@@ -238,6 +238,40 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
     return Array.from(map.entries()).map(([code, bags]) => ({ code, bags }));
   }
 
+  /**
+   * Khi có ô tìm: nếu khớp mã NVL thì chỉ trả về các mã NVL khớp (và Bag tương ứng);
+   * nếu chỉ khớp mã thùng thì trả về toàn bộ NVL của thùng đó.
+   */
+  getMaterialsWithBagsForSearch(g: ScrapBoxGroup): { code: string; bags: number }[] {
+    const q = this.searchTerm.trim().toLowerCase();
+    if (!q) return [];
+    const all = this.getMaterialsWithBags(g.materials);
+    const boxMatch = (g.boxCode || '').toLowerCase().includes(q);
+    const matMatch = all.filter(x => {
+      if ((x.code || '').toLowerCase().includes(q)) return true;
+      return (g.materials || []).some(
+        m => (m || '').slice(0, 7) === x.code && (m || '').toLowerCase().includes(q)
+      );
+    });
+    if (matMatch.length > 0) return matMatch;
+    if (boxMatch) return all;
+    return [];
+  }
+
+  /** Số mã hiển thị (khi tìm kiếm: theo bộ lọc NVL; không tìm: toàn bộ). */
+  getDisplayMaterialCodeCount(g: ScrapBoxGroup): number {
+    if (this.searchTrim) return this.getMaterialsWithBagsForSearch(g).length;
+    return this.getMaterialsWithBags(g.materials).length;
+  }
+
+  /** Tổng Bag hiển thị (khi tìm: chỉ bag của các mã NVL đang hiển thị). */
+  getDisplayBagTotal(g: ScrapBoxGroup): number {
+    if (this.searchTrim) {
+      return this.getMaterialsWithBagsForSearch(g).reduce((s, x) => s + x.bags, 0);
+    }
+    return g.materials.length;
+  }
+
   getDateKey(d?: Date): string {
     const d2 = d || new Date();
     const day = String(d2.getDate()).padStart(2, '0');

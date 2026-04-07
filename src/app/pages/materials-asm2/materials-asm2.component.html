@@ -74,6 +74,13 @@
           <i class="material-icons">call_split</i>
           Tem Lẽ
         </button>
+        <button type="button"
+                class="more-btn tem-le-btn tem-xuat-kho-btn"
+                (click)="openTemXuatKhoPopup()"
+                title="In tem QR xuất kho theo PXK + tồn (scan LSX)">
+          <i class="material-icons">local_shipping</i>
+          Tem Xuất Kho
+        </button>
         
         <button class="clear-search-btn" 
                 *ngIf="searchTerm" 
@@ -628,6 +635,52 @@
               (click)="confirmTemLeSplitAndPrint()">
         <i class="material-icons">print</i>
         In 2 tem
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tem Xuất Kho Popup -->
+<div class="modal-overlay" *ngIf="showTemXuatKhoPopup" (click)="closeTemXuatKhoPopup()">
+  <div class="modal-content tem-le-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📦 Tem Xuất Kho — PXK + tồn</h3>
+      <button type="button" class="close-btn" (click)="closeTemXuatKhoPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="tem-xuat-hint">
+        Scan <strong>LSX</strong>. Tồn theo mã trong PXK (Firebase). Không in mã <strong>R*</strong> và nhóm <strong>Rule Bag OFF</strong>. So Mã + PO, Standard Packing, FIFO IMD.
+      </p>
+      <input
+        id="tem-xuat-lsx-input-asm2"
+        type="text"
+        class="editable-input"
+        style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="temXuatLsxInput"
+        (keyup.enter)="onTemXuatLsxEnter()"
+        placeholder="Scan LSX (vd: LHLSX0326/0012)..."
+        autocomplete="off"
+        [disabled]="temXuatBusy"
+      />
+      <div class="tem-le-error" *ngIf="temXuatError">
+        <i class="material-icons">error</i>
+        {{ temXuatError }}
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeTemXuatKhoPopup()" [disabled]="temXuatBusy">
+        <i class="material-icons">cancel</i>
+        Hủy
+      </button>
+      <button type="button" class="delete-batch-btn" style="background:#111827;"
+              (click)="confirmTemXuatKhoPrint()"
+              [disabled]="temXuatBusy">
+        <i class="material-icons">print</i>
+        {{ temXuatBusy ? 'Đang xử lý…' : 'In tem' }}
       </button>
     </div>
   </div>

@@ -153,15 +153,15 @@
         <tr *ngFor="let g of filteredGrouped; let i = index">
           <td class="col-stt">{{ i + 1 }}</td>
           <td class="col-box"><strong>{{ g.boxCode }}</strong></td>
-          <td class="col-count">{{ getMaterialsWithBags(g.materials).length }}</td>
-          <td class="col-bag">{{ g.materials.length }}</td>
+          <td class="col-count">{{ getDisplayMaterialCodeCount(g) }}</td>
+          <td class="col-bag">{{ getDisplayBagTotal(g) }}</td>
           <td class="col-materials">
             <div *ngIf="searchTrim">
-              <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBags(g.materials)">
+              <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBagsForSearch(g)">
                 <span class="mat-code">{{ x.code }}</span>
                 <span class="mat-bag">| {{ x.bags }}</span>
               </div>
-              <span class="no-mat" *ngIf="!g.materials?.length">—</span>
+              <span class="no-mat" *ngIf="getMaterialsWithBagsForSearch(g).length === 0">—</span>
             </div>
             <span *ngIf="!searchTrim" class="detail-hint">Nhập ô tìm để xem mã</span>
           </td>
@@ -186,18 +186,18 @@
             <span>{{ g.boxCode }}</span>
           </div>
           <div class="card-meta">
-            <span class="card-count">{{ getMaterialsWithBags(g.materials).length }} mã · {{ g.materials.length }} Bag</span>
+            <span class="card-count">{{ getDisplayMaterialCodeCount(g) }} mã · {{ getDisplayBagTotal(g) }} Bag</span>
             <button class="btn-delete" (click)="deleteAggregated(g)">
               <mat-icon>delete</mat-icon>
             </button>
           </div>
         </div>
         <div class="card-materials" *ngIf="searchTrim">
-          <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBags(g.materials)">
+          <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBagsForSearch(g)">
             <span class="mat-code">{{ x.code }}</span>
             <span class="mat-bag">| {{ x.bags }}</span>
           </div>
-          <span class="no-mat" *ngIf="!g.materials?.length">—</span>
+          <span class="no-mat" *ngIf="getMaterialsWithBagsForSearch(g).length === 0">—</span>
         </div>
         <div class="card-search-hint" *ngIf="!searchTrim">
           <span class="detail-hint">Nhập ô tìm để xem mã NVL</span>

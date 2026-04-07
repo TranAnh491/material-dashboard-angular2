@@ -288,6 +288,33 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     return Array.from(new Set(raw));
   }
 
+  /**
+   * Mục danh mục đúng 4 ký tự (vd. B034) = tiền tố: loại mọi mã bắt đầu bằng chuỗi đó.
+   * Độ dài khác = khớp nguyên mã (vd. B036004).
+   * Đồng bộ với `isMaterialCodeExcludedByControlBatchRules` trong Functions.
+   */
+  private isMaterialExcludedFromDupReport(mcNorm: string): boolean {
+    const mc = String(mcNorm || '').trim().toUpperCase();
+    if (!mc) {
+      return false;
+    }
+    const prefixLen = 4;
+    for (const rule of this.excludeMaterialCodesSet) {
+      const ex = String(rule || '').trim().toUpperCase();
+      if (!ex) {
+        continue;
+      }
+      if (ex.length === prefixLen) {
+        if (mc.startsWith(ex)) {
+          return true;
+        }
+      } else if (mc === ex) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   async saveControlBatchExclusionSettings(): Promise<void> {
     if (this.exclusionSaveBusy) {
       return;
@@ -707,7 +734,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           continue;
         }
         const mcNorm = materialCode.trim().toUpperCase();
-        if (this.excludeEnabled && this.excludeMaterialCodesSet.has(mcNorm)) {
+        if (this.excludeEnabled && this.isMaterialExcludedFromDupReport(mcNorm)) {
           continue;
         }
         this.outboundDupEligibleCount += 1;

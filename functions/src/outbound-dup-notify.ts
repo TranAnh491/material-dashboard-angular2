@@ -55,6 +55,33 @@ function normalizeOutboundDupSinceYmd(raw: unknown): string {
   return DEFAULT_OUTBOUND_DUP_SINCE_YMD;
 }
 
+const CONTROL_BATCH_EXCLUDE_PREFIX_LEN = 4;
+
+/**
+ * Mục danh mục đúng 4 ký tự = tiền tố (vd. B034 → loại B034001, B034xxx…).
+ * Khác = khớp nguyên mã. Đồng bộ với tab Control Batch (Angular).
+ */
+export function isMaterialCodeExcludedByControlBatchRules(mcNorm: string, rules: Set<string>): boolean {
+  const mc = String(mcNorm || '').trim().toUpperCase();
+  if (!mc) {
+    return false;
+  }
+  for (const rule of rules) {
+    const ex = String(rule || '').trim().toUpperCase();
+    if (!ex) {
+      continue;
+    }
+    if (ex.length === CONTROL_BATCH_EXCLUDE_PREFIX_LEN) {
+      if (mc.startsWith(ex)) {
+        return true;
+      }
+    } else if (mc === ex) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Đọc `control-batch-exclusion/settings` (loại trừ + outboundDupSinceDate). */
 export async function loadControlBatchDupSettings(
   db: admin.firestore.Firestore
@@ -235,7 +262,7 @@ export async function scanOutboundDuplicates(
     }
 
     const mcNorm = materialCode.trim().toUpperCase();
-    if (excl.enabled && excl.codes.has(mcNorm)) {
+    if (excl.enabled && isMaterialCodeExcludedByControlBatchRules(mcNorm, excl.codes)) {
       continue;
     }
 
@@ -369,7 +396,7 @@ async function sendDupEmail(
   const exclusion = settings.exclusion;
   const exclNote =
     exclusion.enabled && exclusion.codes.size > 0
-      ? `Đang bật loại trừ: ${exclusion.codes.size} mã hàng không tính trong báo cáo trùng.`
+      ? `Đang bật loại trừ: ${exclusion.codes.size} dòng danh mục (mã đủ hoặc 4 ký tự = tiền tố nhóm).`
       : exclusion.enabled
         ? 'Đang bật loại trừ (danh sách mã trống).'
         : '';
@@ -420,13 +447,13 @@ export async function sendOutboundDupReportManual(
 
   const exclNote =
     excl.enabled && excl.codes.size > 0
-      ? `\n\nGhi chú: đang bật loại trừ ${excl.codes.size} mã hàng khỏi báo cáo trùng.`
+      ? `\n\nGhi chú: đang bật loại trừ ${excl.codes.size} dòng danh mục (mã đủ hoặc 4 ký tự = tiền tố nhóm).`
       : excl.enabled
         ? '\n\nGhi chú: đang bật loại trừ (danh sách mã trống).'
         : '';
   const exclHtml =
     excl.enabled && excl.codes.size > 0
-      ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ ${excl.codes.size} mã hàng khỏi báo cáo trùng.</p>`
+      ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ ${excl.codes.size} dòng danh mục (mã đủ hoặc 4 ký tự = tiền tố nhóm).</p>`
       : excl.enabled
         ? `<p style="color:#1565c0;font-size:13px"><strong>Ghi chú:</strong> Đang bật loại trừ (danh sách mã trống).</p>`
         : '';

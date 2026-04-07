@@ -96,6 +96,13 @@
             <i class="material-icons">call_split</i>
             Tem Lẽ
           </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-xuat-kho-btn"
+                  (click)="openTemXuatKhoPopup()"
+                  title="In tem QR xuất kho theo PXK + tồn (scan LSX)">
+            <i class="material-icons">local_shipping</i>
+            Tem Xuất Kho
+          </button>
         </div>
         
         <!-- Mobile Stats Section - Individual boxes on mobile -->
@@ -156,6 +163,13 @@
                   title="Tách tem lẻ từ tem hiện tại">
             <i class="material-icons">call_split</i>
             Tem Lẽ
+          </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-xuat-kho-btn"
+                  (click)="openTemXuatKhoPopup()"
+                  title="In tem QR xuất kho theo PXK + tồn (scan LSX)">
+            <i class="material-icons">local_shipping</i>
+            Tem Xuất Kho
           </button>
         </div>
         
@@ -721,6 +735,53 @@
               (click)="confirmTemLeSplitAndPrint()">
         <i class="material-icons">print</i>
         In 2 tem
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tem Xuất Kho Popup -->
+<div class="modal-overlay" *ngIf="showTemXuatKhoPopup" (click)="closeTemXuatKhoPopup()">
+  <div class="modal-content tem-le-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📦 Tem Xuất Kho — PXK + tồn</h3>
+      <button type="button" class="close-btn" (click)="closeTemXuatKhoPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="tem-xuat-hint">
+        Scan <strong>LSX</strong>. Đọc PXK rồi <strong>tải tồn từ Firebase theo từng mã trong PXK</strong> (không dùng ô tìm kiếm trên bảng).
+        So Mã + PO, tách tem theo <strong>Standard Packing</strong> (FIFO theo IMD). <strong>Không in</strong> mã <strong>R*</strong> và mã nhóm <strong>Rule Bag OFF</strong>.
+      </p>
+      <input
+        id="tem-xuat-lsx-input-asm1"
+        type="text"
+        class="editable-input"
+        style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="temXuatLsxInput"
+        (keyup.enter)="onTemXuatLsxEnter()"
+        placeholder="Scan LSX (vd: KZLSX0326/0089)..."
+        autocomplete="off"
+        [disabled]="temXuatBusy"
+      />
+      <div class="tem-le-error" *ngIf="temXuatError">
+        <i class="material-icons">error</i>
+        {{ temXuatError }}
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeTemXuatKhoPopup()" [disabled]="temXuatBusy">
+        <i class="material-icons">cancel</i>
+        Hủy
+      </button>
+      <button type="button" class="delete-batch-btn" style="background:#111827;"
+              (click)="confirmTemXuatKhoPrint()"
+              [disabled]="temXuatBusy">
+        <i class="material-icons">print</i>
+        {{ temXuatBusy ? 'Đang xử lý…' : 'In tem' }}
       </button>
     </div>
   </div>

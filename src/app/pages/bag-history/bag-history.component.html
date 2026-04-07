@@ -55,7 +55,7 @@
     <p class="outbound-dup-error" *ngIf="!outboundDupLoading && outboundDupError">{{ outboundDupError }}</p>
     <ng-container *ngIf="!outboundDupLoading && !outboundDupError">
       <p class="outbound-dup-exclude-hint" *ngIf="excludeEnabled && excludeCodeCount > 0">
-        Đang <strong>bật loại trừ</strong>: {{ excludeCodeCount }} mã không tính trong báo cáo trùng (màn hình và email).
+        Đang <strong>bật loại trừ</strong>: {{ excludeCodeCount }} dòng danh mục — mã đủ hoặc <strong>4 ký tự = tiền tố</strong> (vd. B034 loại cả B034xxx); áp dụng trên bảng và email.
       </p>
       <p class="outbound-dup-exclude-hint muted" *ngIf="excludeEnabled && excludeCodeCount === 0">
         Loại trừ đang <strong>bật</strong> nhưng danh sách mã trống — mọi mã vẫn được tính.
@@ -119,19 +119,19 @@
         <span class="cb-more-label">Loại trừ khỏi báo cáo trùng</span>
         <mat-slide-toggle [(ngModel)]="excludeEnabledDraft" color="primary"></mat-slide-toggle>
       </div>
-      <p class="cb-more-hint">Khi bật, các mã trong danh mục bên dưới không được gom vào nhóm trùng (bảng trên và email Functions).</p>
+      <p class="cb-more-hint">Khi bật, các mã khớp danh mục không được gom vào nhóm trùng (bảng trên và email Functions). Một dòng <strong>đúng 4 ký tự</strong> (vd. B034) = loại cả mọi mã <strong>bắt đầu</strong> bằng chuỗi đó; dài hơn = chỉ khớp nguyên mã.</p>
       <button type="button" class="cb-catalog-toggle" (click)="controlBatchCatalogOpen = !controlBatchCatalogOpen">
         {{ controlBatchCatalogOpen ? 'Thu gọn' : 'Mở' }} danh mục loại trừ
       </button>
       <div class="cb-catalog-block" *ngIf="controlBatchCatalogOpen">
-        <label class="cb-catalog-label" for="cb-exclude-catalog">Mã loại trừ (một mã một dòng, hoặc cách nhau bằng dấu phẩy / chấm phẩy)</label>
+        <label class="cb-catalog-label" for="cb-exclude-catalog">Mã loại trừ (một mục một dòng hoặc phẩy / chấm phẩy). 4 ký tự = tiền tố nhóm; vd. B034 loại B034001, B034002…</label>
         <textarea
           id="cb-exclude-catalog"
           class="cb-catalog-textarea"
           [(ngModel)]="excludeCatalogDraft"
           rows="10"
           spellcheck="false"
-          placeholder="VD: A005006, B001033 (mỗi dòng một mã)"></textarea>
+          placeholder="VD: B036004 (mã đủ) · B034 (4 ký tự = tiền tố, loại cả B034…)"></textarea>
       </div>
       <div class="cb-more-actions">
         <button type="button" class="btn-cb-cancel" (click)="closeControlBatchMoreModal()">Đóng</button>

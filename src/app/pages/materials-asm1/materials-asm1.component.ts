@@ -12,6 +12,7 @@ import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { ExcelImportService } from '../../services/excel-import.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { TemXuatKhoService, PxkLineExport } from '../../services/tem-xuat-kho.service';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import * as firebase from 'firebase/compat/app';
@@ -162,6 +163,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   temLeError: string = '';
   temLeParsed: { materialCode: string; po: string; quantity: number; p4: string } | null = null;
 
+  // ===== Tem Xuất Kho (PXK + FIFO tồn → in loạt tem QR) =====
+  showTemXuatKhoPopup = false;
+  temXuatLsxInput = '';
+  temXuatError = '';
+  temXuatBusy = false;
+
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
   spSearchCode = '';
@@ -200,7 +207,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private excelImportService: ExcelImportService,
     private dialog: MatDialog,
     private router: Router,
-    private rmBagHistory: RmBagHistoryService
+    private rmBagHistory: RmBagHistoryService,
+    private temXuatKho: TemXuatKhoService
   ) {}
 
   openTemLePopup(): void {
@@ -326,6 +334,311 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     } catch (e) {
       console.error('❌ Tem Lẽ print error:', e);
       this.temLeError = 'Lỗi khi tạo/in tem. Vui lòng thử lại.';
+    }
+  }
+
+  openTemXuatKhoPopup(): void {
+    this.showTemXuatKhoPopup = true;
+    this.temXuatLsxInput = '';
+    this.temXuatError = '';
+    setTimeout(() => {
+      const el = document.getElementById('tem-xuat-lsx-input-asm1') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 50);
+  }
+
+  closeTemXuatKhoPopup(): void {
+    this.showTemXuatKhoPopup = false;
+    this.temXuatLsxInput = '';
+    this.temXuatError = '';
+  }
+
+  onTemXuatLsxEnter(): void {
+    void this.confirmTemXuatKhoPrint();
+  }
+
+  private normPoForPxk(po: string): string {
+    return String(po || '')
+      .trim()
+      .toUpperCase()
+      .replace(/\s/g, '');
+  }
+
+  private normMatForPxk(m: string): string {
+    return String(m || '')
+      .trim()
+      .toUpperCase();
+  }
+
+  /**
+   * Tem Xuất Kho: không in — mã bắt đầu bằng R; mã thuộc nhóm Rule Bag đang OFF (4 ký tự đầu, `qtyBagRuleByPrefix[prefix] === false`).
+   */
+  private shouldSkipMaterialForTemXuatKhoExport(materialCode: string): boolean {
+    const c = String(materialCode || '').trim().toUpperCase();
+    if (!c) {
+      return true;
+    }
+    if (c.startsWith('R')) {
+      return true;
+    }
+    const p = this.getMaterialCodePrefix4(c);
+    return !!(p && this.qtyBagRuleByPrefix[p] === false);
+  }
+
+  /** Gộp các dòng PXK trùng Mã+PO (cộng lượng). */
+  private mergePxkLinesForTem(lines: PxkLineExport[]): { materialCode: string; po: string; quantity: number }[] {
+    const map = new Map<string, { materialCode: string; po: string; q: number }>();
+    for (const ln of lines) {
+      const mk = this.normMatForPxk(ln.materialCode);
+      const pk = this.normPoForPxk(ln.po);
+      const key = `${mk}\0${pk}`;
+      const add = Math.floor(Number(ln.quantity) || 0);
+      if (add <= 0 || !mk) {
+        continue;
+      }
+      const cur = map.get(key);
+      if (!cur) {
+        map.set(key, { materialCode: ln.materialCode.trim(), po: (ln.po || '').trim(), q: add });
+      } else {
+        cur.q += add;
+      }
+    }
+    return Array.from(map.values()).map((x) => ({
+      materialCode: x.materialCode,
+      po: x.po,
+      quantity: x.q
+    }));
+  }
+
+  /**
+   * Tải tồn kho từ Firebase theo mọi mã hàng xuất hiện trong PXK (không dùng ô tìm kiếm trên màn hình).
+   */
+  private async fetchInventoryRowsForPxkMerged(
+    pxkLines: { materialCode: string; po: string; quantity: number }[]
+  ): Promise<InventoryMaterial[]> {
+    const codes = [...new Set(pxkLines.map((l) => this.normMatForPxk(l.materialCode)).filter(Boolean))];
+    const merged: InventoryMaterial[] = [];
+    for (const code of codes) {
+      try {
+        const querySnapshot = await this.firestore
+          .collection('inventory-materials', (ref) =>
+            ref.where('factory', '==', this.FACTORY).where('materialCode', '==', code).limit(150)
+          )
+          .get()
+          .toPromise();
+        if (!querySnapshot?.docs?.length) {
+          continue;
+        }
+        for (const doc of querySnapshot.docs) {
+          merged.push(this.mapFirestoreDocToInventoryMaterialForPxk(doc));
+        }
+      } catch (e) {
+        console.warn('[Tem Xuất Kho] fetch inventory for', code, e);
+      }
+    }
+    return merged;
+  }
+
+  private mapFirestoreDocToInventoryMaterialForPxk(doc: { id: string; data: () => any }): InventoryMaterial {
+    const data = doc.data() as any;
+    const material = {
+      id: doc.id,
+      ...data,
+      factory: this.FACTORY,
+      importDate: this.parseImportDate(data.importDate),
+      receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
+      expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
+      openingStock: data.openingStock || null,
+      xt: data.xt || 0,
+      source: data.source || 'manual'
+    } as InventoryMaterial;
+    if (this.catalogLoaded && this.catalogCache.has(material.materialCode)) {
+      const catalogItem = this.catalogCache.get(material.materialCode)!;
+      material.materialName = catalogItem.materialName;
+      material.unit = catalogItem.unit;
+      if (!material.rollsOrBags || material.rollsOrBags === '' || material.rollsOrBags === '0') {
+        const spCat = catalogItem.standardPacking;
+        if (spCat && spCat > 0) {
+          material.rollsOrBags = spCat.toString();
+        }
+      }
+    }
+    material.bagTrackingInitialized = !!data.bagTrackingInitialized;
+    material.openingStockAtBagInit =
+      typeof data.openingStockAtBagInit === 'number' ? data.openingStockAtBagInit : undefined;
+    material.bagInput =
+      material.bagTrackingInitialized
+        ? ''
+        : material.totalBags != null && Number(material.totalBags) > 0
+          ? String(Math.floor(Number(material.totalBags)))
+          : '';
+    this.applyLocalDerivedBags(material);
+    return material;
+  }
+
+  /**
+   * Theo lượng xuất PXK: FIFO theo IMD (importDate), chia tem = Standard Packing,
+   * phần lẻ một tem (giống logic in tem trên dòng tồn).
+   * `inventoryRows` — từ Firebase theo mã PXK, không phải `inventoryMaterials` đang lọc theo search.
+   */
+  private buildQrPayloadsForPxkLine(
+    line: {
+      materialCode: string;
+      po: string;
+      quantity: number;
+    },
+    inventoryRows: InventoryMaterial[]
+  ): { qrData: string }[] {
+    const mat = line.materialCode.trim();
+    const po = (line.po || '').trim();
+    const Q = Math.floor(Number(line.quantity) || 0);
+    if (Q <= 0 || !mat) {
+      return [];
+    }
+    const matN = this.normMatForPxk(mat);
+    const poN = this.normPoForPxk(po);
+    const rows = inventoryRows
+      .filter(
+        (m) =>
+          this.normMatForPxk(m.materialCode) === matN &&
+          this.normPoForPxk(m.poNumber || '') === poN
+      )
+      .sort((a, b) => (a.importDate?.getTime() || 0) - (b.importDate?.getTime() || 0));
+
+    let totalAvail = rows.reduce((s, m) => s + this.calculateCurrentStock(m), 0);
+    if (totalAvail < Q) {
+      throw new Error(
+        `Không đủ tồn: ${mat} / PO ${po}. PXK cần ${Q}, tồn khả dụng ${totalAvail}.`
+      );
+    }
+
+    let remaining = Q;
+    const out: { qrData: string }[] = [];
+    for (const m of rows) {
+      if (remaining <= 0) {
+        break;
+      }
+      let rowAvail = Math.min(this.calculateCurrentStock(m), remaining);
+      if (rowAvail <= 0) {
+        continue;
+      }
+      const sp = this.getEffectiveStandardPacking(m);
+      if (!sp || sp <= 0) {
+        throw new Error(`Thiếu Standard Packing (hoặc catalog) cho mã ${mat}.`);
+      }
+      const bagTotal = Math.max(1, this.computeTotalBagsFromStock(m));
+      const importDateStr = m.importDate
+        ? m.importDate.toLocaleDateString('en-GB').split('/').join('')
+        : new Date().toLocaleDateString('en-GB').split('/').join('');
+      let bagIdx = 1;
+      while (rowAvail > 0 && remaining > 0) {
+        const chunk = rowAvail >= sp ? sp : rowAvail;
+        const qrData = `${mat}|${po}|${chunk}|${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
+        out.push({ qrData });
+        rowAvail -= chunk;
+        remaining -= chunk;
+        bagIdx++;
+      }
+    }
+    return out;
+  }
+
+  async confirmTemXuatKhoPrint(): Promise<void> {
+    this.temXuatError = '';
+    const raw = this.temXuatLsxInput.trim();
+    if (!raw) {
+      this.temXuatError = 'Vui lòng scan hoặc nhập lệnh sản xuất (LSX).';
+      return;
+    }
+    if (this.temXuatBusy) {
+      return;
+    }
+    this.temXuatBusy = true;
+    try {
+      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx('ASM1', raw);
+      if (!pxkRaw.length) {
+        this.temXuatError =
+          'Không tìm thấy PXK cho LSX này. Kiểm tra đã import PXK (Work Order / pxk-import-data).';
+        return;
+      }
+      const pxkMerged = this.mergePxkLinesForTem(pxkRaw);
+      const pxkLines = pxkMerged.filter((l) => !this.shouldSkipMaterialForTemXuatKhoExport(l.materialCode));
+      if (!pxkLines.length) {
+        this.temXuatError =
+          'Không còn dòng PXK nào đủ điều kiện in tem (đã loại mã R và nhóm Rule Bag đang OFF).';
+        return;
+      }
+      const inventoryRows = await this.fetchInventoryRowsForPxkMerged(pxkLines);
+      const allPayloads: { qrData: string }[] = [];
+      for (const ln of pxkLines) {
+        const part = this.buildQrPayloadsForPxkLine(ln, inventoryRows);
+        allPayloads.push(...part);
+      }
+      if (allPayloads.length === 0) {
+        this.temXuatError = 'Không tạo được tem (kiểm tra Mã/PO khớp tồn kho và Standard Packing).';
+        return;
+      }
+
+      const qrImages = await Promise.all(
+        allPayloads.map(async (p, i) => {
+          const qrImage = await QRCode.toDataURL(p.qrData, {
+            width: 240,
+            margin: 1,
+            color: { dark: '#000000', light: '#FFFFFF' }
+          });
+          const parts = p.qrData.split('|');
+          return {
+            image: qrImage,
+            qrData: p.qrData,
+            index: i + 1,
+            materialCode: parts[0] || '',
+            poNumber: parts[1] || '',
+            unitNumber: Number(parts[2]) || 0
+          };
+        })
+      );
+
+      const displayLsx = raw.trim();
+      const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: displayLsx, qrData: '' }];
+      let prevMat = '';
+      for (const q of qrImages) {
+        const mat = (q.materialCode || '').trim();
+        if (prevMat !== '' && mat !== prevMat) {
+          printSequence.push({ kind: 'spacer', qrData: '' });
+        }
+        printSequence.push(q);
+        prevMat = mat;
+      }
+
+      const fakeMaterial: InventoryMaterial = {
+        factory: this.FACTORY,
+        importDate: new Date(),
+        batchNumber: '',
+        materialCode: 'PXK-EXPORT',
+        poNumber: '',
+        openingStock: null,
+        quantity: 0,
+        unit: '',
+        location: '',
+        type: '',
+        expiryDate: new Date(),
+        qualityCheck: false,
+        isReceived: false,
+        notes: '',
+        rollsOrBags: '',
+        supplier: '',
+        remarks: '',
+        isCompleted: false
+      };
+
+      this.createQRPrintWindow(printSequence, fakeMaterial, true);
+      this.closeTemXuatKhoPopup();
+    } catch (e) {
+      console.error('❌ Tem Xuất Kho:', e);
+      this.temXuatError = (e as Error)?.message || 'Lỗi khi tạo/in tem.';
+    } finally {
+      this.temXuatBusy = false;
     }
   }
 
@@ -5653,6 +5966,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return n.toLocaleString('en-US');
   }
 
+  private escapeHtmlForPrint(s: string): string {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   // Create print window for QR codes — cùng layout/cỡ chữ/nội dung như inbound tem bịch
   private createQRPrintWindow(qrImages: any[], material: InventoryMaterial, isPartialLabel: boolean = false): void {
     const printWindow = window.open('', '_blank');
@@ -5762,6 +6083,27 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               height: 32mm !important;
             }
 
+            .qr-container.qr-container--lsx {
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+            }
+
+            .lsx-header-text {
+              font-size: 18px !important;
+              font-weight: bold !important;
+              text-align: center !important;
+              padding: 2mm !important;
+              word-break: break-all !important;
+              line-height: 1.15 !important;
+              color: #000000 !important;
+              font-family: Arial, sans-serif !important;
+            }
+
+            .qr-container.qr-container--blank {
+              background: white !important;
+            }
+
             @media print {
               body {
                 margin: 0 !important;
@@ -5831,6 +6173,27 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
                 width: 57mm !important;
                 height: 32mm !important;
               }
+
+              .qr-container.qr-container--lsx {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+              }
+
+              .lsx-header-text {
+                font-size: 18px !important;
+                font-weight: bold !important;
+                text-align: center !important;
+                padding: 2mm !important;
+                word-break: break-all !important;
+                line-height: 1.15 !important;
+                color: #000000 !important;
+                font-family: Arial, sans-serif !important;
+              }
+
+              .qr-container.qr-container--blank {
+                background: white !important;
+              }
             }
           </style>
         </head>
@@ -5838,6 +6201,19 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           <div class="qr-grid">
             ${qrImages
               .map(qr => {
+                if (qr.kind === 'lsxHeader') {
+                  const t = this.escapeHtmlForPrint(String(qr.lsxText ?? '').trim());
+                  return `
+              <div class="qr-container qr-container--lsx">
+                <div class="lsx-header-text">${t}</div>
+              </div>
+            `;
+                }
+                if (qr.kind === 'spacer') {
+                  return `
+              <div class="qr-container qr-container--blank"></div>
+            `;
+                }
                 const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
                 const qtyLine = qr.displayPrefix
                   ? `${qr.displayPrefix} ${this.formatInboundLabelQuantity(f.quantity)}`
