@@ -532,7 +532,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       const rowKey = this.pxkInventoryRowKey(m);
       while (rowAvail > 0 && remaining > 0) {
         const chunk = rowAvail >= sp ? sp : rowAvail;
-        const qrData = `${mat}|${po}|${chunk}|${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
+        const p4Base = `${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
+        const p4 = chunk < sp ? `${p4Base}(T1)` : p4Base;
+        const qrData = `${mat}|${po}|${chunk}|${p4}`;
         out.push({ qrData });
         consumed.set(rowKey, (consumed.get(rowKey) || 0) + chunk);
         rowAvail -= chunk;
