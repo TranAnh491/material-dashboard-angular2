@@ -1,24 +1,32 @@
+// QC theme: be background, black border, black text
+$qc-bg: #faf6e8; // be (lighter)
+$qc-panel-bg: #fffaf0; // panel (lighter)
+$qc-text: #111111;
+$qc-border: #111111;
+$qc-bg-hover: #f1ead1;
+$qc-muted-text: rgba(17, 17, 17, 0.75);
+
 .main-content {
   padding: 20px;
-  background-color: #000000;
+  background-color: $qc-bg;
   min-height: 100vh;
-  color: #ffffff;
+  color: $qc-text;
 }
 
 .excel-container {
-  background: #000000;
-  border: 1px solid #666666;
+  background: $qc-panel-bg;
+  border: 2px solid $qc-border;
   overflow: hidden;
 }
 
 .excel-header {
-  background: #000000;
-  color: #ffffff;
+  background: $qc-panel-bg;
+  color: $qc-text;
   padding: 16px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #666666;
+  border-bottom: 2px solid $qc-border;
   
   h4 {
     margin: 0;
@@ -27,11 +35,11 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    color: #ffffff;
+    color: $qc-text;
     
     .material-icons {
       font-size: 24px;
-      color: #ffffff;
+      color: $qc-text;
     }
   }
   
@@ -40,11 +48,11 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: #ffffff;
+    color: $qc-text;
     
     .material-icons {
       font-size: 18px;
-      color: #ffffff;
+      color: $qc-text;
     }
     
     strong {
@@ -60,9 +68,9 @@
   gap: 12px;
   
   .iqc-btn {
-    background: #000000;
-    color: #ffffff;
-    border: 2px solid #666666;
+    background: $qc-panel-bg;
+    color: $qc-text;
+    border: 2px solid $qc-border;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -72,16 +80,16 @@
     gap: 8px;
     
     &:hover {
-      background: #1a1a1a;
+      background: $qc-bg-hover;
     }
     
     &:active {
-      background: #262626;
+      background: $qc-bg-hover;
     }
     
     .material-icons {
       font-size: 20px;
-      color: #ffffff;
+      color: $qc-text;
     }
   }
 
@@ -97,15 +105,15 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #000000;
-    border: 2px solid #666666;
+    background: $qc-panel-bg;
+    border: 2px solid $qc-border;
     padding: 0 8px;
     border-radius: 8px;
     height: 44px; /* match logout button height */
   }
 
   .iqc-search-input-group .search-icon {
-    color: #ffffff;
+    color: $qc-text;
     font-size: 20px;
   }
 
@@ -115,7 +123,7 @@
     outline: none;
     font-size: 14px;
     padding: 0 6px;
-    color: #ffffff;
+    color: $qc-text;
     background: transparent;
     min-width: 180px;
     height: 100%;
@@ -123,15 +131,15 @@
   }
 
   .iqc-search-input::placeholder {
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(17, 17, 17, 0.55);
   }
 
   .iqc-search-btn,
   .iqc-date-btn,
   .iqc-clear-btn {
-    border: 2px solid #666666;
-    background: #000000;
-    color: #ffffff;
+    border: 2px solid $qc-border;
+    background: $qc-panel-bg;
+    color: $qc-text;
     cursor: pointer;
     font-weight: 500;
     display: inline-flex;
@@ -157,7 +165,7 @@
   .iqc-search-btn:hover:not(:disabled),
   .iqc-date-btn:hover,
   .iqc-clear-btn:hover {
-    background: #1a1a1a;
+    background: $qc-bg-hover;
     transform: translateY(-1px);
   }
 
@@ -165,7 +173,7 @@
   .iqc-date-btn .material-icons,
   .iqc-clear-btn .material-icons {
     font-size: 18px;
-    color: #ffffff;
+    color: $qc-text;
   }
 
   .iqc-search-range-hint {
@@ -173,13 +181,13 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #ffffff;
+    color: $qc-text;
     opacity: 0.9;
     padding-left: 4px;
 
     .material-icons {
       font-size: 16px;
-      color: #ffffff;
+      color: $qc-text;
     }
   }
 
@@ -191,9 +199,9 @@
   }
 
   .logout-btn {
-    background: #000000;
-    color: #ffffff;
-    border: 2px solid #666666;
+    background: $qc-panel-bg;
+    color: $qc-text;
+    border: 2px solid $qc-border;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -203,23 +211,23 @@
     gap: 8px;
     
     &:hover {
-      background: #1a1a1a;
+      background: $qc-bg-hover;
     }
     
     &:active {
-      background: #262626;
+      background: $qc-bg-hover;
     }
     
     .material-icons {
       font-size: 20px;
-      color: #ffffff;
+      color: $qc-text;
     }
   }
 
   .home-btn {
-    background: #000000;
-    color: #ffffff;
-    border: 2px solid #666666;
+    background: $qc-panel-bg;
+    color: $qc-text;
+    border: 2px solid $qc-border;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -230,24 +238,24 @@
     border-radius: 4px;
     
     &:hover {
-      background: #1a1a1a;
-      border-color: #666666;
+      background: $qc-bg-hover;
+      border-color: $qc-border;
     }
     
     &:active {
-      background: #262626;
+      background: $qc-bg-hover;
     }
     
     .material-icons {
       font-size: 16px; /* 80% of 20px */
-      color: #ffffff;
+      color: $qc-text;
     }
   }
   
   .more-btn {
-    background: #000000;
-    color: #ffffff;
-    border: 2px solid #666666;
+    background: $qc-panel-bg;
+    color: $qc-text;
+    border: 2px solid $qc-border;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -257,27 +265,27 @@
     gap: 8px;
     
     &:hover {
-      background: #1a1a1a;
+      background: $qc-bg-hover;
     }
     
     &:active {
-      background: #262626;
+      background: $qc-bg-hover;
     }
     
     .material-icons {
       font-size: 20px;
-      color: #ffffff;
+      color: $qc-text;
     }
   }
 }
 
 .iqc-history-code {
   cursor: pointer;
-  color: #ffffff;
+  color: $qc-text;
   text-decoration: underline;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(17, 17, 17, 0.06);
   }
 }
 
@@ -311,12 +319,12 @@
 
 .iqc-priority-btn .material-icons {
   font-size: 20px;
-  color: #ffffff;
+  color: $qc-text;
   transition: color 0.15s ease, transform 0.15s ease;
 }
 
 .iqc-priority-flame {
-  color: #ffffff;
+  color: $qc-text;
   font-size: 17.5px;
   display: block;
   text-align: center;
@@ -342,8 +350,8 @@
 .monthly-lock-box {
   flex: 1;
   min-width: 200px;
-  background: #000000;
-  border: 2px solid #666666;
+  background: $qc-panel-bg;
+  border: 2px solid $qc-border;
   padding: 16px 20px;
   cursor: default;
   
@@ -351,7 +359,7 @@
     cursor: pointer;
     
     &:hover {
-      background: #1a1a1a;
+      background: $qc-bg-hover;
     }
   }
 
@@ -360,7 +368,7 @@
   &.monthly-lock-box {
     cursor: pointer;
     &:hover {
-      background: #1a1a1a;
+      background: $qc-bg-hover;
     }
   }
   
@@ -374,7 +382,7 @@
     
     .material-icons {
       font-size: 32px;
-      color: #ffffff;
+      color: $qc-text;
     }
     
     .pending-qc-info,
@@ -386,7 +394,7 @@
       .today-checked-label,
       .pending-confirm-label {
         font-size: 14px;
-        color: #ffffff;
+        color: $qc-text;
         font-weight: 500;
         margin-bottom: 4px;
       }
@@ -396,7 +404,7 @@
       .pending-confirm-count {
         font-size: 28px;
         font-weight: 700;
-        color: #ffffff;
+        color: $qc-text;
         line-height: 1;
       }
     }
@@ -406,7 +414,7 @@
       padding-left: 12px;
       font-size: 12px;
       font-weight: 700;
-      color: #ffffff;
+      color: $qc-text;
       opacity: 0.9;
       white-space: nowrap;
       display: inline-flex;
@@ -421,7 +429,7 @@
   cursor: pointer;
   
   &:hover {
-    background: #1a1a1a;
+    background: $qc-bg-hover;
   }
 }
 
@@ -429,15 +437,15 @@
   cursor: pointer;
 
   &:hover {
-    background: #1a1a1a;
+    background: $qc-bg-hover;
   }
 }
 
 
 .iqc-btn {
-  background: #000000;
-  color: #ffffff;
-  border: 2px solid #666666;
+  background: $qc-panel-bg;
+  color: $qc-text;
+  border: 2px solid $qc-border;
   padding: 12px 24px;
   cursor: pointer;
   font-weight: 500;
@@ -447,16 +455,16 @@
   gap: 8px;
   
   &:hover {
-    background: #1a1a1a;
+    background: $qc-bg-hover;
   }
   
   &:active {
-    background: #262626;
+    background: $qc-bg-hover;
   }
   
   .material-icons {
     font-size: 20px;
-    color: #ffffff;
+    color: $qc-text;
   }
 }
 
@@ -467,15 +475,16 @@
 
 .filter-select {
   padding: 8px 12px;
-  border: 1px solid #666666;
+  border: 2px solid $qc-border;
   font-size: 14px;
-  background: #000000;
-  color: #ffffff;
+  background: $qc-panel-bg;
+  color: $qc-text;
   cursor: pointer;
   
   &:focus {
     outline: none;
-    border-color: #999999;
+    border-color: $qc-border;
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
   }
 }
 
@@ -488,22 +497,23 @@
 .search-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #666666;
+  border: 2px solid $qc-border;
   font-size: 14px;
-  background: #000000;
-  color: #ffffff;
+  background: $qc-panel-bg;
+  color: $qc-text;
   
   &:focus {
     outline: none;
-    border-color: #999999;
+    border-color: $qc-border;
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
   }
 }
 
 .total-counter-box {
   padding: 8px 15px;
-  background: #000000;
-  color: #ffffff;
-  border: 1px solid #666666;
+  background: $qc-panel-bg;
+  color: $qc-text;
+  border: 2px solid $qc-border;
   font-weight: 500;
   font-size: 14px;
 }
@@ -519,14 +529,14 @@
     width: 40px;
     height: 40px;
     border: 4px solid #333333;
-    border-top: 4px solid #ffffff;
+    border-top: 4px solid $qc-border;
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
   
   p {
     margin-top: 15px;
-    color: #ffffff;
+    color: $qc-text;
   }
 }
 
@@ -555,10 +565,10 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  color: #ffffff;
+  color: $qc-text;
   
   thead {
-    background: #000000;
+    background: $qc-panel-bg;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -567,29 +577,29 @@
       padding: 12px 8px;
       text-align: left;
       font-weight: 600;
-      border-bottom: 2px solid #666666;
+      border-bottom: 2px solid $qc-border;
       white-space: nowrap;
-      background: #000000;
-      color: #ffffff;
+      background: $qc-panel-bg;
+      color: $qc-text;
     }
   }
   
   tbody {
     tr {
-      border-bottom: 1px solid #666666;
+      border-bottom: 1px solid $qc-border;
       
       &:hover {
-        background: #1a1a1a;
+        background: $qc-bg-hover;
       }
       
       &.selected {
-        background: #333333;
+        background: $qc-bg-hover;
       }
       
       td {
         padding: 10px 8px;
         white-space: nowrap;
-        color: #ffffff;
+        color: $qc-text;
       }
     }
   }
@@ -613,7 +623,7 @@
 
   &.status-lock {
     background: #343a40;
-    color: #ffffff;
+    color: #ffffff; // keep white for contrast on dark badge
   }
   
   &.status-special {
@@ -632,16 +642,196 @@
   }
 }
 
+// --- Theme overrides for legacy black styles (sync to be/black theme) ---
+.employee-verify-section {
+  .employee-scan-input,
+  .employee-status {
+    background: $qc-panel-bg !important;
+    color: $qc-text !important;
+    border: 2px solid $qc-border !important;
+  }
+  .verify-btn {
+    background: $qc-panel-bg !important;
+    color: $qc-text !important;
+    border: 2px solid $qc-border !important;
+  }
+  .verify-instruction {
+    color: $qc-text !important;
+  }
+  .material-icons {
+    color: $qc-text !important;
+  }
+}
+
+.more-menu-modal {
+  .menu-option-btn {
+    background: $qc-panel-bg !important;
+    border: 2px solid $qc-border !important;
+    color: $qc-text !important;
+
+    &:hover {
+      background: $qc-bg-hover !important;
+      border-color: $qc-border !important;
+      box-shadow: 0 4px 10px rgba(17, 17, 17, 0.18) !important;
+    }
+
+    .material-icons {
+      color: $qc-text !important;
+    }
+  }
+}
+
+.report-modal-content {
+  .download-info {
+    background: $qc-panel-bg !important;
+    border: 2px solid $qc-border !important;
+    color: $qc-text !important;
+
+    .material-icons {
+      color: $qc-text !important;
+    }
+    p {
+      color: $qc-text !important;
+    }
+  }
+
+  .date-label,
+  .date-label .material-icons {
+    color: $qc-text !important;
+  }
+
+  .date-select {
+    background: $qc-panel-bg !important;
+    color: $qc-text !important;
+    border: 2px solid $qc-border !important;
+  }
+
+  .download-btn-primary,
+  .download-btn,
+  .download-btn .material-icons {
+    background: $qc-panel-bg !important;
+    color: $qc-text !important;
+    border: 2px solid $qc-border !important;
+  }
+
+  .download-btn-primary:hover:not(:disabled),
+  .download-btn:hover:not(:disabled) {
+    background: $qc-bg-hover !important;
+  }
+
+  .report-table {
+    thead {
+      background: $qc-panel-bg !important;
+    }
+    th {
+      color: $qc-text !important;
+      border-bottom: 2px solid $qc-border !important;
+    }
+    tbody tr {
+      border-bottom: 1px solid $qc-border !important;
+      &:hover {
+        background: $qc-bg-hover !important;
+      }
+      td {
+        color: $qc-text !important;
+      }
+    }
+  }
+
+  .empty-report,
+  .loading-report {
+    color: $qc-text !important;
+    .material-icons {
+      color: $qc-text !important;
+    }
+    p {
+      color: $qc-text !important;
+    }
+  }
+}
+
+.date-range-modal-content .modal-header {
+  background: $qc-panel-bg !important;
+  border-bottom: 2px solid $qc-border !important;
+}
+
+.date-range-modal-content .modal-header h3,
+.date-range-modal-content .modal-header .material-icons,
+.date-range-modal-content .modal-header .close-btn,
+.date-range-modal-content .modal-header .close-btn .material-icons {
+  color: $qc-text !important;
+}
+
+.date-range-subtitle {
+  color: $qc-muted-text !important;
+}
+
+.date-field-label {
+  color: $qc-text !important;
+}
+
+.date-field-input {
+  border: 2px solid $qc-border !important;
+  background: $qc-panel-bg !important;
+  .material-icons {
+    color: $qc-text !important;
+  }
+  input[type='date'] {
+    color: $qc-text !important;
+  }
+  &:focus-within {
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08) !important;
+  }
+}
+
+.recent-checked-section {
+  .recent-materials-container {
+    background: $qc-panel-bg !important;
+    border: 2px solid $qc-border !important;
+  }
+  .recent-materials-table {
+    thead {
+      background: $qc-panel-bg !important;
+    }
+    th {
+      color: $qc-text !important;
+      border-bottom: 2px solid $qc-border !important;
+    }
+    tbody tr {
+      border-bottom: 1px solid $qc-border !important;
+      &:hover {
+        background: $qc-bg-hover !important;
+      }
+      &:nth-child(even) {
+        background: rgba(17, 17, 17, 0.03) !important;
+      }
+      td {
+        color: $qc-text !important;
+      }
+    }
+  }
+  .section-header,
+  .section-header .material-icons,
+  .empty-recent,
+  .loading-recent,
+  .empty-recent .material-icons,
+  .loading-recent .material-icons,
+  .empty-recent p,
+  .loading-recent p {
+    color: $qc-text !important;
+  }
+}
+
 .empty-state {
   padding: 60px 20px;
   text-align: center;
-  color: #ffffff;
+  color: $qc-text;
   
   .material-icons {
     font-size: 64px;
     opacity: 0.3;
     margin-bottom: 15px;
-    color: #ffffff;
+    color: $qc-text;
   }
   
   p {
@@ -656,7 +846,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(17, 17, 17, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -665,9 +855,9 @@
 }
 
 .modal-content {
-  background: #000000;
-  color: #ffffff;
-  border: 1px solid #666666;
+  background: $qc-panel-bg;
+  color: $qc-text;
+  border: 2px solid $qc-border;
 }
 
 .iqc-modal-content {
@@ -679,9 +869,9 @@
 
 .modal-header {
   padding: 16px 20px;
-  background: #000000;
-  color: #ffffff;
-  border-bottom: 1px solid #666666;
+  background: $qc-panel-bg;
+  color: $qc-text;
+  border-bottom: 2px solid $qc-border;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -693,29 +883,29 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    color: #ffffff;
+    color: $qc-text;
     
     .material-icons {
-      color: #ffffff;
+      color: $qc-text;
       font-size: 22px;
     }
   }
   
   .close-btn {
-    background: #000000;
-    border: 1px solid #666666;
+    background: $qc-panel-bg;
+    border: 2px solid $qc-border;
     border-radius: 4px;
     cursor: pointer;
     padding: 5px;
-    color: #ffffff;
+    color: $qc-text;
     
     &:hover {
-      background: #1a1a1a;
+      background: $qc-bg-hover;
     }
     
     .material-icons {
       font-size: 24px;
-      color: #ffffff;
+      color: $qc-text;
     }
   }
 }

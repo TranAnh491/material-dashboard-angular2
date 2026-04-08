@@ -130,6 +130,8 @@ export class QCComponent implements OnInit, OnDestroy {
   // More menu (popup modal)
   showMoreMenu: boolean = false;
   showReportModal: boolean = false;
+  showIqcPermissionModal: boolean = false;
+  showSendReportStatusModal: boolean = false;
   showTodayCheckedModal: boolean = false;
   showPendingQCModal: boolean = false;
   showPendingConfirmModal: boolean = false;
@@ -141,6 +143,25 @@ export class QCComponent implements OnInit, OnDestroy {
   pendingQCMaterials: any[] = [];
   pendingConfirmMaterials: any[] = [];
   isLoadingReport: boolean = false;
+
+  // IQC button permission (separate from QC tab access)
+  iqcButtonEnabledForCurrentEmployee: boolean = false;
+
+  // IQC Permission modal state
+  iqcPermInputEmployeeId: string = '';
+  iqcPermToggleValue: boolean = true; // ON/OFF for entered employee id
+  iqcPermBusy: boolean = false;
+  iqcPermLoadingList: boolean = false;
+  iqcPermShowAddRow: boolean = false;
+  iqcPermissions: Array<{
+    employeeId: string;
+    enabled: boolean;
+    updatedAt?: Date | null;
+  }> = [];
+
+  // Send report UI state
+  isSendingReport: boolean = false;
+  sendReportStatusText: string = '';
   
   private destroy$ = new Subject<void>();
   
@@ -191,6 +212,9 @@ export class QCComponent implements OnInit, OnDestroy {
       this.isEmployeeVerified = true;
       this.showEmployeeModal = false;
       console.log('✅ Restored employee from localStorage:', employeeId, fallbackName);
+
+      // Load IQC permission for this employee
+      this.iqcButtonEnabledForCurrentEmployee = await this.hasIqcButtonPermission(employeeId);
 
       // Load counts and recent materials after employee verified
       this.loadPendingQCCount();
@@ -498,6 +522,11 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // IQC Modal functions
   openIQCModal(): void {
+    // Gate IQC button by "Quyền" rule
+    if (!this.iqcButtonEnabledForCurrentEmployee) {
+      alert('⛔ Bạn chưa được bật quyền IQC. Vào More → Quyền để bật/tắt theo mã nhân viên.');
+      return;
+    }
     // 🔧 FIX: Kiểm tra currentEmployeeId khi mở modal
     if (!this.currentEmployeeId || this.currentEmployeeId.trim() === '') {
       // Khôi phục từ localStorage nếu có
@@ -1007,6 +1036,9 @@ export class QCComponent implements OnInit, OnDestroy {
       this.isEmployeeVerified = true;
       this.showEmployeeModal = false;
       this.employeeScanInput = '';
+
+      // Load IQC permission for this employee
+      this.iqcButtonEnabledForCurrentEmployee = await this.hasIqcButtonPermission(employeeId);
       
       // 🔧 FIX: Lưu currentEmployeeId vào localStorage để khôi phục khi refresh
       localStorage.setItem('qc_currentEmployeeId', employeeId);
@@ -1121,6 +1153,25 @@ export class QCComponent implements OnInit, OnDestroy {
     }
 
     return false;
+  }
+
+  /**
+   * Quyền bấm nút IQC:
+   * - Collection: qc-iqc-permissions/{EMPLOYEE_ID}
+   * - enabled: boolean (default false nếu không có doc)
+   */
+  private async hasIqcButtonPermission(employeeId: string): Promise<boolean> {
+    const emp = (employeeId || '').trim().toUpperCase();
+    if (!emp) return false;
+    try {
+      const snap = await this.firestore.collection('qc-iqc-permissions').doc(emp).get().toPromise();
+      if (!snap?.exists) return false;
+      const d = snap.data() as any;
+      return d?.enabled === true;
+    } catch (e) {
+      console.warn('⚠️ Failed to read IQC permission (default OFF):', e);
+      return false;
+    }
   }
   
   // Get employee name from Firestore
@@ -1642,6 +1693,172 @@ export class QCComponent implements OnInit, OnDestroy {
   
   closeMoreMenu(): void {
     this.showMoreMenu = false;
+  }
+
+  openIqcPermissionModal(): void {
+    this.showIqcPermissionModal = true;
+    this.showMoreMenu = false;
+    this.iqcPermInputEmployeeId = '';
+    this.iqcPermToggleValue = true;
+    this.iqcPermBusy = false;
+    this.iqcPermShowAddRow = false;
+    this.loadIqcPermissionList();
+    setTimeout(() => {
+      const input = document.getElementById('iqc-perm-employee-input');
+      if (input) input.focus();
+    }, 50);
+  }
+
+  closeIqcPermissionModal(): void {
+    this.showIqcPermissionModal = false;
+    this.iqcPermBusy = false;
+    this.iqcPermLoadingList = false;
+  }
+
+  private normalizeAspEmployeeId(raw: string): string {
+    const s = (raw || '').trim().toUpperCase();
+    if (!s) return '';
+    if (/^\d{4}$/.test(s)) return `ASP${s}`;
+    return s;
+  }
+
+  async submitIqcPermissionToggle(): Promise<void> {
+    const emp = this.normalizeAspEmployeeId(this.iqcPermInputEmployeeId);
+    if (!/^ASP\d{4}$/.test(emp)) {
+      alert('❌ Mã nhân viên không đúng. Nhập dạng ASP + 4 số (VD: ASP0106) hoặc chỉ 4 số.');
+      return;
+    }
+    this.iqcPermBusy = true;
+    try {
+      const now = new Date();
+      await this.firestore.collection('qc-iqc-permissions').doc(emp).set(
+        {
+          employeeId: emp,
+          enabled: this.iqcPermToggleValue === true,
+          updatedAt: now
+        },
+        { merge: true }
+      );
+      if ((this.currentEmployeeId || '').trim().toUpperCase() === emp) {
+        this.iqcButtonEnabledForCurrentEmployee = this.iqcPermToggleValue === true;
+      }
+      alert(`✅ Đã ${this.iqcPermToggleValue ? 'BẬT' : 'TẮT'} quyền IQC cho ${emp}`);
+      // Refresh list
+      await this.loadIqcPermissionList();
+      this.iqcPermShowAddRow = false;
+      this.iqcPermInputEmployeeId = '';
+    } catch (e) {
+      console.error('❌ Failed to set IQC permission:', e);
+      alert('❌ Không lưu được quyền IQC. Kiểm tra kết nối hoặc Firestore Rules.');
+    } finally {
+      this.iqcPermBusy = false;
+    }
+  }
+
+  openAddIqcPermissionRow(): void {
+    this.iqcPermShowAddRow = true;
+    this.iqcPermInputEmployeeId = (this.currentEmployeeId || '').trim().toUpperCase();
+    this.iqcPermToggleValue = true;
+    setTimeout(() => {
+      const input = document.getElementById('iqc-perm-employee-input');
+      if (input) input.focus();
+    }, 50);
+  }
+
+  private parseFirestoreDateToDate(value: any): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (value?.toDate) return value.toDate();
+    if (value?.seconds) return new Date(value.seconds * 1000);
+    if (typeof value === 'number') return new Date(value);
+    if (typeof value === 'string') {
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+
+  async loadIqcPermissionList(): Promise<void> {
+    this.iqcPermLoadingList = true;
+    try {
+      const snap = await this.firestore.collection('qc-iqc-permissions', ref => ref.limit(500)).get().toPromise();
+      const list =
+        (snap?.docs || [])
+          .map(doc => {
+            const d = doc.data() as any;
+            const employeeId = (d?.employeeId || doc.id || '').toString().trim().toUpperCase();
+            const enabled = d?.enabled === true;
+            const updatedAt = this.parseFirestoreDateToDate(d?.updatedAt);
+            if (!employeeId) return null;
+            return { employeeId, enabled, updatedAt };
+          })
+          .filter((x: any) => x !== null) as Array<{ employeeId: string; enabled: boolean; updatedAt?: Date | null }>;
+
+      list.sort((a, b) => {
+        const at = a.updatedAt?.getTime?.() ?? 0;
+        const bt = b.updatedAt?.getTime?.() ?? 0;
+        if (bt !== at) return bt - at;
+        return (a.employeeId || '').localeCompare(b.employeeId || '');
+      });
+      this.iqcPermissions = list;
+    } catch (e) {
+      console.warn('⚠️ Failed to load IQC permission list:', e);
+      this.iqcPermissions = [];
+    } finally {
+      this.iqcPermLoadingList = false;
+    }
+  }
+
+  async toggleIqcPermissionFromList(row: { employeeId: string; enabled: boolean }): Promise<void> {
+    const emp = this.normalizeAspEmployeeId(row.employeeId);
+    if (!/^ASP\d{4}$/.test(emp)) return;
+    const next = !row.enabled;
+    row.enabled = next; // optimistic
+    try {
+      const now = new Date();
+      await this.firestore.collection('qc-iqc-permissions').doc(emp).set(
+        { employeeId: emp, enabled: next, updatedAt: now },
+        { merge: true }
+      );
+      if ((this.currentEmployeeId || '').trim().toUpperCase() === emp) {
+        this.iqcButtonEnabledForCurrentEmployee = next;
+      }
+    } catch (e) {
+      row.enabled = !next; // revert
+      console.warn('❌ Failed to toggle IQC permission:', e);
+      alert('❌ Không cập nhật được quyền IQC. Vui lòng thử lại.');
+    }
+  }
+
+  /** More → Gửi Report: gửi report từ đầu tháng hiện tại tới thời điểm bấm (ASM1). */
+  async sendQcReportNow(): Promise<void> {
+    if (this.isSendingReport) {
+      return;
+    }
+    try {
+      this.isSendingReport = true;
+      this.sendReportStatusText = 'Đang gửi report...';
+      this.showSendReportStatusModal = true;
+      const callable = this.fns.httpsCallable('sendQcMonthlyReportManualFn');
+      await firstValueFrom(callable({ factory: 'ASM1', mode: 'currentMonthToDate' }));
+      this.sendReportStatusText = '✅ Đã gửi report.';
+      setTimeout(() => {
+        // Auto-close after success
+        if (this.showSendReportStatusModal) {
+          this.showSendReportStatusModal = false;
+        }
+      }, 1500);
+    } catch (e) {
+      console.warn('❌ sendQcReportNow failed:', e);
+      this.sendReportStatusText = '❌ Gửi report thất bại. Vui lòng thử lại.';
+    } finally {
+      this.isSendingReport = false;
+      this.closeMoreMenu();
+    }
+  }
+
+  closeSendReportStatusModal(): void {
+    this.showSendReportStatusModal = false;
   }
 
   openIqcDateRangeModal(): void {
@@ -2477,6 +2694,8 @@ export class QCComponent implements OnInit, OnDestroy {
     this.showTodayCheckedModal = false;
     this.showPendingQCModal = false;
     this.showPendingConfirmModal = false;
+    this.showIqcPermissionModal = false;
+    this.showSendReportStatusModal = false;
     this.iqcScanInput = '';
     this.scannedMaterial = null;
     
@@ -2485,6 +2704,10 @@ export class QCComponent implements OnInit, OnDestroy {
     this.todayCheckedCount = 0;
     this.pendingConfirmCount = 0;
     this.recentCheckedMaterials = [];
+
+    this.iqcButtonEnabledForCurrentEmployee = false;
+    this.isSendingReport = false;
+    this.sendReportStatusText = '';
     
     console.log('✅ Đã đăng xuất khỏi tab QC. Vui lòng quét lại mã nhân viên để tiếp tục.');
   }

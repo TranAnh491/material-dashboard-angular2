@@ -51,7 +51,7 @@
     
     <!-- Action Buttons Container -->
     <div class="action-buttons-container">
-      <button class="iqc-btn" (click)="openIQCModal()">
+      <button class="iqc-btn" (click)="openIQCModal()" [disabled]="!iqcButtonEnabledForCurrentEmployee" [class.disabled]="!iqcButtonEnabledForCurrentEmployee">
         <i class="material-icons">check_circle</i>
         IQC
       </button>
@@ -688,7 +688,118 @@
           <i class="material-icons">description</i>
           <span>IQC report</span>
         </button>
+        <button class="menu-option-btn" (click)="openIqcPermissionModal()">
+          <i class="material-icons">vpn_key</i>
+          <span>Quyền</span>
+        </button>
+        <button class="menu-option-btn" (click)="sendQcReportNow()">
+          <i class="material-icons">send</i>
+          <span>Gửi Report</span>
+        </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- IQC Permission Modal -->
+<div class="modal-overlay" *ngIf="showIqcPermissionModal" (click)="closeIqcPermissionModal()">
+  <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">vpn_key</i>
+        Quyền IQC
+      </h3>
+      <button
+        class="download-btn"
+        style="margin-right:10px;"
+        type="button"
+        (click)="openAddIqcPermissionRow()"
+        title="Thêm quyền"
+      >
+        <i class="material-icons">add</i>
+      </button>
+      <button class="close-btn" (click)="closeIqcPermissionModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div style="margin-bottom:10px;color:#111827;font-size:13px;">
+        Nhập mã nhân viên <strong>ASP + 4 số</strong> và chọn <strong>ON/OFF</strong>. Khi <strong>ON</strong> thì mã đó mới bấm được nút <strong>IQC</strong>.
+      </div>
+
+      <div class="loading-report" *ngIf="iqcPermLoadingList">
+        <i class="material-icons rotating">sync</i>
+        <p>Đang tải danh sách quyền...</p>
+      </div>
+
+      <div class="report-content" *ngIf="!iqcPermLoadingList">
+        <table class="report-table" *ngIf="iqcPermissions.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã nhân viên</th>
+              <th>Quyền IQC</th>
+              <th>Cập nhật</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of iqcPermissions; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td><strong>{{ p.employeeId }}</strong></td>
+              <td>
+                <span class="status-badge" [ngClass]="p.enabled ? 'status-pass' : 'status-ng'">
+                  {{ p.enabled ? 'ON' : 'OFF' }}
+                </span>
+              </td>
+              <td>{{ p.updatedAt ? (p.updatedAt | date:'dd/MM/yyyy HH:mm:ss') : '—' }}</td>
+              <td>
+                <button class="menu-option-btn" style="padding:6px 10px;" (click)="toggleIqcPermissionFromList(p)" type="button">
+                  <i class="material-icons">{{ p.enabled ? 'toggle_off' : 'toggle_on' }}</i>
+                  <span>{{ p.enabled ? 'Tắt' : 'Bật' }}</span>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="empty-report" *ngIf="iqcPermissions.length === 0">
+          <i class="material-icons">info</i>
+          <p>Chưa có quyền nào. Bấm dấu <strong>+</strong> để thêm.</p>
+        </div>
+      </div>
+
+      <div class="employee-input-wrapper" style="gap:8px;margin-top:12px;" *ngIf="iqcPermShowAddRow">
+        <input
+          id="iqc-perm-employee-input"
+          type="text"
+          class="employee-scan-input"
+          [(ngModel)]="iqcPermInputEmployeeId"
+          placeholder="VD: ASP0106 hoặc 0106"
+          autocomplete="off"
+          [disabled]="iqcPermBusy"
+        />
+        <select [(ngModel)]="iqcPermToggleValue" class="date-select" [disabled]="iqcPermBusy" style="min-width:90px;">
+          <option [ngValue]="true">ON</option>
+          <option [ngValue]="false">OFF</option>
+        </select>
+        <button class="verify-btn" (click)="submitIqcPermissionToggle()" [disabled]="iqcPermBusy">
+          <i class="material-icons">save</i>
+          Lưu
+        </button>
+        <button class="close-modal-btn" type="button" (click)="iqcPermShowAddRow=false" [disabled]="iqcPermBusy" style="margin-left:auto;">
+          <i class="material-icons">close</i>
+          Hủy
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closeIqcPermissionModal()" [disabled]="iqcPermBusy">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
     </div>
   </div>
 </div>

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -110,6 +110,41 @@ exports.sendQcPriorityResolvedEmailFn = functions
         const { sendQcPriorityResolvedEmail } = await Promise.resolve().then(() => __importStar(require('./qc-priority-email')));
         await sendQcPriorityResolvedEmail(payload);
         return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/**
+ * QC Monthly Report:
+ * - Schedule: 08:00 ngày 1 hằng tháng (VN) → gửi report tháng vừa rồi
+ * - Manual: callable từ UI → gửi report từ đầu tháng tới thời điểm bấm
+ */
+exports.sendQcMonthlyReportAtMonthStart = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .pubsub.schedule('0 8 1 * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { sendQcMonthlyReport } = await Promise.resolve().then(() => __importStar(require('./qc-monthly-report')));
+    await sendQcMonthlyReport(admin.firestore(), { factory: 'ASM1', mode: 'previousMonth' });
+});
+exports.sendQcMonthlyReportManualFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const factory = (typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().toUpperCase() : 'ASM1');
+    const modeRaw = typeof (data === null || data === void 0 ? void 0 : data.mode) === 'string' ? data.mode.trim() : 'currentMonthToDate';
+    const mode = (modeRaw === 'previousMonth' ? 'previousMonth' : 'currentMonthToDate');
+    if (factory !== 'ASM1') {
+        throw new functions.https.HttpsError('invalid-argument', 'Chỉ hỗ trợ factory ASM1.');
+    }
+    try {
+        const { sendQcMonthlyReport } = await Promise.resolve().then(() => __importStar(require('./qc-monthly-report')));
+        const r = await sendQcMonthlyReport(admin.firestore(), { factory, mode });
+        return { ok: true, total: r.total };
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

@@ -26,6 +26,12 @@ export const emailSmtpPort = defineString('EMAIL_SMTP_PORT', { default: '587' })
 
 /** Tab QC: ưu tiên Chờ kiểm, đổi từ CHỜ KIỂM sang trạng thái khác */
 export const qcPriorityEmailTo = defineString('QC_PRIORITY_EMAIL_TO', {
-  default: 'plan4@airspeedmfgvn.com',
+  default: 'ASM1-Planning@airspeedmfg.com',
   description: 'Email nhận thông báo mã QC ưu tiên đã xử lý'
+});
+
+/** Tab QC: report tháng (ASM1) */
+export const qcMonthlyReportEmailTo = defineString('QC_MONTHLY_REPORT_EMAIL_TO', {
+  default: 'asm1-quality@airspeedmfg.com',
+  description: 'Email nhận QC monthly report (ASM1)'
 });

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.qcPriorityEmailTo = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
+exports.qcMonthlyReportEmailTo = exports.qcPriorityEmailTo = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
 /**
  * SMTP cho Control Batch (email cảnh báo trùng xuất kho).
  *
@@ -27,7 +27,12 @@ exports.emailSmtpHost = (0, params_1.defineString)('EMAIL_SMTP_HOST', { default:
 exports.emailSmtpPort = (0, params_1.defineString)('EMAIL_SMTP_PORT', { default: '587' });
 /** Tab QC: ưu tiên Chờ kiểm, đổi từ CHỜ KIỂM sang trạng thái khác */
 exports.qcPriorityEmailTo = (0, params_1.defineString)('QC_PRIORITY_EMAIL_TO', {
-    default: 'plan4@airspeedmfgvn.com',
+    default: 'ASM1-Planning@airspeedmfg.com',
     description: 'Email nhận thông báo mã QC ưu tiên đã xử lý'
+});
+/** Tab QC: report tháng (ASM1) */
+exports.qcMonthlyReportEmailTo = (0, params_1.defineString)('QC_MONTHLY_REPORT_EMAIL_TO', {
+    default: 'asm1-quality@airspeedmfg.com',
+    description: 'Email nhận QC monthly report (ASM1)'
 });
 //# sourceMappingURL=params-config.js.map
