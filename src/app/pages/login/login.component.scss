@@ -350,6 +350,12 @@
     margin: 0;
     font-size: 14px;
   }
+
+  .signup-hint {
+    line-height: 1.45;
+    font-size: 13px;
+    color: #555;
+  }
 }
 
 .form-group {
@@ -362,6 +368,10 @@
 
 .employee-id-input {
   text-transform: uppercase;
+}
+
+.login-id-input {
+  text-transform: none;
 }
 
 .login-footer {

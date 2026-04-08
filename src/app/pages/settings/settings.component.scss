@@ -221,6 +221,19 @@
   background: #f1f8f4;
 }
 
+.register-account-row {
+  flex-wrap: wrap;
+
+  .register-department-select {
+    min-width: 120px;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    background: #fff;
+  }
+}
+
 // Notifications
 .notifications {
   background: #fff;
@@ -542,11 +555,33 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
+
+      .detail-hint {
+        font-size: 12px;
+        color: #666;
+        font-weight: normal;
+      }
 
       strong {
         display: inline-block;
         min-width: 120px;
         color: #333;
+      }
+
+      &.detail-row-edit {
+        align-items: flex-start;
+
+        .profile-input {
+          flex: 1;
+          min-width: 200px;
+          max-width: 100%;
+          padding: 8px 10px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          font-size: 14px;
+          box-sizing: border-box;
+        }
       }
       
       .btn-change-password {

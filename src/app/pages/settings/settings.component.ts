@@ -127,11 +127,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
   isResettingAccountPassword = false;
   private static readonly DEFAULT_RESET_PASSWORD = '123456';
 
-  /** Tạo tài khoản Firebase (Auth + Firestore) từ Settings */
+  /** Đăng ký tài khoản (Cloud Function: mật khẩu 6 số gửi email) */
   createAccountEmployeeId = '';
-  createAccountPassword = '';
-  isCreatingAccount = false;
+  createAccountFullName = '';
+  createAccountDepartment = '';
+  createAccountEmail = '';
+  isRegisteringUser = false;
   isDeletingAccountByEmployeeId = false;
+
+  /** Bộ phận — đồng bộ với bảng user cũ */
+  readonly departmentOptions = ['WH', 'QA', 'ENG', 'PLAN', 'PD', 'CS', 'ACC'];
+
+  /** Popup user: chỉnh sửa trước khi Lưu */
+  tempDisplayName = '';
+  tempDepartment = '';
+  tempProfileEmail = '';
 
   // Cleanup Firebase Auth users outside Settings
   isCleaningAuthUsers = false;
@@ -171,21 +181,35 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Tạo tài khoản: mã ASP + mật khẩu → Firebase Auth (aspxxxx@asp.com) + users / user-permissions / user-tab-permissions.
-   * Sau khi tạo xong mở popup phân quyền tab (giống seed ensureAspAccount).
+   * Đăng ký: mã nhân viên + bộ phận + email → Cloud Function tạo Auth + Firestore,
+   * mật khẩu 6 số ngẫu nhiên gửi qua email.
    */
-  async createFirebaseAccountFromSettings(): Promise<void> {
-    if (this.isCreatingAccount) return;
+  async registerAspUserWithEmailFromSettings(): Promise<void> {
+    if (this.isRegisteringUser) return;
 
     const employeeId = this.parseAspEmployeeIdFromResetInput(this.createAccountEmployeeId);
-    const password = (this.createAccountPassword || '').trim();
+    const fullName = (this.createAccountFullName || '').trim();
+    const department = (this.createAccountDepartment || '').trim();
+    const email = (this.createAccountEmail || '').trim().toLowerCase();
 
     if (!employeeId) {
       alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
       return;
     }
-    if (!password || password.length < 6) {
-      alert('Mật khẩu phải có ít nhất 6 ký tự (yêu cầu của Firebase Authentication).');
+    if (!fullName) {
+      alert('Vui lòng nhập họ tên (khác ID đăng nhập ASP).');
+      return;
+    }
+    if (!department) {
+      alert('Vui lòng chọn bộ phận.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert('Email không hợp lệ.');
+      return;
+    }
+    if (!this.isAllowedRegistrationEmail(email)) {
+      alert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
       return;
     }
 
@@ -195,113 +219,50 @@ export class SettingsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const digits = employeeId.replace(/^ASP/, '');
-    const email = `asp${digits}@asp.com`;
-    const displayName = employeeId;
-
-    this.isCreatingAccount = true;
-    const appName = `settings-create-${digits}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    let secondaryApp: firebase.app.App | null = null;
-
+    this.isRegisteringUser = true;
     try {
-      const appOptions = this.firestore.firestore.app.options as any;
-      secondaryApp = firebase.initializeApp(appOptions, appName);
-      const secondaryAuth = secondaryApp.auth();
-
-      let uid: string;
-      try {
-        const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
-        uid = cred.user!.uid;
-        await secondaryAuth.signOut();
-      } catch (e: any) {
-        if (e?.code === 'auth/email-already-in-use') {
-          alert(
-            `Tài khoản email ${email} đã tồn tại trên Firebase Authentication.\n\n` +
-              'Nếu đây là cùng mã nhân viên, hãy dùng mục "Reset mật khẩu" hoặc kiểm tra danh sách người dùng.'
-          );
-          return;
-        }
-        if (e?.code === 'auth/weak-password') {
-          alert('Mật khẩu quá yếu. Vui lòng chọn mật khẩu đủ mạnh hơn (tối thiểu 6 ký tự).');
-          return;
-        }
-        throw e;
-      }
-
-      await this.firestore.collection('users').doc(uid).set(
-        {
-          uid,
-          email,
-          employeeId: displayName,
-          displayName,
-          password,
-          department: '',
-          factory: '',
-          role: 'User',
-          createdAt: new Date(),
-          lastLoginAt: new Date()
-        },
-        { merge: true }
+      const result: any = await firstValueFrom(
+        this.fns.httpsCallable('registerAspUserWithEmailFn')({
+          employeeId,
+          fullName,
+          department,
+          email
+        })
       );
 
-      await this.firestore.collection('user-permissions').doc(uid).set(
-        {
-          uid,
-          email,
-          displayName,
-          hasDeletePermission: false,
-          hasCompletePermission: false,
-          hasReadOnlyPermission: true,
-          password,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        { merge: true }
-      );
-
-      const defaultTabPermissions: { [key: string]: boolean } = {};
-      this.availableTabs.forEach((tab) => {
-        defaultTabPermissions[tab.key] = tab.key === 'dashboard';
-      });
-
-      await this.firestore.collection('user-tab-permissions').doc(uid).set(
-        {
-          uid,
-          email,
-          displayName,
-          tabPermissions: defaultTabPermissions,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        { merge: true }
-      );
-
-      this.firebaseUserPasswords[uid] = password;
-
+      const payload = result?.data !== undefined ? result.data : result;
+      const uid: string | undefined = payload?.uid;
       this.createAccountEmployeeId = '';
-      this.createAccountPassword = '';
+      this.createAccountFullName = '';
+      this.createAccountDepartment = '';
+      this.createAccountEmail = '';
 
       await this.refreshFirebaseUsers();
 
-      const created = this.firebaseUsers.find((u) => u.uid === uid);
-      if (created) {
-        this.openPermissionModal(created);
-      } else {
-        alert(`✅ Đã tạo tài khoản ${displayName} (${email}). Vào danh sách để cấp quyền tab.`);
-      }
-    } catch (error: any) {
-      console.error('❌ createFirebaseAccountFromSettings:', error);
-      const msg = error?.message || String(error);
-      alert('❌ Không tạo được tài khoản: ' + msg);
-    } finally {
-      if (secondaryApp) {
-        try {
-          await secondaryApp.delete();
-        } catch (e) {
-          console.warn('⚠️ Failed to delete secondary Firebase app:', e);
+      alert(
+        `✅ Đã tạo tài khoản và gửi mật khẩu 6 số tới email:\n${email}\n\n` +
+          `Người dùng đăng nhập app bằng ID ${employeeId} và mật khẩu trong thư (không nhập email ở màn đăng nhập).`
+      );
+
+      if (uid) {
+        const created = this.firebaseUsers.find((u) => u.uid === uid);
+        if (created) {
+          this.openPermissionModal(created);
         }
       }
-      this.isCreatingAccount = false;
+    } catch (error: any) {
+      console.error('❌ registerAspUserWithEmailFromSettings:', error);
+      const code = typeof error?.code === 'string' ? error.code : '';
+      const msg = (error?.message as string) || '';
+      const details = error?.details ? String(error.details) : '';
+      const suffix = [msg, details].filter(Boolean).join(' | ');
+      alert(
+        '❌ Không đăng ký được: ' +
+          (code ? `${code} — ` : '') +
+          (suffix || '(không có chi tiết)')
+      );
+    } finally {
+      this.isRegisteringUser = false;
     }
   }
 
@@ -328,8 +289,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         })
       );
 
-      // Clear UI + refresh
-      this.createAccountPassword = '';
       await this.refreshFirebaseUsers();
       alert(`✅ Đã xóa tài khoản ${employeeId}. Bây giờ bạn có thể tạo lại.`);
     } catch (error: any) {
@@ -346,6 +305,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     } finally {
       this.isDeletingAccountByEmployeeId = false;
     }
+  }
+
+  /** Email đăng ký (Settings + đồng bộ server) */
+  private isAllowedRegistrationEmail(email: string): boolean {
+    const e = email.trim().toLowerCase();
+    return e.endsWith('@airspeedmfgvn.com') || e.endsWith('@airspeedmfg.com');
   }
 
   /** Chuẩn hóa nhập: ASP0054 hoặc 0054 → ASP0054 */
@@ -1827,6 +1792,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Mở popup quản lý permissions cho user
   openPermissionModal(user: User): void {
     this.selectedUser = user;
+    this.tempDisplayName = (user.displayName || '').trim();
+    this.tempDepartment = (user.department || '').trim();
+    this.tempProfileEmail = (user.email || '').trim();
     // Load permissions hiện tại của user
     this.tempTabPermissions = { ...(this.firebaseUserTabPermissions[user.uid] || {}) };
     // Đảm bảo tất cả tabs đều có trong tempTabPermissions
@@ -1848,6 +1816,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.tempReadOnlyPermission = false;
     this.changePasswordValue = '';
     this.showChangePasswordForm = false;
+    this.tempDisplayName = '';
+    this.tempDepartment = '';
+    this.tempProfileEmail = '';
   }
 
   // Lưu permissions cho user
@@ -1855,7 +1826,34 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (!this.selectedUser) return;
 
     try {
-      const canonicalEmail = this.getCanonicalAspEmail(this.selectedUser) || (this.selectedUser.email || '').toLowerCase();
+      const email = (this.tempProfileEmail || '').trim().toLowerCase();
+      const displayName = (this.tempDisplayName || '').trim();
+      const department = (this.tempDepartment || '').trim();
+
+      if (!email) {
+        alert('Email tài khoản (Firebase) không được để trống.');
+        return;
+      }
+
+      const prev = this.selectedUser;
+      const profileChanged =
+        email !== (prev.email || '').toLowerCase().trim() ||
+        displayName !== (prev.displayName || '').trim() ||
+        department !== (prev.department || '').trim();
+
+      if (profileChanged) {
+        await firstValueFrom(
+          this.fns.httpsCallable('adminUpdateUserProfileFn')({
+            uid: prev.uid,
+            email,
+            displayName,
+            department
+          })
+        );
+        this.selectedUser.email = email;
+        this.selectedUser.displayName = displayName;
+        this.selectedUser.department = department;
+      }
 
       // Cập nhật local data
       this.firebaseUserTabPermissions[this.selectedUser.uid] = { ...this.tempTabPermissions };
@@ -1864,8 +1862,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Lưu tab permissions vào Firestore
       await this.firestore.collection('user-tab-permissions').doc(this.selectedUser.uid).set({
         uid: this.selectedUser.uid,
-        email: canonicalEmail,
-        displayName: this.selectedUser.displayName || '',
+        email,
+        displayName: displayName || this.selectedUser.displayName || '',
         tabPermissions: this.tempTabPermissions,
         updatedAt: new Date()
       }, { merge: true });
@@ -1873,23 +1871,22 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Lưu read-only permission vào Firestore
       await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
         uid: this.selectedUser.uid,
-        email: canonicalEmail,
-        displayName: this.selectedUser.displayName || '',
+        email,
+        displayName: displayName || this.selectedUser.displayName || '',
         hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
         hasCompletePermission: this.firebaseUserCompletePermissions[this.selectedUser.uid] || false,
         hasReadOnlyPermission: this.tempReadOnlyPermission,
         updatedAt: new Date()
       }, { merge: true });
 
-      // Đồng bộ email chuẩn vào users collection
       await this.firestore.collection('users').doc(this.selectedUser.uid).set({
-        email: canonicalEmail,
+        email,
+        displayName: displayName || this.selectedUser.displayName || '',
+        department,
         updatedAt: new Date()
       }, { merge: true });
 
-      this.selectedUser.email = canonicalEmail;
-
-      console.log(`✅ Saved permissions for ${canonicalEmail}`);
+      console.log(`✅ Saved permissions for ${email}`);
       this.closePermissionModal();
     } catch (error) {
       console.error('❌ Error saving user permissions:', error);

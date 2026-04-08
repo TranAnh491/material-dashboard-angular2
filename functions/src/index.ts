@@ -1,19 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import {
-  buildControlBatchDupSettingsFromCallablePayload,
-  loadControlBatchDupSettings,
-  runOutboundDupNotifyForSlot,
-  sendOutboundDupReportManual
-} from './outbound-dup-notify';
-import { sendQcPriorityResolvedEmail, QcPriorityResolvedPayload } from './qc-priority-email';
+import type { QcPriorityResolvedPayload } from './qc-priority-email';
 import { emailPass } from './params-config';
-import {
-  adminUpdateUserPassword,
-  adminResetUserPassword,
-  adminSetUserPasswordByEmployeeId
-} from './admin-update-user-password';
-import { adminDeleteAuthUsersNotInSettings, adminDeleteUserByEmployeeId } from './admin-sync-auth-users';
 
 admin.initializeApp();
 
@@ -26,6 +14,7 @@ export const notifyOutboundDuplicatesAt12 = functions
   .pubsub.schedule('0 12 * * *')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
+    const { runOutboundDupNotifyForSlot } = await import('./outbound-dup-notify');
     await runOutboundDupNotifyForSlot(admin.firestore(), '12');
   });
 
@@ -34,6 +23,7 @@ export const notifyOutboundDuplicatesAt17 = functions
   .pubsub.schedule('0 17 * * *')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
+    const { runOutboundDupNotifyForSlot } = await import('./outbound-dup-notify');
     await runOutboundDupNotifyForSlot(admin.firestore(), '17');
   });
 
@@ -45,6 +35,11 @@ export const sendControlBatchReportEmail = functions
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
     try {
+      const {
+        buildControlBatchDupSettingsFromCallablePayload,
+        loadControlBatchDupSettings,
+        sendOutboundDupReportManual
+      } = await import('./outbound-dup-notify');
       const db = admin.firestore();
       const fromUi = buildControlBatchDupSettingsFromCallablePayload(data);
       const settings = fromUi ?? (await loadControlBatchDupSettings(db));
@@ -88,6 +83,7 @@ export const sendQcPriorityResolvedEmailFn = functions
       checkedBy
     };
     try {
+      const { sendQcPriorityResolvedEmail } = await import('./qc-priority-email');
       await sendQcPriorityResolvedEmail(payload);
       return { ok: true };
     } catch (e: unknown) {
@@ -113,6 +109,7 @@ export const adminUpdateUserPasswordFn = functions
     }
 
     try {
+      const { adminUpdateUserPassword } = await import('./admin-update-user-password');
       await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
       return { ok: true };
     } catch (e: unknown) {
@@ -155,6 +152,7 @@ export const adminResetUserPasswordFn = functions
     }
 
     try {
+      const { adminResetUserPassword } = await import('./admin-update-user-password');
       const newPassword = await adminResetUserPassword(context.auth.uid, uid);
       return { ok: true, newPassword };
     } catch (e: unknown) {
@@ -190,9 +188,8 @@ export const adminResetUserPasswordFn = functions
   });
 
 /** Admin: đặt password theo mã nhân viên (ASPxxxx hoặc xxxx) -> reset về newPassword. */
-export const adminSetUserPasswordByEmployeeIdFn = functions
-  .runWith({ secrets: [emailPass] })
-  .https.onCall(async (data: { employeeId?: string; newPassword?: string }, context) => {
+export const adminSetUserPasswordByEmployeeIdFn = functions.https.onCall(
+  async (data: { employeeId?: string; newPassword?: string }, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
@@ -205,6 +202,7 @@ export const adminSetUserPasswordByEmployeeIdFn = functions
     }
 
     try {
+      const { adminSetUserPasswordByEmployeeId } = await import('./admin-update-user-password');
       const r = await adminSetUserPasswordByEmployeeId(context.auth.uid, employeeId, newPassword);
       return { ok: true, uid: r.uid, email: r.email };
     } catch (e: unknown) {
@@ -235,6 +233,7 @@ export const adminDeleteUserByEmployeeIdFn = functions
     }
 
     try {
+      const { adminDeleteUserByEmployeeId } = await import('./admin-sync-auth-users');
       const r = await adminDeleteUserByEmployeeId(context.auth.uid, employeeId);
       return r;
     } catch (e: unknown) {
@@ -256,6 +255,134 @@ export const adminDeleteUserByEmployeeIdFn = functions
     }
   });
 
+/** Admin: sửa tên, bộ phận, email đăng nhập (Auth + Firestore). */
+export const adminUpdateUserProfileFn = functions.https.onCall(
+  async (
+    data: { uid?: string; displayName?: string; department?: string; email?: string },
+    context
+  ) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+
+    const uid = typeof data?.uid === 'string' ? data.uid.trim() : '';
+    if (!uid) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
+    }
+
+    try {
+      const { adminUpdateUserProfile } = await import('./admin-update-user-profile');
+      const r = await adminUpdateUserProfile(context.auth.uid, uid, {
+        displayName: data.displayName,
+        department: data.department,
+        email: data.email
+      });
+      return { ok: true, email: r.email };
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Chỉ Admin/Quản lý mới sửa được hồ sơ.'
+        );
+      }
+      if (msg.includes('đã được dùng')) {
+        throw new functions.https.HttpsError('already-exists', msg);
+      }
+      if (msg.includes('không hợp lệ')) {
+        throw new functions.https.HttpsError('invalid-argument', msg);
+      }
+
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  }
+);
+
+/** Admin: đăng ký user — mật khẩu 6 số gửi email (Auth + Firestore + SMTP). */
+export const registerAspUserWithEmailFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: { employeeId?: string; department?: string; email?: string; fullName?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+
+    const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
+    const department = typeof data?.department === 'string' ? data.department : '';
+    const email = typeof data?.email === 'string' ? data.email.trim() : '';
+    const fullName = typeof data?.fullName === 'string' ? data.fullName.trim() : '';
+    if (!employeeId || !email || !fullName) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId, email hoặc họ tên.');
+    }
+
+    try {
+      const { registerAspUserWithEmail } = await import('./admin-register-user');
+      return await registerAspUserWithEmail(context.auth.uid, employeeId, department, email, fullName);
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+      }
+      if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
+        throw new functions.https.HttpsError('already-exists', msg);
+      }
+      if (
+        msg.includes('không đúng') ||
+        msg.includes('không hợp lệ') ||
+        msg.includes('Thiếu') ||
+        msg.includes('phải có đuôi')
+      ) {
+        throw new functions.https.HttpsError('invalid-argument', msg);
+      }
+
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  });
+
+/**
+ * Đăng ký từ trang login (không cần đăng nhập).
+ * Cảnh báo: có thể bị lạm dụng — nên bật App Check / giới hạn IP nếu cần.
+ */
+export const publicRegisterAspUserFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: { employeeId?: string; department?: string; email?: string; fullName?: string }, _context) => {
+    const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
+    const department = typeof data?.department === 'string' ? data.department : '';
+    const email = typeof data?.email === 'string' ? data.email.trim() : '';
+    const fullName = typeof data?.fullName === 'string' ? data.fullName.trim() : '';
+    if (!employeeId || !email || !fullName) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId, email hoặc họ tên.');
+    }
+
+    try {
+      const { publicRegisterAspUserWithEmail } = await import('./admin-register-user');
+      return await publicRegisterAspUserWithEmail(employeeId, department, email, fullName);
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+      if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
+        throw new functions.https.HttpsError('already-exists', msg);
+      }
+      if (
+        msg.includes('không đúng') ||
+        msg.includes('không hợp lệ') ||
+        msg.includes('Thiếu') ||
+        msg.includes('phải có đuôi')
+      ) {
+        throw new functions.https.HttpsError('invalid-argument', msg);
+      }
+
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  });
+
 /** Admin: xóa Firebase Auth users không nằm trong danh sách Settings (collection users/user-permissions). */
 export const adminDeleteAuthUsersNotInSettingsFn = functions
   .https.onCall(async (_data: unknown, context) => {
@@ -264,6 +391,7 @@ export const adminDeleteAuthUsersNotInSettingsFn = functions
     }
 
     try {
+      const { adminDeleteAuthUsersNotInSettings } = await import('./admin-sync-auth-users');
       const r = await adminDeleteAuthUsersNotInSettings(context.auth.uid);
       return r;
     } catch (e: unknown) {
@@ -277,3 +405,24 @@ export const adminDeleteAuthUsersNotInSettingsFn = functions
       throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
   });
+
+/**
+ * Đăng nhập bằng mã ASPxxxx: tra email thật trong Firestore (users.employeeId) để signIn đúng tài khoản
+ * đăng ký qua mail (@airspeedmfgvn.com), không chỉ asp####@asp.com.
+ */
+export const lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (data: { employeeId?: string }) => {
+  const raw = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
+  if (!raw) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId.');
+  }
+
+  try {
+    const { lookupAuthLoginEmailByEmployeeId } = await import('./lookup-login-email');
+    const email = await lookupAuthLoginEmailByEmployeeId(raw);
+    return { email };
+  } catch (e: unknown) {
+    const anyErr = e as any;
+    const msg = anyErr instanceof Error ? anyErr.message : anyErr?.message ?? String(e);
+    throw new functions.https.HttpsError('internal', msg || 'Lỗi tra cứu email.');
+  }
+});

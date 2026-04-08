@@ -47,23 +47,24 @@
   <div class="login-card">
     <div class="login-header">
       <h2>{{ isSignup ? (currentLanguage === 'en' ? 'Sign Up' : 'Đăng ký') : (currentLanguage === 'en' ? 'Login' : 'Đăng nhập') }}</h2>
-      <p>{{ isSignup ? (currentLanguage === 'en' ? 'Create new account' : 'Tạo tài khoản mới') : (currentLanguage === 'en' ? 'Login to system' : 'Đăng nhập vào hệ thống') }}</p>
+      <p *ngIf="!isSignup">{{ currentLanguage === 'en' ? 'Login to system' : 'Đăng nhập vào hệ thống' }}</p>
+      <p *ngIf="isSignup" class="signup-hint">{{ currentLanguage === 'en' ? 'ASP login ID, your full name, department and email. A 6-digit password will be sent to your email. Login uses ASP ID + password, not email.' : 'ID đăng nhập (ASP + 4 số), họ tên, bộ phận và email. Mật khẩu 6 số gửi qua mail. Đăng nhập app bằng mã ASP + mật khẩu — không nhập email ở màn đăng nhập.' }}</p>
     </div>
 
     <!-- Login Form -->
     <form [formGroup]="loginForm" (ngSubmit)="onLogin()" *ngIf="!isSignup">
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Employee ID' : 'Mã số nhân viên' }}</mat-label>
+          <mat-label>{{ currentLanguage === 'en' ? 'Employee ID (ASP + 4 digits)' : 'Mã nhân viên (ASP + 4 số)' }}</mat-label>
           <input matInput formControlName="employeeId" 
-                 class="employee-id-input"
+                 class="login-id-input"
                  (input)="onEmployeeIdInput($event, 'login')"
-                 [placeholder]="currentLanguage === 'en' ? 'Enter employee ID (ASP + 4 digits)' : 'Nhập mã số nhân viên (ASP + 4 số)'">
+                 [placeholder]="currentLanguage === 'en' ? 'e.g. ASP0704' : 'VD: ASP0704'">
           <mat-error *ngIf="loginForm.get('employeeId')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Employee ID is required' : 'Mã số nhân viên là bắt buộc' }}
+            {{ currentLanguage === 'en' ? 'This field is required' : 'Bắt buộc nhập' }}
           </mat-error>
           <mat-error *ngIf="loginForm.get('employeeId')?.hasError('pattern')">
-            {{ currentLanguage === 'en' ? 'Employee ID must be ASP + 4 digits (e.g., ASP0001)' : 'Mã số nhân viên phải có định dạng ASP + 4 số (VD: ASP0001)' }}
+            {{ currentLanguage === 'en' ? 'Enter ASP + 4 digits (e.g. ASP0001)' : 'Nhập ASP + 4 số (VD: ASP0001)' }}
           </mat-error>
         </mat-form-field>
       </div>
@@ -93,16 +94,30 @@
     <form [formGroup]="signupForm" (ngSubmit)="onSignup()" *ngIf="isSignup">
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Employee ID' : 'Mã số nhân viên' }}</mat-label>
+          <mat-label>{{ currentLanguage === 'en' ? 'Login ID (ASP + 4 digits)' : 'ID đăng nhập (ASP + 4 số)' }}</mat-label>
           <input matInput formControlName="employeeId" 
                  class="employee-id-input"
                  (input)="onEmployeeIdInput($event, 'signup')"
-                 [placeholder]="currentLanguage === 'en' ? 'Enter employee ID (ASP + 4 digits)' : 'Nhập mã số nhân viên (ASP + 4 số)'">
+                 [placeholder]="currentLanguage === 'en' ? 'e.g. ASP0704' : 'VD: ASP0704'">
           <mat-error *ngIf="signupForm.get('employeeId')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Employee ID is required' : 'Mã số nhân viên là bắt buộc' }}
+            {{ currentLanguage === 'en' ? 'Login ID is required' : 'Bắt buộc nhập ID đăng nhập' }}
           </mat-error>
           <mat-error *ngIf="signupForm.get('employeeId')?.hasError('pattern')">
-            {{ currentLanguage === 'en' ? 'Employee ID must be ASP + 4 digits (e.g., ASP0001)' : 'Mã số nhân viên phải có định dạng ASP + 4 số (VD: ASP0001)' }}
+            {{ currentLanguage === 'en' ? 'Must be ASP + 4 digits (e.g. ASP0001)' : 'Phải là ASP + 4 số (VD: ASP0001)' }}
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-group">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ currentLanguage === 'en' ? 'Full name' : 'Họ tên' }}</mat-label>
+          <input matInput formControlName="fullName" autocomplete="name"
+                 [placeholder]="currentLanguage === 'en' ? 'Your full name (not the ASP code)' : 'Họ tên thật (khác mã ASP)'">
+          <mat-error *ngIf="signupForm.get('fullName')?.hasError('required')">
+            {{ currentLanguage === 'en' ? 'Full name is required' : 'Bắt buộc nhập họ tên' }}
+          </mat-error>
+          <mat-error *ngIf="signupForm.get('fullName')?.hasError('minlength')">
+            {{ currentLanguage === 'en' ? 'Name too short' : 'Họ tên quá ngắn' }}
           </mat-error>
         </mat-form-field>
       </div>
@@ -128,25 +143,14 @@
 
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Password' : 'Mật khẩu' }}</mat-label>
-          <input matInput formControlName="password" type="password" 
-                 [placeholder]="currentLanguage === 'en' ? 'Enter password' : 'Nhập mật khẩu'">
-          <mat-error *ngIf="signupForm.get('password')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Password is required' : 'Mật khẩu là bắt buộc' }}
+          <mat-label>{{ currentLanguage === 'en' ? 'Email' : 'Email' }}</mat-label>
+          <input matInput formControlName="email" type="email" autocomplete="email"
+                 [placeholder]="currentLanguage === 'en' ? 'Email to receive login password' : 'Email nhận mật khẩu đăng nhập'">
+          <mat-error *ngIf="signupForm.get('email')?.hasError('required')">
+            {{ currentLanguage === 'en' ? 'Email is required' : 'Email là bắt buộc' }}
           </mat-error>
-          <mat-error *ngIf="signupForm.get('password')?.hasError('minlength')">
-            {{ currentLanguage === 'en' ? 'Password must be at least 6 characters' : 'Mật khẩu phải có ít nhất 6 ký tự' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
-
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Confirm Password' : 'Xác nhận mật khẩu' }}</mat-label>
-          <input matInput formControlName="confirmPassword" type="password" 
-                 [placeholder]="currentLanguage === 'en' ? 'Re-enter password' : 'Nhập lại mật khẩu'">
-          <mat-error *ngIf="signupForm.get('confirmPassword')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'Password confirmation is required' : 'Xác nhận mật khẩu là bắt buộc' }}
+          <mat-error *ngIf="signupForm.get('email')?.hasError('pattern')">
+            {{ currentLanguage === 'en' ? 'Use @airspeedmfgvn.com or @airspeedmfg.com' : 'Chỉ dùng email @airspeedmfgvn.com hoặc @airspeedmfg.com' }}
           </mat-error>
         </mat-form-field>
       </div>

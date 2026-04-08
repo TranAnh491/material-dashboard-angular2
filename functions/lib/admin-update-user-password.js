@@ -148,8 +148,24 @@ async function adminSetUserPasswordByEmployeeId(callerUid, employeeIdRaw, newPas
             throw e;
         }
     }
-    if (!foundUid || !foundEmail) {
+    // Đăng ký bằng email thật: tìm theo field employeeId trên Firestore
+    if (!foundUid) {
+        const fsSnap = await admin
+            .firestore()
+            .collection('users')
+            .where('employeeId', '==', employeeId)
+            .limit(1)
+            .get();
+        if (!fsSnap.empty) {
+            foundUid = fsSnap.docs[0].id;
+        }
+    }
+    if (!foundUid) {
         throw new Error(`Không tìm thấy Firebase Auth user theo mã ${employeeId}.`);
+    }
+    if (!foundEmail) {
+        const authUser = await admin.auth().getUser(foundUid);
+        foundEmail = authUser.email || '';
     }
     await adminUpdateUserPassword(callerUid, foundUid, newPassword);
     return { uid: foundUid, email: foundEmail };

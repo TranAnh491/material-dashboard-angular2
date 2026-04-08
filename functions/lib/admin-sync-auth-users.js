@@ -101,8 +101,23 @@ async function adminDeleteUserByEmployeeId(callerUid, employeeIdRaw) {
             throw err;
         }
     }
-    if (!uid || !email) {
+    if (!uid) {
+        const fsSnap = await admin
+            .firestore()
+            .collection('users')
+            .where('employeeId', '==', employeeId)
+            .limit(1)
+            .get();
+        if (!fsSnap.empty) {
+            uid = fsSnap.docs[0].id;
+        }
+    }
+    if (!uid) {
         throw new Error(`Không tìm thấy Firebase Auth user theo mã ${employeeId}.`);
+    }
+    if (!email) {
+        const ur = await admin.auth().getUser(uid);
+        email = ur.email || '';
     }
     // Không cho xóa chính mình (an toàn)
     if (uid === callerUid) {

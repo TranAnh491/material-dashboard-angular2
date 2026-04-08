@@ -33,14 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminDeleteAuthUsersNotInSettingsFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-const outbound_dup_notify_1 = require("./outbound-dup-notify");
-const qc_priority_email_1 = require("./qc-priority-email");
 const params_config_1 = require("./params-config");
-const admin_update_user_password_1 = require("./admin-update-user-password");
-const admin_sync_auth_users_1 = require("./admin-sync-auth-users");
 admin.initializeApp();
 /**
  * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email.
@@ -51,14 +47,16 @@ exports.notifyOutboundDuplicatesAt12 = functions
     .pubsub.schedule('0 12 * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
-    await (0, outbound_dup_notify_1.runOutboundDupNotifyForSlot)(admin.firestore(), '12');
+    const { runOutboundDupNotifyForSlot } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
+    await runOutboundDupNotifyForSlot(admin.firestore(), '12');
 });
 exports.notifyOutboundDuplicatesAt17 = functions
     .runWith({ secrets: [params_config_1.emailPass] })
     .pubsub.schedule('0 17 * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
-    await (0, outbound_dup_notify_1.runOutboundDupNotifyForSlot)(admin.firestore(), '17');
+    const { runOutboundDupNotifyForSlot } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
+    await runOutboundDupNotifyForSlot(admin.firestore(), '17');
 });
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 exports.sendControlBatchReportEmail = functions
@@ -68,10 +66,11 @@ exports.sendControlBatchReportEmail = functions
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
     try {
+        const { buildControlBatchDupSettingsFromCallablePayload, loadControlBatchDupSettings, sendOutboundDupReportManual } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
         const db = admin.firestore();
-        const fromUi = (0, outbound_dup_notify_1.buildControlBatchDupSettingsFromCallablePayload)(data);
-        const settings = fromUi !== null && fromUi !== void 0 ? fromUi : (await (0, outbound_dup_notify_1.loadControlBatchDupSettings)(db));
-        const r = await (0, outbound_dup_notify_1.sendOutboundDupReportManual)(db, settings);
+        const fromUi = buildControlBatchDupSettingsFromCallablePayload(data);
+        const settings = fromUi !== null && fromUi !== void 0 ? fromUi : (await loadControlBatchDupSettings(db));
+        const r = await sendOutboundDupReportManual(db, settings);
         return { ok: true, dupGroups: r.dupGroups };
     }
     catch (e) {
@@ -108,7 +107,8 @@ exports.sendQcPriorityResolvedEmailFn = functions
         checkedBy
     };
     try {
-        await (0, qc_priority_email_1.sendQcPriorityResolvedEmail)(payload);
+        const { sendQcPriorityResolvedEmail } = await Promise.resolve().then(() => __importStar(require('./qc-priority-email')));
+        await sendQcPriorityResolvedEmail(payload);
         return { ok: true };
     }
     catch (e) {
@@ -129,7 +129,8 @@ exports.adminUpdateUserPasswordFn = functions
         throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid hoặc newPassword.');
     }
     try {
-        await (0, admin_update_user_password_1.adminUpdateUserPassword)(context.auth.uid, uid, newPassword);
+        const { adminUpdateUserPassword } = await Promise.resolve().then(() => __importStar(require('./admin-update-user-password')));
+        await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
         return { ok: true };
     }
     catch (e) {
@@ -164,7 +165,8 @@ exports.adminResetUserPasswordFn = functions
         throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
     }
     try {
-        const newPassword = await (0, admin_update_user_password_1.adminResetUserPassword)(context.auth.uid, uid);
+        const { adminResetUserPassword } = await Promise.resolve().then(() => __importStar(require('./admin-update-user-password')));
+        const newPassword = await adminResetUserPassword(context.auth.uid, uid);
         return { ok: true, newPassword };
     }
     catch (e) {
@@ -196,9 +198,7 @@ exports.adminResetUserPasswordFn = functions
     }
 });
 /** Admin: đặt password theo mã nhân viên (ASPxxxx hoặc xxxx) -> reset về newPassword. */
-exports.adminSetUserPasswordByEmployeeIdFn = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
-    .https.onCall(async (data, context) => {
+exports.adminSetUserPasswordByEmployeeIdFn = functions.https.onCall(async (data, context) => {
     var _a;
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -209,7 +209,8 @@ exports.adminSetUserPasswordByEmployeeIdFn = functions
         throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId hoặc newPassword.');
     }
     try {
-        const r = await (0, admin_update_user_password_1.adminSetUserPasswordByEmployeeId)(context.auth.uid, employeeId, newPassword);
+        const { adminSetUserPasswordByEmployeeId } = await Promise.resolve().then(() => __importStar(require('./admin-update-user-password')));
+        const r = await adminSetUserPasswordByEmployeeId(context.auth.uid, employeeId, newPassword);
         return { ok: true, uid: r.uid, email: r.email };
     }
     catch (e) {
@@ -237,7 +238,8 @@ exports.adminDeleteUserByEmployeeIdFn = functions
         throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId.');
     }
     try {
-        const r = await (0, admin_sync_auth_users_1.adminDeleteUserByEmployeeId)(context.auth.uid, employeeId);
+        const { adminDeleteUserByEmployeeId } = await Promise.resolve().then(() => __importStar(require('./admin-sync-auth-users')));
+        const r = await adminDeleteUserByEmployeeId(context.auth.uid, employeeId);
         return r;
     }
     catch (e) {
@@ -256,6 +258,114 @@ exports.adminDeleteUserByEmployeeIdFn = functions
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
 });
+/** Admin: sửa tên, bộ phận, email đăng nhập (Auth + Firestore). */
+exports.adminUpdateUserProfileFn = functions.https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const uid = typeof (data === null || data === void 0 ? void 0 : data.uid) === 'string' ? data.uid.trim() : '';
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
+    }
+    try {
+        const { adminUpdateUserProfile } = await Promise.resolve().then(() => __importStar(require('./admin-update-user-profile')));
+        const r = await adminUpdateUserProfile(context.auth.uid, uid, {
+            displayName: data.displayName,
+            department: data.department,
+            email: data.email
+        });
+        return { ok: true, email: r.email };
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới sửa được hồ sơ.');
+        }
+        if (msg.includes('đã được dùng')) {
+            throw new functions.https.HttpsError('already-exists', msg);
+        }
+        if (msg.includes('không hợp lệ')) {
+            throw new functions.https.HttpsError('invalid-argument', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: đăng ký user — mật khẩu 6 số gửi email (Auth + Firestore + SMTP). */
+exports.registerAspUserWithEmailFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const employeeId = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';
+    const department = typeof (data === null || data === void 0 ? void 0 : data.department) === 'string' ? data.department : '';
+    const email = typeof (data === null || data === void 0 ? void 0 : data.email) === 'string' ? data.email.trim() : '';
+    const fullName = typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName.trim() : '';
+    if (!employeeId || !email || !fullName) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId, email hoặc họ tên.');
+    }
+    try {
+        const { registerAspUserWithEmail } = await Promise.resolve().then(() => __importStar(require('./admin-register-user')));
+        return await registerAspUserWithEmail(context.auth.uid, employeeId, department, email, fullName);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+        }
+        if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
+            throw new functions.https.HttpsError('already-exists', msg);
+        }
+        if (msg.includes('không đúng') ||
+            msg.includes('không hợp lệ') ||
+            msg.includes('Thiếu') ||
+            msg.includes('phải có đuôi')) {
+            throw new functions.https.HttpsError('invalid-argument', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/**
+ * Đăng ký từ trang login (không cần đăng nhập).
+ * Cảnh báo: có thể bị lạm dụng — nên bật App Check / giới hạn IP nếu cần.
+ */
+exports.publicRegisterAspUserFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, _context) => {
+    var _a;
+    const employeeId = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';
+    const department = typeof (data === null || data === void 0 ? void 0 : data.department) === 'string' ? data.department : '';
+    const email = typeof (data === null || data === void 0 ? void 0 : data.email) === 'string' ? data.email.trim() : '';
+    const fullName = typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName.trim() : '';
+    if (!employeeId || !email || !fullName) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId, email hoặc họ tên.');
+    }
+    try {
+        const { publicRegisterAspUserWithEmail } = await Promise.resolve().then(() => __importStar(require('./admin-register-user')));
+        return await publicRegisterAspUserWithEmail(employeeId, department, email, fullName);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
+            throw new functions.https.HttpsError('already-exists', msg);
+        }
+        if (msg.includes('không đúng') ||
+            msg.includes('không hợp lệ') ||
+            msg.includes('Thiếu') ||
+            msg.includes('phải có đuôi')) {
+            throw new functions.https.HttpsError('invalid-argument', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
 /** Admin: xóa Firebase Auth users không nằm trong danh sách Settings (collection users/user-permissions). */
 exports.adminDeleteAuthUsersNotInSettingsFn = functions
     .https.onCall(async (_data, context) => {
@@ -264,7 +374,8 @@ exports.adminDeleteAuthUsersNotInSettingsFn = functions
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
     try {
-        const r = await (0, admin_sync_auth_users_1.adminDeleteAuthUsersNotInSettings)(context.auth.uid);
+        const { adminDeleteAuthUsersNotInSettings } = await Promise.resolve().then(() => __importStar(require('./admin-sync-auth-users')));
+        const r = await adminDeleteAuthUsersNotInSettings(context.auth.uid);
         return r;
     }
     catch (e) {
@@ -275,6 +386,27 @@ exports.adminDeleteAuthUsersNotInSettingsFn = functions
             throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới được phép xóa.');
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/**
+ * Đăng nhập bằng mã ASPxxxx: tra email thật trong Firestore (users.employeeId) để signIn đúng tài khoản
+ * đăng ký qua mail (@airspeedmfgvn.com), không chỉ asp####@asp.com.
+ */
+exports.lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (data) => {
+    var _a;
+    const raw = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';
+    if (!raw) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId.');
+    }
+    try {
+        const { lookupAuthLoginEmailByEmployeeId } = await Promise.resolve().then(() => __importStar(require('./lookup-login-email')));
+        const email = await lookupAuthLoginEmailByEmployeeId(raw);
+        return { email };
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = anyErr instanceof Error ? anyErr.message : (_a = anyErr === null || anyErr === void 0 ? void 0 : anyErr.message) !== null && _a !== void 0 ? _a : String(e);
+        throw new functions.https.HttpsError('internal', msg || 'Lỗi tra cứu email.');
     }
 });
 //# sourceMappingURL=index.js.map

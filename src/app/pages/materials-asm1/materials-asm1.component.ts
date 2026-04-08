@@ -490,6 +490,19 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
    * phần lẻ một tem (giống logic in tem trên dòng tồn).
    * `inventoryRows` — từ Firebase theo mã PXK, không phải `inventoryMaterials` đang lọc theo search.
    */
+  /** Khóa ổn định cho map lượng đã giả lập xuất theo dòng inventory (Tem Xuất Kho). */
+  private pxkInventoryRowKey(m: InventoryMaterial): string {
+    const id = m.id != null && String(m.id).trim() !== '' ? String(m.id).trim() : '';
+    if (id) {
+      return id;
+    }
+    const t = m.importDate?.getTime() ?? 0;
+    return `${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber)}\0${t}\0${String(m.batchNumber ?? '')}`;
+  }
+
+  /**
+   * Tem xuất theo PXK (FIFO) + gom lượng đã lấy trên từng dòng để sau đó in thêm tem TỒN nếu còn kho.
+   */
   private buildQrPayloadsForPxkLine(
     line: {
       materialCode: string;
@@ -497,12 +510,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       quantity: number;
     },
     inventoryRows: InventoryMaterial[]
-  ): { qrData: string }[] {
+  ): { payloads: { qrData: string }[]; consumed: Map<string, number> } {
+    const consumed = new Map<string, number>();
     const mat = line.materialCode.trim();
     const po = (line.po || '').trim();
     const Q = Math.floor(Number(line.quantity) || 0);
     if (Q <= 0 || !mat) {
-      return [];
+      return { payloads: [], consumed };
     }
     const matN = this.normMatForPxk(mat);
     const poN = this.normPoForPxk(po);
@@ -540,14 +554,67 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         ? m.importDate.toLocaleDateString('en-GB').split('/').join('')
         : new Date().toLocaleDateString('en-GB').split('/').join('');
       let bagIdx = 1;
+      const rowKey = this.pxkInventoryRowKey(m);
       while (rowAvail > 0 && remaining > 0) {
         const chunk = rowAvail >= sp ? sp : rowAvail;
         const qrData = `${mat}|${po}|${chunk}|${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
         out.push({ qrData });
+        consumed.set(rowKey, (consumed.get(rowKey) || 0) + chunk);
         rowAvail -= chunk;
         remaining -= chunk;
         bagIdx++;
       }
+    }
+    return { payloads: out, consumed };
+  }
+
+  /**
+   * Sau khi phân bổ lượng xuất PXK (FIFO), mỗi dòng tồn thuộc mã+PO trong PXK còn dư → 1 tem TỒN (cùng format như in trên dòng).
+   */
+  private buildTonQrPayloadsAfterPxkExport(
+    pxkLines: { materialCode: string; po: string; quantity: number }[],
+    inventoryRows: InventoryMaterial[],
+    consumedByRowKey: Map<string, number>
+  ): { qrData: string; displayPrefix: string }[] {
+    const pxkKeys = new Set(
+      pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
+    );
+    const rows = inventoryRows
+      .filter(
+        (m) =>
+          pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)
+      )
+      .sort((a, b) => {
+        const mc = this.normMatForPxk(a.materialCode).localeCompare(this.normMatForPxk(b.materialCode));
+        if (mc !== 0) {
+          return mc;
+        }
+        const po = this.normPoForPxk(a.poNumber || '').localeCompare(this.normPoForPxk(b.poNumber || ''));
+        if (po !== 0) {
+          return po;
+        }
+        return (a.importDate?.getTime() || 0) - (b.importDate?.getTime() || 0);
+      });
+    const out: { qrData: string; displayPrefix: string }[] = [];
+    for (const m of rows) {
+      const key = this.pxkInventoryRowKey(m);
+      const taken = consumedByRowKey.get(key) || 0;
+      const rem = Math.max(
+        0,
+        Math.round((this.calculateCurrentStock(m) - taken) * 10000) / 10000
+      );
+      if (rem <= 1e-6) {
+        continue;
+      }
+      const bagTotal = Math.max(1, this.computeTotalBagsFromStock(m));
+      const importDateStr = m.importDate
+        ? m.importDate.toLocaleDateString('en-GB').split('/').join('')
+        : new Date().toLocaleDateString('en-GB').split('/').join('');
+      const bagIdx = 1;
+      const mat = m.materialCode.trim();
+      const po = (m.poNumber || '').trim();
+      const qrData = `${mat}|${po}|${rem}|${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
+      out.push({ qrData, displayPrefix: 'TỒN' });
     }
     return out;
   }
@@ -578,12 +645,21 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
       const inventoryRows = await this.fetchInventoryRowsForPxkMerged(pxkLines);
-      const allPayloads: { qrData: string }[] = [];
+      const exportPayloads: { qrData: string }[] = [];
+      const consumedByRowKey = new Map<string, number>();
       for (const ln of pxkLines) {
-        const part = this.buildQrPayloadsForPxkLine(ln, inventoryRows);
-        allPayloads.push(...part);
+        const { payloads, consumed } = this.buildQrPayloadsForPxkLine(ln, inventoryRows);
+        exportPayloads.push(...payloads);
+        for (const [k, v] of consumed) {
+          consumedByRowKey.set(k, (consumedByRowKey.get(k) || 0) + v);
+        }
       }
-      if (allPayloads.length === 0) {
+      const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(pxkLines, inventoryRows, consumedByRowKey);
+      const allPayloads: ({ qrData: string } | { qrData: string; displayPrefix: string })[] = [
+        ...exportPayloads,
+        ...tonPayloads
+      ];
+      if (exportPayloads.length === 0) {
         this.temXuatError = 'Không tạo được tem (kiểm tra Mã/PO khớp tồn kho và Standard Packing).';
         return;
       }
@@ -602,15 +678,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             index: i + 1,
             materialCode: parts[0] || '',
             poNumber: parts[1] || '',
-            unitNumber: Number(parts[2]) || 0
+            unitNumber: Number(parts[2]) || 0,
+            displayPrefix: (p as { displayPrefix?: string }).displayPrefix
           };
         })
       );
 
       const displayLsx = raw.trim();
+      const exportCount = exportPayloads.length;
       const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: displayLsx, qrData: '' }];
       let prevMat = '';
-      for (const q of qrImages) {
+      for (let i = 0; i < qrImages.length; i++) {
+        const q = qrImages[i];
+        if (i === exportCount && tonPayloads.length > 0) {
+          printSequence.push({ kind: 'spacer', qrData: '' });
+          printSequence.push({ kind: 'lsxHeader', lsxText: 'TỒN (còn kho)', qrData: '' });
+          prevMat = '';
+        }
         const mat = (q.materialCode || '').trim();
         if (prevMat !== '' && mat !== prevMat) {
           printSequence.push({ kind: 'spacer', qrData: '' });

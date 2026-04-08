@@ -59,42 +59,56 @@
       </div>
     </div>
 
-    <!-- Tạo tài khoản Firebase + Firestore -->
+    <!-- Đăng ký: mã nhân viên + bộ phận + email → mật khẩu 6 số gửi email -->
     <div class="reset-account-panel create-account-panel">
-      <h3>Tạo tài khoản</h3>
+      <h3>Đăng ký tài khoản</h3>
       <p class="reset-account-hint">
-        Nhập <strong>mã nhân viên</strong> (VD: <strong>ASP0054</strong> hoặc <strong>0054</strong>) và <strong>mật khẩu</strong> để đăng nhập app.
-        Hệ thống tạo user <strong>aspxxxx@asp.com</strong> trên Firebase Authentication và lưu Firestore.
-        Sau khi tạo, popup <strong>Quản lý quyền truy cập</strong> sẽ mở để bạn bật các tab cần thiết.
+        <strong>ID đăng nhập</strong> (ASP + 4 số) khác <strong>họ tên</strong>. Nhập ID, họ tên, chọn <strong>bộ phận</strong>, <strong>email</strong> nhận mật khẩu.
+        Hệ thống gửi mật khẩu 6 số tới email; đăng nhập app bằng <strong>mã ASP + mật khẩu</strong> (không nhập email ở màn đăng nhập).
       </p>
-      <div class="reset-account-row">
+      <div class="reset-account-row register-account-row">
         <input
           type="text"
           name="createAccountEmployeeId"
           [(ngModel)]="createAccountEmployeeId"
           (input)="onCreateAccountEmployeeInput($event)"
-          placeholder="ASP0054"
+          placeholder="ID đăng nhập (ASP0054)"
           autocomplete="off"
-          [disabled]="isCreatingAccount">
+          [disabled]="isRegisteringUser">
         <input
-          type="password"
-          name="createAccountPassword"
-          [(ngModel)]="createAccountPassword"
-          placeholder="Mật khẩu (tối thiểu 6 ký tự)"
-          autocomplete="new-password"
-          [disabled]="isCreatingAccount">
+          type="text"
+          name="createAccountFullName"
+          [(ngModel)]="createAccountFullName"
+          placeholder="Họ tên (khác mã ASP)"
+          autocomplete="name"
+          [disabled]="isRegisteringUser">
+        <select
+          name="createAccountDepartment"
+          [(ngModel)]="createAccountDepartment"
+          [disabled]="isRegisteringUser"
+          class="register-department-select">
+          <option value="">— Bộ phận —</option>
+          <option *ngFor="let d of departmentOptions" [value]="d">{{ d }}</option>
+        </select>
+        <input
+          type="email"
+          name="createAccountEmail"
+          [(ngModel)]="createAccountEmail"
+          placeholder="Email nhận mật khẩu"
+          autocomplete="email"
+          [disabled]="isRegisteringUser">
         <button
           type="button"
           class="btn-create-account"
-          (click)="createFirebaseAccountFromSettings()"
-          [disabled]="isCreatingAccount || !createAccountEmployeeId?.trim() || !createAccountPassword?.trim()">
-          {{ isCreatingAccount ? 'Đang tạo…' : 'Tạo tài khoản' }}
+          (click)="registerAspUserWithEmailFromSettings()"
+          [disabled]="isRegisteringUser || !createAccountEmployeeId?.trim() || !createAccountFullName?.trim() || !createAccountDepartment || !createAccountEmail?.trim()">
+          {{ isRegisteringUser ? 'Đang xử lý…' : 'Đăng ký' }}
         </button>
         <button
           type="button"
           class="btn-delete-account"
           (click)="deleteAccountByEmployeeId()"
-          [disabled]="isDeletingAccountByEmployeeId || isCreatingAccount || !createAccountEmployeeId?.trim()">
+          [disabled]="isDeletingAccountByEmployeeId || isRegisteringUser || !createAccountEmployeeId?.trim()">
           {{ isDeletingAccountByEmployeeId ? 'Đang xóa…' : 'Xóa tài khoản' }}
         </button>
       </div>
@@ -183,13 +197,25 @@
         <div class="modal-body">
           <div class="user-detail">
             <div class="detail-row">
-              <strong>Mã nhân viên:</strong> {{ getEmployeeIdOnly(selectedUser) }}
+              <strong>ID đăng nhập (ASP + 4 số):</strong> {{ getEmployeeIdOnly(selectedUser) }}
+              <span class="detail-hint"> — không phải họ tên</span>
             </div>
-            <div class="detail-row">
-              <strong>Tên:</strong> {{ selectedUser.displayName || '-' }}
+            <div class="detail-row detail-row-edit">
+              <strong>Họ tên:</strong>
+              <input type="text" class="profile-input" name="tempDisplayName" [(ngModel)]="tempDisplayName" placeholder="Họ và tên hiển thị" autocomplete="name">
+              <span class="detail-hint">khác mã ASP ở trên</span>
             </div>
-            <div class="detail-row">
-              <strong>Bộ phận:</strong> {{ selectedUser.department || '-' }}
+            <div class="detail-row detail-row-edit">
+              <strong>Bộ phận:</strong>
+              <select class="profile-input" name="tempDepartment" [(ngModel)]="tempDepartment">
+                <option value="">—</option>
+                <option *ngFor="let d of departmentOptions" [value]="d">{{ d }}</option>
+              </select>
+            </div>
+            <div class="detail-row detail-row-edit">
+              <strong>Email (tài khoản Firebase):</strong>
+              <input type="email" class="profile-input" name="tempProfileEmail" [(ngModel)]="tempProfileEmail" placeholder="email@domain.com" autocomplete="email">
+              <span class="detail-hint">app đăng nhập bằng mã ASP + mật khẩu</span>
             </div>
             <div class="detail-row">
               <strong>Password:</strong> {{ firebaseUserPasswords[selectedUser.uid] || '-' }}
