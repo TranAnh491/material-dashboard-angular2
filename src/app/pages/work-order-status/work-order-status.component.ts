@@ -46,7 +46,10 @@ interface PxkLine {
   soChungTu?: string; // Số chứng từ
   maKho?: string;    // Mã kho: NVL, NVL_E31, NVL_KE31, NVL_SX, NVL_KS, NVL_EXPIRED
   loaiHinh?: string; // Loại hình
-  tenVatTu?: string; dinhMuc?: string; tenTP?: string; tongSLYCau?: string; soPOKH?: string; phanTramHaoHut?: string; maKhachHang?: string; ghiChu?: string;
+  tenVatTu?: string; dinhMuc?: string; tenTP?: string;
+  tongSLYCau?: string; // Tổng lượng định mức (cột R theo file PXK)
+  luongYeuCau?: string; // Lượng yêu cầu (cột O theo file PXK)
+  soPOKH?: string; phanTramHaoHut?: string; maKhachHang?: string; ghiChu?: string;
 }
 
 /** Dữ liệu PXK nhóm theo LSX */
@@ -3507,7 +3510,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }
       console.log('[PXK Import] Raw rows sample (first 8 rows, first 12 cols):', rows.slice(0, 8).map((r: any[]) => (r || []).slice(0, 12).map((c: any) => String(c ?? '').substring(0, 20))));
       // Format (thường gặp): A=Mã Ctừ, ... , J có thể là Xuất Kho hoặc Loại Hình tùy report
-      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9, COL_R = 17, COL_S = 18;
+      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9, COL_O = 14, COL_R = 17, COL_S = 18;
       let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
       let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number; let idxMaKho: number; let idxLoaiHinh: number;
       let idxTenVatTu: number; let idxDinhMuc: number; let idxTenTP: number; let idxTongSLYCau: number; let idxMaKhachHang: number; let idxSoPOKH: number; let idxPhanTramHaoHut: number; let idxGhiChu: number;
@@ -3601,7 +3604,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
       const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number,
-        tenVatTuCol = -1, dinhMucCol = -1, tenTPCol = -1, tongSLYCauCol = -1, maKhachHangCol = -1, soPOKHCol = -1, phanTramHaoHutCol = -1, ghiChuCol = -1) => {
+        tenVatTuCol = -1, dinhMucCol = -1, tenTPCol = -1, tongSLYCauCol = -1, luongYeuCauCol = -1, maKhachHangCol = -1, soPOKHCol = -1, phanTramHaoHutCol = -1, ghiChuCol = -1) => {
         const out: PxkDataByLsx = {};
         let cnt = 0;
         for (let r = dataStartRow; r < rows.length; r++) {
@@ -3629,6 +3632,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const dinhMuc = dinhMucCol >= 0 ? String(row[dinhMucCol] ?? '').trim() : undefined;
           const tenTP = tenTPCol >= 0 ? String(row[tenTPCol] ?? '').trim() : undefined;
           const tongSLYCau = tongSLYCauCol >= 0 ? String(row[tongSLYCauCol] ?? '').trim() : undefined;
+          // Cột O = Lượng yêu cầu (theo file PXK). Nếu không có thì bỏ trống.
+          const luongYeuCau = luongYeuCauCol >= 0 ? String(row[luongYeuCauCol] ?? '').trim() : undefined;
           const maKhachHang = maKhachHangCol >= 0 ? String(row[maKhachHangCol] ?? '').trim() : undefined;
           const soPOKH = soPOKHCol >= 0 ? String(row[soPOKHCol] ?? '').trim() : undefined;
           const phanTramHaoHut = phanTramHaoHutCol >= 0 ? String(row[phanTramHaoHutCol] ?? '').trim() : undefined;
@@ -3642,6 +3647,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           if (dinhMuc)       lineObj.dinhMuc       = dinhMuc;
           if (tenTP)         lineObj.tenTP         = tenTP;
           if (tongSLYCau)    lineObj.tongSLYCau    = tongSLYCau;
+          if (luongYeuCau)   lineObj.luongYeuCau   = luongYeuCau;
           if (maKhachHang)   lineObj.maKhachHang   = maKhachHang;
           if (soPOKH)        lineObj.soPOKH        = soPOKH;
           if (phanTramHaoHut) lineObj.phanTramHaoHut = phanTramHaoHut;
@@ -3656,6 +3662,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       let idxMaKhoFinal = idxMaKho, idxLoaiHinhFinal = idxLoaiHinh;
       let idxTenVatTuFinal = idxTenVatTu ?? -1, idxDinhMucFinal = idxDinhMuc ?? -1, idxTenTPFinal = idxTenTP ?? -1;
       let idxTongSLYCauFinal = idxTongSLYCau ?? -1, idxMaKhachHangFinal = 4, idxSoPOKHFinal = 15, idxPhanTramHaoHutFinal = idxPhanTramHaoHut ?? -1, idxGhiChuFinal = idxGhiChu ?? -1;
+      // Theo yêu cầu: cột O trong file = Lượng yêu cầu (cố định)
+      let idxLuongYeuCauFinal = COL_O;
       let byLsx: PxkDataByLsx = {};
       let rowsWithPx = 0;
       const pxkLsxSamples: string[] = [];
@@ -3680,7 +3688,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       };
       chooseQtyCol();
       const tryParse = () => {
-        const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal, idxMaKhoFinal, idxLoaiHinhFinal, idxTenVatTuFinal, idxDinhMucFinal, idxTenTPFinal, idxTongSLYCauFinal, idxMaKhachHangFinal, idxSoPOKHFinal, idxPhanTramHaoHutFinal, idxGhiChuFinal);
+        const res = parseWithCols(
+          idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal,
+          idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal,
+          idxMaKhoFinal, idxLoaiHinhFinal,
+          idxTenVatTuFinal, idxDinhMucFinal, idxTenTPFinal,
+          idxTongSLYCauFinal, idxLuongYeuCauFinal,
+          idxMaKhachHangFinal, idxSoPOKHFinal, idxPhanTramHaoHutFinal, idxGhiChuFinal
+        );
         byLsx = res.byLsx;
         rowsWithPx = res.rowsWithPx;
       };
@@ -4073,7 +4088,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     let sttCounter = 0;
     const rowsHtml = sortedLines.map((l) => {
       if (l === null) {
-        return '<tr><td colspan="14" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
+        return '<tr><td colspan="17" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
       }
       sttCounter++;
       const matCode = String(l.materialCode || '').trim().toUpperCase();
@@ -4083,6 +4098,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const tenVatTu = String((l as any).tenVatTu || '').trim();
       const dinhMuc = String((l as any).dinhMuc || '').trim();
       const tongSLYCau = String((l as any).tongSLYCau || '').trim();
+      const luongYeuCau = String((l as any).luongYeuCau || '').trim();
       const po = String(l.po || '').trim();
       const isNvlSxOnly = maKho === 'NVL_SX';
       const isR = matCode.charAt(0) === 'R';
@@ -4109,6 +4125,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(l.unit)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(dinhMuc || '-')}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(tongSLYCau || '-')}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(luongYeuCau || '-')}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(po)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${qtyStr}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(maKho)}</td>
@@ -4287,7 +4304,7 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 </div>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>Tổng lượng định mức</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th class="col-vitri">Vị trí</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Lượng Giao</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>T/L Định Mức</th><th>Lượng yêu cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th class="col-vitri">Vị trí</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Giao SX</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 ${nvlSxKsBoxHtml}
