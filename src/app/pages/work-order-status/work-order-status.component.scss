@@ -2137,6 +2137,93 @@ textarea.mat-input-element {
   min-height: 120px;
 }
 
+.pxk-import-dialog {
+  max-width: 560px;
+
+  .pxk-import-info {
+    margin-bottom: 8px;
+    padding: 12px 14px;
+    background: #e3f2fd;
+    border-radius: 8px;
+    border-left: 4px solid #1976d2;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+
+    .pxk-import-info-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 10px;
+      font-weight: 600;
+      color: #1565c0;
+
+      .material-icons {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+      }
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 1.25rem;
+    }
+
+    li {
+      margin-bottom: 8px;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+}
+
+.more-dialog {
+  // Popup MORE: to hơn ~50% so với mặc định
+  max-width: 1050px;
+  width: 95%;
+
+  .dialog-header h4 {
+    font-size: 18px;
+  }
+
+  .dialog-content {
+    font-size: 14px;
+  }
+
+  // Căn đều các nút: grid 2 cột, mỗi nút full width
+  .import-controls {
+    .file-input-container {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      align-items: stretch;
+
+      // Ẩn dấu phân cách "|" trong dialog
+      > span {
+        display: none !important;
+      }
+
+      label,
+      .btn {
+        width: 100%;
+        justify-content: center;
+        white-space: nowrap;
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    .import-controls {
+      .file-input-container {
+        grid-template-columns: 1fr;
+      }
+    }
+  }
+}
+
 .time-range-dialog {
   background: white;
   border-radius: 8px;

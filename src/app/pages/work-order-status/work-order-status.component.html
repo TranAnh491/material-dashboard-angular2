@@ -8,79 +8,6 @@
           <div class="card">
             <div class="card-body">
             
-            <!-- Import Section -->
-            <div class="import-section" *ngIf="selectedFunction === 'import'">
-              <h4 class="section-title">
-                <i class="material-icons">upload_file</i> Điều chỉnh Work Orders
-              </h4>
-              
-              <div class="import-controls">
-                <div class="file-input-container">
-                  <input type="file" 
-                         id="excelFileInput" 
-                         accept=".xlsx,.xls" 
-                         (change)="onFileSelected($event)" 
-                         style="display: none;">
-                  <label for="excelFileInput" class="btn btn-primary">
-                    <i class="material-icons">file_upload</i> Chọn file Excel
-                  </label>
-                  <button class="btn btn-outline-info" (click)="showTimeRangeDialog = true">
-                    <i class="material-icons">schedule</i> Chọn thời gian
-                  </button>
-                  <button class="btn btn-outline-success" (click)="exportWorkOrdersByTimeRange()">
-                    <i class="material-icons">download</i> Tải về
-                  </button>
-                  <button class="btn btn-outline-primary" (click)="downloadTemplate()">
-                    <i class="material-icons">download</i> Tải Form
-                  </button>
-                  <button mat-raised-button color="accent" (click)="showAllWorkOrders()" class="btn btn-outline-warning">
-                    <mat-icon>visibility</mat-icon> Hiển thị tất cả
-                  </button>
-                  <span style="margin-left:12px;color:#999;">|</span>
-                  <button class="btn btn-outline-secondary" (click)="downloadPxkTemplate()" style="color: #607d8b;"
-                          title="Tải form mẫu import PXK">
-                    <i class="material-icons">download</i> Tải form PXK
-                  </button>
-                  <button class="btn btn-outline-warning" (click)="clearPxkImportedData()" [disabled]="isClearingPxk"
-                          style="background-color: #fff; color: #ff9800;" title="Xóa dữ liệu PXK đã import để import lại">
-                    <i class="material-icons">delete_sweep</i> Xóa dữ liệu PXK
-                  </button>
-                  <button class="btn btn-outline-secondary" (click)="showPxkDownloadDialog = true"
-                          style="color: #607d8b;" title="Tải lịch sử PXK theo tháng">
-                    <i class="material-icons">download</i> Tải PXK
-                  </button>
-                </div>
-                
-                <div class="import-info">
-                  <p>💡 Hướng dẫn:</p>
-                  <ul>
-                    <li>File Excel phải có header: Nhà Máy, Năm, Tháng, STT, Mã TP VN, LSX, Lượng sản phẩm, Khách hàng, Gấp, Ngày Giao NVL, Line, NVL thiếu, Người soạn, Tình trạng, Đủ/Thiếu, Ngày nhận thông tin, Ghi Chú</li>
-                    <li>Nhà Máy phải là một trong: ASM1, ASM2, ASM3, Sample 1, Sample 2</li>
-                    <li>Nếu không có Nhà Máy, sẽ sử dụng nhà máy đang chọn ({{selectedFactory}})</li>
-                    <li>Dữ liệu sẽ được nối tiếp với dữ liệu hiện có (không ghi đè)</li>
-                    <li>File tối đa 10MB</li>
-                  </ul>
-                </div>
-                
-                <div class="firebase-status" *ngIf="firebaseSaved">
-                  <span class="status-success">✅ Đã lưu vào Firebase</span>
-                </div>
-                
-                <div class="loading-indicator" *ngIf="isSaving">
-                  <div class="spinner"></div>
-                  <span>Đang lưu vào Firebase...</span>
-                </div>
-                
-                <div class="loading-indicator" *ngIf="isLoading">
-                  <div class="spinner"></div>
-                  <span>Đang xử lý file Excel...</span>
-                  <button class="btn btn-sm btn-outline-warning ms-2" (click)="resetLoadingStates()">
-                    <i class="material-icons">refresh</i> Reset
-                  </button>
-                </div>
-              </div>
-            </div>
-            
             <!-- Summary Cards -->
             <div class="row summary-row">
               <div class="col-lg-2 col-md-4 col-sm-6">
@@ -182,7 +109,7 @@
                   </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFunction === 'import'"
-                          (click)="selectFunction('import')"
+                          (click)="showMoreDialog = true"
                           style="color: #000; border: none;"
                           [style.background]="selectedFunction === 'import' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">more_horiz</i> MORE
@@ -202,7 +129,7 @@
                   <input type="file" id="pxkFileInput" accept=".xlsx,.xls" 
                          (change)="onPxkFileSelected($event)" style="display: none;">
                   <button class="btn btn-outline-secondary" 
-                          (click)="triggerPxkImport()"
+                          (click)="showPxkImportDialog = true"
                           [disabled]="isImportingPxk"
                           style="color: #607d8b; border: none;"
                           title="Import file PXK">
@@ -215,6 +142,90 @@
                     <i class="material-icons">delete</i> XÓA
                   </button>
 
+                </div>
+              </div>
+            </div>
+
+            <!-- MORE Dialog (Import Work Orders + PXK utilities) -->
+            <div class="time-range-dialog-overlay" *ngIf="showMoreDialog">
+              <div class="time-range-dialog more-dialog">
+                <div class="dialog-header">
+                  <h4><i class="material-icons" style="vertical-align:middle;margin-right:6px;">upload_file</i> Điều chỉnh Work Orders</h4>
+                  <button mat-icon-button type="button" (click)="showMoreDialog = false">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content">
+                  <div class="import-controls">
+                    <div class="file-input-container">
+                      <input type="file" 
+                             id="excelFileInput" 
+                             accept=".xlsx,.xls" 
+                             (change)="onFileSelected($event)" 
+                             style="display: none;">
+                      <label for="excelFileInput" class="btn btn-primary">
+                        <i class="material-icons">file_upload</i> Chọn file Excel
+                      </label>
+                      <button class="btn btn-outline-info" type="button" (click)="showTimeRangeDialog = true">
+                        <i class="material-icons">schedule</i> Chọn thời gian
+                      </button>
+                      <button class="btn btn-outline-success" type="button" (click)="exportWorkOrdersByTimeRange()">
+                        <i class="material-icons">download</i> Tải về
+                      </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="downloadTemplate()">
+                        <i class="material-icons">download</i> Tải Form
+                      </button>
+                      <button mat-raised-button color="accent" type="button" (click)="showAllWorkOrders()" class="btn btn-outline-warning">
+                        <mat-icon>visibility</mat-icon> Hiển thị tất cả
+                      </button>
+                      <span style="margin-left:12px;color:#999;">|</span>
+                      <button class="btn btn-outline-secondary" type="button" (click)="downloadPxkTemplate()" style="color: #607d8b;"
+                              title="Tải form mẫu import PXK">
+                        <i class="material-icons">download</i> Tải form PXK
+                      </button>
+                      <button class="btn btn-outline-warning" type="button" (click)="clearPxkImportedData()" [disabled]="isClearingPxk"
+                              style="background-color: #fff; color: #ff9800;" title="Xóa dữ liệu PXK đã import để import lại">
+                        <i class="material-icons">delete_sweep</i> Xóa dữ liệu PXK
+                      </button>
+                      <button class="btn btn-outline-secondary" type="button" (click)="showPxkDownloadDialog = true"
+                              style="color: #607d8b;" title="Tải lịch sử PXK theo tháng">
+                        <i class="material-icons">download</i> Tải PXK
+                      </button>
+                    </div>
+
+                    <div class="import-info">
+                      <p>💡 Hướng dẫn:</p>
+                      <ul>
+                        <li>File Excel phải có header: Nhà Máy, Năm, Tháng, STT, Mã TP VN, LSX, Lượng sản phẩm, Khách hàng, Gấp, Ngày Giao NVL, Line, NVL thiếu, Người soạn, Tình trạng, Đủ/Thiếu, Ngày nhận thông tin, Ghi Chú</li>
+                        <li>Nhà Máy phải là một trong: ASM1, ASM2, ASM3, Sample 1, Sample 2</li>
+                        <li>Nếu không có Nhà Máy, sẽ sử dụng nhà máy đang chọn ({{selectedFactory}})</li>
+                        <li>Dữ liệu sẽ được nối tiếp với dữ liệu hiện có (không ghi đè)</li>
+                        <li>File tối đa 10MB</li>
+                      </ul>
+                    </div>
+
+                    <div class="firebase-status" *ngIf="firebaseSaved">
+                      <span class="status-success">✅ Đã lưu vào Firebase</span>
+                    </div>
+
+                    <div class="loading-indicator" *ngIf="isSaving">
+                      <div class="spinner"></div>
+                      <span>Đang lưu vào Firebase...</span>
+                    </div>
+
+                    <div class="loading-indicator" *ngIf="isLoading">
+                      <div class="spinner"></div>
+                      <span>Đang xử lý file Excel...</span>
+                      <button class="btn btn-sm btn-outline-warning ms-2" type="button" (click)="resetLoadingStates()">
+                        <i class="material-icons">refresh</i> Reset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
+                  <button mat-raised-button type="button" (click)="showMoreDialog = false">
+                    <mat-icon>close</mat-icon> Đóng
+                  </button>
                 </div>
               </div>
             </div>
@@ -700,6 +711,39 @@
             </div>
 
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PXK Import Dialog -->
+  <div class="time-range-dialog-overlay pxk-download-overlay" *ngIf="showPxkImportDialog">
+    <div class="time-range-dialog pxk-download-dialog pxk-import-dialog">
+      <div class="dialog-header">
+        <h4>Import PXK</h4>
+        <button mat-icon-button type="button" (click)="showPxkImportDialog = false">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <div class="pxk-import-info">
+          <p class="pxk-import-info-title"><i class="material-icons">info</i> Nguồn dữ liệu file</p>
+          <ul>
+            <li>File Excel (<strong>.xlsx</strong> / <strong>.xls</strong>) được <strong>xuất từ hệ thống kho / kế toán</strong> (báo cáo phiếu xuất kho — PXK), không phải tự tạo tay trừ khi đúng cấu trúc báo cáo.</li>
+            <li>Trong file cần có các dòng có <strong>Mã Ctừ = PX</strong> và cột <strong>Số lệnh SX (LSX)</strong> đúng định dạng theo nhà máy (ví dụ ASM1: KZLSX…, ASM2: LHLSX…).</li>
+            <li>Sau khi import, dữ liệu được lưu trên hệ thống và dùng để <strong>đối chiếu với Work Order</strong> trên màn hình này (So sánh, In PXK).</li>
+            <li>Để xem cấu trúc cột mẫu: vào <strong>MORE → Tải form PXK</strong>.</li>
+          </ul>
+        </div>
+        <div class="dialog-actions">
+          <button mat-raised-button color="primary" type="button"
+                  (click)="triggerPxkImportFromDialog()"
+                  [disabled]="isImportingPxk">
+            <mat-icon>upload_file</mat-icon> {{ isImportingPxk ? 'Đang xử lý...' : 'Import PXK' }}
+          </button>
+          <button mat-raised-button type="button" (click)="showPxkImportDialog = false">
+            <mat-icon>cancel</mat-icon> Đóng
+          </button>
         </div>
       </div>
     </div>

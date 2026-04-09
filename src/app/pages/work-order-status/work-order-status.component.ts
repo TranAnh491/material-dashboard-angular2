@@ -72,6 +72,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   
   // Import functionality
   selectedFunction: string | null = null;
+  /** Popup MORE (thay cho Import Section inline) */
+  showMoreDialog: boolean = false;
   selectedFactory: string = 'ASM1'; // Default to ASM1
   firebaseSaved: boolean = false;
   isSaving: boolean = false;
@@ -208,6 +210,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   isImportingPxk: boolean = false;
   isClearingPxk: boolean = false;
   showPxkDownloadDialog: boolean = false;
+  /** Popup trước khi chọn file import PXK (mô tả nguồn dữ liệu) */
+  showPxkImportDialog: boolean = false;
   pxkDownloadDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   pxkDownloadAllMonths: boolean = false; // true = tải tất cả, false = lọc theo tháng
   isDownloadingPxk: boolean = false;
@@ -2005,13 +2009,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     alert(`✅ Đã tải xuống template Excel: ${filename}`);
   }
 
-  /** Tải form mẫu import PXK - cập nhật theo template in PXK. Cột E=Mã Khách Hàng, cột P=Số PO KH, cột R=Ghi chú */
+  /** Tải form mẫu import PXK - cập nhật theo template in PXK. Cột E=Mã Khách Hàng, cột P=Số PO KH, cột R=Tổng lượng định mức, cột S=Ghi chú */
   downloadPxkTemplate(): void {
     const templateData = [
-      ['Mã Ctừ', 'Số Chứng Từ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã Khách Hàng', 'Mã vật tư', 'Tên Vật Tư', 'Đơn vị tính', 'Số PO', 'Xuất Kho', 'Mã Kho', 'Định Mức', 'Loại Hình', 'Tên TP', 'Tổng SL Y/Cầu', 'Số PO KH', 'Phần Trăm Hao Hụt', 'Ghi chú'],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', '', 'B006006', '', 'M', 'PO001', 1054.58, 'NVL', '', '', '', '', '', '', ''],
-      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', '', 'B009598', '', 'PCS', 'PO002', 100, 'NVL_SX', '', '', '', '', '', '', ''],
-      ['PX', 'LHPX0226/0001', 'LHLSX0326/0089', 'P005363_A', '', 'B006006', '', 'M', 'PO001', 500, 'NVL', '', '', '', '', '', '', '']
+      ['Mã Ctừ', 'Số Chứng Từ', 'Số lệnh sản xuất', 'Mã sản phẩm', 'Mã Khách Hàng', 'Mã vật tư', 'Tên Vật Tư', 'Đơn vị tính', 'Số PO', 'Xuất Kho', 'Mã Kho', 'Định Mức', 'Loại Hình', 'Tên TP', 'Tổng SL Y/Cầu', 'Số PO KH', 'Phần Trăm Hao Hụt', 'Tổng lượng định mức', 'Ghi chú'],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P005363_A', '', 'B006006', '', 'M', 'PO001', 1054.58, 'NVL', '', '', '', '', '', '', '', ''],
+      ['PX', 'KZPX0226/0001', 'KZLSX0326/0089', 'P001013_A', '', 'B009598', '', 'PCS', 'PO002', 100, 'NVL_SX', '', '', '', '', '', '', '', ''],
+      ['PX', 'LHPX0226/0001', 'LHLSX0326/0089', 'P005363_A', '', 'B006006', '', 'M', 'PO001', 500, 'NVL', '', '', '', '', '', '', '', '']
     ];
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -2033,7 +2037,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       { wch: 14 }, // O: Tổng SL Y/Cầu
       { wch: 12 }, // P: Số PO KH
       { wch: 16 }, // Q: Phần Trăm Hao Hụt
-      { wch: 25 }  // R: Ghi chú
+      { wch: 16 }, // R: Tổng lượng định mức
+      { wch: 25 }  // S: Ghi chú
     ];
     XLSX.utils.book_append_sheet(workbook, worksheet, 'PXK');
     const filename = `Form_Import_PXK_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -3436,6 +3441,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  /** Đóng popup và mở hộp chọn file Excel PXK */
+  triggerPxkImportFromDialog(): void {
+    this.showPxkImportDialog = false;
+    this.triggerPxkImport();
+  }
+
   async onPxkFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input?.files?.[0];
@@ -3495,8 +3506,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         }
       }
       console.log('[PXK Import] Raw rows sample (first 8 rows, first 12 cols):', rows.slice(0, 8).map((r: any[]) => (r || []).slice(0, 12).map((c: any) => String(c ?? '').substring(0, 20))));
-      // Format: A=Mã Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã vật tư, F=Số PO, G=Mã Kho, H=Số lượng, I=Đvt, J=Loại Hình
-      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9;
+      // Format (thường gặp): A=Mã Ctừ, ... , J có thể là Xuất Kho hoặc Loại Hình tùy report
+      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9, COL_R = 17, COL_S = 18;
       let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
       let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number; let idxMaKho: number; let idxLoaiHinh: number;
       let idxTenVatTu: number; let idxDinhMuc: number; let idxTenTP: number; let idxTongSLYCau: number; let idxMaKhachHang: number; let idxSoPOKH: number; let idxPhanTramHaoHut: number; let idxGhiChu: number;
@@ -3529,6 +3540,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         idxSoPOKH = 15;
         idxPhanTramHaoHut = colIdx(headers, 'Phần Trăm Hao Hụt', 'Phan Tram Hao Hut');
         idxGhiChu = colIdx(headers, 'Ghi chú', 'Ghi Chu', 'GhiChu', 'Note', 'Ghi chú');
+
+        // Theo file PXK mới: cột R = Tổng lượng định mức, cột S = Ghi chú (nếu sheet đủ cột).
+        const headerLen = (rows[headerRowIndex] || []).length;
+        if (headerLen >= 19) {
+          idxTongSLYCau = COL_R;
+          idxGhiChu = COL_S;
+        }
       } else {
         headerRowIndex = 0;
         idxMaCtu = COL_A;
@@ -3589,7 +3607,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         for (let r = dataStartRow; r < rows.length; r++) {
           const row = rows[r] || [];
           const v = String(row[maCtuCol] ?? '').trim().toUpperCase();
-          if (v !== 'PX' && !v.includes('PX') && !v.includes('PHIEU XUAT') && !v.includes('PHIẾU XUẤT')) continue;
+          // Mã Ctừ: nhận PX và cả DN (cột A có thể là "PXDN", "DN...", ...).
+          const isPx = v === 'PX' || v.includes('PX') || v.includes('PHIEU XUAT') || v.includes('PHIẾU XUẤT');
+          const isDn = v === 'DN' || v.includes('DN');
+          if (!isPx && !isDn) continue;
           cnt++;
           const pxkLsxRaw = getFullLsxFromCell(row[lsxCol]);
           if (!pxkLsxRaw) continue;
@@ -3638,6 +3659,26 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       let byLsx: PxkDataByLsx = {};
       let rowsWithPx = 0;
       const pxkLsxSamples: string[] = [];
+
+      // Một số report PXK đặt cột "Xuất Kho" ở J. Nếu đang fallback về H, thử đo nhanh cột nào hợp lý hơn.
+      const chooseQtyCol = () => {
+        if (idxSoLuongXTTFinal !== COL_H) return;
+        const scanLimit = Math.min(dataStartRow + 200, rows.length);
+        const countNumeric = (col: number) => {
+          let c = 0;
+          for (let r = dataStartRow; r < scanLimit; r++) {
+            const row = rows[r] || [];
+            const raw = row[col];
+            const num = typeof raw === 'number' ? raw : parseFloat(String(raw ?? '').replace(/,/g, ''));
+            if (!Number.isNaN(num) && String(raw ?? '').trim() !== '') c++;
+          }
+          return c;
+        };
+        const hCnt = countNumeric(COL_H);
+        const jCnt = countNumeric(COL_J);
+        if (jCnt > hCnt) idxSoLuongXTTFinal = COL_J;
+      };
+      chooseQtyCol();
       const tryParse = () => {
         const res = parseWithCols(idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal, idxSoLuongXTTFinal, idxDvtFinal, idxSoPOFinal, idxSoChungTuFinal, idxMaKhoFinal, idxLoaiHinhFinal, idxTenVatTuFinal, idxDinhMucFinal, idxTenTPFinal, idxTongSLYCauFinal, idxMaKhachHangFinal, idxSoPOKHFinal, idxPhanTramHaoHutFinal, idxGhiChuFinal);
         byLsx = res.byLsx;
@@ -3651,7 +3692,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const row = rows[r] || [];
           for (let c = 0; c <= 10; c++) {
             const v = String(row[c] ?? '').trim().toUpperCase();
-            if (v === 'PX' || v.includes('PX')) pxCountByCol[c]++;
+            if (v === 'PX' || v.includes('PX') || v === 'DN' || v.includes('DN')) pxCountByCol[c]++;
           }
         }
         const bestMaCtuCol = pxCountByCol.reduce((best, cnt, i) => cnt > (pxCountByCol[best] || 0) ? i : best, 0);
@@ -3664,7 +3705,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       for (let r = dataStartRow; r < rows.length && pxkLsxSamples.length < 5; r++) {
         const row = rows[r] || [];
         const v = String(row[idxMaCtuFinal] ?? '').trim().toUpperCase();
-        if (v !== 'PX' && !v.includes('PX')) continue;
+        if (v !== 'PX' && !v.includes('PX') && v !== 'DN' && !v.includes('DN')) continue;
         const pxkLsxRaw = getFullLsxFromCell(row[idxSoLenhSXFinal]);
         if (pxkLsxRaw) pxkLsxSamples.push(pxkLsxRaw);
       }
@@ -4246,7 +4287,7 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 </div>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>Tổng SL Y/Cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th class="col-vitri">Vị trí</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Lượng Giao</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>Tổng lượng định mức</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th class="col-vitri">Vị trí</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Lượng Giao</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 ${nvlSxKsBoxHtml}
