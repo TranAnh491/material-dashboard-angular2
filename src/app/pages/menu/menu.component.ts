@@ -14,6 +14,18 @@ export class MenuComponent implements OnInit {
   // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop)
   // FG Check, FG Location, FG In được cho phép hiển thị trên mobile
   desktopOnlyTabs: string[] = [
+    // Hide on mobile per request (keep on desktop)
+    '/assistant',
+    '/pxk-preview',
+    '/find-rm1',
+    '/bag-history',
+    '/fg-overview',
+    '/warehouse-loading',
+    '/trace-back',
+    '/qc',
+    '/safety',
+    // PrintLabelComponent is routed as /label (admin-layout.routing.ts)
+    '/label',
     '/work-order-status',
     '/shipment',
     '/inventory-overview-asm1',
