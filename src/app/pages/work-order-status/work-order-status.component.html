@@ -128,12 +128,15 @@
                   </button>
                   <input type="file" id="pxkFileInput" accept=".xlsx,.xls" 
                          (change)="onPxkFileSelected($event)" style="display: none;">
-                  <button class="btn btn-outline-secondary" 
+                  <button class="btn btn-outline-secondary pxk-toolbar-import-btn"
+                          type="button"
                           (click)="showPxkImportDialog = true"
                           [disabled]="isImportingPxk"
-                          style="color: #607d8b; border: none;"
-                          title="Import file PXK">
-                    <i class="material-icons">description</i> PXK
+                          matTooltip="Mở cửa sổ hướng dẫn, sau đó bấm Chọn file Excel để import PXK"
+                          style="color: #1565c0; border: 1px solid #90caf9; font-weight: 600;"
+                          title="Import file phiếu xuất kho (Excel)">
+                    <i class="material-icons" style="vertical-align: middle;">upload_file</i>
+                    Import file PXK
                   </button>
                   <button class="btn btn-outline-danger" 
                           (click)="showDeleteDialog = true"
@@ -720,28 +723,74 @@
   <div class="time-range-dialog-overlay pxk-download-overlay" *ngIf="showPxkImportDialog">
     <div class="time-range-dialog pxk-download-dialog pxk-import-dialog">
       <div class="dialog-header">
-        <h4>Import PXK</h4>
-        <button mat-icon-button type="button" (click)="showPxkImportDialog = false">
+        <h4>Import PXK — chọn file Excel</h4>
+        <button mat-icon-button type="button" (click)="showPxkImportDialog = false" aria-label="Đóng">
           <mat-icon>close</mat-icon>
         </button>
       </div>
-      <div class="dialog-content">
-        <div class="pxk-import-info">
-          <p class="pxk-import-info-title"><i class="material-icons">info</i> Nguồn dữ liệu file</p>
-          <ul>
-            <li>File Excel (<strong>.xlsx</strong> / <strong>.xls</strong>) được <strong>xuất từ hệ thống kho / kế toán</strong> (báo cáo phiếu xuất kho — PXK), không phải tự tạo tay trừ khi đúng cấu trúc báo cáo.</li>
-            <li>Trong file cần có các dòng có <strong>Mã Ctừ = PX</strong> và cột <strong>Số lệnh SX (LSX)</strong> đúng định dạng theo nhà máy (ví dụ ASM1: KZLSX…, ASM2: LHLSX…).</li>
-            <li>Sau khi import, dữ liệu được lưu trên hệ thống và dùng để <strong>đối chiếu với Work Order</strong> trên màn hình này (So sánh, In PXK).</li>
-            <li>Để xem cấu trúc cột mẫu: vào <strong>MORE → Tải form PXK</strong>.</li>
-          </ul>
+      <div class="dialog-content pxk-import-dialog-content">
+        <div class="pxk-import-cta-bar">
+          <button mat-raised-button color="primary" type="button"
+                  class="pxk-import-primary-btn"
+                  (click)="triggerPxkImportFromDialog()"
+                  [disabled]="isImportingPxk">
+            <mat-icon>folder_open</mat-icon>
+            {{ isImportingPxk ? 'Đang xử lý...' : 'Chọn file Excel (.xlsx / .xls)' }}
+          </button>
+          <button mat-stroked-button type="button" (click)="showPxkImportDialog = false">
+            Đóng
+          </button>
         </div>
-        <div class="dialog-actions">
+        <p class="pxk-import-cta-hint"><strong>Bấm nút xanh</strong> phía trên để mở cửa sổ chọn file trên máy — không cần cuộn xuống dưới.</p>
+        <div class="pxk-import-scroll">
+          <div class="pxk-import-info">
+            <p class="pxk-import-info-title"><i class="material-icons">info</i> Nguồn dữ liệu file</p>
+            <div class="pxk-import-body">
+              <div class="pxk-import-col-text">
+                <ul>
+                  <li>File Excel (<strong>.xlsx</strong> / <strong>.xls</strong>) được <strong>xuất từ hệ thống kho / kế toán</strong> (báo cáo phiếu xuất kho — PXK), không phải tự tạo tay trừ khi đúng cấu trúc báo cáo.</li>
+                  <li>Chỉ import các dòng có <strong>Mã Ctừ = PX</strong> (hoặc tương đương chứng từ xuất). Cột <strong>Số lệnh sản xuất (LSX)</strong> phải đúng định dạng theo nhà máy: ASM1 <code>KZLSX</code> + 4 số + <code>/</code> + 4 số; ASM2 <code>LHLSX</code> + 4 số + <code>/</code> + 4 số.</li>
+                  <li>Sau khi import, dữ liệu lưu trên hệ thống để <strong>đối chiếu Work Order</strong> (So sánh, In PXK). Hệ thống tìm dòng tiêu đề theo tên cột; nếu khớp, thứ tự cột có thể khác form mẫu.</li>
+                </ul>
+              </div>
+              <div class="pxk-import-col-table">
+                <p class="pxk-table-heading">Ánh xạ cột chuẩn (<strong>MORE → Tải form PXK</strong>, sheet <strong>PXK</strong>)</p>
+                <table class="pxk-column-map" aria-label="Ánh xạ cột Excel">
+                  <thead>
+                    <tr><th>Cột</th><th>Tiêu đề mẫu</th><th>Dùng trong hệ thống</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>A</td><td>Mã Ctừ</td><td>Lọc dòng xuất (<code>PX</code>)</td></tr>
+                    <tr><td>B</td><td>Số Chứng Từ</td><td>Số chứng từ (merge/ghi đè theo số CT)</td></tr>
+                    <tr><td>C</td><td>Số lệnh sản xuất</td><td>LSX — khóa nhóm &amp; khớp WO</td></tr>
+                    <tr><td>D</td><td>Mã sản phẩm</td><td>(Tuỳ file kho; form mẫu có cột này)</td></tr>
+                    <tr><td>E</td><td>Mã Khách Hàng</td><td>Mã khách hàng trên dòng PXK</td></tr>
+                    <tr><td>F</td><td>Mã vật tư</td><td>Mã vật tư — So sánh / In PXK</td></tr>
+                    <tr><td>G</td><td>Tên Vật Tư</td><td>Tên vật tư</td></tr>
+                    <tr><td>H</td><td>Đơn vị tính</td><td>ĐVT</td></tr>
+                    <tr><td>I</td><td>Số PO</td><td>Số PO</td></tr>
+                    <tr><td>J</td><td>Xuất Kho</td><td>Số lượng xuất thực tế (đối chiếu số lượng)</td></tr>
+                    <tr><td>K</td><td>Mã Kho</td><td>Mã kho</td></tr>
+                    <tr><td>L–N</td><td>Định Mức, Loại Hình, Tên TP</td><td>Thông tin bổ sung</td></tr>
+                    <tr><td>O</td><td>Tổng SL Y/Cầu</td><td>Lượng yêu cầu / tổng SL YC (hiển thị khi So sánh &amp; In PXK)</td></tr>
+                    <tr><td>P</td><td>Số PO KH</td><td>Số PO khách hàng</td></tr>
+                    <tr><td>Q</td><td>Phần Trăm Hao Hụt</td><td>% hao hụt</td></tr>
+                    <tr><td>R</td><td>Tổng lượng định mức</td><td>Tổng SL định mức (khi file đủ cột)</td></tr>
+                    <tr><td>S</td><td>Ghi chú</td><td>Ghi chú (khi file đủ cột)</td></tr>
+                  </tbody>
+                </table>
+                <p class="pxk-import-note">File xuất từ phần mềm kho có thể đặt &quot;Xuất Kho&quot; ở cột H hoặc J — hệ thống tự chọn cột có nhiều số hơn trong một đoạn dòng đầu.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-actions pxk-import-actions-footer">
           <button mat-raised-button color="primary" type="button"
                   (click)="triggerPxkImportFromDialog()"
                   [disabled]="isImportingPxk">
-            <mat-icon>upload_file</mat-icon> {{ isImportingPxk ? 'Đang xử lý...' : 'Import PXK' }}
+            <mat-icon>upload_file</mat-icon> {{ isImportingPxk ? 'Đang xử lý...' : 'Chọn file lần nữa' }}
           </button>
-          <button mat-raised-button type="button" (click)="showPxkImportDialog = false">
+          <button mat-button type="button" (click)="showPxkImportDialog = false">
             <mat-icon>cancel</mat-icon> Đóng
           </button>
         </div>

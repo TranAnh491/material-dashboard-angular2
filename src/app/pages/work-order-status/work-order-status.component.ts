@@ -3463,19 +3463,41 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         reader.readAsArrayBuffer(file);
       });
       const workbook = XLSX.read(data, { type: 'array' });
-      let sheet = workbook.Sheets['Sheet1'] || workbook.Sheets['sheet1'];
+      const normSheet = (n: string) => n.trim().toLowerCase();
+      let sheet: any;
+      const byName = (name: string) => workbook.SheetNames.find((n: string) => normSheet(n) === normSheet(name));
+      sheet = workbook.Sheets['Sheet1'] || workbook.Sheets['sheet1'];
       if (!sheet) {
-        const sheet1 = workbook.SheetNames.find((n: string) => n.trim().toLowerCase() === 'sheet1');
-        if (sheet1) sheet = workbook.Sheets[sheet1];
+        const s1 = byName('Sheet1');
+        if (s1) sheet = workbook.Sheets[s1];
+      }
+      if (!sheet) {
+        const pxkName = byName('PXK') || workbook.SheetNames.find((n: string) => normSheet(n) === 'pxk');
+        if (pxkName) sheet = workbook.Sheets[pxkName];
       }
       if (!sheet) {
         const found = workbook.SheetNames.find((n: string) => {
-          const lower = n.trim().toLowerCase();
+          const lower = normSheet(n);
           return lower.includes('bảng kê') || lower.includes('bang ke') || lower.includes('phiếu xuất') || lower.includes('phieu xuat');
         });
         if (found) sheet = workbook.Sheets[found];
       }
       if (!sheet) sheet = workbook.Sheets[workbook.SheetNames[0]];
+      // Bỏ qua sheet trống (một số file .xlsx có sheet ẩn / trống đứng đầu)
+      if (sheet) {
+        const testRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true }) as any[][];
+        const nonEmpty = (testRows || []).some((row: any[]) => (row || []).some((c: any) => String(c ?? '').trim() !== ''));
+        if (!nonEmpty && workbook.SheetNames.length > 1) {
+          for (const name of workbook.SheetNames) {
+            const sh = workbook.Sheets[name];
+            const r = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '', raw: true }) as any[][];
+            if ((r || []).some((row: any[]) => (row || []).some((c: any) => String(c ?? '').trim() !== ''))) {
+              sheet = sh;
+              break;
+            }
+          }
+        }
+      }
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true }) as any[][];
       if (rows.length < 2) {
         alert('File PXK không có dữ liệu.');
@@ -3491,56 +3513,71 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       };
       const hasRequiredHeaders = (h: string[]): boolean => {
         const hasMaCtu = colIdx(h, 'Mã Ctừ', 'Ma Ctu', 'MaCtu', 'Mã chứng từ', 'Ma chung tu', 'Chứng từ', 'Loại ctừ') >= 0;
-        const hasLsx = colIdx(h, 'Số lệnh sản xuất', 'So lenh san xuat', 'SoLenhSanXuat', 'Lệnh sản xuất', 'Lenh san xuat', 'LSX', 'Số LSX') >= 0;
+        const hasLsx = colIdx(h, 'Số lệnh sản xuất', 'So lenh san xuat', 'SoLenhSanXuat', 'Số lệnh SX', 'So lenh SX', 'Lệnh sản xuất', 'Lenh san xuat', 'LSX', 'Số LSX') >= 0;
         const hasMaVatTu = colIdx(h, 'Mã vật tư', 'Ma vat tu', 'MaVatTu', 'Mã VT', 'Ma VT', 'Vật tư') >= 0;
         return hasMaCtu && hasLsx && hasMaVatTu;
       };
       let headerRowIndex = -1;
-      for (let r = 0; r < Math.min(20, rows.length); r++) {
+      const headerScanMax = Math.min(50, rows.length);
+      for (let r = 0; r < headerScanMax; r++) {
         const rowHeaders = (rows[r] || []).map((h: any) => String(h || '').trim());
-        const cellC = norm((rowHeaders[2] || '').trim());
-        if (r <= 1 && (cellC.includes('so lenh san xuat') || cellC.includes('lsx'))) {
-          headerRowIndex = r;
-          break;
-        }
         if (hasRequiredHeaders(rowHeaders)) {
           headerRowIndex = r;
           break;
         }
       }
+      // Heuristic: dòng có cột C giống tiêu đề LSX và cột A giống Mã Ctừ (tránh nhầm với dòng tiêu đề báo cáo không có đủ cột)
+      if (headerRowIndex < 0) {
+        for (let r = 0; r < Math.min(5, rows.length); r++) {
+          const rowHeaders = (rows[r] || []).map((h: any) => String(h || '').trim());
+          const cellA = norm((rowHeaders[0] || '').trim());
+          const cellC = norm((rowHeaders[2] || '').trim());
+          if ((cellC.includes('solanhsanxuat') || cellC.includes('solanhsx') || (cellC.includes('lsx') && cellC.includes('lenh')))
+            && (cellA.includes('mactu') || cellA.includes('machungtu'))) {
+            headerRowIndex = r;
+            break;
+          }
+        }
+      }
       console.log('[PXK Import] Raw rows sample (first 8 rows, first 12 cols):', rows.slice(0, 8).map((r: any[]) => (r || []).slice(0, 12).map((c: any) => String(c ?? '').substring(0, 20))));
-      // Format (thường gặp): A=Mã Ctừ, ... , J có thể là Xuất Kho hoặc Loại Hình tùy report
-      const COL_A = 0, COL_B = 1, COL_C = 2, COL_D = 3, COL_E = 4, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9, COL_O = 14, COL_R = 17, COL_S = 18;
+      // Form mẫu MORE → Tải form PXK: A=Ctừ, B=Số CT, C=LSX, D=Mã SP, E=Mã KH, F=Mã VT, G=Tên VT, H=ĐVT, I=Số PO, J=Xuất Kho, K=Mã Kho, …
+      const COL_A = 0, COL_B = 1, COL_C = 2, COL_F = 5, COL_G = 6, COL_H = 7, COL_I = 8, COL_J = 9, COL_K = 10, COL_L = 11, COL_M = 12, COL_N = 13, COL_O = 14, COL_R = 17, COL_S = 18;
       let idxMaCtu: number; let idxSoLenhSX: number; let idxMaVatTu: number;
       let idxSoLuongXTT: number; let idxDvt: number; let idxSoPO: number; let idxSoChungTu: number; let idxMaKho: number; let idxLoaiHinh: number;
       let idxTenVatTu: number; let idxDinhMuc: number; let idxTenTP: number; let idxTongSLYCau: number; let idxMaKhachHang: number; let idxSoPOKH: number; let idxPhanTramHaoHut: number; let idxGhiChu: number;
       idxMaCtu = COL_A;
       idxSoChungTu = COL_B;
       idxSoLenhSX = COL_C;
-      idxMaVatTu = COL_E;
-      idxSoPO = COL_F;
-      idxMaKho = -1; // Tìm theo header, -1 nếu file cũ không có cột Mã Kho
-      idxSoLuongXTT = COL_H;
-      idxDvt = COL_I;
-      idxLoaiHinh = -1; // Tìm theo header, -1 nếu file cũ không có cột Loại Hình
+      idxMaVatTu = COL_F;
+      idxSoPO = COL_I;
+      idxMaKho = COL_K;
+      idxSoLuongXTT = COL_J;
+      idxDvt = COL_H;
+      idxLoaiHinh = COL_M;
+      idxTenVatTu = COL_G;
+      idxDinhMuc = COL_L;
+      idxTenTP = COL_N;
+      idxTongSLYCau = -1;
+      idxPhanTramHaoHut = -1;
+      idxGhiChu = -1;
+      idxMaKhachHang = 4;
+      idxSoPOKH = 15;
       if (headerRowIndex >= 0) {
         const headers = (rows[headerRowIndex] || []).map((h: any) => String(h || '').trim());
         idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') >= 0 ? colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') : COL_A;
         idxSoChungTu = colIdx(headers, 'Số Chứng Từ', 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') >= 0 ? colIdx(headers, 'Số Chứng Từ', 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') : COL_B;
-        idxSoLenhSX = colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') >= 0 ? colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'LSX', 'Số LSX') : COL_C;
-        idxMaVatTu = colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') >= 0 ? colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') : COL_E;
-        idxSoPO = colIdx(headers, 'Số PO', 'So PO', 'PO') >= 0 ? colIdx(headers, 'Số PO', 'So PO', 'PO') : COL_F;
+        idxSoLenhSX = colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'Số lệnh SX', 'So lenh SX', 'LSX', 'Số LSX') >= 0 ? colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'Số lệnh SX', 'So lenh SX', 'LSX', 'Số LSX') : COL_C;
+        idxMaVatTu = colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') >= 0 ? colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') : COL_F;
+        idxSoPO = colIdx(headers, 'Số PO', 'So PO', 'PO') >= 0 ? colIdx(headers, 'Số PO', 'So PO', 'PO') : COL_I;
         idxMaKho = colIdx(headers, 'Mã Kho', 'Ma Kho', 'MaKho');
-        idxSoLuongXTT = colIdx(headers, 'Xuất Kho', 'Xuat Kho', 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Xuất Kho', 'Xuat Kho', 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_H;
-        idxDvt = colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') >= 0 ? colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') : COL_I;
+        idxSoLuongXTT = colIdx(headers, 'Xuất Kho', 'Xuat Kho', 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') >= 0 ? colIdx(headers, 'Xuất Kho', 'Xuat Kho', 'Số lượng xuất thực tế', 'So luong xuat', 'Số lượng xuất') : COL_J;
+        idxDvt = colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') >= 0 ? colIdx(headers, 'Đvt', 'DVT', 'Đơn vị tính') : COL_H;
         idxLoaiHinh = colIdx(headers, 'Loại Hình', 'Loai Hinh', 'LoaiHinh');
         idxTenVatTu = colIdx(headers, 'Tên Vật Tư', 'Ten Vat Tu');
         idxDinhMuc = colIdx(headers, 'Định Mức', 'Dinh Muc');
         idxTenTP = colIdx(headers, 'Tên TP', 'Ten TP');
         idxTongSLYCau = colIdx(headers, 'Tổng SL Y/Cầu', 'Tong SL Y/Cau');
-        // Luôn dùng cố định: cột E (index 4) = Mã Khách Hàng, cột P (index 15) = Số PO KH
-        idxMaKhachHang = 4;
-        idxSoPOKH = 15;
+        // Luôn dùng cố định: cột E (index 4) = Mã Khách Hàng, cột P (index 15) = Số PO KH (theo form MORE → Tải form PXK)
         idxPhanTramHaoHut = colIdx(headers, 'Phần Trăm Hao Hụt', 'Phan Tram Hao Hut');
         idxGhiChu = colIdx(headers, 'Ghi chú', 'Ghi Chu', 'GhiChu', 'Note', 'Ghi chú');
 
@@ -3554,7 +3591,18 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         headerRowIndex = 0;
         idxMaCtu = COL_A;
         idxSoChungTu = COL_B;
-        idxTenVatTu = idxDinhMuc = idxTenTP = idxTongSLYCau = idxSoPOKH = idxPhanTramHaoHut = idxGhiChu = -1;
+        idxSoLenhSX = COL_C;
+        idxMaVatTu = COL_F;
+        idxSoPO = COL_I;
+        idxMaKho = COL_K;
+        idxSoLuongXTT = COL_J;
+        idxDvt = COL_H;
+        idxLoaiHinh = COL_M;
+        idxTenVatTu = COL_G;
+        idxDinhMuc = COL_L;
+        idxTenTP = COL_N;
+        idxTongSLYCau = idxPhanTramHaoHut = idxGhiChu = -1;
+        idxSoPOKH = 15;
         idxMaKhachHang = 4; // Cột E
       }
       const allWo = [...this.workOrders, ...(this.filteredWorkOrders || [])];
@@ -3593,12 +3641,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       };
       const getFullLsxFromCell = (val: any): string => {
         if (val == null || val === '') return '';
-        if (typeof val === 'string') return val.trim();
         if (typeof val === 'number' && val >= 0 && val < 1 && !Number.isInteger(val)) return '';
-        return String(val).trim();
+        const t = typeof val === 'string' ? val : String(val);
+        return t.trim().replace(/\uFF0F/g, '/').replace(/\s+/g, '');
       };
       /** Chuẩn LSX: ASM1 = KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089); ASM2 = LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089) */
-      const isValidLsxFormat = (s: string): boolean => /^(KZLSX|LHLSX)\d{4}\/\d{4}$/i.test(String(s || '').trim());
+      const isValidLsxFormat = (s: string): boolean => {
+        const t = String(s || '').trim().replace(/\uFF0F/g, '/').replace(/\s+/g, '');
+        return /^(KZLSX|LHLSX)\d{4}\/\d{4}$/i.test(t);
+      };
       /** Xác định factory từ prefix LSX: KZ → ASM1, LH → ASM2 */
       const getFactoryFromLsx = (lsxStr: string): 'ASM1' | 'ASM2' =>
         String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
@@ -3670,7 +3721,6 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
       // Một số report PXK đặt cột "Xuất Kho" ở J. Nếu đang fallback về H, thử đo nhanh cột nào hợp lý hơn.
       const chooseQtyCol = () => {
-        if (idxSoLuongXTTFinal !== COL_H) return;
         const scanLimit = Math.min(dataStartRow + 200, rows.length);
         const countNumeric = (col: number) => {
           let c = 0;
@@ -3684,9 +3734,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         };
         const hCnt = countNumeric(COL_H);
         const jCnt = countNumeric(COL_J);
-        if (jCnt > hCnt) idxSoLuongXTTFinal = COL_J;
+        if (idxSoLuongXTTFinal === COL_H && jCnt > hCnt) idxSoLuongXTTFinal = COL_J;
+        else if (idxSoLuongXTTFinal === COL_J && hCnt > jCnt) idxSoLuongXTTFinal = COL_H;
       };
       chooseQtyCol();
+      const colLetter = (idx: number): string =>
+        idx >= 0 && idx < 26 ? String.fromCharCode(65 + idx) : `cột ${idx + 1}`;
       const tryParse = () => {
         const res = parseWithCols(
           idxMaCtuFinal, idxSoLenhSXFinal, idxMaVatTuFinal,
@@ -3737,7 +3790,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
       if (total === 0) {
         if (rowsWithPx > 0) {
-          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột LSX đang đọc: cột C.`);
+          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột Số lệnh SX đang đọc: ${colLetter(idxSoLenhSXFinal)} (cột ${idxSoLenhSXFinal + 1}).`);
         } else if (rows.length > dataStartRow) {
           alert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
         } else {
