@@ -605,10 +605,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }).length;
   }
 
+  /** Ngày tham chiếu tháng: ưu tiên ngày ship thực tế, không có thì ngày yêu cầu. */
+  private getShipmentMonthReferenceDate(s: any): Date | null {
+    if (s.actualShipDate) {
+      const d = s.actualShipDate instanceof Date ? s.actualShipDate : new Date(s.actualShipDate);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (s.requestDate) {
+      const d = s.requestDate instanceof Date ? s.requestDate : new Date(s.requestDate);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+
+  /** Chỉ tính shipment thuộc tháng hiện tại (theo actualShipDate hoặc requestDate). */
+  private isShipmentInCurrentMonth(s: any): boolean {
+    const d = this.getShipmentMonthReferenceDate(s);
+    if (!d) return false;
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+
   private loadShipmentDataFromGoogleSheets() {
     // Load shipment data from Firebase collection 'shipments'
-    console.log(`Loading all shipment data from Firebase`);
-    
+    console.log(`Loading shipment data from Firebase (tháng hiện tại)`);
+
     this.firestore.collection('shipments').get().subscribe(snapshot => {
       const allShipments = snapshot.docs.map(doc => {
         const data = doc.data() as any;
@@ -620,10 +641,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
           status: data.status || 'Chờ soạn'
         };
       });
-      
-      // Group by shipmentCode (đếm tất cả shipments, không filter theo tháng)
+
+      const monthShipments = allShipments.filter(s => this.isShipmentInCurrentMonth(s));
+      console.log(`Shipments: ${monthShipments.length}/${allShipments.length} dòng thuộc tháng hiện tại`);
+
+      // Group by shipmentCode — chỉ trong tháng hiện tại
       const shipmentGroups = new Map<string, any[]>();
-      allShipments.forEach(s => {
+      monthShipments.forEach(s => {
         const code = String(s.shipmentCode || '').trim().toUpperCase();
         if (!code) return; // Skip empty shipment codes
         if (!shipmentGroups.has(code)) {
@@ -645,11 +669,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
       
       this.shipment = `${completedShipments}/${totalShipments}`;
-      console.log(`Total Shipments: ${this.shipment} (completed/total shipments)`);
-      console.log(`Breakdown: ${completedShipments} shipments fully shipped out of ${totalShipments} total shipments`);
-      
-      // Shipment Status for next 7 days
-      this.updateShipmentStatus(allShipments);
+      console.log(`Shipment (tháng hiện tại): ${this.shipment} (Đã Ship / Tổng số shipment)`);
+      console.log(`Breakdown: ${completedShipments} shipment hoàn tất / ${totalShipments} shipment trong tháng`);
+
+      // Shipment Status for next 7 days (chỉ dòng thuộc tháng hiện tại)
+      this.updateShipmentStatus(monthShipments);
     }, error => {
       console.error('Error loading shipment data from Firebase:', error);
       this.shipment = "0/0";

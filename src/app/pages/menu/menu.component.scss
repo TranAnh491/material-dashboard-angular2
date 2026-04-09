@@ -117,50 +117,6 @@
   margin: 0 0 20px 0;
   padding-bottom: 12px;
   border-bottom: 2px solid #333333;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  
-  &::before {
-    content: '';
-    width: 4px;
-    height: 24px;
-    border-radius: 2px;
-  }
-}
-
-/* Explicit category marker for Quality section (avoid nth-of-type coupling) */
-.menu-section-quality .menu-category-title::before {
-  background: #455A64;
-}
-
-// Category title colors
-.menu-section:nth-of-type(1) .menu-category-title::before {
-  background: #1976D2; // Main - Blue
-}
-
-.menu-section:nth-of-type(2) .menu-category-title::before {
-  background: #388E3C; // ASM1 RM - Green
-}
-
-.menu-section:nth-of-type(3) .menu-category-title::before {
-  background: #455A64; // Quality - Blue Grey
-}
-
-.menu-section:nth-of-type(4) .menu-category-title::before {
-  background: #00ACC1; // ASM2 RM - Cyan
-}
-
-.menu-section:nth-of-type(5) .menu-category-title::before {
-  background: #F57C00; // ASM FG - Orange
-}
-
-.menu-section:nth-of-type(6) .menu-category-title::before {
-  background: #7B1FA2; // Tools - Purple
-}
-
-.menu-section:nth-of-type(7) .menu-category-title::before {
-  background: #D32F2F; // Admin - Red
 }
 
 .menu-grid {
@@ -346,161 +302,234 @@
   }
 }
 
-// Responsive - Mobile
-@media (max-width: 768px) {
-  .menu-container {
-    padding: 30px 15px;
-  }
-  
-  .menu-header {
-    margin-bottom: 30px;
-    padding-bottom: 20px;
+// —— Mobile / tablet nhỏ: phong cách iOS (Settings / grouped list, dark mode)
+// Khớp `isMobile` trong menu.component.ts (màn ≤1024px)
+@media (max-width: 1024px) {
+  .menu-container.menu-container--ios-mobile {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #000000;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 0 calc(24px + env(safe-area-inset-bottom, 0px));
+    -webkit-font-smoothing: antialiased;
   }
 
-  .header-content {
+  .menu-container.menu-container--ios-mobile .menu-header {
+    margin-bottom: 8px;
+    padding: 12px 16px 16px;
+    border-bottom: none;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .menu-container.menu-container--ios-mobile .header-content {
     flex-direction: column;
-    gap: 20px;
+    gap: 12px;
     align-items: center;
     text-align: center;
   }
-  
-  .header-left {
+
+  .menu-container.menu-container--ios-mobile .header-left {
     flex-direction: column;
-    gap: 15px;
-  }
-  
-  .header-logo {
-    height: 90px;
-  }
-  
-  .menu-subtitle {
-    font-size: 1.1rem;
-  }
-  
-  .menu-footer {
-    margin-top: 40px;
-    padding-top: 30px;
-  }
-  
-  .logout-btn {
-    width: 100%;
-    max-width: 100px;
-    justify-content: center;
-    padding: 6px 12px;
-    font-size: 0.5rem;
-    
-    .material-icons {
-      font-size: 10px;
-    }
-  }
-  
-  .menu-subtitle {
-    font-size: 0.9rem;
-  }
-  
-  .menu-grid {
-    grid-template-columns: 1fr;
     gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    padding: 16px;
+    background: #1c1c1e;
+    border-radius: 12px;
+    box-sizing: border-box;
   }
-  
-  .menu-item {
+
+  .menu-container.menu-container--ios-mobile .header-logo {
+    height: 72px;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-subtitle {
+    font-size: 15px;
+    font-weight: 400;
+    color: #ebebf5;
+    letter-spacing: -0.24px;
+    line-height: 1.25;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-section {
+    margin-bottom: 20px;
+    padding: 0 16px;
+  }
+
+  // Tiêu đề nhóm kiểu iOS (uppercase, xám)
+  .menu-container.menu-container--ios-mobile .menu-category-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 400;
+    text-transform: uppercase;
+    color: #8e8e93;
+    letter-spacing: -0.08px;
+    margin: 0 0 6px 16px;
+    padding: 0;
+    border: none;
+    border-bottom: none;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    grid-template-columns: none;
+    background: #1c1c1e;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 0;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-item {
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
     gap: 12px;
-    padding: 14px 12px;
-    min-height: auto;
-  }
-  
-  .menu-item .material-icons {
-    font-size: 18px; // Giảm 50% so với 36px hiện tại
+    padding: 10px 16px;
+    min-height: 44px;
+    border-radius: 0 !important;
+    background: transparent;
+    box-shadow: none;
+    border-bottom: 0.5px solid rgba(84, 84, 88, 0.65);
+    transform: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .menu-item .menu-tab-icon-img {
-    width: 41px;  // Giảm ~50% so với 82px
-    height: 51px; // Giảm ~50% so với 102px
+  .menu-container.menu-container--ios-mobile .menu-item:last-child {
+    border-bottom: none;
   }
-  
-  .menu-item span {
-    font-size: 0.9rem;
-    text-align: left;
-    line-height: 1.2;
+
+  .menu-container.menu-container--ios-mobile .menu-item:hover {
+    transform: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-item:active {
+    transform: none;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .menu-container.menu-container--ios-mobile .ios-menu-icon {
+    width: 29px;
+    height: 29px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    .material-icons {
+      font-size: 18px;
+      color: #ffffff;
+    }
+  }
+
+  .menu-item-main .ios-menu-icon {
+    background: #0a84ff;
+  }
+
+  .menu-item-asm1-rm .ios-menu-icon {
+    background: #30d158;
+  }
+
+  .menu-item-quality .ios-menu-icon {
+    background: #636366;
+  }
+
+  .menu-item-asm2-rm .ios-menu-icon {
+    background: #5ac8fa;
+  }
+
+  .menu-item-asm1-fg .ios-menu-icon {
+    background: #ff9f0a;
+  }
+
+  .menu-item-tools .ios-menu-icon {
+    background: #bf5af2;
+  }
+
+  .menu-item-admin .ios-menu-icon {
+    background: #ff453a;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-item-label {
     flex: 1;
+    font-size: 17px;
+    font-weight: 400;
+    color: #ffffff;
+    letter-spacing: -0.41px;
+    text-align: left;
+    line-height: 1.25;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  // Ẩn tên khu vực (Main / ASM1 RM / ...) trên mobile
-  .menu-category-title {
+  .menu-container.menu-container--ios-mobile .ios-row-chevron {
+    font-size: 20px !important;
+    width: 20px;
+    height: 20px;
+    color: #636366;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-item .menu-tab-icon-img {
     display: none;
   }
 
-  // Gom các section lại gần nhau, không tạo khoảng cách lớn
-  .menu-section {
-    margin-bottom: 0;
+  .menu-container.menu-container--ios-mobile .menu-item:hover .ios-menu-icon .material-icons,
+  .menu-container.menu-container--ios-mobile .menu-item:active .ios-menu-icon .material-icons {
+    transform: none;
+  }
+
+  .menu-container.menu-container--ios-mobile .menu-footer {
+    margin-top: 8px;
+    padding: 0 16px;
+    border-top: none;
+  }
+
+  .menu-container.menu-container--ios-mobile .logout-btn {
+    width: 100%;
+    max-width: none;
+    justify-content: center;
+    padding: 14px 16px;
+    font-size: 17px;
+    font-weight: 400;
+    border-radius: 10px;
+    background: #1c1c1e;
+    color: #ff453a;
+    box-shadow: none;
+
+    .material-icons {
+      font-size: 20px;
+      color: #ff453a;
+    }
+
+    span {
+      color: #ff453a;
+    }
+
+    &:hover {
+      transform: none;
+      background: #2c2c2e;
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
   }
 }
 
-// Responsive - Small Mobile
 @media (max-width: 480px) {
-  .menu-container {
-    padding: 20px 10px;
-  }
-  
-  .header-logo {
-    height: 80px;
-  }
-  
-  .menu-subtitle {
-    font-size: 1rem;
-  }
-  
-  .menu-footer {
-    margin-top: 30px;
-    padding-top: 20px;
-  }
-  
-  .logout-btn {
-    padding: 5px 10px;
-    font-size: 0.45rem;
-    max-width: 100px;
-    
-    .material-icons {
-      font-size: 10px;
-    }
-  }
-  
-  .menu-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  
-  .menu-item {
-    padding: 12px 10px;
-    min-height: auto;
-  }
-  
-  .menu-item .material-icons {
-    font-size: 16px; // Giảm 50% so với 32px hiện tại
-  }
-  
-  .menu-item span {
-    font-size: 0.8rem;
-    max-width: 100%;
+  .menu-container.menu-container--ios-mobile .header-logo {
+    height: 64px;
   }
 
-  .menu-item .menu-tab-icon-img {
-    width: 38px;
-    height: 48px;
-  }
-
-  .menu-category-title {
-    display: none;
-  }
-
-  .menu-section {
-    margin-bottom: 0;
+  .menu-container.menu-container--ios-mobile .menu-item-label {
+    font-size: 16px;
   }
 }
 
