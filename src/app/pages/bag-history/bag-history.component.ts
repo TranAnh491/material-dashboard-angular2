@@ -58,10 +58,16 @@ export interface OutboundDuplicateGroupRow {
   poNumber: string;
   imd: string;
   bagBatch: string;
+  /** Khóa nhóm trùng: factory|material|po|imd|bag */
+  dupKey: string;
+  /** Ngày/giờ xuất mới nhất trong nhóm (ưu tiên exportDate, fallback createdAt/updatedAt). */
+  latestExportAtLabel?: string;
   /** Số bản ghi outbound cùng khóa (>1). */
   count: number;
   /** LSX (`productionOrder`) gom từ các lần xuất trùng; nhiều lệnh cách nhau bằng · */
   productionOrderSummary: string;
+  /** Dòng này từng bị bỏ qua trước đây, nhưng đã phát sinh thêm (count tăng) nên hiện lại. */
+  revivedAfterIgnore?: boolean;
 }
 
 @Component({
@@ -108,6 +114,11 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   /** Loại trừ mã khỏi báo cáo trùng (đồng bộ Firestore `control-batch-exclusion/settings`). */
   excludeEnabled = false;
   private excludeMaterialCodesSet = new Set<string>();
+  /**
+   * Bỏ qua theo từng nhóm trùng (factory|mã|PO|IMD|bag).
+   * Value = baseline count đã bỏ qua. Nếu lần sau count <= baseline => ẩn; nếu count tăng => hiện lại.
+   */
+  private outboundDupIgnoredGroups = new Map<string, number>();
 
   showControlBatchMoreModal = false;
   controlBatchCatalogOpen = false;
@@ -226,12 +237,23 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
       excludeEnabled?: unknown;
       excludeMaterialCodes?: unknown;
       outboundDupSinceDate?: unknown;
+      outboundDupIgnoredGroups?: unknown;
     } | null | undefined;
     this.excludeEnabled = d?.excludeEnabled === true;
     const arr = Array.isArray(d?.excludeMaterialCodes) ? d.excludeMaterialCodes : [];
     this.excludeMaterialCodesSet = new Set(
       arr.map(x => String(x || '').trim().toUpperCase()).filter(Boolean)
     );
+    // load ignored groups (baseline count)
+    this.outboundDupIgnoredGroups.clear();
+    if (Array.isArray(d?.outboundDupIgnoredGroups)) {
+      for (const item of d!.outboundDupIgnoredGroups as any[]) {
+        const key = String(item?.key ?? '').trim();
+        const n = Number(item?.ignoredCount);
+        if (!key) continue;
+        if (Number.isFinite(n) && n > 0) this.outboundDupIgnoredGroups.set(key, Math.floor(n));
+      }
+    }
     this.outboundDupSinceYmd = this.normalizeOutboundDupSinceYmd(d?.outboundDupSinceDate);
     const ms = this.vnYmdStartMs(this.outboundDupSinceYmd);
     this.outboundDupSinceMs =
@@ -679,6 +701,34 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     return `${fac}|${mc}|${po}|${im}|${bag}`;
   }
 
+  isOutboundDupGroupIgnored(row: OutboundDuplicateGroupRow): boolean {
+    const baseline = this.outboundDupIgnoredGroups.get(row.dupKey);
+    return baseline != null && baseline >= row.count;
+  }
+
+  async onToggleIgnoreOutboundDupGroup(row: OutboundDuplicateGroupRow, checked: boolean): Promise<void> {
+    const key = String(row?.dupKey || '').trim();
+    if (!key) return;
+    if (checked) this.outboundDupIgnoredGroups.set(key, Math.max(1, Math.floor(row.count || 1)));
+    else this.outboundDupIgnoredGroups.delete(key);
+
+    const payload = Array.from(this.outboundDupIgnoredGroups.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'vi'))
+      .map(([k, ignoredCount]) => ({ key: k, ignoredCount }));
+    try {
+      await this.firestore.doc('control-batch-exclusion/settings').set(
+        {
+          outboundDupIgnoredGroups: payload,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.error('save outboundDupIgnoredGroups', e);
+      this.snackBar.open('Lưu "Bỏ qua" thất bại. Kiểm tra quyền Firestore.', 'Đóng', { duration: 6000 });
+    }
+  }
+
   private async fetchAllOutboundDocsForFactory(
     factory: 'ASM1' | 'ASM2',
     batchSize: number
@@ -726,8 +776,12 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         string,
         {
           count: number;
-          sample: Omit<OutboundDuplicateGroupRow, 'count' | 'productionOrderSummary'>;
+          sample: Omit<
+            OutboundDuplicateGroupRow,
+            'count' | 'productionOrderSummary' | 'dupKey' | 'revivedAfterIgnore'
+          >;
           lsx: Set<string>;
+          latestMs: number;
         }
       >();
       for (const doc of all) {
@@ -752,11 +806,13 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         }
         this.outboundDupEligibleCount += 1;
         const key = this.outboundDupCompositeKey(factory, materialCode, poNumber, imd, bagBatch);
+        const tMs = this.getOutboundDocTimeMs(d) ?? 0;
         const lsxVal = d['productionOrder'];
         const lsxStr = lsxVal != null ? String(lsxVal).trim() : '';
         const prev = counts.get(key);
         if (prev) {
           prev.count += 1;
+          if (tMs > prev.latestMs) prev.latestMs = tMs;
           if (lsxStr) {
             prev.lsx.add(lsxStr);
           }
@@ -775,16 +831,44 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
               bagBatch: bagBatch.trim()
             },
             lsx
+            ,
+            latestMs: tMs
           });
         }
       }
       const dupes: OutboundDuplicateGroupRow[] = [];
-      for (const { count, sample, lsx } of counts.values()) {
+      const fmtVn = (ms: number): string => {
+        if (!ms) return '';
+        const d = new Date(ms);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+      };
+      for (const { count, sample, lsx, latestMs } of counts.values()) {
         if (count > 1) {
           const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
           const productionOrderSummary =
             lsxList.length > 0 ? lsxList.join(' · ') : '—';
-          dupes.push({ ...sample, count, productionOrderSummary });
+          const dupKey = this.outboundDupCompositeKey(
+            sample.factory,
+            sample.materialCode,
+            sample.poNumber,
+            sample.imd,
+            sample.bagBatch
+          );
+          const ignoredBaseline = this.outboundDupIgnoredGroups.get(dupKey);
+          if (ignoredBaseline != null && ignoredBaseline >= count) {
+            continue; // bỏ qua khi dò nếu chưa phát sinh thêm lần xuất
+          }
+          const revivedAfterIgnore =
+            ignoredBaseline != null && ignoredBaseline < count ? true : undefined;
+          dupes.push({
+            ...sample,
+            dupKey,
+            latestExportAtLabel: fmtVn(latestMs) || undefined,
+            count,
+            productionOrderSummary,
+            revivedAfterIgnore
+          });
         }
       }
       dupes.sort((a, b) => {

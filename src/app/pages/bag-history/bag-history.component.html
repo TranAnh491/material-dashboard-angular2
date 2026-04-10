@@ -77,6 +77,8 @@
               <th>Bag</th>
               <th class="num">Số lần xuất</th>
               <th>Lệnh sản xuất</th>
+              <th>Ngày</th>
+              <th>Bỏ qua</th>
             </tr>
           </thead>
           <tbody>
@@ -87,7 +89,17 @@
               <td>{{ r.imd || '—' }}</td>
               <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
               <td class="num">{{ r.count }}</td>
-              <td class="lsx-col">{{ r.productionOrderSummary }}</td>
+              <td class="lsx-col">
+                {{ r.productionOrderSummary }}
+                <span *ngIf="r.revivedAfterIgnore" class="revived-badge" title="Nhóm này đã phát sinh thêm lần xuất nên hiện lại.">mới</span>
+              </td>
+              <td class="date-col">{{ r.latestExportAtLabel || '—' }}</td>
+              <td class="ignore-col">
+                <mat-checkbox
+                  [checked]="isOutboundDupGroupIgnored(r)"
+                  (change)="onToggleIgnoreOutboundDupGroup(r, $event.checked)">
+                </mat-checkbox>
+              </td>
             </tr>
           </tbody>
         </table>

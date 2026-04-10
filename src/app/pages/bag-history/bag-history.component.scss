@@ -452,11 +452,36 @@ $control-h: 40px;
   font-size: 12px;
 }
 
+.date-col {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
 .lsx-col {
   max-width: 18rem;
   word-break: break-word;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.ignore-col {
+  width: 84px;
+  text-align: center;
+}
+
+.revived-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid #92400e;
+  background: #fff7ed;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  vertical-align: baseline;
+  white-space: nowrap;
 }
 
 .empty {
@@ -479,6 +504,12 @@ $control-h: 40px;
   padding: 1rem;
   background: rgba(10, 10, 10, 0.45);
   box-sizing: border-box;
+}
+
+// Datepicker của Angular Material render trong cdk-overlay-container (global).
+// Nếu z-index overlay thấp hơn popup (1200) thì lịch sẽ bị che.
+::ng-deep .cdk-overlay-container {
+  z-index: 1300 !important;
 }
 
 .cb-more-dialog {

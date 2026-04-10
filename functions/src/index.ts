@@ -27,6 +27,19 @@ export const notifyOutboundDuplicatesAt17 = functions
     await runOutboundDupNotifyForSlot(admin.firestore(), '17');
   });
 
+/**
+ * Control Batch: mỗi 30 phút quét "nhóm trùng mới" và gửi email tự động.
+ * Nhóm đã gửi sẽ không gửi lại.
+ */
+export const notifyOutboundDuplicatesEvery30Min = functions
+  .runWith({ secrets: [emailPass] })
+  .pubsub.schedule('*/30 * * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runOutboundDupNotifyEvery30Min } = await import('./outbound-dup-notify');
+    await runOutboundDupNotifyEvery30Min(admin.firestore());
+  });
+
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 export const sendControlBatchReportEmail = functions
   .runWith({ secrets: [emailPass] })

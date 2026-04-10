@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -101,6 +102,18 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   // Time range filter
   startDate: string = '';
   endDate: string = '';
+
+  // Modern range date picker (single input + popover)
+  showDateRangePopover = false;
+  tempStartDate: string = '';
+  tempEndDate: string = '';
+
+  get dateRangeDisplay(): string {
+    if (this.startDate && this.endDate) return `${this.startDate} → ${this.endDate}`;
+    if (this.startDate && !this.endDate) return `Từ ${this.startDate}`;
+    if (!this.startDate && this.endDate) return `Đến ${this.endDate}`;
+    return 'Chọn khung ngày';
+  }
   
   // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
   statusFilter: string = 'pending'; // Default: Chưa nhận (ẩn mã đã tick đã nhận)
@@ -209,8 +222,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
     private ngZone: NgZone,
-    private rmBagHistory: RmBagHistoryService
+    private rmBagHistory: RmBagHistoryService,
+    private router: Router
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
+
+  goHome(): void {
+    this.router.navigate(['/dashboard']);
+  }
   
   ngOnInit(): void {
     this.loadPermissions();
@@ -223,6 +245,28 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.statusFilter = 'pending';
     
     this.loadMaterials();
+  }
+
+  openDateRangePopover(ev?: Event): void {
+    ev?.stopPropagation?.();
+    this.tempStartDate = this.startDate || '';
+    this.tempEndDate = this.endDate || '';
+    this.showDateRangePopover = true;
+  }
+
+  closeDateRangePopover(): void {
+    this.showDateRangePopover = false;
+  }
+
+  cancelDateRange(): void {
+    this.closeDateRangePopover();
+  }
+
+  applyDateRange(): void {
+    this.startDate = this.tempStartDate || '';
+    this.endDate = this.tempEndDate || '';
+    this.closeDateRangePopover();
+    this.applyFilters();
   }
 
   trackByMaterial(index: number, material: InboundMaterial): any {

@@ -27,6 +27,10 @@ export type ControlBatchDupSettings = {
   dupSinceYmd: string;
   /** DD/MM/YYYY — hiển thị email / đồng bộ với app. */
   dupSinceLabel: string;
+  /** Nhóm trùng bị bỏ qua theo baseline count (key -> ignoredCount). */
+  ignoredGroups: Map<string, number>;
+  /** Nhóm trùng đã gửi email (key -> true). */
+  emailedGroups: Set<string>;
 };
 
 /** 00:00 ngày `ymd` theo múi Asia/Ho_Chi_Minh. */
@@ -115,7 +119,9 @@ export function buildControlBatchDupSettingsFromCallablePayload(data: unknown): 
     exclusion: { enabled, codes },
     dupSinceMs,
     dupSinceYmd,
-    dupSinceLabel: formatYmdVnDisplay(dupSinceYmd)
+    dupSinceLabel: formatYmdVnDisplay(dupSinceYmd),
+    ignoredGroups: new Map<string, number>(),
+    emailedGroups: new Set<string>()
   };
 }
 
@@ -135,11 +141,29 @@ export async function loadControlBatchDupSettings(
   }
   const dupSinceYmd = normalizeOutboundDupSinceYmd(d.outboundDupSinceDate);
   const dupSinceMs = vnYmdStartMs(dupSinceYmd)!;
+  const ignoredGroups = new Map<string, number>();
+  if (Array.isArray(d.outboundDupIgnoredGroups)) {
+    for (const item of d.outboundDupIgnoredGroups) {
+      const key = String(item?.key ?? '').trim();
+      const n = Number(item?.ignoredCount);
+      if (!key) continue;
+      if (Number.isFinite(n) && n > 0) ignoredGroups.set(key, Math.floor(n));
+    }
+  }
+  const emailedGroups = new Set<string>();
+  if (Array.isArray(d.outboundDupEmailedGroups)) {
+    for (const item of d.outboundDupEmailedGroups) {
+      const key = String(item?.key ?? '').trim();
+      if (key) emailedGroups.add(key);
+    }
+  }
   return {
     exclusion: { enabled, codes },
     dupSinceMs,
     dupSinceYmd,
-    dupSinceLabel: formatYmdVnDisplay(dupSinceYmd)
+    dupSinceLabel: formatYmdVnDisplay(dupSinceYmd),
+    ignoredGroups,
+    emailedGroups
   };
 }
 
@@ -151,6 +175,8 @@ export type OutboundDupRow = {
   bagBatch: string;
   count: number;
   productionOrderSummary: string;
+  /** composite key factory|mc|po|imd|bag */
+  dupKey: string;
 };
 
 type Agg = {
@@ -335,7 +361,12 @@ export async function scanOutboundDuplicates(
     if (count > 1) {
       const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
       const productionOrderSummary = lsxList.length > 0 ? lsxList.join(' · ') : '—';
-      dupes.push({ ...sample, count, productionOrderSummary });
+      const dupKey = compositeKey(sample.factory, sample.materialCode, sample.poNumber, sample.imd, sample.bagBatch);
+      const ignoredBaseline = s.ignoredGroups.get(dupKey);
+      if (ignoredBaseline != null && ignoredBaseline >= count) {
+        continue;
+      }
+      dupes.push({ ...sample, count, productionOrderSummary, dupKey });
     }
   }
   dupes.sort((a, b) => {
@@ -449,10 +480,122 @@ async function sendDupEmail(
   await transporter.sendMail({
     from: cfg.from,
     to: cfg.to.join(', '),
-    subject: `[Control Batch] Cảnh báo: ${dupes.length} nhóm trùng xuất kho`,
+    subject: `[Control Batch] Cảnh báo: ${dupes.length} nhóm trùng xuất kho (mới)`,
     text: buildPlainText(dupes, settings.dupSinceLabel, exclNote || undefined),
     html: buildHtml(dupes, settings.dupSinceLabel, exclHtml || undefined)
   });
+}
+
+function vnNowLabel(d = new Date()): string {
+  return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+}
+
+function vnHalfHourBucketKey(d = new Date()): string {
+  const vn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const y = vn.getUTCFullYear();
+  const m = String(vn.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(vn.getUTCDate()).padStart(2, '0');
+  const hh = String(vn.getUTCHours()).padStart(2, '0');
+  const mm = vn.getUTCMinutes() >= 30 ? '30' : '00';
+  return `${y}-${m}-${day}-${hh}:${mm}`;
+}
+
+/**
+ * Lịch 30 phút: nếu phát sinh nhóm trùng "mới" thì gửi email.
+ * "Mới" = dupKey chưa từng được gửi trước đây (outboundDupEmailedGroups).
+ * Nhóm đã gửi sẽ không gửi lại.
+ */
+export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firestore): Promise<void> {
+  const bucket = vnHalfHourBucketKey(new Date());
+  const lockRef = db.collection('outbound-dup-notify-locks').doc(`30m-${bucket}`);
+
+  const canProceed = await db.runTransaction(async tx => {
+    const snap = await tx.get(lockRef);
+    if (snap.exists) {
+      const st = (snap.data() as { status?: string })?.status;
+      if (st === 'done' || st === 'sending') return false;
+    }
+    tx.set(
+      lockRef,
+      { status: 'sending', bucket, startedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    return true;
+  });
+  if (!canProceed) {
+    console.log('outbound-dup-notify-30m: skip (lock)', bucket);
+    return;
+  }
+
+  try {
+    const settings = await loadControlBatchDupSettings(db);
+    const allDupes = await scanOutboundDuplicates(db, settings);
+    const newDupes = allDupes.filter(r => !settings.emailedGroups.has(r.dupKey));
+
+    if (newDupes.length === 0) {
+      await lockRef.set(
+        {
+          status: 'done',
+          dupGroups: 0,
+          emailSent: false,
+          finishedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+      return;
+    }
+
+    const emailCfg = getEmailCfg();
+    if (!emailCfg) {
+      console.error('outbound-dup-notify-30m: missing SMTP config');
+      await lockRef.set(
+        {
+          status: 'done',
+          dupGroups: newDupes.length,
+          emailSent: false,
+          emailSkippedReason: 'missing_smtp_config',
+          finishedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+      return;
+    }
+
+    await sendDupEmail(newDupes, emailCfg, settings);
+
+    // Persist "emailed" keys so we don't resend.
+    const sentAt = vnNowLabel(new Date());
+    const toAppend = newDupes.map(r => ({ key: r.dupKey, sentAt }));
+    const settingsRef = db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC);
+    await settingsRef.set(
+      {
+        outboundDupEmailedGroups: admin.firestore.FieldValue.arrayUnion(...toAppend),
+        outboundDupLastAutoEmailAt: admin.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    await lockRef.set(
+      {
+        status: 'done',
+        dupGroups: newDupes.length,
+        emailSent: true,
+        finishedAt: admin.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    console.log('outbound-dup-notify-30m: emailed', newDupes.length, 'new groups', bucket);
+  } catch (e) {
+    console.error('outbound-dup-notify-30m failed', e);
+    await lockRef.set(
+      {
+        status: 'error',
+        errorAt: admin.firestore.FieldValue.serverTimestamp(),
+        error: (e as Error)?.message || String(e)
+      },
+      { merge: true }
+    );
+  }
 }
 
 /**
