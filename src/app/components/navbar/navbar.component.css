@@ -49,6 +49,17 @@
     font-size: 18px;
 }
 
+/* INBOUND ASM1: thanh nav trong suốt — click xuyên tới topbar trang (cùng ý materials: không để vùng rỗng chặn nút dưới). Phải tắt hit-test cả .container-fluid vì con mặc định không nhận event khi cha là none. */
+.navbar.navbar--inbound-pass-through,
+.navbar.navbar--inbound-pass-through .container-fluid {
+  pointer-events: none;
+}
+
+.navbar.navbar--inbound-pass-through .navbar-wrapper,
+.navbar.navbar--inbound-pass-through .navbar-wrapper .navbar-brand {
+  pointer-events: auto;
+}
+
 /* Home Button Styles */
 .btn-home {
     background: transparent !important;

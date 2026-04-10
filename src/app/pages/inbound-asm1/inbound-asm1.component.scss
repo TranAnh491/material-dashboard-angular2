@@ -890,7 +890,8 @@ iframe {
   .excel-header {
     position: sticky;
     top: 0;
-    z-index: 200;
+    /* Cao hơn .excel-actions (99), cùng cách materials-asm1 (.excel-header 100 vs .excel-actions 99) */
+    z-index: 100;
     padding: 16px 20px;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
@@ -1421,11 +1422,11 @@ iframe {
   }
 }
 
-// Action controls
+// Action controls — giống materials-asm1: sticky dưới header, z-index thấp hơn .excel-header để header luôn trên khi chồng; top ≈ chiều cao topbar (padding + hàng brand)
 .excel-actions {
   position: sticky;
-  top: 76px;
-  z-index: 190 !important;
+  top: 80px;
+  z-index: 99 !important;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   overflow: visible !important;

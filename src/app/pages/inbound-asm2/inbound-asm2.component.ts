@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -170,9 +171,21 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   // Time range filter
   startDate: string = '';
   endDate: string = '';
+
+  // Modern range date picker (single input + popover) — cùng inbound-asm1
+  showDateRangePopover = false;
+  tempStartDate: string = '';
+  tempEndDate: string = '';
+
+  get dateRangeDisplay(): string {
+    if (this.startDate && this.endDate) return `${this.startDate} — ${this.endDate}`;
+    if (this.startDate && !this.endDate) return `Từ ${this.startDate}`;
+    if (!this.startDate && this.endDate) return `Đến ${this.endDate}`;
+    return 'Chọn khung ngày';
+  }
   
-  // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
-  statusFilter: string = 'all'; // Default to Tất cả
+  // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ (mặc định giống asm1)
+  statusFilter: string = 'pending';
   
   // Batch type filters - Hàng Trả / Hàng Nhập
   filterReturnGoods: boolean = false; // Lọc hàng trả (batchNumber bắt đầu bằng TRA)
@@ -281,8 +294,39 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
     private ngZone: NgZone,
-    private rmBagHistory: RmBagHistoryService
+    private rmBagHistory: RmBagHistoryService,
+    private router: Router
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
+
+  goHome(): void {
+    this.router.navigate(['/dashboard']);
+  }
+
+  openDateRangePopover(ev?: Event): void {
+    ev?.stopPropagation?.();
+    this.tempStartDate = this.startDate || '';
+    this.tempEndDate = this.endDate || '';
+    this.showDateRangePopover = true;
+  }
+
+  closeDateRangePopover(): void {
+    this.showDateRangePopover = false;
+  }
+
+  cancelDateRange(): void {
+    this.closeDateRangePopover();
+  }
+
+  applyDateRange(): void {
+    this.startDate = this.tempStartDate || '';
+    this.endDate = this.tempEndDate || '';
+    this.closeDateRangePopover();
+    this.applyFilters();
+  }
   
   ngOnInit(): void {
     Chart.register(...registerables);
@@ -292,8 +336,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.setupDateDefaults();
     console.log(`📅 Khung thời gian mặc định: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
     
-    // Mặc định hiển thị tất cả materials (không filter)
-    this.statusFilter = 'all';
+    this.statusFilter = 'pending';
+    this.filterDaNhap = false;
     
     this.loadMaterials();
   }
@@ -1428,6 +1472,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     this.applyFilters();
   }
 
+  /** Đồng bộ với segmented "Đã Nhập" — giống inbound-asm1 */
+  onFilterDaNhapChange(): void {
+    this.statusFilter = this.filterDaNhap ? 'received' : 'pending';
+    this.applyFilters();
+  }
+
   // Getter: Đếm số hàng trả đang chờ nhập (chưa isReceived)
   get pendingReturnGoodsCount(): number {
     return this.materials.filter(material =>
@@ -1591,6 +1641,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
   changeStatusFilter(status: string): void {
     this.statusFilter = status;
+    this.filterDaNhap = status === 'received';
     console.log(`🔄 Thay đổi bộ lọc trạng thái: ${status}`);
     
     // Log thông tin về số lượng materials trước và sau khi lọc
