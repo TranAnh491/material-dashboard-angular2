@@ -51,6 +51,8 @@ export interface InventoryMaterial {
   iqcStatus?: string; // IQC Status: PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
   /** Tổng số bịch (Inbound gwLdv) */
   totalBags?: number;
+  /** Số bag tồn đầu (lấy từ Inbound "số bịch") */
+  openingBagsAtInit?: number;
   /** Số bịch đã xuất (Outbound QR dạng DDMMYYYY-i/n) */
   exportedBags?: number;
   /** String input để edit BAG (totalBags) an toàn với dấu phẩy. */
@@ -163,6 +165,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   temLeSplitQty: number | null = null;
   temLeError: string = '';
   temLeParsed: { materialCode: string; po: string; quantity: number; p4: string } | null = null;
+  private temLeSuffixPool: string[] = [];
 
   // ===== Tem Xuất Kho (PXK + FIFO tồn → in loạt tem QR) =====
   showTemXuatKhoPopup = false;
@@ -225,6 +228,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.temLeSplitQty = null;
     this.temLeError = '';
     this.temLeParsed = null;
+    this.ensureTemLeSuffixPool();
 
     // Scanner (keyboard wedge) will type into focused input
     setTimeout(() => {
@@ -299,7 +303,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const splitQtyR = round4(splitQty);
 
     const baseP4 = String(parsed.p4 || '').trim().replace(/\(T\d+\)\s*$/i, '');
-    const splitP4 = `${baseP4}(T1)`; // Tem tách có đuôi lẽ
+    const splitP4 = `${baseP4}(T1${this.nextTemLeSuffix6()})`; // Tem tách có đuôi lẽ (6 số)
     const remainP4 = baseP4;         // Tem gốc còn lại giữ nguyên
 
     const splitQrData = `${parsed.materialCode}|${parsed.po}|${splitQtyR}|${splitP4}`;
@@ -558,7 +562,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       while (rowAvail > 0 && remaining > 0) {
         const chunk = rowAvail >= sp ? sp : rowAvail;
         const p4Base = `${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
-        const p4 = chunk < sp ? `${p4Base}(T1)` : p4Base;
+        const p4 = chunk < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
         const qrData = `${mat}|${po}|${chunk}|${p4}`;
         out.push({ qrData });
         consumed.set(rowKey, (consumed.get(rowKey) || 0) + chunk);
@@ -568,6 +572,46 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       }
     }
     return { payloads: out, consumed };
+  }
+
+  private ensureTemLeSuffixPool(): void {
+    if (this.temLeSuffixPool.length > 0) return;
+    this.temLeSuffixPool = this.generateTemLeSuffixPool6(6);
+  }
+
+  private nextTemLeSuffix6(): string {
+    this.ensureTemLeSuffixPool();
+    const v = this.temLeSuffixPool.shift();
+    if (v) return v;
+    this.temLeSuffixPool = this.generateTemLeSuffixPool6(6);
+    return this.temLeSuffixPool.shift() || this.random6Digits();
+  }
+
+  private generateTemLeSuffixPool6(count: number): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    while (out.length < count) {
+      const v = this.random6Digits();
+      if (seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+    return out;
+  }
+
+  private random6Digits(): string {
+    try {
+      const a = new Uint32Array(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c: Crypto | undefined = (globalThis as any)?.crypto as Crypto | undefined;
+      if (c?.getRandomValues) {
+        c.getRandomValues(a);
+        return String(a[0] % 1_000_000).padStart(6, '0');
+      }
+    } catch {
+      // fallback below
+    }
+    return String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
   }
 
   /**
@@ -3984,7 +4028,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
 
-    const raw = (material.bagInput ?? material.totalBags ?? '') as any;
+    const raw = (material.bagInput ?? material.openingBagsAtInit ?? material.totalBags ?? '') as any;
     const num =
       raw === '' || raw === null || raw === undefined
         ? 0

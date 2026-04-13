@@ -750,6 +750,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           unit: material.unit,
           exported: 0, // Initially no exports
           totalBags,
+          openingBagsAtInit: totalBags, // số bag tồn đầu (lấy từ Inbound "số bịch")
           exportedBags: 0,
           stock: material.quantity, // Initial stock = quantity
           location: inventoryLocation, // Đã xử lý đặc biệt cho hàng trả
@@ -848,6 +849,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           unit: material.unit,
           exported: 0,
           totalBags: 0,
+          openingBagsAtInit: 0,
           exportedBags: 0,
           stock: material.quantity,
           location: 'IQC',
@@ -916,6 +918,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const bb = (material.bagBatch || '').trim();
       return this.firestore.collection('inventory-materials').doc(docId).update({
         totalBags,
+        openingBagsAtInit: totalBags, // số bag tồn đầu (lấy từ Inbound "số bịch")
         exportedBags: 0,
         location: inventoryLocation,
         stock: material.quantity,
