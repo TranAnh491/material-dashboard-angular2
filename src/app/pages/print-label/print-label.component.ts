@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { PermissionService } from '../../services/permission.service';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
@@ -50,7 +52,7 @@ export class PrintLabelComponent implements OnInit {
   isSaving: boolean = false;
   isLoading: boolean = false;
 
-  morePopupView: 'menu' | 'printers' = 'menu';
+  morePopupView: 'menu' | 'printers' | 'tinhTrang' | 'lateMails' = 'menu';
 
   // Authentication properties
   isAuthenticated: boolean = false;
@@ -107,10 +109,32 @@ export class PrintLabelComponent implements OnInit {
   printerCatalogSaving = false;
   private readonly PRINTER_CATALOG_DOC = 'print-label-settings/printers';
 
+  /** Danh mục tình trạng cho cột "Tình trạng" (cấu hình trong More → Tình trạng) */
+  tinhTrangCatalog: string[] = [];
+  tinhTrangNewName = '';
+  tinhTrangCatalogSaving = false;
+  private readonly TINH_TRANG_CATALOG_DOC = 'print-label-settings/tinh-trang';
+  /** Người nhận mail cảnh báo tem trễ kế hoạch (Cloud Function đọc doc này) */
+  private readonly LATE_NOTIFICATION_EMAILS_DOC = 'print-label-settings/late-notification-emails';
+  lateEmailText = '';
+  lateEmailsSaving = false;
+  lateNotifyManualRunning = false;
+  /** Giá trị mặc định khi Firestore chưa có cấu hình */
+  private readonly DEFAULT_TINH_TRANG: string[] = [
+    'IQC',
+    'Late',
+    'Chờ in',
+    'Chờ bản vẽ',
+    'Chờ Template',
+    'Đã in',
+    'Done'
+  ];
+
   constructor(
     private firestore: AngularFirestore,
     private permissionService: PermissionService,
-    private auth: AngularFireAuth
+    private auth: AngularFireAuth,
+    private fns: AngularFireFunctions
   ) { }
 
   ngOnInit(): void {
@@ -129,6 +153,7 @@ export class PrintLabelComponent implements OnInit {
         this.refreshStorageInfo();
         this.autoHandleDocumentSizeLimit();
         void this.loadPrinterCatalog();
+        void this.loadTinhTrangCatalog();
       }, 1000);
     } else {
       // Desktop loading
@@ -136,6 +161,7 @@ export class PrintLabelComponent implements OnInit {
       this.refreshStorageInfo();
       this.autoHandleDocumentSizeLimit();
       void this.loadPrinterCatalog();
+      void this.loadTinhTrangCatalog();
     }
   }
 
@@ -143,11 +169,14 @@ export class PrintLabelComponent implements OnInit {
     this.showMorePopup = true;
     this.morePopupView = 'menu';
     this.printerNewName = '';
+    this.tinhTrangNewName = '';
   }
 
   closeMorePopup(): void {
     this.showMorePopup = false;
     this.morePopupView = 'menu';
+    this.tinhTrangNewName = '';
+    this.lateEmailText = '';
   }
 
   openMorePrinters(): void {
@@ -155,9 +184,99 @@ export class PrintLabelComponent implements OnInit {
     this.printerNewName = '';
   }
 
+  openMoreTinhTrang(): void {
+    this.morePopupView = 'tinhTrang';
+    this.tinhTrangNewName = '';
+    void this.loadTinhTrangCatalog();
+  }
+
   backToMoreMenu(): void {
     this.morePopupView = 'menu';
     this.printerNewName = '';
+    this.tinhTrangNewName = '';
+    this.lateEmailText = '';
+  }
+
+  openMoreLateMails(): void {
+    this.morePopupView = 'lateMails';
+    void this.loadLateNotificationEmails();
+  }
+
+  private parseLateEmailsFromTextarea(): string[] {
+    return this.lateEmailText
+      .split(/[\n,;\s]+/)
+      .map(s => s.trim())
+      .filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+  }
+
+  async loadLateNotificationEmails(): Promise<void> {
+    try {
+      const snap = await this.firestore.doc(this.LATE_NOTIFICATION_EMAILS_DOC).get().toPromise();
+      const d = (snap && snap.exists ? snap.data() : null) as { emails?: unknown } | null;
+      const arr = Array.isArray(d?.emails) ? d.emails : [];
+      const list = arr.map((x: unknown) => String(x ?? '').trim()).filter(Boolean);
+      this.lateEmailText = list.join('\n');
+    } catch (e) {
+      console.error('loadLateNotificationEmails:', e);
+      this.lateEmailText = '';
+    }
+  }
+
+  async saveLateNotificationEmails(): Promise<void> {
+    if (this.lateEmailsSaving) {
+      return;
+    }
+    this.lateEmailsSaving = true;
+    try {
+      const emails = Array.from(new Set(this.parseLateEmailsFromTextarea())).sort((a, b) =>
+        a.localeCompare(b, 'vi')
+      );
+      await this.firestore.doc(this.LATE_NOTIFICATION_EMAILS_DOC).set(
+        { emails, updatedAt: new Date() },
+        { merge: true }
+      );
+      this.lateEmailText = emails.join('\n');
+      alert('Đã lưu danh sách mail.');
+    } catch (e) {
+      console.error('saveLateNotificationEmails:', e);
+      alert('Không lưu được danh sách mail.');
+    } finally {
+      this.lateEmailsSaving = false;
+    }
+  }
+
+  async triggerPrintLabelLateNotifyManual(): Promise<void> {
+    if (this.lateNotifyManualRunning) {
+      return;
+    }
+    this.lateNotifyManualRunning = true;
+    try {
+      const fn = this.fns.httpsCallable<
+        object,
+        { ok: boolean; sent: boolean; lateCount: number; recipientCount: number }
+      >('sendPrintLabelLateNotifyManualFn');
+      const data = await firstValueFrom(fn({}));
+      if (!data?.ok) {
+        alert('Không xác định được kết quả từ server.');
+        return;
+      }
+      if (data.recipientCount === 0) {
+        alert('Chưa cấu hình email nhận (lưu danh sách mail trước).');
+        return;
+      }
+      if (data.sent) {
+        alert(`Đã gửi mail cảnh báo. Số mã trễ: ${data.lateCount}, số người nhận: ${data.recipientCount}.`);
+      } else if (data.lateCount === 0) {
+        alert(`Không có mã trễ kế hoạch (chưa Done + quá ngày nhận KH). Đã cấu hình ${data.recipientCount} email.`);
+      } else {
+        alert(`Đã xử lý. sent=${data.sent}, lateCount=${data.lateCount}, recipientCount=${data.recipientCount}.`);
+      }
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      alert(`Lỗi: ${msg}`);
+    } finally {
+      this.lateNotifyManualRunning = false;
+    }
   }
 
   private normalizePrinterName(v: string): string {
@@ -221,6 +340,97 @@ export class PrintLabelComponent implements OnInit {
       alert('❌ Không lưu được danh mục Người in.');
     } finally {
       this.printerCatalogSaving = false;
+    }
+  }
+
+  private normalizeTinhTrangName(v: string): string {
+    return String(v ?? '').trim();
+  }
+
+  /** Pass / NG / Done: luồng IQC — không nằm trong danh mục dropdown thường */
+  private isLockedTinhTrang(value: string): boolean {
+    const v = this.normalizeTinhTrangName(value);
+    return v === 'Pass' || v === 'NG' || v === 'Done';
+  }
+
+  shouldShowOrphanTinhTrangOption(item: ScheduleItem): boolean {
+    const v = this.normalizeTinhTrangName(String(item.tinhTrang ?? ''));
+    if (!v) {
+      return false;
+    }
+    if (this.isLockedTinhTrang(v)) {
+      return false;
+    }
+    return !this.tinhTrangCatalog.includes(v);
+  }
+
+  async loadTinhTrangCatalog(): Promise<void> {
+    try {
+      const snap = await this.firestore.doc(this.TINH_TRANG_CATALOG_DOC).get().toPromise();
+      const d = (snap && snap.exists ? snap.data() : null) as any;
+      const arr = Array.isArray(d?.statuses) ? d.statuses : [];
+      let list: string[] = arr
+        .map((x: any) => this.normalizeTinhTrangName(String(x ?? '')))
+        .filter((x: string) => Boolean(x));
+      if (list.length === 0) {
+        list = [...this.DEFAULT_TINH_TRANG];
+      }
+      this.tinhTrangCatalog = Array.from(new Set<string>(list)).sort((a, b) => a.localeCompare(b, 'vi'));
+    } catch (e) {
+      console.error('❌ loadTinhTrangCatalog:', e);
+      this.tinhTrangCatalog = [...this.DEFAULT_TINH_TRANG];
+    }
+  }
+
+  async addTinhTrangToCatalog(): Promise<void> {
+    const name = this.normalizeTinhTrangName(this.tinhTrangNewName);
+    if (!name) {
+      return;
+    }
+    if (this.isLockedTinhTrang(name)) {
+      alert('Không thêm được "Pass", "NG", "Done" — các trạng thái này do IQC quản lý.');
+      return;
+    }
+    const next = Array.from(new Set([...this.tinhTrangCatalog, name])).sort((a, b) => a.localeCompare(b, 'vi'));
+    await this.saveTinhTrangCatalog(next);
+    this.tinhTrangNewName = '';
+  }
+
+  async removeTinhTrangFromCatalog(name: string): Promise<void> {
+    const n = this.normalizeTinhTrangName(name);
+    if (!n) {
+      return;
+    }
+    const next = this.tinhTrangCatalog.filter(x => x !== n);
+    if (next.length === 0) {
+      alert('Phải giữ ít nhất một tình trạng trong danh mục.');
+      return;
+    }
+    await this.saveTinhTrangCatalog(next);
+  }
+
+  private async saveTinhTrangCatalog(next: string[]): Promise<void> {
+    if (this.tinhTrangCatalogSaving) {
+      return;
+    }
+    this.tinhTrangCatalogSaving = true;
+    try {
+      const cleaned = next.map(x => this.normalizeTinhTrangName(x)).filter(Boolean);
+      const unique = Array.from(new Set(cleaned)).sort((a, b) => a.localeCompare(b, 'vi'));
+      if (unique.length === 0) {
+        alert('Phải có ít nhất một tình trạng.');
+        return;
+      }
+      await this.firestore.doc(this.TINH_TRANG_CATALOG_DOC).set(
+        { statuses: unique, updatedAt: new Date() },
+        { merge: true }
+      );
+      this.tinhTrangCatalog = unique;
+    } catch (e: any) {
+      console.error('❌ saveTinhTrangCatalog:', e);
+      alert('❌ Không lưu được danh mục Tình trạng.');
+    } finally {
+      this.tinhTrangCatalogSaving = false;
     }
   }
 
@@ -1435,6 +1645,39 @@ export class PrintLabelComponent implements OnInit {
     return months[monthNumber as keyof typeof months] || 'Unknown';
   }
 
+  /**
+   * Chuẩn hóa "Ngày nhận kế hoạch" để sắp xếp (DD/MM/YYYY phổ biến trong sheet / Firebase).
+   * Trả về timestamp; không có ngày hoặc không đọc được → cuối danh sách.
+   */
+  private parseNgayNhanKeHoachToTime(raw?: string): number {
+    const s = String(raw ?? '').trim();
+    if (!s) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (m) {
+      const d = parseInt(m[1], 10);
+      const mo = parseInt(m[2], 10) - 1;
+      const y = parseInt(m[3], 10);
+      const dt = new Date(y, mo, d);
+      if (!isNaN(dt.getTime())) {
+        return dt.getTime();
+      }
+    }
+    const m2 = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (m2) {
+      const dt = new Date(parseInt(m2[1], 10), parseInt(m2[2], 10) - 1, parseInt(m2[3], 10));
+      if (!isNaN(dt.getTime())) {
+        return dt.getTime();
+      }
+    }
+    const t = Date.parse(s);
+    if (!isNaN(t)) {
+      return t;
+    }
+    return Number.MAX_SAFE_INTEGER - 1;
+  }
+
   getFilteredData(): ScheduleItem[] {
     let filtered = [...this.scheduleData];
     console.log('🔍 Initial data count:', this.scheduleData.length);
@@ -1460,13 +1703,25 @@ export class PrintLabelComponent implements OnInit {
     }
     
     if (this.currentStatusFilter) {
-      filtered = filtered.filter(item => item.tinhTrang === this.currentStatusFilter);
+      const f = this.normalizeTinhTrangName(this.currentStatusFilter);
+      filtered = filtered.filter(
+        item => this.normalizeTinhTrangName(String(item.tinhTrang ?? '')) === f
+      );
       console.log('🔍 After status filter:', filtered.length);
     }
     
     // Note: Done items are already filtered out at Firebase level
     // No need to filter again here
-    
+
+    filtered.sort((a, b) => {
+      const ta = this.parseNgayNhanKeHoachToTime(a.ngayNhanKeHoach);
+      const tb = this.parseNgayNhanKeHoachToTime(b.ngayNhanKeHoach);
+      if (ta !== tb) {
+        return ta - tb;
+      }
+      return String(a.maTem ?? '').localeCompare(String(b.maTem ?? ''), 'vi', { sensitivity: 'base' });
+    });
+
     console.log('🔍 Final filtered count:', filtered.length);
     return filtered;
   }
@@ -1495,31 +1750,23 @@ export class PrintLabelComponent implements OnInit {
     return rounded.toString();
   }
 
-  // Status count methods
-  getIQCItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'IQC').length;
+  /** Các chip đếm theo danh mục Tình trạng (More → Tình trạng) + Pass (luôn có để lọc IQC) */
+  getStatusChipsForDisplay(): string[] {
+    const src = this.tinhTrangCatalog.length > 0 ? this.tinhTrangCatalog : [...this.DEFAULT_TINH_TRANG];
+    const out = [...src];
+    if (!out.includes('Pass')) {
+      out.push('Pass');
+    }
+    return out;
   }
 
-
-  getLateItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Late').length;
+  getTinhTrangCount(status: string): number {
+    const s = this.normalizeTinhTrangName(status);
+    return this.scheduleData.filter(item => this.normalizeTinhTrangName(String(item.tinhTrang ?? '')) === s).length;
   }
 
-  getPassItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Pass').length;
-  }
-
-
-  getPendingItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ in').length;
-  }
-
-  getChoBanVeItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ bản vẽ').length;
-  }
-
-  getChoTemplateItemsCount(): number {
-    return this.scheduleData.filter(item => item.tinhTrang === 'Chờ Template').length;
+  getStatusChipLabel(status: string): string {
+    return this.normalizeTinhTrangName(status).toLocaleUpperCase('vi-VN');
   }
 
   getNotDoneItemsCount(): number {

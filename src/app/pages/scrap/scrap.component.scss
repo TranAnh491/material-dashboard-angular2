@@ -1,9 +1,21 @@
+// ── Theme: nền be nhạt, chữ đen, viền đen ───────────────────────────────────
+$scrap-beige-page: #ebe4d8;
+$scrap-beige-panel: #f5f0e6;
+$scrap-beige-input: #faf7f2;
+$scrap-border: #000;
+$scrap-text: #000;
+
 // ── Layout ──────────────────────────────────────────────────────────────────
 .scrap-container {
   padding: 68px 16px 24px 16px;
   min-height: 100vh;
-  background: #f4f6f9;
+  background: $scrap-beige-page;
+  color: $scrap-text;
   box-sizing: border-box;
+}
+
+.scrap-theme-beige mat-progress-spinner circle {
+  stroke: $scrap-text !important;
 }
 
 // ── Toolbar ──────────────────────────────────────────────────────────────────
@@ -11,9 +23,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #000;
-  color: #fff;
-  border: 2px solid #000;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 10px 16px;
   box-shadow: none;
@@ -27,9 +39,9 @@
   gap: 8px;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: $scrap-text;
   flex-shrink: 0;
-  mat-icon { font-size: 22px; width: 22px; height: 22px; color: #fff; }
+  mat-icon { font-size: 22px; width: 22px; height: 22px; color: $scrap-text; }
 }
 
 .toolbar-actions {
@@ -43,14 +55,14 @@
 .search-wrap {
   display: flex;
   align-items: center;
-  background: #000;
-  border: 1px solid #000;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
   border-radius: 6px;
   padding: 6px 10px;
   flex: 1;
   min-width: 180px;
   max-width: 360px;
-  .search-icon { font-size: 18px; width: 18px; height: 18px; color: #fff; margin-right: 6px; }
+  .search-icon { font-size: 18px; width: 18px; height: 18px; color: $scrap-text; margin-right: 6px; }
 }
 
 .search-input {
@@ -59,20 +71,22 @@
   outline: none;
   font-size: 14px;
   width: 100%;
-  color: #fff;
+  color: $scrap-text;
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(0, 0, 0, 0.45);
   }
 }
 
-.btn-scan {
+.btn-scan,
+.btn-print,
+.btn-nvl-list {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #000;
-  color: #fff;
-  border: 1px solid #000;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 6px;
   padding: 8px 18px;
   font-size: 14px;
@@ -80,27 +94,8 @@
   cursor: pointer;
   transition: background .2s;
   flex-shrink: 0;
-  mat-icon { font-size: 20px; width: 20px; height: 20px; color: #fff; }
-  &:hover { background: #1a1a1a; }
-  &:active { transform: scale(.97); }
-}
-
-.btn-print {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #000;
-  color: #fff;
-  border: 1px solid #000;
-  border-radius: 6px;
-  padding: 8px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .2s;
-  flex-shrink: 0;
-  mat-icon { font-size: 20px; width: 20px; height: 20px; color: #fff; }
-  &:hover { background: #1a1a1a; }
+  mat-icon { font-size: 20px; width: 20px; height: 20px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-panel, 4%); }
   &:active { transform: scale(.97); }
 }
 
@@ -117,12 +112,14 @@
 }
 
 .modal-box {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  background: $scrap-beige-panel;
+  border: 2px solid $scrap-border;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   width: 100%;
   max-width: 360px;
   overflow: hidden;
+  color: $scrap-text;
 }
 
 .modal-header {
@@ -130,18 +127,19 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid #eee;
-  h3 { margin: 0; font-size: 16px; font-weight: 600; color: #333; }
+  border-bottom: 2px solid $scrap-border;
+  h3 { margin: 0; font-size: 16px; font-weight: 700; color: $scrap-text; }
 }
 
 .btn-close-modal {
-  background: none;
-  border: none;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
+  border-radius: 6px;
   cursor: pointer;
   padding: 4px;
-  color: #666;
-  mat-icon { font-size: 20px; width: 20px; height: 20px; }
-  &:hover { color: #333; }
+  color: $scrap-text;
+  mat-icon { font-size: 20px; width: 20px; height: 20px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 3%); }
 }
 
 .modal-body {
@@ -150,9 +148,9 @@
 
 .print-hint {
   font-size: 13px;
-  color: #555;
+  color: $scrap-text;
   margin-bottom: 14px;
-  strong { color: #1565c0; }
+  strong { color: $scrap-text; font-weight: 800; }
 }
 
 .form-row {
@@ -160,24 +158,27 @@
   label {
     display: block;
     font-size: 13px;
-    font-weight: 500;
-    color: #444;
+    font-weight: 600;
+    color: $scrap-text;
     margin-bottom: 6px;
   }
   input {
     width: 100%;
-    border: 2px solid #e0e0e0;
+    box-sizing: border-box;
+    border: 2px solid $scrap-border;
     border-radius: 8px;
     padding: 10px 14px;
     font-size: 16px;
     outline: none;
+    background: $scrap-beige-input;
+    color: $scrap-text;
   }
-  input:focus { border-color: #1565c0; }
+  input:focus { outline: 2px solid $scrap-text; outline-offset: 0; }
 }
 
 .print-preview {
   font-size: 12px;
-  color: #666;
+  color: $scrap-text;
   margin-top: 10px;
   word-break: break-all;
 }
@@ -186,43 +187,45 @@
   display: flex;
   gap: 10px;
   padding: 14px 18px;
-  border-top: 1px solid #eee;
+  border-top: 2px solid $scrap-border;
   justify-content: flex-end;
 }
 
 .btn-modal-cancel {
-  background: #e0e0e0;
-  color: #555;
-  border: none;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 9px 18px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  &:hover { background: #bdbdbd; }
+  &:hover { background: darken($scrap-beige-input, 4%); }
 }
 
 .btn-modal-print {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #1565c0;
-  color: #fff;
-  border: none;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 9px 20px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  mat-icon { font-size: 18px; width: 18px; height: 18px; }
-  &:hover { background: #0d47a1; }
-  &:disabled { background: #90caf9; cursor: not-allowed; }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-panel, 5%); }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 // ── Scan Panel ───────────────────────────────────────────────────────────────
 .scan-panel {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  background: $scrap-beige-panel;
+  border: 2px solid $scrap-border;
+  border-radius: 10px;
+  box-shadow: none;
   padding: 18px 20px;
   margin-bottom: 14px;
 }
@@ -234,19 +237,28 @@
   align-items: center;
   gap: 10px;
   font-size: 16px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 700;
+  color: $scrap-text;
   margin-bottom: 14px;
   flex-wrap: wrap;
 }
 
 .step-icon {
   font-size: 24px; width: 24px; height: 24px;
-  &.box-icon { color: #f57c00; }
+  &.box-icon { color: $scrap-text; }
 }
 
-.box-label { color: #555; strong { color: #1565c0; } }
-.mat-count { margin-left: auto; background: #e3f2fd; color: #1565c0; border-radius: 12px; padding: 2px 10px; font-size: 13px; }
+.box-label { color: $scrap-text; strong { color: $scrap-text; text-decoration: underline; } }
+.mat-count {
+  margin-left: auto;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
 
 .input-row {
   display: flex;
@@ -256,41 +268,42 @@
 
 .scan-input {
   flex: 1;
-  border: 2px solid #1976d2;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 16px;
   outline: none;
-  color: #222;
-  transition: border-color .2s;
-  &:focus { border-color: #0d47a1; }
+  color: $scrap-text;
+  background: $scrap-beige-input;
+  transition: background .2s;
+  &:focus { background: #fff; }
 }
 
 .btn-confirm {
-  background: #1976d2;
-  color: #fff;
-  border: none;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   width: 44px; height: 44px;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background .2s;
   flex-shrink: 0;
-  mat-icon { font-size: 22px; }
-  &:hover { background: #0d47a1; }
+  mat-icon { font-size: 22px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-panel, 5%); }
 }
 
 .btn-cancel {
-  background: #e0e0e0;
-  color: #555;
-  border: none;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   width: 44px; height: 44px;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  mat-icon { font-size: 22px; }
-  &:hover { background: #bdbdbd; }
+  mat-icon { font-size: 22px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 4%); }
 }
 
 // Materials chips list
@@ -307,36 +320,37 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #e3f2fd;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
   border-radius: 20px;
   padding: 4px 4px 4px 10px;
   font-size: 13px;
-  color: #0d47a1;
+  color: $scrap-text;
 }
 
 .mat-num {
   font-weight: 700;
   margin-right: 2px;
-  color: #1565c0;
+  color: $scrap-text;
 }
 
 .mat-code { font-family: monospace; }
 
 .btn-remove {
-  background: none;
-  border: none;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
   cursor: pointer;
-  color: #e53935;
+  color: $scrap-text;
   display: flex; align-items: center;
   padding: 2px;
   border-radius: 50%;
-  mat-icon { font-size: 16px; width: 16px; height: 16px; }
-  &:hover { background: #ffebee; }
+  mat-icon { font-size: 16px; width: 16px; height: 16px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 4%); }
 }
 
 .no-materials {
   font-size: 13px;
-  color: #999;
+  color: rgba(0, 0, 0, 0.55);
   margin-bottom: 14px;
 }
 
@@ -348,16 +362,16 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #fff3e0;
-  color: #e65100;
-  border: 1px solid #ffcc80;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 8px 14px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  mat-icon { font-size: 18px; width: 18px; height: 18px; }
-  &:hover { background: #ffe0b2; }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 3%); }
 }
 
 .detail-hint {
@@ -381,42 +395,44 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #e0e0e0;
-  color: #555;
-  border: none;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 9px 18px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  mat-icon { font-size: 18px; }
-  &:hover { background: #bdbdbd; }
+  mat-icon { font-size: 18px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 4%); }
 }
 
 .btn-done {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #2e7d32;
-  color: #fff;
-  border: none;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 9px 22px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: background .2s;
-  mat-icon { font-size: 18px; }
-  &:hover { background: #1b5e20; }
-  &:disabled { background: #a5d6a7; cursor: not-allowed; }
+  mat-icon { font-size: 18px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-panel, 5%); }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 // ── Saved message ─────────────────────────────────────────────────────────────
 .saved-msg {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
   border-radius: 8px;
   padding: 10px 18px;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 12px;
   text-align: center;
 }
@@ -431,32 +447,33 @@
 // ── Table Meta ────────────────────────────────────────────────────────────────
 .table-meta {
   font-size: 13px;
-  color: #666;
+  color: $scrap-text;
   margin-bottom: 8px;
   padding-left: 4px;
+  font-weight: 600;
 }
 
 // ── Desktop Table ─────────────────────────────────────────────────────────────
 .table-wrap {
-  background: #fff;
+  background: $scrap-beige-panel;
   border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.1);
+  box-shadow: none;
   overflow-x: auto;
-  border: 1px solid #000;
+  border: 2px solid $scrap-border;
 }
 
 .desktop-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  color: #000;
-  background: #fff;
+  color: $scrap-text;
+  background: $scrap-beige-panel;
 
   th,
   td {
-    background: #fff;
-    color: #000;
-    border: 1px solid #000;
+    background: $scrap-beige-panel;
+    color: $scrap-text;
+    border: 2px solid $scrap-border;
     padding: 8px 10px;
     vertical-align: top;
   }
@@ -468,7 +485,7 @@
   }
 
   tr:hover td {
-    background: #fff;
+    background: $scrap-beige-input;
   }
 
   .col-stt { width: 42px; text-align: center; }
@@ -507,8 +524,9 @@
 
 .mat-tag {
   display: inline-block;
-  background: #e8eaf6;
-  color: #283593;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 1px solid $scrap-border;
   border-radius: 4px;
   padding: 2px 7px;
   font-size: 12px;
@@ -519,15 +537,15 @@
 .no-mat { color: #000; }
 
 .btn-delete {
-  background: none;
-  border: none;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
   cursor: pointer;
-  color: #e53935;
+  color: $scrap-text;
   border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
   padding: 4px;
-  mat-icon { font-size: 18px; width: 18px; height: 18px; }
-  &:hover { background: #ffebee; }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 4%); }
 }
 
 // ── Mobile Cards (hidden on desktop) ─────────────────────────────────────────
@@ -550,10 +568,10 @@
   }
 
   .record-card {
-    background: #fff;
-    color: #000;
-    border: 1px solid #000;
-    border-radius: 4px;
+    background: $scrap-beige-panel;
+    color: $scrap-text;
+    border: 2px solid $scrap-border;
+    border-radius: 6px;
     box-shadow: none;
     margin-bottom: 10px;
     padding: 12px 14px;
@@ -583,9 +601,9 @@
   }
 
   .card-count {
-    background: #fff;
-    color: #000;
-    border: 1px solid #000;
+    background: $scrap-beige-input;
+    color: $scrap-text;
+    border: 2px solid $scrap-border;
     border-radius: 4px;
     padding: 2px 8px;
     font-size: 12px;
@@ -601,10 +619,10 @@
 
   .empty-card {
     text-align: center;
-    color: #000;
+    color: $scrap-text;
     padding: 24px;
-    border: 1px solid #000;
-    background: #fff;
+    border: 2px solid $scrap-border;
+    background: $scrap-beige-panel;
   }
 
   .scan-panel { padding: 14px; }
@@ -612,4 +630,269 @@
   .step-header { font-size: 14px; }
   .btn-done, .btn-cancel-full { flex: 1; justify-content: center; }
   .mat-count { margin-left: 0; }
+}
+
+// ── Danh sách NVL theo thùng (full view) ────────────────────────────────────
+.nvl-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: calc(100vh - 88px);
+}
+
+.nvl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: $scrap-beige-panel;
+  border: 2px solid $scrap-border;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: $scrap-text;
+}
+
+.btn-back-scrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: $scrap-beige-input;
+  color: $scrap-text;
+  border: 2px solid $scrap-border;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  mat-icon { font-size: 20px; width: 20px; height: 20px; color: $scrap-text; }
+  &:hover { background: darken($scrap-beige-input, 4%); }
+}
+
+.nvl-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 800;
+  color: $scrap-text;
+  flex: 1;
+  min-width: 0;
+  mat-icon { font-size: 22px; width: 22px; height: 22px; color: $scrap-text; }
+}
+
+.nvl-search-wrap {
+  display: flex;
+  align-items: center;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
+  border-radius: 6px;
+  padding: 6px 10px;
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
+}
+
+.nvl-search-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: $scrap-text;
+  margin-right: 6px;
+}
+
+.nvl-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  width: 100%;
+  color: $scrap-text;
+  &::placeholder {
+    color: rgba(0, 0, 0, 0.45);
+  }
+}
+
+.nvl-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.nvl-list-body {
+  flex: 1;
+}
+
+.nvl-list-meta {
+  font-size: 13px;
+  font-weight: 600;
+  color: $scrap-text;
+  margin: 0 0 10px 4px;
+}
+
+.nvl-table-scroll {
+  overflow-x: auto;
+  border: 2px solid $scrap-border;
+  border-radius: 8px;
+  background: $scrap-beige-panel;
+}
+
+.nvl-flat-table {
+  min-width: 100%;
+}
+
+.col-nvl-pos {
+  min-width: 100px;
+}
+
+.col-nvl-del {
+  width: 64px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.btn-delete-nvl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: $scrap-beige-input;
+  border: 2px solid $scrap-border;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  color: $scrap-text;
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: $scrap-text;
+  }
+  &:hover:not(:disabled) {
+    background: darken($scrap-beige-input, 5%);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.nvl-box-card {
+  background: $scrap-beige-panel;
+  border: 2px solid $scrap-border;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  color: $scrap-text;
+}
+
+.nvl-box-head {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 2px solid $scrap-border;
+}
+
+.nvl-box-stt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  font-weight: 800;
+  font-size: 15px;
+  background: $scrap-beige-input;
+  border-right: 2px solid $scrap-border;
+  color: $scrap-text;
+}
+
+.nvl-box-main {
+  flex: 1;
+  padding: 10px 14px;
+}
+
+.nvl-box-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  color: $scrap-text;
+  mat-icon { font-size: 22px; width: 22px; height: 22px; color: $scrap-text; }
+}
+
+.nvl-box-stats {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: $scrap-text;
+}
+
+.nvl-material-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: $scrap-text;
+  background: $scrap-beige-panel;
+
+  th,
+  td {
+    border: 2px solid $scrap-border;
+    padding: 8px 12px;
+    text-align: left;
+    color: $scrap-text;
+    background: $scrap-beige-panel;
+  }
+
+  th {
+    font-weight: 800;
+    background: $scrap-beige-input;
+  }
+
+  .col-nvl-bag {
+    width: 72px;
+    text-align: center;
+  }
+
+  tbody tr:hover td {
+    background: $scrap-beige-input;
+  }
+}
+
+.nvl-empty-cell {
+  text-align: center;
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.nvl-empty-all {
+  text-align: center;
+  padding: 36px 16px;
+  border: 2px dashed $scrap-border;
+  border-radius: 8px;
+  background: $scrap-beige-panel;
+  color: $scrap-text;
+  font-weight: 600;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .nvl-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nvl-toolbar-title {
+    order: -1;
+  }
+
+  .nvl-search-wrap {
+    max-width: none;
+  }
+
+  .nvl-material-table {
+    font-size: 12px;
+    th, td { padding: 6px 8px; }
+  }
 }

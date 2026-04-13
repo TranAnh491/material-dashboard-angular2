@@ -223,7 +223,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       if(currentPath.charAt(0) === '#'){
           currentPath = currentPath.slice( 1 );
       }
-      return currentPath === '/qc';
+      return currentPath === '/qc' || currentPath === '/qc-traceability';
     }
 
     isSettingsPage(): boolean {

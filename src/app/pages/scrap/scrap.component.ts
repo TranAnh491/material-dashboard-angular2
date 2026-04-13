@@ -18,6 +18,14 @@ export interface ScrapBoxGroup {
   docIds: string[];
 }
 
+/** Một dòng trong bảng NVL chung (Danh sách NVL). */
+export interface ScrapNvlFlatRow {
+  code: string;
+  bags: number;
+  /** Mã thùng — cột Vị trí */
+  boxCode: string;
+}
+
 type ScanStep = 'idle' | 'scan-box' | 'scan-materials';
 
 @Component({
@@ -50,6 +58,12 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
 
   private needFocusBox = false;
   private needFocusMaterial = false;
+
+  /** Toàn màn hình: danh sách NVL (bảng chung) */
+  showNvlListView = false;
+  nvlListSearch = '';
+  /** Khóa dòng đang xóa (box + mã) để khóa nút */
+  nvlRowDeletingKey: string | null = null;
 
   constructor(private firestore: AngularFirestore) {}
 
@@ -217,6 +231,107 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
 
   get searchTrim(): string {
     return this.searchTerm.trim();
+  }
+
+  openNvlListView(): void {
+    this.showNvlListView = true;
+    this.nvlListSearch = '';
+  }
+
+  closeNvlListView(): void {
+    this.showNvlListView = false;
+    this.nvlListSearch = '';
+  }
+
+  get nvlListFilteredGrouped(): ScrapBoxGroup[] {
+    const q = this.nvlListSearch.trim().toLowerCase();
+    const base = this.allGrouped;
+    if (!q) {
+      return base;
+    }
+    return base.filter(
+      g =>
+        g.boxCode.toLowerCase().includes(q) ||
+        g.materials.some(m => (m || '').toLowerCase().includes(q))
+    );
+  }
+
+  /** Bảng NVL chung: Mã | Bag | Vị trí (thùng), sắp xếp theo thùng rồi mã */
+  get nvlListFlatRows(): ScrapNvlFlatRow[] {
+    const rows: ScrapNvlFlatRow[] = [];
+    for (const g of this.nvlListFilteredGrouped) {
+      for (const x of this.getMaterialsWithBags(g.materials)) {
+        rows.push({ code: x.code, bags: x.bags, boxCode: g.boxCode });
+      }
+    }
+    // Sắp xếp mã theo thứ tự chữ cái (a, b, c…), cùng mã thì theo vị trí thùng
+    rows.sort(
+      (a, b) =>
+        a.code.localeCompare(b.code, 'vi', { sensitivity: 'base', numeric: true }) ||
+        a.boxCode.localeCompare(b.boxCode, 'vi', { numeric: true })
+    );
+    return rows;
+  }
+
+  nvlFlatRowKey(row: ScrapNvlFlatRow): string {
+    return `${row.boxCode}\u0001${row.code}`;
+  }
+
+  /**
+   * Xóa đúng số Bag của mã NVL trong thùng (duyệt doc theo thời gian tạo, bỏ khớp trước).
+   */
+  async deleteNvlFlatRow(row: ScrapNvlFlatRow): Promise<void> {
+    if (this.nvlRowDeletingKey) {
+      return;
+    }
+    if (!confirm(`Xóa ${row.bags} Bag mã ${row.code} khỏi thùng ${row.boxCode}?`)) {
+      return;
+    }
+    const key = this.nvlFlatRowKey(row);
+    this.nvlRowDeletingKey = key;
+    try {
+      const snap = await this.firestore
+        .collection<ScrapSession>('scrap-data', ref => ref.where('boxCode', '==', row.boxCode.trim()))
+        .get()
+        .toPromise();
+      const docs = (snap?.docs || []).slice().sort(
+        (a, b) => this.docCreatedMs(a.data()) - this.docCreatedMs(b.data())
+      );
+      let toRemove = row.bags;
+      for (const d of docs) {
+        if (toRemove <= 0) {
+          break;
+        }
+        const mats = (d.data().materials || []) as string[];
+        const next: string[] = [];
+        for (const m of mats) {
+          const c = (m || '').slice(0, 7);
+          if (toRemove > 0 && c === row.code) {
+            toRemove--;
+          } else {
+            next.push(m);
+          }
+        }
+        if (next.length === mats.length) {
+          continue;
+        }
+        if (next.length === 0) {
+          await d.ref.delete();
+        } else {
+          await d.ref.update({
+            materials: next,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp() as any
+          });
+        }
+      }
+      if (toRemove > 0) {
+        alert('Chưa xóa hết (dữ liệu có thể đã đổi). Hãy làm mới trang.');
+      }
+    } catch (e) {
+      alert('Lỗi khi xóa: ' + e);
+    } finally {
+      this.nvlRowDeletingKey = null;
+    }
   }
 
   async deleteAggregated(g: ScrapBoxGroup): Promise<void> {

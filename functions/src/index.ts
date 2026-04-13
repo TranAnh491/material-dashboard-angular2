@@ -122,6 +122,44 @@ export const sendQcMonthlyReportAtMonthStart = functions
     await sendQcMonthlyReport(admin.firestore(), { factory: 'ASM1', mode: 'previousMonth' });
   });
 
+/**
+ * Print Label: 08:00 hằng ngày (VN) — gửi mail danh sách mã chưa Done và đã quá Ngày nhận kế hoạch.
+ * Danh sách người nhận: Firestore `print-label-settings/late-notification-emails` (emails[]).
+ */
+export const notifyPrintLabelLateItemsDaily = functions
+  .runWith({ secrets: [emailPass] })
+  .pubsub.schedule('0 8 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runPrintLabelLateNotify } = await import('./print-label-late-notify');
+    await runPrintLabelLateNotify(admin.firestore());
+  });
+
+/** Callable: chạy thủ công cùng logic báo tem trễ kế hoạch (More → Danh sách mail). */
+export const sendPrintLabelLateNotifyManualFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { runPrintLabelLateNotify } = await import('./print-label-late-notify');
+      const r = await runPrintLabelLateNotify(admin.firestore());
+      return {
+        ok: true,
+        sent: r.sent,
+        lateCount: r.lateCount,
+        recipientCount: r.recipientCount
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 export const sendQcMonthlyReportManualFn = functions
   .runWith({ secrets: [emailPass] })
   .https.onCall(async (data: { factory?: string; mode?: string }, context) => {

@@ -60,14 +60,17 @@
 
         </div>
         
-        <!-- Status Indicators -->
+        <!-- Status Indicators (đồng bộ danh mục Tình trạng trong More → Tình trạng) -->
         <div class="status-chips">
-          <button type="button" class="status-chip" (click)="filterByStatus('IQC')">IQC: {{getIQCItemsCount()}}</button>
-          <button type="button" class="status-chip" (click)="filterByStatus('Late')">LATE: {{getLateItemsCount()}}</button>
-          <button type="button" class="status-chip" (click)="filterByStatus('Pass')">PASS: {{getPassItemsCount()}}</button>
-          <button type="button" class="status-chip" (click)="filterByStatus('Chờ in')">CHỜ IN: {{getPendingItemsCount()}}</button>
-          <button type="button" class="status-chip" (click)="filterByStatus('Chờ bản vẽ')">CHỜ BẢN VẼ: {{getChoBanVeItemsCount()}}</button>
-          <button type="button" class="status-chip" (click)="filterByStatus('Chờ Template')">CHỜ TEMPLATE: {{getChoTemplateItemsCount()}}</button>
+          <button
+            type="button"
+            class="status-chip"
+            *ngFor="let st of getStatusChipsForDisplay()"
+            (click)="filterByStatus(st)"
+            [class.active]="currentStatusFilter === st"
+          >
+            {{ getStatusChipLabel(st) }}: {{ getTinhTrangCount(st) }}
+          </button>
           <button type="button" class="status-chip" (click)="clearStatusFilter()">TOTAL: {{getNotDoneItemsCount()}}</button>
         </div>
       </div>
@@ -244,12 +247,8 @@
                     onfocus="this.style.background='#e6f3ff'" 
                     onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
-                    <option value="IQC">IQC</option>
-                    <option value="Chờ in">Chờ in</option>
-                    <option value="Chờ bản vẽ">Chờ bản vẽ</option>
-                    <option value="Chờ Template">Chờ Template</option>
-                    <option value="Đã in">Đã in</option>
-                    <option value="Done">Done</option>
+                    <option *ngFor="let s of tinhTrangCatalog" [value]="s">{{ s }}</option>
+                    <option *ngIf="shouldShowOrphanTinhTrangOption(item)" [value]="item.tinhTrang">{{ item.tinhTrang }} (hiện tại)</option>
                   </select>
               </td>
               <td style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000;">
@@ -911,6 +910,8 @@
           <button type="button" class="custom-btn" (click)="testBatchGeneration(); closeMorePopup()">Test Batch Generation</button>
           <button type="button" class="custom-btn" (click)="checkAndClearFirebaseData(); closeMorePopup()">Kiểm tra & Xóa hết Firebase</button>
           <button type="button" class="custom-btn" (click)="openMorePrinters()">Người in</button>
+          <button type="button" class="custom-btn" (click)="openMoreTinhTrang()">Tình trạng</button>
+          <button type="button" class="custom-btn" (click)="openMoreLateMails()">Danh sách mail</button>
         </div>
       </ng-container>
 
@@ -964,6 +965,94 @@
         <p style="margin: 8px 0 0; color:#000; opacity:0.75; font-size: 13px;">
           Cột <strong>Người in</strong> sẽ lấy từ danh mục này.
         </p>
+      </ng-container>
+
+      <!-- TÌNH TRẠNG CATALOG -->
+      <ng-container *ngIf="morePopupView === 'tinhTrang'">
+        <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div style="display:flex; align-items:center; gap: 8px;">
+            <button type="button" class="custom-btn" (click)="backToMoreMenu()">Quay lại</button>
+            <h4 style="margin:0; font-weight:400; text-transform: uppercase;">Danh mục tình trạng</h4>
+          </div>
+          <button type="button" class="custom-btn" (click)="loadTinhTrangCatalog()">Reload</button>
+        </div>
+
+        <div style="display:flex; gap: 8px; align-items:center; margin-top: 10px; flex-wrap: wrap;">
+          <input
+            type="text"
+            class="custom-input"
+            [(ngModel)]="tinhTrangNewName"
+            placeholder="Nhập tình trạng mới..."
+            style="min-width: 260px; border: 1px solid #000; border-radius: 6px; padding: 8px 10px; text-transform:none;"
+            (keyup.enter)="addTinhTrangToCatalog()"
+          />
+          <button type="button" class="custom-btn" (click)="addTinhTrangToCatalog()" [disabled]="tinhTrangCatalogSaving">
+            {{ tinhTrangCatalogSaving ? 'Đang lưu...' : 'Thêm' }}
+          </button>
+        </div>
+
+        <div style="margin-top: 10px; max-height: 260px; overflow:auto; border: 1px solid #000; border-radius: 6px; background: #fff;">
+          <table class="excel-table" style="margin:0;">
+            <thead>
+              <tr>
+                <th style="text-transform: uppercase;">TÌNH TRẠNG</th>
+                <th style="width: 90px; text-transform: uppercase;">XÓA</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of tinhTrangCatalog">
+                <td style="text-align:left; padding-left:10px; text-transform:none;">{{ s }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="custom-btn"
+                    (click)="removeTinhTrangFromCatalog(s)"
+                    [disabled]="tinhTrangCatalogSaving || tinhTrangCatalog.length <= 1"
+                  >
+                    Xóa
+                  </button>
+                </td>
+              </tr>
+              <tr *ngIf="tinhTrangCatalog.length === 0">
+                <td colspan="2" style="padding: 12px; color:#000;">Chưa có danh mục. Nhập và bấm Thêm.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 8px 0 0; color:#000; opacity:0.75; font-size: 13px;">
+          Cột <strong>Tình trạng</strong> (trừ <strong>Pass</strong> / <strong>NG</strong> / <strong>Done</strong> do IQC) sẽ hiển thị các giá trị trong danh mục này.
+        </p>
+      </ng-container>
+
+      <!-- MAIL CẢNH BÁO TEM TRỄ KẾ HOẠCH -->
+      <ng-container *ngIf="morePopupView === 'lateMails'">
+        <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div style="display:flex; align-items:center; gap: 8px;">
+            <button type="button" class="custom-btn" (click)="backToMoreMenu()">Quay lại</button>
+            <h4 style="margin:0; font-weight:400; text-transform: uppercase;">Danh sách mail (tem trễ kế hoạch)</h4>
+          </div>
+          <button type="button" class="custom-btn" (click)="loadLateNotificationEmails()">Reload</button>
+        </div>
+        <p style="margin: 10px 0 6px; color:#000; opacity:0.8; font-size: 13px; line-height: 1.45;">
+          Mỗi dòng hoặc phân tách bằng dấu phẩy / chấm phẩy. Hệ thống gửi mail tự động khi
+          <strong>mã tem chưa Done</strong> và <strong>đã quá Ngày nhận kế hoạch</strong> (so sánh theo lịch múi giờ Việt Nam).
+          Lịch chạy Cloud Function: <strong>08:00</strong> hằng ngày.
+        </p>
+        <textarea
+          class="custom-input"
+          [(ngModel)]="lateEmailText"
+          rows="10"
+          placeholder="vd: qc@company.com&#10;planning@company.com"
+          style="width: 100%; box-sizing: border-box; border: 1px solid #000; border-radius: 6px; padding: 10px; font-size: 14px; resize: vertical; text-transform: none;"
+        ></textarea>
+        <div style="display:flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+          <button type="button" class="custom-btn" (click)="saveLateNotificationEmails()" [disabled]="lateEmailsSaving">
+            {{ lateEmailsSaving ? 'Đang lưu...' : 'Lưu danh sách' }}
+          </button>
+          <button type="button" class="custom-btn" (click)="triggerPrintLabelLateNotifyManual()" [disabled]="lateNotifyManualRunning">
+            {{ lateNotifyManualRunning ? 'Đang chạy...' : 'Gửi thử / chạy ngay' }}
+          </button>
+        </div>
       </ng-container>
     </div>
   </div>

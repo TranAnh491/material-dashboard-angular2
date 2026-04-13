@@ -161,6 +161,7 @@ export class TabPermissionGuard implements CanActivate {
       '/safety': 'safety',
       '/equipment': 'equipment',
       '/qc': 'qc',
+      '/qc-traceability': 'qc',
       '/wh-security': 'wh-security',
       '/rm1-delivery': 'rm1-delivery',
       '/settings': 'settings',

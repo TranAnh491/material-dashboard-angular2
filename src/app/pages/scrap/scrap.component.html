@@ -1,34 +1,11 @@
-<div class="scrap-container">
-
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="toolbar-title">
-      <mat-icon>delete_sweep</mat-icon>
-      <span>SCRAP</span>
-    </div>
-    <div class="toolbar-actions">
-      <div class="search-wrap">
-        <mat-icon class="search-icon">search</mat-icon>
-        <input class="search-input" type="text" placeholder="Tìm mã thùng hoặc mã NVL để xem chi tiết…"
-               [(ngModel)]="searchTerm" />
-      </div>
-      <button class="btn-scan" (click)="startScan()" *ngIf="scanStep === 'idle'">
-        <mat-icon>qr_code_scanner</mat-icon>
-        <span>Scan</span>
-      </button>
-      <button class="btn-print" (click)="openPrintModal()">
-        <mat-icon>print</mat-icon>
-        <span>Print</span>
-      </button>
-    </div>
-  </div>
+<div class="scrap-container scrap-theme-beige">
 
   <!-- Print Modal -->
   <div class="modal-overlay" *ngIf="showPrintModal" (click)="closePrintModal()">
     <div class="modal-box" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h3>In tem mã thùng</h3>
-        <button class="btn-close-modal" (click)="closePrintModal()">
+        <button class="btn-close-modal" type="button" (click)="closePrintModal()">
           <mat-icon>close</mat-icon>
         </button>
       </div>
@@ -48,12 +25,41 @@
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn-modal-cancel" (click)="closePrintModal()">Huỷ</button>
-        <button class="btn-modal-print" (click)="doPrintLabels()" [disabled]="printBoxCount < 1 || isPrinting">
+        <button class="btn-modal-cancel" type="button" (click)="closePrintModal()">Huỷ</button>
+        <button class="btn-modal-print" type="button" (click)="doPrintLabels()" [disabled]="printBoxCount < 1 || isPrinting">
           <mat-icon>print</mat-icon>
           {{ isPrinting ? 'Đang xử lý…' : 'In' }}
         </button>
       </div>
+    </div>
+  </div>
+
+  <ng-container *ngIf="!showNvlListView">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-title">
+      <mat-icon>delete_sweep</mat-icon>
+      <span>SCRAP</span>
+    </div>
+    <div class="toolbar-actions">
+      <div class="search-wrap">
+        <mat-icon class="search-icon">search</mat-icon>
+        <input class="search-input" type="text" placeholder="Tìm mã thùng hoặc mã NVL để xem chi tiết…"
+               [(ngModel)]="searchTerm" />
+      </div>
+      <button class="btn-scan" (click)="startScan()" *ngIf="scanStep === 'idle'">
+        <mat-icon>qr_code_scanner</mat-icon>
+        <span>Scan</span>
+      </button>
+      <button class="btn-print" type="button" (click)="openPrintModal()">
+        <mat-icon>print</mat-icon>
+        <span>Print</span>
+      </button>
+      <button class="btn-nvl-list" type="button" (click)="openNvlListView()">
+        <mat-icon>inventory</mat-icon>
+        <span>Danh sách NVL</span>
+      </button>
     </div>
   </div>
 
@@ -205,6 +211,72 @@
       </div>
       <div class="empty-card" *ngIf="filteredGrouped.length === 0">
         Không có dữ liệu
+      </div>
+    </div>
+  </div>
+
+  </ng-container>
+
+  <!-- Danh sách NVL theo thùng (toàn màn hình) -->
+  <div class="nvl-list-view" *ngIf="showNvlListView">
+    <div class="nvl-toolbar">
+      <button class="btn-back-scrap" type="button" (click)="closeNvlListView()">
+        <mat-icon>arrow_back</mat-icon>
+        <span>Quay lại SCRAP</span>
+      </button>
+      <div class="nvl-toolbar-title">
+        <mat-icon>list_alt</mat-icon>
+        <span>Danh sách NVL</span>
+      </div>
+      <div class="nvl-search-wrap">
+        <mat-icon class="nvl-search-icon">search</mat-icon>
+        <input class="nvl-search-input" type="text" placeholder="Lọc mã thùng hoặc mã NVL…"
+               [(ngModel)]="nvlListSearch" />
+      </div>
+    </div>
+
+    <div class="nvl-loading" *ngIf="isLoading && sessions.length === 0">
+      <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
+    </div>
+
+    <div class="nvl-list-body" *ngIf="!isLoading || sessions.length > 0">
+      <p class="nvl-list-meta">
+        {{ nvlListFlatRows.length }} dòng NVL
+        <span *ngIf="nvlListSearch.trim()"> · {{ nvlListFilteredGrouped.length }} thùng sau lọc (tổng {{ allGrouped.length }} thùng)</span>
+      </p>
+
+      <div class="nvl-table-scroll">
+        <table class="nvl-material-table nvl-flat-table">
+          <thead>
+            <tr>
+              <th class="col-nvl-code">Mã</th>
+              <th class="col-nvl-bag">Bag</th>
+              <th class="col-nvl-pos">Vị trí</th>
+              <th class="col-nvl-del">Xóa</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of nvlListFlatRows">
+              <td class="col-nvl-code"><span class="mono">{{ r.code }}</span></td>
+              <td class="col-nvl-bag">{{ r.bags }}</td>
+              <td class="col-nvl-pos"><span class="mono">{{ r.boxCode }}</span></td>
+              <td class="col-nvl-del">
+                <button
+                  type="button"
+                  class="btn-delete-nvl"
+                  (click)="deleteNvlFlatRow(r)"
+                  [disabled]="nvlRowDeletingKey === nvlFlatRowKey(r)"
+                  title="Xóa mã NVL khỏi thùng này"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="nvlListFlatRows.length === 0">
+              <td colspan="4" class="nvl-empty-cell">Không có dữ liệu phù hợp bộ lọc.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

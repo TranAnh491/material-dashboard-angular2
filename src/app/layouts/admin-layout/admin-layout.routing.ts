@@ -33,6 +33,7 @@ import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
 import { PxkPreviewComponent } from '../../pages/pxk-preview/pxk-preview.component';
 import { QCComponent } from '../../pages/qc/qc.component';
+import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.component';
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
@@ -89,6 +90,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'sxxk',                component: SxxkComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'scrap',               component: ScrapComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'qc',                   component: QCComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'qc-traceability',      component: QcTraceabilityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'rm1-delivery',         component: Rm1DeliveryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'wh-security',          component: WhSecurityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard, TabPermissionGuard] },

@@ -1,0 +1,139 @@
+<div class="trace-root">
+  <header class="trace-header">
+    <div class="trace-header-titles">
+      <h2 class="trace-title">Traceability</h2>
+      <p class="trace-subtitle">Theo dõi vòng đời nguyên vật liệu từ nhập đến xuất sản xuất</p>
+    </div>
+  </header>
+
+  <section class="trace-scan-section">
+    <div class="trace-scan-field">
+      <i class="material-icons trace-scan-icon" aria-hidden="true">qr_code_scanner</i>
+      <input
+        #traceScanInput
+        type="text"
+        class="trace-scan-input"
+        [value]="scanCode"
+        (input)="onScanInput($event)"
+        (keyup.enter)="onScanEnter()"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Scan QR / Nhập mã lô..."
+      />
+      <button type="button" class="trace-scan-btn" (click)="onScanEnter()" [disabled]="isLoading">
+        <i class="material-icons" *ngIf="!isLoading">play_arrow</i>
+        <i class="material-icons trace-spin" *ngIf="isLoading">sync</i>
+        <span>{{ isLoading ? 'Đang tải...' : 'Tra cứu' }}</span>
+      </button>
+    </div>
+    <p class="trace-scan-hint">Máy quét: tự động gửi Enter sau mã — hỗ trợ QR định dạng Material|PO|SL|IMD hoặc mã lô / mã hàng.</p>
+  </section>
+
+  <div class="trace-alert trace-alert-error" *ngIf="errorMessage">
+    <i class="material-icons">error_outline</i>
+    <span>{{ errorMessage }}</span>
+    <button type="button" class="trace-alert-dismiss" (click)="errorMessage = ''" title="Đóng">×</button>
+  </div>
+
+  <section class="trace-summary-card" *ngIf="summary">
+    <div class="trace-summary-top">
+      <div>
+        <div class="trace-summary-code">{{ summary.itemCode }}</div>
+        <div class="trace-summary-name">{{ summary.itemName }}</div>
+        <div class="trace-summary-meta">
+          <span>Lô: <strong>{{ summary.batchLabel }}</strong></span>
+          <span class="trace-meta-sep">·</span>
+          <span>PO: <strong>{{ summary.poNumber }}</strong></span>
+        </div>
+      </div>
+      <span class="trace-status-pill" [attr.data-variant]="summary.statusVariant">{{ summary.statusLabel }}</span>
+    </div>
+    <div class="trace-summary-grid">
+      <div class="trace-summary-metric">
+        <div class="trace-metric-label">Tồn kho hiện tại</div>
+        <div class="trace-metric-value">{{ summary.stockDisplay }}</div>
+      </div>
+      <div class="trace-summary-metric">
+        <div class="trace-metric-label">Vị trí</div>
+        <div class="trace-metric-location">{{ summary.location }}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="trace-timeline" *ngIf="summary && qcNode">
+    <h3 class="trace-timeline-heading">Luồng truy xuất</h3>
+
+    <div class="trace-timeline-inner" *ngIf="qcNode">
+      <div class="trace-line" aria-hidden="true"></div>
+
+      <article class="trace-node">
+        <div class="trace-node-marker trace-node-marker-qc">
+          <i class="material-icons">verified_user</i>
+        </div>
+        <div class="trace-node-card">
+          <header class="trace-node-header">
+            <span class="trace-node-title">Quality Inspection</span>
+            <span class="trace-node-caption">Kiểm hàng Inbound</span>
+          </header>
+          <dl class="trace-dl">
+            <div class="trace-dl-row">
+              <dt>Nhân viên kiểm</dt>
+              <dd>{{ qcNode.inspector }}</dd>
+            </div>
+            <div class="trace-dl-row">
+              <dt>Ngày giờ</dt>
+              <dd class="trace-dl-muted">
+                {{ qcNode.timestamp ? (qcNode.timestamp | date:'dd/MM/yyyy h:mm a') : '—' }}
+              </dd>
+            </div>
+            <div class="trace-dl-row">
+              <dt>Số cuộn đã scan</dt>
+              <dd>{{ qcNode.scannedLabel }}</dd>
+            </div>
+            <div class="trace-dl-row trace-dl-badge-row">
+              <dt>Tình trạng</dt>
+              <dd>
+                <span class="trace-condition-pill" [attr.data-variant]="qcNode.conditionVariant">{{ qcNode.conditionLabel }}</span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </article>
+
+      <article class="trace-node trace-node-outbound">
+        <div class="trace-node-marker trace-node-marker-out">
+          <i class="material-icons">precision_manufacturing</i>
+        </div>
+        <div class="trace-node-card trace-node-card-wide">
+          <header class="trace-node-header">
+            <span class="trace-node-title">Issued to Production</span>
+            <span class="trace-node-caption">Xuất cho LSX</span>
+          </header>
+
+          <div class="trace-out-empty" *ngIf="issues.length === 0">
+            <i class="material-icons">inventory_2</i>
+            <p>Chưa có bản ghi xuất kho cho lô này (hoặc chưa khớp IMD với outbound).</p>
+          </div>
+
+          <div class="trace-out-list" *ngIf="issues.length > 0">
+            <div class="trace-out-item" *ngFor="let issue of issues">
+              <div class="trace-out-main">
+                <span class="trace-out-wo">{{ issue.workOrder }}</span>
+                <span class="trace-out-qty">{{ issue.qtyLabel }}</span>
+              </div>
+              <div class="trace-out-time">
+                {{ issue.timestamp ? (issue.timestamp | date:'dd/MM/yyyy h:mm a') : '—' }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <div class="trace-empty-state" *ngIf="!summary && !errorMessage && !isLoading">
+    <i class="material-icons">timeline</i>
+    <p>Quét mã để xem lịch sử kiểm hàng và xuất LSX.</p>
+    <button type="button" class="trace-link-btn" (click)="focusScanField()">Focus ô quét</button>
+  </div>
+</div>
