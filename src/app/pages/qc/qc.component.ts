@@ -45,6 +45,9 @@ export class QCComponent implements OnInit, OnDestroy {
   filteredMaterials: InventoryMaterial[] = [];
   isLoading: boolean = false;
   errorMessage: string = '';
+
+  /** Chọn nhà máy để lọc dữ liệu QC. */
+  selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
   
   // Search and filter
   searchTerm: string = '';
@@ -247,7 +250,7 @@ export class QCComponent implements OnInit, OnDestroy {
 
       const pendingQcIds: string[] = (pendingQcSnap?.docs || [])
         .map(doc => ({ id: doc.id, data: doc.data() as any }))
-        .filter(x => x.data?.factory === 'ASM1' && this.isAsm1PendingQcAtIqc(x.data))
+        .filter(x => x.data?.factory === this.selectedFactory && this.isPendingQcAtIqc(x.data))
         .map(x => x.id);
 
       this.priorityPendingQcIds = pendingQcIds;
@@ -262,7 +265,7 @@ export class QCComponent implements OnInit, OnDestroy {
       let bestTime = 0;
       (pendingConfirmSnap?.docs || []).forEach(doc => {
         const data = doc.data() as any;
-        if (data?.factory !== 'ASM1') return;
+        if (data?.factory !== this.selectedFactory) return;
         const status = (data?.iqcStatus ?? '').toString().trim();
         if (status !== 'CHỜ XÁC NHẬN') return;
 
@@ -294,12 +297,12 @@ export class QCComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.errorMessage = '';
     
-    console.log('📦 Loading ASM1 inventory materials for QC...');
+    console.log(`📦 Loading ${this.selectedFactory} inventory materials for QC...`);
     
     // Thử query với orderBy trước, nếu lỗi thì query không có orderBy
     try {
       this.firestore.collection('inventory-materials', ref => 
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
            .orderBy('importDate', 'desc')
            .limit(1000)
       ).snapshotChanges()
@@ -311,7 +314,7 @@ export class QCComponent implements OnInit, OnDestroy {
             const data = doc.payload.doc.data() as any;
             return {
               id: doc.payload.doc.id,
-              factory: data.factory || 'ASM1',
+              factory: data.factory || this.selectedFactory,
               importDate: this.parseImportDate(data.importDate),
               receivedDate: data.receivedDate?.toDate() || undefined,
               batchNumber: data.batchNumber || '',
@@ -358,7 +361,7 @@ export class QCComponent implements OnInit, OnDestroy {
   
   loadMaterialsWithoutOrderBy(): void {
     this.firestore.collection('inventory-materials', ref => 
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
          .limit(1000)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
@@ -369,7 +372,7 @@ export class QCComponent implements OnInit, OnDestroy {
           const data = doc.payload.doc.data() as any;
           return {
             id: doc.payload.doc.id,
-            factory: data.factory || 'ASM1',
+            factory: data.factory || this.selectedFactory,
             importDate: this.parseImportDate(data.importDate),
             receivedDate: data.receivedDate?.toDate() || undefined,
             batchNumber: data.batchNumber || '',
@@ -654,7 +657,7 @@ export class QCComponent implements OnInit, OnDestroy {
       
       // Query Firestore với materialCode và poNumber
       const querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
            .where('materialCode', '==', materialCode)
            .where('poNumber', '==', poNumber)
            .limit(10)
@@ -674,7 +677,7 @@ export class QCComponent implements OnInit, OnDestroy {
         const data = doc.data() as any;
         const material: InventoryMaterial = {
           id: doc.id,
-          factory: data.factory || 'ASM1',
+          factory: data.factory || this.selectedFactory,
           importDate: this.parseImportDate(data.importDate),
           receivedDate: data.receivedDate?.toDate() || undefined,
           batchNumber: data.batchNumber || '',
@@ -901,7 +904,7 @@ export class QCComponent implements OnInit, OnDestroy {
       poNumber: String(material.poNumber || '').slice(0, 120),
       imd: String(this.getDisplayIMD(material) || '').slice(0, 120),
       location: String(material.location || '').slice(0, 120),
-      factory: String(material.factory || 'ASM1').slice(0, 40),
+      factory: String(material.factory || this.selectedFactory).slice(0, 40),
       oldStatus: String(oldStatus || '').slice(0, 80),
       newStatus: String(newStatus || '').slice(0, 80),
       checkedBy: String(checkedBy || '').slice(0, 80)
@@ -1214,7 +1217,7 @@ export class QCComponent implements OnInit, OnDestroy {
     
     // Query without orderBy to avoid index requirement, then sort in memory
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
          .limit(500) // Get more to filter, then sort and take top 20
     ).get()
     .pipe(takeUntil(this.destroy$))
@@ -1271,21 +1274,21 @@ export class QCComponent implements OnInit, OnDestroy {
     // Query theo factory + trạng thái; lọc khu IQC trong memory (prefix IQC, có thể kèm pallet)
     // vì Firestore không so được "bắt đầu bằng IQC" và vị trí có thể là IQC-P01...
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
          .where('iqcStatus', '==', 'CHỜ KIỂM')
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
         this.pendingQCCount = snapshot.docs.filter(doc =>
-          this.isAsm1PendingQcAtIqc(doc.data())
+          this.isPendingQcAtIqc(doc.data())
         ).length;
       },
       error: (error) => {
         console.error('❌ Error loading pending QC count:', error);
         // Fallback: calculate from local materials
         this.pendingQCCount = this.materials.filter(m =>
-          this.isAsm1PendingQcAtIqc({ iqcStatus: m.iqcStatus, location: m.location })
+          this.isPendingQcAtIqc({ iqcStatus: m.iqcStatus, location: m.location })
         ).length;
       }
     });
@@ -1300,7 +1303,7 @@ export class QCComponent implements OnInit, OnDestroy {
     
     // Chỉ dùng factory filter, filter date và user-checked trong memory để tránh cần index
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -1344,7 +1347,7 @@ export class QCComponent implements OnInit, OnDestroy {
   loadPendingConfirmCount(): void {
     // Use get() for one-time query (faster)
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
          .where('iqcStatus', '==', 'CHỜ XÁC NHẬN')
     ).get()
     .pipe(takeUntil(this.destroy$))
@@ -1374,7 +1377,7 @@ export class QCComponent implements OnInit, OnDestroy {
     const { start, end } = this.getCurrentMonthRange();
 
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -1463,14 +1466,14 @@ export class QCComponent implements OnInit, OnDestroy {
       let snapshot: any = null;
       try {
         snapshot = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('factory', '==', 'ASM1')
+          ref.where('factory', '==', this.selectedFactory)
              .where('iqcStatus', '==', status)
              .limit(2000)
         ).get().toPromise();
       } catch (e) {
         // Fallback: filter in memory (avoid index issues)
         snapshot = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('factory', '==', 'ASM1')
+          ref.where('factory', '==', this.selectedFactory)
              .limit(5000)
         ).get().toPromise();
       }
@@ -1532,7 +1535,7 @@ export class QCComponent implements OnInit, OnDestroy {
   // Fallback: count manually
   loadPendingConfirmCountFallback(): void {
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -1577,7 +1580,7 @@ export class QCComponent implements OnInit, OnDestroy {
       
       // Chỉ dùng factory filter, filter date range trong memory để tránh cần index
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -1668,14 +1671,14 @@ export class QCComponent implements OnInit, OnDestroy {
   // Fallback: load all ASM1 materials and count manually
   loadPendingQCCountFallback(): void {
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', 'ASM1')
+      ref.where('factory', '==', this.selectedFactory)
     ).snapshotChanges()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
         this.pendingQCCount = snapshot.filter(doc => {
           const data = doc.payload.doc.data() as any;
-          return this.isAsm1PendingQcAtIqc(data);
+          return this.isPendingQcAtIqc(data);
         }).length;
         console.log(`📊 Pending QC count (fallback, location = IQC): ${this.pendingQCCount}`);
       },
@@ -1840,7 +1843,7 @@ export class QCComponent implements OnInit, OnDestroy {
       this.sendReportStatusText = 'Đang gửi report...';
       this.showSendReportStatusModal = true;
       const callable = this.fns.httpsCallable('sendQcMonthlyReportManualFn');
-      await firstValueFrom(callable({ factory: 'ASM1', mode: 'currentMonthToDate' }));
+      await firstValueFrom(callable({ factory: this.selectedFactory, mode: 'currentMonthToDate' }));
       this.sendReportStatusText = '✅ Đã gửi report.';
       setTimeout(() => {
         // Auto-close after success
@@ -1890,7 +1893,7 @@ export class QCComponent implements OnInit, OnDestroy {
   }
 
   /** Cùng rule với box "Mã hàng chờ kiểm": CHỜ KIỂM tại khu IQC (prefix IQC) */
-  private isAsm1PendingQcAtIqc(data: any): boolean {
+  private isPendingQcAtIqc(data: any): boolean {
     const status = (data?.iqcStatus ?? '').toString().trim();
     return status === 'CHỜ KIỂM' && this.isLocationAtIqcArea(data?.location);
   }
@@ -1945,14 +1948,14 @@ export class QCComponent implements OnInit, OnDestroy {
       let snapshot: any = null;
       try {
         snapshot = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('factory', '==', 'ASM1')
+          ref.where('factory', '==', this.selectedFactory)
              .where('materialCode', '==', code)
              .limit(200)
         ).get().toPromise();
       } catch (e) {
         // Fallback: query by factory only, filter in memory (avoid index issues)
         snapshot = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('factory', '==', 'ASM1')
+          ref.where('factory', '==', this.selectedFactory)
              .limit(2000)
         ).get().toPromise();
       }
@@ -2205,7 +2208,7 @@ export class QCComponent implements OnInit, OnDestroy {
       // Query materials checked in selected month (only user checked, not auto-pass)
       // Chỉ dùng factory filter, filter date range trong memory để tránh cần index
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -2320,7 +2323,7 @@ export class QCComponent implements OnInit, OnDestroy {
       tomorrow.setDate(tomorrow.getDate() + 1);
       
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -2449,7 +2452,7 @@ export class QCComponent implements OnInit, OnDestroy {
       console.log('📊 Loading pending QC materials...');
       
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -2471,7 +2474,7 @@ export class QCComponent implements OnInit, OnDestroy {
           const location = data.location || '';
           
           // Cùng rule đếm: CHỜ KIỂM tại khu IQC (vị trí bắt đầu bằng IQC, có thể kèm pallet)
-          if (this.isAsm1PendingQcAtIqc(data)) {
+          if (this.isPendingQcAtIqc(data)) {
             // Read backend priority flag
             if (!!data.qcPriorityPendingQC) {
               pendingQcPrioritySet.add(doc.id);
@@ -2565,7 +2568,7 @@ export class QCComponent implements OnInit, OnDestroy {
       
       // Chỉ dùng factory filter, filter status trong memory để tránh cần index
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -2714,6 +2717,40 @@ export class QCComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  onFactoryChange(factory: 'ASM1' | 'ASM2'): void {
+    if (this.selectedFactory === factory) {
+      return;
+    }
+    this.selectedFactory = factory;
+
+    // Reset scan state to avoid mixing factories
+    this.scannedMaterial = null;
+    this.iqcScanInput = '';
+
+    // Refresh summary panels
+    this.loadPendingQCCount();
+    this.loadTodayCheckedCount();
+    this.loadPendingConfirmCount();
+    this.loadMonthlyStatusCounts();
+    this.loadRecentCheckedMaterials();
+    this.loadQcPriorityFromBackend();
+
+    // Refresh current inline list (if any)
+    if (this.iqcHistoryContext === 'pendingConfirm' && this.showIqcSearchResults) {
+      this.showPendingConfirmMaterials(false);
+    } else if (this.iqcHistoryContext === 'todayChecked' && this.showIqcSearchResults) {
+      this.showTodayCheckedMaterials(false);
+    } else if (this.iqcHistoryContext === 'pendingQC' && this.showIqcSearchResults) {
+      this.showPendingQCMaterials(false);
+    } else if (this.iqcHistoryContext === 'monthlyPass' && this.showIqcSearchResults) {
+      this.showMonthlyStatusMaterials('PASS');
+    } else if (this.iqcHistoryContext === 'monthlyNg' && this.showIqcSearchResults) {
+      this.showMonthlyStatusMaterials('NG');
+    } else if (this.iqcHistoryContext === 'monthlyLock' && this.showIqcSearchResults) {
+      this.showMonthlyStatusMaterials('LOCK');
+    }
   }
 }
 

@@ -346,10 +346,17 @@ exports.zaloWebhook = onRequest(
 
     if (eventName === "message.text.received" && chatId && text === "/id") {
       try {
-        await sendText(chatId, `chat_id: ${chatId}`);
+        const profile = await getLinkedProfile(chatId);
+        if (profile?.memberId) {
+          await sendText(chatId, `ID: ${profile.memberId}`);
+        } else {
+          await sendText(chatId, "Bạn chưa liên kết. Vui lòng nhắn 'hi' để bắt đầu nhập mã nhân viên và tên.");
+        }
       } catch (err) {
-        logger.error("Auto-reply failed", err);
+        logger.error("id command failed", err);
       }
+      res.status(200).json({ok: true});
+      return;
     }
 
     // Command: /tonkho <ASM1|ASM2> <MA_HANG>

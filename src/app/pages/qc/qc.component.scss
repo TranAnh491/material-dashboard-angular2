@@ -1,32 +1,44 @@
-// QC theme: be background, black border, black text
-$qc-bg: #faf6e8; // be (lighter)
-$qc-panel-bg: #fffaf0; // panel (lighter)
-$qc-text: #111111;
-$qc-border: #111111;
-$qc-bg-hover: #f1ead1;
-$qc-muted-text: rgba(17, 17, 17, 0.75);
+// QC theme (dark - like reference screenshot)
+$qc-bg: #05070a; // page background
+$qc-panel-bg: #0b1118; // primary surface
+$qc-panel-bg-2: #0e1621; // elevated surface
+$qc-text: #e5e7eb; // main text
+$qc-muted-text: rgba(229, 231, 235, 0.72);
+$qc-border: rgba(255, 255, 255, 0.10);
+$qc-border-strong: rgba(255, 255, 255, 0.18);
+$qc-bg-hover: rgba(255, 255, 255, 0.06);
+$qc-accent: #34d399; // green accent
+$qc-accent-2: #22c55e;
+$qc-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
 
 .main-content {
   padding: 20px;
-  background-color: $qc-bg;
+  background:
+    radial-gradient(900px 520px at 20% -10%, rgba(52, 211, 153, 0.14), rgba(0, 0, 0, 0) 60%),
+    radial-gradient(760px 480px at 85% 20%, rgba(59, 130, 246, 0.10), rgba(0, 0, 0, 0) 55%),
+    linear-gradient(180deg, #06090d 0%, $qc-bg 55%, #05070a 100%);
   min-height: 100vh;
   color: $qc-text;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 .excel-container {
-  background: $qc-panel-bg;
-  border: 2px solid $qc-border;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid $qc-border-strong;
+  border-radius: 18px;
+  box-shadow: $qc-shadow;
   overflow: hidden;
+  backdrop-filter: blur(10px);
 }
 
 .excel-header {
-  background: $qc-panel-bg;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
   color: $qc-text;
   padding: 16px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid $qc-border;
+  border-bottom: 1px solid $qc-border-strong;
   
   h4 {
     margin: 0;
@@ -39,7 +51,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     
     .material-icons {
       font-size: 24px;
-      color: $qc-text;
+      color: rgba(229, 231, 235, 0.92);
     }
   }
   
@@ -48,11 +60,11 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: $qc-text;
+    color: $qc-muted-text;
     
     .material-icons {
       font-size: 18px;
-      color: $qc-text;
+      color: rgba(229, 231, 235, 0.78);
     }
     
     strong {
@@ -66,11 +78,52 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   display: flex;
   align-items: center;
   gap: 12px;
+
+  .factory-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid $qc-border-strong;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    flex-shrink: 0;
+  }
+
+  .factory-btn {
+    border: 0;
+    background: transparent;
+    color: rgba(229, 231, 235, 0.78);
+    padding: 9px 16px;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, box-shadow .15s ease, transform .15s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(229, 231, 235, 0.92);
+    }
+
+    &.active {
+      background:
+        radial-gradient(120px 60px at 30% 0%, rgba(52, 211, 153, 0.35), rgba(0, 0, 0, 0) 70%),
+        linear-gradient(180deg, rgba(52, 211, 153, 0.22), rgba(34, 197, 94, 0.10));
+      color: rgba(236, 253, 245, 0.96);
+      box-shadow:
+        0 10px 18px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(52, 211, 153, 0.25) inset,
+        0 0 18px rgba(52, 211, 153, 0.22);
+      transform: translateY(-0.5px);
+    }
+  }
   
   .iqc-btn {
-    background: $qc-panel-bg;
-    color: $qc-text;
-    border: 2px solid $qc-border;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(229, 231, 235, 0.92);
+    border: 1px solid $qc-border-strong;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -78,9 +131,11 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     display: flex;
     align-items: center;
     gap: 8px;
+    border-radius: 12px;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
     
     &:hover {
-      background: $qc-bg-hover;
+      background: rgba(255, 255, 255, 0.07);
     }
     
     &:active {
@@ -89,7 +144,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     
     .material-icons {
       font-size: 20px;
-      color: $qc-text;
+      color: rgba(229, 231, 235, 0.92);
     }
   }
 
@@ -285,7 +340,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   text-decoration: underline;
 
   &:hover {
-    background: rgba(17, 17, 17, 0.06);
+    background: rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -350,16 +405,76 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 .monthly-lock-box {
   flex: 1;
   min-width: 200px;
-  background: $qc-panel-bg;
-  border: 2px solid $qc-border;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid $qc-border-strong;
   padding: 16px 20px;
   cursor: default;
+  border-radius: 18px;
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+
+  // Subtle top highlight like screenshot cards
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(420px 120px at 25% 0%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0) 68%);
+    pointer-events: none;
+  }
+
+  // Colored accent border/glow per box type
+  &.pending-qc-box {
+    border-color: rgba(59, 130, 246, 0.26);
+    background:
+      radial-gradient(420px 180px at 18% -10%, rgba(59, 130, 246, 0.16), rgba(0, 0, 0, 0) 62%),
+      rgba(255, 255, 255, 0.03);
+  }
+
+  &.today-checked-box {
+    border-color: rgba(34, 197, 94, 0.26);
+    background:
+      radial-gradient(420px 180px at 18% -10%, rgba(34, 197, 94, 0.16), rgba(0, 0, 0, 0) 62%),
+      rgba(255, 255, 255, 0.03);
+  }
+
+  &.pending-confirm-box {
+    border-color: rgba(245, 158, 11, 0.26);
+    background:
+      radial-gradient(420px 180px at 18% -10%, rgba(245, 158, 11, 0.16), rgba(0, 0, 0, 0) 62%),
+      rgba(255, 255, 255, 0.03);
+  }
+
+  &.monthly-pass-box {
+    border-color: rgba(34, 197, 94, 0.24);
+    background:
+      radial-gradient(420px 180px at 18% -10%, rgba(34, 197, 94, 0.14), rgba(0, 0, 0, 0) 62%),
+      rgba(255, 255, 255, 0.03);
+  }
+
+  &.monthly-ng-box {
+    border-color: rgba(239, 68, 68, 0.24);
+    background:
+      radial-gradient(420px 180px at 18% -10%, rgba(239, 68, 68, 0.14), rgba(0, 0, 0, 0) 62%),
+      rgba(255, 255, 255, 0.03);
+  }
+
+  &.monthly-lock-box {
+    border-color: rgba(148, 163, 184, 0.22);
+    background:
+      radial-gradient(420px 180px at 18% -10%, rgba(148, 163, 184, 0.14), rgba(0, 0, 0, 0) 62%),
+      rgba(255, 255, 255, 0.03);
+  }
   
   &.pending-qc-box {
     cursor: pointer;
     
     &:hover {
-      background: $qc-bg-hover;
+      transform: translateY(-1px);
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.62);
+      border-color: rgba(59, 130, 246, 0.36);
     }
   }
 
@@ -368,7 +483,8 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   &.monthly-lock-box {
     cursor: pointer;
     &:hover {
-      background: $qc-bg-hover;
+      transform: translateY(-1px);
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.62);
     }
   }
   
@@ -382,7 +498,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     
     .material-icons {
       font-size: 32px;
-      color: $qc-text;
+      color: rgba(229, 231, 235, 0.9);
     }
     
     .pending-qc-info,
@@ -404,7 +520,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       .pending-confirm-count {
         font-size: 28px;
         font-weight: 700;
-        color: $qc-text;
+        color: rgba(229, 231, 235, 0.92);
         line-height: 1;
       }
     }
@@ -414,7 +530,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       padding-left: 12px;
       font-size: 12px;
       font-weight: 700;
-      color: $qc-text;
+      color: rgba(229, 231, 235, 0.86);
       opacity: 0.9;
       white-space: nowrap;
       display: inline-flex;
@@ -429,7 +545,9 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   cursor: pointer;
   
   &:hover {
-    background: $qc-bg-hover;
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.62);
+    border-color: rgba(34, 197, 94, 0.36);
   }
 }
 
@@ -437,15 +555,17 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   cursor: pointer;
 
   &:hover {
-    background: $qc-bg-hover;
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.62);
+    border-color: rgba(245, 158, 11, 0.36);
   }
 }
 
 
 .iqc-btn {
-  background: $qc-panel-bg;
-  color: $qc-text;
-  border: 2px solid $qc-border;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
+  border: 1px solid $qc-border-strong;
   padding: 12px 24px;
   cursor: pointer;
   font-weight: 500;
@@ -453,9 +573,11 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   display: flex;
   align-items: center;
   gap: 8px;
+  border-radius: 12px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
   
   &:hover {
-    background: $qc-bg-hover;
+    background: rgba(255, 255, 255, 0.07);
   }
   
   &:active {
@@ -464,7 +586,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   
   .material-icons {
     font-size: 20px;
-    color: $qc-text;
+    color: rgba(229, 231, 235, 0.92);
   }
 }
 
@@ -475,16 +597,17 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 
 .filter-select {
   padding: 8px 12px;
-  border: 2px solid $qc-border;
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   font-size: 14px;
-  background: $qc-panel-bg;
-  color: $qc-text;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
   cursor: pointer;
   
   &:focus {
     outline: none;
-    border-color: $qc-border;
-    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
+    border-color: rgba(52, 211, 153, 0.35);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
   }
 }
 
@@ -497,23 +620,25 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 .search-input {
   width: 100%;
   padding: 8px 12px;
-  border: 2px solid $qc-border;
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   font-size: 14px;
-  background: $qc-panel-bg;
-  color: $qc-text;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
   
   &:focus {
     outline: none;
-    border-color: $qc-border;
-    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
+    border-color: rgba(52, 211, 153, 0.35);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
   }
 }
 
 .total-counter-box {
   padding: 8px 15px;
-  background: $qc-panel-bg;
-  color: $qc-text;
-  border: 2px solid $qc-border;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.9);
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   font-weight: 500;
   font-size: 14px;
 }
@@ -528,8 +653,8 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   .spinner {
     width: 40px;
     height: 40px;
-    border: 4px solid #333333;
-    border-top: 4px solid $qc-border;
+    border: 4px solid rgba(255, 255, 255, 0.12);
+    border-top: 4px solid rgba(52, 211, 153, 0.55);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
@@ -547,13 +672,13 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 
 .error-message {
   padding: 16px 20px;
-  background: #f8d7da;
-  color: #721c24;
+  background: rgba(239, 68, 68, 0.12);
+  color: rgba(254, 226, 226, 0.92);
   margin: 20px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border-left: 4px solid #dc3545;
+  border-left: 4px solid rgba(239, 68, 68, 0.55);
 }
 
 .excel-table-container {
@@ -568,7 +693,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   color: $qc-text;
   
   thead {
-    background: $qc-panel-bg;
+    background: transparent;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -577,10 +702,10 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       padding: 12px 8px;
       text-align: left;
       font-weight: 600;
-      border-bottom: 2px solid $qc-border;
+      border-bottom: 1px solid $qc-border-strong;
       white-space: nowrap;
-      background: $qc-panel-bg;
-      color: $qc-text;
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      color: rgba(229, 231, 235, 0.9);
     }
   }
   
@@ -589,7 +714,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       border-bottom: 1px solid $qc-border;
       
       &:hover {
-        background: $qc-bg-hover;
+        background: rgba(255, 255, 255, 0.04);
       }
       
       &.selected {
@@ -599,7 +724,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       td {
         padding: 10px 8px;
         white-space: nowrap;
-        color: $qc-text;
+        color: rgba(229, 231, 235, 0.9);
       }
     }
   }
@@ -610,35 +735,43 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   font-size: 12px;
   font-weight: 500;
   display: inline-block;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
   
   &.status-pass {
-    background: #d4edda;
-    color: #155724;
+    background: rgba(34, 197, 94, 0.14);
+    color: rgba(187, 247, 208, 0.92);
+    border-color: rgba(34, 197, 94, 0.22);
   }
   
   &.status-ng {
-    background: #f8d7da;
-    color: #721c24;
+    background: rgba(239, 68, 68, 0.14);
+    color: rgba(254, 226, 226, 0.92);
+    border-color: rgba(239, 68, 68, 0.22);
   }
 
   &.status-lock {
-    background: #343a40;
-    color: #ffffff; // keep white for contrast on dark badge
+    background: rgba(148, 163, 184, 0.14);
+    color: rgba(226, 232, 240, 0.92);
+    border-color: rgba(148, 163, 184, 0.22);
   }
   
   &.status-special {
-    background: #fff3cd;
-    color: #856404;
+    background: rgba(245, 158, 11, 0.16);
+    color: rgba(254, 243, 199, 0.92);
+    border-color: rgba(245, 158, 11, 0.24);
   }
   
   &.status-pending {
-    background: #d1ecf1;
-    color: #0c5460;
+    background: rgba(59, 130, 246, 0.14);
+    color: rgba(219, 234, 254, 0.92);
+    border-color: rgba(59, 130, 246, 0.22);
   }
   
   &.status-default {
-    background: #e9ecef;
-    color: #495057;
+    background: rgba(148, 163, 184, 0.14);
+    color: rgba(226, 232, 240, 0.92);
+    border-color: rgba(148, 163, 184, 0.22);
   }
 }
 
@@ -846,7 +979,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(17, 17, 17, 0.35);
+  background: rgba(0, 0, 0, 0.62);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -855,9 +988,12 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 }
 
 .modal-content {
-  background: $qc-panel-bg;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
   color: $qc-text;
-  border: 2px solid $qc-border;
+  border: 1px solid $qc-border-strong;
+  border-radius: 18px;
+  box-shadow: $qc-shadow;
+  backdrop-filter: blur(12px);
 }
 
 .iqc-modal-content {
@@ -869,9 +1005,9 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 
 .modal-header {
   padding: 16px 20px;
-  background: $qc-panel-bg;
+  background: rgba(255, 255, 255, 0.03);
   color: $qc-text;
-  border-bottom: 2px solid $qc-border;
+  border-bottom: 1px solid $qc-border;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -892,15 +1028,15 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   }
   
   .close-btn {
-    background: $qc-panel-bg;
-    border: 2px solid $qc-border;
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid $qc-border-strong;
+    border-radius: 12px;
     cursor: pointer;
     padding: 5px;
     color: $qc-text;
     
     &:hover {
-      background: $qc-bg-hover;
+      background: rgba(255, 255, 255, 0.07);
     }
     
     .material-icons {
@@ -912,7 +1048,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 
 .modal-body {
   padding: 20px;
-  color: #ffffff;
+  color: $qc-text;
 }
 
 .scan-section {
@@ -923,14 +1059,14 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   display: block;
   margin-bottom: 10px;
   font-weight: 500;
-  color: #ffffff;
+  color: rgba(229, 231, 235, 0.9);
   font-size: 14px;
   display: flex;
   align-items: center;
   gap: 8px;
   
   .material-icons {
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.9);
     font-size: 20px;
   }
 }
@@ -943,22 +1079,25 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 .scan-input {
   flex: 1;
   padding: 10px 12px;
-  border: 1px solid #666666;
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   font-size: 14px;
-  background: #000000;
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
   
   &:focus {
     outline: none;
-    border-color: #999999;
+    border-color: rgba(52, 211, 153, 0.35);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
   }
 }
 
 .scan-btn {
   padding: 10px 20px;
-  background: #000000;
-  color: #ffffff;
-  border: 2px solid #666666;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 500;
   display: flex;
@@ -966,51 +1105,52 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   gap: 8px;
   
   &:hover {
-    background: #1a1a1a;
+    background: rgba(255, 255, 255, 0.07);
   }
   
   &:active {
-    background: #262626;
+    background: rgba(255, 255, 255, 0.08);
   }
   
   .material-icons {
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.92);
   }
 }
 
 .scanned-material-section {
   margin-top: 25px;
   padding-top: 25px;
-  border-top: 1px solid #666666;
+  border-top: 1px solid $qc-border;
 }
 
 .section-title {
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 12px;
-  color: #ffffff;
+  color: rgba(229, 231, 235, 0.9);
   display: flex;
   align-items: center;
   gap: 8px;
   
   .material-icons {
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.9);
     font-size: 20px;
   }
 }
 
 .material-info-card {
-  background: #000000;
+  background: rgba(255, 255, 255, 0.04);
   padding: 16px;
   margin-bottom: 20px;
-  border: 1px solid #666666;
+  border: 1px solid $qc-border-strong;
+  border-radius: 14px;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px solid #666666;
+  border-bottom: 1px solid $qc-border;
   
   &:last-child {
     border-bottom: none;
@@ -1019,11 +1159,11 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 
 .info-label {
   font-weight: 500;
-  color: #cccccc;
+  color: $qc-muted-text;
 }
 
 .info-value {
-  color: #ffffff;
+  color: rgba(229, 231, 235, 0.92);
   font-weight: 500;
 }
 
@@ -1045,9 +1185,10 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 
 .status-btn {
   padding: 12px;
-  border: 2px solid #666666;
-  background: #000000;
-  color: #ffffff;
+  border: 1px solid $qc-border-strong;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
+  border-radius: 14px;
   cursor: pointer;
   font-weight: 500;
   font-size: 14px;
@@ -1057,85 +1198,85 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   gap: 8px;
   
   &:hover {
-    border-color: #999999;
-    background: #1a1a1a;
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.07);
   }
   
   &.selected {
-    border-color: #ffffff;
-    background: #333333;
-    color: #ffffff;
+    border-color: rgba(52, 211, 153, 0.40);
+    background:
+      radial-gradient(120px 60px at 30% 0%, rgba(52, 211, 153, 0.35), rgba(0, 0, 0, 0) 70%),
+      linear-gradient(180deg, rgba(52, 211, 153, 0.20), rgba(34, 197, 94, 0.08));
+    color: rgba(236, 253, 245, 0.96);
     
     .material-icons {
-      color: #ffffff;
+      color: rgba(236, 253, 245, 0.96);
     }
   }
   
   &.status-ng.selected {
-    background: #333333;
-    border-color: #ffffff;
-    color: #ffffff;
+    // keep same selected look as base .selected
   }
 
   &.status-lock.selected {
-    background: #333333;
-    border-color: #ffffff;
-    color: #ffffff;
+    // keep same selected look as base .selected
   }
   
   &.status-special.selected {
-    background: #333333;
-    border-color: #ffffff;
-    color: #ffffff;
+    // keep same selected look as base .selected
   }
   
   &.status-pending.selected {
-    background: #333333;
-    border-color: #ffffff;
-    color: #ffffff;
+    // keep same selected look as base .selected
   }
   
   .material-icons {
     font-size: 20px;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.92);
   }
 }
 
 .iqc-extra-input {
   margin-top: 10px;
   padding: 12px;
-  border: 1px solid #666666;
-  background: #000000;
+  border: 1px solid $qc-border-strong;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
 }
 
 .extra-label {
   display: block;
   font-weight: 600;
   margin-bottom: 8px;
-  color: #ffffff;
+  color: rgba(229, 231, 235, 0.9);
 }
 
 .extra-textarea {
   width: 100%;
-  border: 1px solid #666666;
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   padding: 10px 12px;
   font-size: 14px;
   resize: vertical;
-  background: #000000;
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(229, 231, 235, 0.92);
 
   &:focus {
     outline: none;
-    border-color: #999999;
+    border-color: rgba(52, 211, 153, 0.35);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
   }
 }
 
 .update-btn {
   width: 100%;
   padding: 12px;
-  background: #000000;
-  color: #ffffff;
-  border: 2px solid #666666;
+  background:
+    radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.35), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(180deg, rgba(52, 211, 153, 0.18), rgba(34, 197, 94, 0.08));
+  color: rgba(236, 253, 245, 0.96);
+  border: 1px solid rgba(52, 211, 153, 0.26);
+  border-radius: 14px;
   cursor: pointer;
   font-weight: 500;
   font-size: 15px;
@@ -1145,30 +1286,35 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   gap: 8px;
   
   &:hover {
-    background: #1a1a1a;
+    background:
+      radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.42), rgba(0, 0, 0, 0) 70%),
+      linear-gradient(180deg, rgba(52, 211, 153, 0.22), rgba(34, 197, 94, 0.10));
   }
   
   &:active {
-    background: #262626;
+    background:
+      radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.32), rgba(0, 0, 0, 0) 70%),
+      linear-gradient(180deg, rgba(52, 211, 153, 0.14), rgba(34, 197, 94, 0.06));
   }
   
   .material-icons {
-    color: #ffffff;
+    color: rgba(236, 253, 245, 0.96);
   }
 }
 
 .modal-footer {
   padding: 15px 20px;
-  border-top: 1px solid #666666;
+  border-top: 1px solid $qc-border;
   display: flex;
   justify-content: flex-end;
 }
 
 .close-modal-btn {
   padding: 10px 20px;
-  background: #000000;
-  color: #ffffff;
-  border: 2px solid #666666;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
+  border: 1px solid $qc-border-strong;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 500;
   display: flex;
@@ -1176,15 +1322,15 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   gap: 8px;
   
   &:hover {
-    background: #1a1a1a;
+    background: rgba(255, 255, 255, 0.07);
   }
   
   &:active {
-    background: #262626;
+    background: rgba(255, 255, 255, 0.08);
   }
   
   .material-icons {
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.92);
   }
 }
 
@@ -1199,7 +1345,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   
   .verify-instruction {
     font-size: 16px;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.86);
     margin-bottom: 20px;
   }
   
@@ -1212,22 +1358,27 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   .employee-scan-input {
     flex: 1;
     padding: 12px;
-    border: 1px solid #666666;
+    border: 1px solid $qc-border-strong;
+    border-radius: 12px;
     font-size: 14px;
-    background: #000000;
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(229, 231, 235, 0.92);
     
     &:focus {
       outline: none;
-      border-color: #999999;
+      border-color: rgba(52, 211, 153, 0.35);
+      box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
     }
   }
   
   .verify-btn {
     padding: 12px 20px;
-    background: #000000;
-    color: #ffffff;
-    border: 2px solid #666666;
+    background:
+      radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.35), rgba(0, 0, 0, 0) 70%),
+      linear-gradient(180deg, rgba(52, 211, 153, 0.18), rgba(34, 197, 94, 0.08));
+    color: rgba(236, 253, 245, 0.96);
+    border: 1px solid rgba(52, 211, 153, 0.26);
+    border-radius: 12px;
     cursor: pointer;
     font-weight: 500;
     display: flex;
@@ -1235,20 +1386,23 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     gap: 8px;
     
     &:hover {
-      background: #1a1a1a;
+      background:
+        radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.42), rgba(0, 0, 0, 0) 70%),
+        linear-gradient(180deg, rgba(52, 211, 153, 0.22), rgba(34, 197, 94, 0.10));
     }
     
     .material-icons {
       font-size: 20px;
-      color: #ffffff;
+      color: rgba(236, 253, 245, 0.96);
     }
   }
   
   .employee-status {
     padding: 12px;
-    background: #000000;
-    color: #ffffff;
-    border: 1px solid #666666;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(229, 231, 235, 0.92);
+    border: 1px solid $qc-border-strong;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1256,7 +1410,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     font-weight: 500;
     
     .material-icons {
-      color: #ffffff;
+      color: $qc-accent;
     }
   }
 }
@@ -1278,8 +1432,8 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     .menu-option-btn {
       width: 100%;
       padding: 16px 20px;
-      background: #000000;
-      border: 2px solid #666666;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid $qc-border-strong;
       border-radius: 8px;
       cursor: pointer;
       display: flex;
@@ -1287,14 +1441,14 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       gap: 12px;
       font-size: 16px;
       font-weight: 500;
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.92);
       transition: all 0.3s;
       
       &:hover {
-        background: #1a1a1a;
-        border-color: #666666;
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.22);
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 18px 28px rgba(0, 0, 0, 0.55);
       }
       
       &:active {
@@ -1303,7 +1457,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       
       .material-icons {
         font-size: 24px;
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.92);
       }
       
       span {
@@ -1327,19 +1481,19 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       align-items: center;
       gap: 10px;
       padding: 12px 16px;
-      background: #000000;
-      border: 1px solid #666666;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid $qc-border-strong;
       border-radius: 4px;
       margin-bottom: 24px;
       
       .material-icons {
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.92);
         font-size: 20px;
       }
       
       p {
         margin: 0;
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.86);
         font-size: 14px;
         line-height: 1.5;
       }
@@ -1362,32 +1516,32 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
           gap: 6px;
           font-size: 14px;
           font-weight: 500;
-          color: #ffffff;
+          color: rgba(229, 231, 235, 0.86);
           
           .material-icons {
             font-size: 18px;
-            color: #ffffff;
+            color: rgba(229, 231, 235, 0.86);
           }
         }
         
         .date-select {
           padding: 12px 16px;
-          border: 2px solid #666666;
+          border: 1px solid $qc-border-strong;
           border-radius: 8px;
           font-size: 15px;
-          background: #000000;
-          color: #ffffff;
+          background: rgba(255, 255, 255, 0.04);
+          color: rgba(229, 231, 235, 0.92);
           cursor: pointer;
           transition: all 0.3s;
           
           &:hover {
-            border-color: #999999;
+            border-color: rgba(255, 255, 255, 0.22);
           }
           
           &:focus {
             outline: none;
-            border-color: #999999;
-            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+            border-color: rgba(52, 211, 153, 0.35);
+            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
           }
         }
       }
@@ -1396,9 +1550,11 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     .download-btn-primary {
       width: 100%;
       padding: 14px 24px;
-      background: #000000;
-      color: #ffffff;
-      border: 2px solid #666666;
+      background:
+        radial-gradient(160px 80px at 22% 0%, rgba(52, 211, 153, 0.35), rgba(0, 0, 0, 0) 70%),
+        linear-gradient(180deg, rgba(52, 211, 153, 0.18), rgba(34, 197, 94, 0.08));
+      color: rgba(236, 253, 245, 0.96);
+      border: 1px solid rgba(52, 211, 153, 0.26);
       border-radius: 8px;
       font-size: 16px;
       font-weight: 600;
@@ -1412,7 +1568,9 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       
       &:hover:not(:disabled) {
         transform: translateY(-2px);
-        background: #1a1a1a;
+        background:
+          radial-gradient(160px 80px at 22% 0%, rgba(52, 211, 153, 0.42), rgba(0, 0, 0, 0) 70%),
+          linear-gradient(180deg, rgba(52, 211, 153, 0.22), rgba(34, 197, 94, 0.10));
       }
       
       &:active:not(:disabled) {
@@ -1427,7 +1585,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       
       .material-icons {
         font-size: 22px;
-        color: #ffffff;
+        color: rgba(236, 253, 245, 0.96);
       }
     }
   }
@@ -1441,7 +1599,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       
       .material-icons {
         font-size: 48px;
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.7);
         
         &.rotating {
           animation: spin 1s linear infinite;
@@ -1450,7 +1608,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     }
     
     p {
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.86);
       font-size: 15px;
     }
   }
@@ -1460,9 +1618,10 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     
     .download-btn {
       padding: 10px 20px;
-      background: #000000;
-      color: #ffffff;
-      border: 2px solid #666666;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(229, 231, 235, 0.92);
+      border: 1px solid $qc-border-strong;
+      border-radius: 12px;
       cursor: pointer;
       font-weight: 500;
       display: flex;
@@ -1470,7 +1629,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       gap: 8px;
       
       &:hover:not(:disabled) {
-        background: #1a1a1a;
+        background: rgba(255, 255, 255, 0.07);
       }
       
       &:disabled {
@@ -1480,7 +1639,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
       
       .material-icons {
         font-size: 20px;
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.92);
       }
     }
   }
@@ -1496,7 +1655,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     font-size: 13px;
     
     thead {
-      background: #000000;
+      background: transparent;
       position: sticky;
       top: 0;
       
@@ -1504,24 +1663,25 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
         padding: 10px 8px;
         text-align: left;
         font-weight: 600;
-        border-bottom: 2px solid #666666;
+        border-bottom: 1px solid $qc-border-strong;
         white-space: nowrap;
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.9);
+        background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
       }
     }
     
     tbody {
       tr {
-        border-bottom: 1px solid #666666;
+        border-bottom: 1px solid $qc-border;
         
         &:hover {
-          background: #1a1a1a;
+          background: rgba(255, 255, 255, 0.04);
         }
         
         td {
           padding: 10px 8px;
           white-space: nowrap;
-          color: #ffffff;
+          color: rgba(229, 231, 235, 0.9);
         }
       }
     }
@@ -1531,17 +1691,17 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   .loading-report {
     text-align: center;
     padding: 40px 20px;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.86);
     
     .material-icons {
       font-size: 48px;
       margin-bottom: 16px;
       opacity: 0.6;
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.7);
     }
     
     p {
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.86);
     }
     
     .rotating {
@@ -1556,23 +1716,23 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 }
 
 .date-range-modal-content .modal-header {
-  background: #000000 !important;
-  border-bottom: 1px solid #666666 !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom: 1px solid $qc-border !important;
 }
 
 .date-range-modal-content .modal-header h3,
 .date-range-modal-content .modal-header .material-icons,
 .date-range-modal-content .modal-header .close-btn {
-  color: #ffffff !important;
+  color: $qc-text !important;
 }
 
 .date-range-modal-content .modal-header .close-btn .material-icons {
-  color: #ffffff !important;
+  color: $qc-text !important;
 }
 
 .date-range-subtitle {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
+  color: $qc-muted-text;
   margin-bottom: 14px;
 }
 
@@ -1592,22 +1752,22 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 .date-field-label {
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: rgba(229, 231, 235, 0.86);
 }
 
 .date-field-input {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 2px solid #666666;
-  background: #000000;
+  border: 1px solid $qc-border-strong;
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 10px;
   padding: 10px 12px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
   .material-icons {
     font-size: 18px;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.86);
   }
 
   input[type="date"] {
@@ -1615,14 +1775,14 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     border: none;
     outline: none;
     font-size: 14px;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.92);
     background: transparent;
     min-width: 0;
   }
 
   &:focus-within {
-    border-color: #999999;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+    border-color: rgba(52, 211, 153, 0.35);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12);
   }
 }
 
@@ -1665,32 +1825,36 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 }
 
 .date-range-btn-secondary {
-  background: #000000;
-  color: #ffffff;
-  border: 2px solid #666666;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.92);
+  border: 1px solid $qc-border-strong;
 
   .material-icons {
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.92);
   }
 
   &:hover {
-    background: #1a1a1a;
+    background: rgba(255, 255, 255, 0.07);
     box-shadow: none;
   }
 }
 
 .date-range-btn-primary {
-  background: #000000;
-  color: #ffffff;
-  border: 2px solid #666666;
+  background:
+    radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.35), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(180deg, rgba(52, 211, 153, 0.18), rgba(34, 197, 94, 0.08));
+  color: rgba(236, 253, 245, 0.96);
+  border: 1px solid rgba(52, 211, 153, 0.26);
   box-shadow: none;
 
   .material-icons {
-    color: #ffffff;
+    color: rgba(236, 253, 245, 0.96);
   }
 
   &:hover {
-    background: #1a1a1a;
+    background:
+      radial-gradient(140px 70px at 25% 0%, rgba(52, 211, 153, 0.42), rgba(0, 0, 0, 0) 70%),
+      linear-gradient(180deg, rgba(52, 211, 153, 0.22), rgba(34, 197, 94, 0.10));
     box-shadow: none;
   }
 }
@@ -1714,13 +1878,13 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
 // Recent Checked Materials Section
 .recent-checked-toggle-section {
   padding: 16px 20px;
-  border-top: 1px solid #666666;
-  background: #000000;
+  border-top: 1px solid $qc-border;
+  background: rgba(255, 255, 255, 0.02);
   
   .toggle-recent-btn {
-    background: #000000;
-    color: #ffffff;
-    border: 2px solid #666666;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(229, 231, 235, 0.92);
+    border: 1px solid $qc-border-strong;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -1728,23 +1892,23 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     display: flex;
     align-items: center;
     gap: 8px;
-    border-radius: 4px;
+    border-radius: 12px;
     transition: all 0.3s;
     width: 100%;
     justify-content: center;
     
     &:hover {
-      background: #1a1a1a;
-      border-color: #666666;
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(255, 255, 255, 0.22);
     }
     
     &:active {
-      background: #262626;
+      background: rgba(255, 255, 255, 0.08);
     }
     
     .material-icons {
       font-size: 20px;
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.92);
     }
   }
 }
@@ -1758,18 +1922,19 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     gap: 10px;
     font-size: 16px;
     font-weight: 600;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.9);
     margin-bottom: 16px;
     
     .material-icons {
       font-size: 22px;
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.9);
     }
   }
   
   .recent-materials-container {
-    background: #000000;
-    border: 1px solid #666666;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid $qc-border-strong;
+    border-radius: 14px;
     overflow-x: auto;
   }
   
@@ -1779,7 +1944,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     font-size: 13px;
     
     thead {
-      background: #000000;
+      background: transparent;
       position: sticky;
       top: 0;
       
@@ -1787,28 +1952,29 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
         padding: 10px 8px;
         text-align: left;
         font-weight: 600;
-        border-bottom: 2px solid #666666;
+        border-bottom: 1px solid $qc-border-strong;
         white-space: nowrap;
-        color: #ffffff;
+        color: rgba(229, 231, 235, 0.9);
+        background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
       }
     }
     
     tbody {
       tr {
-        border-bottom: 1px solid #666666;
+        border-bottom: 1px solid $qc-border;
         
         &:hover {
-          background: #1a1a1a;
+          background: rgba(255, 255, 255, 0.04);
         }
         
         &:nth-child(even) {
-          background: #0d0d0d;
+          background: rgba(255, 255, 255, 0.02);
         }
         
         td {
           padding: 10px 8px;
           white-space: nowrap;
-          color: #ffffff;
+          color: rgba(229, 231, 235, 0.9);
         }
       }
     }
@@ -1818,13 +1984,13 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
   .loading-recent {
     text-align: center;
     padding: 40px 20px;
-    color: #ffffff;
+    color: rgba(229, 231, 235, 0.86);
     
     .material-icons {
       font-size: 48px;
       margin-bottom: 16px;
       opacity: 0.6;
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.7);
     }
     
     .rotating {
@@ -1832,7 +1998,7 @@ $qc-muted-text: rgba(17, 17, 17, 0.75);
     }
     
     p {
-      color: #ffffff;
+      color: rgba(229, 231, 235, 0.86);
     }
   }
 }

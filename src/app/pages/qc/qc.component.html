@@ -51,6 +51,24 @@
     
     <!-- Action Buttons Container -->
     <div class="action-buttons-container">
+      <div class="factory-toggle" aria-label="Chọn nhà máy">
+        <button
+          type="button"
+          class="factory-btn"
+          [class.active]="selectedFactory === 'ASM1'"
+          (click)="onFactoryChange('ASM1')"
+        >
+          ASM1
+        </button>
+        <button
+          type="button"
+          class="factory-btn"
+          [class.active]="selectedFactory === 'ASM2'"
+          (click)="onFactoryChange('ASM2')"
+        >
+          ASM2
+        </button>
+      </div>
       <button class="iqc-btn" (click)="openIQCModal()" [disabled]="!iqcButtonEnabledForCurrentEmployee" [class.disabled]="!iqcButtonEnabledForCurrentEmployee">
         <i class="material-icons">check_circle</i>
         IQC
