@@ -23,6 +23,8 @@ export interface BagHistoryRow {
   bagsDelta?: number;
   /** Bịch quét (i/tổng) */
   bagBatch?: string;
+  /** Hiển thị Bag: `i` hoặc `i(T...)` khi bịch lẻ/tách. */
+  bagNumberDisplay?: string;
   note?: string;
 }
 
@@ -433,8 +435,22 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         d.bagBatch != null && String(d.bagBatch).trim() !== ''
           ? String(d.bagBatch)
           : undefined,
+      bagNumberDisplay:
+        d.bagNumberDisplay != null && String(d.bagNumberDisplay).trim() !== ''
+          ? String(d.bagNumberDisplay).trim()
+          : undefined,
       note: d.note
     };
+  }
+
+  getBagColumnDisplay(row: { bagBatch?: string; bagNumberDisplay?: string }): string {
+    const bnd = (row.bagNumberDisplay || '').trim();
+    // Nếu có mã bịch lẻ/tách (VD: 1(T1254581)) thì ưu tiên để tránh kiểm tra nhầm.
+    if (bnd && bnd.includes('(')) {
+      return bnd;
+    }
+    const bb = (row.bagBatch || '').trim();
+    return bb || '—';
   }
 
   applyFilters(): void {

@@ -87,7 +87,7 @@
               <td>{{ r.materialCode }}</td>
               <td>{{ r.poNumber }}</td>
               <td>{{ r.imd || '—' }}</td>
-              <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
+              <td class="bag-batch-col">{{ getBagColumnDisplay(r) }}</td>
               <td class="num">{{ r.count }}</td>
               <td class="lsx-col">
                 {{ r.productionOrderSummary }}
@@ -225,7 +225,7 @@
           <td>{{ r.materialCode }}</td>
           <td>{{ r.poNumber }}</td>
           <td>{{ r.imd || '—' }}</td>
-          <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
+          <td class="bag-batch-col">{{ getBagColumnDisplay(r) }}</td>
           <td class="num">{{ r.nhapBags > 0 ? r.nhapBags : '' }}</td>
           <td class="num">{{ r.xuatBags > 0 ? r.xuatBags : '' }}</td>
           <td class="num">{{ r.tonKho > 0 || r.nhapBags > 0 ? r.tonKho : '' }}</td>

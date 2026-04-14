@@ -2522,6 +2522,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         if (exportedBagsDelta > 0) {
           const fac = this.selectedFactory;
           const imd = imdForRow || this.normalizeImportDate(data.importDate);
+          const p = this.rmBagHistory.parseQrPart4(importDate);
+          const bagNumberDisplay = (p.bagNumberDisplay || '').trim();
           await this.rmBagHistory.log({
             event: 'XUẤT',
             factory: fac,
@@ -2533,6 +2535,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             remainingBags: remainingB,
             bagsDelta: exportedBagsDelta,
             bagBatch: bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(importDate),
+            ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
             inventoryDocId: targetDoc.id,
             note: 'Xuất bịch (QR -i/n)'
           });
@@ -2546,6 +2549,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             exportedBags: newExpBags,
             remainingBags: remainingB,
             bagBatch: bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(importDate),
+            ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
             inventoryDocId: targetDoc.id,
             note: 'Tồn bịch sau xuất'
           });

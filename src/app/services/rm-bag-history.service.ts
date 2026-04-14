@@ -33,6 +33,8 @@ export interface RmBagHistoryEntry {
   bagsDelta?: number;
   /** Nhãn bịch từ QR phần 4 dạng DDMMYYYY-i/tổng → "i/tổng" (VD: 3/10) */
   bagBatch?: string;
+  /** Hiển thị Bag (ưu tiên): `i` hoặc `i(T...)` khi bịch lẻ/tách — để tránh nhầm khi kiểm tra. */
+  bagNumberDisplay?: string;
   inventoryDocId?: string;
   note?: string;
 }
