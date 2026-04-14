@@ -1,6 +1,7 @@
-import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
+import { Subscription } from 'rxjs';
 import * as QRCode from 'qrcode';
 
 export interface ScrapSession {
@@ -33,15 +34,24 @@ type ScanStep = 'idle' | 'scan-box' | 'scan-materials';
   templateUrl: './scrap.component.html',
   styleUrls: ['./scrap.component.scss']
 })
-export class ScrapComponent implements OnInit, AfterViewChecked {
+export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
+
+  /** Chỉ tải N bản ghi mới nhất — tránh đọc cả collection (rất chậm). */
+  private static readonly LIST_PAGE_SIZE = 400;
 
   @ViewChild('boxInput') boxInputRef!: ElementRef<HTMLInputElement>;
   @ViewChild('materialInput') materialInputRef!: ElementRef<HTMLInputElement>;
 
   sessions: ScrapSession[] = [];
   searchTerm = '';
-  isLoading = false;
+  /** Đang tải danh sách từ Firestore (tab mở lần đầu). */
+  listLoading = false;
+  /** Đang lưu phiên quét (không dùng chung listLoading để bảng không “biến mất”). */
+  isSaving = false;
+  loadError: string | null = null;
   savedMsg = '';
+
+  private listSub?: Subscription;
 
   showPrintModal = false;
   printBoxCount = 1;
@@ -71,6 +81,11 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
     this.loadData();
   }
 
+  ngOnDestroy(): void {
+    this.listSub?.unsubscribe();
+    this.listSub = undefined;
+  }
+
   ngAfterViewChecked(): void {
     if (this.needFocusBox && this.boxInputRef) {
       this.boxInputRef.nativeElement.focus();
@@ -83,13 +98,26 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
   }
 
   loadData(): void {
-    this.isLoading = true;
-    this.firestore.collection<ScrapSession>('scrap-data', ref => ref.orderBy('createdAt', 'desc'))
+    this.listSub?.unsubscribe();
+    this.loadError = null;
+    this.listLoading = true;
+    this.listSub = this.firestore
+      .collection<ScrapSession>('scrap-data', ref =>
+        ref.orderBy('createdAt', 'desc').limit(ScrapComponent.LIST_PAGE_SIZE)
+      )
       .valueChanges({ idField: 'id' })
-      .subscribe(data => {
-        this.sessions = data;
-        this.isLoading = false;
-      }, () => { this.isLoading = false; });
+      .subscribe(
+        data => {
+          this.sessions = data;
+          this.listLoading = false;
+        },
+        err => {
+          this.listLoading = false;
+          this.loadError =
+            'Không tải được dữ liệu. Kiểm tra mạng / quyền Firestore hoặc index cho createdAt. ' +
+            (err?.message || err);
+        }
+      );
   }
 
   startScan(): void {
@@ -145,7 +173,7 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
 
   async saveSession(): Promise<void> {
     if (!this.currentBoxCode) return;
-    this.isLoading = true;
+    this.isSaving = true;
     const box = this.currentBoxCode.trim();
     const materials7 = this.currentMaterials.map(m => (m || '').slice(0, 7));
     try {
@@ -182,7 +210,7 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
     } catch (e) {
       alert('Lỗi khi lưu: ' + e);
     } finally {
-      this.isLoading = false;
+      this.isSaving = false;
     }
   }
 
@@ -231,6 +259,12 @@ export class ScrapComponent implements OnInit, AfterViewChecked {
 
   get searchTrim(): string {
     return this.searchTerm.trim();
+  }
+
+  readonly listPageSize = ScrapComponent.LIST_PAGE_SIZE;
+
+  get isListLikelyTruncated(): boolean {
+    return this.sessions.length >= ScrapComponent.LIST_PAGE_SIZE;
   }
 
   openNvlListView(): void {

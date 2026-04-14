@@ -741,8 +741,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', 99.85, '#4caf50');
     this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', 100, '#2196f3');
     
-    // FGs Inventory Turnover 2026: current = 1.4, target = 16, 2/12 tháng
-    this.createInventoryTurnoverChart('completedTasksChart', 1.4, 16, 2, 12);
+    // FGs Inventory Turnover 2026 (lũy kế): 2 tháng đầu = 1.40, tháng 3 = 0.82 → tổng = 2.22, target = 14, 3/12 tháng
+    this.createInventoryTurnoverChart('completedTasksChart', 2.22, 14, 3, 12);
   }
 
   // Create inventory turnover chart with target and progress

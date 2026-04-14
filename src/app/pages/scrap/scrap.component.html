@@ -60,6 +60,10 @@
         <mat-icon>inventory</mat-icon>
         <span>Danh sách NVL</span>
       </button>
+      <button class="btn-nvl-list" type="button" (click)="loadData()" [disabled]="listLoading" title="Tải lại danh sách từ server">
+        <mat-icon>refresh</mat-icon>
+        <span>Làm mới</span>
+      </button>
     </div>
   </div>
 
@@ -120,9 +124,9 @@
         <button class="btn-cancel-full" (click)="cancelScan()">
           <mat-icon>cancel</mat-icon> Huỷ
         </button>
-        <button class="btn-done" (click)="saveSession()" [disabled]="isLoading">
+        <button class="btn-done" (click)="saveSession()" [disabled]="isSaving">
           <mat-icon>save</mat-icon>
-          {{ isLoading ? 'Đang lưu…' : 'Done – Lưu' }}
+          {{ isSaving ? 'Đang lưu…' : 'Done – Lưu' }}
         </button>
       </div>
     </div>
@@ -131,16 +135,19 @@
   <!-- Saved Message -->
   <div class="saved-msg" *ngIf="savedMsg">{{ savedMsg }}</div>
 
-  <!-- Loading -->
-  <div class="loading-wrap" *ngIf="isLoading && scanStep === 'idle'">
-    <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
-  </div>
+  <!-- Data Table (luôn có khung — tránh màn hình trống khi đang tải) -->
+  <div class="table-wrap">
+    <div class="scrap-load-error" *ngIf="loadError">{{ loadError }}</div>
+    <div class="loading-wrap loading-wrap--table" *ngIf="listLoading && sessions.length === 0 && !loadError && scanStep === 'idle'">
+      <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
+      <span class="loading-label">Đang tải danh sách thùng…</span>
+    </div>
 
-  <!-- Data Table -->
-  <div class="table-wrap" *ngIf="!isLoading || sessions.length > 0">
+    <ng-container *ngIf="!listLoading || sessions.length > 0 || loadError">
     <div class="table-meta">
       {{ filteredGrouped.length }} thùng
       <span *ngIf="searchTrim"> (lọc từ {{ allGrouped.length }})</span>
+      <span class="table-meta-hint" *ngIf="isListLikelyTruncated"> · Chỉ hiển thị {{ listPageSize }} bản ghi mới nhất (tải nhanh hơn).</span>
     </div>
 
     <!-- Desktop table -->
@@ -213,6 +220,7 @@
         Không có dữ liệu
       </div>
     </div>
+    </ng-container>
   </div>
 
   </ng-container>
@@ -235,11 +243,14 @@
       </div>
     </div>
 
-    <div class="nvl-loading" *ngIf="isLoading && sessions.length === 0">
+    <div class="nvl-loading" *ngIf="listLoading && sessions.length === 0 && !loadError">
       <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
+      <span class="loading-label">Đang tải…</span>
     </div>
 
-    <div class="nvl-list-body" *ngIf="!isLoading || sessions.length > 0">
+    <div class="scrap-load-error nvl-load-error" *ngIf="loadError">{{ loadError }}</div>
+
+    <div class="nvl-list-body" *ngIf="!listLoading || sessions.length > 0 || loadError">
       <p class="nvl-list-meta">
         {{ nvlListFlatRows.length }} dòng NVL
         <span *ngIf="nvlListSearch.trim()"> · {{ nvlListFilteredGrouped.length }} thùng sau lọc (tổng {{ allGrouped.length }} thùng)</span>

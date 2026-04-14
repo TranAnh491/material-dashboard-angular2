@@ -437,11 +437,46 @@ $scrap-text: #000;
   text-align: center;
 }
 
+// ── Loading / lỗi tải ───────────────────────────────────────────────────────
+.scrap-load-error {
+  padding: 12px 14px;
+  margin: 0 0 10px 0;
+  background: #fdecea;
+  border: 2px solid #c62828;
+  border-radius: 8px;
+  color: #b71c1c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.nvl-load-error {
+  margin: 0 0 12px 0;
+}
+
+.loading-label {
+  margin-left: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: $scrap-text;
+}
+
+.loading-wrap--table {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
 // ── Loading ───────────────────────────────────────────────────────────────────
 .loading-wrap {
   display: flex;
   justify-content: center;
   padding: 30px 0;
+}
+
+.table-meta-hint {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.55);
 }
 
 // ── Table Meta ────────────────────────────────────────────────────────────────
@@ -715,6 +750,7 @@ $scrap-text: #000;
 
 .nvl-loading {
   display: flex;
+  align-items: center;
   justify-content: center;
   padding: 40px 0;
 }

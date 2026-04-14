@@ -1,19 +1,38 @@
-// Menu Page - Dark Theme (black background, white labels)
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+// Menu — dark “card” UI (nền / viền / chữ theo phong cách tham chiếu; icon giữ nguyên trong HTML)
 .menu-container {
+  --menu-bg: #0a0a0a;
+  --menu-surface: #121212;
+  --menu-surface-elevated: #1c1c1c;
+  --menu-border: #222222;
+  --menu-border-strong: #2e2e2e;
+  --menu-text: #f4f4f5;
+  --menu-text-muted: #9ca3af;
+  --menu-accent: #4ade80;
+  --menu-radius-lg: 16px;
+  --menu-radius-md: 14px;
+  --menu-font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
   min-height: 100vh;
-  background: #000000;
+  box-sizing: border-box;
+  background: var(--menu-bg);
   padding: 40px 20px;
   width: 100%;
   margin: 0;
+  font-family: var(--menu-font);
+  color: var(--menu-text);
+  -webkit-font-smoothing: antialiased;
 }
 
 .menu-header {
-  margin-bottom: 50px;
-  padding: 30px 0;
-  border-bottom: 3px solid #333333;
-  background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.06);
+  margin-bottom: 28px;
+  padding: 20px 0 24px;
+  border: none;
+  border-bottom: 1px solid var(--menu-border);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .header-content {
@@ -54,82 +73,90 @@
 }
 
 .menu-subtitle {
-  font-size: 1.5rem;
-  font-weight: 400;
-  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--menu-text-muted);
   margin: 0;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
 }
 
 .logout-btn {
-  background: linear-gradient(135deg, #D32F2F 0%, #C62828 100%);
-  color: #ffffff;
-  border: none;
-  border-radius: 6px;
-  padding: 12px 24px;
-  font-size: 1rem;
+  background: var(--menu-surface);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: var(--menu-radius-md);
+  padding: 12px 28px;
+  font-size: 0.875rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 6px rgba(211, 47, 47, 0.3);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 
   &:hover {
-    background: linear-gradient(135deg, #E53935 0%, #D32F2F 100%);
-    box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4);
-    transform: translateY(-2px);
+    background: rgba(248, 113, 113, 0.08);
+    border-color: rgba(248, 113, 113, 0.55);
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.12), 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
   &:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(211, 47, 47, 0.3);
+    transform: scale(0.98);
   }
 
   .material-icons {
     font-size: 20px;
-    color: #ffffff;
+    color: #f87171;
   }
 
   span {
-    color: #ffffff;
+    color: #f87171;
   }
 }
 
-.menu-section {
-  margin-bottom: 40px;
-}
-
 .menu-footer {
-  margin-top: 60px;
-  padding-top: 40px;
-  border-top: 2px solid #333333;
+  margin-top: 48px;
+  padding-top: 28px;
+  border-top: 1px solid var(--menu-border);
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
 .menu-category-title {
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: #ffffff;
-  margin: 0 0 20px 0;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #333333;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--menu-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 0 0 14px 4px;
+  padding: 0;
+  border: none;
 }
 
 .menu-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 20px;
+  gap: 14px;
+}
+
+.menu-section {
+  margin-bottom: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .menu-item {
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  padding: 25px 20px;
+  background: var(--menu-surface-elevated);
+  border: 1px solid var(--menu-border);
+  border-radius: 10px;
+  padding: 22px 16px;
   text-align: center;
   cursor: pointer;
   display: flex;
@@ -138,18 +165,19 @@
   gap: 12px;
   min-height: 120px;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
   box-shadow: none;
 }
 
 .menu-item:hover {
-  transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transform: translateY(-2px);
+  background: #232323;
+  border-color: var(--menu-border-strong);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2);
 }
 
 .menu-item:active {
-  transform: translateY(-2px);
+  transform: translateY(0);
 }
 
 .menu-item .material-icons {
@@ -169,11 +197,14 @@
   transform: scale(1.1);
 }
 
+.menu-item .menu-item-label,
 .menu-item span {
-  font-size: 1rem;
-  font-weight: 400;
+  font-size: 0.875rem;
+  font-weight: 500;
   text-align: center;
-  line-height: 1.3;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--menu-text);
 }
 
 // Main Category
@@ -298,7 +329,7 @@
   }
   
   .menu-subtitle {
-    font-size: 1.3rem;
+    font-size: 0.95rem;
   }
 }
 
@@ -354,6 +385,10 @@
   .menu-container.menu-container--ios-mobile .menu-section {
     margin-bottom: 20px;
     padding: 0 16px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
   }
 
   // Tiêu đề nhóm kiểu iOS (uppercase, xám)
