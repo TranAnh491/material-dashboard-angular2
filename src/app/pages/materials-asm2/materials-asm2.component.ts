@@ -166,7 +166,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   /** Cutoff: từ ngày này trở đi là tem mẫu mới, không cần in lại. */
   private readonly TEM_MOI_CUTOFF = new Date(2026, 3, 1); // 01/04/2026 (month is 0-based)
   /** Rule "đã in lại tem mẫu mới" (label-reprint-flags). Tạm thời TẮT theo yêu cầu. */
-  private readonly REPRINT_FLAG_RULE_ENABLED = false;
+  private readonly REPRINT_FLAG_RULE_ENABLED = true;
 
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
@@ -507,7 +507,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     inventoryRows: InventoryMaterial[],
     reprintedDocIds: Set<string>,
     printedFlagItemsOut: Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>,
-    usedBagsByRowKeyOut: Map<string, number>
+    usedBagsByRowKeyOut: Map<string, number>,
+    exportedQtyByBagOut: Map<string, Map<number, number>>
   ): { payloads: { qrData: string }[]; consumed: Map<string, number> } {
     const consumed = new Map<string, number>();
     const mat = line.materialCode.trim();
@@ -565,6 +566,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
       let bagIdx = 1;
       const rowKey = this.pxkInventoryRowKey(m);
+      const rowStock = Math.max(0, this.calculateCurrentStock(m));
+      const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
+      const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
+      const expMap = exportedQtyByBagOut.get(rowKey) || new Map<number, number>();
+      if (!exportedQtyByBagOut.has(rowKey)) exportedQtyByBagOut.set(rowKey, expMap);
       while (rowAvail > 0 && remaining > 0) {
         if (bagIdx > bagTotal) {
           throw new Error(`BAG vượt quá tổng: ${mat} / PO ${po} / IMD ${importDateStr} (${bagIdx}/${bagTotal}).`);
@@ -579,6 +585,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           printedFlagItemsOut.set(rowFlag.docId, rowFlag);
         }
         consumed.set(rowKey, (consumed.get(rowKey) || 0) + chunk);
+        expMap.set(bagIdx, Math.round(((expMap.get(bagIdx) || 0) + chunk) * 10000) / 10000);
         rowAvail -= chunk;
         remaining -= chunk;
         bagIdx++;
@@ -634,7 +641,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     consumedByRowKey: Map<string, number>,
     reprintedDocIds: Set<string>,
     printedFlagItemsOut: Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>,
-    usedBagsByRowKey: Map<string, number>
+    usedBagsByRowKey: Map<string, number>,
+    exportedQtyByBag: Map<string, Map<number, number>>
   ): { qrData: string }[] {
     const pxkKeys = new Set(
       pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
@@ -680,21 +688,21 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       if (!sp || sp <= 0) {
         continue;
       }
-      let bagIdx = Math.max(1, (usedBagsByRowKey.get(key) || 0) + 1);
-      let remainingQty = rem;
       if (!isTemMoi && !isAlreadyReprinted) {
-        while (remainingQty > 1e-9) {
-          if (bagIdx > bagTotal) {
-            break;
-          }
-          const chunk = remainingQty >= sp ? sp : remainingQty;
-          const p4Base = `${importDateStr}-${bagIdx}/${bagTotal}`;
-          const p4 = chunk < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
-          const qrData = `${mat}|${po}|${chunk}|${p4}`;
+        const expMap = exportedQtyByBag.get(key) || new Map<number, number>();
+        const rowStock = Math.max(0, this.calculateCurrentStock(m));
+        const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
+        const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
+        for (let i = 1; i <= bagTotal; i++) {
+          const cap = capOfBag(i);
+          const exportedInBag = Math.round((Number(expMap.get(i) || 0)) * 10000) / 10000;
+          const remainInBag = Math.round((cap - exportedInBag) * 10000) / 10000;
+          if (remainInBag <= 1e-9) continue;
+          const p4Base = `${importDateStr}-${i}/${bagTotal}`;
+          const p4 = remainInBag < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
+          const qrData = `${mat}|${po}|${remainInBag}|${p4}`;
           out.push({ qrData });
           printedFlagItemsOut.set(rowFlag.docId, rowFlag);
-          remainingQty = Math.round((remainingQty - chunk) * 10000) / 10000;
-          bagIdx++;
         }
       }
     }
@@ -737,6 +745,16 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)
         )
         .map((m) => this.buildReprintFlagItemFromInventoryRow(m));
+      const preCutoffFlagItems = inventoryRows.filter((m) => {
+        if (!pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)) return false;
+        const t = m.importDate?.getTime?.() || 0;
+        return t > 0 && t < this.TEM_MOI_CUTOFF.getTime();
+      });
+      const postCutoffCount = inventoryRows.filter((m) => {
+        if (!pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)) return false;
+        const t = m.importDate?.getTime?.() || 0;
+        return t >= this.TEM_MOI_CUTOFF.getTime();
+      }).length;
       const reprintedDocIds = this.REPRINT_FLAG_RULE_ENABLED
         ? await this.labelReprintFlags.getExistingFlagsByDocId(flagItems.map((x) => x.docId))
         : new Set<string>();
@@ -745,6 +763,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       const consumedByRowKey = new Map<string, number>();
       const printedFlagItems = new Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>();
       const usedBagsByRowKey = new Map<string, number>();
+      const exportedQtyByBag = new Map<string, Map<number, number>>();
       const notEnoughLines: string[] = [];
       for (const ln of pxkLines) {
         try {
@@ -753,7 +772,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             inventoryRows,
             reprintedDocIds,
             printedFlagItems,
-            usedBagsByRowKey
+            usedBagsByRowKey,
+            exportedQtyByBag
           );
           exportPayloads.push(...payloads);
           for (const [k, v] of consumed) {
@@ -773,10 +793,19 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         consumedByRowKey,
         reprintedDocIds,
         printedFlagItems,
-        usedBagsByRowKey
+        usedBagsByRowKey,
+        exportedQtyByBag
       );
       if (exportPayloads.length === 0 && tonPayloads.length === 0) {
-        this.temXuatError = notEnoughLines.length ? notEnoughLines.join('\n') : 'Tem mới, không cần in';
+        if (notEnoughLines.length) {
+          this.temXuatError = notEnoughLines.join('\n');
+        } else if (this.REPRINT_FLAG_RULE_ENABLED && preCutoffFlagItems.length > 0 && reprintedDocIds.size > 0) {
+          this.temXuatError = 'Đã in tem mẫu mới (tem cũ trước 01/04/2026) nên không in lại.';
+        } else if (postCutoffCount > 0 && preCutoffFlagItems.length === 0) {
+          this.temXuatError = 'Tem mới (sau 01/04/2026), không cần in';
+        } else {
+          this.temXuatError = 'Không có tem cần in trong LSX này.';
+        }
         return;
       }
       if (notEnoughLines.length) {

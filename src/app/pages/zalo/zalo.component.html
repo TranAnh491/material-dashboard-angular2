@@ -1,0 +1,242 @@
+<div class="main-content zalo-page">
+  <div class="container-fluid">
+    <div class="zalo-header">
+      <div class="zalo-title">
+        <h3>
+          <i class="material-icons">chat</i>
+          Zalo Admin
+        </h3>
+        <div class="subtitle">Quản lý quyền, rule, và thông tin user Zalo/bot</div>
+      </div>
+      <button type="button" class="btn btn-save" (click)="saveConfig()" [disabled]="saveBusy || isLoading">
+        <i class="material-icons">save</i>
+        {{ saveBusy ? 'Đang lưu…' : 'Lưu cấu hình' }}
+      </button>
+    </div>
+
+    <div class="zalo-banner" *ngIf="saveMessage">
+      {{ saveMessage }}
+    </div>
+
+    <div class="row">
+      <div class="col-lg-5 col-md-12">
+        <div class="card zalo-card">
+          <div class="card-header">
+            <h4 class="card-title">Cấu hình bot / rule</h4>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <label class="chk">
+                <input type="checkbox" [(ngModel)]="config.botEnabled">
+                <span>Enable bot</span>
+              </label>
+            </div>
+
+            <div class="form-row grid-2">
+              <label class="chk">
+                <input type="checkbox" [(ngModel)]="config.notifyOnOutbound">
+                <span>Notify outbound</span>
+              </label>
+              <label class="chk">
+                <input type="checkbox" [(ngModel)]="config.notifyOnInbound">
+                <span>Notify inbound</span>
+              </label>
+            </div>
+
+            <div class="form-row">
+              <label>Cho phép gửi từ Factory</label>
+              <select multiple [(ngModel)]="config.allowSendFromFactories" class="select">
+                <option value="ALL">ALL</option>
+                <option value="ASM1">ASM1</option>
+                <option value="ASM2">ASM2</option>
+              </select>
+              <div class="hint">Giữ Ctrl để chọn nhiều.</div>
+            </div>
+
+            <div class="form-row">
+              <label>OA ID (không bắt buộc)</label>
+              <input class="input" [(ngModel)]="config.oaId" placeholder="VD: 1234567890">
+            </div>
+
+            <div class="form-row">
+              <label>Webhook URL (không bắt buộc)</label>
+              <input class="input" [(ngModel)]="config.webhookUrl" placeholder="VD: https://...">
+              <div class="hint">Không lưu access token vào đây nếu bạn muốn tránh lộ secret.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7 col-md-12">
+        <div class="card zalo-card order-card">
+          <div class="card-header">
+            <h4 class="card-title">Lệnh (LSX) đang thiết lập</h4>
+          </div>
+          <div class="card-body">
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newOrder.lsx" placeholder="Nhập LSX (VD: KZLSX0426/0015)">
+              <select class="select" [(ngModel)]="newOrder.factory">
+                <option value="ASM1">ASM1</option>
+                <option value="ASM2">ASM2</option>
+                <option value="ALL">ALL</option>
+              </select>
+              <button type="button" class="btn btn-add" (click)="addOrUpdateOrder()">
+                <i class="material-icons">add</i>
+                Add/Update LSX
+              </button>
+            </div>
+            <div class="form-row">
+              <input class="input" [(ngModel)]="newOrder.notes" placeholder="Notes (optional)">
+            </div>
+            <div class="form-row">
+              <input class="input" [(ngModel)]="orderFilter" placeholder="Tìm lệnh... (lsx, user)">
+            </div>
+
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>LSX</th>
+                    <th>Factory</th>
+                    <th>Members</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let o of filteredOrders">
+                    <td>
+                      <div class="cell-main">{{ o.lsx }}</div>
+                      <div class="cell-sub" *ngIf="o.notes">{{ o.notes }}</div>
+                    </td>
+                    <td>{{ o.factory }}</td>
+                    <td>
+                      <div class="member-chips" *ngIf="o.memberEmployeeIds?.length; else noMembers">
+                        <span class="chip" *ngFor="let e of o.memberEmployeeIds">
+                          {{ getLinkDisplay(e) }}
+                          <button type="button" class="chip-x" (click)="removeMemberFromOrder(o, e)" title="Remove">×</button>
+                        </span>
+                      </div>
+                      <ng-template #noMembers>
+                        <div class="cell-sub">Chưa gán người</div>
+                      </ng-template>
+
+                      <div class="member-add-row">
+                        <select class="select" [(ngModel)]="addMemberSelection[o.id || '']">
+                          <option value="">— Thêm người —</option>
+                          <option *ngFor="let u of getAvailableMembersForOrder(o)" [value]="u.employeeId">
+                            {{ u.employeeId }} - {{ u.displayName || u.zaloDisplayName || u.zaloUserId }}
+                          </option>
+                        </select>
+                        <button type="button" class="btn btn-small" (click)="addMemberToOrder(o)">Add</button>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="pill" [class.pill--off]="!o.enabled">{{ o.enabled ? 'ON' : 'OFF' }}</span>
+                    </td>
+                    <td class="actions">
+                      <button type="button" class="btn btn-small" (click)="toggleOrderEnabled(o)">
+                        {{ o.enabled ? 'Disable' : 'Enable' }}
+                      </button>
+                      <button type="button" class="btn btn-small btn-danger" (click)="deleteOrder(o)">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredOrders.length === 0">
+                    <td colspan="5" class="empty">Chưa có lệnh nào</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card zalo-card">
+          <div class="card-header">
+            <h4 class="card-title">User Zalo ↔ Employee</h4>
+          </div>
+          <div class="card-body">
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newLink.employeeId" placeholder="Employee ID (ASPxxxx)">
+              <input class="input" [(ngModel)]="newLink.zaloUserId" placeholder="Zalo User ID">
+              <button type="button" class="btn btn-add" (click)="addUserLink()">
+                <i class="material-icons">person_add</i>
+                Add/Update
+              </button>
+            </div>
+
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newLink.displayName" placeholder="Tên nhân viên (optional)">
+              <input class="input" [(ngModel)]="newLink.department" placeholder="Bộ phận (optional)">
+              <select class="select" [(ngModel)]="newLink.factory">
+                <option value="ALL">ALL</option>
+                <option value="ASM1">ASM1</option>
+                <option value="ASM2">ASM2</option>
+              </select>
+            </div>
+
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newLink.zaloDisplayName" placeholder="Zalo name (optional)">
+              <input class="input" [(ngModel)]="newLink.phone" placeholder="Phone (optional)">
+              <label class="chk inline">
+                <input type="checkbox" [(ngModel)]="newLink.enabled">
+                <span>Enabled</span>
+              </label>
+            </div>
+
+            <div class="form-row">
+              <input class="input" [(ngModel)]="newLink.notes" placeholder="Notes (optional)">
+            </div>
+
+            <div class="form-row">
+              <input class="input" [(ngModel)]="userFilter" placeholder="Tìm user... (mã, zalo id, tên, sđt)">
+            </div>
+
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Zalo</th>
+                    <th>Factory</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let u of filteredLinks">
+                    <td>
+                      <div class="cell-main">{{ u.employeeId }}</div>
+                      <div class="cell-sub">{{ u.displayName }}</div>
+                    </td>
+                    <td>
+                      <div class="cell-main">{{ u.zaloUserId }}</div>
+                      <div class="cell-sub">{{ u.zaloDisplayName }}</div>
+                    </td>
+                    <td>{{ u.factory || 'ALL' }}</td>
+                    <td>
+                      <span class="pill" [class.pill--off]="!u.enabled">{{ u.enabled ? 'ON' : 'OFF' }}</span>
+                    </td>
+                    <td class="actions">
+                      <button type="button" class="btn btn-small" (click)="toggleEnabled(u)">
+                        {{ u.enabled ? 'Disable' : 'Enable' }}
+                      </button>
+                      <button type="button" class="btn btn-small btn-danger" (click)="deleteLink(u)">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredLinks.length === 0">
+                    <td colspan="5" class="empty">Chưa có dữ liệu</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

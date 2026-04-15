@@ -70,4 +70,6 @@ export const ROUTES: RouteInfo[] = [
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
   { path: '/settings', title: 'Settings', icon: 'settings', class: '' }
+  ,
+  { path: '/zalo', title: 'Zalo', icon: 'chat', class: '' }
 ]; 

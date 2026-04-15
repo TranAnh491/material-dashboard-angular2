@@ -74,6 +74,7 @@ import { SettingsGuard } from '../../guards/settings.guard';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
 
 import { ChartComponent } from '../../pages/chart/chart.component';
+import { ZaloComponent } from '../../pages/zalo/zalo.component';
 
 @NgModule({
   imports: [
@@ -143,6 +144,8 @@ import { ChartComponent } from '../../pages/chart/chart.component';
     PrintOptionDialogComponent,
 
     ChartComponent
+    ,
+    ZaloComponent
   ],
   providers: [
     GoogleSheetService,

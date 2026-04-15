@@ -39,7 +39,8 @@ export class MenuComponent implements OnInit {
     '/equipment',
     '/manage',
     '/sxxk',
-    '/settings'
+    '/settings',
+    '/zalo'
   ];
   
   menuTabs = [
@@ -95,7 +96,8 @@ export class MenuComponent implements OnInit {
     { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', iconImage: 'assets/img/safety.png', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'school', iconImage: 'assets/img/training.png', category: 'Admin' },
     { path: '/manage', title: 'Manage', icon: 'tune', iconImage: 'assets/img/manage.png', category: 'Admin' },
-    { path: '/settings', title: 'Settings', icon: 'settings', iconImage: 'assets/img/setting.png', category: 'Admin' }
+    { path: '/settings', title: 'Settings', icon: 'settings', iconImage: 'assets/img/setting.png', category: 'Admin' },
+    { path: '/zalo', title: 'Zalo', icon: 'chat', iconImage: 'assets/img/setting.png', category: 'Admin' }
   ];
 
   constructor(

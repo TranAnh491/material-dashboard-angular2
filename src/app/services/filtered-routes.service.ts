@@ -79,7 +79,7 @@ export class FilteredRoutesService {
     }
 
     // Đặc biệt cho Settings - chỉ Admin và Quản lý mới có quyền
-    if (tabKey === 'settings') {
+    if (tabKey === 'settings' || tabKey === 'zalo') {
       return userRole === 'Admin' || userRole === 'Quản lý';
     }
 
@@ -144,6 +144,7 @@ export class FilteredRoutesService {
       '/wh-security': 'wh-security',
       '/rm1-delivery': 'rm1-delivery',
       '/settings': 'settings',
+      '/zalo': 'zalo',
       
       // Legacy routes (for backward compatibility)
       '#materials': 'materials',

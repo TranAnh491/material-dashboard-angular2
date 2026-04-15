@@ -36,11 +36,11 @@ export class TabPermissionGuard implements CanActivate {
     }
 
     // Đặc biệt cho Settings - chỉ Admin và Quản lý mới có quyền
-    if (tabKey === 'settings') {
+    if (tabKey === 'settings' || tabKey === 'zalo') {
       return this.rolePermissionService.canAccessSettings().pipe(
         switchMap(hasRoleAccess => {
           if (!hasRoleAccess) {
-            console.log(`❌ Access denied to Settings - User không có quyền Admin hoặc Quản lý`);
+            console.log(`❌ Access denied to ${tabKey} - User không có quyền Admin hoặc Quản lý`);
             this.router.navigate(['/dashboard']);
             return of(false);
           }
@@ -48,7 +48,7 @@ export class TabPermissionGuard implements CanActivate {
           return this.tabPermissionService.canAccessTab(tabKey).pipe(
             map(hasAccess => {
               if (!hasAccess) {
-                console.log(`❌ Access denied to Settings - User không có tab permission`);
+                console.log(`❌ Access denied to ${tabKey} - User không có tab permission`);
                 this.router.navigate(['/dashboard']);
                 return false;
               }
@@ -57,7 +57,7 @@ export class TabPermissionGuard implements CanActivate {
           );
         }),
         catchError(error => {
-          console.error('❌ Error checking Settings permission:', error);
+          console.error(`❌ Error checking ${tabKey} permission:`, error);
           this.router.navigate(['/dashboard']);
           return of(false);
         })
@@ -165,6 +165,7 @@ export class TabPermissionGuard implements CanActivate {
       '/wh-security': 'wh-security',
       '/rm1-delivery': 'rm1-delivery',
       '/settings': 'settings',
+      '/zalo': 'zalo',
       
       // Menu route - cho phép truy cập (không cần permission)
       '/menu': 'dashboard'

@@ -38,6 +38,7 @@ import { WhSecurityComponent } from '../../pages/wh-security/wh-security.compone
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
+import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { TabPermissionGuard } from '../../guards/tab-permission.guard';
@@ -93,6 +94,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'qc-traceability',      component: QcTraceabilityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'rm1-delivery',         component: Rm1DeliveryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'wh-security',          component: WhSecurityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'zalo',                 component: ZaloComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
