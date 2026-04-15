@@ -165,6 +165,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   temXuatBusy = false;
   /** Cutoff: từ ngày này trở đi là tem mẫu mới, không cần in lại. */
   private readonly TEM_MOI_CUTOFF = new Date(2026, 3, 1); // 01/04/2026 (month is 0-based)
+  /** Rule "đã in lại tem mẫu mới" (label-reprint-flags). Tạm thời TẮT theo yêu cầu. */
+  private readonly REPRINT_FLAG_RULE_ENABLED = false;
 
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
@@ -735,7 +737,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)
         )
         .map((m) => this.buildReprintFlagItemFromInventoryRow(m));
-      const reprintedDocIds = await this.labelReprintFlags.getExistingFlagsByDocId(flagItems.map((x) => x.docId));
+      const reprintedDocIds = this.REPRINT_FLAG_RULE_ENABLED
+        ? await this.labelReprintFlags.getExistingFlagsByDocId(flagItems.map((x) => x.docId))
+        : new Set<string>();
 
       const exportPayloads: { qrData: string }[] = [];
       const consumedByRowKey = new Map<string, number>();
@@ -869,15 +873,17 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
       this.createQRPrintWindow(qrImages, fakeMaterial, true);
 
-      // 2) Lưu cờ: các dòng tồn đã được in lại tem mẫu mới (để lần sau báo "Tem mới, không cần in")
-      try {
-        const userEmail = (await this.afAuth.currentUser)?.email || '';
-        await this.labelReprintFlags.markReprintedByDocId(
-          Array.from(printedFlagItems.values()),
-          { reprintedBy: userEmail, source: `TEM_XUAT_KHO_REPRINT:${this.FACTORY}` }
-        );
-      } catch (e) {
-        console.warn('⚠️ Không lưu được cờ in lại tem (bỏ qua):', e);
+      // 2) Lưu cờ: các dòng tồn đã được in lại tem mẫu mới
+      if (this.REPRINT_FLAG_RULE_ENABLED) {
+        try {
+          const userEmail = (await this.afAuth.currentUser)?.email || '';
+          await this.labelReprintFlags.markReprintedByDocId(
+            Array.from(printedFlagItems.values()),
+            { reprintedBy: userEmail, source: `TEM_XUAT_KHO_REPRINT:${this.FACTORY}` }
+          );
+        } catch (e) {
+          console.warn('⚠️ Không lưu được cờ in lại tem (bỏ qua):', e);
+        }
       }
 
       this.closeTemXuatKhoPopup();
