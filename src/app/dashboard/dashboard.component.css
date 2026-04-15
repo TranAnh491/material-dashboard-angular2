@@ -1,6 +1,6 @@
 /* 🎨 Chart Colors */
 #completedTasksChart {
-  background: white;
+  background: transparent;
 }
 #dailySalesChart,
 #websiteViewsChart,
@@ -18,7 +18,7 @@
 .card-title {
   font-size: 1.4rem;
   font-weight: 600;
-  color: #000;
+  color: rgba(229, 231, 235, 0.92);
   margin: 0.2rem 0 0.5rem;
 }
 
@@ -31,13 +31,13 @@
 .stats,
 .table th,
 .table td {
-  color: #000 !important;
+  color: rgba(229, 231, 235, 0.88) !important;
   text-align: center;
   vertical-align: middle;
 }
 
 .text-muted {
-  color: #000 !important;
+  color: rgba(229, 231, 235, 0.72) !important;
   font-size: 0.9rem;
   opacity: 0.88;
 }
@@ -51,7 +51,7 @@
 .workorder-status-table th,
 .workorder-status-table td {
   text-align: center !important;
-  color: #000 !important;
+  color: rgba(229, 231, 235, 0.88) !important;
   vertical-align: middle !important;
   font-size: 0.95rem;
 }
@@ -59,18 +59,19 @@
 .workorder-status-table th {
   font-weight: bold;
   font-size: 1.04em;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 /* Empty cells styling */
 .workorder-status-table td:empty::before {
   content: "—";
-  color: #ccc;
+  color: rgba(229, 231, 235, 0.35);
   font-style: italic;
 }
 
 .workorder-status-table td:empty {
-  color: #ccc;
+  color: rgba(229, 231, 235, 0.35);
   font-style: italic;
 }
 
@@ -81,7 +82,7 @@
 }
 
 .workorder-status-table td {
-  color: #000 !important;
+  color: rgba(229, 231, 235, 0.88) !important;
 }
 
 .workorder-status-table td:has-text('—') {
@@ -91,26 +92,26 @@
 
 /* CSS classes for cell styling */
 .workorder-status-table .empty-cell {
-  color: #ccc !important;
+  color: rgba(229, 231, 235, 0.35) !important;
   font-style: italic;
 }
 
 .workorder-status-table .has-value {
-  color: #000 !important;
+  color: rgba(229, 231, 235, 0.92) !important;
   font-weight: 500;
 }
 
 .workorder-status-table .yesterday-overdue-row {
-  background: #fff3e0;
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .workorder-status-table .yesterday-label {
   font-weight: 700;
-  color: #bf360c !important;
+  color: rgba(254, 243, 199, 0.92) !important;
 }
 
 .workorder-status-table .overdue-value {
-  color: #d84315 !important;
+  color: rgba(245, 158, 11, 0.92) !important;
   font-weight: 700;
 }
 
@@ -119,11 +120,23 @@
   padding: 18px 22px 10px 22px;
   border-radius: 8px 8px 0 0;
   margin-bottom: 0;
-  box-shadow: 0 2px 8px #d7b8eb44;
+  box-shadow: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .custom-card-header-purple {
-  background: linear-gradient(60deg, #66bb6a, #43a047);
+  /* Lớp nền đặc cuối cùng — gradient phía trên không còn “hở” thấy nền dashboard */
+  background:
+    radial-gradient(220px 90px at 18% 0%, rgba(34, 197, 94, 0.42), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(34, 197, 94, 0.26), rgba(34, 197, 94, 0.14)),
+    #0b1118;
+}
+
+.custom-card-header-amber {
+  background:
+    radial-gradient(220px 90px at 18% 0%, rgba(245, 158, 11, 0.45), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(245, 158, 11, 0.28), rgba(245, 158, 11, 0.16)),
+    #0b1118;
 }
 
 .custom-card-title {
@@ -131,14 +144,14 @@
   font-size: 1.0rem;
   font-weight: 700;
   letter-spacing: 0.2px;
-  color: #000 !important;
+  color: rgba(236, 253, 245, 0.96) !important;
 }
 
 .custom-card-desc {
   margin: 0;
   font-size: 1rem;
   opacity: 0.88;
-  color: #000 !important;
+  color: rgba(229, 231, 235, 0.82) !important;
 }
 
 /* KPI Card Enhancements */
@@ -152,7 +165,8 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background-color: #fff;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -164,7 +178,7 @@
   background: transparent;
   padding-top: 0.25rem;
   font-size: 0.85rem;
-  color: #000;
+  color: rgba(229, 231, 235, 0.82);
 }
 
 /* 🔄 Bounce animation - Removed */
@@ -188,7 +202,7 @@
 /* Force card header titles and descriptions to be black */
 .card-header .card-title,
 .card-header .card-category {
-    color: #000 !important;
+    color: rgba(229, 231, 235, 0.92) !important;
 }
 
 /* 📱 Mobile Optimizations */
@@ -196,7 +210,7 @@
   
   /* Main Layout */
   .main-content {
-    padding: 10px;
+    padding: 47px 10px 10px;
   }
 
   /* Chart Cards Mobile */
@@ -597,12 +611,48 @@
 
 /* 📊 KPI Cards Positioning - Close to navbar */
 .main-content {
-  padding-top: 10px !important; /* Reduced top padding to move KPI cards up */
+  /* ~50% less offset than 68px while staying below fixed navbar */
+  padding-top: 50px !important;
+}
+
+/* Fix card heights + prevent overlap */
+.kpi-card,
+.safety-stock-box,
+.rack-warnings-box,
+.iqc-week-box,
+.card-chart {
+  min-height: 126px;
+}
+
+.safety-stock-box,
+.rack-warnings-box,
+.iqc-week-box {
+  min-height: 178px;
+}
+
+.card-chart {
+  min-height: 330px;
+}
+
+.box-header {
+  gap: 10px;
+}
+
+.box-header h5 {
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.refresh-btn {
+  flex: 0 0 auto;
 }
 
 /* KPI Cards Section - Minimal top margin */
 .row.mt-1.mb-4 {
-  margin-top: 0.25rem !important; /* Very small top margin */
+  margin-top: 0 !important;
   margin-bottom: 0.25rem !important; /* Reduced to 4px to bring charts closer */
 }
 
@@ -703,6 +753,20 @@
   gap: 8px;
 }
 
+/* Header icon tint (match each box) */
+.safety-stock-box .box-header .material-icons {
+  color: rgba(219, 234, 254, 0.92) !important;
+}
+
+.rack-warnings-box .box-header .material-icons {
+  color: rgba(254, 226, 226, 0.92) !important;
+}
+
+.iqc-week-box .box-header .material-icons,
+.iqc-materials-modal .modal-header .material-icons {
+  color: rgba(254, 243, 199, 0.92) !important;
+}
+
 .box-header h5 i {
   font-size: 18px;
   color: var(--text-secondary);
@@ -759,12 +823,28 @@
   background: #ffffff;
   position: relative;
   overflow: hidden;
-  color: #374151;
+  color: #111827;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   margin: 2px; /* Reduced margin */
+}
+
+/* Weekday text contrast on light tiles */
+.weekday-item .weekday-name {
+  color: #6b7280;
+}
+.weekday-item .weekday-day {
+  color: #111827;
+}
+.weekday-item .weekday-month {
+  color: #374151;
+}
+
+/* Make weekday tiles match dashboard card rounding */
+.weekday-item {
+  border-radius: 12px;
 }
 
 /* Today marker - removed black dot */
@@ -1166,8 +1246,15 @@
   z-index: 10000;
 }
 
+/* Force charts canvas backgrounds transparent (avoid white block) */
+#dailySalesChart,
+#websiteViewsChart,
+#completedTasksChart {
+  background: transparent !important;
+}
+
 .iqc-materials-modal {
-  background: white;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
   border-radius: 12px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   max-width: 90%;
@@ -1292,7 +1379,7 @@
 .materials-table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1391,4 +1478,306 @@
   .mobile-logout-btn {
     display: block;
   }
+}
+
+/* =========================================================
+   Dark dashboard theme (match QC)
+   Kept as overrides to avoid breaking legacy CSS.
+   ========================================================= */
+
+:host {
+  --dash-bg: #05070a;
+  --dash-surface: #0b1118;
+  --dash-text: #e5e7eb;
+  --dash-muted: rgba(229, 231, 235, 0.72);
+  --dash-border: rgba(255, 255, 255, 0.10);
+  --dash-border-strong: rgba(255, 255, 255, 0.18);
+  --dash-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.main-content {
+  background:
+    radial-gradient(900px 520px at 20% -10%, rgba(34, 197, 94, 0.14), rgba(0, 0, 0, 0) 60%),
+    radial-gradient(760px 480px at 85% 20%, rgba(59, 130, 246, 0.10), rgba(0, 0, 0, 0) 55%),
+    linear-gradient(180deg, #06090d 0%, var(--dash-bg) 55%, #05070a 100%);
+  color: var(--dash-text) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Default text tone in dashboard */
+.card-title,
+.stats,
+.table th,
+.table td,
+.workorder-status-table th,
+.workorder-status-table td,
+.custom-card-title,
+.custom-card-desc,
+.text-muted {
+  color: var(--dash-text) !important;
+}
+
+.text-muted {
+  color: var(--dash-muted) !important;
+}
+
+/* Generic cards */
+.card,
+.card-chart {
+  border-radius: 18px !important;
+  border: 1px solid var(--dash-border-strong) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)) !important;
+  box-shadow: var(--dash-shadow) !important;
+  backdrop-filter: blur(10px);
+}
+
+/* KPI cards (top row) */
+.kpi-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(420px 140px at 25% 0%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0) 68%);
+  pointer-events: none;
+}
+
+.kpi-label {
+  color: rgba(229, 231, 235, 0.78) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.2px;
+}
+
+.kpi-value {
+  color: rgba(229, 231, 235, 0.94) !important;
+}
+
+.kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid var(--dash-border-strong);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
+}
+
+.kpi-icon .material-icons {
+  font-size: 28px;
+  color: rgba(229, 231, 235, 0.92);
+}
+
+.kpi-card-workorder {
+  border-color: rgba(34, 197, 94, 0.26) !important;
+  background:
+    radial-gradient(420px 180px at 18% -10%, rgba(34, 197, 94, 0.16), rgba(0, 0, 0, 0) 62%),
+    rgba(255, 255, 255, 0.03) !important;
+}
+.kpi-card-workorder .kpi-icon { border-color: rgba(34, 197, 94, 0.28) !important; }
+.kpi-card-workorder .kpi-icon .material-icons { color: rgba(187, 247, 208, 0.92) !important; }
+
+.kpi-card-shipment {
+  border-color: rgba(245, 158, 11, 0.26) !important;
+  background:
+    radial-gradient(420px 180px at 18% -10%, rgba(245, 158, 11, 0.16), rgba(0, 0, 0, 0) 62%),
+    rgba(255, 255, 255, 0.03) !important;
+}
+.kpi-card-shipment .kpi-icon { border-color: rgba(245, 158, 11, 0.28) !important; }
+.kpi-card-shipment .kpi-icon .material-icons { color: rgba(254, 243, 199, 0.92) !important; }
+
+.kpi-card-otd {
+  border-color: rgba(59, 130, 246, 0.26) !important;
+  background:
+    radial-gradient(420px 180px at 18% -10%, rgba(59, 130, 246, 0.16), rgba(0, 0, 0, 0) 62%),
+    rgba(255, 255, 255, 0.03) !important;
+}
+.kpi-card-otd .kpi-icon { border-color: rgba(59, 130, 246, 0.28) !important; }
+.kpi-card-otd .kpi-icon .material-icons { color: rgba(219, 234, 254, 0.92) !important; }
+
+.kpi-card-safety {
+  border-color: rgba(239, 68, 68, 0.24) !important;
+  background:
+    radial-gradient(420px 180px at 18% -10%, rgba(239, 68, 68, 0.14), rgba(0, 0, 0, 0) 62%),
+    rgba(255, 255, 255, 0.03) !important;
+}
+.kpi-card-safety .kpi-icon { border-color: rgba(239, 68, 68, 0.26) !important; }
+.kpi-card-safety .kpi-icon .material-icons { color: rgba(254, 226, 226, 0.92) !important; }
+
+/* Chart cards */
+.chart-body {
+  position: relative !important;
+}
+
+.chart-badge {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  font-weight: 700;
+  font-size: 12px;
+  z-index: 10;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dash-border-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(229, 231, 235, 0.86);
+}
+
+.chart-badge-green { border-color: rgba(34, 197, 94, 0.24); color: rgba(187, 247, 208, 0.92); }
+.chart-badge-amber { border-color: rgba(245, 158, 11, 0.24); color: rgba(254, 243, 199, 0.92); }
+
+.chart-card-green { border-color: rgba(34, 197, 94, 0.20) !important; }
+.chart-card-blue { border-color: rgba(59, 130, 246, 0.20) !important; }
+.chart-card-amber { border-color: rgba(245, 158, 11, 0.20) !important; }
+
+/* Tables */
+.table-bordered,
+.workorder-status-table {
+  border-color: var(--dash-border) !important;
+}
+
+.table-bordered th,
+.table-bordered td,
+.workorder-status-table th,
+.workorder-status-table td {
+  border-color: var(--dash-border) !important;
+}
+
+.workorder-status-table th {
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
+}
+
+/* Status boards: Bootstrap 4 striping — force dark zebra + light text */
+.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(odd) {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(even) {
+  background-color: rgba(0, 0, 0, 0.22) !important;
+}
+
+.dashboard-status-boards .workorder-status-table.table-hover tbody tr:hover {
+  color: rgba(229, 231, 235, 0.96) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dashboard-status-boards .workorder-status-table tbody tr > td,
+.dashboard-status-boards .workorder-status-table tbody tr > th {
+  color: rgba(229, 231, 235, 0.92) !important;
+}
+
+.workorder-status-table .empty-cell,
+.workorder-status-table td:empty {
+  color: rgba(229, 231, 235, 0.35) !important;
+}
+
+/* Safety/rack/iqc boxes */
+.safety-stock-box,
+.rack-warnings-box,
+.iqc-week-box {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--dash-border-strong) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(10px);
+}
+
+.box-header {
+  border-bottom: 1px solid var(--dash-border) !important;
+}
+
+.iqc-week-box .box-header h5,
+.box-header h5 {
+  color: rgba(229, 231, 235, 0.9) !important;
+}
+
+.iqc-week-box .iqc-week-label {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Modal (IQC materials) */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.62) !important;
+}
+
+.iqc-materials-modal {
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
+  border: 1px solid var(--dash-border-strong) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--dash-shadow) !important;
+  backdrop-filter: blur(12px);
+}
+
+.iqc-materials-modal .modal-header {
+  border-bottom: 1px solid var(--dash-border) !important;
+}
+
+.iqc-materials-modal .modal-header h3 {
+  color: rgba(229, 231, 235, 0.92) !important;
+}
+
+.iqc-materials-modal .close-btn {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--dash-border-strong) !important;
+  border-radius: 12px !important;
+  color: rgba(229, 231, 235, 0.78) !important;
+}
+
+.iqc-materials-modal .close-btn:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: rgba(229, 231, 235, 0.92) !important;
+}
+
+.iqc-materials-modal .download-btn {
+  border-radius: 12px !important;
+  border: 1px solid rgba(34, 197, 94, 0.26) !important;
+  background:
+    radial-gradient(160px 80px at 22% 0%, rgba(34, 197, 94, 0.35), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.08)) !important;
+  color: rgba(236, 253, 245, 0.96) !important;
+}
+
+.iqc-materials-modal .download-btn:hover:not(:disabled) {
+  background:
+    radial-gradient(160px 80px at 22% 0%, rgba(34, 197, 94, 0.42), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(180deg, rgba(34, 197, 94, 0.22), rgba(34, 197, 94, 0.10)) !important;
+}
+
+.iqc-week-section {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--dash-border-strong) !important;
+  border-radius: 14px !important;
+}
+
+.week-header {
+  border-bottom: 1px solid rgba(245, 158, 11, 0.30) !important;
+}
+
+.week-header h4 {
+  color: rgba(229, 231, 235, 0.92) !important;
+}
+
+.materials-table {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.materials-table thead {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.20), rgba(245, 158, 11, 0.10)) !important;
+}
+
+.materials-table th {
+  color: rgba(254, 243, 199, 0.92) !important;
+}
+
+.materials-table td {
+  color: rgba(229, 231, 235, 0.88) !important;
+  border-bottom: 1px solid var(--dash-border) !important;
+}
+
+.materials-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
 }

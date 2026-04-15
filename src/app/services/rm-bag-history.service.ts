@@ -72,10 +72,12 @@ export class RmBagHistoryService {
 
     let splitSuffix = '';
     let head = raw;
-    const splitM = /^(.+?)(\([Tt]\d+\))$/.exec(raw);
+    // Hậu tố bịch tách có thể là "(T123)" hoặc "T123" (một số tem không có ngoặc)
+    const splitM = /^(.+?)(?:\(([Tt]\d+)\)|([Tt]\d+))$/.exec(raw);
     if (splitM) {
       head = splitM[1].trim();
-      splitSuffix = splitM[2];
+      const tag = (splitM[2] || splitM[3] || '').trim();
+      splitSuffix = tag ? `(${tag.toUpperCase()})` : '';
     }
 
     const m = /^(\d{8})-(\d+)\/(\d+)$/.exec(head);

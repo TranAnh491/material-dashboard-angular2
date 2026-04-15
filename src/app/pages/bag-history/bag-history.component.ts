@@ -446,7 +446,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   getBagColumnDisplay(row: { bagBatch?: string; bagNumberDisplay?: string }): string {
     const bnd = (row.bagNumberDisplay || '').trim();
     // Nếu có mã bịch lẻ/tách (VD: 1(T1254581)) thì ưu tiên để tránh kiểm tra nhầm.
-    if (bnd && bnd.includes('(')) {
+    if (bnd && (bnd.includes('(') || /t\d+/i.test(bnd))) {
       return bnd;
     }
     const bb = (row.bagBatch || '').trim();
@@ -899,6 +899,31 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         return (a.bagBatch || '').localeCompare(b.bagBatch || '');
       });
       this.outboundDupRows = dupes;
+
+      // Push alert to Firestore so backend can notify specific members on new duplicates.
+      // Backend will deduplicate and only notify on newly appeared / increased counts.
+      if (dupes.length > 0) {
+        try {
+          await this.firestore.collection('zalo_alerts').add({
+            type: 'outbound_duplicate_detected',
+            source: 'bag-history',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            dupes: dupes.slice(0, 50).map(d => ({
+              dupKey: d.dupKey,
+              factory: d.factory,
+              materialCode: d.materialCode,
+              poNumber: d.poNumber,
+              imd: d.imd,
+              bagBatch: d.bagBatch,
+              count: d.count,
+              latestExportAtLabel: d.latestExportAtLabel || null,
+              revivedAfterIgnore: d.revivedAfterIgnore || null
+            }))
+          });
+        } catch (e) {
+          console.warn('bag-history write zalo_alerts failed', e);
+        }
+      }
     } catch (e) {
       console.error('bag-history outbound duplicate scan', e);
       this.outboundDupError =

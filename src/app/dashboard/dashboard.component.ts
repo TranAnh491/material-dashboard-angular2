@@ -36,6 +36,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Factory selection
   selectedFactory: string = 'ASM1';
+
+  /** Donut "track" (phần còn lại của vòng) — đồng bộ 3 chart trên nền tối */
+  private readonly donutTrackColor = 'rgba(255, 255, 255, 0.12)';
+  private readonly donutArcBorderRadius = 6;
   
   // Work order data
   workOrders: WorkOrder[] = [];
@@ -274,9 +278,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       data: {
         labels: ['Accuracy'],
         datasets: [{
-          data: [percentage, 100 - percentage],
-          backgroundColor: [color, '#e0e0e0'],
-          borderWidth: 0
+          data: [percentage, Math.max(0, 100 - percentage)],
+          backgroundColor: [color, this.donutTrackColor],
+          borderWidth: 0,
+          borderRadius: this.donutArcBorderRadius,
+          spacing: 0
         }]
       },
       options: {
@@ -364,7 +370,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
           ctx.save();
           ctx.font = 'bold 32px Arial';
-          ctx.fillStyle = '#000000'; // Black text
+          ctx.fillStyle = 'rgba(229, 231, 235, 0.92)'; // light text for dark UI
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(totalRounded, centerX, centerY);
@@ -755,18 +761,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Calculate percentage of target achieved
     const percentage = (currentValue / target) * 100;
     
-    // Colors
-    const achievedColor = '#2196f3'; // Blue for achieved
-    const remainingColor = '#e0e0e0'; // Gray for remaining
+    const achievedColor = '#2196f3';
 
     const chart = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Achieved', 'Remaining'],
         datasets: [{
-          data: [currentValue, target - currentValue],
-          backgroundColor: [achievedColor, remainingColor],
-          borderWidth: 0
+          data: [currentValue, Math.max(0, target - currentValue)],
+          backgroundColor: [achievedColor, this.donutTrackColor],
+          borderWidth: 0,
+          borderRadius: this.donutArcBorderRadius,
+          spacing: 0
         }]
       },
       options: {
@@ -808,7 +814,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           
           // Target text
           ctx.font = '12px Arial';
-          ctx.fillStyle = '#666666';
+          ctx.fillStyle = 'rgba(229, 231, 235, 0.72)';
           ctx.fillText(`Target: ${target}`, centerX, centerY + 15);
           
           ctx.restore();

@@ -5,48 +5,117 @@
 .asm-icons {
     display: flex;
     align-items: center;
-    margin-right: 15px;
+    gap: 8px;
+    margin-right: 8px;
 }
 
-.asm-icons .btn {
+.factory-chip {
+    height: 36px;
+    min-width: 44px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(229, 231, 235, 0.92);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    line-height: 1;
+    box-shadow: none;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.factory-chip:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.26);
+}
+
+.factory-chip:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.55);
+    outline-offset: 2px;
+}
+
+.factory-chip-asm1.is-active {
+    border-color: rgba(34, 197, 94, 0.55);
+    background: rgba(34, 197, 94, 0.18);
+}
+
+.factory-chip-asm2.is-active {
+    border-color: rgba(245, 158, 11, 0.55);
+    background: rgba(245, 158, 11, 0.16);
+}
+
+.factory-chip .material-icons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 6px 10px;
-    border-radius: 4px;
-    transition: all 0.3s ease;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: #333;
-    font-weight: 500;
-    min-width: 64px;
-    box-shadow: none;
-}
-
-.asm-icons .btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    transform: none;
-    box-shadow: none;
-}
-
-.asm-icons .btn.active {
-    background: #ff9800;
-    color: white;
-    border-color: #ff9800;
-}
-
-.asm-icons .btn.active:hover {
-    background: #f57c00;
+    justify-content: center;
+    color: rgba(229, 231, 235, 0.92);
 }
 
 .asm-label {
-    font-size: 12px;
-    font-weight: 600;
-    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    line-height: 1;
+    color: rgba(229, 231, 235, 0.92);
 }
 
-.asm-icons .material-icons {
-    font-size: 18px;
+.navbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.navbar .navbar-collapse {
+  align-items: center;
+}
+
+.navbar-actions .nav-item {
+    display: flex;
+    align-items: center;
+}
+
+.navbar-actions app-notification-dropdown {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-actions .notification-dropdown .notification-icon {
+  height: 36px;
+  width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0;
+}
+
+.navbar-actions .notification-dropdown .notification-icon:hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.navbar-actions .nav-link {
+    height: 36px;
+    padding: 0 10px !important;
+    border-radius: 999px;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.navbar-actions .nav-link:hover,
+.navbar-actions .nav-link:focus {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.22);
 }
 
 /* INBOUND ASM1: thanh nav trong suốt — click xuyên tới topbar trang (cùng ý materials: không để vùng rỗng chặn nút dưới). Phải tắt hit-test cả .container-fluid vì con mặc định không nhận event khi cha là none. */
@@ -62,29 +131,30 @@
 
 /* Home Button Styles */
 .btn-home {
-    background: transparent !important;
-    color: #000000 !important;
-    border: 1px solid rgba(255, 255, 255, 0.5) !important;
-    border-radius: 4px !important;
-    padding: 8px 12px !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(229, 231, 235, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-radius: 999px !important;
+    padding: 0 12px !important;
+    height: 36px !important;
     min-width: auto !important;
     box-shadow: none !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    z-index: 1000 !important;
-    margin-left: auto !important;
-    order: 999 !important;
+    z-index: 1 !important;
+    margin-left: 0 !important;
+    order: 0 !important;
 }
 
 .btn-home:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-color: rgba(255, 255, 255, 0.7) !important;
+    background: rgba(255, 255, 255, 0.10) !important;
+    border-color: rgba(255, 255, 255, 0.26) !important;
 }
 
 .btn-home .material-icons {
-    font-size: 16px; /* 80% of 20px */
-    color: #000000 !important;
+    font-size: 18px;
+    color: rgba(229, 231, 235, 0.92) !important;
 }
 
 /* Navbar Toggler Button (Hamburger Menu) */
@@ -190,27 +260,17 @@
     margin: 0;
 }
 
-/* Giảm margin của ASM icons */
-.asm-icons {
-    margin-right: 4px;
+@media (min-width: 992px) {
+  .user-profile-link > p {
+    display: none;
+  }
 }
 
-/* Đồng đều kích cỡ các icon */
-.navbar-nav .nav-link i,
-.asm-icons i,
+.navbar-actions .nav-link i,
 .notification-dropdown .notification-icon i {
-    font-size: 19px !important;
-    width: 19px;
-    height: 19px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Đồng đều kích cỡ ASM labels */
-.asm-label {
-    font-size: 10px !important;
-    font-weight: bold;
+  font-size: 18px !important;
+  width: 18px;
+  height: 18px;
 }
 
 /* User profile layout - icon và tên nằm cạnh nhau */
@@ -225,13 +285,13 @@
 }
 
 .user-name {
-    font-size: 11px;
-    font-weight: 500;
-    color: #333;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(229, 231, 235, 0.92);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 120px;
+    max-width: 160px;
 }
 
 /* Điều chỉnh khoảng cách cho dropdown menu */
@@ -245,22 +305,19 @@
         gap: 0px;
     }
     
-    .navbar-nav .nav-link {
+    .navbar-nav .nav-link:not(.user-profile-link) {
         padding: 4px 6px;
         margin: 0;
     }
-    
-    .asm-icons {
-        margin-right: 2px;
+
+    .navbar-actions {
+      width: 100%;
+      justify-content: flex-end;
     }
-    
-    /* Đồng đều kích cỡ các icon trên mobile */
-    .navbar-nav .nav-link i,
-    .asm-icons i,
-    .notification-dropdown .notification-icon i {
-        font-size: 16px !important;
-        width: 16px;
-        height: 16px;
+
+    .navbar-actions .nav-link {
+      height: 40px;
+      padding: 0 12px !important;
     }
     
     /* User profile layout trên mobile */

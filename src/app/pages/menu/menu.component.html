@@ -21,8 +21,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>
@@ -41,8 +43,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>
@@ -61,8 +65,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>
@@ -81,8 +87,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>
@@ -101,8 +109,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>
@@ -121,8 +131,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>
@@ -141,8 +153,10 @@
           <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
             <i class="material-icons">{{ tab.icon }}</i>
           </div>
-          <img *ngIf="!isMobile && tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-          <i *ngIf="!isMobile && !tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          <div *ngIf="!isMobile" class="menu-item-icon-shell">
+            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
+            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
+          </div>
           <span class="menu-item-label">{{ tab.title }}</span>
           <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
         </div>

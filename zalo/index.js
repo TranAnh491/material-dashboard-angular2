@@ -18,6 +18,7 @@
 const {setGlobalOptions} = require("firebase-functions");
 const {defineSecret} = require("firebase-functions/params");
 const {onRequest} = require("firebase-functions/https");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
@@ -553,5 +554,121 @@ exports.notifyByMemberId = onRequest(
       logger.error(err);
       res.status(500).json({error: "notifyByMemberId failed"});
     }
+  }
+);
+
+/**
+ * Firestore trigger: when UI detects outbound duplicates, notify fixed members.
+ *
+ * Collection written by UI: `zalo_alerts`
+ * Payload: { type: 'outbound_duplicate_detected', dupes: [{dupKey,count,...}], createdAt }
+ *
+ * Rule requested: notify ASP0106 and ASP0701.
+ */
+exports.notifyOutboundDuplicates = onDocumentCreated(
+  {
+    document: "zalo_alerts/{alertId}",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const data = snap.data() || {};
+    if (data.type !== "outbound_duplicate_detected") return;
+
+    const dupes = Array.isArray(data.dupes) ? data.dupes : [];
+    if (dupes.length === 0) return;
+
+    const stateRef = db.collection("zalo_alert_state").doc("outbound_duplicates");
+    const stateSnap = await stateRef.get();
+    const state = stateSnap.exists ? (stateSnap.data() || {}) : {};
+    const prev = (state.lastNotifiedCounts && typeof state.lastNotifiedCounts === "object")
+      ? state.lastNotifiedCounts
+      : {};
+
+    // Determine which dupKeys are new/increased
+    const changed = [];
+    const nextCounts = {...prev};
+    for (const d of dupes) {
+      const key = String(d?.dupKey || "").trim();
+      const count = Number(d?.count || 0) || 0;
+      if (!key || count <= 1) continue;
+      const before = Number(prev[key] || 0) || 0;
+      if (count > before) {
+        changed.push({
+          dupKey: key,
+          factory: d.factory,
+          materialCode: d.materialCode,
+          poNumber: d.poNumber,
+          imd: d.imd,
+          bagBatch: d.bagBatch,
+          count,
+          before,
+        });
+      }
+      if (count > before) nextCounts[key] = count;
+    }
+
+    // Always update state (even if no changed) to avoid re-notify on same scan
+    await stateRef.set(
+      {
+        lastNotifiedCounts: nextCounts,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      {merge: true}
+    );
+
+    if (changed.length === 0) return;
+
+    const botToken = ZALO_BOT_TOKEN.value();
+    const memberIds = ["ASP0106", "ASP0701"];
+
+    const linkSnap = await db
+      .collection("zalo_links")
+      .where("memberId", "in", memberIds)
+      .get()
+      .catch((e) => {
+        logger.error("lookup zalo_links failed", e);
+        return null;
+      });
+
+    const chatIds = [];
+    if (linkSnap && !linkSnap.empty) {
+      for (const doc of linkSnap.docs) {
+        const v = doc.data() || {};
+        if (v.chatId) chatIds.push(String(v.chatId));
+      }
+    }
+
+    if (chatIds.length === 0) {
+      logger.warn("No chatId found for memberIds", {memberIds});
+      return;
+    }
+
+    const top = changed.slice(0, 8);
+    const lines = top.map((c) => {
+      const mc = String(c.materialCode || "").toUpperCase();
+      const fac = String(c.factory || "");
+      const po = c.poNumber ? ` PO:${c.poNumber}` : "";
+      const imd = c.imd ? ` IMD:${c.imd}` : "";
+      const bag = c.bagBatch ? ` BAG:${c.bagBatch}` : "";
+      const delta = c.before ? ` (${c.before}→${c.count})` : ` (${c.count})`;
+      return `- ${fac} ${mc}${po}${imd}${bag}${delta}`;
+    });
+    const msg =
+      `⚠️ Phát hiện trùng xuất kho (${changed.length} nhóm mới/tăng).\n` +
+      lines.join("\n") +
+      (changed.length > top.length ? `\n... +${changed.length - top.length} nhóm` : "");
+
+    await Promise.all(
+      chatIds.map((chatId) =>
+        fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({chat_id: chatId, text: msg}),
+        }).catch((e) => logger.error("sendMessage failed", e))
+      )
+    );
   }
 );

@@ -1,22 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-// Menu — dark “card” UI (nền / viền / chữ theo phong cách tham chiếu; icon giữ nguyên trong HTML)
+// Menu — chỉ viền quanh icon; chữ không viền; ô ngoài trong suốt (nền trang gradient)
 .menu-container {
-  --menu-bg: #0a0a0a;
-  --menu-surface: #121212;
-  --menu-surface-elevated: #1c1c1c;
-  --menu-border: #222222;
-  --menu-border-strong: #2e2e2e;
-  --menu-text: #f4f4f5;
-  --menu-text-muted: #9ca3af;
-  --menu-accent: #4ade80;
-  --menu-radius-lg: 16px;
-  --menu-radius-md: 14px;
+  --menu-bg: #05070a;
+  --menu-surface: rgba(255, 255, 255, 0.03);
+  --menu-border: rgba(255, 255, 255, 0.1);
+  --menu-border-strong: rgba(255, 255, 255, 0.18);
+  --menu-text: #e5e7eb;
+  --menu-text-muted: rgba(229, 231, 235, 0.62);
+  --menu-radius-lg: 18px;
+  --menu-radius-md: 16px;
   --menu-font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
   min-height: 100vh;
   box-sizing: border-box;
-  background: var(--menu-bg);
+  background:
+    radial-gradient(900px 520px at 20% -10%, rgba(34, 197, 94, 0.12), rgba(0, 0, 0, 0) 58%),
+    radial-gradient(760px 480px at 85% 18%, rgba(59, 130, 246, 0.1), rgba(0, 0, 0, 0) 52%),
+    linear-gradient(180deg, #06090d 0%, var(--menu-bg) 55%, #05070a 100%);
   padding: 40px 20px;
   width: 100%;
   margin: 0;
@@ -82,7 +83,7 @@
 }
 
 .logout-btn {
-  background: var(--menu-surface);
+  background: rgba(255, 255, 255, 0.06);
   color: #f87171;
   border: 1px solid rgba(248, 113, 113, 0.35);
   border-radius: var(--menu-radius-md);
@@ -153,134 +154,231 @@
 }
 
 .menu-item {
-  background: var(--menu-surface-elevated);
-  border: 1px solid var(--menu-border);
-  border-radius: 10px;
-  padding: 22px 16px;
+  position: relative;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 12px 8px;
   text-align: center;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  min-height: 120px;
-  justify-content: center;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  min-height: 0;
+  justify-content: flex-start;
+  transition: transform 0.2s ease;
   box-shadow: none;
+  backdrop-filter: none;
 }
 
 .menu-item:hover {
-  transform: translateY(-2px);
-  background: #232323;
-  border-color: var(--menu-border-strong);
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2);
+  transform: translateY(-1px);
 }
 
 .menu-item:active {
   transform: translateY(0);
 }
 
-.menu-item .material-icons {
-  font-size: 48px;
-  transition: transform 0.3s ease;
+/* Chỉ viền ô icon (desktop) */
+.menu-item-icon-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  min-height: 88px;
+  padding: 10px 8px;
+  border-radius: var(--menu-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  box-shadow: none;
+  flex-shrink: 0;
 }
 
-.menu-item .menu-tab-icon-img {
-  width: 82px;
-  height: 102px;
+.menu-tab-icon-img {
+  max-width: 100%;
+  max-height: 72px;
+  width: auto;
+  height: auto;
   object-fit: contain;
-  transition: transform 0.3s ease;
+  display: block;
+  transition: transform 0.25s ease;
 }
 
-.menu-item:hover .material-icons,
-.menu-item:hover .menu-tab-icon-img {
-  transform: scale(1.1);
+.menu-tab-icon-fallback {
+  font-size: 36px;
+  line-height: 1;
+  transition: transform 0.25s ease;
 }
 
-.menu-item .menu-item-label,
-.menu-item span {
+.menu-item:hover .menu-tab-icon-img,
+.menu-item:hover .menu-tab-icon-fallback {
+  transform: scale(1.06);
+}
+
+.menu-item .menu-item-label {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   text-align: center;
   line-height: 1.35;
-  letter-spacing: -0.01em;
-  color: var(--menu-text);
+  letter-spacing: 0.02em;
+  color: rgba(229, 231, 235, 0.92);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
-// Main Category
+/* Viền theo nhóm — chỉ ô icon */
 .menu-item-main {
-  .material-icons {
-    color: #ffffff;
+  .menu-item-icon-shell {
+    border-color: rgba(34, 197, 94, 0.55);
   }
-  
-  span {
-    color: #ffffff;
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(74, 222, 128, 0.35));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(187, 247, 208, 0.95);
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(34, 197, 94, 0.85);
+    }
   }
 }
 
-// ASM1 RM Category
 .menu-item-asm1-rm {
-  .material-icons {
-    color: #ffffff;
+  .menu-item-icon-shell {
+    border-color: rgba(16, 185, 129, 0.55);
   }
-  
-  span {
-    color: #ffffff;
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(52, 211, 153, 0.32));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(167, 243, 208, 0.95);
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(16, 185, 129, 0.85);
+    }
   }
 }
 
-// ASM2 RM Category
 .menu-item-asm2-rm {
-  .material-icons {
-    color: #ffffff;
+  .menu-item-icon-shell {
+    border-color: rgba(59, 130, 246, 0.55);
   }
-  
-  span {
-    color: #ffffff;
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(96, 165, 250, 0.35));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(219, 234, 254, 0.95);
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(59, 130, 246, 0.85);
+    }
   }
 }
 
-// ASM FG Category
 .menu-item-asm1-fg {
-  .material-icons {
-    color: #ffffff;
+  .menu-item-icon-shell {
+    border-color: rgba(245, 158, 11, 0.55);
   }
-  
-  span {
-    color: #ffffff;
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.32));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(254, 243, 199, 0.95);
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(245, 158, 11, 0.88);
+    }
   }
 }
 
-// Tools Category
 .menu-item-tools {
-  .material-icons {
-    color: #ffffff;
+  .menu-item-icon-shell {
+    border-color: rgba(192, 132, 252, 0.58);
   }
-  
-  span {
-    color: #ffffff;
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(192, 132, 252, 0.3));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(233, 213, 255, 0.95);
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(192, 132, 252, 0.9);
+    }
   }
 }
 
-// Quality Category
 .menu-item-quality {
-  .material-icons {
-    color: #ffffff !important;
+  .menu-item-icon-shell {
+    border-color: rgba(244, 114, 182, 0.58);
   }
 
-  span {
-    color: #ffffff !important;
+  .menu-item-label {
+    color: rgba(229, 231, 235, 0.92) !important;
+  }
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(244, 114, 182, 0.3));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(252, 231, 243, 0.95) !important;
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(244, 114, 182, 0.9);
+    }
   }
 }
 
-// Admin Category
 .menu-item-admin {
-  .material-icons {
-    color: #ffffff;
+  .menu-item-icon-shell {
+    border-color: rgba(248, 113, 113, 0.58);
   }
-  
-  span {
-    color: #ffffff;
+
+  .menu-tab-icon-img {
+    filter: drop-shadow(0 0 14px rgba(248, 113, 113, 0.28));
+  }
+
+  .menu-tab-icon-fallback {
+    color: rgba(254, 226, 226, 0.95);
+  }
+
+  &:hover {
+    .menu-item-icon-shell {
+      border-color: rgba(248, 113, 113, 0.92);
+    }
   }
 }
 
@@ -293,8 +391,8 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    background: #666666;
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(229, 231, 235, 0.92);
     font-size: 0.65rem;
     font-weight: 600;
     padding: 3px 6px;
@@ -319,9 +417,15 @@
     padding: 20px 15px;
     min-height: 110px;
   }
-  
-  .menu-item .material-icons {
-    font-size: 42px;
+
+  .menu-item-icon-shell {
+    width: 72px;
+    min-height: 80px;
+    padding: 8px 6px;
+  }
+
+  .menu-tab-icon-fallback {
+    font-size: 32px;
   }
   
   .header-logo {
@@ -500,6 +604,12 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    border: none;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    display: block;
+    max-width: none;
   }
 
   .menu-container.menu-container--ios-mobile .ios-row-chevron {

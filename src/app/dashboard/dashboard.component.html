@@ -12,15 +12,15 @@
     <div class="row mt-1 mb-4">
       <!-- Work Order -->
       <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3" style="border-radius: 12px; background-color: #e8f5e9;">
+        <div class="card p-3 kpi-card kpi-card-workorder">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <p class="text-uppercase small mb-1" style="color: #2b2b2b; font-weight: 500;">Work Order</p>
-              <h3 class="fw-bold" style="color: #2b2b2b;">{{ workOrder }}</h3>
-              <p class="text-muted small">{{ selectedFactory }} (Hoàn thành/Tổng — LSX tháng hiện tại)</p>
+              <p class="text-uppercase small mb-1 kpi-label">Work Order</p>
+              <h3 class="fw-bold kpi-value">{{ workOrder }}</h3>
+              <p class="text-muted small">Hoàn thành / Tổng</p>
             </div>
-            <div class="rounded-circle bg-white d-flex justify-content-center align-items-center" style="width:48px; height:48px;">
-              <i class="material-icons" style="color: #66bb6a;">assignment</i>
+            <div class="kpi-icon">
+              <i class="material-icons">assignment</i>
             </div>
           </div>
         </div>
@@ -28,15 +28,15 @@
 
       <!-- Shipment -->
       <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3" style="border-radius: 12px; background-color: #fff3e0;">
+        <div class="card p-3 kpi-card kpi-card-shipment">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <p class="text-uppercase small mb-1" style="color: #2b2b2b; font-weight: 500;">Shipment</p>
-              <h3 class="fw-bold" style="color: #2b2b2b;">{{ shipment }}</h3>
-              <p class="text-muted small">Đã Ship / Tổng số (tháng hiện tại)</p>
+              <p class="text-uppercase small mb-1 kpi-label">Shipment</p>
+              <h3 class="fw-bold kpi-value">{{ shipment }}</h3>
+              <p class="text-muted small">Đã Ship / Tổng số</p>
             </div>
-            <div class="rounded-circle bg-white d-flex justify-content-center align-items-center" style="width:48px; height:48px;">
-              <i class="material-icons" style="color: #ffa726;">conveyor_belt</i>
+            <div class="kpi-icon">
+              <i class="material-icons">conveyor_belt</i>
             </div>
           </div>
         </div>
@@ -44,15 +44,15 @@
 
       <!-- OTD -->
       <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3" style="border-radius: 12px; background-color: #e3f2fd;">
+        <div class="card p-3 kpi-card kpi-card-otd">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <p class="text-uppercase small mb-1" style="color: #2b2b2b; font-weight: 500;">OTD</p>
-              <h3 class="fw-bold" style="color: #2b2b2b;">100%</h3>
+              <p class="text-uppercase small mb-1 kpi-label">OTD</p>
+              <h3 class="fw-bold kpi-value">100%</h3>
               <p class="text-muted small">This month</p>
             </div>
-            <div class="rounded-circle bg-white d-flex justify-content-center align-items-center" style="width:48px; height:48px;">
-              <i class="material-icons" style="color: #42a5f5;">check_circle</i>
+            <div class="kpi-icon">
+              <i class="material-icons">check_circle</i>
             </div>
           </div>
         </div>
@@ -60,15 +60,15 @@
 
       <!-- Safety -->
       <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3" style="border-radius: 12px; background-color: #ffebee;">
+        <div class="card p-3 kpi-card kpi-card-safety">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <p class="text-uppercase small mb-1" style="color: #2b2b2b; font-weight: 500;">Safety</p>
-              <h3 class="fw-bold" style="color: #2b2b2b;">100%</h3>
+              <p class="text-uppercase small mb-1 kpi-label">Safety</p>
+              <h3 class="fw-bold kpi-value">100%</h3>
               <p class="text-muted small">Since Dec-2018</p>
             </div>
-            <div class="rounded-circle bg-white d-flex justify-content-center align-items-center" style="width:48px; height:48px;">
-              <i class="material-icons" style="color: #ef5350;">health_and_safety</i>
+            <div class="kpi-icon">
+              <i class="material-icons">health_and_safety</i>
             </div>
           </div>
         </div>
@@ -85,7 +85,7 @@
           <div class="safety-stock-box">
             <div class="box-header">
               <h5>
-                <i class="material-icons" style="color: #3b82f6;">security</i>
+                <i class="material-icons">security</i>
                 Safety Stock Level
               </h5>
               <button class="refresh-btn" 
@@ -117,7 +117,7 @@
           <div class="rack-warnings-box">
             <div class="box-header">
               <h5>
-                <i class="material-icons" style="color: #ef5350;">warning</i>
+                <i class="material-icons">warning</i>
                 Rack Utilization Warnings
               </h5>
             </div>
@@ -158,7 +158,7 @@
                title="Click để xem Putaway Staging Area">
             <div class="box-header">
               <h5>
-                <i class="material-icons" style="color: #ff9800;">inventory_2</i>
+                <i class="material-icons">inventory_2</i>
                 Putaway Staging Area
               </h5>
             </div>
@@ -184,13 +184,13 @@
     <!-- Charts Section - 3 charts in a row -->
     <div class="row mt-3">
       <div class="col-md-4">
-        <div class="card card-chart" style="border-radius: 12px; background-color: #ffffff;">
-          <div class="card-body" style="position: relative;">
-            <div style="position: absolute; top: 8px; right: 16px; color: #4caf50; font-weight: 500; font-size: 12px; z-index: 10;">
+        <div class="card card-chart chart-card chart-card-green">
+          <div class="card-body chart-body">
+            <div class="chart-badge chart-badge-green">
               Target Achieved
             </div>
             <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-success">precision_manufacturing</i> Materials Accuracy
+              <i class="material-icons me-2">precision_manufacturing</i> Materials Accuracy
             </h4>
             <canvas id="dailySalesChart"></canvas>
           </div>
@@ -203,13 +203,13 @@
       </div>
 
       <div class="col-md-4">
-        <div class="card card-chart" style="border-radius: 12px; background-color: #ffffff;">
-          <div class="card-body" style="position: relative;">
-            <div style="position: absolute; top: 8px; right: 16px; color: #4caf50; font-weight: 500; font-size: 12px; z-index: 10;">
+        <div class="card card-chart chart-card chart-card-blue">
+          <div class="card-body chart-body">
+            <div class="chart-badge chart-badge-green">
               Target Achieved
             </div>
             <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-warning">verified</i> Finished Goods Accuracy
+              <i class="material-icons me-2">verified</i> Finished Goods Accuracy
             </h4>
             <canvas id="websiteViewsChart"></canvas>
           </div>
@@ -222,13 +222,13 @@
       </div>
 
       <div class="col-md-4">
-        <div class="card card-chart" style="border-radius: 12px; background-color: #ffffff;">
-          <div class="card-body" style="position: relative;">
-            <div style="position: absolute; top: 8px; right: 16px; color: #ff9800; font-weight: 500; font-size: 12px; z-index: 10;">
+        <div class="card card-chart chart-card chart-card-amber">
+          <div class="card-body chart-body">
+            <div class="chart-badge chart-badge-amber">
               3/12 tháng
             </div>
             <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2 text-info">autorenew</i> FGs Inventory Turnover 2026
+              <i class="material-icons me-2">autorenew</i> FGs Inventory Turnover 2026
             </h4>
             <canvas id="completedTasksChart"></canvas>
           </div>
@@ -242,7 +242,7 @@
     </div>
 
     <!-- Work Order Status -->
-    <div class="row">
+    <div class="row dashboard-status-boards">
       <div class="col-lg-6 col-md-12">
         <div class="card">
           <div class="custom-card-header custom-card-header-purple">
@@ -292,7 +292,7 @@
       <!-- Shipment Status -->
       <div class="col-lg-6 col-md-12">
         <div class="card">
-          <div class="card-header card-header-warning">
+          <div class="custom-card-header custom-card-header-amber">
             <h4 class="custom-card-title">Shipment Status</h4>
             <p class="custom-card-desc">Status for the next 7 days</p>
           </div>
@@ -332,7 +332,7 @@
   <div class="modal-content iqc-materials-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <h3>
-        <i class="material-icons" style="color: #ff9800;">inventory_2</i>
+        <i class="material-icons">inventory_2</i>
         Putaway Staging Area
       </h3>
       <button class="close-btn" (click)="closeIQCMaterialsModal()">
