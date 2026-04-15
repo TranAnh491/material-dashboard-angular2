@@ -20,19 +20,31 @@ export class LabelReprintFlagService {
 
   constructor(private afs: AngularFirestore) {}
 
+  private sanitizeKeyPart(v: string): string {
+    // Firestore doc id cannot contain '/' and should be reasonably short/stable.
+    // Keep only [A-Z0-9_-], replace others with '_'.
+    return String(v ?? '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+      .slice(0, 300);
+  }
+
   normalizeMaterialCode(v: string): string {
-    return String(v ?? '').trim().toUpperCase();
+    return this.sanitizeKeyPart(v);
   }
 
   normalizePo(v: string): string {
-    return String(v ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    // PO có thể chứa '/', '.', khoảng trắng...
+    return this.sanitizeKeyPart(String(v ?? '').replace(/\s+/g, ''));
   }
 
   buildDocId(factory: 'ASM1' | 'ASM2', materialCode: string, poNumber: string, imdKey: string): string {
-    const f = String(factory).trim().toUpperCase();
+    const f = this.sanitizeKeyPart(factory);
     const m = this.normalizeMaterialCode(materialCode);
     const p = this.normalizePo(poNumber);
-    const imd = String(imdKey ?? '').trim();
+    const imd = this.sanitizeKeyPart(imdKey);
     return `${f}_${m}_${p}_${imd}`;
   }
 

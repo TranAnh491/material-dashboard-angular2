@@ -739,11 +739,26 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const exportPayloads: { qrData: string }[] = [];
       const consumedByRowKey = new Map<string, number>();
       const printedFlagItems = new Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>();
+      const notEnoughLines: string[] = [];
       for (const ln of pxkLines) {
-        const { payloads, consumed } = this.buildQrPayloadsForPxkLine(ln, inventoryRows, reprintedDocIds, printedFlagItems);
-        exportPayloads.push(...payloads);
-        for (const [k, v] of consumed) {
-          consumedByRowKey.set(k, (consumedByRowKey.get(k) || 0) + v);
+        try {
+          const { payloads, consumed } = this.buildQrPayloadsForPxkLine(
+            ln,
+            inventoryRows,
+            reprintedDocIds,
+            printedFlagItems
+          );
+          exportPayloads.push(...payloads);
+          for (const [k, v] of consumed) {
+            consumedByRowKey.set(k, (consumedByRowKey.get(k) || 0) + v);
+          }
+        } catch (e) {
+          // Không đủ tồn / thiếu Standard Packing... → vẫn tiếp tục in các mã khác
+          const msg = (e as Error)?.message || '';
+          const mat = (ln.materialCode || '').trim();
+          const po = (ln.po || '').trim();
+          notEnoughLines.push(msg || `Không xử lý được: ${mat} / PO ${po}`);
+          continue;
         }
       }
       const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(pxkLines, inventoryRows, consumedByRowKey, reprintedDocIds, printedFlagItems);
@@ -752,8 +767,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         ...tonPayloads
       ];
       if (allPayloads.length === 0) {
-        this.temXuatError = 'Tem mới, không cần in';
+        this.temXuatError = notEnoughLines.length ? notEnoughLines.join('\n') : 'Tem mới, không cần in';
         return;
+      }
+      if (notEnoughLines.length) {
+        this.temXuatError = `⚠️ Một số mã không đủ điều kiện in:\n${notEnoughLines.join('\n')}`;
+      } else {
+        this.temXuatError = '';
       }
 
       const qrImages = await Promise.all(
