@@ -1507,6 +1507,37 @@ iframe {
   }
 }
 
+.icon-btn.icon-btn--back-menu {
+  background: #0a0a0a;
+  border-color: #0a0a0a;
+
+  .material-icons {
+    color: #f5f5f5;
+  }
+
+  &:hover {
+    background: #1f1f1f;
+    border-color: #1f1f1f;
+    transform: translateY(-1px);
+  }
+}
+
+.toolbar-back-menu-btn {
+  background: #0a0a0a !important;
+  color: #f5f5f5 !important;
+  border-color: #0a0a0a !important;
+
+  .material-icons {
+    color: #f5f5f5 !important;
+  }
+
+  &:hover {
+    background: #1f1f1f !important;
+    border-color: #1f1f1f !important;
+    color: #f5f5f5 !important;
+  }
+}
+
 // Toolbar (buttons + filters)
 .toolbar {
   padding: 10px 20px 14px;

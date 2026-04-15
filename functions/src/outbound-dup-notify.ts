@@ -6,7 +6,8 @@ import {
   emailSmtpHost,
   emailSmtpPort,
   emailTo,
-  emailUser
+  emailUser,
+  zaloBotToken
 } from './params-config';
 
 const CONTROL_BATCH_EXCLUSION_COLLECTION = 'control-batch-exclusion';
@@ -486,6 +487,70 @@ async function sendDupEmail(
   });
 }
 
+async function sendZaloDupNotify(db: admin.firestore.Firestore, dupes: OutboundDupRow[]): Promise<boolean> {
+  const token = zaloBotToken.value().trim();
+  if (!token) {
+    console.error('outbound-dup-notify-30m: missing ZALO_BOT_TOKEN');
+    return false;
+  }
+
+  // Fixed recipients requested: ASP0106 & ASP0701 (lookup chatId from `zalo_links`)
+  const memberIds = ['ASP0106', 'ASP0701'];
+  const links = await db
+    .collection('zalo_links')
+    .where('memberId', 'in', memberIds)
+    .get()
+    .catch(e => {
+      console.error('outbound-dup-notify-30m: lookup zalo_links failed', e);
+      return null;
+    });
+
+  const chatIds: string[] = [];
+  if (links && !links.empty) {
+    for (const doc of links.docs) {
+      const d = doc.data() as any;
+      const chatId = typeof d?.chatId === 'string' ? d.chatId.trim() : '';
+      if (chatId) chatIds.push(chatId);
+    }
+  }
+
+  if (chatIds.length === 0) {
+    console.warn('outbound-dup-notify-30m: no chatId for', memberIds);
+    return false;
+  }
+
+  const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
+  const top = dupes.slice(0, 8);
+  const lines = top.map(r => {
+    const fac = r.factory || '';
+    const mc = (r.materialCode || '').toUpperCase();
+    const po = r.poNumber ? ` PO:${r.poNumber}` : '';
+    const imd = r.imd ? ` IMD:${r.imd}` : '';
+    const bag = r.bagBatch ? ` BAG:${r.bagBatch}` : '';
+    return `- ${fac} ${mc}${po}${imd}${bag} (${r.count})`;
+  });
+  const msg =
+    `⚠️ Control Batch: phát hiện ${dupes.length} nhóm trùng xuất kho (mới).\n` +
+    lines.join('\n') +
+    (dupes.length > top.length ? `\n... +${dupes.length - top.length} nhóm` : '');
+
+  try {
+    await Promise.all(
+      chatIds.map(chatId =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: msg })
+        })
+      )
+    );
+    return true;
+  } catch (e) {
+    console.error('outbound-dup-notify-30m: send zalo failed', e);
+    return false;
+  }
+}
+
 function vnNowLabel(d = new Date()): string {
   return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
 }
@@ -545,23 +610,16 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
       return;
     }
 
-    const emailCfg = getEmailCfg();
-    if (!emailCfg) {
-      console.error('outbound-dup-notify-30m: missing SMTP config');
-      await lockRef.set(
-        {
-          status: 'done',
-          dupGroups: newDupes.length,
-          emailSent: false,
-          emailSkippedReason: 'missing_smtp_config',
-          finishedAt: admin.firestore.FieldValue.serverTimestamp()
-        },
-        { merge: true }
-      );
-      return;
-    }
+    // Send Zalo (independent from SMTP/email).
+    const zaloSent = await sendZaloDupNotify(db, newDupes);
 
-    await sendDupEmail(newDupes, emailCfg, settings);
+    const emailCfg = getEmailCfg();
+    const emailSent = !!emailCfg;
+    if (emailCfg) {
+      await sendDupEmail(newDupes, emailCfg, settings);
+    } else {
+      console.error('outbound-dup-notify-30m: missing SMTP config (skip email)');
+    }
 
     // Persist "emailed" keys so we don't resend.
     const sentAt = vnNowLabel(new Date());
@@ -579,12 +637,18 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
       {
         status: 'done',
         dupGroups: newDupes.length,
-        emailSent: true,
+        emailSent,
+        zaloSent,
         finishedAt: admin.firestore.FieldValue.serverTimestamp()
       },
       { merge: true }
     );
-    console.log('outbound-dup-notify-30m: emailed', newDupes.length, 'new groups', bucket);
+    console.log('outbound-dup-notify-30m: notified', {
+      newGroups: newDupes.length,
+      emailSent,
+      zaloSent,
+      bucket
+    });
   } catch (e) {
     console.error('outbound-dup-notify-30m failed', e);
     await lockRef.set(

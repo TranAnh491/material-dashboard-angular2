@@ -6,13 +6,9 @@
 
     <div class="status-line">{{ statusLineText }}</div>
 
-    <!-- Control bar: MENU + nhà máy + import + lọc -->
+    <!-- Control bar: nhà máy + import + lọc; nút Menu neo phải -->
     <div class="control-bar">
       <div class="factory-section">
-      <button type="button" class="io-btn menu-btn" (click)="goToMenu()">
-        <i class="material-icons">home</i>
-        Menu
-      </button>
       <div class="factory-toggle">
         <button
           type="button"
@@ -65,6 +61,11 @@
         </button>
       </div>
     </div>
+      <button type="button" class="io-btn menu-btn control-bar__back-menu" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        Menu
+      </button>
+  </div>
   </div>
 
   <div class="loading-state-text" *ngIf="isLoadingFg">Đang tải FG Inventory…</div>

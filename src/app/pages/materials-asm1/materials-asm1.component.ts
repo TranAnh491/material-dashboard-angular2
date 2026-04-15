@@ -14,6 +14,7 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { ExcelImportService } from '../../services/excel-import.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { TemXuatKhoService, PxkLineExport } from '../../services/tem-xuat-kho.service';
+import { LabelReprintFlagService } from '../../services/label-reprint-flag.service';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import * as firebase from 'firebase/compat/app';
@@ -172,6 +173,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   temXuatLsxInput = '';
   temXuatError = '';
   temXuatBusy = false;
+  /** Cutoff: từ ngày này trở đi là tem mẫu mới, không cần in lại. */
+  private readonly TEM_MOI_CUTOFF = new Date(2026, 3, 1); // 01/04/2026 (month is 0-based)
 
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
@@ -219,8 +222,19 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private dialog: MatDialog,
     private router: Router,
     private rmBagHistory: RmBagHistoryService,
-    private temXuatKho: TemXuatKhoService
+    private temXuatKho: TemXuatKhoService,
+    private labelReprintFlags: LabelReprintFlagService
   ) {}
+
+  private getImdKeyFromImportDate(d: Date | null | undefined): string {
+    return d ? d.toLocaleDateString('en-GB').split('/').join('') : new Date().toLocaleDateString('en-GB').split('/').join('');
+  }
+
+  private buildReprintFlagItemFromInventoryRow(m: InventoryMaterial): { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string } {
+    const imdKey = this.getImdKeyFromImportDate(m.importDate);
+    const docId = this.labelReprintFlags.buildDocId('ASM1', m.materialCode, m.poNumber || '', imdKey);
+    return { docId, factory: 'ASM1', materialCode: m.materialCode, poNumber: m.poNumber || '', imdKey };
+  }
 
   openTemLePopup(): void {
     this.showTemLePopup = true;
@@ -513,7 +527,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       po: string;
       quantity: number;
     },
-    inventoryRows: InventoryMaterial[]
+    inventoryRows: InventoryMaterial[],
+    reprintedDocIds: Set<string>,
+    printedFlagItemsOut: Map<
+      string,
+      { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }
+    >
   ): { payloads: { qrData: string }[]; consumed: Map<string, number> } {
     const consumed = new Map<string, number>();
     const mat = line.materialCode.trim();
@@ -554,9 +573,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         throw new Error(`Thiếu Standard Packing (hoặc catalog) cho mã ${mat}.`);
       }
       const bagTotal = Math.max(1, this.computeTotalBagsFromStock(m));
-      const importDateStr = m.importDate
-        ? m.importDate.toLocaleDateString('en-GB').split('/').join('')
-        : new Date().toLocaleDateString('en-GB').split('/').join('');
+      const importDateStr = this.getImdKeyFromImportDate(m.importDate);
+      const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
+      const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
+      const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
       let bagIdx = 1;
       const rowKey = this.pxkInventoryRowKey(m);
       while (rowAvail > 0 && remaining > 0) {
@@ -564,7 +584,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         const p4Base = `${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
         const p4 = chunk < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
         const qrData = `${mat}|${po}|${chunk}|${p4}`;
-        out.push({ qrData });
+        // Chỉ in lại tem cho hàng nhập trước cutoff và chưa được in lại tem mẫu mới.
+        if (!isTemMoi && !isAlreadyReprinted) {
+          out.push({ qrData });
+          printedFlagItemsOut.set(rowFlag.docId, rowFlag);
+        }
         consumed.set(rowKey, (consumed.get(rowKey) || 0) + chunk);
         rowAvail -= chunk;
         remaining -= chunk;
@@ -620,7 +644,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private buildTonQrPayloadsAfterPxkExport(
     pxkLines: { materialCode: string; po: string; quantity: number }[],
     inventoryRows: InventoryMaterial[],
-    consumedByRowKey: Map<string, number>
+    consumedByRowKey: Map<string, number>,
+    reprintedDocIds: Set<string>,
+    printedFlagItemsOut: Map<
+      string,
+      { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }
+    >
   ): { qrData: string; displayPrefix: string }[] {
     const pxkKeys = new Set(
       pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
@@ -653,14 +682,18 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         continue;
       }
       const bagTotal = Math.max(1, this.computeTotalBagsFromStock(m));
-      const importDateStr = m.importDate
-        ? m.importDate.toLocaleDateString('en-GB').split('/').join('')
-        : new Date().toLocaleDateString('en-GB').split('/').join('');
+      const importDateStr = this.getImdKeyFromImportDate(m.importDate);
+      const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
+      const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
+      const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
       const bagIdx = 1;
       const mat = m.materialCode.trim();
       const po = (m.poNumber || '').trim();
       const qrData = `${mat}|${po}|${rem}|${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
-      out.push({ qrData, displayPrefix: 'TỒN' });
+      if (!isTemMoi && !isAlreadyReprinted) {
+        out.push({ qrData, displayPrefix: 'TỒN' });
+        printedFlagItemsOut.set(rowFlag.docId, rowFlag);
+      }
     }
     return out;
   }
@@ -691,22 +724,35 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
       const inventoryRows = await this.fetchInventoryRowsForPxkMerged(pxkLines);
+
+      // 1) Load cờ "đã in lại tem mẫu mới" cho các dòng tồn liên quan (theo Mã + PO + IMD).
+      const pxkKeys = new Set(
+        pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
+      );
+      const flagItems = inventoryRows
+        .filter((m) =>
+          pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)
+        )
+        .map((m) => this.buildReprintFlagItemFromInventoryRow(m));
+      const reprintedDocIds = await this.labelReprintFlags.getExistingFlagsByDocId(flagItems.map((x) => x.docId));
+
       const exportPayloads: { qrData: string }[] = [];
       const consumedByRowKey = new Map<string, number>();
+      const printedFlagItems = new Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>();
       for (const ln of pxkLines) {
-        const { payloads, consumed } = this.buildQrPayloadsForPxkLine(ln, inventoryRows);
+        const { payloads, consumed } = this.buildQrPayloadsForPxkLine(ln, inventoryRows, reprintedDocIds, printedFlagItems);
         exportPayloads.push(...payloads);
         for (const [k, v] of consumed) {
           consumedByRowKey.set(k, (consumedByRowKey.get(k) || 0) + v);
         }
       }
-      const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(pxkLines, inventoryRows, consumedByRowKey);
+      const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(pxkLines, inventoryRows, consumedByRowKey, reprintedDocIds, printedFlagItems);
       const allPayloads: ({ qrData: string } | { qrData: string; displayPrefix: string })[] = [
         ...exportPayloads,
         ...tonPayloads
       ];
-      if (exportPayloads.length === 0) {
-        this.temXuatError = 'Không tạo được tem (kiểm tra Mã/PO khớp tồn kho và Standard Packing).';
+      if (allPayloads.length === 0) {
+        this.temXuatError = 'Tem mới, không cần in';
         return;
       }
 
@@ -771,6 +817,18 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       };
 
       this.createQRPrintWindow(printSequence, fakeMaterial, true);
+
+      // 2) Lưu cờ: các dòng tồn đã được in lại tem mẫu mới (để lần sau báo "Tem mới, không cần in")
+      try {
+        const userEmail = (await this.afAuth.currentUser)?.email || '';
+        await this.labelReprintFlags.markReprintedByDocId(
+          Array.from(printedFlagItems.values()),
+          { reprintedBy: userEmail, source: `TEM_XUAT_KHO_REPRINT:${this.FACTORY}` }
+        );
+      } catch (e) {
+        console.warn('⚠️ Không lưu được cờ in lại tem (bỏ qua):', e);
+      }
+
       this.closeTemXuatKhoPopup();
     } catch (e) {
       console.error('❌ Tem Xuất Kho:', e);

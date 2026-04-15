@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import type { QcPriorityResolvedPayload } from './qc-priority-email';
-import { emailPass } from './params-config';
+import { emailPass, zaloBotToken } from './params-config';
 
 admin.initializeApp();
 
@@ -32,7 +32,7 @@ export const notifyOutboundDuplicatesAt17 = functions
  * Nhóm đã gửi sẽ không gửi lại.
  */
 export const notifyOutboundDuplicatesEvery30Min = functions
-  .runWith({ secrets: [emailPass] })
+  .runWith({ secrets: [emailPass, zaloBotToken] })
   .pubsub.schedule('*/30 * * * *')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {

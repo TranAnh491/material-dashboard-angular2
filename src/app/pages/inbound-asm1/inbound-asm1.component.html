@@ -16,7 +16,7 @@
         <button type="button" class="icon-btn" title="Trang chủ" (click)="goHome()">
           <i class="material-icons">home</i>
         </button>
-        <button type="button" class="icon-btn" title="Về Menu" (click)="goToMenu()">
+        <button type="button" class="icon-btn icon-btn--back-menu" title="Về Menu" (click)="goToMenu()">
           <i class="material-icons">menu</i>
         </button>
       </div>
@@ -86,17 +86,17 @@
             In toàn bộ
           </button>
 
+          <button class="btn btn--ghost mobile-hide" (click)="openMorePopup()">
+            <i class="material-icons">more_horiz</i>
+            More
+          </button>
+
           <button type="button"
-                  class="btn btn--ghost mobile-hide"
+                  class="btn btn--ghost mobile-hide toolbar-back-menu-btn"
                   (click)="goToMenu()"
                   title="Về Menu">
             <i class="material-icons">menu</i>
             Menu
-          </button>
-
-          <button class="btn btn--ghost mobile-hide" (click)="openMorePopup()">
-            <i class="material-icons">more_horiz</i>
-            More
           </button>
         </div>
           

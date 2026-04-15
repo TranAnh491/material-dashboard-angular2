@@ -79,6 +79,7 @@ export interface OutboundDuplicateGroupRow {
 })
 export class BagHistoryComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
+  private outboundDupTimer: any | null = null;
 
   /** 800 bản ghi mới nhất (luồng realtime). */
   rows: BagHistoryRow[] = [];
@@ -180,6 +181,13 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         data => {
           this.applyControlBatchExclusionDoc(data);
           void this.loadOutboundExportDuplicates();
+
+          // Auto refresh duplicate scan every 30 minutes while tab is open.
+          if (!this.outboundDupTimer) {
+            this.outboundDupTimer = setInterval(() => {
+              void this.loadOutboundExportDuplicates();
+            }, 30 * 60 * 1000);
+          }
         },
         err => {
           console.error('control-batch-exclusion subscribe', err);
@@ -191,6 +199,10 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.outboundDupTimer) {
+      clearInterval(this.outboundDupTimer);
+      this.outboundDupTimer = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }

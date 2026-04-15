@@ -28,6 +28,10 @@ interface WorkOrderStatusRow {
 })
 export class DashboardComponent implements OnInit, OnDestroy {
 
+  /**
+   * Tóm tắt tháng hiện tại (Done/Tổng) — cùng nguồn với Cloud Function `notifyDashboardZaloWeekdays1130`
+   * (codebase `zalo`: `zalo/dashboard-digest.js` + `zalo/index.js`, 11:30 thứ 2–6 VN).
+   */
   workOrder = "...";
   shipment = "...";
   workOrderStatus: WorkOrderStatusRow[] = [];

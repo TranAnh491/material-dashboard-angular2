@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesEvery30Min = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesEvery30Min = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -63,7 +63,7 @@ exports.notifyOutboundDuplicatesAt17 = functions
  * Nhóm đã gửi sẽ không gửi lại.
  */
 exports.notifyOutboundDuplicatesEvery30Min = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .pubsub.schedule('*/30 * * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
@@ -140,6 +140,40 @@ exports.sendQcMonthlyReportAtMonthStart = functions
     .onRun(async () => {
     const { sendQcMonthlyReport } = await Promise.resolve().then(() => __importStar(require('./qc-monthly-report')));
     await sendQcMonthlyReport(admin.firestore(), { factory: 'ASM1', mode: 'previousMonth' });
+});
+/**
+ * Print Label: 08:00 hằng ngày (VN) — gửi mail danh sách mã chưa Done và đã quá Ngày nhận kế hoạch.
+ * Danh sách người nhận: Firestore `print-label-settings/late-notification-emails` (emails[]).
+ */
+exports.notifyPrintLabelLateItemsDaily = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .pubsub.schedule('0 8 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runPrintLabelLateNotify } = await Promise.resolve().then(() => __importStar(require('./print-label-late-notify')));
+    await runPrintLabelLateNotify(admin.firestore());
+});
+/** Callable: chạy thủ công cùng logic báo tem trễ kế hoạch (More → Danh sách mail). */
+exports.sendPrintLabelLateNotifyManualFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+        const { runPrintLabelLateNotify } = await Promise.resolve().then(() => __importStar(require('./print-label-late-notify')));
+        const r = await runPrintLabelLateNotify(admin.firestore());
+        return {
+            ok: true,
+            sent: r.sent,
+            lateCount: r.lateCount,
+            recipientCount: r.recipientCount
+        };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
 });
 exports.sendQcMonthlyReportManualFn = functions
     .runWith({ secrets: [params_config_1.emailPass] })

@@ -19,6 +19,8 @@ const {setGlobalOptions} = require("firebase-functions");
 const {defineSecret} = require("firebase-functions/params");
 const {onRequest} = require("firebase-functions/https");
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {runDashboardZaloDigest} = require("./dashboard-digest");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
@@ -360,6 +362,142 @@ exports.zaloWebhook = onRequest(
       return;
     }
 
+    // Command: /scarp (alias /scrap) with password gate (password = 2026)
+    // Flow:
+    // - User: /scarp  -> bot asks password
+    // - User: 2026    -> bot asks material code
+    // - User: B001680 -> bot checks scrap store and replies
+    const SCRAP_PASSWORD = "2026";
+    const SCRAP_AUTH_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+    const isScrapCommand = (s) => {
+      const tt = String(s || "").trim().toLowerCase();
+      return tt === "/scarp" || tt.startsWith("/scarp ") || tt === "/scrap" || tt.startsWith("/scrap ");
+    };
+
+    const doScrapLookup = async (raw) => {
+      const rawCode = String(raw || "").trim();
+      if (!rawCode) {
+        await sendText(chatId, "Vui lòng nhập mã hàng (ví dụ: B001680).");
+        return;
+      }
+      // UI scrap chỉ lưu 7 ký tự đầu (raw.slice(0,7))
+      const code7 = rawCode.toUpperCase().slice(0, 7);
+      try {
+        // Avoid composite-index requirement (array-contains + orderBy).
+        const snap = await db
+          .collection("scrap-data")
+          .where("materials", "array-contains", code7)
+          .limit(20)
+          .get();
+
+        if (snap.empty) {
+          await sendText(chatId, `Kho scrap: KHÔNG có mã ${code7}.`);
+          return;
+        }
+
+        const boxCounts = new Map();
+        let totalBags = 0;
+        for (const doc of snap.docs) {
+          const d = doc.data() || {};
+          const boxCode = String(d.boxCode || "").trim();
+          const materials = Array.isArray(d.materials) ? d.materials : [];
+          const bags = materials.filter((x) => String(x || "").toUpperCase().slice(0, 7) === code7).length;
+          totalBags += bags;
+          if (boxCode) boxCounts.set(boxCode, (boxCounts.get(boxCode) || 0) + bags);
+        }
+
+        const boxes = Array.from(boxCounts.entries())
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]), "vi"))
+          .slice(0, 8)
+          .map(([box, bags]) => `- ${box}: ${bags} bag`)
+          .join("\n");
+
+        await sendText(
+          chatId,
+          `Kho scrap: CÓ mã ${code7}.\nTổng (ước tính): ${totalBags} bag.\nThùng:\n${boxes || "—"}`
+        );
+      } catch (err) {
+        logger.error("scrap lookup failed", err);
+        await sendText(chatId, "Lỗi khi tra cứu kho scrap.");
+      }
+    };
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      const t = text.trim();
+      const pendingRef = db.collection("zalo_pending").doc(chatId);
+      const pendingSnap = await pendingRef.get().catch(() => null);
+      const pending = pendingSnap?.exists ? pendingSnap.data() : null;
+
+      const authedUntilMs = pending?.scrapAuthedUntilMs ? Number(pending.scrapAuthedUntilMs) : 0;
+      const isAuthed = Number.isFinite(authedUntilMs) && authedUntilMs > Date.now();
+
+      // Start /scrap or /scarp
+      if (isScrapCommand(t)) {
+        const parts = t.split(/\s+/g).filter(Boolean);
+        const inlineCode = parts[1] || "";
+
+        if (!isAuthed) {
+          await pendingRef.set(
+            { intent: "scrap", step: "password", updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+            { merge: true }
+          );
+          await sendText(chatId, "Nhập password để tra cứu kho scrap.");
+          res.status(200).json({ ok: true });
+          return;
+        }
+
+        // Already authed
+        if (inlineCode) {
+          await doScrapLookup(inlineCode);
+        } else {
+          await pendingRef.set(
+            { intent: "scrap", step: "code", updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+            { merge: true }
+          );
+          await sendText(chatId, "Nhập mã hàng cần tra cứu kho scrap (ví dụ: B001680).");
+        }
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      // Continue scrap flow
+      if (pending?.intent === "scrap" && pending?.step === "password") {
+        if (t === SCRAP_PASSWORD) {
+          await pendingRef.set(
+            {
+              scrapAuthedUntilMs: Date.now() + SCRAP_AUTH_TTL_MS,
+              intent: "scrap",
+              step: "code",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          await sendText(chatId, "OK. Nhập mã hàng cần tra cứu kho scrap (ví dụ: B001680).");
+        } else {
+          await sendText(chatId, "Sai password. Vui lòng nhập lại.");
+        }
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      if (pending?.intent === "scrap" && pending?.step === "code") {
+        if (!isAuthed) {
+          await pendingRef.set({ intent: "scrap", step: "password" }, { merge: true });
+          await sendText(chatId, "Hết hạn. Nhập lại password để tra cứu kho scrap.");
+          res.status(200).json({ ok: true });
+          return;
+        }
+        await doScrapLookup(t);
+        // keep auth, end intent
+        await pendingRef
+          .set({ intent: admin.firestore.FieldValue.delete(), step: admin.firestore.FieldValue.delete() }, { merge: true })
+          .catch(() => {});
+        res.status(200).json({ ok: true });
+        return;
+      }
+    }
+
     // Command: /tonkho <ASM1|ASM2> <MA_HANG>
     // Data source matches Angular tabs: collection `inventory-materials` with fields:
     // - factory: "ASM1" | "ASM2"
@@ -670,5 +808,22 @@ exports.notifyOutboundDuplicates = onDocumentCreated(
         }).catch((e) => logger.error("sendMessage failed", e))
       )
     );
+  }
+);
+
+/**
+ * Thứ 2–thứ 6, 11:30 (VN) — gửi Zalo cho ASP0106 (Work Order + Shipment, cùng logic tab Dashboard).
+ * Chỉ secret ZALO_BOT_TOKEN; deploy: firebase deploy --only functions:zalo:notifyDashboardZaloWeekdays1130
+ */
+exports.notifyDashboardZaloWeekdays1130 = onSchedule(
+  {
+    schedule: "30 11 * * 1-5",
+    timeZone: "Asia/Ho_Chi_Minh",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async () => {
+    const token = ZALO_BOT_TOKEN.value();
+    await runDashboardZaloDigest(db, token);
   }
 );

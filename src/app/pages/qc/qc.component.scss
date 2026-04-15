@@ -280,9 +280,10 @@ $qc-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
   }
 
   .home-btn {
-    background: $qc-panel-bg;
-    color: $qc-text;
-    border: 2px solid $qc-border;
+    order: 999;
+    background: #0a0a0a;
+    color: #f5f5f5;
+    border: 2px solid #0a0a0a;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: 500;
@@ -293,17 +294,18 @@ $qc-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
     border-radius: 4px;
     
     &:hover {
-      background: $qc-bg-hover;
-      border-color: $qc-border;
+      background: #1f1f1f;
+      border-color: #1f1f1f;
     }
     
     &:active {
-      background: $qc-bg-hover;
+      background: #262626;
+      border-color: #262626;
     }
     
     .material-icons {
       font-size: 16px; /* 80% of 20px */
-      color: $qc-text;
+      color: #f5f5f5;
     }
   }
   

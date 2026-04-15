@@ -4,16 +4,6 @@
         <div class="navbar-wrapper">
           <a class="navbar-brand" href="javascript:void(0)">{{getTitle()}}</a>
         </div>
-        <!-- Home Button - Ẩn ở trang Menu, QC, Settings, RM Delivery (có nút Về menu riêng) -->
-        <button
-          type="button"
-          class="btn-home me-3"
-          (click)="goToMenu()"
-          *ngIf="!isMenuPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage()"
-          title="Về Menu"
-        >
-          <i class="material-icons">home</i>
-        </button>
         <div class="collapse navbar-collapse justify-content-end" id="navigation">
             <!-- ASM1 and ASM2 Icons -->
             <div class="asm-icons" *ngIf="isDashboard()">
@@ -63,6 +53,16 @@
                 </li>
             </ul>
         </div>
+        <!-- Home Button - bên phải thanh; ẩn ở Menu, QC, Settings, RM Delivery, Inbound (có nút riêng) -->
+        <button
+          type="button"
+          class="btn-home ms-2"
+          (click)="goToMenu()"
+          *ngIf="!isMenuPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage()"
+          title="Về Menu"
+        >
+          <i class="material-icons">home</i>
+        </button>
     </div>
 </nav>
 

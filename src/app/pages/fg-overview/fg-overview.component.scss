@@ -100,6 +100,24 @@
     flex-wrap: nowrap;
     justify-content: flex-start;
   }
+
+  .control-bar__back-menu {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: #0a0a0a !important;
+    color: #ffffff !important;
+    border-color: #0a0a0a !important;
+
+    .material-icons {
+      color: #ffffff !important;
+    }
+
+    &:hover {
+      background: #262626 !important;
+      color: #ffffff !important;
+      border-color: #262626 !important;
+    }
+  }
 }
 
 .factory-section {

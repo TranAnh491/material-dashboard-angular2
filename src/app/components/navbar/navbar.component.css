@@ -129,32 +129,49 @@
   pointer-events: auto;
 }
 
-/* Home Button Styles */
+.navbar.navbar--inbound-pass-through .btn-home {
+  pointer-events: auto;
+}
+
+.navbar > .container-fluid {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.navbar .navbar-collapse {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Home Button Styles — nền đen, icon sáng, neo bên phải thanh */
 .btn-home {
-    background: rgba(255, 255, 255, 0.06) !important;
-    color: rgba(229, 231, 235, 0.92) !important;
-    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    background: #0a0a0a !important;
+    color: #f5f5f5 !important;
+    border: 1px solid #0a0a0a !important;
     border-radius: 999px !important;
     padding: 0 12px !important;
     height: 36px !important;
     min-width: auto !important;
-    box-shadow: none !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     z-index: 1 !important;
+    flex-shrink: 0 !important;
     margin-left: 0 !important;
     order: 0 !important;
 }
 
 .btn-home:hover {
-    background: rgba(255, 255, 255, 0.10) !important;
-    border-color: rgba(255, 255, 255, 0.26) !important;
+    background: #1f1f1f !important;
+    border-color: #1f1f1f !important;
 }
 
 .btn-home .material-icons {
     font-size: 18px;
-    color: rgba(229, 231, 235, 0.92) !important;
+    color: #f5f5f5 !important;
 }
 
 /* Navbar Toggler Button (Hamburger Menu) */
@@ -200,9 +217,9 @@
         top: 10px !important;
         right: 10px !important;
         z-index: 9999 !important;
-        background: rgba(255, 255, 255, 0.95) !important;
-        border: 1px solid rgba(0, 0, 0, 0.2) !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+        background: #0a0a0a !important;
+        border: 1px solid #0a0a0a !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
         padding: 10px !important;
         min-width: 44px !important;
         min-height: 44px !important;
@@ -215,7 +232,7 @@
     
     .btn-home .material-icons {
         font-size: 20px !important;
-        color: #000000 !important;
+        color: #f5f5f5 !important;
     }
     
     /* Đảm bảo navbar không ẩn nút Home trên mobile */

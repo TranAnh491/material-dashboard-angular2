@@ -24,6 +24,13 @@ export const emailFrom = defineString('EMAIL_FROM', { default: '', description: 
 export const emailSmtpHost = defineString('EMAIL_SMTP_HOST', { default: 'smtp.gmail.com' });
 export const emailSmtpPort = defineString('EMAIL_SMTP_PORT', { default: '587' });
 
+/**
+ * Zalo Bot Platform token (dùng để gửi tin nhắn bot).
+ * Bí mật:
+ *   firebase functions:secrets:set ZALO_BOT_TOKEN
+ */
+export const zaloBotToken = defineSecret('ZALO_BOT_TOKEN');
+
 /** Tab QC: ưu tiên Chờ kiểm, đổi từ CHỜ KIỂM sang trạng thái khác */
 export const qcPriorityEmailTo = defineString('QC_PRIORITY_EMAIL_TO', {
   default: 'ASM1-Planning@airspeedmfg.com',

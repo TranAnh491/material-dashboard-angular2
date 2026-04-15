@@ -43,9 +43,9 @@
 
   .header-actions {
     .menu-btn {
-      background: #ffffff;
-      color: #475569;
-      border: 1px solid #e2e8f0;
+      background: #0a0a0a;
+      color: #f5f5f5;
+      border: 1px solid #0a0a0a;
       padding: 9px 16px;
       border-radius: 8px;
       cursor: pointer;
@@ -59,12 +59,12 @@
       touch-action: manipulation;
 
       &:hover, &:active {
-        background: #f1f5f9;
-        border-color: #cbd5e1;
-        color: #1e293b;
+        background: #1f1f1f;
+        border-color: #1f1f1f;
+        color: #f5f5f5;
       }
 
-      .material-icons { font-size: 20px; }
+      .material-icons { font-size: 20px; color: #f5f5f5; }
     }
   }
 }

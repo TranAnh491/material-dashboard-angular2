@@ -144,11 +144,11 @@
             [disabled]="isCleaningAuthUsers">
             {{ isCleaningAuthUsers ? 'Đang xóa…' : 'Xóa ngoài Settings' }}
           </button>
+          <button type="button" (click)="logout()" class="btn-logout">Đăng xuất</button>
           <a routerLink="/menu" class="btn-menu" title="Về Menu">
             <i class="material-icons">home</i>
             Về menu
           </a>
-          <button type="button" (click)="logout()" class="btn-logout">Đăng xuất</button>
         </div>
       </div>
 
