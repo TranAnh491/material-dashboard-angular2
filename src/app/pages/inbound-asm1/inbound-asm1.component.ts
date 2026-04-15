@@ -415,16 +415,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   
   private setupDateDefaults(): void {
     const today = new Date();
-    // Cố định hiển thị 30 ngày, tính từ hôm nay quay ngược lại 30 ngày
-    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // Cố định hiển thị 7 ngày, tính từ hôm nay quay ngược lại 7 ngày
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     
-    this.startDate = thirtyDaysAgo.toISOString().split('T')[0];
+    this.startDate = sevenDaysAgo.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
     
     console.log(`📅 Thiết lập khung thời gian mặc định:`);
-    console.log(`  - Từ ngày: ${this.startDate} (${thirtyDaysAgo.toLocaleDateString('vi-VN')})`);
+    console.log(`  - Từ ngày: ${this.startDate} (${sevenDaysAgo.toLocaleDateString('vi-VN')})`);
     console.log(`  - Đến ngày: ${this.endDate} (${today.toLocaleDateString('vi-VN')})`);
-    console.log(`  - Tổng cộng: 30 ngày gần nhất`);
+    console.log(`  - Tổng cộng: 7 ngày gần nhất`);
   }
   
   loadMaterials(): void {
@@ -443,9 +443,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     // PERF + Correctness: luôn lấy dữ liệu mới nhất theo createdAt để không "mất lô" sau import.
     // Tránh composite index bằng cách KHÔNG where(factory) trong query (chỉ orderBy 1 field).
     // Sau đó lọc ASM1 ở client-side như trước.
-    this.firestore.collection(collectionName, ref =>
-      ref.orderBy('createdAt', 'desc').limit(5000)
-    ).get().toPromise()
+    // PERF: lọc theo 7 ngày gần nhất ngay trên Firestore (theo createdAt) để không phải tải 5000 docs.
+    // Tránh composite index: chỉ where + orderBy trên 1 field.
+    const end = this.endDate ? new Date(this.endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = this.startDate ? new Date(this.startDate) : new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+    start.setHours(0, 0, 0, 0);
+    const startTs = firebase.firestore.Timestamp.fromDate(start);
+    const endTs = firebase.firestore.Timestamp.fromDate(end);
+
+    this.firestore
+      .collection(collectionName, (ref) =>
+        ref
+          .where('createdAt', '>=', startTs)
+          .where('createdAt', '<=', endTs)
+          .orderBy('createdAt', 'desc')
+          .limit(1500)
+      )
+      .get()
+      .toPromise()
       .then(snapshot => {
         const docs = snapshot?.docs || [];
         console.log(`🔍 Raw snapshot from ${collectionName} contains ${docs.length} documents`);
