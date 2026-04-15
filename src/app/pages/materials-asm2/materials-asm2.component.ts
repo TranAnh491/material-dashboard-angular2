@@ -504,7 +504,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     },
     inventoryRows: InventoryMaterial[],
     reprintedDocIds: Set<string>,
-    printedFlagItemsOut: Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>
+    printedFlagItemsOut: Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>,
+    usedBagsByRowKeyOut: Map<string, number>
   ): { payloads: { qrData: string }[]; consumed: Map<string, number> } {
     const consumed = new Map<string, number>();
     const mat = line.materialCode.trim();
@@ -544,7 +545,18 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       if (!sp || sp <= 0) {
         throw new Error(`Thiếu Standard Packing (hoặc catalog) cho mã ${mat}.`);
       }
-      const bagTotal = Math.max(1, this.computeTotalBagsFromStock(m));
+      const bagTotal = Math.floor(Number(m.totalBags ?? 0));
+      if (bagTotal <= 0) {
+        const imdKey = this.getImdKeyFromImportDate(m.importDate);
+        throw new Error(`Thiếu BAG: ${mat} / PO ${po} / IMD ${imdKey}. Vui lòng nhập đủ cột BAG trước khi in.`);
+      }
+      const expectedBagsFromStock = this.computeTotalBagsFromStock(m);
+      if (expectedBagsFromStock > 0 && bagTotal < expectedBagsFromStock) {
+        const imdKey = this.getImdKeyFromImportDate(m.importDate);
+        throw new Error(
+          `BAG không đủ: ${mat} / PO ${po} / IMD ${imdKey}. BAG=${bagTotal} nhưng tồn/SP cần tối thiểu ${expectedBagsFromStock}.`
+        );
+      }
       const importDateStr = this.getImdKeyFromImportDate(m.importDate);
       const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
       const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
@@ -552,8 +564,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       let bagIdx = 1;
       const rowKey = this.pxkInventoryRowKey(m);
       while (rowAvail > 0 && remaining > 0) {
+        if (bagIdx > bagTotal) {
+          throw new Error(`BAG vượt quá tổng: ${mat} / PO ${po} / IMD ${importDateStr} (${bagIdx}/${bagTotal}).`);
+        }
         const chunk = rowAvail >= sp ? sp : rowAvail;
-        const p4Base = `${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
+        const p4Base = `${importDateStr}-${bagIdx}/${bagTotal}`;
         const p4 = chunk < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
         const qrData = `${mat}|${po}|${chunk}|${p4}`;
         // Chỉ in lại tem cho hàng nhập trước cutoff và chưa được in lại tem mẫu mới.
@@ -566,6 +581,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         remaining -= chunk;
         bagIdx++;
       }
+      usedBagsByRowKeyOut.set(rowKey, Math.max(usedBagsByRowKeyOut.get(rowKey) || 0, bagIdx - 1));
     }
     return { payloads: out, consumed };
   }
@@ -615,8 +631,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     inventoryRows: InventoryMaterial[],
     consumedByRowKey: Map<string, number>,
     reprintedDocIds: Set<string>,
-    printedFlagItemsOut: Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>
-  ): { qrData: string; displayPrefix: string }[] {
+    printedFlagItemsOut: Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>,
+    usedBagsByRowKey: Map<string, number>
+  ): { qrData: string }[] {
     const pxkKeys = new Set(
       pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
     );
@@ -636,7 +653,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         }
         return (a.importDate?.getTime() || 0) - (b.importDate?.getTime() || 0);
       });
-    const out: { qrData: string; displayPrefix: string }[] = [];
+    const out: { qrData: string }[] = [];
     for (const m of rows) {
       const key = this.pxkInventoryRowKey(m);
       const taken = consumedByRowKey.get(key) || 0;
@@ -647,18 +664,36 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       if (rem <= 1e-6) {
         continue;
       }
-      const bagTotal = Math.max(1, this.computeTotalBagsFromStock(m));
+      const bagTotal = Math.floor(Number(m.totalBags ?? 0));
+      if (bagTotal <= 0) {
+        continue;
+      }
       const importDateStr = this.getImdKeyFromImportDate(m.importDate);
       const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
       const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
       const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
-      const bagIdx = 1;
       const mat = m.materialCode.trim();
       const po = (m.poNumber || '').trim();
-      const qrData = `${mat}|${po}|${rem}|${importDateStr}-${Math.min(bagIdx, bagTotal)}/${bagTotal}`;
+      const sp = this.getEffectiveStandardPacking(m);
+      if (!sp || sp <= 0) {
+        continue;
+      }
+      let bagIdx = Math.max(1, (usedBagsByRowKey.get(key) || 0) + 1);
+      let remainingQty = rem;
       if (!isTemMoi && !isAlreadyReprinted) {
-        out.push({ qrData, displayPrefix: 'TỒN' });
-        printedFlagItemsOut.set(rowFlag.docId, rowFlag);
+        while (remainingQty > 1e-9) {
+          if (bagIdx > bagTotal) {
+            break;
+          }
+          const chunk = remainingQty >= sp ? sp : remainingQty;
+          const p4Base = `${importDateStr}-${bagIdx}/${bagTotal}`;
+          const p4 = chunk < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
+          const qrData = `${mat}|${po}|${chunk}|${p4}`;
+          out.push({ qrData });
+          printedFlagItemsOut.set(rowFlag.docId, rowFlag);
+          remainingQty = Math.round((remainingQty - chunk) * 10000) / 10000;
+          bagIdx++;
+        }
       }
     }
     return out;
@@ -705,6 +740,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       const exportPayloads: { qrData: string }[] = [];
       const consumedByRowKey = new Map<string, number>();
       const printedFlagItems = new Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>();
+      const usedBagsByRowKey = new Map<string, number>();
       const notEnoughLines: string[] = [];
       for (const ln of pxkLines) {
         try {
@@ -712,7 +748,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             ln,
             inventoryRows,
             reprintedDocIds,
-            printedFlagItems
+            printedFlagItems,
+            usedBagsByRowKey
           );
           exportPayloads.push(...payloads);
           for (const [k, v] of consumed) {
@@ -726,12 +763,15 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           continue;
         }
       }
-      const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(pxkLines, inventoryRows, consumedByRowKey, reprintedDocIds, printedFlagItems);
-      const allPayloads: ({ qrData: string } | { qrData: string; displayPrefix: string })[] = [
-        ...exportPayloads,
-        ...tonPayloads
-      ];
-      if (allPayloads.length === 0) {
+      const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(
+        pxkLines,
+        inventoryRows,
+        consumedByRowKey,
+        reprintedDocIds,
+        printedFlagItems,
+        usedBagsByRowKey
+      );
+      if (exportPayloads.length === 0 && tonPayloads.length === 0) {
         this.temXuatError = notEnoughLines.length ? notEnoughLines.join('\n') : 'Tem mới, không cần in';
         return;
       }
@@ -741,44 +781,70 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         this.temXuatError = '';
       }
 
-      const qrImages = await Promise.all(
-        allPayloads.map(async (p, i) => {
-          const qrImage = await QRCode.toDataURL(p.qrData, {
-            width: 240,
-            margin: 1,
-            color: { dark: '#000000', light: '#FFFFFF' }
-          });
-          const parts = p.qrData.split('|');
-          return {
-            image: qrImage,
-            qrData: p.qrData,
-            index: i + 1,
-            materialCode: parts[0] || '',
-            poNumber: parts[1] || '',
-            unitNumber: Number(parts[2]) || 0,
-            displayPrefix: (p as { displayPrefix?: string }).displayPrefix
-          };
-        })
-      );
+      const exportByKey = new Map<string, { qrData: string }[]>();
+      for (const p of exportPayloads) {
+        const parts = p.qrData.split('|');
+        const k = `${(parts[0] || '').trim()}\0${(parts[1] || '').trim()}`;
+        if (!exportByKey.has(k)) exportByKey.set(k, []);
+        exportByKey.get(k)!.push(p);
+      }
+      const tonByKey = new Map<string, { qrData: string }[]>();
+      for (const p of tonPayloads) {
+        const parts = p.qrData.split('|');
+        const k = `${(parts[0] || '').trim()}\0${(parts[1] || '').trim()}`;
+        if (!tonByKey.has(k)) tonByKey.set(k, []);
+        tonByKey.get(k)!.push(p);
+      }
 
       const displayLsx = raw.trim();
-      const exportCount = exportPayloads.length;
-      const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: displayLsx, qrData: '' }];
-      let prevMat = '';
-      for (let i = 0; i < qrImages.length; i++) {
-        const q = qrImages[i];
-        if (i === exportCount && tonPayloads.length > 0) {
-          printSequence.push({ kind: 'spacer', qrData: '' });
-          printSequence.push({ kind: 'lsxHeader', lsxText: 'TỒN (còn kho)', qrData: '' });
-          prevMat = '';
-        }
-        const mat = (q.materialCode || '').trim();
-        if (prevMat !== '' && mat !== prevMat) {
-          printSequence.push({ kind: 'spacer', qrData: '' });
-        }
-        printSequence.push(q);
-        prevMat = mat;
+      const orderedKeys: string[] = [];
+      for (const ln of pxkLines) {
+        const k = `${(ln.materialCode || '').trim()}\0${(ln.po || '').trim()}`;
+        if (!orderedKeys.includes(k)) orderedKeys.push(k);
       }
+
+      const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: displayLsx, qrData: '' }];
+      for (const k of orderedKeys) {
+        const [mat] = k.split('\0');
+        const exp = exportByKey.get(k) || [];
+        const ton = tonByKey.get(k) || [];
+        if (exp.length === 0 && ton.length === 0) continue;
+        printSequence.push({ kind: 'lsxHeader', lsxText: `${mat}`, qrData: '' });
+        if (exp.length) {
+          printSequence.push({ kind: 'lsxHeader', lsxText: 'XUẤT', qrData: '' });
+          for (const p of exp) printSequence.push(p);
+        }
+        if (ton.length) {
+          printSequence.push({ kind: 'lsxHeader', lsxText: 'TỒN', qrData: '' });
+          for (const p of ton) printSequence.push(p);
+        }
+        printSequence.push({ kind: 'spacer', qrData: '' });
+      }
+
+      const qrImages: any[] = [];
+      let idx = 1;
+      for (const it of printSequence) {
+        if (it?.kind === 'lsxHeader' || it?.kind === 'spacer') {
+          qrImages.push(it);
+          continue;
+        }
+        const qrImage = await QRCode.toDataURL(it.qrData, {
+          width: 240,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+        const parts = String(it.qrData || '').split('|');
+        qrImages.push({
+          image: qrImage,
+          qrData: it.qrData,
+          index: idx++,
+          materialCode: parts[0] || '',
+          poNumber: parts[1] || '',
+          unitNumber: Number(parts[2]) || 0
+        });
+      }
+
+      // qrImages đã là thứ tự in cuối cùng (LSX -> Mã -> XUẤT -> tem -> TỒN -> tem)
 
       const fakeMaterial: InventoryMaterial = {
         factory: this.FACTORY,
@@ -801,7 +867,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         isCompleted: false
       };
 
-      this.createQRPrintWindow(printSequence, fakeMaterial, true);
+      this.createQRPrintWindow(qrImages, fakeMaterial, true);
 
       // 2) Lưu cờ: các dòng tồn đã được in lại tem mẫu mới (để lần sau báo "Tem mới, không cần in")
       try {
