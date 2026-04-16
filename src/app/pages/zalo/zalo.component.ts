@@ -3,6 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import * as XLSX from 'xlsx';
 
 type Factory = 'ASM1' | 'ASM2' | 'ALL';
 
@@ -60,6 +61,11 @@ export class ZaloComponent implements OnInit, OnDestroy {
   saveBusy = false;
   saveMessage = '';
 
+  // Employee directory import (Excel): col A = employeeId, col B = name
+  importBusy = false;
+  importMessage = '';
+  private importFile: File | null = null;
+
   config: ZaloConfig = {
     botEnabled: false,
     allowSendFromFactories: ['ALL'],
@@ -109,6 +115,97 @@ export class ZaloComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  onImportFileSelected(ev: Event): void {
+    const input = ev.target as HTMLInputElement | null;
+    const f = input?.files?.[0] || null;
+    this.importFile = f;
+    this.importMessage = f ? `Đã chọn file: ${f.name}` : '';
+  }
+
+  private normalizeEmployeeId(raw: unknown): string {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!s) return '';
+    if (/^\d{4}$/.test(s)) return `ASP${s}`;
+    return s;
+  }
+
+  async importEmployeeDirectory(): Promise<void> {
+    if (this.importBusy) return;
+    if (!this.importFile) {
+      this.importMessage = 'Chưa chọn file.';
+      return;
+    }
+    this.importBusy = true;
+    this.importMessage = 'Đang import...';
+    try {
+      const userEmail = (await this.afAuth.currentUser)?.email || '';
+      const buf = await this.importFile.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheetName = wb.SheetNames?.[0];
+      if (!sheetName) {
+        this.importMessage = 'File không có sheet.';
+        return;
+      }
+      const ws = wb.Sheets[sheetName];
+      // Read as 2D array; keep empty cells as '' so columns stay aligned
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as any[][];
+      if (!rows || rows.length === 0) {
+        this.importMessage = 'Sheet trống.';
+        return;
+      }
+
+      const items: Array<{ employeeId: string; name: string }> = [];
+      for (const r of rows) {
+        const employeeId = this.normalizeEmployeeId(r?.[0]);
+        const name = String(r?.[1] ?? '').trim();
+        if (!employeeId || !/^ASP\d{4}$/.test(employeeId)) continue;
+        if (!name) continue;
+        items.push({ employeeId, name });
+      }
+
+      if (items.length === 0) {
+        this.importMessage = 'Không tìm thấy dòng hợp lệ (cột A=mã ASPxxxx, cột B=tên).';
+        return;
+      }
+
+      // Dedupe by employeeId (last wins)
+      const byId = new Map<string, { employeeId: string; name: string }>();
+      for (const it of items) byId.set(it.employeeId, it);
+      const unique = Array.from(byId.values());
+
+      const col = this.afs.collection('employee-directory').ref;
+      const now = new Date();
+      let written = 0;
+      const chunkSize = 450; // under 500 writes/batch
+      for (let i = 0; i < unique.length; i += chunkSize) {
+        const batch = this.afs.firestore.batch();
+        const chunk = unique.slice(i, i + chunkSize);
+        for (const it of chunk) {
+          const ref = col.doc(it.employeeId);
+          batch.set(
+            ref,
+            {
+              employeeId: it.employeeId,
+              name: it.name,
+              updatedAt: now,
+              updatedBy: userEmail
+            },
+            { merge: true }
+          );
+        }
+        await batch.commit();
+        written += chunk.length;
+      }
+
+      this.importMessage = `✅ Import xong: ${written}/${unique.length} nhân viên. (Collection: employee-directory)`;
+    } catch (e) {
+      console.error('❌ Zalo: import employee directory failed', e);
+      this.importMessage = '❌ Import thất bại. Kiểm tra file và quyền Firestore.';
+    } finally {
+      this.importBusy = false;
+    }
   }
 
   get filteredLinks(): ZaloUserLink[] {

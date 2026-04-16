@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesEvery30Min = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesEvery30Min = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -126,6 +126,47 @@ exports.sendQcPriorityResolvedEmailFn = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** QC (ASM1): nếu mã đang bật ưu tiên và bị đổi trạng thái → nhắn Zalo cho ASP0609. */
+exports.sendQcPriorityStatusChangedZaloFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const materialCode = typeof (data === null || data === void 0 ? void 0 : data.materialCode) === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    const poNumber = typeof (data === null || data === void 0 ? void 0 : data.poNumber) === 'string' ? data.poNumber.trim().slice(0, 120) : '';
+    const imd = typeof (data === null || data === void 0 ? void 0 : data.imd) === 'string' ? data.imd.trim().slice(0, 120) : '';
+    const location = typeof (data === null || data === void 0 ? void 0 : data.location) === 'string' ? data.location.trim().slice(0, 120) : '';
+    const factory = typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 40) : 'ASM1';
+    const oldStatus = typeof (data === null || data === void 0 ? void 0 : data.oldStatus) === 'string' ? data.oldStatus.trim().slice(0, 80) : '';
+    const newStatus = typeof (data === null || data === void 0 ? void 0 : data.newStatus) === 'string' ? data.newStatus.trim().slice(0, 80) : '';
+    const checkedBy = typeof (data === null || data === void 0 ? void 0 : data.checkedBy) === 'string' ? data.checkedBy.trim().slice(0, 80) : '';
+    if (!materialCode || !newStatus) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode hoặc newStatus.');
+    }
+    if (factory.toUpperCase() !== 'ASM1') {
+        throw new functions.https.HttpsError('invalid-argument', 'Chỉ hỗ trợ factory ASM1.');
+    }
+    const payload = {
+        materialCode,
+        poNumber,
+        imd,
+        location,
+        factory,
+        oldStatus,
+        newStatus,
+        checkedBy
+    };
+    try {
+        const { sendQcPriorityStatusChangedZalo } = await Promise.resolve().then(() => __importStar(require('./qc-priority-zalo')));
+        await sendQcPriorityStatusChangedZalo(admin.firestore(), payload);
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
     }
 });
 /**

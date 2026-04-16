@@ -775,6 +775,12 @@ export class QCComponent implements OnInit, OnDestroy {
       oldIqcStatus === 'CHỜ KIỂM' &&
       statusToUpdate !== 'CHỜ KIỂM';
 
+    // Zalo (ASM1): nếu mã đang bật ưu tiên (Pending QC hoặc Pending Confirm) và bị đổi trạng thái
+    const shouldNotifyPriorityStatusChangedZalo =
+      String(materialToUpdate.factory || this.selectedFactory).trim().toUpperCase() === 'ASM1' &&
+      (wasPendingQcPriority || wasPendingConfirmPriority) &&
+      oldIqcStatus !== String(statusToUpdate || '').trim();
+
     const shouldClearPendingConfirmPriority =
       wasPendingConfirmPriority && statusToUpdate !== 'CHỜ XÁC NHẬN';
     const shouldClearPendingQcPriority =
@@ -847,6 +853,14 @@ export class QCComponent implements OnInit, OnDestroy {
         employeeIdToSave
       );
 
+      this.notifyQcPriorityStatusChangedZaloIfNeeded(
+        shouldNotifyPriorityStatusChangedZalo,
+        materialToUpdate,
+        oldIqcStatus,
+        statusToUpdate,
+        employeeIdToSave
+      );
+
       // Refresh counts và recent materials sau khi update thành công (chạy background)
       setTimeout(() => {
         this.loadPendingQCCount();
@@ -913,6 +927,33 @@ export class QCComponent implements OnInit, OnDestroy {
     firstValueFrom(callable(payload))
       .then(() => console.log('📧 QC ưu tiên: đã gửi thông báo email'))
       .catch((e) => console.warn('📧 QC ưu tiên: gửi email thất bại', e));
+  }
+
+  /** Zalo cho ASP0609 khi mã ưu tiên (ASM1) đổi trạng thái — không chặn UI. */
+  private notifyQcPriorityStatusChangedZaloIfNeeded(
+    shouldNotify: boolean,
+    material: InventoryMaterial,
+    oldStatus: string,
+    newStatus: string,
+    checkedBy: string
+  ): void {
+    if (!shouldNotify) {
+      return;
+    }
+    const payload = {
+      materialCode: String(material.materialCode || '').slice(0, 120),
+      poNumber: String(material.poNumber || '').slice(0, 120),
+      imd: String(this.getDisplayIMD(material) || '').slice(0, 120),
+      location: String(material.location || '').slice(0, 120),
+      factory: String(material.factory || this.selectedFactory).slice(0, 40),
+      oldStatus: String(oldStatus || '').slice(0, 80),
+      newStatus: String(newStatus || '').slice(0, 80),
+      checkedBy: String(checkedBy || '').slice(0, 80)
+    };
+    const callable = this.fns.httpsCallable('sendQcPriorityStatusChangedZaloFn');
+    firstValueFrom(callable(payload))
+      .then(() => console.log('💬 QC ưu tiên: đã gửi thông báo Zalo'))
+      .catch((e) => console.warn('💬 QC ưu tiên: gửi Zalo thất bại', e));
   }
 
   // Update local counts immediately (optimistic update)

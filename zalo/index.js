@@ -149,11 +149,18 @@ exports.zaloWebhook = onRequest(
 
     const normalize = (s) => String(s || "").trim();
     const isGreeting = (s) => {
-      const t = normalize(s).toLowerCase();
+      const t = normalize(s).toLowerCase().replace(/\s+/g, " ");
       return (
         t === "hi" ||
         t === "hello" ||
         t === "helo" ||
+        t === "hi cưng" ||
+        t === "hi cưng" ||
+        t === "hi cung" ||
+        t === "cưng" ||
+        t === "cung" ||
+        t === "cục vàng" ||
+        t === "cuc vang" ||
         t === "xin chào" ||
         t === "xin chao" ||
         t === "chào" ||
@@ -168,6 +175,21 @@ exports.zaloWebhook = onRequest(
       return doc.exists ? doc.data() : null;
     };
 
+    const getEmployeeNameFromDirectory = async (memberId) => {
+      const emp = String(memberId || "").trim().toUpperCase();
+      if (!emp) return "";
+      try {
+        const snap = await db.collection("employee-directory").doc(emp).get();
+        if (!snap.exists) return "";
+        const d = snap.data() || {};
+        const name = String(d.name || d.employeeName || "").trim();
+        return name;
+      } catch (e) {
+        logger.error("employee-directory lookup failed", e);
+        return "";
+      }
+    };
+
     const startOnboarding = async () => {
       await db
         .collection("zalo_pending")
@@ -176,7 +198,10 @@ exports.zaloWebhook = onRequest(
           {intent: "onboarding", step: "employeeCode", updatedAt: admin.firestore.FieldValue.serverTimestamp()},
           {merge: true}
         );
-      await sendText(chatId, "Chào bạn. Vui lòng nhập **Mã nhân viên** (ví dụ: ASP0106).");
+      await sendText(
+        chatId,
+        "Vui lòng nhập **Mã nhân viên** (ví dụ: ASP0106).\nSau đó gõ: /id để xác nhận liên kết."
+      );
     };
 
     // Pending conversation state (onboarding, scrap, ...)
@@ -186,7 +211,7 @@ exports.zaloWebhook = onRequest(
         const pendingSnap = await pendingRef.get();
         const pending = pendingSnap.exists ? pendingSnap.data() : null;
 
-        // Onboarding flow: greeting -> ask employee code -> ask name -> save
+        // Onboarding flow: ask employee code, then user confirms by /id
         if (pending?.intent === "onboarding") {
           const t = normalize(text);
           if (pending.step === "employeeCode") {
@@ -198,50 +223,10 @@ exports.zaloWebhook = onRequest(
             }
 
             await pendingRef.set(
-              {
-                intent: "onboarding",
-                step: "name",
-                memberId: code,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              },
+              {intent: "link_emp", step: "confirm", memberId: code, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
               {merge: true}
             );
-            await sendText(chatId, `OK. Bạn nhập **Tên** của bạn để hoàn tất (ví dụ: Tuấn Anh).`);
-            res.status(200).json({ok: true});
-            return;
-          }
-
-          if (pending.step === "name") {
-            const name = t;
-            const memberId = String(pending.memberId || "").toUpperCase();
-            if (!memberId || !isValidEmployeeCode(memberId)) {
-              // fallback: restart
-              await pendingRef.delete().catch(() => {});
-              await startOnboarding();
-              res.status(200).json({ok: true});
-              return;
-            }
-            if (!name) {
-              await sendText(chatId, "Tên không được để trống. Vui lòng nhập lại tên của bạn.");
-              res.status(200).json({ok: true});
-              return;
-            }
-
-            await db.collection("zalo_links").doc(chatId).set(
-              {
-                chatId,
-                name,
-                memberId,
-                source: "zaloWebhook",
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              },
-              {merge: true}
-            );
-            await pendingRef.delete().catch(() => {});
-            await sendText(
-              chatId,
-              `Đã liên kết thành công.\nMã: ${memberId}\nTên: ${name}\n\n${name} muốn làm gì?\n- Gõ: /tonkho <MA_HANG> (xem cả ASM1 + ASM2)\n- Hoặc: tồn kho <MA_HANG>\n- Hoặc: /tonkho ASM1 <MA_HANG>\n- Hoặc: /tonkho ASM2 <MA_HANG>`
-            );
+            await sendText(chatId, `Đã nhận mã ${code}. Vui lòng gõ: /id để xác nhận liên kết.`);
             res.status(200).json({ok: true});
             return;
           }
@@ -305,13 +290,109 @@ exports.zaloWebhook = onRequest(
         if (profile?.memberId) {
           await sendText(chatId, `ID: ${profile.memberId}`);
         } else {
-          await sendText(chatId, "Bạn chưa liên kết. Nếu cần liên kết để nhận thông báo theo mã NV thì gõ: /link");
+          const pendingRef = db.collection("zalo_pending").doc(chatId);
+          const pendingSnap = await pendingRef.get().catch(() => null);
+          const pending = pendingSnap?.exists ? pendingSnap.data() : null;
+          const memberId = String(pending?.memberId || "").trim().toUpperCase();
+          if (pending?.intent === "link_emp" && isValidEmployeeCode(memberId)) {
+            const nameFromDir = await getEmployeeNameFromDirectory(memberId);
+            const name = nameFromDir || memberId;
+            await db.collection("zalo_links").doc(chatId).set(
+              {
+                chatId,
+                name,
+                memberId,
+                source: "zaloWebhook",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              {merge: true}
+            );
+            await pendingRef.delete().catch(() => {});
+            await sendText(
+              chatId,
+              `Đã liên kết thành công.\nMã: ${memberId}\nTên: ${name}\n\nXin chào ${name}.\nGõ: /tonkho <mã hàng> để tìm vị trí.`
+            );
+          } else {
+            await sendText(chatId, "Bạn chưa liên kết. Nhắn mã nhân viên (VD: ASP0609) rồi gõ /id, hoặc gõ /link.");
+          }
         }
       } catch (err) {
         logger.error("id command failed", err);
       }
       res.status(200).json({ok: true});
       return;
+    }
+
+    // Update display name: "tên tôi là <Tên>"
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      const raw = text.trim();
+      const mm = raw.match(
+        /^(?:t[eê]n\s+t[oòóỏõọôồốổỗộơờớởỡợ]i\s+l[aàáảãạâầấẩẫậăằắẳẵặ]|ten\s+toi\s+la)\s+(.+)\s*$/i
+      );
+      if (mm?.[1]) {
+        const nameRaw = String(mm[1] || "").trim().replace(/\s+/g, " ");
+        const toTitle = (s) =>
+          String(s || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .split(" ")
+            .filter(Boolean)
+            .map((w) => {
+              const lw = w.toLocaleLowerCase("vi-VN");
+              const head = lw.slice(0, 1).toLocaleUpperCase("vi-VN");
+              const tail = lw.slice(1);
+              return head + tail;
+            })
+            .join(" ");
+        const name = toTitle(nameRaw);
+
+        if (!name) {
+          res.status(200).json({ok: true});
+          return;
+        }
+
+        try {
+          await db.collection("zalo_links").doc(chatId).set(
+            {
+              chatId,
+              name,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {merge: true}
+          );
+          await sendText(chatId, `OK. Em đã cập nhật tên của bạn là: ${name}`);
+        } catch (e) {
+          logger.error("update name failed", e);
+          await sendText(chatId, "Lỗi khi cập nhật tên.");
+        }
+
+        res.status(200).json({ok: true});
+        return;
+      }
+    }
+
+    // Quick link: user sends "ASPxxxx" then confirms by /id
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      const t = text.trim().toUpperCase();
+      if (isValidEmployeeCode(t)) {
+        try {
+          const profile = await getLinkedProfile(chatId);
+          if (profile?.memberId) {
+            // already linked
+            res.status(200).json({ok: true});
+            return;
+          }
+          await db.collection("zalo_pending").doc(chatId).set(
+            {intent: "link_emp", step: "confirm", memberId: t, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+            {merge: true}
+          );
+          await sendText(chatId, `Đã nhận mã ${t}. Vui lòng gõ: /id để xác nhận liên kết.`);
+        } catch (e) {
+          logger.error("set pending link_emp failed", e);
+        }
+        res.status(200).json({ok: true});
+        return;
+      }
     }
 
     // Command: /scarp (alias /scrap) with password gate (password = 2026)
@@ -522,6 +603,14 @@ exports.zaloWebhook = onRequest(
           await sendText(chatId, "Lỗi khi kiểm tra tồn kho.");
         }
       };
+
+      // Quick search: user sends material code only (e.g. B001003)
+      if (/^[AB]\d{6}$/i.test(t)) {
+        await handleTonkho(t, ["ASM1", "ASM2"]);
+        res.status(200).json({ok: true});
+        return;
+      }
+
       // Natural text: "tồn kho B001680" (accepts without accents too)
       const m = t.match(/^(?:t[oòóỏõọôồốổỗộơờớởỡợ]n\\s+kho|ton\\s+kho)\\s+([A-Za-z0-9._-]+)\\s*$/i);
       if (m?.[1]) {
@@ -551,42 +640,8 @@ exports.zaloWebhook = onRequest(
       }
     }
 
-    // Link account flow:
-    // Employee sends 2 lines:
-    // Line 1: Employee code (ASP + 4 digits), e.g. "ASP0106" (case-insensitive)
-    // Line 2: Name, e.g. "Tuấn Anh"
-    //
-    // We store: memberId = employee code, name, chatId
-    if (eventName === "message.text.received" && chatId && typeof text === "string") {
-      const lines = text
-        .split(/\r?\n/g)
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      if (lines.length >= 2) {
-        const memberId = String(lines[0]).toUpperCase();
-        const name = lines[1];
-
-        if (isValidEmployeeCode && name) {
-          try {
-            await db.collection("zalo_links").doc(chatId).set(
-              {
-                chatId,
-                name,
-                memberId,
-                source: "zaloWebhook",
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              },
-              {merge: true}
-            );
-
-            await sendText(chatId, `Đã liên kết thành công.\nMã: ${memberId}\nTên: ${name}\nchat_id: ${chatId}`);
-          } catch (err) {
-            logger.error("Link account failed", err);
-          }
-        }
-      }
-    }
+    // (Deprecated) Link by 2-line message. Disabled by request:
+    // Linking is now: send employee code (ASPxxxx) then /id to confirm.
 
     res.status(200).json({ok: true});
   }

@@ -108,6 +108,50 @@ export const sendQcPriorityResolvedEmailFn = functions
     }
   });
 
+/** QC (ASM1): nếu mã đang bật ưu tiên và bị đổi trạng thái → nhắn Zalo cho ASP0609. */
+export const sendQcPriorityStatusChangedZaloFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Partial<QcPriorityResolvedPayload>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const materialCode = typeof data?.materialCode === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    const poNumber = typeof data?.poNumber === 'string' ? data.poNumber.trim().slice(0, 120) : '';
+    const imd = typeof data?.imd === 'string' ? data.imd.trim().slice(0, 120) : '';
+    const location = typeof data?.location === 'string' ? data.location.trim().slice(0, 120) : '';
+    const factory = typeof data?.factory === 'string' ? data.factory.trim().slice(0, 40) : 'ASM1';
+    const oldStatus = typeof data?.oldStatus === 'string' ? data.oldStatus.trim().slice(0, 80) : '';
+    const newStatus = typeof data?.newStatus === 'string' ? data.newStatus.trim().slice(0, 80) : '';
+    const checkedBy = typeof data?.checkedBy === 'string' ? data.checkedBy.trim().slice(0, 80) : '';
+    if (!materialCode || !newStatus) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode hoặc newStatus.');
+    }
+    if (factory.toUpperCase() !== 'ASM1') {
+      throw new functions.https.HttpsError('invalid-argument', 'Chỉ hỗ trợ factory ASM1.');
+    }
+    const payload: QcPriorityResolvedPayload = {
+      materialCode,
+      poNumber,
+      imd,
+      location,
+      factory,
+      oldStatus,
+      newStatus,
+      checkedBy
+    };
+    try {
+      const { sendQcPriorityStatusChangedZalo } = await import('./qc-priority-zalo');
+      await sendQcPriorityStatusChangedZalo(admin.firestore(), payload);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 /**
  * QC Monthly Report:
  * - Schedule: 08:00 ngày 1 hằng tháng (VN) → gửi report tháng vừa rồi

@@ -26,6 +26,17 @@
           </div>
           <div class="card-body">
             <div class="form-row">
+              <label>Import danh sách nhân viên (Excel)</label>
+              <div class="hint">File: cột A = Mã nhân viên (ASPxxxx), cột B = Tên.</div>
+              <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportFileSelected($event)">
+              <div class="hint" *ngIf="importMessage">{{ importMessage }}</div>
+              <button type="button" class="btn btn-add" (click)="importEmployeeDirectory()" [disabled]="importBusy">
+                <i class="material-icons">upload</i>
+                {{ importBusy ? 'Đang import…' : 'Import' }}
+              </button>
+            </div>
+
+            <div class="form-row">
               <label class="chk">
                 <input type="checkbox" [(ngModel)]="config.botEnabled">
                 <span>Enable bot</span>

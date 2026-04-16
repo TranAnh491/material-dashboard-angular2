@@ -59,7 +59,10 @@ export interface OutboundDuplicateGroupRow {
   materialCode: string;
   poNumber: string;
   imd: string;
+  /** Bag key để gom trùng: ưu tiên `bagNumberDisplay` (VD `6(T123...)`), fallback `bagBatch` (VD `6/10`). */
   bagBatch: string;
+  /** Hiển thị Bag đầy đủ khi có tem tách (VD `6(T123...)`). */
+  bagNumberDisplay?: string;
   /** Khóa nhóm trùng: factory|material|po|imd|bag */
   dupKey: string;
   /** Ngày/giờ xuất mới nhất trong nhóm (ưu tiên exportDate, fallback createdAt/updatedAt). */
@@ -824,8 +827,14 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         const imdRaw = d['batchNumber'] ?? d['importDate'];
         const imd = imdRaw != null ? String(imdRaw) : '';
         const bagRaw = d['bagBatch'];
-        const bagBatch = bagRaw != null ? String(bagRaw) : '';
-        if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagBatch)) {
+        const bagBatchRaw = bagRaw != null ? String(bagRaw) : '';
+        const bagNumberRaw = d['bagNumberDisplay'];
+        const bagNumberDisplay =
+          bagNumberRaw != null && String(bagNumberRaw).trim() !== ''
+            ? String(bagNumberRaw).trim()
+            : '';
+        const bagKey = (bagNumberDisplay || bagBatchRaw || '').trim();
+        if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagKey)) {
           continue;
         }
         const mcNorm = materialCode.trim().toUpperCase();
@@ -833,7 +842,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           continue;
         }
         this.outboundDupEligibleCount += 1;
-        const key = this.outboundDupCompositeKey(factory, materialCode, poNumber, imd, bagBatch);
+        const key = this.outboundDupCompositeKey(factory, materialCode, poNumber, imd, bagKey);
         const tMs = this.getOutboundDocTimeMs(d) ?? 0;
         const lsxVal = d['productionOrder'];
         const lsxStr = lsxVal != null ? String(lsxVal).trim() : '';
@@ -856,7 +865,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
               materialCode: materialCode.trim(),
               poNumber: poNumber.trim(),
               imd: imd.trim(),
-              bagBatch: bagBatch.trim()
+              bagBatch: bagKey.trim(),
+              bagNumberDisplay: bagNumberDisplay || undefined
             },
             lsx
             ,
@@ -927,6 +937,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
               poNumber: d.poNumber,
               imd: d.imd,
               bagBatch: d.bagBatch,
+              bagNumberDisplay: (d as any).bagNumberDisplay || null,
               count: d.count,
               latestExportAtLabel: d.latestExportAtLabel || null,
               revivedAfterIgnore: d.revivedAfterIgnore || null
