@@ -179,8 +179,7 @@ exports.zaloWebhook = onRequest(
       await sendText(chatId, "Chào bạn. Vui lòng nhập **Mã nhân viên** (ví dụ: ASP0106).");
     };
 
-    // Pending conversation state for /tonkho natural flow
-    // Stored per chatId: { intent: "tonkho", materialCode: "B001680" }
+    // Pending conversation state (onboarding, scrap, ...)
     if (eventName === "message.text.received" && chatId && typeof text === "string") {
       try {
         const pendingRef = db.collection("zalo_pending").doc(chatId);
@@ -241,107 +240,60 @@ exports.zaloWebhook = onRequest(
             await pendingRef.delete().catch(() => {});
             await sendText(
               chatId,
-              `Đã liên kết thành công.\nMã: ${memberId}\nTên: ${name}\n\n${name} muốn làm gì?\n- Gõ: tồn kho <MA_HANG>\n- Hoặc: /tonkho ASM1 <MA_HANG>\n- Hoặc: /tonkho ASM2 <MA_HANG>`
+              `Đã liên kết thành công.\nMã: ${memberId}\nTên: ${name}\n\n${name} muốn làm gì?\n- Gõ: /tonkho <MA_HANG> (xem cả ASM1 + ASM2)\n- Hoặc: tồn kho <MA_HANG>\n- Hoặc: /tonkho ASM1 <MA_HANG>\n- Hoặc: /tonkho ASM2 <MA_HANG>`
             );
             res.status(200).json({ok: true});
             return;
           }
         }
 
-        // If user previously asked "tồn kho <code>" then we wait for ASM1/ASM2
-        if (pending?.intent === "tonkho" && pending?.materialCode) {
-          const answer = text.trim().toUpperCase();
-          if (["ASM1", "ASM2"].includes(answer)) {
-            const factory = answer;
-            const code = String(pending.materialCode).trim().toUpperCase();
-
-            // Clear pending first to avoid loops
-            await pendingRef.delete().catch(() => {});
-
-            try {
-              const snap = await db
-                .collection("inventory-materials")
-                .where("factory", "==", factory)
-                .where("materialCode", "==", code)
-                .limit(20)
-                .get();
-
-              if (snap.empty) {
-                await fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
-                  method: "POST",
-                  headers: {"Content-Type": "application/json"},
-                  body: JSON.stringify({
-                    chat_id: chatId,
-                    text: `Không tìm thấy tồn cho ${code} (${factory}).`,
-                  }),
-                });
-                res.status(200).json({ok: true});
-                return;
-              }
-
-              let total = 0;
-              const lines = [];
-              for (const doc of snap.docs) {
-                const d = doc.data() || {};
-                // Match Angular column "Tồn kho":
-                // (openingStock || 0) + (quantity || 0) - (exported || 0) - (xt || 0)
-                const qty =
-                  (Number(d.openingStock || 0) || 0) +
-                  (Number(d.quantity || 0) || 0) -
-                  (Number(d.exported || 0) || 0) -
-                  (Number(d.xt || 0) || 0);
-                total += qty || 0;
-                const po = d.poNumber || d.po || "";
-                const loc = d.location || "";
-                const batch = d.batchNumber || "";
-                const extra = [po && `PO:${po}`, loc && `Vị trí:${loc}`, batch && `Lot:${batch}`]
-                  .filter(Boolean)
-                  .join(" | ");
-                lines.push(`- ${qty}${extra ? ` (${extra})` : ""}`);
-                if (lines.length >= 8) break;
-              }
-
-              const reply = `Tồn kho ${factory}\nMã: ${code}\nTổng: ${total}\n` + (lines.length ? `Chi tiết:\n${lines.join("\n")}` : "");
-              await fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({chat_id: chatId, text: reply}),
-              });
-              res.status(200).json({ok: true});
-              return;
-            } catch (err) {
-              logger.error("tonkho pending flow failed", err);
-              await fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({chat_id: chatId, text: "Lỗi khi kiểm tra tồn kho."}),
-              });
-              res.status(200).json({ok: true});
-              return;
-            }
-          }
-        }
       } catch (err) {
         logger.error("pending state read failed", err);
       }
     }
 
+    const CHUCNANG_TEXT =
+      "Danh sách câu lệnh:\n" +
+      "- /tonkho <mã hàng>  (xem vị trí & tồn kho ở ASM1 + ASM2)\n" +
+      "- /tonkho ASM1 <mã hàng>\n" +
+      "- /tonkho ASM2 <mã hàng>\n" +
+      "- /scrap  (tra cứu kho scrap, có password)\n" +
+      "- /link   (liên kết mã nhân viên để nhận thông báo)\n" +
+      "- /id     (xem mã nhân viên đã liên kết)";
+
     // Greetings:
-    // - If linked: greet by name and show menu
-    // - If not linked: start onboarding
+    // - Always show intro + guidance
     if (eventName === "message.text.received" && chatId && typeof text === "string" && isGreeting(text)) {
       try {
-        const profile = await getLinkedProfile(chatId);
-        if (profile?.name) {
-          await sendText(
-            chatId,
-            `Chào ${profile.name}. Bạn muốn làm gì?\n- Gõ: tồn kho <MA_HANG>\n- Hoặc: /tonkho ASM1 <MA_HANG>\n- Hoặc: /tonkho ASM2 <MA_HANG>`
-          );
-        } else {
-          await startOnboarding();
-        }
+        await sendText(
+          chatId,
+          "Xin chào, em là trợ lý kho.\n" +
+            "Nếu tìm mã hàng, vui lòng gõ: /tonkho <mã hàng>\n" +
+            "Em sẽ hiển thị vị trí hàng để tìm.\n\n" +
+            "Nếu có các yêu cầu khác, vui lòng gõ: /chucnang (em sẽ hiển thị danh sách các câu lệnh)."
+        );
       } catch (err) {
         logger.error("greeting handler failed", err);
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && text.trim().toLowerCase() === "/chucnang") {
+      try {
+        await sendText(chatId, CHUCNANG_TEXT);
+      } catch (err) {
+        logger.error("chucnang command failed", err);
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && text.trim() === "/link") {
+      try {
+        await startOnboarding();
+      } catch (err) {
+        logger.error("link command failed", err);
       }
       res.status(200).json({ok: true});
       return;
@@ -353,7 +305,7 @@ exports.zaloWebhook = onRequest(
         if (profile?.memberId) {
           await sendText(chatId, `ID: ${profile.memberId}`);
         } else {
-          await sendText(chatId, "Bạn chưa liên kết. Vui lòng nhắn 'hi' để bắt đầu nhập mã nhân viên và tên.");
+          await sendText(chatId, "Bạn chưa liên kết. Nếu cần liên kết để nhận thông báo theo mã NV thì gõ: /link");
         }
       } catch (err) {
         logger.error("id command failed", err);
@@ -498,94 +450,102 @@ exports.zaloWebhook = onRequest(
       }
     }
 
-    // Command: /tonkho <ASM1|ASM2> <MA_HANG>
+    // Command: /tonkho <MA_HANG> (mặc định xem cả ASM1 + ASM2)
+    // Optional: /tonkho ASM1 <MA_HANG> hoặc /tonkho ASM2 <MA_HANG>
     // Data source matches Angular tabs: collection `inventory-materials` with fields:
     // - factory: "ASM1" | "ASM2"
     // - materialCode: string
     // - quantity: number (fallbacks supported below)
     if (eventName === "message.text.received" && chatId && typeof text === "string") {
       const t = text.trim();
+
+      const buildTonkhoReplyFor = async (factory, code) => {
+        const snap = await db
+          .collection("inventory-materials")
+          .where("factory", "==", factory)
+          .where("materialCode", "==", code)
+          .limit(20)
+          .get();
+
+        if (snap.empty) return {factory, ok: false, total: 0, lines: []};
+
+        let total = 0;
+        const lines = [];
+        for (const doc of snap.docs) {
+          const d = doc.data() || {};
+          // Match Angular column "Tồn kho":
+          // (openingStock || 0) + (quantity || 0) - (exported || 0) - (xt || 0)
+          const qty =
+            (Number(d.openingStock || 0) || 0) +
+            (Number(d.quantity || 0) || 0) -
+            (Number(d.exported || 0) || 0) -
+            (Number(d.xt || 0) || 0);
+          total += qty || 0;
+          const po = d.poNumber || d.po || "";
+          const loc = d.location || "";
+          const batch = d.batchNumber || "";
+          const extra = [po && `PO:${po}`, loc && `Vị trí:${loc}`, batch && `Lot:${batch}`]
+            .filter(Boolean)
+            .join(" | ");
+          lines.push(`- ${qty}${extra ? ` (${extra})` : ""}`);
+          if (lines.length >= 8) break;
+        }
+        return {factory, ok: true, total, lines};
+      };
+
+      const handleTonkho = async (code, factories) => {
+        try {
+          const codeNorm = String(code || "").trim().toUpperCase();
+          if (!codeNorm) {
+            await sendText(chatId, "Vui lòng nhập mã hàng (ví dụ: B001680).");
+            return;
+          }
+
+          const targets =
+            Array.isArray(factories) && factories.length > 0 ? factories : ["ASM1", "ASM2"];
+          const results = await Promise.all(targets.map((fac) => buildTonkhoReplyFor(fac, codeNorm)));
+          const found = results.filter((r) => r.ok);
+          if (found.length === 0) {
+            await sendText(chatId, `Không tìm thấy tồn cho ${codeNorm} (ASM1/ASM2).`);
+            return;
+          }
+          const header = `Tồn kho\nMã: ${codeNorm}\n`;
+          const blocks = found
+            .map((r) => {
+              const details = r.lines && r.lines.length ? `Chi tiết:\n${r.lines.join("\n")}` : "";
+              return `---\n${r.factory}\nTổng: ${r.total}\n${details}`.trim();
+            })
+            .join("\n\n");
+          await sendText(chatId, `${header}\n${blocks}`.trim());
+        } catch (err) {
+          logger.error("tonkho failed", err);
+          await sendText(chatId, "Lỗi khi kiểm tra tồn kho.");
+        }
+      };
       // Natural text: "tồn kho B001680" (accepts without accents too)
       const m = t.match(/^(?:t[oòóỏõọôồốổỗộơờớởỡợ]n\\s+kho|ton\\s+kho)\\s+([A-Za-z0-9._-]+)\\s*$/i);
       if (m?.[1]) {
-        const code = m[1].trim().toUpperCase();
-        try {
-          await db.collection("zalo_pending").doc(chatId).set(
-            {
-              intent: "tonkho",
-              materialCode: code,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            {merge: true}
-          );
-        } catch (err) {
-          logger.error("set pending tonkho failed", err);
-        }
-
-        await sendText(chatId, `Bạn muốn xem tồn kho ở nhà máy nào cho mã ${code}?\nTrả lời: ASM1 hoặc ASM2`);
-
+        await handleTonkho(m[1], ["ASM1", "ASM2"]);
         res.status(200).json({ok: true});
         return;
       }
 
       if (t.toLowerCase().startsWith("/tonkho")) {
         const parts = t.split(/\s+/g).filter(Boolean);
-        const factory = (parts[1] || "").toUpperCase();
-        const materialCode = (parts[2] || "").trim();
+        const p1 = (parts[1] || "").trim();
+        const p2 = (parts[2] || "").trim();
+        const maybeFactory = p1.toUpperCase();
+        const fac = ["ASM1", "ASM2"].includes(maybeFactory) ? maybeFactory : "";
+        const code = fac ? p2 : p1;
+        const factories = fac ? [fac] : ["ASM1", "ASM2"];
 
-        if (!factory || !materialCode || !["ASM1", "ASM2"].includes(factory)) {
-          await sendText(chatId, "Cú pháp:\n/tonkho ASM1 <MA_HANG>\nhoặc\n/tonkho ASM2 <MA_HANG>");
+        if (!code) {
+          await sendText(chatId, "Cú pháp:\n/tonkho <MA_HANG>\nhoặc\n/tonkho ASM1 <MA_HANG>\nhoặc\n/tonkho ASM2 <MA_HANG>");
           res.status(200).json({ok: true});
           return;
         }
 
-        try {
-          const code = materialCode.toUpperCase();
-          const snap = await db
-            .collection("inventory-materials")
-            .where("factory", "==", factory)
-            .where("materialCode", "==", code)
-            .limit(20)
-            .get();
-
-          if (snap.empty) {
-            await sendText(chatId, `Không tìm thấy tồn cho ${code} (${factory}).`);
-            res.status(200).json({ok: true});
-            return;
-          }
-
-          let total = 0;
-          const lines = [];
-          for (const doc of snap.docs) {
-            const d = doc.data() || {};
-            // Match Angular column "Tồn kho":
-            // (openingStock || 0) + (quantity || 0) - (exported || 0) - (xt || 0)
-            const qty =
-              (Number(d.openingStock || 0) || 0) +
-              (Number(d.quantity || 0) || 0) -
-              (Number(d.exported || 0) || 0) -
-              (Number(d.xt || 0) || 0);
-            total += qty || 0;
-            const po = d.poNumber || d.po || "";
-            const loc = d.location || "";
-            const batch = d.batchNumber || "";
-            const extra = [po && `PO:${po}`, loc && `Vị trí:${loc}`, batch && `Lot:${batch}`]
-              .filter(Boolean)
-              .join(" | ");
-            lines.push(`- ${qty}${extra ? ` (${extra})` : ""}`);
-            if (lines.length >= 8) break;
-          }
-
-          const reply =
-            `Tồn kho ${factory}\nMã: ${materialCode.toUpperCase()}\nTổng: ${total}\n` +
-            (lines.length ? `Chi tiết:\n${lines.join("\n")}` : "");
-
-          await sendText(chatId, reply);
-        } catch (err) {
-          logger.error("tonkho failed", err);
-          await sendText(chatId, "Lỗi khi kiểm tra tồn kho.");
-        }
-
+        await handleTonkho(code, factories);
         res.status(200).json({ok: true});
         return;
       }
