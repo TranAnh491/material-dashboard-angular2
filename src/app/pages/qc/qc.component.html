@@ -73,6 +73,10 @@
         <i class="material-icons">check_circle</i>
         IQC
       </button>
+      <button type="button" class="iqc-btn material-check-btn" (click)="openMaterialCheckModal()" title="Tra cứu tình trạng IQC theo mã (scanner)">
+        <i class="material-icons">fact_check</i>
+        Check
+      </button>
 
       <!-- Search material + IQC status history -->
       <div class="iqc-search-wrapper">
@@ -359,45 +363,103 @@
             <button 
               class="status-btn" 
               [class.selected]="selectedIQCStatus === 'PASS'"
-              (click)="selectedIQCStatus = 'PASS'">
+              type="button"
+              (click)="onSelectIqcStatus('PASS')">
               <i class="material-icons">check_circle</i>
               PASS
             </button>
             <button 
               class="status-btn status-ng" 
               [class.selected]="selectedIQCStatus === 'NG'"
-              (click)="selectedIQCStatus = 'NG'">
+              type="button"
+              (click)="onSelectIqcStatus('NG')">
               <i class="material-icons">cancel</i>
               NG
             </button>
             <button 
               class="status-btn status-lock" 
               [class.selected]="selectedIQCStatus === 'LOCK'"
-              (click)="selectedIQCStatus = 'LOCK'">
+              type="button"
+              (click)="onSelectIqcStatus('LOCK')">
               <i class="material-icons">lock</i>
               LOCK
             </button>
             <button 
               class="status-btn status-special" 
               [class.selected]="selectedIQCStatus === 'ĐẶC CÁCH'"
-              (click)="selectedIQCStatus = 'ĐẶC CÁCH'">
+              type="button"
+              (click)="onSelectIqcStatus('ĐẶC CÁCH')">
               <i class="material-icons">stars</i>
               ĐẶC CÁCH
             </button>
             <button 
               class="status-btn status-pending" 
               [class.selected]="selectedIQCStatus === 'CHỜ KIỂM'"
-              (click)="selectedIQCStatus = 'CHỜ KIỂM'">
+              type="button"
+              (click)="onSelectIqcStatus('CHỜ KIỂM')">
               <i class="material-icons">schedule</i>
               CHỜ KIỂM
             </button>
             <button 
               class="status-btn status-pending" 
               [class.selected]="selectedIQCStatus === 'CHỜ XÁC NHẬN'"
-              (click)="selectedIQCStatus = 'CHỜ XÁC NHẬN'">
+              type="button"
+              (click)="onSelectIqcStatus('CHỜ XÁC NHẬN')">
               <i class="material-icons">schedule</i>
               CHỜ XÁC NHẬN
             </button>
+          </div>
+
+          <div class="iqc-pass-le-block" *ngIf="scannedMaterial">
+            <label class="iqc-pass-le-label">
+              <input
+                type="checkbox"
+                [(ngModel)]="iqcPassLe"
+                (ngModelChange)="onIqcPassLeCheckboxChange($event)"
+                [disabled]="selectedIQCStatus !== 'PASS'"
+              />
+              <span>Pass lẻ (ghi nhận từng bịch đã pass; không pass cả lô)</span>
+            </label>
+            <p class="iqc-pass-le-hint" *ngIf="selectedIQCStatus !== 'PASS'">
+              Chọn <strong>PASS</strong> để bật Pass lẻ.
+            </p>
+            <p class="iqc-pass-le-hint" *ngIf="iqcPassLe">
+              Trạng thái lưu trên kho: <strong>Chưa xong</strong>. Quét tem từng bịch (phần 4 có dạng
+              <code>DDMMYYYY-số/tổng</code>).
+            </p>
+            <div class="iqc-pass-le-scan" *ngIf="iqcPassLe">
+              <input
+                id="iqc-pass-le-scan-input"
+                type="text"
+                class="scan-input"
+                [(ngModel)]="iqcPassLeScanInput"
+                (keyup.enter)="processIqcPassLeScan()"
+                placeholder="MaterialCode|PO|SL|DDMMYYYY-i/tổng"
+                autocomplete="off"
+              />
+              <button type="button" class="scan-btn" (click)="processIqcPassLeScan()">
+                <i class="material-icons">add</i>
+                Thêm bịch
+              </button>
+            </div>
+            <div class="iqc-pass-le-summary" *ngIf="iqcPassLe && (iqcPassLeBagEntries.length || passLeNotPassedLabels.length)">
+              <div class="iqc-pass-le-col" *ngIf="iqcPassLeBagEntries.length">
+                <div class="iqc-pass-le-col-title">Đã pass ({{ iqcPassLeBagEntries.length }})</div>
+                <ul class="iqc-pass-le-list">
+                  <li *ngFor="let e of iqcPassLeBagEntries">{{ e.displayKey }}</li>
+                </ul>
+              </div>
+              <div class="iqc-pass-le-col" *ngIf="passLeNotPassedLabels.length">
+                <div class="iqc-pass-le-col-title">Chưa pass ({{ passLeNotPassedLabels.length }})</div>
+                <ul class="iqc-pass-le-list">
+                  <li *ngFor="let lbl of passLeNotPassedLabels">{{ lbl }}</li>
+                </ul>
+              </div>
+              <p class="iqc-pass-le-note" *ngIf="iqcPassLe && passLeHasSplit && iqcPassLeBagEntries.length">
+                <i class="material-icons">info</i>
+                Có tem bịch tách (T…): danh sách “chưa pass” không tự động theo số thứ tự; chỉ lưu các bịch đã quét.
+              </p>
+            </div>
           </div>
 
           <!-- Extra input based on selected status -->
@@ -431,6 +493,102 @@
     
     <div class="modal-footer">
       <button class="close-modal-btn" (click)="closeIQCModal()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tra cứu nhanh tình trạng mã (scanner) -->
+<div class="modal-overlay" *ngIf="showMaterialCheckModal" (click)="closeMaterialCheckModal()">
+  <div class="modal-content iqc-modal-content material-check-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">fact_check</i>
+        Check — Tình trạng IQC ({{ selectedFactory }})
+      </h3>
+      <button type="button" class="close-btn" (click)="closeMaterialCheckModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="scan-section">
+        <label class="scan-label">
+          <i class="material-icons">qr_code_scanner</i>
+          Quét mã (Enter) — QR đầy đủ hoặc chỉ MaterialCode
+        </label>
+        <div class="scan-input-container">
+          <input
+            type="text"
+            id="material-check-scan-input"
+            class="scan-input"
+            [(ngModel)]="materialCheckScanInput"
+            (keyup.enter)="processMaterialCheckScan()"
+            placeholder="MaterialCode hoặc MaterialCode|PO|Qty|IMD"
+            autocomplete="off"
+          />
+          <button type="button" class="scan-btn" (click)="processMaterialCheckScan()" [disabled]="materialCheckBusy">
+            <i class="material-icons">search</i>
+            Tra cứu
+          </button>
+        </div>
+      </div>
+
+      <div class="material-check-hint" *ngIf="!materialCheckError && materialCheckRows.length === 0 && !materialCheckBusy">
+        <i class="material-icons">info</i>
+        <span>Kết quả hiển thị tại đây sau khi quét xong.</span>
+      </div>
+
+      <div class="material-check-error" *ngIf="materialCheckError">
+        <i class="material-icons">error_outline</i>
+        <span>{{ materialCheckError }}</span>
+      </div>
+
+      <div class="material-check-loading" *ngIf="materialCheckBusy">
+        <i class="material-icons">hourglass_empty</i>
+        <span>Đang tra cứu...</span>
+      </div>
+
+      <div class="material-check-results" *ngIf="materialCheckRows.length > 0">
+        <h4 class="section-title">
+          <i class="material-icons">inventory_2</i>
+          Kết quả ({{ materialCheckRows.length }} dòng kho)
+        </h4>
+        <div class="material-check-table-wrap">
+          <table class="material-check-table">
+            <thead>
+              <tr>
+                <th>PO</th>
+                <th>Lô / IMD</th>
+                <th>Vị trí</th>
+                <th>Tình trạng IQC</th>
+                <th>Người kiểm</th>
+                <th>Thời gian kiểm</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of materialCheckRows">
+                <td>{{ row.poNumber || '—' }}</td>
+                <td>{{ row.imdLabel || row.batchNumber || '—' }}</td>
+                <td>{{ row.location || '—' }}</td>
+                <td>
+                  <span class="status-badge" [ngClass]="getIQCStatusClass(row.iqcStatus || 'CHỜ KIỂM')">
+                    {{ getStatusLabel(row.iqcStatus) }}
+                  </span>
+                </td>
+                <td>{{ row.qcCheckedBy?.trim() ? row.qcCheckedBy : '—' }}</td>
+                <td>{{ row.qcCheckedAt ? (row.qcCheckedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="close-modal-btn" (click)="closeMaterialCheckModal()">
         <i class="material-icons">close</i>
         Đóng
       </button>

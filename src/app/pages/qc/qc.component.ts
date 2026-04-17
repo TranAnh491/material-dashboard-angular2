@@ -5,6 +5,9 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
+import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 
 export interface InventoryMaterial {
   id?: string;
@@ -33,6 +36,21 @@ export interface InventoryMaterial {
   iqcStatus?: string; // IQC Status: PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
   createdAt?: Date;
   updatedAt?: Date;
+  /** Tổng số bịch (BAG) trên kho — dùng cho Pass lẻ / QR bịch. */
+  totalBags?: number;
+}
+
+export interface MaterialCheckRow {
+  id: string;
+  materialCode: string;
+  materialName?: string;
+  poNumber: string;
+  batchNumber: string;
+  location: string;
+  imdLabel: string;
+  iqcStatus: string;
+  qcCheckedBy: string;
+  qcCheckedAt: Date | null;
 }
 
 @Component({
@@ -112,6 +130,16 @@ export class QCComponent implements OnInit, OnDestroy {
   ngErrorText: string = '';
   lockReasonText: string = '';
   pendingNoteText: string = '';
+
+  /** Pass lẻ: PASS nhưng chỉ ghi nhận từng bịch đã quét; lưu trạng thái CHƯA XONG. */
+  iqcPassLe: boolean = false;
+  iqcPassLeScanInput: string = '';
+  iqcPassLeBagEntries: Array<{
+    displayKey: string;
+    numerator: number;
+    denominator: number;
+    hasSplit: boolean;
+  }> = [];
   
   // Pending QC count
   pendingQCCount: number = 0;
@@ -165,13 +193,21 @@ export class QCComponent implements OnInit, OnDestroy {
   // Send report UI state
   isSendingReport: boolean = false;
   sendReportStatusText: string = '';
+
+  /** Popup tra cứu nhanh: tình trạng IQC / ai kiểm / thời gian (chỉ đọc). */
+  showMaterialCheckModal: boolean = false;
+  materialCheckScanInput: string = '';
+  materialCheckBusy: boolean = false;
+  materialCheckError: string = '';
+  materialCheckRows: MaterialCheckRow[] = [];
   
   private destroy$ = new Subject<void>();
   
   constructor(
     private firestore: AngularFirestore,
     private router: Router,
-    private fns: AngularFireFunctions
+    private fns: AngularFireFunctions,
+    private rmBagHistory: RmBagHistoryService
   ) {}
   
   getYearOptions(): number[] {
@@ -337,6 +373,7 @@ export class QCComponent implements OnInit, OnDestroy {
               supplier: data.supplier || '',
               remarks: data.remarks || '',
               iqcStatus: data.iqcStatus || 'CHỜ KIỂM',
+              totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
               createdAt: data.createdAt?.toDate() || new Date(),
               updatedAt: data.updatedAt?.toDate() || new Date()
             } as InventoryMaterial;
@@ -391,12 +428,13 @@ export class QCComponent implements OnInit, OnDestroy {
             qualityCheck: data.qualityCheck || false,
             isReceived: data.isReceived || false,
             notes: data.notes || '',
-            rollsOrBags: data.rollsOrBags || '',
-            supplier: data.supplier || '',
-            remarks: data.remarks || '',
-            iqcStatus: data.iqcStatus || 'CHỜ XÁC NHẬN',
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date()
+              rollsOrBags: data.rollsOrBags || '',
+              supplier: data.supplier || '',
+              remarks: data.remarks || '',
+              iqcStatus: data.iqcStatus || 'CHỜ XÁC NHẬN',
+              totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date()
           } as InventoryMaterial;
         });
         
@@ -556,6 +594,7 @@ export class QCComponent implements OnInit, OnDestroy {
     this.ngErrorText = '';
     this.lockReasonText = '';
     this.pendingNoteText = '';
+    this.resetIqcPassLeUi();
     
     // Auto-focus scan input after modal opens
     setTimeout(() => {
@@ -575,6 +614,362 @@ export class QCComponent implements OnInit, OnDestroy {
     this.ngErrorText = '';
     this.lockReasonText = '';
     this.pendingNoteText = '';
+    this.resetIqcPassLeUi();
+  }
+
+  private resetIqcPassLeUi(): void {
+    this.iqcPassLe = false;
+    this.iqcPassLeScanInput = '';
+    this.iqcPassLeBagEntries = [];
+  }
+
+  private clearIqcPassLeEntriesOnly(): void {
+    this.iqcPassLeScanInput = '';
+    this.iqcPassLeBagEntries = [];
+  }
+
+  onSelectIqcStatus(status: string): void {
+    this.selectedIQCStatus = status;
+    if (status !== 'PASS') {
+      this.resetIqcPassLeUi();
+    }
+  }
+
+  onIqcPassLeCheckboxChange(checked: boolean): void {
+    this.iqcPassLe = checked;
+    if (!checked) {
+      this.iqcPassLeScanInput = '';
+      this.iqcPassLeBagEntries = [];
+    } else {
+      setTimeout(() => {
+        const el = document.getElementById('iqc-pass-le-scan-input');
+        if (el) {
+          el.focus();
+        }
+      }, 80);
+    }
+  }
+
+  get passLeHasSplit(): boolean {
+    return this.iqcPassLeBagEntries.some(e => e.hasSplit);
+  }
+
+  get passLeNotPassedLabels(): string[] {
+    if (!this.iqcPassLeBagEntries.length) {
+      return [];
+    }
+    if (this.passLeHasSplit) {
+      return [];
+    }
+    const T = this.getPassLeExpectedTotalBags();
+    if (T <= 0) {
+      return [];
+    }
+    const passed = new Set(this.iqcPassLeBagEntries.map(e => e.numerator));
+    const out: string[] = [];
+    for (let i = 1; i <= T; i++) {
+      if (!passed.has(i)) {
+        out.push(`${i}/${T}`);
+      }
+    }
+    return out;
+  }
+
+  getPassLeExpectedTotalBags(): number {
+    const fromDoc = Math.max(0, Math.floor(Number(this.scannedMaterial?.totalBags ?? 0)));
+    if (!this.iqcPassLeBagEntries.length) {
+      return fromDoc;
+    }
+    const d = this.iqcPassLeBagEntries[0].denominator;
+    return Math.max(d, fromDoc);
+  }
+
+  /** QR cùng dòng kho (mã + PO + IMD) với material đang mở IQC. */
+  private materialQrMatchesScannedLine(
+    material: InventoryMaterial,
+    materialCode: string,
+    poNumber: string,
+    part4ImdKey: string
+  ): boolean {
+    const mc = (material.materialCode || '').trim();
+    if (mc !== (materialCode || '').trim()) {
+      return false;
+    }
+    const poMat = (material.poNumber || '').trim();
+    const poScan = (poNumber || '').trim();
+    const poMatch =
+      poMat === poScan || poMat.replace(/\s+/g, '') === poScan.replace(/\s+/g, '');
+    if (!poMatch) {
+      return false;
+    }
+    const matImd = this.getDisplayIMD(material);
+    const k = (part4ImdKey || '').trim();
+    if (!k) {
+      return false;
+    }
+    return matImd === k || matImd.startsWith(k) || k.startsWith(matImd);
+  }
+
+  processIqcPassLeScan(): void {
+    const raw = (this.iqcPassLeScanInput || '').trim();
+    if (!raw || !this.scannedMaterial || !this.iqcPassLe) {
+      return;
+    }
+    const parts = raw.split('|');
+    if (parts.length < 4) {
+      alert('❌ Pass lẻ: QR cần đúng định dạng MaterialCode|PO|Quantity|IMD (có số bịch).');
+      this.iqcPassLeScanInput = '';
+      return;
+    }
+    const materialCode = parts[0].trim();
+    const poNumber = parts[1].trim();
+    const part4 = parts[3].trim();
+    const parsed = this.rmBagHistory.parseQrPart4(part4);
+    if (!parsed.bagFractionLabel) {
+      alert(
+        '❌ Pass lẻ: phần IMD phải có số bịch dạng DDMMYYYY-số/tổng (VD: 01012026-3/10).'
+      );
+      this.iqcPassLeScanInput = '';
+      return;
+    }
+    if (!this.materialQrMatchesScannedLine(this.scannedMaterial, materialCode, poNumber, parsed.imdKey)) {
+      alert('❌ QR không khớp mã hàng / PO / IMD của dòng đang mở trong IQC.');
+      this.iqcPassLeScanInput = '';
+      return;
+    }
+    const fracParts = parsed.bagFractionLabel.split('/');
+    const numerator = parseInt(fracParts[0], 10);
+    const denominator = parseInt(fracParts[1], 10);
+    if (
+      !Number.isFinite(numerator) ||
+      !Number.isFinite(denominator) ||
+      numerator < 1 ||
+      denominator < 1
+    ) {
+      alert('❌ Không đọc được số bịch từ tem.');
+      this.iqcPassLeScanInput = '';
+      return;
+    }
+    if (this.iqcPassLeBagEntries.length > 0) {
+      const d0 = this.iqcPassLeBagEntries[0].denominator;
+      if (denominator !== d0) {
+        alert(`❌ Các tem phải cùng tổng bịch (đang dùng /${d0}).`);
+        this.iqcPassLeScanInput = '';
+        return;
+      }
+    }
+    const displayKey =
+      parsed.bagNumberDisplay && String(parsed.bagNumberDisplay).trim()
+        ? String(parsed.bagNumberDisplay).trim()
+        : parsed.bagFractionLabel;
+    if (this.iqcPassLeBagEntries.some(e => e.displayKey === displayKey)) {
+      alert('⚠️ Bịch này đã có trong danh sách đã pass.');
+      this.iqcPassLeScanInput = '';
+      return;
+    }
+    const hasSplit = String(parsed.bagNumberDisplay || '').includes('(');
+    this.iqcPassLeBagEntries.push({
+      displayKey,
+      numerator,
+      denominator,
+      hasSplit
+    });
+    this.iqcPassLeScanInput = '';
+    setTimeout(() => {
+      const el = document.getElementById('iqc-pass-le-scan-input');
+      if (el) {
+        el.focus();
+      }
+    }, 50);
+  }
+
+  openMaterialCheckModal(): void {
+    if (!this.currentEmployeeId || this.currentEmployeeId.trim() === '') {
+      const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
+      const savedEmployeeName = localStorage.getItem('qc_currentEmployeeName');
+      if (savedEmployeeId && savedEmployeeName) {
+        this.currentEmployeeId = savedEmployeeId;
+        this.currentEmployeeName = savedEmployeeName;
+        this.isEmployeeVerified = true;
+      } else {
+        alert('⚠️ Vui lòng xác thực nhân viên trước khi tra cứu.');
+        this.showEmployeeModal = true;
+        return;
+      }
+    }
+
+    this.showMaterialCheckModal = true;
+    this.materialCheckScanInput = '';
+    this.materialCheckRows = [];
+    this.materialCheckError = '';
+    this.materialCheckBusy = false;
+
+    setTimeout(() => {
+      const input = document.getElementById('material-check-scan-input');
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  }
+
+  closeMaterialCheckModal(): void {
+    this.showMaterialCheckModal = false;
+    this.materialCheckScanInput = '';
+    this.materialCheckRows = [];
+    this.materialCheckError = '';
+    this.materialCheckBusy = false;
+  }
+
+  private mapDocToMaterialCheckRow(doc: any): MaterialCheckRow {
+    const data = doc.data() as any;
+    const mat: InventoryMaterial = {
+      id: doc.id,
+      factory: data.factory || this.selectedFactory,
+      importDate: this.parseImportDate(data.importDate),
+      receivedDate: data.receivedDate?.toDate() || undefined,
+      batchNumber: data.batchNumber || '',
+      materialCode: data.materialCode || '',
+      materialName: data.materialName || '',
+      poNumber: data.poNumber || '',
+      openingStock: data.openingStock ?? null,
+      quantity: data.quantity || 0,
+      unit: data.unit || '',
+      exported: data.exported || 0,
+      xt: data.xt || 0,
+      stock: data.stock || 0,
+      location: data.location || '',
+      type: data.type || '',
+      expiryDate: data.expiryDate?.toDate() || new Date(),
+      qualityCheck: data.qualityCheck || false,
+      isReceived: data.isReceived || false,
+      notes: data.notes || '',
+      rollsOrBags: data.rollsOrBags || '',
+      supplier: data.supplier || '',
+      remarks: data.remarks || '',
+      iqcStatus: data.iqcStatus || '',
+      totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date()
+    };
+
+    return {
+      id: doc.id,
+      materialCode: mat.materialCode,
+      materialName: mat.materialName,
+      poNumber: mat.poNumber,
+      batchNumber: mat.batchNumber,
+      location: mat.location,
+      imdLabel: this.getDisplayIMD(mat),
+      iqcStatus: (data.iqcStatus || '').toString(),
+      qcCheckedBy: (data.qcCheckedBy || '').toString(),
+      qcCheckedAt: this.parseFirestoreDate(data.qcCheckedAt)
+    };
+  }
+
+  async processMaterialCheckScan(): Promise<void> {
+    const raw = (this.materialCheckScanInput || '').trim();
+    if (!raw || this.materialCheckBusy) {
+      return;
+    }
+
+    this.materialCheckBusy = true;
+    this.materialCheckError = '';
+    this.materialCheckRows = [];
+
+    try {
+      const parts = raw.split('|');
+
+      if (parts.length >= 4) {
+        const materialCode = parts[0].trim();
+        const poNumber = parts[1].trim();
+        const scannedIMD = parts[3].trim();
+
+        const querySnapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory)
+             .where('materialCode', '==', materialCode)
+             .where('poNumber', '==', poNumber)
+             .limit(25)
+        ).get().toPromise();
+
+        if (!querySnapshot || querySnapshot.empty) {
+          this.materialCheckError =
+            `Không tìm thấy dòng kho (${this.selectedFactory}) cho mã ${materialCode}, PO ${poNumber}.`;
+          this.materialCheckScanInput = '';
+          return;
+        }
+
+        let matched: MaterialCheckRow | null = null;
+        querySnapshot.forEach((doc: any) => {
+          if (matched) return;
+          const row = this.mapDocToMaterialCheckRow(doc);
+          const imdMatch =
+            row.imdLabel === scannedIMD ||
+            row.imdLabel.startsWith(scannedIMD) ||
+            scannedIMD.startsWith(row.imdLabel);
+          if (imdMatch) {
+            matched = row;
+          }
+        });
+
+        if (!matched) {
+          this.materialCheckError =
+            `Không khớp IMD với dữ liệu kho. Đã quét IMD: ${scannedIMD}.`;
+          this.materialCheckScanInput = '';
+          return;
+        }
+
+        this.materialCheckRows = [matched];
+      } else {
+        const materialCode = (parts[0] || raw).trim().toUpperCase();
+        if (!materialCode) {
+          this.materialCheckError = 'Vui lòng quét hoặc nhập mã nguyên liệu.';
+          return;
+        }
+
+        let snapshot: any = null;
+        try {
+          snapshot = await this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory)
+               .where('materialCode', '==', materialCode)
+               .limit(200)
+          ).get().toPromise();
+        } catch {
+          snapshot = await this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory)
+               .limit(2000)
+          ).get().toPromise();
+        }
+
+        if (!snapshot || snapshot.empty) {
+          this.materialCheckError = `Không tìm thấy mã ${materialCode} tại ${this.selectedFactory}.`;
+          this.materialCheckScanInput = '';
+          return;
+        }
+
+        const rows = snapshot.docs
+          .map((doc: any) => this.mapDocToMaterialCheckRow(doc))
+          .filter((row: any) => (row.materialCode || '').toUpperCase() === materialCode)
+          .sort((a: any, b: any) => {
+            const ta = a.qcCheckedAt ? a.qcCheckedAt.getTime() : 0;
+            const tb = b.qcCheckedAt ? b.qcCheckedAt.getTime() : 0;
+            return tb - ta;
+          });
+
+        if (rows.length === 0) {
+          this.materialCheckError = `Không tìm thấy mã ${materialCode} tại ${this.selectedFactory}.`;
+        } else {
+          this.materialCheckRows = rows;
+        }
+      }
+
+      this.materialCheckScanInput = '';
+    } catch (error: any) {
+      console.error('Error material check scan:', error);
+      this.materialCheckError = `Lỗi tra cứu: ${error?.message || error}`;
+      this.materialCheckScanInput = '';
+    } finally {
+      this.materialCheckBusy = false;
+    }
   }
   
   async processIQCScan(): Promise<void> {
@@ -642,6 +1037,7 @@ export class QCComponent implements OnInit, OnDestroy {
     
     if (foundMaterial) {
       this.scannedMaterial = foundMaterial;
+      this.clearIqcPassLeEntriesOnly();
       this.iqcScanInput = '';
       console.log('✅ Found material:', foundMaterial);
     } else {
@@ -700,6 +1096,7 @@ export class QCComponent implements OnInit, OnDestroy {
           supplier: data.supplier || '',
           remarks: data.remarks || '',
           iqcStatus: data.iqcStatus || 'CHỜ XÁC NHẬN',
+          totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date()
         };
@@ -722,6 +1119,7 @@ export class QCComponent implements OnInit, OnDestroy {
       
       if (foundMaterial) {
         this.scannedMaterial = foundMaterial;
+        this.clearIqcPassLeEntriesOnly();
         // Thêm vào materials array nếu chưa có
         const existingIndex = this.materials.findIndex(m => m.id === foundMaterial!.id);
         if (existingIndex < 0) {
@@ -762,7 +1160,17 @@ export class QCComponent implements OnInit, OnDestroy {
     }
     
     // Lưu thông tin trước khi reset
-    const statusToUpdate = this.selectedIQCStatus;
+    const wantsPassLePartial = this.selectedIQCStatus === 'PASS' && this.iqcPassLe;
+    let statusToUpdate = this.selectedIQCStatus;
+    if (wantsPassLePartial) {
+      if (this.iqcPassLeBagEntries.length === 0) {
+        alert(
+          'Pass lẻ: vui lòng quét ít nhất một tem bịch.\nTem phải có phần IMD dạng DDMMYYYY-số/tổng (VD: 01012026-2/10).'
+        );
+        return;
+      }
+      statusToUpdate = 'CHƯA XONG';
+    }
     const materialToUpdate = { ...this.scannedMaterial };
     const employeeIdToSave = this.currentEmployeeId.trim();
 
@@ -842,6 +1250,19 @@ export class QCComponent implements OnInit, OnDestroy {
     } else if (statusToUpdate === 'CHỜ KIỂM') {
       updatePayload.iqcPendingNote = (this.pendingNoteText || '').trim();
     }
+
+    const del = firebase.firestore.FieldValue.delete();
+    if (statusToUpdate === 'CHƯA XONG') {
+      updatePayload.iqcPassLeBagKeys = this.iqcPassLeBagEntries.map(e => e.displayKey);
+      updatePayload.iqcPassLeTotalBags = this.getPassLeExpectedTotalBags();
+      updatePayload.iqcPassLeNotPassedBags = this.passLeNotPassedLabels;
+    } else {
+      updatePayload.iqcPassLeBagKeys = del;
+      updatePayload.iqcPassLeTotalBags = del;
+      updatePayload.iqcPassLeNotPassedBags = del;
+    }
+
+    this.resetIqcPassLeUi();
 
     this.firestore.collection('inventory-materials').doc(materialId).update(updatePayload).then(() => {
       console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} by ${employeeIdToSave} at ${now.toISOString()}`);
@@ -1022,6 +1443,8 @@ export class QCComponent implements OnInit, OnDestroy {
         return 'status-lock';
       case 'ĐẶC CÁCH':
         return 'status-special';
+      case 'CHƯA XONG':
+        return 'status-chua-xong';
       case 'CHỜ XÁC NHẬN':
       case 'CHỜ KIỂM':
         return 'status-pending';
@@ -1036,6 +1459,9 @@ export class QCComponent implements OnInit, OnDestroy {
   }
   
   getStatusLabel(status: string): string {
+    if (status === 'CHƯA XONG') {
+      return 'Chưa xong';
+    }
     if (!status || status === 'CHỜ KIỂM' || status === 'CHỜ XÁC NHẬN') {
       return status || 'CHỜ KIỂM';
     }
