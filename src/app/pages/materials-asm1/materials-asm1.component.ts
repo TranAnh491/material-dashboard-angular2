@@ -178,6 +178,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   /** Rule "đã in lại tem mẫu mới" (label-reprint-flags). Tạm thời TẮT theo yêu cầu. */
   private readonly REPRINT_FLAG_RULE_ENABLED = true;
 
+  // ===== In Lại Tem (theo LSX -> in toàn bộ tem theo mã hàng, chỉ IMD trước cutoff) =====
+  showTemInLaiPopup = false;
+  temInLaiLsxInput = '';
+  temInLaiError = '';
+  temInLaiBusy = false;
+  temInLaiItems: Array<{
+    materialCode: string;
+    eligibleRowCount: number;
+    alreadyPrinted: boolean;
+    blockedByRuleBag: boolean;
+  }> = [];
+  private temInLaiPrintedCodes = new Set<string>();
+  temInLaiShowAdd = false;
+  temInLaiAddCodeInput = '';
+  temInLaiImportBusy = false;
+  private readonly TEM_INLAI_PRINTED_COLLECTION = 'tem-inlai-printed-codes';
+
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
   spSearchCode = '';
@@ -260,6 +277,393 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.temLeSplitQty = null;
     this.temLeError = '';
     this.temLeParsed = null;
+  }
+
+  private normalizeMaterialCodeUpper(raw: string): string {
+    return (raw || '').toString().trim().toUpperCase();
+  }
+
+  private buildTemInLaiPrintedDocId(materialCode: string): string {
+    const mc = this.normalizeMaterialCodeUpper(materialCode);
+    return `ASM1__${mc}`.replace(/[\/\\\s]+/g, '_').slice(0, 200);
+  }
+
+  private async loadTemInLaiPrintedCodes(): Promise<void> {
+    try {
+      const snap = await this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION, (ref) =>
+        ref.where('factory', '==', 'ASM1').limit(5000)
+      ).get().toPromise();
+      this.temInLaiPrintedCodes.clear();
+      if (snap && !snap.empty) {
+        for (const doc of snap.docs) {
+          const d = doc.data() as any;
+          const mc = this.normalizeMaterialCodeUpper(d?.materialCode || doc.id);
+          if (mc) this.temInLaiPrintedCodes.add(mc);
+        }
+      }
+    } catch (e) {
+      console.warn('[TemInLai] load printed codes failed', e);
+    }
+  }
+
+  openTemInLaiPopup(): void {
+    this.showTemInLaiPopup = true;
+    this.temInLaiLsxInput = '';
+    this.temInLaiError = '';
+    this.temInLaiBusy = false;
+    this.temInLaiItems = [];
+    this.temInLaiShowAdd = false;
+    this.temInLaiAddCodeInput = '';
+    void this.loadTemInLaiPrintedCodes();
+    setTimeout(() => {
+      const el = document.getElementById('tem-inlai-lsx-input-asm1') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 50);
+  }
+
+  closeTemInLaiPopup(): void {
+    this.showTemInLaiPopup = false;
+    this.temInLaiLsxInput = '';
+    this.temInLaiError = '';
+    this.temInLaiBusy = false;
+    this.temInLaiItems = [];
+    this.temInLaiShowAdd = false;
+    this.temInLaiAddCodeInput = '';
+  }
+
+  onTemInLaiLsxEnter(): void {
+    void this.loadTemInLaiListFromLsx();
+  }
+
+  private async fetchInventoryRowsByMaterialCodes(materialCodes: string[]): Promise<InventoryMaterial[]> {
+    const out: InventoryMaterial[] = [];
+    const uniq = Array.from(new Set(materialCodes.map((x) => this.normalizeMaterialCodeUpper(x)).filter(Boolean)));
+    for (const code of uniq) {
+      try {
+        const snap = await this.firestore.collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', this.FACTORY).where('materialCode', '==', code).limit(2000)
+        ).get().toPromise();
+        if (!snap || snap.empty) continue;
+        for (const doc of snap.docs) {
+          const d = doc.data() as any;
+          out.push({
+            id: doc.id,
+            factory: d.factory || this.FACTORY,
+            importDate: this.parseImportDate(d.importDate),
+            receivedDate: d.receivedDate?.toDate?.() || undefined,
+            batchNumber: d.batchNumber || '',
+            materialCode: d.materialCode || '',
+            materialName: d.materialName || '',
+            poNumber: d.poNumber || '',
+            openingStock: d.openingStock || null,
+            quantity: d.quantity || 0,
+            unit: d.unit || '',
+            exported: d.exported || 0,
+            xt: d.xt || 0,
+            stock: d.stock || 0,
+            location: d.location || '',
+            type: d.type || '',
+            expiryDate: d.expiryDate?.toDate?.() || new Date(),
+            qualityCheck: d.qualityCheck || false,
+            isReceived: d.isReceived || false,
+            notes: d.notes || '',
+            rollsOrBags: d.rollsOrBags || '',
+            supplier: d.supplier || '',
+            remarks: d.remarks || '',
+            isCompleted: !!d.isCompleted,
+            totalBags: Math.floor(Number(d.totalBags ?? 0)),
+            bagTrackingInitialized: !!d.bagTrackingInitialized
+          } as any);
+        }
+      } catch (e) {
+        console.warn('[TemInLai] fetch inventory rows for', code, e);
+      }
+    }
+    return out;
+  }
+
+  private async loadTemInLaiListFromLsx(): Promise<void> {
+    this.temInLaiError = '';
+    const raw = this.temInLaiLsxInput.trim();
+    if (!raw) {
+      this.temInLaiError = 'Vui lòng scan hoặc nhập lệnh sản xuất (LSX).';
+      return;
+    }
+    if (this.temInLaiBusy) return;
+    this.temInLaiBusy = true;
+    this.temInLaiItems = [];
+    try {
+      await this.loadTemInLaiPrintedCodes();
+      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx('ASM1', raw);
+      if (!pxkRaw.length) {
+        this.temInLaiError = 'Không tìm thấy PXK cho LSX này. Kiểm tra đã import PXK.';
+        return;
+      }
+      const merged = this.mergePxkLinesForTem(pxkRaw);
+      const codes = Array.from(new Set(merged.map((l) => this.normalizeMaterialCodeUpper(l.materialCode)).filter(Boolean)));
+      if (!codes.length) {
+        this.temInLaiError = 'Không có mã hàng trong PXK của LSX này.';
+        return;
+      }
+      const invRows = await this.fetchInventoryRowsByMaterialCodes(codes);
+      const cutoffMs = this.TEM_MOI_CUTOFF.getTime();
+      const eligibleByCode = new Map<string, number>();
+      for (const r of invRows) {
+        const mc = this.normalizeMaterialCodeUpper(r.materialCode);
+        const t = r.importDate?.getTime?.() || 0;
+        if (mc && t > 0 && t < cutoffMs) {
+          eligibleByCode.set(mc, (eligibleByCode.get(mc) || 0) + 1);
+        }
+      }
+      this.temInLaiItems = codes
+        .sort((a, b) => a.localeCompare(b, 'vi'))
+        .map((mc) => ({
+          materialCode: mc,
+          eligibleRowCount: eligibleByCode.get(mc) || 0,
+          alreadyPrinted: this.temInLaiPrintedCodes.has(mc),
+          blockedByRuleBag: this.shouldSkipMaterialForTemXuatKhoExport(mc)
+        }));
+      if (this.temInLaiItems.every((x) => x.eligibleRowCount === 0)) {
+        this.temInLaiError = 'Không có dòng kho IMD trước 01/04/2026 cho các mã trong LSX này.';
+      }
+    } catch (e) {
+      console.error('Tem In Lại error:', e);
+      this.temInLaiError = (e as Error)?.message || 'Lỗi khi đọc LSX.';
+    } finally {
+      this.temInLaiBusy = false;
+    }
+  }
+
+  async addPrintedCodeManual(): Promise<void> {
+    const mc = this.normalizeMaterialCodeUpper(this.temInLaiAddCodeInput);
+    if (!mc) return;
+    try {
+      await this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(this.buildTemInLaiPrintedDocId(mc)).set(
+        {
+          factory: 'ASM1',
+          materialCode: mc,
+          source: 'manual',
+          updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+      this.temInLaiPrintedCodes.add(mc);
+      this.temInLaiAddCodeInput = '';
+      this.temInLaiItems = this.temInLaiItems.map((it) =>
+        it.materialCode === mc ? { ...it, alreadyPrinted: true } : it
+      );
+    } catch (e) {
+      console.warn('[TemInLai] manual add failed', e);
+    }
+  }
+
+  triggerPrintedCodesImport(): void {
+    const el = document.getElementById('tem-inlai-import-file-asm1') as HTMLInputElement | null;
+    if (!el) return;
+    el.value = '';
+    el.click();
+  }
+
+  async onPrintedCodesFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (this.temInLaiImportBusy) return;
+    this.temInLaiImportBusy = true;
+    this.temInLaiError = '';
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheetName = wb.SheetNames?.[0];
+      if (!sheetName) {
+        this.temInLaiError = 'File không có sheet.';
+        return;
+      }
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }) as any[][];
+      const codes: string[] = [];
+      for (const r of rows) {
+        const v = r?.[0];
+        const mc = this.normalizeMaterialCodeUpper(String(v ?? ''));
+        if (mc) codes.push(mc);
+      }
+      const uniq = Array.from(new Set(codes)).filter(Boolean);
+      if (uniq.length === 0) {
+        this.temInLaiError = 'Không đọc được mã nào ở cột A.';
+        return;
+      }
+
+      // Write to Firestore in batches (<=500 ops/batch)
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniq.length; i += 450) {
+        chunks.push(uniq.slice(i, i + 450));
+      }
+      for (const ch of chunks) {
+        const batch = this.firestore.firestore.batch();
+        for (const mc of ch) {
+          const docId = this.buildTemInLaiPrintedDocId(mc);
+          const ref = this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(docId).ref;
+          batch.set(
+            ref,
+            {
+              factory: 'ASM1',
+              materialCode: mc,
+              source: 'import',
+              updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+            },
+            { merge: true }
+          );
+        }
+        await batch.commit();
+      }
+
+      for (const mc of uniq) this.temInLaiPrintedCodes.add(mc);
+      this.temInLaiItems = this.temInLaiItems.map((it) =>
+        this.temInLaiPrintedCodes.has(it.materialCode) ? { ...it, alreadyPrinted: true } : it
+      );
+      this.temInLaiError = `✅ Đã import ${uniq.length} mã đã in.`;
+    } catch (e) {
+      console.warn('[TemInLai] import failed', e);
+      this.temInLaiError = 'Lỗi import file (chỉ nhận Excel/CSV, mã nằm ở cột A).';
+    } finally {
+      this.temInLaiImportBusy = false;
+    }
+  }
+
+  async printTemInLaiAll(): Promise<void> {
+    this.temInLaiError = '';
+    if (this.temInLaiBusy) return;
+    const lsx = this.temInLaiLsxInput.trim();
+    const codesToPrint = this.temInLaiItems
+      .filter((x) => x.eligibleRowCount > 0 && !x.alreadyPrinted && !x.blockedByRuleBag)
+      .map((x) => x.materialCode);
+    if (!codesToPrint.length) {
+      this.temInLaiError = 'Không có mã nào cần in (hoặc tất cả đã in / không có IMD cũ).';
+      return;
+    }
+    this.temInLaiBusy = true;
+    try {
+      const invRowsAll = await this.fetchInventoryRowsByMaterialCodes(codesToPrint);
+      const cutoffMs = this.TEM_MOI_CUTOFF.getTime();
+      const invRows = invRowsAll.filter((r) => {
+        const t = r.importDate?.getTime?.() || 0;
+        return t > 0 && t < cutoffMs;
+      });
+      const payloads: { qrData: string }[] = [];
+      for (const r of invRows) {
+        const mat = this.normalizeMaterialCodeUpper(r.materialCode);
+        const po = (r.poNumber || '').trim();
+        const sp = this.getEffectiveStandardPacking(r);
+        if (!sp || sp <= 0) continue;
+        const rowStock = Math.max(0, this.calculateCurrentStock(r));
+        if (rowStock <= 0) continue;
+        const bagTotal = r.bagTrackingInitialized ? this.computeTotalBagsFromStock(r) : Math.floor(Number((r as any).totalBags ?? 0));
+        if (!bagTotal || bagTotal < 1) continue;
+        const imdKey = this.getImdKeyFromImportDate(r.importDate);
+        const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
+        const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
+        for (let i = 1; i <= bagTotal; i++) {
+          const qty = capOfBag(i);
+          if (qty <= 1e-9) continue;
+          const p4 = `${imdKey}-${i}/${bagTotal}`;
+          payloads.push({ qrData: `${mat}|${po}|${qty}|${p4}` });
+        }
+      }
+      if (!payloads.length) {
+        this.temInLaiError = 'Không tạo được tem nào để in (kiểm tra Standard Packing / BAG / tồn kho).';
+        return;
+      }
+
+      const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: `IN LẠI TEM — ${lsx}`, qrData: '' }];
+      const byMat = new Map<string, { qrData: string }[]>();
+      for (const p of payloads) {
+        const parts = p.qrData.split('|');
+        const mat = (parts[0] || '').trim();
+        if (!byMat.has(mat)) byMat.set(mat, []);
+        byMat.get(mat)!.push(p);
+      }
+      const orderedMats = Array.from(byMat.keys()).sort((a, b) => a.localeCompare(b, 'vi'));
+      for (const mat of orderedMats) {
+        printSequence.push({ kind: 'lsxHeader', lsxText: mat, qrData: '' });
+        for (const p of byMat.get(mat) || []) {
+          printSequence.push(p);
+        }
+        printSequence.push({ kind: 'spacer', qrData: '' });
+      }
+
+      const qrImages: any[] = [];
+      let idx = 1;
+      for (const it of printSequence) {
+        if (it?.kind === 'lsxHeader' || it?.kind === 'spacer') {
+          qrImages.push(it);
+          continue;
+        }
+        const qrImage = await QRCode.toDataURL(it.qrData, {
+          width: 240,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+        const parts = String(it.qrData || '').split('|');
+        qrImages.push({
+          image: qrImage,
+          qrData: it.qrData,
+          index: idx++,
+          materialCode: parts[0] || '',
+          poNumber: parts[1] || '',
+          unitNumber: Number(parts[2]) || 0
+        });
+      }
+
+      const fakeMaterial: InventoryMaterial = {
+        factory: this.FACTORY,
+        importDate: new Date(),
+        batchNumber: '',
+        materialCode: 'REPRINT',
+        poNumber: '',
+        openingStock: null,
+        quantity: 0,
+        unit: '',
+        location: '',
+        type: '',
+        expiryDate: new Date(),
+        qualityCheck: false,
+        isReceived: false,
+        notes: '',
+        rollsOrBags: '',
+        supplier: '',
+        remarks: '',
+        isCompleted: false
+      } as any;
+      this.createQRPrintWindow(qrImages, fakeMaterial, true);
+
+      const batch = this.firestore.firestore.batch();
+      for (const mc of orderedMats) {
+        const docId = this.buildTemInLaiPrintedDocId(mc);
+        const ref = this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(docId).ref;
+        batch.set(
+          ref,
+          {
+            factory: 'ASM1',
+            materialCode: mc,
+            source: 'print',
+            lastLsx: lsx || null,
+            updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+      for (const mc of orderedMats) this.temInLaiPrintedCodes.add(mc);
+      this.temInLaiItems = this.temInLaiItems.map((it) =>
+        orderedMats.includes(it.materialCode) ? { ...it, alreadyPrinted: true } : it
+      );
+    } catch (e) {
+      console.error('[TemInLai] print failed', e);
+      this.temInLaiError = (e as Error)?.message || 'Lỗi khi in tem.';
+    } finally {
+      this.temInLaiBusy = false;
+    }
   }
 
   onTemLeQrTextChanged(): void {

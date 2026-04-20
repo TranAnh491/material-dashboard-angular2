@@ -465,7 +465,9 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
       return bnd;
     }
     const bb = (row.bagBatch || '').trim();
-    return bb || '—';
+    // Normal outbound case: show full fraction "i/tổng" when available.
+    if (bb) return bb;
+    return bnd || '—';
   }
 
   applyFilters(): void {
@@ -833,7 +835,13 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           bagNumberRaw != null && String(bagNumberRaw).trim() !== ''
             ? String(bagNumberRaw).trim()
             : '';
-        const bagKey = (bagNumberDisplay || bagBatchRaw || '').trim();
+        // Bag grouping rule:
+        // - If there is a split-bag marker (T...), use bagNumberDisplay (e.g. "6(T123)").
+        // - Otherwise, prefer bagBatch from outbound (e.g. "6/10") to keep full bag fraction.
+        // - Fallback to whichever exists.
+        const bndHasSplit =
+          !!bagNumberDisplay && (bagNumberDisplay.includes('(') || /t\d+/i.test(bagNumberDisplay));
+        const bagKey = (bndHasSplit ? bagNumberDisplay : (bagBatchRaw || bagNumberDisplay || '')).trim();
         if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagKey)) {
           continue;
         }

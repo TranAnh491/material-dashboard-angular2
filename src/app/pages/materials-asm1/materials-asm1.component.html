@@ -97,11 +97,11 @@
             Tem Lẽ
           </button>
           <button type="button"
-                  class="more-btn tem-le-btn tem-xuat-kho-btn"
-                  (click)="openTemXuatKhoPopup()"
-                  title="In tem QR xuất kho theo PXK + tồn (scan LSX)">
-            <i class="material-icons">local_shipping</i>
-            Tem Xuất Kho
+                  class="more-btn tem-le-btn tem-reprint-btn"
+                  (click)="openTemInLaiPopup()"
+                  title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
+            <i class="material-icons">print</i>
+            In Lại Tem
           </button>
         </div>
         
@@ -165,11 +165,11 @@
             Tem Lẽ
           </button>
           <button type="button"
-                  class="more-btn tem-le-btn tem-xuat-kho-btn"
-                  (click)="openTemXuatKhoPopup()"
-                  title="In tem QR xuất kho theo PXK + tồn (scan LSX)">
-            <i class="material-icons">local_shipping</i>
-            Tem Xuất Kho
+                  class="more-btn tem-le-btn tem-reprint-btn"
+                  (click)="openTemInLaiPopup()"
+                  title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
+            <i class="material-icons">print</i>
+            In Lại Tem
           </button>
         </div>
         
@@ -737,6 +737,87 @@
               (click)="confirmTemLeSplitAndPrint()">
         <i class="material-icons">print</i>
         In 2 tem
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- In Lại Tem Popup -->
+<div class="modal-overlay" *ngIf="showTemInLaiPopup" (click)="closeTemInLaiPopup()">
+  <div class="modal-content tem-le-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🖨️ In Lại Tem — theo LSX (IMD &lt; 01/04/2026)</h3>
+      <button type="button" class="close-btn" (click)="closeTemInLaiPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="tem-xuat-hint">
+        Scan <strong>LSX</strong> để lấy danh sách mã cần in. In <strong>toàn bộ tem theo Mã hàng</strong> (bỏ qua PO/IMD),
+        nhưng chỉ lấy các dòng kho có <strong>IMD trước 01/04/2026</strong>. Các mã đã in sẽ được đánh dấu và lần sau sẽ <strong>bỏ qua</strong>.
+      </p>
+      <input
+        id="tem-inlai-lsx-input-asm1"
+        type="text"
+        class="editable-input"
+        style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="temInLaiLsxInput"
+        (keyup.enter)="onTemInLaiLsxEnter()"
+        placeholder="Scan LSX (vd: LHLSX0326/0012)..."
+        autocomplete="off"
+      />
+
+      <div class="tem-le-error" *ngIf="temInLaiError">
+        <i class="material-icons">error</i>
+        {{ temInLaiError }}
+      </div>
+
+      <div class="tem-inlai-toolbar">
+        <button type="button" class="popup-action-btn" (click)="triggerPrintedCodesImport()" title="Import file (cột A) danh sách mã đã in">+</button>
+        <input
+          id="tem-inlai-import-file-asm1"
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          style="display:none"
+          (change)="onPrintedCodesFileSelected($event)"
+        />
+        <button type="button" class="popup-action-btn" (click)="temInLaiShowAdd = !temInLaiShowAdd" title="Thêm 1 mã đã in (nhập tay)">Nhập tay</button>
+        <div class="tem-inlai-add-row" *ngIf="temInLaiShowAdd">
+          <input
+            type="text"
+            class="editable-input"
+            style="flex:1;min-width:220px;font-family:Consolas,monospace;font-size:13px;"
+            [(ngModel)]="temInLaiAddCodeInput"
+            (keyup.enter)="addPrintedCodeManual()"
+            placeholder="Nhập mã đã in (vd B005209)"
+            autocomplete="off"
+          />
+          <button type="button" class="delete-batch-btn" style="background:#111827;" (click)="addPrintedCodeManual()">Lưu</button>
+        </div>
+      </div>
+
+      <div class="tem-inlai-list" *ngIf="temInLaiItems.length > 0">
+        <div class="tem-inlai-row" *ngFor="let it of temInLaiItems">
+          <span class="code">{{ it.materialCode }}</span>
+          <span class="meta">({{ it.eligibleRowCount }} dòng IMD cũ)</span>
+          <span class="badge" [class.done]="it.alreadyPrinted" [class.blocked]="it.blockedByRuleBag">
+            {{ it.blockedByRuleBag ? 'Rule Bag' : (it.alreadyPrinted ? 'Đã in' : 'Chưa in') }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeTemInLaiPopup()" [disabled]="temInLaiBusy">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="delete-batch-btn" style="background:#111827;"
+              (click)="printTemInLaiAll()"
+              [disabled]="temInLaiBusy || temInLaiItems.length === 0">
+        <i class="material-icons">print</i>
+        {{ temInLaiBusy ? 'Đang in...' : 'In tem' }}
       </button>
     </div>
   </div>
