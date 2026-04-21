@@ -711,6 +711,29 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return mapping ? (mapping.description || '') : '';
   }
 
+  /**
+   * Pallet dạng "6P/27P" = pallet 6/27 → sort theo số đầu tiên (6 < 12).
+   * Không có chữ số → 0.
+   */
+  private getPalletOrdinalForSort(pallet: string | undefined | null): number {
+    const s = String(pallet ?? '').trim();
+    if (!s) return 0;
+    const m = s.match(/\d+/);
+    if (!m) return 0;
+    const n = parseInt(m[0], 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** So sánh pallet: ưu tiên số thứ tự đầu, còn lại so chuỗi (ổn định). */
+  private comparePalletForSort(a: string | undefined | null, b: string | undefined | null): number {
+    const pa = String(a ?? '').trim();
+    const pb = String(b ?? '').trim();
+    const oa = this.getPalletOrdinalForSort(pa);
+    const ob = this.getPalletOrdinalForSort(pb);
+    if (oa !== ob) return oa - ob;
+    return pa.toUpperCase().localeCompare(pb.toUpperCase());
+  }
+
   // Sort materials: Shipment → Pallet → mergeCarton → Mã TP
   sortMaterials(): void {
     console.log('🔄 Sorting FG Out materials by: Shipment → Pallet → mergeCarton → Mã TP');
@@ -719,9 +742,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const shipB = (b.shipment || '').toString().toUpperCase();
       if (shipA !== shipB) return shipA.localeCompare(shipB);
 
-      const palletA = (a.pallet || '').toString().toUpperCase();
-      const palletB = (b.pallet || '').toString().toUpperCase();
-      if (palletA !== palletB) return palletA.localeCompare(palletB);
+      const palletCmp = this.comparePalletForSort(a.pallet, b.pallet);
+      if (palletCmp !== 0) return palletCmp;
 
       const mcA = String(a.mergeCarton ?? '').padStart(3, '0');
       const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
@@ -1414,7 +1436,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       if (c) codeSet.add(c);
     });
     this.colFilterOptionsShipment = Array.from(shipSet).sort();
-    this.colFilterOptionsPallet = Array.from(palletSet).sort();
+    this.colFilterOptionsPallet = Array.from(palletSet).sort((a, b) => this.comparePalletForSort(a, b));
     this.colFilterOptionsBatch = Array.from(batchSet).sort();
     this.colFilterOptionsMaterialCode = Array.from(codeSet).sort();
 
@@ -1433,9 +1455,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const shipB = String(b.shipment ?? '').toUpperCase();
       if (shipA !== shipB) return shipA.localeCompare(shipB);
 
-      const palletA = String(a.pallet ?? '').toUpperCase();
-      const palletB = String(b.pallet ?? '').toUpperCase();
-      if (palletA !== palletB) return palletA.localeCompare(palletB);
+      const palletCmp = this.comparePalletForSort(a.pallet, b.pallet);
+      if (palletCmp !== 0) return palletCmp;
       // Rows có mergeCarton được nhóm ngay sau nhau (trong cùng pallet)
       const mcA = String(a.mergeCarton ?? '').padStart(3, '0'); // pad để sort '01' < '09' < '10'
       const mcB = String(b.mergeCarton ?? '').padStart(3, '0');

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesEvery30Min = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -59,17 +59,35 @@ exports.notifyOutboundDuplicatesAt17 = functions
     await runOutboundDupNotifyForSlot(admin.firestore(), '17');
 });
 /**
- * Control Batch: mỗi 30 phút quét "nhóm trùng mới" và gửi email tự động.
+ * Control Batch: chạy mỗi 5 phút theo khung giờ (T2–T7):
+ * - 08:00–12:15
+ * - 13:15–20:00
  * Nhóm đã gửi sẽ không gửi lại.
  */
-exports.notifyOutboundDuplicatesEvery30Min = functions
-    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
-    .pubsub.schedule('*/30 * * * *')
-    .timeZone('Asia/Ho_Chi_Minh')
-    .onRun(async () => {
+const runOutboundDupNotify5m = async () => {
     const { runOutboundDupNotifyEvery30Min } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
     await runOutboundDupNotifyEvery30Min(admin.firestore());
-});
+};
+exports.notifyOutboundDuplicatesEvery5MinMorning = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .pubsub.schedule('*/5 8-11 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(runOutboundDupNotify5m);
+exports.notifyOutboundDuplicatesEvery5MinNoon = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .pubsub.schedule('0-15/5 12 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(runOutboundDupNotify5m);
+exports.notifyOutboundDuplicatesEvery5MinAfternoon = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .pubsub.schedule('*/5 13-19 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(runOutboundDupNotify5m);
+exports.notifyOutboundDuplicatesAt20 = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .pubsub.schedule('0 20 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(runOutboundDupNotify5m);
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 exports.sendControlBatchReportEmail = functions
     .runWith({ secrets: [params_config_1.emailPass] })

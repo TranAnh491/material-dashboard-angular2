@@ -5,18 +5,6 @@
       "source": "functions"
     },
     {
-      "codebase": "warehouse-ai",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ],
-      "source": "warehouse-ai"
-    },
-    {
       "source": "zalo",
       "codebase": "zalo",
       "disallowLegacyRuntimeConfig": true,

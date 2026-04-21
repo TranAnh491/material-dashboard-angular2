@@ -555,24 +555,25 @@ function vnNowLabel(d = new Date()): string {
   return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
 }
 
-function vnHalfHourBucketKey(d = new Date()): string {
+function vnFiveMinBucketKey(d = new Date()): string {
   const vn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
   const y = vn.getUTCFullYear();
   const m = String(vn.getUTCMonth() + 1).padStart(2, '0');
   const day = String(vn.getUTCDate()).padStart(2, '0');
   const hh = String(vn.getUTCHours()).padStart(2, '0');
-  const mm = vn.getUTCMinutes() >= 30 ? '30' : '00';
+  const min = vn.getUTCMinutes();
+  const mm = String(Math.floor(min / 5) * 5).padStart(2, '0');
   return `${y}-${m}-${day}-${hh}:${mm}`;
 }
 
 /**
- * Lịch 30 phút: nếu phát sinh nhóm trùng "mới" thì gửi email.
+ * Lịch 5 phút (theo khung giờ): nếu phát sinh nhóm trùng "mới" thì gửi email/Zalo.
  * "Mới" = dupKey chưa từng được gửi trước đây (outboundDupEmailedGroups).
  * Nhóm đã gửi sẽ không gửi lại.
  */
 export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firestore): Promise<void> {
-  const bucket = vnHalfHourBucketKey(new Date());
-  const lockRef = db.collection('outbound-dup-notify-locks').doc(`30m-${bucket}`);
+  const bucket = vnFiveMinBucketKey(new Date());
+  const lockRef = db.collection('outbound-dup-notify-locks').doc(`5m-${bucket}`);
 
   const canProceed = await db.runTransaction(async tx => {
     const snap = await tx.get(lockRef);
@@ -588,7 +589,7 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
     return true;
   });
   if (!canProceed) {
-    console.log('outbound-dup-notify-30m: skip (lock)', bucket);
+    console.log('outbound-dup-notify-5m: skip (lock)', bucket);
     return;
   }
 
@@ -618,7 +619,7 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
     if (emailCfg) {
       await sendDupEmail(newDupes, emailCfg, settings);
     } else {
-      console.error('outbound-dup-notify-30m: missing SMTP config (skip email)');
+      console.error('outbound-dup-notify-5m: missing SMTP config (skip email)');
     }
 
     // Persist "emailed" keys so we don't resend.
@@ -643,7 +644,7 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
       },
       { merge: true }
     );
-    console.log('outbound-dup-notify-30m: notified', {
+    console.log('outbound-dup-notify-5m: notified', {
       newGroups: newDupes.length,
       emailSent,
       zaloSent,

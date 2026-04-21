@@ -28,17 +28,39 @@ export const notifyOutboundDuplicatesAt17 = functions
   });
 
 /**
- * Control Batch: mỗi 30 phút quét "nhóm trùng mới" và gửi email tự động.
+ * Control Batch: chạy mỗi 5 phút theo khung giờ (T2–T7):
+ * - 08:00–12:15
+ * - 13:15–20:00
  * Nhóm đã gửi sẽ không gửi lại.
  */
-export const notifyOutboundDuplicatesEvery30Min = functions
+const runOutboundDupNotify5m = async () => {
+  const { runOutboundDupNotifyEvery30Min } = await import('./outbound-dup-notify');
+  await runOutboundDupNotifyEvery30Min(admin.firestore());
+};
+
+export const notifyOutboundDuplicatesEvery5MinMorning = functions
   .runWith({ secrets: [emailPass, zaloBotToken] })
-  .pubsub.schedule('*/30 * * * *')
+  .pubsub.schedule('*/5 8-11 * * 1-6')
   .timeZone('Asia/Ho_Chi_Minh')
-  .onRun(async () => {
-    const { runOutboundDupNotifyEvery30Min } = await import('./outbound-dup-notify');
-    await runOutboundDupNotifyEvery30Min(admin.firestore());
-  });
+  .onRun(runOutboundDupNotify5m);
+
+export const notifyOutboundDuplicatesEvery5MinNoon = functions
+  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .pubsub.schedule('0-15/5 12 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(runOutboundDupNotify5m);
+
+export const notifyOutboundDuplicatesEvery5MinAfternoon = functions
+  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .pubsub.schedule('*/5 13-19 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(runOutboundDupNotify5m);
+
+export const notifyOutboundDuplicatesAt20 = functions
+  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .pubsub.schedule('0 20 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(runOutboundDupNotify5m);
 
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 export const sendControlBatchReportEmail = functions
