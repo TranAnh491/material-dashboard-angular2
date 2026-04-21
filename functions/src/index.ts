@@ -39,25 +39,25 @@ const runOutboundDupNotify5m = async () => {
 };
 
 export const notifyOutboundDuplicatesEvery5MinMorning = functions
-  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .runWith({ secrets: [zaloBotToken] })
   .pubsub.schedule('*/5 8-11 * * 1-6')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(runOutboundDupNotify5m);
 
 export const notifyOutboundDuplicatesEvery5MinNoon = functions
-  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .runWith({ secrets: [zaloBotToken] })
   .pubsub.schedule('0-15/5 12 * * 1-6')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(runOutboundDupNotify5m);
 
 export const notifyOutboundDuplicatesEvery5MinAfternoon = functions
-  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .runWith({ secrets: [zaloBotToken] })
   .pubsub.schedule('*/5 13-19 * * 1-6')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(runOutboundDupNotify5m);
 
 export const notifyOutboundDuplicatesAt20 = functions
-  .runWith({ secrets: [emailPass, zaloBotToken] })
+  .runWith({ secrets: [zaloBotToken] })
   .pubsub.schedule('0 20 * * 1-6')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(runOutboundDupNotify5m);

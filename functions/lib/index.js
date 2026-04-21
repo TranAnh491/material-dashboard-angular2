@@ -69,22 +69,22 @@ const runOutboundDupNotify5m = async () => {
     await runOutboundDupNotifyEvery30Min(admin.firestore());
 };
 exports.notifyOutboundDuplicatesEvery5MinMorning = functions
-    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
     .pubsub.schedule('*/5 8-11 * * 1-6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(runOutboundDupNotify5m);
 exports.notifyOutboundDuplicatesEvery5MinNoon = functions
-    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
     .pubsub.schedule('0-15/5 12 * * 1-6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(runOutboundDupNotify5m);
 exports.notifyOutboundDuplicatesEvery5MinAfternoon = functions
-    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
     .pubsub.schedule('*/5 13-19 * * 1-6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(runOutboundDupNotify5m);
 exports.notifyOutboundDuplicatesAt20 = functions
-    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
     .pubsub.schedule('0 20 * * 1-6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(runOutboundDupNotify5m);

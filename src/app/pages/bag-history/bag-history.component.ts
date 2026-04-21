@@ -67,10 +67,14 @@ export interface OutboundDuplicateGroupRow {
   dupKey: string;
   /** Ngày/giờ xuất mới nhất trong nhóm (ưu tiên exportDate, fallback createdAt/updatedAt). */
   latestExportAtLabel?: string;
+  /** Milliseconds (UTC) của latest export time — dùng để sort. */
+  latestExportAtMs?: number;
   /** Số bản ghi outbound cùng khóa (>1). */
   count: number;
   /** LSX (`productionOrder`) gom từ các lần xuất trùng; nhiều lệnh cách nhau bằng · */
   productionOrderSummary: string;
+  /** LSX đầu tiên (A-Z) — dùng để sort theo rule. */
+  productionOrderFirst?: string;
   /** Dòng này từng bị bỏ qua trước đây, nhưng đã phát sinh thêm (count tăng) nên hiện lại. */
   revivedAfterIgnore?: boolean;
 }
@@ -398,6 +402,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           outboundDupSinceDate: string;
           excludeEnabled: boolean;
           excludeMaterialCodes: string[];
+          outboundDupIgnoredGroups: Array<{ key: string; ignoredCount: number }>;
         },
         { ok?: boolean; dupGroups?: number }
       >('sendControlBatchReportEmail');
@@ -407,7 +412,11 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           excludeEnabled: this.excludeEnabled,
           excludeMaterialCodes: Array.from(this.excludeMaterialCodesSet).sort((a, b) =>
             a.localeCompare(b, 'vi')
-          )
+          ),
+          // Gửi kèm "Bỏ qua" để Functions quét đúng như bảng đang hiển thị
+          outboundDupIgnoredGroups: Array.from(this.outboundDupIgnoredGroups.entries())
+            .sort((a, b) => a[0].localeCompare(b[0], 'vi'))
+            .map(([key, ignoredCount]) => ({ key, ignoredCount }))
         })
       );
       const n = res?.dupGroups ?? 0;
@@ -911,22 +920,38 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
             ...sample,
             dupKey,
             latestExportAtLabel: fmtVn(latestMs) || undefined,
+            latestExportAtMs: latestMs || 0,
             count,
             productionOrderSummary,
+            productionOrderFirst: lsxList?.[0] || '',
             revivedAfterIgnore
           });
         }
       }
+      // Sort theo rule hiển thị vi phạm:
+      // 1) Ngày mới nhất lên trên (latestExportAtMs desc)
+      // 2) LSX A-Z (productionOrderFirst)
+      // 3) Mã A-Z (materialCode)
       dupes.sort((a, b) => {
-        const fc = (a.factory || '').localeCompare(b.factory || '');
-        if (fc !== 0) return fc;
-        const mc = (a.materialCode || '').localeCompare(b.materialCode || '');
+        const tA = Number(a.latestExportAtMs || 0);
+        const tB = Number(b.latestExportAtMs || 0);
+        if (tA !== tB) return tB - tA;
+        const lsxA = String(a.productionOrderFirst || a.productionOrderSummary || '').toUpperCase();
+        const lsxB = String(b.productionOrderFirst || b.productionOrderSummary || '').toUpperCase();
+        const lc = lsxA.localeCompare(lsxB, 'vi');
+        if (lc !== 0) return lc;
+        const mcA = String(a.materialCode || '').toUpperCase();
+        const mcB = String(b.materialCode || '').toUpperCase();
+        const mc = mcA.localeCompare(mcB, 'vi');
         if (mc !== 0) return mc;
-        const po = (a.poNumber || '').localeCompare(b.poNumber || '');
+        // tie-breaker ổn định
+        const fc = String(a.factory || '').localeCompare(String(b.factory || ''), 'vi');
+        if (fc !== 0) return fc;
+        const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'vi');
         if (po !== 0) return po;
-        const im = (a.imd || '').localeCompare(b.imd || '');
+        const im = String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
         if (im !== 0) return im;
-        return (a.bagBatch || '').localeCompare(b.bagBatch || '');
+        return String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
       });
       this.outboundDupRows = dupes;
 

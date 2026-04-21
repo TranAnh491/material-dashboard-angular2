@@ -116,12 +116,24 @@ export function buildControlBatchDupSettingsFromCallablePayload(data: unknown): 
       codes.add(c);
     }
   }
+
+  // Optional: allow app to pass ignored groups so manual Send Mail matches UI exactly
+  const ignoredGroups = new Map<string, number>();
+  const rawIgnored = d['outboundDupIgnoredGroups'];
+  if (Array.isArray(rawIgnored)) {
+    for (const item of rawIgnored as any[]) {
+      const key = String(item?.key ?? '').trim();
+      const n = Number(item?.ignoredCount);
+      if (!key) continue;
+      if (Number.isFinite(n) && n > 0) ignoredGroups.set(key, Math.floor(n));
+    }
+  }
   return {
     exclusion: { enabled, codes },
     dupSinceMs,
     dupSinceYmd,
     dupSinceLabel: formatYmdVnDisplay(dupSinceYmd),
-    ignoredGroups: new Map<string, number>(),
+    ignoredGroups,
     emailedGroups: new Set<string>()
   };
 }
@@ -174,6 +186,14 @@ export type OutboundDupRow = {
   poNumber: string;
   imd: string;
   bagBatch: string;
+  /** Bag tem tách (VD 6(T123...)) nếu có */
+  bagNumberDisplay?: string;
+  /** Latest export time ms, for sorting like UI */
+  latestExportAtMs?: number;
+  /** Latest export time label (VN), for display parity */
+  latestExportAtLabel?: string;
+  /** First LSX (A-Z), for sorting like UI */
+  productionOrderFirst?: string;
   count: number;
   productionOrderSummary: string;
   /** composite key factory|mc|po|imd|bag */
@@ -184,6 +204,8 @@ type Agg = {
   count: number;
   sample: Pick<OutboundDupRow, 'factory' | 'materialCode' | 'poNumber' | 'imd' | 'bagBatch'>;
   lsx: Set<string>;
+  latestMs: number;
+  bagNumberDisplay?: string;
 };
 
 function isValidRmMaterialCode(code: string): boolean {
@@ -318,9 +340,15 @@ export async function scanOutboundDuplicates(
     const imdRaw = d.batchNumber ?? d.importDate;
     const imd = imdRaw != null ? String(imdRaw) : '';
     const bagRaw = d.bagBatch;
-    const bagBatch = bagRaw != null ? String(bagRaw) : '';
+    const bagBatchRaw = bagRaw != null ? String(bagRaw) : '';
+    const bagNumberRaw = (d as any).bagNumberDisplay;
+    const bagNumberDisplay =
+      bagNumberRaw != null && String(bagNumberRaw).trim() !== '' ? String(bagNumberRaw).trim() : '';
+    const bndHasSplit =
+      !!bagNumberDisplay && (bagNumberDisplay.includes('(') || /t\d+/i.test(bagNumberDisplay));
+    const bagKey = (bndHasSplit ? bagNumberDisplay : (bagBatchRaw || bagNumberDisplay || '')).trim();
 
-    if (!isOutboundRowEligible(materialCode, poNumber, imd, bagBatch)) {
+    if (!isOutboundRowEligible(materialCode, poNumber, imd, bagKey)) {
       continue;
     }
 
@@ -329,12 +357,14 @@ export async function scanOutboundDuplicates(
       continue;
     }
 
-    const key = compositeKey(factory, materialCode, poNumber, imd, bagBatch);
+    const key = compositeKey(factory, materialCode, poNumber, imd, bagKey);
     const lsxVal = d.productionOrder;
     const lsxStr = lsxVal != null ? String(lsxVal).trim() : '';
+    const tMs = docTimeMs(d) ?? 0;
     const prev = counts.get(key);
     if (prev) {
       prev.count += 1;
+      if (tMs > prev.latestMs) prev.latestMs = tMs;
       if (lsxStr) {
         prev.lsx.add(lsxStr);
       }
@@ -350,15 +380,23 @@ export async function scanOutboundDuplicates(
           materialCode: materialCode.trim(),
           poNumber: poNumber.trim(),
           imd: imd.trim(),
-          bagBatch: bagBatch.trim()
+          bagBatch: bagKey.trim()
         },
-        lsx
+        lsx,
+        latestMs: tMs,
+        bagNumberDisplay: bagNumberDisplay || undefined
       });
     }
   }
 
   const dupes: OutboundDupRow[] = [];
-  for (const { count, sample, lsx } of counts.values()) {
+  const fmtVn = (ms: number): string => {
+    if (!ms) return '';
+    const dt = new Date(ms);
+    if (Number.isNaN(dt.getTime())) return '';
+    return dt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+  };
+  for (const { count, sample, lsx, latestMs, bagNumberDisplay } of counts.values()) {
     if (count > 1) {
       const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
       const productionOrderSummary = lsxList.length > 0 ? lsxList.join(' · ') : '—';
@@ -367,27 +405,39 @@ export async function scanOutboundDuplicates(
       if (ignoredBaseline != null && ignoredBaseline >= count) {
         continue;
       }
-      dupes.push({ ...sample, count, productionOrderSummary, dupKey });
+      dupes.push({
+        ...sample,
+        bagNumberDisplay,
+        latestExportAtMs: latestMs || 0,
+        latestExportAtLabel: fmtVn(latestMs) || undefined,
+        productionOrderFirst: lsxList?.[0] || '',
+        count,
+        productionOrderSummary,
+        dupKey
+      });
     }
   }
+  // Sort parity with UI: date desc → LSX A-Z → mã A-Z
   dupes.sort((a, b) => {
-    const fc = (a.factory || '').localeCompare(b.factory || '');
-    if (fc !== 0) {
-      return fc;
-    }
-    const mc = (a.materialCode || '').localeCompare(b.materialCode || '');
-    if (mc !== 0) {
-      return mc;
-    }
-    const po = (a.poNumber || '').localeCompare(b.poNumber || '');
-    if (po !== 0) {
-      return po;
-    }
-    const im = (a.imd || '').localeCompare(b.imd || '');
-    if (im !== 0) {
-      return im;
-    }
-    return (a.bagBatch || '').localeCompare(b.bagBatch || '');
+    const tA = Number(a.latestExportAtMs || 0);
+    const tB = Number(b.latestExportAtMs || 0);
+    if (tA !== tB) return tB - tA;
+    const lsxA = String(a.productionOrderFirst || a.productionOrderSummary || '').toUpperCase();
+    const lsxB = String(b.productionOrderFirst || b.productionOrderSummary || '').toUpperCase();
+    const lc = lsxA.localeCompare(lsxB, 'vi');
+    if (lc !== 0) return lc;
+    const mcA = String(a.materialCode || '').toUpperCase();
+    const mcB = String(b.materialCode || '').toUpperCase();
+    const mc = mcA.localeCompare(mcB, 'vi');
+    if (mc !== 0) return mc;
+    // tie-breaker stable
+    const fc = String(a.factory || '').localeCompare(String(b.factory || ''), 'vi');
+    if (fc !== 0) return fc;
+    const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'vi');
+    if (po !== 0) return po;
+    const im = String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
+    if (im !== 0) return im;
+    return String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
   });
   return dupes;
 }
@@ -422,7 +472,7 @@ function getEmailCfg(): EmailCfg | null {
 function buildPlainText(dupes: OutboundDupRow[], dupSinceLabel: string, exclusionNote?: string): string {
   const lines = dupes.map(
     r =>
-      `- ${r.factory} | ${r.materialCode} | PO ${r.poNumber} | IMD ${r.imd || '—'} | Bag ${r.bagBatch || '—'} | ${r.count} lần | LSX: ${r.productionOrderSummary}`
+      `- ${r.factory} | ${r.materialCode} | PO ${r.poNumber} | IMD ${r.imd || '—'} | Bag ${r.bagNumberDisplay || r.bagBatch || '—'} | ${r.count} lần | LSX: ${r.productionOrderSummary} | Ngày: ${r.latestExportAtLabel || '—'}`
   );
   return (
     `Control Batch — phát hiện ${dupes.length} nhóm trùng xuất kho (từ ${dupSinceLabel}, đủ điều kiện định dạng).\n\n` +
@@ -435,14 +485,14 @@ function buildHtml(dupes: OutboundDupRow[], dupSinceLabel: string, exclusionNote
   const rows = dupes
     .map(
       r =>
-        `<tr><td>${esc(r.factory)}</td><td>${esc(r.materialCode)}</td><td>${esc(r.poNumber)}</td><td>${esc(r.imd)}</td><td>${esc(r.bagBatch)}</td><td style="text-align:right">${r.count}</td><td>${esc(r.productionOrderSummary)}</td></tr>`
+        `<tr><td>${esc(r.factory)}</td><td>${esc(r.materialCode)}</td><td>${esc(r.poNumber)}</td><td>${esc(r.imd)}</td><td>${esc(r.bagNumberDisplay || r.bagBatch)}</td><td style="text-align:right">${r.count}</td><td>${esc(r.productionOrderSummary)}</td><td>${esc(r.latestExportAtLabel || '')}</td></tr>`
     )
     .join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p><strong>Control Batch</strong> — ${dupes.length} nhóm <strong>trùng xuất kho</strong> (từ ${esc(dupSinceLabel)}).</p>
 ${exclusionNoteHtml || ''}
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
-<thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th></tr></thead>
+<thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th><th>Ngày</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <p style="color:#555;font-size:12px">Gửi từ Tuấn Anh</p>
 </body></html>`;
@@ -526,8 +576,12 @@ async function sendZaloDupNotify(db: admin.firestore.Firestore, dupes: OutboundD
     const mc = (r.materialCode || '').toUpperCase();
     const po = r.poNumber ? ` PO:${r.poNumber}` : '';
     const imd = r.imd ? ` IMD:${r.imd}` : '';
-    const bag = r.bagBatch ? ` BAG:${r.bagBatch}` : '';
-    return `- ${fac} ${mc}${po}${imd}${bag} (${r.count})`;
+    const bagDisp = (r.bagNumberDisplay || r.bagBatch || '').trim();
+    const bag = bagDisp ? ` BAG:${bagDisp}` : '';
+    const lsx = r.productionOrderFirst || r.productionOrderSummary;
+    const lsxPart = lsx && lsx !== '—' ? ` LSX:${lsx}` : '';
+    const dt = r.latestExportAtLabel ? ` NGÀY:${r.latestExportAtLabel}` : '';
+    return `- ${fac} ${mc}${po}${imd}${bag}${lsxPart}${dt} (${r.count})`;
   });
   const msg =
     `⚠️ Control Batch: phát hiện ${dupes.length} nhóm trùng xuất kho (mới).\n` +
@@ -567,7 +621,7 @@ function vnFiveMinBucketKey(d = new Date()): string {
 }
 
 /**
- * Lịch 5 phút (theo khung giờ): nếu phát sinh nhóm trùng "mới" thì gửi email/Zalo.
+ * Lịch 5 phút (theo khung giờ): nếu phát sinh nhóm trùng "mới" thì gửi Zalo.
  * "Mới" = dupKey chưa từng được gửi trước đây (outboundDupEmailedGroups).
  * Nhóm đã gửi sẽ không gửi lại.
  */
@@ -604,6 +658,7 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
           status: 'done',
           dupGroups: 0,
           emailSent: false,
+          zaloSent: false,
           finishedAt: admin.firestore.FieldValue.serverTimestamp()
         },
         { merge: true }
@@ -611,16 +666,9 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
       return;
     }
 
-    // Send Zalo (independent from SMTP/email).
+    // Send Zalo only (email disabled by request).
     const zaloSent = await sendZaloDupNotify(db, newDupes);
-
-    const emailCfg = getEmailCfg();
-    const emailSent = !!emailCfg;
-    if (emailCfg) {
-      await sendDupEmail(newDupes, emailCfg, settings);
-    } else {
-      console.error('outbound-dup-notify-5m: missing SMTP config (skip email)');
-    }
+    const emailSent = false;
 
     // Persist "emailed" keys so we don't resend.
     const sentAt = vnNowLabel(new Date());
