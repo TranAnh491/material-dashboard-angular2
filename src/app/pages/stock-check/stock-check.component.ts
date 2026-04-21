@@ -254,6 +254,302 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private reportOnlyDateKey: string | null = null;
   private readonly REPORT_SETTINGS_COLLECTION = 'stock-check-report-settings';
 
+  // ======================== CHECK BY LIST / CHECK BY CODE ========================
+  /** Mode scan: location = yêu cầu scan vị trí; list/code = cho phép scan không cần vị trí */
+  scanMode: 'location' | 'list' | 'code' = 'location';
+  /** Cho phép scan vật tư khi chưa scan vị trí (list/code mode). */
+  private allowMaterialScanWithoutLocation = false;
+
+  // Import checklist (cột A)
+  showListCheckModal = false;
+  listImportBusy = false;
+  listImportError = '';
+  listImportedCodes: string[] = [];
+  /** Persist checklist để lần sau mở lại vẫn có */
+  private readonly STOCK_CHECK_LISTS_COLLECTION = 'stock-check-checklists';
+  private readonly STOCK_CHECK_SESSIONS_COLLECTION = 'stock-check-check-sessions';
+  private activeChecklistId: string | null = null;
+
+  // Check by code modal/session
+  showCodeCheckModal = false;
+  codeCheckBusy = false;
+  codeCheckError = '';
+  codeCheckScanInput = '';
+  /** Mã đang kiểm theo mode "theo mã" (khóa theo mã đầu tiên scan) */
+  codeCheckActiveMaterialCode = '';
+  /** Lần đầu scan mã (chỉ mã hàng) -> load dữ liệu rồi mới cho scan QR */
+  codeCheckLoaded = false;
+
+  trackByMaterialRow = (_: number, m: StockCheckMaterial) =>
+    `${String(m.materialCode || '').toUpperCase().trim()}__${String(m.poNumber || '').trim()}__${String(m.imd || '').trim()}`;
+
+  private normalizeCodeUpper(v: string): string {
+    return String(v || '').trim().toUpperCase();
+  }
+
+  private parseStandardPackingNumber(sp: unknown): number {
+    const raw = String(sp ?? '').trim().replace(/,/g, '');
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  private enforceStandardPerScan(material: StockCheckMaterial | null, scannedQty: number): { ok: boolean; max?: number } {
+    const max = this.parseStandardPackingNumber(material?.standardPacking);
+    if (max > 0 && scannedQty > max) {
+      return { ok: false, max };
+    }
+    return { ok: true, max: max || undefined };
+  }
+
+  openListCheckModal(): void {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.currentEmployeeId) {
+      alert('Vui lòng scan mã nhân viên trước!');
+      this.showEmployeeScanModal = true;
+      return;
+    }
+    this.listImportError = '';
+    this.showListCheckModal = true;
+    // load checklist active (optional) could be added later
+  }
+
+  closeListCheckModal(): void {
+    this.showListCheckModal = false;
+  }
+
+  triggerListImportFile(): void {
+    const el = document.getElementById('stock-check-list-import-file') as HTMLInputElement | null;
+    if (!el) return;
+    el.value = '';
+    el.click();
+  }
+
+  async onListImportFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (!this.selectedFactory) return;
+    if (!this.currentEmployeeId) return;
+    if (this.listImportBusy) return;
+    this.listImportBusy = true;
+    this.listImportError = '';
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheetName = wb.SheetNames?.[0];
+      if (!sheetName) {
+        this.listImportError = 'File không có sheet.';
+        return;
+      }
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }) as any[][];
+      const codes: string[] = [];
+      for (const r of rows) {
+        const v = r?.[0];
+        const mc = this.normalizeCodeUpper(String(v ?? ''));
+        if (mc) codes.push(mc);
+      }
+      const uniq = Array.from(new Set(codes)).filter(Boolean);
+      if (uniq.length === 0) {
+        this.listImportError = 'Không đọc được mã nào ở cột A.';
+        return;
+      }
+      this.listImportedCodes = uniq;
+
+      // Save checklist to Firestore
+      const now = new Date();
+      const docId = `${this.selectedFactory}_${this.currentEmployeeId}_${now.getTime()}`;
+      await this.firestore
+        .collection(this.STOCK_CHECK_LISTS_COLLECTION)
+        .doc(docId)
+        .set(
+          {
+            id: docId,
+            factory: this.selectedFactory,
+            createdBy: this.currentEmployeeId,
+            createdAt: firebase.default.firestore.FieldValue.serverTimestamp(),
+            codes: uniq,
+            fileName: file.name || '',
+            updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+      this.activeChecklistId = docId;
+    } catch (e) {
+      console.warn('[StockCheck] import list failed', e);
+      this.listImportError = 'Lỗi import file (chỉ nhận Excel/CSV, mã nằm ở cột A).';
+    } finally {
+      this.listImportBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Start scanning materials for imported list (no location required). */
+  startListCheckScan(): void {
+    if (!this.selectedFactory) return;
+    if (!this.currentEmployeeId) return;
+    if (!this.listImportedCodes || this.listImportedCodes.length === 0) {
+      alert('Chưa có danh sách mã cần kiểm. Vui lòng import file trước.');
+      return;
+    }
+    this.scanMode = 'list';
+    this.allowMaterialScanWithoutLocation = true;
+    this.currentScanLocation = ''; // list mode không cần vị trí
+    this.showScanModal = true;
+    this.scanStep = 'material';
+    this.scannedEmployeeId = this.currentEmployeeId;
+    this.scanInput = '';
+    this.scanHistory = [];
+    this.wrongLocationItems = [];
+    this.scanMessage =
+      `MODE: KIỂM THEO DANH SÁCH\n` +
+      `ID: ${this.currentEmployeeId}\n` +
+      `Factory: ${this.selectedFactory}\n\n` +
+      `Scan QR: Mã|PO|Số lượng|IMD\n` +
+      `Rule: Qty mỗi lần scan ≤ StandardPacking.`;
+
+    setTimeout(() => {
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 200);
+  }
+
+  openCodeCheckModal(): void {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.currentEmployeeId) {
+      alert('Vui lòng scan mã nhân viên trước!');
+      this.showEmployeeScanModal = true;
+      return;
+    }
+    this.codeCheckError = '';
+    this.codeCheckScanInput = '';
+    this.codeCheckActiveMaterialCode = '';
+    this.codeCheckLoaded = false;
+    this.showCodeCheckModal = true;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.getElementById('stock-check-code-scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 200);
+  }
+
+  closeCodeCheckModal(): void {
+    this.showCodeCheckModal = false;
+  }
+
+  async onCodeCheckFirstScanEnter(): Promise<void> {
+    const raw = (this.codeCheckScanInput || '').trim();
+    if (!raw) return;
+    if (!this.selectedFactory || !this.currentEmployeeId) return;
+    if (this.codeCheckBusy) return;
+    this.codeCheckBusy = true;
+    this.codeCheckError = '';
+    try {
+      // Accept: only materialCode OR full QR (mc|po|qty|imd...)
+      const mc = raw.includes('|') ? this.normalizeCodeUpper(raw.split('|')[0] || '') : this.normalizeCodeUpper(raw);
+      if (!mc) {
+        this.codeCheckError = 'Mã không hợp lệ.';
+        return;
+      }
+      this.codeCheckActiveMaterialCode = mc;
+
+      // Fast load: query inventory-materials only for this code + factory
+      const snap = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', mc)
+        )
+        .get()
+        .toPromise();
+
+      const rows: StockCheckMaterial[] = [];
+      if (snap && !snap.empty) {
+        snap.forEach(doc => {
+          const d = doc.data() as any;
+          const openingStockValue = d.openingStock ?? 0;
+          const qty = d.quantity ?? 0;
+          const exported = d.exported ?? 0;
+          const xt = d.xt ?? 0;
+          const stock = Number(openingStockValue) + Number(qty) - Number(exported) - Number(xt);
+          rows.push({
+            stt: 0,
+            materialCode: String(d.materialCode || mc).trim(),
+            poNumber: String(d.poNumber || '').trim(),
+            imd: String(d.batchNumber || d.imd || '').trim() || String(d.importDate || '').trim(),
+            stock: Number.isFinite(stock) ? stock : 0,
+            location: String(d.location || '').trim(),
+            inventoryId: doc.id,
+            actualLocation: '',
+            standardPacking: String(d.standardPacking || '').trim(),
+            stockCheck: '',
+            qtyCheck: null,
+            idCheck: '',
+            dateCheck: null,
+            openingStock: Number(openingStockValue) || 0,
+            quantity: Number(qty) || 0,
+            exported: Number(exported) || 0,
+            xt: Number(xt) || 0,
+            importDate: d.importDate?.toDate?.() ?? (d.importDate instanceof Date ? d.importDate : undefined),
+            batchNumber: String(d.batchNumber || '').trim()
+          });
+        });
+      }
+
+      // Merge into local arrays for scanning logic reuse
+      for (const r of rows) {
+        const key = this.buildMaterialKey(r.materialCode, r.poNumber, r.imd);
+        if (key && !this.materialByKey.has(key)) {
+          this.allMaterials.push(r);
+          this.materialByKey.set(key, r);
+        }
+      }
+      // rebuild stt lazily
+      this.codeCheckLoaded = true;
+      this.codeCheckScanInput = '';
+    } catch (e) {
+      console.warn('[StockCheck] code-check load failed', e);
+      this.codeCheckError = 'Không tải được dữ liệu mã hàng (kiểm tra quyền/index Firestore).';
+    } finally {
+      this.codeCheckBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Start scan modal locked to codeCheckActiveMaterialCode (no location required). */
+  startCodeCheckScan(): void {
+    if (!this.selectedFactory) return;
+    if (!this.currentEmployeeId) return;
+    if (!this.codeCheckActiveMaterialCode) {
+      alert('Vui lòng scan Mã hàng trước.');
+      return;
+    }
+    this.scanMode = 'code';
+    this.allowMaterialScanWithoutLocation = true;
+    this.currentScanLocation = '';
+    this.showScanModal = true;
+    this.scanStep = 'material';
+    this.scannedEmployeeId = this.currentEmployeeId;
+    this.scanInput = '';
+    this.scanHistory = [];
+    this.wrongLocationItems = [];
+    this.scanMessage =
+      `MODE: KIỂM KÊ THEO MÃ\n` +
+      `ID: ${this.currentEmployeeId}\n` +
+      `Factory: ${this.selectedFactory}\n` +
+      `Mã: ${this.codeCheckActiveMaterialCode}\n\n` +
+      `Scan QR: Mã|PO|Số lượng|IMD\n` +
+      `Rule: Qty mỗi lần scan ≤ StandardPacking.`;
+    setTimeout(() => {
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 200);
+  }
+
   // Locations from Location tab (for validation)
   validLocations: string[] = []; // Danh sách vị trí hợp lệ từ Location tab
 
@@ -884,6 +1180,26 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       }
 
       const scannedQty = parseFloat(quantity) || 0;
+      // Mode "theo mã": chỉ nhận scan đúng mã đang khóa
+      if (this.scanMode === 'code' && this.codeCheckActiveMaterialCode) {
+        const lockCode = this.normalizeCodeUpper(this.codeCheckActiveMaterialCode);
+        if (this.normalizeCodeUpper(codeUpper) !== lockCode) {
+          this.showAutoDismissScanNotice(
+            'Sai mã',
+            `Đang kiểm theo mã: ${lockCode}.\nBạn vừa scan: ${this.normalizeCodeUpper(codeUpper)}.\nBỏ qua scan này.`
+          );
+          return;
+        }
+      }
+      // Rule: Qty mỗi lần scan không được > StandardPacking
+      const stdCheck = this.enforceStandardPerScan(matchingMaterial, scannedQty);
+      if (!stdCheck.ok) {
+        this.showAutoDismissScanNotice(
+          'Vượt Standard',
+          `Qty scan: ${scannedQty} > Standard: ${stdCheck.max}\nMã: ${codeUpper}\nBỏ qua scan này.`
+        );
+        return;
+      }
       const dataLoc = (matchingMaterial.location || '').trim().toUpperCase();
       const scanLoc = (this.currentScanLocation || '').trim().toUpperCase();
       const isWrongLocation = !!scanLoc && !!dataLoc && dataLoc !== scanLoc;
@@ -973,6 +1289,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
     // Không tìm thấy trong bảng - tạo material mới và thêm vào (không await tải standardPacking)
     const scannedQty = parseFloat(quantity) || 0;
+    // Mode "theo mã": không cho tạo mới bằng mã khác
+    if (this.scanMode === 'code' && this.codeCheckActiveMaterialCode) {
+      const lockCode = this.normalizeCodeUpper(this.codeCheckActiveMaterialCode);
+      if (this.normalizeCodeUpper(codeUpper) !== lockCode) {
+        this.showAutoDismissScanNotice(
+          'Sai mã',
+          `Đang kiểm theo mã: ${lockCode}.\nBạn vừa scan: ${this.normalizeCodeUpper(codeUpper)}.\nBỏ qua scan này.`
+        );
+        return;
+      }
+    }
     const newMaterial: StockCheckMaterial = {
       stt: 0,
       materialCode: materialCode,
@@ -1674,6 +2001,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       .valueChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(async (snapshotData: any) => {
+        // Khi đang scan: bỏ qua reload realtime để tránh lag (local state đã cập nhật ngay khi scan)
+        if (this.showScanModal || this.isProcessingScanQueue) {
+          return;
+        }
         // Nếu chưa load initial data, skip (sẽ được load trong loadData)
         if (!this.isInitialDataLoaded) {
           console.log(`⏳ [subscribeToSnapshotChanges] Initial data not loaded yet, skipping...`);
@@ -2353,17 +2684,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       
       // Đảm bảo đã có vị trí (nếu chưa có thì yêu cầu scan lại)
       if (!this.currentScanLocation) {
-        // Nếu chưa có vị trí, chuyển về bước scan vị trí
-        this.scanStep = 'location';
-        this.scanInput = '';
-        this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó có thể SCAN MÃ HÀNG hàng loạt.`;
-        setTimeout(() => {
-          const input = document.getElementById('scan-input') as HTMLInputElement;
-          if (input) {
-            input.focus();
-          }
-        }, 100);
-        return;
+        if (!this.allowMaterialScanWithoutLocation) {
+          // Nếu chưa có vị trí, chuyển về bước scan vị trí
+          this.scanStep = 'location';
+          this.scanInput = '';
+          this.scanMessage = `ID: ${this.currentEmployeeId}\n\nVui lòng SCAN VỊ TRÍ trước, sau đó có thể SCAN MÃ HÀNG hàng loạt.`;
+          setTimeout(() => {
+            const input = document.getElementById('scan-input') as HTMLInputElement;
+            if (input) {
+              input.focus();
+            }
+          }, 100);
+          return;
+        }
       }
       
       // Đẩy qua queue để không block nhịp scan
@@ -2385,6 +2718,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   closeScanModal(showSummaryAlert: boolean = true): void {
     this.showScanModal = false;
     this.scanStep = 'idle';
+    this.scanMode = 'location';
+    this.allowMaterialScanWithoutLocation = false;
     this.scannedEmployeeId = '';
     this.scanMessage = '';
     this.scanInput = '';
@@ -2428,6 +2763,46 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       if (ok) {
         await this.moveWrongLocationsToScanLocation(scanLoc);
       }
+    }
+
+    // Lưu session summary cho mode danh sách / theo mã (để report/đối chiếu)
+    try {
+      if (this.selectedFactory && this.currentEmployeeId && (this.scanMode === 'list' || this.scanMode === 'code')) {
+        const sid = `${this.selectedFactory}_${this.currentEmployeeId}_${Date.now()}`;
+        await this.firestore
+          .collection(this.STOCK_CHECK_SESSIONS_COLLECTION)
+          .doc(sid)
+          .set(
+            {
+              factory: this.selectedFactory,
+              mode: this.scanMode,
+              employeeId: this.currentEmployeeId,
+              scannedTotal,
+              scanLocation: scanLoc || '',
+              checklistId: this.activeChecklistId || null,
+              materialCode: this.scanMode === 'code' ? (this.codeCheckActiveMaterialCode || '') : '',
+              createdAt: firebase.default.firestore.FieldValue.serverTimestamp()
+            },
+            { merge: true }
+          );
+
+        if (this.scanMode === 'list' && this.activeChecklistId) {
+          await this.firestore
+            .collection(this.STOCK_CHECK_LISTS_COLLECTION)
+            .doc(this.activeChecklistId)
+            .set(
+              {
+                doneAt: firebase.default.firestore.FieldValue.serverTimestamp(),
+                doneBy: this.currentEmployeeId,
+                doneScannedTotal: scannedTotal,
+                updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+              },
+              { merge: true }
+            );
+        }
+      }
+    } catch (e) {
+      console.warn('[StockCheck] save session summary failed', e);
     }
 
     // Đóng modal trước (auto close popup), sau đó báo hoàn thành

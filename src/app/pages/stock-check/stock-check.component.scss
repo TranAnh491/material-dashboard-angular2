@@ -4,6 +4,168 @@
   z-index: 100 !important;
 }
 
+// =========================================================
+// MONOCHROME THEME (TRẮNG/ĐEN) — giảm tải UI
+// Add as overrides at the end to avoid breaking layout.
+// =========================================================
+.stock-check-wrapper {
+  --sc-bg: #ffffff;
+  --sc-fg: #111111;
+  --sc-muted: #6b7280;
+  --sc-border: #000000;
+  --sc-border-soft: #e5e7eb;
+  --sc-surface: #ffffff;
+  --sc-surface-2: #f9fafb;
+
+  background: var(--sc-bg);
+  color: var(--sc-fg);
+
+  // Strip colorful shadows
+  * {
+    box-shadow: none !important;
+  }
+
+  .top-bar,
+  .data-section,
+  .stock-check-container {
+    background: var(--sc-bg) !important;
+    color: var(--sc-fg) !important;
+  }
+
+  .factory-title-icon {
+    filter: grayscale(1) contrast(1.1);
+  }
+
+  // Buttons (common)
+  button,
+  .inventory-btn,
+  .report-btn,
+  .sort-btn,
+  .khsx-btn,
+  .history-btn,
+  .reset-btn,
+  .logout-btn,
+  .asm-select-btn,
+  .scan-submit-btn,
+  .cancel-btn,
+  .done-btn-full {
+    background: var(--sc-surface) !important;
+    color: var(--sc-fg) !important;
+    border: 2px solid var(--sc-border) !important;
+  }
+
+  button:hover:not(:disabled),
+  .inventory-btn:hover:not(:disabled),
+  .report-btn:hover:not(:disabled),
+  .sort-btn:hover:not(:disabled),
+  .khsx-btn:hover:not(:disabled),
+  .history-btn:hover:not(:disabled),
+  .reset-btn:hover:not(:disabled),
+  .logout-btn:hover:not(:disabled),
+  .asm-select-btn:hover:not(:disabled),
+  .scan-submit-btn:hover:not(:disabled),
+  .cancel-btn:hover:not(:disabled),
+  .done-btn-full:hover:not(:disabled) {
+    background: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  button:disabled,
+  .inventory-btn:disabled,
+  .report-btn:disabled,
+  .sort-btn:disabled,
+  .khsx-btn:disabled,
+  .history-btn:disabled,
+  .reset-btn:disabled,
+  .logout-btn:disabled,
+  .asm-select-btn:disabled,
+  .scan-submit-btn:disabled,
+  .cancel-btn:disabled,
+  .done-btn-full:disabled {
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
+  }
+
+  i.material-icons {
+    color: inherit !important;
+  }
+
+  // Counter boxes → grayscale
+  .counter-boxes .counter-box {
+    background: var(--sc-surface) !important;
+    border: 2px solid var(--sc-border) !important;
+    color: var(--sc-fg) !important;
+  }
+  .counter-boxes .counter-box .counter-label {
+    color: var(--sc-muted) !important;
+  }
+  .counter-boxes .counter-box.active {
+    background: var(--sc-surface-2) !important;
+  }
+
+  // Tables
+  table,
+  .data-table {
+    color: var(--sc-fg) !important;
+  }
+  th,
+  td {
+    border-color: var(--sc-border-soft) !important;
+  }
+  thead th {
+    background: var(--sc-surface-2) !important;
+    color: var(--sc-fg) !important;
+    border-bottom: 2px solid var(--sc-border) !important;
+  }
+
+  // Inputs
+  input,
+  select,
+  textarea,
+  .editable-input,
+  .search-input,
+  .scan-input,
+  .scan-input-field {
+    background: #ffffff !important;
+    color: var(--sc-fg) !important;
+    border: 1px solid var(--sc-border) !important;
+  }
+
+  // Modals
+  .scan-modal,
+  .scan-modal-v2,
+  .mobile-factory-picker-modal {
+    background: rgba(0, 0, 0, 0.82) !important;
+  }
+  .scan-modal .modal-content,
+  .scan-modal-v2 .scan-modal-inner,
+  .mobile-factory-picker-card {
+    background: #ffffff !important;
+    border: 2px solid var(--sc-border) !important;
+    color: var(--sc-fg) !important;
+  }
+
+  // Badges / status pills: remove colors
+  .badge,
+  .status-badge,
+  .revived-badge {
+    background: var(--sc-surface-2) !important;
+    border: 1px solid var(--sc-border) !important;
+    color: var(--sc-fg) !important;
+  }
+
+  // Notice popup: monochrome
+  .scan-notice-card {
+    border: 2px solid var(--sc-border) !important;
+    background: #ffffff !important;
+    color: var(--sc-fg) !important;
+  }
+  .scan-notice-icon {
+    background: var(--sc-surface-2) !important;
+    border: 1px solid var(--sc-border) !important;
+  }
+}
+
 .stock-check-wrapper {
   position: relative;
   z-index: 100;

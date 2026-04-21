@@ -82,6 +82,16 @@
           <i class="material-icons">download</i>
           REPORT
         </button>
+
+        <button class="report-btn desktop-only" *ngIf="selectedFactory" (click)="openListCheckModal()" title="Kiểm theo danh sách (import file cột A)">
+          <i class="material-icons">upload_file</i>
+          KIỂM DS
+        </button>
+
+        <button class="report-btn desktop-only" *ngIf="selectedFactory" (click)="openCodeCheckModal()" title="Kiểm kê theo mã (scan mã hàng trước)">
+          <i class="material-icons">fact_check</i>
+          KIỂM MÃ
+        </button>
         
         <div class="search-box desktop-only">
           <i class="material-icons search-trigger" title="Tìm kiếm" (click)="runSearchNow()">search</i>
@@ -445,6 +455,111 @@
       <div class="scan-notice-title">{{ scanNoticeTitle }}</div>
       <div class="scan-notice-body">{{ scanNoticeBody }}</div>
       <div class="scan-notice-hint">Tự đóng sau giây lát — tiếp tục scan</div>
+    </div>
+  </div>
+
+  <!-- Kiểm theo danh sách (import cột A) -->
+  <div class="scan-modal" *ngIf="showListCheckModal">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">upload_file</i>
+          KIỂM THEO DANH SÁCH ({{ selectedFactory }})
+        </h3>
+      </div>
+
+      <div class="scan-message">
+        <p>Import file Excel/CSV, hệ thống đọc <strong>cột A</strong> để lấy danh sách mã cần kiểm.</p>
+      </div>
+
+      <div class="modal-actions" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <button type="button" class="scan-submit-btn" (click)="triggerListImportFile()" [disabled]="listImportBusy">
+          <i class="material-icons">upload</i>
+          {{ listImportBusy ? 'Đang import...' : 'Import file' }}
+        </button>
+        <input
+          id="stock-check-list-import-file"
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          style="display:none"
+          (change)="onListImportFileSelected($event)"
+        />
+
+        <button type="button" class="inventory-btn" (click)="startListCheckScan()" [disabled]="listImportBusy || listImportedCodes.length === 0">
+          <i class="material-icons">qr_code_scanner</i>
+          BẮT ĐẦU KIỂM
+        </button>
+      </div>
+
+      <div class="tem-le-error" *ngIf="listImportError" style="margin-top:10px">
+        <i class="material-icons">error</i>
+        {{ listImportError }}
+      </div>
+
+      <div class="scan-message" *ngIf="listImportedCodes.length > 0">
+        <p><strong>Đã nạp:</strong> {{ listImportedCodes.length }} mã.</p>
+        <p style="font-family:Consolas,monospace;font-size:12px;max-height:120px;overflow:auto;border:1px solid #e5e7eb;padding:8px;border-radius:8px">
+          {{ listImportedCodes.join(', ') }}
+        </p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="cancel-btn" (click)="closeListCheckModal()">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kiểm kê theo mã -->
+  <div class="scan-modal" *ngIf="showCodeCheckModal">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">fact_check</i>
+          KIỂM KÊ THEO MÃ ({{ selectedFactory }})
+        </h3>
+      </div>
+
+      <div class="scan-message">
+        <p>Scan <strong>Mã hàng</strong> đầu tiên để load dữ liệu, sau đó bấm <strong>Bắt đầu kiểm</strong> và scan QR (Mã|PO|SL|IMD).</p>
+      </div>
+
+      <div class="scan-input-container">
+        <input
+          id="stock-check-code-scan-input"
+          type="text"
+          class="scan-input"
+          [(ngModel)]="codeCheckScanInput"
+          (keyup.enter)="onCodeCheckFirstScanEnter()"
+          placeholder="Scan Mã hàng hoặc QR..."
+          autocomplete="off"
+        />
+        <button class="scan-submit-btn" (click)="onCodeCheckFirstScanEnter()" [disabled]="codeCheckBusy">
+          <i class="material-icons">search</i>
+        </button>
+      </div>
+
+      <div class="tem-le-error" *ngIf="codeCheckError" style="margin-top:10px">
+        <i class="material-icons">error</i>
+        {{ codeCheckError }}
+      </div>
+
+      <div class="scan-message" *ngIf="codeCheckActiveMaterialCode">
+        <p><strong>Mã:</strong> {{ codeCheckActiveMaterialCode }}</p>
+      </div>
+
+      <div class="modal-actions" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <button type="button" class="inventory-btn" (click)="startCodeCheckScan()" [disabled]="!codeCheckActiveMaterialCode || codeCheckBusy">
+          <i class="material-icons">qr_code_scanner</i>
+          BẮT ĐẦU KIỂM
+        </button>
+        <button class="cancel-btn" (click)="closeCodeCheckModal()" [disabled]="codeCheckBusy">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+      </div>
     </div>
   </div>
 
