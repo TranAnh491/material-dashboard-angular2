@@ -5,6 +5,8 @@ import { takeUntil, first, filter, skip } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
 import { environment } from '../../../environments/environment';
+import { Router } from '@angular/router';
+import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 
 interface RackStat {
   location: string;
@@ -274,6 +276,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   dsError = '';
   /** DS: nếu bị Firestore permission-denied thì dừng retry để tránh spam lỗi */
   private dsPermissionDenied = false;
+  /** DS: đang xuất report */
+  dsReportBusy = false;
 
   /** Khoảng ngày để load PXK (theo importedAt trong pxk-import-data) */
   dsFromDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -483,6 +487,141 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private dsRuleToMs(): number {
     const d = this.dsToDate instanceof Date ? this.dsToDate : new Date(this.dsToDate as any);
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+  }
+
+  private buildStockCheckHistoryDocId(factory: string, materialCode: string, poNumber: string, imd: string): string {
+    const sanitizedMaterialCode = String(materialCode || '').replace(/\//g, '_');
+    const sanitizedPoNumber = String(poNumber || '').replace(/\//g, '_');
+    const sanitizedImd = String(imd || '').replace(/\//g, '_');
+    return `${factory}_${sanitizedMaterialCode}_${sanitizedPoNumber}_${sanitizedImd}`;
+  }
+
+  /** REPORT cho KIỂM DS: xuất danh sách PXK + lịch sử scan chi tiết (có bag) */
+  async exportDsReport(): Promise<void> {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (this.dsReportBusy) return;
+    this.dsReportBusy = true;
+    try {
+      const factory = this.selectedFactory;
+      const fromMs = this.dsRuleFromMs();
+      const toMs = this.dsRuleToMs();
+
+      // ===== Sheet 1: PXK list (DS rows) =====
+      const pxkRows = this.dsRows.map((r, idx) => {
+        const stock = this.dsStockForRow(r);
+        const checkedByRule = this.dsIsCheckedByRule(r);
+        const qtyCheck = checkedByRule ? (r.qtyCheck == null ? 0 : Number(r.qtyCheck)) : 0;
+        const dateCheck = checkedByRule && r.dateCheck ? new Date(r.dateCheck) : null;
+        const deltaText = this.dsQtyDeltaDisplay(r);
+        return {
+          'STT': idx + 1,
+          'Mã hàng': r.materialCode,
+          'PO': r.poNumber,
+          'IMD': r.imd,
+          'Vị trí': r.location || '—',
+          'Tồn Kho': stock == null ? '' : stock,
+          'Kiểm Kê': qtyCheck,
+          'Chênh Lệch': deltaText,
+          'Tình trạng': checkedByRule ? this.dsQtyStatus(r).label : 'CHƯA KIỂM',
+          'ID Check': checkedByRule ? (this.materialByKey.get(this.buildMaterialKey(r.materialCode, r.poNumber, r.imd))?.idCheck || '') : '',
+          'Date Check': dateCheck ? dateCheck.toLocaleString('vi-VN') : ''
+        };
+      });
+
+      // ===== Sheet 2: DS checked detail (history items) =====
+      const dsKeySet = new Set(this.dsRows.map(r => this.buildMaterialKey(r.materialCode, r.poNumber, r.imd)));
+      const detail: any[] = [];
+
+      const snap = await this.firestore
+        .collection('stock-check-history', ref => ref.where('factory', '==', factory))
+        .get()
+        .toPromise();
+
+      if (snap && !(snap as any).empty) {
+        (snap as any).forEach((doc: any) => {
+          const data = doc.data() as any;
+          const mc = String(data?.materialCode || '').trim().toUpperCase();
+          const po = String(data?.poNumber || '').trim();
+          const imd = String(data?.imd || '').trim();
+          const materialKey = this.buildMaterialKey(mc, po, imd);
+          if (!dsKeySet.has(materialKey)) return;
+          const history: any[] = Array.isArray(data?.history) ? data.history : [];
+          for (const it of history) {
+            const d = this.parseFirestoreDate(it?.dateCheck);
+            if (!d) continue;
+            const t = d.getTime();
+            if (t < fromMs || t > toMs) continue;
+            const qty = it?.qtyCheck !== undefined && it?.qtyCheck !== null ? Number(it.qtyCheck) : 0;
+            if (!qty || qty === 0) continue;
+            detail.push({
+              'Mã hàng': mc,
+              'PO': po,
+              'IMD': imd,
+              'Bag': String(it?.bag || '').trim(),
+              'Qty (scan)': qty,
+              'Date Check': d.toLocaleString('vi-VN'),
+              'ID Check': String(it?.idCheck || '').trim(),
+              'Vị trí': String(it?.location || '').trim(),
+              'Tồn Kho (lúc scan)': it?.stock !== undefined && it?.stock !== null ? Number(it.stock) : '',
+              'Standard Packing': String(it?.standardPacking || '').trim()
+            });
+          }
+        });
+      }
+
+      detail.sort((a, b) => String(b['Date Check'] || '').localeCompare(String(a['Date Check'] || ''), 'vi'));
+
+      // ===== Write workbook =====
+      const wb = XLSX.utils.book_new();
+      const ws1 = XLSX.utils.json_to_sheet(pxkRows);
+      ws1['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 14 }, // Mã
+        { wch: 14 }, // PO
+        { wch: 12 }, // IMD
+        { wch: 10 }, // Vị trí
+        { wch: 12 }, // Tồn kho
+        { wch: 12 }, // Kiểm kê
+        { wch: 12 }, // Chênh lệch
+        { wch: 12 }, // Tình trạng
+        { wch: 12 }, // ID
+        { wch: 20 }  // Date
+      ];
+      XLSX.utils.book_append_sheet(wb, ws1, 'PXK List (DS)');
+
+      const ws2 = XLSX.utils.json_to_sheet(detail);
+      ws2['!cols'] = [
+        { wch: 14 }, // Mã
+        { wch: 14 }, // PO
+        { wch: 12 }, // IMD
+        { wch: 12 }, // Bag
+        { wch: 10 }, // Qty
+        { wch: 20 }, // Date
+        { wch: 12 }, // ID
+        { wch: 10 }, // Vị trí
+        { wch: 14 }, // Stock
+        { wch: 16 }  // Standard
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, 'DS Checked Detail');
+
+      const ymd = (d: Date): string => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}${mm}${dd}`;
+      };
+      const fileName = `Report_DS_${factory}_${ymd(this.dsFromDate)}-${ymd(this.dsToDate)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch (e) {
+      console.error('[StockCheck DS] export report failed', e);
+      alert('❌ Không xuất được report DS (kiểm tra quyền đọc stock-check-history).');
+    } finally {
+      this.dsReportBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   /** DS: xác định "Đã kiểm/Chưa kiểm" theo rule ngày trong More */
@@ -1678,8 +1817,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private router: Router,
+    private rmBagHistory: RmBagHistoryService
   ) {}
+
+  goToMenu(): void {
+    // app.routing.ts uses hash routing; Router will handle it.
+    void this.router.navigateByUrl('/menu');
+  }
 
   private buildMaterialKey(materialCode: string, poNumber: string, imd: string): string {
     return `${(materialCode || '').toUpperCase().trim()}|${(poNumber || '').trim()}|${(imd || '').trim()}`;
@@ -1748,9 +1894,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const materialCode = String(parts[0] ?? '').trim();
     const poNumber = String(parts[1] ?? '').trim();
     const quantity = String(parts[2] ?? '').trim();
-    const imdRaw = String(parts[3] ?? '').trim();
-    const imd = (imdRaw.split('-')[0] || '').trim();
-    const bag = parts.length >= 5 ? String(parts.slice(4).join('|') ?? '').trim() : '';
+    const part4Raw = String(parts[3] ?? '').trim();
+    const imd = (part4Raw.split('-')[0] || '').trim();
+    // Bag có thể nằm trong QR part 4 dạng DDMMYYYY-i/tổng(T1) (giống outbound)
+    const bagFromPart4 = this.rmBagHistory.extractBagLabelFromQrPart4(part4Raw);
+    const bagFromPart5 = parts.length >= 5 ? String(parts.slice(4).join('|') ?? '').trim() : '';
+    const bag = (bagFromPart5 || bagFromPart4 || '').trim();
 
     const codeUpper = materialCode.toUpperCase().trim();
     const poTrim = poNumber.trim();

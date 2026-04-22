@@ -23,8 +23,15 @@
             <i class="material-icons">arrow_back</i>
             QUAY LẠI
           </button>
+          <button type="button" class="hdr-btn report" *ngIf="showDsListPage" (click)="exportDsReport()" [disabled]="dsReportBusy" title="Report DS">
+            <i class="material-icons">download</i>
+            REPORT
+          </button>
           <button type="button" class="hdr-btn" (click)="selectFactory('ASM1')" [disabled]="!currentEmployeeId" title="Chọn ASM1">ASM1</button>
           <button type="button" class="hdr-btn" (click)="selectFactory('ASM2')" [disabled]="!currentEmployeeId" title="Chọn ASM2">ASM2</button>
+          <button type="button" class="hdr-btn menu" *ngIf="currentEmployeeId" (click)="goToMenu()" title="Về Menu">
+            <i class="material-icons">apps</i>
+          </button>
           <button type="button" class="hdr-btn logout" *ngIf="currentEmployeeId" (click)="logoutEmployee()" title="Đăng xuất">
             <i class="material-icons">logout</i>
           </button>
@@ -48,6 +55,9 @@
             <button type="button" class="mob-btn mob-btn--secondary" (click)="openDsListModal()">
               <i class="material-icons">list_alt</i>
               <span>KIỂM DS</span>
+            </button>
+            <button type="button" class="mob-btn mob-btn--back mob-btn--menu" (click)="goToMenu()" title="Menu">
+              <i class="material-icons">apps</i>
             </button>
             <button type="button" class="mob-btn mob-btn--back mob-btn--logout" (click)="logoutEmployee()" title="Thoát">
               <i class="material-icons">logout</i>

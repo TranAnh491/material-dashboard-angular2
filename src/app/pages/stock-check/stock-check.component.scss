@@ -4513,11 +4513,18 @@
           border-color: #cbd5e1;
         }
         &--logout {
-          margin-left: auto;
           padding: 8px 10px;
           color: #dc2626;
           border-color: #fecaca;
           background: #fff1f2;
+          i.material-icons { font-size: 20px; }
+        }
+        &--menu {
+          margin-left: auto;
+          padding: 8px 10px;
+          color: var(--sc-primary, #6366f1);
+          border-color: var(--sc-primary-200, #c7d2fe);
+          background: var(--sc-primary-50, #eef2ff);
           i.material-icons { font-size: 20px; }
         }
       }
