@@ -537,7 +537,11 @@ async function sendDupEmail(
   });
 }
 
-async function sendZaloDupNotify(db: admin.firestore.Firestore, dupes: OutboundDupRow[]): Promise<boolean> {
+async function sendZaloDupNotify(
+  db: admin.firestore.Firestore,
+  dupes: OutboundDupRow[],
+  settings?: Pick<ControlBatchDupSettings, 'dupSinceLabel' | 'exclusion'>
+): Promise<boolean> {
   const token = zaloBotToken.value().trim();
   if (!token) {
     console.error('outbound-dup-notify-30m: missing ZALO_BOT_TOKEN');
@@ -583,8 +587,18 @@ async function sendZaloDupNotify(db: admin.firestore.Firestore, dupes: OutboundD
     const dt = r.latestExportAtLabel ? ` NGÀY:${r.latestExportAtLabel}` : '';
     return `- ${fac} ${mc}${po}${imd}${bag}${lsxPart}${dt} (${r.count})`;
   });
+  const since = settings?.dupSinceLabel ? `\nTừ ngày: ${settings.dupSinceLabel}` : '';
+  const excl =
+    settings?.exclusion?.enabled === true
+      ? `\nLoại trừ: BẬT (${settings.exclusion.codes?.size ?? 0} dòng)`
+      : settings?.exclusion
+        ? `\nLoại trừ: TẮT`
+        : '';
   const msg =
-    `⚠️ Control Batch: phát hiện ${dupes.length} nhóm trùng xuất kho (mới).\n` +
+    `⚠️ Control Batch: phát hiện ${dupes.length} nhóm trùng xuất kho (mới).` +
+    since +
+    excl +
+    `\n` +
     lines.join('\n') +
     (dupes.length > top.length ? `\n... +${dupes.length - top.length} nhóm` : '');
 
@@ -667,7 +681,10 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
     }
 
     // Send Zalo only (email disabled by request).
-    const zaloSent = await sendZaloDupNotify(db, newDupes);
+    const zaloSent = await sendZaloDupNotify(db, newDupes, {
+      dupSinceLabel: settings.dupSinceLabel,
+      exclusion: settings.exclusion
+    });
     const emailSent = false;
 
     // Persist "emailed" keys so we don't resend.

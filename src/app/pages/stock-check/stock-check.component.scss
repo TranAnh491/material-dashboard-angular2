@@ -5,172 +5,169 @@
 }
 
 // =========================================================
-// MONOCHROME THEME (TRẮNG/ĐEN) — giảm tải UI
-// Add as overrides at the end to avoid breaking layout.
+// PASTEL PROFESSIONAL THEME
+// Palette: Indigo primary · Emerald success · Red danger
+// Inspired by Linear / Stripe / Notion design systems
 // =========================================================
+
+// --- CSS Custom Properties ---
 .stock-check-wrapper {
-  --sc-bg: #ffffff;
-  --sc-fg: #111111;
-  --sc-muted: #6b7280;
-  --sc-border: #000000;
-  --sc-border-soft: #e5e7eb;
-  --sc-surface: #ffffff;
-  --sc-surface-2: #f9fafb;
+  --sc-primary:       #4F46E5;   // Indigo 600
+  --sc-primary-dark:  #3730A3;   // Indigo 800
+  --sc-primary-50:    #EEF2FF;   // Indigo 50
+  --sc-primary-100:   #E0E7FF;   // Indigo 100
+  --sc-primary-200:   #C7D2FE;   // Indigo 200
 
-  background: var(--sc-bg);
-  color: var(--sc-fg);
+  --sc-success:       #059669;   // Emerald 600
+  --sc-success-50:    #ECFDF5;   // Emerald 50
+  --sc-success-200:   #A7F3D0;   // Emerald 200
 
-  // Strip colorful shadows
-  * {
-    box-shadow: none !important;
-  }
+  --sc-danger:        #DC2626;   // Red 600
+  --sc-danger-50:     #FEF2F2;   // Red 50
+  --sc-danger-200:    #FECACA;   // Red 200
 
-  .top-bar,
-  .data-section,
-  .stock-check-container {
-    background: var(--sc-bg) !important;
-    color: var(--sc-fg) !important;
-  }
+  --sc-sky:           #0EA5E9;   // Sky 500
+  --sc-sky-50:        #F0F9FF;
+  --sc-violet:        #7C3AED;   // Violet 600
+  --sc-violet-50:     #F5F3FF;
 
-  .factory-title-icon {
-    filter: grayscale(1) contrast(1.1);
-  }
+  --sc-bg:            #F8FAFF;   // Page background (subtle blue-tint)
+  --sc-surface:       #FFFFFF;   // Card surface
+  --sc-surface-2:     #F1F5F9;   // Slate 100
 
-  // Buttons (common)
-  button,
-  .inventory-btn,
-  .report-btn,
-  .sort-btn,
-  .khsx-btn,
-  .history-btn,
-  .reset-btn,
-  .logout-btn,
-  .asm-select-btn,
-  .scan-submit-btn,
-  .cancel-btn,
-  .done-btn-full {
-    background: var(--sc-surface) !important;
-    color: var(--sc-fg) !important;
-    border: 2px solid var(--sc-border) !important;
-  }
+  --sc-fg:            #1E293B;   // Slate 800 — main text
+  --sc-fg-2:          #475569;   // Slate 600
+  --sc-muted:         #94A3B8;   // Slate 400
 
-  button:hover:not(:disabled),
-  .inventory-btn:hover:not(:disabled),
-  .report-btn:hover:not(:disabled),
-  .sort-btn:hover:not(:disabled),
-  .khsx-btn:hover:not(:disabled),
-  .history-btn:hover:not(:disabled),
-  .reset-btn:hover:not(:disabled),
-  .logout-btn:hover:not(:disabled),
-  .asm-select-btn:hover:not(:disabled),
-  .scan-submit-btn:hover:not(:disabled),
-  .cancel-btn:hover:not(:disabled),
-  .done-btn-full:hover:not(:disabled) {
-    background: #000000 !important;
-    color: #ffffff !important;
-  }
-
-  button:disabled,
-  .inventory-btn:disabled,
-  .report-btn:disabled,
-  .sort-btn:disabled,
-  .khsx-btn:disabled,
-  .history-btn:disabled,
-  .reset-btn:disabled,
-  .logout-btn:disabled,
-  .asm-select-btn:disabled,
-  .scan-submit-btn:disabled,
-  .cancel-btn:disabled,
-  .done-btn-full:disabled {
-    opacity: 0.45 !important;
-    cursor: not-allowed !important;
-  }
-
-  i.material-icons {
-    color: inherit !important;
-  }
-
-  // Counter boxes → grayscale
-  .counter-boxes .counter-box {
-    background: var(--sc-surface) !important;
-    border: 2px solid var(--sc-border) !important;
-    color: var(--sc-fg) !important;
-  }
-  .counter-boxes .counter-box .counter-label {
-    color: var(--sc-muted) !important;
-  }
-  .counter-boxes .counter-box.active {
-    background: var(--sc-surface-2) !important;
-  }
-
-  // Tables
-  table,
-  .data-table {
-    color: var(--sc-fg) !important;
-  }
-  th,
-  td {
-    border-color: var(--sc-border-soft) !important;
-  }
-  thead th {
-    background: var(--sc-surface-2) !important;
-    color: var(--sc-fg) !important;
-    border-bottom: 2px solid var(--sc-border) !important;
-  }
-
-  // Inputs
-  input,
-  select,
-  textarea,
-  .editable-input,
-  .search-input,
-  .scan-input,
-  .scan-input-field {
-    background: #ffffff !important;
-    color: var(--sc-fg) !important;
-    border: 1px solid var(--sc-border) !important;
-  }
-
-  // Modals
-  .scan-modal,
-  .scan-modal-v2,
-  .mobile-factory-picker-modal {
-    background: rgba(0, 0, 0, 0.82) !important;
-  }
-  .scan-modal .modal-content,
-  .scan-modal-v2 .scan-modal-inner,
-  .mobile-factory-picker-card {
-    background: #ffffff !important;
-    border: 2px solid var(--sc-border) !important;
-    color: var(--sc-fg) !important;
-  }
-
-  // Badges / status pills: remove colors
-  .badge,
-  .status-badge,
-  .revived-badge {
-    background: var(--sc-surface-2) !important;
-    border: 1px solid var(--sc-border) !important;
-    color: var(--sc-fg) !important;
-  }
-
-  // Notice popup: monochrome
-  .scan-notice-card {
-    border: 2px solid var(--sc-border) !important;
-    background: #ffffff !important;
-    color: var(--sc-fg) !important;
-  }
-  .scan-notice-icon {
-    background: var(--sc-surface-2) !important;
-    border: 1px solid var(--sc-border) !important;
-  }
+  --sc-border:        #CBD5E1;   // Slate 300
+  --sc-border-soft:   #E2E8F0;   // Slate 200
 }
 
 .stock-check-wrapper {
   position: relative;
   z-index: 100;
-  background: #ffffff;
+  background: var(--sc-bg);
   min-height: 100vh;
+  color: var(--sc-fg);
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+
+  // ---- Global pastel overrides (replace old hard-coded black/purple) ----
+
+  // Modal overlay
+  .scan-modal,
+  .scan-modal-v2,
+  .material-detail-modal,
+  .history-modal,
+  .mobile-factory-picker-modal {
+    background: rgba(15, 23, 42, 0.72) !important;
+  }
+
+  // Modal content cards
+  .scan-modal .modal-content,
+  .scan-modal-v2 .scan-modal-inner,
+  .mobile-factory-picker-card {
+    background: var(--sc-surface) !important;
+    border: 1.5px solid var(--sc-border) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18) !important;
+  }
+
+  // Modal headers — replace any colorful gradients with indigo
+  .modal-header,
+  .rack-modal-header,
+  .rack-detail-header {
+    background: linear-gradient(90deg, var(--sc-primary) 0%, #6366F1 100%) !important;
+    border-bottom: none !important;
+    color: #fff !important;
+
+    h2, h3, h4 { color: #fff !important; }
+    i.material-icons { color: rgba(255,255,255,0.9) !important; }
+
+    .close-btn, button {
+      color: rgba(255,255,255,0.85) !important;
+      background: rgba(255,255,255,0.12) !important;
+      border: none !important;
+      &:hover { background: rgba(255,255,255,0.22) !important; color: #fff !important; }
+    }
+  }
+
+  // Scan notice card
+  .scan-notice-card {
+    border: 1.5px solid var(--sc-border) !important;
+    background: var(--sc-surface) !important;
+    color: var(--sc-fg) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 24px rgba(79, 70, 229, 0.12) !important;
+  }
+  .scan-notice-icon {
+    background: var(--sc-primary-50) !important;
+    border: 1.5px solid var(--sc-primary-200) !important;
+    i.material-icons { color: var(--sc-primary) !important; }
+  }
+
+  // Employee ID chip (inside old .top-bar-actions)
+  .employee-id-display {
+    background: var(--sc-primary-50) !important;
+    border-color: var(--sc-primary-200) !important;
+    color: var(--sc-primary) !important;
+    i.material-icons { color: var(--sc-primary) !important; }
+  }
+
+  // Status badges — Đã kiểm (green) / Chưa kiểm (red/amber)
+  .ds-status-badge {
+    &.checked { background: var(--sc-success-50) !important; color: var(--sc-success) !important; border-color: var(--sc-success-200) !important; }
+    &.unchecked { background: var(--sc-danger-50) !important; color: var(--sc-danger) !important; border-color: var(--sc-danger-200) !important; }
+  }
+
+  // Cancel / secondary buttons in modals
+  .cancel-btn {
+    border: 1.5px solid var(--sc-border) !important;
+    background: var(--sc-surface) !important;
+    color: var(--sc-fg-2) !important;
+    border-radius: 8px !important;
+    &:hover { border-color: var(--sc-primary) !important; color: var(--sc-primary) !important; background: var(--sc-primary-50) !important; }
+  }
+
+  // Primary action buttons in modals
+  .scan-submit-btn,
+  .done-btn-full {
+    background: var(--sc-primary) !important;
+    color: #fff !important;
+    border-color: var(--sc-primary) !important;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3) !important;
+    &:hover:not(:disabled) { background: var(--sc-primary-dark) !important; }
+  }
+
+  // Danger (reset) buttons
+  .reset-btn,
+  [class*="danger"] {
+    &:hover:not(:disabled) {
+      background: var(--sc-danger-50) !important;
+      border-color: var(--sc-danger) !important;
+      color: var(--sc-danger) !important;
+    }
+  }
+
+  // Table thead
+  thead th {
+    background: var(--sc-surface-2) !important;
+    color: var(--sc-fg-2) !important;
+    border-bottom: 2px solid var(--sc-border) !important;
+  }
+
+  // Rack buttons
+  .rack-btn {
+    background: linear-gradient(90deg, var(--sc-primary) 0%, #6366F1 100%) !important;
+    color: #fff !important;
+    border: none !important;
+  }
+
+  // Rack export btn
+  .rack-export-btn {
+    border: 1.5px solid rgba(255,255,255,0.5) !important;
+    background: rgba(255,255,255,0.15) !important;
+    color: #fff !important;
+  }
 }
 
 // Mobile: popup chọn ASM1/ASM2 sau khi scan mã nhân viên
@@ -526,119 +523,337 @@
 
 .stock-check-container {
   padding: 20px;
-  background: #ffffff;
+  background: var(--sc-bg);
   min-height: 100vh;
-  font-family: Arial, sans-serif;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
   position: relative;
   z-index: 100;
-  transform: translateZ(0); // Force GPU acceleration
+  transform: translateZ(0);
 
-  // Top Bar - Title on top, actions below
+  // ============================================================
+  // TOP BAR — 3 dòng sticky, tối ưu nhà kho
+  // ============================================================
   .top-bar {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin-bottom: 15px;
-    padding: 12px 15px;
-    border: 2px solid #000000;
-    background: #ffffff;
+    gap: 0;
+    margin-bottom: 20px;
+    border: 1.5px solid var(--sc-border);
+    border-radius: 12px;
+    background: var(--sc-surface);
+    box-shadow: 0 1px 4px rgba(79, 70, 229, 0.07), 0 4px 16px rgba(15, 23, 42, 0.06);
     position: sticky;
     top: 0;
     z-index: 10000 !important;
-    isolation: isolate;
-    pointer-events: auto !important;
-    transform: translateZ(0); // Force GPU acceleration and new stacking context
-    will-change: transform; // Optimize for GPU
-    
-    // Ensure all children are clickable
-    > * {
-      pointer-events: auto !important;
-      position: relative;
+    transform: translateZ(0);
+    will-change: transform;
+    overflow: hidden;
+
+    > * { pointer-events: auto !important; position: relative; }
+
+    // Mặc định desktop: ẩn mobile-only, hiện desktop-only
+    .mobile-only { display: none !important; }
+    .desktop-only { display: flex !important; }
+
+    // ---- DÒNG 1: Brand + factory + logout ----
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 16px;
+      background: linear-gradient(90deg, var(--sc-primary-50) 0%, #fff 100%);
+      border-bottom: 1px solid var(--sc-border-soft);
     }
 
-    .back-btn,
-    .logout-btn,
-    .reset-btn,
-    .history-btn {
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .factory-title-icon {
+      height: 26px;
+      width: auto;
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--sc-primary);
+      white-space: nowrap;
+    }
+
+    .employee-id-display {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border: 1px solid var(--sc-primary-200);
+      border-radius: 999px;
+      background: var(--sc-primary-50);
+      color: var(--sc-primary);
+      white-space: nowrap;
+      i.material-icons { font-size: 13px; }
+    }
+
+    .header-factory-btns {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 16px;
-      border: 2px solid #000000;
-      background: #ffffff;
-      color: #000000;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer !important;
-      border-radius: 6px;
-      white-space: nowrap;
       flex-shrink: 0;
-      position: relative;
-      z-index: 10001 !important;
-      pointer-events: auto !important;
-      min-height: 36px;
-      transform: translateZ(0);
+    }
+
+    .hdr-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 32px;
+      padding: 0 14px;
+      border: 1.5px solid var(--sc-border);
+      border-radius: 8px;
+      background: var(--sc-surface);
+      color: var(--sc-fg-2);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
       text-transform: uppercase;
-      -webkit-user-select: none;
+      letter-spacing: 0.4px;
+      touch-action: manipulation;
+      transition: all 0.15s ease;
+      &:hover:not(:disabled) {
+        background: var(--sc-primary);
+        border-color: var(--sc-primary);
+        color: #fff;
+      }
+      &:disabled { opacity: 0.35; cursor: not-allowed; }
+      &.logout {
+        padding: 0 10px;
+        border-color: var(--sc-border);
+        color: var(--sc-muted);
+        i.material-icons { font-size: 18px; pointer-events: none; }
+        &:hover:not(:disabled) {
+          background: #FEF2F2;
+          border-color: var(--sc-danger);
+          color: var(--sc-danger);
+        }
+      }
+      &.back {
+        border-color: var(--sc-primary-200);
+        background: var(--sc-primary-50);
+        color: var(--sc-primary);
+        i.material-icons { font-size: 16px; pointer-events: none; }
+        &:hover:not(:disabled) {
+          background: var(--sc-primary);
+          border-color: var(--sc-primary);
+          color: #fff;
+        }
+      }
+    }
+
+    // ---- DÒNG 2: Counters + Action buttons (1 hàng ngang) ----
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 0;
+      border-bottom: 1px solid var(--sc-border-soft);
+      min-height: 54px;
+      background: var(--sc-surface);
+    }
+
+    .big-counters {
+      display: flex;
+      flex: 1;
+      align-items: stretch;
+      border-right: 1px solid var(--sc-border-soft);
+    }
+
+    .big-counter {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-right: 1px solid var(--sc-border-soft);
+      cursor: pointer;
       user-select: none;
-      -webkit-tap-highlight-color: transparent; // Ngăn highlight khi tap trên mobile
-      touch-action: manipulation; // Ngăn double-tap zoom và double click
-      
-      i, span {
-        pointer-events: none;
+      touch-action: manipulation;
+      transition: background 0.15s;
+
+      &:last-child { border-right: none; }
+      &:hover { background: var(--sc-surface-2); }
+
+      // Màu số theo loại counter
+      &:nth-child(1) .big-num { color: var(--sc-primary); }
+      &:nth-child(2) .big-num { color: var(--sc-success); }
+      &:nth-child(3) .big-num { color: var(--sc-danger); }
+
+      &.active {
+        &:nth-child(1) { background: var(--sc-primary-50); }
+        &:nth-child(2) { background: var(--sc-success-50); }
+        &:nth-child(3) { background: var(--sc-danger-50); }
+        .big-lbl { font-weight: 800; }
       }
 
-      i {
-        font-size: 20px;
+      .big-num {
+        font-size: 26px;
+        font-weight: 900;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
       }
 
-      span {
+      .big-lbl {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        color: var(--sc-muted);
+        text-transform: uppercase;
+        line-height: 1.2;
+      }
+    }
+
+    .main-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      flex-shrink: 0;
+    }
+
+    // Nút hành động chính: icon + chữ theo HÀNG NGANG
+    .main-btn {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 14px;
+      border: 1.5px solid var(--sc-border);
+      border-radius: 8px;
+      background: var(--sc-surface);
+      color: var(--sc-fg-2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+
+      i.material-icons { font-size: 17px; pointer-events: none; flex-shrink: 0; }
+
+      &:hover:not(:disabled) {
+        border-color: var(--sc-primary);
+        color: var(--sc-primary);
+        background: var(--sc-primary-50);
+      }
+      &:disabled { opacity: 0.4; cursor: not-allowed; }
+
+      &.primary {
+        background: var(--sc-primary);
+        color: #fff;
+        border-color: var(--sc-primary);
         font-size: 13px;
+        padding: 0 18px;
+        box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+        i.material-icons { font-size: 19px; }
+        &:hover:not(:disabled) {
+          background: var(--sc-primary-dark);
+          border-color: var(--sc-primary-dark);
+          color: #fff;
+          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+        }
       }
 
-      &:hover {
-        background: #000000;
-        color: #ffffff;
-      }
-      
-      &:active {
-        transform: translateZ(0) scale(0.98); // Hiệu ứng nhấn nhẹ
+      &.more-btn {
+        padding: 0 10px;
+        border-style: dashed;
+        border-color: var(--sc-muted);
+        i.material-icons { font-size: 20px; }
+        &:hover:not(:disabled) {
+          border-style: solid;
+          border-color: var(--sc-primary);
+          color: var(--sc-primary);
+          background: var(--sc-primary-50);
+        }
       }
     }
 
-    // Reset: giữ click ổn định (icon/text không bắt event riêng)
-    
-    .logout-btn {
-      background: linear-gradient(135deg, #ef9a9a, #e57373);
-      color: #ffffff;
-      border-color: #ef9a9a;
-      
-      &:hover {
-        background: linear-gradient(135deg, #e57373, #ef5350);
-      }
+    // ---- DÒNG 3: Search full width ----
+    .search-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 16px;
+      border-top: none;
+      background: var(--sc-surface-2);
     }
-    
-    .reset-btn {
-      background: linear-gradient(135deg, #ffcc80, #ffb74d);
-      color: #ffffff;
-      border-color: #ffcc80;
-      position: relative;
-      z-index: 25000 !important;
-      pointer-events: auto !important;
-      
-      &:hover {
-        background: linear-gradient(135deg, #ffb74d, #ffa726);
-      }
+
+    .search-icon {
+      font-size: 19px;
+      color: var(--sc-muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      &:hover { color: var(--sc-primary); }
     }
-    
-    .history-btn {
-      background: linear-gradient(135deg, #ce93d8, #ba68c8);
-      color: #ffffff;
-      border-color: #ce93d8;
-      
-      &:hover {
-        background: linear-gradient(135deg, #ba68c8, #ab47bc);
-      }
+
+    .search-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--sc-fg);
+      background: transparent;
+      padding: 2px 0;
+      &::placeholder { color: var(--sc-muted); }
+    }
+
+    .clear-search-btn {
+      display: flex;
+      align-items: center;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px;
+      color: var(--sc-muted);
+      &:hover { color: var(--sc-danger); }
+      i.material-icons { font-size: 18px; }
+    }
+
+    // Nút phụ (giữ để không lỗi CSS)
+    .back-btn, .logout-btn, .reset-btn, .history-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      height: 36px;
+      border: 1.5px solid var(--sc-border);
+      border-radius: 8px;
+      background: var(--sc-surface);
+      color: var(--sc-fg-2);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-transform: uppercase;
+      touch-action: manipulation;
+      white-space: nowrap;
+      transition: all 0.15s;
+      i, span { pointer-events: none; }
+      i { font-size: 18px; }
+      &:hover { background: var(--sc-primary-50); border-color: var(--sc-primary); color: var(--sc-primary); }
     }
 
     .factory-title {
@@ -661,7 +876,7 @@
 
       i.material-icons {
         font-size: 24px;
-        color: #2196F3;
+        color: var(--sc-primary);
       }
 
       .factory-title-icon {
@@ -677,16 +892,18 @@
         gap: 6px;
         margin-left: 20px;
         padding: 6px 12px;
-        background: linear-gradient(135deg, #a5d6a7, #66bb6a);
+        background: var(--sc-primary-50);
         color: #ffffff;
         border-radius: 20px;
         font-size: 14px;
         font-weight: 600;
-        box-shadow: 0 2px 8px rgba(102, 187, 106, 0.25);
+        border: 1px solid var(--sc-primary-200);
+        color: var(--sc-primary);
+        box-shadow: none;
         
         i.material-icons {
           font-size: 18px;
-          color: #ffffff;
+          color: var(--sc-primary);
         }
       }
     }
@@ -1167,6 +1384,8 @@
       display: flex;
       gap: 15px;
       margin-bottom: 20px;
+      margin-top: 0;
+      margin-bottom: 0;
 
       .counter-box {
         flex: 1;
@@ -1370,60 +1589,79 @@
     }
 
     .location-box {
-      border: 2px solid #333;
-      background: #fff;
-      border-radius: 8px;
-      padding: 14px 12px;
+      border: 1.5px solid var(--sc-border);
+      background: var(--sc-surface);
+      border-radius: 12px;
+      padding: 14px 14px;
+      min-height: 90px;
       cursor: pointer;
-      transition: box-shadow 0.2s, transform 0.15s;
+      transition: box-shadow 0.2s, transform 0.15s, border-color 0.15s;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+
       &:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(79, 70, 229, 0.14);
+        border-color: var(--sc-primary-200);
+        transform: translateY(-2px);
       }
+
+      // Box đã xong hết → xanh nhạt, giảm nổi
       &.all-checked {
-        border-color: #2e7d32;
-        background: #e8f5e9;
+        opacity: 0.55;
+        border-color: var(--sc-success-200);
+        background: var(--sc-success-50);
+        &:hover { opacity: 0.8; }
       }
 
       &.active-box {
-        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.45);
-        border-color: #2196F3;
+        box-shadow: 0 0 0 2.5px var(--sc-primary);
+        border-color: var(--sc-primary);
       }
 
       &.parent {
-        border-color: #1565c0;
-        background: #e3f2fd;
+        border-color: var(--sc-primary-200);
+        background: var(--sc-primary-50);
         .location-box-title {
-          font-size: 18px;
-          i.material-icons { color: #1565c0; }
+          font-size: 22px;
+          i.material-icons { color: var(--sc-primary); font-size: 24px; }
         }
       }
 
       &.child {
         .location-box-title {
-          i.material-icons { color: #111; }
+          i.material-icons { color: var(--sc-fg-2); font-size: 20px; }
         }
       }
+
       .location-box-title {
         display: flex;
         align-items: center;
         gap: 6px;
-        font-weight: 700;
-        font-size: 15px;
-        color: #000;
+        font-weight: 800;
+        font-size: 19px;
+        color: var(--sc-fg);
         margin-bottom: 10px;
-        i.material-icons { font-size: 20px; }
+        letter-spacing: 0.2px;
+        i.material-icons { font-size: 21px; flex-shrink: 0; }
       }
+
       .location-box-stats {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px 10px;
-        font-size: 12px;
+        gap: 6px 10px;
+        font-size: 13px;
+        font-weight: 700;
         .stat {
-          &.total { color: #333; }
-          &.full { color: #2e7d32; }
-          &.partial { color: #ffb74d; }
-          &.unchecked { color: #c62828; }
+          &.total { color: var(--sc-fg-2); }
+          &.full { color: var(--sc-success); }
+          &.partial { color: #92400E; }
+          &.unchecked {
+            color: var(--sc-danger);
+            font-size: 16px;
+            font-weight: 900;
+          }
         }
       }
     }
@@ -1529,6 +1767,209 @@
       gap: 8px;
       flex-wrap: wrap;
       i.material-icons { font-size: 24px; }
+    }
+
+    // ===================== KIỂM DS — bảng chi tiết vị trí =====================
+    // Rõ ràng hơn: tăng khoảng cách cột, kẻ line, căn giữa.
+    &.ds-location-detail {
+      .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #000;
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      table.data-table {
+        width: 100%;
+        min-width: 980px; // rộng hơn để cột thoáng (≈ +40px/cột)
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+
+      table.data-table th,
+      table.data-table td {
+        border: 1px solid #000; // gạch dọc/ngang rõ
+        padding: 10px 14px;     // nới cột
+        text-align: center;     // căn giữa
+        vertical-align: middle;
+        font-size: 13px;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+
+      table.data-table thead th {
+        background: #f5f5f5;
+        font-weight: 800;
+      }
+
+      table.data-table td.num,
+      table.data-table th.num {
+        text-align: center;
+      }
+
+      // Nút scan to rõ
+      .scan-submit-btn {
+        min-width: 44px;
+        height: 38px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      // DS detail cards — MỖI MÃ LÀ 1 HÀNG NGANG đầy đủ
+      .ds-detail-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .ds-detail-card {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0;
+        border: 1.5px solid var(--sc-border);
+        border-radius: 10px;
+        background: var(--sc-surface);
+        overflow: hidden;
+        min-height: 52px;
+        transition: box-shadow 0.15s, border-color 0.15s;
+
+        &:hover { border-color: var(--sc-primary-200); box-shadow: 0 2px 8px rgba(79,70,229,0.08); }
+
+        &.checked {
+          background: var(--sc-success-50);
+          border-color: var(--sc-success-200);
+        }
+        &.unchecked {
+          background: var(--sc-surface);
+        }
+      }
+
+      // Cột trái: Mã + badge (cố định chiều rộng)
+      .ds-col-left {
+        flex-shrink: 0;
+        width: 190px;
+        min-width: 150px;
+        padding: 10px 14px;
+        border-right: 1px solid var(--sc-border-soft);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        justify-content: center;
+      }
+
+      .ds-mc {
+        font-weight: 800;
+        font-size: 14px;
+        color: var(--sc-fg);
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ds-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        width: fit-content;
+
+        &.ok {
+          background: var(--sc-success-50);
+          color: var(--sc-success);
+          border: 1px solid var(--sc-success-200);
+        }
+        &.no {
+          background: var(--sc-danger-50);
+          color: var(--sc-danger);
+          border: 1px solid var(--sc-danger-200);
+        }
+      }
+
+      // Cột giữa: PO | IMD | SL kiểm | Ngày — flex: 1, hàng ngang bắt buộc
+      .ds-card-row {
+        flex: 1;
+        display: flex;
+        flex-direction: row !important;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0;
+        flex-wrap: nowrap !important;
+        overflow: hidden;
+        height: 100%;
+      }
+
+      .ds-card-row .kv {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        padding: 8px 12px;
+        border-right: 1px solid var(--sc-border-soft);
+        min-width: 80px;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .ds-card-row .k {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--sc-muted);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .ds-card-row .v {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--sc-fg);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      // Cột phải: nút KIỂM KÊ
+      .ds-card-scan-btn {
+        flex-shrink: 0;
+        display: inline-flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 100%;
+        min-height: 52px;
+        padding: 0 16px;
+        border: none;
+        border-left: 1.5px solid var(--sc-border-soft);
+        background: var(--sc-primary-50);
+        color: var(--sc-primary);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        cursor: pointer;
+        touch-action: manipulation;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+
+        i.material-icons { font-size: 17px; pointer-events: none; }
+
+        &:hover {
+          background: var(--sc-primary);
+          color: #fff;
+        }
+      }
+
+      .ds-badges { display: none; } // ẩn class cũ nếu còn sót
     }
 
     .search-result-header {
@@ -2294,10 +2735,9 @@
   .scan-modal-v2 {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(15, 23, 42, 0.65);
     z-index: 9999;
     display: flex;
-    // Desktop/Web: full màn hình và bám phía trên
     align-items: flex-start;
     justify-content: center;
 
@@ -2308,7 +2748,7 @@
       max-height: 100vh;
       display: flex;
       flex-direction: column;
-      background: #f4f6f9;
+      background: var(--sc-bg);
       border-radius: 0;
       overflow: hidden;
       box-shadow: none;
@@ -2316,9 +2756,9 @@
       // ---- Fixed top block ----
       .scan-fixed-top {
         flex-shrink: 0;
-        background: #ffffff;
+        background: var(--sc-surface);
         padding: 14px 16px 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        box-shadow: 0 2px 12px rgba(79, 70, 229, 0.1);
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -2349,12 +2789,12 @@
             i { font-size: 18px; }
 
             &.location {
-              background: #1565c0;
+              background: var(--sc-sky);
               color: #ffffff;
             }
 
             &.material {
-              background: #2e7d32;
+              background: var(--sc-success);
               color: #ffffff;
             }
           }
@@ -2364,30 +2804,30 @@
             align-items: center;
             gap: 4px;
             padding: 5px 12px;
-            border: 2px solid #1565c0;
+            border: 1.5px solid var(--sc-sky);
             border-radius: 999px;
             font-size: 13px;
             font-weight: 800;
-            color: #1565c0;
-            background: #e3f2fd;
+            color: var(--sc-sky);
+            background: var(--sc-sky-50);
 
             i { font-size: 15px; }
           }
 
           .step-hint {
             font-size: 12px;
-            color: #666;
+            color: var(--sc-muted);
             padding-left: 2px;
           }
 
           .step-counter {
             font-size: 13px;
-            color: #333;
+            color: var(--sc-fg-2);
             padding-left: 2px;
 
             strong {
               font-size: 15px;
-              color: #2e7d32;
+              color: var(--sc-success);
             }
           }
         }
@@ -2401,21 +2841,22 @@
           .scan-input-field {
             flex: 1;
             padding: 12px 14px;
-            border: 2px solid #000;
-            background: #fff;
-            color: #000;
+            border: 1.5px solid var(--sc-border);
+            background: var(--sc-surface);
+            color: var(--sc-fg);
             font-size: 16px;
-            font-family: Arial, sans-serif;
-            border-radius: 8px;
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+            border-radius: 10px;
             min-width: 0;
 
             &:focus {
               outline: none;
-              border-color: #1976d2;
-              background: #fafafa;
+              border-color: var(--sc-primary);
+              box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+              background: var(--sc-primary-50);
             }
 
-            &::placeholder { color: #aaa; font-size: 14px; }
+            &::placeholder { color: var(--sc-muted); font-size: 14px; }
           }
 
           .scan-send-btn {
@@ -2423,27 +2864,28 @@
             width: 48px;
             height: 48px;
             border: none;
-            background: #000;
+            background: var(--sc-primary);
             color: #fff;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 
             i { font-size: 24px; }
 
-            &:hover { background: #333; }
+            &:hover { background: var(--sc-primary-dark); }
           }
 
           .scan-close-btn {
             flex-shrink: 0;
             width: 48px;
             height: 48px;
-            border: 2px solid #000;
-            background: #fff;
-            color: #000;
-            border-radius: 8px;
+            border: 1.5px solid var(--sc-border);
+            background: var(--sc-surface);
+            color: var(--sc-fg-2);
+            border-radius: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -2451,7 +2893,7 @@
 
             i { font-size: 24px; }
 
-            &:hover { background: #f5f5f5; }
+            &:hover { background: var(--sc-danger-50); border-color: var(--sc-danger); color: var(--sc-danger); }
           }
         }
       }
@@ -2469,12 +2911,12 @@
           .done-btn-full {
             width: 100%;
             padding: 14px;
-            border: 2px solid #000;
-            background: #000;
+            border: none;
+            background: var(--sc-primary);
             color: #fff;
             font-size: 15px;
-            font-weight: 900;
-            letter-spacing: 1px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
             text-transform: uppercase;
             border-radius: 10px;
             cursor: pointer;
@@ -2482,10 +2924,11 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
+            box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35);
 
             i { font-size: 20px; }
 
-            &:hover { background: #333; }
+            &:hover { background: var(--sc-primary-dark); }
           }
         }
 
@@ -2495,10 +2938,10 @@
           align-items: center;
           gap: 8px;
           padding: 30px 0;
-          color: #888;
+          color: var(--sc-muted);
           text-align: center;
 
-          i { font-size: 40px; color: #ccc; }
+          i { font-size: 40px; color: var(--sc-border); }
         }
 
         // Web/Desktop: grid 5 box mỗi hàng
@@ -2531,16 +2974,16 @@
             flex-direction: column;
             gap: 8px;
 
-            &.status-unchecked { border-color: #cfcfcf; background: #fafafa; }
-            &.status-partial   { border-color: #ffcc80; background: #fffaf2; }
-            &.status-full      { border-color: #2e7d32; background: #f0fff0; }
+            &.status-unchecked { border-color: var(--sc-border-soft); background: var(--sc-surface-2); }
+            &.status-partial   { border-color: #FCD34D; background: #FFFBEB; }
+            &.status-full      { border-color: var(--sc-success-200); background: var(--sc-success-50); }
 
-            // Highlight nhanh cho mã vừa scan (không reorder list)
+            // Highlight nhanh cho mã vừa scan
             &.just-scanned {
-              border-color: #111 !important;
+              border-color: var(--sc-primary) !important;
               box-shadow:
-                0 0 0 3px rgba(33, 150, 243, 0.55),
-                0 4px 14px rgba(33, 150, 243, 0.25);
+                0 0 0 3px rgba(79, 70, 229, 0.25),
+                0 4px 14px rgba(79, 70, 229, 0.15);
               transform: translateZ(0);
             }
 
@@ -2555,7 +2998,7 @@
                 .code {
                   font-size: 16px;
                   font-weight: 900;
-                  color: #000;
+                  color: var(--sc-fg);
                   white-space: nowrap;
                   overflow: hidden;
                   text-overflow: ellipsis;
@@ -2564,16 +3007,16 @@
 
               .label {
                 font-size: 11px;
-                font-weight: 900;
-                color: #666;
+                font-weight: 700;
+                color: var(--sc-muted);
                 text-transform: uppercase;
                 flex-shrink: 0;
               }
 
               .value {
                 font-size: 12px;
-                font-weight: 900;
-                color: #000;
+                font-weight: 800;
+                color: var(--sc-fg-2);
                 text-align: right;
                 white-space: nowrap;
                 overflow: hidden;
@@ -2582,17 +3025,17 @@
               }
 
               .status-pill {
-                padding: 4px 10px;
+                padding: 3px 10px;
                 border-radius: 999px;
                 font-size: 11px;
-                font-weight: 900;
+                font-weight: 700;
                 text-transform: uppercase;
                 letter-spacing: 0.4px;
                 flex-shrink: 0;
 
-                &.unchecked { background: #eeeeee; color: #666; border: 1px solid #ccc; }
-                &.partial   { background: #ffcc80; color: #7a4a00; }
-                &.full      { background: #2e7d32; color: #fff; }
+                &.unchecked { background: var(--sc-surface-2); color: var(--sc-muted); border: 1px solid var(--sc-border); }
+                &.partial   { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
+                &.full      { background: var(--sc-success-50); color: var(--sc-success); border: 1px solid var(--sc-success-200); }
               }
             }
           }
@@ -2603,7 +3046,7 @@
     .wrong-location-section {
       margin-top: 18px;
       padding-top: 12px;
-      border-top: 2px dashed rgba(0, 0, 0, 0.15);
+      border-top: 2px dashed var(--sc-border-soft);
     }
 
     .wrong-location-title {
@@ -2612,7 +3055,7 @@
       gap: 8px;
       font-weight: 800;
       font-size: 14px;
-      color: #b71c1c;
+      color: var(--sc-danger);
       margin-bottom: 10px;
       i.material-icons { font-size: 20px; }
     }
@@ -2628,8 +3071,8 @@
     }
 
     .wrong-location-box {
-      border: 2px solid #d32f2f;
-      background: #fff5f5;
+      border: 1.5px solid var(--sc-danger-200);
+      background: var(--sc-danger-50);
       border-radius: 10px;
       padding: 12px;
       .status-pills {
@@ -2638,7 +3081,7 @@
         gap: 6px;
       }
       .status-pill.wrong {
-        background: #d32f2f;
+        background: var(--sc-danger);
         color: #fff;
         font-weight: 800;
       }
@@ -2646,8 +3089,8 @@
         display: flex;
         flex-direction: column;
         gap: 2px;
-        .k { font-size: 11px; color: #666; }
-        .v { font-size: 13px; font-weight: 800; color: #111; }
+        .k { font-size: 11px; color: var(--sc-muted); }
+        .v { font-size: 13px; font-weight: 800; color: var(--sc-fg); }
       }
     }
 
@@ -3774,20 +4217,20 @@
         align-items: center;
         justify-content: center;
         width: 100%;
-        
-        .mobile-only {
-          display: flex;
-        }
-        
-        .desktop-only {
-          display: none !important;
-        }
       }
+
+      // Mobile: hiện mobile-only, ẩn desktop-only trong top-bar
+      .mobile-only { display: flex !important; }
+      .desktop-only { display: none !important; }
     }
 
-    // Mobile: ẩn toàn bộ phần dữ liệu/counters
-    .data-section {
+    // Mobile: ẩn data-section bình thường, CHO PHÉP ds-data-section hiển thị
+    .data-section:not(.ds-data-section) {
       display: none !important;
+    }
+    .data-section.ds-data-section {
+      display: block !important;
+      padding: 0 !important;
     }
 
   // Highlight cột vị trí thực tế sai khác
@@ -3908,8 +4351,19 @@
     }
 
     .top-bar {
-      gap: 8px;
-      padding: 10px 12px;
+      gap: 0;
+      padding: 0;
+
+      // Ẩn header-row (logo + tên + ASM1/ASM2) trên mobile — chỉ hiện 2 nút action
+      .header-row {
+        display: none !important;
+      }
+
+      // Dòng 2 nút action chiếm full chiều rộng
+      .mobile-action-row {
+        padding: 10px 14px;
+        border-top: none;
+      }
 
       .factory-title {
         font-size: 16px;
@@ -3929,60 +4383,66 @@
         }
       }
       
-      .top-bar-actions {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: stretch;
+      // Dòng nút hành động mobile — nằm dưới header-row
+      .mobile-action-row {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px 8px;
         width: 100%;
+        box-sizing: border-box;
+        border-top: 1px solid var(--sc-border-soft);
 
-        .mobile-action-row.mobile-only {
-          display: flex !important;
-          flex-direction: row;
-          width: 100%;
-          gap: 10px;
-          margin-top: 50px;
-          padding: 0 8px;
-          box-sizing: border-box;
-          align-items: stretch;
-
-          .mobile-inv-btn {
-            flex: 1;
-            min-width: 0;
-            margin-top: 0 !important;
-            padding: 12px 8px !important;
-            font-size: 14px !important;
-            font-weight: 700 !important;
-            justify-content: center;
-            display: inline-flex !important;
-            align-items: center;
-            gap: 6px;
-            min-height: 52px;
-            width: auto !important;
-
-            i.material-icons {
-              font-size: 22px !important;
-              margin-right: 0 !important;
-            }
-
-            span {
-              font-size: 13px;
-            }
-          }
+        .mobile-loading-hint {
+          font-size: 11px;
+          color: var(--sc-text-muted);
+          margin: 0;
         }
+      }
 
-        .mobile-loading-hint.mobile-only {
-          display: block !important;
-          width: 100%;
-          text-align: center;
-          font-size: 13px;
-          color: #555555;
-          margin: 8px 0 0;
-          padding: 0 12px;
+      // Nút gọn cho mobile header
+      .mob-btn {
+        display: inline-flex !important;
+        flex-direction: row !important;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        border: 2px solid transparent;
+        cursor: pointer;
+        white-space: nowrap;
+        line-height: 1.2;
+        flex-shrink: 0;
+        i.material-icons { font-size: 18px; pointer-events: none; }
+        span { font-size: 13px; }
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        &--primary {
+          background: var(--sc-primary, #6366f1);
+          color: #fff;
+          border-color: var(--sc-primary, #6366f1);
+          box-shadow: 0 2px 6px rgba(99,102,241,.25);
         }
-        
-        .desktop-only {
-          display: none !important;
+        &--secondary {
+          background: var(--sc-primary-50, #eef2ff);
+          color: var(--sc-primary, #6366f1);
+          border-color: var(--sc-primary-200, #c7d2fe);
+        }
+        &--back {
+          background: #f1f5f9;
+          color: #475569;
+          border-color: #cbd5e1;
+        }
+        &--logout {
+          margin-left: auto;
+          padding: 8px 10px;
+          color: #dc2626;
+          border-color: #fecaca;
+          background: #fff1f2;
+          i.material-icons { font-size: 20px; }
         }
       }
 
@@ -4008,40 +4468,7 @@
         }
       }
 
-      // Nút KIỂM KÊ (scanner) - nổi bật nhất (trên mobile thường nằm trong .mobile-action-row)
-      .inventory-btn {
-        width: 100%;
-        justify-content: center;
-        padding: 12px 20px;
-        font-size: 16px;
-        font-weight: 600;
-        background: linear-gradient(145deg, #2196F3, #1976D2);
-        color: #ffffff;
-        border: 2px solid #1976D2;
-        min-height: 50px;
-        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
 
-        &:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-          box-shadow: none;
-        }
-        
-        span {
-          font-size: 16px;
-          display: inline;
-        }
-        
-        i.material-icons {
-          font-size: 24px;
-          margin-right: 8px;
-        }
-      }
-
-      .logout-btn.mobile-inv-btn {
-        min-height: 52px;
-        box-shadow: 0 2px 8px rgba(229, 115, 115, 0.35);
-      }
     }
 
     .data-section {
@@ -4101,6 +4528,266 @@
           order: -1;
         }
       }
+    }
+  }
+}
+
+// ===================== MORE MODAL GRID =====================
+.stock-check-wrapper {
+  .more-modal-content {
+    min-width: 340px;
+    max-width: 480px;
+  }
+
+  .more-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 16px 20px 8px;
+  }
+
+  .more-grid-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 10px;
+    border: 1.5px solid var(--sc-border);
+    border-radius: 10px;
+    background: var(--sc-surface);
+    color: var(--sc-fg-2);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-align: center;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: all 0.15s ease;
+    line-height: 1.3;
+
+    i.material-icons { font-size: 24px; pointer-events: none; color: var(--sc-primary); }
+    strong { font-size: 13px; display: block; color: var(--sc-fg); }
+
+    &:hover:not(:disabled) {
+      background: var(--sc-primary-50);
+      border-color: var(--sc-primary-200);
+      color: var(--sc-primary);
+      i.material-icons { color: var(--sc-primary); }
+    }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+    &.active {
+      background: var(--sc-primary-50);
+      border-color: var(--sc-primary);
+      color: var(--sc-primary);
+      i.material-icons { color: var(--sc-primary); }
+    }
+    &.danger {
+      border-color: var(--sc-danger-200);
+      i.material-icons { color: var(--sc-danger); }
+      &:hover { background: var(--sc-danger-50); border-color: var(--sc-danger); color: var(--sc-danger); }
+    }
+  }
+}
+
+// ===================== Employee scan modal — mobile compact =====================
+@media (max-width: 768px) {
+  .stock-check-wrapper {
+    .emp-scan-modal {
+      align-items: flex-start !important;
+      padding-top: 60px !important;
+
+      .desktop-only { display: none !important; }
+
+      .emp-scan-content {
+        width: 92% !important;
+        max-width: 380px !important;
+        border-radius: 14px !important;
+        padding: 0 !important;
+        overflow: hidden;
+      }
+
+      .emp-scan-header {
+        padding: 14px 18px !important;
+        h3 {
+          font-size: 15px !important;
+          gap: 6px !important;
+          i.material-icons { font-size: 18px !important; }
+        }
+      }
+
+      .scan-input-container {
+        padding: 14px 16px 18px !important;
+        gap: 8px !important;
+
+        .scan-input {
+          height: 48px !important;
+          font-size: 16px !important;
+          border-radius: 10px !important;
+        }
+
+        .scan-submit-btn {
+          width: 48px !important;
+          height: 48px !important;
+          border-radius: 10px !important;
+          flex-shrink: 0;
+          i.material-icons { font-size: 22px !important; }
+        }
+      }
+    }
+  }
+}
+
+// ===================== KIỂM DS + KIỂM KÊ — tối ưu mobile =====================
+@media (max-width: 768px) {
+  .stock-check-wrapper {
+
+
+    // ---- DS page: container gọn ----
+    .ds-data-section {
+      padding: 0 8px 16px !important;
+    }
+
+    // ---- DS counters: 1 hàng ngang compact 3 cột ----
+    .ds-data-section .counter-boxes {
+      display: flex !important;
+      flex-direction: row !important;
+      gap: 6px !important;
+      margin-bottom: 12px !important;
+
+      .counter-box {
+        flex: 1 !important;
+        min-width: 0 !important;
+        padding: 10px 8px !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        text-align: center !important;
+        border-radius: 10px !important;
+
+        .counter-icon { display: none !important; }
+
+        .counter-info {
+          .counter-label {
+            font-size: 9px !important;
+            letter-spacing: 0.3px !important;
+          }
+          .counter-value {
+            font-size: 22px !important;
+            font-weight: 900 !important;
+          }
+        }
+      }
+    }
+
+    // ---- DS location boxes: 2 cột trên mobile ----
+    .ds-data-section .location-boxes-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 8px !important;
+    }
+
+    .ds-data-section .location-box {
+      min-height: 70px !important;
+      padding: 10px 10px !important;
+      border-radius: 10px !important;
+
+      .location-box-title {
+        font-size: 16px !important;
+        margin-bottom: 6px !important;
+        i.material-icons { font-size: 16px !important; }
+      }
+
+      .location-box-stats {
+        font-size: 11px !important;
+        gap: 4px 6px !important;
+      }
+    }
+
+    // ---- DS location detail header ----
+    .ds-data-section .location-detail-header {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 8px !important;
+      padding: 8px 0 12px !important;
+    }
+
+    .ds-data-section .back-to-boxes-btn {
+      min-height: 44px !important;
+      font-size: 13px !important;
+      padding: 0 14px !important;
+      width: 100% !important;
+      justify-content: center !important;
+    }
+
+    .ds-data-section .location-detail-title {
+      font-size: 14px !important;
+    }
+
+    // ---- DS detail cards: trên mobile nhỏ → stack 2 dòng ----
+    .ds-data-section .ds-detail-grid {
+      gap: 6px !important;
+    }
+  }
+}
+
+// Trên màn hình rất nhỏ (< 480px): DS card stack thành 2 dòng
+@media (max-width: 480px) {
+  :host .ds-detail-card {
+    flex-direction: column !important;
+    min-height: auto !important;
+  }
+  :host .ds-col-left {
+    width: 100% !important;
+    min-width: unset !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+  :host .ds-mc {
+    font-size: 14px !important;
+    font-weight: 800 !important;
+  }
+  :host .ds-card-row {
+    flex-wrap: wrap !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+  }
+  :host .ds-card-row .kv {
+    flex: 1 1 calc(50% - 1px) !important;
+    min-width: 80px !important;
+    padding: 7px 10px !important;
+    border-bottom: none !important;
+    border-right: 1px solid #E2E8F0 !important;
+
+    &:nth-child(even) { border-right: none !important; }
+  }
+  :host .ds-card-row .k { font-size: 9px !important; }
+  :host .ds-card-row .v { font-size: 12px !important; }
+  :host .ds-card-scan-btn {
+    width: 100% !important;
+    min-width: unset !important;
+    border-left: none !important;
+    border-top: 1px solid #E2E8F0 !important;
+    border-radius: 0 !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    font-size: 13px !important;
+    i.material-icons { font-size: 18px !important; }
+  }
+}
+
+@media (max-width: 768px) {
+  .stock-check-wrapper {
+    // DS detail: tablet — giữ ngang nhưng compact
+    .ds-location-detail {
+      .ds-col-left { width: 140px; min-width: 110px; padding: 8px 10px; }
+      .ds-mc { font-size: 13px; }
+      .ds-card-row .kv { padding: 7px 9px; min-width: 65px; }
+      .ds-card-row .k { font-size: 9px; }
+      .ds-card-row .v { font-size: 12px; }
+      .ds-card-scan-btn { padding: 0 10px; min-width: 84px; font-size: 11px; }
     }
   }
 }
@@ -4405,26 +5092,109 @@
   }
 }
 
-// ======================== MOBILE PERFORMANCE ========================
+// ======================== MOBILE PERFORMANCE + SCAN MODAL MOBILE ========================
 @media (max-width: 768px) {
   .scan-modal-v2 {
     align-items: flex-start;
 
     .scan-modal-inner {
       width: 100%;
-      max-width: 520px;
+      max-width: 100vw;
       height: 100%;
       max-height: 100vh;
       border-radius: 0;
+      background: #F8FAFF;
     }
 
+    // Header scan: compact, sticky, clear
     .scan-fixed-top {
-      padding-top: 44px; // Hạ nội dung xuống để tránh bị che bởi status bar / notch
+      padding: 12px 12px 10px;
+      box-shadow: 0 2px 10px rgba(79,70,229,0.10);
+
+      .step-badge {
+        font-size: 12px !important;
+        padding: 5px 12px !important;
+        i { font-size: 16px !important; }
+      }
+
+      .loc-tag {
+        font-size: 12px !important;
+        padding: 4px 10px !important;
+      }
+
+      .step-counter { font-size: 12px !important; }
+      .step-hint { font-size: 11px !important; }
+
+      // Input row: input chiếm phần lớn, nút to dễ bấm
+      .scan-input-row {
+        gap: 6px !important;
+
+        .scan-input-field {
+          height: 50px !important;
+          font-size: 17px !important;
+          padding: 0 14px !important;
+          border-radius: 10px !important;
+        }
+
+        .scan-send-btn,
+        .scan-close-btn {
+          width: 50px !important;
+          height: 50px !important;
+          border-radius: 10px !important;
+          i { font-size: 22px !important; }
+        }
+      }
     }
 
+    // Scroll body: padding thoáng
     .scan-scroll-body {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
+      padding: 10px 10px 20px;
+
+      // HOÀN THÀNH button: to, dễ bấm
+      .done-row .done-btn-full {
+        height: 52px !important;
+        font-size: 16px !important;
+        border-radius: 12px !important;
+        letter-spacing: 0.8px !important;
+      }
+    }
+
+    // Material grid: 2 cột trên mobile
+    .mat-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 8px !important;
+
+      .mat-box {
+        min-height: 90px !important;
+        padding: 10px 10px !important;
+        border-radius: 10px !important;
+        gap: 6px !important;
+
+        .box-row.top .code {
+          font-size: 13px !important;
+        }
+
+        .status-pill {
+          font-size: 9px !important;
+          padding: 2px 6px !important;
+        }
+
+        .box-row .label { font-size: 10px !important; }
+        .box-row .value { font-size: 11px !important; }
+      }
+    }
+
+    // Wrong location grid: 1 cột
+    .wrong-location-grid {
+      grid-template-columns: 1fr !important;
+      gap: 8px !important;
+    }
+
+    .wrong-location-box {
+      padding: 10px !important;
+      border-radius: 10px !important;
     }
 
     .mat-list .mat-card {
@@ -4432,6 +5202,14 @@
       will-change: transform;
       contain: layout style;
     }
+  }
+}
+
+// Trên mobile rất nhỏ < 400px: mat-grid 1 cột
+@media (max-width: 400px) {
+  .scan-modal-v2 .mat-grid {
+    grid-template-columns: 1fr !important;
+    .mat-box { min-height: 70px !important; }
   }
 }
 
@@ -4781,5 +5559,179 @@
       &:hover { background: #6a1b9a; }
       i { font-size: 18px; }
     }
+  }
+}
+
+// ======================================================================
+// FORCE DS DETAIL CARDS — HÀNG NGANG TUYỆT ĐỐI
+// :host tăng specificity, !important đảm bảo không bị override
+// ======================================================================
+:host .ds-detail-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+:host .ds-detail-card {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  flex-wrap: nowrap !important;
+  border: 1.5px solid #CBD5E1 !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  overflow: hidden !important;
+  min-height: 54px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+
+  &.checked {
+    background: #ECFDF5 !important;
+    border-color: #A7F3D0 !important;
+  }
+}
+
+:host .ds-col-left {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  gap: 4px !important;
+  flex-shrink: 0 !important;
+  width: 180px !important;
+  min-width: 120px !important;
+  padding: 10px 14px !important;
+  border-right: 1px solid #E2E8F0 !important;
+  box-sizing: border-box !important;
+}
+
+:host .ds-mc {
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  color: #1E293B !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+:host .ds-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 2px 8px !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+
+  &.ok {
+    background: #ECFDF5 !important;
+    color: #059669 !important;
+    border: 1px solid #A7F3D0 !important;
+  }
+  &.no {
+    background: #FEF2F2 !important;
+    color: #DC2626 !important;
+    border: 1px solid #FECACA !important;
+  }
+}
+
+:host .ds-card-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  flex-wrap: nowrap !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+:host .ds-card-row .kv {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  padding: 8px 12px !important;
+  border-right: 1px solid #E2E8F0 !important;
+  flex: 1 1 0 !important;
+  min-width: 72px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+:host .ds-card-row .kv:last-child {
+  border-right: none !important;
+}
+
+:host .ds-card-row .k {
+  display: block !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #94A3B8 !important;
+  letter-spacing: 0.6px !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+}
+
+:host .ds-card-row .v {
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #1E293B !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+  line-height: 1.3 !important;
+}
+
+:host .ds-card-scan-btn {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+  padding: 0 14px !important;
+  min-width: 96px !important;
+  border: none !important;
+  border-left: 1.5px solid #E2E8F0 !important;
+  border-radius: 0 !important;
+  background: #EEF2FF !important;
+  color: #4F46E5 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.4px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  align-self: stretch !important;
+  touch-action: manipulation !important;
+
+  i.material-icons { font-size: 16px !important; pointer-events: none !important; }
+
+  &:hover {
+    background: #4F46E5 !important;
+    color: #fff !important;
+  }
+}
+
+@media (max-width: 900px) {
+  :host .ds-col-left {
+    width: 110px !important;
+    min-width: 90px !important;
+    padding: 8px 8px !important;
+  }
+  :host .ds-mc { font-size: 12px !important; }
+  :host .ds-card-row .kv { padding: 6px 7px !important; min-width: 56px !important; }
+  :host .ds-card-row .k { font-size: 9px !important; }
+  :host .ds-card-row .v { font-size: 11px !important; }
+  :host .ds-card-scan-btn {
+    min-width: 72px !important;
+    padding: 0 8px !important;
+    font-size: 10px !important;
+    i.material-icons { font-size: 14px !important; }
   }
 }

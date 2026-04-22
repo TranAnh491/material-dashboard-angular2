@@ -260,15 +260,253 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Cho phép scan vật tư khi chưa scan vị trí (list/code mode). */
   private allowMaterialScanWithoutLocation = false;
 
-  // Import checklist (cột A)
-  showListCheckModal = false;
-  listImportBusy = false;
-  listImportError = '';
-  listImportedCodes: string[] = [];
-  /** Persist checklist để lần sau mở lại vẫn có */
-  private readonly STOCK_CHECK_LISTS_COLLECTION = 'stock-check-checklists';
+  // ======================== KIỂM DS (PXK) ========================
+  showStockCheckMoreModal = false;
+  showDsSettingsModal = false;
+  showDsListPage = false;
+  dsLoading = false;
+  dsError = '';
+
+  /** Khoảng ngày để load PXK (theo importedAt trong pxk-import-data) */
+  dsFromDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+  dsToDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
+  /** Loại trừ mã/nhóm mã khi hiển thị Kiểm DS */
+  dsExcludeEnabled = false;
+  dsExcludeCatalogText = '';
+  private dsExcludeCodesSet = new Set<string>();
+
+  /** Bảng Kiểm DS: lấy từ PXK -> lọc inventory-materials đã load -> hiển thị */
+  dsRows: Array<{
+    materialCode: string;
+    poNumber: string;
+    imd: string;
+    location: string;
+    qtyCheck: number | null;
+    dateCheck: Date | null;
+  }> = [];
+
+  // DS view (box theo vị trí) — giống giao diện kiểm kê
+  dsSelectedLocationForDetail: string | null = null;
+  dsSelectedParentGroup: string | null = null;
+  /** DS: mở danh sách theo counter (Tổng/Đã kiểm/Chưa kiểm) */
+  dsCounterListMode = false;
+  dsCounterListFilter: 'all' | 'checked' | 'unchecked' = 'all';
+  private _dsRackStatsCache: RackStat[] | null = null;
+
+  private readonly STOCK_CHECK_DS_SETTINGS_COLLECTION = 'stock-check-ds-settings';
   private readonly STOCK_CHECK_SESSIONS_COLLECTION = 'stock-check-check-sessions';
-  private activeChecklistId: string | null = null;
+
+  /** Lock scan theo dòng Kiểm DS (mã+PO+IMD) */
+  private dsLockMaterialCode = '';
+  private dsLockPoNumber = '';
+  private dsLockImd = '';
+
+  get dsTotalMaterials(): number {
+    return this.dsRows.length;
+  }
+
+  get dsCheckedMaterials(): number {
+    return this.dsRows.filter(r => this.dsIsCheckedByRule(r)).length;
+  }
+
+  get dsUncheckedMaterials(): number {
+    return Math.max(0, this.dsTotalMaterials - this.dsCheckedMaterials);
+  }
+
+  /** DS: danh sách theo counter (không theo vị trí) */
+  get dsCounterListRows(): Array<{
+    materialCode: string;
+    poNumber: string;
+    imd: string;
+    location: string;
+    qtyCheck: number | null;
+    dateCheck: Date | null;
+  }> {
+    const mode = this.dsCounterListFilter;
+    const rows = this.dsRows.slice();
+    const filtered =
+      mode === 'all'
+        ? rows
+        : mode === 'checked'
+          ? rows.filter(r => this.dsIsCheckedByRule(r))
+          : rows.filter(r => !this.dsIsCheckedByRule(r));
+    return filtered.sort((a, b) => {
+      const stA = this.dsIsCheckedByRule(a) ? 0 : 1; // checked lên trước khi mode=all
+      const stB = this.dsIsCheckedByRule(b) ? 0 : 1;
+      if (mode === 'all' && stA !== stB) return stA - stB;
+      const mc = a.materialCode.localeCompare(b.materialCode, 'vi');
+      if (mc !== 0) return mc;
+      const po = a.poNumber.localeCompare(b.poNumber, 'vi');
+      if (po !== 0) return po;
+      return a.imd.localeCompare(b.imd, 'vi');
+    });
+  }
+
+  openDsCounterList(filter: 'all' | 'checked' | 'unchecked'): void {
+    this.dsCounterListFilter = filter;
+    this.dsCounterListMode = true;
+    this.dsSelectedLocationForDetail = null;
+    this.dsSelectedParentGroup = null;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const el = document.querySelector('.ds-counter-list') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 0);
+  }
+
+  closeDsCounterList(): void {
+    this.dsCounterListMode = false;
+    this.cdr.detectChanges();
+  }
+
+  get dsLocationBoxStats(): RackStat[] {
+    return this.computeDsRackStats();
+  }
+
+  /** Box mẹ cho DS: A/B/C... dựa vào ký tự đầu của location */
+  get dsParentBoxStats(): RackStat[] {
+    const map = new Map<string, RackStat>();
+    for (const r of this.dsLocationBoxStats) {
+      const g = (r.location || '').trim().toUpperCase().charAt(0);
+      if (!g) continue;
+      if (!map.has(g)) {
+        map.set(g, { location: g, total: 0, full: 0, partial: 0, unchecked: 0 });
+      }
+      const stat = map.get(g)!;
+      stat.total += r.total;
+      stat.full += r.full;
+      stat.partial += r.partial;
+      stat.unchecked += r.unchecked;
+    }
+    return Array.from(map.values()).sort((a, b) => this.naturalSortLocations(a.location, b.location));
+  }
+
+  /** DS: nhóm box con theo Z1, Z2... (reuse same helper) */
+  get dsChildBoxGroups(): ChildBoxGroup[] {
+    const g = (this.dsSelectedParentGroup || '').trim().toUpperCase();
+    if (!g) return [];
+    const boxes = this.dsLocationBoxStats.filter(r => (r.location || '').trim().toUpperCase().startsWith(g));
+    const map = new Map<string, RackStat[]>();
+    for (const r of boxes) {
+      const sub = this.getSubGroupPrefix(r.location);
+      if (!map.has(sub)) map.set(sub, []);
+      map.get(sub)!.push(r);
+    }
+    const groups: ChildBoxGroup[] = [];
+    map.forEach((arr, groupLabel) => {
+      arr.sort((a, b) => this.naturalSortLocations(a.location, b.location));
+      groups.push({ groupLabel, boxes: arr });
+    });
+    groups.sort((a, b) => this.naturalSortLocations(a.groupLabel, b.groupLabel));
+    return groups;
+  }
+
+  openDsParentGroup(group: string): void {
+    const g = (group || '').trim().toUpperCase().charAt(0);
+    if (!g) return;
+    this.dsSelectedParentGroup = g;
+    this.cdr.detectChanges();
+  }
+
+  backDsToParentGroups(): void {
+    this.dsSelectedParentGroup = null;
+    this.cdr.detectChanges();
+  }
+
+  openDsLocationDetail(location: string): void {
+    const loc = (location || '').trim().toUpperCase();
+    if (!loc) return;
+    this.dsSelectedLocationForDetail = loc;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const el = document.querySelector('.ds-location-detail') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 0);
+  }
+
+  backDsToLocationBoxes(): void {
+    this.dsSelectedLocationForDetail = null;
+    this.dsSelectedParentGroup = null;
+    this.dsCounterListMode = false;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const el = document.querySelector('.ds-location-boxes') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 0);
+  }
+
+  get dsDetailRows(): Array<{
+    materialCode: string;
+    poNumber: string;
+    imd: string;
+    location: string;
+    qtyCheck: number | null;
+    dateCheck: Date | null;
+  }> {
+    const loc = (this.dsSelectedLocationForDetail || '').trim().toUpperCase();
+    if (!loc) return [];
+    return this.dsRows
+      .filter(r => String(r.location || '—').trim().toUpperCase() === loc)
+      .slice()
+      .sort((a, b) => {
+        const mc = a.materialCode.localeCompare(b.materialCode, 'vi');
+        if (mc !== 0) return mc;
+        const po = a.poNumber.localeCompare(b.poNumber, 'vi');
+        if (po !== 0) return po;
+        return a.imd.localeCompare(b.imd, 'vi');
+      });
+  }
+
+  private dsRuleFromMs(): number {
+    const d = this.dsFromDate instanceof Date ? this.dsFromDate : new Date(this.dsFromDate as any);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+  }
+
+  private dsRuleToMs(): number {
+    const d = this.dsToDate instanceof Date ? this.dsToDate : new Date(this.dsToDate as any);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+  }
+
+  /** DS: xác định "Đã kiểm/Chưa kiểm" theo rule ngày trong More */
+  dsIsCheckedByRule(r: { dateCheck: Date | null }): boolean {
+    if (!r?.dateCheck) return false;
+    const t = r.dateCheck instanceof Date ? r.dateCheck.getTime() : new Date(r.dateCheck as any).getTime();
+    if (!Number.isFinite(t) || t <= 0) return false;
+    const from = this.dsRuleFromMs();
+    const to = this.dsRuleToMs();
+    return t >= from && t <= to;
+  }
+
+  dsRowStatusLabel(r: { dateCheck: Date | null }): string {
+    return this.dsIsCheckedByRule(r) ? 'ĐÃ KIỂM' : 'CHƯA KIỂM';
+  }
+
+  trackByDsDetailRow = (_: number, r: { materialCode: string; poNumber: string; imd: string }) =>
+    `${String(r.materialCode || '').toUpperCase().trim()}__${String(r.poNumber || '').trim()}__${String(r.imd || '').trim()}`;
+
+  private computeDsRackStats(): RackStat[] {
+    if (this._dsRackStatsCache) return this._dsRackStatsCache;
+    const map = new Map<string, RackStat>();
+    for (const r of this.dsRows) {
+      // Keep parity with DS list: rows with missing location are still counted (grouped as '—')
+      const loc = String(r.location || '—').trim().toUpperCase() || '—';
+      if (!map.has(loc)) {
+        map.set(loc, { location: loc, total: 0, full: 0, partial: 0, unchecked: 0 });
+      }
+      const stat = map.get(loc)!;
+      stat.total += 1;
+      // DS mode: không có stock để tính full/partial => coi "checked" là full
+      if (this.dsIsCheckedByRule(r)) stat.full += 1;
+      else stat.unchecked += 1;
+    }
+    this._dsRackStatsCache = Array.from(map.values()).sort((a, b) => this.naturalSortLocations(a.location, b.location));
+    return this._dsRackStatsCache;
+  }
+
+  private invalidateDsRackStatsCache(): void {
+    this._dsRackStatsCache = null;
+  }
 
   // Check by code modal/session
   showCodeCheckModal = false;
@@ -287,6 +525,320 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return String(v || '').trim().toUpperCase();
   }
 
+  private parseExcludeCatalogText(text: string): string[] {
+    const raw = String(text || '')
+      .split(/[\n,;]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    // unique
+    return Array.from(new Set(raw));
+  }
+
+  private isCodeExcludedByRules(mcUpper: string): boolean {
+    if (!this.dsExcludeEnabled) return false;
+    const mc = (mcUpper || '').trim().toUpperCase();
+    if (!mc) return false;
+    for (const ex of this.dsExcludeCodesSet) {
+      if (ex.length === 4) {
+        if (mc.startsWith(ex)) return true;
+      } else if (mc === ex) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  openStockCheckMoreModal(): void {
+    this.showStockCheckMoreModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeStockCheckMoreModal(): void {
+    this.showStockCheckMoreModal = false;
+    this.cdr.detectChanges();
+  }
+
+  async openDsSettingsModal(): Promise<void> {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.currentEmployeeId) {
+      alert('Vui lòng scan mã nhân viên trước!');
+      this.showEmployeeScanModal = true;
+      return;
+    }
+    this.dsError = '';
+    this.showDsSettingsModal = true;
+    try {
+      await this.loadDsSettings();
+    } catch (e) {
+      console.warn('[StockCheck DS] load settings failed', e);
+    }
+    // NOTE: Settings modal in MORE is for configuration only (no list render here).
+  }
+
+  closeDsSettingsModal(): void {
+    this.showDsSettingsModal = false;
+    this.dsError = '';
+    this.cdr.detectChanges();
+  }
+
+  async openDsListModal(): Promise<void> {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.currentEmployeeId) {
+      alert('Vui lòng scan mã nhân viên trước!');
+      this.showEmployeeScanModal = true;
+      return;
+    }
+    this.dsError = '';
+    this.showDsListPage = true;
+    try {
+      await this.loadDsSettings(); // dùng rule đã lưu
+    } catch (e) {
+      console.warn('[StockCheck DS] load settings failed', e);
+    }
+    await this.reloadDsRowsFromPxk();
+  }
+
+  closeDsListPage(): void {
+    this.showDsListPage = false;
+    this.dsError = '';
+    this.cdr.detectChanges();
+  }
+
+  private dsSettingsDocId(factory: string): string {
+    return `${factory}_ds_settings`;
+  }
+
+  private async loadDsSettings(): Promise<void> {
+    if (!this.selectedFactory) return;
+    const docId = this.dsSettingsDocId(this.selectedFactory);
+    const snap = await this.firestore
+      .collection(this.STOCK_CHECK_DS_SETTINGS_COLLECTION)
+      .doc(docId)
+      .get()
+      .toPromise();
+    if (!snap || !snap.exists) return;
+    const d = snap.data() as any;
+    this.dsExcludeEnabled = d?.excludeEnabled === true;
+    this.dsExcludeCatalogText = typeof d?.excludeCatalogText === 'string' ? d.excludeCatalogText : '';
+    // dates stored as ymd
+    const ymdFrom = typeof d?.fromYmd === 'string' ? d.fromYmd : '';
+    const ymdTo = typeof d?.toYmd === 'string' ? d.toYmd : '';
+    const parseYmd = (ymd: string): Date | null => {
+      const m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return null;
+      const y = parseInt(m[1], 10);
+      const mo = parseInt(m[2], 10) - 1;
+      const da = parseInt(m[3], 10);
+      const dt = new Date(y, mo, da);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+    const f = parseYmd(ymdFrom);
+    const t = parseYmd(ymdTo);
+    if (f) this.dsFromDate = f;
+    if (t) this.dsToDate = t;
+    this.rebuildDsExcludeSet();
+  }
+
+  private async saveDsSettings(): Promise<void> {
+    if (!this.selectedFactory) return;
+    const docId = this.dsSettingsDocId(this.selectedFactory);
+    const toYmd = (d: Date): string => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+    await this.firestore
+      .collection(this.STOCK_CHECK_DS_SETTINGS_COLLECTION)
+      .doc(docId)
+      .set(
+        {
+          factory: this.selectedFactory,
+          excludeEnabled: this.dsExcludeEnabled,
+          excludeCatalogText: this.dsExcludeCatalogText,
+          fromYmd: toYmd(this.dsFromDate),
+          toYmd: toYmd(this.dsToDate),
+          updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+  }
+
+  private rebuildDsExcludeSet(): void {
+    const arr = this.parseExcludeCatalogText(this.dsExcludeCatalogText);
+    this.dsExcludeCodesSet = new Set(arr);
+  }
+
+  async onDsSettingsChanged(): Promise<void> {
+    this.rebuildDsExcludeSet();
+    await this.saveDsSettings();
+    // Only reload list when DS page is visible (outside button "KIỂM DS")
+    if (this.showDsListPage) {
+      await this.reloadDsRowsFromPxk();
+    }
+  }
+
+  onDsFromDateChange(ymd: string): void {
+    if (!ymd) return;
+    const d = new Date(`${ymd}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      this.dsFromDate = d;
+      void this.onDsSettingsChanged();
+    }
+  }
+
+  onDsToDateChange(ymd: string): void {
+    if (!ymd) return;
+    const d = new Date(`${ymd}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      this.dsToDate = d;
+      void this.onDsSettingsChanged();
+    }
+  }
+
+  private async loadPxkPairsFromFirebase(): Promise<Set<string>> {
+    if (!this.selectedFactory) return new Set();
+    const from = new Date(this.dsFromDate.getFullYear(), this.dsFromDate.getMonth(), this.dsFromDate.getDate(), 0, 0, 0, 0);
+    const to = new Date(this.dsToDate.getFullYear(), this.dsToDate.getMonth(), this.dsToDate.getDate(), 23, 59, 59, 999);
+    const out = new Set<string>();
+
+    const addFromDocs = (docs: any[]): void => {
+      for (const doc of docs) {
+        const d = typeof doc?.data === 'function' ? doc.data() : doc;
+        const lines: any[] = Array.isArray(d?.lines) ? d.lines : [];
+        for (const ln of lines) {
+          const mc = this.normalizeCodeUpper(String(ln?.materialCode || ''));
+          const po = String(ln?.po || ln?.poNumber || '').trim();
+          if (!mc || !po) continue;
+          if (this.isCodeExcludedByRules(mc)) continue;
+          out.add(`${mc}__${po}`);
+        }
+      }
+    };
+
+    const isInRange = (v: any): boolean => {
+      if (!v) return false;
+      const dt = typeof v?.toDate === 'function' ? v.toDate() : (v instanceof Date ? v : new Date(v));
+      const t = dt?.getTime?.() || 0;
+      if (!t) return false;
+      return t >= from.getTime() && t <= to.getTime();
+    };
+
+    // Try indexed query first (factory + importedAt range)
+    try {
+      const snap = await this.firestore
+        .collection('pxk-import-data', ref =>
+          ref.where('factory', '==', this.selectedFactory).where('importedAt', '>=', from).where('importedAt', '<=', to)
+        )
+        .get()
+        .toPromise();
+      if (snap && !snap.empty) {
+        addFromDocs((snap as any).docs || []);
+      }
+      return out;
+    } catch (e) {
+      // Fallback: query by factory only (avoid composite index), then filter by date on client
+      console.warn('[StockCheck DS] indexed query failed, fallback to factory-only', e);
+      const snap2 = await this.firestore
+        .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
+        .get()
+        .toPromise();
+      if (!snap2 || (snap2 as any).empty) return out;
+      const docs = (snap2 as any).docs || [];
+      const inRangeDocs = docs.filter((doc: any) => {
+        const d = doc?.data?.() || {};
+        return isInRange(d?.importedAt);
+      });
+      addFromDocs(inRangeDocs);
+      return out;
+    }
+    return out;
+  }
+
+  private async reloadDsRowsFromPxk(): Promise<void> {
+    this.dsLoading = true;
+    this.dsError = '';
+    this.dsRows = [];
+    try {
+      const pairs = await this.loadPxkPairsFromFirebase();
+      if (pairs.size === 0) {
+        this.dsRows = [];
+        return;
+      }
+      // Filter from already-loaded inventory list (fast)
+      const rows = this.allMaterials
+        .filter(m => {
+          const mc = this.normalizeCodeUpper(m.materialCode);
+          const po = String(m.poNumber || '').trim();
+          if (!mc || !po) return false;
+          if (!pairs.has(`${mc}__${po}`)) return false;
+          if (this.isCodeExcludedByRules(mc)) return false;
+          return true;
+        })
+        .map(m => ({
+          materialCode: this.normalizeCodeUpper(m.materialCode),
+          poNumber: String(m.poNumber || '').trim(),
+          imd: String(m.imd || '').trim(),
+          location: String(m.location || '').trim(),
+          qtyCheck: m.qtyCheck ?? null,
+          dateCheck: m.dateCheck ?? null
+        }));
+
+      // Sort: Mã, PO, IMD
+      rows.sort((a, b) => {
+        const mc = a.materialCode.localeCompare(b.materialCode, 'vi');
+        if (mc !== 0) return mc;
+        const po = a.poNumber.localeCompare(b.poNumber, 'vi');
+        if (po !== 0) return po;
+        return a.imd.localeCompare(b.imd, 'vi');
+      });
+      this.dsRows = rows;
+      this.invalidateDsRackStatsCache();
+      this.dsSelectedLocationForDetail = null;
+      this.dsSelectedParentGroup = null;
+    } catch (e) {
+      console.error('[StockCheck DS] reload failed', e);
+      this.dsError = 'Không tải được danh sách PXK (kiểm tra quyền/index Firestore).';
+    } finally {
+      this.dsLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Kiểm kê theo dòng PXK (khóa mã+PO+IMD) */
+  startDsRowCheck(r: { materialCode: string; poNumber: string; imd: string }): void {
+    if (!this.selectedFactory || !this.currentEmployeeId) return;
+    this.dsLockMaterialCode = this.normalizeCodeUpper(r.materialCode);
+    this.dsLockPoNumber = String(r.poNumber || '').trim();
+    this.dsLockImd = String(r.imd || '').trim();
+    this.scanMode = 'list';
+    this.allowMaterialScanWithoutLocation = true;
+    this.currentScanLocation = '';
+    this.showScanModal = true;
+    this.scanStep = 'material';
+    this.scannedEmployeeId = this.currentEmployeeId;
+    this.scanInput = '';
+    this.scanHistory = [];
+    this.wrongLocationItems = [];
+    this.scanMessage =
+      `MODE: KIỂM DS (PXK)\n` +
+      `ID: ${this.currentEmployeeId}\n` +
+      `Factory: ${this.selectedFactory}\n` +
+      `Khóa: ${this.dsLockMaterialCode} | PO:${this.dsLockPoNumber} | IMD:${this.dsLockImd}\n\n` +
+      `Scan QR: Mã|PO|Số lượng|IMD\n` +
+      `Rule: Qty mỗi lần scan ≤ StandardPacking.`;
+    setTimeout(() => {
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 200);
+  }
+
   private parseStandardPackingNumber(sp: unknown): number {
     const raw = String(sp ?? '').trim().replace(/,/g, '');
     const n = parseFloat(raw);
@@ -301,121 +853,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return { ok: true, max: max || undefined };
   }
 
-  openListCheckModal(): void {
-    if (!this.selectedFactory) {
-      alert('Vui lòng chọn nhà máy trước!');
-      return;
-    }
-    if (!this.currentEmployeeId) {
-      alert('Vui lòng scan mã nhân viên trước!');
-      this.showEmployeeScanModal = true;
-      return;
-    }
-    this.listImportError = '';
-    this.showListCheckModal = true;
-    // load checklist active (optional) could be added later
-  }
-
-  closeListCheckModal(): void {
-    this.showListCheckModal = false;
-  }
-
-  triggerListImportFile(): void {
-    const el = document.getElementById('stock-check-list-import-file') as HTMLInputElement | null;
-    if (!el) return;
-    el.value = '';
-    el.click();
-  }
-
-  async onListImportFileSelected(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0];
-    if (!file) return;
-    if (!this.selectedFactory) return;
-    if (!this.currentEmployeeId) return;
-    if (this.listImportBusy) return;
-    this.listImportBusy = true;
-    this.listImportError = '';
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const sheetName = wb.SheetNames?.[0];
-      if (!sheetName) {
-        this.listImportError = 'File không có sheet.';
-        return;
-      }
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }) as any[][];
-      const codes: string[] = [];
-      for (const r of rows) {
-        const v = r?.[0];
-        const mc = this.normalizeCodeUpper(String(v ?? ''));
-        if (mc) codes.push(mc);
-      }
-      const uniq = Array.from(new Set(codes)).filter(Boolean);
-      if (uniq.length === 0) {
-        this.listImportError = 'Không đọc được mã nào ở cột A.';
-        return;
-      }
-      this.listImportedCodes = uniq;
-
-      // Save checklist to Firestore
-      const now = new Date();
-      const docId = `${this.selectedFactory}_${this.currentEmployeeId}_${now.getTime()}`;
-      await this.firestore
-        .collection(this.STOCK_CHECK_LISTS_COLLECTION)
-        .doc(docId)
-        .set(
-          {
-            id: docId,
-            factory: this.selectedFactory,
-            createdBy: this.currentEmployeeId,
-            createdAt: firebase.default.firestore.FieldValue.serverTimestamp(),
-            codes: uniq,
-            fileName: file.name || '',
-            updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-          },
-          { merge: true }
-        );
-      this.activeChecklistId = docId;
-    } catch (e) {
-      console.warn('[StockCheck] import list failed', e);
-      this.listImportError = 'Lỗi import file (chỉ nhận Excel/CSV, mã nằm ở cột A).';
-    } finally {
-      this.listImportBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  /** Start scanning materials for imported list (no location required). */
-  startListCheckScan(): void {
-    if (!this.selectedFactory) return;
-    if (!this.currentEmployeeId) return;
-    if (!this.listImportedCodes || this.listImportedCodes.length === 0) {
-      alert('Chưa có danh sách mã cần kiểm. Vui lòng import file trước.');
-      return;
-    }
-    this.scanMode = 'list';
-    this.allowMaterialScanWithoutLocation = true;
-    this.currentScanLocation = ''; // list mode không cần vị trí
-    this.showScanModal = true;
-    this.scanStep = 'material';
-    this.scannedEmployeeId = this.currentEmployeeId;
-    this.scanInput = '';
-    this.scanHistory = [];
-    this.wrongLocationItems = [];
-    this.scanMessage =
-      `MODE: KIỂM THEO DANH SÁCH\n` +
-      `ID: ${this.currentEmployeeId}\n` +
-      `Factory: ${this.selectedFactory}\n\n` +
-      `Scan QR: Mã|PO|Số lượng|IMD\n` +
-      `Rule: Qty mỗi lần scan ≤ StandardPacking.`;
-
-    setTimeout(() => {
-      const input = document.getElementById('scan-input') as HTMLInputElement;
-      if (input) input.focus();
-    }, 200);
-  }
+  // (Removed old Kiểm DS import-file flow; replaced by PXK-based list in modal)
 
   openCodeCheckModal(): void {
     if (!this.selectedFactory) {
@@ -1141,6 +1579,20 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const codeUpper = materialCode.toUpperCase().trim();
     const poTrim = poNumber.trim();
     const imdTrim = imd.trim();
+
+    // Lock theo dòng Kiểm DS: mã + PO + IMD phải khớp
+    if (this.scanMode === 'list' && this.dsLockMaterialCode) {
+      const lockMc = this.normalizeCodeUpper(this.dsLockMaterialCode);
+      const lockPo = String(this.dsLockPoNumber || '').trim();
+      const lockImd = String(this.dsLockImd || '').trim();
+      if (this.normalizeCodeUpper(codeUpper) !== lockMc || poTrim !== lockPo || imdTrim !== lockImd) {
+        this.showAutoDismissScanNotice(
+          'Sai dòng',
+          `Đang kiểm DS: ${lockMc} | PO:${lockPo} | IMD:${lockImd}\nBạn scan: ${this.normalizeCodeUpper(codeUpper)} | PO:${poTrim} | IMD:${imdTrim}\nBỏ qua scan này.`
+        );
+        return;
+      }
+    }
 
     const lookupKey = this.buildMaterialKey(codeUpper, poTrim, imdTrim);
     let matchingMaterial = this.materialByKey.get(lookupKey);
@@ -2720,6 +3172,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.scanStep = 'idle';
     this.scanMode = 'location';
     this.allowMaterialScanWithoutLocation = false;
+    this.dsLockMaterialCode = '';
+    this.dsLockPoNumber = '';
+    this.dsLockImd = '';
     this.scannedEmployeeId = '';
     this.scanMessage = '';
     this.scanInput = '';
@@ -2767,7 +3222,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
     // Lưu session summary cho mode danh sách / theo mã (để report/đối chiếu)
     try {
-      if (this.selectedFactory && this.currentEmployeeId && (this.scanMode === 'list' || this.scanMode === 'code')) {
+        if (this.selectedFactory && this.currentEmployeeId && (this.scanMode === 'list' || this.scanMode === 'code')) {
         const sid = `${this.selectedFactory}_${this.currentEmployeeId}_${Date.now()}`;
         await this.firestore
           .collection(this.STOCK_CHECK_SESSIONS_COLLECTION)
@@ -2779,27 +3234,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               employeeId: this.currentEmployeeId,
               scannedTotal,
               scanLocation: scanLoc || '',
-              checklistId: this.activeChecklistId || null,
+                checklistId: null,
               materialCode: this.scanMode === 'code' ? (this.codeCheckActiveMaterialCode || '') : '',
               createdAt: firebase.default.firestore.FieldValue.serverTimestamp()
             },
             { merge: true }
           );
 
-        if (this.scanMode === 'list' && this.activeChecklistId) {
-          await this.firestore
-            .collection(this.STOCK_CHECK_LISTS_COLLECTION)
-            .doc(this.activeChecklistId)
-            .set(
-              {
-                doneAt: firebase.default.firestore.FieldValue.serverTimestamp(),
-                doneBy: this.currentEmployeeId,
-                doneScannedTotal: scannedTotal,
-                updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-              },
-              { merge: true }
-            );
-        }
+        // No checklist persistence in PXK mode
       }
     } catch (e) {
       console.warn('[StockCheck] save session summary failed', e);

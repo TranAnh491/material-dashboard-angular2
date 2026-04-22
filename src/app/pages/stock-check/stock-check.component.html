@@ -1,194 +1,119 @@
 <div class="stock-check-wrapper">
   <!-- Stock Check Interface -->
   <div class="stock-check-container" *ngIf="showEmployeeScanModal || currentEmployeeId || selectedFactory || showMobileFactoryModal">
-    <!-- Top Bar - ẩn hẳn khi đang mở modal scan để không còn box trắng phía trên -->
-    <div class="top-bar" *ngIf="!showScanModal && !showMobileFactoryModal">
-      <h2 class="factory-title" *ngIf="!showScanModal">
-        <img src="assets/img/shipcheck.png" alt="" class="factory-title-icon">
-        <span *ngIf="selectedFactory">{{ selectedFactory }} - KIỂM KÊ</span>
-        <span *ngIf="!selectedFactory">KIỂM KÊ</span>
-        <span class="employee-id-display" *ngIf="currentEmployeeId">
-          <i class="material-icons">badge</i>
-          ID: {{ currentEmployeeId }}
-        </span>
-      </h2>
-      
-      <div class="top-bar-actions" *ngIf="!showScanModal">
-        <!-- ASM selection (after employee login) -->
-        <button
-          type="button"
-          class="asm-select-btn desktop-only"
-          (click)="selectFactory('ASM1')"
-          [disabled]="!currentEmployeeId"
-          title="Chọn ASM1">
-          <i class="material-icons">factory</i>
-          ASM1
-        </button>
-        <button
-          type="button"
-          class="asm-select-btn desktop-only"
-          (click)="selectFactory('ASM2')"
-          [disabled]="!currentEmployeeId"
-          title="Chọn ASM2">
-          <i class="material-icons">factory</i>
-          ASM2
-        </button>
+    <!-- Top Bar — 3 dòng sticky, tối ưu nhà kho -->
+    <div class="top-bar" *ngIf="!showScanModal && !showMobileFactoryModal && !showEmployeeScanModal">
 
-        <!-- Mobile: KIỂM KÊ + Đăng xuất (sau khi đã chọn nhà máy) -->
-        <div class="mobile-action-row mobile-only" *ngIf="selectedFactory && currentEmployeeId">
-          <button type="button" class="inventory-btn mobile-inv-btn" (click)="startInventoryCheck()" [disabled]="isLoading">
-            <i class="material-icons">qr_code_scanner</i>
-            <span>KIỂM KÊ</span>
+      <!-- DÒNG 1: Logo · Tên nhà máy · ID · [ASM1][ASM2][Thoát] -->
+      <div class="header-row">
+        <div class="header-brand">
+          <img src="assets/img/shipcheck.png" alt="" class="factory-title-icon">
+          <span class="brand-name">
+            <span *ngIf="selectedFactory && showDsListPage">{{ selectedFactory }} · KIỂM KÊ DS</span>
+            <span *ngIf="selectedFactory && !showDsListPage">{{ selectedFactory }} · KIỂM KÊ</span>
+            <span *ngIf="!selectedFactory">KIỂM KÊ</span>
+          </span>
+          <span class="employee-id-display" *ngIf="currentEmployeeId">
+            <i class="material-icons">badge</i>
+            ID: {{ currentEmployeeId }}
+          </span>
+        </div>
+        <div class="header-factory-btns">
+          <button type="button" class="hdr-btn back" *ngIf="showDsListPage" (click)="closeDsListPage()" title="Quay lại">
+            <i class="material-icons">arrow_back</i>
+            QUAY LẠI
           </button>
-          <button type="button" class="logout-btn mobile-inv-btn" (click)="logoutEmployee()" title="Đăng xuất">
+          <button type="button" class="hdr-btn" (click)="selectFactory('ASM1')" [disabled]="!currentEmployeeId" title="Chọn ASM1">ASM1</button>
+          <button type="button" class="hdr-btn" (click)="selectFactory('ASM2')" [disabled]="!currentEmployeeId" title="Chọn ASM2">ASM2</button>
+          <button type="button" class="hdr-btn logout" *ngIf="currentEmployeeId" (click)="logoutEmployee()" title="Đăng xuất">
             <i class="material-icons">logout</i>
-            <span>THOÁT</span>
           </button>
         </div>
-        <p class="mobile-loading-hint mobile-only" *ngIf="selectedFactory && currentEmployeeId && isLoading">Đang tải dữ liệu nhà máy...</p>
-        
-        <!-- Desktop actions only when selectedFactory -->
-        <button type="button" class="reset-btn desktop-only" *ngIf="selectedFactory" (click)="openResetModal()" title="Reset stock check">
-          <i class="material-icons">refresh</i>
-          <span>RESET</span>
-        </button>
 
-        <button class="logout-btn desktop-only" *ngIf="currentEmployeeId" (click)="logoutEmployee()" title="Đăng xuất">
-          <i class="material-icons">logout</i>
-          <span>ĐĂNG XUẤT</span>
-        </button>
-        
-        <button class="history-btn desktop-only" *ngIf="selectedFactory" (click)="loadArchiveHistory()" title="Xem lịch sử kiểm kê">
-          <i class="material-icons">history</i>
-          <span>LỊCH SỬ</span>
-        </button>
-        
-        <button class="inventory-btn desktop-only" *ngIf="selectedFactory" (click)="startInventoryCheck()">
-          <i class="material-icons">qr_code_scanner</i>
-          KIỂM KÊ
-        </button>
-        
-        <button class="sort-btn desktop-only" *ngIf="selectedFactory" (click)="toggleSortMode()" [title]="sortMode === 'alphabetical' ? 'Sắp xếp theo mã hàng vừa kiểm kê mới nhất' : 'Sắp xếp theo A, B, C'">
-          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
-          <span>SẮP XẾP</span>
-        </button>
-        
-        <button class="khsx-btn desktop-only" *ngIf="selectedFactory" (click)="openKhsxDialog()" title="Quản lý danh sách KHSX">
-          <i class="material-icons">playlist_add_check</i>
-          KHSX
-        </button>
+      </div>
 
-        <button class="report-btn desktop-only" [disabled]="!selectedFactory" (click)="openReportByDateModal()">
-          <i class="material-icons">download</i>
-          REPORT
-        </button>
+      <!-- Mobile: dòng nút hành động (riêng biệt, dưới header-row) -->
+      <div class="mobile-action-row mobile-only" *ngIf="selectedFactory && currentEmployeeId">
+        <ng-container *ngIf="showDsListPage">
+          <button type="button" class="mob-btn mob-btn--back" (click)="closeDsListPage()">
+            <i class="material-icons">arrow_back</i>
+            <span>QUAY LẠI</span>
+          </button>
+        </ng-container>
+          <ng-container *ngIf="!showDsListPage">
+            <button type="button" class="mob-btn mob-btn--primary" (click)="startInventoryCheck()" [disabled]="isLoading">
+              <i class="material-icons">qr_code_scanner</i>
+              <span>KIỂM KÊ</span>
+            </button>
+            <button type="button" class="mob-btn mob-btn--secondary" (click)="openDsListModal()">
+              <i class="material-icons">list_alt</i>
+              <span>KIỂM DS</span>
+            </button>
+            <button type="button" class="mob-btn mob-btn--back mob-btn--logout" (click)="logoutEmployee()" title="Thoát">
+              <i class="material-icons">logout</i>
+            </button>
+          </ng-container>
+        <p class="mobile-loading-hint" *ngIf="isLoading">Đang tải...</p>
+      </div>
 
-        <button class="report-btn desktop-only" *ngIf="selectedFactory" (click)="openListCheckModal()" title="Kiểm theo danh sách (import file cột A)">
-          <i class="material-icons">upload_file</i>
-          KIỂM DS
-        </button>
+      <!-- DÒNG 2: Bộ đếm lớn + nút hành động chính -->
+      <div class="action-row desktop-only" *ngIf="selectedFactory && !showDsListPage">
+        <!-- 3 counter lớn -->
+        <div class="big-counters">
+          <div class="big-counter clickable" [class.active]="filterMode === 'all'" (click)="setFilterMode('all')" title="Tổng mã">
+            <div class="big-num">{{ totalMaterials }}</div>
+            <div class="big-lbl">TỔNG MÃ</div>
+          </div>
+          <div class="big-counter clickable checked" [class.active]="filterMode === 'checked'" (click)="setFilterMode('checked')" title="Đã kiểm tra">
+            <div class="big-num">{{ checkedMaterials }}</div>
+            <div class="big-lbl">ĐÃ KIỂM</div>
+          </div>
+          <div class="big-counter clickable unchecked" [class.active]="filterMode === 'unchecked'" (click)="setFilterMode('unchecked')" title="Chưa kiểm tra">
+            <div class="big-num">{{ uncheckedMaterials }}</div>
+            <div class="big-lbl">CHƯA KIỂM</div>
+          </div>
+        </div>
 
-        <button class="report-btn desktop-only" *ngIf="selectedFactory" (click)="openCodeCheckModal()" title="Kiểm kê theo mã (scan mã hàng trước)">
-          <i class="material-icons">fact_check</i>
-          KIỂM MÃ
-        </button>
-        
-        <div class="search-box desktop-only">
-          <i class="material-icons search-trigger" title="Tìm kiếm" (click)="runSearchNow()">search</i>
-          <input 
-            type="text" 
-            class="search-input"
-            [(ngModel)]="searchInput"
-            (input)="onSearchInput()"
-            (keyup.enter)="runSearchNow()"
-            (keyup)="searchInput = searchInput.toUpperCase()"
-            placeholder="Tìm kiếm mã hàng">
-          <button 
-            type="button"
-            class="clear-search-btn" 
-            *ngIf="searchInput"
-            (click)="clearSearch()"
-            title="Xóa tìm kiếm">
-            <i class="material-icons">close</i>
+        <!-- Nút hành động chính -->
+        <div class="main-actions">
+          <button class="main-btn primary" (click)="startInventoryCheck()" [disabled]="isLoading">
+            <i class="material-icons">qr_code_scanner</i>
+            KIỂM KÊ
+          </button>
+          <button class="main-btn" (click)="openDsListModal()" title="Danh sách mã cần kiểm (từ PXK)">
+            <i class="material-icons">list_alt</i>
+            KIỂM DS
+          </button>
+          <button class="main-btn" (click)="openCodeCheckModal()" title="Kiểm kê theo mã">
+            <i class="material-icons">fact_check</i>
+            KIỂM MÃ
+          </button>
+          <button class="main-btn more-btn" (click)="openStockCheckMoreModal()" title="Thêm tùy chọn">
+            <i class="material-icons">more_horiz</i>
           </button>
         </div>
+      </div>
+
+      <!-- DÒNG 3: Search full-width -->
+      <div class="search-row desktop-only" *ngIf="selectedFactory">
+        <i class="material-icons search-icon" (click)="runSearchNow()">search</i>
+        <input
+          type="text"
+          class="search-input"
+          [(ngModel)]="searchInput"
+          (input)="onSearchInput()"
+          (keyup.enter)="runSearchNow()"
+          (keyup)="searchInput = searchInput.toUpperCase()"
+          placeholder="Tìm kiếm mã hàng...">
+        <button type="button" class="clear-search-btn" *ngIf="searchInput" (click)="clearSearch()" title="Xóa">
+          <i class="material-icons">close</i>
+        </button>
       </div>
     </div>
 
   <!-- Data Table - không render trên mobile để giao diện mobile chạy nhanh hơn -->
-  <div class="data-section" *ngIf="!isMobile">
-    <!-- Counter Boxes -->
-    <div class="counter-boxes">
-      <!-- Unified (Desktop + Mobile): 3 counter boxes -->
-      <div class="counter-box total-box clickable" 
-           [class.active]="filterMode === 'all'"
-           (click)="setFilterMode('all')"
-           title="Tổng mã">
-        <div class="counter-icon">
-          <i class="material-icons">inventory_2</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">TỔNG MÃ</div>
-          <div class="counter-value">{{ totalMaterials }}</div>
-        </div>
-      </div>
-
-      <div class="counter-box checked-box clickable" 
-           [class.active]="filterMode === 'checked'"
-           (click)="setFilterMode('checked')"
-           title="Đã kiểm tra">
-        <div class="counter-icon">
-          <i class="material-icons">check_circle</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">ĐÃ KIỂM TRA</div>
-          <div class="counter-value">{{ checkedMaterials }}</div>
-        </div>
-      </div>
-
-      <div class="counter-box location-change-box clickable" 
-           [class.active]="filterMode === 'location-change'"
-           (click)="setFilterMode('location-change')"
-           title="Đã đổi vị trí - Click để xem danh sách">
-        <div class="counter-icon">
-          <i class="material-icons">swap_horiz</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">ĐỔI VỊ TRÍ</div>
-          <div class="counter-value">{{ locationChangedMaterials }}</div>
-        </div>
-      </div>
-
-      <div class="counter-box unchecked-box clickable" 
-           [class.active]="filterMode === 'unchecked'"
-           (click)="setFilterMode('unchecked')"
-           title="Chưa kiểm tra">
-        <div class="counter-icon">
-          <i class="material-icons">radio_button_unchecked</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">CHƯA KIỂM TRA</div>
-          <div class="counter-value">{{ uncheckedMaterials }}</div>
-        </div>
-      </div>
-
-      <!-- KHSX counter box -->
-      <div class="counter-box khsx-box clickable"
-           [class.active]="filterMode === 'khsx-unchecked'"
-           (click)="setFilterMode('khsx-unchecked')"
-           title="Mã có KHSX nhưng chưa được stock check - Click để lọc">
-        <div class="counter-icon">
-          <i class="material-icons">playlist_add_check</i>
-        </div>
-        <div class="counter-info">
-          <div class="counter-label">KHSX CHƯA CHECK</div>
-          <div class="counter-value">{{ khsxUncheckedCount }}
-            <span class="counter-sub" *ngIf="khsxTotalCount > 0"> / {{ khsxTotalCount }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
+  <!-- Khi đang ở chế độ KIỂM DS: ẩn toàn bộ phần kiểm kê bình thường -->
+  <div class="data-section" *ngIf="!isMobile && !showDsListPage">
     <!-- Loading -->
     <div class="loading" *ngIf="isLoading">
       <i class="material-icons rotating">sync</i>
@@ -458,57 +383,298 @@
     </div>
   </div>
 
-  <!-- Kiểm theo danh sách (import cột A) -->
-  <div class="scan-modal" *ngIf="showListCheckModal">
-    <div class="modal-content" (click)="$event.stopPropagation()">
+  <!-- More modal (Stock Check) — chứa các nút phụ -->
+  <div class="scan-modal" *ngIf="showStockCheckMoreModal" (click)="closeStockCheckMoreModal()">
+    <div class="modal-content more-modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h3>
-          <i class="material-icons">upload_file</i>
-          KIỂM THEO DANH SÁCH ({{ selectedFactory }})
+          <i class="material-icons">more_horiz</i>
+          THÊM TÙY CHỌN ({{ selectedFactory }})
         </h3>
       </div>
-
-      <div class="scan-message">
-        <p>Import file Excel/CSV, hệ thống đọc <strong>cột A</strong> để lấy danh sách mã cần kiểm.</p>
-      </div>
-
-      <div class="modal-actions" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <button type="button" class="scan-submit-btn" (click)="triggerListImportFile()" [disabled]="listImportBusy">
-          <i class="material-icons">upload</i>
-          {{ listImportBusy ? 'Đang import...' : 'Import file' }}
+      <div class="more-modal-grid">
+        <!-- Cài đặt KIỂM DS -->
+        <button type="button" class="more-grid-btn" (click)="openDsSettingsModal()">
+          <i class="material-icons">tune</i>
+          <span>Cài đặt KIỂM DS</span>
         </button>
-        <input
-          id="stock-check-list-import-file"
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          style="display:none"
-          (change)="onListImportFileSelected($event)"
-        />
-
-        <button type="button" class="inventory-btn" (click)="startListCheckScan()" [disabled]="listImportBusy || listImportedCodes.length === 0">
-          <i class="material-icons">qr_code_scanner</i>
-          BẮT ĐẦU KIỂM
+        <!-- Đếm đổi vị trí -->
+        <button type="button" class="more-grid-btn" [class.active]="filterMode === 'location-change'" (click)="setFilterMode('location-change'); closeStockCheckMoreModal()">
+          <i class="material-icons">swap_horiz</i>
+          <span>ĐỔI VỊ TRÍ<br><strong>{{ locationChangedMaterials }}</strong></span>
+        </button>
+        <!-- KHSX -->
+        <button type="button" class="more-grid-btn" [class.active]="filterMode === 'khsx-unchecked'" (click)="setFilterMode('khsx-unchecked'); closeStockCheckMoreModal(); openKhsxDialog()">
+          <i class="material-icons">playlist_add_check</i>
+          <span>KHSX<br><strong>{{ khsxUncheckedCount }} / {{ khsxTotalCount }}</strong></span>
+        </button>
+        <!-- Sắp xếp -->
+        <button type="button" class="more-grid-btn" (click)="toggleSortMode(); closeStockCheckMoreModal()">
+          <i class="material-icons">{{ sortMode === 'alphabetical' ? 'sort_by_alpha' : 'access_time' }}</i>
+          <span>SẮP XẾP<br><strong>{{ sortMode === 'alphabetical' ? 'A→Z' : 'Mới nhất' }}</strong></span>
+        </button>
+        <!-- Report -->
+        <button type="button" class="more-grid-btn" [disabled]="!selectedFactory" (click)="openReportByDateModal(); closeStockCheckMoreModal()">
+          <i class="material-icons">download</i>
+          <span>REPORT</span>
+        </button>
+        <!-- Lịch sử -->
+        <button type="button" class="more-grid-btn" *ngIf="selectedFactory" (click)="loadArchiveHistory(); closeStockCheckMoreModal()">
+          <i class="material-icons">history</i>
+          <span>LỊCH SỬ</span>
+        </button>
+        <!-- Reset -->
+        <button type="button" class="more-grid-btn danger" *ngIf="selectedFactory" (click)="openResetModal(); closeStockCheckMoreModal()">
+          <i class="material-icons">refresh</i>
+          <span>RESET</span>
         </button>
       </div>
-
-      <div class="tem-le-error" *ngIf="listImportError" style="margin-top:10px">
-        <i class="material-icons">error</i>
-        {{ listImportError }}
-      </div>
-
-      <div class="scan-message" *ngIf="listImportedCodes.length > 0">
-        <p><strong>Đã nạp:</strong> {{ listImportedCodes.length }} mã.</p>
-        <p style="font-family:Consolas,monospace;font-size:12px;max-height:120px;overflow:auto;border:1px solid #e5e7eb;padding:8px;border-radius:8px">
-          {{ listImportedCodes.join(', ') }}
-        </p>
-      </div>
-
-      <div class="modal-actions">
-        <button class="cancel-btn" (click)="closeListCheckModal()">
+      <div class="modal-actions" style="padding:10px 20px 16px">
+        <button type="button" class="cancel-btn" (click)="closeStockCheckMoreModal()">
           <i class="material-icons">close</i>
           Đóng
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Kiểm DS (PXK) settings + list -->
+  <div class="scan-modal" *ngIf="showDsSettingsModal">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">list_alt</i>
+          KIỂM DS — theo PXK ({{ selectedFactory }})
+        </h3>
+      </div>
+
+      <div class="scan-message" style="display:block;text-align:left">
+        <p><strong>Chọn khoảng ngày</strong> (lọc theo <code>importedAt</code> của PXK).</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label style="font-size:13px;color:#111">Từ:</label>
+          <input type="date" class="scan-input" [ngModel]="dsFromDate | date:'yyyy-MM-dd'" (ngModelChange)="onDsFromDateChange($event)" />
+          <label style="font-size:13px;color:#111">Đến:</label>
+          <input type="date" class="scan-input" [ngModel]="dsToDate | date:'yyyy-MM-dd'" (ngModelChange)="onDsToDateChange($event)" />
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:13px;color:#111"><strong>Loại trừ mã/nhóm mã</strong></label>
+          <mat-slide-toggle [(ngModel)]="dsExcludeEnabled" (ngModelChange)="onDsSettingsChanged()"></mat-slide-toggle>
+        </div>
+        <textarea
+          rows="4"
+          class="scan-input"
+          style="width:100%;box-sizing:border-box;margin-top:8px;font-family:Consolas,monospace;font-size:12px"
+          [(ngModel)]="dsExcludeCatalogText"
+          (blur)="onDsSettingsChanged()"
+          placeholder="Mỗi dòng 1 mã. 4 ký tự = nhóm (vd B033). Dài hơn = mã đầy đủ."
+        ></textarea>
+        <p style="margin-top:10px;color:#6b7280;font-size:12px;line-height:1.4">
+          Popup này chỉ để <strong>cài rule</strong>. Danh sách mã cần kiểm sẽ hiển thị khi bấm nút <strong>KIỂM DS</strong> ngoài màn hình.
+        </p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="cancel-btn" (click)="closeDsSettingsModal()">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KIỂM DS (PXK) — HIỂN THỊ DẠNG TRANG -->
+  <div class="data-section ds-data-section" *ngIf="showDsListPage">
+
+    <!-- Counters (DS) -->
+    <div class="counter-boxes">
+      <div class="counter-box total-box clickable" (click)="openDsCounterList('all')" title="Tổng mã (DS)">
+        <div class="counter-icon"><i class="material-icons">inventory_2</i></div>
+        <div class="counter-info">
+          <div class="counter-label">TỔNG MÃ (DS)</div>
+          <div class="counter-value">{{ dsTotalMaterials }}</div>
+        </div>
+      </div>
+      <div class="counter-box checked-box clickable" (click)="openDsCounterList('checked')" title="Đã kiểm (DS)">
+        <div class="counter-icon"><i class="material-icons">check_circle</i></div>
+        <div class="counter-info">
+          <div class="counter-label">ĐÃ KIỂM (DS)</div>
+          <div class="counter-value">{{ dsCheckedMaterials }}</div>
+        </div>
+      </div>
+      <div class="counter-box unchecked-box clickable" (click)="openDsCounterList('unchecked')" title="Chưa kiểm (DS)">
+        <div class="counter-icon"><i class="material-icons">radio_button_unchecked</i></div>
+        <div class="counter-info">
+          <div class="counter-label">CHƯA KIỂM (DS)</div>
+          <div class="counter-value">{{ dsUncheckedMaterials }}</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="outbound-dup-loading" *ngIf="dsLoading" style="padding:12px 0">Đang tải danh sách PXK…</p>
+    <div class="tem-le-error" *ngIf="!dsLoading && dsError" style="margin:8px 0">
+      <i class="material-icons">error</i>
+      {{ dsError }}
+    </div>
+
+    <!-- Danh sách theo counter (DS) -->
+    <div class="location-detail-section ds-location-detail ds-counter-list" *ngIf="!dsLoading && dsCounterListMode">
+      <div class="location-detail-header">
+        <button type="button" class="back-to-boxes-btn" (click)="closeDsCounterList()">
+          <i class="material-icons">arrow_back</i>
+          Quay lại danh sách vị trí (DS)
+        </button>
+        <h3 class="location-detail-title">
+          <i class="material-icons">list_alt</i>
+          Danh sách (DS):
+          <span *ngIf="dsCounterListFilter === 'all'">Tổng</span>
+          <span *ngIf="dsCounterListFilter === 'checked'">Đã kiểm</span>
+          <span *ngIf="dsCounterListFilter === 'unchecked'">Chưa kiểm</span>
+        </h3>
+      </div>
+
+      <div class="ds-detail-grid" *ngIf="dsCounterListRows.length > 0">
+        <div class="ds-detail-card"
+             *ngFor="let r of dsCounterListRows; trackBy: trackByDsDetailRow"
+             [class.checked]="dsIsCheckedByRule(r)"
+             [class.unchecked]="!dsIsCheckedByRule(r)">
+
+          <div class="ds-col-left">
+            <div class="ds-mc">{{ r.materialCode }}</div>
+            <span class="ds-badge" [class.ok]="dsIsCheckedByRule(r)" [class.no]="!dsIsCheckedByRule(r)">
+              {{ dsRowStatusLabel(r) }}
+            </span>
+          </div>
+
+          <div class="ds-card-row">
+            <div class="kv"><span class="k">VT</span><span class="v">{{ r.location || '—' }}</span></div>
+            <div class="kv"><span class="k">PO</span><span class="v">{{ r.poNumber || '—' }}</span></div>
+            <div class="kv"><span class="k">IMD</span><span class="v">{{ r.imd || '—' }}</span></div>
+            <div class="kv"><span class="k">SL kiểm</span><span class="v">{{ r.qtyCheck == null ? '—' : r.qtyCheck }}</span></div>
+            <div class="kv"><span class="k">Ngày</span><span class="v">{{ r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '—' }}</span></div>
+          </div>
+
+          <button type="button" class="ds-card-scan-btn" (click)="startDsRowCheck(r)" title="Kiểm kê">
+            <i class="material-icons">qr_code_scanner</i>
+            <span>KIỂM KÊ</span>
+          </button>
+        </div>
+      </div>
+      <div class="scan-message" *ngIf="dsCounterListRows.length === 0">
+        <p>Không có dòng nào theo rule hiện tại.</p>
+      </div>
+    </div>
+
+    <!-- Box theo vị trí (DS) -->
+    <div class="location-boxes-wrapper ds-location-boxes" *ngIf="!dsLoading && !dsSelectedLocationForDetail && !dsCounterListMode">
+      <div class="location-boxes-empty" *ngIf="dsLocationBoxStats.length === 0">
+        <i class="material-icons">inbox</i>
+        <p>Chưa có dữ liệu vị trí (DS)</p>
+      </div>
+
+      <!-- Box mẹ -->
+      <div class="location-boxes-grid" *ngIf="dsLocationBoxStats.length > 0 && !dsSelectedParentGroup">
+        <div class="location-box parent clickable"
+             *ngFor="let p of dsParentBoxStats; trackBy: trackByParentGroup"
+             (click)="openDsParentGroup(p.location)"
+             [class.all-checked]="p.unchecked === 0 && p.total > 0"
+             title="Click để xem vị trí con">
+          <div class="location-box-title">
+            <i class="material-icons">folder</i>
+            {{ p.location }}
+          </div>
+          <div class="location-box-stats">
+            <span class="stat total">Tổng: {{ p.total }}</span>
+            <span class="stat full">Đã kiểm: {{ p.full }}</span>
+            <span class="stat unchecked">Chưa KT: {{ p.unchecked }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Box con -->
+      <div class="child-group-header" *ngIf="dsLocationBoxStats.length > 0 && dsSelectedParentGroup">
+        <button type="button" class="back-to-parent-btn" (click)="backDsToParentGroups()">
+          <i class="material-icons">arrow_back</i>
+          Quay lại nhóm
+        </button>
+        <div class="child-group-title">
+          <i class="material-icons">folder_open</i>
+          Nhóm: <strong>{{ dsSelectedParentGroup }}</strong>
+        </div>
+      </div>
+      <div class="child-box-groups" *ngIf="dsLocationBoxStats.length > 0 && dsSelectedParentGroup">
+        <div class="child-box-group" *ngFor="let grp of dsChildBoxGroups; trackBy: trackByChildBoxGroup">
+          <div class="child-box-group-label">{{ grp.groupLabel }}</div>
+          <div class="location-boxes-grid">
+            <div class="location-box child clickable"
+                 *ngFor="let r of grp.boxes; trackBy: trackByLocationBox"
+                 (click)="openDsLocationDetail(r.location)"
+                 [class.all-checked]="r.unchecked === 0 && r.total > 0"
+                 title="Click xem chi tiết">
+              <div class="location-box-title">
+                <i class="material-icons">place</i>
+                {{ r.location }}
+              </div>
+              <div class="location-box-stats">
+                <span class="stat total">Tổng: {{ r.total }}</span>
+                <span class="stat full">Đã kiểm: {{ r.full }}</span>
+                <span class="stat unchecked">Chưa KT: {{ r.unchecked }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chi tiết theo vị trí (DS) -->
+    <div class="location-detail-section ds-location-detail" *ngIf="dsSelectedLocationForDetail">
+      <div class="location-detail-header">
+        <button type="button" class="back-to-boxes-btn" (click)="backDsToLocationBoxes()">
+          <i class="material-icons">arrow_back</i>
+          Quay lại danh sách vị trí (DS)
+        </button>
+        <h3 class="location-detail-title">
+          <i class="material-icons">place</i>
+          Chi tiết vị trí (DS): {{ dsSelectedLocationForDetail }}
+        </h3>
+      </div>
+
+      <div class="ds-detail-grid" *ngIf="dsDetailRows.length > 0">
+        <div class="ds-detail-card"
+             *ngFor="let r of dsDetailRows; trackBy: trackByDsDetailRow"
+             [class.checked]="dsIsCheckedByRule(r)"
+             [class.unchecked]="!dsIsCheckedByRule(r)">
+
+          <!-- Cột trái: Mã + badge trạng thái -->
+          <div class="ds-col-left">
+            <div class="ds-mc">{{ r.materialCode }}</div>
+            <span class="ds-badge" [class.ok]="dsIsCheckedByRule(r)" [class.no]="!dsIsCheckedByRule(r)">
+              {{ dsRowStatusLabel(r) }}
+            </span>
+          </div>
+
+          <!-- Cột giữa: PO | IMD | SL kiểm | Ngày — hàng ngang bắt buộc -->
+          <div class="ds-card-row">
+            <div class="kv"><span class="k">PO</span><span class="v">{{ r.poNumber || '—' }}</span></div>
+            <div class="kv"><span class="k">IMD</span><span class="v">{{ r.imd || '—' }}</span></div>
+            <div class="kv"><span class="k">SL kiểm</span><span class="v">{{ r.qtyCheck == null ? '—' : r.qtyCheck }}</span></div>
+            <div class="kv"><span class="k">Ngày</span><span class="v">{{ r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '—' }}</span></div>
+          </div>
+
+          <!-- Cột phải: nút KIỂM KÊ -->
+          <button type="button" class="ds-card-scan-btn" (click)="startDsRowCheck(r)" title="Kiểm kê">
+            <i class="material-icons">qr_code_scanner</i>
+            <span>KIỂM KÊ</span>
+          </button>
+        </div>
+      </div>
+      <div class="scan-message" *ngIf="dsDetailRows.length === 0">
+        <p>Không có dòng nào ở vị trí này.</p>
+      </div>
+    </div>
+
+    <div class="scan-message" *ngIf="!dsLoading && dsRows.length === 0 && !dsSelectedLocationForDetail">
+      <p>Không có dòng nào theo PXK trong rule hiện tại.</p>
     </div>
   </div>
 
@@ -564,20 +730,18 @@
   </div>
 
   <!-- Employee Scan Modal (after factory selection) -->
-  <div class="scan-modal" *ngIf="showEmployeeScanModal">
-    <div class="modal-content">
-      <div class="modal-header">
+  <div class="scan-modal emp-scan-modal" *ngIf="showEmployeeScanModal">
+    <div class="modal-content emp-scan-content">
+      <div class="modal-header emp-scan-header">
         <h3>
           <i class="material-icons">badge</i>
           SCAN MÃ NHÂN VIÊN
         </h3>
       </div>
-      
-      <div class="scan-message">
+      <div class="scan-message desktop-only">
         <p><strong>Vui lòng scan mã nhân viên</strong></p>
         <p>Format: <strong>ASP + 4 số</strong> (ví dụ: ASP1234)</p>
       </div>
-      
       <div class="scan-input-container">
         <input 
           id="employee-scan-input"
@@ -585,15 +749,14 @@
           class="scan-input"
           [(ngModel)]="employeeScanInput"
           (keyup.enter)="onEmployeeScanEnter()"
-          placeholder="Scan mã nhân viên (ASP + 4 số)..."
+          placeholder="ASP + 4 số (vd: ASP1234)"
           autocomplete="off"
           autofocus>
         <button class="scan-submit-btn" (click)="onEmployeeScanEnter()">
           <i class="material-icons">send</i>
         </button>
       </div>
-      
-      <div class="modal-actions">
+      <div class="modal-actions desktop-only">
         <button class="cancel-btn" (click)="cancelEmployeeScan()">
           <i class="material-icons">close</i>
           Hủy
@@ -654,12 +817,12 @@
               <i class="material-icons">qr_code_scanner</i>
               SCAN NGUYÊN LIỆU
             </div>
-            <div class="loc-tag">
+            <div class="loc-tag" *ngIf="scanMode === 'location' && currentScanLocation">
               <i class="material-icons">place</i>
               {{ currentScanLocation }}
             </div>
           </div>
-          <div class="step-counter">Đã kiểm: <strong>{{ locationCheckedCount }}</strong> / {{ locationTotalCount }}</div>
+          <div class="step-counter" *ngIf="scanMode === 'location'">Đã kiểm: <strong>{{ locationCheckedCount }}</strong> / {{ locationTotalCount }}</div>
         </div>
 
         <!-- Input row -->
@@ -697,7 +860,8 @@
 
         <div class="location-materials-empty" *ngIf="locationMaterials.length === 0">
           <i class="material-icons">inbox</i>
-          <span>Không có NVL nào ở vị trí <strong>{{ currentScanLocation }}</strong></span>
+          <span *ngIf="scanMode === 'location'">Không có NVL nào ở vị trí <strong>{{ currentScanLocation }}</strong></span>
+          <span *ngIf="scanMode !== 'location'">Sẵn sàng scan QR theo dòng đã chọn.</span>
         </div>
 
         <div class="mat-grid" *ngIf="locationMaterialsView.length > 0">
