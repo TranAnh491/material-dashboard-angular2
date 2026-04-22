@@ -31,6 +31,8 @@ interface StockCheckMaterial {
   inventoryId?: string;
   actualLocation?: string; // Vị trí thực tế (scan)
   standardPacking?: string;
+  /** Template tem mới (có bag): bag của lần scan gần nhất (phục vụ UI/report) */
+  lastBag?: string;
   stockCheck: string;
   qtyCheck: number | null;
   idCheck: string;
@@ -87,6 +89,8 @@ interface CheckHistoryItem {
   qtyCheck: number;
   dateCheck: any;
   updatedAt: any;
+  /** Template tem mới (có bag) */
+  bag?: string;
 }
 
 interface ReportDayAggRow {
@@ -100,6 +104,8 @@ interface ReportDayAggRow {
   idCheck: string;
   lastDateCheck: Date;
   hasKhsx: boolean;
+  /** Template tem mới (có bag): bag của lần scan mới nhất trong ngày */
+  bag?: string;
 }
 
 interface ReportCompareRow {
@@ -266,6 +272,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   showDsListPage = false;
   dsLoading = false;
   dsError = '';
+  /** DS: nếu bị Firestore permission-denied thì dừng retry để tránh spam lỗi */
+  private dsPermissionDenied = false;
 
   /** Khoảng ngày để load PXK (theo importedAt trong pxk-import-data) */
   dsFromDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -301,6 +309,15 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private dsLockMaterialCode = '';
   private dsLockPoNumber = '';
   private dsLockImd = '';
+
+  /** DS: khi scan ở màn hình chi tiết, chỉ ghi nhận các dòng thuộc DS hiện tại */
+  private dsAllowedMaterialKeys: Set<string> | null = null;
+  /** DS: cộng dồn lượng kiểm kê theo từng dòng trong phiên scan hiện tại */
+  dsSessionQtyByKey: Map<string, number> = new Map();
+  /** DS: bag đã scan trong phiên (để chặn trùng bag) */
+  private dsSessionBags: Set<string> = new Set();
+  /** DS: danh sách dòng đang kiểm (để hiển thị trong scan modal) */
+  private dsScanRowsForDisplay: Array<{ materialCode: string; poNumber: string; imd: string }> = [];
 
   get dsTotalMaterials(): number {
     return this.dsRows.length;
@@ -482,6 +499,53 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return this.dsIsCheckedByRule(r) ? 'ĐÃ KIỂM' : 'CHƯA KIỂM';
   }
 
+  /** DS: tình trạng theo so sánh stock vs qtyCheck (ĐỦ/THIẾU/DƯ) */
+  dsQtyStatus(r: { materialCode: string; poNumber: string; imd: string; qtyCheck: number | null }): { label: string; kind: 'du' | 'thieu' | 'dủ' | 'chua' } {
+    const key = this.buildMaterialKey(String(r.materialCode || '').toUpperCase().trim(), String(r.poNumber || '').trim(), String(r.imd || '').trim());
+    const m = this.materialByKey.get(key);
+    const stock = m?.stock ?? null;
+    const qc = r.qtyCheck == null ? null : Number(r.qtyCheck);
+    if (qc == null || !Number.isFinite(qc)) return { label: '—', kind: 'chua' };
+    if (stock == null || !Number.isFinite(stock)) return { label: '—', kind: 'chua' };
+    if (qc === stock) return { label: 'ĐỦ', kind: 'dủ' };
+    if (qc < stock) return { label: 'THIẾU', kind: 'thieu' };
+    return { label: 'DƯ', kind: 'du' };
+  }
+
+  /** DS: lượng kiểm kê trong phiên scan hiện tại */
+  dsSessionQtyFor(r: { materialCode: string; poNumber: string; imd: string }): number | null {
+    const key = this.buildMaterialKey(String(r.materialCode || '').toUpperCase().trim(), String(r.poNumber || '').trim(), String(r.imd || '').trim());
+    const v = this.dsSessionQtyByKey.get(key);
+    return v == null ? null : v;
+  }
+
+  /** DS: hiển thị chênh lệch (qtyCheck - stock) để biết dư/thiếu bao nhiêu */
+  dsQtyDeltaDisplay(r: { materialCode: string; poNumber: string; imd: string; qtyCheck: number | null; dateCheck: Date | null }): string {
+    // Nếu DS chưa kiểm theo rule ngày: để trống
+    if (!this.dsIsCheckedByRule(r)) return '';
+    const key = this.buildMaterialKey(String(r.materialCode || '').toUpperCase().trim(), String(r.poNumber || '').trim(), String(r.imd || '').trim());
+    const m = this.materialByKey.get(key);
+    const stock = m?.stock;
+    const qc = r.qtyCheck == null ? null : Number(r.qtyCheck);
+    if (stock == null || !Number.isFinite(stock) || qc == null || !Number.isFinite(qc)) return '';
+    const diff = qc - stock;
+    const fmt = (n: number): string => {
+      const fixed = Number.isInteger(n) ? n : Number(n.toFixed(2));
+      // dùng dấu , theo hàng ngàn
+      return fixed.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    };
+    if (diff === 0) return '0';
+    return diff > 0 ? `+${fmt(diff)}` : fmt(diff);
+  }
+
+  /** DS: tồn kho (stock) theo dòng */
+  dsStockForRow(r: { materialCode: string; poNumber: string; imd: string }): number | null {
+    const key = this.buildMaterialKey(String(r.materialCode || '').toUpperCase().trim(), String(r.poNumber || '').trim(), String(r.imd || '').trim());
+    const m = this.materialByKey.get(key);
+    const v = m?.stock;
+    return v == null || !Number.isFinite(v) ? null : v;
+  }
+
   trackByDsDetailRow = (_: number, r: { materialCode: string; poNumber: string; imd: string }) =>
     `${String(r.materialCode || '').toUpperCase().trim()}__${String(r.poNumber || '').trim()}__${String(r.imd || '').trim()}`;
 
@@ -596,6 +660,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
     this.dsError = '';
     this.showDsListPage = true;
+    // reset permission flag mỗi lần mở DS page (trường hợp user vừa đăng nhập/cấp quyền)
+    this.dsPermissionDenied = false;
     try {
       await this.loadDsSettings(); // dùng rule đã lưu
     } catch (e) {
@@ -617,11 +683,22 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private async loadDsSettings(): Promise<void> {
     if (!this.selectedFactory) return;
     const docId = this.dsSettingsDocId(this.selectedFactory);
-    const snap = await this.firestore
-      .collection(this.STOCK_CHECK_DS_SETTINGS_COLLECTION)
-      .doc(docId)
-      .get()
-      .toPromise();
+    let snap: any;
+    try {
+      snap = await this.firestore
+        .collection(this.STOCK_CHECK_DS_SETTINGS_COLLECTION)
+        .doc(docId)
+        .get()
+        .toPromise();
+    } catch (e) {
+      const code = (e as any)?.code || '';
+      if (String(code).includes('permission-denied')) {
+        this.dsPermissionDenied = true;
+        this.dsError = 'Không có quyền đọc rule DS (stock-check-ds-settings). Vui lòng đăng nhập/tài khoản được cấp quyền.';
+        return;
+      }
+      throw e;
+    }
     if (!snap || !snap.exists) return;
     const d = snap.data() as any;
     this.dsExcludeEnabled = d?.excludeEnabled === true;
@@ -676,6 +753,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   async onDsSettingsChanged(): Promise<void> {
+    if (this.dsPermissionDenied) return;
     this.rebuildDsExcludeSet();
     await this.saveDsSettings();
     // Only reload list when DS page is visible (outside button "KIỂM DS")
@@ -704,6 +782,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   private async loadPxkPairsFromFirebase(): Promise<Set<string>> {
     if (!this.selectedFactory) return new Set();
+    if (this.dsPermissionDenied) return new Set();
     const from = new Date(this.dsFromDate.getFullYear(), this.dsFromDate.getMonth(), this.dsFromDate.getDate(), 0, 0, 0, 0);
     const to = new Date(this.dsToDate.getFullYear(), this.dsToDate.getMonth(), this.dsToDate.getDate(), 23, 59, 59, 999);
     const out = new Set<string>();
@@ -743,12 +822,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       }
       return out;
     } catch (e) {
+      const code = (e as any)?.code || '';
+      if (String(code).includes('permission-denied')) {
+        this.dsPermissionDenied = true;
+        this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
+        return new Set();
+      }
       // Fallback: query by factory only (avoid composite index), then filter by date on client
       console.warn('[StockCheck DS] indexed query failed, fallback to factory-only', e);
       const snap2 = await this.firestore
         .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
         .get()
         .toPromise();
+      // permission denied ở fallback cũng cần chặn
+      if (!snap2 && (e as any)?.code && String((e as any).code).includes('permission-denied')) {
+        this.dsPermissionDenied = true;
+        this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
+        return new Set();
+      }
       if (!snap2 || (snap2 as any).empty) return out;
       const docs = (snap2 as any).docs || [];
       const inRangeDocs = docs.filter((doc: any) => {
@@ -817,6 +908,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.dsLockMaterialCode = this.normalizeCodeUpper(r.materialCode);
     this.dsLockPoNumber = String(r.poNumber || '').trim();
     this.dsLockImd = String(r.imd || '').trim();
+    this.dsAllowedMaterialKeys = null;
+    this.dsSessionQtyByKey = new Map();
+    this.dsSessionBags = new Set();
+    this.dsScanRowsForDisplay = [
+      { materialCode: this.normalizeCodeUpper(r.materialCode), poNumber: String(r.poNumber || '').trim(), imd: String(r.imd || '').trim() }
+    ];
     this.scanMode = 'list';
     this.allowMaterialScanWithoutLocation = true;
     this.currentScanLocation = '';
@@ -837,6 +934,83 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const input = document.getElementById('scan-input') as HTMLInputElement;
       if (input) input.focus();
     }, 200);
+  }
+
+  /** DS: Kiểm kê theo danh sách đang hiển thị (chi tiết vị trí hoặc danh sách theo counter) */
+  startDsDetailCheck(
+    rows: Array<{ materialCode: string; poNumber: string; imd: string }>,
+    contextLabel: string
+  ): void {
+    if (!this.selectedFactory || !this.currentEmployeeId) return;
+    const allowed = new Set<string>();
+    for (const r of rows) {
+      const mc = this.normalizeCodeUpper(r.materialCode);
+      const po = String(r.poNumber || '').trim();
+      const imd = String(r.imd || '').trim();
+      if (!mc || !po || !imd) continue;
+      allowed.add(this.buildMaterialKey(mc, po, imd));
+    }
+    this.dsAllowedMaterialKeys = allowed;
+    this.dsLockMaterialCode = '';
+    this.dsLockPoNumber = '';
+    this.dsLockImd = '';
+    this.dsSessionQtyByKey = new Map();
+    this.dsSessionBags = new Set();
+    this.dsScanRowsForDisplay = rows.map(r => ({
+      materialCode: this.normalizeCodeUpper(r.materialCode),
+      poNumber: String(r.poNumber || '').trim(),
+      imd: String(r.imd || '').trim()
+    }));
+
+    this.scanMode = 'list';
+    this.allowMaterialScanWithoutLocation = true;
+    this.currentScanLocation = '';
+    this.showScanModal = true;
+    this.scanStep = 'material';
+    this.scannedEmployeeId = this.currentEmployeeId;
+    this.scanInput = '';
+    this.scanHistory = [];
+    this.wrongLocationItems = [];
+    this.scanMessage =
+      `MODE: KIỂM DS (PXK)\n` +
+      `ID: ${this.currentEmployeeId}\n` +
+      `Factory: ${this.selectedFactory}\n` +
+      `Phạm vi: ${contextLabel}\n\n` +
+      `Rule:\n` +
+      `- Chỉ ghi nhận mã có trong DS hiện tại\n` +
+      `- Qty mỗi lần scan ≤ StandardPacking\n` +
+      `- Trùng bag -> bỏ qua`;
+    setTimeout(() => {
+      const input = document.getElementById('scan-input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 200);
+  }
+
+  /** DS: rows hiển thị trong scan modal (show qty scan cộng dồn + qtyCheck hiện tại) */
+  get dsScanRowsView(): Array<{
+    materialCode: string;
+    poNumber: string;
+    imd: string;
+    scannedQty: number;
+    qtyCheck: number | null;
+  }> {
+    if (this.scanMode !== 'list' || this.scanStep !== 'material') return [];
+    const out: Array<{ materialCode: string; poNumber: string; imd: string; scannedQty: number; qtyCheck: number | null }> = [];
+    for (const r of this.dsScanRowsForDisplay) {
+      const key = this.buildMaterialKey(r.materialCode, r.poNumber, r.imd);
+      const scannedQty = this.dsSessionQtyByKey.get(key) || 0;
+      const m = this.materialByKey.get(key);
+      out.push({
+        materialCode: r.materialCode,
+        poNumber: r.poNumber,
+        imd: r.imd,
+        scannedQty,
+        qtyCheck: m?.qtyCheck ?? null
+      });
+    }
+    // Ưu tiên dòng đã scan nhiều lên trên
+    out.sort((a, b) => (b.scannedQty || 0) - (a.scannedQty || 0) || a.materialCode.localeCompare(b.materialCode, 'vi'));
+    return out;
   }
 
   private parseStandardPackingNumber(sp: unknown): number {
@@ -1563,6 +1737,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.scannedEmployeeId = this.currentEmployeeId;
     const parts = scannedData.split('|');
 
+    // QR tối thiểu: Mã|PO|Số lượng|IMD  (mẫu mới có thêm |Bag)
     if (parts.length < 4) {
       this.scanMessage = '❌ Mã không hợp lệ!\n\nFormat: Mã|PO|Số lượng|IMD\n\nScan lại';
       this.cdr.detectChanges();
@@ -1573,12 +1748,25 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const materialCode = String(parts[0] ?? '').trim();
     const poNumber = String(parts[1] ?? '').trim();
     const quantity = String(parts[2] ?? '').trim();
-    const imdRaw = parts.slice(3).join('|').trim();
+    const imdRaw = String(parts[3] ?? '').trim();
     const imd = (imdRaw.split('-')[0] || '').trim();
+    const bag = parts.length >= 5 ? String(parts.slice(4).join('|') ?? '').trim() : '';
 
     const codeUpper = materialCode.toUpperCase().trim();
     const poTrim = poNumber.trim();
     const imdTrim = imd.trim();
+
+    // DS detail mode: chỉ nhận mã thuộc DS hiện tại
+    if (this.scanMode === 'list' && this.dsAllowedMaterialKeys && this.dsAllowedMaterialKeys.size > 0) {
+      const key = this.buildMaterialKey(codeUpper, poTrim, imdTrim);
+      if (!this.dsAllowedMaterialKeys.has(key)) {
+        this.showAutoDismissScanNotice(
+          'Không thuộc DS',
+          `Bạn scan: ${this.normalizeCodeUpper(codeUpper)} | PO:${poTrim} | IMD:${imdTrim}\nKhông có trong danh sách DS hiện tại.\nBỏ qua scan này.`
+        );
+        return;
+      }
+    }
 
     // Lock theo dòng Kiểm DS: mã + PO + IMD phải khớp
     if (this.scanMode === 'list' && this.dsLockMaterialCode) {
@@ -1661,12 +1849,26 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const remaining = stockVal - existingQty;
       let qtyToSave = scannedQty;
       let ignoredExcess = 0;
-      if (remaining <= 0) {
-        ignoredExcess = scannedQty;
-        qtyToSave = 0;
-      } else if (scannedQty > remaining) {
-        ignoredExcess = scannedQty - remaining;
-        qtyToSave = remaining;
+      // DS mode: cho phép cộng dồn vượt stock để hiển thị "Dư"
+      if (this.scanMode !== 'list') {
+        if (remaining <= 0) {
+          ignoredExcess = scannedQty;
+          qtyToSave = 0;
+        } else if (scannedQty > remaining) {
+          ignoredExcess = scannedQty - remaining;
+          qtyToSave = remaining;
+        }
+      }
+
+      // DS: trùng bag -> không ghi nhận (mỗi bag chỉ 1 lần)
+      if (this.scanMode === 'list' && bag) {
+        const bagKey = bag.trim().toUpperCase();
+        if (bagKey && this.dsSessionBags.has(bagKey)) {
+          this.showAutoDismissScanNotice('Trùng bag', `Bag: ${bag}\nĐã được scan trước đó.\nBỏ qua scan này.`);
+          return;
+        }
+        if (bagKey) this.dsSessionBags.add(bagKey);
+        matchingMaterial.lastBag = bag;
       }
 
       if (isWrongLocation) {
@@ -1718,11 +1920,18 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.saveStockCheckToFirebase(matchingMaterial, qtyToSave)
+      // DS: cộng dồn lượng kiểm kê theo phiên để hiển thị ở màn DS
+      if (this.scanMode === 'list') {
+        const k = this.buildMaterialKey(codeUpper, poTrim, imdTrim);
+        const prev = this.dsSessionQtyByKey.get(k) || 0;
+        this.dsSessionQtyByKey.set(k, prev + qtyToSave);
+      }
+
+      this.saveStockCheckToFirebase(matchingMaterial, qtyToSave, bag || undefined)
         .catch(err => console.error('❌ Error saving stock check (async):', err));
 
       const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
-      this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}`);
+      this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}${bag ? ` | Bag: ${bag}` : ''}`);
       if (this.scanHistory.length > 5) this.scanHistory.pop();
 
       this.scanMessage = isWrongLocation
@@ -1785,7 +1994,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     }, 0);
 
-    this.saveStockCheckToFirebase(newMaterial, scannedQty)
+    this.saveStockCheckToFirebase(newMaterial, scannedQty, bag || undefined)
       .catch(err => console.error('❌ Error saving new material stock check (async):', err));
 
     this.firestore
@@ -2728,7 +2937,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Cache rack stats để giảm tính toán khi render box vị trí */
   private _rackStatsCache: RackStat[] | null = null;
 
-  async saveStockCheckToFirebase(material: StockCheckMaterial, scannedQty?: number): Promise<void> {
+  async saveStockCheckToFirebase(material: StockCheckMaterial, scannedQty?: number, bag?: string): Promise<void> {
     try {
       const snapshotDocId = `${this.selectedFactory}_stock_check_current`;
       
@@ -2823,7 +3032,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         idCheck: material.idCheck,
         qtyCheck: newQty,
         dateCheck: material.dateCheck || new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        bag: bag || material.lastBag || undefined
       };
       
       // Save history async - không block scan
@@ -2894,6 +3104,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         // Không dùng serverTimestamp trong array (Firebase không hỗ trợ trong array values)
         dateCheck: new Date(),
         updatedAt: new Date(),
+        bag: historyItem.bag || material.lastBag || '',
         stock: material.stock, // Lưu stock tại thời điểm check
         location: material.location || '',
         standardPacking: material.standardPacking || ''
@@ -3690,6 +3901,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         'Mã hàng': mat.materialCode,
         'PO': mat.poNumber,
         'IMD': mat.imd,
+        'Bag': (mat as any).lastBag || '',
         'Tồn Kho': stockVal,
         'KHSX': mat.hasKhsx ? '✔' : '',
         'Vị trí': mat.location,
@@ -3714,6 +3926,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       { wch: 15 }, // Mã hàng
       { wch: 12 }, // PO
       { wch: 10 }, // IMD
+      { wch: 12 }, // Bag
       { wch: 10 }, // Tồn Kho
       { wch: 8 },  // KHSX
       { wch: 12 }, // Vị trí
@@ -3848,6 +4061,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           const location = String(item?.location || '').trim();
           const standardPacking = String(item?.standardPacking || '').trim();
           const idCheck = String(item?.idCheck || '').trim() || '-';
+          const bag = String(item?.bag || '').trim();
 
           if (!tempByDateKey.has(dateKey)) tempByDateKey.set(dateKey, new Map());
           const byMat = tempByDateKey.get(dateKey)!;
@@ -3864,7 +4078,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               standardPacking: standardPacking,
               idCheck: idCheck,
               lastDateCheck: d,
-              hasKhsx: khsxSet.has(materialCode)
+              hasKhsx: khsxSet.has(materialCode),
+              bag: bag
             });
           } else {
             existing.qtyCheckTotal += qty;
@@ -3874,6 +4089,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               existing.standardPacking = standardPacking;
               existing.idCheck = idCheck;
               existing.lastDateCheck = d;
+              existing.bag = bag;
             }
           }
         }
@@ -4043,6 +4259,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         'Mã hàng': r.materialCode,
         'PO': r.poNumber,
         'IMD': r.imd,
+        'Bag': r.bag || '',
         'Tồn Kho': stockVal,
         'KHSX': r.hasKhsx ? '✔' : '',
         'Vị trí': r.location || '-',
@@ -4063,6 +4280,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       { wch: 15 }, // Mã hàng
       { wch: 12 }, // PO
       { wch: 10 }, // IMD
+      { wch: 12 }, // Bag
       { wch: 10 }, // Tồn Kho
       { wch: 8 },  // KHSX
       { wch: 12 }, // Vị trí

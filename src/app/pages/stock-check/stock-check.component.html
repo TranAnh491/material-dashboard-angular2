@@ -520,6 +520,14 @@
     <!-- Danh sách theo counter (DS) -->
     <div class="location-detail-section ds-location-detail ds-counter-list" *ngIf="!dsLoading && dsCounterListMode">
       <div class="location-detail-header">
+        <button type="button"
+                class="back-to-boxes-btn"
+                (click)="startDsDetailCheck(dsCounterListRows, 'Danh sách theo counter')"
+                [disabled]="dsCounterListRows.length === 0"
+                title="Kiểm kê DS (scan trong danh sách hiện tại)">
+          <i class="material-icons">qr_code_scanner</i>
+          KIỂM KÊ
+        </button>
         <button type="button" class="back-to-boxes-btn" (click)="closeDsCounterList()">
           <i class="material-icons">arrow_back</i>
           Quay lại danh sách vị trí (DS)
@@ -550,14 +558,12 @@
             <div class="kv"><span class="k">VT</span><span class="v">{{ r.location || '—' }}</span></div>
             <div class="kv"><span class="k">PO</span><span class="v">{{ r.poNumber || '—' }}</span></div>
             <div class="kv"><span class="k">IMD</span><span class="v">{{ r.imd || '—' }}</span></div>
-            <div class="kv"><span class="k">SL kiểm</span><span class="v">{{ r.qtyCheck == null ? '—' : r.qtyCheck }}</span></div>
-            <div class="kv"><span class="k">Ngày</span><span class="v">{{ r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '—' }}</span></div>
+            <div class="kv"><span class="k">Tồn Kho</span><span class="v">{{ dsStockForRow(r) == null ? '—' : (dsStockForRow(r) | number:'1.0-0') }}</span></div>
+            <div class="kv"><span class="k">Kiểm Kê</span><span class="v">{{ dsIsCheckedByRule(r) ? ((r.qtyCheck == null ? 0 : r.qtyCheck) | number:'1.0-0') : 0 }}</span></div>
+            <div class="kv"><span class="k">Chênh Lệch</span><span class="v">{{ dsQtyDeltaDisplay(r) }}</span></div>
+            <div class="kv"><span class="k">Ngày</span><span class="v">{{ dsIsCheckedByRule(r) && r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '' }}</span></div>
+            <div class="kv"><span class="k">Tình trạng</span><span class="v" [ngClass]="{'st-ok': dsIsCheckedByRule(r) && dsQtyStatus(r).kind === 'dủ', 'st-warn': dsIsCheckedByRule(r) && dsQtyStatus(r).kind === 'thieu', 'st-bad': dsIsCheckedByRule(r) && dsQtyStatus(r).kind === 'du'}">{{ dsIsCheckedByRule(r) ? dsQtyStatus(r).label : 'CHƯA KIỂM' }}</span></div>
           </div>
-
-          <button type="button" class="ds-card-scan-btn" (click)="startDsRowCheck(r)" title="Kiểm kê">
-            <i class="material-icons">qr_code_scanner</i>
-            <span>KIỂM KÊ</span>
-          </button>
         </div>
       </div>
       <div class="scan-message" *ngIf="dsCounterListRows.length === 0">
@@ -629,6 +635,14 @@
     <!-- Chi tiết theo vị trí (DS) -->
     <div class="location-detail-section ds-location-detail" *ngIf="dsSelectedLocationForDetail">
       <div class="location-detail-header">
+        <button type="button"
+                class="back-to-boxes-btn"
+                (click)="startDsDetailCheck(dsDetailRows, 'Vị trí: ' + dsSelectedLocationForDetail)"
+                [disabled]="dsDetailRows.length === 0"
+                title="Kiểm kê DS (scan trong danh sách hiện tại)">
+          <i class="material-icons">qr_code_scanner</i>
+          KIỂM KÊ
+        </button>
         <button type="button" class="back-to-boxes-btn" (click)="backDsToLocationBoxes()">
           <i class="material-icons">arrow_back</i>
           Quay lại danh sách vị trí (DS)
@@ -657,15 +671,12 @@
           <div class="ds-card-row">
             <div class="kv"><span class="k">PO</span><span class="v">{{ r.poNumber || '—' }}</span></div>
             <div class="kv"><span class="k">IMD</span><span class="v">{{ r.imd || '—' }}</span></div>
-            <div class="kv"><span class="k">SL kiểm</span><span class="v">{{ r.qtyCheck == null ? '—' : r.qtyCheck }}</span></div>
-            <div class="kv"><span class="k">Ngày</span><span class="v">{{ r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '—' }}</span></div>
+            <div class="kv"><span class="k">Tồn Kho</span><span class="v">{{ dsStockForRow(r) == null ? '—' : dsStockForRow(r) }}</span></div>
+            <div class="kv"><span class="k">Kiểm Kê</span><span class="v">{{ r.qtyCheck == null ? '—' : r.qtyCheck }}</span></div>
+            <div class="kv"><span class="k">Chênh Lệch</span><span class="v">{{ dsQtyDeltaDisplay(r) }}</span></div>
+            <div class="kv"><span class="k">Ngày</span><span class="v">{{ dsIsCheckedByRule(r) && r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '' }}</span></div>
+            <div class="kv"><span class="k">Tình trạng</span><span class="v" [ngClass]="{'st-ok': dsIsCheckedByRule(r) && dsQtyStatus(r).kind === 'dủ', 'st-warn': dsIsCheckedByRule(r) && dsQtyStatus(r).kind === 'thieu', 'st-bad': dsIsCheckedByRule(r) && dsQtyStatus(r).kind === 'du'}">{{ dsIsCheckedByRule(r) ? dsQtyStatus(r).label : 'CHƯA KIỂM' }}</span></div>
           </div>
-
-          <!-- Cột phải: nút KIỂM KÊ -->
-          <button type="button" class="ds-card-scan-btn" (click)="startDsRowCheck(r)" title="Kiểm kê">
-            <i class="material-icons">qr_code_scanner</i>
-            <span>KIỂM KÊ</span>
-          </button>
         </div>
       </div>
       <div class="scan-message" *ngIf="dsDetailRows.length === 0">
@@ -856,6 +867,25 @@
             <i class="material-icons">check</i>
             HOÀN THÀNH
           </button>
+        </div>
+
+        <!-- DS: Luôn hiển thị danh sách mã đang kiểm + lượng đã scan -->
+        <div class="ds-scan-panel" *ngIf="scanMode === 'list' && dsScanRowsView.length > 0">
+          <div class="ds-scan-panel-title">
+            <i class="material-icons">list_alt</i>
+            ĐANG KIỂM (DS)
+            <span class="ds-scan-panel-sub">({{ dsScanRowsView.length }} dòng)</span>
+          </div>
+          <div class="ds-scan-panel-grid">
+            <div class="ds-scan-row" *ngFor="let r of dsScanRowsView; trackBy: trackByDsDetailRow">
+              <div class="ds-scan-code">{{ r.materialCode }}</div>
+              <div class="ds-scan-meta">PO: <strong>{{ r.poNumber }}</strong> · IMD: <strong>{{ r.imd }}</strong></div>
+              <div class="ds-scan-qty">
+                <span class="pill">Đã scan: <strong>{{ r.scannedQty }}</strong></span>
+                <span class="pill">Tổng kiểm: <strong>{{ r.qtyCheck == null ? 0 : r.qtyCheck }}</strong></span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="location-materials-empty" *ngIf="locationMaterials.length === 0">

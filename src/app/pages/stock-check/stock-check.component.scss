@@ -4,6 +4,82 @@
   z-index: 100 !important;
 }
 
+// DS: trạng thái đủ/thiếu/dư
+:host .ds-data-section .st-ok {
+  color: var(--sc-success, #10b981) !important;
+  font-weight: 800;
+}
+:host .ds-data-section .st-warn {
+  color: #f59e0b !important;
+  font-weight: 800;
+}
+:host .ds-data-section .st-bad {
+  color: var(--sc-danger, #ef4444) !important;
+  font-weight: 900;
+}
+
+// Scan modal: DS panel (hiển thị mã đang kiểm + qty)
+:host .scan-modal-v2 .ds-scan-panel {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--sc-border-soft);
+  border-radius: 12px;
+  background: var(--sc-surface);
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.06);
+}
+:host .scan-modal-v2 .ds-scan-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--sc-text);
+  margin-bottom: 8px;
+}
+:host .scan-modal-v2 .ds-scan-panel-title i.material-icons { font-size: 18px; }
+:host .scan-modal-v2 .ds-scan-panel-sub { color: var(--sc-text-muted); font-weight: 700; }
+:host .scan-modal-v2 .ds-scan-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+:host .scan-modal-v2 .ds-scan-row {
+  border: 1px solid var(--sc-border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+}
+:host .scan-modal-v2 .ds-scan-code {
+  font-weight: 900;
+  color: var(--sc-primary);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+:host .scan-modal-v2 .ds-scan-meta {
+  font-size: 11px;
+  color: var(--sc-text-muted);
+  margin-bottom: 6px;
+}
+:host .scan-modal-v2 .ds-scan-qty {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+:host .scan-modal-v2 .ds-scan-qty .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--sc-border-soft);
+  background: var(--sc-primary-50);
+  color: var(--sc-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+@media (max-width: 768px) {
+  :host .scan-modal-v2 .ds-scan-panel-grid { grid-template-columns: 1fr; }
+}
+
 // =========================================================
 // PASTEL PROFESSIONAL THEME
 // Palette: Indigo primary · Emerald success · Red danger
