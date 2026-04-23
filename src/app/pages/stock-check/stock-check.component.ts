@@ -535,6 +535,47 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const dsKeySet = new Set(this.dsRows.map(r => this.buildMaterialKey(r.materialCode, r.poNumber, r.imd)));
       const detail: any[] = [];
 
+      // ===== Sheet 3/4: Thống kê theo nhân viên theo 2 khung giờ =====
+      type EmpAgg = {
+        dateKey: string; // YYYY-MM-DD (local)
+        employeeId: string;
+        bagKeys: Set<string>;
+        scanLines: number;
+        qtyTotal: number;
+      };
+      const morningAgg = new Map<string, EmpAgg>(); // key = dateKey__emp
+      const eveningAgg = new Map<string, EmpAgg>(); // key = dateKey__emp
+
+      const toLocalYmd = (d: Date): string => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      const minutesOfDay = (d: Date): number => d.getHours() * 60 + d.getMinutes();
+      const inMorningShift = (d: Date): boolean => {
+        const m = minutesOfDay(d);
+        // 08:00–17:00, loại trừ 12:15–13:15
+        if (m < 8 * 60 || m > 17 * 60) return false;
+        if (m >= (12 * 60 + 15) && m < (13 * 60 + 15)) return false;
+        return true;
+      };
+      const inEveningShift = (d: Date): boolean => {
+        const m = minutesOfDay(d);
+        // 17:30–20:00
+        return m >= (17 * 60 + 30) && m <= (20 * 60);
+      };
+      const bumpEmpAgg = (map: Map<string, EmpAgg>, dateKey: string, emp: string, bagKey: string | null, qty: number): void => {
+        const k = `${dateKey}__${emp}`;
+        if (!map.has(k)) {
+          map.set(k, { dateKey, employeeId: emp, bagKeys: new Set<string>(), scanLines: 0, qtyTotal: 0 });
+        }
+        const a = map.get(k)!;
+        a.scanLines += 1;
+        a.qtyTotal += qty;
+        if (bagKey) a.bagKeys.add(bagKey);
+      };
+
       const snap = await this.firestore
         .collection('stock-check-history', ref => ref.where('factory', '==', factory))
         .get()
@@ -556,18 +597,28 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             if (t < fromMs || t > toMs) continue;
             const qty = it?.qtyCheck !== undefined && it?.qtyCheck !== null ? Number(it.qtyCheck) : 0;
             if (!qty || qty === 0) continue;
+            const bag = String(it?.bag || '').trim();
+            const emp = String(it?.idCheck || '').trim() || '-';
             detail.push({
               'Mã hàng': mc,
               'PO': po,
               'IMD': imd,
-              'Bag': String(it?.bag || '').trim(),
+              'Bag': bag,
               'Qty (scan)': qty,
               'Date Check': d.toLocaleString('vi-VN'),
-              'ID Check': String(it?.idCheck || '').trim(),
+              'ID Check': emp,
               'Vị trí': String(it?.location || '').trim(),
               'Tồn Kho (lúc scan)': it?.stock !== undefined && it?.stock !== null ? Number(it.stock) : '',
               'Standard Packing': String(it?.standardPacking || '').trim()
             });
+
+            // Thống kê theo nhân viên theo khung giờ:
+            // - Luôn cộng lượt scan + tổng qty
+            // - Chỉ cộng "Số bag" khi có bag (tem cũ có thể trống)
+            const dateKey = toLocalYmd(d);
+            const bagKey = bag ? `${mc}__${po}__${imd}__${bag}` : null; // unique bag theo dòng
+            if (inMorningShift(d)) bumpEmpAgg(morningAgg, dateKey, emp, bagKey, qty);
+            if (inEveningShift(d)) bumpEmpAgg(eveningAgg, dateKey, emp, bagKey, qty);
           }
         });
       }
@@ -606,6 +657,44 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         { wch: 16 }  // Standard
       ];
       XLSX.utils.book_append_sheet(wb, ws2, 'DS Checked Detail');
+
+      // ===== Sheet 3: SÁNG =====
+      const morningRows = Array.from(morningAgg.values())
+        .sort((a, b) => (a.dateKey.localeCompare(b.dateKey) || a.employeeId.localeCompare(b.employeeId, 'vi')))
+        .map((a, idx) => ({
+          'STT': idx + 1,
+          'Ngày': a.dateKey,
+          'Mã NV': a.employeeId,
+          'Số bag': a.bagKeys.size,
+          'Tổng lượt scan': a.scanLines,
+          'Tổng Qty': a.qtyTotal
+        }));
+      const ws3 = XLSX.utils.json_to_sheet(morningRows);
+      ws3['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 12 }, // Ngày
+        { wch: 12 }, // Mã NV
+        { wch: 10 }, // Số bag
+        { wch: 14 }, // lượt
+        { wch: 12 }  // Qty
+      ];
+      XLSX.utils.book_append_sheet(wb, ws3, 'SÁNG (08h-17h)');
+
+      // ===== Sheet 4: TỐI =====
+      const eveningRows = Array.from(eveningAgg.values())
+        .sort((a, b) => (a.dateKey.localeCompare(b.dateKey) || a.employeeId.localeCompare(b.employeeId, 'vi')))
+        .map((a, idx) => ({
+          'STT': idx + 1,
+          'Ngày': a.dateKey,
+          'Mã NV': a.employeeId,
+          'Số bag': a.bagKeys.size,
+          'Tổng lượt scan': a.scanLines,
+          'Tổng Qty': a.qtyTotal
+        }));
+      const ws4 = XLSX.utils.json_to_sheet(eveningRows);
+      ws4['!cols'] = ws3['!cols'];
+      // Excel không cho phép ký tự ':' trong tên sheet
+      XLSX.utils.book_append_sheet(wb, ws4, 'TỐI (17h30-20h)');
 
       const ymd = (d: Date): string => {
         const yyyy = d.getFullYear();

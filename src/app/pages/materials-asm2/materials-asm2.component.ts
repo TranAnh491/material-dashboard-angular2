@@ -238,8 +238,22 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return d ? d.toLocaleDateString('en-GB').split('/').join('') : new Date().toLocaleDateString('en-GB').split('/').join('');
   }
 
+  /**
+   * IMD dùng để so khớp/in QR.
+   * - Nếu có `batchNumber` dạng chữ số (vd 20042026 hoặc 2004202601) thì dùng toàn bộ phần số đó.
+   * - Nếu không có thì fallback về `importDate` (8 số DDMMYYYY).
+   */
+  private getImdKeyForMaterial(material: InventoryMaterial): string {
+    const b = String((material as any)?.batchNumber ?? '').trim();
+    if (b) {
+      const m = /^(\d{8,})/.exec(b);
+      if (m) return m[1];
+    }
+    return this.getImdKeyFromImportDate(material?.importDate);
+  }
+
   private buildReprintFlagItemFromInventoryRow(m: InventoryMaterial): { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string } {
-    const imdKey = this.getImdKeyFromImportDate(m.importDate);
+    const imdKey = this.getImdKeyForMaterial(m);
     const docId = this.labelReprintFlags.buildDocId('ASM2', m.materialCode, m.poNumber || '', imdKey);
     return { docId, factory: 'ASM2', materialCode: m.materialCode, poNumber: m.poNumber || '', imdKey };
   }
@@ -549,7 +563,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         if (rowStock <= 0) continue;
         const bagTotal = r.bagTrackingInitialized ? this.computeTotalBagsFromStock(r) : Math.floor(Number((r as any).totalBags ?? 0));
         if (!bagTotal || bagTotal < 1) continue;
-        const imdKey = this.getImdKeyFromImportDate(r.importDate);
+        const imdKey = this.getImdKeyForMaterial(r);
         const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
         const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
         for (let i = 1; i <= bagTotal; i++) {
@@ -955,17 +969,17 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       }
       const bagTotal = Math.floor(Number(m.totalBags ?? 0));
       if (bagTotal <= 0) {
-        const imdKey = this.getImdKeyFromImportDate(m.importDate);
+        const imdKey = this.getImdKeyForMaterial(m);
         throw new Error(`Thiếu BAG: ${mat} / PO ${po} / IMD ${imdKey}. Vui lòng nhập đủ cột BAG trước khi in.`);
       }
       const expectedBagsFromStock = this.computeTotalBagsFromStock(m);
       if (expectedBagsFromStock > 0 && bagTotal < expectedBagsFromStock) {
-        const imdKey = this.getImdKeyFromImportDate(m.importDate);
+        const imdKey = this.getImdKeyForMaterial(m);
         throw new Error(
           `BAG không đủ: ${mat} / PO ${po} / IMD ${imdKey}. BAG=${bagTotal} nhưng tồn/SP cần tối thiểu ${expectedBagsFromStock}.`
         );
       }
-      const importDateStr = this.getImdKeyFromImportDate(m.importDate);
+      const importDateStr = this.getImdKeyForMaterial(m);
       const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
       const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
       const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
@@ -1083,7 +1097,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       if (bagTotal <= 0) {
         continue;
       }
-      const importDateStr = this.getImdKeyFromImportDate(m.importDate);
+      const importDateStr = this.getImdKeyForMaterial(m);
       const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
       const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
       const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
@@ -1773,13 +1787,17 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     
     const baseDate = material.importDate.toLocaleDateString('en-GB').split('/').join('');
     
-    // Kiểm tra nếu batchNumber có format đúng (chỉ chứa số và có độ dài hợp lý)
-    if (material.batchNumber && material.batchNumber !== baseDate) {
-      // Chỉ xử lý nếu batchNumber bắt đầu bằng baseDate và chỉ có thêm số sequence
-      if (material.batchNumber.startsWith(baseDate)) {
-        const suffix = material.batchNumber.substring(baseDate.length);
-        // Chỉ chấp nhận suffix nếu nó chỉ chứa số và có độ dài <= 2
-        if (/^\d{1,2}$/.test(suffix)) {
+    const bn = String((material as any)?.batchNumber ?? '').trim();
+    if (bn && bn !== baseDate) {
+      // Nếu batchNumber là chuỗi số (>= 8 ký tự) thì ưu tiên hiển thị toàn bộ.
+      // Ví dụ: 20042026 và 2004202601 là 2 IMD khác nhau.
+      if (/^\d{8,}$/.test(bn)) {
+        return bn;
+      }
+      // Trường hợp legacy: batchNumber = baseDate + suffix số
+      if (bn.startsWith(baseDate)) {
+        const suffix = bn.substring(baseDate.length);
+        if (/^\d+$/.test(suffix) && suffix.length > 0) {
           return baseDate + suffix;
         }
       }
@@ -4700,15 +4718,15 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
     if (typeof raw === 'string') {
       const t = raw.trim();
-      const full = /^(\d{8})(?:-\d+\/\d+)?$/.exec(t);
+      const full = /^(\d{8,})(?:-\d+\/\d+)?$/.exec(t);
       if (full) {
         return full[1];
       }
-      const prefix = /^(\d{8})-/.exec(t);
+      const prefix = /^(\d{8,})-/.exec(t);
       if (prefix) {
         return prefix[1];
       }
-      if (/^\d{8}$/.test(t)) {
+      if (/^\d{8,}$/.test(t)) {
         return t;
       }
     }
@@ -4722,11 +4740,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return '';
   }
 
-  /** Khớp cột IMD tồn kho: 8 số đầu từ batchNumber (nếu có), không thì từ importDate. */
+  /** Khớp cột IMD tồn kho: phần số đầu từ batchNumber (>=8 số) nếu có, không thì từ importDate. */
   private getInventoryImdBaseKey(material: InventoryMaterial): string | undefined {
     if (material.batchNumber && String(material.batchNumber).trim()) {
       const b = String(material.batchNumber).trim();
-      const m = /^(\d{8})/.exec(b);
+      const m = /^(\d{8,})/.exec(b);
       if (m) {
         return m[1];
       }
@@ -6205,9 +6223,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         return;
       }
 
-      const importDateStr = material.importDate
-        ? material.importDate.toLocaleDateString('en-GB').split('/').join('')
-        : new Date().toLocaleDateString('en-GB').split('/').join('');
+      // IMD trên QR phải giữ nguyên toàn bộ (vd 2004202601), không cắt về 8 số.
+      const importDateStr = this.getImdKeyForMaterial(material);
 
       const isPartialLabel = qtyBag !== totalQuantity;
       const fullLabelCount = Math.floor(qtyBag / standardPacking + 1e-9);
