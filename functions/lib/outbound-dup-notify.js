@@ -466,7 +466,8 @@ async function sendDupEmail(dupes, cfg, settings) {
         html: buildHtml(dupes, settings.dupSinceLabel, exclHtml || undefined)
     });
 }
-async function sendZaloDupNotify(db, dupes) {
+async function sendZaloDupNotify(db, dupes, settings) {
+    var _a, _b, _c;
     const token = params_config_1.zaloBotToken.value().trim();
     if (!token) {
         console.error('outbound-dup-notify-30m: missing ZALO_BOT_TOKEN');
@@ -509,7 +510,16 @@ async function sendZaloDupNotify(db, dupes) {
         const dt = r.latestExportAtLabel ? ` NGÀY:${r.latestExportAtLabel}` : '';
         return `- ${fac} ${mc}${po}${imd}${bag}${lsxPart}${dt} (${r.count})`;
     });
-    const msg = `⚠️ Control Batch: phát hiện ${dupes.length} nhóm trùng xuất kho (mới).\n` +
+    const since = (settings === null || settings === void 0 ? void 0 : settings.dupSinceLabel) ? `\nTừ ngày: ${settings.dupSinceLabel}` : '';
+    const excl = ((_a = settings === null || settings === void 0 ? void 0 : settings.exclusion) === null || _a === void 0 ? void 0 : _a.enabled) === true
+        ? `\nLoại trừ: BẬT (${(_c = (_b = settings.exclusion.codes) === null || _b === void 0 ? void 0 : _b.size) !== null && _c !== void 0 ? _c : 0} dòng)`
+        : (settings === null || settings === void 0 ? void 0 : settings.exclusion)
+            ? `\nLoại trừ: TẮT`
+            : '';
+    const msg = `⚠️ Control Batch: phát hiện ${dupes.length} nhóm trùng xuất kho (mới).` +
+        since +
+        excl +
+        `\n` +
         lines.join('\n') +
         (dupes.length > top.length ? `\n... +${dupes.length - top.length} nhóm` : '');
     try {
@@ -576,7 +586,10 @@ async function runOutboundDupNotifyEvery30Min(db) {
             return;
         }
         // Send Zalo only (email disabled by request).
-        const zaloSent = await sendZaloDupNotify(db, newDupes);
+        const zaloSent = await sendZaloDupNotify(db, newDupes, {
+            dupSinceLabel: settings.dupSinceLabel,
+            exclusion: settings.exclusion
+        });
         const emailSent = false;
         // Persist "emailed" keys so we don't resend.
         const sentAt = vnNowLabel(new Date());

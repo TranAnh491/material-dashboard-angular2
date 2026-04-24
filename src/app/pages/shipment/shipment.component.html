@@ -886,7 +886,9 @@
              class="calendar-day"
              [class.today]="isToday(dayData.date)"
              [class.has-shipments]="dayData.shipments?.length > 0"
-             [class.empty]="!dayData.date">
+             [class.empty]="!dayData.date"
+             [class.clickable]="!!dayData.date"
+             (click)="openScheduleDayDetail(dayData)">
           
           <div class="day-number" *ngIf="dayData.date">{{ dayData.day }}</div>
           
@@ -911,7 +913,106 @@
     </div>
     
     <div class="modal-footer">
+      <button type="button" class="btn btn-apply" (click)="openScheduleChartDialog()">
+        <i class="material-icons">bar_chart</i>
+        Chart
+      </button>
       <button type="button" class="btn btn-cancel" (click)="closeScheduleDialog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Chart Dialog -->
+<div class="custom-modal" [class.show]="showScheduleChartDialog" [style.display]="showScheduleChartDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeScheduleChartDialog()"></div>
+  <div class="modal-container schedule-chart-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">bar_chart</i>
+        Chart — {{ getMonthName() }} {{ scheduleYear }}
+      </h5>
+      <button type="button" class="close-btn" (click)="closeScheduleChartDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">
+            Số thùng shipped mỗi ngày
+            <span class="chart-subtitle">Tổng tháng: {{ scheduleChartMonthTotalCarton }}</span>
+          </div>
+          <div class="chart-canvas-wrap">
+            <canvas id="schedule-shipped-per-day-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeScheduleChartDialog()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Day Detail Dialog -->
+<div class="custom-modal" [class.show]="showScheduleDayDetailDialog" [style.display]="showScheduleDayDetailDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeScheduleDayDetail()"></div>
+  <div class="modal-container schedule-day-detail-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">assignment</i>
+        Chi tiết shipment ngày {{ scheduleDetailDate ? (scheduleDetailDate | date:'dd/MM/yyyy') : '' }}
+      </h5>
+      <button type="button" class="close-btn" (click)="closeScheduleDayDetail()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div *ngIf="scheduleDetailRows.length === 0" class="text-center" style="padding: 20px; color: #666;">
+        Không có shipment trong ngày này.
+      </div>
+
+      <div class="schedule-detail-table-wrapper" *ngIf="scheduleDetailRows.length > 0">
+        <table class="schedule-detail-table">
+          <thead>
+            <tr>
+              <th class="col-shipment">Shipment</th>
+              <th class="col-material">Mã thành phẩm</th>
+              <th class="col-pallet text-right">Số lượng pallet</th>
+              <th class="col-carton text-right">Số thùng</th>
+              <th class="col-status">Tình trạng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of scheduleDetailRows; let i = index"
+                [class.shipment-separator]="i === 0 || scheduleDetailRows[i - 1]?.shipmentCode !== r.shipmentCode"
+                [class.pending-row]="r.status === 'Chờ soạn'"
+                [class.inprogress-row]="r.status === 'Đang soạn'"
+                [class.missing-row]="r.status === 'Chưa Đủ'">
+              <td class="col-shipment">{{ r.shipmentCode }}</td>
+              <td class="col-material">{{ r.materialCode }}</td>
+              <td class="col-pallet text-right">{{ r.qtyPallet | number:'1.0-0':'en-US' }}</td>
+              <td class="col-carton text-right">{{ r.carton | number:'1.0-0':'en-US' }}</td>
+              <td>
+                <span class="status-pill" [ngClass]="getStatusClass(r.status)">{{ r.status }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeScheduleDayDetail()">
         <i class="material-icons">close</i>
         Đóng
       </button>

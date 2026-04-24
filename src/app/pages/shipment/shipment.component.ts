@@ -3,6 +3,7 @@ import { Subject, combineLatest } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
+import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 
@@ -76,6 +77,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   scheduleMonth: number = new Date().getMonth();
   scheduleYear: number = new Date().getFullYear();
   calendarDays: any[] = [];
+
+  // Schedule charts
+  showScheduleChartDialog: boolean = false;
+  scheduleChartMonthTotalCarton: number = 0;
+  // Chart.js generic types are strict; use any to avoid TS friction with custom bubble payloads
+  private shippedPerDayChart: any = null;
+
+  // Schedule day detail dialog
+  showScheduleDayDetailDialog: boolean = false;
+  scheduleDetailDate: Date | null = null;
+  scheduleDetailRows: Array<{ shipmentCode: string; materialCode: string; qtyPallet: number; carton: number; status: string }> = [];
   
   // Add shipment dialog
   showAddShipmentDialog: boolean = false;
@@ -1416,13 +1428,52 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return `${year}-${month}-${day}`;
   }
 
-  /** Tính Ngày chuẩn bị = Dispatch date - Full date (số ngày). Trả về null nếu thiếu một trong hai ngày. */
+  /**
+   * Tính Ngày chuẩn bị (Day Pre) theo NGÀY LÀM VIỆC:
+   * - Chỉ tính Thứ 2 -> Thứ 7 (bỏ Chủ nhật)
+   * - Riêng tháng 4 bỏ thêm ngày 27 và 30 (ngày lễ)
+   * - Đếm ngày từ NGÀY SAU Full Date đến NGÀY TRƯỚC Dispatch Date
+   *   (ví dụ Full 25/4, Dispatch 28/4 => chỉ tính 26/4 => 1 ngày)
+   * Trả về null nếu thiếu một trong hai ngày.
+   */
   calcDayPre(shipment: ShipmentItem): number | null {
-    const full = shipment.fullDate ? new Date(shipment.fullDate).getTime() : null;
-    const dispatch = shipment.actualShipDate ? new Date(shipment.actualShipDate).getTime() : null;
-    if (full == null || dispatch == null) return null;
-    const days = Math.round((dispatch - full) / (24 * 60 * 60 * 1000));
-    return days;
+    if (!shipment.fullDate || !shipment.actualShipDate) return null;
+
+    const start = new Date(shipment.fullDate);
+    const end = new Date(shipment.actualShipDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+
+    // normalize time
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    // If dates are equal => 0
+    if (end.getTime() === start.getTime()) return 0;
+
+    const isExcluded = (d: Date): boolean => {
+      const dayOfWeek = d.getDay(); // 0 = Sunday
+      if (dayOfWeek === 0) return true; // bỏ Chủ nhật
+
+      // Tháng 4 bỏ ngày 27 & 30
+      const month = d.getMonth() + 1; // 1-12
+      const day = d.getDate();
+      if (month === 4 && (day === 27 || day === 30)) return true;
+
+      return false;
+    };
+
+    const step = end > start ? 1 : -1;
+    let count = 0;
+
+    // count dates: (start, end) excluding endpoints
+    const cur = new Date(start);
+    cur.setDate(cur.getDate() + step);
+    while ((step === 1 && cur < end) || (step === -1 && cur > end)) {
+      if (!isExcluded(cur)) count += 1;
+      cur.setDate(cur.getDate() + step);
+    }
+
+    return step === 1 ? count : -count;
   }
 
   /** Giá trị hiển thị cột Ngày chuẩn bị (tính từ Full date - Dispatch date). */
@@ -1674,6 +1725,182 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.showScheduleDialog = false;
   }
 
+  openScheduleChartDialog(): void {
+    this.showScheduleChartDialog = true;
+    // render charts after modal is visible
+    setTimeout(() => this.renderScheduleCharts(), 0);
+  }
+
+  closeScheduleChartDialog(): void {
+    this.showScheduleChartDialog = false;
+    this.destroyScheduleCharts();
+  }
+
+  private destroyScheduleCharts(): void {
+    try {
+      this.shippedPerDayChart?.destroy();
+    } catch {
+      // ignore
+    } finally {
+      this.shippedPerDayChart = null;
+    }
+  }
+
+  private renderScheduleCharts(): void {
+    this.destroyScheduleCharts();
+
+    const el1 = document.getElementById('schedule-shipped-per-day-canvas') as HTMLCanvasElement | null;
+    if (!el1) return;
+
+    const daysInMonth = new Date(this.scheduleYear, this.scheduleMonth + 1, 0).getDate();
+    const labels = Array.from({ length: daysInMonth }, (_, i) => String(i + 1));
+
+    // Carton shipped per day (Dispatch Date / actualShipDate) - split by DayPre buckets (stacked)
+    const byDay_under1 = new Array<number>(daysInMonth).fill(0);
+    const byDay_d1 = new Array<number>(daysInMonth).fill(0);
+    const byDay_d2 = new Array<number>(daysInMonth).fill(0);
+    const byDay_d3 = new Array<number>(daysInMonth).fill(0);
+    const byDay_over3 = new Array<number>(daysInMonth).fill(0);
+
+    for (const s of this.shipments) {
+      if (!s?.actualShipDate) continue;
+      const d = new Date(s.actualShipDate);
+      if (d.getFullYear() !== this.scheduleYear) continue;
+      if (d.getMonth() !== this.scheduleMonth) continue;
+
+      const carton = Number((s as any)?.carton) || 0;
+      if (carton <= 0) continue;
+
+      const day = d.getDate();
+      if (day < 1 || day > daysInMonth) continue;
+      const idx = day - 1;
+
+      // bucket by DayPre (requires fullDate + dispatchDate)
+      const dayPre = this.calcDayPre(s);
+      if (dayPre === null) {
+        // nếu thiếu Full Date thì coi như <1 (không có ngày chuẩn bị)
+        byDay_under1[idx] += carton;
+      } else if (dayPre <= 0) byDay_under1[idx] += carton;
+      else if (dayPre === 1) byDay_d1[idx] += carton;
+      else if (dayPre === 2) byDay_d2[idx] += carton;
+      else if (dayPre === 3) byDay_d3[idx] += carton;
+      else byDay_over3[idx] += carton;
+    }
+
+    this.scheduleChartMonthTotalCarton =
+      byDay_under1.reduce((s, v) => s + v, 0) +
+      byDay_d1.reduce((s, v) => s + v, 0) +
+      byDay_d2.reduce((s, v) => s + v, 0) +
+      byDay_d3.reduce((s, v) => s + v, 0) +
+      byDay_over3.reduce((s, v) => s + v, 0);
+
+    const yLabels = ['<1 ngày', '1 ngày', '2 ngày', '3 ngày', '>3 ngày'] as const;
+    type BubblePoint = { x: number; y: number; r: number; carton: number };
+
+    const radiusForCarton = (carton: number): number => {
+      // sqrt scaling: số thùng càng lớn chấm càng to
+      const r = Math.sqrt(Math.max(0, carton)) * 0.85;
+      return Math.max(3, Math.min(24, r));
+    };
+
+    const buildPoints = (arr: number[], yIndex: number): BubblePoint[] => {
+      const pts: BubblePoint[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const carton = Number(arr[i]) || 0;
+        if (carton <= 0) continue;
+        pts.push({ x: i + 1, y: yIndex, r: radiusForCarton(carton), carton });
+      }
+      return pts;
+    };
+
+    this.shippedPerDayChart = new Chart(el1, {
+      type: 'bubble',
+      data: {
+        // labels not required for linear x, but keep for completeness
+        labels,
+        datasets: [
+          {
+            label: '<1 ngày',
+            data: buildPoints(byDay_under1, 0) as any,
+            backgroundColor: 'rgba(156, 39, 176, 0.25)',
+            borderColor: 'rgba(156, 39, 176, 0.9)',
+            borderWidth: 1
+          },
+          {
+            label: '1 ngày',
+            data: buildPoints(byDay_d1, 1) as any,
+            backgroundColor: 'rgba(76, 175, 80, 0.25)',
+            borderColor: 'rgba(76, 175, 80, 0.9)',
+            borderWidth: 1
+          },
+          {
+            label: '2 ngày',
+            data: buildPoints(byDay_d2, 2) as any,
+            backgroundColor: 'rgba(249, 168, 37, 0.25)',
+            borderColor: 'rgba(249, 168, 37, 0.9)',
+            borderWidth: 1
+          },
+          {
+            label: '3 ngày',
+            data: buildPoints(byDay_d3, 3) as any,
+            backgroundColor: 'rgba(255, 152, 0, 0.25)',
+            borderColor: 'rgba(255, 152, 0, 0.9)',
+            borderWidth: 1
+          },
+          {
+            label: '>3 ngày',
+            data: buildPoints(byDay_over3, 4) as any,
+            backgroundColor: 'rgba(211, 47, 47, 0.22)',
+            borderColor: 'rgba(211, 47, 47, 0.8)',
+            borderWidth: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const p = items?.[0]?.raw as BubblePoint | undefined;
+                return p ? `Ngày ${p.x}` : '';
+              },
+              label: (item) => {
+                const p = item.raw as BubblePoint;
+                const label = yLabels[p.y] ?? '';
+                return `${label}: ${p.carton} thùng`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            min: 1,
+            max: daysInMonth,
+            ticks: { stepSize: 1 },
+            title: { display: true, text: 'Ngày trong tháng' }
+          },
+          y: {
+            type: 'linear',
+            min: -0.5,
+            max: 4.5,
+            ticks: {
+              stepSize: 1,
+              callback: (value) => {
+                const idx = typeof value === 'number' ? value : Number(value);
+                return yLabels[idx] ?? '';
+              }
+            },
+            title: { display: true, text: 'Nhóm ngày chuẩn bị (Day Pre)' }
+          }
+        }
+      }
+    });
+  }
+
   // Generate calendar for current month
   generateCalendar(): void {
     const firstDay = new Date(this.scheduleYear, this.scheduleMonth, 1);
@@ -1714,6 +1941,73 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
   }
 
+  openScheduleDayDetail(dayData: any): void {
+    if (!dayData?.date) return;
+    const rows: ShipmentItem[] = Array.isArray(dayData.shipments) ? dayData.shipments : [];
+
+    // Group by shipmentCode + materialCode (1 shipment có nhiều mã TP)
+    const byShipmentMat = new Map<string, ShipmentItem[]>();
+    for (const r of rows) {
+      const code = String(r?.shipmentCode || '').trim() || '(NO SHIPMENT)';
+      const mat = String((r as any)?.materialCode || '').trim() || '—';
+      const key = `${code}\0${mat}`;
+      if (!byShipmentMat.has(key)) byShipmentMat.set(key, []);
+      byShipmentMat.get(key)!.push(r);
+    }
+
+    const statusRank: Record<string, number> = {
+      'Delay': 1,
+      'Chưa Đủ': 2,
+      'Đang soạn': 3,
+      'Chờ soạn': 4,
+      'Đã xong': 5,
+      'Đã Check': 6,
+      'Đã Ship': 7
+    };
+    const pickStatus = (arr: ShipmentItem[]): string => {
+      let best = '';
+      let bestRank = 999;
+      for (const it of arr) {
+        const st = String((it as any)?.status || '').trim();
+        if (!st) continue;
+        const r = statusRank[st] ?? 500;
+        if (r < bestRank) {
+          bestRank = r;
+          best = st;
+        }
+      }
+      return best || '—';
+    };
+
+    const detail: Array<{ shipmentCode: string; materialCode: string; qtyPallet: number; carton: number; status: string }> = [];
+    for (const [key, group] of byShipmentMat.entries()) {
+      const [shipCode, mat] = key.split('\0');
+      const carton = group.reduce((s, it) => s + (Number((it as any)?.carton) || 0), 0);
+      // qtyPallet thường bị lặp theo từng dòng → dùng max để tránh cộng dồn sai
+      const qtyPallet = group.reduce((mx, it) => Math.max(mx, Number((it as any)?.qtyPallet) || 0), 0);
+      const status = pickStatus(group);
+      detail.push({ shipmentCode: shipCode || '(NO SHIPMENT)', materialCode: mat || '—', qtyPallet, carton, status });
+    }
+
+    // Sort: carton giảm dần, rồi shipment, rồi mã TP
+    detail.sort(
+      (a, b) =>
+        (b.carton - a.carton) ||
+        a.shipmentCode.localeCompare(b.shipmentCode, 'vi') ||
+        a.materialCode.localeCompare(b.materialCode, 'vi')
+    );
+
+    this.scheduleDetailDate = new Date(dayData.date);
+    this.scheduleDetailRows = detail;
+    this.showScheduleDayDetailDialog = true;
+  }
+
+  closeScheduleDayDetail(): void {
+    this.showScheduleDayDetailDialog = false;
+    this.scheduleDetailDate = null;
+    this.scheduleDetailRows = [];
+  }
+
   // Navigate to previous month
   previousMonth(): void {
     if (this.scheduleMonth === 0) {
@@ -1723,6 +2017,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.scheduleMonth--;
     }
     this.generateCalendar();
+    if (this.showScheduleChartDialog) {
+      setTimeout(() => this.renderScheduleCharts(), 0);
+    }
   }
 
   // Navigate to next month
@@ -1734,6 +2031,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.scheduleMonth++;
     }
     this.generateCalendar();
+    if (this.showScheduleChartDialog) {
+      setTimeout(() => this.renderScheduleCharts(), 0);
+    }
   }
 
   // Get month name in Vietnamese

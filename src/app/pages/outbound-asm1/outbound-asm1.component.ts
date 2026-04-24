@@ -259,8 +259,55 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     this.startDate = today.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
     this.hidePreviousDayHistory = true;
+    // “Hôm nay” = xem tất cả mã phát sinh hôm nay, không phụ thuộc LSX đang chọn
+    this.selectedProductionOrder = '';
+    this.searchProductionOrder = '';
     console.log('📅 Reset to today\'s date and hide previous day\'s history');
     this.loadMaterials();
+  }
+
+  private mapOutboundDocToMaterial(doc: any): OutboundMaterial {
+    const data = doc.payload.doc.data() as any;
+    const rawImd = data.importDate != null && data.importDate !== '' ? String(data.importDate) : '';
+    const pImd = rawImd ? this.rmBagHistory.parseQrPart4(rawImd) : null;
+    const importDateNorm = pImd?.imdKey || rawImd || null;
+    const bagBatchNorm =
+      (data.bagBatch && String(data.bagBatch).trim()) ||
+      pImd?.bagFractionLabel ||
+      '';
+    const bagNumNorm =
+      (data.bagNumberDisplay && String(data.bagNumberDisplay).trim()) ||
+      pImd?.bagNumberDisplay ||
+      '';
+
+    return {
+      id: doc.payload.doc.id,
+      factory: data.factory || 'ASM1',
+      materialCode: data.materialCode || '',
+      poNumber: data.poNumber || '',
+      quantity: data.quantity || 0,
+      unit: data.unit || '',
+      exportQuantity: data.exportQuantity || 0,
+      scanCount: data.scanCount ?? 1,
+      exportDate: data.exportDate?.toDate() || new Date(),
+      location: data.location || '',
+      exportedBy: data.exportedBy || '',
+      employeeId: data.employeeId || '',
+      productionOrder: data.productionOrder || '',
+      batchNumber: data.batchNumber || importDateNorm || null,
+      importDate: importDateNorm,
+      bagBatch: bagBatchNorm,
+      bagNumberDisplay: bagNumNorm,
+      scanMethod: data.scanMethod || 'MANUAL',
+      notes: data.notes || '',
+      createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
+    } as OutboundMaterial;
+  }
+
+  private isDateWithinRange(d: Date, startIso: string, endIso: string): boolean {
+    const day = d.toISOString().split('T')[0];
+    return day >= startIso && day <= endIso;
   }
   
   ngOnDestroy(): void {
@@ -682,9 +729,55 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   private readonly DISPLAY_LIMIT = 50;
   
   loadMaterials(): void {
-    // 🔧 OPTIMIZATION: Không load gì cả nếu chưa có LSX được chọn
-    if (!this.selectedProductionOrder || !this.selectedProductionOrder.trim()) {
-      console.log('⏸️ No LSX selected - skipping data load');
+    const hasLSX = !!(this.selectedProductionOrder && this.selectedProductionOrder.trim());
+    const todayIso = new Date().toISOString().split('T')[0];
+    const isTodayRange = this.startDate === todayIso && this.endDate === todayIso;
+
+    // Nếu không chọn LSX nhưng đang ở chế độ “Hôm nay” → load tất cả mã hôm nay
+    if (!hasLSX && isTodayRange) {
+      this.isLoading = true;
+      this.errorMessage = '';
+      console.log('📦 Loading all ASM1 outbound materials for TODAY (no LSX filter)...');
+
+      this.firestore
+        .collection('outbound-materials', (ref) =>
+          ref.where('factory', '==', 'ASM1').limit(10000)
+        )
+        .snapshotChanges()
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (snapshot) => {
+            const materialsAll = snapshot.map((doc) => this.mapOutboundDocToMaterial(doc));
+            const start = this.startDate || todayIso;
+            const end = this.endDate || todayIso;
+
+            this.materials = materialsAll
+              .filter((m) => m.exportDate && this.isDateWithinRange(m.exportDate, start, end))
+              .sort((a, b) => {
+                const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
+                if (updatedCompare !== 0) return updatedCompare;
+                const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
+                if (dateCompare !== 0) return dateCompare;
+                return b.createdAt.getTime() - a.createdAt.getTime();
+              });
+
+            this.filteredMaterials = [...this.materials];
+            this.updatePagination();
+            this.isLoading = false;
+            this.cdr.detectChanges();
+          },
+          error: (error) => {
+            console.error('❌ Error loading ASM1 outbound materials (today view):', error);
+            this.errorMessage = 'Lỗi khi tải dữ liệu: ' + error.message;
+            this.isLoading = false;
+          }
+        });
+      return;
+    }
+
+    // Không chọn LSX và không phải “Hôm nay” → ẩn dữ liệu
+    if (!hasLSX) {
+      console.log('⏸️ No LSX selected - hiding data');
       this.materials = [];
       this.filteredMaterials = [];
       this.isLoading = false;
@@ -706,44 +799,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     .subscribe({
       next: (snapshot) => {
         // 🔧 TỐI ƯU HÓA: Xử lý batch thay vì từng record để tăng tốc độ
-        const materials = snapshot.map(doc => {
-          const data = doc.payload.doc.data() as any;
-          const rawImd = data.importDate != null && data.importDate !== '' ? String(data.importDate) : '';
-          const pImd = rawImd ? this.rmBagHistory.parseQrPart4(rawImd) : null;
-          const importDateNorm = pImd?.imdKey || rawImd || null;
-          const bagBatchNorm =
-            (data.bagBatch && String(data.bagBatch).trim()) ||
-            pImd?.bagFractionLabel ||
-            '';
-          const bagNumNorm =
-            (data.bagNumberDisplay && String(data.bagNumberDisplay).trim()) ||
-            pImd?.bagNumberDisplay ||
-            '';
-          
-          return {
-            id: doc.payload.doc.id,
-            factory: data.factory || 'ASM1',
-            materialCode: data.materialCode || '',
-            poNumber: data.poNumber || '',
-            quantity: data.quantity || 0,
-            unit: data.unit || '',
-            exportQuantity: data.exportQuantity || 0,
-            scanCount: data.scanCount ?? 1,
-            exportDate: data.exportDate?.toDate() || new Date(),
-            location: data.location || '',
-            exportedBy: data.exportedBy || '',
-            employeeId: data.employeeId || '',
-            productionOrder: data.productionOrder || '',
-            batchNumber: data.batchNumber || importDateNorm || null,
-            importDate: importDateNorm,
-            bagBatch: bagBatchNorm,
-            bagNumberDisplay: bagNumNorm,
-            scanMethod: data.scanMethod || 'MANUAL',
-            notes: data.notes || '',
-            createdAt: data.createdAt?.toDate() || data.createdDate?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || data.lastUpdated?.toDate() || new Date()
-          } as OutboundMaterial;
-        });
+        const materials = snapshot.map((doc) => this.mapOutboundDocToMaterial(doc));
         
         console.log(`📦 Loaded ${materials.length} total materials from outbound-materials collection`);
         
@@ -817,7 +873,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
             
             return true;
           })
-          .slice(0, this.DISPLAY_LIMIT); // Lấy 50 dòng gần nhất
+          .slice(0, this.DISPLAY_LIMIT); // vẫn giới hạn khi xem theo LSX
         
         this.filteredMaterials = [...this.materials];
         this.updatePagination();

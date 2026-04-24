@@ -1119,6 +1119,35 @@
       </div>
       
       <div class="modal-actions">
+        <button class="download-btn"
+                style="margin-right:auto"
+                (click)="exportStockCheckReportByMonth(3)"
+                [disabled]="isLoadingReportDates || isExportingMonthlyReport || reportDateOptions.length === 0"
+                title="Gộp toàn bộ report kiểm kê tháng 3 thành 1 file">
+          <i class="material-icons">{{ isExportingMonthlyReport ? 'hourglass_empty' : 'download' }}</i>
+          Tháng 3 (gộp 1 file)
+        </button>
+        <button class="download-btn"
+                (click)="saveStockCheckMonthlyReportToFirebase(3)"
+                [disabled]="isLoadingReportDates || isSavingMonthlyReport || reportDateOptions.length === 0"
+                title="Tạo file tháng 3 và lưu lên Firebase (1 file dùng lại nhiều lần)">
+          <i class="material-icons">{{ isSavingMonthlyReport ? 'hourglass_empty' : 'cloud_upload' }}</i>
+          Lưu Firebase (Tháng 3)
+        </button>
+        <button class="download-btn"
+                (click)="loadMonthlyReportLink(3)"
+                [disabled]="isLoadingReportDates || isSavingMonthlyReport"
+                title="Tải lại link file tháng 3 từ Firebase">
+          <i class="material-icons">refresh</i>
+          Load file (Firebase)
+        </button>
+        <button class="download-btn"
+                (click)="openMonthlyReportInNewTab()"
+                [disabled]="!monthlyReportUrl"
+                [title]="monthlyReportUrl ? 'Mở file đã gộp trên Firebase' : 'Chưa có file tháng 3 trên Firebase'">
+          <i class="material-icons">open_in_new</i>
+          Mở file
+        </button>
         <button class="cancel-btn" (click)="closeReportByDateModal()">
           Đóng
         </button>

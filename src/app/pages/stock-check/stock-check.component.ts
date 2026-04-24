@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { Subject } from 'rxjs';
-import { takeUntil, first, filter, skip } from 'rxjs/operators';
+import { takeUntil, first, filter, skip, debounceTime } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
 import { environment } from '../../../environments/environment';
@@ -253,6 +254,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   reportDateOptions: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
   private reportDataByDateKey: Map<string, ReportDayAggRow[]> = new Map();
   private reportDatesLoadedFactory: string | null = null;
+  /** Đang export report theo tháng (gộp nhiều ngày). */
+  isExportingMonthlyReport: boolean = false;
+  /** Đang tạo & lưu file tháng lên Firebase Storage */
+  isSavingMonthlyReport: boolean = false;
+  /** Link file tháng đã lưu (nếu có) */
+  monthlyReportUrl: string | null = null;
+  monthlyReportUpdatedAt: Date | null = null;
+  private readonly MONTHLY_REPORTS_COLLECTION = 'stock-check-monthly-reports';
   /** ON/OFF ghi nhận dữ liệu theo ngày report (true = ghi nhận, false = bỏ qua). */
   reportDateEnabledMap: { [dateKey: string]: boolean } = {};
   /**
@@ -278,6 +287,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private dsPermissionDenied = false;
   /** DS: đang xuất report */
   dsReportBusy = false;
+  /** DS: watch PXK realtime để auto reload khi có import mới */
+  private dsPxkWatchSub: any = null;
+  private dsPxkWatchDebounceId: any = null;
 
   /** Khoảng ngày để load PXK (theo importedAt trong pxk-import-data) */
   dsFromDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -658,6 +670,69 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       ];
       XLSX.utils.book_append_sheet(wb, ws2, 'DS Checked Detail');
 
+      // ===== Sheet: CHƯA KIỂM (tính số bịch theo standardPacking) =====
+      const secPerBag = 20;
+      const uncheckRowsRaw = this.dsRows.filter(r => !this.dsIsCheckedByRule(r));
+      let totalBagsNeed = 0;
+      let totalMinutesNeed = 0;
+      const resolveStandardPackingForDs = (r: { materialCode: string; poNumber: string; imd: string }): number => {
+        // 1) Thử match chính xác theo key (mã+po+imd)
+        const key = this.buildMaterialKey(r.materialCode, r.poNumber, r.imd);
+        const mExact = this.materialByKey.get(key);
+        const exact = this.parseStandardPackingNumber(mExact?.standardPacking);
+        if (exact > 0) return exact;
+
+        // 2) Fallback theo mã hàng (nhiều dòng PXK có IMD rỗng nên không match được)
+        const mc = this.normalizeCodeUpper(r.materialCode);
+        const anyRow = this.allMaterials.find(x => this.normalizeCodeUpper(x.materialCode) === mc && this.parseStandardPackingNumber(x.standardPacking) > 0);
+        return this.parseStandardPackingNumber(anyRow?.standardPacking);
+      };
+      const uncheckRows = uncheckRowsRaw.map((r, idx) => {
+        const stock = this.dsStockForRow(r) ?? 0;
+        const std = resolveStandardPackingForDs(r);
+        const bagsNeed = std > 0 && stock > 0 ? Math.ceil(stock / std) : 0;
+        const minutesNeed = bagsNeed > 0 ? Math.round((bagsNeed * secPerBag) / 60 * 100) / 100 : 0;
+        totalBagsNeed += bagsNeed;
+        totalMinutesNeed += minutesNeed;
+        return {
+          'STT': idx + 1,
+          'Mã hàng': r.materialCode,
+          'PO': r.poNumber,
+          'IMD': r.imd || '',
+          'Vị trí': r.location || '—',
+          'Tồn kho': stock,
+          'StandardPacking': std || '',
+          'Số bịch cần scan': bagsNeed || '',
+          'Ước tính phút (20s/bịch)': minutesNeed || ''
+        };
+      });
+      // dòng tổng
+      uncheckRows.push({
+        'STT': '',
+        'Mã hàng': 'TỔNG',
+        'PO': '',
+        'IMD': '',
+        'Vị trí': '',
+        'Tồn kho': '',
+        'StandardPacking': '',
+        'Số bịch cần scan': totalBagsNeed,
+        'Ước tính phút (20s/bịch)': Math.round(totalMinutesNeed * 100) / 100
+      } as any);
+
+      const wsUn = XLSX.utils.json_to_sheet(uncheckRows);
+      wsUn['!cols'] = [
+        { wch: 6 },   // STT
+        { wch: 14 },  // Mã
+        { wch: 14 },  // PO
+        { wch: 12 },  // IMD
+        { wch: 10 },  // Vị trí
+        { wch: 12 },  // Tồn kho
+        { wch: 16 },  // Standard
+        { wch: 14 },  // Số bịch
+        { wch: 20 }   // phút
+      ];
+      XLSX.utils.book_append_sheet(wb, wsUn, 'CHUA KIEM');
+
       // ===== Sheet 3: SÁNG =====
       const morningRows = Array.from(morningAgg.values())
         .sort((a, b) => (a.dateKey.localeCompare(b.dateKey) || a.employeeId.localeCompare(b.employeeId, 'vi')))
@@ -896,12 +971,59 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       console.warn('[StockCheck DS] load settings failed', e);
     }
     await this.reloadDsRowsFromPxk();
+    this.startDsPxkWatch();
   }
 
   closeDsListPage(): void {
     this.showDsListPage = false;
     this.dsError = '';
+    this.stopDsPxkWatch();
     this.cdr.detectChanges();
+  }
+
+  private startDsPxkWatch(): void {
+    if (!this.selectedFactory) return;
+    if (this.dsPermissionDenied) return;
+    if (this.dsPxkWatchSub) return;
+
+    try {
+      this.dsPxkWatchSub = this.firestore
+        .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
+        .valueChanges()
+        .pipe(takeUntil(this.destroy$), debounceTime(500))
+        .subscribe({
+          next: () => {
+            // Khi PXK thay đổi trong lúc đang ở DS page, reload lại theo rule ngày hiện tại.
+            if (!this.showDsListPage || this.dsPermissionDenied) return;
+            if (this.dsPxkWatchDebounceId) clearTimeout(this.dsPxkWatchDebounceId);
+            this.dsPxkWatchDebounceId = setTimeout(() => {
+              void this.reloadDsRowsFromPxk();
+            }, 200);
+          },
+          error: (e: any) => {
+            const code = e?.code || '';
+            if (String(code).includes('permission-denied')) {
+              this.dsPermissionDenied = true;
+              this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
+            }
+          }
+        });
+    } catch (e) {
+      console.warn('[StockCheck DS] start watch failed', e);
+    }
+  }
+
+  private stopDsPxkWatch(): void {
+    try {
+      if (this.dsPxkWatchDebounceId) {
+        clearTimeout(this.dsPxkWatchDebounceId);
+        this.dsPxkWatchDebounceId = null;
+      }
+      if (this.dsPxkWatchSub && typeof this.dsPxkWatchSub.unsubscribe === 'function') {
+        this.dsPxkWatchSub.unsubscribe();
+      }
+    } catch {}
+    this.dsPxkWatchSub = null;
   }
 
   private dsSettingsDocId(factory: string): string {
@@ -1080,34 +1202,127 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return out;
   }
 
+  /** DS: load danh sách cặp (Mã+PO) từ PXK theo rule ngày để render (không phụ thuộc tồn kho). */
+  private async loadPxkPairsListFromFirebase(): Promise<Array<{ materialCode: string; poNumber: string }>> {
+    if (!this.selectedFactory) return [];
+    if (this.dsPermissionDenied) return [];
+    const from = new Date(this.dsFromDate.getFullYear(), this.dsFromDate.getMonth(), this.dsFromDate.getDate(), 0, 0, 0, 0);
+    const to = new Date(this.dsToDate.getFullYear(), this.dsToDate.getMonth(), this.dsToDate.getDate(), 23, 59, 59, 999);
+    const out: Array<{ materialCode: string; poNumber: string }> = [];
+    const seen = new Set<string>();
+
+    const normPo = (v: any): string => String(v ?? '').replace(/\s+/g, '').trim();
+
+    const addFromDocs = (docs: any[]): void => {
+      for (const doc of docs) {
+        const d = typeof doc?.data === 'function' ? doc.data() : doc;
+        const lines: any[] = Array.isArray(d?.lines) ? d.lines : [];
+        for (const ln of lines) {
+          const mc = this.normalizeCodeUpper(String(ln?.materialCode || ''));
+          const po = normPo(ln?.po || ln?.poNumber || '');
+          if (!mc || !po) continue;
+          if (this.isCodeExcludedByRules(mc)) continue;
+          const key = `${mc}__${po}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ materialCode: mc, poNumber: po });
+        }
+      }
+    };
+
+    const isInRange = (v: any): boolean => {
+      if (!v) return false;
+      const dt = typeof v?.toDate === 'function' ? v.toDate() : (v instanceof Date ? v : new Date(v));
+      const t = dt?.getTime?.() || 0;
+      if (!t) return false;
+      return t >= from.getTime() && t <= to.getTime();
+    };
+
+    try {
+      const snap = await this.firestore
+        .collection('pxk-import-data', ref =>
+          ref.where('factory', '==', this.selectedFactory).where('importedAt', '>=', from).where('importedAt', '<=', to)
+        )
+        .get()
+        .toPromise();
+      if (snap && !snap.empty) {
+        addFromDocs((snap as any).docs || []);
+      }
+      return out;
+    } catch (e) {
+      const code = (e as any)?.code || '';
+      if (String(code).includes('permission-denied')) {
+        this.dsPermissionDenied = true;
+        this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
+        return [];
+      }
+      // fallback factory-only
+      const snap2 = await this.firestore
+        .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
+        .get()
+        .toPromise();
+      if (!snap2 || (snap2 as any).empty) return out;
+      const docs = (snap2 as any).docs || [];
+      const inRangeDocs = docs.filter((doc: any) => {
+        const d = doc?.data?.() || {};
+        return isInRange(d?.importedAt);
+      });
+      addFromDocs(inRangeDocs);
+      return out;
+    }
+  }
+
   private async reloadDsRowsFromPxk(): Promise<void> {
     this.dsLoading = true;
     this.dsError = '';
     this.dsRows = [];
     try {
-      const pairs = await this.loadPxkPairsFromFirebase();
-      if (pairs.size === 0) {
+      const pxkPairs = await this.loadPxkPairsListFromFirebase();
+      if (pxkPairs.length === 0) {
         this.dsRows = [];
         return;
       }
-      // Filter from already-loaded inventory list (fast)
-      const rows = this.allMaterials
-        .filter(m => {
-          const mc = this.normalizeCodeUpper(m.materialCode);
-          const po = String(m.poNumber || '').trim();
-          if (!mc || !po) return false;
-          if (!pairs.has(`${mc}__${po}`)) return false;
-          if (this.isCodeExcludedByRules(mc)) return false;
-          return true;
-        })
-        .map(m => ({
-          materialCode: this.normalizeCodeUpper(m.materialCode),
-          poNumber: String(m.poNumber || '').trim(),
-          imd: String(m.imd || '').trim(),
-          location: String(m.location || '').trim(),
-          qtyCheck: m.qtyCheck ?? null,
-          dateCheck: m.dateCheck ?? null
-        }));
+      const normPoInv = (v: any): string => String(v ?? '').replace(/\s+/g, '').trim();
+      const rows: Array<{
+        materialCode: string;
+        poNumber: string;
+        imd: string;
+        location: string;
+        qtyCheck: number | null;
+        dateCheck: Date | null;
+      }> = [];
+
+      for (const p of pxkPairs) {
+        const mc = this.normalizeCodeUpper(p.materialCode);
+        const po = String(p.poNumber || '').trim();
+        const matches = this.allMaterials.filter(m => {
+          const mc2 = this.normalizeCodeUpper(m.materialCode);
+          const po2 = normPoInv(m.poNumber);
+          return mc2 === mc && po2 === normPoInv(po);
+        });
+        if (matches.length === 0) {
+          // PXK có nhưng kho chưa có dòng tương ứng -> vẫn hiển thị để không bị thiếu
+          rows.push({
+            materialCode: mc,
+            poNumber: po,
+            imd: '',
+            location: '',
+            qtyCheck: null,
+            dateCheck: null
+          });
+        } else {
+          for (const m of matches) {
+            rows.push({
+              materialCode: mc,
+              poNumber: String(m.poNumber || '').replace(/\s+/g, '').trim(),
+              imd: String(m.imd || '').trim(),
+              location: String(m.location || '').trim(),
+              qtyCheck: m.qtyCheck ?? null,
+              dateCheck: m.dateCheck ?? null
+            });
+          }
+        }
+      }
 
       // Sort: Mã, PO, IMD
       rows.sort((a, b) => {
@@ -1906,6 +2121,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
+    private fns: AngularFireFunctions,
     private cdr: ChangeDetectorRef,
     private router: Router,
     private rmBagHistory: RmBagHistoryService
@@ -4569,6 +4785,227 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, fileName);
 
     this.closeReportByDateModal();
+  }
+
+  /** Export: gộp toàn bộ report theo THÁNG (vd. tháng 3) thành 1 file Excel. */
+  async exportStockCheckReportByMonth(month1to12: number): Promise<void> {
+    if (!this.selectedFactory) return;
+    if (this.isExportingMonthlyReport) return;
+
+    this.isExportingMonthlyReport = true;
+    this.cdr.detectChanges();
+    try {
+      if (this.reportDataByDateKey.size === 0) {
+        await this.loadReportDatesAndCache();
+      }
+
+      const mm = String(month1to12).padStart(2, '0');
+      const dateKeys = Array.from(this.reportDataByDateKey.keys()).filter(dk => {
+        const parts = String(dk || '').split('-');
+        return parts.length === 3 && parts[1] === mm;
+      }).sort((a, b) => a.localeCompare(b));
+
+      if (dateKeys.length === 0) {
+        alert(`Không có dữ liệu report trong tháng ${month1to12}.`);
+        return;
+      }
+
+      // Gộp theo key vật tư: Mã + PO + IMD (+ Bag + Location) để tránh dính dòng khác vị trí/bịch
+      const merged = new Map<string, ReportDayAggRow>();
+      for (const dk of dateKeys) {
+        const dayRows = this.reportDataByDateKey.get(dk) || [];
+        for (const r of dayRows) {
+          const key = `${String(r.materialCode || '').trim().toUpperCase()}\0${String(r.poNumber || '').trim().toUpperCase()}\0${String(r.imd || '').trim()}\0${String(r.bag || '').trim()}\0${String(r.location || '').trim().toUpperCase()}`;
+          const existing = merged.get(key);
+          if (!existing) {
+            merged.set(key, { ...r });
+            continue;
+          }
+          existing.qtyCheckTotal = Number(existing.qtyCheckTotal || 0) + Number(r.qtyCheckTotal || 0);
+          // Stock/standard/location/khsx: giữ giá trị "mới nhất" nếu có
+          existing.stock = r.stock ?? existing.stock;
+          existing.standardPacking = r.standardPacking || existing.standardPacking;
+          existing.location = r.location || existing.location;
+          existing.hasKhsx = existing.hasKhsx || !!r.hasKhsx;
+          // Bag: giữ nếu có
+          existing.bag = existing.bag || r.bag;
+          // Lấy lần check cuối cùng
+          const tOld = existing.lastDateCheck ? new Date(existing.lastDateCheck).getTime() : 0;
+          const tNew = r.lastDateCheck ? new Date(r.lastDateCheck).getTime() : 0;
+          if (tNew > tOld) {
+            existing.lastDateCheck = r.lastDateCheck;
+            existing.idCheck = r.idCheck || existing.idCheck;
+          }
+        }
+      }
+
+      const rows = Array.from(merged.values()).sort((a, b) => {
+        const mc = a.materialCode.localeCompare(b.materialCode);
+        if (mc !== 0) return mc;
+        const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'vi');
+        if (po !== 0) return po;
+        return String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
+      });
+
+      const exportData = rows.map((r, idx) => {
+        const stockVal = Number(r.stock || 0);
+        const qtyCheckVal = Number(r.qtyCheckTotal || 0);
+        const soSanh = parseFloat((stockVal - qtyCheckVal).toFixed(2));
+        return {
+          'STT': idx + 1,
+          'Mã hàng': r.materialCode,
+          'PO': r.poNumber,
+          'IMD': r.imd,
+          'Bag': r.bag || '',
+          'Tồn Kho': stockVal,
+          'KHSX': r.hasKhsx ? '✔' : '',
+          'Vị trí': r.location || '-',
+          'Standard Packing': r.standardPacking || '',
+          'Stock Check': '✓',
+          'Qty Check': qtyCheckVal,
+          'So Sánh Stock': soSanh,
+          'ID Check': r.idCheck || '',
+          'Date Check': r.lastDateCheck ? r.lastDateCheck.toLocaleString('vi-VN') : ''
+        };
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 15 }, // Mã hàng
+        { wch: 12 }, // PO
+        { wch: 10 }, // IMD
+        { wch: 12 }, // Bag
+        { wch: 10 }, // Tồn Kho
+        { wch: 8 },  // KHSX
+        { wch: 12 }, // Vị trí
+        { wch: 18 }, // Standard Packing
+        { wch: 12 }, // Stock Check
+        { wch: 10 }, // Qty Check
+        { wch: 15 }, // So Sánh Stock
+        { wch: 15 }, // ID Check
+        { wch: 20 }  // Date Check
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, `Thang_${mm}`);
+
+      // Sheet so sánh với tồn kho import
+      const compareRows = await this.buildCheckedVsInventoryComparison(rows);
+      const compareExport = compareRows.map((r, idx) => ({
+        'STT': idx + 1,
+        'Mã hàng': r.materialCode,
+        'IMD (đã kiểm)': r.imdList || '',
+        'Qty đã kiểm': r.checkedQty,
+        'Tồn kho import': r.inventoryStock,
+        'Chênh lệch (Tồn - Check)': r.difference,
+        'Trạng thái': r.status
+      }));
+      const wsCompare = XLSX.utils.json_to_sheet(compareExport);
+      wsCompare['!cols'] = [
+        { wch: 6 },   // STT
+        { wch: 15 },  // Mã hàng
+        { wch: 20 },  // IMD
+        { wch: 12 },  // Qty đã kiểm
+        { wch: 12 },  // Tồn kho import
+        { wch: 20 },  // Chênh lệch
+        { wch: 16 }   // Trạng thái
+      ];
+      XLSX.utils.book_append_sheet(wb, wsCompare, 'So sánh tồn kho');
+
+      const years = Array.from(new Set(dateKeys.map(dk => dk.split('-')[0]).filter(Boolean))).sort();
+      const monthLabel = years.length ? `${mm}/${years.join(',')}` : mm;
+      const summary = [
+        { 'Thông tin': 'Factory', 'Giá trị': this.selectedFactory },
+        { 'Thông tin': 'Tháng', 'Giá trị': monthLabel },
+        { 'Thông tin': 'Số ngày', 'Giá trị': dateKeys.length },
+        { 'Thông tin': 'Tổng dòng (gộp)', 'Giá trị': rows.length }
+      ];
+      const wsSummary = XLSX.utils.json_to_sheet(summary);
+      wsSummary['!cols'] = [{ wch: 20 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Tóm tắt');
+
+      const fileName = `Stock_Check_${this.selectedFactory}_Thang${mm}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      this.closeReportByDateModal();
+    } catch (e) {
+      console.error('❌ [ReportByDate] Export month failed:', e);
+      alert('❌ Không xuất được report theo tháng.');
+    } finally {
+      this.isExportingMonthlyReport = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private monthlyReportDocId(factory: string, year: number, month1to12: number): string {
+    const mm = String(month1to12).padStart(2, '0');
+    return `${factory}__${year}-${mm}`;
+  }
+
+  async loadMonthlyReportLink(month1to12: number): Promise<void> {
+    if (!this.selectedFactory) return;
+    const year = new Date().getFullYear();
+    const docId = this.monthlyReportDocId(this.selectedFactory, year, month1to12);
+    try {
+      const doc = await this.firestore.collection(this.MONTHLY_REPORTS_COLLECTION).doc(docId).ref.get();
+      if (!doc.exists) {
+        this.monthlyReportUrl = null;
+        this.monthlyReportUpdatedAt = null;
+        return;
+      }
+      const d: any = doc.data() || {};
+      this.monthlyReportUrl = d.url || null;
+      this.monthlyReportUpdatedAt = d.updatedAt?.toDate?.() || null;
+    } catch (e) {
+      console.error('❌ [MonthlyReport] load link failed', e);
+      this.monthlyReportUrl = null;
+      this.monthlyReportUpdatedAt = null;
+    } finally {
+      this.cdr.detectChanges();
+    }
+  }
+
+  openMonthlyReportInNewTab(): void {
+    if (!this.monthlyReportUrl) return;
+    window.open(this.monthlyReportUrl, '_blank');
+  }
+
+  /** Tạo file Excel tháng và lưu lên Firebase (Storage + Firestore link). */
+  async saveStockCheckMonthlyReportToFirebase(month1to12: number): Promise<void> {
+    if (!this.selectedFactory) return;
+    if (this.isSavingMonthlyReport) return;
+
+    this.isSavingMonthlyReport = true;
+    this.cdr.detectChanges();
+
+    const factory = this.selectedFactory;
+    const year = new Date().getFullYear();
+
+    try {
+      // Gọi Cloud Function để generate & upload server-side (không dính CORS).
+      const res: any = await this.fns
+        .httpsCallable('generateStockCheckMonthlyReportFn')({
+          factory,
+          year,
+          month: month1to12
+        })
+        .toPromise();
+
+      const url = res?.url || null;
+      if (!url) {
+        alert(`Không có dữ liệu report trong tháng ${month1to12}/${year}.`);
+        return;
+      }
+
+      this.monthlyReportUrl = url;
+      this.monthlyReportUpdatedAt = new Date();
+      alert('✅ Đã gộp & lưu report tháng lên Firebase.');
+    } catch (e) {
+      console.error('❌ [MonthlyReport] save failed', e);
+      alert('❌ Không lưu được report tháng lên Firebase.');
+    } finally {
+      this.isSavingMonthlyReport = false;
+      this.cdr.detectChanges();
+    }
   }
 
   /** So sánh danh sách đã kiểm kê với tồn kho import (ASM1/ASM2) theo Mã hàng (cộng dồn nhiều PO). */
