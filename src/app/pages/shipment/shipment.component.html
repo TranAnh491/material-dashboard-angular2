@@ -1056,14 +1056,15 @@
     </div>
 
     <div class="modal-body">
-      <div *ngIf="scheduleDetailRows.length === 0" class="text-center" style="padding: 20px; color: #666;">
+      <div *ngIf="scheduleDetailGroups.length === 0" class="text-center" style="padding: 20px; color: #666;">
         Không có shipment trong ngày này.
       </div>
 
-      <div class="schedule-detail-table-wrapper" *ngIf="scheduleDetailRows.length > 0">
+      <div class="schedule-detail-table-wrapper" *ngIf="scheduleDetailGroups.length > 0">
         <table class="schedule-detail-table">
           <thead>
             <tr>
+              <th class="col-kh">KH</th>
               <th class="col-shipment">Shipment</th>
               <th class="col-material">Mã thành phẩm</th>
               <th class="col-pallet text-right">Số lượng pallet</th>
@@ -1072,19 +1073,22 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let r of scheduleDetailRows; let i = index"
-                [class.shipment-separator]="i === 0 || scheduleDetailRows[i - 1]?.shipmentCode !== r.shipmentCode"
-                [class.pending-row]="r.status === 'Chờ soạn'"
-                [class.inprogress-row]="r.status === 'Đang soạn'"
-                [class.missing-row]="r.status === 'Chưa Đủ'">
-              <td class="col-shipment">{{ r.shipmentCode }}</td>
-              <td class="col-material">{{ r.materialCode }}</td>
-              <td class="col-pallet text-right">{{ r.qtyPallet | number:'1.0-0':'en-US' }}</td>
-              <td class="col-carton text-right">{{ r.carton | number:'1.0-0':'en-US' }}</td>
-              <td>
-                <span class="status-pill" [ngClass]="getStatusClass(r.status)">{{ r.status }}</span>
-              </td>
-            </tr>
+            <ng-container *ngFor="let g of scheduleDetailGroups; let gi = index">
+              <tr *ngFor="let r of g.rows; let ri = index"
+                  [class.shipment-separator]="ri === 0"
+                  [class.pending-row]="r.status === 'Chờ soạn'"
+                  [class.inprogress-row]="r.status === 'Đang soạn'"
+                  [class.missing-row]="r.status === 'Chưa Đủ'">
+                <td class="col-kh" *ngIf="ri === 0" [attr.rowspan]="g.rows.length">{{ g.khName }}</td>
+                <td class="col-shipment" *ngIf="ri === 0" [attr.rowspan]="g.rows.length">{{ g.shipmentCode }}</td>
+                <td class="col-material">{{ r.materialCode }}</td>
+                <td class="col-pallet text-right">{{ r.qtyPallet | number:'1.0-0':'en-US' }}</td>
+                <td class="col-carton text-right">{{ r.carton | number:'1.0-0':'en-US' }}</td>
+                <td>
+                  <span class="status-pill" [ngClass]="getStatusClass(r.status)">{{ r.status }}</span>
+                </td>
+              </tr>
+            </ng-container>
           </tbody>
         </table>
       </div>

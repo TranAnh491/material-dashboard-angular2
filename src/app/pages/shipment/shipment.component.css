@@ -1880,6 +1880,12 @@ tr.checked-row:hover {
   border-top: 3px solid #9e9e9e;
 }
 
+.schedule-detail-table td.col-kh,
+.schedule-detail-table td.col-shipment {
+  vertical-align: top;
+  font-weight: 800;
+}
+
 /* Shipment “Chờ soạn” nổi bật màu cam */
 .schedule-detail-table tbody tr.pending-row td.col-shipment {
   font-weight: 800;
@@ -1919,11 +1925,12 @@ tr.checked-row:hover {
 
 /* Tỷ lệ 4 cột để không cần kéo ngang */
 /* Tỷ lệ 5 cột để không cần kéo ngang */
-.schedule-detail-table .col-shipment { width: 34%; }
-.schedule-detail-table .col-material { width: 20%; }
-.schedule-detail-table .col-pallet { width: 16%; }
-.schedule-detail-table .col-carton { width: 16%; }
-.schedule-detail-table .col-status { width: 14%; }
+.schedule-detail-table .col-kh { width: 18%; }
+.schedule-detail-table .col-shipment { width: 26%; }
+.schedule-detail-table .col-material { width: 18%; }
+.schedule-detail-table .col-pallet { width: 14%; }
+.schedule-detail-table .col-carton { width: 12%; }
+.schedule-detail-table .col-status { width: 12%; }
 
 .status-pill {
   display: inline-block;

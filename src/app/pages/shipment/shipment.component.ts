@@ -87,7 +87,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Schedule day detail dialog
   showScheduleDayDetailDialog: boolean = false;
   scheduleDetailDate: Date | null = null;
-  scheduleDetailRows: Array<{ shipmentCode: string; materialCode: string; qtyPallet: number; carton: number; status: string }> = [];
+  scheduleDetailGroups: Array<{
+    khName: string;
+    shipmentCode: string;
+    rows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+  }> = [];
   
   // Add shipment dialog
   showAddShipmentDialog: boolean = false;
@@ -2176,14 +2180,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (!dayData?.date) return;
     const rows: ShipmentItem[] = Array.isArray(dayData.shipments) ? dayData.shipments : [];
 
-    // Group by shipmentCode + materialCode (1 shipment có nhiều mã TP)
-    const byShipmentMat = new Map<string, ShipmentItem[]>();
+    // Group by shipmentCode → inside group by materialCode
+    const byShipment = new Map<string, ShipmentItem[]>();
     for (const r of rows) {
       const code = String(r?.shipmentCode || '').trim() || '(NO SHIPMENT)';
-      const mat = String((r as any)?.materialCode || '').trim() || '—';
-      const key = `${code}\0${mat}`;
-      if (!byShipmentMat.has(key)) byShipmentMat.set(key, []);
-      byShipmentMat.get(key)!.push(r);
+      if (!byShipment.has(code)) byShipment.set(code, []);
+      byShipment.get(code)!.push(r);
     }
 
     const statusRank: Record<string, number> = {
@@ -2210,33 +2212,53 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return best || '—';
     };
 
-    const detail: Array<{ shipmentCode: string; materialCode: string; qtyPallet: number; carton: number; status: string }> = [];
-    for (const [key, group] of byShipmentMat.entries()) {
-      const [shipCode, mat] = key.split('\0');
-      const carton = group.reduce((s, it) => s + (Number((it as any)?.carton) || 0), 0);
-      // qtyPallet thường bị lặp theo từng dòng → dùng max để tránh cộng dồn sai
-      const qtyPallet = group.reduce((mx, it) => Math.max(mx, Number((it as any)?.qtyPallet) || 0), 0);
-      const status = pickStatus(group);
-      detail.push({ shipmentCode: shipCode || '(NO SHIPMENT)', materialCode: mat || '—', qtyPallet, carton, status });
+    const groups: Array<{
+      khName: string;
+      shipmentCode: string;
+      rows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+      sumCarton: number;
+    }> = [];
+
+    for (const [shipCode, shipRows] of byShipment.entries()) {
+      const byMat = new Map<string, ShipmentItem[]>();
+      for (const r of shipRows) {
+        const mat = String((r as any)?.materialCode || '').trim() || '—';
+        if (!byMat.has(mat)) byMat.set(mat, []);
+        byMat.get(mat)!.push(r);
+      }
+
+      const detailRows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }> = [];
+      for (const [mat, matGroup] of byMat.entries()) {
+        const carton = matGroup.reduce((s, it) => s + (Number((it as any)?.carton) || 0), 0);
+        const qtyPallet = matGroup.reduce((mx, it) => Math.max(mx, Number((it as any)?.qtyPallet) || 0), 0);
+        const status = pickStatus(matGroup);
+        detailRows.push({ materialCode: mat || '—', qtyPallet, carton, status });
+      }
+
+      // sort inside shipment: carton desc then material
+      detailRows.sort((a, b) => (b.carton - a.carton) || a.materialCode.localeCompare(b.materialCode, 'vi'));
+
+      const khName =
+        this.getTenKhFromMaterialCode(detailRows[0]?.materialCode) ||
+        this.getCustomerNameFromMapping((shipRows?.[0] as any)?.customerCode || '') ||
+        '';
+
+      const sumCarton = detailRows.reduce((s, r) => s + (Number(r.carton) || 0), 0);
+      groups.push({ khName, shipmentCode: shipCode || '(NO SHIPMENT)', rows: detailRows, sumCarton });
     }
 
-    // Sort: carton giảm dần, rồi shipment, rồi mã TP
-    detail.sort(
-      (a, b) =>
-        (b.carton - a.carton) ||
-        a.shipmentCode.localeCompare(b.shipmentCode, 'vi') ||
-        a.materialCode.localeCompare(b.materialCode, 'vi')
-    );
+    // sort shipments: total carton desc then shipment code
+    groups.sort((a, b) => (b.sumCarton - a.sumCarton) || a.shipmentCode.localeCompare(b.shipmentCode, 'vi'));
 
     this.scheduleDetailDate = new Date(dayData.date);
-    this.scheduleDetailRows = detail;
+    this.scheduleDetailGroups = groups.map(({ sumCarton, ...g }) => g);
     this.showScheduleDayDetailDialog = true;
   }
 
   closeScheduleDayDetail(): void {
     this.showScheduleDayDetailDialog = false;
     this.scheduleDetailDate = null;
-    this.scheduleDetailRows = [];
+    this.scheduleDetailGroups = [];
   }
 
   // Navigate to previous month
