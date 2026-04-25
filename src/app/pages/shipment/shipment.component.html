@@ -126,6 +126,10 @@
                       <i class="material-icons">download</i>
                       Tải Template Shipment
                     </a>
+                    <a class="dropdown-item" href="javascript:void(0)" (click)="importCustomerKhCatalog(); closeDropdown(); $event.preventDefault()">
+                      <i class="material-icons">contacts</i>
+                      Import danh mục KH
+                    </a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="javascript:void(0)" (click)="showTimeRangeDialog = true; closeDropdown()">
                       <i class="material-icons">schedule</i>
@@ -190,7 +194,7 @@
                 <div class="search-container">
                   <input type="text" 
                          class="search-input" 
-                         placeholder="Tìm kiếm theo Shipment..." 
+                         placeholder="Tìm kiếm..." 
                          [(ngModel)]="searchTerm"
                          (input)="applyFilters()">
                   <i class="material-icons search-icon">search</i>
@@ -225,6 +229,14 @@
                         title="Xem lịch xuất hàng theo tháng">
                   <i class="material-icons">calendar_month</i>
                   Schedules
+                </button>
+                <button class="btn btn-outline-dark btn-kh-filter"
+                        type="button"
+                        (click)="openKhFilterDialog()"
+                        title="Lọc bảng theo khách hàng (danh mục KH: cột A = Mã TP, cột B = Tên KH)">
+                  <i class="material-icons">people</i>
+                  KH
+                  <span *ngIf="filterByCustomerName" class="kh-filter-badge" title="Đang lọc theo KH">●</span>
                 </button>
               </div>
             </div>
@@ -268,6 +280,7 @@
             <th>PRINT</th>
             <th class="col-hidden-header">ẨN</th>
             <th>XÓA</th>
+            <th>KH</th>
           </tr>
         </thead>
         <tbody>
@@ -494,6 +507,9 @@
                       matTooltip="Xóa">
                 <mat-icon>delete</mat-icon>
               </button>
+            </td>
+            <td class="kh-name-cell">
+              {{ getTenKhFromMaterialCode(shipment.materialCode) || getCustomerNameFromMapping(shipment.customerCode || '') }}
             </td>
           </tr>
         </tbody>
@@ -926,7 +942,7 @@
 </div>
 
 <!-- Schedule Chart Dialog -->
-<div class="custom-modal" [class.show]="showScheduleChartDialog" [style.display]="showScheduleChartDialog ? 'flex' : 'none'">
+<div class="custom-modal schedule-chart-modal-root" [class.show]="showScheduleChartDialog" [style.display]="showScheduleChartDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="closeScheduleChartDialog()"></div>
   <div class="modal-container schedule-chart-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -958,6 +974,69 @@
         <i class="material-icons">close</i>
         Đóng
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Lọc theo KH (danh mục từ More → Import danh mục KH) -->
+<div class="custom-modal kh-filter-modal-root" [class.show]="showKhFilterDialog" [style.display]="showKhFilterDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeKhFilterDialog()"></div>
+  <div class="modal-container kh-filter-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">people</i>
+        Lọc theo khách hàng (KH)
+      </h5>
+      <button type="button" class="close-btn" (click)="closeKhFilterDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="kh-filter-hint">
+        Danh mục: <strong>More → Import danh mục KH</strong> (cột A = Mã TP, cột B = Tên KH).
+        Bảng chỉ giữ các dòng có Mã TP thuộc KH đã chọn (hoặc tên KH khớp qua mã khách nếu có trong danh mục).
+      </p>
+      <label class="input-group-text d-block mb-1" for="khSelect">Chọn KH</label>
+      <select id="khSelect" class="form-control" [(ngModel)]="selectedKhInDialog">
+        <option value="">— Tất cả —</option>
+        <option *ngFor="let name of uniqueKhNamesList" [value]="name">{{ name }}</option>
+      </select>
+      <p *ngIf="uniqueKhNamesList.length === 0" class="text-muted mt-2 mb-0" style="font-size: 12px;">
+        Chưa có danh mục KH. Hãy import file hoặc thêm bản ghi trong Firebase collection <code>fg-customer-mapping</code>.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeKhFilterDialog()">Hủy</button>
+      <button type="button" class="btn btn-outline-secondary" (click)="clearKhCustomerFilter()">Xóa lọc</button>
+      <button type="button" class="btn btn-apply" (click)="applyKhCustomerFilterFromDialog()">Áp dụng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import danh mục KH progress -->
+<div class="custom-modal kh-import-progress-modal-root" [class.show]="importingKhCatalog" [style.display]="importingKhCatalog ? 'flex' : 'none'">
+  <div class="modal-overlay"></div>
+  <div class="modal-container kh-import-progress-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">contacts</i>
+        Đang import danh mục KH...
+      </h5>
+    </div>
+    <div class="modal-body">
+      <div class="kh-import-progress-row">
+        <div class="kh-import-progress-pct">{{ importKhProgressPct }}%</div>
+        <div class="kh-import-progress-meta">
+          <div>Đã lưu: <strong>{{ importKhSaved }}</strong> / {{ importKhValidRows }}</div>
+          <div class="text-muted" style="font-size: 12px;">Bỏ qua (trống Mã TP): {{ importKhSkippedEmptyMat }} / Tổng dòng: {{ importKhTotalRows }}</div>
+        </div>
+      </div>
+      <div class="kh-import-progress-bar">
+        <div class="kh-import-progress-bar-fill" [style.width.%]="importKhProgressPct"></div>
+      </div>
+      <div class="text-muted" style="font-size: 12px; margin-top: 10px;">
+        Vui lòng không đóng trang trong lúc đang import.
+      </div>
     </div>
   </div>
 </div>

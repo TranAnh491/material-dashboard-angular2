@@ -114,6 +114,22 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Danh mục mã khách (để hiển thị Customer trong Shipment Order)
   customerMappingItems: { id: string; customerCode: string; materialCode: string; description: string }[] = [];
+  /** Danh sách tên KH duy nhất (từ description trong fg-customer-mapping) — dùng cho lọc KH */
+  uniqueKhNamesList: string[] = [];
+  /** Map nhanh: materialKey7 -> tên KH (ưu tiên description không rỗng) */
+  private khNameByMaterial7 = new Map<string, string>();
+  /** Lọc bảng theo tên KH đã chọn (null = không lọc) */
+  filterByCustomerName: string | null = null;
+  showKhFilterDialog = false;
+  selectedKhInDialog = '';
+
+  // Import danh mục KH progress
+  importingKhCatalog = false;
+  importKhProgressPct = 0;
+  importKhSaved = 0;
+  importKhSkippedEmptyMat = 0;
+  importKhTotalRows = 0;
+  importKhValidRows = 0;
   
   newShipment: ShipmentItem = {
     shipmentCode: '',
@@ -232,7 +248,38 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             description: (data.description || '').toString().trim()
           };
         });
+        this.refreshUniqueKhNamesList();
       });
+  }
+
+  /** Key mã TP dùng để map KH: chỉ lấy 7 ký tự đầu */
+  private materialKey7(materialCode: string | undefined | null): string {
+    // Chuẩn hoá để tránh lệch key khi mã TP có dấu '-', '/', khoảng trắng...
+    // Chỉ lấy A-Z và 0-9 rồi lấy 7 ký tự đầu.
+    const s = (materialCode || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!s) return '';
+    return s.slice(0, 7);
+  }
+
+  private refreshUniqueKhNamesList(): void {
+    const set = new Set<string>();
+    const map = new Map<string, string>();
+    for (const m of this.customerMappingItems) {
+      const d = (m.description || '').trim();
+      if (d) set.add(d);
+
+      const key7 = this.materialKey7(m.materialCode);
+      if (key7) {
+        // Ưu tiên lấy description không rỗng; nếu đã có rồi thì giữ nguyên (tránh bị ghi đè bởi dòng trống)
+        if (d) {
+          map.set(key7, d);
+        } else if (!map.has(key7)) {
+          map.set(key7, '');
+        }
+      }
+    }
+    this.uniqueKhNamesList = Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+    this.khNameByMaterial7 = map;
   }
 
   // Lấy tên khách hàng từ mã khách (danh mục) – dùng cho Shipment Order
@@ -243,6 +290,184 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       (m.customerCode || '').toString().trim().toUpperCase() === code
     );
     return item ? (item.description || '').trim() : '';
+  }
+
+  /** Tên KH theo mã TP (import danh mục: cột A = mã TP, cột B = tên KH → lưu materialCode + description) */
+  getTenKhFromMaterialCode(materialCode: string | undefined | null): string {
+    const mat = this.materialKey7(materialCode);
+    if (!mat) return '';
+    const v = this.khNameByMaterial7.get(mat);
+    return (v || '').trim();
+  }
+
+  openKhFilterDialog(): void {
+    this.selectedKhInDialog = this.filterByCustomerName || '';
+    this.showKhFilterDialog = true;
+  }
+
+  closeKhFilterDialog(): void {
+    this.showKhFilterDialog = false;
+  }
+
+  applyKhCustomerFilterFromDialog(): void {
+    const v = (this.selectedKhInDialog || '').trim();
+    this.filterByCustomerName = v ? v : null;
+    this.applyFilters();
+    this.closeKhFilterDialog();
+  }
+
+  clearKhCustomerFilter(): void {
+    this.filterByCustomerName = null;
+    this.selectedKhInDialog = '';
+    this.applyFilters();
+    this.closeKhFilterDialog();
+  }
+
+  /** Shipment có thuộc KH đang lọc không: ưu tiên theo mã TP trong danh mục, sau đó theo tên từ mã khách */
+  private shipmentMatchesKhFilter(shipment: ShipmentItem): boolean {
+    if (!this.filterByCustomerName) return true;
+    const target = this.filterByCustomerName.trim().toLowerCase();
+    const byMat = (this.getTenKhFromMaterialCode(shipment.materialCode) || '').trim().toLowerCase();
+    if (byMat === target) return true;
+    const byCode = (this.getCustomerNameFromMapping(shipment.customerCode || '') || '').trim().toLowerCase();
+    return byCode === target;
+  }
+
+  /** Tên KH hiển thị cho 1 dòng shipment (dùng cho cột KH + search) */
+  private getKhNameForShipment(shipment: ShipmentItem): string {
+    return (
+      this.getTenKhFromMaterialCode(shipment.materialCode) ||
+      this.getCustomerNameFromMapping(shipment.customerCode || '') ||
+      ''
+    ).toString().trim();
+  }
+
+  /** Import Excel: cột A = Mã TP, cột B = Tên KH → ghi fg-customer-mapping */
+  importCustomerKhCatalog(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.style.display = 'none';
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files?.[0] as File | undefined;
+      if (file) void this.processCustomerKhExcel(file);
+    };
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
+  }
+
+  private customerKhDocIdFromMaterial(mat: string): string {
+    let s = this.materialKey7(mat);
+    if (!s) return '';
+    s = s.replace(/\//g, '_').replace(/\\/g, '_');
+    if (s.length > 200) s = s.slice(0, 200);
+    return s;
+  }
+
+  private async readExcelSheetAsRows(file: File): Promise<any[][]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+          resolve(rows || []);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  private async processCustomerKhExcel(file: File): Promise<void> {
+    try {
+      const rows = await this.readExcelSheetAsRows(file);
+      if (!rows.length) {
+        alert('ℹ️ File không có dữ liệu.');
+        return;
+      }
+      let start = 0;
+      const h = `${rows[0][0] ?? ''} ${rows[0][1] ?? ''}`.toLowerCase();
+      if (/mã|ma|tp|tên|ten|khách|khach|customer|name/.test(h)) {
+        start = 1;
+      }
+      // Pre-scan totals for progress
+      let totalRows = 0;
+      let validRows = 0;
+      let skippedEmptyMat = 0;
+      // Map theo docId để loại trùng (7 ký tự đầu) ngay trong file
+      const upsertsById = new Map<string, { id: string; materialCode7: string; tenKh: string }>();
+      for (let i = start; i < rows.length; i++) {
+        totalRows++;
+        const mat = String(rows[i][0] ?? '').trim();
+        const tenKh = String(rows[i][1] ?? '').trim();
+        if (!mat) {
+          skippedEmptyMat++;
+          continue;
+        }
+        const id = this.customerKhDocIdFromMaterial(mat);
+        if (!id) continue;
+        const materialCode7 = this.materialKey7(mat);
+        upsertsById.set(id, { id, materialCode7, tenKh });
+      }
+      validRows = upsertsById.size;
+
+      this.importingKhCatalog = true;
+      this.importKhProgressPct = 0;
+      this.importKhSaved = 0;
+      this.importKhSkippedEmptyMat = skippedEmptyMat;
+      this.importKhTotalRows = totalRows;
+      this.importKhValidRows = validRows;
+      this.cdr.detectChanges();
+
+      // Firestore batch write (tối đa 500 ops/batch). Dùng 400 để an toàn.
+      const BATCH_SIZE = 400;
+      const upserts = Array.from(upsertsById.values());
+      let saved = 0;
+      for (let i = 0; i < upserts.length; i += BATCH_SIZE) {
+        const batch = this.firestore.firestore.batch();
+        const slice = upserts.slice(i, i + BATCH_SIZE);
+        slice.forEach(u => {
+          const ref = this.firestore.firestore.collection('fg-customer-mapping').doc(u.id);
+          batch.set(ref, { materialCode: u.materialCode7, description: u.tenKh, customerCode: '' }, { merge: true } as any);
+        });
+        await batch.commit();
+        saved += slice.length;
+
+        // Update progress UI theo batch
+        this.importKhSaved = saved;
+        this.importKhProgressPct = validRows > 0 ? Math.round((saved / validRows) * 100) : 100;
+        this.cdr.detectChanges();
+      }
+      if (!saved) {
+        this.importingKhCatalog = false;
+        this.cdr.detectChanges();
+        alert('ℹ️ Không có dòng hợp lệ (cần cột A là Mã TP).');
+        return;
+      }
+      this.importKhSaved = saved;
+      this.importKhProgressPct = 100;
+      this.importingKhCatalog = false;
+      this.cdr.detectChanges();
+      alert(
+        `✅ Đã lưu danh mục KH lên Firebase.\n` +
+        `- Tổng dòng đọc: ${totalRows}\n` +
+        `- Đã lưu (hợp lệ): ${saved}\n` +
+        `- Bỏ qua (trống Mã TP): ${skippedEmptyMat}\n\n` +
+        `Ghi chú: hệ thống map theo 7 ký tự đầu của Mã TP.`
+      );
+    } catch (e: any) {
+      console.error('processCustomerKhExcel', e);
+      this.importingKhCatalog = false;
+      this.cdr.detectChanges();
+      alert(`❌ Lỗi import danh mục KH: ${e?.message || e}`);
+    }
   }
 
   // Toggle dropdown
@@ -325,11 +550,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       // Nếu requestDate = null/undefined, tự động pass filter (hiển thị luôn)
       
       // Filter by search term
-      const matchesSearch = !this.searchTerm || 
-        shipment.shipmentCode.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        shipment.materialCode.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        shipment.customerCode.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        shipment.poShip.toLowerCase().includes(this.searchTerm.toLowerCase());
+      const q = (this.searchTerm || '').toString().trim().toLowerCase();
+      const matchesSearch = !q || 
+        (shipment.shipmentCode || '').toLowerCase().includes(q) ||
+        (shipment.materialCode || '').toLowerCase().includes(q) ||
+        (shipment.customerCode || '').toLowerCase().includes(q) ||
+        (shipment.poShip || '').toLowerCase().includes(q) ||
+        this.getKhNameForShipment(shipment).toLowerCase().includes(q);
+
+      if (!this.shipmentMatchesKhFilter(shipment)) {
+        return false;
+      }
       
       return isInDateRange && matchesSearch;
     });
