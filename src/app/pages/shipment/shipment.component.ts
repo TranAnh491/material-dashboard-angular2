@@ -92,6 +92,78 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     shipmentCode: string;
     rows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
   }> = [];
+
+  /** Schedules → click day: mỗi shipment = 1 box */
+  scheduleDayBoxes: Array<{
+    shipmentCode: string;
+    factory: string;
+    khName: string;
+    totalCarton: number;
+    totalPallet: number;
+    lots: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+    statusDots: Array<{ status: string; css: string }>;
+  }> = [];
+
+  showScheduleShipmentLotsDialog: boolean = false;
+  selectedShipmentBox: null | {
+    shipmentCode: string;
+    factory: string;
+    khName: string;
+    totalCarton: number;
+    totalPallet: number;
+    lots: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+    statusDots: Array<{ status: string; css: string }>;
+  } = null;
+
+  openShipmentLots(box: any): void {
+    this.selectedShipmentBox = box;
+    this.showScheduleShipmentLotsDialog = true;
+  }
+
+  closeShipmentLots(): void {
+    this.showScheduleShipmentLotsDialog = false;
+    this.selectedShipmentBox = null;
+  }
+
+  private buildStatusDots(lots: Array<{ status: string; carton?: number }>): Array<{ status: string; css: string }> {
+    // 1 chấm = 1–10 carton => số chấm = ceil(carton/10) theo từng status
+    const sumByStatus = new Map<string, number>();
+    for (const l of lots) {
+      const st = String(l?.status || '').trim();
+      const carton = Number((l as any)?.carton) || 0;
+      if (!st || carton <= 0) continue;
+      sumByStatus.set(st, (sumByStatus.get(st) ?? 0) + carton);
+    }
+
+    const cssFor = (st: string): string => {
+      if (st === 'Chưa Đủ') return 'dot-missing';
+      if (st === 'Chờ soạn') return 'dot-pending';
+      if (st === 'Đang soạn') return 'dot-inprogress';
+      if (st === 'Đã xong' || st === 'Đã Check' || st === 'Đã Ship') return 'dot-done';
+      if (st === 'Delay') return 'dot-delay';
+      return 'dot-other';
+    };
+
+    const order = ['Chưa Đủ', 'Chờ soạn', 'Đang soạn', 'Đã xong', 'Đã Check', 'Đã Ship', 'Delay'];
+    const allStatuses = Array.from(sumByStatus.keys());
+    allStatuses.sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      return a.localeCompare(b, 'vi');
+    });
+
+    const out: Array<{ status: string; css: string }> = [];
+    for (const st of allStatuses) {
+      const sum = sumByStatus.get(st) ?? 0;
+      const dots = Math.max(1, Math.ceil(sum / 10));
+      const css = cssFor(st);
+      for (let i = 0; i < dots; i++) {
+        out.push({ status: st, css });
+      }
+    }
+    return out;
+  }
   
   // Add shipment dialog
   showAddShipmentDialog: boolean = false;
@@ -223,6 +295,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         });
         
         this.shipments = firebaseShipments;
+        this.autoHideShippedOlderThanOneDay(firebaseShipments);
         this.applyFilters();
         
         // Restore scroll position if needed
@@ -235,6 +308,30 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           });
         }
       });
+  }
+
+  /** Nếu status = Đã Ship và Dispatch Date đã qua >= 1 ngày thì tự động set hidden=true */
+  private autoHideShippedOlderThanOneDay(rows: ShipmentItem[]): void {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const s of rows) {
+      const id = (s as any)?.id;
+      if (!id) continue;
+      if (s.hidden === true) continue;
+      const status = String((s as any)?.status || '').trim();
+      if (status !== 'Đã Ship') continue;
+      if (!s.actualShipDate) continue;
+
+      const d = new Date(s.actualShipDate);
+      if (isNaN(d.getTime())) continue;
+      d.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
+      if (diffDays < 1) continue;
+
+      // set hidden true (silent)
+      this.firestore.collection('shipments').doc(id).update({ hidden: true }).catch(() => {});
+    }
   }
 
   // Load danh mục mã khách (fg-customer-mapping) cho Shipment Order
@@ -2155,12 +2252,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const date = new Date(this.scheduleYear, this.scheduleMonth, day);
       const shipments = this.getShipmentsByDate(date);
       const totalCarton = shipments.reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
+      const hasAttention = shipments.some(s => {
+        const st = String((s as any)?.status || '').trim();
+        return st === 'Chờ soạn' || st === 'Đang soạn' || st === 'Chưa Đủ' || st === 'Delay';
+      });
       this.calendarDays.push({ 
         date: date, 
         day: day,
         shipments: shipments,
         totalCarton,
-        shipmentCount: shipments.length
+        shipmentCount: shipments.length,
+        hasAttention
       });
     }
   }
@@ -2180,12 +2282,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (!dayData?.date) return;
     const rows: ShipmentItem[] = Array.isArray(dayData.shipments) ? dayData.shipments : [];
 
-    // Group by shipmentCode → inside group by materialCode
+    // Group by shipmentCode + factory (để rõ ASM1/ASM2)
     const byShipment = new Map<string, ShipmentItem[]>();
     for (const r of rows) {
       const code = String(r?.shipmentCode || '').trim() || '(NO SHIPMENT)';
-      if (!byShipment.has(code)) byShipment.set(code, []);
-      byShipment.get(code)!.push(r);
+      const factory = String((r as any)?.factory || '').trim() || '—';
+      const key = `${code}\0${factory}`;
+      if (!byShipment.has(key)) byShipment.set(key, []);
+      byShipment.get(key)!.push(r);
     }
 
     const statusRank: Record<string, number> = {
@@ -2219,7 +2323,20 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       sumCarton: number;
     }> = [];
 
-    for (const [shipCode, shipRows] of byShipment.entries()) {
+    const boxes: Array<{
+      shipmentCode: string;
+      factory: string;
+      khName: string;
+      totalCarton: number;
+      totalPallet: number;
+      lots: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+      statusDots: Array<{ status: string; css: string }>;
+    }> = [];
+
+    for (const [shipKey, shipRows] of byShipment.entries()) {
+      const [shipCodeRaw, factoryRaw] = shipKey.split('\0');
+      const shipCode = shipCodeRaw || '(NO SHIPMENT)';
+      const factory = factoryRaw || '—';
       const byMat = new Map<string, ShipmentItem[]>();
       for (const r of shipRows) {
         const mat = String((r as any)?.materialCode || '').trim() || '—';
@@ -2244,7 +2361,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         '';
 
       const sumCarton = detailRows.reduce((s, r) => s + (Number(r.carton) || 0), 0);
-      groups.push({ khName, shipmentCode: shipCode || '(NO SHIPMENT)', rows: detailRows, sumCarton });
+      groups.push({ khName, shipmentCode: shipCode, rows: detailRows, sumCarton });
+
+      const totalPallet = detailRows.reduce((mx, r) => Math.max(mx, Number(r.qtyPallet) || 0), 0);
+      boxes.push({
+        shipmentCode: shipCode,
+        factory,
+        khName,
+        totalCarton: sumCarton,
+        totalPallet,
+        lots: detailRows,
+        statusDots: this.buildStatusDots(detailRows)
+      });
     }
 
     // sort shipments: total carton desc then shipment code
@@ -2252,6 +2380,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     this.scheduleDetailDate = new Date(dayData.date);
     this.scheduleDetailGroups = groups.map(({ sumCarton, ...g }) => g);
+    this.scheduleDayBoxes = boxes.sort((a, b) => (b.totalCarton - a.totalCarton) || a.shipmentCode.localeCompare(b.shipmentCode, 'vi'));
     this.showScheduleDayDetailDialog = true;
   }
 
@@ -2259,6 +2388,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.showScheduleDayDetailDialog = false;
     this.scheduleDetailDate = null;
     this.scheduleDetailGroups = [];
+    this.scheduleDayBoxes = [];
+    this.closeShipmentLots();
   }
 
   // Navigate to previous month

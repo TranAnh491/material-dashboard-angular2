@@ -771,9 +771,9 @@
 .table td.status-cell.status-cho-soan .status-select { background: transparent !important; color: #e65100 !important; font-weight: 600 !important; } /* Chờ soạn: cam */
 .table td.status-cell.status-dang-soan .status-select { background: transparent !important; color: #f9a825 !important; font-weight: 600 !important; } /* Đang soạn: vàng */
 .table td.status-cell.status-chua-du .status-select { background: transparent !important; color: #c62828 !important; font-weight: 600 !important; } /* Chưa đủ: đỏ */
-.table td.status-cell.status-da-xong .status-select { background: transparent !important; color: #2e7d32 !important; font-weight: 600 !important; } /* Đã xong: xanh lá cây */
-.table td.status-cell.status-da-check .status-select { background: transparent !important; color: #0288d1 !important; font-weight: 600 !important; } /* Đã check: xanh da trời */
-.table td.status-cell.status-da-ship .status-select { background: transparent !important; color: #000000 !important; font-weight: 600 !important; } /* Đã ship: đen */
+.table td.status-cell.status-da-xong .status-select { background: transparent !important; color: #1976d2 !important; font-weight: 600 !important; } /* Đã xong: xanh da trời */
+.table td.status-cell.status-da-check .status-select { background: transparent !important; color: #1976d2 !important; font-weight: 600 !important; } /* Đã check: xanh da trời */
+.table td.status-cell.status-da-ship .status-select { background: transparent !important; color: #1976d2 !important; font-weight: 600 !important; } /* Đã ship: xanh da trời */
 .table td.status-cell.status-delay .status-select { background: transparent !important; color: #d32f2f !important; font-weight: 600 !important; } /* Delay: đỏ */
 .table td.status-cell.status-default .status-select { background: transparent !important; color: #616161 !important; font-weight: 600 !important; }
 
@@ -1702,8 +1702,8 @@ tr.checked-row:hover {
 
 /* Schedule Calendar Dialog Styles */
 .schedule-modal {
-  max-width: 900px;
-  width: 90%;
+  max-width: 1170px; /* +30% so với 900px */
+  width: 95%;
 }
 
 /* Schedule Chart Dialog */
@@ -1715,15 +1715,6 @@ tr.checked-row:hover {
   max-width: 1100px;
   width: 95%;
   max-height: 90vh;
-}
-
-.kh-filter-modal-root {
-  z-index: 2110;
-}
-
-.kh-filter-modal {
-  max-width: 480px;
-  width: 92%;
 }
 
 .kh-import-progress-modal-root {
@@ -1768,24 +1759,6 @@ tr.checked-row:hover {
   background: #2196f3;
   width: 0%;
   transition: width 120ms linear;
-}
-
-.kh-filter-hint {
-  font-size: 12px;
-  color: #333;
-  margin: 0 0 12px 0;
-  line-height: 1.45;
-}
-
-.btn-kh-filter {
-  margin-left: 6px;
-}
-
-.kh-filter-badge {
-  color: #c62828;
-  font-size: 10px;
-  margin-left: 2px;
-  line-height: 1;
 }
 
 .kh-name-cell {
@@ -1834,6 +1807,131 @@ tr.checked-row:hover {
 .schedule-day-detail-modal {
   max-width: 1170px; /* ~ +30% so với 900px */
   width: 95%;
+}
+
+/* Day detail: shipment boxes */
+.schedule-box-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .schedule-box-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .schedule-box-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.schedule-box {
+  text-align: left;
+  width: 100%;
+  border: 2px solid rgba(33, 150, 243, 0.35);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.schedule-box:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
+  border-color: rgba(33, 150, 243, 0.65);
+}
+
+.schedule-box-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.factory-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #000;
+  background: rgba(33, 150, 243, 0.14);
+  border: 1px solid rgba(33, 150, 243, 0.25);
+}
+
+.status-dots {
+  /* Xếp chấm tròn bên phải, tối đa 10 chấm / hàng rồi xuống dòng */
+  display: grid;
+  grid-template-columns: repeat(10, 8px);
+  grid-auto-rows: 8px;
+  gap: 5px;
+  justify-content: end;
+  align-content: start;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+}
+
+.dot-pending { background: rgba(255, 152, 0, 0.95); }
+.dot-inprogress { background: rgba(249, 168, 37, 0.95); }
+.dot-missing { background: rgba(211, 47, 47, 0.92); }
+.dot-done { background: rgba(33, 150, 243, 0.95); }
+.dot-delay { background: rgba(156, 39, 176, 0.92); }
+.dot-other { background: rgba(96, 96, 96, 0.75); }
+
+.schedule-box-code {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 900;
+  color: #000;
+}
+
+.schedule-box-kh {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #000;
+  opacity: 0.85;
+}
+
+.schedule-box-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Shipment lots modal */
+.schedule-lots-modal {
+  max-width: 1280px;
+  width: 98%;
+  max-height: 92vh;
+}
+
+.lots-subtitle {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #000;
+}
+
+/* Tăng vùng nhìn bảng lô trong popup */
+.schedule-lots-modal .modal-body {
+  padding: 16px;
+}
+
+.schedule-lots-modal .schedule-detail-table-wrapper {
+  max-height: 72vh;
 }
 
 .schedule-detail-table-wrapper {
@@ -1921,6 +2019,13 @@ tr.checked-row:hover {
 .status-pill.status-dang-soan {
   border-color: rgba(249, 168, 37, 0.55);
   background: rgba(249, 168, 37, 0.18);
+}
+
+.status-pill.status-da-xong,
+.status-pill.status-da-check,
+.status-pill.status-da-ship {
+  border-color: rgba(33, 150, 243, 0.55);
+  background: rgba(33, 150, 243, 0.18);
 }
 
 /* Tỷ lệ 4 cột để không cần kéo ngang */
@@ -2037,6 +2142,12 @@ tr.checked-row:hover {
 .calendar-day.has-shipments {
   border-color: #4caf50;
   background: linear-gradient(135deg, #ffffff 0%, #e8f5e9 100%);
+}
+
+/* Ngày còn trạng thái chưa xong (Chờ soạn/Đang soạn/Chưa Đủ/Delay) */
+.calendar-day.attention-day {
+  border-color: rgba(255, 152, 0, 0.9);
+  background: linear-gradient(135deg, #fff7ed 0%, #ffe0b2 100%);
 }
 
 .day-number {
