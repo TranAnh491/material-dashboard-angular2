@@ -201,6 +201,19 @@ export const notifyPrintLabelLateItemsDaily = functions
     await runPrintLabelLateNotify(admin.firestore());
   });
 
+/**
+ * FG Overview: T2–T6 (Asia/Ho_Chi_Minh) — nếu quá 1 ngày chưa import tồn kho thì gửi email WH.
+ * Nguồn: `fg-overview-import-cache/current-asm1` và `current-asm2` (field `updatedAt`).
+ */
+export const notifyFgOverviewMissingImportWeekdays = functions
+  .runWith({ secrets: [emailPass] })
+  .pubsub.schedule('0 8 * * 1-5')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runFgOverviewImportNotify } = await import('./fg-overview-import-notify');
+    await runFgOverviewImportNotify(admin.firestore());
+  });
+
 /** Callable: chạy thủ công cùng logic báo tem trễ kế hoạch (More → Danh sách mail). */
 export const sendPrintLabelLateNotifyManualFn = functions
   .runWith({ secrets: [emailPass] })

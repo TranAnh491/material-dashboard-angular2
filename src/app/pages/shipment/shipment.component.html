@@ -1,11 +1,46 @@
-<!-- Shipment - Modern Interface -->
-<div class="main-content">
+<!-- Shipment - Dashboard layout (match screenshot) -->
+<div class="shipment-layout">
+  <aside class="shipment-sidebar">
+    <button type="button" class="sidebar-logo" title="Shipment">
+      <i class="material-icons">local_shipping</i>
+    </button>
+    <nav class="sidebar-nav" aria-label="Sidebar">
+      <button type="button" class="nav-icon-btn is-active" title="Home" (click)="goToMenu()">
+        <i class="material-icons">home</i>
+      </button>
+      <button type="button" class="nav-icon-btn" title="Shipments">
+        <i class="material-icons">local_shipping</i>
+      </button>
+      <button type="button" class="nav-icon-btn" title="Calendar" (click)="openSchedulesFromSidebar()">
+        <i class="material-icons">event</i>
+      </button>
+      <button type="button" class="nav-icon-btn" title="Analytics" (click)="openChartFromSidebar()">
+        <i class="material-icons">bar_chart</i>
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <button type="button" class="nav-icon-btn" title="Settings">
+        <i class="material-icons">settings</i>
+      </button>
+      <button type="button" class="sidebar-locale" title="Locale">VN</button>
+    </div>
+  </aside>
+
+  <div class="shipment-body">
+    <div class="main-content">
   <div class="container-fluid">
     <div class="row">
       <div class="col-md-12">
         <div class="card">
           <!-- Sticky Header Wrapper -->
           <div class="sticky-header-wrapper">
+            <div class="dashboard-header">
+              <div class="dashboard-header-left">
+                <div class="dashboard-title">Shipment Dashboard</div>
+                <div class="dashboard-subtitle">Real-time overview of your import shipments</div>
+              </div>
+              <!-- Hide top-right menu/notify button (per request) -->
+            </div>
             <!-- Summary Cards -->
             <div class="row summary-row">
             <div class="col-lg-2 col-md-4 col-sm-6">
@@ -222,14 +257,7 @@
                   Tải lịch sử
                 </button>
                 
-                <!-- Schedules Button -->
-                <button class="btn btn-info" 
-                        type="button" 
-                        (click)="openScheduleDialog()"
-                        title="Xem lịch xuất hàng theo tháng">
-                  <i class="material-icons">calendar_month</i>
-                  Schedules
-                </button>
+                <!-- Schedules moved to left Calendar icon -->
               </div>
             </div>
           </div>
@@ -284,7 +312,47 @@
                   </td>
                 </tr>
           
-                    <tr *ngFor="let shipment of filteredShipments; let i = index" 
+                    <ng-container *ngFor="let shipment of filteredShipments; let i = index">
+                      <tr *ngIf="i === 0 || isFirstOfShipment(i)" class="shipment-group-header">
+                        <td colspan="29">
+                          <div class="shipment-group-card">
+                            <div class="shipment-group-left">
+                              <div class="shipment-group-accent"></div>
+                              <div class="shipment-group-title">
+                                Import #{{ shipment.shipmentCode }}
+                              </div>
+                              <div class="shipment-group-meta">
+                                NGÀY IMPORT:
+                                <strong>{{ getShipmentGroupSummary(shipment).importDate | date : 'MM/dd/yyyy' }}</strong>
+                                &nbsp;&nbsp;DISPATCH DATE:
+                                <strong>{{ getShipmentGroupSummary(shipment).actualShipDate | date : 'MM/dd/yyyy' }}</strong>
+                              </div>
+                            </div>
+                            <div class="shipment-group-right">
+                              <div class="group-stat">
+                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalCarton | number : '1.0-0' }}</div>
+                                <div class="stat-label">CARTON</div>
+                              </div>
+                              <div class="group-stat">
+                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalQtyBox | number : '1.0-0' }}</div>
+                                <div class="stat-label">QTYBOX</div>
+                              </div>
+                              <div class="group-stat">
+                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalOdd | number : '1.0-0' }}</div>
+                                <div class="stat-label">ODD</div>
+                              </div>
+                              <div class="group-stat">
+                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalInventory | number : '1.0-0' }}</div>
+                                <div class="stat-label">TỒN</div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+
+                      <tr
+                        [class.shipment-group-first]="i === 0 || isFirstOfShipment(i)"
+                        [class.shipment-group-last]="isLastOfShipment(i)"
                         [class.checked-row]="isShipmentChecked(shipment)"
                         [class.shipment-separator]="isFirstOfShipment(i)">
             <td class="row-header">{{i + 1}}</td>
@@ -503,7 +571,8 @@
             <td class="kh-name-cell">
               {{ getTenKhFromMaterialCode(shipment.materialCode) || getCustomerNameFromMapping(shipment.customerCode || '') }}
             </td>
-          </tr>
+                      </tr>
+                    </ng-container>
         </tbody>
       </table>
               </div>
@@ -512,6 +581,9 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
   </div>
 </div>
 

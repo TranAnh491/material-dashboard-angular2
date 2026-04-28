@@ -263,6 +263,14 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.isInboundAsm1Page() || this.isInboundAsm2Page();
     }
 
+    isShipmentPage(): boolean {
+      var currentPath = this.location.prepareExternalUrl(this.location.path());
+      if (currentPath.charAt(0) === '#') {
+        currentPath = currentPath.slice(1);
+      }
+      return currentPath === '/shipment';
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

@@ -60,6 +60,13 @@
           Dư ở import
         </button>
       </div>
+      <div class="import-date-box" *ngIf="importFileName && importUpdatedAt">
+        Import: <strong>{{ importUpdatedAt | date : 'dd/MM/yyyy' }}</strong>
+        <ng-container *ngIf="daysSinceImport !== null"> ({{ daysSinceImport }} ngày)</ng-container>
+      </div>
+      <div class="mismatch-count-box" *ngIf="rows.length">
+        Mã lệch: <strong>{{ mismatchCodeCount }}</strong>
+      </div>
     </div>
       <button type="button" class="io-btn menu-btn control-bar__back-menu" (click)="goToMenu()" title="Về Menu">
         <i class="material-icons">home</i>

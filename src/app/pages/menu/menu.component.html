@@ -1,34 +1,54 @@
 <div class="menu-container" [class.menu-container--ios-mobile]="isMobile">
-  <div class="menu-header">
-    <div class="header-content">
-      <div class="header-left">
-        <img src="assets/img/logo.png" alt="Airspeed Logo" class="header-logo">
-        <div class="header-text">
-          <p class="menu-subtitle">Warehouse Management System</p>
-        </div>
+  <div class="menu-topbar">
+    <div class="topbar-left">
+      <img src="assets/img/logo.png" alt="Airspeed Logo" class="topbar-logo">
+      <div class="topbar-appname">Warehouse Management System</div>
+    </div>
+    <div class="topbar-center">
+      <div class="topbar-search">
+        <i class="material-icons search-icon">search</i>
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Search menu or module..."
+          [(ngModel)]="searchTerm"
+        />
       </div>
     </div>
+    <div class="topbar-right">
+      <button type="button" class="topbar-icon-btn" title="Notifications">
+        <i class="material-icons">notifications</i>
+        <span class="badge-dot" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="topbar-locale" title="Locale">VN</button>
+    </div>
+  </div>
+
+  <div class="menu-hero">
+    <div class="hero-title">Menu Overview</div>
+    <div class="hero-subtitle">Quick access to all modules and features</div>
   </div>
 
   <!-- Dashboard First -->
   <div class="menu-section">
-    <h5 class="menu-category-title">Main</h5>
+    <h5 class="menu-category-title">MAIN</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Main' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item menu-item-main" 
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div
+        *ngFor="let tab of tabsByCategory('Main')"
+        class="menu-card"
+        (click)="navigateToTab(tab.path)"
+        role="button"
+        tabindex="0"
+      >
+        <div
+          class="menu-card-icon"
+          [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }"
+        >
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Manage all shipments and deliveries</div>
+      </div>
     </div>
   </div>
 
@@ -36,43 +56,27 @@
   <div class="menu-section">
     <h5 class="menu-category-title">ASM1 RM</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM1 RM' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item menu-item-asm1-rm" 
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div *ngFor="let tab of tabsByCategory('ASM1 RM')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Manage inbound/outbound RM1</div>
+      </div>
     </div>
   </div>
 
   <!-- Quality Group -->
   <div class="menu-section menu-section-quality">
-      <h5 class="menu-category-title">QUALITY</h5>
+    <h5 class="menu-category-title">QUALITY</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Quality' && (!isMobile || !isDesktopOnly(tab.path))"
-             class="menu-item menu-item-quality"
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div *ngFor="let tab of tabsByCategory('Quality')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Quality control and traceability</div>
+      </div>
     </div>
   </div>
   
@@ -80,21 +84,13 @@
   <div class="menu-section">
     <h5 class="menu-category-title">ASM2 RM</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM2 RM' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item menu-item-asm2-rm" 
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div *ngFor="let tab of tabsByCategory('ASM2 RM')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Manage inbound/outbound RM2</div>
+      </div>
     </div>
   </div>
   
@@ -102,21 +98,13 @@
   <div class="menu-section">
     <h5 class="menu-category-title">ASM FG</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'ASM FG' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item menu-item-asm1-fg" 
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div *ngFor="let tab of tabsByCategory('ASM FG')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">FG inventory management</div>
+      </div>
     </div>
   </div>
   
@@ -124,21 +112,13 @@
   <div class="menu-section">
     <h5 class="menu-category-title">Tools & Operations</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Tools' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item menu-item-tools" 
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div *ngFor="let tab of tabsByCategory('Tools')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Tools and operations</div>
+      </div>
     </div>
   </div>
   
@@ -146,21 +126,13 @@
   <div class="menu-section">
     <h5 class="menu-category-title">Admin & Reports</h5>
     <div class="menu-grid">
-      <ng-container *ngFor="let tab of menuTabs">
-        <div *ngIf="tab.category === 'Admin' && (!isMobile || !isDesktopOnly(tab.path))" 
-             class="menu-item menu-item-admin" 
-             (click)="navigateToTab(tab.path)">
-          <div *ngIf="isMobile" class="ios-menu-icon" aria-hidden="true">
-            <i class="material-icons">{{ tab.icon }}</i>
-          </div>
-          <div *ngIf="!isMobile" class="menu-item-icon-shell">
-            <img *ngIf="tab.iconImage" [src]="tab.iconImage" alt="" class="menu-tab-icon-img">
-            <i *ngIf="!tab.iconImage" class="material-icons menu-tab-icon-fallback">{{ tab.icon }}</i>
-          </div>
-          <span class="menu-item-label">{{ tab.title }}</span>
-          <i *ngIf="isMobile" class="material-icons ios-row-chevron" aria-hidden="true">chevron_right</i>
+      <div *ngFor="let tab of tabsByCategory('Admin')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
+          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
         </div>
-      </ng-container>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Admin and reports</div>
+      </div>
     </div>
   </div>
   

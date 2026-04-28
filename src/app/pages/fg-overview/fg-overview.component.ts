@@ -71,6 +71,8 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
   rows: FgOverviewRow[] = [];
   importFileName: string | null = null;
   importRowCount = 0;
+  /** Thời điểm import tồn kho (đọc từ cache Firebase `updatedAt`). */
+  importUpdatedAt: Date | null = null;
   /** Popup hướng dẫn + chọn file import */
   showImportDialog = false;
   /** Popup More actions */
@@ -223,6 +225,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
   clearImport(): void {
     this.importFileName = null;
     this.importRowCount = 0;
+    this.importUpdatedAt = null;
     this.importCodesNormalized.clear();
     this.importLines = [];
     this.resetTableColumnFill();
@@ -270,6 +273,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     // Chuyển nhà máy thì reset về state rỗng trước, sau đó mới nạp bản cache tương ứng
     this.importFileName = null;
     this.importRowCount = 0;
+    this.importUpdatedAt = null;
     this.importCodesNormalized.clear();
     this.importLines = [];
     this.resetTableColumnFill();
@@ -293,6 +297,16 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
           }
           if (!lines.length) return;
           this.importFileName = typeof d.fileName === 'string' && d.fileName ? d.fileName : 'Đã lưu trên Firebase';
+          // updatedAt có thể là Firestore Timestamp
+          const ua: any = (d as any).updatedAt;
+          if (ua && typeof ua.toDate === 'function') {
+            const dt = ua.toDate();
+            this.importUpdatedAt = dt instanceof Date && isFinite(dt.getTime()) ? dt : null;
+          } else if (ua instanceof Date) {
+            this.importUpdatedAt = isFinite(ua.getTime()) ? ua : null;
+          } else {
+            this.importUpdatedAt = null;
+          }
           this.applyImportedLines(lines, this.importFileName);
           if (d.columnFill && typeof d.columnFill === 'object') {
             this.tableColumnFill = {
@@ -336,12 +350,39 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     if (fileName !== null) {
       this.importFileName = fileName;
     }
+    // Nếu import mới từ file (chưa kịp serverTimestamp), vẫn hiển thị thời điểm hiện tại
+    if (!this.importUpdatedAt) {
+      this.importUpdatedAt = new Date();
+    }
     this.rebuildRows();
+  }
+
+  private formatDateDdMmYyyy(d: Date | null): string {
+    if (!d || !isFinite(d.getTime())) return '';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(d.getFullYear());
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  /** Số ngày kể từ lần import gần nhất (0 = hôm nay). */
+  get daysSinceImport(): number | null {
+    if (!this.importUpdatedAt) return null;
+    const a = new Date(this.importUpdatedAt);
+    if (!isFinite(a.getTime())) return null;
+    a.setHours(0, 0, 0, 0);
+    const b = new Date();
+    b.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000)));
   }
 
   get statusLineText(): string {
     if (this.importFileName) {
-      return `FILE IMPORT ${this.importFileName} — ${this.importRowCount} dòng (từ dòng 7, cột A) • CACHE Mỗi nhà máy lưu 1 bản riêng (ASM1/ASM2), import mới sẽ ghi đè bản của đúng nhà máy đang chọn.`;
+      const dt = this.formatDateDdMmYyyy(this.importUpdatedAt);
+      const ds = this.daysSinceImport;
+      const dsText = ds === null ? '' : ` • ${ds} ngày chưa import`;
+      const dtText = dt ? ` • Import: ${dt}` : '';
+      return `FILE IMPORT ${this.importFileName} — ${this.importRowCount} dòng (từ dòng 7, cột A)${dtText}${dsText} • CACHE Mỗi nhà máy lưu 1 bản riêng (ASM1/ASM2), import mới sẽ ghi đè bản của đúng nhà máy đang chọn.`;
     }
     return 'FILE IMPORT Chưa có file import • CACHE Mỗi nhà máy lưu 1 bản riêng (ASM1/ASM2), import mới sẽ ghi đè bản của đúng nhà máy đang chọn.';
   }
@@ -398,6 +439,22 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       return this.rows.filter(r => r.compare === 'Thiếu ở file import');
     }
     return this.rows.filter(r => r.compare === 'Dư so với FG Inventory');
+  }
+
+  /** Đếm số MÃ TP (theo 7 ký tự đầu) bị lệch so với tồn FG. */
+  get mismatchCodeCount(): number {
+    const key7 = (code: string): string => String(code || '').trim().toUpperCase().slice(0, 7);
+    const mismatched = new Set<string>();
+    for (const r of this.rows) {
+      const isMismatch =
+        r.compare !== 'Khớp' ||
+        r.normQtyMismatch ||
+        (r.qtyDelta !== null && Math.abs(r.qtyDelta) >= 1e-6);
+      if (!isMismatch) continue;
+      const k = key7(r.materialCode);
+      if (k) mismatched.add(k);
+    }
+    return mismatched.size;
   }
 
   downloadComparisonReport(): void {

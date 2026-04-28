@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.generateStockCheckMonthlyReportFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.generateStockCheckMonthlyReportFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -211,6 +211,18 @@ exports.notifyPrintLabelLateItemsDaily = functions
     .onRun(async () => {
     const { runPrintLabelLateNotify } = await Promise.resolve().then(() => __importStar(require('./print-label-late-notify')));
     await runPrintLabelLateNotify(admin.firestore());
+});
+/**
+ * FG Overview: T2–T6 (Asia/Ho_Chi_Minh) — nếu quá 1 ngày chưa import tồn kho thì gửi email WH.
+ * Nguồn: `fg-overview-import-cache/current-asm1` và `current-asm2` (field `updatedAt`).
+ */
+exports.notifyFgOverviewMissingImportWeekdays = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .pubsub.schedule('0 8 * * 1-5')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runFgOverviewImportNotify } = await Promise.resolve().then(() => __importStar(require('./fg-overview-import-notify')));
+    await runFgOverviewImportNotify(admin.firestore());
 });
 /** Callable: chạy thủ công cùng logic báo tem trễ kế hoạch (More → Danh sách mail). */
 exports.sendPrintLabelLateNotifyManualFn = functions

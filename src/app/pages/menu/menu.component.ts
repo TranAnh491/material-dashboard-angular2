@@ -10,6 +10,7 @@ import { FirebaseAuthService } from '../../services/firebase-auth.service';
 export class MenuComponent implements OnInit {
   
   isMobile: boolean = false;
+  searchTerm: string = '';
   
   // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop)
   // FG Check, FG Location, FG In được cho phép hiển thị trên mobile
@@ -126,6 +127,37 @@ export class MenuComponent implements OnInit {
   
   isDesktopOnly(path: string): boolean {
     return this.desktopOnlyTabs.includes(path);
+  }
+
+  private norm(s: unknown): string {
+    return String(s ?? '').trim().toLowerCase();
+  }
+
+  get filteredTabs(): Array<{ path: string; title: string; icon: string; iconImage?: string; category: string }> {
+    const q = this.norm(this.searchTerm);
+    const base = this.menuTabs.filter(t => !this.isMobile || !this.isDesktopOnly(t.path));
+    if (!q) return base;
+    return base.filter(t => this.norm(t.title).includes(q) || this.norm(t.path).includes(q) || this.norm(t.category).includes(q));
+  }
+
+  tabsByCategory(category: string): Array<{ path: string; title: string; icon: string; iconImage?: string; category: string }> {
+    return this.filteredTabs.filter(t => t.category === category);
+  }
+
+  /** UI: icon color accents per module (approx match screenshot). */
+  getIconAccent(tab: { path: string }): { bg: string; border: string; fg: string } {
+    const p = String(tab?.path || '').trim();
+    const map: Record<string, { bg: string; border: string; fg: string }> = {
+      '/dashboard': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' },
+      '/assistant': { bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.18)', fg: '#16a34a' },
+      '/work-order-status': { bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.18)', fg: '#ea580c' },
+      '/shipment': { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.18)', fg: '#7c3aed' },
+      '/find-rm1': { bg: 'rgba(14,165,233,0.10)', border: 'rgba(14,165,233,0.18)', fg: '#0284c7' },
+      '/pxk-preview': { bg: 'rgba(34,211,238,0.10)', border: 'rgba(34,211,238,0.18)', fg: '#0891b2' },
+      '/location': { bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.18)', fg: '#e11d48' },
+      '/rm1-delivery': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' }
+    };
+    return map[p] || { bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.12)', fg: '#2563eb' };
   }
   
   navigateToTab(path: string): void {

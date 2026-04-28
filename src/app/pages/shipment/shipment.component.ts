@@ -6,6 +6,7 @@ import * as QRCode from 'qrcode';
 import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { Router } from '@angular/router';
 
 export interface ShipmentItem {
   id?: string;
@@ -46,6 +47,20 @@ export interface ShipmentItem {
 export class ShipmentComponent implements OnInit, OnDestroy {
   shipments: ShipmentItem[] = [];
   filteredShipments: ShipmentItem[] = [];
+
+  /** UI: group header per shipmentCode (Import #...) */
+  private shipmentGroupSummaryByCode: Map<
+    string,
+    {
+      shipmentCode: string;
+      importDate: Date | null;
+      actualShipDate: Date | null;
+      totalCarton: number;
+      totalQtyBox: number;
+      totalOdd: number;
+      totalInventory: number;
+    }
+  > = new Map();
   
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
@@ -244,9 +259,28 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
+    private router: Router,
     private cdr: ChangeDetectorRef,
     private ngZone: NgZone
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
+
+  /** Sidebar: Calendar = mở Schedules. */
+  openSchedulesFromSidebar(): void {
+    this.openScheduleDialog();
+  }
+
+  /** Sidebar: Analytics = mở Chart. */
+  openChartFromSidebar(): void {
+    // đảm bảo month/year hiện tại hợp lệ trước khi render chart
+    this.scheduleMonth = new Date().getMonth();
+    this.scheduleYear = new Date().getFullYear();
+    this.generateCalendar();
+    this.openScheduleChartDialog();
+  }
 
   ngOnInit(): void {
     const now = new Date();
@@ -709,6 +743,60 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const materialB = String(b.materialCode || '').toUpperCase();
       return materialA.localeCompare(materialB);
     });
+
+    // Build group summaries for UI (Import #... header blocks)
+    this.shipmentGroupSummaryByCode = new Map();
+    for (const s of this.filteredShipments) {
+      const code = this.normalizeShipmentCode(s.shipmentCode);
+      if (!code) continue;
+      const cur = this.shipmentGroupSummaryByCode.get(code) || {
+        shipmentCode: code,
+        importDate: null as Date | null,
+        actualShipDate: null as Date | null,
+        totalCarton: 0,
+        totalQtyBox: 0,
+        totalOdd: 0,
+        totalInventory: 0
+      };
+      const imp = s.importDate ? new Date(s.importDate) : null;
+      const dis = s.actualShipDate ? new Date(s.actualShipDate) : null;
+      if (imp && !isNaN(imp.getTime())) {
+        // giữ ngày đầu tiên (nhỏ nhất) để hiển thị
+        if (!cur.importDate || imp.getTime() < cur.importDate.getTime()) cur.importDate = imp;
+      }
+      if (dis && !isNaN(dis.getTime())) {
+        if (!cur.actualShipDate || dis.getTime() < cur.actualShipDate.getTime()) cur.actualShipDate = dis;
+      }
+      cur.totalCarton += Number(s.carton) || 0;
+      cur.totalQtyBox += Number(s.qtyBox) || 0;
+      cur.totalOdd += Number(s.odd) || 0;
+      cur.totalInventory += Number((s as any).inventory) || 0;
+      this.shipmentGroupSummaryByCode.set(code, cur);
+    }
+  }
+
+  /** UI: lấy summary theo shipmentCode (để render group header). */
+  getShipmentGroupSummary(shipment: ShipmentItem): {
+    shipmentCode: string;
+    importDate: Date | null;
+    actualShipDate: Date | null;
+    totalCarton: number;
+    totalQtyBox: number;
+    totalOdd: number;
+    totalInventory: number;
+  } {
+    const code = this.normalizeShipmentCode(shipment?.shipmentCode);
+    return (
+      this.shipmentGroupSummaryByCode.get(code) || {
+        shipmentCode: code,
+        importDate: shipment?.importDate || null,
+        actualShipDate: shipment?.actualShipDate || null,
+        totalCarton: Number(shipment?.carton) || 0,
+        totalQtyBox: Number((shipment as any)?.qtyBox) || 0,
+        totalOdd: Number((shipment as any)?.odd) || 0,
+        totalInventory: Number((shipment as any)?.inventory) || 0
+      }
+    );
   }
 
   private normalizeShipmentCode(code: string | undefined | null): string {
@@ -971,6 +1059,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const current = this.filteredShipments[index];
     const previous = this.filteredShipments[index - 1];
     return current.shipmentCode !== previous.shipmentCode;
+  }
+
+  /** UI: dòng cuối cùng của 1 shipmentCode (để bo góc card nhóm). */
+  isLastOfShipment(index: number): boolean {
+    if (index < 0 || index >= this.filteredShipments.length) return false;
+    if (index === this.filteredShipments.length - 1) return true;
+    const current = this.filteredShipments[index];
+    const next = this.filteredShipments[index + 1];
+    return this.normalizeShipmentCode(current?.shipmentCode) !== this.normalizeShipmentCode(next?.shipmentCode);
   }
 
   /** Kiểm tra tổng lượng (cùng shipment + mã hàng) có bằng tổng FG Check không (để tô nền xanh). Nhiều dòng cùng shipment + mã hàng thì so tổng. */
