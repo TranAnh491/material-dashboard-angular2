@@ -54,10 +54,7 @@ html, body {
   background-color: #ffffff !important;
 }
 
-/* Override any remaining backgrounds */
-div, section, main, article, aside {
-  background-color: inherit !important;
-}
+/* Note: removed aggressive div inherit rule — it blocked component-specific backgrounds */
 
 /* ---- Delivery Scan Flow Dialog: bỏ padding mặc định của MatDialog ---- */
 .delivery-flow-dialog .mat-dialog-container {

@@ -538,13 +538,25 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const fromMs = this.dsRuleFromMs();
       const toMs = this.dsRuleToMs();
 
+      // Áp dụng rule ON/OFF theo danh sách report bên ngoài:
+      // nếu ngày report bị OFF thì các sheet "checked" (và cả các sheet khác liên quan) không ghi nhận dữ liệu ngày đó.
+      const dsRowCheckedByReportRule = (r: { dateCheck: Date | null }): boolean => {
+        const checkedByDsRule = this.dsIsCheckedByRule(r);
+        if (!checkedByDsRule) return false;
+        if (!r?.dateCheck) return false;
+        const d = r.dateCheck instanceof Date ? r.dateCheck : new Date(r.dateCheck as any);
+        if (!Number.isFinite(d.getTime())) return false;
+        const dateKey = this.toLocalDateKey(d);
+        return this.isReportDateEnabled(dateKey);
+      };
+
       // ===== Sheet 1: PXK list (DS rows) =====
       const pxkRows = this.dsRows.map((r, idx) => {
         const stock = this.dsStockForRow(r);
-        const checkedByRule = this.dsIsCheckedByRule(r);
+        const checkedByRule = dsRowCheckedByReportRule(r);
         const qtyCheck = checkedByRule ? (r.qtyCheck == null ? 0 : Number(r.qtyCheck)) : 0;
         const dateCheck = checkedByRule && r.dateCheck ? new Date(r.dateCheck) : null;
-        const deltaText = this.dsQtyDeltaDisplay(r);
+        const deltaText = checkedByRule ? this.dsQtyDeltaDisplay(r) : '';
         return {
           'STT': idx + 1,
           'Mã hàng': r.materialCode,
@@ -624,6 +636,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             if (!d) continue;
             const t = d.getTime();
             if (t < fromMs || t > toMs) continue;
+
+            // Nếu ngày report đang OFF → bỏ toàn bộ ghi nhận cho sheet + thống kê theo ngày
+            const dateKey = toLocalYmd(d);
+            if (!this.isReportDateEnabled(dateKey)) continue;
+
             const qty = it?.qtyCheck !== undefined && it?.qtyCheck !== null ? Number(it.qtyCheck) : 0;
             if (!qty || qty === 0) continue;
             const bag = String(it?.bag || '').trim();
@@ -644,7 +661,6 @@ export class StockCheckComponent implements OnInit, OnDestroy {
             // Thống kê theo nhân viên theo khung giờ:
             // - Luôn cộng lượt scan + tổng qty
             // - Chỉ cộng "Số bag" khi có bag (tem cũ có thể trống)
-            const dateKey = toLocalYmd(d);
             const bagKey = bag ? `${mc}__${po}__${imd}__${bag}` : null; // unique bag theo dòng
             if (inMorningShift(d)) bumpEmpAgg(morningAgg, dateKey, emp, bagKey, qty);
             if (inEveningShift(d)) bumpEmpAgg(eveningAgg, dateKey, emp, bagKey, qty);
@@ -689,7 +705,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
       // ===== Sheet: CHƯA KIỂM (tính số bịch theo standardPacking) =====
       const secPerBag = 20;
-      const uncheckRowsRaw = this.dsRows.filter(r => !this.dsIsCheckedByRule(r));
+      const uncheckRowsRaw = this.dsRows.filter(r => !dsRowCheckedByReportRule(r));
       let totalBagsNeed = 0;
       let totalMinutesNeed = 0;
       const resolveStandardPackingForDs = (r: { materialCode: string; poNumber: string; imd: string }): number => {
@@ -1337,7 +1353,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         // DS cần chỉ hiển thị các mã/vị trí có tồn kho thực tế.
         // Các cặp PXK nhưng không có dòng inventory-materials (hoặc stock <= 0) sẽ bị loại để tránh hiển thị dư.
-        const matchesWithStock = matches.filter(m => Number.isFinite(m.stock) && Number(m.stock) > 0);
+        // DS cần hiển thị đủ theo từng PO/vị trí.
+        // Chỉ loại các dòng mà tồn kho thực sự = 0 (xấp xỉ 0), còn stock != 0 (kể cả âm) thì giữ.
+        const matchesWithStock = matches.filter(m => {
+          const stockVal = Number((m as any)?.stock ?? 0);
+          if (!Number.isFinite(stockVal)) return false;
+          return Math.abs(stockVal) > 1e-9;
+        });
         if (matchesWithStock.length === 0) continue;
 
         for (const m of matchesWithStock) {
@@ -1648,6 +1670,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   // Counters
   get totalMaterials(): number {
     return this.allMaterials.length;
+  }
+
+  get overallCompletionPct(): number {
+    if (!this.totalMaterials || this.totalMaterials <= 0) return 0;
+    const pct = (this.checkedMaterials / this.totalMaterials) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  }
+
+  getDsOverallCompletionPct(): number {
+    if (!this.dsTotalMaterials || this.dsTotalMaterials <= 0) return 0;
+    const pct = (this.dsCheckedMaterials / this.dsTotalMaterials) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  }
+
+  getLocationBoxCompletionPct(stat: RackStat): number {
+    if (!stat || !Number.isFinite(stat.total) || stat.total <= 0) return 0;
+    const pct = (stat.full / stat.total) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
   }
 
   get checkedMaterials(): number { return this._checkedMaterials; }
@@ -2265,13 +2305,6 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         matchingMaterial.isNewMaterial = true;
       }
 
-      matchingMaterial.stockCheck = '✓';
-      matchingMaterial.idCheck = this.scannedEmployeeId;
-      matchingMaterial.dateCheck = new Date();
-      if (this.currentScanLocation) {
-        matchingMaterial.actualLocation = this.currentScanLocation;
-      }
-
       const scannedQty = parseFloat(quantity) || 0;
       // Mode "theo mã": chỉ nhận scan đúng mã đang khóa
       if (this.scanMode === 'code' && this.codeCheckActiveMaterialCode) {
@@ -2302,15 +2335,29 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const remaining = stockVal - existingQty;
       let qtyToSave = scannedQty;
       let ignoredExcess = 0;
-      // DS mode: cho phép cộng dồn vượt stock để hiển thị "Dư"
-      if (this.scanMode !== 'list') {
-        if (remaining <= 0) {
-          ignoredExcess = scannedQty;
-          qtyToSave = 0;
-        } else if (scannedQty > remaining) {
-          ignoredExcess = scannedQty - remaining;
-          qtyToSave = remaining;
-        }
+      if (remaining <= 0) {
+        ignoredExcess = scannedQty;
+        qtyToSave = 0;
+      } else if (scannedQty > remaining) {
+        ignoredExcess = scannedQty - remaining;
+        qtyToSave = remaining;
+      }
+
+      if (ignoredExcess > 0) {
+        this.showAutoDismissScanNotice(
+          'DƯ',
+          `Scan dư: ${materialCode} | PO: ${poNumber}\n` +
+            `Tồn còn lại: ${Math.max(0, remaining)}\n` +
+            `Bỏ qua: ${ignoredExcess}`
+        );
+      }
+
+      // Scan dư hoàn toàn => không ghi nhận bất kỳ cập nhật nào (bag/wrong-location/history/checked icon)
+      if (qtyToSave <= 0) {
+        this.flashLocationMaterial(viewKey, matchingMaterial);
+        this.cdr.detectChanges();
+        this.focusScanInputSoon(0);
+        return;
       }
 
       // DS: trùng bag -> không ghi nhận (mỗi bag chỉ 1 lần)
@@ -2366,11 +2413,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         }
       }
 
-      if (qtyToSave <= 0) {
-        this.flashLocationMaterial(viewKey, matchingMaterial);
-        this.cdr.detectChanges();
-        this.focusScanInputSoon(0);
-        return;
+      matchingMaterial.stockCheck = '✓';
+      matchingMaterial.idCheck = this.scannedEmployeeId;
+      matchingMaterial.dateCheck = new Date();
+      if (this.currentScanLocation) {
+        matchingMaterial.actualLocation = this.currentScanLocation;
       }
 
       // DS: cộng dồn lượng kiểm kê theo phiên để hiển thị ở màn DS
@@ -2383,7 +2430,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       this.saveStockCheckToFirebase(matchingMaterial, qtyToSave, bag || undefined)
         .catch(err => console.error('❌ Error saving stock check (async):', err));
 
-      const qtyText = ignoredExcess > 0 ? `${qtyToSave} (dư ${ignoredExcess} bỏ qua)` : `${qtyToSave}`;
+      const qtyText = `${qtyToSave}`;
       this.scanHistory.unshift(`✓ ${materialCode} | PO: ${poNumber} | Qty: ${qtyText}${bag ? ` | Bag: ${bag}` : ''}`);
       if (this.scanHistory.length > 5) this.scanHistory.pop();
 

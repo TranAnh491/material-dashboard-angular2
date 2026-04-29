@@ -1,621 +1,166 @@
-/* 🎨 Chart Colors */
-#completedTasksChart {
-  background: transparent;
-}
-#dailySalesChart,
-#websiteViewsChart,
-#completedTasksChart {
-  width: 100% !important;
-  max-height: 240px;
+/* =========================================================
+   Dashboard – Light / White theme (matches menu.component)
+   ========================================================= */
+
+:host {
+  --dash-bg: #f8fafc;
+  --dash-surface: #ffffff;
+  --dash-text: rgba(15, 23, 42, 0.92);
+  --dash-muted: rgba(15, 23, 42, 0.55);
+  --dash-border: rgba(15, 23, 42, 0.10);
+  --dash-border-strong: rgba(15, 23, 42, 0.14);
+  --dash-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  --dash-font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* 📊 Card Styling */
+/* ── Layout ── */
+.main-content {
+  background: var(--dash-bg);
+  color: var(--dash-text) !important;
+  font-family: var(--dash-font);
+  padding-top: 50px !important;
+}
+
+.container-fluid {
+  padding-top: 0;
+}
+
+/* ── Generic Cards ── */
+.card,
 .card-chart {
-  border-radius: 1rem;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  background: var(--dash-surface) !important;
+  border: 1px solid var(--dash-border-strong) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--dash-shadow) !important;
 }
 
+/* ── Card Text ── */
 .card-title {
   font-size: 1.4rem;
   font-weight: 600;
-  color: rgba(229, 231, 235, 0.92);
+  color: var(--dash-text);
   margin: 0.2rem 0 0.5rem;
 }
 
 .card-category {
   font-size: 0.9rem;
-  color: #000;
+  color: var(--dash-text);
   margin: 0;
-}
-
-.stats,
-.table th,
-.table td {
-  color: rgba(229, 231, 235, 0.88) !important;
-  text-align: center;
-  vertical-align: middle;
-}
-
-.text-muted {
-  color: rgba(229, 231, 235, 0.72) !important;
-  font-size: 0.9rem;
-  opacity: 0.88;
-}
-
-/* 🧾 Table Styling */
-.workorder-status-table {
-  width: 100%;
-  text-align: center;
-}
-
-.workorder-status-table th,
-.workorder-status-table td {
-  text-align: center !important;
-  color: rgba(229, 231, 235, 0.88) !important;
-  vertical-align: middle !important;
-  font-size: 0.95rem;
-}
-
-.workorder-status-table th {
-  font-weight: bold;
-  font-size: 1.04em;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-/* Empty cells styling */
-.workorder-status-table td:empty::before {
-  content: "—";
-  color: rgba(229, 231, 235, 0.35);
-  font-style: italic;
-}
-
-.workorder-status-table td:empty {
-  color: rgba(229, 231, 235, 0.35);
-  font-style: italic;
-}
-
-/* Dash character styling */
-.workorder-status-table td:contains('—') {
-  color: #ccc !important;
-  font-style: italic;
-}
-
-.workorder-status-table td {
-  color: rgba(229, 231, 235, 0.88) !important;
-}
-
-.workorder-status-table td:has-text('—') {
-  color: #ccc !important;
-  font-style: italic;
-}
-
-/* CSS classes for cell styling */
-.workorder-status-table .empty-cell {
-  color: rgba(229, 231, 235, 0.35) !important;
-  font-style: italic;
-}
-
-.workorder-status-table .has-value {
-  color: rgba(229, 231, 235, 0.92) !important;
-  font-weight: 500;
-}
-
-.workorder-status-table .yesterday-overdue-row {
-  background: rgba(245, 158, 11, 0.12);
-}
-
-.workorder-status-table .yesterday-label {
-  font-weight: 700;
-  color: rgba(254, 243, 199, 0.92) !important;
-}
-
-.workorder-status-table .overdue-value {
-  color: rgba(245, 158, 11, 0.92) !important;
-  font-weight: 700;
-}
-
-/* 💼 Custom header: Work Order Status */
-.custom-card-header {
-  padding: 18px 22px 10px 22px;
-  border-radius: 8px 8px 0 0;
-  margin-bottom: 0;
-  box-shadow: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
-}
-
-.custom-card-header-purple {
-  /* Lớp nền đặc cuối cùng — gradient phía trên không còn “hở” thấy nền dashboard */
-  background:
-    radial-gradient(220px 90px at 18% 0%, rgba(34, 197, 94, 0.42), rgba(0, 0, 0, 0) 72%),
-    linear-gradient(180deg, rgba(34, 197, 94, 0.26), rgba(34, 197, 94, 0.14)),
-    #0b1118;
-}
-
-.custom-card-header-amber {
-  background:
-    radial-gradient(220px 90px at 18% 0%, rgba(245, 158, 11, 0.45), rgba(0, 0, 0, 0) 72%),
-    linear-gradient(180deg, rgba(245, 158, 11, 0.28), rgba(245, 158, 11, 0.16)),
-    #0b1118;
-}
-
-.custom-card-title {
-  margin: 0;
-  font-size: 1.0rem;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  color: rgba(236, 253, 245, 0.96) !important;
-}
-
-.custom-card-desc {
-  margin: 0;
-  font-size: 1rem;
-  opacity: 0.88;
-  color: rgba(229, 231, 235, 0.82) !important;
-}
-
-/* KPI Card Enhancements */
-.card.card-stats {
-  border-radius: 1rem;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
-  padding-top: 1rem;
-}
-
-.card-header-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: -28px auto 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .card-footer {
   background: transparent;
   padding-top: 0.25rem;
   font-size: 0.85rem;
-  color: rgba(229, 231, 235, 0.82);
+  color: var(--dash-muted);
 }
 
-/* 🔄 Bounce animation - Removed */
+.stats,
+.table th,
+.table td {
+  color: var(--dash-text) !important;
+  text-align: center;
+  vertical-align: middle;
+}
 
-/* 📌 Optional: Table border radius */
-.table, .workorder-status-table {
-  border-radius: 8px;
+.text-muted {
+  color: var(--dash-muted) !important;
+  font-size: 0.9rem;
+}
+
+/* ── Chart Canvas ── */
+#dailySalesChart,
+#websiteViewsChart,
+#completedTasksChart {
+  width: 100% !important;
+  max-height: 240px;
+  background: transparent !important;
+}
+
+/* ── Chart Cards ── */
+.chart-body {
+  position: relative !important;
+}
+
+.chart-badge {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  font-weight: 700;
+  font-size: 12px;
+  z-index: 10;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dash-border-strong);
+  background: var(--dash-surface);
+  color: var(--dash-muted);
+}
+
+.chart-badge-green { border-color: rgba(16, 185, 129, 0.30); color: #059669; }
+.chart-badge-amber { border-color: rgba(245, 158, 11, 0.30); color: #d97706; }
+
+.chart-card-green { border-color: rgba(16, 185, 129, 0.22) !important; }
+.chart-card-blue  { border-color: rgba(59, 130, 246, 0.22) !important; }
+.chart-card-amber { border-color: rgba(245, 158, 11, 0.22) !important; }
+
+/* ── KPI Cards (top row) ── */
+.kpi-card {
+  position: relative;
   overflow: hidden;
 }
 
-/* Make top card icons 50% larger */
-.col-lg-3.col-md-6.col-sm-6 .card .rounded-circle .material-icons {
-  font-size: 36px;
+.kpi-label {
+  color: var(--dash-muted) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.2px;
 }
 
-/* Increase font size for KPI titles */
-.col-lg-3.col-md-6.col-sm-6 .card p.text-uppercase.small {
-  font-size: 1.3rem;
+.kpi-value {
+  color: var(--dash-text) !important;
 }
 
-/* Force card header titles and descriptions to be black */
-.card-header .card-title,
-.card-header .card-category {
-    color: rgba(229, 231, 235, 0.92) !important;
+.kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid var(--dash-border-strong);
+  background: var(--dash-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
-/* 📱 Mobile Optimizations */
-@media (max-width: 768px) {
-  
-  /* Main Layout */
-  .main-content {
-    padding: 47px 10px 10px;
-  }
-
-  /* Chart Cards Mobile */
-  #dailySalesChart,
-  #websiteViewsChart,
-  #completedTasksChart {
-    max-height: 200px;
-  }
-
-  .card-chart {
-    margin-bottom: 15px;
-    border-radius: 12px;
-  }
-
-  .card-chart:hover {
-    transform: none; /* Disable hover transform on mobile */
-  }
-
-  .card-title {
-    font-size: 1.2rem;
-    margin: 0.1rem 0 0.3rem;
-  }
-
-  .card-category {
-    font-size: 0.8rem;
-  }
-
-  /* KPI Cards Mobile */
-  .card.card-stats {
-    margin-bottom: 15px;
-    padding: 15px;
-    border-radius: 12px;
-  }
-
-  .card.card-stats:hover {
-    transform: none;
-  }
-
-  .card-header-icon {
-    width: 48px;
-    height: 48px;
-    margin: -24px auto 8px;
-  }
-
-  .col-lg-3.col-md-6.col-sm-6 .card .rounded-circle .material-icons {
-    font-size: 28px;
-  }
-
-  .col-lg-3.col-md-6.col-sm-6 .card p.text-uppercase.small {
-    font-size: 1.1rem;
-  }
-
-  .card-footer {
-    font-size: 0.8rem;
-    padding-top: 0.2rem;
-  }
-
-  /* Table Mobile - Work Order Status & Shipment Status */
-  .workorder-status-table {
-    font-size: 0.75rem;
-    width: 100%;
-    table-layout: fixed;
-  }
-
-  .workorder-status-table th,
-  .workorder-status-table td {
-    padding: 6px 3px;
-    font-size: 0.75rem;
-    word-wrap: break-word;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .workorder-status-table th {
-    font-size: 0.8rem;
-    font-weight: 600;
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-  }
-
-  /* Specific column widths for mobile */
-  .workorder-status-table th:nth-child(1),
-  .workorder-status-table td:nth-child(1) {
-    width: 17%; /* Date */
-  }
-
-  .workorder-status-table th:nth-child(2),
-  .workorder-status-table td:nth-child(2) {
-    width: 16%; /* Done */
-  }
-
-  .workorder-status-table th:nth-child(3),
-  .workorder-status-table td:nth-child(3) {
-    width: 16%; /* Waiting */
-  }
-
-  .workorder-status-table th:nth-child(4),
-  .workorder-status-table td:nth-child(4) {
-    width: 17%; /* Kitting */
-  }
-
-  .workorder-status-table th:nth-child(5),
-  .workorder-status-table td:nth-child(5) {
-    width: 17%; /* Ready */
-  }
-
-  .workorder-status-table th:nth-child(6),
-  .workorder-status-table td:nth-child(6) {
-    width: 17%; /* Delay */
-  }
-
-  /* Mobile card improvements */
-  .card .card-body {
-    padding: 10px;
-  }
-
-  .card .custom-card-header {
-    padding: 12px 15px 6px 15px;
-  }
-
-  .custom-card-title {
-    font-size: 0.85rem;
-    margin-bottom: 4px;
-  }
-
-  .custom-card-desc {
-    font-size: 0.75rem;
-    margin-bottom: 8px;
-  }
-
-  /* Custom Card Header Mobile */
-  .custom-card-header {
-    padding: 15px 18px 8px 18px;
-  }
-
-  .custom-card-title {
-    font-size: 0.9rem;
-  }
-
-  .custom-card-desc {
-    font-size: 0.9rem;
-  }
-
-  /* Table Container Mobile */
-  .table-responsive {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  }
-
-  .table, .workorder-status-table {
-    min-width: 100%;
-    border-radius: 8px;
-    margin-bottom: 0;
-  }
-
-  /* Mobile table improvements */
-  .workorder-status-table tbody tr {
-    border-bottom: 1px solid #dee2e6;
-  }
-
-  .workorder-status-table tbody tr:hover {
-    background-color: #f8f9fa;
-  }
-
-  .workorder-status-table tbody tr:last-child {
-    border-bottom: none;
-  }
-
-  /* Status indicators for mobile */
-  .workorder-status-table td[class*="text-"] {
-    font-weight: 600;
-    text-align: center;
-  }
-
-  /* Mobile card spacing */
-  .row .col-lg-6 {
-    margin-bottom: 20px;
-  }
-
-  .card {
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    border: none;
-  }
-
-  /* Animation Adjustments - Removed */
-
-  /* Touch Optimizations */
-  .card.card-stats,
-  .card-chart {
-    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
-    touch-action: manipulation;
-  }
+.kpi-icon .material-icons {
+  font-size: 28px;
+  color: var(--dash-muted);
 }
 
-/* Small Mobile Devices */
-@media (max-width: 480px) {
-  
-  .main-content {
-    padding: 8px;
-  }
-
-  /* Charts Ultra Compact */
-  #dailySalesChart,
-  #websiteViewsChart,
-  #completedTasksChart {
-    max-height: 180px;
-  }
-
-  .card-chart {
-    margin-bottom: 12px;
-  }
-
-  .card-title {
-    font-size: 1.1rem;
-    margin: 0 0 0.2rem;
-  }
-
-  .card-category {
-    font-size: 0.75rem;
-  }
-
-  /* KPI Cards Ultra Compact */
-  .card.card-stats {
-    padding: 12px;
-    margin-bottom: 12px;
-  }
-
-  .card-header-icon {
-    width: 40px;
-    height: 40px;
-    margin: -20px auto 6px;
-  }
-
-  .col-lg-3.col-md-6.col-sm-6 .card .rounded-circle .material-icons {
-    font-size: 24px;
-  }
-
-  .col-lg-3.col-md-6.col-sm-6 .card p.text-uppercase.small {
-    font-size: 1rem;
-  }
-
-  /* Table Ultra Compact - Small Mobile */
-  .workorder-status-table {
-    font-size: 0.7rem;
-    table-layout: fixed;
-  }
-
-  .workorder-status-table th,
-  .workorder-status-table td {
-    padding: 4px 2px;
-    font-size: 0.7rem;
-    word-wrap: break-word;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .workorder-status-table th {
-    font-size: 0.75rem;
-    font-weight: 700;
-    background-color: #e9ecef;
-  }
-
-  /* Even more compact column widths for small mobile */
-  .workorder-status-table th:nth-child(1),
-  .workorder-status-table td:nth-child(1) {
-    width: 15%; /* Date */
-  }
-
-  .workorder-status-table th:nth-child(2),
-  .workorder-status-table td:nth-child(2) {
-    width: 14%; /* Done */
-  }
-
-  .workorder-status-table th:nth-child(3),
-  .workorder-status-table td:nth-child(3) {
-    width: 14%; /* Waiting */
-  }
-
-  .workorder-status-table th:nth-child(4),
-  .workorder-status-table td:nth-child(4) {
-    width: 14%; /* Kitting */
-  }
-
-  .workorder-status-table th:nth-child(5),
-  .workorder-status-table td:nth-child(5) {
-    width: 14%; /* Ready */
-  }
-
-  .workorder-status-table th:nth-child(6),
-  .workorder-status-table td:nth-child(6) {
-    width: 29%; /* Delay — rộng hơn */
-  }
-
-  /* Ultra compact cards */
-  .card .card-body {
-    padding: 8px;
-  }
-
-  .card .custom-card-header {
-    padding: 10px 12px 4px 12px;
-  }
-
-  .custom-card-title {
-    font-size: 0.8rem;
-    margin-bottom: 2px;
-  }
-
-  .custom-card-desc {
-    font-size: 0.7rem;
-    margin-bottom: 6px;
-  }
-
-  .custom-card-header {
-    padding: 12px 15px 6px 15px;
-  }
-
-  .custom-card-title {
-    font-size: 0.85rem;
-  }
-
-  .custom-card-desc {
-    font-size: 0.85rem;
-  }
+.kpi-card-workorder {
+  border-color: rgba(16, 185, 129, 0.22) !important;
 }
+.kpi-card-workorder .kpi-icon { border-color: rgba(16, 185, 129, 0.24) !important; }
+.kpi-card-workorder .kpi-icon .material-icons { color: #059669 !important; }
 
-/* Tablet Optimizations */
-@media (min-width: 769px) and (max-width: 1024px) {
-  
-  .card-title {
-    font-size: 1.3rem;
-  }
-
-  #dailySalesChart,
-  #websiteViewsChart,
-  #completedTasksChart {
-    max-height: 220px;
-  }
-
-  .workorder-status-table th,
-  .workorder-status-table td {
-    font-size: 0.9rem;
-  }
+.kpi-card-shipment {
+  border-color: rgba(245, 158, 11, 0.22) !important;
 }
+.kpi-card-shipment .kpi-icon { border-color: rgba(245, 158, 11, 0.24) !important; }
+.kpi-card-shipment .kpi-icon .material-icons { color: #d97706 !important; }
 
-/* Landscape Mobile */
-@media (max-width: 768px) and (orientation: landscape) {
-  
-  #dailySalesChart,
-  #websiteViewsChart,
-  #completedTasksChart {
-    max-height: 160px;
-  }
-
-  .card.card-stats {
-    padding: 10px;
-  }
-
-  .card-header-icon {
-    width: 40px;
-    height: 40px;
-    margin: -20px auto 6px;
-  }
-
-  /* Landscape table adjustments */
-  .workorder-status-table {
-    font-size: 0.7rem;
-  }
-
-  .workorder-status-table th,
-  .workorder-status-table td {
-    padding: 4px 2px;
-    font-size: 0.7rem;
-  }
-
-  .custom-card-title {
-    font-size: 0.8rem;
-  }
-
-  .custom-card-desc {
-    font-size: 0.7rem;
-  }
+.kpi-card-otd {
+  border-color: rgba(59, 130, 246, 0.22) !important;
 }
+.kpi-card-otd .kpi-icon { border-color: rgba(59, 130, 246, 0.24) !important; }
+.kpi-card-otd .kpi-icon .material-icons { color: #2563eb !important; }
 
-/* High DPI Displays */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  
-  .card-header-icon,
-  .material-icons {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+.kpi-card-safety {
+  border-color: rgba(239, 68, 68, 0.20) !important;
 }
+.kpi-card-safety .kpi-icon { border-color: rgba(239, 68, 68, 0.22) !important; }
+.kpi-card-safety .kpi-icon .material-icons { color: #dc2626 !important; }
 
-/* 📊 KPI Cards Positioning - Close to navbar */
-.main-content {
-  /* ~50% less offset than 68px while staying below fixed navbar */
-  padding-top: 50px !important;
-}
-
-/* Fix card heights + prevent overlap */
+/* ── Card Heights ── */
 .kpi-card,
 .safety-stock-box,
 .rack-warnings-box,
@@ -634,57 +179,121 @@
   min-height: 330px;
 }
 
-.box-header {
-  gap: 10px;
+/* ── Custom Card Headers (Work Order / Shipment) ── */
+.custom-card-header {
+  padding: 18px 22px 10px 22px;
+  border-radius: 14px 14px 0 0;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--dash-border);
 }
 
-.box-header h5 {
-  min-width: 0;
-  flex: 1;
-  white-space: nowrap;
+.custom-card-header-purple {
+  background:
+    radial-gradient(220px 90px at 18% 0%, rgba(16, 185, 129, 0.12), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(16, 185, 129, 0.06), rgba(16, 185, 129, 0.02)),
+    var(--dash-surface);
+}
+
+.custom-card-header-amber {
+  background:
+    radial-gradient(220px 90px at 18% 0%, rgba(245, 158, 11, 0.12), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(245, 158, 11, 0.06), rgba(245, 158, 11, 0.02)),
+    var(--dash-surface);
+}
+
+.custom-card-title {
+  margin: 0;
+  font-size: 1.0rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--dash-text) !important;
+}
+
+.custom-card-desc {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--dash-muted) !important;
+}
+
+/* ── Work Order Status Table ── */
+.workorder-status-table {
+  width: 100%;
+  text-align: center;
+}
+
+.workorder-status-table th,
+.workorder-status-table td {
+  text-align: center !important;
+  color: var(--dash-text) !important;
+  vertical-align: middle !important;
+  font-size: 0.95rem;
+}
+
+.workorder-status-table th {
+  font-weight: 700;
+  font-size: 1.04em;
+  background: var(--dash-bg);
+  border-bottom: 1px solid var(--dash-border);
+}
+
+.workorder-status-table .empty-cell,
+.workorder-status-table td:empty {
+  color: var(--dash-muted) !important;
+  font-style: italic;
+}
+
+.workorder-status-table .has-value {
+  color: var(--dash-text) !important;
+  font-weight: 500;
+}
+
+.workorder-status-table .yesterday-overdue-row {
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.workorder-status-table .yesterday-label {
+  font-weight: 700;
+  color: #d97706 !important;
+}
+
+.workorder-status-table .overdue-value {
+  color: #d97706 !important;
+  font-weight: 700;
+}
+
+.table-bordered,
+.workorder-status-table {
+  border-color: var(--dash-border) !important;
+}
+
+.table-bordered th,
+.table-bordered td,
+.workorder-status-table th,
+.workorder-status-table td {
+  border-color: var(--dash-border) !important;
+}
+
+.table, .workorder-status-table {
+  border-radius: 8px;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.refresh-btn {
-  flex: 0 0 auto;
+/* Status boards: zebra striping */
+.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(odd) {
+  background-color: var(--dash-bg) !important;
 }
 
-/* KPI Cards Section - Minimal top margin */
-.row.mt-1.mb-4 {
-  margin-top: 0 !important;
-  margin-bottom: 0.25rem !important; /* Reduced to 4px to bring charts closer */
+.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(even) {
+  background-color: var(--dash-surface) !important;
 }
 
-/* Chart Section - Close to KPI cards */
-.chart-section {
-  margin-top: 0 !important; /* No margin to make it very close to KPI cards */
+.dashboard-status-boards .workorder-status-table.table-hover tbody tr:hover {
+  background-color: rgba(15, 23, 42, 0.04) !important;
+  color: var(--dash-text) !important;
 }
 
-/* Chart title spacing - increase space between icon and title */
-.chart-section .card-title .material-icons {
-  margin-right: 12px !important; /* Increase spacing from 8px to 12px */
-}
-
-/* Materials Accuracy Chart - Remove grid lines, keep axes and chart line */
-#dailySalesChart {
-  /* Remove grid lines */
-  --chartjs-grid-color: transparent !important;
-}
-
-/* Override Chart.js grid lines for Materials Accuracy chart */
-#dailySalesChart canvas {
-  display: block;
-}
-
-/* Ensure KPI cards are positioned at the top */
-.container-fluid {
-  padding-top: 0;
-}
-
-/* Safety Stock Level Chart Styles - Copied from Chart tab */
+/* ── CSS variables for weekday tiles ── */
 :root {
-  /* Color variables for easy theming */
   --c-red: #FEE2E2;
   --b-red: #EF4444;
   --c-yellow: #FEF3C7;
@@ -693,44 +302,46 @@
   --b-green: #10B981;
   --c-gray: #F3F4F6;
   --b-gray: #9CA3AF;
-  
-  /* Dark mode colors */
+
   --bg-primary: #ffffff;
-  --bg-secondary: #f8f9fa;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --border-color: #e5e7eb;
-  --shadow-color: rgba(0, 0, 0, 0.1);
+  --bg-secondary: #f8fafc;
+  --text-primary: rgba(15, 23, 42, 0.92);
+  --text-secondary: rgba(15, 23, 42, 0.55);
+  --border-color: rgba(15, 23, 42, 0.10);
+  --shadow-color: rgba(15, 23, 42, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-primary: #1f2937;
-    --bg-secondary: #111827;
-    --text-primary: #f9fafb;
-    --text-secondary: #d1d5db;
-    --border-color: #374151;
-    --shadow-color: rgba(0, 0, 0, 0.3);
-  }
-}
-
-.safety-stock-container {
+/* ── Safety Stock / Rack / IQC boxes ── */
+.safety-stock-container,
+.rack-warnings-container,
+.iqc-week-container {
   display: flex;
-  justify-content: flex-start; /* Move to left side */
+  justify-content: flex-start;
   margin-bottom: 20px;
   margin-top: 20px;
 }
 
-.safety-stock-box {
+.safety-stock-box,
+.rack-warnings-box,
+.iqc-week-box {
   padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  width: 100%; /* Full width of column */
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  min-height: 178px; /* Match Rack Warnings box height */
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 16px;
+  width: 100%;
+  background: var(--dash-surface);
+  box-shadow: var(--dash-shadow);
 }
 
+.iqc-week-box {
+  height: 178px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rack-warnings-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
 
 .box-header {
   display: flex;
@@ -738,44 +349,53 @@
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
-  text-align: left; /* Left align text */
+  border-bottom: 1px solid var(--dash-border) !important;
+  text-align: left;
+  gap: 10px;
 }
-
 
 .box-header h5 {
   margin: 0;
+  min-width: 0;
+  flex: 1;
   font-size: 16px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--dash-text) !important;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* Header icon tint (match each box) */
-.safety-stock-box .box-header .material-icons {
-  color: rgba(219, 234, 254, 0.92) !important;
-}
-
-.rack-warnings-box .box-header .material-icons {
-  color: rgba(254, 226, 226, 0.92) !important;
-}
-
-.iqc-week-box .box-header .material-icons,
-.iqc-materials-modal .modal-header .material-icons {
-  color: rgba(254, 243, 199, 0.92) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .box-header h5 i {
   font-size: 18px;
-  color: var(--text-secondary);
+  color: var(--dash-muted);
 }
 
+.safety-stock-box .box-header .material-icons { color: #2563eb !important; }
+.rack-warnings-box  .box-header .material-icons { color: #dc2626 !important; }
+.iqc-week-box       .box-header .material-icons { color: #d97706 !important; }
+
+/* IQC week box header override */
+.iqc-week-box .box-header {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.iqc-week-box .box-header h5 {
+  font-size: 14px;
+  color: var(--dash-text);
+}
+
+/* Refresh button */
 .refresh-btn {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  flex: 0 0 auto;
+  background: var(--dash-bg);
+  color: var(--dash-text);
+  border: 1px solid var(--dash-border);
   padding: 8px;
   border-radius: 50%;
   cursor: pointer;
@@ -787,19 +407,19 @@
 }
 
 .refresh-btn:hover {
-  background: var(--text-primary);
-  color: var(--bg-primary);
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .refresh-btn:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
 .refresh-btn i {
   font-size: 16px;
 }
 
+/* ── Weekday tiles ── */
 .weekdays-container {
   margin-bottom: 10px;
 }
@@ -815,258 +435,151 @@
 
 .weekday-item {
   width: 100%;
-  height: 60px; /* Reduced to match Rack Warnings height */
-  padding: 4px 6px; /* Reduced padding */
-  border: 2px solid #9CA3AF; /* Default gray border */
-  border-radius: 8px; /* Reduced border-radius */
+  height: 60px;
+  padding: 4px 6px;
+  border: 2px solid var(--dash-border);
+  border-radius: 12px;
   text-align: center;
-  background: #ffffff;
+  background: var(--dash-surface);
   position: relative;
   overflow: hidden;
-  color: #111827;
+  color: var(--dash-text);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  margin: 2px; /* Reduced margin */
+  margin: 2px;
 }
 
-/* Weekday text contrast on light tiles */
-.weekday-item .weekday-name {
-  color: #6b7280;
-}
-.weekday-item .weekday-day {
-  color: #111827;
-}
-.weekday-item .weekday-month {
-  color: #374151;
-}
+.weekday-item .weekday-name  { color: var(--dash-muted); }
+.weekday-item .weekday-day   { color: var(--dash-text); }
+.weekday-item .weekday-month { color: rgba(15, 23, 42, 0.70); }
 
-/* Make weekday tiles match dashboard card rounding */
-.weekday-item {
-  border-radius: 12px;
-}
-
-/* Today marker - removed black dot */
 .weekday-item::after {
   content: '';
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
+  top: 8px; right: 8px;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  background: #000000;
+  background: #0f172a;
   opacity: 0;
-  display: none; /* Hide the black dot */
+  display: none;
 }
 
-/* Status states with modern color scheme */
-.weekday-item.late {
-  background: #FEE2E2; /* Light red background */
-  border-color: #EF4444; /* Red border */
-  color: #B91C1C; /* Dark red text */
-}
+.weekday-item.today { border-width: 3px; }
 
-.weekday-item.inventory {
-  background: #FEF3C7; /* Light yellow background */
-  border-color: #F59E0B; /* Yellow border */
-  color: #92400E; /* Dark yellow text */
-}
-
-.weekday-item.regular {
-  background: #ffffff; /* White background */
-  border-color: #e0e0e0; /* Light gray border */
-  color: #424242; /* Dark gray text */
-}
-
-.weekday-item.scan-day {
-  background: #e0f2fe; /* Light blue background */
-  border-color: #0284c7; /* Light blue border */
-  color: #0369a1; /* Light blue text */
-}
-
-.weekday-item.unknown {
-  background: #F3F4F6; /* Light gray background */
-  border-color: #9CA3AF; /* Gray border */
-  color: #374151; /* Dark gray text */
-}
-
-/* Today state */
-.weekday-item.today {
-  border-width: 3px;
-}
-
-.weekday-item.today::after {
-  opacity: 1;
-}
+.weekday-item.late      { background: #FEE2E2; border-color: #EF4444; color: #B91C1C; }
+.weekday-item.inventory { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
+.weekday-item.regular   { background: var(--dash-surface); border-color: var(--dash-border); color: var(--dash-text); }
+.weekday-item.scan-day  { background: #e0f2fe; border-color: #0284c7; color: #0369a1; }
+.weekday-item.unknown   { background: #F3F4F6; border-color: #9CA3AF; color: rgba(15, 23, 42, 0.70); }
 
 .weekday-name {
-  font-size: 9px; /* Reduced for smaller box */
+  font-size: 9px;
   font-weight: 500;
-  margin-bottom: 2px; /* Reduced margin */
-  color: #6B7280; /* Medium gray */
+  margin-bottom: 2px;
+  color: var(--dash-muted);
   text-transform: uppercase;
   letter-spacing: 0.2px;
-  font-family: "Inter", "Roboto", sans-serif;
-  height: 16px; /* Reduced height */
+  font-family: var(--dash-font);
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .weekday-day {
-  font-size: 16px; /* Reduced for smaller box */
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.2;
-  margin-bottom: 1px; /* Reduced margin */
-  color: #111827; /* Near black */
-  font-family: "Inter", "Roboto", sans-serif;
-  height: 22px; /* Reduced height */
+  margin-bottom: 1px;
+  color: var(--dash-text);
+  font-family: var(--dash-font);
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .weekday-month {
-  font-size: 10px; /* Reduced for smaller box */
-  color: #374151; /* Dark gray */
-  font-family: "Inter", "Roboto", sans-serif;
-  height: 14px; /* Reduced height */
+  font-size: 10px;
+  color: rgba(15, 23, 42, 0.70);
+  font-family: var(--dash-font);
+  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Responsive adjustments for new grid layout */
-@media (max-width: 768px) {
-  .weekdays-container .weekdays-row {
-    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
-    gap: 4px;
-    max-width: 300px;
-  }
-
-  .safety-stock-box .box-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
-  }
-
-  .safety-stock-box {
-    padding: 12px 16px;
-  }
-
-  .weekday-item {
-    height: 100px;
-    padding: 6px 10px;
-  }
-
-  .weekday-name {
-    font-size: 12px;
-    margin-bottom: 6px;
-  }
-
-  .weekday-day {
-    font-size: 18px;
-    margin-bottom: 3px;
-  }
-
-  .weekday-month {
-    font-size: 12px;
-  }
+/* ── Rack Warnings ── */
+.rack-warnings-box .box-header h5 {
+  color: var(--dash-text);
 }
 
-@media (max-width: 480px) {
-  .weekdays-container .weekdays-row {
-    grid-template-columns: repeat(auto-fit, minmax(35px, 1fr));
-    gap: 3px;
-    max-width: 250px;
-  }
-
-  .weekday-item {
-    height: 90px;
-    padding: 4px 8px;
-  }
-
-  .weekday-name {
-    font-size: 10px;
-    margin-bottom: 4px;
-  }
-
-  .weekday-day {
-    font-size: 16px;
-    margin-bottom: 2px;
-  }
-
-  .weekday-month {
-    font-size: 10px;
-  }
-}
-
-/* Rack Warnings Box - Match Safety Stock Level size */
-.rack-warnings-container {
+.warnings-summary {
   display: flex;
-  justify-content: flex-start;
-  margin-bottom: 20px;
-  margin-top: 20px;
+  justify-content: center;
+  align-items: center;
+  min-height: 80px;
 }
 
-.rack-warnings-box {
-  padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  width: 100%; /* Full width of column */
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  min-height: 178px;
-}
-
-.rack-warnings-box:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px var(--shadow-color);
-}
-
-/* IQC Week Box - Match Rack Utilization Warnings size */
-.iqc-week-container {
+.all-clear {
   display: flex;
-  justify-content: flex-start;
-  margin-bottom: 20px;
-  margin-top: 20px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #059669;
+  font-size: 15px;
+  font-weight: 600;
 }
 
-.iqc-week-box {
-  padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  width: 100%;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  height: 178px;
+.all-clear i { font-size: 28px; }
+
+.summary-counts {
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  align-items: center;
+}
+
+.count-item {
   display: flex;
   flex-direction: column;
-}
-
-
-.iqc-week-box .box-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
+  gap: 6px;
 }
 
-.iqc-week-box .box-header h5 {
-  margin: 0;
-  font-size: 14px;
+.count-number {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.count-label {
+  font-size: 13px;
   font-weight: 600;
-  color: #1f2937;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
+.count-item.critical .count-number { color: #ef4444; }
+.count-item.critical .count-label  { color: #dc2626; }
+.count-item.warning  .count-number { color: #f59e0b; }
+.count-item.warning  .count-label  { color: #d97706; }
+
+.warnings-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--dash-muted);
+  font-size: 14px;
+}
+
+.warnings-loading i { font-size: 24px; }
+
+/* ── IQC Week summary ── */
 .iqc-week-summary {
   display: flex;
   flex-direction: column;
@@ -1100,7 +613,7 @@
 .iqc-week-count {
   font-size: 14px;
   font-weight: 700;
-  color: #ff9800; /* Màu cam */
+  color: #d97706;
   margin-bottom: 2px;
   line-height: 1;
 }
@@ -1108,7 +621,7 @@
 .iqc-week-label {
   font-size: 9px;
   font-weight: 600;
-  color: #000000; /* Màu đen */
+  color: var(--dash-text);
   text-transform: uppercase;
   line-height: 1;
 }
@@ -1120,143 +633,102 @@
   justify-content: center;
   flex: 1;
   gap: 8px;
-  color: #6b7280;
+  color: var(--dash-muted);
 }
 
 .iqc-loading .material-icons {
   font-size: 24px;
-  color: #ff9800;
-}
-
-/* @keyframes rotate - Removed */
-
-.rack-warnings-box .box-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
-  text-align: left;
-}
-
-.rack-warnings-box .box-header h5 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.warnings-summary {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 80px;
-}
-
-.all-clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #10b981;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.all-clear i {
-  font-size: 28px;
-}
-
-.summary-counts {
-  display: flex;
-  gap: 40px;
-  justify-content: center;
-  align-items: center;
-}
-
-.count-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.count-number {
-  font-size: 36px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.count-label {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.count-item.critical .count-number {
-  color: #ef4444;
-}
-
-.count-item.critical .count-label {
-  color: #dc2626;
-}
-
-.count-item.warning .count-number {
-  color: #f59e0b;
-}
-
-.count-item.warning .count-label {
   color: #d97706;
 }
 
-.warnings-loading {
+/* ── KPI card stats/icons legacy helpers ── */
+.card.card-stats {
+  border-radius: 16px;
+  box-shadow: var(--dash-shadow);
+  padding-top: 1rem;
+}
+
+.card-header-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--dash-bg);
+  border: 1px solid var(--dash-border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: -28px auto 10px;
+  box-shadow: var(--dash-shadow);
+}
+
+.card-header .card-title,
+.card-header .card-category {
+  color: var(--dash-text) !important;
+}
+
+/* ── KPI section spacing ── */
+.row.mt-1.mb-4 {
+  margin-top: 0 !important;
+  margin-bottom: 0.25rem !important;
+}
+
+/* ── Mobile Logout Button ── */
+.mobile-logout-btn {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.btn-logout-mobile {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 24px;
-  color: #6b7280;
+  padding: 12px 20px;
+  background: #ffffff;
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 999px;
   font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.10);
+  cursor: pointer;
 }
 
-.warnings-loading i {
-  font-size: 24px;
+.btn-logout-mobile:hover {
+  background: #fef2f2;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.12);
+  transform: translateY(-2px);
 }
 
-/* @keyframes rotate - Removed */
+.btn-logout-mobile:active {
+  transform: translateY(0);
+}
 
-/* .rotating - Removed */
+.btn-logout-mobile i { font-size: 20px; }
 
-/* IQC Materials Modal */
+@media (max-width: 768px) {
+  .mobile-logout-btn { display: block; }
+}
+
+/* ── IQC Materials Modal ── */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(15, 23, 42, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
 }
 
-/* Force charts canvas backgrounds transparent (avoid white block) */
-#dailySalesChart,
-#websiteViewsChart,
-#completedTasksChart {
-  background: transparent !important;
-}
-
 .iqc-materials-modal {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  background: var(--dash-surface);
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
   max-width: 90%;
   width: 1200px;
   max-height: 90vh;
@@ -1270,35 +742,37 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--dash-border);
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #111827;
+  color: var(--dash-text);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.iqc-materials-modal .modal-header .material-icons { color: #d97706 !important; }
+
 .close-btn {
-  background: none;
-  border: none;
+  background: var(--dash-bg);
+  border: 1px solid var(--dash-border);
+  border-radius: 10px;
   font-size: 24px;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--dash-muted);
   padding: 4px;
-  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .close-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--dash-text);
 }
 
 .modal-body {
@@ -1318,17 +792,18 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: #10b981;
+  background: #059669;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 999px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.20);
 }
 
 .download-btn:hover:not(:disabled) {
-  background: #059669;
+  background: #047857;
   transform: translateY(-1px);
 }
 
@@ -1344,10 +819,10 @@
 }
 
 .iqc-week-section {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--dash-border);
+  border-radius: 12px;
   padding: 16px;
-  background: #f9fafb;
+  background: var(--dash-bg);
 }
 
 .week-header {
@@ -1356,57 +831,55 @@
   gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid #ff9800;
+  border-bottom: 2px solid rgba(245, 158, 11, 0.35);
 }
 
 .week-header h4 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #000000;
+  color: var(--dash-text);
 }
 
 .week-count {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--dash-muted);
   font-weight: 500;
 }
 
-.materials-list {
-  overflow-x: auto;
-}
+.materials-list { overflow-x: auto; }
 
 .materials-table {
   width: 100%;
   border-collapse: collapse;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--dash-surface);
   border-radius: 6px;
   overflow: hidden;
 }
 
 .materials-table thead {
-  background: #ff9800;
+  background: rgba(245, 158, 11, 0.10);
 }
 
 .materials-table th {
   padding: 12px;
   text-align: left;
   font-size: 12px;
-  font-weight: 600;
-  color: #000000;
+  font-weight: 700;
+  color: #92400e;
   text-transform: uppercase;
-  border-bottom: 2px solid #f57c00;
+  border-bottom: 2px solid rgba(245, 158, 11, 0.25);
 }
 
 .materials-table td {
   padding: 10px 12px;
   font-size: 13px;
-  color: #000000;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--dash-text);
+  border-bottom: 1px solid var(--dash-border);
 }
 
 .materials-table tbody tr:hover {
-  background: #f9fafb;
+  background: var(--dash-bg);
 }
 
 .materials-table tbody tr:last-child td {
@@ -1416,368 +889,205 @@
 .no-materials {
   text-align: center;
   padding: 20px;
-  color: #6b7280;
+  color: var(--dash-muted);
   font-size: 14px;
 }
 
-.iqc-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.iqc-loading i {
-  font-size: 24px;
-}
-
-/* Mobile Logout Button */
-.mobile-logout-btn {
-  display: none; /* Hidden by default on desktop */
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-}
-
-.btn-logout-mobile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-  color: white;
-  border: none;
-  border-radius: 50px;
-  font-size: 14px;
-  font-weight: 600;
-  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
-  cursor: pointer;
-}
-
-.btn-logout-mobile:hover {
-  background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
-  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
-  transform: translateY(-2px);
-}
-
-.btn-logout-mobile:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 10px rgba(231, 76, 60, 0.4);
-}
-
-.btn-logout-mobile i {
-  font-size: 20px;
-}
-
-/* Show logout button only on mobile (max-width: 768px) */
+/* ── Responsive ── */
 @media (max-width: 768px) {
-  .mobile-logout-btn {
-    display: block;
+  .main-content { padding: 47px 10px 10px; }
+
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart { max-height: 200px; }
+
+  .card-chart {
+    margin-bottom: 15px;
+    border-radius: 12px;
   }
+
+  .card-chart:hover { transform: none; }
+  .card-title { font-size: 1.2rem; }
+  .card-category { font-size: 0.8rem; }
+
+  .card.card-stats {
+    margin-bottom: 15px;
+    padding: 15px;
+    border-radius: 12px;
+  }
+
+  .card-header-icon { width: 48px; height: 48px; margin: -24px auto 8px; }
+  .card-footer { font-size: 0.8rem; }
+
+  .workorder-status-table {
+    font-size: 0.75rem;
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .workorder-status-table th,
+  .workorder-status-table td {
+    padding: 6px 3px;
+    font-size: 0.75rem;
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workorder-status-table th {
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: var(--dash-bg);
+    border-bottom: 2px solid var(--dash-border);
+  }
+
+  .workorder-status-table th:nth-child(1), .workorder-status-table td:nth-child(1) { width: 17%; }
+  .workorder-status-table th:nth-child(2), .workorder-status-table td:nth-child(2) { width: 16%; }
+  .workorder-status-table th:nth-child(3), .workorder-status-table td:nth-child(3) { width: 16%; }
+  .workorder-status-table th:nth-child(4), .workorder-status-table td:nth-child(4) { width: 17%; }
+  .workorder-status-table th:nth-child(5), .workorder-status-table td:nth-child(5) { width: 17%; }
+  .workorder-status-table th:nth-child(6), .workorder-status-table td:nth-child(6) { width: 17%; }
+
+  .card .card-body { padding: 10px; }
+  .card .custom-card-header { padding: 12px 15px 6px 15px; }
+  .custom-card-title { font-size: 0.85rem; margin-bottom: 4px; }
+  .custom-card-desc  { font-size: 0.75rem; margin-bottom: 8px; }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+  }
+
+  .table, .workorder-status-table {
+    min-width: 100%;
+    border-radius: 8px;
+    margin-bottom: 0;
+  }
+
+  .workorder-status-table tbody tr { border-bottom: 1px solid var(--dash-border); }
+  .workorder-status-table tbody tr:hover { background-color: var(--dash-bg); }
+  .workorder-status-table tbody tr:last-child { border-bottom: none; }
+
+  .row .col-lg-6 { margin-bottom: 20px; }
+
+  .card {
+    border-radius: 12px;
+    box-shadow: var(--dash-shadow);
+    border: 1px solid var(--dash-border);
+  }
+
+  .weekdays-container .weekdays-row {
+    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+    gap: 4px;
+    max-width: 300px;
+  }
+
+  .safety-stock-box .box-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .safety-stock-box { padding: 12px 16px; }
+
+  .weekday-item { height: 100px; padding: 6px 10px; }
+  .weekday-name  { font-size: 12px; margin-bottom: 6px; }
+  .weekday-day   { font-size: 18px; margin-bottom: 3px; }
+  .weekday-month { font-size: 12px; }
 }
 
-/* =========================================================
-   Dark dashboard theme (match QC)
-   Kept as overrides to avoid breaking legacy CSS.
-   ========================================================= */
+@media (max-width: 480px) {
+  .main-content { padding: 8px; }
 
-:host {
-  --dash-bg: #05070a;
-  --dash-surface: #0b1118;
-  --dash-text: #e5e7eb;
-  --dash-muted: rgba(229, 231, 235, 0.72);
-  --dash-border: rgba(255, 255, 255, 0.10);
-  --dash-border-strong: rgba(255, 255, 255, 0.18);
-  --dash-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart { max-height: 180px; }
+
+  .card-chart { margin-bottom: 12px; }
+  .card-title  { font-size: 1.1rem; }
+  .card-category { font-size: 0.75rem; }
+
+  .card.card-stats { padding: 12px; margin-bottom: 12px; }
+  .card-header-icon { width: 40px; height: 40px; margin: -20px auto 6px; }
+
+  .workorder-status-table {
+    font-size: 0.7rem;
+    table-layout: fixed;
+  }
+
+  .workorder-status-table th,
+  .workorder-status-table td {
+    padding: 4px 2px;
+    font-size: 0.7rem;
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workorder-status-table th {
+    font-size: 0.75rem;
+    font-weight: 700;
+    background-color: var(--dash-bg);
+  }
+
+  .workorder-status-table th:nth-child(1), .workorder-status-table td:nth-child(1) { width: 15%; }
+  .workorder-status-table th:nth-child(2), .workorder-status-table td:nth-child(2) { width: 14%; }
+  .workorder-status-table th:nth-child(3), .workorder-status-table td:nth-child(3) { width: 14%; }
+  .workorder-status-table th:nth-child(4), .workorder-status-table td:nth-child(4) { width: 14%; }
+  .workorder-status-table th:nth-child(5), .workorder-status-table td:nth-child(5) { width: 14%; }
+  .workorder-status-table th:nth-child(6), .workorder-status-table td:nth-child(6) { width: 29%; }
+
+  .card .card-body { padding: 8px; }
+  .card .custom-card-header { padding: 10px 12px 4px 12px; }
+  .custom-card-title { font-size: 0.8rem; margin-bottom: 2px; }
+  .custom-card-desc  { font-size: 0.7rem; margin-bottom: 6px; }
+
+  .weekdays-container .weekdays-row {
+    grid-template-columns: repeat(auto-fit, minmax(35px, 1fr));
+    gap: 3px;
+    max-width: 250px;
+  }
+
+  .weekday-item  { height: 90px; padding: 4px 8px; }
+  .weekday-name  { font-size: 10px; margin-bottom: 4px; }
+  .weekday-day   { font-size: 16px; margin-bottom: 2px; }
+  .weekday-month { font-size: 10px; }
 }
 
-.main-content {
-  background:
-    radial-gradient(900px 520px at 20% -10%, rgba(34, 197, 94, 0.14), rgba(0, 0, 0, 0) 60%),
-    radial-gradient(760px 480px at 85% 20%, rgba(59, 130, 246, 0.10), rgba(0, 0, 0, 0) 55%),
-    linear-gradient(180deg, #06090d 0%, var(--dash-bg) 55%, #05070a 100%);
-  color: var(--dash-text) !important;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+@media (min-width: 769px) and (max-width: 1024px) {
+  .card-title { font-size: 1.3rem; }
+
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart { max-height: 220px; }
+
+  .workorder-status-table th,
+  .workorder-status-table td { font-size: 0.9rem; }
 }
 
-/* Default text tone in dashboard */
-.card-title,
-.stats,
-.table th,
-.table td,
-.workorder-status-table th,
-.workorder-status-table td,
-.custom-card-title,
-.custom-card-desc,
-.text-muted {
-  color: var(--dash-text) !important;
+@media (max-width: 768px) and (orientation: landscape) {
+  #dailySalesChart,
+  #websiteViewsChart,
+  #completedTasksChart { max-height: 160px; }
+
+  .card.card-stats { padding: 10px; }
+  .card-header-icon { width: 40px; height: 40px; margin: -20px auto 6px; }
+
+  .workorder-status-table { font-size: 0.7rem; }
+  .workorder-status-table th,
+  .workorder-status-table td { padding: 4px 2px; font-size: 0.7rem; }
+
+  .custom-card-title { font-size: 0.8rem; }
+  .custom-card-desc  { font-size: 0.7rem; }
 }
 
-.text-muted {
-  color: var(--dash-muted) !important;
-}
-
-/* Generic cards */
-.card,
-.card-chart {
-  border-radius: 18px !important;
-  border: 1px solid var(--dash-border-strong) !important;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)) !important;
-  box-shadow: var(--dash-shadow) !important;
-  backdrop-filter: blur(10px);
-}
-
-/* KPI cards (top row) */
-.kpi-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.kpi-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(420px 140px at 25% 0%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0) 68%);
-  pointer-events: none;
-}
-
-.kpi-label {
-  color: rgba(229, 231, 235, 0.78) !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.2px;
-}
-
-.kpi-value {
-  color: rgba(229, 231, 235, 0.94) !important;
-}
-
-.kpi-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  border: 1px solid var(--dash-border-strong);
-  background: rgba(255, 255, 255, 0.04);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
-}
-
-.kpi-icon .material-icons {
-  font-size: 28px;
-  color: rgba(229, 231, 235, 0.92);
-}
-
-.kpi-card-workorder {
-  border-color: rgba(34, 197, 94, 0.26) !important;
-  background:
-    radial-gradient(420px 180px at 18% -10%, rgba(34, 197, 94, 0.16), rgba(0, 0, 0, 0) 62%),
-    rgba(255, 255, 255, 0.03) !important;
-}
-.kpi-card-workorder .kpi-icon { border-color: rgba(34, 197, 94, 0.28) !important; }
-.kpi-card-workorder .kpi-icon .material-icons { color: rgba(187, 247, 208, 0.92) !important; }
-
-.kpi-card-shipment {
-  border-color: rgba(245, 158, 11, 0.26) !important;
-  background:
-    radial-gradient(420px 180px at 18% -10%, rgba(245, 158, 11, 0.16), rgba(0, 0, 0, 0) 62%),
-    rgba(255, 255, 255, 0.03) !important;
-}
-.kpi-card-shipment .kpi-icon { border-color: rgba(245, 158, 11, 0.28) !important; }
-.kpi-card-shipment .kpi-icon .material-icons { color: rgba(254, 243, 199, 0.92) !important; }
-
-.kpi-card-otd {
-  border-color: rgba(59, 130, 246, 0.26) !important;
-  background:
-    radial-gradient(420px 180px at 18% -10%, rgba(59, 130, 246, 0.16), rgba(0, 0, 0, 0) 62%),
-    rgba(255, 255, 255, 0.03) !important;
-}
-.kpi-card-otd .kpi-icon { border-color: rgba(59, 130, 246, 0.28) !important; }
-.kpi-card-otd .kpi-icon .material-icons { color: rgba(219, 234, 254, 0.92) !important; }
-
-.kpi-card-safety {
-  border-color: rgba(239, 68, 68, 0.24) !important;
-  background:
-    radial-gradient(420px 180px at 18% -10%, rgba(239, 68, 68, 0.14), rgba(0, 0, 0, 0) 62%),
-    rgba(255, 255, 255, 0.03) !important;
-}
-.kpi-card-safety .kpi-icon { border-color: rgba(239, 68, 68, 0.26) !important; }
-.kpi-card-safety .kpi-icon .material-icons { color: rgba(254, 226, 226, 0.92) !important; }
-
-/* Chart cards */
-.chart-body {
-  position: relative !important;
-}
-
-.chart-badge {
-  position: absolute;
-  top: 8px;
-  right: 16px;
-  font-weight: 700;
-  font-size: 12px;
-  z-index: 10;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--dash-border-strong);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(229, 231, 235, 0.86);
-}
-
-.chart-badge-green { border-color: rgba(34, 197, 94, 0.24); color: rgba(187, 247, 208, 0.92); }
-.chart-badge-amber { border-color: rgba(245, 158, 11, 0.24); color: rgba(254, 243, 199, 0.92); }
-
-.chart-card-green { border-color: rgba(34, 197, 94, 0.20) !important; }
-.chart-card-blue { border-color: rgba(59, 130, 246, 0.20) !important; }
-.chart-card-amber { border-color: rgba(245, 158, 11, 0.20) !important; }
-
-/* Tables */
-.table-bordered,
-.workorder-status-table {
-  border-color: var(--dash-border) !important;
-}
-
-.table-bordered th,
-.table-bordered td,
-.workorder-status-table th,
-.workorder-status-table td {
-  border-color: var(--dash-border) !important;
-}
-
-.workorder-status-table th {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
-}
-
-/* Status boards: Bootstrap 4 striping — force dark zebra + light text */
-.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(odd) {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-}
-
-.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(even) {
-  background-color: rgba(0, 0, 0, 0.22) !important;
-}
-
-.dashboard-status-boards .workorder-status-table.table-hover tbody tr:hover {
-  color: rgba(229, 231, 235, 0.96) !important;
-  background-color: rgba(255, 255, 255, 0.08) !important;
-}
-
-.dashboard-status-boards .workorder-status-table tbody tr > td,
-.dashboard-status-boards .workorder-status-table tbody tr > th {
-  color: rgba(229, 231, 235, 0.92) !important;
-}
-
-.workorder-status-table .empty-cell,
-.workorder-status-table td:empty {
-  color: rgba(229, 231, 235, 0.35) !important;
-}
-
-/* Safety/rack/iqc boxes */
-.safety-stock-box,
-.rack-warnings-box,
-.iqc-week-box {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid var(--dash-border-strong) !important;
-  border-radius: 18px !important;
-  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.55) !important;
-  backdrop-filter: blur(10px);
-}
-
-.box-header {
-  border-bottom: 1px solid var(--dash-border) !important;
-}
-
-.iqc-week-box .box-header h5,
-.box-header h5 {
-  color: rgba(229, 231, 235, 0.9) !important;
-}
-
-.iqc-week-box .iqc-week-label {
-  color: rgba(255, 255, 255, 0.92) !important;
-}
-
-/* Modal (IQC materials) */
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.62) !important;
-}
-
-.iqc-materials-modal {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)) !important;
-  border: 1px solid var(--dash-border-strong) !important;
-  border-radius: 18px !important;
-  box-shadow: var(--dash-shadow) !important;
-  backdrop-filter: blur(12px);
-}
-
-.iqc-materials-modal .modal-header {
-  border-bottom: 1px solid var(--dash-border) !important;
-}
-
-.iqc-materials-modal .modal-header h3 {
-  color: rgba(229, 231, 235, 0.92) !important;
-}
-
-.iqc-materials-modal .close-btn {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid var(--dash-border-strong) !important;
-  border-radius: 12px !important;
-  color: rgba(229, 231, 235, 0.78) !important;
-}
-
-.iqc-materials-modal .close-btn:hover {
-  background: rgba(255, 255, 255, 0.07) !important;
-  color: rgba(229, 231, 235, 0.92) !important;
-}
-
-.iqc-materials-modal .download-btn {
-  border-radius: 12px !important;
-  border: 1px solid rgba(34, 197, 94, 0.26) !important;
-  background:
-    radial-gradient(160px 80px at 22% 0%, rgba(34, 197, 94, 0.35), rgba(0, 0, 0, 0) 70%),
-    linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.08)) !important;
-  color: rgba(236, 253, 245, 0.96) !important;
-}
-
-.iqc-materials-modal .download-btn:hover:not(:disabled) {
-  background:
-    radial-gradient(160px 80px at 22% 0%, rgba(34, 197, 94, 0.42), rgba(0, 0, 0, 0) 70%),
-    linear-gradient(180deg, rgba(34, 197, 94, 0.22), rgba(34, 197, 94, 0.10)) !important;
-}
-
-.iqc-week-section {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid var(--dash-border-strong) !important;
-  border-radius: 14px !important;
-}
-
-.week-header {
-  border-bottom: 1px solid rgba(245, 158, 11, 0.30) !important;
-}
-
-.week-header h4 {
-  color: rgba(229, 231, 235, 0.92) !important;
-}
-
-.materials-table {
-  background: rgba(255, 255, 255, 0.02) !important;
-}
-
-.materials-table thead {
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.20), rgba(245, 158, 11, 0.10)) !important;
-}
-
-.materials-table th {
-  color: rgba(254, 243, 199, 0.92) !important;
-}
-
-.materials-table td {
-  color: rgba(229, 231, 235, 0.88) !important;
-  border-bottom: 1px solid var(--dash-border) !important;
-}
-
-.materials-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.04) !important;
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .card-header-icon,
+  .material-icons {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }

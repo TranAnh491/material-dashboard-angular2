@@ -70,9 +70,12 @@
       <div class="action-row desktop-only" *ngIf="selectedFactory && !showDsListPage">
         <!-- 3 counter lớn -->
         <div class="big-counters">
-          <div class="big-counter clickable" [class.active]="filterMode === 'all'" (click)="setFilterMode('all')" title="Tổng mã">
+          <div class="big-counter total-box clickable" [class.active]="filterMode === 'all'" (click)="setFilterMode('all')" title="Tổng mã">
             <div class="big-num">{{ totalMaterials }}</div>
             <div class="big-lbl">TỔNG MÃ</div>
+            <div class="big-total-progress" aria-hidden="true">
+              <div class="big-total-progress-bar" [style.width.%]="overallCompletionPct"></div>
+            </div>
           </div>
           <div class="big-counter clickable checked" [class.active]="filterMode === 'checked'" (click)="setFilterMode('checked')" title="Đã kiểm tra">
             <div class="big-num">{{ checkedMaterials }}</div>
@@ -147,6 +150,9 @@
           <div class="location-box-title">
             <i class="material-icons">folder</i>
             {{ p.location }}
+              <div class="location-progress-ring" [style.--p]="getLocationBoxCompletionPct(p)">
+                <span>{{ getLocationBoxCompletionPct(p) }}%</span>
+              </div>
           </div>
           <div class="location-box-stats">
             <span class="stat total">Tổng: {{ p.total }}</span>
@@ -180,6 +186,9 @@
               <div class="location-box-title">
                 <i class="material-icons">place</i>
                 {{ r.location }}
+                <div class="location-progress-ring" [style.--p]="getLocationBoxCompletionPct(r)">
+                  <span>{{ getLocationBoxCompletionPct(r) }}%</span>
+                </div>
               </div>
               <div class="location-box-stats">
                 <span class="stat total">Tổng: {{ r.total }}</span>
@@ -503,6 +512,9 @@
         <div class="counter-info">
           <div class="counter-label">TỔNG MÃ (DS)</div>
           <div class="counter-value">{{ dsTotalMaterials }}</div>
+          <div class="ds-total-progress" aria-hidden="true">
+            <div class="ds-total-progress-bar" [style.width.%]="getDsOverallCompletionPct()"></div>
+          </div>
         </div>
       </div>
       <div class="counter-box checked-box clickable" (click)="openDsCounterList('checked')" title="Đã kiểm (DS)">
@@ -598,6 +610,9 @@
           <div class="location-box-title">
             <i class="material-icons">folder</i>
             {{ p.location }}
+            <div class="location-progress-ring" [style.--p]="getLocationBoxCompletionPct(p)">
+              <span>{{ getLocationBoxCompletionPct(p) }}%</span>
+            </div>
           </div>
           <div class="location-box-stats">
             <span class="stat total">Tổng: {{ p.total }}</span>
@@ -630,6 +645,9 @@
               <div class="location-box-title">
                 <i class="material-icons">place</i>
                 {{ r.location }}
+                <div class="location-progress-ring" [style.--p]="getLocationBoxCompletionPct(r)">
+                  <span>{{ getLocationBoxCompletionPct(r) }}%</span>
+                </div>
               </div>
               <div class="location-box-stats">
                 <span class="stat total">Tổng: {{ r.total }}</span>
@@ -681,7 +699,7 @@
           <div class="ds-card-row">
             <div class="kv"><span class="k">PO</span><span class="v">{{ r.poNumber || '—' }}</span></div>
             <div class="kv"><span class="k">IMD</span><span class="v">{{ r.imd || '—' }}</span></div>
-            <div class="kv"><span class="k">Tồn Kho</span><span class="v">{{ dsStockForRow(r) == null ? '—' : dsStockForRow(r) }}</span></div>
+            <div class="kv"><span class="k">Tồn Kho</span><span class="v">{{ dsStockForRow(r) == null ? '—' : (dsStockForRow(r) | number:'1.0-2') }}</span></div>
             <div class="kv"><span class="k">Kiểm Kê</span><span class="v">{{ r.qtyCheck == null ? '—' : r.qtyCheck }}</span></div>
             <div class="kv"><span class="k">Chênh Lệch</span><span class="v">{{ dsQtyDeltaDisplay(r) }}</span></div>
             <div class="kv"><span class="k">Ngày</span><span class="v">{{ dsIsCheckedByRule(r) && r.dateCheck ? (r.dateCheck | date:'dd/MM/yyyy HH:mm') : '' }}</span></div>
