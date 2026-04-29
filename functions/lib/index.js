@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.generateStockCheckMonthlyReportFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -244,32 +244,6 @@ exports.sendPrintLabelLateNotifyManualFn = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
-    }
-});
-/** Stock Check: gộp report theo tháng và lưu ra 1 file (Storage + Firestore link). */
-exports.generateStockCheckMonthlyReportFn = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
-    }
-    const factory = (typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().toUpperCase() : 'ASM1');
-    const year = typeof (data === null || data === void 0 ? void 0 : data.year) === 'number' ? data.year : new Date().getFullYear();
-    const month = typeof (data === null || data === void 0 ? void 0 : data.month) === 'number' ? data.month : 3;
-    if (factory !== 'ASM1' && factory !== 'ASM2') {
-        throw new functions.https.HttpsError('invalid-argument', 'Factory không hợp lệ.');
-    }
-    if (!Number.isFinite(year) || year < 2020 || year > 2100) {
-        throw new functions.https.HttpsError('invalid-argument', 'Year không hợp lệ.');
-    }
-    if (!Number.isFinite(month) || month < 1 || month > 12) {
-        throw new functions.https.HttpsError('invalid-argument', 'Month không hợp lệ.');
-    }
-    try {
-        const { generateStockCheckMonthlyReport } = await Promise.resolve().then(() => __importStar(require('./stock-check-monthly-report')));
-        return await generateStockCheckMonthlyReport({ factory, year, month });
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError('internal', msg || 'Không tạo được report theo tháng.');
     }
 });
 exports.sendQcMonthlyReportManualFn = functions

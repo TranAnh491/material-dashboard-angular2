@@ -27,6 +27,10 @@
 # Firebase Functions — tham số / .env theo project (không commit)
 /functions/.env
 /functions/.env.*
+/functions-stockcheck-monthly/node_modules
+/functions-stockcheck-monthly/lib
+/functions-stockcheck-monthly/.env
+/functions-stockcheck-monthly/.env.*
 
 # misc
 /.sass-cache

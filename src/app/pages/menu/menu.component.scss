@@ -198,6 +198,17 @@
   color: #2563eb;
 }
 
+.menu-line-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.menu-line-icon svg {
+  display: block;
+}
+
 .menu-card-title {
   font-size: 12px;
   font-weight: 900;

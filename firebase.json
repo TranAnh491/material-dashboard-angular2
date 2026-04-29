@@ -5,6 +5,17 @@
       "source": "functions"
     },
     {
+      "codebase": "stockcheck-monthly",
+      "source": "functions-stockcheck-monthly",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    },
+    {
       "source": "zalo",
       "codebase": "zalo",
       "disallowLegacyRuntimeConfig": true,
@@ -17,6 +28,9 @@
       ]
     }
   ],
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [

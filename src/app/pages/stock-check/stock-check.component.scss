@@ -3283,216 +3283,203 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 60px 20px;
+            padding: 40px 20px;
             text-align: center;
-            color: #999;
+            color: #9ca3af;
 
-            i {
-              font-size: 64px;
-              margin-bottom: 20px;
-              color: #ccc;
-            }
+            i { font-size: 48px; margin-bottom: 12px; color: #d1d5db; }
+            p { font-size: 14px; margin: 4px 0; }
+            p.hint { font-size: 12px; color: #9ca3af; }
+          }
 
-            p {
-              font-size: 16px;
-              margin: 5px 0;
-
-              &.hint {
-                font-size: 14px;
-                color: #999;
-                font-style: italic;
-              }
-            }
+          // Shared button mixin cho cả .archive-item và .modal-actions
+          %report-btn-base {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: background 0.15s, opacity 0.15s;
+            white-space: nowrap;
+            i { font-size: 15px; }
+            &:disabled { opacity: 0.45; cursor: not-allowed; }
           }
 
           .archive-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 20px;
-            border: 2px solid #000000;
-            border-radius: 12px;
-            background: #ffffff;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #fff;
+            transition: background 0.12s;
 
-            &:hover {
-              background: #f9f9f9;
-              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            }
+            &:hover { background: #f9fafb; }
 
             .archive-info {
               flex: 1;
+              min-width: 0;
 
               .archive-header {
                 display: flex;
                 align-items: center;
-                gap: 15px;
-                margin-bottom: 12px;
+                gap: 10px;
 
                 .archive-index {
-                  font-size: 18px;
-                  font-weight: 700;
-                  color: #ff9800;
-                  background: #fff8f0;
-                  padding: 6px 12px;
-                  border-radius: 8px;
-                  border: 2px solid #ff9800;
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: #6b7280;
+                  background: #f3f4f6;
+                  padding: 3px 8px;
+                  border-radius: 4px;
+                  flex-shrink: 0;
                 }
 
                 .archive-date {
                   display: flex;
                   align-items: center;
-                  gap: 6px;
-                  font-size: 16px;
+                  gap: 5px;
+                  font-size: 14px;
                   font-weight: 600;
-                  color: #000000;
-
-                  i {
-                    font-size: 20px;
-                    color: #ff9800;
-                  }
+                  color: #111827;
+                  i { font-size: 15px; color: #9ca3af; }
                 }
               }
 
               .archive-details {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-
+                margin-top: 4px;
                 .detail-item {
                   display: flex;
                   align-items: center;
-                  gap: 8px;
-                  font-size: 14px;
-                  color: #666;
-
-                  i {
-                    font-size: 18px;
-                    color: #ff9800;
-                  }
+                  gap: 5px;
+                  font-size: 12px;
+                  color: #6b7280;
+                  i { font-size: 14px; color: #9ca3af; }
                 }
               }
             }
 
             .archive-item-actions {
               display: flex;
-              flex-wrap: wrap;
               align-items: center;
-              justify-content: flex-end;
-              gap: 10px;
+              flex-shrink: 0;
+              gap: 6px;
             }
 
             .report-recognition-toggle {
-              display: inline-flex;
-              align-items: center;
-              gap: 8px;
-              padding: 8px 12px;
-              border: 2px solid #000000;
-              border-radius: 8px;
-              background: #fff8e1;
-              font-size: 13px;
-              font-weight: 700;
-              color: #333333;
+              @extend %report-btn-base;
+              border-color: #d1d5db;
+              background: #f9fafb;
+              color: #374151;
+              font-size: 12px;
+              padding: 5px 10px;
               cursor: pointer;
 
-              input[type="checkbox"] {
-                width: 16px;
-                height: 16px;
-                cursor: pointer;
-              }
+              input[type="checkbox"] { width: 13px; height: 13px; cursor: pointer; }
 
               .toggle-label {
-                min-width: 28px;
+                min-width: 24px;
                 text-align: center;
-                color: #2e7d32;
-
-                &.off {
-                  color: #c62828;
-                }
+                color: #16a34a;
+                &.off { color: #dc2626; }
               }
             }
 
             .download-btn {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              padding: 12px 20px;
-              background: linear-gradient(135deg, #4CAF50, #45A049);
-              color: #ffffff;
-              border: 2px solid #000000;
-              border-radius: 8px;
-              font-size: 14px;
-              font-weight: 700;
-              text-transform: uppercase;
-              cursor: pointer;
-
-              &:hover:not(:disabled) {
-                background: linear-gradient(135deg, #45A049, #3d8b40);
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-              }
-
-              &:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-              }
-
-              i {
-                font-size: 20px;
-              }
+              @extend %report-btn-base;
+              background: #2563eb;
+              color: #fff;
+              border-color: #2563eb;
+              &:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
             }
 
             .delete-report-date-btn {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              padding: 12px 16px;
-              background: linear-gradient(135deg, #e53935, #c62828);
-              color: #ffffff;
-              border: 2px solid #000000;
-              border-radius: 8px;
-              font-size: 13px;
-              font-weight: 700;
-              text-transform: uppercase;
-              cursor: pointer;
+              @extend %report-btn-base;
+              background: #fff;
+              color: #dc2626;
+              border-color: #fca5a5;
+              &:hover:not(:disabled) { background: #fef2f2; border-color: #dc2626; }
+              &:disabled { cursor: wait; }
+            }
 
-              &:hover:not(:disabled) {
-                background: linear-gradient(135deg, #c62828, #b71c1c);
-                box-shadow: 0 4px 8px rgba(198, 40, 40, 0.35);
-              }
+            // Tháng đã chốt: viền trái xanh + nền xám cực nhạt
+            &.archive-item--month {
+              border-left: 3px solid #2563eb;
+              background: #f8faff;
+              &:hover { background: #eff6ff; }
 
-              &:disabled {
-                opacity: 0.55;
-                cursor: wait;
-              }
-
-              i {
-                font-size: 20px;
+              .archive-date {
+                font-size: 15px;
+                .report-date-count {
+                  font-size: 12px;
+                  font-weight: 400;
+                  color: #6b7280;
+                  margin-left: 4px;
+                }
               }
             }
+          }
+
+          .report-current-month-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 10px 2px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            i { font-size: 14px; }
           }
         }
       }
 
       .modal-actions {
-        padding: 20px 24px;
-        border-top: 2px solid #000000;
+        padding: 12px 16px;
+        border-top: 1px solid #e5e7eb;
         display: flex;
+        flex-wrap: wrap;
         justify-content: flex-end;
-        gap: 12px;
+        align-items: center;
+        gap: 6px;
+
+        .download-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 7px 12px;
+          background: #2563eb;
+          color: #fff;
+          border: 1px solid #2563eb;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+          i { font-size: 14px; }
+          &:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
+          &:disabled { opacity: 0.45; cursor: not-allowed; }
+        }
 
         .cancel-btn {
-          padding: 12px 24px;
-          background: #f5f5f5;
-          color: #000000;
-          border: 2px solid #000000;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 700;
-          text-transform: uppercase;
+          padding: 7px 16px;
+          background: #fff;
+          color: #374151;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
           cursor: pointer;
-
-          &:hover {
-            background: #e0e0e0;
-          }
+          &:hover { background: #f3f4f6; }
         }
       }
     }
@@ -5816,5 +5803,73 @@
     padding: 0 8px !important;
     font-size: 10px !important;
     i.material-icons { font-size: 14px !important; }
+  }
+}
+
+// Import backup lịch sử — overlay tiến trình (cao hơn modal Report)
+.import-history-backup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+
+.import-history-backup-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  max-width: 440px;
+  width: 100%;
+  padding: 18px 20px 16px;
+
+  h4 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #5e35b1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .material-icons {
+      font-size: 22px;
+    }
+  }
+
+  .ihb-file {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: #444;
+    word-break: break-all;
+    line-height: 1.35;
+  }
+
+  mat-progress-bar {
+    margin-bottom: 12px;
+  }
+
+  .ihb-detail {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #333;
+
+    &.ihb-success {
+      color: #2e7d32;
+    }
+
+    &.ihb-error {
+      color: #c62828;
+    }
+  }
+
+  .ihb-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
   }
 }

@@ -44,7 +44,7 @@
           class="menu-card-icon"
           [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }"
         >
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">Manage all shipments and deliveries</div>
@@ -58,7 +58,7 @@
     <div class="menu-grid">
       <div *ngFor="let tab of tabsByCategory('ASM1 RM')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">Manage inbound/outbound RM1</div>
@@ -72,7 +72,7 @@
     <div class="menu-grid">
       <div *ngFor="let tab of tabsByCategory('Quality')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">Quality control and traceability</div>
@@ -86,7 +86,7 @@
     <div class="menu-grid">
       <div *ngFor="let tab of tabsByCategory('ASM2 RM')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">Manage inbound/outbound RM2</div>
@@ -100,7 +100,7 @@
     <div class="menu-grid">
       <div *ngFor="let tab of tabsByCategory('ASM FG')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">FG inventory management</div>
@@ -114,7 +114,7 @@
     <div class="menu-grid">
       <div *ngFor="let tab of tabsByCategory('Tools')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">Tools and operations</div>
@@ -128,7 +128,7 @@
     <div class="menu-grid">
       <div *ngFor="let tab of tabsByCategory('Admin')" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: getIconAccent(tab).bg, borderColor: getIconAccent(tab).border }">
-          <i class="material-icons" [style.color]="getIconAccent(tab).fg">{{ tab.icon }}</i>
+          <span class="menu-line-icon" [style.color]="getIconAccent(tab).fg" [innerHTML]="getMenuLineIcon(tab)"></span>
         </div>
         <div class="menu-card-title">{{ tab.title }}</div>
         <div class="menu-card-subtitle">Admin and reports</div>

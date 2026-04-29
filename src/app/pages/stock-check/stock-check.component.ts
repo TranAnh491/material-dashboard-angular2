@@ -1,7 +1,8 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { AngularFireFunctions } from '@angular/fire/compat/functions';
+import { AngularFireStorage } from '@angular/fire/compat/storage';
 import { Subject } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { takeUntil, first, filter, skip, debounceTime } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
@@ -120,10 +121,19 @@ interface ReportCompareRow {
   imdList?: string;
 }
 
+/** Tháng đã chốt — gộp nhiều ngày thành 1 dòng trong modal Report */
+interface ReportMonthOption {
+  monthKey: string;       // YYYY-MM
+  monthLabel: string;     // "Tháng 3/2026"
+  totalMaterials: number; // unique mã trong tháng
+  dateKeys: string[];     // các YYYY-MM-DD thuộc tháng này
+}
+
 @Component({
   selector: 'app-stock-check',
   templateUrl: './stock-check.component.html',
-  styleUrls: ['./stock-check.component.scss']
+  styleUrls: ['./stock-check.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StockCheckComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
@@ -252,12 +262,27 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Đang xóa report: giữ `dateKey` để disable nút tương ứng */
   isDeletingReportDateKey: string | null = null;
   reportDateOptions: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
+  /** Các tháng đã chốt (< tháng hiện tại) — mỗi tháng 1 dòng gộp */
+  reportMonthOptions: ReportMonthOption[] = [];
+  /** Các ngày thuộc tháng hiện tại — vẫn hiển thị lẻ */
+  reportCurrentMonthDates: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
   private reportDataByDateKey: Map<string, ReportDayAggRow[]> = new Map();
   private reportDatesLoadedFactory: string | null = null;
   /** Đang export report theo tháng (gộp nhiều ngày). */
   isExportingMonthlyReport: boolean = false;
   /** Đang tạo & lưu file tháng lên Firebase Storage */
   isSavingMonthlyReport: boolean = false;
+  /** Tháng đang chờ chọn file Excel để Lưu Firebase (sau khi tải gộp) */
+  pendingFirebaseSaveMonth: number | null = null;
+  /** Backup / import lịch sử stock-check-history (JSON) */
+  isExportingHistoryBackup = false;
+  isImportingHistoryBackup = false;
+  /** Modal tiến trình Import backup lịch sử */
+  showImportHistoryBackupProgressModal = false;
+  importHistoryBackupPhase: 'reading' | 'writing' | 'done' | 'error' = 'reading';
+  importHistoryBackupFileName = '';
+  importHistoryBackupDetail = '';
+  importHistoryBackupProgressPct = 0;
   /** Link file tháng đã lưu (nếu có) */
   monthlyReportUrl: string | null = null;
   monthlyReportUpdatedAt: Date | null = null;
@@ -335,17 +360,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** DS: danh sách dòng đang kiểm (để hiển thị trong scan modal) */
   private dsScanRowsForDisplay: Array<{ materialCode: string; poNumber: string; imd: string }> = [];
 
-  get dsTotalMaterials(): number {
-    return this.dsRows.length;
-  }
-
-  get dsCheckedMaterials(): number {
-    return this.dsRows.filter(r => this.dsIsCheckedByRule(r)).length;
-  }
-
-  get dsUncheckedMaterials(): number {
-    return Math.max(0, this.dsTotalMaterials - this.dsCheckedMaterials);
-  }
+  get dsTotalMaterials(): number { return this._dsTotalMaterials; }
+  get dsCheckedMaterials(): number { return this._dsCheckedMaterials; }
+  get dsUncheckedMaterials(): number { return this._dsUncheckedMaterials; }
 
   /** DS: danh sách theo counter (không theo vị trí) */
   get dsCounterListRows(): Array<{
@@ -873,6 +890,21 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   private invalidateDsRackStatsCache(): void {
     this._dsRackStatsCache = null;
+    this.updateDsCounters();
+  }
+
+  private updateDsCounters(): void {
+    const from = this.dsRuleFromMs();
+    const to = this.dsRuleToMs();
+    let checked = 0;
+    for (const r of this.dsRows) {
+      if (!r.dateCheck) continue;
+      const t = r.dateCheck instanceof Date ? r.dateCheck.getTime() : new Date(r.dateCheck as any).getTime();
+      if (Number.isFinite(t) && t >= from && t <= to) checked++;
+    }
+    this._dsTotalMaterials = this.dsRows.length;
+    this._dsCheckedMaterials = checked;
+    this._dsUncheckedMaterials = Math.max(0, this.dsRows.length - checked);
   }
 
   // Check by code modal/session
@@ -1276,10 +1308,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.dsLoading = true;
     this.dsError = '';
     this.dsRows = [];
+    this.updateDsCounters();
     try {
       const pxkPairs = await this.loadPxkPairsListFromFirebase();
       if (pxkPairs.length === 0) {
         this.dsRows = [];
+        this.updateDsCounters();
         return;
       }
       const normPoInv = (v: any): string => String(v ?? '').replace(/\s+/g, '').trim();
@@ -1300,27 +1334,21 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           const po2 = normPoInv(m.poNumber);
           return mc2 === mc && po2 === normPoInv(po);
         });
-        if (matches.length === 0) {
-          // PXK có nhưng kho chưa có dòng tương ứng -> vẫn hiển thị để không bị thiếu
+
+        // DS cần chỉ hiển thị các mã/vị trí có tồn kho thực tế.
+        // Các cặp PXK nhưng không có dòng inventory-materials (hoặc stock <= 0) sẽ bị loại để tránh hiển thị dư.
+        const matchesWithStock = matches.filter(m => Number.isFinite(m.stock) && Number(m.stock) > 0);
+        if (matchesWithStock.length === 0) continue;
+
+        for (const m of matchesWithStock) {
           rows.push({
             materialCode: mc,
-            poNumber: po,
-            imd: '',
-            location: '',
-            qtyCheck: null,
-            dateCheck: null
+            poNumber: String(m.poNumber || '').replace(/\s+/g, '').trim(),
+            imd: String(m.imd || '').trim(),
+            location: String(m.location || '').trim(),
+            qtyCheck: m.qtyCheck ?? null,
+            dateCheck: m.dateCheck ?? null
           });
-        } else {
-          for (const m of matches) {
-            rows.push({
-              materialCode: mc,
-              poNumber: String(m.poNumber || '').replace(/\s+/g, '').trim(),
-              imd: String(m.imd || '').trim(),
-              location: String(m.location || '').trim(),
-              qtyCheck: m.qtyCheck ?? null,
-              dateCheck: m.dateCheck ?? null
-            });
-          }
         }
       }
 
@@ -1622,31 +1650,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return this.allMaterials.length;
   }
 
-  get checkedMaterials(): number {
-    return this.allMaterials.filter(m => m.stockCheck === '✓').length;
-  }
-
-  get uncheckedMaterials(): number {
-    // 🔧 Công thức: Tổng mã - (Đã kiểm tra + Đổi vị trí)
-    // Lưu ý: Nếu 1 mã có ở cả 2 thì chỉ tính 1 lần (không double count)
-    const checkedOrLocationChanged = new Set<string>();
-    
-    this.allMaterials.forEach(m => {
-      const key = `${m.materialCode}_${m.poNumber}_${m.imd}`;
-      if (m.stockCheck === '✓' || m.locationChangeInfo?.hasChanged === true) {
-        checkedOrLocationChanged.add(key);
-      }
-    });
-    
-    return this.totalMaterials - checkedOrLocationChanged.size;
-  }
-
-  get locationChangedMaterials(): number {
-    // Đếm số lượng materials đã đổi vị trí
-    return this.allMaterials.filter(m => 
-      m.locationChangeInfo?.hasChanged === true
-    ).length;
-  }
+  get checkedMaterials(): number { return this._checkedMaterials; }
+  get uncheckedMaterials(): number { return this._uncheckedMaterials; }
+  get locationChangedMaterials(): number { return this._locationChangedMaterials; }
 
   /** Danh sách vị trí (mỗi vị trí 1 box) — dùng cho giao diện grid 6 cột */
   get locationBoxStats(): RackStat[] {
@@ -1714,26 +1720,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return groups;
   }
 
-  get outsideStockMaterials(): number {
-    // Đếm mã ngoài tồn kho: isNewMaterial = true HOẶC stock = 0
-    return this.allMaterials.filter(m => {
-      if (m.isNewMaterial === true) return true;
-      // Tính stock hiện tại
-      const openingStockValue = m.openingStock !== null && m.openingStock !== undefined ? m.openingStock : 0;
-      const currentStock = openingStockValue + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
-      return currentStock === 0 || currentStock < 0;
-    }).length;
-  }
-
-  /** Số mã có KHSX nhưng chưa được stock check */
-  get khsxUncheckedCount(): number {
-    return this.allMaterials.filter(m => m.hasKhsx && m.stockCheck !== '✓').length;
-  }
-
-  /** Tổng số mã có KHSX */
-  get khsxTotalCount(): number {
-    return this.allMaterials.filter(m => m.hasKhsx).length;
-  }
+  get outsideStockMaterials(): number { return this._outsideStockMaterials; }
+  get khsxUncheckedCount(): number { return this._khsxUncheckedCount; }
+  get khsxTotalCount(): number { return this._khsxTotalCount; }
 
   /**
    * Set filter mode
@@ -1909,6 +1898,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const searchTerm = this.searchInput.trim().toUpperCase();
     let filtered = [...this.allMaterials];
 
+    // Ẩn mã tồn kho = 0 (trừ mode 'outside')
+    if (this.filterMode !== 'outside') {
+      filtered = filtered.filter(m => !this.isZeroStock(m));
+    }
+
     // Apply filter mode first
     if (this.filterMode === 'checked') {
       filtered = filtered.filter(m => m.stockCheck === '✓');
@@ -2066,6 +2060,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
     let filtered = [...this.allMaterials];
 
+    // Ẩn mã tồn kho = 0 khỏi danh sách kiểm (mode 'outside' vẫn xem được)
+    if (this.filterMode !== 'outside') {
+      filtered = filtered.filter(m => !this.isZeroStock(m));
+    }
+
     if (this.filterMode === 'checked') {
       filtered = filtered.filter(m => m.stockCheck === '✓');
     } else if (this.filterMode === 'unchecked') {
@@ -2121,7 +2120,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private fns: AngularFireFunctions,
+    private storage: AngularFireStorage,
     private cdr: ChangeDetectorRef,
     private router: Router,
     private rmBagHistory: RmBagHistoryService
@@ -2635,25 +2634,23 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    * Load valid locations from Location tab (collection 'locations')
    */
   loadValidLocations(): void {
-    try {
-      this.firestore.collection('locations')
-        .valueChanges()
-        .pipe(takeUntil(this.destroy$))
-        .subscribe((locations: any[]) => {
-          // Extract viTri field from locations
-          this.validLocations = locations
-            .map(loc => loc.viTri ? loc.viTri.trim().toUpperCase() : '')
-            .filter(loc => loc !== ''); // Remove empty locations
-          
-          console.log(`✅ Loaded ${this.validLocations.length} valid locations from Location tab`);
-        }, error => {
-          console.error('❌ Error loading locations:', error);
-          this.validLocations = []; // Fallback to empty array
-        });
-    } catch (error) {
-      console.error('❌ Error loading valid locations:', error);
-      this.validLocations = [];
-    }
+    this.firestore.collection('locations')
+      .get()
+      .pipe(first(), takeUntil(this.destroy$))
+      .subscribe({
+        next: (snap) => {
+          this.validLocations = snap.docs
+            .map((doc: any) => {
+              const d = doc.data();
+              return d?.viTri ? String(d.viTri).trim().toUpperCase() : '';
+            })
+            .filter((loc: string) => loc !== '');
+        },
+        error: (err: any) => {
+          console.error('❌ Error loading locations:', err);
+          this.validLocations = [];
+        }
+      });
   }
 
   /**
@@ -3033,14 +3030,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           }
           this.loadPageFromFiltered(this.currentPage);
         } else {
-          // Initialize filtered materials
-          this.filteredMaterials = [...this.allMaterials];
-
-          // Calculate total pages
-          this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
-
-          // Load first page
-          this.loadPageFromFiltered(1);
+          this.applyFilter();
         }
         
         // Calculate ID check statistics
@@ -3161,10 +3151,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               });
               this.invalidateRackStatsCache();
               this.updateLocationMaterials();
-              if (!this.searchResultsMode) {
-                this.filteredMaterials = [...this.allMaterials];
-                this.loadPageFromFiltered(this.currentPage);
-              }
+              this.applyFilter();
               this.calculateIdCheckStats();
               this.cdr.detectChanges();
             } else {
@@ -3176,10 +3163,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
                 this.applyReportDateRecognitionToMaterials(this.allMaterials);
                 this.invalidateRackStatsCache();
                 this.updateLocationMaterials();
-                if (!this.searchResultsMode) {
-                  this.filteredMaterials = [...this.allMaterials];
-                  this.loadPageFromFiltered(this.currentPage);
-                }
+                this.applyFilter();
                 this.calculateIdCheckStats();
                 this.cdr.detectChanges();
               }
@@ -3203,11 +3187,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         // Update location view (box) nếu đang scan theo vị trí
         this.updateLocationMaterials();
         
-        // Update filtered materials (không ghi đè khi đang xem snapshot tìm kiếm)
-        if (!this.searchResultsMode) {
-          this.filteredMaterials = [...this.allMaterials];
-          this.loadPageFromFiltered(this.currentPage);
-        }
+        // Update filtered materials (applyFilter xử lý cả searchResultsMode + zero-stock)
+        this.applyFilter();
 
         // Recalculate stats
         this.calculateIdCheckStats();
@@ -3390,6 +3371,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private snapshotCache: { [factory: string]: { materials: any[], lastUpdated: Date } } = {};
   /** Cache rack stats để giảm tính toán khi render box vị trí */
   private _rackStatsCache: RackStat[] | null = null;
+
+  /** Cached counters — cập nhật qua updateCounters() khi data thay đổi */
+  private _checkedMaterials: number = 0;
+  private _uncheckedMaterials: number = 0;
+  private _locationChangedMaterials: number = 0;
+  private _outsideStockMaterials: number = 0;
+  private _khsxUncheckedCount: number = 0;
+  private _khsxTotalCount: number = 0;
+
+  /** DS cached counters */
+  private _dsTotalMaterials: number = 0;
+  private _dsCheckedMaterials: number = 0;
+  private _dsUncheckedMaterials: number = 0;
 
   async saveStockCheckToFirebase(material: StockCheckMaterial, scannedQty?: number, bag?: string): Promise<void> {
     try {
@@ -4183,7 +4177,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.searchInput = '';
     this.selectedLocationForDetail = loc;
     this.filteredMaterials = this.allMaterials
-      .filter(m => this.getDisplayLocation(m) === loc)
+      .filter(m => this.getDisplayLocation(m) === loc && !this.isZeroStock(m))
       .slice()
       .sort((a, b) => {
         const code = a.materialCode.localeCompare(b.materialCode);
@@ -4316,6 +4310,46 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   private invalidateRackStatsCache(): void {
     this._rackStatsCache = null;
+    this.updateCounters();
+  }
+
+  /** Trả về true nếu mã này tồn kho = 0 (không cần kiểm tra thực tế) */
+  private isZeroStock(m: StockCheckMaterial): boolean {
+    if (m.isNewMaterial === true) return false;
+    const os = m.openingStock ?? 0;
+    const cs = os + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
+    return cs <= 0;
+  }
+
+  /** Tính tất cả counters trong 1 vòng lặp — gọi sau mỗi lần allMaterials thay đổi */
+  private updateCounters(): void {
+    const materials = this.allMaterials;
+    let checked = 0, locationChanged = 0, outside = 0, khsxUnchecked = 0, khsxTotal = 0;
+    const checkedOrChangedKeys = new Set<string>();
+    for (const m of materials) {
+      if (m.stockCheck === '✓') checked++;
+      if (m.locationChangeInfo?.hasChanged === true) locationChanged++;
+      if (m.hasKhsx) {
+        khsxTotal++;
+        if (m.stockCheck !== '✓') khsxUnchecked++;
+      }
+      if (m.stockCheck === '✓' || m.locationChangeInfo?.hasChanged === true) {
+        checkedOrChangedKeys.add(`${m.materialCode}_${m.poNumber}_${m.imd}`);
+      }
+      if (m.isNewMaterial === true) {
+        outside++;
+      } else {
+        const os = m.openingStock ?? 0;
+        const cs = os + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0);
+        if (cs <= 0) outside++;
+      }
+    }
+    this._checkedMaterials = checked;
+    this._locationChangedMaterials = locationChanged;
+    this._outsideStockMaterials = outside;
+    this._khsxUncheckedCount = khsxUnchecked;
+    this._khsxTotalCount = khsxTotal;
+    this._uncheckedMaterials = materials.length - checkedOrChangedKeys.size;
   }
 
   exportRackReport(): void {
@@ -4435,6 +4469,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   closeReportByDateModal(): void {
     this.showReportByDateModal = false;
+    this.pendingFirebaseSaveMonth = null;
+    this.isExportingHistoryBackup = false;
+    this.isImportingHistoryBackup = false;
+    this.showImportHistoryBackupProgressModal = false;
+  }
+
+  closeImportHistoryBackupProgressModal(): void {
+    this.showImportHistoryBackupProgressModal = false;
   }
 
   private toLocalDateKey(d: Date): string {
@@ -4570,6 +4612,38 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       }
 
       this.reportDatesLoadedFactory = this.selectedFactory;
+
+      // Gộp các ngày cùng tháng — tháng đã chốt (< tháng hiện tại) → 1 dòng/tháng
+      const now = new Date();
+      const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const monthMap = new Map<string, { dateKeys: string[]; matKeys: Set<string> }>();
+
+      this.reportCurrentMonthDates = [];
+      for (const opt of this.reportDateOptions) {
+        const mk = opt.dateKey.substring(0, 7); // YYYY-MM
+        if (mk >= currentMonthKey) {
+          // tháng hiện tại → hiển thị lẻ
+          this.reportCurrentMonthDates.push(opt);
+          continue;
+        }
+        if (!monthMap.has(mk)) monthMap.set(mk, { dateKeys: [], matKeys: new Set() });
+        const m = monthMap.get(mk)!;
+        m.dateKeys.push(opt.dateKey);
+        const rows = this.reportDataByDateKey.get(opt.dateKey) || [];
+        rows.forEach(r => m.matKeys.add(`${r.materialCode}|${r.poNumber}|${r.imd}`));
+      }
+
+      this.reportMonthOptions = Array.from(monthMap.entries())
+        .sort((a, b) => b[0].localeCompare(a[0])) // mới nhất lên trên
+        .map(([mk, v]) => {
+          const [yyyy, mm] = mk.split('-');
+          return {
+            monthKey: mk,
+            monthLabel: `Tháng ${parseInt(mm)}/${yyyy}`,
+            totalMaterials: v.matKeys.size,
+            dateKeys: v.dateKeys
+          };
+        });
     } finally {
       this.isLoadingReportDates = false;
     }
@@ -4590,6 +4664,165 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.reportDateEnabledMap[dateKey] = enabled;
     await this.saveReportDateSettings();
     await this.reloadAndApplyReportDateRecognition();
+  }
+
+  /** True nếu TẤT CẢ ngày trong tháng đều ON */
+  isReportMonthEnabled(monthKey: string): boolean {
+    const opt = this.reportMonthOptions.find(m => m.monthKey === monthKey);
+    if (!opt || opt.dateKeys.length === 0) return false;
+    return opt.dateKeys.every(dk => this.isReportDateEnabled(dk));
+  }
+
+  /** Bật/tắt toàn bộ ngày trong tháng cùng lúc */
+  async onToggleReportMonthEnabled(monthKey: string, enabled: boolean): Promise<void> {
+    const opt = this.reportMonthOptions.find(m => m.monthKey === monthKey);
+    if (!opt) return;
+    if (this.reportOnlyDateKey) this.reportOnlyDateKey = null;
+    for (const dk of opt.dateKeys) {
+      this.reportDateEnabledMap[dk] = enabled;
+    }
+    await this.saveReportDateSettings();
+    await this.reloadAndApplyReportDateRecognition();
+  }
+
+  /** Xuất report gộp theo monthKey (YYYY-MM) */
+  async exportReportByMonthKey(monthKey: string): Promise<void> {
+    if (!this.selectedFactory) return;
+    if (this.isExportingMonthlyReport) return;
+    const [yyyy, mm] = monthKey.split('-');
+    const month1to12 = parseInt(mm, 10);
+    const year = parseInt(yyyy, 10);
+    if (!this.ensureMonthClosedForMerge(month1to12)) return;
+
+    this.isExportingMonthlyReport = true;
+    this.cdr.detectChanges();
+    try {
+      const factory = this.selectedFactory;
+      const khsxSet = new Set((this.khsxCodes || []).map(c => String(c).trim().toUpperCase()));
+
+      // Dùng cache nếu đã có, không cần đọc Firestore lại
+      const opt = this.reportMonthOptions.find(m => m.monthKey === monthKey);
+      const cachedDateKeys = opt?.dateKeys || [];
+      const merged = new Map<string, ReportDayAggRow>();
+
+      if (cachedDateKeys.length > 0 && this.reportDataByDateKey.size > 0) {
+        // Dùng cache đã load → nhanh, không cần fetch Firestore
+        for (const dk of cachedDateKeys) {
+          const dayRows = this.reportDataByDateKey.get(dk) || [];
+          for (const r of dayRows) {
+            const key = `${r.materialCode}\0${r.poNumber}\0${r.imd}\0${r.bag || ''}\0${(r.location || '').toUpperCase()}`;
+            const existing = merged.get(key);
+            if (!existing) {
+              merged.set(key, { ...r });
+            } else {
+              existing.qtyCheckTotal += r.qtyCheckTotal;
+              const tOld = existing.lastDateCheck ? new Date(existing.lastDateCheck).getTime() : 0;
+              const tNew = r.lastDateCheck ? new Date(r.lastDateCheck).getTime() : 0;
+              if (tNew > tOld) {
+                existing.stock = r.stock;
+                existing.location = r.location;
+                existing.standardPacking = r.standardPacking;
+                existing.idCheck = r.idCheck;
+                existing.lastDateCheck = r.lastDateCheck;
+                existing.bag = r.bag;
+              }
+            }
+          }
+        }
+      } else {
+        // Fallback: đọc Firestore và lọc theo year+month
+        const snap = await this.firestore
+          .collection('stock-check-history', ref => ref.where('factory', '==', factory))
+          .get().toPromise();
+        if (snap && !snap.empty) {
+          snap.forEach(doc => {
+            const data = doc.data() as any;
+            const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+            const poNumber = String(data?.poNumber || '').trim();
+            const imd = String(data?.imd || '').trim();
+            const history: any[] = Array.isArray(data?.history) ? data.history : [];
+            if (!materialCode || !poNumber || !imd || history.length === 0) return;
+            for (const item of history) {
+              const d = this.parseFirestoreDate(item?.dateCheck);
+              if (!d) continue;
+              if (d.getFullYear() !== year || (d.getMonth() + 1) !== month1to12) continue;
+              const qty = item?.qtyCheck != null ? Number(item.qtyCheck) : 0;
+              if (!qty) continue;
+              const stockVal = item?.stock != null ? Number(item.stock) : 0;
+              const location = String(item?.location || '').trim();
+              const standardPacking = String(item?.standardPacking || '').trim();
+              const idCheck = String(item?.idCheck || '').trim() || '-';
+              const bag = String(item?.bag || '').trim();
+              const key = `${materialCode}\0${poNumber}\0${imd}\0${bag}\0${location.toUpperCase()}`;
+              const existing = merged.get(key);
+              if (!existing) {
+                merged.set(key, { materialCode, poNumber, imd, stock: stockVal, qtyCheckTotal: qty, location, standardPacking, idCheck, lastDateCheck: d, hasKhsx: khsxSet.has(materialCode), bag });
+              } else {
+                existing.qtyCheckTotal += qty;
+                if (d.getTime() >= existing.lastDateCheck.getTime()) {
+                  existing.stock = stockVal; existing.location = location;
+                  existing.standardPacking = standardPacking; existing.idCheck = idCheck;
+                  existing.lastDateCheck = d; existing.bag = bag;
+                }
+              }
+            }
+          });
+        }
+      }
+
+      if (merged.size === 0) {
+        alert(`Không có dữ liệu report tháng ${month1to12}/${year}.`);
+        return;
+      }
+
+      const rows = Array.from(merged.values()).sort((a, b) => {
+        const mc = a.materialCode.localeCompare(b.materialCode);
+        if (mc !== 0) return mc;
+        return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'vi');
+      });
+
+      const exportData = rows.map((r, idx) => {
+        const stockVal = Number(r.stock || 0);
+        const qtyCheckVal = Number(r.qtyCheckTotal || 0);
+        return {
+          'STT': idx + 1, 'Mã hàng': r.materialCode, 'PO': r.poNumber, 'IMD': r.imd,
+          'Bag': r.bag || '', 'Tồn Kho': stockVal, 'KHSX': r.hasKhsx ? '✔' : '',
+          'Vị trí': r.location || '-', 'Standard Packing': r.standardPacking || '',
+          'Stock Check': '✓', 'Qty Check': qtyCheckVal,
+          'So Sánh Stock': parseFloat((stockVal - qtyCheckVal).toFixed(2)),
+          'ID Check': r.idCheck || '',
+          'Date Check': r.lastDateCheck ? r.lastDateCheck.toLocaleString('vi-VN') : ''
+        };
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+        { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 18 },
+        { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, `Thang_${mm}`);
+
+      const compareRows = await this.buildCheckedVsInventoryComparison(rows);
+      const wsCompare = XLSX.utils.json_to_sheet(compareRows.map((r, idx) => ({
+        'STT': idx + 1, 'Mã hàng': r.materialCode, 'IMD (đã kiểm)': r.imdList || '',
+        'Qty đã kiểm': r.checkedQty, 'Tồn kho import': r.inventoryStock,
+        'Chênh lệch (Tồn - Check)': r.difference, 'Trạng thái': r.status
+      })));
+      wsCompare['!cols'] = [
+        { wch: 6 }, { wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 16 }
+      ];
+      XLSX.utils.book_append_sheet(wb, wsCompare, 'So sánh tồn kho');
+
+      XLSX.writeFile(wb, `Stock_Check_${factory}_Thang${mm}_${yyyy}.xlsx`);
+    } catch (e) {
+      console.error('❌ [ReportByMonth] Export failed:', e);
+      alert('❌ Không xuất được report.');
+    } finally {
+      this.isExportingMonthlyReport = false;
+      this.cdr.detectChanges();
+    }
   }
 
   private hasAnyReportDateDisabled(): boolean {
@@ -4791,6 +5024,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   async exportStockCheckReportByMonth(month1to12: number): Promise<void> {
     if (!this.selectedFactory) return;
     if (this.isExportingMonthlyReport) return;
+    if (!this.ensureMonthClosedForMerge(month1to12)) return;
 
     this.isExportingMonthlyReport = true;
     this.cdr.detectChanges();
@@ -4936,6 +5170,162 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Export trực tiếp report gộp tháng — không cần mở modal, không build date cache.
+   * 1 lần đọc Firestore + 1 lần đọc inventory, xử lý trong memory, xuất file.
+   */
+  async exportMonthReportDirect(month1to12: number): Promise<void> {
+    if (!this.selectedFactory) return;
+    if (this.isExportingMonthlyReport) return;
+    if (!this.ensureMonthClosedForMerge(month1to12)) return;
+
+    this.isExportingMonthlyReport = true;
+    this.cdr.detectChanges();
+
+    try {
+      const factory = this.selectedFactory;
+      const mm = String(month1to12).padStart(2, '0');
+      const khsxSet = new Set((this.khsxCodes || []).map(c => String(c).trim().toUpperCase()));
+
+      // Đọc toàn bộ stock-check-history của factory (1 query duy nhất)
+      const snap = await this.firestore
+        .collection('stock-check-history', ref => ref.where('factory', '==', factory))
+        .get()
+        .toPromise();
+
+      if (!snap || snap.empty) {
+        alert(`Không có dữ liệu kiểm kê tháng ${month1to12}.`);
+        return;
+      }
+
+      // Gộp trực tiếp theo key: Mã+PO+IMD+Bag+Location — chỉ tháng cần
+      const merged = new Map<string, ReportDayAggRow>();
+
+      snap.forEach(doc => {
+        const data = doc.data() as any;
+        const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+        const poNumber = String(data?.poNumber || '').trim();
+        const imd = String(data?.imd || '').trim();
+        const history: any[] = Array.isArray(data?.history) ? data.history : [];
+        if (!materialCode || !poNumber || !imd || history.length === 0) return;
+
+        for (const item of history) {
+          const d = this.parseFirestoreDate(item?.dateCheck);
+          if (!d) continue;
+          // Chỉ lấy đúng tháng cần — bỏ qua tháng khác ngay tại đây
+          if (String(d.getMonth() + 1).padStart(2, '0') !== mm) continue;
+
+          const qty = item?.qtyCheck != null ? Number(item.qtyCheck) : 0;
+          if (!qty) continue;
+
+          const stockVal = item?.stock != null ? Number(item.stock) : 0;
+          const location = String(item?.location || '').trim();
+          const standardPacking = String(item?.standardPacking || '').trim();
+          const idCheck = String(item?.idCheck || '').trim() || '-';
+          const bag = String(item?.bag || '').trim();
+
+          const key = `${materialCode}\0${poNumber}\0${imd}\0${bag}\0${location.toUpperCase()}`;
+          const existing = merged.get(key);
+          if (!existing) {
+            merged.set(key, {
+              materialCode, poNumber, imd,
+              stock: stockVal, qtyCheckTotal: qty,
+              location, standardPacking, idCheck,
+              lastDateCheck: d,
+              hasKhsx: khsxSet.has(materialCode),
+              bag
+            });
+          } else {
+            existing.qtyCheckTotal += qty;
+            if (d.getTime() >= existing.lastDateCheck.getTime()) {
+              existing.stock = stockVal;
+              existing.location = location;
+              existing.standardPacking = standardPacking;
+              existing.idCheck = idCheck;
+              existing.lastDateCheck = d;
+              existing.bag = bag;
+            }
+          }
+        }
+      });
+
+      if (merged.size === 0) {
+        alert(`Không có dữ liệu report trong tháng ${month1to12}.`);
+        return;
+      }
+
+      const rows = Array.from(merged.values()).sort((a, b) => {
+        const mc = a.materialCode.localeCompare(b.materialCode);
+        if (mc !== 0) return mc;
+        const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'vi');
+        if (po !== 0) return po;
+        return String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
+      });
+
+      const exportData = rows.map((r, idx) => {
+        const stockVal = Number(r.stock || 0);
+        const qtyCheckVal = Number(r.qtyCheckTotal || 0);
+        const soSanh = parseFloat((stockVal - qtyCheckVal).toFixed(2));
+        return {
+          'STT': idx + 1,
+          'Mã hàng': r.materialCode,
+          'PO': r.poNumber,
+          'IMD': r.imd,
+          'Bag': r.bag || '',
+          'Tồn Kho': stockVal,
+          'KHSX': r.hasKhsx ? '✔' : '',
+          'Vị trí': r.location || '-',
+          'Standard Packing': r.standardPacking || '',
+          'Stock Check': '✓',
+          'Qty Check': qtyCheckVal,
+          'So Sánh Stock': soSanh,
+          'ID Check': r.idCheck || '',
+          'Date Check': r.lastDateCheck ? r.lastDateCheck.toLocaleString('vi-VN') : ''
+        };
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+        { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 18 },
+        { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, `Thang_${mm}`);
+
+      // Sheet so sánh tồn kho
+      const compareRows = await this.buildCheckedVsInventoryComparison(rows);
+      const compareExport = compareRows.map((r, idx) => ({
+        'STT': idx + 1,
+        'Mã hàng': r.materialCode,
+        'IMD (đã kiểm)': r.imdList || '',
+        'Qty đã kiểm': r.checkedQty,
+        'Tồn kho import': r.inventoryStock,
+        'Chênh lệch (Tồn - Check)': r.difference,
+        'Trạng thái': r.status
+      }));
+      const wsCompare = XLSX.utils.json_to_sheet(compareExport);
+      wsCompare['!cols'] = [
+        { wch: 6 }, { wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 16 }
+      ];
+      XLSX.utils.book_append_sheet(wb, wsCompare, 'So sánh tồn kho');
+
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+        { 'Thông tin': 'Factory', 'Giá trị': factory },
+        { 'Thông tin': 'Tháng', 'Giá trị': mm },
+        { 'Thông tin': 'Tổng dòng (gộp)', 'Giá trị': rows.length }
+      ]), 'Tóm tắt');
+
+      XLSX.writeFile(wb, `Stock_Check_${factory}_Thang${mm}.xlsx`);
+    } catch (e) {
+      console.error('❌ [ReportDirect] Export failed:', e);
+      alert('❌ Không xuất được report.');
+    } finally {
+      this.isExportingMonthlyReport = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   private monthlyReportDocId(factory: string, year: number, month1to12: number): string {
     const mm = String(month1to12).padStart(2, '0');
     return `${factory}__${year}-${mm}`;
@@ -4943,18 +5333,24 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   async loadMonthlyReportLink(month1to12: number): Promise<void> {
     if (!this.selectedFactory) return;
-    const year = new Date().getFullYear();
-    const docId = this.monthlyReportDocId(this.selectedFactory, year, month1to12);
+    if (this.reportDataByDateKey.size === 0) {
+      await this.loadReportDatesAndCache();
+    }
+    const years = this.collectYearsForReportMonth(month1to12);
+    const tryYears = years.length ? [...years].sort((a, b) => b - a) : [new Date().getFullYear()];
     try {
-      const doc = await this.firestore.collection(this.MONTHLY_REPORTS_COLLECTION).doc(docId).ref.get();
-      if (!doc.exists) {
-        this.monthlyReportUrl = null;
-        this.monthlyReportUpdatedAt = null;
-        return;
+      for (const year of tryYears) {
+        const docId = this.monthlyReportDocId(this.selectedFactory, year, month1to12);
+        const doc = await this.firestore.collection(this.MONTHLY_REPORTS_COLLECTION).doc(docId).ref.get();
+        if (doc.exists) {
+          const d: any = doc.data() || {};
+          this.monthlyReportUrl = d.url || null;
+          this.monthlyReportUpdatedAt = d.updatedAt?.toDate?.() || null;
+          return;
+        }
       }
-      const d: any = doc.data() || {};
-      this.monthlyReportUrl = d.url || null;
-      this.monthlyReportUpdatedAt = d.updatedAt?.toDate?.() || null;
+      this.monthlyReportUrl = null;
+      this.monthlyReportUpdatedAt = null;
     } catch (e) {
       console.error('❌ [MonthlyReport] load link failed', e);
       this.monthlyReportUrl = null;
@@ -4969,43 +5365,666 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     window.open(this.monthlyReportUrl, '_blank');
   }
 
-  /** Tạo file Excel tháng và lưu lên Firebase (Storage + Firestore link). */
-  async saveStockCheckMonthlyReportToFirebase(month1to12: number): Promise<void> {
-    if (!this.selectedFactory) return;
+  /**
+   * Sau khi đã tải file gộp tháng (Excel), bấm nút này rồi chọn đúng file vừa tải —
+   * hệ thống upload lên Storage (ghi đè file tháng) và cập nhật link trong Firestore.
+   * `fileInput`: ref input file (gọi .click() đồng bộ trong cùng user gesture để trình duyệt không chặn).
+   */
+  saveStockCheckMonthlyReportToFirebase(month1to12: number, fileInput: HTMLInputElement): void {
+    if (!this.selectedFactory || !fileInput) return;
     if (this.isSavingMonthlyReport) return;
+    if (!this.ensureMonthClosedForMerge(month1to12)) return;
+    this.pendingFirebaseSaveMonth = month1to12;
+    fileInput.value = '';
+    fileInput.click();
+  }
+
+  async onMergedMonthlyFileForFirebase(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    const expectedMonth = this.pendingFirebaseSaveMonth;
+    this.pendingFirebaseSaveMonth = null;
+
+    if (!file || !this.selectedFactory || !expectedMonth) {
+      return;
+    }
 
     this.isSavingMonthlyReport = true;
     this.cdr.detectChanges();
 
-    const factory = this.selectedFactory;
-    const year = new Date().getFullYear();
-
     try {
-      // Gọi Cloud Function để generate & upload server-side (không dính CORS).
-      const res: any = await this.fns
-        .httpsCallable('generateStockCheckMonthlyReportFn')({
-          factory,
-          year,
-          month: month1to12
-        })
-        .toPromise();
-
-      const url = res?.url || null;
-      if (!url) {
-        alert(`Không có dữ liệu report trong tháng ${month1to12}/${year}.`);
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const meta = this.parseMergedReportMetaFromWorkbook(wb);
+      if (!meta) {
+        alert(
+          'Không đọc được sheet “Tóm tắt” trong file.\nChọn đúng file Excel vừa xuất từ nút “Tháng … (gộp 1 file)”.'
+        );
+        return;
+      }
+      if (meta.factory !== this.selectedFactory) {
+        alert(`Factory trong file (${meta.factory}) không khớp nhà máy đang chọn (${this.selectedFactory}).`);
+        return;
+      }
+      if (meta.month !== expectedMonth) {
+        alert(`File gộp là tháng ${meta.month}, không khớp thao tác “Lưu Firebase” tháng ${expectedMonth}.`);
         return;
       }
 
+      const mm = String(meta.month).padStart(2, '0');
+      const yyyyMm = `${meta.year}-${mm}`;
+      const storagePath = `stock-check-reports/${this.selectedFactory}/${yyyyMm}/Stock_Check_${this.selectedFactory}_Thang${mm}.xlsx`;
+
+      const ref = this.storage.ref(storagePath);
+      const uploadTask = ref.put(file, {
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        customMetadata: {
+          uploadedFrom: 'stock-check-report-ui',
+          sourceFileName: file.name || ''
+        }
+      });
+      await firstValueFrom(
+        uploadTask.snapshotChanges().pipe(
+          filter((s: any) => !!s && s.totalBytes > 0 && s.bytesTransferred === s.totalBytes)
+        )
+      );
+      const url = await firstValueFrom(ref.getDownloadURL());
+
+      const docId = this.monthlyReportDocId(this.selectedFactory, meta.year, meta.month);
+      const rowCount = meta.rowCount > 0 ? meta.rowCount : this.countThangSheetDataRows(wb, mm);
+
+      await this.firestore
+        .collection(this.MONTHLY_REPORTS_COLLECTION)
+        .doc(docId)
+        .set(
+          {
+            factory: this.selectedFactory,
+            year: meta.year,
+            month: meta.month,
+            storagePath,
+            url,
+            dayCount: meta.dayCount || 0,
+            rowCount,
+            uploadedVia: 'client-xlsx',
+            updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+
       this.monthlyReportUrl = url;
       this.monthlyReportUpdatedAt = new Date();
-      alert('✅ Đã gộp & lưu report tháng lên Firebase.');
+      alert('✅ Đã tải file gộp lên Firebase Storage và cập nhật link (ghi đè file tháng).');
     } catch (e) {
-      console.error('❌ [MonthlyReport] save failed', e);
-      alert('❌ Không lưu được report tháng lên Firebase.');
+      console.error('❌ [MonthlyReport] client upload failed', e);
+      alert(
+        '❌ Không lưu được file lên Firebase.\n' +
+          '- Đảm bảo đã deploy rules Storage (stock-check-reports).\n' +
+          '- Đã đăng nhập tài khoản Firebase.\n' +
+          'Chi tiết: console.'
+      );
     } finally {
       this.isSavingMonthlyReport = false;
       this.cdr.detectChanges();
     }
+  }
+
+  private collectYearsForReportMonth(month1to12: number): number[] {
+    const mm = String(month1to12).padStart(2, '0');
+    const years = new Set<number>();
+    for (const dk of this.reportDataByDateKey.keys()) {
+      const parts = String(dk || '').split('-');
+      if (parts.length === 3 && parts[1] === mm) {
+        const y = parseInt(parts[0], 10);
+        if (Number.isFinite(y)) years.add(y);
+      }
+    }
+    return Array.from(years);
+  }
+
+  private parseMergedReportMetaFromWorkbook(wb: XLSX.WorkBook): {
+    factory: string;
+    year: number;
+    month: number;
+    dayCount: number;
+    rowCount: number;
+  } | null {
+    const sheetName =
+      wb.SheetNames.find(n => n === 'Tóm tắt' || n === 'Tom tat' || n.toLowerCase() === 'tóm tắt') || 'Tóm tắt';
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return null;
+    const rows = XLSX.utils.sheet_to_json<{ [k: string]: unknown }>(ws, { defval: '' });
+    const val = (label: string): string => {
+      const row = rows.find(r => String(r['Thông tin'] ?? r['Thong tin'] ?? '').trim() === label);
+      return row ? String(row['Giá trị'] ?? row['Gia tri'] ?? '').trim() : '';
+    };
+    const factory = val('Factory');
+    const thangRaw = val('Tháng');
+    const dayCount = Number(val('Số ngày')) || 0;
+    const rowCount = Number(val('Tổng dòng (gộp)')) || 0;
+    const first = thangRaw.split(',')[0].trim();
+    const parts = first.split('/');
+    if (parts.length < 2) return null;
+    const month = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    if (!factory || !Number.isFinite(month) || !Number.isFinite(year)) return null;
+    return { factory, year, month, dayCount, rowCount };
+  }
+
+  private countThangSheetDataRows(wb: XLSX.WorkBook, mm: string): number {
+    const name =
+      wb.SheetNames.find(n => n === `Thang_${mm}` || /^Thang_/i.test(n)) || wb.SheetNames.find(n => n.startsWith('Thang'));
+    if (!name) return 0;
+    const ws = wb.Sheets[name];
+    const data = XLSX.utils.sheet_to_json(ws);
+    return Array.isArray(data) ? data.length : 0;
+  }
+
+  /** Xuất JSON lịch sử scan (stock-check-history) đúng nguyên bản để backup / import lại. */
+  async exportStockCheckHistoryMonthBackup(month1to12: number): Promise<void> {
+    if (!this.selectedFactory) return;
+    if (this.isExportingHistoryBackup) return;
+    this.isExportingHistoryBackup = true;
+    this.cdr.detectChanges();
+    try {
+      const snap = await this.firestore
+        .collection('stock-check-history', ref => ref.where('factory', '==', this.selectedFactory))
+        .get()
+        .toPromise();
+
+      const documents: Array<{
+        docId: string;
+        materialCode: string;
+        poNumber: string;
+        imd: string;
+        historyItems: any[];
+      }> = [];
+
+      if (snap && !snap.empty) {
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data() as any;
+          const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+          const poNumber = String(data?.poNumber || '').trim();
+          const imd = String(data?.imd || '').trim();
+          const history: any[] = Array.isArray(data?.history) ? data.history : [];
+          const items = history.filter(h => this.historyItemInCalendarMonth(h, month1to12));
+          if (items.length === 0) continue;
+          documents.push({
+            docId: docSnap.id,
+            materialCode,
+            poNumber,
+            imd,
+            historyItems: items.map(h => this.serializeHistoryItemPlain(h))
+          });
+        }
+      }
+
+      if (documents.length === 0) {
+        alert(`Không có mục lịch sử nào trong tháng ${month1to12} để xuất backup.`);
+        return;
+      }
+
+      const payload = {
+        version: 1 as const,
+        kind: 'stock-check-history-month' as const,
+        factory: this.selectedFactory,
+        month: month1to12,
+        generatedAt: new Date().toISOString(),
+        documents
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      const a = document.createElement('a');
+      const mm = String(month1to12).padStart(2, '0');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Stock_Check_History_${this.selectedFactory}_Thang${mm}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      console.error('❌ exportStockCheckHistoryMonthBackup', e);
+      alert('❌ Không xuất được backup lịch sử.');
+    } finally {
+      this.isExportingHistoryBackup = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  openHistoryBackupFilePicker(input: HTMLInputElement): void {
+    if (!input || this.isExportingHistoryBackup || this.isImportingHistoryBackup) return;
+    input.value = '';
+    input.click();
+  }
+
+  async onStockCheckHistoryBackupImport(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !this.selectedFactory) return;
+
+    if (
+      !confirm(
+        'Import backup JSON sẽ ghi đè các mục lịch sử scan trong Firestore:\n' +
+          '- Với từng mã (doc), xóa mọi dòng lịch sử thuộc cùng (năm, tháng) với dữ liệu trong file,\n' +
+          '  rồi chèn lại đúng nội dung trong file.\n\n' +
+          'Tiếp tục?'
+      )
+    ) {
+      return;
+    }
+
+    this.isImportingHistoryBackup = true;
+    this.importHistoryBackupFileName = file.name;
+    this.importHistoryBackupPhase = 'reading';
+    this.importHistoryBackupDetail = `Đã nhận file: ${file.name}`;
+    this.importHistoryBackupProgressPct = 0;
+    this.showImportHistoryBackupProgressModal = true;
+    this.cdr.detectChanges();
+
+    const fail = (msg: string): void => {
+      this.importHistoryBackupPhase = 'error';
+      this.importHistoryBackupDetail = msg;
+      this.importHistoryBackupProgressPct = 0;
+    };
+
+    try {
+      this.importHistoryBackupDetail = `Đã nhận file: ${file.name} — đang đọc và kiểm tra…`;
+      const text = await file.text();
+      const data = JSON.parse(text) as any;
+      if (data?.version !== 1 || data?.kind !== 'stock-check-history-month') {
+        fail('File không đúng định dạng backup (version / kind).');
+        return;
+      }
+      if (String(data.factory) !== this.selectedFactory) {
+        fail(`Factory trong file (${data.factory}) không khớp nhà máy đang chọn (${this.selectedFactory}).`);
+        return;
+      }
+
+      const documents: any[] = Array.isArray(data.documents) ? data.documents : [];
+      if (documents.length === 0) {
+        fail('File backup không có documents.');
+        return;
+      }
+      const importedMonth = Number(data?.month);
+      const importedYear = this.detectBackupYearFromDocuments(documents, importedMonth);
+
+      this.importHistoryBackupPhase = 'writing';
+
+      /** Gộp các khối cùng docId — một lần merge với đủ historyItems (tương đương xử lý tuần tự). */
+      let blocksSkipped = 0;
+      const aggMap = new Map<
+        string,
+        { docId: string; importedItems: any[]; lastBlock: any }
+      >();
+
+      for (const block of documents) {
+        const docId = String(block.docId || '').trim();
+        if (!docId) {
+          blocksSkipped++;
+          continue;
+        }
+        const importedItems: any[] = Array.isArray(block.historyItems) ? block.historyItems : [];
+        if (importedItems.length === 0) {
+          blocksSkipped++;
+          continue;
+        }
+
+        const prev = aggMap.get(docId);
+        if (!prev) {
+          aggMap.set(docId, {
+            docId,
+            importedItems: [...importedItems],
+            lastBlock: block
+          });
+        } else {
+          prev.importedItems.push(...importedItems);
+          prev.lastBlock = block;
+        }
+      }
+
+      const workList = Array.from(aggMap.values());
+      if (workList.length === 0) {
+        fail('Không có khối hợp lệ để import.');
+        return;
+      }
+
+      const db = this.firestore.firestore;
+      const totalAgg = workList.length;
+      const origCount = documents.length;
+      this.importHistoryBackupDetail =
+        origCount !== totalAgg
+          ? `Đã gộp ${origCount} khối → ${totalAgg} mã — đang đọc Firestore (song song)…`
+          : `Đang đọc ${totalAgg} mã trên Firestore (song song)…`;
+      this.importHistoryBackupProgressPct = 2;
+      this.cdr.detectChanges();
+
+      const refs = workList.map(w =>
+        this.firestore.collection('stock-check-history').doc(w.docId).ref
+      );
+
+      const READ_POOL = 48;
+      const snaps = await this.firestoreGetSnapshotsParallel(refs, READ_POOL, (done, total) => {
+        this.importHistoryBackupProgressPct = Math.round((50 * done) / Math.max(1, total));
+        this.importHistoryBackupDetail = `Đang đọc Firestore song song: ${done}/${total} mã…`;
+        if (done % 40 === 0 || done === total) {
+          this.cdr.detectChanges();
+        }
+      });
+
+      let batch = db.batch();
+      let opCount = 0;
+      let batchCommits = 0;
+      let docsWritten = 0;
+      let mergeSkipped = 0;
+      let monthCleanupRemovedDates = 0;
+      let monthCleanupRemovedItems = 0;
+      let monthCleanupKeptDate = '';
+      const MAX_BATCH = 500;
+      const flush = async (): Promise<void> => {
+        if (opCount === 0) return;
+        await batch.commit();
+        batchCommits++;
+        batch = db.batch();
+        opCount = 0;
+      };
+
+      for (let i = 0; i < workList.length; i++) {
+        const w = workList[i];
+        const block = w.lastBlock;
+        const importedItems = w.importedItems;
+
+        const ymImported = new Set<string>();
+        for (const it of importedItems) {
+          const d = new Date(it?.dateCheck);
+          if (!isNaN(d.getTime())) ymImported.add(`${d.getFullYear()}-${d.getMonth() + 1}`);
+        }
+
+        const curSnap = snaps[i];
+        const curData = curSnap.exists ? (curSnap.data() as any) : null;
+        const curHistory: any[] = Array.isArray(curData?.history) ? [...curData.history] : [];
+
+        const kept = curHistory.filter(h => {
+          const d = this.parseFirestoreDate(h?.dateCheck);
+          if (!d) return true;
+          const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+          return !ymImported.has(key);
+        });
+
+        const mergedFirestore = importedItems.map(h => this.plainHistoryItemToFirestore(h));
+        const merged = [...kept, ...mergedFirestore].sort((a, b) => {
+          const ta = this.parseFirestoreDate(a.dateCheck)?.getTime() || 0;
+          const tb = this.parseFirestoreDate(b.dateCheck)?.getTime() || 0;
+          return tb - ta;
+        });
+
+        const materialCode = String(block.materialCode || curData?.materialCode || '').trim();
+        const poNumber = String(block.poNumber || curData?.poNumber || '').trim();
+        const imd = String(block.imd || curData?.imd || '').trim();
+
+        if (!materialCode || !poNumber || !imd) {
+          mergeSkipped++;
+          continue;
+        }
+
+        const ref = refs[i];
+        batch.set(
+          ref,
+          {
+            factory: this.selectedFactory,
+            materialCode,
+            poNumber,
+            imd,
+            history: merged,
+            lastUpdated: firebase.default.firestore.FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+        opCount++;
+        docsWritten++;
+        if (opCount >= MAX_BATCH) await flush();
+
+        this.importHistoryBackupProgressPct =
+          50 + Math.round((45 * (i + 1)) / Math.max(1, workList.length));
+        this.importHistoryBackupDetail = `Đang ghi Firestore: ${i + 1}/${workList.length} mã…`;
+        if ((i + 1) % 80 === 0 || i + 1 === workList.length) {
+          this.cdr.detectChanges();
+        }
+      }
+
+      await flush();
+      if (Number.isFinite(importedMonth) && importedMonth >= 1 && importedMonth <= 12 && importedYear) {
+        this.importHistoryBackupDetail = `Đang dọn dữ liệu tháng ${importedMonth}/${importedYear} để chỉ giữ 1 file…`;
+        this.importHistoryBackupProgressPct = 96;
+        this.cdr.detectChanges();
+        const cleanup = await this.keepOnlyOneReportDateInMonth(importedYear, importedMonth);
+        monthCleanupRemovedDates = cleanup.removedDateCount;
+        monthCleanupRemovedItems = cleanup.removedItemCount;
+        monthCleanupKeptDate = cleanup.keptDateKey;
+      }
+      this.reportDatesLoadedFactory = null;
+      this.reportDataByDateKey.clear();
+      this.importHistoryBackupDetail = 'Đang làm mới danh sách ngày report…';
+      this.cdr.detectChanges();
+      await this.loadReportDatesAndCache();
+
+      this.importHistoryBackupPhase = 'done';
+      this.importHistoryBackupProgressPct = 100;
+      const skipParts: string[] = [];
+      if (blocksSkipped > 0) {
+        skipParts.push(`${blocksSkipped} khối rỗng/thiếu docId`);
+      }
+      if (mergeSkipped > 0) {
+        skipParts.push(`${mergeSkipped} mã không đủ PO/IMD/mã hàng`);
+      }
+      const skipPart =
+        skipParts.length > 0 ? ` Bỏ qua: ${skipParts.join('; ')}.` : '';
+      const cleanupPart =
+        monthCleanupRemovedDates > 0
+          ? ` Đã xóa ${monthCleanupRemovedDates} file ngày trong tháng, giữ lại 1 file (${this.dateKeyToLabel(monthCleanupKeptDate)}), tổng ${monthCleanupRemovedItems} dòng lịch sử bị gỡ.`
+          : '';
+      this.importHistoryBackupDetail =
+        `Hoàn tất: đã ghi ${docsWritten} tài liệu (${batchCommits} lần commit batch).${skipPart}${cleanupPart} Đã làm mới danh sách ngày.`;
+    } catch (e: any) {
+      console.error('❌ onStockCheckHistoryBackupImport', e);
+      const msg =
+        e?.message || e?.code || String(e);
+      fail(`Import thất bại: ${msg}. Chi tiết xem console (F12).`);
+    } finally {
+      this.isImportingHistoryBackup = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Đọc nhiều snapshot Firestore song song (worker pool).
+   * Tránh bottleneck import backup khi gọi get() tuần tự hàng nghìn lần.
+   */
+  private async firestoreGetSnapshotsParallel(
+    refs: any[],
+    concurrency: number,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<any[]> {
+    const total = refs.length;
+    const results: any[] = new Array(total);
+    if (total === 0) {
+      return results;
+    }
+
+    let nextIndex = 0;
+    let completed = 0;
+    const workers = Math.min(Math.max(1, concurrency), total);
+
+    const runWorker = async (): Promise<void> => {
+      while (true) {
+        const idx = nextIndex++;
+        if (idx >= total) {
+          return;
+        }
+        results[idx] = await refs[idx].get();
+        completed++;
+        if (onProgress && (completed % 40 === 0 || completed === total)) {
+          onProgress(completed, total);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: workers }, () => runWorker()));
+    return results;
+  }
+
+  private detectBackupYearFromDocuments(documents: any[], importedMonth: number): number | null {
+    if (!Number.isFinite(importedMonth) || importedMonth < 1 || importedMonth > 12) return null;
+    const countByYear = new Map<number, number>();
+
+    for (const block of documents) {
+      const items: any[] = Array.isArray(block?.historyItems) ? block.historyItems : [];
+      for (const it of items) {
+        const d = new Date(it?.dateCheck);
+        if (isNaN(d.getTime())) continue;
+        if (d.getMonth() + 1 !== importedMonth) continue;
+        const y = d.getFullYear();
+        countByYear.set(y, (countByYear.get(y) || 0) + 1);
+      }
+    }
+
+    let bestYear: number | null = null;
+    let bestCount = 0;
+    countByYear.forEach((count, y) => {
+      if (count > bestCount) {
+        bestCount = count;
+        bestYear = y;
+      }
+    });
+
+    return bestYear;
+  }
+
+  /**
+   * Sau import backup tháng: giữ duy nhất 1 ngày (mới nhất) trong tháng đó để UI chỉ còn 1 file ngày.
+   */
+  private async keepOnlyOneReportDateInMonth(
+    year: number,
+    month1to12: number
+  ): Promise<{ removedDateCount: number; removedItemCount: number; keptDateKey: string }> {
+    if (!this.selectedFactory) return { removedDateCount: 0, removedItemCount: 0, keptDateKey: '' };
+
+    const snap = await this.firestore
+      .collection('stock-check-history', ref => ref.where('factory', '==', this.selectedFactory))
+      .get()
+      .toPromise();
+    if (!snap || snap.empty) return { removedDateCount: 0, removedItemCount: 0, keptDateKey: '' };
+
+    let keptDate: Date | null = null;
+    snap.docs.forEach(docSnap => {
+      const data = docSnap.data() as any;
+      const history: any[] = Array.isArray(data?.history) ? data.history : [];
+      for (const item of history) {
+        const d = this.parseFirestoreDate(item?.dateCheck);
+        if (!d) continue;
+        if (d.getFullYear() !== year || d.getMonth() + 1 !== month1to12) continue;
+        if (!keptDate || d.getTime() > keptDate.getTime()) {
+          keptDate = d;
+        }
+      }
+    });
+    if (!keptDate) return { removedDateCount: 0, removedItemCount: 0, keptDateKey: '' };
+
+    const keepDateKey = this.toLocalDateKey(keptDate);
+    const removedDateKeys = new Set<string>();
+    let removedItemCount = 0;
+
+    const db = this.firestore.firestore;
+    let batch = db.batch();
+    let opCount = 0;
+    const MAX_BATCH = 500;
+    const flush = async (): Promise<void> => {
+      if (opCount === 0) return;
+      await batch.commit();
+      batch = db.batch();
+      opCount = 0;
+    };
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data() as any;
+      const history: any[] = Array.isArray(data?.history) ? data.history : [];
+      if (history.length === 0) continue;
+
+      const nextHistory = history.filter(item => {
+        const d = this.parseFirestoreDate(item?.dateCheck);
+        if (!d) return true;
+        if (d.getFullYear() !== year || d.getMonth() + 1 !== month1to12) return true;
+        const dk = this.toLocalDateKey(d);
+        if (dk === keepDateKey) return true;
+        removedDateKeys.add(dk);
+        removedItemCount++;
+        return false;
+      });
+
+      if (nextHistory.length === history.length) continue;
+      if (nextHistory.length === 0) {
+        batch.delete(docSnap.ref);
+      } else {
+        batch.update(docSnap.ref, { history: nextHistory });
+      }
+      opCount++;
+      if (opCount >= MAX_BATCH) await flush();
+    }
+
+    await flush();
+    return {
+      removedDateCount: removedDateKeys.size,
+      removedItemCount,
+      keptDateKey: keepDateKey
+    };
+  }
+
+  private historyItemInCalendarMonth(item: any, month1to12: number): boolean {
+    const d = this.parseFirestoreDate(item?.dateCheck);
+    if (!d) return false;
+    return d.getMonth() + 1 === month1to12;
+  }
+
+  private serializeHistoryItemPlain(item: any): Record<string, unknown> {
+    const dCheck = this.parseFirestoreDate(item?.dateCheck);
+    const dUpd = this.parseFirestoreDate(item?.updatedAt);
+    return {
+      idCheck: String(item?.idCheck ?? ''),
+      qtyCheck: Number(item?.qtyCheck ?? 0),
+      dateCheck: dCheck ? dCheck.toISOString() : '',
+      updatedAt: dUpd ? dUpd.toISOString() : null,
+      bag: String(item?.bag ?? ''),
+      stock: item?.stock !== undefined && item?.stock !== null ? Number(item.stock) : null,
+      location: String(item?.location ?? ''),
+      standardPacking: String(item?.standardPacking ?? '')
+    };
+  }
+
+  private plainHistoryItemToFirestore(h: any): any {
+    const dCheck = h?.dateCheck ? new Date(h.dateCheck) : new Date();
+    const dUpd = h?.updatedAt ? new Date(h.updatedAt) : null;
+    return {
+      idCheck: String(h?.idCheck ?? ''),
+      qtyCheck: Number(h?.qtyCheck ?? 0),
+      dateCheck: firebase.default.firestore.Timestamp.fromDate(
+        !isNaN(dCheck.getTime()) ? dCheck : new Date()
+      ),
+      updatedAt: firebase.default.firestore.Timestamp.fromDate(
+        dUpd && !isNaN(dUpd.getTime()) ? dUpd : !isNaN(dCheck.getTime()) ? dCheck : new Date()
+      ),
+      bag: String(h?.bag ?? ''),
+      stock: h?.stock !== undefined && h?.stock !== null ? Number(h.stock) : 0,
+      location: String(h?.location ?? ''),
+      standardPacking: String(h?.standardPacking ?? '')
+    };
+  }
+
+  private ensureMonthClosedForMerge(month1to12: number): boolean {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    if (month1to12 >= currentMonth) {
+      alert(`Tháng ${month1to12} chưa chốt. Việc gộp sẽ bắt đầu khi qua tháng mới.`);
+      return false;
+    }
+    return true;
   }
 
   /** So sánh danh sách đã kiểm kê với tồn kho import (ASM1/ASM2) theo Mã hàng (cộng dồn nhiều PO). */
