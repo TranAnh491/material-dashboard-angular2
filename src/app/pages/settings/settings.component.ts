@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { PermissionService, UserPermission } from '../../services/permission.service';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
@@ -15,7 +15,8 @@ import { Subscription, firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-settings',
   templateUrl: './settings.component.html',
-  styleUrls: ['./settings.component.scss']
+  styleUrls: ['./settings.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SettingsComponent implements OnInit, OnDestroy {
   isAdminLoggedIn = false;
@@ -147,6 +148,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Cleanup Firebase Auth users outside Settings
   isCleaningAuthUsers = false;
 
+  // Cached user lists to avoid expensive recomputation on every CD cycle
+  _approvedUsers: User[] = [];
+  _pendingUsers: User[] = [];
+  _adminUsersCount: number = 0;
+  private _empIdCache = new Map<string, string>();
+
   constructor(
     private permissionService: PermissionService,
     private firebaseAuthService: FirebaseAuthService,
@@ -156,7 +163,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private employeeCleanupService: EmployeeCleanupService,
     private fns: AngularFireFunctions,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) { }
 
   goToMenu(): void {
@@ -264,6 +272,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
     } finally {
       this.isRegisteringUser = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -305,6 +314,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
     } finally {
       this.isDeletingAccountByEmployeeId = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -463,6 +473,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
     } finally {
       this.isResettingAccountPassword = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -501,7 +512,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    console.log('🚀 Settings Component Initializing...');
     
     // Export component ra window để debug
     (window as any).settingsComponent = this;
@@ -510,7 +520,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.setupAuthStateListener();
 
     // Không load dữ liệu nặng (Firestore) cho đến khi admin login thành công.
-    console.log('✅ Settings Component Initialized (waiting for Admin login)');
   }
 
   ngOnDestroy(): void {
@@ -523,14 +532,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   private setupAuthStateListener(): void {
     this.afAuth.authState.subscribe(async (user) => {
       if (user) {
-        console.log('👤 User authenticated:', user.email);
         // Ensure current user exists in Firestore but don't auto-refresh the list
         await this.ensureCurrentUserInFirestore();
-        console.log('ℹ️ Current user ensured in Firestore. Use F5 or manual refresh to see updated user list.');
       } else {
-        console.log('👤 User signed out');
         // Clear user data when signed out
         this.firebaseUsers = [];
+        this._rebuildUserCache();
         this.firebaseUserPermissions = {};
         this.firebaseUserDepartments = {};
         this.firebaseUserTabPermissions = {};
@@ -543,12 +550,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Kiểm tra trạng thái Firestore và hiển thị thông tin debug
   async checkFirestoreStatus(): Promise<void> {
     try {
-      console.log('🔍 Checking Firestore status...');
       
       // Kiểm tra quyền truy cập collection 'users'
       try {
         const usersSnapshot = await this.firestore.collection('users').get().toPromise();
-        console.log(`✅ Users collection accessible: ${usersSnapshot?.size || 0} documents`);
       } catch (error) {
         console.error('❌ Cannot access users collection:', error);
       }
@@ -556,7 +561,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Kiểm tra quyền truy cập collection 'user-permissions'
       try {
         const permissionsSnapshot = await this.firestore.collection('user-permissions').get().toPromise();
-        console.log(`✅ User-permissions collection accessible: ${permissionsSnapshot?.size || 0} documents`);
       } catch (error) {
         console.error('❌ Cannot access user-permissions collection:', error);
       }
@@ -564,20 +568,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Kiểm tra current user
       const currentUser = await this.afAuth.currentUser;
       if (currentUser) {
-        console.log(`✅ Current user: ${currentUser.email} (${currentUser.uid})`);
         
         // Kiểm tra xem current user có trong Firestore không
         try {
           const userDoc = await this.firestore.collection('users').doc(currentUser.uid).get().toPromise();
-          console.log(`✅ Current user in Firestore: ${userDoc?.exists ? 'YES' : 'NO'}`);
         } catch (error) {
           console.error('❌ Cannot check current user in Firestore:', error);
         }
       } else {
-        console.log('❌ No current user found');
       }
       
-      console.log('✅ Firestore status check completed');
       
     } catch (error) {
       console.error('❌ Error checking Firestore status:', error);
@@ -709,7 +709,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
 
       await this.refreshFirebaseUsers();
-      console.log(`✅ Đã đảm bảo tài khoản ${displayName} (${email}).`);
     } catch (error) {
       console.error(`❌ ensureAspAccount ${displayName}:`, error);
     } finally {
@@ -741,6 +740,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       console.error('Error loading user permissions:', error);
     }
     this.isLoading = false;
+    this.cdr.markForCheck();
   }
 
   async addUser(): Promise<void> {
@@ -779,6 +779,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       alert('Có lỗi xảy ra khi thêm nhân viên!');
     }
     this.isLoading = false;
+    this.cdr.markForCheck();
   }
 
   editUser(user: UserPermission): void {
@@ -800,6 +801,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       alert('Có lỗi xảy ra khi cập nhật!');
     }
     this.isLoading = false;
+    this.cdr.markForCheck();
   }
 
   cancelEdit(): void {
@@ -818,6 +820,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         alert('Có lỗi xảy ra khi xóa nhân viên!');
       }
       this.isLoading = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -835,7 +838,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async loadFirebaseUsers(): Promise<void> {
     this.isLoadingFirebaseUsers = true;
     try {
-      console.log('🔍 Loading Firebase users from multiple sources...');
       
       // 1. Đọc từ Firestore collection 'users'
       const usersSnapshot = await this.firestore.collection('users').get().toPromise();
@@ -860,7 +862,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
           } as User;
         }));
         
-        console.log(`✅ Loaded ${firestoreUsers.length} users from Firestore`);
       }
 
       // 2. Đọc từ collection 'user-permissions' để tìm thêm users
@@ -881,12 +882,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
                 createdAt: data.createdAt?.toDate() || new Date(),
                 lastLoginAt: data.lastLoginAt?.toDate() || new Date()
               } as User);
-              console.log(`✅ Added user from permissions: ${data.email}`);
             }
           });
         }
       } catch (error) {
-        console.log('⚠️ Could not load from user-permissions:', error);
       }
 
       // 3. Đảm bảo current user có trong danh sách
@@ -905,7 +904,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
             createdAt: new Date(),
             lastLoginAt: new Date()
           } as User);
-          console.log(`✅ Added current user: ${currentUser.email}`);
         }
       }
 
@@ -915,7 +913,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
       
       this.firebaseUsers = uniqueUsers;
-      console.log(`✅ Final user list: ${this.firebaseUsers.length} unique users`);
+      this._rebuildUserCache();
       
       // 6. Load permissions, departments, passwords và tab permissions cho tất cả users
       await this.loadFirebaseUserPermissions();
@@ -929,8 +927,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.error('❌ Error loading Firebase users:', error);
       this.firebaseUsers = [];
+      this._rebuildUserCache();
     }
     this.isLoadingFirebaseUsers = false;
+    this.cdr.markForCheck();
   }
 
   // Thiết lập real-time listener cho users
@@ -941,7 +941,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       const currentUser = await this.afAuth.currentUser;
       if (!currentUser) {
-        console.log('⚠️ No current user found');
         return;
       }
 
@@ -949,7 +948,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const userDoc = await this.firestore.collection('users').doc(currentUser.uid).get().toPromise();
       
       if (!userDoc?.exists) {
-        console.log(`📝 Creating new user in Firestore: ${currentUser.email}`);
         
         // Tạo user mới trong Firestore
         await this.firestore.collection('users').doc(currentUser.uid).set({
@@ -995,12 +993,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
           updatedAt: new Date()
         });
 
-        console.log(`✅ New user created: ${currentUser.email}`);
         
         // Refresh user list
         await this.refreshFirebaseUsers();
       } else {
-        console.log(`✅ User already exists in Firestore: ${currentUser.email}`);
         
         // Cập nhật lastLoginAt
         await this.firestore.collection('users').doc(currentUser.uid).update({
@@ -1017,7 +1013,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async refreshFirebaseUsers(): Promise<void> {
     // Kiểm tra nếu đang refresh thì không làm gì
     if (this.isRefreshing) {
-      console.log('⚠️ Refresh already in progress, skipping...');
       return;
     }
 
@@ -1030,9 +1025,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.refreshTimeout = setTimeout(async () => {
       try {
         this.isRefreshing = true;
-        console.log('🔄 Refreshing Firebase users...');
         await this.loadFirebaseUsers();
-        console.log('✅ Firebase users refreshed with departments and permissions');
       } catch (error) {
         console.error('❌ Error refreshing Firebase users:', error);
       } finally {
@@ -1045,13 +1038,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     if (confirm(`Bạn có chắc chắn muốn xóa user ${user.email}?\n\nHành động này sẽ xóa:\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
       try {
-        console.log(`🗑️ Starting deletion of user: ${user.email} (${user.uid})`);
         
         // Sử dụng service để xóa hoàn toàn
         await this.firebaseAuthService.deleteUser(user.uid);
         
         // Remove from local arrays
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== user.uid);
+        this._rebuildUserCache();
         delete this.firebaseUserPermissions[user.uid];
         delete this.firebaseUserCompletePermissions[user.uid];
         delete this.firebaseUserReadOnlyPermissions[user.uid];
@@ -1061,7 +1054,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         // Show success message
         alert(`✅ Đã xóa thành công user ${user.email}!`);
         
-        console.log(`📊 Updated user count: ${this.firebaseUsers.length}`);
         
       } catch (error) {
         console.error('❌ Error deleting Firebase user:', error);
@@ -1083,7 +1075,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
 
   async loadFirebaseUserPermissions(): Promise<void> {
-    console.log('🔍 Loading Firebase user permissions...');
     
     // Load current delete and complete permissions for all Firebase users
     for (const user of this.firebaseUsers) {
@@ -1097,12 +1088,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
           this.firebaseUserPermissions[user.uid] = data.hasDeletePermission || false;
           this.firebaseUserCompletePermissions[user.uid] = data.hasCompletePermission || false;
           this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
-          console.log(`✅ Loaded permissions for ${user.email}: delete=${data.hasDeletePermission}, complete=${data.hasCompletePermission}, readOnly=${data.hasReadOnlyPermission}`);
             } else {
               this.firebaseUserPermissions[user.uid] = false; // Default to false
               this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
               this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
-              console.log(`✅ Default permissions for ${user.email}: delete=false, complete=false, readOnly=false (không xem gì cả)`);
           }
               } catch (error) {
           console.error('❌ Error loading permissions for user', user.email, ':', error);
@@ -1112,12 +1101,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
         }
     }
     
-    console.log('✅ Firebase user permissions loaded');
+    this._rebuildUserCache();
   }
 
   async loadFirebaseUserReadOnlyPermissions(): Promise<void> {
-    console.log('🔍 Loading Firebase user read-only permissions...');
-    console.log('📋 Logic mới: Tài khoản mới mặc định "Chỉ xem" = true, chỉ tab Dashboard được tick');
     
     for (const user of this.firebaseUsers) {
       try {
@@ -1127,11 +1114,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
         if (doc?.exists) {
           const data = doc.data() as any;
           this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
-          console.log(`✅ Loaded read-only permission for ${user.email}: ${data.hasReadOnlyPermission}`);
             } else {
               // User mới mặc định KHÔNG xem được gì cả
               this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
-              console.log(`✅ Default read-only permission for ${user.email}: false (không xem gì cả)`);
           }
               } catch (error) {
           console.error('❌ Error loading read-only permission for user', user.email, ':', error);
@@ -1140,11 +1125,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
         }
     }
     
-    console.log('✅ Firebase user read-only permissions loaded');
   }
 
   async loadFirebaseUserDepartments(): Promise<void> {
-    console.log('🔍 Loading Firebase user departments...');
     
     for (const user of this.firebaseUsers) {
       try {
@@ -1163,11 +1146,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
     }
     
-    console.log('✅ Firebase user departments loaded');
   }
 
   async loadFirebaseUserPasswords(): Promise<void> {
-    console.log('🔍 Loading Firebase user passwords...');
     
     for (const user of this.firebaseUsers) {
       try {
@@ -1196,12 +1177,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
     }
     
-    console.log('✅ Firebase user passwords loaded');
   }
 
   async loadFirebaseUserTabPermissions(): Promise<void> {
-    console.log('🔍 Loading Firebase user tab permissions...');
-    console.log('📋 Logic mới: Tài khoản mới mặc định KHÔNG có tab nào được tick - không xem được gì cả');
     
     for (const user of this.firebaseUsers) {
       try {
@@ -1211,7 +1189,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         if (doc?.exists) {
           const data = doc.data() as any;
           this.firebaseUserTabPermissions[user.uid] = data.tabPermissions || {};
-          console.log(`✅ Loaded tab permissions for ${user.email}:`, data.tabPermissions);
           } else {
             // Tạo permissions mặc định cho user mới
             // Nếu user có department, sử dụng permissions theo department
@@ -1238,7 +1215,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
     }
     
-    console.log('✅ Firebase user tab permissions loaded');
+    this._rebuildUserCache();
   }
 
   private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
@@ -1252,7 +1229,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         finalPermissions[tab.key] = tab.key === 'dashboard';
       });
       
-      console.log(`✅ Created default tab permissions for ${user.email} - CHỈ Dashboard = true, các tab khác = false (chờ duyệt)`);
       
       await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
         uid: user.uid,
@@ -1272,10 +1248,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   async refreshTabPermissions(): Promise<void> {
     try {
-      console.log('🔄 Refreshing tab permissions for all users...');
       await this.loadFirebaseUserTabPermissions();
       await this.syncMissingTabPermissions();
-      console.log('✅ Tab permissions refreshed and synced');
     } catch (error) {
       console.error('❌ Error refreshing tab permissions:', error);
     }
@@ -1283,7 +1257,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   private async syncMissingTabPermissions(): Promise<void> {
     try {
-      console.log('🔄 Syncing missing tab permissions...');
       
       for (const user of this.firebaseUsers) {
         const userTabPermissions = this.firebaseUserTabPermissions[user.uid] || {};
@@ -1295,7 +1268,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
             // Add missing tab permission - KHÔNG có tab nào được tick mặc định
             userTabPermissions[tab.key] = false;
             hasChanges = true;
-            console.log(`➕ Added missing permission for ${user.email}: ${tab.name} = false (không xem gì cả)`);
           }
         }
         
@@ -1314,7 +1286,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         }
       }
       
-      console.log('✅ Tab permissions synced for all users');
     } catch (error) {
       console.error('❌ Error syncing tab permissions:', error);
     }
@@ -1337,7 +1308,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }, { merge: true });
 
       this.firebaseUserPermissions[userId] = hasPermission;
-      console.log(`✅ Updated delete permission for ${user.email}: ${hasPermission}`);
     } catch (error) {
       console.error('❌ Error updating user permission:', error);
     }
@@ -1359,7 +1329,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }, { merge: true });
 
       this.firebaseUserCompletePermissions[userId] = hasPermission;
-      console.log(`✅ Updated complete permission for ${user.email}: ${hasPermission}`);
     } catch (error) {
       console.error('❌ Error updating user complete permission:', error);
     }
@@ -1381,7 +1350,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }, { merge: true });
 
       this.firebaseUserReadOnlyPermissions[userId] = hasPermission;
-      console.log(`✅ Updated read-only permission for ${user.email}: ${hasPermission}`);
     } catch (error) {
       console.error('❌ Error updating user read-only permission:', error);
     }
@@ -1481,8 +1449,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }, { merge: true });
 
       this.firebaseUserDepartments[userId] = department;
-      console.log(`✅ Updated department for ${user.email}: ${department}`);
-      console.log(`✅ Updated tab permissions based on department:`, defaultTabPermissions);
     } catch (error) {
       console.error('❌ Error updating user department:', error);
     }
@@ -1514,7 +1480,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
 
       user.factory = factory;
-      console.log(`✅ Updated factory for ${user.email}: ${factory}`);
     } catch (error) {
       console.error('❌ Error updating user factory:', error);
     }
@@ -1546,7 +1511,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
 
       user.role = role;
-      console.log(`✅ Updated role for ${user.email}: ${role}`);
     } catch (error) {
       console.error('❌ Error updating user role:', error);
     }
@@ -1574,7 +1538,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       }, { merge: true });
 
-      console.log(`✅ Updated tab permission for ${user.email}: ${tabKey} = ${hasAccess}`);
     } catch (error) {
       console.error('❌ Error updating user tab permission:', error);
     }
@@ -1582,7 +1545,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   async saveAllPermissions(): Promise<void> {
     try {
-      console.log('💾 Saving all permissions...');
 
       // Save delete, complete and read-only permissions
       const permissions = Object.keys(this.firebaseUserPermissions).map(uid => ({
@@ -1621,7 +1583,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         }
       }
 
-      console.log('✅ All permissions saved successfully');
       alert('✅ Đã lưu tất cả quyền hạn thành công!');
     } catch (error) {
       console.error('❌ Error saving permissions:', error);
@@ -1675,12 +1636,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   // Chỉ hiển thị mã nhân viên, không hiển thị tên
   getEmployeeIdOnly(user: any): string {
-    // admin@asp.com chỉ hiển thị là Admin
-    if (user.email === 'admin@asp.com') {
-      return 'Admin';
-    }
-
-    return this.extractAspEmployeeId(user) || '';
+    if (!user?.uid) return this.extractAspEmployeeId(user) || user?.email || '';
+    if (this._empIdCache.has(user.uid)) return this._empIdCache.get(user.uid)!;
+    const result = user.email === 'admin@asp.com' ? 'Admin' : (this.extractAspEmployeeId(user) || '');
+    this._empIdCache.set(user.uid, result);
+    return result;
   }
 
   /** Chuẩn hóa tài khoản về định dạng ASP + 4 số (nếu có thể parse). */
@@ -1771,23 +1731,39 @@ export class SettingsComponent implements OnInit, OnDestroy {
     });
   }
 
+  private _rebuildUserCache(): void {
+    this._empIdCache.clear();
+    this.firebaseUsers.forEach(u => this._empIdCache.set(u.uid, this.getEmployeeIdOnly(u)));
+    const sorted = [...this.firebaseUsers].sort((a, b) =>
+      (this._empIdCache.get(a.uid) || '').localeCompare(this._empIdCache.get(b.uid) || '')
+    );
+    this._approvedUsers = sorted.filter(u =>
+      Object.values(this.firebaseUserTabPermissions[u.uid] || {}).some(v => v === true)
+    );
+    this._pendingUsers = sorted.filter(u =>
+      !Object.values(this.firebaseUserTabPermissions[u.uid] || {}).some(v => v === true)
+    );
+    this._adminUsersCount = this.firebaseUsers.filter(u =>
+      ['admin', 'Admin', 'Quản lý'].includes(u.role)
+    ).length;
+    this.cdr.markForCheck();
+  }
+
+  // trackBy helpers
+  trackByUid(index: number, user: any): string { return user?.uid || String(index); }
+  trackByTabKey(index: number, tab: any): string { return tab?.key || String(index); }
+  trackByNotifId(index: number, n: any): string { return n?.id || String(index); }
+  trackByEmpId(index: number, emp: any): string { return emp?.employeeId || String(index); }
+  trackByIndex(index: number, _: any): number { return index; }
+
   // Lọc user đã được duyệt (có ít nhất 1 tab permission = true)
   getApprovedUsers(): User[] {
-    return this.getSortedFirebaseUsers().filter(user => {
-      const permissions = this.firebaseUserTabPermissions[user.uid] || {};
-      // Có ít nhất 1 tab được phép truy cập
-      return Object.values(permissions).some(hasAccess => hasAccess === true);
-    });
+    return this._approvedUsers;
   }
 
   // Lọc user chờ duyệt (tất cả tab permission = false hoặc undefined)
   getPendingUsers(): User[] {
-    return this.getSortedFirebaseUsers().filter(user => {
-      const permissions = this.firebaseUserTabPermissions[user.uid] || {};
-      // Tất cả tab đều false hoặc không có permission nào
-      const hasAnyAccess = Object.values(permissions).some(hasAccess => hasAccess === true);
-      return !hasAnyAccess;
-    });
+    return this._pendingUsers;
   }
 
   // Mở popup quản lý permissions cho user
@@ -1887,7 +1863,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       }, { merge: true });
 
-      console.log(`✅ Saved permissions for ${email}`);
       this.closePermissionModal();
     } catch (error) {
       console.error('❌ Error saving user permissions:', error);
@@ -1901,13 +1876,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     if (confirm(`Bạn có chắc chắn muốn xóa user ${this.selectedUser.email}?\n\nHành động này sẽ xóa:\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
       try {
-        console.log(`🗑️ Starting deletion of user: ${this.selectedUser.email} (${this.selectedUser.uid})`);
         
         // Sử dụng service để xóa hoàn toàn
         await this.firebaseAuthService.deleteUser(this.selectedUser.uid);
         
         // Remove from local arrays
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== this.selectedUser!.uid);
+        this._rebuildUserCache();
         delete this.firebaseUserPermissions[this.selectedUser.uid];
         delete this.firebaseUserCompletePermissions[this.selectedUser.uid];
         delete this.firebaseUserReadOnlyPermissions[this.selectedUser.uid];
@@ -1920,7 +1895,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         // Đóng modal
         this.closePermissionModal();
         
-        console.log(`📊 Updated user count: ${this.firebaseUsers.length}`);
         
       } catch (error) {
         console.error('❌ Error deleting Firebase user:', error);
@@ -2022,7 +1996,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
             await targetUser.updatePassword(newPassword);
             await secondaryAuth.signOut();
-            console.log(`✅ Updated Firebase Auth password for ${email}`);
             return email;
           } catch (attemptErr: any) {
             lastError = attemptErr;
@@ -2057,11 +2030,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   // Get count of admin users
   getAdminUsersCount(): number {
-    return this.firebaseUsers.filter(user => 
-      user.role === 'admin' || 
-      user.role === 'Admin' || 
-      user.role === 'Quản lý'
-    ).length;
+    return this._adminUsersCount;
   }
 
   // ==================== EMPLOYEE CLEANUP METHODS ====================
@@ -2072,21 +2041,17 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async compareEmployees(): Promise<void> {
     this.isComparingEmployees = true;
     try {
-      console.log('🔍 Bắt đầu so sánh mã nhân viên...');
       
       // Debug: Hiển thị danh sách users
       this.debugSettingsUsers();
       
       // Sử dụng danh sách users thực tế từ Settings
       if (this.firebaseUsers && this.firebaseUsers.length > 0) {
-        console.log(`📋 Sử dụng ${this.firebaseUsers.length} users từ Settings`);
         this.employeeComparisonResult = await this.employeeCleanupService.compareEmployeesWithSettingsUsers(this.firebaseUsers);
       } else {
-        console.log('⚠️ Chưa có danh sách users, sử dụng method cũ');
         this.employeeComparisonResult = await this.employeeCleanupService.compareEmployees();
       }
       
-      console.log('✅ Hoàn thành so sánh:', this.employeeComparisonResult.summary);
     } catch (error) {
       console.error('❌ Lỗi khi so sánh mã nhân viên:', error);
       alert('❌ Có lỗi xảy ra khi so sánh mã nhân viên!');
@@ -2099,15 +2064,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
    * Debug: Hiển thị chi tiết danh sách users trong Settings
    */
   private debugSettingsUsers(): void {
-    console.log('🔍 DEBUG: Danh sách users trong Settings:');
-    console.log(`📊 Tổng số users: ${this.firebaseUsers.length}`);
     
     this.firebaseUsers.forEach((user, index) => {
       const empId = this.getEmployeeIdOnly(user);
-      console.log(`  ${index + 1}. ${empId} (${user.email}) - UID: ${user.uid}`);
-      console.log(`     - employeeId: ${user.employeeId || 'N/A'}`);
-      console.log(`     - displayName: ${user.displayName || 'N/A'}`);
-      console.log(`     - email: ${user.email || 'N/A'}`);
     });
   }
 
@@ -2130,10 +2089,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     this.isCleaningUp = true;
     try {
-      console.log('🗑️ Bắt đầu xóa mã nhân viên dư thừa...');
       const result = await this.employeeCleanupService.cleanupRedundantEmployees(this.selectedRedundantEmployees);
       
-      console.log('✅ Hoàn thành xóa:', result);
       alert(`✅ Đã xóa thành công ${result.success} mã nhân viên!\n` +
             `❌ Lỗi: ${result.errors}\n\n` +
             `Chi tiết:\n${result.details.join('\n')}`);
@@ -2235,7 +2192,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
       // Xóa tất cả notifications khỏi danh sách
       this.newUserNotifications = [];
-      console.log('✅ Đã đánh dấu tất cả thông báo đã đọc');
     } catch (error) {
       console.error('Error marking notifications as read:', error);
     }
@@ -2254,7 +2210,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
       // Xóa notification khỏi danh sách
       this.newUserNotifications = this.newUserNotifications.filter(n => n.id !== notificationId);
-      console.log(`✅ Đã đánh dấu thông báo ${notificationId} đã đọc`);
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
