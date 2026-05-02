@@ -838,92 +838,107 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async loadFirebaseUsers(): Promise<void> {
     this.isLoadingFirebaseUsers = true;
     try {
-      
-      // 1. Đọc từ Firestore collection 'users'
-      const usersSnapshot = await this.firestore.collection('users').get().toPromise();
+      // ── 3 batch reads in parallel (replaces 170 sequential doc.get() calls) ──
+      const [usersSnap, permSnap, tabPermSnap, currentUser] = await Promise.all([
+        this.firestore.collection('users').get().toPromise(),
+        this.firestore.collection('user-permissions').get().toPromise().catch(() => null),
+        this.firestore.collection('user-tab-permissions').get().toPromise().catch(() => null),
+        this.afAuth.currentUser,
+      ]);
+
+      // Build lookup maps from batch results
+      const permMap = new Map<string, any>();
+      permSnap?.docs.forEach(d => permMap.set(d.id, d.data()));
+
+      const tabPermMap = new Map<string, any>();
+      tabPermSnap?.docs.forEach(d => tabPermMap.set(d.id, (d.data() as any)?.tabPermissions || {}));
+
+      // Build user list from 'users' collection
       const firestoreUsers: User[] = [];
-      
-      if (usersSnapshot && !usersSnapshot.empty) {
-        firestoreUsers.push(...usersSnapshot.docs.map(doc => {
+      usersSnap?.docs.forEach(doc => {
+        const data = doc.data() as any;
+        firestoreUsers.push({
+          uid: doc.id,
+          email: data.email || '',
+          displayName: data.displayName || '',
+          department: data.department || '',
+          factory: data.factory || '',
+          role: data.role || 'User',
+          photoURL: data.photoURL || '',
+          password: data.password || '',
+          createdAt: data.createdAt?.toDate() || new Date(),
+          lastLoginAt: data.lastLoginAt?.toDate() || new Date(),
+        } as User);
+      });
+
+      // Merge users from 'user-permissions' not already in list
+      permSnap?.docs.forEach(doc => {
+        if (!firestoreUsers.some(u => u.uid === doc.id)) {
           const data = doc.data() as any;
-          // Load department từ user-permissions nếu không có trong users collection
-          let department = data.department || '';
-          return {
-            uid: doc.id,
-            email: data.email || '',
-            displayName: data.displayName || '',
-            department: department,
-            factory: data.factory || '',
-            role: data.role || 'User',
-            photoURL: data.photoURL || '',
-            password: data.password || '', // Load password từ Firestore
-            createdAt: data.createdAt?.toDate() || new Date(),
-            lastLoginAt: data.lastLoginAt?.toDate() || new Date()
-          } as User;
-        }));
-        
-      }
-
-      // 2. Đọc từ collection 'user-permissions' để tìm thêm users
-      try {
-        const permissionsSnapshot = await this.firestore.collection('user-permissions').get().toPromise();
-        if (permissionsSnapshot && !permissionsSnapshot.empty) {
-          permissionsSnapshot.docs.forEach(doc => {
-            const data = doc.data() as any;
-            if (data.email && !firestoreUsers.some(u => u.uid === doc.id)) {
-              firestoreUsers.push({
-                uid: doc.id,
-                email: data.email || '',
-                displayName: data.displayName || '',
-                department: data.department || '',
-                factory: data.factory || '',
-                role: data.role || 'User',
-                photoURL: data.photoURL || '',
-                createdAt: data.createdAt?.toDate() || new Date(),
-                lastLoginAt: data.lastLoginAt?.toDate() || new Date()
-              } as User);
-            }
-          });
+          if (data.email) {
+            firestoreUsers.push({
+              uid: doc.id,
+              email: data.email || '',
+              displayName: data.displayName || '',
+              department: data.department || '',
+              factory: data.factory || '',
+              role: data.role || 'User',
+              photoURL: data.photoURL || '',
+              createdAt: data.createdAt?.toDate() || new Date(),
+              lastLoginAt: data.lastLoginAt?.toDate() || new Date(),
+            } as User);
+          }
         }
-      } catch (error) {
+      });
+
+      // Ensure current user is in list
+      if (currentUser && !firestoreUsers.some(u => u.uid === currentUser.uid)) {
+        firestoreUsers.push({
+          uid: currentUser.uid,
+          email: currentUser.email || '',
+          displayName: currentUser.displayName || '',
+          department: '', factory: '', role: 'User', photoURL: '',
+          createdAt: new Date(), lastLoginAt: new Date(),
+        } as User);
       }
 
-      // 3. Đảm bảo current user có trong danh sách
-      const currentUser = await this.afAuth.currentUser;
-      if (currentUser) {
-        const currentUserExists = firestoreUsers.some(u => u.uid === currentUser.uid);
-        if (!currentUserExists) {
-          firestoreUsers.push({
-            uid: currentUser.uid,
-            email: currentUser.email || '',
-            displayName: currentUser.displayName || '',
-            department: '',
-            factory: '',
-            role: 'User',
-            photoURL: currentUser.photoURL || '',
-            createdAt: new Date(),
-            lastLoginAt: new Date()
-          } as User);
-        }
-      }
-
-      // 5. Loại bỏ duplicates và cập nhật danh sách
-      const uniqueUsers = firestoreUsers.filter((user, index, self) => 
-        index === self.findIndex(u => u.uid === user.uid)
+      // Deduplicate
+      this.firebaseUsers = firestoreUsers.filter(
+        (u, i, self) => i === self.findIndex(x => x.uid === u.uid)
       );
-      
-      this.firebaseUsers = uniqueUsers;
+
+      // ── Populate permission maps in one pass (no Firestore reads) ──
+      this.firebaseUserPermissions = {};
+      this.firebaseUserCompletePermissions = {};
+      this.firebaseUserReadOnlyPermissions = {};
+      this.firebaseUserDepartments = {};
+      this.firebaseUserPasswords = {};
+      this.firebaseUserTabPermissions = {};
+
+      for (const user of this.firebaseUsers) {
+        const perm = permMap.get(user.uid) as any || {};
+        this.firebaseUserPermissions[user.uid]         = perm.hasDeletePermission   || false;
+        this.firebaseUserCompletePermissions[user.uid] = perm.hasCompletePermission || false;
+        this.firebaseUserReadOnlyPermissions[user.uid] = perm.hasReadOnlyPermission || false;
+        this.firebaseUserDepartments[user.uid]         = user.department || '';
+        this.firebaseUserPasswords[user.uid]           = user.password   || perm.password || '';
+
+        const tabPerms = tabPermMap.get(user.uid);
+        if (tabPerms) {
+          // Ensure all known tabs are present
+          const merged: { [k: string]: boolean } = {};
+          this.availableTabs.forEach(t => merged[t.key] = tabPerms[t.key] ?? false);
+          this.firebaseUserTabPermissions[user.uid] = merged;
+        } else {
+          // New user: create defaults (only dashboard = true) and save async (non-blocking)
+          const defaults: { [k: string]: boolean } = {};
+          this.availableTabs.forEach(t => defaults[t.key] = t.key === 'dashboard');
+          this.firebaseUserTabPermissions[user.uid] = defaults;
+          this.createDefaultTabPermissionsForUser(user, defaults).catch(() => {});
+        }
+      }
+
       this._rebuildUserCache();
-      
-      // 6. Load permissions, departments, passwords và tab permissions cho tất cả users
-      await this.loadFirebaseUserPermissions();
-      await this.loadFirebaseUserReadOnlyPermissions();
-      await this.loadFirebaseUserDepartments();
-      await this.loadFirebaseUserPasswords();
-      await this.loadFirebaseUserTabPermissions();
-
-
-
     } catch (error) {
       console.error('❌ Error loading Firebase users:', error);
       this.firebaseUsers = [];
@@ -1074,149 +1089,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
 
 
-  async loadFirebaseUserPermissions(): Promise<void> {
-    
-    // Load current delete and complete permissions for all Firebase users
-    for (const user of this.firebaseUsers) {
-      try {
-        // Đọc từ Firestore collection user-permissions
-        const userRef = this.firestore.collection('user-permissions').doc(user.uid);
-        const doc = await userRef.get().toPromise();
-        
-        if (doc?.exists) {
-          const data = doc.data() as any;
-          this.firebaseUserPermissions[user.uid] = data.hasDeletePermission || false;
-          this.firebaseUserCompletePermissions[user.uid] = data.hasCompletePermission || false;
-          this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
-            } else {
-              this.firebaseUserPermissions[user.uid] = false; // Default to false
-              this.firebaseUserCompletePermissions[user.uid] = false; // Default to false
-              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
-          }
-              } catch (error) {
-          console.error('❌ Error loading permissions for user', user.email, ':', error);
-          this.firebaseUserPermissions[user.uid] = false; // Default to false on error
-          this.firebaseUserCompletePermissions[user.uid] = false; // Default to false on error
-          this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả) on error
-        }
-    }
-    
-    this._rebuildUserCache();
-  }
-
-  async loadFirebaseUserReadOnlyPermissions(): Promise<void> {
-    
-    for (const user of this.firebaseUsers) {
-      try {
-        const userRef = this.firestore.collection('user-permissions').doc(user.uid);
-        const doc = await userRef.get().toPromise();
-        
-        if (doc?.exists) {
-          const data = doc.data() as any;
-          this.firebaseUserReadOnlyPermissions[user.uid] = data.hasReadOnlyPermission || false;
-            } else {
-              // User mới mặc định KHÔNG xem được gì cả
-              this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả)
-          }
-              } catch (error) {
-          console.error('❌ Error loading read-only permission for user', user.email, ':', error);
-          // User mới mặc định KHÔNG xem được gì cả, ngay cả khi có lỗi
-          this.firebaseUserReadOnlyPermissions[user.uid] = false; // Default to false (không xem gì cả) on error
-        }
-    }
-    
-  }
-
-  async loadFirebaseUserDepartments(): Promise<void> {
-    
-    for (const user of this.firebaseUsers) {
-      try {
-        const userRef = this.firestore.collection('users').doc(user.uid);
-        const doc = await userRef.get().toPromise();
-        
-        if (doc?.exists) {
-          const data = doc.data() as any;
-          this.firebaseUserDepartments[user.uid] = data.department || '';
-        } else {
-          this.firebaseUserDepartments[user.uid] = '';
-        }
-      } catch (error) {
-        console.error('❌ Error loading department for user', user.email, ':', error);
-        this.firebaseUserDepartments[user.uid] = '';
-      }
-    }
-    
-  }
-
-  async loadFirebaseUserPasswords(): Promise<void> {
-    
-    for (const user of this.firebaseUsers) {
-      try {
-        // Đọc từ collection 'users' trước
-        const userRef = this.firestore.collection('users').doc(user.uid);
-        const userDoc = await userRef.get().toPromise();
-        
-        if (userDoc?.exists) {
-          const data = userDoc.data() as any;
-          this.firebaseUserPasswords[user.uid] = data.password || '';
-        } else {
-          // Nếu không có trong 'users', thử đọc từ 'user-permissions'
-          const permRef = this.firestore.collection('user-permissions').doc(user.uid);
-          const permDoc = await permRef.get().toPromise();
-          
-          if (permDoc?.exists) {
-            const data = permDoc.data() as any;
-            this.firebaseUserPasswords[user.uid] = data.password || '';
-          } else {
-            this.firebaseUserPasswords[user.uid] = '';
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error loading password for user', user.email, ':', error);
-        this.firebaseUserPasswords[user.uid] = '';
-      }
-    }
-    
-  }
-
-  async loadFirebaseUserTabPermissions(): Promise<void> {
-    
-    for (const user of this.firebaseUsers) {
-      try {
-        const userRef = this.firestore.collection('user-tab-permissions').doc(user.uid);
-        const doc = await userRef.get().toPromise();
-        
-        if (doc?.exists) {
-          const data = doc.data() as any;
-          this.firebaseUserTabPermissions[user.uid] = data.tabPermissions || {};
-          } else {
-            // Tạo permissions mặc định cho user mới
-            // Nếu user có department, sử dụng permissions theo department
-            // Nếu không, tất cả false
-            const defaultPermissions: { [key: string]: boolean } = {};
-            this.availableTabs.forEach(tab => {
-              defaultPermissions[tab.key] = false;
-            });
-            
-            this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
-            
-            // Lưu vào Firestore (hàm này sẽ tự động xử lý permissions theo department nếu có)
-            await this.createDefaultTabPermissionsForUser(user, defaultPermissions);
-        }
-      } catch (error) {
-        console.error('❌ Error loading tab permissions for user', user.email, ':', error);
-        // Tạo permissions mặc định nếu có lỗi - KHÔNG có tab nào được tick
-        const defaultPermissions: { [key: string]: boolean } = {};
-        this.availableTabs.forEach(tab => {
-          // KHÔNG có tab nào được tick mặc định - user mới không xem được gì cả
-          defaultPermissions[tab.key] = false;
-        });
-        this.firebaseUserTabPermissions[user.uid] = defaultPermissions;
-      }
-    }
-    
-    this._rebuildUserCache();
-  }
+  /** @deprecated Bulk-loaded inside loadFirebaseUsers() — kept for backward compatibility */
+  async loadFirebaseUserPermissions(): Promise<void> { this._rebuildUserCache(); }
+  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
+  async loadFirebaseUserReadOnlyPermissions(): Promise<void> {}
+  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
+  async loadFirebaseUserDepartments(): Promise<void> {}
+  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
+  async loadFirebaseUserPasswords(): Promise<void> {}
+  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
+  async loadFirebaseUserTabPermissions(): Promise<void> { this._rebuildUserCache(); }
 
   private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
     try {
