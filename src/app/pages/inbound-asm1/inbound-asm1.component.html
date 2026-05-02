@@ -207,7 +207,7 @@
         </div>
         <div class="batch-grid" *ngIf="inboundBatchGroups.length > 0; else noInboundBatches">
           <div class="batch-card"
-               *ngFor="let batch of inboundBatchGroups"
+               *ngFor="let batch of inboundBatchGroups; trackBy: trackByBatchNumber"
                [class.is-done]="batch.receivedCount === batch.count && batch.count > 0"
                (click)="selectBatchView(batch.batchNumber)"
                (contextmenu)="openBatchContextMenu($event, batch.batchNumber)">
@@ -244,7 +244,7 @@
         </div>
         <div class="batch-grid">
           <div class="batch-card"
-               *ngFor="let batch of returnBatchGroups"
+               *ngFor="let batch of returnBatchGroups; trackBy: trackByBatchNumber"
                [class.is-done]="batch.receivedCount === batch.count && batch.count > 0"
                [class.is-return]="true"
                (click)="selectBatchView(batch.batchNumber)"
@@ -279,7 +279,7 @@
         </div>
         <div class="batch-grid">
           <div class="batch-card"
-               *ngFor="let batch of preScanBatchGroups"
+               *ngFor="let batch of preScanBatchGroups; trackBy: trackByBatchNumber"
                [class.is-done]="batch.receivedCount === batch.count && batch.count > 0"
                [class.is-pending-scan]="true"
                (click)="selectBatchView(batch.batchNumber)"
@@ -660,8 +660,8 @@
                 class="batch-select modern-select"
                 (change)="onBatchSelectionChange()">
                 <option value="">-- Chọn lô hàng/DNNK --</option>
-                <option 
-                  *ngFor="let batch of availableBatches" 
+                <option
+                  *ngFor="let batch of availableBatches; trackBy: trackByBatchNumber"
                   [value]="batch.batchNumber">
                   {{ batch.batchNumber }}
                 </option>
@@ -785,7 +785,7 @@
               style="width:100%;max-width:100%;padding:8px;"
               [(ngModel)]="printAllBatchSelection">
         <option value="">— Chọn lô —</option>
-        <option *ngFor="let b of distinctBatchNumbersForPrint" [value]="b">{{ b }}</option>
+        <option *ngFor="let b of distinctBatchNumbersForPrint; trackBy: trackByIndex" [value]="b">{{ b }}</option>
       </select>
       <div class="modal-actions" style="margin-top:16px;">
         <button type="button" class="cancel-btn" (click)="closePrintAllBatchModal()">
@@ -1165,8 +1165,8 @@
           Danh sách mã hàng đã scan ({{ scannedMaterialsList.length }})
         </h4>
         <div class="materials-grid">
-          <div 
-            *ngFor="let item of scannedMaterialsList" 
+          <div
+            *ngFor="let item of scannedMaterialsList; trackBy: trackByMaterialCode"
             class="material-item"
             [ngClass]="{ 'complete': item.isComplete }">
             <div class="material-header">
@@ -1358,7 +1358,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let note of materialNotes">
+              <tr *ngFor="let note of materialNotes; trackBy: trackByNoteId">
                 <td>{{ note.materialCode }}</td>
                 <td>{{ note.checkPercent }}%</td>
                 <td>{{ note.note }}</td>

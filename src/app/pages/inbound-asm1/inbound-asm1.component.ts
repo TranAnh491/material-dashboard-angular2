@@ -2,13 +2,11 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@an
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import * as XLSX from 'xlsx';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import * as QRCode from 'qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 
@@ -273,6 +271,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     return material?.id || `${material?.batchNumber || ''}|${material?.materialCode || ''}|${material?.poNumber || ''}|${index}`;
   }
 
+  trackByIndex(index: number, _: any): number { return index; }
+  trackByBatchNumber(index: number, item: any): string { return item?.batchNumber || String(index); }
+  trackByMaterialCode(index: number, item: any): string { return item?.materialCode || String(index); }
+  trackByNoteId(index: number, item: any): string { return item?.id || item?.materialCode || String(index); }
+
   /** Tải DMVT từ Firestore (subcollection dmvt/ASM1/items). */
   private loadDmvtCatalogFromFirestore(): Promise<void> {
     const colRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
@@ -341,6 +344,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     const reader = new FileReader();
     reader.onload = async (e: any) => {
       try {
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -1900,8 +1904,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     this.errorMessage = 'Đang import dữ liệu...';
     
     const reader = new FileReader();
-    reader.onload = (e: any) => {
+    reader.onload = async (e: any) => {
       try {
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
@@ -2654,6 +2659,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       return;
     }
 
+    const QRCode = await import('qrcode') as any;
     const payloads = this.buildInboundQrLabelPayloads(material);
     if (!payloads) {
       alert(
@@ -3125,6 +3131,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       return;
     }
 
+    const QRCode = await import('qrcode') as any;
     const batchNumber = this.selectedBatchView;
     const firstItem = items[0];
     const importDate = firstItem.importDate ? this.formatDate(firstItem.importDate) : '';
@@ -3314,6 +3321,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       return;
     }
 
+    const QRCode = await import('qrcode') as any;
     const bn = (batchNumber || '').trim();
     if (!bn) {
       alert('Thiếu mã lô hàng.');
@@ -3882,10 +3890,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   // Export functionality
-  exportToExcel(): void {
+  async exportToExcel(): Promise<void> {
     if (!this.canExportData) return;
-    
+
     try {
+      const XLSX = await import('xlsx');
       console.log('📊 Exporting ASM1 inbound data to Excel...');
       
       // Optimize data for smaller file size
@@ -3998,13 +4007,14 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
   
   // Download Excel template for import
-  downloadTemplate(): void {
+  async downloadTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
     const templateData = [
       ['LÔ HÀNG/ DNNK', 'MÃ HÀNG', 'SỐ P.O', 'LƯỢNG NHẬP', 'LOẠI HÌNH', 'NHÀ CUNG CẤP', 'VỊ TRÍ', 'HSD (dd/mm/yyyy)', 'LƯỢNG ĐƠN VỊ', 'LƯU Ý'],
       ['RM1-B001', 'RM1-MAT001', 'RM1-PO001', 100.5, 'Raw Material', 'Supplier A', 'IQC', '31/12/2025', 10.5, 'Ghi chú mẫu'],
       ['RM1-B002', 'RM1-MAT002', 'RM1-PO002', 50.25, 'Raw Material', 'Supplier B', 'IQC', '30/11/2025', 5.25, 'Ghi chú mẫu']
     ];
-    
+
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
     
     // Set column widths
@@ -4029,8 +4039,9 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
 
   // Download Inbound Report - Lịch sử kiểm lô hàng
-  downloadInboundReport(): void {
+  async downloadInboundReport(): Promise<void> {
     try {
+      const XLSX = await import('xlsx');
       console.log('📊 Tạo report lịch sử kiểm lô hàng...');
       
       // Tạo dữ liệu report

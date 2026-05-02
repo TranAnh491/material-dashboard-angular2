@@ -135,7 +135,7 @@
             </td>
           </tr>
           
-          <tr *ngFor="let item of filteredItems; let i = index">
+          <tr *ngFor="let item of filteredItems; let i = index; trackBy: trackByIndex">
             <td>{{item.shipment || ''}}</td>
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell" [class.duplicate-material]="isDuplicateMaterialCode(item)">{{item.materialCode}}</td>
@@ -444,7 +444,7 @@
       <div class="form-group" style="margin-bottom: 16px;">
         <label class="form-label">Tháng</label>
         <select class="form-input" [(ngModel)]="reportMonth" style="width: 100%; padding: 10px;">
-          <option *ngFor="let m of [1,2,3,4,5,6,7,8,9,10,11,12]" [value]="m">Tháng {{m}}</option>
+          <option *ngFor="let m of [1,2,3,4,5,6,7,8,9,10,11,12]; trackBy: trackByIndex" [value]="m">Tháng {{m}}</option>
         </select>
       </div>
       <div class="form-group" style="margin-bottom: 16px;">
@@ -549,7 +549,7 @@
         <div class="sc-shipment-grid" *ngIf="shipmentCheckBoxes.length > 0">
           <button type="button"
                   class="sc-shipment-card"
-                  *ngFor="let s of shipmentCheckBoxes"
+                  *ngFor="let s of shipmentCheckBoxes; trackBy: trackByIndex"
                   (click)="selectShipmentForCheck(s.shipmentCode)">
             <span class="sc-shipment-card-code">{{ s.shipmentCode }}</span>
             <span class="sc-shipment-card-meta">{{ s.status }} · {{ s.palletCount }} pallet</span>
@@ -604,7 +604,7 @@
           </div>
 
           <div class="sc-pallet-list">
-            <div class="sc-pallet-item" *ngFor="let r of shipmentCheckResults"
+            <div class="sc-pallet-item" *ngFor="let r of shipmentCheckResults; trackBy: trackByIndex"
                  [class.done]="r.status === 'ok'"
                  [class.pending]="r.status === 'pending'">
               <i class="material-icons sc-pallet-icon">

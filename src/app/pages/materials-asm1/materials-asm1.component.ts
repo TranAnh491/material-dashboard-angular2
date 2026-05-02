@@ -4,8 +4,6 @@ import { Subject, BehaviorSubject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import * as XLSX from 'xlsx';
-import * as QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSlideToggleChange } from '@angular/material/slide-toggle';
@@ -480,6 +478,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   async onPrintedCodesFileSelected(event: Event): Promise<void> {
+    const XLSX = await import('xlsx');
     const input = event.target as HTMLInputElement | null;
     const file = input?.files?.[0];
     if (!file) return;
@@ -546,6 +545,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   async printTemInLaiAll(): Promise<void> {
+    const QRCode = await import('qrcode') as any;
     this.temInLaiError = '';
     if (this.temInLaiBusy) return;
     const lsx = this.temInLaiLsxInput.trim();
@@ -716,6 +716,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   async confirmTemLeSplitAndPrint(): Promise<void> {
+    const QRCode = await import('qrcode') as any;
     this.temLeError = '';
 
     const parsed = this.temLeParsed || this.parseTemLeQrText(this.temLeQrText);
@@ -1165,6 +1166,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   async confirmTemXuatKhoPrint(): Promise<void> {
+    const QRCode = await import('qrcode') as any;
     this.temXuatError = '';
     const raw = this.temXuatLsxInput.trim();
     if (!raw) {
@@ -1739,9 +1741,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Download inventory stock data from Firebase as Excel file
   async loadInventoryStockFromFirebase(): Promise<void> {
+    const XLSX = await import('xlsx');
     console.log('📦 Downloading ASM1 inventory stock from Firebase as Excel...');
     this.isLoading = true;
-    
+
     try {
       // Get all inventory materials from Firebase
       const snapshot = await this.firestore.collection('inventory-materials', ref => 
@@ -3987,7 +3990,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Check Firebase status first
       try {
         console.log('🔍 Testing Firebase connection...');
-        const testSnapshot = await this.firestore.collection('materials').get().toPromise();
+        const testSnapshot = await this.firestore.collection('materials').ref.limit(1).get();
         if (testSnapshot) {
           console.log('✅ Firebase connection OK');
         }
@@ -4079,6 +4082,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Read Excel file and return data
   private async readExcelFile(file: File): Promise<any[]> {
+    const XLSX = await import('xlsx');
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e: any) => {
@@ -4229,12 +4233,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Tải Standard Packing từ Firebase và xuất Excel
   async loadStandardPacking(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       console.log('📥 Loading Standard Packing from Firebase and exporting to Excel...');
-      
+
       // Hiển thị loading state
       this.isCatalogLoading = true;
-      
+
       // Tải dữ liệu từ collection materials
       const snapshot = await this.firestore.collection('materials').get().toPromise();
       
@@ -4312,7 +4317,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  downloadCatalogTemplate(): void {
+  async downloadCatalogTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       console.log('📥 Downloading catalog template - Standard Packing only');
       
@@ -6448,6 +6454,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // Print QR Code for inventory items
   async printQRCode(material: InventoryMaterial): Promise<void> {
+    const QRCode = await import('qrcode') as any;
     try {
       console.log('🏷️ Generating QR code for ASM1 material:', material.materialCode);
       
@@ -7076,9 +7083,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   // 🆕 Load catalog once when component initializes (no real-time updates)
   private async loadCatalogOnce(): Promise<void> {
+    if (this.catalogLoaded) return;
     try {
       console.log('📦 Loading catalog once for Standard Packing...');
-      
+
       const snapshot = await this.firestore.collection('materials')
         .ref
         .get();
@@ -7542,7 +7550,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   // Export inventory data to Excel
-  exportToExcel(): void {
+  async exportToExcel(): Promise<void> {
+    const XLSX = await import('xlsx');
     if (!this.canExport) {
       alert('Bạn không có quyền xuất dữ liệu');
       return;

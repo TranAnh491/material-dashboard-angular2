@@ -82,7 +82,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let r of outboundDupRows">
+            <tr *ngFor="let r of outboundDupRows; trackBy: trackByBagId">
               <td>{{ r.factory }}</td>
               <td>{{ r.materialCode }}</td>
               <td>{{ r.poNumber }}</td>
@@ -220,7 +220,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let r of searchSummaryRows">
+        <tr *ngFor="let r of searchSummaryRows; trackBy: trackByIndex">
           <td>{{ r.factory }}</td>
           <td>{{ r.materialCode }}</td>
           <td>{{ r.poNumber }}</td>

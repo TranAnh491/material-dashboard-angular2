@@ -247,7 +247,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex">
             <td class="factory-cell readonly-cell">
               {{material.factory || 'ASM1'}}
             </td>
@@ -309,7 +309,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex">
             <td class="code-cell readonly-cell">
               {{material.materialCode}}
             </td>
@@ -347,7 +347,7 @@
         <button class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
           <i class="material-icons">chevron_left</i>
         </button>
-        <button class="page-btn" *ngFor="let page of [].constructor(totalPages); let i = index" [class.active]="currentPage === i + 1" (click)="goToPage(i + 1)">{{i + 1}}</button>
+        <button class="page-btn" *ngFor="let page of [].constructor(totalPages); let i = index; trackBy: trackByIndex" [class.active]="currentPage === i + 1" (click)="goToPage(i + 1)">{{i + 1}}</button>
         <button class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
           <i class="material-icons">chevron_right</i>
         </button>
@@ -417,7 +417,7 @@
         <div class="pending-data-section" *ngIf="pendingScanData.length > 0">
           <h4>Danh Sách Đã Scan ({{ pendingScanData.length }})</h4>
           <div class="scan-list">
-            <div class="scan-item" *ngFor="let item of pendingScanData; let i = index">
+            <div class="scan-item" *ngFor="let item of pendingScanData; let i = index; trackBy: trackByIndex">
               <div class="scan-item-header">
                 <span class="scan-index">#{{ i + 1 }}</span>
                 <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>
@@ -472,7 +472,7 @@
       <!-- Removed duplicate LSX and Employee info - already shown in main status -->
       
       <div class="scan-review-list">
-        <div class="scan-review-item" *ngFor="let item of pendingScanData; let i = index">
+        <div class="scan-review-item" *ngFor="let item of pendingScanData; let i = index; trackBy: trackByIndex">
           <div class="scan-item-header">
             <span class="scan-index">#{{ i + 1 }}</span>
             <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>

@@ -4,7 +4,6 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import * as XLSX from 'xlsx';
 import { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
@@ -538,6 +537,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     return employeeId.length > 7 ? employeeId.substring(0, 7) : employeeId;
   }
 
+  trackByIndex(index: number, _: any): number { return index; }
+
   // BAG number (i) từ bagBatch dạng "i/tổng" (có thể nhiều giá trị nối bằng dấu phẩy).
   getBagNumberDisplay(bagBatch?: string): string {
     const s = (bagBatch ?? '').trim();
@@ -1027,6 +1028,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   
   // Export tất cả dữ liệu (không giới hạn 50 dòng)
   async exportToExcel(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       console.log('📊 Exporting TẤT CẢ ASM1 outbound data to Excel...');
       
@@ -1129,6 +1131,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
 
   // Download monthly history - Tải lịch sử outbound theo tháng
   async downloadMonthlyHistory(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       // Hiện popup chọn tháng
       const monthYear = prompt(
@@ -1250,6 +1253,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   
   // Cleanup old data (move to archive or delete)
   async cleanupData(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       const confirmCleanup = confirm(
         '⚠️ CẢNH BÁO: Thao tác này sẽ xóa dữ liệu cũ trên Firebase!\n\n' +

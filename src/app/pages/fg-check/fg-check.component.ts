@@ -3,7 +3,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
-import * as XLSX from 'xlsx';
+
 
 export interface FGCheckItem {
   id?: string;
@@ -2514,7 +2514,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   /** Tải báo cáo Check theo tháng đã chọn (Excel) */
-  downloadCheckReportByMonth(): void {
+  async downloadCheckReportByMonth(): Promise<void> {
+    const XLSX = await import('xlsx');
     const itemsInMonth = this.items.filter(item => {
       const d = item.createdAt ? (item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt)) : null;
       if (!d || isNaN(d.getTime())) return false;
@@ -2569,7 +2570,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.shipmentCheckLoading = true;
     this.shipmentCheckBoxes = [];
     try {
-      const shipmentSnap = await this.firestore.collection('shipments').get().toPromise();
+      const shipmentSnap = await this.firestore.collection('shipments', ref => ref.limit(500)).get().toPromise();
       const statusByShipment = new Map<string, string>();
       shipmentSnap?.docs?.forEach(doc => {
         const d = doc.data() as any;
@@ -2585,7 +2586,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const fgOutSnap = await this.firestore.collection('fg-out').get().toPromise();
+      const fgOutSnap = await this.firestore.collection('fg-out', ref => ref.limit(500)).get().toPromise();
       const palletsByShipment = new Map<string, Set<string>>();
       fgOutSnap?.docs?.forEach(doc => {
         const d = doc.data() as any;
@@ -2786,6 +2787,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   /** More: tải Excel lịch sử quét Shipment Check từ Firebase. */
   async downloadShipmentCheckHistoryExcel(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       const snap = await this.firestore
         .collection(this.SHIPMENT_CHECK_LOGS, ref => ref.orderBy('createdAt', 'desc').limit(20000))
@@ -2841,4 +2843,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
     this.focusShipmentCheckScanInput();
   }
+
+  trackByIndex(index: number, _: any): number { return index; }
 }

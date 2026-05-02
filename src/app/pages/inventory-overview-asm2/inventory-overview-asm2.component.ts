@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { TabPermissionService } from '../../services/tab-permission.service';
-import * as XLSX from 'xlsx';
+
 
 interface InventoryOverviewItem {
   id: string;
@@ -771,12 +771,13 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   }
 
   // Export to Excel
-  exportToExcel(): void {
+  async exportToExcel(): Promise<void> {
     if (this.filteredItems.length === 0) {
       console.warn('⚠️ No data to export');
       return;
     }
 
+    const XLSX = await import('xlsx');
     try {
       console.log('📊 Exporting to Excel...');
       
@@ -833,13 +834,14 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   }
 
   // Download full report with all data
-  downloadFullReport(): void {
+  async downloadFullReport(): Promise<void> {
     if (this.inventoryItems.length === 0) {
       console.warn('⚠️ No data to export');
       alert('⚠️ Không có dữ liệu để tải báo cáo');
       return;
     }
 
+    const XLSX = await import('xlsx');
     try {
       console.log('📊 Downloading full report...');
       
@@ -1101,7 +1103,8 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   }
 
   // Download LinkQ Excel template
-  downloadLinkQTemplate(): void {
+  async downloadLinkQTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       console.log('📥 Downloading LinkQ template...');
       
@@ -1156,13 +1159,14 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
   }
 
   // Download LinkQ comparison report
-  downloadLinkQComparisonReport(): void {
+  async downloadLinkQComparisonReport(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       if (!this.isLinkQDataLoaded) {
         alert('⚠️ Vui lòng import dữ liệu LinkQ trước khi tải báo cáo so sánh!');
         return;
       }
-      
+
       console.log('📊 Downloading LinkQ comparison report...');
       
       let comparisonData;
@@ -1265,6 +1269,7 @@ export class InventoryOverviewASM2Component implements OnInit, OnDestroy {
 
   // Read LinkQ Excel file
   private async readLinkQExcelFile(file: File): Promise<any[]> {
+    const XLSX = await import('xlsx');
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e: any) => {

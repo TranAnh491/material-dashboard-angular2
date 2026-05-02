@@ -467,6 +467,9 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     };
   }
 
+  trackByIndex(index: number, _: any): number { return index; }
+  trackByBagId(index: number, item: any): string { return item?.id || item?.bagId || String(index); }
+
   getBagColumnDisplay(row: { bagBatch?: string; bagNumberDisplay?: string }): string {
     const bnd = (row.bagNumberDisplay || '').trim();
     // Nếu có mã bịch lẻ/tách (VD: 1(T1254581)) thì ưu tiên để tránh kiểm tra nhầm.
