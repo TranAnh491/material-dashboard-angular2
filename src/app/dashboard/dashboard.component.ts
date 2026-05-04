@@ -21,6 +21,23 @@ interface WorkOrderStatusRow {
   delayClass: string;
 }
 
+/** 1 ô heatmap = 1 SKU (mã+PO+IMD) trong tuần đó — Putaway staging */
+interface IqcHeatmapCell {
+  materialCode: string;
+  poNumber: string;
+  imd: string;
+  stock: number;
+  /** 1..4 mức màu theo tồn trong tuần */
+  level: 1 | 2 | 3 | 4;
+  tooltip: string;
+}
+
+interface IqcHeatmapWeekCol {
+  week: string;
+  count: number;
+  cells: IqcHeatmapCell[];
+}
+
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
@@ -41,9 +58,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Factory selection
   selectedFactory: string = 'ASM1';
 
-  /** Donut "track" (phần còn lại của vòng) — đồng bộ 3 chart trên nền tối */
-  private readonly donutTrackColor = 'rgba(255, 255, 255, 0.12)';
-  private readonly donutArcBorderRadius = 6;
   
   // Work order data
   workOrders: WorkOrder[] = [];
@@ -85,8 +99,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     week: string; // W32, W33, ...
     count: number;
   }> = [];
-  iqcWeekSparkData: Array<{ week: string; count: number; bars: number[] }> = [];
+  /** 8 cột tuần, mỗi ô = 1 SKU trong tuần (IQC staging) */
+  iqcHeatmapWeeks: IqcHeatmapWeekCol[] = [];
   iqcLoading = false;
+
+  get iqcHeatmapHasAnySku(): boolean {
+    return (this.iqcHeatmapWeeks || []).some((c) => (c.cells?.length || 0) > 0);
+  }
   
   // IQC Materials Modal
   showIQCMaterialsModal: boolean = false;
@@ -113,6 +132,46 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Charts for widgets
   private woStatusChart: Chart | null = null;
+  private fgTurnoverChart: Chart | null = null;
+
+  /** % Accuracy hiển thị “tháng này” (đồng bộ với donut) */
+  matAccuracyThisMonth = 99.85;
+  fgAccuracyThisMonth = 100;
+
+  /** FGs Inventory Turnover — theo tháng 2026 (cột) + target tháng */
+  readonly fgTurnoverMonthLabels = ['Thg 1', 'Thg 2', 'Thg 3', 'Thg 4'];
+  readonly fgTurnoverMonthValues = [1.33, 0.4, 0.83, 1.16];
+  readonly fgTurnoverTargetMonthly = 1.33;
+
+  get fgTurnoverYtd(): number {
+    return this.fgTurnoverMonthValues.reduce((a, b) => a + b, 0);
+  }
+
+  // Accuracy targets (donut + “Mục tiêu” trong chart)
+  matAccuracyTarget = 99;
+  fgAccuracyTarget = 98;
+
+  // Shipment table pagination
+  shipmentCurrentPage = 1;
+  shipmentPageSize = 10;
+  get shipmentPageCount(): number { return Math.max(1, Math.ceil(this.shipmentStatus.length / this.shipmentPageSize)); }
+  get shipmentPagedRows(): any[] {
+    const start = (this.shipmentCurrentPage - 1) * this.shipmentPageSize;
+    return this.shipmentStatus.slice(start, start + this.shipmentPageSize);
+  }
+  shipmentPrevPage(): void { if (this.shipmentCurrentPage > 1) this.shipmentCurrentPage--; }
+  shipmentNextPage(): void { if (this.shipmentCurrentPage < this.shipmentPageCount) this.shipmentCurrentPage++; }
+
+  // WO table — same pagination
+  woCurrentPage = 1;
+  woPageSize = 10;
+  get woPageCount(): number { return Math.max(1, Math.ceil(this.workOrderStatus.length / this.woPageSize)); }
+  get woPagedRows(): WorkOrderStatusRow[] {
+    const start = (this.woCurrentPage - 1) * this.woPageSize;
+    return this.workOrderStatus.slice(start, start + this.woPageSize);
+  }
+  woPrevPage(): void { if (this.woCurrentPage > 1) this.woCurrentPage--; }
+  woNextPage(): void { if (this.woCurrentPage < this.woPageCount) this.woCurrentPage++; }
 
   // Menu tabs for icon grid
   menuTabs = [
@@ -222,6 +281,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       } catch {}
       this.woStatusChart = null;
     }
+    if (this.fgTurnoverChart) {
+      try {
+        this.fgTurnoverChart.destroy();
+      } catch {}
+      this.fgTurnoverChart = null;
+    }
   }
 
   createChart(canvasId: string, label: string, labels: string[], data: number[], color: string, yRange?: { min?: number, max?: number }) {
@@ -277,55 +342,64 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Create donut chart for accuracy with percentage in center
-  createAccuracyDonutChart(canvasId: string, label: string, percentage: number, color: string = '#ff9800') {
+  /** Donut tròn đầy đủ — % tháng này ở giữa */
+  createAccuracyDonutChart(canvasId: string, label: string, percentage: number, color: string = '#ff9800', targetPct?: number) {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Format percentage: if it's a whole number, show 0 decimals, otherwise show 2 decimals
-    const percentageText = percentage % 1 === 0 ? percentage.toFixed(0) + '%' : percentage.toFixed(2) + '%';
+    const existing = Chart.getChart(canvas);
+    if (existing) {
+      try {
+        existing.destroy();
+      } catch {}
+    }
 
-    const chart = new Chart(ctx, {
+    const percentageText = percentage % 1 === 0 ? percentage.toFixed(0) + '%' : percentage.toFixed(2) + '%';
+    const trackColor = 'rgba(15,23,42,0.08)';
+
+    new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Accuracy'],
+        labels: ['Accuracy', 'Remaining'],
         datasets: [{
           data: [percentage, Math.max(0, 100 - percentage)],
-          backgroundColor: [color, this.donutTrackColor],
+          backgroundColor: [color, trackColor],
           borderWidth: 0,
-          borderRadius: this.donutArcBorderRadius,
+          borderRadius: 4,
           spacing: 0
         }]
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
-        cutout: '70%', // Donut hole size
+        maintainAspectRatio: false,
+        cutout: '66%',
+        layout: { padding: { top: 4, bottom: 4, left: 4, right: 4 } },
         plugins: {
-          legend: {
-            display: false
-          },
-          tooltip: {
-            enabled: false
-          }
+          legend: { display: false },
+          tooltip: { enabled: false }
         }
       },
       plugins: [{
-        id: 'centerTextPlugin',
+        id: 'accuracyCenterText',
         afterDraw: (chart) => {
-          const ctx = chart.ctx;
-          const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-          const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-
-          ctx.save();
-          ctx.font = 'bold 32px Arial';
-          ctx.fillStyle = color;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(percentageText, centerX, centerY);
-          ctx.restore();
+          const c = chart.ctx;
+          const { left, right, top, bottom } = chart.chartArea;
+          const cx = (left + right) / 2;
+          const cy = (top + bottom) / 2;
+          c.save();
+          c.font = `800 22px Inter, system-ui, -apple-system, 'Segoe UI', sans-serif`;
+          c.fillStyle = color;
+          c.textAlign = 'center';
+          c.textBaseline = 'middle';
+          c.fillText(percentageText, cx, cy - (targetPct !== undefined ? 8 : 0));
+          if (targetPct !== undefined) {
+            c.font = `500 10px Inter, system-ui, -apple-system, 'Segoe UI', sans-serif`;
+            c.fillStyle = 'rgba(15,23,42,0.48)';
+            c.fillText(`Mục tiêu: ${targetPct}%`, cx, cy + 14);
+          }
+          c.restore();
         }
       }]
     });
@@ -763,19 +837,129 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private createCharts() {
-    // Cập nhật dữ liệu thực tế cho 3 box chart
-    const months = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'];
-    const matAccuracy = [99.9, 99.93, 99.80, 99.91, 99.87, 99.86];
-    const fgAccuracy = [100, 100, 100, 100, 100, 100];
-    
-    this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', 99.85, '#4caf50');
-    this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', 100, '#2196f3');
-    
-    // FGs Inventory Turnover 2026 (lũy kế): 2 tháng đầu = 1.40, tháng 3 = 0.82 → tổng = 2.22, target = 14, 3/12 tháng
-    this.createInventoryTurnoverChart('completedTasksChart', 2.22, 14, 3, 12);
+    this.matAccuracyThisMonth = 99.85;
+    this.fgAccuracyThisMonth = 100;
 
-    // Widget chart: Work Order Status (7 days)
+    this.createAccuracyDonutChart(
+      'dailySalesChart',
+      'Materials Accuracy (%)',
+      this.matAccuracyThisMonth,
+      '#22c55e',
+      this.matAccuracyTarget
+    );
+    this.createAccuracyDonutChart(
+      'websiteViewsChart',
+      'Finished Goods Accuracy (%)',
+      this.fgAccuracyThisMonth,
+      '#3b82f6',
+      this.fgAccuracyTarget
+    );
+
+    this.createFgTurnoverMonthlyBarChart('completedTasksChart');
+
     this.createWorkOrderStatusStackedChart();
+  }
+
+  /** Cột theo tháng + đường target tháng (1.33) */
+  private createFgTurnoverMonthlyBarChart(canvasId: string): void {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (this.fgTurnoverChart) {
+      try {
+        this.fgTurnoverChart.destroy();
+      } catch {}
+      this.fgTurnoverChart = null;
+    }
+
+    const labels = [...this.fgTurnoverMonthLabels];
+    const bars = [...this.fgTurnoverMonthValues];
+    const tgt = this.fgTurnoverTargetMonthly;
+    const targetLine = labels.map(() => tgt);
+
+    const barBlue = '#2563eb';
+    const targetColor = '#ef4444';
+
+    this.fgTurnoverChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar' as const,
+            label: 'Turnover tháng',
+            data: bars,
+            backgroundColor: barBlue,
+            borderRadius: 6,
+            borderSkipped: false,
+            order: 2
+          },
+          {
+            type: 'line' as const,
+            label: `Target tháng (${tgt})`,
+            data: targetLine,
+            borderColor: targetColor,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [7, 5],
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: false,
+            tension: 0,
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 4, right: 4, bottom: 0, left: 2 } },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            align: 'end',
+            labels: {
+              boxWidth: 10,
+              boxHeight: 10,
+              usePointStyle: true,
+              font: { size: 11, weight: 'bold' as const, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const v = context.parsed.y;
+                if (v === undefined || v === null) return '';
+                return `${context.dataset.label}: ${Number(v).toFixed(2)}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              color: 'rgba(15,23,42,0.55)',
+              font: { size: 11, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+            },
+            border: { display: false }
+          },
+          y: {
+            beginAtZero: true,
+            suggestedMax: Math.max(...bars, tgt) * 1.15,
+            grid: { color: 'rgba(15,23,42,0.06)' },
+            ticks: {
+              color: 'rgba(15,23,42,0.45)',
+              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+            },
+            border: { display: false }
+          }
+        }
+      }
+    });
   }
 
   private parseCellNumber(v: any): number {
@@ -817,18 +1001,48 @@ export class DashboardComponent implements OnInit, OnDestroy {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: { left: 2, right: 2, top: 0, bottom: 0 }
+        },
         plugins: {
           legend: {
             display: true,
             position: 'top',
-            labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle' }
+            align: 'center',
+            labels: {
+              boxWidth: 10,
+              boxHeight: 10,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              padding: 6,
+              font: { size: 11, weight: 'bold' as const, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+            }
           },
           tooltip: { mode: 'index', intersect: false }
         },
         interaction: { mode: 'index', intersect: false },
         scales: {
-          x: { stacked: true, grid: { display: false }, ticks: { color: 'rgba(15,23,42,0.55)', font: { size: 10 } } },
-          y: { stacked: true, grid: { color: 'rgba(15,23,42,0.06)' }, ticks: { color: 'rgba(15,23,42,0.45)', font: { size: 10 } } }
+          x: {
+            stacked: true,
+            offset: false,
+            grid: { display: false },
+            ticks: {
+              color: 'rgba(15,23,42,0.55)',
+              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" },
+              padding: 2
+            },
+            border: { display: false }
+          },
+          y: {
+            stacked: true,
+            grid: { color: 'rgba(15,23,42,0.06)' },
+            ticks: {
+              color: 'rgba(15,23,42,0.45)',
+              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" },
+              padding: 4
+            },
+            border: { display: false }
+          }
         }
       }
     });
@@ -862,78 +1076,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   goMenu(): void {
     this.router.navigate(['/menu']);
-  }
-
-  // Create inventory turnover chart with target and progress
-  createInventoryTurnoverChart(canvasId: string, currentValue: number, target: number, monthsActive: number, totalMonths: number) {
-    const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Calculate percentage of target achieved
-    const percentage = (currentValue / target) * 100;
-    
-    const achievedColor = '#2196f3';
-
-    const chart = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Achieved', 'Remaining'],
-        datasets: [{
-          data: [currentValue, Math.max(0, target - currentValue)],
-          backgroundColor: [achievedColor, this.donutTrackColor],
-          borderWidth: 0,
-          borderRadius: this.donutArcBorderRadius,
-          spacing: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        cutout: '70%',
-        plugins: {
-          legend: {
-            display: false
-          },
-          tooltip: {
-            callbacks: {
-              label: (context) => {
-                if (context.dataIndex === 0) {
-                  return `Achieved: ${currentValue}`;
-                } else {
-                  return `Remaining: ${(target - currentValue).toFixed(1)}`;
-                }
-              }
-            }
-          }
-        }
-      },
-      plugins: [{
-        id: 'turnoverCenterText',
-        afterDraw: (chart) => {
-          const ctx = chart.ctx;
-          const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
-          const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
-
-          ctx.save();
-          
-          // Main value
-          ctx.font = 'bold 28px Arial';
-          ctx.fillStyle = achievedColor;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(currentValue.toString(), centerX, centerY - 10);
-          
-          // Target text
-          ctx.font = '12px Arial';
-          ctx.fillStyle = 'rgba(229, 231, 235, 0.72)';
-          ctx.fillText(`Target: ${target}`, centerX, centerY + 15);
-          
-          ctx.restore();
-        }
-      }]
-    });
   }
 
   // Method to handle factory selection changes
@@ -1252,16 +1394,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       if (!snapshot || snapshot.empty) {
         this.iqcWeekData = weeks.map(w => ({ week: w.week, count: 0 }));
-        this.iqcWeekSparkData = this.buildIqcWeekSparkData(this.iqcWeekData);
+        this.iqcHeatmapWeeks = weeks.map((w) => ({ week: w.week, count: 0, cells: [] }));
         this.cdr.detectChanges();
         return;
       }
 
-      // Count unique materials per week
-      const weekCounts = new Map<string, Set<string>>();
-      weeks.forEach(w => {
-        weekCounts.set(w.week, new Set());
-      });
+      const weekCells = new Map<string, Map<string, { materialCode: string; poNumber: string; imd: string; stock: number }>>();
+      weeks.forEach((w) => weekCells.set(w.week, new Map()));
 
       snapshot.forEach(doc => {
         const data = doc.data() as any;
@@ -1347,54 +1486,56 @@ export class DashboardComponent implements OnInit, OnDestroy {
             const batchNumber = (data.batchNumber || '').trim();
             const imd = this.getIMDFromDate(materialDate, batchNumber);
             const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
-            
-            weekCounts.get(week.week)?.add(uniqueKey);
+            const wm = weekCells.get(week.week);
+            if (wm) {
+              const prev = wm.get(uniqueKey);
+              if (prev) {
+                prev.stock += stock;
+              } else {
+                wm.set(uniqueKey, { materialCode, poNumber, imd, stock });
+              }
+            }
             break; // Material can only belong to one week
           }
         }
       });
 
-      // Convert to array format
-      this.iqcWeekData = weeks.map(w => ({
-        week: w.week,
-        count: weekCounts.get(w.week)?.size || 0
-      }));
-      this.iqcWeekSparkData = this.buildIqcWeekSparkData(this.iqcWeekData);
-
+      this.finalizeIqcHeatmapFromWeekMaps(weeks, weekCells);
       console.log('📊 IQC Week Data:', this.iqcWeekData);
       this.cdr.detectChanges();
     } catch (error) {
       console.error('❌ Error loading IQC by week:', error);
       this.iqcWeekData = [];
+      this.iqcHeatmapWeeks = [];
     } finally {
       this.iqcLoading = false;
     }
   }
 
-  private buildIqcWeekSparkData(input: Array<{ week: string; count: number }>): Array<{ week: string; count: number; bars: number[] }> {
-    const max = Math.max(1, ...(input || []).map(x => Number(x.count) || 0));
-    return (input || []).map((w, idx) => {
-      const seed = this.hashToUnit(`${w.week}-${idx}`);
-      const intensity = Math.min(1, (Number(w.count) || 0) / max);
-      const bars = Array.from({ length: 10 }).map((_, j) => {
-        // Stable, slightly varied histogram look, scaled by intensity
-        const wave = 0.35 + 0.65 * Math.abs(Math.sin((j + 1) * 1.05 + seed * 6.283));
-        const noise = 0.78 + 0.22 * Math.abs(Math.cos((j + 3) * 0.9 + seed * 3.1415));
-        const v = Math.max(0.08, Math.min(1, wave * noise * (0.25 + 0.75 * intensity)));
-        return Math.round(v * 100);
+  private finalizeIqcHeatmapFromWeekMaps(
+    weeks: Array<{ week: string; weekNum: number; startDate: Date; endDate: Date }>,
+    weekCells: Map<string, Map<string, { materialCode: string; poNumber: string; imd: string; stock: number }>>
+  ): void {
+    this.iqcWeekData = weeks.map((w) => ({
+      week: w.week,
+      count: weekCells.get(w.week)?.size || 0
+    }));
+    this.iqcHeatmapWeeks = weeks.map((w) => {
+      const m = weekCells.get(w.week);
+      const arr = m ? Array.from(m.values()).sort((a, b) => b.stock - a.stock) : [];
+      const maxS = Math.max(...arr.map((x) => x.stock), 1e-9);
+      const cells: IqcHeatmapCell[] = arr.map((v) => {
+        const ratio = v.stock / maxS;
+        let level: 1 | 2 | 3 | 4 = 1;
+        if (ratio > 0.75) level = 4;
+        else if (ratio > 0.5) level = 3;
+        else if (ratio > 0.25) level = 2;
+        else level = 1;
+        const tooltip = `${v.materialCode} · PO ${v.poNumber || '—'} · IMD ${v.imd} · Tồn: ${v.stock.toFixed(2)}`;
+        return { ...v, level, tooltip };
       });
-      return { week: w.week, count: w.count, bars };
+      return { week: w.week, count: cells.length, cells };
     });
-  }
-
-  private hashToUnit(s: string): number {
-    let h = 2166136261;
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    // 0..1
-    return (h >>> 0) / 4294967295;
   }
 
   // Helper: Get ISO week number

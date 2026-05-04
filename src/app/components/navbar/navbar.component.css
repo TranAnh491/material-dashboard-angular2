@@ -118,9 +118,11 @@
     border-color: rgba(255, 255, 255, 0.22);
 }
 
-/* INBOUND ASM1: thanh nav trong suốt — click xuyên tới topbar trang (cùng ý materials: không để vùng rỗng chặn nút dưới). Phải tắt hit-test cả .container-fluid vì con mặc định không nhận event khi cha là none. */
+/* INBOUND / DASHBOARD: thanh nav không chặn click xuống nội dung (topbar trang có nút Home, filter…). Phải tắt hit-test cả .container-fluid. */
 .navbar.navbar--inbound-pass-through,
-.navbar.navbar--inbound-pass-through .container-fluid {
+.navbar.navbar--inbound-pass-through .container-fluid,
+.navbar.navbar--dashboard-pass-through,
+.navbar.navbar--dashboard-pass-through .container-fluid {
   pointer-events: none;
 }
 

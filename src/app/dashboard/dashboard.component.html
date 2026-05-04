@@ -62,7 +62,7 @@
             <i class="material-icons">inventory_2</i>
           </div>
         </div>
-        <div class="kpi-spark kpi-spark--amber"></div>
+        <div class="kpi-spark kpi-spark--sky"></div>
       </div>
 
       <div class="card p-3 kpi-card kpi-card-otd">
@@ -76,7 +76,7 @@
             <i class="material-icons">track_changes</i>
           </div>
         </div>
-        <div class="kpi-spark kpi-spark--blue"></div>
+        <div class="kpi-spark kpi-spark--orange"></div>
       </div>
 
       <div class="card p-3 kpi-card kpi-card-safety">
@@ -96,46 +96,49 @@
 
 
 
-    <!-- Row: Work Order Status (7 days) / Shipment Status (7 days) / Putaway Staging Area -->
-    <div class="dash-grid dash-grid--triple">
-      <div class="card dash-widget">
-        <div class="dash-widget__head">
+    <!-- Hàng widget: Work Order / Shipment / Putaway (bố cục + typography theo dashboard mẫu) -->
+    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order, shipment, putaway">
+      <article class="card dash-widget wo-chart-widget dash-surface-card">
+        <header class="dash-widget__head">
           <div class="dash-widget__headrow">
-            <div class="dash-widget__title">
-              <i class="material-icons">stacked_bar_chart</i>
-              Work Order Status (7 days)
+            <div class="dash-widget__title dash-widget__title--with-icon">
+              <span class="dash-widget__ico dash-widget__ico--blue" aria-hidden="true">
+                <i class="material-icons">stacked_bar_chart</i>
+              </span>
+              <span class="dash-widget__title-text">Work Order Status (7 days)</span>
             </div>
-            <div class="dash-widget__pill">7 ngày qua <i class="material-icons">expand_more</i></div>
+            <div class="dash-widget__pill"><span>7 ngày qua</span><i class="material-icons">expand_more</i></div>
           </div>
-        </div>
-        <div class="card-body">
+        </header>
+        <div class="card-body card-body--wo-chart">
           <div class="wo-chart-wrap">
             <canvas id="workOrderStatusChart"></canvas>
           </div>
         </div>
-      </div>
+      </article>
 
-      <div class="card dash-widget">
-        <div class="dash-widget__head">
+      <article class="card dash-widget ship-widget dash-surface-card">
+        <header class="dash-widget__head">
           <div class="dash-widget__headrow">
-            <div class="dash-widget__title">
-              <i class="material-icons">local_shipping</i>
-              Shipment Status (7 days)
+            <div class="dash-widget__title dash-widget__title--with-icon">
+              <span class="dash-widget__ico dash-widget__ico--sky" aria-hidden="true">
+                <i class="material-icons">local_shipping</i>
+              </span>
+              <span class="dash-widget__title-text">Shipment Status (7 days)</span>
             </div>
-            <div class="dash-widget__pill">7 ngày qua <i class="material-icons">expand_more</i></div>
+            <div class="dash-widget__pill"><span>7 ngày qua</span><i class="material-icons">expand_more</i></div>
           </div>
-        </div>
-        <div class="card-body">
+        </header>
+        <div class="card-body card-body--ship-list">
           <div class="ship-list" *ngIf="shipmentStatus.length; else noShipTpl">
             <div class="ship-item" *ngFor="let row of shipmentStatus | slice:0:4">
               <div class="ship-date">
                 <div class="ship-date__d">{{ row.shipDate }}</div>
-                <div class="ship-date__w">{{ row.shipDate.includes('/') ? '' : '' }}</div>
               </div>
               <div class="ship-main">
                 <div class="ship-code">Shipment {{ row.shipment }}</div>
                 <div class="ship-meta">
-                  <span>Customer: —</span>
+                  <span>Customer: {{ row.customer || '—' }}</span>
                   <span class="dot">·</span>
                   <span>Carton: {{ row.carton }}</span>
                 </div>
@@ -149,85 +152,125 @@
             </button>
           </div>
           <ng-template #noShipTpl>
-            <div class="text-center text-muted">No shipments for the next 7 days.</div>
+            <div class="text-center text-muted dash-empty-hint">No shipments for the next 7 days.</div>
           </ng-template>
         </div>
-      </div>
+      </article>
 
-      <div class="card dash-widget dash-widget--clickable" (click)="openIQCMaterialsModal()" title="Click để xem Putaway Staging Area">
-        <div class="dash-widget__head">
+      <article class="card dash-widget putaway-widget dash-widget--clickable dash-surface-card" (click)="openIQCMaterialsModal()" title="Click để xem Putaway Staging Area">
+        <header class="dash-widget__head">
           <div class="dash-widget__headrow">
-            <div class="dash-widget__title">
-              <i class="material-icons">inventory_2</i>
-              Putaway Staging Area
+            <div class="dash-widget__title dash-widget__title--with-icon">
+              <span class="dash-widget__ico dash-widget__ico--slate" aria-hidden="true">
+                <i class="material-icons">inventory_2</i>
+              </span>
+              <span class="dash-widget__title-text">Putaway Staging Area</span>
             </div>
-            <div class="dash-widget__pill">7 ngày qua <i class="material-icons">expand_more</i></div>
+            <div class="dash-widget__pill"><span>7 ngày qua</span><i class="material-icons">expand_more</i></div>
           </div>
-        </div>
-        <div class="card-body">
+        </header>
+        <div class="card-body card-body--putaway">
           <div class="putaway-wrap" *ngIf="!iqcLoading">
-            <div class="putaway-weeks">
-              <div *ngFor="let w of iqcWeekSparkData" class="putaway-week">
-                <div class="putaway-week__count">{{ w.count }}</div>
-                <div class="putaway-week__label">{{ w.week }}</div>
-                <div class="putaway-spark" aria-hidden="true">
-                  <div *ngFor="let b of w.bars" class="putaway-bar" [style.height.%]="b"></div>
+            <div class="putaway-heatmap" *ngIf="iqcHeatmapHasAnySku; else putawayHeatEmpty" aria-label="Heatmap SKU theo tuần IQC staging">
+              <div *ngFor="let col of iqcHeatmapWeeks" class="putaway-heatmap__col">
+                <div class="putaway-heatmap__head">
+                  <span class="putaway-heatmap__week">{{ col.week }}</span>
+                  <span class="putaway-heatmap__cnt">{{ col.count }}</span>
+                </div>
+                <div class="putaway-heatmap__cells">
+                  <div
+                    *ngFor="let c of col.cells"
+                    class="putaway-heatmap__cell"
+                    [class.putaway-heatmap__cell--lv1]="c.level === 1"
+                    [class.putaway-heatmap__cell--lv2]="c.level === 2"
+                    [class.putaway-heatmap__cell--lv3]="c.level === 3"
+                    [class.putaway-heatmap__cell--lv4]="c.level === 4"
+                    [title]="c.tooltip"
+                  ></div>
                 </div>
               </div>
             </div>
+            <ng-template #putawayHeatEmpty>
+              <div class="putaway-heatmap putaway-heatmap--empty text-muted text-center">Không có SKU ở IQC staging (8 tuần).</div>
+            </ng-template>
           </div>
           <div class="iqc-loading" *ngIf="iqcLoading">
             <i class="material-icons rotating">refresh</i>
             <span>Loading...</span>
           </div>
         </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
-    <!-- Charts Section - 3 charts in a row -->
-    <div class="dash-grid dash-grid--triple">
-      <div class="card card-chart chart-card chart-card-green">
-        <div class="card-body chart-body">
+    <!-- Hàng gauge: Materials / FG / Turnover -->
+    <section class="dash-chart-row dash-grid dash-grid--triple" aria-label="Accuracy and turnover">
+
+      <!-- Materials Accuracy -->
+      <article class="card card-chart chart-card chart-card-green dash-surface-card">
+        <div class="card-body chart-body acc-card-body">
           <div class="chart-badge chart-badge-green">Target Achieved</div>
-          <h4 class="card-title d-flex align-items-center">
-            <i class="material-icons me-2">precision_manufacturing</i> Materials Accuracy
+          <h4 class="card-title dash-chart-title">
+            <span class="dash-widget__ico dash-widget__ico--green-sm" aria-hidden="true"><i class="material-icons">precision_manufacturing</i></span>
+            <span>Materials Accuracy</span>
           </h4>
-          <canvas id="dailySalesChart"></canvas>
+          <p class="acc-month-line">Tháng này: <strong>{{ matAccuracyThisMonth | number:'1.2-2' }}%</strong></p>
+          <div class="acc-chart-only">
+            <div class="acc-gauge-wrap">
+              <canvas id="dailySalesChart"></canvas>
+            </div>
+          </div>
         </div>
-        <div class="card-footer">
+        <footer class="card-footer dash-chart-footer">
           <div class="stats"><i class="material-icons">inventory</i> Inventory stocktaking monthly</div>
-        </div>
-      </div>
+        </footer>
+      </article>
 
-      <div class="card card-chart chart-card chart-card-blue">
-        <div class="card-body chart-body">
+      <!-- Finished Goods Accuracy -->
+      <article class="card card-chart chart-card chart-card-blue dash-surface-card">
+        <div class="card-body chart-body acc-card-body">
           <div class="chart-badge chart-badge-green">Target Achieved</div>
-          <h4 class="card-title d-flex align-items-center">
-            <i class="material-icons me-2">verified</i> Finished Goods Accuracy
+          <h4 class="card-title dash-chart-title">
+            <span class="dash-widget__ico dash-widget__ico--blue-sm" aria-hidden="true"><i class="material-icons">verified</i></span>
+            <span>Finished Goods Accuracy</span>
           </h4>
-          <canvas id="websiteViewsChart"></canvas>
+          <p class="acc-month-line">Tháng này: <strong>{{ fgAccuracyThisMonth | number:'1.2-2' }}%</strong></p>
+          <div class="acc-chart-only">
+            <div class="acc-gauge-wrap">
+              <canvas id="websiteViewsChart"></canvas>
+            </div>
+          </div>
         </div>
-        <div class="card-footer">
+        <footer class="card-footer dash-chart-footer">
           <div class="stats"><i class="material-icons">inventory</i> Inventory stocktaking monthly</div>
-        </div>
-      </div>
+        </footer>
+      </article>
 
-      <div class="card card-chart chart-card chart-card-amber">
-        <div class="card-body chart-body">
-          <div class="chart-badge chart-badge-amber">3/12 tháng</div>
-          <h4 class="card-title d-flex align-items-center">
-            <i class="material-icons me-2">autorenew</i> FGs Inventory Turnover 2026
+      <!-- FGs Inventory Turnover -->
+      <article class="card card-chart chart-card chart-card-amber dash-surface-card">
+        <div class="card-body chart-body acc-card-body acc-card-body--turnover">
+          <div class="chart-badge chart-badge-amber">4/12 tháng</div>
+          <h4 class="card-title dash-chart-title">
+            <span class="dash-widget__ico dash-widget__ico--amber-sm" aria-hidden="true"><i class="material-icons">autorenew</i></span>
+            <span>FGs Inventory Turnover 2026</span>
           </h4>
-          <canvas id="completedTasksChart"></canvas>
+          <div class="turnover-chart-wrap">
+            <canvas id="completedTasksChart"></canvas>
+          </div>
         </div>
-        <div class="card-footer">
-          <div class="stats"><i class="material-icons">access_time</i> Target: 14 | Current: 2.22</div>
-        </div>
-      </div>
-    </div>
+        <footer class="card-footer dash-chart-footer">
+          <div class="stats">
+            <i class="material-icons">stacked_bar_chart</i>
+            Target tháng: {{ fgTurnoverTargetMonthly | number:'1.2-2' }} (đường đỏ đứt nét) ·
+            T1 {{ fgTurnoverMonthValues[0] | number:'1.2-2' }} · T2 {{ fgTurnoverMonthValues[1] | number:'1.2-2' }} ·
+            T3 {{ fgTurnoverMonthValues[2] | number:'1.2-2' }} · T4 {{ fgTurnoverMonthValues[3] | number:'1.2-2' }} ·
+            Lũy kế T1–T4: {{ fgTurnoverYtd | number:'1.2-2' }}
+          </div>
+        </footer>
+      </article>
+    </section>
 
-    <!-- Row: Safety Stock Level + Rack Utilization Warnings -->
-    <div class="dash-grid dash-grid--double">
+    <!-- Safety Stock + Rack warnings -->
+    <section class="dash-ops-row dash-grid dash-grid--double" aria-label="Safety stock and rack utilization">
       <div class="safety-stock-box card">
         <div class="box-header">
           <h5>
@@ -264,15 +307,20 @@
             <span>All Clear</span>
           </div>
 
-          <div *ngIf="rackWarnings.length > 0" class="summary-counts">
-            <div class="count-item critical" *ngIf="criticalCount > 0">
-              <div class="count-number">{{ criticalCount }}</div>
-              <div class="count-label">Critical</div>
+          <div *ngIf="rackWarnings.length > 0" class="rack-warn-body">
+            <!-- Big counter -->
+            <div class="rack-warn-counter" [class.rack-warn-counter--critical]="criticalCount > 0">
+              <div class="rack-warn-num">{{ criticalCount + warningCount }}</div>
+              <div class="rack-warn-label">WARNING</div>
             </div>
-
-            <div class="count-item warning" *ngIf="warningCount > 0">
-              <div class="count-number">{{ warningCount }}</div>
-              <div class="count-label">Warning</div>
+            <!-- Item rows -->
+            <div class="rack-warn-items">
+              <div *ngFor="let w of rackWarnings" class="rack-warn-row">
+                <i class="material-icons rack-warn-row__ico" [class.rack-warn-row__ico--red]="w.status==='critical'">warning</i>
+                <span class="rack-warn-row__pos">{{ w.position }}</span>
+                <span class="rack-warn-row__desc">Utilization is above {{ w.status === 'critical' ? '90' : '85' }}%</span>
+                <span class="rack-warn-row__pct" [class.rack-warn-row__pct--red]="w.status==='critical'">{{ w.usage }}%</span>
+              </div>
             </div>
           </div>
         </div>
@@ -282,20 +330,29 @@
           <span>Loading...</span>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- Details tables (bottom) -->
-    <div class="dash-grid dash-grid--double">
+    <section class="dash-detail-boards dashboard-status-boards dash-grid dash-grid--double" aria-label="Work order and shipment details">
+
+      <!-- Work Order Details -->
       <div class="card">
-        <div class="custom-card-header custom-card-header-purple">
-          <h4 class="custom-card-title">Work Order Status - {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }} (Details)</h4>
-          <p class="custom-card-desc">Status for the next 7 days</p>
+        <div class="custom-card-header custom-card-header-purple detail-card-header">
+          <div class="detail-card-header__left">
+            <h4 class="custom-card-title">
+              <i class="material-icons detail-header-ico detail-header-ico--green">assignment</i>
+              Work Order Status - {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }} (Details)
+            </h4>
+            <p class="custom-card-desc">Status for the next 7 days</p>
+          </div>
+          <button type="button" class="detail-viewall-btn" (click)="navigateToTab('/work-order-status')">Xem tất cả</button>
         </div>
         <div class="card-body">
           <table class="table table-bordered table-striped workorder-status-table">
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Ngày</th>
+                <th>Hôm qua (trễ)</th>
                 <th>Done</th>
                 <th>Waiting</th>
                 <th>Kitting</th>
@@ -304,18 +361,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr class="yesterday-overdue-row">
-                <td class="yesterday-label">Hôm qua (trễ)</td>
-                <td class="empty-cell">—</td>
-                <td class="empty-cell">—</td>
-                <td class="empty-cell">—</td>
-                <td class="empty-cell">—</td>
-                <td [class]="yesterdayOverdueCount > 0 ? 'has-value overdue-value' : 'empty-cell'">
-                  {{ yesterdayOverdueCount > 0 ? yesterdayOverdueCount : '—' }}
-                </td>
-              </tr>
-              <tr *ngFor="let row of workOrderStatus">
+              <tr *ngFor="let row of woPagedRows">
                 <td [title]="row.code">{{ row.code }}</td>
+                <td class="empty-cell">—</td>
                 <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
                 <td [class]="row.waitingClass" [title]="row.note">{{ row.note }}</td>
                 <td [class]="row.kittingClass" [title]="row.kitting">{{ row.kitting }}</td>
@@ -323,17 +371,35 @@
                 <td [class]="row.delayClass" [title]="row.extra">{{ row.extra }}</td>
               </tr>
               <tr *ngIf="workOrderStatus.length === 0">
-                <td colspan="6" class="text-center text-muted">No work orders found for the selected factory</td>
+                <td colspan="7" class="text-center text-muted">No work orders found for the selected factory</td>
               </tr>
             </tbody>
           </table>
+          <div class="detail-pagination" *ngIf="workOrderStatus.length > 0">
+            <span class="detail-pagination__info">
+              Hiển thị {{ (woCurrentPage-1)*woPageSize+1 }}–{{ woCurrentPage*woPageSize > workOrderStatus.length ? workOrderStatus.length : woCurrentPage*woPageSize }} trong {{ workOrderStatus.length }}
+            </span>
+            <div class="detail-pagination__controls">
+              <button class="pg-btn" (click)="woPrevPage()" [disabled]="woCurrentPage === 1">&#8249;</button>
+              <span class="pg-num">{{ woCurrentPage }}</span>
+              <button class="pg-btn" (click)="woNextPage()" [disabled]="woCurrentPage === woPageCount">&#8250;</button>
+              <span class="pg-sep">{{ woPageSize }} / trang</span>
+            </div>
+          </div>
         </div>
       </div>
 
+      <!-- Shipment Details -->
       <div class="card">
-        <div class="custom-card-header custom-card-header-amber">
-          <h4 class="custom-card-title">Shipment Status (Details)</h4>
-          <p class="custom-card-desc">Status for the next 7 days</p>
+        <div class="custom-card-header custom-card-header-amber detail-card-header">
+          <div class="detail-card-header__left">
+            <h4 class="custom-card-title">
+              <i class="material-icons detail-header-ico detail-header-ico--amber">local_shipping</i>
+              Shipment Status (Details)
+            </h4>
+            <p class="custom-card-desc">Status for the next 7 days</p>
+          </div>
+          <button type="button" class="detail-viewall-btn" (click)="goShipment()">Xem tất cả</button>
         </div>
         <div class="card-body table-responsive">
           <table class="table table-bordered table-striped workorder-status-table">
@@ -347,21 +413,39 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let row of shipmentStatus">
+              <tr *ngFor="let row of shipmentPagedRows">
                 <td [title]="row.shipDate">{{ row.shipDate }}</td>
                 <td [title]="row.shipment">{{ row.shipment }}</td>
-                <td [title]="row.customer">{{ row.customer }}</td>
+                <td [title]="row.customer">{{ row.customer || '—' }}</td>
                 <td [title]="row.carton">{{ row.carton }}</td>
-                <td [title]="row.statusDetail">{{ row.statusDetail }}</td>
+                <td>
+                  <span class="status-badge"
+                    [class.status-badge--amber]="!isShipDone(row.statusDetail) && !isShipWarn(row.statusDetail)"
+                    [class.status-badge--red]="isShipWarn(row.statusDetail)"
+                    [class.status-badge--green]="isShipDone(row.statusDetail)">
+                    {{ shipBadgeText(row.statusDetail) }}
+                  </span>
+                </td>
               </tr>
               <tr *ngIf="shipmentStatus.length === 0">
                 <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
               </tr>
             </tbody>
           </table>
+          <div class="detail-pagination" *ngIf="shipmentStatus.length > 0">
+            <span class="detail-pagination__info">
+              Hiển thị {{ (shipmentCurrentPage-1)*shipmentPageSize+1 }}–{{ shipmentCurrentPage*shipmentPageSize > shipmentStatus.length ? shipmentStatus.length : shipmentCurrentPage*shipmentPageSize }} trong {{ shipmentStatus.length }}
+            </span>
+            <div class="detail-pagination__controls">
+              <button class="pg-btn" (click)="shipmentPrevPage()" [disabled]="shipmentCurrentPage === 1">&#8249;</button>
+              <span class="pg-num">{{ shipmentCurrentPage }}</span>
+              <button class="pg-btn" (click)="shipmentNextPage()" [disabled]="shipmentCurrentPage === shipmentPageCount">&#8250;</button>
+              <span class="pg-sep">{{ shipmentPageSize }} / trang</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </div>
 
