@@ -544,17 +544,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const fromMs = this.dsRuleFromMs();
       const toMs = this.dsRuleToMs();
 
-      // Áp dụng rule ON/OFF theo danh sách report bên ngoài:
-      // nếu ngày report bị OFF thì các sheet "checked" (và cả các sheet khác liên quan) không ghi nhận dữ liệu ngày đó.
-      const dsRowCheckedByReportRule = (r: { dateCheck: Date | null }): boolean => {
-        const checkedByDsRule = this.dsIsCheckedByRule(r);
-        if (!checkedByDsRule) return false;
-        if (!r?.dateCheck) return false;
-        const d = r.dateCheck instanceof Date ? r.dateCheck : new Date(r.dateCheck as any);
-        if (!Number.isFinite(d.getTime())) return false;
-        const dateKey = this.toLocalDateKey(d);
-        return this.isReportDateEnabled(dateKey);
-      };
+      // Cùng điều kiện với UI DS (`dsIsCheckedByRule`: khoảng KK tùy chỉnh + Report ON theo ngày).
+      const dsRowCheckedByReportRule = (r: { dateCheck: Date | null }): boolean => this.dsIsCheckedByRule(r);
 
       // ===== Sheet 1: PXK list (DS rows) =====
       const pxkRows = this.dsRows.map((r, idx) => {
@@ -828,14 +819,21 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** DS: xác định "Đã kiểm/Chưa kiểm" theo rule ngày trong More */
+  /**
+   * DS: "Đã kiểm" khi (1) dateCheck nằm trong khoảng KK tùy chỉnh (from/to) VÀ
+   * (2) ngày đó được BẬT trong cài đặt Report (cùng rule với snapshot / export DS).
+   * Trước đây chỉ có (1) nên UI DS lệch với Report ON/OFF và với file export.
+   */
   dsIsCheckedByRule(r: { dateCheck: Date | null }): boolean {
     if (!r?.dateCheck) return false;
-    const t = r.dateCheck instanceof Date ? r.dateCheck.getTime() : new Date(r.dateCheck as any).getTime();
+    const d = r.dateCheck instanceof Date ? r.dateCheck : new Date(r.dateCheck as any);
+    const t = d.getTime();
     if (!Number.isFinite(t) || t <= 0) return false;
     const from = this.dsRuleFromMs();
     const to = this.dsRuleToMs();
-    return t >= from && t <= to;
+    if (t < from || t > to) return false;
+    const dateKey = this.toLocalDateKey(d);
+    return this.isReportDateEnabled(dateKey);
   }
 
   dsRowStatusLabel(r: { dateCheck: Date | null }): string {
@@ -916,14 +914,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.updateDsCounters();
   }
 
+  /** Khi snapshot/report cập nhật `allMaterials`, đồng bộ lại bảng KK DS (dsRows) nếu đang mở trang DS. */
+  private refreshDsRowsIfListPageOpen(): void {
+    if (!this.showDsListPage || this.dsPermissionDenied) return;
+    void this.reloadDsRowsFromPxk();
+  }
+
   private updateDsCounters(): void {
-    const from = this.dsRuleFromMs();
-    const to = this.dsRuleToMs();
     let checked = 0;
     for (const r of this.dsRows) {
-      if (!r.dateCheck) continue;
-      const t = r.dateCheck instanceof Date ? r.dateCheck.getTime() : new Date(r.dateCheck as any).getTime();
-      if (Number.isFinite(t) && t >= from && t <= to) checked++;
+      if (this.dsIsCheckedByRule(r)) checked++;
     }
     this._dsTotalMaterials = this.dsRows.length;
     this._dsCheckedMaterials = checked;
@@ -3089,6 +3089,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         
         // Calculate ID check statistics
         this.calculateIdCheckStats();
+
+        this.refreshDsRowsIfListPageOpen();
         
         // Force change detection to ensure UI updates
         this.cdr.detectChanges();
@@ -3210,6 +3212,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
               this.updateLocationMaterials();
               this.applyFilter();
               this.calculateIdCheckStats();
+              this.refreshDsRowsIfListPageOpen();
               this.cdr.detectChanges();
             } else {
               const data = doc.data() as any;
@@ -3222,6 +3225,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
                 this.updateLocationMaterials();
                 this.applyFilter();
                 this.calculateIdCheckStats();
+                this.refreshDsRowsIfListPageOpen();
                 this.cdr.detectChanges();
               }
             }
@@ -3249,6 +3253,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
         // Recalculate stats
         this.calculateIdCheckStats();
+
+        this.refreshDsRowsIfListPageOpen();
 
         // Force change detection
         this.cdr.detectChanges();
@@ -4947,6 +4953,14 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         : null;
     const map = data?.enabledMap && typeof data.enabledMap === 'object' ? data.enabledMap : {};
     this.reportDateEnabledMap = { ...(map || {}) };
+
+    // Chế độ onlyDateKey mặc định lưu đúng ngày tạo doc; nếu không cập nhật theo lịch thì mãi so với ngày cũ
+    // → isReportDateEnabled sai, applyReportDateRecognition xóa dateCheck của "hôm nay", DS hiện 0 đã kiểm.
+    const todayYmd = this.toLocalDateKey(new Date());
+    if (this.reportOnlyDateKey && this.reportOnlyDateKey < todayYmd) {
+      this.reportOnlyDateKey = todayYmd;
+      await this.saveReportDateSettings();
+    }
   }
 
   private async saveReportDateSettings(): Promise<void> {
@@ -4984,6 +4998,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.calculateIdCheckStats();
     this.updateLocationMaterials();
     this.invalidateRackStatsCache();
+    this.refreshDsRowsIfListPageOpen();
     this.cdr.detectChanges();
   }
 
