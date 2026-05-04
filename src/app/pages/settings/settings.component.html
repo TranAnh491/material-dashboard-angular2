@@ -1,4 +1,4 @@
-<div class="settings-container">
+<div class="settings-container" [class.settings-container--under-navbar]="isAdminLoggedIn">
   <!-- Admin Login -->
   <div *ngIf="!isAdminLoggedIn" class="login-section">
     <div class="login-box">
@@ -18,69 +18,96 @@
     </div>
   </div>
 
-  <!-- Settings Dashboard -->
-  <div *ngIf="isAdminLoggedIn" class="dashboard">
-    <div class="header">
-      <h1>Quản lý người dùng</h1>
-      <div class="header-actions">
-        <button (click)="refreshFirebaseUsers()" class="btn-header">Làm mới</button>
-        <button type="button" (click)="logout()" class="btn-header btn-logout">Đăng xuất</button>
-        <a routerLink="/menu" class="btn-header btn-menu" title="Về Menu">
+  <!-- Settings Dashboard — layout theo mockup Quản lý người dùng -->
+  <div *ngIf="isAdminLoggedIn" class="dashboard settings-dashboard">
+    <header class="settings-topbar">
+      <div class="settings-topbar__brand">
+        <div class="settings-topbar__icon-wrap" aria-hidden="true">
+          <i class="material-icons">manage_accounts</i>
+        </div>
+        <div class="settings-topbar__titles">
+          <h1 class="settings-topbar__title">Quản lý người dùng</h1>
+          <p class="settings-topbar__subtitle">Quản lý tài khoản người dùng và phân quyền hệ thống</p>
+        </div>
+      </div>
+      <div class="settings-topbar__actions">
+        <button type="button" class="btn-outline btn-settings-gear" (click)="showSettingsTools = !showSettingsTools" [class.active]="showSettingsTools" title="Công cụ nâng cao">
+          <i class="material-icons">settings</i>
+          <span>Settings</span>
+        </button>
+        <button type="button" class="btn-outline btn-logout-outline" (click)="logout()">
+          <i class="material-icons">logout</i>
+          Đăng xuất
+        </button>
+        <button type="button" class="btn-primary-menu" (click)="goToMenu()">
           <i class="material-icons">home</i>
           Về menu
-        </a>
-      </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats">
-      <div class="stat-item">
-        <div class="stat-number">{{ firebaseUsers.length }}</div>
-        <div class="stat-label">Người dùng</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-number">{{ _adminUsersCount }}</div>
-        <div class="stat-label">Quản trị viên</div>
-      </div>
-    </div>
-
-    <!-- Reset mật khẩu tài khoản -->
-    <div class="reset-account-panel">
-      <h3>Reset mật khẩu tài khoản</h3>
-      <p class="reset-account-hint">Nhập mã nhân viên (VD: <strong>ASP0054</strong> hoặc <strong>0054</strong>). Mật khẩu sẽ được đặt về <strong>123456</strong>.</p>
-      <div class="reset-account-row">
-        <input
-          type="text"
-          name="resetAccountInput"
-          [(ngModel)]="resetAccountInput"
-          (input)="onResetAccountInput($event)"
-          placeholder="ASP0054"
-          autocomplete="off"
-          [disabled]="isResettingAccountPassword">
-        <button
-          type="button"
-          class="btn-reset-account"
-          (click)="resetAccountPasswordToDefault()"
-          [disabled]="isResettingAccountPassword || !resetAccountInput?.trim()">
-          {{ isResettingAccountPassword ? 'Đang xử lý…' : 'Reset' }}
         </button>
       </div>
+    </header>
+
+    <div class="settings-stat-row">
+      <div class="stat-card stat-card--users">
+        <div class="stat-card__icon stat-card__icon--blue"><i class="material-icons">person</i></div>
+        <div class="stat-card__body">
+          <div class="stat-card__value">{{ firebaseUsers.length }}</div>
+          <div class="stat-card__label">Người dùng</div>
+          <div class="stat-card__hint">Tổng số tài khoản</div>
+        </div>
+      </div>
+      <div class="stat-card stat-card--admin">
+        <div class="stat-card__icon stat-card__icon--green"><i class="material-icons">group_add</i></div>
+        <div class="stat-card__body">
+          <div class="stat-card__value">{{ getAdminUsersCount() }}</div>
+          <div class="stat-card__label">Quản trị viên</div>
+          <div class="stat-card__hint">Tài khoản admin</div>
+        </div>
+      </div>
+      <div class="stat-card stat-card--reset">
+        <div class="stat-card__reset-head">
+          <div class="stat-card__icon stat-card__icon--purple"><i class="material-icons">lock</i></div>
+          <div class="stat-card__reset-title">Reset mật khẩu tài khoản</div>
+        </div>
+        <p class="stat-card__reset-hint">Nhập mã nhân viên (VD: <strong>ASP0054</strong> hoặc <strong>0054</strong>). Mật khẩu sẽ được đặt về <strong>123456</strong>.</p>
+        <div class="stat-card__reset-row">
+          <input
+            type="text"
+            name="resetAccountInput"
+            [(ngModel)]="resetAccountInput"
+            (input)="onResetAccountInput($event)"
+            placeholder="Nhập mã nhân viên"
+            autocomplete="off"
+            [disabled]="isResettingAccountPassword">
+          <button
+            type="button"
+            class="btn-reset-purple"
+            (click)="resetAccountPasswordToDefault()"
+            [disabled]="isResettingAccountPassword || !resetAccountInput?.trim()">
+            <i class="material-icons">refresh</i>
+            {{ isResettingAccountPassword ? 'Đang xử lý…' : 'Reset' }}
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- Đăng ký: mã nhân viên + bộ phận + email → mật khẩu 6 số gửi email -->
-    <div class="reset-account-panel create-account-panel">
-      <h3>Đăng ký tài khoản</h3>
-      <p class="reset-account-hint">
-        <strong>ID đăng nhập</strong> (ASP + 4 số) khác <strong>họ tên</strong>. Nhập ID, họ tên, chọn <strong>bộ phận</strong>, <strong>email</strong> nhận mật khẩu.
-        Hệ thống gửi mật khẩu 6 số tới email; đăng nhập app bằng <strong>mã ASP + mật khẩu</strong> (không nhập email ở màn đăng nhập).
-      </p>
-      <div class="reset-account-row register-account-row">
+    <section class="register-card">
+      <div class="register-card__head">
+        <div class="register-card__icon-wrap"><i class="material-icons">person_add</i></div>
+        <div>
+          <h2 class="register-card__title">Đăng ký tài khoản</h2>
+          <p class="register-card__desc">
+            <strong>ID đăng nhập</strong> (ASP + 4 số) khác <strong>họ tên</strong>. Nhập ID, họ tên, chọn <strong>bộ phận</strong>, <strong>email</strong> nhận mật khẩu.
+            Hệ thống gửi mật khẩu 6 số tới email; đăng nhập app bằng <strong>mã ASP + mật khẩu</strong> (không nhập email ở màn đăng nhập).
+          </p>
+        </div>
+      </div>
+      <div class="register-card__form">
         <input
           type="text"
           name="createAccountEmployeeId"
           [(ngModel)]="createAccountEmployeeId"
           (input)="onCreateAccountEmployeeInput($event)"
-          placeholder="ID đăng nhập (ASP0054)"
+          placeholder="ID đăng nhập (ASP + 4 số)"
           autocomplete="off"
           [disabled]="isRegisteringUser">
         <input
@@ -94,8 +121,8 @@
           name="createAccountDepartment"
           [(ngModel)]="createAccountDepartment"
           [disabled]="isRegisteringUser"
-          class="register-department-select">
-          <option value="">— Bộ phận —</option>
+          class="register-card__select">
+          <option value="">-- Chọn bộ phận --</option>
           <option *ngFor="let d of departmentOptions; trackBy: trackByIndex" [value]="d">{{ d }}</option>
         </select>
         <input
@@ -107,20 +134,22 @@
           [disabled]="isRegisteringUser">
         <button
           type="button"
-          class="btn-create-account"
+          class="btn-register-green"
           (click)="registerAspUserWithEmailFromSettings()"
           [disabled]="isRegisteringUser || !createAccountEmployeeId?.trim() || !createAccountFullName?.trim() || !createAccountDepartment || !createAccountEmail?.trim()">
+          <i class="material-icons">person_add</i>
           {{ isRegisteringUser ? 'Đang xử lý…' : 'Đăng ký' }}
         </button>
         <button
           type="button"
-          class="btn-delete-account"
+          class="btn-delete-outline"
           (click)="deleteAccountByEmployeeId()"
           [disabled]="isDeletingAccountByEmployeeId || isRegisteringUser || !createAccountEmployeeId?.trim()">
+          <i class="material-icons">delete_outline</i>
           {{ isDeletingAccountByEmployeeId ? 'Đang xóa…' : 'Xóa tài khoản' }}
         </button>
       </div>
-    </div>
+    </section>
 
     <!-- Notifications -->
     <div *ngIf="newUserNotifications.length > 0" class="notifications">
@@ -141,16 +170,49 @@
     </div>
 
     <!-- Users List -->
-    <div class="users-section">
-      <div class="section-header">
-        <h3>Danh sách người dùng</h3>
-        <div class="actions">
+    <div class="users-section users-section--modern">
+      <div class="users-table-toolbar">
+        <h3 class="users-table-toolbar__title">Danh sách người dùng</h3>
+        <div class="users-table-toolbar__controls">
+          <div class="users-search-wrap">
+            <i class="material-icons" aria-hidden="true">search</i>
+            <input
+              type="search"
+              name="userListSearchQuery"
+              [(ngModel)]="userListSearchQuery"
+              (ngModelChange)="onUserListSearchChange()"
+              placeholder="Tìm kiếm theo ID, họ tên, bộ phận..."
+              autocomplete="off">
+          </div>
           <button
             type="button"
-            (click)="cleanupAuthUsersNotInSettings()"
-            [disabled]="isCleaningAuthUsers">
-            {{ isCleaningAuthUsers ? 'Đang xóa…' : 'Xóa ngoài Settings' }}
+            class="btn-icon-square"
+            [class.btn-icon-square--active]="userListFilterButtonActive()"
+            (click)="showUserListFilters = !showUserListFilters"
+            title="Lọc danh sách">
+            <i class="material-icons">filter_list</i>
           </button>
+          <button
+            type="button"
+            class="btn-icon-square btn-icon-square--primary-toggle"
+            [class.btn-icon-square--active]="userListViewMode === 'grid'"
+            (click)="toggleUserListGridMode()"
+            title="Chế độ lưới / bảng">
+            <i class="material-icons">{{ userListViewMode === 'grid' ? 'view_list' : 'apps' }}</i>
+          </button>
+          <button type="button" class="btn-users-refresh-outline" (click)="refreshFirebaseUsers()" title="Làm mới danh sách">
+            <i class="material-icons">refresh</i>
+            Làm mới
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="showUserListFilters" class="users-filter-panel">
+        <span class="users-filter-panel__label">Trạng thái duyệt quyền tab:</span>
+        <div class="users-filter-panel__chips">
+          <button type="button" class="filter-chip" [class.filter-chip--active]="userListApprovalFilter === 'all'" (click)="userListApprovalFilter = 'all'; onUserListApprovalFilterChange()">Tất cả</button>
+          <button type="button" class="filter-chip" [class.filter-chip--active]="userListApprovalFilter === 'approved'" (click)="userListApprovalFilter = 'approved'; onUserListApprovalFilterChange()">Đã duyệt</button>
+          <button type="button" class="filter-chip" [class.filter-chip--active]="userListApprovalFilter === 'pending'" (click)="userListApprovalFilter = 'pending'; onUserListApprovalFilterChange()">Chờ duyệt</button>
         </div>
       </div>
 
@@ -160,33 +222,135 @@
         Chưa có người dùng nào
       </div>
 
-      <!-- Danh sách đã duyệt -->
-      <div *ngIf="!isLoadingFirebaseUsers && _approvedUsers.length > 0" class="users-list-section">
-        <h4>Đã duyệt ({{ _approvedUsers.length }})</h4>
-        <div class="users-list">
-          <div *ngFor="let user of _approvedUsers; trackBy: trackByUid" class="user-item" (click)="openPermissionModal(user)">
-            <div class="user-info">
-              <div class="user-employee-id">{{ getEmployeeIdOnly(user) }}</div>
-              <div class="user-name" [class.admin-name]="user.role === 'Admin'">{{ user.displayName || '-' }}</div>
-              <div class="user-department">{{ user.department || '-' }}</div>
+      <!-- Chế độ bảng -->
+      <div *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0 && userListViewMode === 'table'" class="users-table-wrap">
+        <table class="users-data-table">
+          <thead>
+            <tr>
+              <th class="col-avatar" scope="col"></th>
+              <th scope="col">ID đăng nhập</th>
+              <th scope="col">Họ và tên</th>
+              <th scope="col">Bộ phận</th>
+              <th scope="col">Vai trò</th>
+              <th scope="col">Trạng thái</th>
+              <th class="col-actions" scope="col"><span class="sr-only">Thao tác</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let user of getUserListPaginatedUsers(); trackBy: trackByUid"
+              class="users-data-table__row"
+              (click)="openPermissionModal(user)">
+              <td class="col-avatar">
+                <span class="user-avatar-disc" [ngClass]="getAvatarToneClass(user.uid)">{{ getUserInitials(user) }}</span>
+              </td>
+              <td class="cell-mono">{{ getEmployeeIdOnly(user) }}</td>
+              <td>
+                <div class="user-name-cell">
+                  <span class="user-name-cell__text">{{ (user.displayName || '—') | uppercase }}</span>
+                  <span *ngIf="isUserAdministrator(user)" class="badge-admin-inline" title="Quản trị viên">
+                    <i class="material-icons">workspace_premium</i>
+                    Quản trị viên
+                  </span>
+                </div>
+              </td>
+              <td>{{ user.department || '—' }}</td>
+              <td>
+                <span [class]="getUserRoleBadgeClass(user)">{{ getUserRoleBadgeLabel(user) }}</span>
+              </td>
+              <td>
+                <span [class]="getUserStatusRowClass(user)">
+                  <span class="user-status__dot" aria-hidden="true"></span>
+                  {{ getUserStatusLabel(user) }}
+                </span>
+              </td>
+              <td class="user-table-actions-cell" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  class="btn-row-more"
+                  [attr.aria-expanded]="userRowMenuOpenUid === user.uid"
+                  (click)="toggleUserRowMenu($event, user.uid)"
+                  title="Thao tác">
+                  <i class="material-icons">more_vert</i>
+                </button>
+                <div *ngIf="userRowMenuOpenUid === user.uid" class="user-row-menu-dropdown">
+                  <button type="button" (click)="openUserRowPermission(user, $event)">Quản lý quyền</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="users-table-footer">
+          <p class="users-table-footer__range">
+            Hiển thị <strong>{{ getUserListRangeStart() }}</strong> - <strong>{{ getUserListRangeEnd() }}</strong>
+            trong <strong>{{ getUserListFilteredCount() }}</strong> người dùng
+          </p>
+          <div class="users-table-footer__pagination">
+            <button type="button" class="btn-page-nav" [disabled]="userListPageIndex <= 1" (click)="userListPrevPage()" aria-label="Trang trước">
+              <i class="material-icons">chevron_left</i>
+            </button>
+            <div class="users-page-numbers">
+              <ng-container *ngFor="let slot of getUserListPaginationSlots(); let idx = index">
+                <span *ngIf="slot === 'ellipsis'" class="users-page-ellipsis">…</span>
+                <button
+                  *ngIf="slot !== 'ellipsis'"
+                  type="button"
+                  class="btn-page-num"
+                  [class.btn-page-num--active]="slot === userListPageIndex"
+                  (click)="goUserListPage(slot)">{{ slot }}</button>
+              </ng-container>
+            </div>
+            <button type="button" class="btn-page-nav" [disabled]="userListPageIndex >= getUserListTotalPages()" (click)="userListNextPage()" aria-label="Trang sau">
+              <i class="material-icons">chevron_right</i>
+            </button>
+            <div class="users-page-size-wrap">
+              <select
+                name="userListPageSize"
+                [(ngModel)]="userListPageSize"
+                (ngModelChange)="onUserListPageSizeChange()"
+                class="users-page-size-select"
+                title="Số dòng mỗi trang">
+                <option *ngFor="let n of userListPageSizeOptions" [ngValue]="n">{{ n }} / trang</option>
+              </select>
+              <i class="material-icons users-page-size-chevron" aria-hidden="true">expand_more</i>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Danh sách chờ duyệt -->
-      <div *ngIf="!isLoadingFirebaseUsers && _pendingUsers.length > 0" class="users-list-section pending-section">
-        <h4>Chờ duyệt ({{ _pendingUsers.length }})</h4>
-        <div class="users-list">
-          <div *ngFor="let user of _pendingUsers; trackBy: trackByUid" class="user-item pending" (click)="openPermissionModal(user)">
-            <div class="user-info">
-              <div class="user-employee-id">{{ getEmployeeIdOnly(user) }}</div>
-              <div class="user-name" [class.admin-name]="user.role === 'Admin'">{{ user.displayName || '-' }}</div>
-              <div class="user-department">{{ user.department || '-' }}</div>
+      <!-- Chế độ lưới (card) -->
+      <ng-container *ngIf="!isLoadingFirebaseUsers && firebaseUsers.length > 0 && userListViewMode === 'grid'">
+        <div *ngIf="getFilteredApprovedUsersForGrid().length > 0" class="users-list-section users-list-section--approved">
+          <h4 class="users-tab-title">Đã duyệt ({{ getFilteredApprovedUsersForGrid().length }})</h4>
+          <div class="users-list">
+            <div *ngFor="let user of getFilteredApprovedUsersForGrid(); trackBy: trackByUid" class="user-item" (click)="openPermissionModal(user)">
+              <div class="user-info">
+                <div class="user-employee-id">{{ getEmployeeIdOnly(user) }}</div>
+                <div class="user-name" [class.admin-name]="user.role === 'Admin'">{{ user.displayName || '-' }}</div>
+                <div class="user-department">{{ user.department || '-' }}</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+
+        <div *ngIf="getFilteredPendingUsersForGrid().length > 0" class="users-list-section pending-section">
+          <h4 class="users-tab-title users-tab-title--pending">Chờ duyệt ({{ getFilteredPendingUsersForGrid().length }})</h4>
+          <div class="users-list">
+            <div *ngFor="let user of getFilteredPendingUsersForGrid(); trackBy: trackByUid" class="user-item pending" (click)="openPermissionModal(user)">
+              <div class="user-info">
+                <div class="user-employee-id">{{ getEmployeeIdOnly(user) }}</div>
+                <div class="user-name" [class.admin-name]="user.role === 'Admin'">{{ user.displayName || '-' }}</div>
+                <div class="user-department">{{ user.department || '-' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="getUserListFilteredCount() === 0" class="empty empty--inline">
+          Không có người dùng khớp bộ lọc
+        </div>
+      </ng-container>
     </div>
 
     <!-- Permission Modal -->
@@ -276,98 +440,22 @@
       </div>
     </div>
 
-    <!-- Old Users Table (Hidden) -->
-    <div *ngIf="false" class="table-container">
-      <table class="users-table">
-        <thead>
-          <tr>
-            <th class="col-account">Tài khoản</th>
-            <th class="col-role">Vai trò</th>
-            <th class="col-department">Bộ phận</th>
-            <th class="col-factory">Nhà máy</th>
-            <th class="col-name sticky-name">Tên</th>
-            <th class="col-checkbox">Chỉ xem</th>
-            <th class="col-checkbox">Xóa</th>
-            <th class="col-checkbox">Hoàn thành</th>
-            <th class="col-lastlogin">Đăng nhập gần nhất</th>
-            <th class="col-action">Thao tác</th>
-            <th *ngFor="let tab of availableTabs; trackBy: trackByTabKey" class="col-tab">{{ tab.name }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let user of getSortedFirebaseUsers(); trackBy: trackByUid">
-            <td class="col-account">{{ getEmployeeIdOnly(user) }}</td>
-            <td class="col-role">
-              <select *ngIf="isEditingPermissions"
-                      [(ngModel)]="user.role"
-                  (change)="updateUserRole(user.uid, user.role)">
-                <option value="Admin">Admin</option>
-                <option value="Quản lý">Quản lý</option>
-                <option value="User">User</option>
-              </select>
-              <span *ngIf="!isEditingPermissions">{{ user.role || 'User' }}</span>
-            </td>
-            <td class="col-department">
-              <select *ngIf="isEditingPermissions"
-                      [(ngModel)]="user.department"
-                  (change)="updateUserDepartment(user.uid, user.department)">
-                <option value="">-</option>
-                <option value="WH">WH</option>
-                <option value="QA">QA</option>
-                <option value="ENG">ENG</option>
-                <option value="PLAN">PLAN</option>
-                <option value="PD">PD</option>
-                <option value="CS">CS</option>
-                <option value="ACC">ACC</option>
-              </select>
-              <span *ngIf="!isEditingPermissions">{{ user.department || '-' }}</span>
-            </td>
-            <td class="col-factory">
-              <select *ngIf="isEditingPermissions"
-                      [(ngModel)]="user.factory"
-                  (change)="updateUserFactory(user.uid, user.factory)">
-                <option value="ASM1">ASM1</option>
-                <option value="ASM2">ASM2</option>
-              </select>
-              <span *ngIf="!isEditingPermissions">{{ user.factory || '-' }}</span>
-            </td>
-            <td class="col-name sticky-name">{{ user.displayName || '-' }}</td>
-            <td class="col-checkbox">
-              <input type="checkbox"
-                    [checked]="firebaseUserReadOnlyPermissions[user.uid] || false"
-                     (change)="updateUserReadOnlyPermission(user.uid, $event.target.checked)"
-                     [disabled]="!isEditingPermissions">
-            </td>
-            <td class="col-checkbox">
-              <input type="checkbox"
-                    [checked]="firebaseUserPermissions[user.uid] || false"
-                     (change)="updateUserPermission(user.uid, $event.target.checked)"
-                     [disabled]="!isEditingPermissions">
-            </td>
-            <td class="col-checkbox">
-              <input type="checkbox"
-                    [checked]="firebaseUserCompletePermissions[user.uid] || false"
-                     (change)="updateUserCompletePermission(user.uid, $event.target.checked)"
-                     [disabled]="!isEditingPermissions">
-            </td>
-            <td class="col-lastlogin">{{ user.lastLoginAt ? (user.lastLoginAt | date:'dd/MM/yyyy HH:mm') : 'Chưa đăng nhập' }}</td>
-            <td class="col-action">
-              <button (click)="deleteFirebaseUser(user)">Xóa</button>
-            </td>
-            <td *ngFor="let tab of availableTabs; trackBy: trackByTabKey" class="col-tab">
-              <input type="checkbox"
-                [checked]="firebaseUserTabPermissions[user.uid]?.[tab.key] !== false"
-                     (change)="updateUserTabPermission(user.uid, tab.key, $event.target.checked)"
-                     [disabled]="!isEditingPermissions">
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+    <div *ngIf="showSettingsTools" class="settings-tools-panel">
+      <div class="settings-tools-panel__row">
+        <button type="button" class="btn-outline btn-tool-row" (click)="refreshFirebaseUsers()">
+          <i class="material-icons">refresh</i>
+          Làm mới
+        </button>
+        <button
+          type="button"
+          class="btn-outline-danger btn-tool-row"
+          (click)="cleanupAuthUsersNotInSettings()"
+          [disabled]="isCleaningAuthUsers">
+          {{ isCleaningAuthUsers ? 'Đang xóa…' : 'Xóa tài khoản Auth ngoài Settings' }}
+        </button>
+      </div>
 
-  <!-- Employee Cleanup -->
-  <div *ngIf="isAdminLoggedIn" class="cleanup-section">
+      <div class="cleanup-section">
     <div class="section-header">
       <h3>Dọn dẹp mã nhân viên</h3>
       <div class="actions">
@@ -420,6 +508,8 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
       </div>
     </div>
   </div>

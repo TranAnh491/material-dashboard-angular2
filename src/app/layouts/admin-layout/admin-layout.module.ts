@@ -12,6 +12,7 @@ import { GoogleSheetService } from '../../services/google-sheet.service';
 import { DashboardComponent } from '../../dashboard/dashboard.component';
 import { AssistantComponent } from '../../pages/assistant/assistant.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
+import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -114,6 +115,7 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
     DashboardComponent,
     AssistantComponent,
     MenuComponent,
+    MaterialsDashboardComponent,
     KpiReportsComponent,
     EquipmentComponent,
     InboundFgsComponent,

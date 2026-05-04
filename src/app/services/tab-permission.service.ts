@@ -83,7 +83,10 @@ export class TabPermissionService {
       'location': factoryAccess.canAccessASM1 === true,
       
       // Safety tab - chỉ cho phép khi có quyền truy cập ít nhất một nhà máy
-      'safety': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true
+      'safety': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
+
+      // Materials Dashboard - cần quyền ít nhất 1 nhà máy
+      'materials-dashboard': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true
     };
 
     return { ...basePermissions, ...factoryPermissions };
@@ -148,6 +151,7 @@ export class TabPermissionService {
     // Main tabs
     { key: 'dashboard', name: 'Dashboard' },
     { key: 'assistant', name: 'Assistant' },
+    { key: 'materials-dashboard', name: 'Materials Dashboard' },
     { key: 'work-order-status', name: 'Work Order' },
     { key: 'shipment', name: 'Shipment' },
     

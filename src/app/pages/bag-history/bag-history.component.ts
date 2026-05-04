@@ -1128,4 +1128,5 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     });
     this.searchSummaryRows = out;
   }
+
 }

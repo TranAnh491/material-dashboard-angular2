@@ -1,0 +1,408 @@
+<div class="md-page materials-dashboard" [ngStyle]="heatmapColorCssVars">
+  <div class="md-headerbar">
+    <div class="md-headerbar__left">
+      <div class="md-appicon" aria-hidden="true">
+        <i class="material-icons">grid_view</i>
+      </div>
+      <div>
+        <div class="md-title">Materials Dashboard</div>
+        <div class="md-sub">Heatmap SKU activity (ASM1 + ASM2) from Manifest vs Master</div>
+      </div>
+    </div>
+
+    <div class="md-headerbar__right">
+      <button type="button" class="btn btn-default btn-sm btn-dense" (click)="goMenu()" title="Về Menu">
+        <i class="material-icons">menu</i>
+        Menu
+      </button>
+      <button type="button" class="btn btn-default btn-sm btn-dense" (click)="exportExcel()" [disabled]="isLoading || isExporting || !baseRows?.length">
+        <i class="material-icons">file_download</i>
+        Export
+      </button>
+      <button type="button" class="btn btn-primary btn-sm btn-dense" (click)="reload()" [disabled]="isLoading">
+        <i class="material-icons">refresh</i>
+        Refresh
+      </button>
+      <button type="button" class="icon-plain" title="More" (click)="openMore()">
+        <i class="material-icons">more_horiz</i>
+      </button>
+    </div>
+  </div>
+
+  <div class="md-kpi-controls">
+    <div class="md-kpi-row md-kpi-row--cards">
+      <div class="kpi-card kpi-card--stat">
+        <div class="kpi-icon kpi-icon--blue"><i class="material-icons">inventory_2</i></div>
+        <div class="kpi-meta">
+          <div class="kpi-value">{{ kpiTotalSkus | number }}</div>
+          <div class="kpi-label">Total SKUs</div>
+        </div>
+      </div>
+
+      <div class="kpi-card kpi-card--stat">
+        <div class="kpi-icon kpi-icon--indigo"><i class="material-icons">whatshot</i></div>
+        <div class="kpi-meta">
+          <div class="kpi-value">{{ kpiActiveSkus | number }}</div>
+          <div class="kpi-sub green">{{ kpiActivePct }}%</div>
+          <div class="kpi-label">Active SKUs</div>
+        </div>
+      </div>
+
+      <div class="kpi-card kpi-card--stat">
+        <div class="kpi-icon kpi-icon--gray"><i class="material-icons">pause_circle</i></div>
+        <div class="kpi-meta">
+          <div class="kpi-value">{{ kpiNoActivitySkus | number }}</div>
+          <div class="kpi-sub red">{{ kpiNoActivityPct }}%</div>
+          <div class="kpi-label">No Activity</div>
+        </div>
+      </div>
+
+      <div class="controls-panel controls-panel--inline">
+        <div class="ctrl ctrl--year">
+          <label>Year</label>
+          <select class="form-control form-control--dense" [(ngModel)]="selectedYear" (change)="applyYear()">
+            <option *ngFor="let y of yearOptions" [ngValue]="y">{{ y }}</option>
+          </select>
+        </div>
+
+        <div class="ctrl ctrl--daterange">
+          <label>Date range</label>
+          <div class="date-range">
+            <input class="form-control form-control--dense" type="date" [(ngModel)]="startDate" (change)="reload()" />
+            <span class="sep">–</span>
+            <input class="form-control form-control--dense" type="date" [(ngModel)]="endDate" (change)="reload()" />
+          </div>
+        </div>
+
+        <div class="ctrl ctrl--search">
+          <label>Tìm SKU</label>
+          <div class="search-wrap">
+            <i class="material-icons search-ic">search</i>
+            <input
+              type="text"
+              class="form-control form-control--dense"
+              [(ngModel)]="searchSku"
+              (input)="onFiltersChanged()"
+              placeholder="B + 6 số hoặc một phần mã…"
+              autocomplete="off"
+            />
+            <button type="button" class="icon-btn" *ngIf="searchSku?.length" (click)="clearSearch()" title="Xóa tìm kiếm">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- More popup -->
+  <div class="md-modal-backdrop" *ngIf="showMorePopup" (click)="closeMore()">
+    <div class="md-modal md-modal--wide" (click)="$event.stopPropagation()">
+      <div class="md-modal__header">
+        <div class="title">More — Import &amp; hướng dẫn</div>
+        <button type="button" class="icon-x" (click)="closeMore()" title="Close">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="md-modal__body md-modal__body--scroll">
+        <details class="info-details">
+          <summary class="info-details__summary">
+            <i class="material-icons">info</i>
+            Info — Hướng dẫn định dạng file &amp; tải template
+          </summary>
+          <div class="info-details__body">
+            <p class="info-lead">Mỗi loại file dùng <strong>sheet đầu tiên</strong>, <strong>dòng 1 có thể là tiêu đề</strong> (sẽ bỏ qua nếu không đọc được dữ liệu).</p>
+            <ul class="info-list">
+              <li><strong>Bảng kê xuất kho</strong> — Cột A: mã <code>B</code> + 6 số; B: ngày xuất; C: lượng. Mỗi dòng là một lần xuất. Lưu vào Firebase (collection <code>materials-export-manifest</code>), <strong>không ghi đè</strong> dữ liệu cũ.</li>
+              <li><strong>Aging</strong> — Cột A: mã hàng; B: aging (số <strong>tháng</strong>). Lưu một bản ghi duy nhất và <strong>ghi đè toàn bộ</strong> khi import mới (<code>materials-dashboard-aging/current</code>).</li>
+              <li><strong>Bảng kê nhập</strong> — Cột A: mã hàng; B: ngày nhập. Mỗi dòng một lần nhập. Lưu vào <code>materials-import-manifest</code>.</li>
+            </ul>
+            <div class="template-downloads">
+              <span class="template-downloads__label">Template (.xlsx):</span>
+              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadMaterialsTemplate('export')">
+                <i class="material-icons">download</i> Xuất kho
+              </button>
+              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadMaterialsTemplate('aging')">
+                <i class="material-icons">download</i> Aging
+              </button>
+              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadMaterialsTemplate('inbound')">
+                <i class="material-icons">download</i> Nhập kho
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <div class="section">
+          <div class="section-title">Import bảng kê xuất kho</div>
+          <div class="section-hint">Cột A = mã (Bxxxxxx), B = ngày xuất, C = lượng. Lưu Firebase (thêm dòng).</div>
+          <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportFileSelected($event)" [disabled]="importingExport || importingAging || importingInbound" />
+          <div class="import-status" *ngIf="importingExport">
+            <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
+            <span>Đang import...</span>
+          </div>
+          <div class="import-ok" *ngIf="!importingExport && importExportSavedCount">
+            ✅ Đã lưu {{ importExportSavedCount }} dòng.
+          </div>
+          <div class="import-err" *ngIf="importExportError">
+            ❌ {{ importExportError }}
+          </div>
+        </div>
+
+        <div class="section section--divider">
+          <div class="section-title">Import Aging</div>
+          <div class="section-hint">Cột A = mã hàng, B = aging (số <strong>tháng</strong>). <strong>Ghi đè</strong> toàn bộ Aging đã lưu khi import thành công.</div>
+          <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportAgingFileSelected($event)" [disabled]="importingExport || importingAging || importingInbound" />
+          <div class="import-status" *ngIf="importingAging">
+            <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
+            <span>Đang import Aging...</span>
+          </div>
+          <div class="import-ok" *ngIf="!importingAging && importAgingSavedSkuCount">
+            ✅ Đã lưu {{ importAgingSavedSkuCount }} mã (ghi đè Aging).
+          </div>
+          <div class="import-err" *ngIf="importAgingError">
+            ❌ {{ importAgingError }}
+          </div>
+        </div>
+
+        <div class="section section--divider">
+          <div class="section-title">Import bảng kê nhập</div>
+          <div class="section-hint">Cột A = mã hàng, B = ngày nhập. Lưu Firebase (thêm dòng).</div>
+          <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportInboundFileSelected($event)" [disabled]="importingExport || importingAging || importingInbound" />
+          <div class="import-status" *ngIf="importingInbound">
+            <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
+            <span>Đang import bảng kê nhập...</span>
+          </div>
+          <div class="import-ok" *ngIf="!importingInbound && importInboundSavedCount">
+            ✅ Đã lưu {{ importInboundSavedCount }} dòng.
+          </div>
+          <div class="import-err" *ngIf="importInboundError">
+            ❌ {{ importInboundError }}
+          </div>
+        </div>
+      </div>
+      <div class="md-modal__footer">
+        <button type="button" class="btn btn-default" (click)="closeMore()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup cài đặt màu (nút bánh răng — không phải Import) -->
+  <div class="md-modal-backdrop" *ngIf="showColorSettingsPopup" (click)="closeColorSettings()">
+    <div class="md-modal md-modal--colors" (click)="$event.stopPropagation()">
+      <div class="md-modal__header">
+        <div class="title">Cài đặt màu heatmap</div>
+        <button type="button" class="icon-x" (click)="closeColorSettings()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="md-modal__body md-modal__body--scroll md-modal__body--color-settings">
+        <p class="color-settings-lead">Màu áp dụng ngay sau khi bấm <strong>Lưu</strong>. Được lưu trên trình duyệt (localStorage).</p>
+
+        <div class="color-settings-section">
+          <div class="section-title">Hoạt động xuất (Fill: Activities)</div>
+          <div class="color-row">
+            <label>Không xuất (0 lần)</label>
+            <input type="color" [(ngModel)]="colorSettingsDraft.noExport" />
+          </div>
+          <div class="color-row" *ngFor="let lbl of activityBucketLabels; let i = index">
+            <label>Bucket {{ lbl }} lần</label>
+            <input type="color" [(ngModel)]="colorSettingsDraft.activityBuckets[i]" />
+          </div>
+        </div>
+
+        <div class="color-settings-section">
+          <div class="section-title">Nhóm AAA (Fill: Group)</div>
+          <div class="color-row" *ngFor="let _ of colorSettingsDraft.groupPalette; let i = index">
+            <label>Màu vòng {{ i + 1 }} / {{ colorSettingsDraft.groupPalette.length }}</label>
+            <input type="color" [(ngModel)]="colorSettingsDraft.groupPalette[i]" />
+          </div>
+        </div>
+
+        <div class="color-settings-section">
+          <div class="section-title">Vị trí (Fill: Location — gradient)</div>
+          <div class="color-row">
+            <label>Màu nhạt</label>
+            <input type="color" [(ngModel)]="colorSettingsDraft.locationLight" />
+          </div>
+          <div class="color-row">
+            <label>Màu đậm</label>
+            <input type="color" [(ngModel)]="colorSettingsDraft.locationDark" />
+          </div>
+        </div>
+
+        <div class="color-settings-section">
+          <div class="section-title">Cờ Aging (góc ô — theo tháng)</div>
+          <div class="color-row"><label>&lt; 12 tháng</label><input type="color" [(ngModel)]="colorSettingsDraft.agingGreen" /></div>
+          <div class="color-row"><label>12 – &lt; 24 tháng</label><input type="color" [(ngModel)]="colorSettingsDraft.agingYellow" /></div>
+          <div class="color-row"><label>24 – 36 tháng</label><input type="color" [(ngModel)]="colorSettingsDraft.agingOrange" /></div>
+          <div class="color-row"><label>&gt; 36 tháng</label><input type="color" [(ngModel)]="colorSettingsDraft.agingRed" /></div>
+        </div>
+
+        <div class="color-settings-section">
+          <div class="section-title">Stock Check (viền ô đã kiểm kê)</div>
+          <div class="color-row">
+            <label>Màu viền</label>
+            <input type="color" [(ngModel)]="colorSettingsDraft.stockCheckRing" />
+          </div>
+        </div>
+      </div>
+      <div class="md-modal__footer md-modal__footer--spread">
+        <button type="button" class="btn btn-default" (click)="resetColorSettingsDraft()">Khôi phục mặc định (nháp)</button>
+        <div class="md-modal__footer-actions">
+          <button type="button" class="btn btn-default" (click)="closeColorSettings()">Hủy</button>
+          <button type="button" class="btn btn-primary" (click)="saveColorSettings()">Lưu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-hint" *ngIf="error">
+    <i class="material-icons">error</i>
+    <span>{{ error }}</span>
+  </div>
+
+  <div class="md-legend-toolbar">
+    <div class="legend" aria-label="Legend">
+      <div class="legend-title">LEGEND</div>
+      <div class="legend-item">
+        <span class="swatch swatch--noact" [style.background]="heatmapColors.noExport"></span>
+        <span class="txt">No Activity</span>
+      </div>
+      <div class="legend-item">
+        <span class="swatch swatch--low" [style.background]="heatmapColors.activityBuckets[0]"></span>
+        <span class="txt">Low Activity</span>
+      </div>
+      <div class="legend-item">
+        <span class="swatch swatch--med" [style.background]="heatmapColors.activityBuckets[2]"></span>
+        <span class="txt">Medium Activity</span>
+      </div>
+      <div class="legend-item">
+        <span class="swatch swatch--high" [style.background]="heatmapColors.activityBuckets[4]"></span>
+        <span class="txt">High Activity</span>
+      </div>
+      <div class="legend-item">
+        <span class="swatch swatch--vhigh" [style.background]="heatmapColors.activityBuckets[7]"></span>
+        <span class="txt">Very High Activity</span>
+      </div>
+      <div class="legend-item" *ngIf="stockCheckCompareEnabled">
+        <span
+          class="swatch swatch--stockcheck-ring"
+          [style.background]="heatmapColors.noExport"
+          [style.box-shadow]="'0 0 0 2px ' + heatmapColors.stockCheckRing"></span>
+        <span class="txt">Đã kiểm kê (Stock Check)</span>
+      </div>
+      <ng-container *ngIf="layerMode === 'Aging' && hasAgingImportData()">
+        <div class="legend-item">
+          <span class="swatch swatch--flag swatch--flag-green" [style.background]="heatmapColors.agingGreen"></span>
+          <span class="txt">Aging &lt; 12 tháng</span>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch--flag swatch--flag-yellow" [style.background]="heatmapColors.agingYellow"></span>
+          <span class="txt">12 – &lt; 24 tháng</span>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch--flag swatch--flag-orange" [style.background]="heatmapColors.agingOrange"></span>
+          <span class="txt">24 – 36 tháng</span>
+        </div>
+        <div class="legend-item">
+          <span class="swatch swatch--flag swatch--flag-red" [style.background]="heatmapColors.agingRed"></span>
+          <span class="txt">&gt; 36 tháng</span>
+        </div>
+      </ng-container>
+    </div>
+
+    <div class="toolbar" aria-label="View controls">
+      <div class="toolbar-group toolbar-group--stockcheck">
+        <span class="tool-label">Stock-Check:</span>
+        <select
+          class="form-control form-control--dense tool-select tool-select--narrow"
+          name="stockCheckCompare"
+          [(ngModel)]="stockCheckCompareEnabled"
+          (ngModelChange)="onStockCheckCompareChange()">
+          <option [ngValue]="false">No</option>
+          <option [ngValue]="true">Yes</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <span class="tool-label">Add layer:</span>
+        <select class="form-control form-control--dense tool-select" [(ngModel)]="layerMode" (ngModelChange)="setLayerMode(layerMode)">
+          <option [ngValue]="'None'">None</option>
+          <option [ngValue]="'Aging'">Aging</option>
+          <option [ngValue]="'Location'">Location</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <span class="tool-label">View:</span>
+        <button type="button" class="chip chip--view is-active" (click)="setViewMode('compact')">
+          <i class="material-icons">grid_on</i>
+          Compact Grid
+        </button>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="tool-check">
+          <input type="checkbox" [(ngModel)]="groupByAaa" (change)="onFiltersChanged()" />
+          <span>Group by AAA</span>
+        </label>
+      </div>
+
+      <div class="toolbar-group">
+        <span class="tool-label">Sort by:</span>
+        <select class="form-control form-control--dense tool-select" [(ngModel)]="sortMode" (change)="onFiltersChanged()">
+          <option value="activity_desc">Activity (High → Low)</option>
+          <option value="activity_asc">Activity (Low → High)</option>
+          <option value="aging_asc">Aging tháng (thấp → cao)</option>
+          <option value="aging_desc">Aging tháng (cao → thấp)</option>
+          <option value="sku_asc">SKU (A → Z)</option>
+        </select>
+      </div>
+
+      <button type="button" class="icon-plain icon-plain--gear" title="Cài đặt màu heatmap" (click)="openColorSettings()">
+        <i class="material-icons">settings</i>
+      </button>
+    </div>
+  </div>
+
+  <div class="heatmap-card card">
+    <div class="card-body card-body--heatmap">
+      <div class="heatmap-wrap" *ngIf="!isLoading; else loadingTpl">
+        <div class="sku-grid" [style.--md-cell.px]="cellSizePx">
+          <div
+            class="sku-cell"
+            *ngFor="let cell of cells; trackBy: trackBySku"
+            [class.sku-cell--stock-checked]="cell.stockChecked"
+            [style.background]="cell.bg"
+            [attr.title]="titlesEnabled ? cell.title : null">
+            <span
+              *ngIf="cell.agingFlag"
+              class="sku-cell__aging-flag"
+              [ngClass]="'sku-cell__aging-flag--' + cell.agingFlag"
+              aria-hidden="true"></span>
+          </div>
+        </div>
+      </div>
+
+      <ng-template #loadingTpl>
+        <div class="loading">
+          <mat-progress-spinner mode="indeterminate" diameter="28"></mat-progress-spinner>
+          <span>Loading dashboard data...</span>
+        </div>
+      </ng-template>
+    </div>
+
+    <div class="heatmap-card__foot">
+      <div class="foot-left">
+        <i class="material-icons">schedule</i>
+        <span>Last updated: {{ lastUpdatedText }}</span>
+      </div>
+      <div class="foot-right">
+        <span>Total SKUs: <b>{{ kpiTotalSkus | number }}</b></span>
+        <span>Active SKUs: <b class="green">{{ kpiActiveSkus | number }} ({{ kpiActivePct }}%)</b></span>
+        <span>No Activity: <b class="red">{{ kpiNoActivitySkus | number }} ({{ kpiNoActivityPct }}%)</b></span>
+      </div>
+    </div>
+  </div>
+</div>
+

@@ -85,6 +85,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     week: string; // W32, W33, ...
     count: number;
   }> = [];
+  iqcWeekSparkData: Array<{ week: string; count: number; bars: number[] }> = [];
   iqcLoading = false;
   
   // IQC Materials Modal
@@ -109,6 +110,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   refreshTime = 300000; // 5 phút
   rackWarningsRefreshInterval: any;
   rackWarningsRefreshTime = 14400000; // 4 tiếng
+
+  // Charts for widgets
+  private woStatusChart: Chart | null = null;
 
   // Menu tabs for icon grid
   menuTabs = [
@@ -212,6 +216,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     if (this.rackWarningsRefreshInterval) clearInterval(this.rackWarningsRefreshInterval);
+    if (this.woStatusChart) {
+      try {
+        this.woStatusChart.destroy();
+      } catch {}
+      this.woStatusChart = null;
+    }
   }
 
   createChart(canvasId: string, label: string, labels: string[], data: number[], color: string, yRange?: { min?: number, max?: number }) {
@@ -591,6 +601,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     
     console.log(`Updated Work Order Status for next 7 days:`, this.workOrderStatus);
+
+    // Re-render stacked chart AFTER data is ready and view has painted.
+    // (When created too early, the canvas exists but chart gets empty/0px sizing.)
+    setTimeout(() => {
+      try {
+        this.createWorkOrderStatusStackedChart();
+      } catch (e) {
+        console.warn('Failed to render WorkOrderStatus chart', e);
+      }
+    }, 0);
   }
 
   private getYesterdayOverdueCount(today: Date): number {
@@ -753,6 +773,95 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     // FGs Inventory Turnover 2026 (lũy kế): 2 tháng đầu = 1.40, tháng 3 = 0.82 → tổng = 2.22, target = 14, 3/12 tháng
     this.createInventoryTurnoverChart('completedTasksChart', 2.22, 14, 3, 12);
+
+    // Widget chart: Work Order Status (7 days)
+    this.createWorkOrderStatusStackedChart();
+  }
+
+  private parseCellNumber(v: any): number {
+    const s = String(v ?? '').trim();
+    if (!s || s === '—' || s === '-') return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  private createWorkOrderStatusStackedChart(): void {
+    const canvas = document.getElementById('workOrderStatusChart') as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rows = this.workOrderStatus || [];
+    const labels = rows.map((r) => r.code);
+    const done = rows.map((r) => this.parseCellNumber(r.value));
+    const waiting = rows.map((r) => this.parseCellNumber(r.note));
+    const delay = rows.map((r) => this.parseCellNumber(r.extra));
+
+    if (this.woStatusChart) {
+      try {
+        this.woStatusChart.destroy();
+      } catch {}
+      this.woStatusChart = null;
+    }
+
+    this.woStatusChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Done', data: done, backgroundColor: '#22C55E', borderRadius: 6, borderSkipped: false, stack: 's' },
+          { label: 'Waiting', data: waiting, backgroundColor: '#3B82F6', borderRadius: 6, borderSkipped: false, stack: 's' },
+          { label: 'Delay', data: delay, backgroundColor: '#EF4444', borderRadius: 6, borderSkipped: false, stack: 's' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle' }
+          },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: 'rgba(15,23,42,0.55)', font: { size: 10 } } },
+          y: { stacked: true, grid: { color: 'rgba(15,23,42,0.06)' }, ticks: { color: 'rgba(15,23,42,0.45)', font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  isShipDone(statusDetail: string): boolean {
+    const s = String(statusDetail || '').toLowerCase();
+    return s.includes('đã xong') || s.includes('da xong') || s.includes('done') || s.includes('đã ship') || s.includes('da ship');
+  }
+
+  isShipWarn(statusDetail: string): boolean {
+    const s = String(statusDetail || '').toLowerCase();
+    return s.includes('chưa') || s.includes('cho soan') || s.includes('chờ') || s.includes('delay') || s.includes('warning');
+  }
+
+  shipBadgeText(statusDetail: string): string {
+    const s = String(statusDetail || '').trim();
+    if (!s) return 'Chờ soạn';
+    if (this.isShipDone(s)) return 'Đã xong';
+    if (/chưa/i.test(s)) return 'Chưa đủ';
+    return 'Chờ soạn';
+  }
+
+  goShipment(): void {
+    this.router.navigate(['/shipment']);
+  }
+
+  goHome(): void {
+    this.router.navigate(['/dashboard']);
+  }
+
+  goMenu(): void {
+    this.router.navigate(['/menu']);
   }
 
   // Create inventory turnover chart with target and progress
@@ -1143,6 +1252,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       if (!snapshot || snapshot.empty) {
         this.iqcWeekData = weeks.map(w => ({ week: w.week, count: 0 }));
+        this.iqcWeekSparkData = this.buildIqcWeekSparkData(this.iqcWeekData);
         this.cdr.detectChanges();
         return;
       }
@@ -1249,6 +1359,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         week: w.week,
         count: weekCounts.get(w.week)?.size || 0
       }));
+      this.iqcWeekSparkData = this.buildIqcWeekSparkData(this.iqcWeekData);
 
       console.log('📊 IQC Week Data:', this.iqcWeekData);
       this.cdr.detectChanges();
@@ -1258,6 +1369,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
     } finally {
       this.iqcLoading = false;
     }
+  }
+
+  private buildIqcWeekSparkData(input: Array<{ week: string; count: number }>): Array<{ week: string; count: number; bars: number[] }> {
+    const max = Math.max(1, ...(input || []).map(x => Number(x.count) || 0));
+    return (input || []).map((w, idx) => {
+      const seed = this.hashToUnit(`${w.week}-${idx}`);
+      const intensity = Math.min(1, (Number(w.count) || 0) / max);
+      const bars = Array.from({ length: 10 }).map((_, j) => {
+        // Stable, slightly varied histogram look, scaled by intensity
+        const wave = 0.35 + 0.65 * Math.abs(Math.sin((j + 1) * 1.05 + seed * 6.283));
+        const noise = 0.78 + 0.22 * Math.abs(Math.cos((j + 3) * 0.9 + seed * 3.1415));
+        const v = Math.max(0.08, Math.min(1, wave * noise * (0.25 + 0.75 * intensity)));
+        return Math.round(v * 100);
+      });
+      return { week: w.week, count: w.count, bars };
+    });
+  }
+
+  private hashToUnit(s: string): number {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    // 0..1
+    return (h >>> 0) / 4294967295;
   }
 
   // Helper: Get ISO week number

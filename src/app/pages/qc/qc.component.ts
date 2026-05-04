@@ -200,7 +200,15 @@ export class QCComponent implements OnInit, OnDestroy {
   materialCheckBusy: boolean = false;
   materialCheckError: string = '';
   materialCheckRows: MaterialCheckRow[] = [];
-  
+
+  // Per-box date ranges
+  boxDateRanges: Record<string, { from: Date | null; to: Date | null }> = {};
+  showBoxDateModal: boolean = false;
+  editingBoxKey: string = '';
+  boxModalTitle: string = '';
+  boxModalFromStr: string = '';
+  boxModalToStr: string = '';
+
   private destroy$ = new Subject<void>();
   
   constructor(
@@ -210,6 +218,129 @@ export class QCComponent implements OnInit, OnDestroy {
     private rmBagHistory: RmBagHistoryService
   ) {}
   
+  get monthlyTotal(): number {
+    return this.monthlyPassCount + this.monthlyNgCount + this.monthlyLockCount;
+  }
+
+  get monthlyPassRate(): number {
+    if (!this.monthlyTotal) return 0;
+    return Math.round(this.monthlyPassCount / this.monthlyTotal * 1000) / 10;
+  }
+
+  get monthlyNgRate(): number {
+    if (!this.monthlyTotal) return 0;
+    return Math.round(this.monthlyNgCount / this.monthlyTotal * 1000) / 10;
+  }
+
+  get monthlyLockRate(): number {
+    if (!this.monthlyTotal) return 0;
+    return Math.round(this.monthlyLockCount / this.monthlyTotal * 1000) / 10;
+  }
+
+  get todayStr(): string {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  get lastUpdatedTime(): string {
+    const d = new Date();
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  private startOfDay(d: Date): Date {
+    const r = new Date(d); r.setHours(0, 0, 0, 0); return r;
+  }
+
+  private endOfDay(d: Date): Date {
+    const r = new Date(d); r.setHours(23, 59, 59, 999); return r;
+  }
+
+  private dateToInputStr(d: Date): string {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private initBoxDateRanges(): void {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const jan2026    = new Date(2026, 0, 1);
+    this.boxDateRanges = {
+      pendingQC:      { from: jan2026,    to: null },
+      todayChecked:   { from: this.startOfDay(now), to: this.endOfDay(now) },
+      pendingConfirm: { from: jan2026,    to: null },
+      pass:           { from: monthStart, to: monthEnd },
+      ng:             { from: monthStart, to: monthEnd },
+      lock:           { from: jan2026,    to: null },
+    };
+  }
+
+  formatBoxDateLabel(key: string): string {
+    const r = this.boxDateRanges[key];
+    if (!r) return '';
+    const fmt = (d: Date | null) => d
+      ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+      : 'nay';
+    if (!r.from && !r.to) return 'Tất cả';
+    if (!r.from) return `≤ ${fmt(r.to)}`;
+    if (!r.to)   return `≥ ${fmt(r.from)}`;
+    // If from == to (same day), show single date
+    const sameDay = r.from.toDateString() === r.to?.toDateString();
+    if (sameDay) return fmt(r.from);
+    return `${fmt(r.from)} – ${fmt(r.to)}`;
+  }
+
+  openBoxDateModal(key: string, title: string): void {
+    this.editingBoxKey  = key;
+    this.boxModalTitle  = title;
+    const r = this.boxDateRanges[key];
+    this.boxModalFromStr = r?.from ? this.dateToInputStr(r.from) : '';
+    this.boxModalToStr   = r?.to   ? this.dateToInputStr(r.to)   : '';
+    this.showBoxDateModal = true;
+  }
+
+  applyBoxDateModal(): void {
+    if (!this.editingBoxKey) return;
+    const from = this.boxModalFromStr ? new Date(this.boxModalFromStr + 'T00:00:00') : null;
+    const to   = this.boxModalToStr   ? new Date(this.boxModalToStr   + 'T23:59:59') : null;
+    this.boxDateRanges[this.editingBoxKey] = { from, to };
+    this.showBoxDateModal = false;
+    this.reloadBoxCounts();
+  }
+
+  resetBoxDateModal(): void {
+    const now        = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const jan2026    = new Date(2026, 0, 1);
+    const defaults: Record<string, { from: Date | null; to: Date | null }> = {
+      pendingQC:      { from: jan2026,    to: null },
+      todayChecked:   { from: this.startOfDay(now), to: this.endOfDay(now) },
+      pendingConfirm: { from: jan2026,    to: null },
+      pass:           { from: monthStart, to: monthEnd },
+      ng:             { from: monthStart, to: monthEnd },
+      lock:           { from: jan2026,    to: null },
+    };
+    if (this.editingBoxKey && defaults[this.editingBoxKey]) {
+      this.boxDateRanges[this.editingBoxKey] = defaults[this.editingBoxKey];
+      const r = this.boxDateRanges[this.editingBoxKey];
+      this.boxModalFromStr = r.from ? this.dateToInputStr(r.from) : '';
+      this.boxModalToStr   = r.to   ? this.dateToInputStr(r.to)   : '';
+    }
+  }
+
+  private reloadBoxCounts(): void {
+    this.loadPendingQCCount();
+    this.loadTodayCheckedCount();
+    this.loadPendingConfirmCount();
+    this.loadMonthlyStatusCounts();
+  }
+
   getYearOptions(): number[] {
     const currentYear = new Date().getFullYear();
     const years = [];
@@ -220,8 +351,8 @@ export class QCComponent implements OnInit, OnDestroy {
   }
   
   ngOnInit(): void {
-    // Không cần load materials ban đầu, chỉ load khi scan
     console.log('📦 QC Component initialized - ready for scanning');
+    this.initBoxDateRanges();
     
     // 🔧 FIX: Khôi phục currentEmployeeId từ localStorage nếu có
     const savedEmployeeId = localStorage.getItem('qc_currentEmployeeId');
@@ -1678,14 +1809,20 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Load recent checked materials (one-time query, not subscription)
+  // Load recent checked materials — Firestore sort + limit, filter autoPass in memory
   loadRecentCheckedMaterials(): void {
     this.isLoadingRecent = true;
-    
-    // Query without orderBy to avoid index requirement, then sort in memory
+
+    // Dùng qcCheckedAt >= 2020 để Firestore chỉ trả doc đã có checkedAt,
+    // đồng thời orderBy + limit ở server → không cần sort/slice client nữa.
+    // Index cần: factory ASC + qcCheckedAt DESC  (xem firestore.indexes.json)
+    const baseTs = firebase.firestore.Timestamp.fromDate(new Date(2020, 0, 1));
+
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', this.selectedFactory)
-         .limit(500) // Get more to filter, then sort and take top 20
+         .where('qcCheckedAt', '>=', baseTs)   // lọc tại Firestore: chỉ doc đã kiểm
+         .orderBy('qcCheckedAt', 'desc')        // sort tại Firestore
+         .limit(60)                             // 60 thay vì 500; đủ dư để lọc autoPass
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -1694,43 +1831,34 @@ export class QCComponent implements OnInit, OnDestroy {
           .map(doc => {
             const data = doc.data() as any;
             const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
-            const iqcStatus = data.iqcStatus;
+            const iqcStatus   = data.iqcStatus;
             const qcCheckedBy = data.qcCheckedBy || '';
-            const location = (data.location || '').toUpperCase();
-            
-            // Chỉ hiển thị materials được người dùng kiểm
-            const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
+            const location    = (data.location || '').toUpperCase();
+
+            const isAutoPass     = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
             const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
-            
-            if (iqcStatus && 
-                iqcStatus !== 'CHỜ KIỂM' && 
-                hasUserChecked && 
-                !isAutoPass) {
+
+            if (iqcStatus && iqcStatus !== 'CHỜ KIỂM' && hasUserChecked && !isAutoPass) {
               return {
                 materialCode: data.materialCode || '',
-                poNumber: data.poNumber || '',
-                batchNumber: data.batchNumber || '',
-                iqcStatus: iqcStatus,
+                poNumber:     data.poNumber     || '',
+                batchNumber:  data.batchNumber  || '',
+                iqcStatus,
                 checkedBy: qcCheckedBy,
                 checkedAt: qcCheckedAt
               };
             }
             return null;
           })
-          .filter(material => material !== null)
-          .sort((a, b) => {
-            // Sort by checked time (newest first) in memory
-            return b!.checkedAt.getTime() - a!.checkedAt.getTime();
-          })
-          .slice(0, 20); // Get only last 20
-        
+          .filter((m): m is NonNullable<typeof m> => m !== null)
+          .slice(0, 20); // tối đa 20 hiển thị
+
         this.recentCheckedMaterials = recentMaterials;
         this.isLoadingRecent = false;
       },
       error: (error) => {
         console.error('❌ Error loading recent checked materials:', error);
         this.isLoadingRecent = false;
-        // Show empty state on error
         this.recentCheckedMaterials = [];
       }
     });
@@ -1738,8 +1866,7 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // Load pending QC count from Firestore (one-time query, not subscription)
   loadPendingQCCount(): void {
-    // Query theo factory + trạng thái; lọc khu IQC trong memory (prefix IQC, có thể kèm pallet)
-    // vì Firestore không so được "bắt đầu bằng IQC" và vị trí có thể là IQC-P01...
+    const range = this.boxDateRanges['pendingQC'];
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', this.selectedFactory)
          .where('iqcStatus', '==', 'CHỜ KIỂM')
@@ -1747,13 +1874,21 @@ export class QCComponent implements OnInit, OnDestroy {
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.pendingQCCount = snapshot.docs.filter(doc =>
-          this.isPendingQcAtIqc(doc.data())
-        ).length;
+        this.pendingQCCount = snapshot.docs.filter(doc => {
+          const data = doc.data() as any;
+          if (!this.isPendingQcAtIqc(data)) return false;
+          if (range?.from || range?.to) {
+            const dt = this.parseFirestoreDate(data.importDate) || this.parseFirestoreDate(data.createdAt);
+            if (dt) {
+              if (range.from && dt < range.from) return false;
+              if (range.to   && dt > range.to)   return false;
+            }
+          }
+          return true;
+        }).length;
       },
       error: (error) => {
         console.error('❌ Error loading pending QC count:', error);
-        // Fallback: calculate from local materials
         this.pendingQCCount = this.materials.filter(m =>
           this.isPendingQcAtIqc({ iqcStatus: m.iqcStatus, location: m.location })
         ).length;
@@ -1761,50 +1896,44 @@ export class QCComponent implements OnInit, OnDestroy {
     });
   }
   
-  // Load today's checked count (one-time query)
+  // Load checked count cho khoảng date của box "todayChecked"
+  // Index cần: factory ASC + qcCheckedAt ASC  (xem firestore.indexes.json)
   loadTodayCheckedCount(): void {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    // Chỉ dùng factory filter, filter date và user-checked trong memory để tránh cần index
+    const range = this.boxDateRanges['todayChecked'];
+    const from  = range?.from ?? this.startOfDay(new Date());
+    const to    = range?.to   ?? this.endOfDay(new Date());
+
+    const fromTs = firebase.firestore.Timestamp.fromDate(from);
+    const toTs   = firebase.firestore.Timestamp.fromDate(to);
+
     this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', this.selectedFactory)
+      ref.where('factory',    '==', this.selectedFactory)
+         .where('qcCheckedAt', '>=', fromTs)   // ← lọc tại Firestore
+         .where('qcCheckedAt', '<=', toTs)     // ← lọc tại Firestore
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        // Count only user-checked materials (not auto-pass) checked today
+        // Server đã lọc theo ngày; chỉ còn check autoPass + hasUserChecked
         this.todayCheckedCount = snapshot.docs.filter(doc => {
-          const data = doc.data() as any;
+          const data        = doc.data() as any;
           const qcCheckedAt = data.qcCheckedAt?.toDate ? data.qcCheckedAt.toDate() : null;
-          const iqcStatus = data.iqcStatus;
+          const iqcStatus   = data.iqcStatus;
           const qcCheckedBy = data.qcCheckedBy || '';
-          const location = (data.location || '').toUpperCase();
-          
-          // Filter by date range in memory
-          if (!qcCheckedAt || qcCheckedAt < today || qcCheckedAt >= tomorrow) {
-            return false;
-          }
-          
-          // Only count user-checked (not auto-pass)
-          const isAutoPass = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
+          const location    = (data.location || '').toUpperCase();
+
+          const isAutoPass     = (location === 'F62' || location === 'F62TRA') && iqcStatus === 'Pass' && !qcCheckedBy;
           const hasUserChecked = qcCheckedBy && qcCheckedBy.trim() !== '' && qcCheckedAt;
-          
-          return iqcStatus && 
-                 iqcStatus !== 'CHỜ KIỂM' && 
-                 hasUserChecked && 
-                 !isAutoPass;
+
+          return iqcStatus && iqcStatus !== 'CHỜ KIỂM' && hasUserChecked && !isAutoPass;
         }).length;
       },
       error: (error) => {
         console.error('❌ Error loading today checked count:', error);
-        // Fallback: calculate from local materials
         this.todayCheckedCount = this.materials.filter(m => {
           if (!m.iqcStatus || m.iqcStatus === 'CHỜ KIỂM') return false;
           const checkDate = m.updatedAt || new Date();
-          return checkDate >= today && checkDate < tomorrow;
+          return checkDate >= from && checkDate <= to;
         }).length;
       }
     });
@@ -1812,7 +1941,7 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // Load pending confirm count (one-time query)
   loadPendingConfirmCount(): void {
-    // Use get() for one-time query (faster)
+    const range = this.boxDateRanges['pendingConfirm'];
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', this.selectedFactory)
          .where('iqcStatus', '==', 'CHỜ XÁC NHẬN')
@@ -1820,12 +1949,19 @@ export class QCComponent implements OnInit, OnDestroy {
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.pendingConfirmCount = snapshot.size;
+        this.pendingConfirmCount = snapshot.docs.filter(doc => {
+          if (!range?.from && !range?.to) return true;
+          const data = doc.data() as any;
+          const dt = this.parseFirestoreDate(data.importDate) || this.parseFirestoreDate(data.createdAt);
+          if (!dt) return true;
+          if (range.from && dt < range.from) return false;
+          if (range.to   && dt > range.to)   return false;
+          return true;
+        }).length;
       },
       error: (error) => {
         console.error('❌ Error loading pending confirm count:', error);
-        // Fallback: calculate from local materials
-        this.pendingConfirmCount = this.materials.filter(m => 
+        this.pendingConfirmCount = this.materials.filter(m =>
           m.iqcStatus === 'CHỜ XÁC NHẬN'
         ).length;
       }
@@ -1839,70 +1975,82 @@ export class QCComponent implements OnInit, OnDestroy {
     return { start, end };
   }
 
-  // Load monthly counts for PASS / NG / LOCK (current month)
+  // Load PASS / NG / LOCK counts với per-box date ranges
+  // Tính broadest range → filter tại Firestore; sau đó lọc per-status trong memory (dataset nhỏ hơn nhiều)
+  // Index cần: factory ASC + qcCheckedAt ASC  (xem firestore.indexes.json)
   loadMonthlyStatusCounts(): void {
-    const { start, end } = this.getCurrentMonthRange();
+    const passRange = this.boxDateRanges['pass'];
+    const ngRange   = this.boxDateRanges['ng'];
+    const lockRange = this.boxDateRanges['lock'];
 
-    this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', this.selectedFactory)
-    ).get()
+    // Tính khoảng rộng nhất của 3 box để dùng làm server-side filter
+    const allFroms = [passRange?.from, ngRange?.from, lockRange?.from]
+                       .filter((d): d is Date => !!d);
+    const allTos   = [passRange?.to,   ngRange?.to,   lockRange?.to  ]
+                       .filter((d): d is Date => !!d);
+    const broadFrom = allFroms.length
+      ? new Date(Math.min(...allFroms.map(d => d.getTime()))) : null;
+    const broadTo   = allTos.length
+      ? new Date(Math.max(...allTos.map(d => d.getTime())))   : null;
+
+    const inRange = (dt: Date | null, range: { from: Date | null; to: Date | null } | undefined): boolean => {
+      if (!dt || !range) return !!dt;
+      if (range.from && dt < range.from) return false;
+      if (range.to   && dt > range.to)   return false;
+      return true;
+    };
+
+    this.firestore.collection('inventory-materials', ref => {
+      let q: firebase.firestore.Query = ref.where('factory', '==', this.selectedFactory);
+      // Push date range xuống Firestore — giảm số docs trả về đáng kể
+      if (broadFrom) q = q.where('qcCheckedAt', '>=', firebase.firestore.Timestamp.fromDate(broadFrom));
+      if (broadTo)   q = q.where('qcCheckedAt', '<=', firebase.firestore.Timestamp.fromDate(broadTo));
+      return q;
+    }).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        let pass = 0;
-        let ng = 0;
-        let lock = 0;
+        let pass = 0, ng = 0, lock = 0;
 
         snapshot.docs.forEach((doc: any) => {
-          const data = doc.data() as any;
-
-          const eventTime =
-            this.parseFirestoreDate(data?.qcCheckedAt) ||
-            this.parseFirestoreDate(data?.updatedAt) ||
-            null;
-          if (!eventTime || eventTime < start || eventTime >= end) return;
-
-          const statusNorm = (data?.iqcStatus || '').toString().trim().toUpperCase();
+          const data        = doc.data() as any;
+          const eventTime   = this.parseFirestoreDate(data?.qcCheckedAt) ||
+                              this.parseFirestoreDate(data?.updatedAt)   || null;
+          const statusNorm  = (data?.iqcStatus  || '').toString().trim().toUpperCase();
           const qcCheckedBy = (data?.qcCheckedBy || '').toString();
-          const location = (data?.location || '').toString().trim().toUpperCase();
+          const location    = (data?.location    || '').toString().trim().toUpperCase();
 
-          // Exclude auto-pass like the "today checked" logic
           const isAutoPass =
             (location === 'F62' || location === 'F62TRA') &&
             statusNorm === 'PASS' &&
-            (!qcCheckedBy || qcCheckedBy.trim() === '');
-
+            (!qcCheckedBy || !qcCheckedBy.trim());
           if (isAutoPass) return;
 
-          if (statusNorm === 'PASS') pass++;
-          else if (statusNorm === 'NG') ng++;
-          else if (statusNorm === 'LOCK') lock++;
+          if      (statusNorm === 'PASS' && inRange(eventTime, passRange)) pass++;
+          else if (statusNorm === 'NG'   && inRange(eventTime, ngRange))   ng++;
+          else if (statusNorm === 'LOCK' && inRange(eventTime, lockRange)) lock++;
         });
 
         this.monthlyPassCount = pass;
-        this.monthlyNgCount = ng;
+        this.monthlyNgCount   = ng;
         this.monthlyLockCount = lock;
       },
       error: (error) => {
-        console.error('❌ Error loading monthly PASS/NG/LOCK counts:', error);
-        // Fallback: best-effort from local materials using updatedAt
-        const now = new Date();
+        console.error('❌ Error loading PASS/NG/LOCK counts:', error);
+        const now    = new Date();
         const startF = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endF = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const endF   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-        const countBy = (status: string) => {
-          const s = status.toUpperCase();
-          return this.materials.filter(m => {
+        const countBy = (status: string) =>
+          this.materials.filter(m => {
             const checkDate = (m as any)?.qcCheckedAt || m.updatedAt || new Date();
-            const eventTime = checkDate instanceof Date ? checkDate : new Date(checkDate);
-            if (!eventTime || eventTime < startF || eventTime >= endF) return false;
-            const statusNorm = (m?.iqcStatus || '').toString().trim().toUpperCase();
-            return statusNorm === s;
+            const et = checkDate instanceof Date ? checkDate : new Date(checkDate);
+            if (!et || et < startF || et >= endF) return false;
+            return (m?.iqcStatus || '').toString().trim().toUpperCase() === status.toUpperCase();
           }).length;
-        };
 
         this.monthlyPassCount = countBy('PASS');
-        this.monthlyNgCount = countBy('NG');
+        this.monthlyNgCount   = countBy('NG');
         this.monthlyLockCount = countBy('LOCK');
       }
     });

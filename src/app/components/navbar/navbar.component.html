@@ -5,8 +5,8 @@
           <a class="navbar-brand" href="javascript:void(0)">{{getTitle()}}</a>
         </div>
         <div class="collapse navbar-collapse justify-content-end" id="navigation">
-            <!-- ASM1 and ASM2 Icons -->
-            <div class="asm-icons" *ngIf="isDashboard()">
+            <!-- ASM1/ASM2 + notifications + user: tắt trên navbar chung (mỗi tab tự có điều khiển / Menu có đăng xuất) -->
+            <div class="asm-icons" *ngIf="shouldShowNavbarFactoryToolbar()">
                 <button
                   type="button"
                   class="factory-chip factory-chip-asm1"
@@ -28,7 +28,7 @@
                     <span class="asm-label">2</span>
                 </button>
             </div>
-            <ul class="navbar-nav navbar-actions" *ngIf="isDashboard()">
+            <ul class="navbar-nav navbar-actions" *ngIf="shouldShowNavbarFactoryToolbar()">
                 <li class="nav-item">
                     <app-notification-dropdown></app-notification-dropdown>
                 </li>
@@ -58,7 +58,7 @@
           type="button"
           class="btn-home ms-2"
           (click)="goToMenu()"
-          *ngIf="!isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage()"
+          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage()"
           title="Về Menu"
         >
           <i class="material-icons">home</i>

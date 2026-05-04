@@ -98,6 +98,7 @@ export class FilteredRoutesService {
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
       '/assistant': 'assistant',
+      '/materials-dashboard': 'materials-dashboard',
       '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
       

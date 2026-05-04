@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { PermissionService, UserPermission } from '../../services/permission.service';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
@@ -147,6 +147,19 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   // Cleanup Firebase Auth users outside Settings
   isCleaningAuthUsers = false;
+
+  /** Panel công cụ (Làm mới, xóa Auth ngoài Settings, dọn dẹp mã NV) — nút Settings trên header */
+  showSettingsTools = false;
+
+  /** Danh sách người dùng — toolbar / bảng / phân trang */
+  userListSearchQuery = '';
+  userListApprovalFilter: 'all' | 'approved' | 'pending' = 'all';
+  userListViewMode: 'table' | 'grid' = 'table';
+  userListPageSize = 10;
+  readonly userListPageSizeOptions = [10, 25, 50];
+  userListPageIndex = 1;
+  showUserListFilters = false;
+  userRowMenuOpenUid: string | null = null;
 
   // Cached user lists to avoid expensive recomputation on every CD cycle
   _approvedUsers: User[] = [];
@@ -1628,7 +1641,214 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this._adminUsersCount = this.firebaseUsers.filter(u =>
       ['admin', 'Admin', 'Quản lý'].includes(u.role)
     ).length;
+    this.clampUserListPage();
     this.cdr.markForCheck();
+  }
+
+  /** User có ít nhất một tab được bật */
+  userHasApprovedTabs(u: User): boolean {
+    return Object.values(this.firebaseUserTabPermissions[u.uid] || {}).some(v => v === true);
+  }
+
+  isUserAdministrator(u: User): boolean {
+    const r = (u.role || '').trim();
+    return ['admin', 'Admin', 'Quản lý'].includes(r);
+  }
+
+  getUserInitials(u: User): string {
+    const name = (u.displayName || '').trim();
+    const id = this.getEmployeeIdOnly(u).trim();
+    const src = name || id || '?';
+    const parts = src.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
+    }
+    return src.replace(/[^A-Za-zÀ-ỹ0-9]/g, '').slice(0, 2).toUpperCase() || '??';
+  }
+
+  getAvatarToneClass(uid: string): string {
+    let h = 0;
+    for (let i = 0; i < uid.length; i++) {
+      h = ((h << 5) - h) + uid.charCodeAt(i);
+      h |= 0;
+    }
+    return `avatar-tone--${Math.abs(h) % 6}`;
+  }
+
+  getUserListFilteredUsers(): User[] {
+    const sorted = this.getSortedFirebaseUsers();
+    const hasTab = (u: User) => this.userHasApprovedTabs(u);
+    let list = sorted;
+    if (this.userListApprovalFilter === 'approved') {
+      list = sorted.filter(hasTab);
+    } else if (this.userListApprovalFilter === 'pending') {
+      list = sorted.filter(u => !hasTab(u));
+    }
+    const q = this.userListSearchQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(u => {
+      const id = this.getEmployeeIdOnly(u).toLowerCase();
+      const name = (u.displayName || '').toLowerCase();
+      const dept = (u.department || '').toLowerCase();
+      return id.includes(q) || name.includes(q) || dept.includes(q);
+    });
+  }
+
+  getUserListPaginatedUsers(): User[] {
+    const all = this.getUserListFilteredUsers();
+    const start = (this.userListPageIndex - 1) * this.userListPageSize;
+    return all.slice(start, start + this.userListPageSize);
+  }
+
+  getUserListFilteredCount(): number {
+    return this.getUserListFilteredUsers().length;
+  }
+
+  getUserListTotalPages(): number {
+    const n = this.getUserListFilteredCount();
+    return Math.max(1, Math.ceil(n / this.userListPageSize) || 1);
+  }
+
+  getUserListRangeStart(): number {
+    const total = this.getUserListFilteredCount();
+    if (total === 0) return 0;
+    return (this.userListPageIndex - 1) * this.userListPageSize + 1;
+  }
+
+  getUserListRangeEnd(): number {
+    return Math.min(this.userListPageIndex * this.userListPageSize, this.getUserListFilteredCount());
+  }
+
+  getUserListPaginationSlots(): Array<number | 'ellipsis'> {
+    const total = this.getUserListTotalPages();
+    const cur = this.userListPageIndex;
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const set = new Set<number>([1, total, cur, cur - 1, cur + 1]);
+    const sorted = [...set].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+    const out: Array<number | 'ellipsis'> = [];
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+        out.push('ellipsis');
+      }
+      out.push(sorted[i]);
+    }
+    return out;
+  }
+
+  private clampUserListPage(): void {
+    const total = this.getUserListFilteredUsers().length;
+    const pages = Math.max(1, Math.ceil(total / this.userListPageSize) || 1);
+    if (this.userListPageIndex > pages) {
+      this.userListPageIndex = pages;
+    }
+    if (this.userListPageIndex < 1) {
+      this.userListPageIndex = 1;
+    }
+    if (total === 0) {
+      this.userListPageIndex = 1;
+    }
+  }
+
+  onUserListSearchChange(): void {
+    this.userListPageIndex = 1;
+    this.clampUserListPage();
+    this.cdr.markForCheck();
+  }
+
+  onUserListApprovalFilterChange(): void {
+    this.userListPageIndex = 1;
+    this.clampUserListPage();
+    this.cdr.markForCheck();
+  }
+
+  onUserListPageSizeChange(): void {
+    this.userListPageIndex = 1;
+    this.clampUserListPage();
+    this.cdr.markForCheck();
+  }
+
+  goUserListPage(p: number): void {
+    const pages = this.getUserListTotalPages();
+    const next = Math.min(Math.max(1, p), pages);
+    if (next !== this.userListPageIndex) {
+      this.userListPageIndex = next;
+      this.userRowMenuOpenUid = null;
+      this.cdr.markForCheck();
+    }
+  }
+
+  userListPrevPage(): void {
+    this.goUserListPage(this.userListPageIndex - 1);
+  }
+
+  userListNextPage(): void {
+    this.goUserListPage(this.userListPageIndex + 1);
+  }
+
+  toggleUserListGridMode(): void {
+    this.userListViewMode = this.userListViewMode === 'table' ? 'grid' : 'table';
+    this.userRowMenuOpenUid = null;
+    this.cdr.markForCheck();
+  }
+
+  toggleUserRowMenu(ev: Event, uid: string): void {
+    ev.stopPropagation();
+    this.userRowMenuOpenUid = this.userRowMenuOpenUid === uid ? null : uid;
+    this.cdr.markForCheck();
+  }
+
+  closeUserRowMenu(): void {
+    if (this.userRowMenuOpenUid !== null) {
+      this.userRowMenuOpenUid = null;
+      this.cdr.markForCheck();
+    }
+  }
+
+  openUserRowPermission(user: User, ev?: Event): void {
+    ev?.stopPropagation();
+    this.closeUserRowMenu();
+    this.openPermissionModal(user);
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(ev: MouseEvent): void {
+    const t = ev.target as HTMLElement | null;
+    if (t?.closest('.user-table-actions-cell')) {
+      return;
+    }
+    this.closeUserRowMenu();
+  }
+
+  /** Hiển thị badge vai trò trong bảng */
+  getUserRoleBadgeClass(user: User): string {
+    return this.isUserAdministrator(user) ? 'role-pill role-pill--admin' : 'role-pill role-pill--user';
+  }
+
+  getUserRoleBadgeLabel(user: User): string {
+    return this.isUserAdministrator(user) ? 'Admin' : 'Người dùng';
+  }
+
+  getUserStatusRowClass(user: User): string {
+    return this.userHasApprovedTabs(user) ? 'user-status user-status--active' : 'user-status user-status--pending';
+  }
+
+  getUserStatusLabel(user: User): string {
+    return this.userHasApprovedTabs(user) ? 'Hoạt động' : 'Chờ duyệt';
+  }
+
+  /** Lưới (card): danh sách đã / chờ sau khi lọc */
+  getFilteredApprovedUsersForGrid(): User[] {
+    return this.getUserListFilteredUsers().filter(u => this.userHasApprovedTabs(u));
+  }
+
+  getFilteredPendingUsersForGrid(): User[] {
+    return this.getUserListFilteredUsers().filter(u => !this.userHasApprovedTabs(u));
+  }
+
+  userListFilterButtonActive(): boolean {
+    return this.showUserListFilters || this.userListApprovalFilter !== 'all';
   }
 
   // trackBy helpers

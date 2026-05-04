@@ -1,9 +1,10 @@
 import { Component, OnInit, ElementRef, OnDestroy, Output, EventEmitter } from '@angular/core';
 import { ROUTES } from '../../routes/sidebar-routes';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, NavigationEnd } from '@angular/router';
 import { NotificationService } from '../../services/notification.service';
 import { interval, Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
 import { NotificationDropdownComponent } from '../notification-dropdown/notification-dropdown.component';
 
@@ -22,6 +23,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
     public notificationCount = 0;
     private lastNotificationCount = 0;
     private notificationSubscription: Subscription;
+    private navigationSubscription?: Subscription;
     public currentUser: User | null = null;
     private userSubscription: Subscription;
     public selectedFactory: string = 'ASM1'; // Default to ASM1
@@ -70,6 +72,15 @@ export class NavbarComponent implements OnInit, OnDestroy {
       if (savedFactory) {
         this.selectedFactory = savedFactory;
       }
+
+      this.navigationSubscription = this.router.events
+        .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+        .subscribe(() => {
+          const f = localStorage.getItem('selectedFactory');
+          if (f === 'ASM1' || f === 'ASM2') {
+            this.selectedFactory = f;
+          }
+        });
     }
 
     checkForNotifications() {
@@ -109,6 +120,9 @@ export class NavbarComponent implements OnInit, OnDestroy {
       // Hủy đăng ký để tránh rò rỉ bộ nhớ
       if (this.notificationSubscription) {
         this.notificationSubscription.unsubscribe();
+      }
+      if (this.navigationSubscription) {
+        this.navigationSubscription.unsubscribe();
       }
       if (this.userSubscription) {
         this.userSubscription.unsubscribe();
@@ -201,62 +215,58 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return '';
     }
 
-    isDashboard(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if(currentPath.charAt(0) === '#'){
-          currentPath = currentPath.slice( 1 );
+    /** Đường dẫn app hiện tại (bỏ query/hash) — dùng cho *ngIf navbar. */
+    private currentAppPath(): string {
+      let u = (this.router.url || '').trim();
+      if (!u) {
+        u = this.location.prepareExternalUrl(this.location.path()) || '/';
+        if (u.charAt(0) === '#') {
+          u = u.slice(1);
+        }
       }
-      // Chỉ hiển thị dashboard elements khi thực sự ở trang dashboard
-      return currentPath === '/dashboard';
+      if (!u.startsWith('/')) {
+        u = '/' + u;
+      }
+      return u.split('?')[0].split('#')[0] || '/';
+    }
+
+    isDashboard(): boolean {
+      return this.currentAppPath() === '/dashboard';
+    }
+
+    /**
+     * Cụm factory chip + notifications + profile trên navbar từng bật ở mọi tab (trừ Dashboard),
+     * gây trùng UI. Tắt mặc định; bật lại chỉ khi thật sự cần (đổi return true + điều kiện route).
+     */
+    shouldShowNavbarFactoryToolbar(): boolean {
+      return false;
     }
 
     isMenuPage(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if(currentPath.charAt(0) === '#'){
-          currentPath = currentPath.slice( 1 );
-      }
-      return currentPath === '/menu' || currentPath === '/';
+      const p = this.currentAppPath();
+      return p === '/menu' || p === '/';
     }
 
     isQCPage(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if(currentPath.charAt(0) === '#'){
-          currentPath = currentPath.slice( 1 );
-      }
-      return currentPath === '/qc' || currentPath === '/qc-traceability';
+      const p = this.currentAppPath();
+      return p === '/qc' || p === '/qc-traceability';
     }
 
     isSettingsPage(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if(currentPath.charAt(0) === '#'){
-          currentPath = currentPath.slice( 1 );
-      }
-      return currentPath === '/settings';
+      return this.currentAppPath() === '/settings';
     }
 
 
     isRm1DeliveryPage(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if(currentPath.charAt(0) === '#'){
-          currentPath = currentPath.slice( 1 );
-      }
-      return currentPath === '/rm1-delivery';
+      return this.currentAppPath() === '/rm1-delivery';
     }
 
     isInboundAsm1Page(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if (currentPath.charAt(0) === '#') {
-        currentPath = currentPath.slice(1);
-      }
-      return currentPath === '/inbound-asm1';
+      return this.currentAppPath() === '/inbound-asm1';
     }
 
     isInboundAsm2Page(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if (currentPath.charAt(0) === '#') {
-        currentPath = currentPath.slice(1);
-      }
-      return currentPath === '/inbound-asm2';
+      return this.currentAppPath() === '/inbound-asm2';
     }
 
     isInboundAsmPage(): boolean {
@@ -264,11 +274,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
     }
 
     isShipmentPage(): boolean {
-      var currentPath = this.location.prepareExternalUrl(this.location.path());
-      if (currentPath.charAt(0) === '#') {
-        currentPath = currentPath.slice(1);
-      }
-      return currentPath === '/shipment';
+      return this.currentAppPath() === '/shipment';
     }
 
     goToMenu(): void {

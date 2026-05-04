@@ -73,9 +73,6 @@
           <div class="big-counter total-box clickable" [class.active]="filterMode === 'all'" (click)="setFilterMode('all')" title="Tổng mã">
             <div class="big-num">{{ totalMaterials }}</div>
             <div class="big-lbl">TỔNG MÃ</div>
-            <div class="big-total-progress" aria-hidden="true">
-              <div class="big-total-progress-bar" [style.width.%]="overallCompletionPct"></div>
-            </div>
           </div>
           <div class="big-counter clickable checked" [class.active]="filterMode === 'checked'" (click)="setFilterMode('checked')" title="Đã kiểm tra">
             <div class="big-num">{{ checkedMaterials }}</div>
@@ -512,9 +509,6 @@
         <div class="counter-info">
           <div class="counter-label">TỔNG MÃ (DS)</div>
           <div class="counter-value">{{ dsTotalMaterials }}</div>
-          <div class="ds-total-progress" aria-hidden="true">
-            <div class="ds-total-progress-bar" [style.width.%]="getDsOverallCompletionPct()"></div>
-          </div>
         </div>
       </div>
       <div class="counter-box checked-box clickable" (click)="openDsCounterList('checked')" title="Đã kiểm (DS)">

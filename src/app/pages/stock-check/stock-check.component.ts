@@ -4,7 +4,7 @@ import { AngularFireStorage } from '@angular/fire/compat/storage';
 import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { takeUntil, first, filter, skip, debounceTime } from 'rxjs/operators';
-import * as XLSX from 'xlsx';
+import type * as XLSXNs from 'xlsx';
 import * as firebase from 'firebase/compat/app';
 import { environment } from '../../../environments/environment';
 import { Router } from '@angular/router';
@@ -154,6 +154,12 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
   /** Tránh load lại inventory nhiều lần (valueChanges realtime gây nặng) */
   private inventoryLoadedFactory: 'ASM1' | 'ASM2' | null = null;
+
+  /** Cache dynamic import XLSX — chỉ tải khi lần đầu cần export, không ảnh hưởng initial bundle */
+  private _xlsxNs: Promise<typeof XLSXNs> | null = null;
+  private xlsxLib(): Promise<typeof XLSXNs> {
+    return (this._xlsxNs ??= import('xlsx') as Promise<typeof XLSXNs>);
+  }
 
   /** Highlight (viền) mã vừa scan, không reorder list */
   private lastScannedHighlightKey: string = '';
@@ -671,6 +677,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       detail.sort((a, b) => String(b['Date Check'] || '').localeCompare(String(a['Date Check'] || ''), 'vi'));
 
       // ===== Write workbook =====
+      const XLSX = await this.xlsxLib();
       const wb = XLSX.utils.book_new();
       const ws1 = XLSX.utils.json_to_sheet(pxkRows);
       ws1['!cols'] = [
@@ -3107,19 +3114,22 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     if (!codes.length) return;
     const standardPackingMap = new Map<string, string>();
     try {
-      const batchSize = 100;
-      for (let i = 0; i < codes.length; i += batchSize) {
-        const chunk = codes.slice(i, i + batchSize);
-        const snaps = await Promise.all(
-          chunk.map(code => this.firestore.collection('materials').doc(code).get().toPromise())
-        );
-        snaps.forEach((doc, idx) => {
-          if (doc && doc.exists) {
-            const data = doc.data();
-            const sp = data?.['standardPacking'];
-            if (sp != null) standardPackingMap.set(chunk[idx], sp.toString());
-          }
-        });
+      // Dùng whereIn (chunks 10) thay vì N individual doc reads — giảm số round-trip Firestore
+      const IN_LIMIT = 10; // Giới hạn Firestore 'in' operator
+      for (let i = 0; i < codes.length; i += IN_LIMIT) {
+        const chunk = codes.slice(i, i + IN_LIMIT);
+        const snap = await this.firestore
+          .collection('materials', ref =>
+            ref.where(firebase.default.firestore.FieldPath.documentId(), 'in', chunk)
+          )
+          .get()
+          .toPromise();
+        if (snap && !snap.empty) {
+          snap.forEach(doc => {
+            const sp = (doc.data() as any)?.['standardPacking'];
+            if (sp != null) standardPackingMap.set(doc.id, sp.toString());
+          });
+        }
       }
       this.allMaterials.forEach(m => {
         const sp = standardPackingMap.get(m.materialCode);
@@ -4122,7 +4132,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   /** Tải template Excel KHSX (1 cột: Mã hàng) */
-  downloadKhsxTemplate(): void {
+  async downloadKhsxTemplate(): Promise<void> {
+    const XLSX = await this.xlsxLib();
     const templateData = [{ 'Mã hàng': 'A001234' }, { 'Mã hàng': 'B056789' }];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(templateData);
@@ -4134,33 +4145,35 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Xử lý chọn file KHSX để import */
   onKhsxFileSelected(event: any): void {
     const file: File = event.target.files[0];
+    event.target.value = ''; // Reset input ngay để có thể chọn lại cùng file
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e: any) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: any[] = XLSX.utils.sheet_to_json(ws);
-        const codes: string[] = rows
-          .map(row => {
-            const val = row['Mã hàng'] || row['MA HANG'] || row['ma hang'] || Object.values(row)[0];
-            return val ? String(val).trim().toUpperCase() : '';
-          })
-          .filter(c => c.length > 0);
-        if (codes.length === 0) {
-          alert('❌ Không tìm thấy dữ liệu mã hàng trong file. Vui lòng kiểm tra cột "Mã hàng".');
-          return;
+    // Pre-load XLSX trước khi tạo FileReader để đảm bảo module sẵn sàng trong callback
+    void this.xlsxLib().then(XLSX => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows: any[] = XLSX.utils.sheet_to_json(ws);
+          const codes: string[] = rows
+            .map(row => {
+              const val = row['Mã hàng'] || row['MA HANG'] || row['ma hang'] || Object.values(row)[0];
+              return val ? String(val).trim().toUpperCase() : '';
+            })
+            .filter(c => c.length > 0);
+          if (codes.length === 0) {
+            alert('❌ Không tìm thấy dữ liệu mã hàng trong file. Vui lòng kiểm tra cột "Mã hàng".');
+            return;
+          }
+          this.saveKhsxCodes(codes);
+        } catch (err) {
+          console.error('❌ Error reading KHSX file:', err);
+          alert('❌ Lỗi khi đọc file Excel.');
         }
-        this.saveKhsxCodes(codes);
-      } catch (err) {
-        console.error('❌ Error reading KHSX file:', err);
-        alert('❌ Lỗi khi đọc file Excel.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    // Reset input để có thể chọn lại cùng file
-    event.target.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    });
   }
 
   /** Lưu danh sách mã KHSX vào Firebase (ghi đè dữ liệu cũ) */
@@ -4399,7 +4412,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this._uncheckedMaterials = materials.length - checkedOrChangedKeys.size;
   }
 
-  exportRackReport(): void {
+  async exportRackReport(): Promise<void> {
     if (this.rackStats.length === 0) return;
 
     const exportData = this.rackStats.map(r => ({
@@ -4410,6 +4423,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       'Chưa kiểm':       r.unchecked,
     }));
 
+    const XLSX = await this.xlsxLib();
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportData);
     ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 12 }];
@@ -4420,7 +4434,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /**
    * Export stock check report to Excel
    */
-  exportStockCheckReport(): void {
+  async exportStockCheckReport(): Promise<void> {
     if (this.allMaterials.length === 0) {
       alert('Không có dữ liệu để xuất!');
       return;
@@ -4450,8 +4464,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     });
 
     // Create workbook
+    const XLSX = await this.xlsxLib();
     const wb = XLSX.utils.book_new();
-    
+
     // Create main sheet
     const ws = XLSX.utils.json_to_sheet(exportData);
     
@@ -4842,6 +4857,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         };
       });
 
+      const XLSX = await this.xlsxLib();
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
@@ -5006,6 +5022,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       };
     });
 
+    const XLSX = await this.xlsxLib();
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportData);
 
@@ -5150,6 +5167,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         };
       });
 
+      const XLSX = await this.xlsxLib();
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
@@ -5331,6 +5349,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         };
       });
 
+      const XLSX = await this.xlsxLib();
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
       ws['!cols'] = [
@@ -5442,8 +5461,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
 
     try {
       const buf = await file.arrayBuffer();
+      const XLSX = await this.xlsxLib();
       const wb = XLSX.read(buf, { type: 'array' });
-      const meta = this.parseMergedReportMetaFromWorkbook(wb);
+      const meta = this.parseMergedReportMetaFromWorkbook(XLSX, wb);
       if (!meta) {
         alert(
           'Không đọc được sheet “Tóm tắt” trong file.\nChọn đúng file Excel vừa xuất từ nút “Tháng … (gộp 1 file)”.'
@@ -5479,7 +5499,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       const url = await firstValueFrom(ref.getDownloadURL());
 
       const docId = this.monthlyReportDocId(this.selectedFactory, meta.year, meta.month);
-      const rowCount = meta.rowCount > 0 ? meta.rowCount : this.countThangSheetDataRows(wb, mm);
+      const rowCount = meta.rowCount > 0 ? meta.rowCount : this.countThangSheetDataRows(XLSX, wb, mm);
 
       await this.firestore
         .collection(this.MONTHLY_REPORTS_COLLECTION)
@@ -5529,7 +5549,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return Array.from(years);
   }
 
-  private parseMergedReportMetaFromWorkbook(wb: XLSX.WorkBook): {
+  private parseMergedReportMetaFromWorkbook(XLSX: typeof XLSXNs, wb: any): {
     factory: string;
     year: number;
     month: number;
@@ -5537,7 +5557,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     rowCount: number;
   } | null {
     const sheetName =
-      wb.SheetNames.find(n => n === 'Tóm tắt' || n === 'Tom tat' || n.toLowerCase() === 'tóm tắt') || 'Tóm tắt';
+      wb.SheetNames.find((n: string) => n === 'Tóm tắt' || n === 'Tom tat' || n.toLowerCase() === 'tóm tắt') || 'Tóm tắt';
     const ws = wb.Sheets[sheetName];
     if (!ws) return null;
     const rows = XLSX.utils.sheet_to_json<{ [k: string]: unknown }>(ws, { defval: '' });
@@ -5558,9 +5578,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return { factory, year, month, dayCount, rowCount };
   }
 
-  private countThangSheetDataRows(wb: XLSX.WorkBook, mm: string): number {
+  private countThangSheetDataRows(XLSX: typeof XLSXNs, wb: any, mm: string): number {
     const name =
-      wb.SheetNames.find(n => n === `Thang_${mm}` || /^Thang_/i.test(n)) || wb.SheetNames.find(n => n.startsWith('Thang'));
+      wb.SheetNames.find((n: string) => n === `Thang_${mm}` || /^Thang_/i.test(n)) || wb.SheetNames.find((n: string) => n.startsWith('Thang'));
     if (!name) return 0;
     const ws = wb.Sheets[name];
     const data = XLSX.utils.sheet_to_json(ws);
@@ -6097,31 +6117,20 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       }
     });
 
+    // Dùng allMaterials đã tải sẵn trong memory — tránh truy vấn Firestore thừa lần 2
     const inventoryMap = new Map<string, { materialCode: string; inventoryStock: number }>();
-    const invSnap = await this.firestore
-      .collection('inventory-materials', ref => ref.where('factory', '==', this.selectedFactory))
-      .get()
-      .toPromise();
-
-    if (invSnap && !invSnap.empty) {
-      invSnap.forEach(doc => {
-        const data = doc.data() as any;
-        const materialCode = String(data?.materialCode || '').trim().toUpperCase();
-        if (!materialCode) return;
-        const openingStock = Number(data?.openingStock ?? 0);
-        const quantity = Number(data?.quantity ?? 0);
-        const exported = Number(data?.exported ?? 0);
-        const xt = Number(data?.xt ?? 0);
-        const stock = openingStock + quantity - exported - xt;
-        const key = materialCode;
-        const existing = inventoryMap.get(key);
-        if (!existing) {
-          inventoryMap.set(key, { materialCode, inventoryStock: stock });
-        } else {
-          existing.inventoryStock += stock;
-        }
-      });
-    }
+    (this.allMaterials || []).forEach(mat => {
+      const materialCode = String(mat.materialCode || '').trim().toUpperCase();
+      if (!materialCode) return;
+      // mat.stock = openingStock + quantity - exported - xt (đã tính tại loadData)
+      const stock = Number(mat.stock ?? 0);
+      const existing = inventoryMap.get(materialCode);
+      if (!existing) {
+        inventoryMap.set(materialCode, { materialCode, inventoryStock: stock });
+      } else {
+        existing.inventoryStock += stock;
+      }
+    });
 
     const allKeys = new Set<string>([...checkedMap.keys(), ...inventoryMap.keys()]);
     const result: ReportCompareRow[] = [];

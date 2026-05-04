@@ -1,5 +1,32 @@
 <div class="main-content">
   <div class="container-fluid">
+    <!-- Dashboard Header (like screenshot) -->
+    <div class="dash-topbar">
+      <div class="dash-topbar__left">
+        <div class="dash-topbar__title">Warehouse Dashboard</div>
+        <div class="dash-topbar__sub">Real-time overview of warehouse performance</div>
+      </div>
+
+      <div class="dash-topbar__right">
+        <div class="dash-pill dash-pill--date" title="Date range (display)">
+          <i class="material-icons">event</i>
+          <span>{{ weekdays?.[0]?.date ? (weekdays[0].date | date:'dd/MM/yyyy') : '--/--/----' }} - {{ weekdays?.[weekdays.length-1]?.date ? (weekdays[weekdays.length-1].date | date:'dd/MM/yyyy') : '--/--/----' }}</span>
+        </div>
+
+        <div class="dash-pill dash-pill--factory">
+          <span class="dash-pill__label">Factory</span>
+          <select class="dash-select" [(ngModel)]="selectedFactory" (change)="onFactoryChange(selectedFactory)">
+            <option value="ASM1">ASM1</option>
+            <option value="ASM2">ASM2</option>
+          </select>
+        </div>
+
+        <button type="button" class="dash-iconbtn dash-iconbtn--home" (click)="goMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+        </button>
+      </div>
+    </div>
+
     <!-- Mobile Logout Button -->
     <div class="mobile-logout-btn">
       <button class="btn-logout-mobile" (click)="logout()" title="Đăng xuất">
@@ -9,318 +36,329 @@
     </div>
     
     <!-- KPI Cards Section - moved up close to navbar -->
-    <div class="row mt-1 mb-4">
-      <!-- Work Order -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3 kpi-card kpi-card-workorder">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <p class="text-uppercase small mb-1 kpi-label">Work Order</p>
-              <h3 class="fw-bold kpi-value">{{ workOrder }}</h3>
-              <p class="text-muted small">Hoàn thành / Tổng</p>
-            </div>
-            <div class="kpi-icon">
-              <i class="material-icons">assignment</i>
-            </div>
+    <div class="dash-grid dash-grid--kpis">
+      <div class="card p-3 kpi-card kpi-card-workorder">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <p class="text-uppercase small mb-1 kpi-label">WORK ORDER</p>
+            <h3 class="fw-bold kpi-value">{{ workOrder }}</h3>
+            <p class="text-muted small">Hoàn thành / Tổng</p>
+          </div>
+          <div class="kpi-icon">
+            <i class="material-icons">assignment</i>
           </div>
         </div>
+        <div class="kpi-spark kpi-spark--green"></div>
       </div>
 
-      <!-- Shipment -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3 kpi-card kpi-card-shipment">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <p class="text-uppercase small mb-1 kpi-label">Shipment</p>
-              <h3 class="fw-bold kpi-value">{{ shipment }}</h3>
-              <p class="text-muted small">Đã Ship / Tổng số</p>
-            </div>
-            <div class="kpi-icon">
-              <i class="material-icons">conveyor_belt</i>
-            </div>
+      <div class="card p-3 kpi-card kpi-card-shipment">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <p class="text-uppercase small mb-1 kpi-label">SHIPMENT</p>
+            <h3 class="fw-bold kpi-value">{{ shipment }}</h3>
+            <p class="text-muted small">Đã Ship / Tổng số</p>
+          </div>
+          <div class="kpi-icon">
+            <i class="material-icons">inventory_2</i>
           </div>
         </div>
+        <div class="kpi-spark kpi-spark--amber"></div>
       </div>
 
-      <!-- OTD -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3 kpi-card kpi-card-otd">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <p class="text-uppercase small mb-1 kpi-label">OTD</p>
-              <h3 class="fw-bold kpi-value">100%</h3>
-              <p class="text-muted small">This month</p>
-            </div>
-            <div class="kpi-icon">
-              <i class="material-icons">check_circle</i>
-            </div>
+      <div class="card p-3 kpi-card kpi-card-otd">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <p class="text-uppercase small mb-1 kpi-label">OTD</p>
+            <h3 class="fw-bold kpi-value">100%</h3>
+            <p class="text-muted small">This month</p>
+          </div>
+          <div class="kpi-icon">
+            <i class="material-icons">track_changes</i>
           </div>
         </div>
+        <div class="kpi-spark kpi-spark--blue"></div>
       </div>
 
-      <!-- Safety -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="card p-3 kpi-card kpi-card-safety">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <p class="text-uppercase small mb-1 kpi-label">Safety</p>
-              <h3 class="fw-bold kpi-value">100%</h3>
-              <p class="text-muted small">Since Dec-2018</p>
-            </div>
-            <div class="kpi-icon">
-              <i class="material-icons">health_and_safety</i>
-            </div>
+      <div class="card p-3 kpi-card kpi-card-safety">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <p class="text-uppercase small mb-1 kpi-label">SAFETY</p>
+            <h3 class="fw-bold kpi-value">100%</h3>
+            <p class="text-muted small">Since Dec-2018</p>
+          </div>
+          <div class="kpi-icon">
+            <i class="material-icons">health_and_safety</i>
           </div>
         </div>
+        <div class="kpi-spark kpi-spark--red"></div>
       </div>
     </div>
 
 
 
-    <!-- Safety Stock Level & Rack Warnings Row -->
-    <div class="row mt-3">
-      <!-- Safety Stock Level -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="safety-stock-container">
-          <div class="safety-stock-box">
-            <div class="box-header">
-              <h5>
-                <i class="material-icons">security</i>
-                Safety Stock Level
-              </h5>
-              <button class="refresh-btn" 
-                      (click)="refreshData()" 
-                      aria-label="Làm mới dữ liệu"
-                      title="Làm mới dữ liệu">
-                <i class="material-icons">refresh</i>
-              </button>
+    <!-- Row: Work Order Status (7 days) / Shipment Status (7 days) / Putaway Staging Area -->
+    <div class="dash-grid dash-grid--triple">
+      <div class="card dash-widget">
+        <div class="dash-widget__head">
+          <div class="dash-widget__headrow">
+            <div class="dash-widget__title">
+              <i class="material-icons">stacked_bar_chart</i>
+              Work Order Status (7 days)
             </div>
-            
-            <div class="weekdays-container">
-              <div class="weekdays-row">
-                <div *ngFor="let weekday of weekdays; let i = index" 
-                     [class]="getWeekdayClass(weekday)"
-                     class="weekday-item">
-                  <div class="weekday-name">{{ weekday.name }}</div>
-                  <div class="weekday-day">{{ getDayOfMonth(weekday.date) }}</div>
-                  <div class="weekday-month">{{ getMonth(weekday.date) }}</div>
-                </div>
-              </div>
-            </div>
+            <div class="dash-widget__pill">7 ngày qua <i class="material-icons">expand_more</i></div>
           </div>
         </div>
-      </div>
-      
-      <!-- Rack Utilization Warnings -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="rack-warnings-container">
-          <div class="rack-warnings-box">
-            <div class="box-header">
-              <h5>
-                <i class="material-icons">warning</i>
-                Rack Utilization Warnings
-              </h5>
-            </div>
-            
-            <div class="warnings-summary" *ngIf="!rackWarningsLoading">
-              <div *ngIf="rackWarnings.length === 0" class="all-clear">
-                <i class="material-icons">check_circle</i>
-                <span>All Clear</span>
-              </div>
-              
-              <div *ngIf="rackWarnings.length > 0" class="summary-counts">
-                <div class="count-item critical" *ngIf="criticalCount > 0">
-                  <div class="count-number">{{ criticalCount }}</div>
-                  <div class="count-label">Critical</div>
-                </div>
-                
-                <div class="count-item warning" *ngIf="warningCount > 0">
-                  <div class="count-number">{{ warningCount }}</div>
-                  <div class="count-label">Warning</div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="warnings-loading" *ngIf="rackWarningsLoading">
-              <i class="material-icons rotating">refresh</i>
-              <span>Loading...</span>
-            </div>
+        <div class="card-body">
+          <div class="wo-chart-wrap">
+            <canvas id="workOrderStatusChart"></canvas>
           </div>
         </div>
       </div>
 
-      <!-- IQC Materials by Week -->
-      <div class="col-lg-3 col-md-6 col-sm-6">
-        <div class="iqc-week-container">
-          <div class="iqc-week-box" 
-               (click)="openIQCMaterialsModal()"
-               style="cursor: pointer;"
-               title="Click để xem Putaway Staging Area">
-            <div class="box-header">
-              <h5>
-                <i class="material-icons">inventory_2</i>
-                Putaway Staging Area
-              </h5>
+      <div class="card dash-widget">
+        <div class="dash-widget__head">
+          <div class="dash-widget__headrow">
+            <div class="dash-widget__title">
+              <i class="material-icons">local_shipping</i>
+              Shipment Status (7 days)
             </div>
-            
-            <div class="iqc-week-summary" *ngIf="!iqcLoading">
-              <div class="iqc-weeks-row">
-                <div *ngFor="let week of iqcWeekData" class="iqc-week-item">
-                  <div class="iqc-week-count">{{ week.count }}</div>
-                  <div class="iqc-week-label">{{ week.week }}</div>
+            <div class="dash-widget__pill">7 ngày qua <i class="material-icons">expand_more</i></div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="ship-list" *ngIf="shipmentStatus.length; else noShipTpl">
+            <div class="ship-item" *ngFor="let row of shipmentStatus | slice:0:4">
+              <div class="ship-date">
+                <div class="ship-date__d">{{ row.shipDate }}</div>
+                <div class="ship-date__w">{{ row.shipDate.includes('/') ? '' : '' }}</div>
+              </div>
+              <div class="ship-main">
+                <div class="ship-code">Shipment {{ row.shipment }}</div>
+                <div class="ship-meta">
+                  <span>Customer: —</span>
+                  <span class="dot">·</span>
+                  <span>Carton: {{ row.carton }}</span>
+                </div>
+              </div>
+              <div class="ship-badge" [class.ship-badge--done]="isShipDone(row.statusDetail)" [class.ship-badge--warn]="isShipWarn(row.statusDetail)">
+                {{ shipBadgeText(row.statusDetail) }}
+              </div>
+            </div>
+            <button type="button" class="ship-more" (click)="goShipment()">
+              Xem tất cả shipments →
+            </button>
+          </div>
+          <ng-template #noShipTpl>
+            <div class="text-center text-muted">No shipments for the next 7 days.</div>
+          </ng-template>
+        </div>
+      </div>
+
+      <div class="card dash-widget dash-widget--clickable" (click)="openIQCMaterialsModal()" title="Click để xem Putaway Staging Area">
+        <div class="dash-widget__head">
+          <div class="dash-widget__headrow">
+            <div class="dash-widget__title">
+              <i class="material-icons">inventory_2</i>
+              Putaway Staging Area
+            </div>
+            <div class="dash-widget__pill">7 ngày qua <i class="material-icons">expand_more</i></div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="putaway-wrap" *ngIf="!iqcLoading">
+            <div class="putaway-weeks">
+              <div *ngFor="let w of iqcWeekSparkData" class="putaway-week">
+                <div class="putaway-week__count">{{ w.count }}</div>
+                <div class="putaway-week__label">{{ w.week }}</div>
+                <div class="putaway-spark" aria-hidden="true">
+                  <div *ngFor="let b of w.bars" class="putaway-bar" [style.height.%]="b"></div>
                 </div>
               </div>
             </div>
-            
-            <div class="iqc-loading" *ngIf="iqcLoading">
-              <i class="material-icons rotating">refresh</i>
-              <span>Loading...</span>
-            </div>
+          </div>
+          <div class="iqc-loading" *ngIf="iqcLoading">
+            <i class="material-icons rotating">refresh</i>
+            <span>Loading...</span>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Charts Section - 3 charts in a row -->
-    <div class="row mt-3">
-      <div class="col-md-4">
-        <div class="card card-chart chart-card chart-card-green">
-          <div class="card-body chart-body">
-            <div class="chart-badge chart-badge-green">
-              Target Achieved
-            </div>
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2">precision_manufacturing</i> Materials Accuracy
-            </h4>
-            <canvas id="dailySalesChart"></canvas>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">inventory</i> Inventory stocktaking monthly
-            </div>
-          </div>
+    <div class="dash-grid dash-grid--triple">
+      <div class="card card-chart chart-card chart-card-green">
+        <div class="card-body chart-body">
+          <div class="chart-badge chart-badge-green">Target Achieved</div>
+          <h4 class="card-title d-flex align-items-center">
+            <i class="material-icons me-2">precision_manufacturing</i> Materials Accuracy
+          </h4>
+          <canvas id="dailySalesChart"></canvas>
+        </div>
+        <div class="card-footer">
+          <div class="stats"><i class="material-icons">inventory</i> Inventory stocktaking monthly</div>
         </div>
       </div>
 
-      <div class="col-md-4">
-        <div class="card card-chart chart-card chart-card-blue">
-          <div class="card-body chart-body">
-            <div class="chart-badge chart-badge-green">
-              Target Achieved
-            </div>
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2">verified</i> Finished Goods Accuracy
-            </h4>
-            <canvas id="websiteViewsChart"></canvas>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">inventory</i> Inventory stocktaking monthly
-            </div>
-          </div>
+      <div class="card card-chart chart-card chart-card-blue">
+        <div class="card-body chart-body">
+          <div class="chart-badge chart-badge-green">Target Achieved</div>
+          <h4 class="card-title d-flex align-items-center">
+            <i class="material-icons me-2">verified</i> Finished Goods Accuracy
+          </h4>
+          <canvas id="websiteViewsChart"></canvas>
+        </div>
+        <div class="card-footer">
+          <div class="stats"><i class="material-icons">inventory</i> Inventory stocktaking monthly</div>
         </div>
       </div>
 
-      <div class="col-md-4">
-        <div class="card card-chart chart-card chart-card-amber">
-          <div class="card-body chart-body">
-            <div class="chart-badge chart-badge-amber">
-              3/12 tháng
-            </div>
-            <h4 class="card-title d-flex align-items-center">
-              <i class="material-icons me-2">autorenew</i> FGs Inventory Turnover 2026
-            </h4>
-            <canvas id="completedTasksChart"></canvas>
-          </div>
-          <div class="card-footer">
-            <div class="stats">
-              <i class="material-icons">access_time</i> Target: 14 | Current: 2.22
-            </div>
-          </div>
+      <div class="card card-chart chart-card chart-card-amber">
+        <div class="card-body chart-body">
+          <div class="chart-badge chart-badge-amber">3/12 tháng</div>
+          <h4 class="card-title d-flex align-items-center">
+            <i class="material-icons me-2">autorenew</i> FGs Inventory Turnover 2026
+          </h4>
+          <canvas id="completedTasksChart"></canvas>
+        </div>
+        <div class="card-footer">
+          <div class="stats"><i class="material-icons">access_time</i> Target: 14 | Current: 2.22</div>
         </div>
       </div>
     </div>
 
-    <!-- Work Order Status -->
-    <div class="row dashboard-status-boards">
-      <div class="col-lg-6 col-md-12">
-        <div class="card">
-          <div class="custom-card-header custom-card-header-purple">
-            <h4 class="custom-card-title">Work Order Status - {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }}</h4>
-            <p class="custom-card-desc">Status for the next 7 days</p>
-          </div>
-          <div class="card-body">
-            <table class="table table-bordered table-striped workorder-status-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Done</th>
-                  <th>Waiting</th>
-                  <th>Kitting</th>
-                  <th>Ready</th>
-                  <th>Delay</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="yesterday-overdue-row">
-                  <td class="yesterday-label">Hôm qua (trễ)</td>
-                  <td class="empty-cell">—</td>
-                  <td class="empty-cell">—</td>
-                  <td class="empty-cell">—</td>
-                  <td class="empty-cell">—</td>
-                  <td [class]="yesterdayOverdueCount > 0 ? 'has-value overdue-value' : 'empty-cell'">
-                    {{ yesterdayOverdueCount > 0 ? yesterdayOverdueCount : '—' }}
-                  </td>
-                </tr>
-                <tr *ngFor="let row of workOrderStatus">
-                  <td [title]="row.code">{{ row.code }}</td>
-                  <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
-                  <td [class]="row.waitingClass" [title]="row.note">{{ row.note }}</td>
-                  <td [class]="row.kittingClass" [title]="row.kitting">{{ row.kitting }}</td>
-                  <td [class]="row.readyClass" [title]="row.ready">{{ row.ready }}</td>
-                  <td [class]="row.delayClass" [title]="row.extra">{{ row.extra }}</td>
-                </tr>
-                <tr *ngIf="workOrderStatus.length === 0">
-                  <td colspan="6" class="text-center text-muted">No work orders found for the selected factory</td>
-                </tr>
-              </tbody>
-            </table>
+    <!-- Row: Safety Stock Level + Rack Utilization Warnings -->
+    <div class="dash-grid dash-grid--double">
+      <div class="safety-stock-box card">
+        <div class="box-header">
+          <h5>
+            <i class="material-icons">security</i>
+            Safety Stock Level
+          </h5>
+          <button class="refresh-btn" (click)="refreshData()" aria-label="Làm mới dữ liệu" title="Làm mới dữ liệu">
+            <i class="material-icons">refresh</i>
+          </button>
+        </div>
+
+        <div class="weekdays-container">
+          <div class="weekdays-row">
+            <div *ngFor="let weekday of weekdays; let i = index" [class]="getWeekdayClass(weekday)" class="weekday-item">
+              <div class="weekday-name">{{ weekday.name }}</div>
+              <div class="weekday-day">{{ getDayOfMonth(weekday.date) }}</div>
+              <div class="weekday-month">{{ getMonth(weekday.date) }}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Shipment Status -->
-      <div class="col-lg-6 col-md-12">
-        <div class="card">
-          <div class="custom-card-header custom-card-header-amber">
-            <h4 class="custom-card-title">Shipment Status</h4>
-            <p class="custom-card-desc">Status for the next 7 days</p>
+      <div class="rack-warnings-box card">
+        <div class="box-header">
+          <h5>
+            <i class="material-icons">warning</i>
+            Rack Utilization Warnings
+          </h5>
+        </div>
+
+        <div class="warnings-summary" *ngIf="!rackWarningsLoading">
+          <div *ngIf="rackWarnings.length === 0" class="all-clear">
+            <i class="material-icons">check_circle</i>
+            <span>All Clear</span>
           </div>
-          <div class="card-body table-responsive">
-            <table class="table table-bordered table-striped workorder-status-table">
-              <thead>
-                <tr>
-                  <th>Ship Date</th>
-                  <th>Shipment</th>
-                  <th>Customer</th>
-                  <th>Carton</th>
-                  <th>Status Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of shipmentStatus">
-                  <td [title]="row.shipDate">{{ row.shipDate }}</td>
-                  <td [title]="row.shipment">{{ row.shipment }}</td>
-                  <td [title]="row.customer">{{ row.customer }}</td>
-                  <td [title]="row.carton">{{ row.carton }}</td>
-                  <td [title]="row.statusDetail">{{ row.statusDetail }}</td>
-                </tr>
-                <tr *ngIf="shipmentStatus.length === 0">
-                  <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
-                </tr>
-              </tbody>
-            </table>
+
+          <div *ngIf="rackWarnings.length > 0" class="summary-counts">
+            <div class="count-item critical" *ngIf="criticalCount > 0">
+              <div class="count-number">{{ criticalCount }}</div>
+              <div class="count-label">Critical</div>
+            </div>
+
+            <div class="count-item warning" *ngIf="warningCount > 0">
+              <div class="count-number">{{ warningCount }}</div>
+              <div class="count-label">Warning</div>
+            </div>
           </div>
+        </div>
+
+        <div class="warnings-loading" *ngIf="rackWarningsLoading">
+          <i class="material-icons rotating">refresh</i>
+          <span>Loading...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Details tables (bottom) -->
+    <div class="dash-grid dash-grid--double">
+      <div class="card">
+        <div class="custom-card-header custom-card-header-purple">
+          <h4 class="custom-card-title">Work Order Status - {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }} (Details)</h4>
+          <p class="custom-card-desc">Status for the next 7 days</p>
+        </div>
+        <div class="card-body">
+          <table class="table table-bordered table-striped workorder-status-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Done</th>
+                <th>Waiting</th>
+                <th>Kitting</th>
+                <th>Ready</th>
+                <th>Delay</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="yesterday-overdue-row">
+                <td class="yesterday-label">Hôm qua (trễ)</td>
+                <td class="empty-cell">—</td>
+                <td class="empty-cell">—</td>
+                <td class="empty-cell">—</td>
+                <td class="empty-cell">—</td>
+                <td [class]="yesterdayOverdueCount > 0 ? 'has-value overdue-value' : 'empty-cell'">
+                  {{ yesterdayOverdueCount > 0 ? yesterdayOverdueCount : '—' }}
+                </td>
+              </tr>
+              <tr *ngFor="let row of workOrderStatus">
+                <td [title]="row.code">{{ row.code }}</td>
+                <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
+                <td [class]="row.waitingClass" [title]="row.note">{{ row.note }}</td>
+                <td [class]="row.kittingClass" [title]="row.kitting">{{ row.kitting }}</td>
+                <td [class]="row.readyClass" [title]="row.ready">{{ row.ready }}</td>
+                <td [class]="row.delayClass" [title]="row.extra">{{ row.extra }}</td>
+              </tr>
+              <tr *ngIf="workOrderStatus.length === 0">
+                <td colspan="6" class="text-center text-muted">No work orders found for the selected factory</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="custom-card-header custom-card-header-amber">
+          <h4 class="custom-card-title">Shipment Status (Details)</h4>
+          <p class="custom-card-desc">Status for the next 7 days</p>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-bordered table-striped workorder-status-table">
+            <thead>
+              <tr>
+                <th>Ship Date</th>
+                <th>Shipment</th>
+                <th>Customer</th>
+                <th>Carton</th>
+                <th>Status Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of shipmentStatus">
+                <td [title]="row.shipDate">{{ row.shipDate }}</td>
+                <td [title]="row.shipment">{{ row.shipment }}</td>
+                <td [title]="row.customer">{{ row.customer }}</td>
+                <td [title]="row.carton">{{ row.carton }}</td>
+                <td [title]="row.statusDetail">{{ row.statusDetail }}</td>
+              </tr>
+              <tr *ngIf="shipmentStatus.length === 0">
+                <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
