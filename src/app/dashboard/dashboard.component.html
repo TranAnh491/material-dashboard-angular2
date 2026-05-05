@@ -3,8 +3,17 @@
     <!-- Dashboard Header (like screenshot) -->
     <div class="dash-topbar">
       <div class="dash-topbar__left">
-        <div class="dash-topbar__title">Warehouse Dashboard</div>
-        <div class="dash-topbar__sub">Real-time overview of warehouse performance</div>
+        <img
+          class="dash-topbar__logo"
+          src="assets/img/company-logo.svg"
+          width="48"
+          height="48"
+          alt="Company logo"
+        />
+        <div class="dash-topbar__headlines">
+          <div class="dash-topbar__title">Warehouse Dashboard</div>
+          <div class="dash-topbar__sub">Real-time overview of warehouse performance</div>
+        </div>
       </div>
 
       <div class="dash-topbar__right">
@@ -97,22 +106,48 @@
 
 
     <!-- Hàng widget: Work Order / Shipment / Putaway (bố cục + typography theo dashboard mẫu) -->
-    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order, shipment, putaway">
+    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order weekly heatmap, shipment, putaway">
       <article class="card dash-widget wo-chart-widget dash-surface-card">
         <header class="dash-widget__head">
           <div class="dash-widget__headrow">
             <div class="dash-widget__title dash-widget__title--with-icon">
               <span class="dash-widget__ico dash-widget__ico--blue" aria-hidden="true">
-                <i class="material-icons">stacked_bar_chart</i>
+                <i class="material-icons">apps</i>
               </span>
-              <span class="dash-widget__title-text">Work Order Status (7 days)</span>
+              <span class="dash-widget__title-text">Work Order Status (weekly)</span>
             </div>
-            <div class="dash-widget__pill"><span>7 ngày qua</span><i class="material-icons">expand_more</i></div>
+            <div class="dash-widget__pill"><span>T2–T7 · weekly</span><i class="material-icons">expand_more</i></div>
           </div>
         </header>
         <div class="card-body card-body--wo-chart">
-          <div class="wo-chart-wrap">
-            <canvas id="workOrderStatusChart"></canvas>
+          <div class="wo-chart-wrap wo-chart-wrap--heatmap">
+            <div class="wo-heatmap-inner" *ngIf="woHeatmapDays.length">
+              <div class="putaway-heatmap wo-heatmap" aria-label="Work order weekly heatmap">
+                <div *ngFor="let col of woHeatmapDays" class="putaway-heatmap__col">
+                  <div class="putaway-heatmap__head">
+                    <span class="putaway-heatmap__week">{{ col.weekday }}</span>
+                    <span class="wo-heatmap__date">{{ col.label }}</span>
+                    <span class="putaway-heatmap__cnt wo-heatmap__cnt">{{ col.total }}</span>
+                  </div>
+                  <div class="putaway-heatmap__cells">
+                    <div
+                      *ngFor="let c of col.cells"
+                      class="putaway-heatmap__cell wo-heatmap__cell"
+                      [ngClass]="'wo-heatmap__cell--' + c.kind"
+                      [attr.title]="woHeatCellTitle(c.kind)"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <div class="wo-heatmap-legend" *ngIf="woHeatmapHasCells">
+                <span><span class="wo-legend-dot wo-legend-dot--done" aria-hidden="true"></span>Done</span>
+                <span><span class="wo-legend-dot wo-legend-dot--waiting" aria-hidden="true"></span>Waiting</span>
+                <span><span class="wo-legend-dot wo-legend-dot--kitting" aria-hidden="true"></span>Kitting</span>
+                <span><span class="wo-legend-dot wo-legend-dot--ready" aria-hidden="true"></span>Ready</span>
+                <span><span class="wo-legend-dot wo-legend-dot--delay" aria-hidden="true"></span>Delay</span>
+              </div>
+            </div>
+            <div *ngIf="!woHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
           </div>
         </div>
       </article>
@@ -343,7 +378,7 @@
               <i class="material-icons detail-header-ico detail-header-ico--green">assignment</i>
               Work Order Status - {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }} (Details)
             </h4>
-            <p class="custom-card-desc">Status for the next 7 days</p>
+            <p class="custom-card-desc">Weekly: Thứ 2 – Thứ 7 (6 ngày làm việc)</p>
           </div>
           <button type="button" class="detail-viewall-btn" (click)="navigateToTab('/work-order-status')">Xem tất cả</button>
         </div>

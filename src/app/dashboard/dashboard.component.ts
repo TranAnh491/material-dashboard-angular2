@@ -21,6 +21,16 @@ interface WorkOrderStatusRow {
   delayClass: string;
 }
 
+/** Heatmap weekly: mỗi ô = 1 WO theo trạng thái */
+type WoHeatKind = 'done' | 'waiting' | 'kitting' | 'ready' | 'delay';
+
+interface WoHeatmapDayCol {
+  label: string;
+  weekday: string;
+  total: number;
+  cells: { kind: WoHeatKind }[];
+}
+
 /** 1 ô heatmap = 1 SKU (mã+PO+IMD) trong tuần đó — Putaway staging */
 interface IqcHeatmapCell {
   materialCode: string;
@@ -52,6 +62,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrder = "...";
   shipment = "...";
   workOrderStatus: WorkOrderStatusRow[] = [];
+  /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
+  woHeatmapDays: WoHeatmapDayCol[] = [];
   yesterdayOverdueCount: number = 0;
   shipmentStatus: any[] = [];
 
@@ -131,7 +143,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   rackWarningsRefreshTime = 14400000; // 4 tiếng
 
   // Charts for widgets
-  private woStatusChart: Chart | null = null;
   private fgTurnoverChart: Chart | null = null;
 
   /** % Accuracy hiển thị “tháng này” (đồng bộ với donut) */
@@ -146,10 +157,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get fgTurnoverYtd(): number {
     return this.fgTurnoverMonthValues.reduce((a, b) => a + b, 0);
   }
-
-  // Accuracy targets (donut + “Mục tiêu” trong chart)
-  matAccuracyTarget = 99;
-  fgAccuracyTarget = 98;
 
   // Shipment table pagination
   shipmentCurrentPage = 1;
@@ -275,12 +282,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     if (this.rackWarningsRefreshInterval) clearInterval(this.rackWarningsRefreshInterval);
-    if (this.woStatusChart) {
-      try {
-        this.woStatusChart.destroy();
-      } catch {}
-      this.woStatusChart = null;
-    }
     if (this.fgTurnoverChart) {
       try {
         this.fgTurnoverChart.destroy();
@@ -343,7 +344,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Donut tròn đầy đủ — % tháng này ở giữa */
-  createAccuracyDonutChart(canvasId: string, label: string, percentage: number, color: string = '#ff9800', targetPct?: number) {
+  createAccuracyDonutChart(canvasId: string, label: string, percentage: number, color: string = '#ff9800') {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -393,12 +394,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           c.fillStyle = color;
           c.textAlign = 'center';
           c.textBaseline = 'middle';
-          c.fillText(percentageText, cx, cy - (targetPct !== undefined ? 8 : 0));
-          if (targetPct !== undefined) {
-            c.font = `500 10px Inter, system-ui, -apple-system, 'Segoe UI', sans-serif`;
-            c.fillStyle = 'rgba(15,23,42,0.48)';
-            c.fillText(`Mục tiêu: ${targetPct}%`, cx, cy + 14);
-          }
+          c.fillText(percentageText, cx, cy);
           c.restore();
         }
       }]
@@ -513,7 +509,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
         
         // Filter by factory only.
-        // Date counting (next 7 days / yesterday overdue) is computed by deliveryDate (Ngày Giao NVL).
+        // Date counting (WO: Thứ 2–Thứ 7 tuần hiện tại / yesterday overdue) theo deliveryDate (Ngày Giao NVL).
         this.workOrders = workOrders.filter(wo => {
           const woFactory = wo.factory || 'ASM1';
           const normalizedFactory = (woFactory || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
@@ -595,18 +591,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
     console.log('Work order status breakdown (month):', statusBreakdown);
   }
 
+  /** Thứ 2 00:00 của tuần chứa `ref` (Thứ 7 = thứ Bảy, không tính Chủ nhật). */
+  private getMondayOfWeekContaining(ref: Date): Date {
+    const d = new Date(ref);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay(); // 0 CN … 6 T7
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
   private updateWorkOrderStatus() {
     this.workOrderStatus = [];
     const today = new Date();
     this.yesterdayOverdueCount = this.getYesterdayOverdueCount(today);
     
-    console.log('Updating work order status for next 7 days starting from:', today.toDateString());
+    const monday = this.getMondayOfWeekContaining(today);
+    console.log('Updating work order status for Mon–Sat of week:', monday.toDateString());
     console.log('Total work orders to process:', this.workOrders.length);
     
-    // Generate next 7 days
-    for (let i = 0; i < 7; i++) {
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + i);
+    // 6 ngày: Thứ 2 → Thứ 7 (không Chủ nhật)
+    for (let i = 0; i < 6; i++) {
+      const targetDate = new Date(monday);
+      targetDate.setDate(monday.getDate() + i);
       
       const dateStr = targetDate.toLocaleDateString('vi-VN', { 
         day: '2-digit', 
@@ -674,17 +681,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.log(`Date ${dateStr}: Done=${doneCount}, Waiting=${waitingCount}, Kitting=${kittingCount}, Ready=${readyCount}, Delay=${delayCount}`);
     }
     
-    console.log(`Updated Work Order Status for next 7 days:`, this.workOrderStatus);
+    console.log(`Updated Work Order Status (T2–T7, 6 ngày):`, this.workOrderStatus);
 
-    // Re-render stacked chart AFTER data is ready and view has painted.
-    // (When created too early, the canvas exists but chart gets empty/0px sizing.)
-    setTimeout(() => {
-      try {
-        this.createWorkOrderStatusStackedChart();
-      } catch (e) {
-        console.warn('Failed to render WorkOrderStatus chart', e);
-      }
-    }, 0);
+    this.rebuildWoHeatmapFromStatus();
+    this.cdr.detectChanges();
+  }
+
+  get woHeatmapHasCells(): boolean {
+    return (this.woHeatmapDays || []).some((d) => (d.cells?.length || 0) > 0);
+  }
+
+  woHeatCellTitle(kind: WoHeatKind): string {
+    const m: Record<WoHeatKind, string> = {
+      done: 'Done',
+      waiting: 'Waiting',
+      kitting: 'Kitting',
+      ready: 'Ready',
+      delay: 'Delay'
+    };
+    return m[kind] || kind;
+  }
+
+  private rebuildWoHeatmapFromStatus(): void {
+    const rows = this.workOrderStatus || [];
+    const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    this.woHeatmapDays = rows.map((row, idx) => {
+      const d = this.parseCellNumber(row.value);
+      const w = this.parseCellNumber(row.note);
+      const k = this.parseCellNumber(row.kitting);
+      const r = this.parseCellNumber(row.ready);
+      const dl = this.parseCellNumber(row.extra);
+      const cells: { kind: WoHeatKind }[] = [];
+      for (let i = 0; i < d; i++) cells.push({ kind: 'done' });
+      for (let i = 0; i < w; i++) cells.push({ kind: 'waiting' });
+      for (let i = 0; i < k; i++) cells.push({ kind: 'kitting' });
+      for (let i = 0; i < r; i++) cells.push({ kind: 'ready' });
+      for (let i = 0; i < dl; i++) cells.push({ kind: 'delay' });
+      return {
+        label: row.code,
+        weekday: vnDays[idx] ?? `D${idx + 1}`,
+        total: d + w + k + r + dl,
+        cells
+      };
+    });
   }
 
   private getYesterdayOverdueCount(today: Date): number {
@@ -840,24 +879,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.matAccuracyThisMonth = 99.85;
     this.fgAccuracyThisMonth = 100;
 
-    this.createAccuracyDonutChart(
-      'dailySalesChart',
-      'Materials Accuracy (%)',
-      this.matAccuracyThisMonth,
-      '#22c55e',
-      this.matAccuracyTarget
-    );
-    this.createAccuracyDonutChart(
-      'websiteViewsChart',
-      'Finished Goods Accuracy (%)',
-      this.fgAccuracyThisMonth,
-      '#3b82f6',
-      this.fgAccuracyTarget
-    );
+    this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', this.matAccuracyThisMonth, '#22c55e');
+    this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', this.fgAccuracyThisMonth, '#3b82f6');
 
     this.createFgTurnoverMonthlyBarChart('completedTasksChart');
-
-    this.createWorkOrderStatusStackedChart();
   }
 
   /** Cột theo tháng + đường target tháng (1.33) */
@@ -967,85 +992,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!s || s === '—' || s === '-') return 0;
     const n = Number(s);
     return Number.isFinite(n) ? n : 0;
-  }
-
-  private createWorkOrderStatusStackedChart(): void {
-    const canvas = document.getElementById('workOrderStatusChart') as HTMLCanvasElement;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const rows = this.workOrderStatus || [];
-    const labels = rows.map((r) => r.code);
-    const done = rows.map((r) => this.parseCellNumber(r.value));
-    const waiting = rows.map((r) => this.parseCellNumber(r.note));
-    const delay = rows.map((r) => this.parseCellNumber(r.extra));
-
-    if (this.woStatusChart) {
-      try {
-        this.woStatusChart.destroy();
-      } catch {}
-      this.woStatusChart = null;
-    }
-
-    this.woStatusChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Done', data: done, backgroundColor: '#22C55E', borderRadius: 6, borderSkipped: false, stack: 's' },
-          { label: 'Waiting', data: waiting, backgroundColor: '#3B82F6', borderRadius: 6, borderSkipped: false, stack: 's' },
-          { label: 'Delay', data: delay, backgroundColor: '#EF4444', borderRadius: 6, borderSkipped: false, stack: 's' }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        layout: {
-          padding: { left: 2, right: 2, top: 0, bottom: 0 }
-        },
-        plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-            align: 'center',
-            labels: {
-              boxWidth: 10,
-              boxHeight: 10,
-              usePointStyle: true,
-              pointStyle: 'circle',
-              padding: 6,
-              font: { size: 11, weight: 'bold' as const, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
-            }
-          },
-          tooltip: { mode: 'index', intersect: false }
-        },
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          x: {
-            stacked: true,
-            offset: false,
-            grid: { display: false },
-            ticks: {
-              color: 'rgba(15,23,42,0.55)',
-              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" },
-              padding: 2
-            },
-            border: { display: false }
-          },
-          y: {
-            stacked: true,
-            grid: { color: 'rgba(15,23,42,0.06)' },
-            ticks: {
-              color: 'rgba(15,23,42,0.45)',
-              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" },
-              padding: 4
-            },
-            border: { display: false }
-          }
-        }
-      }
-    });
   }
 
   isShipDone(statusDetail: string): boolean {

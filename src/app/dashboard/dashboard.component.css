@@ -63,7 +63,7 @@
   }
 
   .dash-widget-row.dash-grid--triple {
-    --dash-triple-body-min: 260px;
+    --dash-triple-body-min: 230px;
   }
 }
 
@@ -227,7 +227,7 @@
 /* Hàng 3 box: cùng chiều cao card; vùng body đồng min-height */
 .dash-widget-row.dash-grid--triple {
   align-items: stretch;
-  --dash-triple-body-min: 292px;
+  --dash-triple-body-min: 262px;
 }
 
 .dash-widget-row.dash-grid--triple > .card.dash-widget {
@@ -299,14 +299,145 @@
   padding-right: 14px;
 }
 
+/* Heatmap T2–T7 / Putaway tuần: hạ xuống 30px so với tiêu đề box */
+.card.dash-widget.wo-chart-widget .card-body.card-body--wo-chart {
+  padding-top: calc(0.25rem + 30px);
+}
+
+.card.dash-widget.putaway-widget .card-body.card-body--putaway {
+  padding-top: calc(0.25rem + 30px);
+}
+
 .wo-chart-wrap {
   flex: 1 1 auto;
-  min-height: 200px;
+  min-height: 170px;
   height: 0;
   padding: 0 2px 0;
   line-height: 0;
   overflow: hidden;
 }
+
+.wo-chart-wrap--heatmap {
+  line-height: normal;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wo-heatmap-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+/* WO weekly: kín chiều ngang/dọc, ô lớn hơn; cột căn từ mép trên (không căn giữa theo chiều dọc) */
+.wo-heatmap.putaway-heatmap {
+  width: 100%;
+  max-width: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  justify-content: space-between;
+  gap: 6px 8px;
+  align-self: stretch;
+}
+
+.wo-heatmap .putaway-heatmap__col {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+}
+
+.wo-heatmap .putaway-heatmap__cells {
+  display: grid;
+  grid-template-columns: repeat(4, 12px);
+  grid-auto-rows: 12px;
+  gap: 4px;
+  align-content: start;
+  justify-content: center;
+  padding-top: 0;
+}
+
+.wo-heatmap .putaway-heatmap__cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.wo-heatmap .putaway-heatmap__cnt.wo-heatmap__cnt {
+  color: #16a34a;
+}
+
+.wo-heatmap__date {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.45);
+  letter-spacing: 0.02em;
+}
+
+.wo-heatmap__cell--done {
+  background: #22c55e !important;
+  border-color: rgba(22, 101, 52, 0.25) !important;
+}
+
+.wo-heatmap__cell--waiting {
+  background: #3b82f6 !important;
+  border-color: rgba(30, 64, 175, 0.25) !important;
+}
+
+.wo-heatmap__cell--kitting {
+  background: #f97316 !important;
+  border-color: rgba(154, 52, 18, 0.25) !important;
+}
+
+.wo-heatmap__cell--ready {
+  background: #64748b !important;
+  border-color: rgba(30, 41, 59, 0.2) !important;
+}
+
+.wo-heatmap__cell--delay {
+  background: #ef4444 !important;
+  border-color: rgba(153, 27, 27, 0.25) !important;
+}
+
+.wo-heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 8px 4px 2px;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.5);
+  letter-spacing: 0.02em;
+}
+
+.wo-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.wo-legend-dot--done { background: #22c55e; }
+.wo-legend-dot--waiting { background: #3b82f6; }
+.wo-legend-dot--kitting { background: #f97316; }
+.wo-legend-dot--ready { background: #64748b; }
+.wo-legend-dot--delay { background: #ef4444; }
 
 .putaway-widget .putaway-wrap {
   flex: 1 1 auto;
@@ -316,15 +447,8 @@
   width: 100%;
   padding-top: 0;
   padding-bottom: 0;
-  justify-content: center;
-  align-items: center;
-}
-
-.wo-chart-wrap canvas {
-  display: block !important;
-  vertical-align: bottom;
-  width: 100% !important;
-  height: 100% !important;
+  justify-content: flex-start;
+  align-items: stretch;
 }
 
 /* Shipment list widget — giãn theo chiều cao box giữa */
@@ -435,6 +559,23 @@
 
 .dash-topbar__left {
   min-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dash-topbar__logo {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.18);
+}
+
+.dash-topbar__headlines {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .dash-topbar__title {
@@ -535,6 +676,11 @@
   .dash-topbar {
     flex-direction: column;
     align-items: stretch;
+  }
+  .dash-topbar__logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
   }
   .dash-topbar__right {
     justify-content: flex-start;
@@ -1283,6 +1429,42 @@
   overflow-y: auto;
 }
 
+/* Putaway widget: cùng kích thước/layout heatmap như Work Order (ô 12px, 4 cột, cột giãn đều) */
+.putaway-widget .putaway-heatmap:not(.putaway-heatmap--empty) {
+  width: 100%;
+  max-width: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  justify-content: space-between;
+  gap: 6px 8px;
+  align-self: stretch;
+  overflow-x: hidden;
+}
+
+.putaway-widget .putaway-heatmap:not(.putaway-heatmap--empty) .putaway-heatmap__col {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+}
+
+.putaway-widget .putaway-heatmap:not(.putaway-heatmap--empty) .putaway-heatmap__cells {
+  display: grid;
+  grid-template-columns: repeat(4, 12px);
+  grid-auto-rows: 12px;
+  gap: 4px;
+  align-content: start;
+  justify-content: center;
+  padding-top: 0;
+}
+
+.putaway-widget .putaway-heatmap:not(.putaway-heatmap--empty) .putaway-heatmap__cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
 .putaway-heatmap__cell {
   width: 9px;
   height: 9px;
@@ -1683,6 +1865,12 @@
     padding-left: 14px;
     padding-right: 14px;
   }
+  .card.dash-widget.wo-chart-widget .card-body.card-body--wo-chart {
+    padding-top: calc(0.5rem + 30px);
+  }
+  .card.dash-widget.putaway-widget .card-body.card-body--putaway {
+    padding-top: calc(0.5rem + 30px);
+  }
   .card .custom-card-header { padding: 12px 15px 6px 15px; }
   .custom-card-title { font-size: 0.85rem; margin-bottom: 4px; }
   .custom-card-desc  { font-size: 0.75rem; margin-bottom: 8px; }
@@ -1781,6 +1969,12 @@
     padding-bottom: 0;
     padding-left: 12px;
     padding-right: 12px;
+  }
+  .card.dash-widget.wo-chart-widget .card-body.card-body--wo-chart {
+    padding-top: calc(0.45rem + 30px);
+  }
+  .card.dash-widget.putaway-widget .card-body.card-body--putaway {
+    padding-top: calc(0.45rem + 30px);
   }
   .card .custom-card-header { padding: 10px 12px 4px 12px; }
   .custom-card-title { font-size: 0.8rem; margin-bottom: 2px; }
