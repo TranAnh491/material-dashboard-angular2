@@ -65,6 +65,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'bag-history',          component: BagHistoryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'warehouse-loading',    loadChildren: () => import('../../pages/warehouse-loading/warehouse-loading.module').then(m => m.WarehouseLoadingModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'pd-control',           loadChildren: () => import('../../pages/pd-control/pd-control.module').then(m => m.PdControlModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'trace-back',           loadChildren: () => import('../../pages/trace-back/trace-back.module').then(m => m.TraceBackModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-in',                loadChildren: () => import('../../pages/fg-in/fg-in.module').then(m => m.FgInModule), canActivate: [AuthGuard, TabPermissionGuard] },

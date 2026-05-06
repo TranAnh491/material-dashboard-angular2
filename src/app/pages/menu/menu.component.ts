@@ -18,6 +18,7 @@ export class MenuComponent implements OnInit {
 
   filteredByCategory: Record<string, MenuTabView[]> = {
     Main: [],
+    Production: [],
     'ASM1 RM': [],
     Quality: [],
     'ASM2 RM': [],
@@ -71,6 +72,9 @@ export class MenuComponent implements OnInit {
     { path: '/pxk-preview', title: 'PXK Preview', icon: 'preview', iconImage: 'assets/img/preview.png', category: 'Main' },
     { path: '/location', title: 'Location', icon: 'place', iconImage: 'assets/img/location.png', category: 'Main' },
     { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Main' },
+
+    // Production
+    { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', iconImage: 'assets/img/analytics.png', category: 'Production' },
     
     // ASM1 RM
     { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'download', iconImage: 'assets/img/rmin.png', category: 'ASM1 RM' },

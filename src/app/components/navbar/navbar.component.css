@@ -122,7 +122,9 @@
 .navbar.navbar--inbound-pass-through,
 .navbar.navbar--inbound-pass-through .container-fluid,
 .navbar.navbar--dashboard-pass-through,
-.navbar.navbar--dashboard-pass-through .container-fluid {
+.navbar.navbar--dashboard-pass-through .container-fluid,
+.navbar.navbar--pd-pass-through,
+.navbar.navbar--pd-pass-through .container-fluid {
   pointer-events: none;
 }
 
@@ -132,6 +134,11 @@
 }
 
 .navbar.navbar--inbound-pass-through .btn-home {
+  pointer-events: auto;
+}
+
+.navbar.navbar--pd-pass-through .navbar-wrapper,
+.navbar.navbar--pd-pass-through .navbar-wrapper .navbar-brand {
   pointer-events: auto;
 }
 
@@ -216,8 +223,9 @@
     
     .btn-home {
         position: fixed !important;
-        top: 10px !important;
+        top: auto !important;
         right: 10px !important;
+        bottom: 12px !important;
         z-index: 9999 !important;
         background: #0a0a0a !important;
         border: 1px solid #0a0a0a !important;
@@ -247,8 +255,9 @@
     /* Đảm bảo nút Home luôn hiển thị trên mobile, không bị ảnh hưởng bởi collapse */
     .navbar .btn-home {
         position: fixed !important;
-        top: 10px !important;
+        top: auto !important;
         right: 10px !important;
+        bottom: 12px !important;
         z-index: 9999 !important;
     }
 }

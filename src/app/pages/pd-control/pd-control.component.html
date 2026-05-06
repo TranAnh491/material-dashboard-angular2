@@ -1,0 +1,321 @@
+<div class="pd-page">
+  <!-- Ô ẩn nhận chuỗi từ máy quét (HID keyboard); chỉ hoạt động khi bật SCAN -->
+  <input
+    #pdScanInput
+    type="text"
+    class="pd-scanner-input"
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
+    spellcheck="false"
+    aria-hidden="true"
+    tabindex="-1"
+    (keydown.enter)="$event.preventDefault(); onPdScanEnter(pdScanInput)"
+  />
+
+  <div class="pd-topbar">
+    <div class="pd-topbar__left">
+      <div class="pd-topbar__title">Theo dõi nguyên liệu trả – Bộ phận sản xuất</div>
+      <div class="pd-topbar__sub">Quản lý và theo dõi nguyên liệu đã scan trả của các lệnh sản xuất</div>
+    </div>
+
+    <div class="pd-topbar__right">
+      <div class="pd-updated">
+        <span class="dot"></span>
+        <span>Cập nhật lúc: <strong>{{ lastUpdatedText }}</strong></span>
+      </div>
+      <button type="button" class="pd-refresh" (click)="refresh()" [disabled]="isRefreshing">
+        <i class="material-icons">{{ isRefreshing ? 'hourglass_empty' : 'refresh' }}</i>
+        Làm mới
+      </button>
+      <button type="button" class="pd-refresh pd-menu-btn" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        Menu
+      </button>
+    </div>
+  </div>
+
+  <div class="pd-kpis">
+    <div class="pd-card pd-card--scan" [class.pd-card--scan-active]="isPdScanActive">
+      <div
+        class="scan-box"
+        role="button"
+        tabindex="0"
+        (click)="togglePdScan()"
+        (keydown.enter)="togglePdScan()"
+        (keydown.space)="$event.preventDefault(); togglePdScan()"
+        title="Bấm để bật/tắt nhận máy quét mã vạch"
+      >
+        <div class="scan-title">SCAN NGUYÊN LIỆU TRẢ</div>
+        <div class="scan-frame" aria-hidden="true">
+          <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+        </div>
+        <div class="scan-hint">
+          Bấm để bật/tắt nhận máy quét<br />
+          <span>Luồng: ID (ASP+4 số) → LSX → nguyên liệu → Done</span>
+        </div>
+        <div class="scan-status" *ngIf="scanStatusText">{{ scanStatusText }}</div>
+      </div>
+
+      <div class="scan-batch-actions pd-exclude-scan-capture" *ngIf="isPdScanActive">
+        <div class="batch-steps">{{ batchStepHint }}</div>
+        <div class="batch-actions-row">
+          <button
+            type="button"
+            class="pd-done-btn"
+            (click)="commitPdBatch()"
+            [disabled]="batchSaving || pendingMaterials.length === 0 || batchStep !== 'material'"
+          >
+            <span *ngIf="!batchSaving">Done — Lưu ({{ pendingMaterials.length }})</span>
+            <span *ngIf="batchSaving">Đang lưu…</span>
+          </button>
+          <button type="button" class="pd-cancel-btn" (click)="cancelPdBatch()" [disabled]="batchSaving">
+            Huỷ phiên
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pd-card pd-card--kpi-scan-stats">
+      <div class="pd-kpi-scan-stats">
+        <div class="pd-kpi-scan-stats__head">
+          <span class="pd-kpi-scan-stats__title">Scan nguyên liệu trả — hôm nay</span>
+          <span class="pd-kpi-scan-stats__muted">Tab PD</span>
+        </div>
+        <div class="pd-kpi-scan-stats__cols">
+          <div class="pd-kpi-scan-stats__cell">
+            <div class="kpi kpi--inline">
+              <div class="kpi-ico kpi-ico--blue"><i class="material-icons">qr_code_scanner</i></div>
+              <div class="kpi-body">
+                <div class="kpi-label">TỔNG MÃ ĐÃ SCAN TRẢ</div>
+                <div class="kpi-value">{{ kpiTotalScanned }} <span>mã</span></div>
+                <div class="kpi-sub">Trong ngày hôm nay</div>
+              </div>
+            </div>
+          </div>
+          <div class="pd-kpi-scan-stats__cell">
+            <div class="kpi kpi--inline">
+              <div class="kpi-ico kpi-ico--green"><i class="material-icons">check_circle</i></div>
+              <div class="kpi-body">
+                <div class="kpi-label">MÃ HỢP LỆ</div>
+                <div class="kpi-value">{{ kpiValid }} <span>mã</span></div>
+                <div class="kpi-sub">{{ (kpiValid / (kpiTotalScanned || 1)) * 100 | number:'1.0-2' }}%</div>
+              </div>
+            </div>
+          </div>
+          <div class="pd-kpi-scan-stats__cell">
+            <div class="kpi kpi--inline">
+              <div class="kpi-ico kpi-ico--amber"><i class="material-icons">warning</i></div>
+              <div class="kpi-body">
+                <div class="kpi-label">MÃ KHÔNG HỢP LỆ</div>
+                <div class="kpi-value">{{ kpiInvalid }} <span>mã</span></div>
+                <div class="kpi-sub">{{ (kpiInvalid / (kpiTotalScanned || 1)) * 100 | number:'1.0-2' }}%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pd-kpi-scan-stats__spark" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="pd-card pd-card--kpi-wo">
+      <div class="kpi">
+        <div class="kpi-ico kpi-ico--violet"><i class="material-icons">description</i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">LỆNH SẢN XUẤT</div>
+          <div class="kpi-value">{{ kpiWorkOrders }}</div>
+          <div class="kpi-sub">Có scan trả trong tab PD</div>
+        </div>
+      </div>
+      <div class="spark spark--violet"></div>
+    </div>
+  </div>
+
+  <div class="pd-grid">
+    <div class="pd-panel">
+      <div class="panel-head">
+        <div class="panel-title">DANH SÁCH SCAN GẦN NHẤT</div>
+        <div class="panel-actions">
+          <span class="mini pd-muted">Theo thời gian (PD)</span>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <table class="pd-table">
+          <thead>
+            <tr>
+              <th>Thời gian</th>
+              <th>Lệnh sản xuất</th>
+              <th>Mã quét</th>
+              <th>ID nhân viên</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of recentRows">
+              <td>{{ r.time }}</td>
+              <td class="mono">{{ r.productionOrder }}</td>
+              <td class="mono">{{ r.rawBarcode }}</td>
+              <td class="mono pd-id">{{ r.employeeId }}</td>
+            </tr>
+            <tr *ngIf="recentRows.length === 0">
+              <td colspan="4" class="pd-empty">Chưa có scan trả trong ngày.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pd-panel">
+      <div class="panel-head">
+        <div class="panel-title">LỆNH SẢN XUẤT &amp; SCAN TRẢ (PD)</div>
+        <div class="panel-actions pd-exclude-scan-capture">
+          <div class="search pd-panel-search">
+            <i class="material-icons">search</i>
+            <input
+              type="text"
+              [(ngModel)]="searchQuery"
+              (keyup.enter)="applySearch()"
+              placeholder="Tìm theo LSX hoặc mã B+6 số (vd B019019)"
+            />
+          </div>
+          <button type="button" class="mini pd-find-btn" (click)="applySearch()">Tìm</button>
+          <button type="button" class="mini pd-clear-btn" *ngIf="appliedSearchQuery" (click)="clearSearch()">Xóa</button>
+        </div>
+      </div>
+
+      <div class="panel-body panel-body--pd-tree">
+        <p class="pd-hint" *ngIf="!appliedSearchQuery">
+          Bấm <strong>Tìm</strong> theo <strong>LSX</strong> (khớp một phần) hoặc theo <strong>mã hàng B + 6 số</strong> (vd <code>B019019</code>) — hiển thị <strong>sơ đồ cây</strong> LSX → nguyên liệu đã scan trả; có thể mở <strong>Bảng chi tiết</strong> để xóa nhóm.
+        </p>
+
+        <ng-container *ngIf="appliedSearchQuery">
+          <div class="pd-tree-wrap">
+            <div class="pd-tree-loading" *ngIf="treeLoading">
+              <span class="pd-tree-loading-dot"></span>
+              Đang tải sơ đồ…
+            </div>
+
+            <div class="pd-tree-toolbar-float pd-exclude-scan-capture">
+              <button type="button" class="pd-tree-zoom-btn" (click)="zoomTree(-10)" title="Thu nhỏ">
+                <i class="material-icons">remove</i>
+              </button>
+              <span class="pd-tree-zoom-pct">{{ treeZoomPct }}%</span>
+              <button type="button" class="pd-tree-zoom-btn" (click)="zoomTree(10)" title="Phóng to">
+                <i class="material-icons">add</i>
+              </button>
+              <button type="button" class="pd-tree-zoom-btn" (click)="resetTreeZoom()" title="100%">
+                <i class="material-icons">crop_free</i>
+              </button>
+            </div>
+
+            <div class="pd-tree-scroll">
+              <div class="pd-tree-scaler" [style.transform]="'scale(' + treeZoomPct / 100 + ')'">
+                <div class="pd-tree-empty-msg pd-empty" *ngIf="!treeLoading && !treeRoots.length">
+                  Không có scan trả nào khớp «{{ appliedSearchQuery }}» trong ngày.
+                </div>
+
+                <div class="pd-tree-forest" *ngIf="treeRoots.length">
+                  <div class="pd-tree-column" *ngFor="let root of treeRoots">
+                    <div class="pd-tree-root-card">
+                      <div class="pd-tree-root-id mono">{{ root.lsx }}</div>
+                      <div class="pd-tree-root-sub">Lệnh sản xuất</div>
+                      <div class="pd-tree-root-pill" *ngIf="root.planTotal != null">
+                        Đã scan: {{ root.totalScanLines }}/{{ root.planTotal }}
+                      </div>
+                      <div class="pd-tree-root-pill pd-tree-root-pill--plain" *ngIf="root.planTotal == null">
+                        {{ root.totalScanLines }} lần quét · {{ root.materials.length }} loại NVL
+                      </div>
+                    </div>
+
+                    <div class="pd-tree-spine" aria-hidden="true"></div>
+
+                    <div class="pd-tree-leaves-row">
+                      <div
+                        class="pd-tree-leaf"
+                        *ngFor="let m of root.materials"
+                        [class.pd-tree-leaf--bad]="!m.valid"
+                      >
+                        <div class="pd-tree-leaf-code mono">{{ m.code }}</div>
+                        <div class="pd-tree-leaf-state">{{ m.valid ? 'Hợp lệ' : 'Không hợp lệ' }}</div>
+                        <div class="pd-tree-leaf-qty">Số lượng: {{ m.quantity }}</div>
+                      </div>
+                      <div class="pd-tree-leaf pd-tree-leaf--hint" *ngIf="!root.materials.length">
+                        <div class="pd-tree-leaf-hint">Chưa tách được mã B+6 trong mã quét.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <details class="pd-search-details pd-exclude-scan-capture">
+            <summary>Bảng chi tiết / xóa nhóm</summary>
+            <table class="pd-table pd-table--nested">
+              <thead>
+                <tr>
+                  <th>Lệnh sản xuất</th>
+                  <th>Mã quét</th>
+                  <th>Số lần scan</th>
+                  <th>ID nhân viên</th>
+                  <th>Time</th>
+                  <th class="pd-col-action">Xóa</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let r of searchRows">
+                  <td class="mono">{{ r.productionOrder }}</td>
+                  <td class="mono pd-id">{{ r.rawBarcodeShort }}</td>
+                  <td>{{ r.mergedCount }}</td>
+                  <td class="mono pd-id">{{ r.employeeId }}</td>
+                  <td>{{ r.timeText }}</td>
+                  <td class="pd-col-action">
+                    <button
+                      type="button"
+                      class="pd-row-delete"
+                      (click)="beginDeleteScanRows(r.docIds)"
+                      [disabled]="deleteBusy || deleteVerifyModalOpen"
+                      title="Xóa nhóm đã gộp"
+                    >
+                      <i class="material-icons">delete_outline</i>
+                    </button>
+                  </td>
+                </tr>
+                <tr *ngIf="searchRows.length === 0">
+                  <td colspan="6" class="pd-empty">Không có dòng chi tiết.</td>
+                </tr>
+              </tbody>
+            </table>
+          </details>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="pd-delete-overlay"
+    *ngIf="deleteVerifyModalOpen"
+    (click)="cancelDeleteVerifyBackdrop($event)"
+  >
+    <div class="pd-delete-verify-modal pd-exclude-scan-capture" (click)="$event.stopPropagation()">
+      <div class="pd-delete-verify-title">Xác nhận xóa scan trả</div>
+      <input
+        #deleteVerifyInput
+        type="text"
+        class="pd-delete-scan-input"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        [disabled]="deleteBusy"
+        placeholder="Quét mã nhân viên rồi Enter"
+        (keydown.enter)="$event.preventDefault(); onDeleteVerifyEnter(deleteVerifyInput)"
+      />
+      <div class="pd-delete-verify-actions">
+        <button type="button" class="pd-delete-cancel-btn" (click)="cancelDeleteVerify()" [disabled]="deleteBusy">
+          Huỷ
+        </button>
+        <span class="pd-delete-busy" *ngIf="deleteBusy">Đang xóa…</span>
+      </div>
+    </div>
+  </div>
+</div>

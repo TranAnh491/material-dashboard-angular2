@@ -23,7 +23,11 @@
             <i class="material-icons">arrow_back</i>
             QUAY LẠI
           </button>
-          <button type="button" class="hdr-btn report" *ngIf="showDsListPage" (click)="exportDsReport()" [disabled]="dsReportBusy" title="Report DS">
+          <button type="button" class="hdr-btn hdr-btn--tune" *ngIf="showDsListPage" (click)="openDsCustomizeModal()" title="Tùy chỉnh lấy PXK và Report">
+            <i class="material-icons">tune</i>
+            TÙY CHỈNH
+          </button>
+          <button type="button" class="hdr-btn report" *ngIf="showDsListPage" (click)="exportDsReport()" [disabled]="dsReportBusy || dsImportedCodes.length === 0" title="Report KK tùy chỉnh (từ file import)">
             <i class="material-icons">download</i>
             REPORT
           </button>
@@ -45,6 +49,14 @@
           <button type="button" class="mob-btn mob-btn--back" (click)="closeDsListPage()">
             <i class="material-icons">arrow_back</i>
             <span>QUAY LẠI</span>
+          </button>
+          <button type="button" class="mob-btn mob-btn--secondary" (click)="openDsCustomizeModal()" title="PXK & Report">
+            <i class="material-icons">tune</i>
+            <span>TÙY CHỈNH</span>
+          </button>
+          <button type="button" class="mob-btn mob-btn--secondary" (click)="exportDsReport()" [disabled]="dsReportBusy || dsImportedCodes.length === 0" title="Report KK tùy chỉnh (từ file import)">
+            <i class="material-icons">download</i>
+            <span>REPORT</span>
           </button>
         </ng-container>
           <ng-container *ngIf="!showDsListPage">
@@ -454,23 +466,39 @@
     </div>
   </div>
 
-  <!-- Kiểm DS (PXK) settings + list -->
+  <!-- Kiểm DS settings (import file) + list -->
   <div class="scan-modal" *ngIf="showDsSettingsModal">
     <div class="modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h3>
           <i class="material-icons">list_alt</i>
-          KK TÙY CHỈNH — theo PXK ({{ selectedFactory }})
+          KK TÙY CHỈNH — import danh sách mã ({{ selectedFactory }})
         </h3>
       </div>
 
       <div class="scan-message" style="display:block;text-align:left">
-        <p><strong>Chọn khoảng ngày</strong> (lọc theo <code>importedAt</code> của PXK).</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label style="font-size:13px;color:#111">Từ:</label>
-          <input type="date" class="scan-input" [ngModel]="dsFromDate | date:'yyyy-MM-dd'" (ngModelChange)="onDsFromDateChange($event)" />
-          <label style="font-size:13px;color:#111">Đến:</label>
-          <input type="date" class="scan-input" [ngModel]="dsToDate | date:'yyyy-MM-dd'" (ngModelChange)="onDsToDateChange($event)" />
+        <p><strong>Import file Excel</strong>: cột A là <strong>Mã hàng</strong> (mỗi dòng 1 mã).</p>
+        <input
+          #dsImportFileInput
+          type="file"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          style="position: fixed; left: -100vw; top: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden"
+          tabindex="-1"
+          (change)="onDsImportFileSelected($event)"
+        />
+
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="download-btn" (click)="dsImportFileInput.click()">
+            <i class="material-icons">upload_file</i>
+            Import file DS
+          </button>
+          <span style="font-size:12px;color:#6b7280" *ngIf="dsImportedCodes.length > 0">
+            Đã import: <strong>{{ dsImportedCodes.length }}</strong> mã
+            <span *ngIf="dsImportedAt">· {{ dsImportedAt | date:'dd/MM/yyyy HH:mm' }}</span>
+          </span>
+          <span style="font-size:12px;color:#ef4444" *ngIf="dsImportedCodes.length === 0">
+            Chưa có file import DS.
+          </span>
         </div>
 
         <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -486,12 +514,48 @@
           placeholder="Mỗi dòng 1 mã. 4 ký tự = nhóm (vd B033). Dài hơn = mã đầy đủ."
         ></textarea>
         <p style="margin-top:10px;color:#6b7280;font-size:12px;line-height:1.4">
-          Popup này chỉ để <strong>cài rule</strong>. Danh sách mã cần kiểm sẽ hiển thị khi bấm nút <strong>KK TÙY CHỈNH</strong> ngoài màn hình.
+          Khi import file mới, danh sách mã cũ sẽ bị <strong>ghi đè</strong>.
+          DS sẽ lấy tất cả dòng theo <strong>Mã hàng</strong> (mọi PO/IMD liên quan) để kiểm kê.
         </p>
       </div>
 
       <div class="modal-actions">
         <button class="cancel-btn" (click)="closeDsSettingsModal()">
+          <i class="material-icons">close</i>
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hub Tùy chỉnh KK DS (PXK + Report) -->
+  <div class="scan-modal" *ngIf="showDsCustomizeModal" (click)="closeDsCustomizeModal()">
+    <div class="modal-content ds-customize-modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <i class="material-icons">tune</i>
+          Tùy chỉnh KK DS ({{ selectedFactory }})
+        </h3>
+      </div>
+        <div class="scan-message ds-customize-intro">
+        <p>Chọn phần cần chỉnh:</p>
+        <ul>
+          <li><strong>Import DS</strong> — upload file Excel (cột A: mã hàng). Danh sách DS sẽ lấy mọi PO/IMD liên quan.</li>
+          <li><strong>Report</strong> — bật/tắt ghi nhận kiểm kê theo ngày (ảnh hưởng đếm “Đã kiểm” DS và export).</li>
+        </ul>
+      </div>
+      <div class="more-modal-grid ds-customize-grid">
+        <button type="button" class="more-grid-btn" (click)="openDsCustomizePxkSection()">
+          <i class="material-icons">inventory</i>
+          <span><strong>Import DS</strong> (file)</span>
+        </button>
+        <button type="button" class="more-grid-btn" (click)="openDsCustomizeReportSection()">
+          <i class="material-icons">calendar_month</i>
+          <span><strong>Report</strong> theo ngày</span>
+        </button>
+      </div>
+      <div class="modal-actions" style="padding:10px 20px 16px">
+        <button type="button" class="cancel-btn" (click)="closeDsCustomizeModal()">
           <i class="material-icons">close</i>
           Đóng
         </button>
@@ -1097,7 +1161,10 @@
         </p>
         <div class="loading-spinner" *ngIf="isLoadingReportDates">
           <i class="material-icons">hourglass_empty</i>
-          <p>Đang tải các ngày đã có...</p>
+          <p>Đang tải các ngày đã có…</p>
+          <p class="report-by-date-load-hint" *ngIf="reportDatesLoadDocCount > 0">
+            Đã đọc <strong>{{ reportDatesLoadDocCount }}</strong> bản ghi lịch sử (đọc theo lô; chờ thêm nếu dữ liệu lớn).
+          </p>
         </div>
 
         <div class="archive-list" *ngIf="!isLoadingReportDates">
@@ -1194,86 +1261,78 @@
         </div>
       </div>
       
-      <div class="modal-actions">
-        <button class="download-btn"
-                style="margin-right:auto"
-                (click)="exportStockCheckReportByMonth(3)"
-                [disabled]="isLoadingReportDates || isExportingMonthlyReport || reportDateOptions.length === 0"
-                title="Gộp toàn bộ report kiểm kê tháng 3 thành 1 file">
-          <i class="material-icons">{{ isExportingMonthlyReport ? 'hourglass_empty' : 'download' }}</i>
-          Tháng 3 (gộp 1 file)
-        </button>
-        <button class="download-btn"
-                (click)="exportStockCheckReportByMonth(4)"
-                [disabled]="isLoadingReportDates || isExportingMonthlyReport || reportDateOptions.length === 0"
-                title="Gộp toàn bộ report kiểm kê tháng 4 thành 1 file">
-          <i class="material-icons">{{ isExportingMonthlyReport ? 'hourglass_empty' : 'download' }}</i>
-          Tháng 4 (gộp 1 file)
-        </button>
-        <button type="button" class="download-btn"
-                (click)="saveStockCheckMonthlyReportToFirebase(3, mergedMonthlyFirebaseFile)"
-                [disabled]="isLoadingReportDates || isSavingMonthlyReport"
-                title="Sau khi đã tải file gộp tháng 3: bấm đây rồi chọn đúng file Excel vừa tải để upload lên Firebase (ghi đè file tháng)">
-          <i class="material-icons">{{ isSavingMonthlyReport ? 'hourglass_empty' : 'cloud_upload' }}</i>
-          Lưu Firebase (Tháng 3)
-        </button>
-        <button type="button" class="download-btn"
-                (click)="saveStockCheckMonthlyReportToFirebase(4, mergedMonthlyFirebaseFile)"
-                [disabled]="isLoadingReportDates || isSavingMonthlyReport"
-                title="Sau khi đã tải file gộp tháng 4: bấm đây rồi chọn đúng file Excel vừa tải để upload lên Firebase (ghi đè file tháng)">
-          <i class="material-icons">{{ isSavingMonthlyReport ? 'hourglass_empty' : 'cloud_upload' }}</i>
-          Lưu Firebase (Tháng 4)
-        </button>
-        <button class="download-btn"
-                (click)="loadMonthlyReportLink(3)"
-                [disabled]="isLoadingReportDates || isSavingMonthlyReport"
-                title="Tải lại link file tháng 3 từ Firebase">
-          <i class="material-icons">refresh</i>
-          Load file (Firebase)
-        </button>
-        <button class="download-btn"
-                (click)="loadMonthlyReportLink(4)"
-                [disabled]="isLoadingReportDates || isSavingMonthlyReport"
-                title="Tải lại link file tháng 4 từ Firebase">
-          <i class="material-icons">refresh</i>
-          Load file T4 (Firebase)
-        </button>
-        <button class="download-btn"
-                (click)="openMonthlyReportInNewTab()"
-                [disabled]="!monthlyReportUrl"
-                [title]="monthlyReportUrl ? 'Mở file đã gộp trên Firebase' : 'Chưa có file tháng 3 trên Firebase'">
-          <i class="material-icons">open_in_new</i>
-          Mở file
-        </button>
-        <button class="cancel-btn" (click)="closeReportByDateModal()">
-          Đóng
-        </button>
+      <div class="modal-actions report-actions-slim">
+        <div class="report-actions-left">
+          <label class="report-actions-month">
+            <span class="lbl">Tháng</span>
+            <select class="dash-select" [(ngModel)]="reportMergeMonth" [disabled]="isLoadingReportDates || isExportingMonthlyReport || isSavingMonthlyReport">
+              <option [ngValue]="3">Tháng 3</option>
+              <option [ngValue]="4">Tháng 4</option>
+            </select>
+          </label>
+
+          <button class="download-btn"
+                  (click)="exportStockCheckReportByMonth(reportMergeMonth)"
+                  [disabled]="isLoadingReportDates || isExportingMonthlyReport || reportDateOptions.length === 0"
+                  title="Gộp toàn bộ report kiểm kê của tháng thành 1 file Excel">
+            <i class="material-icons">{{ isExportingMonthlyReport ? 'hourglass_empty' : 'download' }}</i>
+            Tải file gộp
+          </button>
+
+          <button type="button" class="download-btn"
+                  (click)="saveStockCheckMonthlyReportToFirebase(reportMergeMonth, mergedMonthlyFirebaseFile)"
+                  [disabled]="isLoadingReportDates || isSavingMonthlyReport"
+                  title="Upload file vừa tải để ghi đè file tháng trên Firebase">
+            <i class="material-icons">{{ isSavingMonthlyReport ? 'hourglass_empty' : 'cloud_upload' }}</i>
+            Lưu Firebase
+          </button>
+
+          <button class="download-btn"
+                  (click)="loadMonthlyReportLink(reportMergeMonth)"
+                  [disabled]="isLoadingReportDates || isSavingMonthlyReport"
+                  title="Tải lại link file tháng từ Firebase">
+            <i class="material-icons">refresh</i>
+            Load link
+          </button>
+
+          <button class="download-btn"
+                  (click)="openMonthlyReportInNewTab()"
+                  [disabled]="!monthlyReportUrl"
+                  [title]="monthlyReportUrl ? 'Mở file đã gộp trên Firebase' : 'Chưa có link file trên Firebase'">
+            <i class="material-icons">open_in_new</i>
+            Mở file
+          </button>
+        </div>
+
+        <button class="cancel-btn" (click)="closeReportByDateModal()">Đóng</button>
       </div>
 
-      <div class="modal-actions" style="flex-wrap: wrap; gap: 8px; border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 4px">
-        <span style="width: 100%; font-size: 12px; color: #6b7280; font-weight: 600">Backup / import lịch sử (JSON — đúng dữ liệu gốc trên Firestore)</span>
-        <button type="button" class="download-btn"
-                (click)="exportStockCheckHistoryMonthBackup(3)"
-                [disabled]="isExportingHistoryBackup || isImportingHistoryBackup"
-                title="Tải JSON toàn bộ lịch sử scan tháng 3 (mọi năm có dữ liệu tháng 3)">
-          <i class="material-icons">{{ isExportingHistoryBackup ? 'hourglass_empty' : 'save_alt' }}</i>
-          Backup lịch sử T3
-        </button>
-        <button type="button" class="download-btn"
-                (click)="exportStockCheckHistoryMonthBackup(4)"
-                [disabled]="isExportingHistoryBackup || isImportingHistoryBackup"
-                title="Tải JSON toàn bộ lịch sử scan tháng 4 (mọi năm có dữ liệu tháng 4)">
-          <i class="material-icons">{{ isExportingHistoryBackup ? 'hourglass_empty' : 'save_alt' }}</i>
-          Backup lịch sử T4
-        </button>
-        <button type="button" class="download-btn"
-                (click)="openHistoryBackupFilePicker(historyBackupImport)"
-                [disabled]="isExportingHistoryBackup || isImportingHistoryBackup"
-                title="Chọn file JSON backup để ghi đè lại lịch sử theo tháng trong file">
-          <i class="material-icons">{{ isImportingHistoryBackup ? 'hourglass_empty' : 'upload_file' }}</i>
-          Import backup lịch sử
-        </button>
-      </div>
+      <details class="report-advanced">
+        <summary>Backup / import lịch sử (nâng cao)</summary>
+        <div class="modal-actions report-advanced-actions">
+          <label class="report-actions-month">
+            <span class="lbl">Tháng</span>
+            <select class="dash-select" [(ngModel)]="reportMergeMonth" [disabled]="isExportingHistoryBackup || isImportingHistoryBackup">
+              <option [ngValue]="3">Tháng 3</option>
+              <option [ngValue]="4">Tháng 4</option>
+            </select>
+          </label>
+          <button type="button" class="download-btn"
+                  (click)="exportStockCheckHistoryMonthBackup(reportMergeMonth)"
+                  [disabled]="isExportingHistoryBackup || isImportingHistoryBackup"
+                  title="Tải JSON toàn bộ lịch sử scan của tháng">
+            <i class="material-icons">{{ isExportingHistoryBackup ? 'hourglass_empty' : 'save_alt' }}</i>
+            Backup lịch sử
+          </button>
+          <button type="button" class="download-btn"
+                  (click)="openHistoryBackupFilePicker(historyBackupImport)"
+                  [disabled]="isExportingHistoryBackup || isImportingHistoryBackup"
+                  title="Chọn file JSON backup để ghi đè lại lịch sử theo tháng trong file">
+            <i class="material-icons">{{ isImportingHistoryBackup ? 'hourglass_empty' : 'upload_file' }}</i>
+            Import backup
+          </button>
+        </div>
+      </details>
     </div>
   </div>
 

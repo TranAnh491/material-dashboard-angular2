@@ -17,6 +17,13 @@
       </div>
 
       <div class="dash-topbar__right">
+        <img
+          class="dash-topbar__logo-right"
+          src="/assets/img/logo.png"
+          width="36"
+          height="36"
+          alt="Company logo"
+        />
         <div class="dash-pill dash-pill--date" title="Date range (display)">
           <i class="material-icons">event</i>
           <span>{{ weekdays?.[0]?.date ? (weekdays[0].date | date:'dd/MM/yyyy') : '--/--/----' }} - {{ weekdays?.[weekdays.length-1]?.date ? (weekdays[weekdays.length-1].date | date:'dd/MM/yyyy') : '--/--/----' }}</span>

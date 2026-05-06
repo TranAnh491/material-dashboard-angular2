@@ -600,6 +600,17 @@
   flex-wrap: wrap;
 }
 
+.dash-topbar__logo-right {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
 .dash-topbar__icons {
   display: inline-flex;
   align-items: center;
@@ -681,6 +692,11 @@
     width: 40px;
     height: 40px;
     border-radius: 10px;
+  }
+  .dash-topbar__logo-right {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
   }
   .dash-topbar__right {
     justify-content: flex-start;

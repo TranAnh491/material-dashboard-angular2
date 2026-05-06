@@ -733,6 +733,37 @@
           color: #fff;
         }
       }
+
+      &.hdr-btn--tune {
+        border-color: #c4b5fd;
+        background: #f5f3ff;
+        color: #5b21b6;
+        i.material-icons { font-size: 16px; pointer-events: none; }
+        &:hover:not(:disabled) {
+          background: #5b21b6;
+          border-color: #5b21b6;
+          color: #fff;
+        }
+      }
+    }
+
+    // Hub “Tùy chỉnh KK DS”
+    .ds-customize-modal-content {
+      max-width: 420px;
+    }
+    .ds-customize-intro {
+      display: block;
+      text-align: left;
+      ul {
+        margin: 8px 0 0;
+        padding-left: 1.15rem;
+        font-size: 12px;
+        color: #444;
+        line-height: 1.45;
+      }
+    }
+    .ds-customize-grid {
+      padding: 8px 16px 0;
     }
 
     // ---- DÒNG 2: Counters + Action buttons (1 hàng ngang) ----
@@ -3511,6 +3542,65 @@
           cursor: pointer;
           &:hover { background: #f3f4f6; }
         }
+      }
+
+      /* Report by date: actions bar (simplified) */
+      .modal-actions.report-actions-slim {
+        justify-content: space-between;
+      }
+      .report-actions-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-width: 0;
+      }
+      .report-actions-month {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 8px 2px 0;
+        .lbl {
+          font-size: 12px;
+          font-weight: 700;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .dash-select {
+          height: 32px;
+          border-radius: 999px;
+          padding: 0 10px;
+          font-weight: 700;
+          font-size: 12px;
+        }
+      }
+
+      .report-advanced {
+        border-top: 1px solid #e5e7eb;
+        padding: 10px 16px 12px;
+        summary {
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          list-style: none;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary::before {
+          content: '▸';
+          display: inline-block;
+          margin-right: 8px;
+          transform: translateY(-1px);
+        }
+        &[open] summary::before { content: '▾'; }
+      }
+      .modal-actions.report-advanced-actions {
+        border-top: none;
+        padding: 10px 0 0;
+        justify-content: flex-start;
       }
     }
   }

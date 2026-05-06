@@ -265,6 +265,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   // Report by date modal
   showReportByDateModal: boolean = false;
   isLoadingReportDates: boolean = false;
+  /** Đã đọc bao nhiêu doc Firestore (report theo ngày — đọc phân trang). */
+  reportDatesLoadDocCount = 0;
+  /** Tháng đang thao tác cho nhóm nút gộp/sync Firebase (UI đơn giản). */
+  reportMergeMonth: 3 | 4 = 3;
   /** Đang xóa report: giữ `dateKey` để disable nút tương ứng */
   isDeletingReportDateKey: string | null = null;
   reportDateOptions: Array<{ dateKey: string; dateLabel: string; totalMaterials: number }> = [];
@@ -308,9 +312,11 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Cho phép scan vật tư khi chưa scan vị trí (list/code mode). */
   private allowMaterialScanWithoutLocation = false;
 
-  // ======================== KIỂM DS (PXK) ========================
+  // ======================== KIỂM DS (IMPORT FILE) ========================
   showStockCheckMoreModal = false;
   showDsSettingsModal = false;
+  /** Hub “Tùy chỉnh” trên màn DS: PXK + Report */
+  showDsCustomizeModal = false;
   showDsListPage = false;
   dsLoading = false;
   dsError = '';
@@ -318,20 +324,17 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   private dsPermissionDenied = false;
   /** DS: đang xuất report */
   dsReportBusy = false;
-  /** DS: watch PXK realtime để auto reload khi có import mới */
-  private dsPxkWatchSub: any = null;
-  private dsPxkWatchDebounceId: any = null;
-
-  /** Khoảng ngày để load PXK (theo importedAt trong pxk-import-data) */
-  dsFromDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-  dsToDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+  /** DS: danh sách mã hàng được import (cột A). */
+  dsImportedCodes: string[] = [];
+  private dsImportedCodesSet = new Set<string>();
+  dsImportedAt: Date | null = null;
 
   /** Loại trừ mã/nhóm mã khi hiển thị Kiểm DS */
   dsExcludeEnabled = false;
   dsExcludeCatalogText = '';
   private dsExcludeCodesSet = new Set<string>();
 
-  /** Bảng Kiểm DS: lấy từ PXK -> lọc inventory-materials đã load -> hiển thị */
+  /** Bảng Kiểm DS: lấy từ file import (mã hàng) -> lọc inventory-materials đã load -> hiển thị */
   dsRows: Array<{
     materialCode: string;
     poNumber: string;
@@ -514,15 +517,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       });
   }
 
-  private dsRuleFromMs(): number {
-    const d = this.dsFromDate instanceof Date ? this.dsFromDate : new Date(this.dsFromDate as any);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
-  }
-
-  private dsRuleToMs(): number {
-    const d = this.dsToDate instanceof Date ? this.dsToDate : new Date(this.dsToDate as any);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
-  }
+  // (Removed PXK date range helpers — DS now uses imported file list)
 
   private buildStockCheckHistoryDocId(factory: string, materialCode: string, poNumber: string, imd: string): string {
     const sanitizedMaterialCode = String(materialCode || '').replace(/\//g, '_');
@@ -531,23 +526,25 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return `${factory}_${sanitizedMaterialCode}_${sanitizedPoNumber}_${sanitizedImd}`;
   }
 
-  /** REPORT cho KIỂM DS: xuất danh sách PXK + lịch sử scan chi tiết (có bag) */
+  /** REPORT cho KIỂM DS: xuất danh sách DS + lịch sử scan chi tiết (có bag) */
   async exportDsReport(): Promise<void> {
     if (!this.selectedFactory) {
       alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.dsImportedCodes || this.dsImportedCodes.length === 0) {
+      alert('Chưa có danh sách KK tùy chỉnh. Vui lòng import file DS trước khi xuất report.');
       return;
     }
     if (this.dsReportBusy) return;
     this.dsReportBusy = true;
     try {
       const factory = this.selectedFactory;
-      const fromMs = this.dsRuleFromMs();
-      const toMs = this.dsRuleToMs();
 
-      // Cùng điều kiện với UI DS (`dsIsCheckedByRule`: khoảng KK tùy chỉnh + Report ON theo ngày).
+      // Cùng điều kiện với UI DS (`dsIsCheckedByRule`: Report ON theo ngày).
       const dsRowCheckedByReportRule = (r: { dateCheck: Date | null }): boolean => this.dsIsCheckedByRule(r);
 
-      // ===== Sheet 1: PXK list (DS rows) =====
+      // ===== Sheet 1: DS list (rows) =====
       const pxkRows = this.dsRows.map((r, idx) => {
         const stock = this.dsStockForRow(r);
         const checkedByRule = dsRowCheckedByReportRule(r);
@@ -631,9 +628,6 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           for (const it of history) {
             const d = this.parseFirestoreDate(it?.dateCheck);
             if (!d) continue;
-            const t = d.getTime();
-            if (t < fromMs || t > toMs) continue;
-
             // Nếu ngày report đang OFF → bỏ toàn bộ ghi nhận cho sheet + thống kê theo ngày
             const dateKey = toLocalYmd(d);
             if (!this.isReportDateEnabled(dateKey)) continue;
@@ -670,6 +664,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       // ===== Write workbook =====
       const XLSX = await this.xlsxLib();
       const wb = XLSX.utils.book_new();
+
+      const infoRows = [
+        {
+          'Factory': factory,
+          'Imported codes': this.dsImportedCodes.length,
+          'Imported at': this.dsImportedAt ? this.dsImportedAt.toLocaleString('vi-VN') : '',
+          'Imported by': (this.currentEmployeeId || '').trim()
+        }
+      ];
+      const wsInfo = XLSX.utils.json_to_sheet(infoRows);
+      wsInfo['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, wsInfo, 'INFO');
+
       const ws1 = XLSX.utils.json_to_sheet(pxkRows);
       ws1['!cols'] = [
         { wch: 6 },  // STT
@@ -684,7 +691,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         { wch: 12 }, // ID
         { wch: 20 }  // Date
       ];
-      XLSX.utils.book_append_sheet(wb, ws1, 'PXK List (DS)');
+      XLSX.utils.book_append_sheet(wb, ws1, 'DS (IMPORT)');
 
       const ws2 = XLSX.utils.json_to_sheet(detail);
       ws2['!cols'] = [
@@ -808,7 +815,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         const dd = String(d.getDate()).padStart(2, '0');
         return `${yyyy}${mm}${dd}`;
       };
-      const fileName = `Report_DS_${factory}_${ymd(this.dsFromDate)}-${ymd(this.dsToDate)}.xlsx`;
+      const fileName = `Report_DS_${factory}_${ymd(new Date())}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (e) {
       console.error('[StockCheck DS] export report failed', e);
@@ -820,18 +827,13 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * DS: "Đã kiểm" khi (1) dateCheck nằm trong khoảng KK tùy chỉnh (from/to) VÀ
-   * (2) ngày đó được BẬT trong cài đặt Report (cùng rule với snapshot / export DS).
-   * Trước đây chỉ có (1) nên UI DS lệch với Report ON/OFF và với file export.
+   * DS: "Đã kiểm" khi có dateCheck và ngày đó đang được BẬT trong cài đặt Report.
    */
   dsIsCheckedByRule(r: { dateCheck: Date | null }): boolean {
     if (!r?.dateCheck) return false;
     const d = r.dateCheck instanceof Date ? r.dateCheck : new Date(r.dateCheck as any);
     const t = d.getTime();
     if (!Number.isFinite(t) || t <= 0) return false;
-    const from = this.dsRuleFromMs();
-    const to = this.dsRuleToMs();
-    if (t < from || t > to) return false;
     const dateKey = this.toLocalDateKey(d);
     return this.isReportDateEnabled(dateKey);
   }
@@ -917,7 +919,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Khi snapshot/report cập nhật `allMaterials`, đồng bộ lại bảng KK DS (dsRows) nếu đang mở trang DS. */
   private refreshDsRowsIfListPageOpen(): void {
     if (!this.showDsListPage || this.dsPermissionDenied) return;
-    void this.reloadDsRowsFromPxk();
+    void this.reloadDsRowsFromImportedCodes();
   }
 
   private updateDsCounters(): void {
@@ -1006,6 +1008,35 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  openDsCustomizeModal(): void {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.currentEmployeeId) {
+      alert('Vui lòng scan mã nhân viên trước!');
+      this.showEmployeeScanModal = true;
+      return;
+    }
+    this.showDsCustomizeModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeDsCustomizeModal(): void {
+    this.showDsCustomizeModal = false;
+    this.cdr.detectChanges();
+  }
+
+  async openDsCustomizePxkSection(): Promise<void> {
+    this.closeDsCustomizeModal();
+    await this.openDsSettingsModal();
+  }
+
+  openDsCustomizeReportSection(): void {
+    this.closeDsCustomizeModal();
+    this.openReportByDateModal();
+  }
+
   async openDsListModal(): Promise<void> {
     if (!this.selectedFactory) {
       alert('Vui lòng chọn nhà máy trước!');
@@ -1025,61 +1056,18 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     } catch (e) {
       console.warn('[StockCheck DS] load settings failed', e);
     }
-    await this.reloadDsRowsFromPxk();
-    this.startDsPxkWatch();
+    await this.reloadDsRowsFromImportedCodes();
   }
 
   closeDsListPage(): void {
     this.showDsListPage = false;
     this.dsError = '';
-    this.stopDsPxkWatch();
     this.cdr.detectChanges();
   }
 
-  private startDsPxkWatch(): void {
-    if (!this.selectedFactory) return;
-    if (this.dsPermissionDenied) return;
-    if (this.dsPxkWatchSub) return;
+  // (Removed PXK realtime watch — DS now uses imported file list)
 
-    try {
-      this.dsPxkWatchSub = this.firestore
-        .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
-        .valueChanges()
-        .pipe(takeUntil(this.destroy$), debounceTime(500))
-        .subscribe({
-          next: () => {
-            // Khi PXK thay đổi trong lúc đang ở DS page, reload lại theo rule ngày hiện tại.
-            if (!this.showDsListPage || this.dsPermissionDenied) return;
-            if (this.dsPxkWatchDebounceId) clearTimeout(this.dsPxkWatchDebounceId);
-            this.dsPxkWatchDebounceId = setTimeout(() => {
-              void this.reloadDsRowsFromPxk();
-            }, 200);
-          },
-          error: (e: any) => {
-            const code = e?.code || '';
-            if (String(code).includes('permission-denied')) {
-              this.dsPermissionDenied = true;
-              this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
-            }
-          }
-        });
-    } catch (e) {
-      console.warn('[StockCheck DS] start watch failed', e);
-    }
-  }
-
-  private stopDsPxkWatch(): void {
-    try {
-      if (this.dsPxkWatchDebounceId) {
-        clearTimeout(this.dsPxkWatchDebounceId);
-        this.dsPxkWatchDebounceId = null;
-      }
-      if (this.dsPxkWatchSub && typeof this.dsPxkWatchSub.unsubscribe === 'function') {
-        this.dsPxkWatchSub.unsubscribe();
-      }
-    } catch {}
-    this.dsPxkWatchSub = null;
-  }
+  // (Removed PXK realtime watch — DS now uses imported file list)
 
   private dsSettingsDocId(factory: string): string {
     return `${factory}_ds_settings`;
@@ -1108,34 +1096,18 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     const d = snap.data() as any;
     this.dsExcludeEnabled = d?.excludeEnabled === true;
     this.dsExcludeCatalogText = typeof d?.excludeCatalogText === 'string' ? d.excludeCatalogText : '';
-    // dates stored as ymd
-    const ymdFrom = typeof d?.fromYmd === 'string' ? d.fromYmd : '';
-    const ymdTo = typeof d?.toYmd === 'string' ? d.toYmd : '';
-    const parseYmd = (ymd: string): Date | null => {
-      const m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (!m) return null;
-      const y = parseInt(m[1], 10);
-      const mo = parseInt(m[2], 10) - 1;
-      const da = parseInt(m[3], 10);
-      const dt = new Date(y, mo, da);
-      return Number.isNaN(dt.getTime()) ? null : dt;
-    };
-    const f = parseYmd(ymdFrom);
-    const t = parseYmd(ymdTo);
-    if (f) this.dsFromDate = f;
-    if (t) this.dsToDate = t;
+    const codes: string[] = Array.isArray(d?.importedCodes) ? d.importedCodes : [];
+    this.dsImportedCodes = codes.map(c => this.normalizeCodeUpper(String(c || ''))).filter(Boolean);
+    this.dsImportedCodesSet = new Set(this.dsImportedCodes);
+    const impAt = d?.importedAt;
+    const impDate = typeof impAt?.toDate === 'function' ? impAt.toDate() : (impAt instanceof Date ? impAt : (impAt ? new Date(impAt) : null));
+    this.dsImportedAt = impDate && !Number.isNaN(impDate.getTime()) ? impDate : null;
     this.rebuildDsExcludeSet();
   }
 
   private async saveDsSettings(): Promise<void> {
     if (!this.selectedFactory) return;
     const docId = this.dsSettingsDocId(this.selectedFactory);
-    const toYmd = (d: Date): string => {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    };
     await this.firestore
       .collection(this.STOCK_CHECK_DS_SETTINGS_COLLECTION)
       .doc(docId)
@@ -1144,8 +1116,6 @@ export class StockCheckComponent implements OnInit, OnDestroy {
           factory: this.selectedFactory,
           excludeEnabled: this.dsExcludeEnabled,
           excludeCatalogText: this.dsExcludeCatalogText,
-          fromYmd: toYmd(this.dsFromDate),
-          toYmd: toYmd(this.dsToDate),
           updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
         },
         { merge: true }
@@ -1157,189 +1127,93 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.dsExcludeCodesSet = new Set(arr);
   }
 
-  async onDsSettingsChanged(): Promise<void> {
+  private rebuildDsImportedCodesSet(): void {
+    this.dsImportedCodes = (this.dsImportedCodes || []).map(c => this.normalizeCodeUpper(String(c || ''))).filter(Boolean);
+    this.dsImportedCodesSet = new Set(this.dsImportedCodes);
+  }
+
+  async onDsImportFileSelected(ev: Event): Promise<void> {
+    if (!this.selectedFactory) return;
     if (this.dsPermissionDenied) return;
-    this.rebuildDsExcludeSet();
-    await this.saveDsSettings();
-    // Only reload list when DS page is visible (outside button "KIỂM DS")
-    if (this.showDsListPage) {
-      await this.reloadDsRowsFromPxk();
-    }
-  }
-
-  onDsFromDateChange(ymd: string): void {
-    if (!ymd) return;
-    const d = new Date(`${ymd}T00:00:00`);
-    if (!Number.isNaN(d.getTime())) {
-      this.dsFromDate = d;
-      void this.onDsSettingsChanged();
-    }
-  }
-
-  onDsToDateChange(ymd: string): void {
-    if (!ymd) return;
-    const d = new Date(`${ymd}T00:00:00`);
-    if (!Number.isNaN(d.getTime())) {
-      this.dsToDate = d;
-      void this.onDsSettingsChanged();
-    }
-  }
-
-  private async loadPxkPairsFromFirebase(): Promise<Set<string>> {
-    if (!this.selectedFactory) return new Set();
-    if (this.dsPermissionDenied) return new Set();
-    const from = new Date(this.dsFromDate.getFullYear(), this.dsFromDate.getMonth(), this.dsFromDate.getDate(), 0, 0, 0, 0);
-    const to = new Date(this.dsToDate.getFullYear(), this.dsToDate.getMonth(), this.dsToDate.getDate(), 23, 59, 59, 999);
-    const out = new Set<string>();
-
-    const addFromDocs = (docs: any[]): void => {
-      for (const doc of docs) {
-        const d = typeof doc?.data === 'function' ? doc.data() : doc;
-        const lines: any[] = Array.isArray(d?.lines) ? d.lines : [];
-        for (const ln of lines) {
-          const mc = this.normalizeCodeUpper(String(ln?.materialCode || ''));
-          const po = String(ln?.po || ln?.poNumber || '').trim();
-          if (!mc || !po) continue;
-          if (this.isCodeExcludedByRules(mc)) continue;
-          out.add(`${mc}__${po}`);
-        }
-      }
-    };
-
-    const isInRange = (v: any): boolean => {
-      if (!v) return false;
-      const dt = typeof v?.toDate === 'function' ? v.toDate() : (v instanceof Date ? v : new Date(v));
-      const t = dt?.getTime?.() || 0;
-      if (!t) return false;
-      return t >= from.getTime() && t <= to.getTime();
-    };
-
-    // Try indexed query first (factory + importedAt range)
-    try {
-      const snap = await this.firestore
-        .collection('pxk-import-data', ref =>
-          ref.where('factory', '==', this.selectedFactory).where('importedAt', '>=', from).where('importedAt', '<=', to)
-        )
-        .get()
-        .toPromise();
-      if (snap && !snap.empty) {
-        addFromDocs((snap as any).docs || []);
-      }
-      return out;
-    } catch (e) {
-      const code = (e as any)?.code || '';
-      if (String(code).includes('permission-denied')) {
-        this.dsPermissionDenied = true;
-        this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
-        return new Set();
-      }
-      // Fallback: query by factory only (avoid composite index), then filter by date on client
-      console.warn('[StockCheck DS] indexed query failed, fallback to factory-only', e);
-      const snap2 = await this.firestore
-        .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
-        .get()
-        .toPromise();
-      // permission denied ở fallback cũng cần chặn
-      if (!snap2 && (e as any)?.code && String((e as any).code).includes('permission-denied')) {
-        this.dsPermissionDenied = true;
-        this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
-        return new Set();
-      }
-      if (!snap2 || (snap2 as any).empty) return out;
-      const docs = (snap2 as any).docs || [];
-      const inRangeDocs = docs.filter((doc: any) => {
-        const d = doc?.data?.() || {};
-        return isInRange(d?.importedAt);
-      });
-      addFromDocs(inRangeDocs);
-      return out;
-    }
-    return out;
-  }
-
-  /** DS: load danh sách cặp (Mã+PO) từ PXK theo rule ngày để render (không phụ thuộc tồn kho). */
-  private async loadPxkPairsListFromFirebase(): Promise<Array<{ materialCode: string; poNumber: string }>> {
-    if (!this.selectedFactory) return [];
-    if (this.dsPermissionDenied) return [];
-    const from = new Date(this.dsFromDate.getFullYear(), this.dsFromDate.getMonth(), this.dsFromDate.getDate(), 0, 0, 0, 0);
-    const to = new Date(this.dsToDate.getFullYear(), this.dsToDate.getMonth(), this.dsToDate.getDate(), 23, 59, 59, 999);
-    const out: Array<{ materialCode: string; poNumber: string }> = [];
-    const seen = new Set<string>();
-
-    const normPo = (v: any): string => String(v ?? '').replace(/\s+/g, '').trim();
-
-    const addFromDocs = (docs: any[]): void => {
-      for (const doc of docs) {
-        const d = typeof doc?.data === 'function' ? doc.data() : doc;
-        const lines: any[] = Array.isArray(d?.lines) ? d.lines : [];
-        for (const ln of lines) {
-          const mc = this.normalizeCodeUpper(String(ln?.materialCode || ''));
-          const po = normPo(ln?.po || ln?.poNumber || '');
-          if (!mc || !po) continue;
-          if (this.isCodeExcludedByRules(mc)) continue;
-          const key = `${mc}__${po}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push({ materialCode: mc, poNumber: po });
-        }
-      }
-    };
-
-    const isInRange = (v: any): boolean => {
-      if (!v) return false;
-      const dt = typeof v?.toDate === 'function' ? v.toDate() : (v instanceof Date ? v : new Date(v));
-      const t = dt?.getTime?.() || 0;
-      if (!t) return false;
-      return t >= from.getTime() && t <= to.getTime();
-    };
+    const input = ev.target as HTMLInputElement;
+    const file = input?.files?.[0] || null;
+    // reset input để cho phép chọn lại cùng file
+    if (input) input.value = '';
+    if (!file) return;
 
     try {
-      const snap = await this.firestore
-        .collection('pxk-import-data', ref =>
-          ref.where('factory', '==', this.selectedFactory).where('importedAt', '>=', from).where('importedAt', '<=', to)
-        )
-        .get()
-        .toPromise();
-      if (snap && !snap.empty) {
-        addFromDocs((snap as any).docs || []);
+      const XLSX = await this.xlsxLib();
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheetName = wb.SheetNames?.[0];
+      if (!sheetName) {
+        alert('File không hợp lệ (không có sheet).');
+        return;
       }
-      return out;
+      const ws = wb.Sheets[sheetName];
+      // Lấy cột A: ưu tiên dạng text thẳng
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }) as any;
+      const codes: string[] = [];
+      for (const r of rows) {
+        const v = String((r && r.length > 0 ? r[0] : '') || '').trim().toUpperCase();
+        if (!v) continue;
+        // bỏ header phổ biến
+        if (v === 'MA HANG' || v === 'MÃ HÀNG' || v === 'MATERIAL' || v === 'MATERIALCODE' || v === 'MATERIAL CODE') continue;
+        codes.push(v);
+      }
+      const uniqueCodes = Array.from(new Set(codes)).filter(Boolean);
+      if (uniqueCodes.length === 0) {
+        alert('File import không có mã hàng ở cột A.');
+        return;
+      }
+
+      // Ghi đè list mã (file mới sẽ thay file cũ)
+      const docId = this.dsSettingsDocId(this.selectedFactory);
+      await this.firestore
+        .collection(this.STOCK_CHECK_DS_SETTINGS_COLLECTION)
+        .doc(docId)
+        .set(
+          {
+            factory: this.selectedFactory,
+            importedCodes: uniqueCodes,
+            importedAt: firebase.default.firestore.FieldValue.serverTimestamp(),
+            importedBy: this.currentEmployeeId || ''
+          },
+          { merge: true }
+        );
+
+      this.dsImportedCodes = uniqueCodes;
+      this.dsImportedAt = new Date();
+      this.rebuildDsImportedCodesSet();
+
+      // Nếu đang ở DS page → reload ngay
+      if (this.showDsListPage) {
+        await this.reloadDsRowsFromImportedCodes();
+      }
+
+      this.cdr.detectChanges();
     } catch (e) {
-      const code = (e as any)?.code || '';
-      if (String(code).includes('permission-denied')) {
-        this.dsPermissionDenied = true;
-        this.dsError = 'Không có quyền đọc PXK (pxk-import-data). Vui lòng đăng nhập/tài khoản được cấp quyền.';
-        return [];
-      }
-      // fallback factory-only
-      const snap2 = await this.firestore
-        .collection('pxk-import-data', ref => ref.where('factory', '==', this.selectedFactory))
-        .get()
-        .toPromise();
-      if (!snap2 || (snap2 as any).empty) return out;
-      const docs = (snap2 as any).docs || [];
-      const inRangeDocs = docs.filter((doc: any) => {
-        const d = doc?.data?.() || {};
-        return isInRange(d?.importedAt);
-      });
-      addFromDocs(inRangeDocs);
-      return out;
+      console.error('[StockCheck DS] import file failed', e);
+      alert('❌ Không import được file KK tùy chỉnh. Kiểm tra định dạng Excel và quyền.');
     }
   }
 
-  private async reloadDsRowsFromPxk(): Promise<void> {
+  private async reloadDsRowsFromImportedCodes(): Promise<void> {
     this.dsLoading = true;
     this.dsError = '';
     this.dsRows = [];
     this.updateDsCounters();
     try {
-      const pxkPairs = await this.loadPxkPairsListFromFirebase();
-      if (pxkPairs.length === 0) {
+      // đảm bảo đã load settings (importedCodes + exclude)
+      if (this.dsImportedCodesSet.size === 0) {
+        await this.loadDsSettings();
+      }
+      if (this.dsImportedCodesSet.size === 0) {
         this.dsRows = [];
         this.updateDsCounters();
         return;
       }
-      const normPoInv = (v: any): string => String(v ?? '').replace(/\s+/g, '').trim();
+
       const rows: Array<{
         materialCode: string;
         poNumber: string;
@@ -1349,39 +1223,23 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         dateCheck: Date | null;
       }> = [];
 
-      for (const p of pxkPairs) {
-        const mc = this.normalizeCodeUpper(p.materialCode);
-        const po = String(p.poNumber || '').trim();
-        const matches = this.allMaterials.filter(m => {
-          const mc2 = this.normalizeCodeUpper(m.materialCode);
-          const po2 = normPoInv(m.poNumber);
-          return mc2 === mc && po2 === normPoInv(po);
+      for (const m of this.allMaterials) {
+        const mc = this.normalizeCodeUpper(m.materialCode);
+        if (!mc) continue;
+        if (!this.dsImportedCodesSet.has(mc)) continue;
+        if (this.isCodeExcludedByRules(mc)) continue;
+        const stockVal = Number((m as any)?.stock ?? 0);
+        if (!Number.isFinite(stockVal) || Math.abs(stockVal) <= 1e-9) continue;
+        rows.push({
+          materialCode: mc,
+          poNumber: String(m.poNumber || '').replace(/\s+/g, '').trim(),
+          imd: String(m.imd || '').trim(),
+          location: String(m.location || '').trim(),
+          qtyCheck: m.qtyCheck ?? null,
+          dateCheck: m.dateCheck ?? null
         });
-
-        // DS cần chỉ hiển thị các mã/vị trí có tồn kho thực tế.
-        // Các cặp PXK nhưng không có dòng inventory-materials (hoặc stock <= 0) sẽ bị loại để tránh hiển thị dư.
-        // DS cần hiển thị đủ theo từng PO/vị trí.
-        // Chỉ loại các dòng mà tồn kho thực sự = 0 (xấp xỉ 0), còn stock != 0 (kể cả âm) thì giữ.
-        const matchesWithStock = matches.filter(m => {
-          const stockVal = Number((m as any)?.stock ?? 0);
-          if (!Number.isFinite(stockVal)) return false;
-          return Math.abs(stockVal) > 1e-9;
-        });
-        if (matchesWithStock.length === 0) continue;
-
-        for (const m of matchesWithStock) {
-          rows.push({
-            materialCode: mc,
-            poNumber: String(m.poNumber || '').replace(/\s+/g, '').trim(),
-            imd: String(m.imd || '').trim(),
-            location: String(m.location || '').trim(),
-            qtyCheck: m.qtyCheck ?? null,
-            dateCheck: m.dateCheck ?? null
-          });
-        }
       }
 
-      // Sort: Mã, PO, IMD
       rows.sort((a, b) => {
         const mc = a.materialCode.localeCompare(b.materialCode, 'vi');
         if (mc !== 0) return mc;
@@ -1389,18 +1247,34 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         if (po !== 0) return po;
         return a.imd.localeCompare(b.imd, 'vi');
       });
+
       this.dsRows = rows;
       this.invalidateDsRackStatsCache();
       this.dsSelectedLocationForDetail = null;
       this.dsSelectedParentGroup = null;
     } catch (e) {
-      console.error('[StockCheck DS] reload failed', e);
-      this.dsError = 'Không tải được danh sách PXK (kiểm tra quyền/index Firestore).';
+      console.error('[StockCheck DS] reload imported failed', e);
+      this.dsError = 'Không tải được danh sách KK tùy chỉnh (kiểm tra rule import file).';
     } finally {
       this.dsLoading = false;
       this.cdr.detectChanges();
     }
   }
+
+  async onDsSettingsChanged(): Promise<void> {
+    if (this.dsPermissionDenied) return;
+    this.rebuildDsExcludeSet();
+    await this.saveDsSettings();
+    // Only reload list when DS page is visible (outside button "KIỂM DS")
+    if (this.showDsListPage) {
+      await this.reloadDsRowsFromImportedCodes();
+    }
+  }
+  // (Removed PXK date range handlers — DS now uses imported file list)
+
+  // (Removed PXK import-data loaders — DS now uses imported file list)
+
+  // (Removed old PXK-based DS reload — replaced by reloadDsRowsFromImportedCodes)
 
   /** Kiểm kê theo dòng PXK (khóa mã+PO+IMD) */
   startDsRowCheck(r: { materialCode: string; poNumber: string; imd: string }): void {
@@ -4576,90 +4450,123 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Gộp batch doc `stock-check-history` vào map phục vụ Report theo ngày (tránh một vòng forEach cực lớn).
+   */
+  private mergeStockCheckHistoryDocsIntoReportAgg(
+    docs: ReadonlyArray<{ data: () => any }>,
+    tempByDateKey: Map<string, Map<string, ReportDayAggRow>>,
+    khsxSet: Set<string>
+  ): void {
+    for (const doc of docs) {
+      const data = doc.data() as any;
+      const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+      const poNumber = String(data?.poNumber || '').trim();
+      const imd = String(data?.imd || '').trim();
+      const history: any[] = Array.isArray(data?.history) ? data.history : [];
+      if (!materialCode || !poNumber || !imd || history.length === 0) continue;
+
+      const materialKey = `${materialCode}__${poNumber}__${imd}`;
+
+      for (const item of history) {
+        const d = this.parseFirestoreDate(item?.dateCheck);
+        if (!d) continue;
+        const dateKey = this.toLocalDateKey(d);
+
+        const qty = item?.qtyCheck !== undefined && item?.qtyCheck !== null ? Number(item.qtyCheck) : 0;
+        if (!qty || qty === 0) {
+          continue;
+        }
+
+        const stockVal = item?.stock !== undefined && item?.stock !== null ? Number(item.stock) : 0;
+        const location = String(item?.location || '').trim();
+        const standardPacking = String(item?.standardPacking || '').trim();
+        const idCheck = String(item?.idCheck || '').trim() || '-';
+        const bag = String(item?.bag || '').trim();
+
+        if (!tempByDateKey.has(dateKey)) tempByDateKey.set(dateKey, new Map());
+        const byMat = tempByDateKey.get(dateKey)!;
+
+        const existing = byMat.get(materialKey);
+        if (!existing) {
+          byMat.set(materialKey, {
+            materialCode,
+            poNumber,
+            imd,
+            stock: stockVal,
+            qtyCheckTotal: qty,
+            location: location,
+            standardPacking: standardPacking,
+            idCheck: idCheck,
+            lastDateCheck: d,
+            hasKhsx: khsxSet.has(materialCode),
+            bag: bag
+          });
+        } else {
+          existing.qtyCheckTotal += qty;
+          if (d.getTime() >= existing.lastDateCheck.getTime()) {
+            existing.stock = stockVal;
+            existing.location = location;
+            existing.standardPacking = standardPacking;
+            existing.idCheck = idCheck;
+            existing.lastDateCheck = d;
+            existing.bag = bag;
+          }
+        }
+      }
+    }
+  }
+
   private async loadReportDatesAndCache(): Promise<void> {
     if (!this.selectedFactory) return;
 
     this.isLoadingReportDates = true;
+    this.reportDatesLoadDocCount = 0;
     this.reportDateOptions = [];
     this.reportDataByDateKey.clear();
+    this.cdr.markForCheck();
 
     try {
       const khsxSet = new Set((this.khsxCodes || []).map(c => String(c).trim().toUpperCase()));
-      const snap = await this.firestore
-        .collection('stock-check-history', ref =>
-          ref.where('factory', '==', this.selectedFactory)
-        )
-        .get()
-        .toPromise();
+      const tempByDateKey: Map<string, Map<string, ReportDayAggRow>> = new Map();
+      const factory = this.selectedFactory;
+      const BATCH = 400;
+      const docIdPath = firebase.default.firestore.FieldPath.documentId();
+      let lastDoc: any = null;
 
-      if (!snap || snap.empty) {
+      for (;;) {
+        const snap = await this.firestore
+          .collection('stock-check-history', ref => {
+            let q = ref.where('factory', '==', factory).orderBy(docIdPath).limit(BATCH);
+            if (lastDoc) q = q.startAfter(lastDoc);
+            return q;
+          })
+          .get()
+          .toPromise();
+
+        if (!snap || snap.empty) break;
+
+        const docs = (snap as any).docs as any[];
+        if (!docs.length) break;
+
+        this.mergeStockCheckHistoryDocsIntoReportAgg(docs, tempByDateKey, khsxSet);
+        this.reportDatesLoadDocCount += docs.length;
+        lastDoc = docs[docs.length - 1];
+        this.cdr.markForCheck();
+
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        if (docs.length < BATCH) break;
+      }
+
+      const dateKeys = Array.from(tempByDateKey.keys());
+      if (dateKeys.length === 0) {
+        this.reportMonthOptions = [];
+        this.reportCurrentMonthDates = [];
         this.reportDatesLoadedFactory = this.selectedFactory;
         return;
       }
 
-      // dateKey -> materialKey -> aggregated row
-      const tempByDateKey: Map<string, Map<string, ReportDayAggRow>> = new Map();
-
-      snap.forEach(doc => {
-        const data = doc.data() as any;
-        const materialCode = String(data?.materialCode || '').trim().toUpperCase();
-        const poNumber = String(data?.poNumber || '').trim();
-        const imd = String(data?.imd || '').trim();
-        const history: any[] = Array.isArray(data?.history) ? data.history : [];
-        if (!materialCode || !poNumber || !imd || history.length === 0) return;
-
-        const materialKey = `${materialCode}__${poNumber}__${imd}`;
-
-        for (const item of history) {
-          const d = this.parseFirestoreDate(item?.dateCheck);
-          if (!d) continue;
-          const dateKey = this.toLocalDateKey(d);
-
-          const qty = item?.qtyCheck !== undefined && item?.qtyCheck !== null ? Number(item.qtyCheck) : 0;
-          if (!qty || qty === 0) {
-            // vẫn có thể cần location/stock, nhưng report qty=0 thường không cần
-            continue;
-          }
-
-          const stockVal = item?.stock !== undefined && item?.stock !== null ? Number(item.stock) : 0;
-          const location = String(item?.location || '').trim();
-          const standardPacking = String(item?.standardPacking || '').trim();
-          const idCheck = String(item?.idCheck || '').trim() || '-';
-          const bag = String(item?.bag || '').trim();
-
-          if (!tempByDateKey.has(dateKey)) tempByDateKey.set(dateKey, new Map());
-          const byMat = tempByDateKey.get(dateKey)!;
-
-          const existing = byMat.get(materialKey);
-          if (!existing) {
-            byMat.set(materialKey, {
-              materialCode,
-              poNumber,
-              imd,
-              stock: stockVal,
-              qtyCheckTotal: qty,
-              location: location,
-              standardPacking: standardPacking,
-              idCheck: idCheck,
-              lastDateCheck: d,
-              hasKhsx: khsxSet.has(materialCode),
-              bag: bag
-            });
-          } else {
-            existing.qtyCheckTotal += qty;
-            if (d.getTime() >= existing.lastDateCheck.getTime()) {
-              existing.stock = stockVal;
-              existing.location = location;
-              existing.standardPacking = standardPacking;
-              existing.idCheck = idCheck;
-              existing.lastDateCheck = d;
-              existing.bag = bag;
-            }
-          }
-        }
-      });
-
-      const dateKeys = Array.from(tempByDateKey.keys());
       dateKeys.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
       for (const dk of dateKeys) {

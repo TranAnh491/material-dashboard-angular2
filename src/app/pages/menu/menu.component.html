@@ -53,6 +53,20 @@
     </div>
   </div>
 
+  <!-- Production Group -->
+  <div class="menu-section" *ngIf="filteredByCategory['Production']?.length">
+    <h5 class="menu-category-title">PRODUCTION</h5>
+    <div class="menu-grid">
+      <div *ngFor="let tab of filteredByCategory['Production']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
+          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
+        </div>
+        <div class="menu-card-title">{{ tab.title }}</div>
+        <div class="menu-card-subtitle">Production control and monitoring</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ASM1 RM Group -->
   <div class="menu-section">
     <h5 class="menu-category-title">ASM1 RM</h5>

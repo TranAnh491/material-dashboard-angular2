@@ -119,6 +119,7 @@ export class TabPermissionGuard implements CanActivate {
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
       '/assistant': 'assistant',
+      '/pd-control': 'pd-control',
       '/materials-dashboard': 'materials-dashboard',
       '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
