@@ -81,6 +81,12 @@ export class PdControlComponent implements OnInit, OnDestroy {
   scanStatusText = '';
   batchSaving = false;
 
+  /** Camera scanner (mobile): dùng camera đọc QR/Barcode */
+  isCameraOn = false;
+  cameraStarting = false;
+  cameraError = '';
+  private cameraScanner: { start: (...args: any[]) => Promise<unknown>; stop: () => Promise<unknown>; clear: () => void } | null = null;
+
   /** Phiên scan: ID → LSX → nguyên liệu (chờ Done mới ghi Firestore) */
   batchStep: PdBatchStep = 'employee';
   batchEmployeeId = '';
@@ -148,6 +154,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    void this.stopCameraScanner();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -556,6 +563,9 @@ export class PdControlComponent implements OnInit, OnDestroy {
       this.scanStatusText =
         'Quét ID nhân viên (7 ký tự đầu = ASP + 4 số), sau đó LSX, rồi quét nguyên liệu — bấm Done để lưu.';
     } else {
+      if (this.isCameraOn) {
+        void this.toggleCamera(false);
+      }
       this.resetBatchSession();
       this.scanStatusText = '';
     }
@@ -567,6 +577,109 @@ export class PdControlComponent implements OnInit, OnDestroy {
       }, 0);
     }
     this.cdr.markForCheck();
+  }
+
+  async toggleCamera(next?: boolean): Promise<void> {
+    const desired = typeof next === 'boolean' ? next : !this.isCameraOn;
+    if (desired === this.isCameraOn) return;
+
+    if (!this.isPdScanActive && desired) {
+      this.togglePdScan();
+    }
+
+    this.cameraError = '';
+    this.isCameraOn = desired;
+    this.cdr.markForCheck();
+
+    if (desired) {
+      await this.startCameraScanner();
+    } else {
+      await this.stopCameraScanner();
+      setTimeout(() => this.pdScanInputRef?.nativeElement?.focus(), 0);
+    }
+  }
+
+  private async startCameraScanner(): Promise<void> {
+    if (this.cameraStarting) return;
+    this.cameraStarting = true;
+    this.cameraError = '';
+    this.cdr.markForCheck();
+
+    try {
+      // đảm bảo modal đã render xong trước khi start
+      await new Promise<void>(r => setTimeout(r, 0));
+
+      const mod = await import('html5-qrcode');
+      const Html5Qrcode = (mod as any).Html5Qrcode;
+      const Html5QrcodeSupportedFormats = (mod as any).Html5QrcodeSupportedFormats;
+      if (!Html5Qrcode) {
+        throw new Error('html5-qrcode not available');
+      }
+
+      const readerId = 'pd-qr-reader';
+      this.cameraScanner = new Html5Qrcode(readerId);
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) {
+        throw new Error('No cameras found');
+      }
+
+      const formatsToSupport =
+        Html5QrcodeSupportedFormats != null
+          ? [
+              Html5QrcodeSupportedFormats.QR_CODE,
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.ITF
+            ]
+          : undefined;
+
+      await this.cameraScanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 12,
+          qrbox: { width: 260, height: 260 },
+          aspectRatio: 1.0,
+          disableFlip: true,
+          formatsToSupport
+        },
+        (decodedText: string) => {
+          const v = (decodedText || '').trim();
+          if (!v) return;
+          // Stop camera after first successful scan (giống thao tác scan bằng máy)
+          void this.toggleCamera(false);
+          this.processPdScanLine(v);
+        },
+        () => {}
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[PD Control] start camera scanner:', e);
+      this.cameraError = 'Không thể khởi động camera. Vui lòng kiểm tra quyền camera và thử lại.';
+      this.isCameraOn = false;
+      alert(this.cameraError + (msg ? ` (${msg})` : ''));
+    } finally {
+      this.cameraStarting = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async stopCameraScanner(): Promise<void> {
+    if (!this.cameraScanner) return;
+    try {
+      await this.cameraScanner.stop();
+    } catch {
+      // ignore
+    }
+    try {
+      this.cameraScanner.clear();
+    } catch {
+      // ignore
+    }
+    this.cameraScanner = null;
   }
 
   cancelPdBatch(): void {

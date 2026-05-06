@@ -8,7 +8,7 @@
     autocorrect="off"
     autocapitalize="off"
     spellcheck="false"
-    aria-hidden="true"
+    aria-label="PD scan input"
     tabindex="-1"
     (keydown.enter)="$event.preventDefault(); onPdScanEnter(pdScanInput)"
   />
@@ -62,6 +62,17 @@
         <div class="batch-actions-row">
           <button
             type="button"
+            class="pd-camera-btn"
+            (click)="toggleCamera()"
+            [disabled]="batchSaving || cameraStarting"
+            [attr.aria-pressed]="isCameraOn"
+            title="Bật/tắt camera để quét"
+          >
+            <i class="material-icons">{{ isCameraOn ? 'videocam' : 'videocam_off' }}</i>
+            Camera
+          </button>
+          <button
+            type="button"
             class="pd-done-btn"
             (click)="commitPdBatch()"
             [disabled]="batchSaving || pendingMaterials.length === 0 || batchStep !== 'material'"
@@ -72,6 +83,28 @@
           <button type="button" class="pd-cancel-btn" (click)="cancelPdBatch()" [disabled]="batchSaving">
             Huỷ phiên
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Camera scanner modal (mobile-friendly) -->
+    <div class="pd-camera-modal pd-exclude-scan-capture" *ngIf="isCameraOn" (click)="toggleCamera(false)">
+      <div class="pd-camera-sheet" (click)="$event.stopPropagation()">
+        <div class="pd-camera-head">
+          <div class="pd-camera-title">
+            <i class="material-icons">qr_code_scanner</i>
+            Quét bằng Camera
+          </div>
+          <button type="button" class="pd-camera-close" (click)="toggleCamera(false)" title="Đóng">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        <div class="pd-camera-body">
+          <div id="pd-qr-reader" class="pd-qr-reader"></div>
+          <div class="pd-camera-hint">
+            Đưa mã vào khung để quét. Sau khi quét thành công camera sẽ tự tắt và tiếp tục bước hiện tại.
+          </div>
+          <div class="pd-camera-error" *ngIf="cameraError">{{ cameraError }}</div>
         </div>
       </div>
     </div>

@@ -281,6 +281,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/pd-control';
     }
 
+    isQcTraceabilityPage(): boolean {
+      return this.currentAppPath() === '/qc-traceability';
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

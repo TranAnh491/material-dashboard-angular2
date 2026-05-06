@@ -124,7 +124,9 @@
 .navbar.navbar--dashboard-pass-through,
 .navbar.navbar--dashboard-pass-through .container-fluid,
 .navbar.navbar--pd-pass-through,
-.navbar.navbar--pd-pass-through .container-fluid {
+.navbar.navbar--pd-pass-through .container-fluid,
+.navbar.navbar--qc-trace-pass-through,
+.navbar.navbar--qc-trace-pass-through .container-fluid {
   pointer-events: none;
 }
 
@@ -138,7 +140,9 @@
 }
 
 .navbar.navbar--pd-pass-through .navbar-wrapper,
-.navbar.navbar--pd-pass-through .navbar-wrapper .navbar-brand {
+.navbar.navbar--pd-pass-through .navbar-wrapper .navbar-brand,
+.navbar.navbar--qc-trace-pass-through .navbar-wrapper,
+.navbar.navbar--qc-trace-pass-through .navbar-wrapper .navbar-brand {
   pointer-events: auto;
 }
 
