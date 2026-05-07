@@ -37,8 +37,8 @@
                  class="lsx-search-input"
                  [(ngModel)]="searchProductionOrder"
                  (keyup.enter)="searchByProductionOrder()"
-                 [placeholder]="isMobile ? 'Nhập LSX (vd: KZLSX1125/0040)' : 'Nhập LSX để xem (ví dụ: KZLSX1125/0040)'"
-                 title="Nhập lệnh sản xuất và nhấn Enter">
+                 [placeholder]="isMobile ? 'Nhập LSX hoặc quét mã hàng...' : 'Nhập LSX hoặc quét mã hàng (B+6 số / QR: Material|PO|SL|IMD)'"
+                 title="Nhập LSX hoặc mã hàng rồi nhấn Enter">
           <button class="search-btn" 
                   (click)="searchByProductionOrder()"
                   [disabled]="!searchProductionOrder || !searchProductionOrder.trim()"
@@ -46,11 +46,22 @@
             <i class="material-icons">search</i>
           </button>
           <button class="clear-search-btn" 
-                  *ngIf="selectedProductionOrder"
+                  *ngIf="selectedProductionOrder || materialSearchMode === 'material'"
                   (click)="clearProductionOrderFilter()"
                   title="Xóa và ẩn dữ liệu">
             <i class="material-icons">clear</i>
           </button>
+        </div>
+
+        <div class="lsx-material-inline" *ngIf="materialSearchMode === 'material'">
+          <div class="lsx-material-inline__loading" *ngIf="materialSearchLoading">
+            <i class="material-icons spinning">sync</i>
+            <span>Đang lọc theo mã hàng…</span>
+          </div>
+          <div class="lsx-material-inline__error" *ngIf="!materialSearchLoading && materialSearchError">
+            <i class="material-icons">info</i>
+            <span>{{ materialSearchError }}</span>
+          </div>
         </div>
 
         <!-- Simple Start/Stop Controls -->
@@ -247,7 +258,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex" [class.row-dup-bag]="material.bagDuplicate">
             <td class="factory-cell readonly-cell">
               {{material.factory || selectedFactory}}
             </td>
@@ -266,7 +277,7 @@
             <td class="batch-cell readonly-cell">
               {{material.importDate || 'N/A'}}
             </td>
-            <td class="bag-number-cell readonly-cell">
+            <td class="bag-number-cell readonly-cell" [class.cell-dup-bag]="material.bagDuplicate">
               {{ getOutboundBagColumnDisplay(material) }}
             </td>
             <td class="bag-batch-cell readonly-cell">
@@ -319,7 +330,7 @@
             <td class="batch-cell readonly-cell">
               {{material.importDate || 'N/A'}}
             </td>
-            <td class="bag-number-cell readonly-cell">
+            <td class="bag-number-cell readonly-cell" [class.cell-dup-bag]="material.bagDuplicate">
               {{ getOutboundBagColumnDisplay(material) }}
             </td>
             <td class="bag-batch-cell readonly-cell">
@@ -347,7 +358,7 @@
         <button class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
           <i class="material-icons">chevron_left</i>
         </button>
-        <button class="page-btn" *ngFor="let page of [].constructor(totalPages); let i = index" [class.active]="currentPage === i + 1" (click)="goToPage(i + 1)">{{i + 1}}</button>
+        <button class="page-btn" *ngFor="let page of [].constructor(totalPages); let i = index; trackBy: trackByIndex" [class.active]="currentPage === i + 1" (click)="goToPage(i + 1)">{{i + 1}}</button>
         <button class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
           <i class="material-icons">chevron_right</i>
         </button>
@@ -417,7 +428,7 @@
         <div class="pending-data-section" *ngIf="pendingScanData.length > 0">
           <h4>Danh Sách Đã Scan ({{ pendingScanData.length }})</h4>
           <div class="scan-list">
-            <div class="scan-item" *ngFor="let item of pendingScanData; let i = index">
+            <div class="scan-item" *ngFor="let item of pendingScanData; let i = index; trackBy: trackByIndex">
               <div class="scan-item-header">
                 <span class="scan-index">#{{ i + 1 }}</span>
                 <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>
@@ -472,7 +483,7 @@
       <!-- Removed duplicate LSX and Employee info - already shown in main status -->
       
       <div class="scan-review-list">
-        <div class="scan-review-item" *ngFor="let item of pendingScanData; let i = index">
+        <div class="scan-review-item" *ngFor="let item of pendingScanData; let i = index; trackBy: trackByIndex">
           <div class="scan-item-header">
             <span class="scan-index">#{{ i + 1 }}</span>
             <span class="scan-time">{{ item.scanTime | date:'HH:mm:ss' }}</span>
