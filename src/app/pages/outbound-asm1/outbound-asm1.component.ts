@@ -40,6 +40,8 @@ export interface OutboundMaterial {
   productionOrder?: string; // Lệnh sản xuất
   employeeId?: string; // Mã nhân viên
   importDate?: string; // Ngày nhập từ QR code để so sánh chính xác với inventory
+  /** UI-only: đánh dấu bag bị trùng giữa nhiều LSX khi search theo mã hàng */
+  bagDuplicate?: boolean;
 
 }
 
@@ -107,6 +109,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   // Production Order Filter properties
   selectedProductionOrder: string = '';
   searchProductionOrder: string = '';
+  /** Search theo mã hàng / QR (Material|PO|...|IMD...): hiển thị lịch sử xuất trong khoảng ngày; highlight bag trùng (Control Batch). */
+  materialSearchMode: 'lsx' | 'material' = 'lsx';
+  materialSearchParsed: { materialCode: string; poNumber?: string; imdKey?: string; bagNumberDisplay?: string } | null = null;
+  materialSearchLoading = false;
+  materialSearchError = '';
   availableProductionOrders: string[] = [];
   
   // Professional Scanning Modal properties
@@ -215,17 +222,14 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   }
   
   private setupDefaultDateRange(): void {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    // Default to show only today's data
-    this.startDate = today.toISOString().split('T')[0];
-    this.endDate = today.toISOString().split('T')[0];
-    this.showOnlyToday = true;
-    this.hidePreviousDayHistory = true;
-    
-    console.log('📅 Date range set to:', { startDate: this.startDate, endDate: this.endDate, showOnlyToday: this.showOnlyToday, hidePreviousDayHistory: this.hidePreviousDayHistory });
+    const y = new Date().getFullYear();
+    this.startDate = `${y}-01-01`;
+    this.endDate = `${y}-12-31`;
+    const todayIso = new Date().toISOString().split('T')[0];
+    this.showOnlyToday = this.startDate === todayIso && this.endDate === todayIso;
+    this.hidePreviousDayHistory = false;
+
+    console.log('📅 Date range set to current year:', { startDate: this.startDate, endDate: this.endDate, showOnlyToday: this.showOnlyToday });
   }
   
   onDateRangeChange(): void {
@@ -261,6 +265,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     // “Hôm nay” = xem tất cả mã phát sinh hôm nay, không phụ thuộc LSX đang chọn
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
+    this.materialSearchMode = 'lsx';
+    this.materialSearchParsed = null;
+    this.materialSearchError = '';
     console.log('📅 Reset to today\'s date and hide previous day\'s history');
     this.loadMaterials();
   }
@@ -501,6 +508,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     const searchTerm = this.searchProductionOrder.trim().toUpperCase();
     console.log(`🔍 Searching for Production Order: ${searchTerm}`);
+
+    // Nếu không phải LSX -> coi như search mã hàng/QR và hiển thị thẳng xuống bảng
+    if (!this.isValidLsxCode(searchTerm)) {
+      await this.searchByMaterialInput(this.searchProductionOrder.trim());
+      return;
+    }
+
+    this.materialSearchMode = 'lsx';
+    this.materialSearchParsed = null;
+    this.materialSearchError = '';
     
     // 🔧 TÌM KIẾM KHÔNG PHÂN BIỆT CHỮ HOA/THƯỜNG
     // Tìm trong availableProductionOrders để khớp chính xác
@@ -522,11 +539,147 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     this.loadMaterials(); // Load data for this LSX (không kiểm tra trạng thái khi search)
   }
+
+  private parseMaterialSearchInput(raw: string): { materialCode: string; poNumber?: string; imdKey?: string; bagNumberDisplay?: string } | null {
+    const t = (raw || '').trim();
+    if (!t) return null;
+
+    // Format chuẩn QR: Material|PO|Qty|IMD (IMD có thể kèm bag)
+    const clean = t.replace(/\s*\|\s*/g, '|');
+    const parts = clean.split('|').map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 1 && /^[A-Z]\d{6,}$/i.test(parts[0])) {
+      const materialCode = parts[0].toUpperCase();
+      const poNumber = parts.length >= 2 ? parts[1] : undefined;
+      const part4 = parts.length >= 4 ? parts[3] : undefined;
+      const pImd = part4 ? this.rmBagHistory.parseQrPart4(part4) : null;
+      const imdKey = pImd?.imdKey || (part4 ? String(part4).trim() : undefined);
+      const bagNumberDisplay = (pImd?.bagNumberDisplay || '').trim() || undefined;
+      return { materialCode, poNumber, imdKey, bagNumberDisplay };
+    }
+
+    // Nhập trực tiếp mã hàng (B + 6 số...)
+    const m = t.match(/[A-Z]\d{6,}/);
+    if (m) {
+      return { materialCode: m[0].toUpperCase() };
+    }
+
+    return null;
+  }
+
+  async searchByMaterialInput(raw: string): Promise<void> {
+    const parsed = this.parseMaterialSearchInput(raw);
+    if (!parsed?.materialCode) {
+      alert('⚠️ Vui lòng nhập LSX hoặc quét/nhập mã hàng (vd B019019 hoặc QR: Material|PO|SL|IMD).');
+      return;
+    }
+
+    this.materialSearchMode = 'material';
+    this.materialSearchParsed = parsed;
+    this.materialSearchError = '';
+    this.materialSearchLoading = true;
+    this.selectedProductionOrder = '';
+    this.cdr.detectChanges();
+
+    try {
+      const start = this.startDate;
+      const end = this.endDate;
+      const snap = await this.firestore
+        .collection('outbound-materials', ref => {
+          let q: any = ref.where('factory', '==', 'ASM1').where('materialCode', '==', parsed.materialCode).limit(10000);
+          if (parsed.poNumber) {
+            q = q.where('poNumber', '==', parsed.poNumber);
+          }
+          return q;
+        })
+        .get()
+        .toPromise();
+
+      const rows: OutboundMaterial[] = (snap?.docs || []).map((d: any) => {
+        const data = d.data();
+        // giả lập cấu trúc snapshotChanges() để dùng lại mapOutboundDocToMaterial
+        return this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => data } } });
+      });
+
+      let filtered = rows.filter(r =>
+        !start || !end ? true : !!(r.exportDate && this.isDateWithinRange(r.exportDate, start, end))
+      );
+
+      filtered.sort((a, b) => {
+        const u = b.updatedAt!.getTime() - a.updatedAt!.getTime();
+        if (u !== 0) return u;
+        const ed = b.exportDate.getTime() - a.exportDate.getTime();
+        if (ed !== 0) return ed;
+        return b.createdAt!.getTime() - a.createdAt!.getTime();
+      });
+
+      const bagKeyOf = (it: OutboundMaterial): string =>
+        this.rmBagHistory.resolveOutboundDupBagSticker({
+          bagNumberDisplay: it.bagNumberDisplay,
+          bagBatch: it.bagBatch,
+          importDate: it.importDate,
+          batchNumber: it.batchNumber,
+          notes: it.notes
+        }).trim();
+
+      const groupKeyOf = (it: OutboundMaterial): string => {
+        const fac = String(it.factory || 'ASM1').trim();
+        const mc = String(it.materialCode || '').trim().toUpperCase();
+        const po = String(it.poNumber || '').trim();
+        const imd = String(it.importDate || '').trim();
+        const bag = bagKeyOf(it);
+        return `${fac}|${mc}|${po}|${imd}|${bag}`;
+      };
+
+      const groupCounts = new Map<string, number>();
+      for (const it of filtered) {
+        const bag = bagKeyOf(it);
+        if (!bag || bag === '—') continue;
+        const key = groupKeyOf(it);
+        groupCounts.set(key, (groupCounts.get(key) || 0) + 1);
+      }
+
+      for (const it of filtered) {
+        const bag = bagKeyOf(it);
+        const key = groupKeyOf(it);
+        it.bagDuplicate = !!(bag && bag !== '—' && (groupCounts.get(key) || 0) > 1);
+      }
+
+      this.materials = [...filtered];
+      this.filteredMaterials = [...filtered];
+      this.currentPage = 1;
+      this.updatePagination();
+
+      if (filtered.length === 0) {
+        this.materialSearchError = `Không có lịch sử xuất kho cho mã ${parsed.materialCode} trong khoảng ngày đang chọn.`;
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('❌ searchByMaterialInput error:', e);
+      this.materialSearchError = `Lỗi tìm theo mã hàng: ${msg}`;
+      this.materials = [];
+      this.filteredMaterials = [];
+      this.updatePagination();
+    } finally {
+      this.materialSearchLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  openLsxFromMaterialResult(lsx: string): void {
+    this.searchProductionOrder = lsx;
+    this.selectedProductionOrder = lsx;
+    this.materialSearchMode = 'lsx';
+    this.materialSearchError = '';
+    this.loadMaterials();
+  }
   
   // Clear Production Order filter (hide all data)
   clearProductionOrderFilter(): void {
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
+    this.materialSearchMode = 'lsx';
+    this.materialSearchParsed = null;
+    this.materialSearchError = '';
     console.log('🔄 Clearing Production Order filter - hiding all data');
     this.loadMaterials(); // Reload to hide all
   }
@@ -730,6 +883,11 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   private readonly DISPLAY_LIMIT = 50;
   
   loadMaterials(): void {
+    if (this.materialSearchMode === 'material' && this.searchProductionOrder?.trim()) {
+      void this.searchByMaterialInput(this.searchProductionOrder.trim());
+      return;
+    }
+
     const hasLSX = !!(this.selectedProductionOrder && this.selectedProductionOrder.trim());
     const todayIso = new Date().toISOString().split('T')[0];
     const isTodayRange = this.startDate === todayIso && this.endDate === todayIso;

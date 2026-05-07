@@ -65,7 +65,8 @@ export class RmBagHistoryService {
    * Parse phần 4 QR: hậu tố `(T1)` / `(t2)` = bịch tách; phần bịch vẫn là i/tổng.
    */
   parseQrPart4(part4: string | null | undefined): QrPart4Parsed {
-    const raw = (part4 ?? '').trim();
+    const raw0 = (part4 ?? '').trim();
+    const raw = typeof raw0.normalize === 'function' ? raw0.normalize('NFKC') : raw0;
     if (!raw) {
       return { imdKey: '', bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
     }
@@ -117,6 +118,74 @@ export class RmBagHistoryService {
    */
   extractBagLabelFromQrPart4(part4: string | null | undefined): string {
     return this.parseQrPart4(part4).bagFractionLabel;
+  }
+
+  /** Ngoặc fullwidth → ASCII — tránh mất nhánh `(T…)` khi đọc tem. */
+  normalizeParenAscii(s: string): string {
+    return String(s || '')
+      .replace(/\uFF08/g, '(')
+      .replace(/\uFF09/g, ')')
+      .trim();
+  }
+
+  private extractQrPart4HintsFromNotes(notes: string | null | undefined): string[] {
+    const n = String(notes ?? '');
+    const out: string[] = [];
+    const re = /\d{8}-\d+\/\d+(?:\([^)]*\)|(?:[Tt]\d+))?/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(n)) !== null) {
+      out.push(m[0]);
+    }
+    return out;
+  }
+
+  /**
+   * Khóa Bag cho Control Batch / trùng xuất: luôn ưu tiên tem đầy đủ (đuôi T…),
+   * không chỉ phần i/tổng — đồng bộ Functions `outbound-bag-resolve.ts`.
+   */
+  resolveOutboundDupBagSticker(fields: {
+    bagNumberDisplay?: string | null;
+    bagBatch?: string | null;
+    importDate?: string | null;
+    batchNumber?: string | null;
+    notes?: string | null;
+  }): string {
+    const bagBatchRaw = this.normalizeParenAscii(String(fields.bagBatch ?? '').trim());
+    let disp = this.normalizeParenAscii(String(fields.bagNumberDisplay ?? '').trim());
+    if (disp) {
+      return disp;
+    }
+
+    const tries: string[] = [];
+    const push = (x: string | null | undefined) => {
+      const s = this.normalizeParenAscii(String(x ?? '').trim());
+      if (s) tries.push(s);
+    };
+
+    push(fields.importDate);
+    push(fields.batchNumber);
+    for (const hint of this.extractQrPart4HintsFromNotes(fields.notes)) {
+      push(hint);
+    }
+
+    for (const line of String(fields.notes ?? '').split(/[\r\n]+/)) {
+      const t = line.trim();
+      if (!t) continue;
+      if (t.includes('|')) {
+        const parts = t.split('|').map(p => p.trim());
+        if (parts.length >= 4) push(parts[3]);
+      }
+    }
+
+    for (const c of tries) {
+      const p = this.parseQrPart4(c);
+      const b = this.normalizeParenAscii(p.bagNumberDisplay);
+      if (b) {
+        return b;
+      }
+    }
+
+    return bagBatchRaw;
   }
 
   /** Ghi một dòng lịch sử (không throw — tránh chặn nhập/xuất). */

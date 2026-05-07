@@ -667,6 +667,41 @@
   border-bottom: 1px solid #e0e0e0; 
 }
 
+/* Inline status when searching by material (results render in table) */
+.lsx-material-inline {
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.lsx-material-inline__loading,
+.lsx-material-inline__error {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e0e0e0;
+  background: #fff;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  .material-icons { font-size: 18px; }
+}
+
+.lsx-material-inline__error {
+  border-color: rgba(2, 132, 199, 0.35);
+}
+
+.row-dup-bag {
+  background: rgba(255, 243, 224, 0.45);
+}
+
+.cell-dup-bag {
+  font-weight: 700;
+  color: #b45309;
+}
+
 .excel-actions .action-controls { 
   display: flex; 
   align-items: center; 

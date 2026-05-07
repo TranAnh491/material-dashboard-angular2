@@ -37,8 +37,8 @@
                  class="lsx-search-input"
                  [(ngModel)]="searchProductionOrder"
                  (keyup.enter)="searchByProductionOrder()"
-                 [placeholder]="isMobile ? 'Nhập LSX (vd: KZLSX1125/0040)' : 'Nhập LSX để xem (ví dụ: KZLSX1125/0040)'"
-                 title="Nhập lệnh sản xuất và nhấn Enter">
+                 [placeholder]="isMobile ? 'Nhập LSX hoặc quét mã hàng...' : 'Nhập LSX hoặc quét mã hàng (B+6 số / QR: Material|PO|SL|IMD)'"
+                 title="Nhập LSX hoặc mã hàng rồi nhấn Enter">
           <button class="search-btn" 
                   (click)="searchByProductionOrder()"
                   [disabled]="!searchProductionOrder || !searchProductionOrder.trim()"
@@ -46,11 +46,23 @@
             <i class="material-icons">search</i>
           </button>
           <button class="clear-search-btn" 
-                  *ngIf="selectedProductionOrder"
+                  *ngIf="selectedProductionOrder || materialSearchMode === 'material'"
                   (click)="clearProductionOrderFilter()"
                   title="Xóa và ẩn dữ liệu">
             <i class="material-icons">clear</i>
           </button>
+        </div>
+
+        <!-- Khi search theo mã hàng: hiển thị loading/error ở đây, dữ liệu đổ xuống bảng -->
+        <div class="lsx-material-inline" *ngIf="materialSearchMode === 'material'">
+          <div class="lsx-material-inline__loading" *ngIf="materialSearchLoading">
+            <i class="material-icons spinning">sync</i>
+            <span>Đang lọc theo mã hàng…</span>
+          </div>
+          <div class="lsx-material-inline__error" *ngIf="!materialSearchLoading && materialSearchError">
+            <i class="material-icons">info</i>
+            <span>{{ materialSearchError }}</span>
+          </div>
         </div>
 
         <!-- Simple Start/Stop Controls -->
@@ -247,7 +259,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex" [class.row-dup-bag]="material.bagDuplicate">
             <td class="factory-cell readonly-cell">
               {{material.factory || 'ASM1'}}
             </td>
@@ -266,7 +278,7 @@
             <td class="batch-cell readonly-cell">
               {{material.importDate || 'N/A'}}
             </td>
-            <td class="bag-number-cell readonly-cell">
+            <td class="bag-number-cell readonly-cell" [class.cell-dup-bag]="material.bagDuplicate">
               {{ getOutboundBagColumnDisplay(material) }}
             </td>
             <td class="bag-batch-cell readonly-cell">
@@ -309,7 +321,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex">
+          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex" [class.row-dup-bag]="material.bagDuplicate">
             <td class="code-cell readonly-cell">
               {{material.materialCode}}
             </td>
@@ -319,7 +331,7 @@
             <td class="batch-cell readonly-cell">
               {{material.importDate || 'N/A'}}
             </td>
-            <td class="bag-number-cell readonly-cell">
+            <td class="bag-number-cell readonly-cell" [class.cell-dup-bag]="material.bagDuplicate">
               {{ getOutboundBagColumnDisplay(material) }}
             </td>
             <td class="bag-batch-cell readonly-cell">

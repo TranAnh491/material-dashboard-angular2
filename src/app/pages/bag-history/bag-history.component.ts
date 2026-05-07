@@ -7,7 +7,7 @@ import 'firebase/compat/firestore';
 import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { RmBagHistoryEventType } from '../../services/rm-bag-history.service';
+import { RmBagHistoryEventType, RmBagHistoryService } from '../../services/rm-bag-history.service';
 
 export interface BagHistoryRow {
   id: string;
@@ -159,7 +159,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private fns: AngularFireFunctions,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private rmBagHistory: RmBagHistoryService
   ) {}
 
   ngOnInit(): void {
@@ -472,14 +473,9 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
 
   getBagColumnDisplay(row: { bagBatch?: string; bagNumberDisplay?: string }): string {
     const bnd = (row.bagNumberDisplay || '').trim();
-    // Nếu có mã bịch lẻ/tách (VD: 1(T1254581)) thì ưu tiên để tránh kiểm tra nhầm.
-    if (bnd && (bnd.includes('(') || /t\d+/i.test(bnd))) {
-      return bnd;
-    }
+    if (bnd) return bnd;
     const bb = (row.bagBatch || '').trim();
-    // Normal outbound case: show full fraction "i/tổng" when available.
-    if (bb) return bb;
-    return bnd || '—';
+    return bb || '—';
   }
 
   applyFilters(): void {
@@ -847,13 +843,14 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           bagNumberRaw != null && String(bagNumberRaw).trim() !== ''
             ? String(bagNumberRaw).trim()
             : '';
-        // Bag grouping rule:
-        // - If there is a split-bag marker (T...), use bagNumberDisplay (e.g. "6(T123)").
-        // - Otherwise, prefer bagBatch from outbound (e.g. "6/10") to keep full bag fraction.
-        // - Fallback to whichever exists.
-        const bndHasSplit =
-          !!bagNumberDisplay && (bagNumberDisplay.includes('(') || /t\d+/i.test(bagNumberDisplay));
-        const bagKey = (bndHasSplit ? bagNumberDisplay : (bagBatchRaw || bagNumberDisplay || '')).trim();
+        const sticker = this.rmBagHistory.resolveOutboundDupBagSticker({
+          bagNumberDisplay,
+          bagBatch: bagBatchRaw,
+          importDate: String(d['importDate'] ?? ''),
+          batchNumber: String(d['batchNumber'] ?? ''),
+          notes: String(d['notes'] ?? '')
+        }).trim();
+        const bagKey = sticker;
         if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagKey)) {
           continue;
         }
@@ -878,6 +875,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           if (lsxStr) {
             lsx.add(lsxStr);
           }
+          const bk = bagKey.trim();
           counts.set(key, {
             count: 1,
             sample: {
@@ -885,11 +883,12 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
               materialCode: materialCode.trim(),
               poNumber: poNumber.trim(),
               imd: imd.trim(),
-              bagBatch: bagKey.trim(),
-              bagNumberDisplay: bagNumberDisplay || undefined
+              bagBatch: bk,
+              bagNumberDisplay:
+                bagNumberDisplay ||
+                (/\(|T\d/i.test(bk) ? bk : undefined)
             },
-            lsx
-            ,
+            lsx,
             latestMs: tMs
           });
         }

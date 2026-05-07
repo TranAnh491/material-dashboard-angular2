@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
+import { resolveOutboundBagDupSticker } from './outbound-bag-resolve';
 import {
   emailFrom,
   emailPass,
@@ -205,7 +206,6 @@ type Agg = {
   sample: Pick<OutboundDupRow, 'factory' | 'materialCode' | 'poNumber' | 'imd' | 'bagBatch'>;
   lsx: Set<string>;
   latestMs: number;
-  bagNumberDisplay?: string;
 };
 
 function isValidRmMaterialCode(code: string): boolean {
@@ -339,14 +339,8 @@ export async function scanOutboundDuplicates(
     const poNumber = String(d.poNumber ?? '');
     const imdRaw = d.batchNumber ?? d.importDate;
     const imd = imdRaw != null ? String(imdRaw) : '';
-    const bagRaw = d.bagBatch;
-    const bagBatchRaw = bagRaw != null ? String(bagRaw) : '';
-    const bagNumberRaw = (d as any).bagNumberDisplay;
-    const bagNumberDisplay =
-      bagNumberRaw != null && String(bagNumberRaw).trim() !== '' ? String(bagNumberRaw).trim() : '';
-    const bndHasSplit =
-      !!bagNumberDisplay && (bagNumberDisplay.includes('(') || /t\d+/i.test(bagNumberDisplay));
-    const bagKey = (bndHasSplit ? bagNumberDisplay : (bagBatchRaw || bagNumberDisplay || '')).trim();
+    const resolved = resolveOutboundBagDupSticker(d as Record<string, unknown>);
+    const bagKey = resolved.sticker.trim();
 
     if (!isOutboundRowEligible(materialCode, poNumber, imd, bagKey)) {
       continue;
@@ -383,8 +377,7 @@ export async function scanOutboundDuplicates(
           bagBatch: bagKey.trim()
         },
         lsx,
-        latestMs: tMs,
-        bagNumberDisplay: bagNumberDisplay || undefined
+        latestMs: tMs
       });
     }
   }
@@ -396,7 +389,7 @@ export async function scanOutboundDuplicates(
     if (Number.isNaN(dt.getTime())) return '';
     return dt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
   };
-  for (const { count, sample, lsx, latestMs, bagNumberDisplay } of counts.values()) {
+  for (const { count, sample, lsx, latestMs } of counts.values()) {
     if (count > 1) {
       const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
       const productionOrderSummary = lsxList.length > 0 ? lsxList.join(' · ') : '—';
@@ -405,9 +398,12 @@ export async function scanOutboundDuplicates(
       if (ignoredBaseline != null && ignoredBaseline >= count) {
         continue;
       }
+      const bk = String(sample.bagBatch || '').trim();
+      const dispSticker =
+        /\(|T\d/i.test(bk) ? bk : '';
       dupes.push({
         ...sample,
-        bagNumberDisplay,
+        bagNumberDisplay: dispSticker || undefined,
         latestExportAtMs: latestMs || 0,
         latestExportAtLabel: fmtVn(latestMs) || undefined,
         productionOrderFirst: lsxList?.[0] || '',
@@ -541,11 +537,11 @@ async function sendZaloDupNotify(
   db: admin.firestore.Firestore,
   dupes: OutboundDupRow[],
   settings?: Pick<ControlBatchDupSettings, 'dupSinceLabel' | 'exclusion'>
-): Promise<boolean> {
+): Promise<{ ok: boolean; reason?: string }> {
   const token = zaloBotToken.value().trim();
   if (!token) {
     console.error('outbound-dup-notify-30m: missing ZALO_BOT_TOKEN');
-    return false;
+    return { ok: false, reason: 'missing_token' };
   }
 
   // Fixed recipients requested: ASP0106 & ASP0701 (lookup chatId from `zalo_links`)
@@ -570,7 +566,7 @@ async function sendZaloDupNotify(
 
   if (chatIds.length === 0) {
     console.warn('outbound-dup-notify-30m: no chatId for', memberIds);
-    return false;
+    return { ok: false, reason: 'missing_chatId' };
   }
 
   const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
@@ -612,10 +608,10 @@ async function sendZaloDupNotify(
         })
       )
     );
-    return true;
+    return { ok: true };
   } catch (e) {
     console.error('outbound-dup-notify-30m: send zalo failed', e);
-    return false;
+    return { ok: false, reason: 'send_failed' };
   }
 }
 
@@ -681,23 +677,27 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
     }
 
     // Send Zalo only (email disabled by request).
-    const zaloSent = await sendZaloDupNotify(db, newDupes, {
+    const zalo = await sendZaloDupNotify(db, newDupes, {
       dupSinceLabel: settings.dupSinceLabel,
       exclusion: settings.exclusion
     });
+    const zaloSent = zalo.ok;
     const emailSent = false;
 
-    // Persist "emailed" keys so we don't resend.
-    const sentAt = vnNowLabel(new Date());
-    const toAppend = newDupes.map(r => ({ key: r.dupKey, sentAt }));
-    const settingsRef = db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC);
-    await settingsRef.set(
-      {
-        outboundDupEmailedGroups: admin.firestore.FieldValue.arrayUnion(...toAppend),
-        outboundDupLastAutoEmailAt: admin.firestore.FieldValue.serverTimestamp()
-      },
-      { merge: true }
-    );
+    // IMPORTANT: only mark as "sent" when Zalo actually sent.
+    // Otherwise, if token/chatId missing, we'd permanently suppress future notifications.
+    if (zaloSent) {
+      const sentAt = vnNowLabel(new Date());
+      const toAppend = newDupes.map(r => ({ key: r.dupKey, sentAt }));
+      const settingsRef = db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC);
+      await settingsRef.set(
+        {
+          outboundDupEmailedGroups: admin.firestore.FieldValue.arrayUnion(...toAppend),
+          outboundDupLastAutoEmailAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    }
 
     await lockRef.set(
       {
@@ -705,6 +705,7 @@ export async function runOutboundDupNotifyEvery30Min(db: admin.firestore.Firesto
         dupGroups: newDupes.length,
         emailSent,
         zaloSent,
+        zaloReason: zaloSent ? '' : zalo.reason || 'unknown',
         finishedAt: admin.firestore.FieldValue.serverTimestamp()
       },
       { merge: true }

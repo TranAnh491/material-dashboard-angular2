@@ -44,6 +44,7 @@ exports.sendOutboundDupReportManual = sendOutboundDupReportManual;
 exports.runOutboundDupNotifyForSlot = runOutboundDupNotifyForSlot;
 const admin = __importStar(require("firebase-admin"));
 const nodemailer = __importStar(require("nodemailer"));
+const outbound_bag_resolve_1 = require("./outbound-bag-resolve");
 const params_config_1 = require("./params-config");
 const CONTROL_BATCH_EXCLUSION_COLLECTION = 'control-batch-exclusion';
 const CONTROL_BATCH_EXCLUSION_DOC = 'settings';
@@ -300,12 +301,8 @@ async function scanOutboundDuplicates(db, cached) {
         const poNumber = String((_c = d.poNumber) !== null && _c !== void 0 ? _c : '');
         const imdRaw = (_d = d.batchNumber) !== null && _d !== void 0 ? _d : d.importDate;
         const imd = imdRaw != null ? String(imdRaw) : '';
-        const bagRaw = d.bagBatch;
-        const bagBatchRaw = bagRaw != null ? String(bagRaw) : '';
-        const bagNumberRaw = d.bagNumberDisplay;
-        const bagNumberDisplay = bagNumberRaw != null && String(bagNumberRaw).trim() !== '' ? String(bagNumberRaw).trim() : '';
-        const bndHasSplit = !!bagNumberDisplay && (bagNumberDisplay.includes('(') || /t\d+/i.test(bagNumberDisplay));
-        const bagKey = (bndHasSplit ? bagNumberDisplay : (bagBatchRaw || bagNumberDisplay || '')).trim();
+        const resolved = (0, outbound_bag_resolve_1.resolveOutboundBagDupSticker)(d);
+        const bagKey = resolved.sticker.trim();
         if (!isOutboundRowEligible(materialCode, poNumber, imd, bagKey)) {
             continue;
         }
@@ -341,8 +338,7 @@ async function scanOutboundDuplicates(db, cached) {
                     bagBatch: bagKey.trim()
                 },
                 lsx,
-                latestMs: tMs,
-                bagNumberDisplay: bagNumberDisplay || undefined
+                latestMs: tMs
             });
         }
     }
@@ -355,7 +351,7 @@ async function scanOutboundDuplicates(db, cached) {
             return '';
         return dt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
     };
-    for (const { count, sample, lsx, latestMs, bagNumberDisplay } of counts.values()) {
+    for (const { count, sample, lsx, latestMs } of counts.values()) {
         if (count > 1) {
             const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
             const productionOrderSummary = lsxList.length > 0 ? lsxList.join(' · ') : '—';
@@ -364,7 +360,9 @@ async function scanOutboundDuplicates(db, cached) {
             if (ignoredBaseline != null && ignoredBaseline >= count) {
                 continue;
             }
-            dupes.push(Object.assign(Object.assign({}, sample), { bagNumberDisplay, latestExportAtMs: latestMs || 0, latestExportAtLabel: fmtVn(latestMs) || undefined, productionOrderFirst: (lsxList === null || lsxList === void 0 ? void 0 : lsxList[0]) || '', count,
+            const bk = String(sample.bagBatch || '').trim();
+            const dispSticker = /\(|T\d/i.test(bk) ? bk : '';
+            dupes.push(Object.assign(Object.assign({}, sample), { bagNumberDisplay: dispSticker || undefined, latestExportAtMs: latestMs || 0, latestExportAtLabel: fmtVn(latestMs) || undefined, productionOrderFirst: (lsxList === null || lsxList === void 0 ? void 0 : lsxList[0]) || '', count,
                 productionOrderSummary,
                 dupKey }));
         }
@@ -471,7 +469,7 @@ async function sendZaloDupNotify(db, dupes, settings) {
     const token = params_config_1.zaloBotToken.value().trim();
     if (!token) {
         console.error('outbound-dup-notify-30m: missing ZALO_BOT_TOKEN');
-        return false;
+        return { ok: false, reason: 'missing_token' };
     }
     // Fixed recipients requested: ASP0106 & ASP0701 (lookup chatId from `zalo_links`)
     const memberIds = ['ASP0106', 'ASP0701'];
@@ -494,7 +492,7 @@ async function sendZaloDupNotify(db, dupes, settings) {
     }
     if (chatIds.length === 0) {
         console.warn('outbound-dup-notify-30m: no chatId for', memberIds);
-        return false;
+        return { ok: false, reason: 'missing_chatId' };
     }
     const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
     const top = dupes.slice(0, 8);
@@ -528,11 +526,11 @@ async function sendZaloDupNotify(db, dupes, settings) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, text: msg })
         })));
-        return true;
+        return { ok: true };
     }
     catch (e) {
         console.error('outbound-dup-notify-30m: send zalo failed', e);
-        return false;
+        return { ok: false, reason: 'send_failed' };
     }
 }
 function vnNowLabel(d = new Date()) {
@@ -586,24 +584,29 @@ async function runOutboundDupNotifyEvery30Min(db) {
             return;
         }
         // Send Zalo only (email disabled by request).
-        const zaloSent = await sendZaloDupNotify(db, newDupes, {
+        const zalo = await sendZaloDupNotify(db, newDupes, {
             dupSinceLabel: settings.dupSinceLabel,
             exclusion: settings.exclusion
         });
+        const zaloSent = zalo.ok;
         const emailSent = false;
-        // Persist "emailed" keys so we don't resend.
-        const sentAt = vnNowLabel(new Date());
-        const toAppend = newDupes.map(r => ({ key: r.dupKey, sentAt }));
-        const settingsRef = db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC);
-        await settingsRef.set({
-            outboundDupEmailedGroups: admin.firestore.FieldValue.arrayUnion(...toAppend),
-            outboundDupLastAutoEmailAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        // IMPORTANT: only mark as "sent" when Zalo actually sent.
+        // Otherwise, if token/chatId missing, we'd permanently suppress future notifications.
+        if (zaloSent) {
+            const sentAt = vnNowLabel(new Date());
+            const toAppend = newDupes.map(r => ({ key: r.dupKey, sentAt }));
+            const settingsRef = db.collection(CONTROL_BATCH_EXCLUSION_COLLECTION).doc(CONTROL_BATCH_EXCLUSION_DOC);
+            await settingsRef.set({
+                outboundDupEmailedGroups: admin.firestore.FieldValue.arrayUnion(...toAppend),
+                outboundDupLastAutoEmailAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
         await lockRef.set({
             status: 'done',
             dupGroups: newDupes.length,
             emailSent,
             zaloSent,
+            zaloReason: zaloSent ? '' : zalo.reason || 'unknown',
             finishedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         console.log('outbound-dup-notify-5m: notified', {
