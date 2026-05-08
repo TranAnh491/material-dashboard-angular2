@@ -41,6 +41,8 @@ npm-debug.log
 testem.log
 /typings
 /.angular
+firebase-debug.log
+firebase-debug.*.log
 
 # e2e
 /e2e/*.js

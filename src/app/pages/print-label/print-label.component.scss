@@ -20,8 +20,8 @@
 
   /* UI đơn sắc: trắng/đen/be — không đậm, không đổ bóng */
   .excel-actions {
-    background: #f5f1e6 !important;
-    border-bottom: 1px solid #000000 !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #e5e7eb !important;
   }
 
   .excel-header h4 {
@@ -32,7 +32,7 @@
   .excel-table thead th {
     font-weight: 400 !important;
     text-transform: uppercase !important;
-    background: #f5f1e6 !important;
+    background: #f9fafb !important;
   }
 
   /* Override tất cả shadow / bold do inline style */
@@ -80,8 +80,8 @@
         font-weight: bold !important;
           font-size: 10px !important;
         color: #000000 !important;
-        background: #ffffff !important;
-        border: 1px solid #000000 !important;
+        background: #f9fafb !important;
+        border: 1px solid #e5e7eb !important;
         padding: 8px 4px !important;
         text-align: center !important;
         vertical-align: middle !important;
@@ -470,9 +470,9 @@ html .print-label-container,
 
   .excel-table {
     thead th {
-      background: #ffffff !important;
+      background: #f9fafb !important;
       color: #000000 !important;
-      border-bottom: 2px solid #000000 !important;
+      border-bottom: 1px solid #e5e7eb !important;
       font-size: 13px !important;
   text-align: center !important;
     }
@@ -480,7 +480,7 @@ html .print-label-container,
     tbody td {
       background: #ffffff !important;
       color: #000000 !important;
-  border: 1px solid #000000 !important;
+  border: 1px solid #e5e7eb !important;
       font-size: 13px !important;
     }
 
@@ -544,7 +544,7 @@ html .print-label-container,
   .excel-table button {
     color: #000000 !important;
     background: #ffffff !important;
-    border: 1px solid #000000 !important;
+    border: 1px solid #e5e7eb !important;
   }
 
   // Ghi đè tất cả icons trong bảng
@@ -559,7 +559,7 @@ html .print-label-container,
   .excel-table .badge {
     color: #000000 !important;
     background: #ffffff !important;
-    border: 1px solid #000000 !important;
+    border: 1px solid #e5e7eb !important;
   }
 }
 

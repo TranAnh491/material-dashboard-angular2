@@ -81,7 +81,9 @@ export class RmBagHistoryService {
       splitSuffix = tag ? `(${tag.toUpperCase()})` : '';
     }
 
-    const m = /^(\d{8})-(\d+)\/(\d+)$/.exec(head);
+    // Một số tem có thêm hậu tố sau DDMMYYYY (VD: DDMMYYYY01-2/2).
+    // Vẫn lấy imdKey = 8 số đầu, bag = phần sau dấu '-'.
+    const m = /^(\d{8})\d*-(\d+)\/(\d+)$/.exec(head);
     if (m) {
       const num = m[2];
       const den = m[3];

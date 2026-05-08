@@ -1679,6 +1679,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       for (const scanItem of this.pendingScanData) {
         const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
         const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate;
+        const bagNumberDisplay = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
         const outboundData: OutboundMaterial = {
           factory: this.selectedFactory,
           materialCode: scanItem.materialCode,
@@ -1693,7 +1694,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           batch: imdStored,
           batchNumber: imdStored,
           bagBatch: scanItem.bagBatch || p.bagFractionLabel,
-          bagNumberDisplay: scanItem.bagNumberDisplay || p.bagNumberDisplay || undefined,
+          ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
           scanMethod: 'CAMERA', // 🔧 CAMERA ONLY: Đánh dấu rõ ràng là camera
           notes: `Auto-scanned export - ${scanItem.scanTime.toISOString()}`,
           createdAt: new Date(),
@@ -2321,6 +2322,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         // ❌ KHÁC ÍT NHẤT 1 TRƯỜNG → Tạo dòng mới
         const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
         const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate || null;
+        const bagNumberDisplay = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
         consolidatedMap.set(key, {
           factory: 'ASM1',
           materialCode: scanItem.materialCode,
@@ -2336,7 +2338,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
           employeeId: scanItem.employeeId,
           batchNumber: imdStored,
           bagBatch: scanItem.bagBatch || p.bagFractionLabel,
-          bagNumberDisplay: scanItem.bagNumberDisplay || p.bagNumberDisplay || undefined,
+          ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
           scanMethod: 'CAMERA',
           notes: `Batch scan - ${scanItem.productionOrder}`,
           importDate: imdStored,

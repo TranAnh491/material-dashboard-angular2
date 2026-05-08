@@ -75,6 +75,11 @@ export class PrintLabelComponent implements OnInit {
   searchTerm: string = '';
   showCompletedItems: boolean = false; // Mặc định TẮT
   currentStatusFilter: string = '';
+
+  // Pagination (danh sách tem in)
+  pageIndex: number = 1; // 1-based
+  pageSize: number = 10;
+  readonly pageSizeOptions: number[] = [10];
   
   // Done items properties
   doneItems: ScheduleItem[] = [];
@@ -1731,6 +1736,76 @@ export class PrintLabelComponent implements OnInit {
     return this.getFilteredData();
   }
 
+  private formatQtyPcs(qty: unknown): string {
+    const s = String(qty ?? '').trim();
+    if (!s) return '';
+    return /pcs$/i.test(s) ? s : `${s}pcs`;
+  }
+
+  private formatEmployeeCode(emailOrUid: unknown): string {
+    const s = String(emailOrUid ?? '').trim();
+    if (!s) return 'UNKNOWN';
+    const code = s.includes('@') ? s.split('@')[0] : s;
+    return code.toUpperCase();
+  }
+
+  /**
+   * Màu theo hạn Ngày nhận kế hoạch:
+   * - future: chưa tới ngày (xanh)
+   * - today: đúng ngày nhận (cam)
+   * - overdue: quá hạn (đỏ)
+   */
+  getDueState(item: ScheduleItem): 'future' | 'today' | 'overdue' | '' {
+    const t = this.parseNgayNhanKeHoachToTime(item.ngayNhanKeHoach);
+    if (!t) return '';
+
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startTomorrow = startToday + 24 * 60 * 60 * 1000;
+
+    if (t < startToday) return 'overdue';
+    if (t >= startToday && t < startTomorrow) return 'today';
+    return 'future';
+  }
+
+  getTotalDisplayCount(): number {
+    return this.getDisplayScheduleData().length;
+  }
+
+  getTotalPages(): number {
+    const total = this.getTotalDisplayCount();
+    return Math.max(1, Math.ceil(total / this.pageSize));
+  }
+
+  getPagedDisplayScheduleData(): ScheduleItem[] {
+    const all = this.getDisplayScheduleData();
+    const totalPages = Math.max(1, Math.ceil(all.length / this.pageSize));
+    if (this.pageIndex > totalPages) this.pageIndex = totalPages;
+    if (this.pageIndex < 1) this.pageIndex = 1;
+    const start = (this.pageIndex - 1) * this.pageSize;
+    return all.slice(start, start + this.pageSize);
+  }
+
+  goToPage(page: number): void {
+    const total = this.getTotalPages();
+    this.pageIndex = Math.min(Math.max(1, page), total);
+  }
+
+  prevPage(): void {
+    this.goToPage(this.pageIndex - 1);
+  }
+
+  nextPage(): void {
+    this.goToPage(this.pageIndex + 1);
+  }
+
+  onPageSizeChange(next: number | string): void {
+    const v = typeof next === 'string' ? parseInt(next, 10) : next;
+    if (!Number.isFinite(v) || v <= 0) return;
+    this.pageSize = Math.min(10, v);
+    this.pageIndex = 1;
+  }
+
   formatNumberForDisplay(value: any): string {
     if (value === null || value === undefined || value === '') {
       return '';
@@ -1776,14 +1851,17 @@ export class PrintLabelComponent implements OnInit {
   // Filter methods
   filterByStatus(status: string): void {
     this.currentStatusFilter = this.currentStatusFilter === status ? '' : status;
+    this.pageIndex = 1;
   }
 
   clearStatusFilter(): void {
     this.currentStatusFilter = '';
+    this.pageIndex = 1;
   }
 
   onSearchChange(event: any): void {
     this.searchTerm = event.target.value;
+    this.pageIndex = 1;
   }
 
   async toggleShowCompletedItems(): Promise<void> {
@@ -2359,7 +2437,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
 
       const user = await this.auth.currentUser;
       const currentUser = user ? user.email || user.uid : 'UNKNOWN';
-      const printDate = new Date().toLocaleDateString('vi-VN');
+      const employeeCode = this.formatEmployeeCode(currentUser);
 
       const labelHtmlParts: string[] = [];
 
@@ -2367,6 +2445,8 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         const d = this.getScheduleItemQrData(item);
         if (!d) continue;
         const qrData = `${d.maTem}|${d.soLuongTem}|${d.lenhSanXuat}`;
+        const qtyPcs = this.formatQtyPcs(d.soLuongTem);
+        const lineNhan = (item.lineNhan || '').toString().trim();
 
         const qrImage = await QRCode.toDataURL(qrData, {
           width: 240,
@@ -2381,13 +2461,13 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
             </div>
             <div class="info-section">
               <div>
-                <div class="info-row">Mã tem: ${d.maTem}</div>
-                <div class="info-row">Lượng: ${d.soLuongTem}</div>
+                <div class="info-row big">${d.maTem}</div>
+                <div class="info-row big">${qtyPcs}</div>
                 <div class="info-row">LSX: ${d.lenhSanXuat}</div>
+                <div class="info-row">LINE: ${lineNhan || '-'}</div>
               </div>
               <div>
-                <div class="info-row small">Ngày in: ${printDate}</div>
-                <div class="info-row small">NV: ${currentUser}</div>
+                <div class="info-row small">NV: ${employeeCode}</div>
               </div>
             </div>
           </div>
@@ -2450,6 +2530,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
                 color: #000000 !important;
               }
               .info-row { margin: 0.3mm 0 !important; font-weight: bold !important; color: #000000 !important; }
+              .info-row.big { font-size: 18px !important; line-height: 1.0 !important; letter-spacing: 0.02em !important; }
               .info-row.small { font-size: 8.4px !important; color: #000000 !important; }
               @media print {
                 @page { margin: 0 !important; size: 57mm 32mm !important; }
@@ -2493,6 +2574,8 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       const maTem = item.maTem || '';
       const soLuongTem = item.soLuongYeuCau || item.soLuongPhoi || '';
       const lenhSanXuat = item.lenhSanXuat || '';
+      const qtyPcs = this.formatQtyPcs(soLuongTem);
+      const lineNhan = (item.lineNhan || '').toString().trim();
       
       const qrData = `${maTem}|${soLuongTem}|${lenhSanXuat}`;
       console.log('📝 QR Data:', qrData);
@@ -2510,7 +2593,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       // Get current user info
       const user = await this.auth.currentUser;
       const currentUser = user ? user.email || user.uid : 'UNKNOWN';
-      const printDate = new Date().toLocaleDateString('vi-VN');
+      const employeeCode = this.formatEmployeeCode(currentUser);
 
       // Create print window
       const printWindow = window.open('', '_blank');
@@ -2587,6 +2670,12 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
                   color: #000000 !important;
                 }
                 
+                .info-row.big {
+                  font-size: 18px !important;
+                  line-height: 1.0 !important;
+                  letter-spacing: 0.02em !important;
+                }
+                
                 @media print {
                   body { 
                     margin: 0 !important; 
@@ -2651,13 +2740,13 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
                 </div>
                 <div class="info-section">
                   <div>
-                    <div class="info-row">Mã tem: ${maTem}</div>
-                    <div class="info-row">Lượng: ${soLuongTem}</div>
+                    <div class="info-row big">${maTem}</div>
+                    <div class="info-row big">${qtyPcs}</div>
                     <div class="info-row">LSX: ${lenhSanXuat}</div>
+                    <div class="info-row">LINE: ${lineNhan || '-'}</div>
                   </div>
                   <div>
-                    <div class="info-row small">Ngày in: ${printDate}</div>
-                    <div class="info-row small">NV: ${currentUser}</div>
+                    <div class="info-row small">NV: ${employeeCode}</div>
                   </div>
                 </div>
               </div>

@@ -3,75 +3,113 @@
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>📋 PRINT LABEL STATUS</h4>
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="page-title-row">
+            <i class="material-icons page-title-icon">content_paste</i>
+            <div class="page-title-text">
+              <div class="page-title">PRINT LABEL STATUS</div>
+              <div class="page-subtitle">Theo dõi trạng thái in tem nhãn sản xuất</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls">
-        <button class="custom-btn" type="button" (click)="openMorePopup()">
-          <i class="material-icons">more_vert</i>
-          More
-        </button>
-
-        <div class="search-box" style="display: flex; align-items: center; gap: 8px;">
-          <input type="text" 
-                 placeholder="TÌM KIẾM..." 
-                 [(ngModel)]="searchTerm"
-                 (input)="onSearchChange($event)"
-                 class="custom-input search-input-uppercase"
-                 style="width: 4cm;"
-                 title="Tìm theo: IMD (001), Mã tem, Khách hàng">
-          
-          <!-- 3 nút nằm thẳng hàng cạnh ô Search -->
-          <button class="custom-btn" (click)="refreshDisplay()" style="width: auto; min-width: 40px; display: flex; align-items: center; justify-content: center;">
-            <i class="material-icons">refresh</i>
-          </button>
-          
-          <button class="custom-btn" 
-                  [class.active]="showCompletedItems"
-                  (click)="toggleShowCompletedItems()">
-            <i class="material-icons">visibility</i>
-          </button>
-          
-          <button class="custom-btn" 
-                  (click)="openDownloadModal()"
-                  title="Tải xuống lịch sử">
-            <i class="material-icons">download</i>
-          </button>
-          
-          <button class="custom-btn custom-btn--iqc" 
-                  (click)="openIQCModal()"
-                  title="IQC - Kiểm tra chất lượng"
-                  >
-            <i class="material-icons">check_circle</i>
-            IQC
+        <div class="toolbar-left">
+          <button class="custom-btn btn-more" type="button" (click)="openMorePopup()">
+            <i class="material-icons">more_vert</i>
+            <span>MORE</span>
+            <i class="material-icons caret">expand_more</i>
           </button>
 
-          <button class="custom-btn custom-btn--print"
-                  (click)="printBatchPrintedQrLabels()"
-                  title="In hàng loạt các tem có tình trạng Đã in">
-            <i class="material-icons">print</i>
-            Print
-          </button>
-          
+          <div class="search-box" style="display: flex; align-items: center; gap: 8px;">
+            <div class="search-wrap">
+              <input type="text" 
+                   placeholder="Tìm kiếm..." 
+                   [(ngModel)]="searchTerm"
+                   (input)="onSearchChange($event)"
+                   class="custom-input search-input-uppercase"
+                   style="width: 4cm;"
+                   title="Tìm theo: IMD (001), Mã tem, Khách hàng">
+              <i class="material-icons search-ico">search</i>
+            </div>
 
-          
+            <!-- 3 nút icon như ảnh -->
+            <button class="icon-btn" type="button" (click)="refreshDisplay()" title="Làm mới">
+              <i class="material-icons">refresh</i>
+            </button>
+            <button class="icon-btn" type="button" [class.active]="showCompletedItems" (click)="toggleShowCompletedItems()" title="Hiện/ẩn Done">
+              <i class="material-icons">visibility</i>
+            </button>
+            <button class="icon-btn" type="button" (click)="openDownloadModal()" title="Tải xuống lịch sử">
+              <i class="material-icons">download</i>
+            </button>
 
+            <button class="custom-btn custom-btn--iqc" 
+                    (click)="openIQCModal()"
+                    title="IQC - Kiểm tra chất lượng"
+                    >
+              <i class="material-icons">check_circle</i>
+              IQC
+            </button>
+
+            <button class="custom-btn custom-btn--print"
+                    (click)="printBatchPrintedQrLabels()"
+                    title="In hàng loạt các tem có tình trạng Đã in">
+              <i class="material-icons">print</i>
+              Print
+            </button>
+          </div>
         </div>
         
         <!-- Status Indicators (đồng bộ danh mục Tình trạng trong More → Tình trạng) -->
-        <div class="status-chips">
+        <div class="toolbar-stats">
           <button
             type="button"
-            class="status-chip"
+            class="stat-card"
             *ngFor="let st of getStatusChipsForDisplay()"
             (click)="filterByStatus(st)"
             [class.active]="currentStatusFilter === st"
           >
-            {{ getStatusChipLabel(st) }}: {{ getTinhTrangCount(st) }}
+            <div class="stat-icon">
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ BẢN VẼ'">description</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ IN'">schedule</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ TEMPLATE'">view_quilt</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'DONE'">check_circle</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'ĐÃ IN'">print</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'IQC'">verified</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'PASS'">task_alt</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'NG'">cancel</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'LATE'">warning</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) !== 'CHỜ BẢN VẼ' 
+                                            && getStatusChipLabel(st) !== 'CHỜ IN' 
+                                            && getStatusChipLabel(st) !== 'CHỜ TEMPLATE'
+                                            && getStatusChipLabel(st) !== 'DONE'
+                                            && getStatusChipLabel(st) !== 'ĐÃ IN'
+                                            && getStatusChipLabel(st) !== 'IQC'
+                                            && getStatusChipLabel(st) !== 'PASS'
+                                            && getStatusChipLabel(st) !== 'NG'
+                                            && getStatusChipLabel(st) !== 'LATE'">label</i>
+            </div>
+            <div class="stat-meta">
+              <div class="stat-label">{{ getStatusChipLabel(st) }}</div>
+              <div class="stat-value">{{ getTinhTrangCount(st) }}</div>
+            </div>
           </button>
-          <button type="button" class="status-chip" (click)="clearStatusFilter()">TOTAL: {{getNotDoneItemsCount()}}</button>
+
+          <button type="button" class="stat-card stat-card--total" (click)="clearStatusFilter()">
+            <div class="stat-icon">
+              <i class="material-icons">shield</i>
+            </div>
+            <div class="stat-meta">
+              <div class="stat-label">TOTAL</div>
+              <div class="stat-value">{{getNotDoneItemsCount()}}</div>
+            </div>
+          </button>
         </div>
       </div>
       </div>
@@ -137,7 +175,7 @@
               </tr>
             </thead>
             <tbody>
-              <ng-container *ngFor="let item of getDisplayScheduleData(); let i = index">
+              <ng-container *ngFor="let item of getPagedDisplayScheduleData(); let i = index">
               <tr *ngIf="!showCompletedItems"
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
@@ -168,13 +206,19 @@
                   </button>
                   <span *ngIf="item.isUrgent" style="color: #000000; font-size: 10px; display: block; text-align: center;">🔥</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.maTem || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">
+                <span class="due-text" [ngClass]="'due-' + getDueState(item)">{{item.maTem || ''}}</span>
+              </td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000; min-width: 50px; max-width: 70px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.maHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.lenhSanXuat || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">
+                <span class="due-text" [ngClass]="'due-' + getDueState(item)">{{item.lenhSanXuat || ''}}</span>
+              </td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.khachHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.ngayNhanKeHoach || ''}}</td>
+              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">
+                <span class="due-text" [ngClass]="'due-' + getDueState(item)">{{item.ngayNhanKeHoach || ''}}</span>
+              </td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || ''}}</td>
@@ -390,6 +434,25 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Pagination card (bấm chuyển trang thay vì kéo xuống) -->
+        <div class="pagination-card" *ngIf="!showCompletedItems">
+          <div class="pagination-left">
+            Hiển thị
+            <select class="page-size-select" [ngModel]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+              <option *ngFor="let s of pageSizeOptions" [ngValue]="s">{{ s }}</option>
+            </select>
+            / {{ getTotalDisplayCount() }} tem
+          </div>
+
+          <div class="pagination-center">
+            <button type="button" class="page-btn" (click)="goToPage(1)" [disabled]="pageIndex === 1">«</button>
+            <button type="button" class="page-btn" (click)="prevPage()" [disabled]="pageIndex === 1">‹</button>
+            <span class="page-meta">Trang <strong>{{ pageIndex }}</strong> / {{ getTotalPages() }}</span>
+            <button type="button" class="page-btn" (click)="nextPage()" [disabled]="pageIndex === getTotalPages()">›</button>
+            <button type="button" class="page-btn" (click)="goToPage(getTotalPages())" [disabled]="pageIndex === getTotalPages()">»</button>
+          </div>
+        </div>
         
       <!-- No Data Message -->
       <div *ngIf="scheduleData.length === 0" style="text-align: center; padding: 40px; color: #999;">
@@ -470,36 +533,62 @@
     .excel-header {
       background: white;
       color: #000;
-      padding: 15px 20px;
-      text-align: center;
+      padding: 14px 16px;
+      text-align: left;
       margin: 0;
+      border-bottom: 1px solid #eef2f7;
     }
     
-    .excel-header h4 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 400;
-      color: #000;
-      text-transform: uppercase;
-    }
+    .page-header { display:flex; align-items:center; justify-content: space-between; }
+    .page-title-row { display:flex; align-items:flex-start; gap: 10px; }
+    .page-title-icon { font-size: 22px; color:#2563eb; margin-top: 2px; }
+    .page-title { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
+    .page-subtitle { font-size: 11px; color:#6b7280; margin-top: 2px; }
     
     .excel-actions {
-      background: #f5f1e6;
-      padding: 15px 20px;
-      border-bottom: 1px solid #000;
+      background: #ffffff;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
     }
     
     .action-controls {
       display: flex;
       gap: 10px;
       align-items: center;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .toolbar-left {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: nowrap;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .toolbar-stats {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+      flex-wrap: nowrap;
+      justify-content: flex-end;
+      margin-left: auto;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 2px;
+      flex: 0 0 auto;
     }
     
     .custom-btn {
       background: #fff;
-      border: 1px solid #000;
-      color: #000;
+      border: 1px solid #e5e7eb;
+      color: #111827;
       padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
@@ -512,25 +601,45 @@
       box-shadow: none;
       text-transform: uppercase;
     }
+
+    .btn-more {
+      background: #2563eb;
+      color: #fff;
+      border-color: #2563eb;
+      padding: 7px 12px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+    .btn-more .material-icons { color:#fff; font-size: 18px; }
+    .btn-more .caret { font-size: 18px; margin-left: -2px; }
+    .btn-more:hover { background:#1d4ed8; border-color:#1d4ed8; }
     
     .custom-btn:hover {
-      background: #efe7d3;
-      border-color: #000;
+      background: #f9fafb;
+      border-color: #d1d5db;
     }
     
     .custom-btn.active {
-      background: #efe7d3;
-      color: #000;
-      border-color: #000;
+      background: #eef2ff;
+      color: #111827;
+      border-color: #c7d2fe;
     }
 
     .custom-btn--iqc {
-      background: #f5f1e6;
+      background: #ffffff;
+      border-color: #e5e7eb;
+      color: #111827;
+      text-transform: uppercase;
     }
 
     .custom-btn--print {
-      background: #ffffff;
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #ffffff;
+      padding: 7px 12px;
     }
+    .custom-btn--print i { color:#fff; }
+    .custom-btn--print:hover { background:#1d4ed8; border-color:#1d4ed8; }
     
     .dropdown-toggle::after {
       content: '';
@@ -589,8 +698,41 @@
     
     .search-box {
       flex: 1;
-      max-width: 300px;
+      max-width: 220px;
     }
+
+    .search-wrap { position: relative; display:flex; align-items:center; }
+    .search-wrap input {
+      padding-right: 30px !important;
+      height: 34px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      font-size: 12px;
+      text-transform: none;
+    }
+    .search-ico {
+      position:absolute;
+      right: 8px;
+      font-size: 18px;
+      color:#9ca3af;
+      pointer-events:none;
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      display: inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .icon-btn i { font-size: 18px; color:#111827; }
+    .icon-btn:hover { background:#f9fafb; border-color:#d1d5db; }
+    .icon-btn.active { background:#eef2ff; border-color:#c7d2fe; }
     
     .search-input-uppercase {
       width: 100%;
@@ -600,17 +742,74 @@
       font-size: 14px;
       text-transform: uppercase;
     }
-    
-    .excel-body {
-      padding: 20px;
-      text-align: center;
+
+    /* More popup (MENU) - grid đều kích thước */
+    .more-popup-content {
+      max-width: 720px;
+      width: 92%;
+    }
+
+    .more-popup-header {
+      background: #f5f1e6;
+      color: #000;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 14px 16px;
+      border-radius: 14px 14px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .more-popup-title {
+      margin: 0;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 14px;
+    }
+
+    .more-popup-header .close-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .more-popup-header .close-btn i {
+      font-size: 20px;
+    }
+
+    .more-menu-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .more-menu-btn {
+      justify-content: center;
+      width: 100%;
+      text-transform: none !important;
+      font-size: 14px;
+      min-height: 44px;
+      border-radius: 10px;
     }
     
+    .excel-body { padding: 16px; text-align: center; }
+    /* Chừa khoảng trống để pagination fixed không che nội dung */
+    .excel-body { padding-bottom: 58px; }
+    
     .table-container {
-      max-height: 85vh;
+      /* Chừa chỗ cho pagination, hạn chế scroll toàn trang */
+      max-height: calc(100vh - 260px);
       overflow-y: auto;
-      border: 1px solid #dee2e6;
-      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
     }
     
     .excel-table {
@@ -626,53 +825,167 @@
     }
     
     .excel-table th {
-      background: #f5f1e6;
-      padding: 10px 6px;
+      background: #f9fafb;
+      padding: 9px 6px;
       text-align: center;
       font-weight: 400;
-      color: #000;
-      border: 1px solid #000;
+      color: #111827;
+      border: 1px solid #e5e7eb !important;
       position: sticky;
       top: 0;
       z-index: 10;
       text-transform: uppercase;
       box-shadow: none;
     }
+
+    /* Đảm bảo mọi cột tiêu đề bảng cùng 1 size chữ */
+    .excel-table thead th {
+      font-size: 10px !important;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
     
     .excel-table td {
-      padding: 8px;
-      border: 1px solid #dee2e6;
+      padding: 7px;
+      border: 1px solid #e5e7eb !important;
       vertical-align: middle;
       text-align: center;
+      line-height: 1.15;
     }
     
     .excel-table tbody tr:hover {
       background-color: #f5f1e6 !important;
     }
 
-    .status-chips {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-left: auto;
-      margin-right: 0;
-    }
-
-    .status-chip {
-      background: #fff;
-      border: 1px solid #000;
-      color: #000;
-      padding: 6px 10px;
-      border-radius: 16px;
-      font-size: 12px;
-      font-weight: 400;
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      color: #111827;
+      padding: 6px 8px;
+      border-radius: 9px;
       cursor: pointer;
       box-shadow: none;
-      text-transform: uppercase;
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      min-width: 92px;
+      justify-content: flex-start;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+      text-transform: none;
+      flex: 0 0 auto;
     }
 
-    .status-chip:hover {
-      background: #efe7d3;
+    .stat-card:hover {
+      background: #f9fafb;
+      border-color: #d1d5db;
+      transform: translateY(-1px);
+    }
+
+    .stat-card.active {
+      background: #eef2ff;
+      border-color: #c7d2fe;
+    }
+
+    .stat-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      color: #111827;
+      flex: 0 0 28px;
+    }
+
+    .stat-icon .material-icons {
+      font-size: 16px;
+      line-height: 16px;
+    }
+
+    .stat-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.1;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      opacity: 0.8;
+      white-space: nowrap;
+    }
+
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .stat-card--total .stat-icon {
+      background: #ecfeff;
+    }
+
+    /* Pagination (bấm chuyển trang) */
+    .pagination-card{
+      margin-top: 0;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      padding: 10px 12px;
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 12px;
+      position: fixed;
+      left: 14px;
+      right: 14px;
+      bottom: 0;
+      z-index: 1000;
+    }
+    .pagination-left{
+      color: #64748b;
+      font-size: 12px;
+      display:flex;
+      align-items:center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .page-size-select{
+      height: 34px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+      padding: 0 10px;
+      font-weight: 600;
+      color: #0f172a;
+      outline: none;
+    }
+    .pagination-center{
+      display:flex;
+      align-items:center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .page-btn{
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      cursor:pointer;
+      transition: all 0.2s ease;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .page-btn:hover{ background:#f9fafb; transform: translateY(-1px); }
+    .page-btn:disabled{ opacity: 0.5; cursor: not-allowed; transform: none; }
+    .page-meta{
+      color: #64748b;
+      font-size: 12px;
+      padding: 0 6px;
+      white-space: nowrap;
     }
     
     .complete-btn:hover {
@@ -684,6 +997,13 @@
       opacity: 0.6;
       background-color: #e8f5e8 !important;
     }
+
+    /* Màu hạn cho Mã tem / LSX / Ngày nhận (chỉ body cells dùng span.due-text) */
+    .due-text { font-weight: 800; }
+    /* Override các rule ép màu đen trong SCSS (dùng ::ng-deep + !important) */
+    :host ::ng-deep .due-future { color: #2563eb !important; } /* xanh */
+    :host ::ng-deep .due-today { color: #f59e0b !important; }  /* cam */
+    :host ::ng-deep .due-overdue { color: #ef4444 !important; } /* đỏ */
     
     /* Mobile responsive */
     @media (max-width: 768px) {
@@ -728,12 +1048,16 @@
       }
       
       .table-container {
-        max-height: 75vh;
+        max-height: calc(100vh - 320px);
       }
       
       .complete-btn {
         font-size: 16px !important;
         padding: 4px !important;
+      }
+
+      .more-menu-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -888,9 +1212,9 @@
 
 <!-- More Popup -->
 <div class="modal-overlay" *ngIf="showMorePopup" (click)="closeMorePopup()">
-  <div class="modal-content" style="max-width: 720px; width: 92%;" (click)="$event.stopPropagation()">
-    <div class="modal-header" style="background: #f5f1e6; color:#000; border-bottom: 1px solid #000;">
-      <h3 style="margin:0; font-weight:400; text-transform: uppercase;">MORE</h3>
+  <div class="modal-content more-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header more-popup-header">
+      <h3 class="more-popup-title">MORE</h3>
       <button class="close-btn" type="button" (click)="closeMorePopup()">
         <i class="material-icons">close</i>
       </button>
@@ -898,20 +1222,35 @@
     <div class="modal-body" style="padding: 16px;">
       <!-- MENU -->
       <ng-container *ngIf="morePopupView === 'menu'">
-        <div style="display:flex; flex-wrap: wrap; gap: 8px;">
-          <button type="button" class="custom-btn" (click)="triggerFileImport(); closeMorePopup()">Import Excel</button>
-          <button type="button" class="custom-btn" (click)="downloadTemplate(); closeMorePopup()">Template</button>
-          <button type="button" class="custom-btn" (click)="removeDuplicateItems(); closeMorePopup()">Xóa mã trùng (DUP)</button>
-          <button type="button" class="custom-btn" (click)="showDeleteOldDataDialog(); closeMorePopup()">Xóa dữ liệu cũ</button>
-          <button type="button" class="custom-btn" (click)="showDeleteCurrentDataDialog(); closeMorePopup()">Xóa dữ liệu hiện tại</button>
-          <button type="button" class="custom-btn" (click)="debugFirebaseData(); closeMorePopup()">Debug Firebase Data</button>
-          <button type="button" class="custom-btn" (click)="findLostData(); closeMorePopup()">Tìm dữ liệu mất</button>
-          <button type="button" class="custom-btn" (click)="showAllFirebaseData(); closeMorePopup()">Hiển thị tất cả mã</button>
-          <button type="button" class="custom-btn" (click)="testBatchGeneration(); closeMorePopup()">Test Batch Generation</button>
-          <button type="button" class="custom-btn" (click)="checkAndClearFirebaseData(); closeMorePopup()">Kiểm tra & Xóa hết Firebase</button>
-          <button type="button" class="custom-btn" (click)="openMorePrinters()">Người in</button>
-          <button type="button" class="custom-btn" (click)="openMoreTinhTrang()">Tình trạng</button>
-          <button type="button" class="custom-btn" (click)="openMoreLateMails()">Danh sách mail</button>
+        <div class="more-menu-grid">
+          <button type="button" class="custom-btn more-menu-btn" (click)="refreshDisplay(); closeMorePopup()">
+            <i class="material-icons">refresh</i> Làm mới
+          </button>
+          <button
+            type="button"
+            class="custom-btn more-menu-btn"
+            [class.active]="showCompletedItems"
+            (click)="toggleShowCompletedItems(); closeMorePopup()"
+          >
+            <i class="material-icons">visibility</i> {{ showCompletedItems ? 'Ẩn Done' : 'Hiện Done' }}
+          </button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="openDownloadModal(); closeMorePopup()">
+            <i class="material-icons">download</i> Tải xuống
+          </button>
+
+          <button type="button" class="custom-btn more-menu-btn" (click)="triggerFileImport(); closeMorePopup()">Import Excel</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="downloadTemplate(); closeMorePopup()">Template</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="removeDuplicateItems(); closeMorePopup()">Xóa mã trùng (DUP)</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="showDeleteOldDataDialog(); closeMorePopup()">Xóa dữ liệu cũ</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="showDeleteCurrentDataDialog(); closeMorePopup()">Xóa dữ liệu hiện tại</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="debugFirebaseData(); closeMorePopup()">Debug Firebase Data</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="findLostData(); closeMorePopup()">Tìm dữ liệu mất</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="showAllFirebaseData(); closeMorePopup()">Hiển thị tất cả mã</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="testBatchGeneration(); closeMorePopup()">Test Batch Generation</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="checkAndClearFirebaseData(); closeMorePopup()">Kiểm tra & Xóa hết Firebase</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="openMorePrinters()">Người in</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="openMoreTinhTrang()">Tình trạng</button>
+          <button type="button" class="custom-btn more-menu-btn" (click)="openMoreLateMails()">Danh sách mail</button>
         </div>
       </ng-container>
 
