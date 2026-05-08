@@ -249,13 +249,46 @@ function isOnOrAfterDupSince(data, sinceMs) {
     }
     return t >= sinceMs;
 }
-function compositeKey(factory, materialCode, poNumber, imd, bagBatch) {
+function compositeKey(factory, materialCode, poNumber, imd, bichBatch, bagDisplay) {
     const fac = (factory || '').trim();
     const mc = (materialCode || '').trim().toUpperCase();
     const po = (poNumber || '').trim();
     const im = (imd || '').trim();
-    const bag = (bagBatch || '').trim();
-    return `${fac}|${mc}|${po}|${im}|${bag}`;
+    const bich = (bichBatch || '').trim();
+    const bag = (bagDisplay || '').trim();
+    return `${fac}|${mc}|${po}|${im}|${bich}|${bag}`;
+}
+function deriveBagDisplayFromBich(bichBatch) {
+    const s = String(bichBatch || '').trim();
+    const m = /^(\d+)\s*\/\s*\d+/.exec(s);
+    return (m === null || m === void 0 ? void 0 : m[1]) ? m[1] : '';
+}
+/**
+ * Control Batch cần phân biệt:
+ * - Bịch: i/tổng (VD 9/62)
+ * - Bag: i hoặc i(T...) khi tách (VD 9 hoặc 9(T125...))
+ *
+ * Rule: nếu trùng ở cột Bịch thì phải so thêm cột Bag để chắc là trùng thật.
+ */
+function resolveBichAndBag(d) {
+    const resolved = (0, outbound_bag_resolve_1.resolveOutboundBagDupSticker)(d);
+    const bich = String(resolved.bagBatchRaw || '').trim();
+    const bagFromDoc = String(resolved.bagNumberDisplayRaw || '').trim();
+    if (bagFromDoc) {
+        return { bichBatch: bich, bagDisplay: bagFromDoc };
+    }
+    const sticker = String(resolved.sticker || '').trim();
+    if (sticker && sticker !== bich) {
+        // sticker có thể là "9" hoặc "9(T...)" khi parse được từ notes/importDate/batchNumber
+        if (!sticker.includes('/') && /\d/.test(sticker)) {
+            return { bichBatch: bich, bagDisplay: sticker };
+        }
+        if (/\([Tt]\d+\)/.test(sticker)) {
+            return { bichBatch: bich, bagDisplay: sticker };
+        }
+    }
+    const fallback = deriveBagDisplayFromBich(bich);
+    return { bichBatch: bich, bagDisplay: fallback || sticker || bich };
 }
 async function fetchAllOutboundByFactory(db, factory) {
     const ref = db.collection('outbound-materials');
@@ -282,7 +315,7 @@ async function fetchAllOutboundByFactory(db, factory) {
 }
 /** Cùng logic với tab Control Batch (Angular). */
 async function scanOutboundDuplicates(db, cached) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f;
     const s = cached !== null && cached !== void 0 ? cached : (await loadControlBatchDupSettings(db));
     const excl = s.exclusion;
     const [docs1, docs2] = await Promise.all([
@@ -301,16 +334,16 @@ async function scanOutboundDuplicates(db, cached) {
         const poNumber = String((_c = d.poNumber) !== null && _c !== void 0 ? _c : '');
         const imdRaw = (_d = d.batchNumber) !== null && _d !== void 0 ? _d : d.importDate;
         const imd = imdRaw != null ? String(imdRaw) : '';
-        const resolved = (0, outbound_bag_resolve_1.resolveOutboundBagDupSticker)(d);
-        const bagKey = resolved.sticker.trim();
-        if (!isOutboundRowEligible(materialCode, poNumber, imd, bagKey)) {
+        const { bichBatch, bagDisplay } = resolveBichAndBag(d);
+        // Eligible: cần có số ở IMD, Bịch, Bag
+        if (!isOutboundRowEligible(materialCode, poNumber, imd, `${bichBatch} ${bagDisplay}`)) {
             continue;
         }
         const mcNorm = materialCode.trim().toUpperCase();
         if (excl.enabled && isMaterialCodeExcludedByControlBatchRules(mcNorm, excl.codes)) {
             continue;
         }
-        const key = compositeKey(factory, materialCode, poNumber, imd, bagKey);
+        const key = compositeKey(factory, materialCode, poNumber, imd, bichBatch, bagDisplay);
         const lsxVal = d.productionOrder;
         const lsxStr = lsxVal != null ? String(lsxVal).trim() : '';
         const tMs = (_e = docTimeMs(d)) !== null && _e !== void 0 ? _e : 0;
@@ -335,7 +368,8 @@ async function scanOutboundDuplicates(db, cached) {
                     materialCode: materialCode.trim(),
                     poNumber: poNumber.trim(),
                     imd: imd.trim(),
-                    bagBatch: bagKey.trim()
+                    bagBatch: bichBatch.trim(),
+                    bagNumberDisplay: bagDisplay.trim()
                 },
                 lsx,
                 latestMs: tMs
@@ -355,14 +389,12 @@ async function scanOutboundDuplicates(db, cached) {
         if (count > 1) {
             const lsxList = Array.from(lsx).sort((a, b) => a.localeCompare(b, 'vi'));
             const productionOrderSummary = lsxList.length > 0 ? lsxList.join(' · ') : '—';
-            const dupKey = compositeKey(sample.factory, sample.materialCode, sample.poNumber, sample.imd, sample.bagBatch);
+            const dupKey = compositeKey(sample.factory, sample.materialCode, sample.poNumber, sample.imd, sample.bagBatch, String((_f = sample.bagNumberDisplay) !== null && _f !== void 0 ? _f : ''));
             const ignoredBaseline = s.ignoredGroups.get(dupKey);
             if (ignoredBaseline != null && ignoredBaseline >= count) {
                 continue;
             }
-            const bk = String(sample.bagBatch || '').trim();
-            const dispSticker = /\(|T\d/i.test(bk) ? bk : '';
-            dupes.push(Object.assign(Object.assign({}, sample), { bagNumberDisplay: dispSticker || undefined, latestExportAtMs: latestMs || 0, latestExportAtLabel: fmtVn(latestMs) || undefined, productionOrderFirst: (lsxList === null || lsxList === void 0 ? void 0 : lsxList[0]) || '', count,
+            dupes.push(Object.assign(Object.assign({}, sample), { latestExportAtMs: latestMs || 0, latestExportAtLabel: fmtVn(latestMs) || undefined, productionOrderFirst: (lsxList === null || lsxList === void 0 ? void 0 : lsxList[0]) || '', count,
                 productionOrderSummary,
                 dupKey }));
         }

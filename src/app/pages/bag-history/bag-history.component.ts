@@ -59,11 +59,11 @@ export interface OutboundDuplicateGroupRow {
   materialCode: string;
   poNumber: string;
   imd: string;
-  /** Bag key để gom trùng: ưu tiên `bagNumberDisplay` (VD `6(T123...)`), fallback `bagBatch` (VD `6/10`). */
+  /** Bịch (i/tổng) — vd `6/10` */
   bagBatch: string;
-  /** Hiển thị Bag đầy đủ khi có tem tách (VD `6(T123...)`). */
+  /** Bag: `i` hoặc `i(T...)` khi bịch tách/lẻ. */
   bagNumberDisplay?: string;
-  /** Khóa nhóm trùng: factory|material|po|imd|bag */
+  /** Khóa nhóm trùng: factory|material|po|imd|bich|bag */
   dupKey: string;
   /** Ngày/giờ xuất mới nhất trong nhóm (ưu tiên exportDate, fallback createdAt/updatedAt). */
   latestExportAtLabel?: string;
@@ -475,6 +475,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     const bnd = (row.bagNumberDisplay || '').trim();
     if (bnd) return bnd;
     const bb = (row.bagBatch || '').trim();
+    const m = /^(\d+)\s*\/\s*\d+/.exec(bb);
+    if (m?.[1]) return m[1];
     return bb || '—';
   }
 
@@ -732,14 +734,16 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     materialCode: string,
     poNumber: string,
     imd: string,
-    bagBatch: string
+    bichBatch: string,
+    bagDisplay: string
   ): string {
     const fac = (factory || '').trim();
     const mc = (materialCode || '').trim().toUpperCase();
     const po = (poNumber || '').trim();
     const im = (imd || '').trim();
-    const bag = (bagBatch || '').trim();
-    return `${fac}|${mc}|${po}|${im}|${bag}`;
+    const bich = (bichBatch || '').trim();
+    const bag = (bagDisplay || '').trim();
+    return `${fac}|${mc}|${po}|${im}|${bich}|${bag}`;
   }
 
   isOutboundDupGroupIgnored(row: OutboundDuplicateGroupRow): boolean {
@@ -836,22 +840,34 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         const poNumber = String(d['poNumber'] ?? '');
         const imdRaw = d['batchNumber'] ?? d['importDate'];
         const imd = imdRaw != null ? String(imdRaw) : '';
-        const bagRaw = d['bagBatch'];
-        const bagBatchRaw = bagRaw != null ? String(bagRaw) : '';
+        const bichRaw = d['bagBatch'];
+        const bichBatchRaw = bichRaw != null ? String(bichRaw) : '';
         const bagNumberRaw = d['bagNumberDisplay'];
-        const bagNumberDisplay =
+        const bagNumberDisplayFromDoc =
           bagNumberRaw != null && String(bagNumberRaw).trim() !== ''
             ? String(bagNumberRaw).trim()
             : '';
         const sticker = this.rmBagHistory.resolveOutboundDupBagSticker({
-          bagNumberDisplay,
-          bagBatch: bagBatchRaw,
+          bagNumberDisplay: bagNumberDisplayFromDoc,
+          bagBatch: bichBatchRaw,
           importDate: String(d['importDate'] ?? ''),
           batchNumber: String(d['batchNumber'] ?? ''),
           notes: String(d['notes'] ?? '')
         }).trim();
-        const bagKey = sticker;
-        if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, bagKey)) {
+        const bichBatch = this.rmBagHistory.normalizeParenAscii(bichBatchRaw).trim();
+        const bagDisplay = bagNumberDisplayFromDoc?.trim()
+          ? this.rmBagHistory.normalizeParenAscii(bagNumberDisplayFromDoc).trim()
+          : (() => {
+              const st = this.rmBagHistory.normalizeParenAscii(sticker).trim();
+              if (st && st !== bichBatch) {
+                if (!st.includes('/') && /\d/.test(st)) return st;
+                if (/\([Tt]\d+\)/.test(st)) return st;
+              }
+              const m = /^(\d+)\s*\/\s*\d+/.exec(bichBatch);
+              return m?.[1] ? m[1] : (st || bichBatch);
+            })();
+
+        if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, `${bichBatch} ${bagDisplay}`)) {
           continue;
         }
         const mcNorm = materialCode.trim().toUpperCase();
@@ -859,7 +875,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           continue;
         }
         this.outboundDupEligibleCount += 1;
-        const key = this.outboundDupCompositeKey(factory, materialCode, poNumber, imd, bagKey);
+        const key = this.outboundDupCompositeKey(factory, materialCode, poNumber, imd, bichBatch, bagDisplay);
         const tMs = this.getOutboundDocTimeMs(d) ?? 0;
         const lsxVal = d['productionOrder'];
         const lsxStr = lsxVal != null ? String(lsxVal).trim() : '';
@@ -875,7 +891,6 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
           if (lsxStr) {
             lsx.add(lsxStr);
           }
-          const bk = bagKey.trim();
           counts.set(key, {
             count: 1,
             sample: {
@@ -883,10 +898,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
               materialCode: materialCode.trim(),
               poNumber: poNumber.trim(),
               imd: imd.trim(),
-              bagBatch: bk,
-              bagNumberDisplay:
-                bagNumberDisplay ||
-                (/\(|T\d/i.test(bk) ? bk : undefined)
+              bagBatch: bichBatch,
+              bagNumberDisplay: bagDisplay
             },
             lsx,
             latestMs: tMs
@@ -910,7 +923,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
             sample.materialCode,
             sample.poNumber,
             sample.imd,
-            sample.bagBatch
+            sample.bagBatch,
+            String((sample as any).bagNumberDisplay ?? '')
           );
           const ignoredBaseline = this.outboundDupIgnoredGroups.get(dupKey);
           if (ignoredBaseline != null && ignoredBaseline >= count) {

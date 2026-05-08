@@ -74,6 +74,7 @@
               <th>Mã</th>
               <th>PO</th>
               <th>IMD</th>
+              <th>Bịch</th>
               <th>Bag</th>
               <th class="num">Số lần xuất</th>
               <th>Lệnh sản xuất</th>
@@ -87,6 +88,7 @@
               <td>{{ r.materialCode }}</td>
               <td>{{ r.poNumber }}</td>
               <td>{{ r.imd || '—' }}</td>
+              <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
               <td class="bag-batch-col">{{ getBagColumnDisplay(r) }}</td>
               <td class="num">{{ r.count }}</td>
               <td class="lsx-col">
