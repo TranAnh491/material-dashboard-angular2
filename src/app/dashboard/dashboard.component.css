@@ -1537,7 +1537,7 @@
 }
 
 .putaway-widget .putaway-heatmap__cell--pending {
-  background: rgba(202, 138, 4, 0.92);
+  background: rgba(255, 237, 0, 0.96);
 }
 
 .putaway-heatmap__cell--pass {
@@ -1549,7 +1549,7 @@
 }
 
 .putaway-heatmap__cell--pending {
-  background: rgba(234, 179, 8, 0.88);
+  background: rgba(255, 241, 56, 0.94);
 }
 
 .putaway-heatmap__cell:hover {
@@ -1864,7 +1864,7 @@
 }
 
 .materials-table tbody tr.iqc-material-row--pending td:first-child {
-  box-shadow: inset 4px 0 0 0 rgb(202, 138, 4);
+  box-shadow: inset 4px 0 0 0 rgb(255, 214, 0);
 }
 
 .no-materials {
