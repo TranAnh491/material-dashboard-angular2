@@ -213,7 +213,7 @@
         </header>
         <div class="card-body card-body--putaway">
           <div class="putaway-wrap" *ngIf="!iqcLoading">
-            <div class="putaway-heatmap" *ngIf="iqcHeatmapHasAnySku; else putawayHeatEmpty" aria-label="Heatmap SKU 8 tuần — vị trí bắt đầu bằng IQC">
+            <div class="putaway-heatmap" *ngIf="iqcHeatmapHasAnySku; else putawayHeatEmpty" aria-label="Heatmap Putaway: Late trước, sau đó các tuần có SKU — vị trí bắt đầu bằng IQC">
               <div *ngFor="let col of iqcHeatmapWeeks" class="putaway-heatmap__col">
                 <div class="putaway-heatmap__head">
                   <span class="putaway-heatmap__week">{{ col.week }}</span>
@@ -234,7 +234,7 @@
             <ng-template #putawayHeatEmpty>
               <div class="putaway-heatmap putaway-heatmap--empty putaway-empty-msg text-muted text-center">
                 <span class="putaway-empty-msg__title">Không có SKU trong 8 tuần gần nhất.</span>
-                <span class="putaway-empty-msg__hint">Chỉ đếm hàng có <strong>vị trí bắt đầu bằng IQC</strong> (ví dụ IQC, IQC-P01; không phân biệt hoa thường sau khi bỏ khoảng trắng đầu/cuối), IQC status Pass / NG / Chờ kiểm, tồn &gt; 0 và có ngày nhập/cập nhật nằm trong một trong 8 tuần đó.</span>
+                <span class="putaway-empty-msg__hint">Chỉ đếm hàng có <strong>vị trí bắt đầu bằng IQC</strong>, IQC status Pass / NG / Chờ kiểm và tồn &gt; 0. Cột <strong>Late</strong> gom SKU ngoài 8 tuần hoặc thiếu ngày. Tuần không có SKU (0 mã) không hiển thị.</span>
               </div>
             </ng-template>
           </div>
@@ -520,6 +520,9 @@
       </div>
       
       <div class="iqc-materials-content" *ngIf="!iqcMaterialsLoading">
+        <div class="no-materials" *ngIf="iqcMaterialsByWeek.length === 0">
+          <p>Không có mã hàng nào khớp điều kiện Putaway (IQC + status + tồn + tuần).</p>
+        </div>
         <div *ngFor="let weekData of iqcMaterialsByWeek" class="iqc-week-section">
           <div class="week-header">
             <h4>{{ weekData.week }}</h4>

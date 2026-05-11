@@ -65,6 +65,9 @@ interface IqcHeatmapWeekCol {
 })
 export class DashboardComponent implements OnInit, OnDestroy {
 
+  /** SKU không thuộc 8 tuần hoặc thiếu ngày — nhãn cột heatmap/modal, luôn đứng trước các tuần Wxx. */
+  private readonly putawayLateWeekLabel = 'Late';
+
   /**
    * Tóm tắt tháng hiện tại (Done/Tổng) — cùng nguồn với Cloud Function `notifyDashboardZaloWeekdays1130`
    * (codebase `zalo`: `zalo/dashboard-digest.js` + `zalo/index.js`, 11:30 thứ 2–6 VN).
@@ -1354,6 +1357,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
    * Firestore range [IQC,IQD) bỏ sót location viết thường (`iqc-…`) hoặc có khoảng trắng đầu chuỗi trong DB — nên gộp thêm [iqc,iqd).
    * Nếu cả hai range trả về 0 dòng (hoặc lỗi index), fallback một query theo factory + limit và vẫn lọc bằng `isIqcStagingLocation`.
    */
+  /** 8 tuần ISO + cột Late (đầu tiên). */
+  private buildPutawayWeekBuckets(referenceDate: Date): Array<{ week: string; weekNum: number; startDate: Date; endDate: Date }> {
+    const currentYear = referenceDate.getFullYear();
+    const currentWeek = this.getISOWeek(referenceDate);
+    const isoWeeks: Array<{ week: string; weekNum: number; startDate: Date; endDate: Date }> = [];
+    for (let i = 7; i >= 0; i--) {
+      let weekNum = currentWeek - i;
+      let year = currentYear;
+      if (weekNum <= 0) {
+        year--;
+        const lastWeekOfYear = this.getISOWeek(new Date(year, 11, 31));
+        weekNum = lastWeekOfYear + weekNum;
+      }
+      const weekDate = this.getDateFromISOWeek(year, weekNum);
+      const startDate = this.getStartOfWeek(weekDate);
+      const endDate = this.getEndOfWeek(weekDate);
+      isoWeeks.push({
+        week: `W${weekNum}`,
+        weekNum,
+        startDate,
+        endDate
+      });
+    }
+    return [
+      {
+        week: this.putawayLateWeekLabel,
+        weekNum: -1,
+        startDate: new Date(0),
+        endDate: new Date(0)
+      },
+      ...isoWeeks
+    ];
+  }
+
   private async fetchPutawayStagingInventoryDocs(factory: string): Promise<any[]> {
     const mergeSnapshotsByDocId = (snaps: any[]): any[] => {
       const byId = new Map<string, any>();
@@ -1412,41 +1449,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   async loadIQCByWeek() {
     this.iqcLoading = true;
     try {
-      // Get current week number (ISO week)
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentWeek = this.getISOWeek(now);
-      
-      // Get 8 weeks (current week and 7 previous weeks)
-      const weeks: Array<{ week: string, weekNum: number, startDate: Date, endDate: Date }> = [];
-      for (let i = 7; i >= 0; i--) {
-        let weekNum = currentWeek - i;
-        let year = currentYear;
-        
-        // Handle year boundary
-        if (weekNum <= 0) {
-          year--;
-          const lastWeekOfYear = this.getISOWeek(new Date(year, 11, 31));
-          weekNum = lastWeekOfYear + weekNum;
-        }
-        
-        const weekDate = this.getDateFromISOWeek(year, weekNum);
-        const startDate = this.getStartOfWeek(weekDate);
-        const endDate = this.getEndOfWeek(weekDate);
-        weeks.push({
-          week: `W${weekNum}`,
-          weekNum: weekNum,
-          startDate: startDate,
-          endDate: endDate
-        });
-      }
+      const weeks = this.buildPutawayWeekBuckets(now);
 
       const factory = this.selectedFactory || 'ASM1';
       const docs = await this.fetchPutawayStagingInventoryDocs(factory);
 
       if (!docs.length) {
-        this.iqcWeekData = weeks.map(w => ({ week: w.week, count: 0 }));
-        this.iqcHeatmapWeeks = weeks.map((w) => ({ week: w.week, count: 0, cells: [] }));
+        this.iqcWeekData = [];
+        this.iqcHeatmapWeeks = [];
         this.cdr.detectChanges();
         return;
       }
@@ -1522,32 +1533,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         }
         
-        // If no date, skip this material
+        const upsertToWeek = (weekKey: string) => {
+          const materialCode = (data.materialCode || '').toUpperCase().trim();
+          const poNumber = (data.poNumber || '').trim();
+          const batchNumber = (data.batchNumber || '').trim();
+          const imd = this.getIMDFromDate(materialDate || new Date(), batchNumber);
+          const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
+          const wm = weekCells.get(weekKey);
+          if (!wm) return;
+          const prev = wm.get(uniqueKey);
+          if (prev) {
+            prev.stock += stock;
+            prev.statusKind = this.mergePutawayStatusKind(prev.statusKind, statusKind);
+          } else {
+            wm.set(uniqueKey, { materialCode, poNumber, imd, stock, statusKind });
+          }
+        };
+
+        // Nếu không có date => gom vào Late
         if (!materialDate) {
+          upsertToWeek(this.putawayLateWeekLabel);
           return;
         }
 
-        // Find which week this material belongs to
+        // Find which week this material belongs to (8 tuần); nếu không match => Late
+        let placed = false;
         for (const week of weeks) {
+          if (week.week === this.putawayLateWeekLabel) continue;
           if (materialDate >= week.startDate && materialDate <= week.endDate) {
             // Create unique key: materialCode_PO_IMD (giống Manage tab)
-            const materialCode = (data.materialCode || '').toUpperCase().trim();
-            const poNumber = (data.poNumber || '').trim();
-            const batchNumber = (data.batchNumber || '').trim();
-            const imd = this.getIMDFromDate(materialDate, batchNumber);
-            const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
-            const wm = weekCells.get(week.week);
-            if (wm) {
-              const prev = wm.get(uniqueKey);
-              if (prev) {
-                prev.stock += stock;
-                prev.statusKind = this.mergePutawayStatusKind(prev.statusKind, statusKind);
-              } else {
-                wm.set(uniqueKey, { materialCode, poNumber, imd, stock, statusKind });
-              }
-            }
-            break; // Material can only belong to one week
+            upsertToWeek(week.week);
+            placed = true;
+            break;
           }
+        }
+        if (!placed) {
+          upsertToWeek(this.putawayLateWeekLabel);
         }
       });
 
@@ -1567,11 +1588,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     weeks: Array<{ week: string; weekNum: number; startDate: Date; endDate: Date }>,
     weekCells: Map<string, Map<string, PutawaySkuAgg>>
   ): void {
-    this.iqcWeekData = weeks.map((w) => ({
-      week: w.week,
-      count: weekCells.get(w.week)?.size || 0
-    }));
-    this.iqcHeatmapWeeks = weeks.map((w) => {
+    const cols = weeks.map((w) => {
       const m = weekCells.get(w.week);
       const arr = m ? Array.from(m.values()).sort((a, b) => b.stock - a.stock) : [];
       const cells: IqcHeatmapCell[] = arr.map((v) => {
@@ -1587,6 +1604,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
       return { week: w.week, count: cells.length, cells };
     });
+    const visible = cols.filter((c) => c.count > 0);
+    this.iqcHeatmapWeeks = visible;
+    this.iqcWeekData = visible.map((c) => ({ week: c.week, count: c.count }));
   }
 
   // Helper: Get ISO week number
@@ -1654,32 +1674,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     try {
       // Get current week number (ISO week)
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentWeek = this.getISOWeek(now);
-      
-      // Get 8 weeks (current week and 7 previous weeks)
-      const weeks: Array<{ week: string, weekNum: number, startDate: Date, endDate: Date }> = [];
-      for (let i = 7; i >= 0; i--) {
-        let weekNum = currentWeek - i;
-        let year = currentYear;
-        
-        // Handle year boundary
-        if (weekNum <= 0) {
-          year--;
-          const lastWeekOfYear = this.getISOWeek(new Date(year, 11, 31));
-          weekNum = lastWeekOfYear + weekNum;
-        }
-        
-        const weekDate = this.getDateFromISOWeek(year, weekNum);
-        const startDate = this.getStartOfWeek(weekDate);
-        const endDate = this.getEndOfWeek(weekDate);
-        weeks.push({
-          week: `W${weekNum}`,
-          weekNum: weekNum,
-          startDate: startDate,
-          endDate: endDate
-        });
-      }
+      const weeks = this.buildPutawayWeekBuckets(now);
 
       const factory = this.selectedFactory || 'ASM1';
       const docs = await this.fetchPutawayStagingInventoryDocs(factory);
@@ -1776,13 +1771,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
             }
           }
           
-          // If no date, skip this material
+          const pushOrMerge = (weekKey: string) => {
+            const materialCode = (data.materialCode || '').toUpperCase().trim();
+            const poNumber = (data.poNumber || '').trim();
+            const batchNumber = (data.batchNumber || '').trim();
+            const imd = this.getIMDFromDate(materialDate || new Date(), batchNumber);
+            const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
+            const weekMaterials = materialsMap.get(weekKey) || [];
+            const existingIndex = weekMaterials.findIndex(m =>
+              m.materialCode === materialCode &&
+              m.poNumber === poNumber &&
+              m.imd === imd
+            );
+            if (existingIndex >= 0) {
+              weekMaterials[existingIndex].stock += stock;
+              weekMaterials[existingIndex].iqcStatus = iqcStatus;
+              weekMaterials[existingIndex].statusKind = this.mergePutawayStatusKind(
+                weekMaterials[existingIndex].statusKind,
+                statusKind
+              );
+              weekMaterials[existingIndex].location = locRaw;
+            } else {
+              weekMaterials.push({
+                materialCode,
+                poNumber,
+                imd,
+                stock,
+                location: locRaw,
+                iqcStatus,
+                statusKind
+              });
+            }
+            materialsMap.set(weekKey, weekMaterials);
+          };
+
+          // Nếu không có date => gom vào Late
           if (!materialDate) {
+            pushOrMerge(this.putawayLateWeekLabel);
             return;
           }
 
-          // Find which week this material belongs to
+          // Find which week this material belongs to (8 tuần); nếu không match => Late
+          let placed = false;
           for (const week of weeks) {
+            if (week.week === this.putawayLateWeekLabel) continue;
             if (materialDate >= week.startDate && materialDate <= week.endDate) {
               const materialCode = (data.materialCode || '').toUpperCase().trim();
               const poNumber = (data.poNumber || '').trim();
@@ -1818,16 +1850,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
               }
               
               materialsMap.set(week.week, weekMaterials);
-              break; // Material can only belong to one week
+              placed = true;
+              break;
             }
+          }
+          if (!placed) {
+            pushOrMerge(this.putawayLateWeekLabel);
           }
         });
 
         // Update iqcMaterialsByWeek with materials
-        this.iqcMaterialsByWeek = this.iqcMaterialsByWeek.map(weekData => ({
-          ...weekData,
-          materials: materialsMap.get(weekData.week) || []
-        }));
+        this.iqcMaterialsByWeek = this.iqcMaterialsByWeek
+          .map((weekData) => ({
+            ...weekData,
+            materials: materialsMap.get(weekData.week) || []
+          }))
+          .filter((w) => w.materials.length > 0);
+      } else {
+        this.iqcMaterialsByWeek = [];
       }
 
       console.log('📊 IQC Materials by Week loaded:', this.iqcMaterialsByWeek);
@@ -1862,10 +1902,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
           'Vị trí': material.location
         }));
 
+        const isOtherBucket = weekData.week === this.putawayLateWeekLabel;
         // Add header row with week info
         const headerRow = [{
           'STT': weekData.week,
-          'Mã hàng': `Từ ${weekData.startDate.toLocaleDateString('vi-VN')} đến ${weekData.endDate.toLocaleDateString('vi-VN')}`,
+          'Mã hàng': isOtherBucket
+            ? 'Ngoài 8 tuần gần nhất (hoặc thiếu ngày import/updated/created)'
+            : `Từ ${weekData.startDate.toLocaleDateString('vi-VN')} đến ${weekData.endDate.toLocaleDateString('vi-VN')}`,
           'PO': `Tổng: ${weekData.materials.length} mã`,
           'IMD': '',
           'IQC status': '',
