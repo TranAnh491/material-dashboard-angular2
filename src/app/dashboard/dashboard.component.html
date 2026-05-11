@@ -199,7 +199,7 @@
         </div>
       </article>
 
-      <article class="card dash-widget putaway-widget dash-widget--clickable dash-surface-card" (click)="openIQCMaterialsModal()" title="Click để xem Putaway Staging Area">
+      <article class="card dash-widget putaway-widget dash-widget--clickable dash-surface-card" (click)="openIQCMaterialsModal()" title="Click để xem chi tiết. Chỉ hiển thị SKU có vị trí (location) bắt đầu bằng IQC — ví dụ IQC, IQC-01.">
         <header class="dash-widget__head">
           <div class="dash-widget__headrow">
             <div class="dash-widget__title dash-widget__title--with-icon">
@@ -213,7 +213,7 @@
         </header>
         <div class="card-body card-body--putaway">
           <div class="putaway-wrap" *ngIf="!iqcLoading">
-            <div class="putaway-heatmap" *ngIf="iqcHeatmapHasAnySku; else putawayHeatEmpty" aria-label="Heatmap SKU theo tuần IQC staging">
+            <div class="putaway-heatmap" *ngIf="iqcHeatmapHasAnySku; else putawayHeatEmpty" aria-label="Heatmap SKU 8 tuần — vị trí bắt đầu bằng IQC">
               <div *ngFor="let col of iqcHeatmapWeeks" class="putaway-heatmap__col">
                 <div class="putaway-heatmap__head">
                   <span class="putaway-heatmap__week">{{ col.week }}</span>
@@ -223,17 +223,19 @@
                   <div
                     *ngFor="let c of col.cells"
                     class="putaway-heatmap__cell"
-                    [class.putaway-heatmap__cell--lv1]="c.level === 1"
-                    [class.putaway-heatmap__cell--lv2]="c.level === 2"
-                    [class.putaway-heatmap__cell--lv3]="c.level === 3"
-                    [class.putaway-heatmap__cell--lv4]="c.level === 4"
+                    [class.putaway-heatmap__cell--pass]="c.statusKind === 'pass'"
+                    [class.putaway-heatmap__cell--ng]="c.statusKind === 'ng'"
+                    [class.putaway-heatmap__cell--pending]="c.statusKind === 'pending'"
                     [title]="c.tooltip"
                   ></div>
                 </div>
               </div>
             </div>
             <ng-template #putawayHeatEmpty>
-              <div class="putaway-heatmap putaway-heatmap--empty text-muted text-center">Không có SKU ở IQC staging (8 tuần).</div>
+              <div class="putaway-heatmap putaway-heatmap--empty putaway-empty-msg text-muted text-center">
+                <span class="putaway-empty-msg__title">Không có SKU trong 8 tuần gần nhất.</span>
+                <span class="putaway-empty-msg__hint">Chỉ đếm hàng có <strong>vị trí bắt đầu bằng IQC</strong> (ví dụ IQC, IQC-P01; không phân biệt hoa thường sau khi bỏ khoảng trắng đầu/cuối), IQC status Pass / NG / Chờ kiểm, tồn &gt; 0 và có ngày nhập/cập nhật nằm trong một trong 8 tuần đó.</span>
+              </div>
             </ng-template>
           </div>
           <div class="iqc-loading" *ngIf="iqcLoading">
@@ -538,7 +540,12 @@
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let material of weekData.materials; let i = index">
+                <tr
+                  *ngFor="let material of weekData.materials; let i = index"
+                  [class.iqc-material-row--pass]="material.statusKind === 'pass'"
+                  [class.iqc-material-row--ng]="material.statusKind === 'ng'"
+                  [class.iqc-material-row--pending]="material.statusKind === 'pending'"
+                >
                   <td>{{ i + 1 }}</td>
                   <td>{{ material.materialCode }}</td>
                   <td>{{ material.poNumber }}</td>

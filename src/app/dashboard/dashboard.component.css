@@ -1403,6 +1403,28 @@
   padding: 12px 8px;
 }
 
+.putaway-empty-msg {
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.putaway-empty-msg__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.58);
+}
+
+.putaway-empty-msg__hint {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(15, 23, 42, 0.48);
+  max-width: 260px;
+  margin: 0 auto;
+}
+
 .putaway-heatmap__col {
   flex: 0 0 auto;
   width: 44px;
@@ -1504,6 +1526,30 @@
 
 .putaway-heatmap__cell--lv4 {
   background: rgba(30, 64, 175, 0.95);
+}
+
+.putaway-widget .putaway-heatmap__cell--pass {
+  background: rgba(22, 163, 74, 0.92);
+}
+
+.putaway-widget .putaway-heatmap__cell--ng {
+  background: rgba(220, 38, 38, 0.92);
+}
+
+.putaway-widget .putaway-heatmap__cell--pending {
+  background: rgba(202, 138, 4, 0.92);
+}
+
+.putaway-heatmap__cell--pass {
+  background: rgba(34, 197, 94, 0.82);
+}
+
+.putaway-heatmap__cell--ng {
+  background: rgba(239, 68, 68, 0.85);
+}
+
+.putaway-heatmap__cell--pending {
+  background: rgba(234, 179, 8, 0.88);
 }
 
 .putaway-heatmap__cell:hover {
@@ -1807,6 +1853,18 @@
 
 .materials-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.materials-table tbody tr.iqc-material-row--pass td:first-child {
+  box-shadow: inset 4px 0 0 0 rgb(22, 163, 74);
+}
+
+.materials-table tbody tr.iqc-material-row--ng td:first-child {
+  box-shadow: inset 4px 0 0 0 rgb(220, 38, 38);
+}
+
+.materials-table tbody tr.iqc-material-row--pending td:first-child {
+  box-shadow: inset 4px 0 0 0 rgb(202, 138, 4);
 }
 
 .no-materials {

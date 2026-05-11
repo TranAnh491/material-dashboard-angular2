@@ -447,20 +447,20 @@ function getEmailCfg() {
     return { host, port, user, pass, from, to };
 }
 function buildPlainText(dupes, dupSinceLabel, exclusionNote) {
-    const lines = dupes.map(r => `- ${r.factory} | ${r.materialCode} | PO ${r.poNumber} | IMD ${r.imd || '—'} | Bag ${r.bagNumberDisplay || r.bagBatch || '—'} | ${r.count} lần | LSX: ${r.productionOrderSummary} | Ngày: ${r.latestExportAtLabel || '—'}`);
+    const lines = dupes.map(r => `- ${r.factory} | ${r.materialCode} | PO ${r.poNumber} | IMD ${r.imd || '—'} | Bịch ${r.bagBatch || '—'} | Bag ${r.bagNumberDisplay || '—'} | ${r.count} lần | LSX: ${r.productionOrderSummary} | Ngày: ${r.latestExportAtLabel || '—'}`);
     return (`Control Batch — phát hiện ${dupes.length} nhóm trùng xuất kho (từ ${dupSinceLabel}, đủ điều kiện định dạng).\n\n` +
         lines.join('\n') +
         (exclusionNote ? `\n\n${exclusionNote}` : ''));
 }
 function buildHtml(dupes, dupSinceLabel, exclusionNoteHtml) {
     const rows = dupes
-        .map(r => `<tr><td>${esc(r.factory)}</td><td>${esc(r.materialCode)}</td><td>${esc(r.poNumber)}</td><td>${esc(r.imd)}</td><td>${esc(r.bagNumberDisplay || r.bagBatch)}</td><td style="text-align:right">${r.count}</td><td>${esc(r.productionOrderSummary)}</td><td>${esc(r.latestExportAtLabel || '')}</td></tr>`)
+        .map(r => `<tr><td>${esc(r.factory)}</td><td>${esc(r.materialCode)}</td><td>${esc(r.poNumber)}</td><td>${esc(r.imd)}</td><td>${esc(r.bagBatch || '')}</td><td>${esc(r.bagNumberDisplay || '')}</td><td style="text-align:right">${r.count}</td><td>${esc(r.productionOrderSummary)}</td><td>${esc(r.latestExportAtLabel || '')}</td></tr>`)
         .join('');
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p><strong>Control Batch</strong> — ${dupes.length} nhóm <strong>trùng xuất kho</strong> (từ ${esc(dupSinceLabel)}).</p>
 ${exclusionNoteHtml || ''}
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
-<thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th><th>Ngày</th></tr></thead>
+<thead><tr><th>Nhà máy</th><th>Mã</th><th>PO</th><th>IMD</th><th>Bịch</th><th>Bag</th><th>Số lần</th><th>Lệnh SX</th><th>Ngày</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <p style="color:#555;font-size:12px">Gửi từ Tuấn Anh</p>
 </body></html>`;

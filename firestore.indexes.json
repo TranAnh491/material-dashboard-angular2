@@ -24,6 +24,14 @@
         { "fieldPath": "iqcStatus",    "order": "ASCENDING" },
         { "fieldPath": "qcCheckedAt",  "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "inventory-materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",      "order": "ASCENDING" },
+        { "fieldPath": "location",     "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

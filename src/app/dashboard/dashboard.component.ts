@@ -31,14 +31,24 @@ interface WoHeatmapDayCol {
   cells: { kind: WoHeatKind }[];
 }
 
+/** Nhóm IQC hiển thị Putaway staging — màu ô heatmap */
+type PutawayIqcStatusKind = 'pass' | 'ng' | 'pending';
+
+interface PutawaySkuAgg {
+  materialCode: string;
+  poNumber: string;
+  imd: string;
+  stock: number;
+  statusKind: PutawayIqcStatusKind;
+}
+
 /** 1 ô heatmap = 1 SKU (mã+PO+IMD) trong tuần đó — Putaway staging */
 interface IqcHeatmapCell {
   materialCode: string;
   poNumber: string;
   imd: string;
   stock: number;
-  /** 1..4 mức màu theo tồn trong tuần */
-  level: 1 | 2 | 3 | 4;
+  statusKind: PutawayIqcStatusKind;
   tooltip: string;
 }
 
@@ -133,6 +143,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       stock: number;
       location: string;
       iqcStatus?: string;
+      statusKind: PutawayIqcStatusKind;
     }>;
   }> = [];
   iqcMaterialsLoading: boolean = false;
@@ -268,6 +279,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.selectedFactory = event.detail.factory;
       console.log('Dashboard received factory change:', this.selectedFactory);
       this.loadDashboardData();
+      this.loadIQCByWeek();
     });
     
     // Listen for factory changes from localStorage (for cross-tab sync)
@@ -275,6 +287,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (event.key === 'selectedFactory') {
         this.selectedFactory = event.newValue || 'ASM1';
         this.loadDashboardData();
+        this.loadIQCByWeek();
       }
     });
   }
@@ -1299,6 +1312,102 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return status === 'critical' ? 'status-critical' : 'status-warning';
   }
 
+  /** Vị trí bắt đầu bằng IQC (sau trim, không phân biệt hoa thường). */
+  private isIqcStagingLocation(locationRaw: string): boolean {
+    return (locationRaw || '').trim().toUpperCase().startsWith('IQC');
+  }
+
+  /** Pass / NG / Chờ kiểm (và biến thể trong DB). */
+  private normalizePutawayIqcStatus(raw: string): PutawayIqcStatusKind | null {
+    const s = (raw || '').trim();
+    if (!s) return null;
+    const u = s.toUpperCase();
+    if (u === 'PASS') return 'pass';
+    if (u === 'NG') return 'ng';
+    if (
+      u.includes('CHỜ KIỂM') ||
+      u.includes('CHỜ XÁC NHẬN') ||
+      u.includes('CHỜ KIỂM TRA') ||
+      u.includes('CHO KIEM') ||
+      u.includes('CHO XAC NHAN')
+    ) {
+      return 'pending';
+    }
+    const compact = u.replace(/\s+/g, '');
+    if (compact.includes('CHỜKIỂM') || compact.includes('CHỜXÁCNHẬN')) return 'pending';
+    return null;
+  }
+
+  private mergePutawayStatusKind(a: PutawayIqcStatusKind, b: PutawayIqcStatusKind): PutawayIqcStatusKind {
+    const rank: Record<PutawayIqcStatusKind, number> = { ng: 3, pending: 2, pass: 1 };
+    return rank[a] >= rank[b] ? a : b;
+  }
+
+  private putawayStatusShortLabel(kind: PutawayIqcStatusKind): string {
+    if (kind === 'pass') return 'Pass';
+    if (kind === 'ng') return 'NG';
+    return 'Chờ kiểm';
+  }
+
+  /**
+   * Lấy document inventory-materials để xử lý Putaway: **sau đó** lọc client theo vị trí bắt đầu bằng IQC.
+   * Firestore range [IQC,IQD) bỏ sót location viết thường (`iqc-…`) hoặc có khoảng trắng đầu chuỗi trong DB — nên gộp thêm [iqc,iqd).
+   * Nếu cả hai range trả về 0 dòng (hoặc lỗi index), fallback một query theo factory + limit và vẫn lọc bằng `isIqcStagingLocation`.
+   */
+  private async fetchPutawayStagingInventoryDocs(factory: string): Promise<any[]> {
+    const mergeSnapshotsByDocId = (snaps: any[]): any[] => {
+      const byId = new Map<string, any>();
+      for (const snap of snaps) {
+        if (!snap || snap.empty) {
+          continue;
+        }
+        snap.docs.forEach((d: any) => byId.set(d.id, d));
+      }
+      return Array.from(byId.values());
+    };
+
+    const rangePromises = [
+      this.firestore
+        .collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', factory).where('location', '>=', 'IQC').where('location', '<', 'IQD')
+        )
+        .get()
+        .toPromise(),
+      this.firestore
+        .collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', factory).where('location', '>=', 'iqc').where('location', '<', 'iqd')
+        )
+        .get()
+        .toPromise()
+    ];
+
+    let merged: any[] = [];
+    try {
+      const settled = await Promise.allSettled(rangePromises);
+      const snaps = settled
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && !!r.value)
+        .map((r) => r.value);
+      merged = mergeSnapshotsByDocId(snaps);
+    } catch (e) {
+      console.warn('Putaway: không gộp được truy vấn range IQC', e);
+    }
+
+    if (merged.length > 0) {
+      return merged;
+    }
+
+    try {
+      const fb = await this.firestore
+        .collection('inventory-materials', (ref) => ref.where('factory', '==', factory).limit(8000))
+        .get()
+        .toPromise();
+      return fb?.docs?.length ? fb.docs : [];
+    } catch (e2) {
+      console.error('Putaway: fallback query theo factory thất bại', e2);
+      return [];
+    }
+  }
+
   // Load IQC Materials by Week (8 weeks)
   async loadIQCByWeek() {
     this.iqcLoading = true;
@@ -1332,28 +1441,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
       }
 
-      // Load all materials with location = "IQC" (exact match) - Filter by ASM1 factory
-      const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
-          .where('location', '==', 'IQC')
-      ).get().toPromise();
+      const factory = this.selectedFactory || 'ASM1';
+      const docs = await this.fetchPutawayStagingInventoryDocs(factory);
 
-      if (!snapshot || snapshot.empty) {
+      if (!docs.length) {
         this.iqcWeekData = weeks.map(w => ({ week: w.week, count: 0 }));
         this.iqcHeatmapWeeks = weeks.map((w) => ({ week: w.week, count: 0, cells: [] }));
         this.cdr.detectChanges();
         return;
       }
 
-      const weekCells = new Map<string, Map<string, { materialCode: string; poNumber: string; imd: string; stock: number }>>();
+      const weekCells = new Map<string, Map<string, PutawaySkuAgg>>();
       weeks.forEach((w) => weekCells.set(w.week, new Map()));
 
-      snapshot.forEach(doc => {
+      docs.forEach((doc: any) => {
         const data = doc.data() as any;
-        const location = (data.location || '').toUpperCase().trim();
-        
-        // Check if location is exactly IQC
-        if (location !== 'IQC') {
+        const locRaw = (data.location || '').trim();
+        if (!this.isIqcStagingLocation(locRaw)) {
           return;
         }
 
@@ -1369,9 +1473,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
           return;
         }
 
-        // 🔧 Chỉ tính materials có IQC status là "Chờ kiểm" hoặc "CHỜ KIỂM"
-        const iqcStatus = (data.iqcStatus || '').trim();
-        if (iqcStatus !== 'Chờ kiểm' && iqcStatus !== 'CHỜ KIỂM' && iqcStatus !== 'Chờ kiểm tra' && iqcStatus !== 'CHỜ XÁC NHẬN') {
+        const iqcStatusRaw = (data.iqcStatus || '').trim();
+        const statusKind = this.normalizePutawayIqcStatus(iqcStatusRaw);
+        if (!statusKind) {
           return;
         }
 
@@ -1437,8 +1541,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
               const prev = wm.get(uniqueKey);
               if (prev) {
                 prev.stock += stock;
+                prev.statusKind = this.mergePutawayStatusKind(prev.statusKind, statusKind);
               } else {
-                wm.set(uniqueKey, { materialCode, poNumber, imd, stock });
+                wm.set(uniqueKey, { materialCode, poNumber, imd, stock, statusKind });
               }
             }
             break; // Material can only belong to one week
@@ -1460,7 +1565,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private finalizeIqcHeatmapFromWeekMaps(
     weeks: Array<{ week: string; weekNum: number; startDate: Date; endDate: Date }>,
-    weekCells: Map<string, Map<string, { materialCode: string; poNumber: string; imd: string; stock: number }>>
+    weekCells: Map<string, Map<string, PutawaySkuAgg>>
   ): void {
     this.iqcWeekData = weeks.map((w) => ({
       week: w.week,
@@ -1469,16 +1574,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.iqcHeatmapWeeks = weeks.map((w) => {
       const m = weekCells.get(w.week);
       const arr = m ? Array.from(m.values()).sort((a, b) => b.stock - a.stock) : [];
-      const maxS = Math.max(...arr.map((x) => x.stock), 1e-9);
       const cells: IqcHeatmapCell[] = arr.map((v) => {
-        const ratio = v.stock / maxS;
-        let level: 1 | 2 | 3 | 4 = 1;
-        if (ratio > 0.75) level = 4;
-        else if (ratio > 0.5) level = 3;
-        else if (ratio > 0.25) level = 2;
-        else level = 1;
-        const tooltip = `${v.materialCode} · PO ${v.poNumber || '—'} · IMD ${v.imd} · Tồn: ${v.stock.toFixed(2)}`;
-        return { ...v, level, tooltip };
+        const tooltip = `${v.materialCode} · PO ${v.poNumber || '—'} · IMD ${v.imd} · ${this.putawayStatusShortLabel(v.statusKind)} · Tồn: ${v.stock.toFixed(2)}`;
+        return {
+          materialCode: v.materialCode,
+          poNumber: v.poNumber,
+          imd: v.imd,
+          stock: v.stock,
+          statusKind: v.statusKind,
+          tooltip
+        };
       });
       return { week: w.week, count: cells.length, cells };
     });
@@ -1576,11 +1681,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
       }
 
-      // Load all materials with location = "IQC" (exact match) - Filter by ASM1 factory
-      const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
-          .where('location', '==', 'IQC')
-      ).get().toPromise();
+      const factory = this.selectedFactory || 'ASM1';
+      const docs = await this.fetchPutawayStagingInventoryDocs(factory);
 
       // Initialize materials array for each week
       this.iqcMaterialsByWeek = weeks.map(w => ({
@@ -1591,7 +1693,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         materials: []
       }));
 
-      if (snapshot && !snapshot.empty) {
+      if (docs.length > 0) {
         const materialsMap = new Map<string, Array<{
           materialCode: string;
           poNumber: string;
@@ -1599,6 +1701,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           stock: number;
           location: string;
           iqcStatus?: string;
+          statusKind: PutawayIqcStatusKind;
         }>>();
 
         // Initialize map for each week
@@ -1606,12 +1709,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
           materialsMap.set(w.week, []);
         });
 
-        snapshot.forEach(doc => {
+        docs.forEach((doc: any) => {
           const data = doc.data() as any;
-          const location = (data.location || '').toUpperCase().trim();
-          
-          // Check if location is exactly IQC
-          if (location !== 'IQC') {
+          const locRaw = (data.location || '').trim();
+          if (!this.isIqcStagingLocation(locRaw)) {
             return;
           }
 
@@ -1627,9 +1728,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             return;
           }
 
-          // 🔧 Chỉ tính materials có IQC status là "Chờ kiểm" hoặc "CHỜ KIỂM"
           const iqcStatus = (data.iqcStatus || '').trim();
-          if (iqcStatus !== 'Chờ kiểm' && iqcStatus !== 'CHỜ KIỂM' && iqcStatus !== 'Chờ kiểm tra' && iqcStatus !== 'CHỜ XÁC NHẬN') {
+          const statusKind = this.normalizePutawayIqcStatus(iqcStatus);
+          if (!statusKind) {
             return;
           }
 
@@ -1698,18 +1799,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
               );
               
               if (existingIndex >= 0) {
-                // Update stock if already exists
                 weekMaterials[existingIndex].stock += stock;
                 weekMaterials[existingIndex].iqcStatus = iqcStatus;
+                weekMaterials[existingIndex].statusKind = this.mergePutawayStatusKind(
+                  weekMaterials[existingIndex].statusKind,
+                  statusKind
+                );
               } else {
-                // Add new material
                 weekMaterials.push({
                   materialCode: materialCode,
                   poNumber: poNumber,
                   imd: imd,
                   stock: stock,
-                  location: 'IQC',
-                  iqcStatus: iqcStatus
+                  location: locRaw,
+                  iqcStatus: iqcStatus,
+                  statusKind
                 });
               }
               
@@ -1753,6 +1857,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           'Mã hàng': material.materialCode,
           'PO': material.poNumber,
           'IMD': material.imd,
+          'IQC status': material.iqcStatus || '',
           'Tồn kho': material.stock,
           'Vị trí': material.location
         }));
@@ -1763,6 +1868,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           'Mã hàng': `Từ ${weekData.startDate.toLocaleDateString('vi-VN')} đến ${weekData.endDate.toLocaleDateString('vi-VN')}`,
           'PO': `Tổng: ${weekData.materials.length} mã`,
           'IMD': '',
+          'IQC status': '',
           'Tồn kho': '',
           'Vị trí': ''
         }];
