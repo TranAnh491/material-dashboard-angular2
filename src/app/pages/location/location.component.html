@@ -783,6 +783,14 @@
             <span class="value">{{ selectedMaterialForStore.poNumber }}</span>
           </div>
           <div class="info-row">
+            <span class="label">IQC Status:</span>
+            <span class="value">
+              <span class="iqc-status-badge" [ngClass]="getIQCStatusClass(selectedMaterialForStore.iqcStatus)">
+                {{ getIQCStatusText(selectedMaterialForStore.iqcStatus) }}
+              </span>
+            </span>
+          </div>
+          <div class="info-row">
             <span class="label">Vị trí hiện tại:</span>
             <span class="value highlight-current">{{ selectedMaterialForStore.location || 'Chưa có' }}</span>
           </div>

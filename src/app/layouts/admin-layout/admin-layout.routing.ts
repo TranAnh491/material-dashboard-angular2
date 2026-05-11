@@ -37,6 +37,7 @@ import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.componen
 import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
+import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted-materials.component';
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
@@ -96,6 +97,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'qc',                   component: QCComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'qc-traceability',      component: QcTraceabilityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'rm1-delivery',         component: Rm1DeliveryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'shorted-materials',    component: ShortedMaterialsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'wh-security',          component: WhSecurityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'zalo',                 component: ZaloComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'utilization',          component: UtilizationComponent, canActivate: [AuthGuard, TabPermissionGuard] },

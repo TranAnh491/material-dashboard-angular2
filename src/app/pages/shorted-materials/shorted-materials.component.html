@@ -1,0 +1,213 @@
+<div class="sm-page">
+  <header class="sm-top">
+    <div class="sm-top__lead">
+      <h1 class="sm-h1">Shorted materials</h1>
+      <p class="sm-lead">Danh sách mã hàng thiếu và số lượng cần bổ sung theo GW</p>
+    </div>
+    <div class="sm-top__rail">
+      <button type="button" class="sm-bell" aria-label="Thông báo">
+        <i class="material-icons">notifications_none</i>
+        <span class="sm-bell__badge">3</span>
+      </button>
+      <div class="sm-user">
+        <span class="sm-user__avatar">AD</span>
+        <span class="sm-user__meta"><span class="sm-user__name">Admin</span></span>
+      </div>
+      <button type="button" class="sm-btn sm-btn--outline" (click)="openBulkPanel()">
+        <i class="material-icons">file_upload</i>
+        Nhập danh sách
+      </button>
+      <button type="button" class="sm-btn sm-btn--solid" (click)="addRow(); onFieldChange()">
+        <i class="material-icons">add</i>
+        Thêm mới
+      </button>
+    </div>
+  </header>
+
+  <section class="sm-kpis">
+    <article class="sm-kpi">
+      <div class="sm-kpi__ico sm-kpi__ico--blue"><i class="material-icons">description</i></div>
+      <div class="sm-kpi__body">
+        <span class="sm-kpi__value">{{ statTotalRows }}</span>
+        <span class="sm-kpi__label">dòng</span>
+      </div>
+    </article>
+    <article class="sm-kpi">
+      <div class="sm-kpi__ico sm-kpi__ico--teal"><i class="material-icons">view_week</i></div>
+      <div class="sm-kpi__body">
+        <span class="sm-kpi__value">{{ statDistinctGw }}</span>
+        <span class="sm-kpi__label">GW</span>
+      </div>
+    </article>
+    <article class="sm-kpi">
+      <div class="sm-kpi__ico sm-kpi__ico--amber"><i class="material-icons">assignment</i></div>
+      <div class="sm-kpi__body">
+        <span class="sm-kpi__value">{{ statTotalQty | number }}</span>
+        <span class="sm-kpi__label">QTY</span>
+      </div>
+    </article>
+    <article class="sm-kpi">
+      <div class="sm-kpi__ico sm-kpi__ico--green"><i class="material-icons">schedule</i></div>
+      <div class="sm-kpi__body">
+        <span class="sm-kpi__value sm-kpi__value--sm">{{ lastUpdatedLabel }}</span>
+        <span class="sm-kpi__label">Cập nhật</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="sm-panel">
+    <div class="sm-toolbar">
+      <div class="sm-toolbar__search">
+        <i class="material-icons">search</i>
+        <input
+          type="search"
+          class="sm-toolbar__input"
+          [(ngModel)]="searchText"
+          (ngModelChange)="onSearchChange()"
+          placeholder="Tìm kiếm mã hàng hoặc GW..."
+          autocomplete="off"
+        />
+      </div>
+      <select class="sm-select" [(ngModel)]="filterGw" (ngModelChange)="onFilterChange()">
+        <option value="">Tất cả GW</option>
+        <option *ngFor="let g of gwOptions" [value]="g">{{ g }}</option>
+      </select>
+      <select class="sm-select" [(ngModel)]="filterStatus" (ngModelChange)="onFilterChange()">
+        <option value="">Trạng thái</option>
+        <option value="high">Thiếu nhiều</option>
+        <option value="medium">Thiếu vừa</option>
+        <option value="low">Thiếu ít</option>
+      </select>
+      <button type="button" class="sm-btn sm-btn--soft" (click)="refresh()">
+        <i class="material-icons">refresh</i>
+        Làm mới
+      </button>
+    </div>
+
+    <div class="sm-table-scroll">
+      <table class="sm-table">
+        <thead>
+          <tr>
+            <th class="sm-th sm-th--narrow">#</th>
+            <th class="sm-th">Mã hàng</th>
+            <th class="sm-th">GW</th>
+            <th class="sm-th sm-th--num">Số lượng thiếu (QTY)</th>
+            <th class="sm-th">Trạng thái</th>
+            <th class="sm-th">Ghi chú</th>
+            <th class="sm-th sm-th--act">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of pagedRows; let i = index" class="sm-tr">
+            <td class="sm-td sm-td--muted">{{ rowDisplayIndex(i) }}</td>
+            <td class="sm-td">
+              <input
+                type="text"
+                class="sm-cell-input sm-cell-input--code"
+                [(ngModel)]="row.materialCode"
+                (blur)="onMaterialBlur(row)"
+                (ngModelChange)="onFieldChange()"
+                placeholder="MAT-…"
+                spellcheck="false"
+              />
+            </td>
+            <td class="sm-td">
+              <input
+                type="text"
+                class="sm-cell-input"
+                [(ngModel)]="row.gw"
+                (blur)="onGwBlur(row)"
+                (ngModelChange)="onFieldChange()"
+                placeholder="GW-…"
+                spellcheck="false"
+              />
+            </td>
+            <td class="sm-td sm-td--num">
+              <input
+                type="number"
+                class="sm-cell-input sm-cell-input--qty"
+                [class.sm-cell-input--qty-high]="shortageLevel(row.gwQty) === 'high'"
+                [class.sm-cell-input--qty-medium]="shortageLevel(row.gwQty) === 'medium'"
+                [class.sm-cell-input--qty-low]="shortageLevel(row.gwQty) === 'low'"
+                [(ngModel)]="row.gwQty"
+                (ngModelChange)="onFieldChange()"
+                (blur)="onQtyBlur()"
+                min="0"
+                step="any"
+                placeholder="0"
+              />
+            </td>
+            <td class="sm-td">
+              <span class="sm-pill" [ngClass]="{
+                'sm-pill--high': shortageLevel(row.gwQty) === 'high',
+                'sm-pill--medium': shortageLevel(row.gwQty) === 'medium',
+                'sm-pill--low': shortageLevel(row.gwQty) === 'low'
+              }">{{ statusLabel(shortageLevel(row.gwQty)) }}</span>
+            </td>
+            <td class="sm-td">
+              <input
+                type="text"
+                class="sm-cell-input"
+                [(ngModel)]="row.notes"
+                (ngModelChange)="onFieldChange()"
+                (blur)="onNotesBlur()"
+                placeholder="Ghi chú"
+              />
+            </td>
+            <td class="sm-td sm-td--act">
+              <button type="button" class="sm-act" (click)="viewRow(row)" title="Xem">
+                <i class="material-icons">visibility</i>
+              </button>
+              <button type="button" class="sm-act sm-act--danger" (click)="removeRow(row.id)" title="Xóa">
+                <i class="material-icons">delete_outline</i>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="sm-pager">
+      <span class="sm-pager__info">
+        Hiển thị <strong>{{ displayFrom }}</strong>–<strong>{{ displayTo }}</strong> trong tổng số <strong>{{ totalFiltered }}</strong> dòng
+      </span>
+      <div class="sm-pager__ctrl">
+        <select class="sm-select sm-select--compact" [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()">
+          <option *ngFor="let n of pageSizeOptions" [ngValue]="n">{{ n }} / trang</option>
+        </select>
+        <div class="sm-pager__nav">
+          <button type="button" class="sm-pagebtn" [disabled]="currentPage <= 1" (click)="prevPage()">‹</button>
+          <button
+            type="button"
+            class="sm-pagebtn"
+            *ngFor="let p of pageList"
+            [class.sm-pagebtn--on]="p === currentPage"
+            (click)="setPage(p)"
+          >{{ p }}</button>
+          <button type="button" class="sm-pagebtn" [disabled]="currentPage >= totalPages" (click)="nextPage()">›</button>
+        </div>
+      </div>
+    </footer>
+  </section>
+
+  <div class="sm-overlay" *ngIf="bulkPanelOpen" (click)="closeBulkPanel()"></div>
+  <div class="sm-modal" *ngIf="bulkPanelOpen" role="dialog" aria-labelledby="sm-modal-title">
+    <div class="sm-modal__box" (click)="$event.stopPropagation()">
+      <div class="sm-modal__head">
+        <h2 id="sm-modal-title" class="sm-modal__title">Nhập danh sách mã thiếu</h2>
+        <button type="button" class="sm-act" (click)="closeBulkPanel()" aria-label="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <p class="sm-modal__hint">
+        Mỗi dòng: <span class="sm-code">Mã</span> hoặc <span class="sm-code">Mã, QTY</span> hoặc <span class="sm-code">Mã, GW, QTY</span>
+        (phân tách bằng dấu phẩy, tab hoặc chấm phẩy).
+      </p>
+      <textarea class="sm-modal__ta" [(ngModel)]="bulkText" rows="12" placeholder="MAT-10001&#10;MAT-10002, 50&#10;MAT-10003, GW-2406-001, 120"></textarea>
+      <div class="sm-modal__foot">
+        <button type="button" class="sm-btn sm-btn--outline" (click)="closeBulkPanel()">Hủy</button>
+        <button type="button" class="sm-btn sm-btn--solid" (click)="applyBulkList()">Thêm vào bảng</button>
+      </div>
+    </div>
+  </div>
+</div>

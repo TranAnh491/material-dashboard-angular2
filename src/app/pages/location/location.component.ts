@@ -134,6 +134,22 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   storeMaterialPOStock: number = 0;
   /** Tồn kho theo từng vị trí (cùng materialCode), dùng để hiển thị khi scan */
   storeMaterialStockByLocation: { location: string; stock: number }[] = [];
+
+  getIQCStatusClass(status?: string): string {
+    const s = (status || '').toString().trim().toUpperCase();
+    if (!s) return 'iqc-none';
+    if (s === 'PASS' || s === 'PASSED') return 'iqc-pass';
+    if (s === 'NG') return 'iqc-ng';
+    if (s === 'ĐẶC CÁCH' || s === 'DAC CACH' || s === 'SPECIAL') return 'iqc-special';
+    if (s === 'CHỜ XÁC NHẬN' || s === 'CHO XAC NHAN' || s === 'PENDING' || s === 'PENDING JUDGMENT') return 'iqc-pending';
+    if (s === 'CHỜ KIỂM' || s === 'CHO KIEM' || s === 'WAITING') return 'iqc-waiting';
+    return 'iqc-default';
+  }
+
+  getIQCStatusText(status?: string): string {
+    const s = (status || '').toString().trim();
+    return s || '—';
+  }
   
   // FG Location Modal
   showFGModal = false;
@@ -1482,7 +1498,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           xt: xt,
           batchNumber: data.batchNumber || '',
           importDate: data.importDate,
-          importDateStr
+          importDateStr,
+          iqcStatus: data.iqcStatus || ''
         };
 
         const matchesMaterialCode = material.materialCode === materialCode;

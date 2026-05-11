@@ -708,44 +708,67 @@
   border-color: #333333;
 }
 
-/* Dropdown */
-.dropdown {
-  position: relative;
+/* More menu — popup (custom-modal) */
+.more-menu-modal-root {
+  z-index: 2150;
 }
 
-.dropdown .dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  background: #ffffff;
-  border: 2px solid #000000;
-  border-radius: 4px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  z-index: 1000;
-  min-width: 200px;
-  padding: 8px 0;
+.more-menu-modal {
+  max-width: 400px;
+  width: 92%;
 }
 
-.dropdown .dropdown-menu .dropdown-item {
+.more-menu-modal-body {
+  padding: 8px 0 12px;
+}
+
+.more-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  background: #ffffff;
   color: #000000;
-  text-decoration: none;
   font-size: 14px;
-  transition: background-color 0.2s ease;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
-.dropdown .dropdown-menu .dropdown-item:hover {
+.more-menu-item:hover {
   background: #f5f5f5;
-  color: #000000;
 }
 
-.dropdown .dropdown-menu .dropdown-item i {
-  font-size: 18px;
-  width: 20px;
+.more-menu-item i.material-icons {
+  font-size: 22px;
+  width: 26px;
   text-align: center;
+  flex-shrink: 0;
+}
+
+.more-menu-item span {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.more-menu-item-active {
+  background: #e8f5e9;
+}
+
+.more-menu-item-danger {
+  color: #c62828;
+}
+
+.more-menu-item-danger:hover {
+  background: #ffebee;
+}
+
+.more-menu-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: #e0e0e0;
 }
 
 /* Table Section - cân bằng: nhiều dòng + thanh scroll ngang luôn thấy */
@@ -2010,8 +2033,8 @@ tr.checked-row:hover {
 }
 
 .schedule-chart-modal {
-  max-width: 1100px;
-  width: 95%;
+  max-width: 1320px; /* +20% so với 1100px */
+  width: 96%;
   max-height: 90vh;
 }
 
@@ -2078,6 +2101,13 @@ tr.checked-row:hover {
   padding: 12px 12px 10px;
 }
 
+.chart-hint-en {
+  font-size: 12px;
+  color: #546e7a;
+  margin: 0 0 10px;
+  line-height: 1.35;
+}
+
 .chart-title {
   font-size: 14px;
   font-weight: 700;
@@ -2093,12 +2123,78 @@ tr.checked-row:hover {
 }
 
 .chart-canvas-wrap {
-  height: 320px;
+  height: 384px; /* +20% so với 320px */
+}
+
+/* Thanh chọn tháng trong modal Chart: không dùng gradient tím của lịch */
+.chart-chart-month-nav.calendar-nav {
+  background: #eceff1;
+  color: #263238;
+  border: 1px solid #cfd8dc;
+  box-shadow: none;
+}
+
+.chart-chart-month-nav .nav-btn {
+  background: rgba(55, 71, 79, 0.12);
+  color: #37474f;
+}
+
+.chart-chart-month-nav .nav-btn:hover {
+  background: rgba(55, 71, 79, 0.2);
+  transform: scale(1.06);
+}
+
+.chart-chart-month-nav .nav-btn i {
+  color: #37474f;
+}
+
+.chart-chart-month-nav {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+}
+
+.chart-nav-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chart-nav-title {
+  font-size: 1.15em;
+  margin: 0;
+  color: #263238;
+}
+
+.chart-month-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #546e7a;
+  cursor: pointer;
+}
+
+.chart-month-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #b0bec5;
+  background: #ffffff;
+  color: #263238;
+  font-size: 14px;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.chart-month-input:focus {
+  outline: 2px solid #039be5;
+  outline-offset: 2px;
 }
 
 @media (min-width: 992px) {
   .chart-canvas-wrap {
-    height: 420px;
+    height: 504px; /* +20% so với 420px */
   }
 }
 

@@ -151,56 +151,10 @@
           <div class="more-button-row">
             <div class="col-12">
               <div class="more-button-container">
-                <div class="dropdown" (click)="$event.stopPropagation()">
-                  <button class="btn btn-outline-secondary dropdown-toggle" type="button" (click)="toggleDropdown()">
-                    <i class="material-icons">more_vert</i>
-                    More
-                  </button>
-                  <div class="dropdown-menu" [class.show]="isDropdownOpen">
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="downloadTemplate(); closeDropdown(); $event.preventDefault()">
-                      <i class="material-icons">download</i>
-                      Tải Template Shipment
-                    </a>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="importCustomerKhCatalog(); closeDropdown(); $event.preventDefault()">
-                      <i class="material-icons">contacts</i>
-                      Import danh mục KH
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="showTimeRangeDialog = true; closeDropdown()">
-                      <i class="material-icons">schedule</i>
-                      Chọn thời gian
-                    </a>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="showAddShipmentDialog = true; closeDropdown()">
-                      <i class="material-icons">add</i>
-                      Add Shipment
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="toggleShowHidden(); closeDropdown()"
-                       [class.active]="showHidden">
-                      <i class="material-icons">{{ showHidden ? 'visibility' : 'visibility_off' }}</i>
-                      {{ showHidden ? 'Đang hiện cả shipment đã ẩn' : 'Hiện shipment đã ẩn' }}
-                      <span *ngIf="getHiddenShipmentsCount() > 0">({{ getHiddenShipmentsCount() }})</span>
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
-                      <i class="material-icons">file_download</i>
-                      Export to Excel
-                    </a>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcelByMonth(); closeDropdown()">
-                      <i class="material-icons">calendar_today</i>
-                      Tải về theo tháng
-                    </a>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="downloadDayPreReport(); closeDropdown()">
-                      <i class="material-icons">assessment</i>
-                      Báo cáo ngày chuẩn bị
-                    </a>
-                    <div class="dropdown-divider"></div>
-                    <a class="dropdown-item" href="javascript:void(0)" (click)="deleteAllShipments(); closeDropdown()" *ngIf="filteredShipments.length > 0">
-                      <i class="material-icons">delete_forever</i>
-                      Xóa Tất Cả
-                    </a>
-                  </div>
-                </div>
+                <button class="btn btn-outline-secondary" type="button" (click)="toggleDropdown()">
+                  <i class="material-icons">more_vert</i>
+                  More
+                </button>
                 
                 <!-- Import File Button -->
                 <button class="btn btn-outline-secondary" type="button" (click)="importFile()">
@@ -625,6 +579,64 @@
   </div>
 </div>
 
+<!-- More menu (popup) -->
+<div class="custom-modal more-menu-modal-root" [class.show]="isDropdownOpen" [style.display]="isDropdownOpen ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeDropdown()"></div>
+  <div class="modal-container more-menu-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">more_horiz</i>
+        More
+      </h5>
+      <button type="button" class="close-btn" (click)="closeDropdown()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body more-menu-modal-body">
+      <button type="button" class="more-menu-item" (click)="downloadTemplate(); closeDropdown()">
+        <i class="material-icons">download</i>
+        <span>Tải Template Shipment</span>
+      </button>
+      <button type="button" class="more-menu-item" (click)="importCustomerKhCatalog(); closeDropdown()">
+        <i class="material-icons">contacts</i>
+        <span>Import danh mục KH</span>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item" (click)="showTimeRangeDialog = true; closeDropdown()">
+        <i class="material-icons">schedule</i>
+        <span>Chọn thời gian</span>
+      </button>
+      <button type="button" class="more-menu-item" (click)="showAddShipmentDialog = true; closeDropdown()">
+        <i class="material-icons">add</i>
+        <span>Add Shipment</span>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item" [class.more-menu-item-active]="showHidden" (click)="toggleShowHidden(); closeDropdown()">
+        <i class="material-icons">{{ showHidden ? 'visibility' : 'visibility_off' }}</i>
+        <span>{{ showHidden ? 'Đang hiện cả shipment đã ẩn' : 'Hiện shipment đã ẩn' }}<ng-container *ngIf="getHiddenShipmentsCount() > 0"> ({{ getHiddenShipmentsCount() }})</ng-container></span>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item" (click)="exportToExcel(); closeDropdown()">
+        <i class="material-icons">file_download</i>
+        <span>Export to Excel</span>
+      </button>
+      <button type="button" class="more-menu-item" (click)="exportToExcelByMonth(); closeDropdown()">
+        <i class="material-icons">calendar_today</i>
+        <span>Tải về theo tháng</span>
+      </button>
+      <button type="button" class="more-menu-item" (click)="downloadDayPreReport(); closeDropdown()">
+        <i class="material-icons">assessment</i>
+        <span>Báo cáo ngày chuẩn bị</span>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item more-menu-item-danger" *ngIf="filteredShipments.length > 0" (click)="deleteAllShipments(); closeDropdown()">
+        <i class="material-icons">delete_forever</i>
+        <span>Xóa Tất Cả</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Time Range Dialog -->
 <div class="custom-modal" [class.show]="showTimeRangeDialog" [style.display]="showTimeRangeDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showTimeRangeDialog = false"></div>
@@ -1013,7 +1025,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">bar_chart</i>
-        Chart — {{ getMonthName() }} {{ scheduleYear }}
+        Chart — {{ getScheduleMonthNameEn() }}
       </h5>
       <button type="button" class="close-btn" (click)="closeScheduleChartDialog()">
         <i class="material-icons">close</i>
@@ -1021,12 +1033,34 @@
     </div>
 
     <div class="modal-body">
+      <div class="calendar-nav chart-chart-month-nav" aria-label="Select month for chart">
+        <button type="button" class="nav-btn" (click)="previousMonth()" title="Previous month">
+          <i class="material-icons">chevron_left</i>
+        </button>
+        <div class="chart-nav-center">
+          <h3 class="calendar-title chart-nav-title">{{ getScheduleMonthNameEn() }}</h3>
+          <label class="chart-month-label" for="schedule-chart-month-input">Select month</label>
+          <input
+            id="schedule-chart-month-input"
+            type="month"
+            class="chart-month-input"
+            [ngModel]="getScheduleChartMonthInputValue()"
+            (ngModelChange)="onScheduleChartMonthPickerChange($event)"
+            (click)="$any($event.target).showPicker?.()"
+            title="Choose month for cartons shipped per dispatch day"
+          />
+        </div>
+        <button type="button" class="nav-btn" (click)="nextMonth()" title="Next month">
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </div>
       <div class="chart-grid">
         <div class="chart-card">
           <div class="chart-title">
-            Số thùng shipped mỗi ngày
-            <span class="chart-subtitle">Tổng tháng: {{ scheduleChartMonthTotalCarton }}</span>
+            Cartons shipped per dispatch day
+            <span class="chart-subtitle">Month total: {{ scheduleChartMonthTotalCarton | number }}</span>
           </div>
+          <p class="chart-hint-en">Y-axis: preparation lead time (Day Pre). Carton counts are shown below each bubble.</p>
           <div class="chart-canvas-wrap">
             <canvas id="schedule-shipped-per-day-canvas"></canvas>
           </div>
@@ -1037,7 +1071,7 @@
     <div class="modal-footer">
       <button type="button" class="btn btn-cancel" (click)="closeScheduleChartDialog()">
         <i class="material-icons">close</i>
-        Đóng
+        Close
       </button>
     </div>
   </div>

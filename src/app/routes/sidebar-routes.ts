@@ -14,6 +14,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
   { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: '' },
+  { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', class: '' },
   { 
     path: '', 
     title: 'ASM1 RM', 
