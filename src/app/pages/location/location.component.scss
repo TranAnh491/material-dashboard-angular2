@@ -1679,6 +1679,25 @@
         color: #666;
       }
     }
+
+    .item-details-2 {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 6px;
+
+      .item-imd {
+        font-size: 10px;
+        color: #666;
+      }
+
+      .iqc-status-badge {
+        font-size: 10px;
+        line-height: 16px;
+        padding: 1px 8px;
+      }
+    }
   }
 }
 

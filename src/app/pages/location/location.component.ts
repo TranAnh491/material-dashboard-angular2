@@ -2046,6 +2046,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkSelectedItems.clear();
 
     try {
+      const toDDMMYYYY = (dateValue: any): string => {
+        if (!dateValue) return '';
+        try {
+          const d: Date =
+            typeof dateValue?.toDate === 'function' ? dateValue.toDate() : new Date(dateValue);
+          if (Number.isNaN(d.getTime())) return '';
+          return d.toLocaleDateString('en-GB').split('/').join('');
+        } catch {
+          return '';
+        }
+      };
+
       const queryByLocation = async (location: string) => {
         return await this.firestore
           .collection('inventory-materials', ref =>
@@ -2089,10 +2101,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const exported = Number(data.exported) || 0;
         const xt = Number(data.xt) || 0;
         const stock = openingStock + quantity - exported - xt;
+        const importDateStr = toDDMMYYYY(data.importDate);
         items.push({
           id: doc.id,
           materialCode: data.materialCode || '',
           poNumber: data.poNumber || '',
+          importDateStr,
+          iqcStatus: data.iqcStatus || '',
           stock,
           location: data.location || '',
           palletId: (data.palletId || '').toString().toUpperCase()

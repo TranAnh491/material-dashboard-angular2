@@ -604,6 +604,14 @@
                 <span class="item-po">{{ item.poNumber }}</span>
                 <span class="item-stock">SL: {{ item.stock | number:'1.0-0' }}</span>
               </div>
+              <div class="item-details item-details-2">
+                <span class="item-imd" *ngIf="item.importDateStr">IMD: {{ item.importDateStr }}</span>
+                <span class="iqc-status-badge" *ngIf="item.iqcStatus" [ngClass]="getIQCStatusClass(item.iqcStatus)">
+                  {{ getIQCStatusText(item.iqcStatus) }}
+                </span>
+                <span class="item-imd" *ngIf="!item.importDateStr">IMD: —</span>
+                <span class="iqc-status-badge iqc-none" *ngIf="!item.iqcStatus">—</span>
+              </div>
             </div>
           </div>
         </div>
