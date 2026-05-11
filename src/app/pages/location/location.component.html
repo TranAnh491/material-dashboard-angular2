@@ -782,6 +782,10 @@
             <span class="label">PO:</span>
             <span class="value">{{ selectedMaterialForStore.poNumber }}</span>
           </div>
+          <div class="info-row" *ngIf="selectedMaterialForStore.importDateStr || scannedIMDForStore">
+            <span class="label">IMD:</span>
+            <span class="value">{{ (selectedMaterialForStore.importDateStr || scannedIMDForStore) || '—' }}</span>
+          </div>
           <div class="info-row">
             <span class="label">IQC Status:</span>
             <span class="value">

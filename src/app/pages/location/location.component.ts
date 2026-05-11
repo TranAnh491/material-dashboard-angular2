@@ -124,6 +124,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   showStoreMaterialModal = false;
   storeMaterialQRInput = '';
   scannedMaterialCodeForStore = '';
+  /** IMD lấy từ QR (DDMMYYYY) để phân biệt PO trùng */
+  scannedIMDForStore = '';
   foundMaterialsForStore: any[] = []; // Các materials tìm được theo materialCode
   selectedMaterialForStore: any = null; // Material được chọn để cất
   suggestedLocations: string[] = []; // Danh sách vị trí hiện tại của material
@@ -1412,6 +1414,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.isSearchingMaterial = true;
     this.scannedMaterialCodeForStore = qrCode;
+    this.scannedIMDForStore = '';
 
     try {
       // Parse QR code: MaterialCode|PO|Quantity|Date
@@ -1419,17 +1422,28 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       let materialCode = '';
       let poNumber = '';
       let imd = '';
+      const extractIMDBeforeDash = (raw: string): string => {
+        const s = (raw || '').trim();
+        if (!s) return '';
+        // Requirement: read IMD from 8..10 chars immediately before the '-' char
+        // Example: "...DDMMYYYY-..." or "...YYYYMMDDHH-..." → take the last 8..10 digits before '-'
+        const m = s.match(/(\d{8,10})(?=-)/);
+        if (m?.[1]) return m[1];
+        // Fallback: if no '-' present, try to get 8..10 digits anywhere
+        const m2 = s.match(/(\d{8,10})/);
+        return m2?.[1] || '';
+      };
 
       if (parts.length >= 2) {
         materialCode = parts[0].trim().substring(0, 7); // Lấy 7 ký tự đầu
         poNumber = parts[1].trim(); // PO number
         if (parts.length >= 4) {
-          imd = parts[3].trim(); // IMD (DDMMYYYY)
+          imd = extractIMDBeforeDash(parts[3]); // IMD (DDMMYYYY) from before '-'
         }
       } else if (parts.length >= 1) {
         materialCode = parts[0].trim().substring(0, 7);
         if (parts.length >= 4) {
-          imd = parts[3].trim();
+          imd = extractIMDBeforeDash(parts[3]);
         }
       } else {
         materialCode = qrCode.trim().substring(0, 7);
@@ -1441,6 +1455,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
+      this.scannedIMDForStore = imd || '';
       console.log(`🔍 Searching for material: ${materialCode}, PO: ${poNumber || 'N/A'}, IMD: ${imd || 'N/A'}`);
 
       const toDDMMYYYY = (dateValue: any): string => {
@@ -1504,10 +1519,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
         const matchesMaterialCode = material.materialCode === materialCode;
         const matchesPO = !poNumber || material.poNumber === poNumber;
+        const matchesIMD = !imd || (material.importDateStr && material.importDateStr === imd);
 
-        // Yêu cầu: chỉ cần gom theo Mã nguyên liệu + PO để ra đúng vị trí.
-        // IMD là duy nhất nên không cần lọc thêm khi hiển thị danh sách vị trí.
-        if (matchesMaterialCode && matchesPO) {
+        // Yêu cầu mới: PO có thể trùng -> dùng thêm IMD (DDMMYYYY) nếu có trong QR
+        if (matchesMaterialCode && matchesPO && matchesIMD) {
           relevantMaterials.push(material);
 
           if (material.location && material.location.trim() !== '') {
@@ -1523,11 +1538,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       // Nếu không tìm thấy material khớp chính xác, lấy material đầu tiên
       if (!matchedMaterial) {
-        // Theo yêu cầu: tìm theo Mã + PO
+        // Theo yêu cầu: tìm theo Mã + PO + IMD (nếu có)
         if (!poNumber) {
           alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
         } else {
-          alert(`❌ Không tìm thấy material đúng theo Mã + PO.\n\nMã: ${materialCode}\nPO: ${poNumber}`);
+          const imdLine = imd ? `\nIMD: ${imd}` : '';
+          alert(`❌ Không tìm thấy material đúng theo Mã + PO${imd ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`);
         }
         this.isSearchingMaterial = false;
         return;
