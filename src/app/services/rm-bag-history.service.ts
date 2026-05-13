@@ -190,9 +190,35 @@ export class RmBagHistoryService {
     return bagBatchRaw;
   }
 
+  private collectOutboundBagParseCandidates(d: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (x: unknown) => {
+      const s = this.normalizeParenAscii(String(x ?? '').trim());
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        out.push(s);
+      }
+    };
+    push(d['importDate']);
+    push(d['batchNumber']);
+    for (const hint of this.extractQrPart4HintsFromNotes(d['notes'] != null ? String(d['notes']) : '')) {
+      push(hint);
+    }
+    for (const line of String(d['notes'] ?? '').split(/[\r\n]+/)) {
+      const t = line.trim();
+      if (!t) continue;
+      if (t.includes('|')) {
+        const parts = t.split('|').map(p => p.trim());
+        if (parts.length >= 4) push(parts[3]);
+      }
+    }
+    return out;
+  }
+
   /**
    * Giống Outbound ASM1 `mapOutboundDocToMaterial` + `getOutboundBagColumnDisplay` (Control Batch / mail).
-   * Không dùng notes để suy Bag — khớp cột hiển thị trên tab Xuất.
+   * Khi `importDate` trên Firestore chỉ còn 8 số IMD, vẫn thử `batchNumber` và gợi ý trong `notes` (khớp Functions).
    */
   resolveControlBatchOutboundRowBagFields(d: Record<string, unknown>): {
     bichBatch: string;
@@ -200,18 +226,26 @@ export class RmBagHistoryService {
     eligibleForDupScan: boolean;
     explicitBagNumberField: boolean;
   } {
-    const rawImd = d['importDate'] != null && d['importDate'] !== '' ? String(d['importDate']) : '';
-    const pImd = rawImd ? this.parseQrPart4(rawImd) : null;
-    const bagBatchNorm =
-      (d['bagBatch'] != null && String(d['bagBatch']).trim() !== '' ? String(d['bagBatch']).trim() : '') ||
-      (pImd?.bagFractionLabel ? String(pImd.bagFractionLabel) : '');
+    let bagBatchNorm =
+      d['bagBatch'] != null && String(d['bagBatch']).trim() !== '' ? String(d['bagBatch']).trim() : '';
     const explicitBagNumberField =
       d['bagNumberDisplay'] != null && String(d['bagNumberDisplay']).trim() !== '';
-    const bagNumNorm = explicitBagNumberField
+    let bagNumNorm = explicitBagNumberField
       ? this.normalizeParenAscii(String(d['bagNumberDisplay']).trim())
-      : pImd?.bagNumberDisplay
-        ? this.normalizeParenAscii(String(pImd.bagNumberDisplay))
-        : '';
+      : '';
+
+    let parsedUsedForBagNum: QrPart4Parsed | null = null;
+
+    for (const c of this.collectOutboundBagParseCandidates(d)) {
+      const p = this.parseQrPart4(c);
+      if (!bagBatchNorm && p.bagFractionLabel) {
+        bagBatchNorm = String(p.bagFractionLabel);
+      }
+      if (!explicitBagNumberField && !bagNumNorm && p.bagNumberDisplay) {
+        bagNumNorm = this.normalizeParenAscii(String(p.bagNumberDisplay));
+        parsedUsedForBagNum = p;
+      }
+    }
 
     const bich = this.normalizeParenAscii(String(bagBatchNorm || '').trim());
     let bagUi = String(bagNumNorm || '').trim();
@@ -238,7 +272,7 @@ export class RmBagHistoryService {
       !explicitBagNumberField &&
       !hasSplitTag &&
       bagUi.length > 0 &&
-      !!pImd?.bagNumberDisplay &&
+      !!parsedUsedForBagNum?.bagNumberDisplay &&
       bagUi === this.bichFirstNumerator(bich);
 
     const eligibleForDupScan =
