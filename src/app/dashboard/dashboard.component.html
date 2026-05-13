@@ -445,7 +445,7 @@
               Shipment — chi tiết
             </h4>
             <p class="custom-card-desc">
-              Chỉ các lô có ngày tham chiếu (Dispatch → Request → Import) nằm trong <strong>7 ngày sắp tới</strong> (từ hôm nay), cùng collection <strong>shipments</strong> với tab Shipment, factory {{ selectedFactory }}.
+              Các lô có ngày ship (Dispatch → Request → Import) trong <strong>7 ngày sắp tới</strong> (từ hôm nay), cùng collection <strong>shipments</strong> với tab Shipment — theo nhà máy đang chọn trên dashboard. Cùng <strong>Shipment</strong> và cùng <strong>trạng thái</strong> thì <strong>gộp tổng Carton</strong>; cột ngày ship lấy ngày sớm nhất trong nhóm.
             </p>
           </div>
           <button type="button" class="detail-viewall-btn" (click)="goShipment()">Mở Shipment</button>
@@ -454,21 +454,17 @@
           <table class="table table-bordered table-striped workorder-status-table">
             <thead>
               <tr>
-                <th>Ngày tham chiếu</th>
-                <th>Thứ</th>
+                <th>Ngày ship</th>
                 <th>Shipment</th>
-                <th>Mã TP</th>
-                <th>Factory</th>
+                <th>Carton</th>
                 <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let row of shipmentDetailPagedRows">
-                <td [title]="row.refDateLabel">{{ row.refDateLabel }}</td>
-                <td [title]="row.weekdayLabel">{{ row.weekdayLabel }}</td>
+                <td [title]="row.shipDateLabel">{{ row.shipDateLabel }}</td>
                 <td [title]="row.shipmentCode">{{ row.shipmentCode }}</td>
-                <td [title]="row.materialCode">{{ row.materialCode }}</td>
-                <td [title]="row.factory">{{ row.factory }}</td>
+                <td [title]="row.cartonLabel">{{ row.cartonLabel }}</td>
                 <td>
                   <span class="status-badge"
                     [class.status-badge--amber]="row.statusBadge === 'amber'"
@@ -479,7 +475,7 @@
                 </td>
               </tr>
               <tr *ngIf="shipmentWeeklyDetailRows.length === 0">
-                <td colspan="6" class="text-center">Không có lô shipment trong 7 ngày sắp tới cho factory đã chọn.</td>
+                <td colspan="4" class="text-center">Không có lô shipment trong 7 ngày sắp tới cho nhà máy đang chọn.</td>
               </tr>
             </tbody>
           </table>

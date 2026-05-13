@@ -88,13 +88,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
   woHeatmapDays: WoHeatmapDayCol[] = [];
   yesterdayOverdueCount: number = 0;
-  /** Bảng chi tiết cuối dashboard: dòng shipment trong 7 ngày sắp tới (cùng nguồn tab Shipment) */
+  /** Bảng chi tiết cuối dashboard: shipment 7 ngày sắp tới (cùng collection tab Shipment) */
   shipmentWeeklyDetailRows: Array<{
-    refDateLabel: string;
-    weekdayLabel: string;
+    shipDateLabel: string;
     shipmentCode: string;
-    materialCode: string;
-    factory: string;
+    cartonLabel: string;
     statusLabel: string;
     statusBadge: 'green' | 'red' | 'amber';
   }> = [];
@@ -840,15 +838,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return t.getTime() >= start.getTime() && t.getTime() <= end.getTime();
   }
 
-  private weekdayLabelFromDate(d: Date): string {
-    const day = d.getDay();
-    const vn = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-    if (day >= 1 && day <= 6) {
-      return vn[day - 1];
-    }
-    return '';
-  }
-
   private isShipmentDetailDone(status: string): boolean {
     const s = String(status || '').toLowerCase();
     return s.includes('đã xong') || s.includes('da xong') || s.includes('done') || s.includes('đã ship') || s.includes('da ship');
@@ -874,6 +863,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.shipmentWeeklyDetailRows = [];
     this.shipmentDetailCurrentPage = 1;
 
+    /** Gộp theo shipment + trạng thái: cộng dồn carton; ngày ship = ngày tham chiếu sớm nhất trong nhóm. */
+    const agg = new Map<
+      string,
+      { refEarliest: Date; shipmentCode: string; statusLabel: string; cartonSum: number }
+    >();
+
     for (const s of allShipments) {
       if (s.hidden) {
         continue;
@@ -886,32 +881,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
         continue;
       }
 
-      const refDateLabel = ref.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-      const weekdayLabel = this.weekdayLabelFromDate(ref);
+      const shipmentCode = (s.shipmentCode || '—').toString().trim().toUpperCase() || '—';
       const statusLabel = String(s.status || '').trim() || '—';
-      this.shipmentWeeklyDetailRows.push({
-        refDateLabel,
-        weekdayLabel,
-        shipmentCode: s.shipmentCode || '—',
-        materialCode: s.materialCode || '—',
-        factory: s.factory || 'ASM1',
-        statusLabel,
-        statusBadge: this.shipmentDetailStatusBadge(statusLabel)
-      });
+      const key = `${shipmentCode}\u001e${statusLabel}`;
+
+      const cartonNum = Number(s.carton);
+      const add =
+        Number.isFinite(cartonNum) && cartonNum > 0 ? Math.round(cartonNum) : 0;
+
+      const prev = agg.get(key);
+      if (!prev) {
+        agg.set(key, {
+          refEarliest: new Date(ref.getTime()),
+          shipmentCode,
+          statusLabel,
+          cartonSum: add
+        });
+      } else {
+        prev.cartonSum += add;
+        if (ref.getTime() < prev.refEarliest.getTime()) {
+          prev.refEarliest = new Date(ref.getTime());
+        }
+      }
     }
 
+    this.shipmentWeeklyDetailRows = Array.from(agg.values()).map((v) => ({
+      shipDateLabel: v.refEarliest.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
+      shipmentCode: v.shipmentCode,
+      cartonLabel: v.cartonSum > 0 ? String(v.cartonSum) : '—',
+      statusLabel: v.statusLabel,
+      statusBadge: this.shipmentDetailStatusBadge(v.statusLabel)
+    }));
+
     this.shipmentWeeklyDetailRows.sort((a, b) => {
-      if (a.refDateLabel !== b.refDateLabel) {
-        return a.refDateLabel.localeCompare(b.refDateLabel, 'vi');
+      if (a.shipDateLabel !== b.shipDateLabel) {
+        return a.shipDateLabel.localeCompare(b.shipDateLabel, 'vi');
       }
       const sc = a.shipmentCode.localeCompare(b.shipmentCode, 'vi');
       if (sc !== 0) {
         return sc;
       }
-      return a.materialCode.localeCompare(b.materialCode, 'vi');
+      return a.statusLabel.localeCompare(b.statusLabel, 'vi');
     });
 
-    console.log(`Shipment chi tiết — 7 ngày sắp tới (${this.selectedFactory}): ${this.shipmentWeeklyDetailRows.length} dòng`);
+    console.log(`Shipment chi tiết — 7 ngày sắp tới (${this.selectedFactory}): ${this.shipmentWeeklyDetailRows.length} dòng (đã gộp carton theo shipment + trạng thái)`);
   }
 
   private loadShipmentDataFromGoogleSheets() {
@@ -942,6 +955,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           factory: data.factory || 'ASM1',
           materialCode: String(data.materialCode || '').trim().toUpperCase(),
           shipmentCode: String(data.shipmentCode || '').trim().toUpperCase(),
+          carton: Number(data.carton) || 0,
           importDate: toD(data.importDate),
           requestDate: toD(data.requestDate),
           actualShipDate: toD(data.actualShipDate),
