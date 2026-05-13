@@ -414,8 +414,8 @@
 }
 
 .wo-heatmap .putaway-heatmap__cell.fg-in-heatmap__cell--cho-vi-tri {
-  background: #3b82f6 !important;
-  border-color: rgba(30, 64, 175, 0.25) !important;
+  background: #22c55e !important;
+  border-color: rgba(22, 101, 52, 0.25) !important;
 }
 
 .wo-heatmap.fg-in-heatmap .putaway-heatmap__cnt.wo-heatmap__cnt {
@@ -427,7 +427,7 @@
 }
 
 .fg-in-legend-dot--cho-vi-tri {
-  background: #3b82f6;
+  background: #22c55e;
 }
 
 .wo-heatmap-legend {

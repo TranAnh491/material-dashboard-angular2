@@ -1858,6 +1858,38 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  /**
+   * R* + IQC Pass → E7; B011/B013/B014* + IQC Pass → F7.
+   * Mutates material.location when rule applies.
+   * @returns location to persist ('E7' | 'F7') or null
+   */
+  private applyPassIqcAutoLocation(material: {
+    materialCode?: string;
+    iqcStatus?: string;
+    location?: string;
+  }): 'E7' | 'F7' | null {
+    try {
+      const mc = String(material.materialCode || '').trim().toUpperCase();
+      const iqc = String(material.iqcStatus || '').trim().toUpperCase();
+      const loc = String(material.location || '').trim().toUpperCase();
+      if (mc.startsWith('R') && iqc === 'PASS' && loc !== 'E7') {
+        material.location = 'E7';
+        return 'E7';
+      }
+      if (
+        (mc.startsWith('B011') || mc.startsWith('B013') || mc.startsWith('B014')) &&
+        iqc === 'PASS' &&
+        loc !== 'F7'
+      ) {
+        material.location = 'F7';
+        return 'F7';
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
   // Load inventory data from Firebase - ONLY ASM1
   async loadInventoryFromFirebase(): Promise<void> {
     console.log('📦 Loading ASM1 inventory from Firebase...');
@@ -1875,9 +1907,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       .subscribe((actions) => {
         console.log(`🔍 Firebase subscription received ${actions.length} actions`);
 
-        // Auto-set location = E7 for material codes starting with "R" when IQC status is PASS
-        const autoE7Batch = this.firestore.firestore.batch();
-        let autoE7Count = 0;
+        // Auto-set location: E7 for R* + IQC PASS; F7 for B011/B013/B014* + IQC PASS
+        const autoLocationBatch = this.firestore.firestore.batch();
+        let autoLocationCount = 0;
         const MAX_BATCH_WRITES = 450; // safety margin under 500
 
         this.inventoryMaterials = actions
@@ -1897,23 +1929,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               iqcStatus: data.iqcStatus || undefined // Load IQC status from Firestore
             };
 
-            try {
-              const mc = String(material.materialCode || '').trim().toUpperCase();
-              const iqc = String(material.iqcStatus || '').trim().toUpperCase();
-              const loc = String(material.location || '').trim().toUpperCase();
-              if (mc.startsWith('R') && iqc === 'PASS' && loc !== 'E7') {
-                material.location = 'E7';
-                if (autoE7Count < MAX_BATCH_WRITES) {
-                  autoE7Batch.update(action.payload.doc.ref, {
-                    location: 'E7',
-                    lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-                    modifiedBy: 'materials-asm1-auto-e7'
-                  } as any);
-                  autoE7Count++;
-                }
-              }
-            } catch {
-              // ignore
+            const newLoc = this.applyPassIqcAutoLocation(material);
+            if (newLoc && autoLocationCount < MAX_BATCH_WRITES) {
+              autoLocationBatch.update(action.payload.doc.ref, {
+                location: newLoc,
+                lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+                modifiedBy: 'materials-asm1-auto-location'
+              } as any);
+              autoLocationCount++;
             }
             
             // 🔍 DEBUG: Log batchNumber để kiểm tra sequence number
@@ -1958,11 +1981,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           })
           .filter(material => material.factory === this.FACTORY); // Double check ASM1 only
 
-        if (autoE7Count > 0) {
-          autoE7Batch
+        if (autoLocationCount > 0) {
+          autoLocationBatch
             .commit()
-            .then(() => console.log(`✅ [ASM1 auto E7] Updated ${autoE7Count} docs (R* + IQC PASS).`))
-            .catch(err => console.warn('⚠️ [ASM1 auto E7] Batch update failed:', err));
+            .then(() =>
+              console.log(
+                `✅ [ASM1 auto location] Updated ${autoLocationCount} docs (R*→E7 / B011|B013|B014*→F7 khi IQC PASS).`
+              )
+            )
+            .catch(err => console.warn('⚠️ [ASM1 auto location] Batch update failed:', err));
         }
 
         // Set filteredInventory to show all loaded items initially
@@ -2978,7 +3005,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
       if (querySnapshot && !querySnapshot.empty) {
         console.log(`✅ ASM1 Found ${querySnapshot.docs.length} documents from Firebase`);
-        
+
+        const MAX_SEARCH_LOC_WRITES = 450;
+        const searchLocBatch = this.firestore.firestore.batch();
+        let searchLocWrites = 0;
+
         // Process search results
         this.inventoryMaterials = querySnapshot.docs.map(doc => {
           const data = doc.data() as any;
@@ -2991,18 +3022,40 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
             openingStock: data.openingStock || null, // Initialize openingStock field - để trống nếu không có
             xt: data.xt || 0, // Initialize XT field for search results
-            source: data.source || 'manual' // Set default source for old materials
+            source: data.source || 'manual', // Set default source for old materials
+            iqcStatus: data.iqcStatus || undefined
           };
-          
+
+          const newLoc = this.applyPassIqcAutoLocation(material);
+          if (newLoc && searchLocWrites < MAX_SEARCH_LOC_WRITES) {
+            searchLocBatch.update(doc.ref, {
+              location: newLoc,
+              lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+              modifiedBy: 'materials-asm1-auto-location'
+            } as any);
+            searchLocWrites++;
+          }
+
           // Apply catalog data if available
           if (this.catalogLoaded && this.catalogCache.has(material.materialCode)) {
             const catalogItem = this.catalogCache.get(material.materialCode)!;
             material.materialName = catalogItem.materialName;
             material.unit = catalogItem.unit;
           }
-          
+
           return material;
         });
+
+        if (searchLocWrites > 0) {
+          searchLocBatch
+            .commit()
+            .then(() =>
+              console.log(
+                `✅ [ASM1 search auto location] Updated ${searchLocWrites} doc(s) (R*→E7 / B011|B013|B014*→F7 khi IQC PASS).`
+              )
+            )
+            .catch(err => console.warn('⚠️ [ASM1 search auto location] Batch update failed:', err));
+        }
         
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
