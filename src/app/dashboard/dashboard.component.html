@@ -259,7 +259,7 @@
 
 
     <!-- Hàng widget: Work Order / Shipment / Putaway (bố cục + typography theo dashboard mẫu) -->
-    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order weekly heatmap, FG In pending, putaway">
+    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order weekly heatmap, FG Inbound pending, putaway">
       <article class="card dash-widget wo-chart-widget dash-surface-card">
         <header class="dash-widget__head">
           <div class="dash-widget__headrow">
@@ -312,7 +312,7 @@
               <span class="dash-widget__ico dash-widget__ico--sky" aria-hidden="true">
                 <i class="material-icons">local_shipping</i>
               </span>
-              <span class="dash-widget__title-text">FG In — tuần T2–T7</span>
+              <span class="dash-widget__title-text">FG Inbound</span>
             </div>
             <div class="dash-widget__pill"><span>T2–T7 · weekly</span><i class="material-icons">expand_more</i></div>
           </div>
@@ -320,7 +320,7 @@
         <div class="card-body card-body--wo-chart">
           <div class="wo-chart-wrap wo-chart-wrap--heatmap">
             <div class="wo-heatmap-inner" *ngIf="fgInHeatmapDays.length">
-              <div class="putaway-heatmap wo-heatmap fg-in-heatmap" aria-label="FG In chờ nhập kho theo ngày trong tuần">
+              <div class="putaway-heatmap wo-heatmap fg-in-heatmap" aria-label="FG Inbound pending warehouse by weekday (T2–T7)">
                 <div *ngFor="let col of fgInHeatmapDays" class="putaway-heatmap__col">
                   <div class="putaway-heatmap__head">
                     <span class="putaway-heatmap__week">{{ col.weekday }}</span>
@@ -338,10 +338,9 @@
                 </div>
               </div>
               <div class="wo-heatmap-legend" *ngIf="fgInHeatmapHasCells">
-                <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--chua-khoa" aria-hidden="true"></span>Chưa khóa</span>
-                <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--cho-vi-tri" aria-hidden="true"></span>Đã khóa — chờ vị trí</span>
+                <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--chua-khoa" aria-hidden="true"></span>Waiting</span>
+                <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--cho-vi-tri" aria-hidden="true"></span>Done</span>
               </div>
-              <button type="button" class="ship-more" (click)="goFgIn()">Mở FG In →</button>
             </div>
             <div *ngIf="!fgInHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
           </div>
@@ -375,6 +374,8 @@
                     [class.putaway-heatmap__cell--pass]="c.statusKind === 'pass'"
                     [class.putaway-heatmap__cell--ng]="c.statusKind === 'ng'"
                     [class.putaway-heatmap__cell--pending]="c.statusKind === 'pending'"
+                    [class.putaway-heatmap__cell--confirm]="c.statusKind === 'confirm'"
+                    [class.putaway-heatmap__cell--lock]="c.statusKind === 'lock'"
                     [title]="c.tooltip"
                   ></div>
                 </div>
@@ -386,6 +387,13 @@
                 <span class="putaway-empty-msg__hint">Chỉ đếm hàng có <strong>vị trí bắt đầu bằng IQC</strong>, IQC status Pass / NG / Chờ kiểm và tồn &gt; 0. Cột <strong>Late</strong> gom SKU ngoài 8 tuần hoặc thiếu ngày. Tuần không có SKU (0 mã) không hiển thị.</span>
               </div>
             </ng-template>
+
+            <div class="wo-heatmap-legend" aria-label="Putaway staging IQC legend">
+              <span><span class="wo-legend-dot wo-legend-dot--iqc-pending" aria-hidden="true"></span>Pending inspection</span>
+              <span><span class="wo-legend-dot wo-legend-dot--iqc-pass" aria-hidden="true"></span>Pass</span>
+              <span><span class="wo-legend-dot wo-legend-dot--iqc-confirm" aria-hidden="true"></span>Pending confirmation</span>
+              <span><span class="wo-legend-dot wo-legend-dot--iqc-ng" aria-hidden="true"></span>NG</span>
+            </div>
           </div>
           <div class="iqc-loading" *ngIf="iqcLoading">
             <i class="material-icons rotating">refresh</i>
@@ -698,6 +706,8 @@
                   [class.iqc-material-row--pass]="material.statusKind === 'pass'"
                   [class.iqc-material-row--ng]="material.statusKind === 'ng'"
                   [class.iqc-material-row--pending]="material.statusKind === 'pending'"
+                  [class.iqc-material-row--confirm]="material.statusKind === 'confirm'"
+                  [class.iqc-material-row--lock]="material.statusKind === 'lock'"
                 >
                   <td>{{ i + 1 }}</td>
                   <td>{{ material.materialCode }}</td>

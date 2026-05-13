@@ -31,7 +31,7 @@ interface WoHeatmapDayCol {
   cells: { kind: WoHeatKind }[];
 }
 
-/** FG In — heatmap tuần T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho */
+/** FG Inbound — heatmap tuần T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho */
 type FgInHeatKind = 'chua-khoa' | 'cho-vi-tri';
 
 interface FgInHeatmapDayCol {
@@ -42,7 +42,7 @@ interface FgInHeatmapDayCol {
 }
 
 /** Nhóm IQC hiển thị Putaway staging — màu ô heatmap */
-type PutawayIqcStatusKind = 'pass' | 'ng' | 'pending';
+type PutawayIqcStatusKind = 'pass' | 'ng' | 'pending' | 'confirm' | 'lock';
 
 interface PutawaySkuAgg {
   materialCode: string;
@@ -96,7 +96,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     statusLabel: string;
     statusBadge: 'green' | 'red' | 'amber';
   }> = [];
-  /** 6 cột T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho — chỉ heatmap FG In */
+  /** 6 cột T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho — FG Inbound */
   fgInHeatmapDays: FgInHeatmapDayCol[] = [];
 
   // Factory selection
@@ -1159,7 +1159,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadFgInPendingWeeklyHeatmap();
   }
 
-  /** FG In: cùng filter factory với WO (ASM1 + Sample 1 / ASM2 + Sample 2). */
+  /** FG Inbound: cùng filter factory với WO (ASM1 + Sample 1 / ASM2 + Sample 2). */
   private materialMatchesDashboardFactory(factory: string): boolean {
     const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
     const f = (factory || 'ASM1').toString().trim().toLowerCase().replace(/\s+/g, ' ');
@@ -1257,8 +1257,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
             skuMap.forEach((kind, code) => {
               const title =
                 kind === 'chua-khoa'
-                  ? `${code}: Chưa khóa (chờ xác nhận nhập kho)`
-                  : `${code}: Đã khóa — chờ gán vị trí kho`;
+                  ? `${code}: Waiting`
+                  : `${code}: Done`;
               cells.push({ kind, tooltip: title });
             });
 
@@ -1271,7 +1271,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
 
           console.log(
-            `FG In chờ nhập kho (heatmap T2–T7, ${this.selectedFactory}):`,
+            `FG Inbound pending (heatmap T2–T7, ${this.selectedFactory}):`,
             this.fgInHeatmapDays.map((d) => ({ day: d.weekday, n: d.total }))
           );
           this.cdr.detectChanges();
@@ -1401,10 +1401,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!s || s === '—' || s === '-') return 0;
     const n = Number(s);
     return Number.isFinite(n) ? n : 0;
-  }
-
-  goFgIn(): void {
-    this.router.navigate(['/fg-in']);
   }
 
   goShipment(): void {
@@ -1706,28 +1702,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const u = s.toUpperCase();
     if (u === 'PASS') return 'pass';
     if (u === 'NG') return 'ng';
-    if (
-      u.includes('CHỜ KIỂM') ||
-      u.includes('CHỜ XÁC NHẬN') ||
-      u.includes('CHỜ KIỂM TRA') ||
-      u.includes('CHO KIEM') ||
-      u.includes('CHO XAC NHAN')
-    ) {
-      return 'pending';
-    }
+    if (u.includes('LOCK') || u.includes('KHÓA') || u.includes('KHOA')) return 'lock';
+    if (u.includes('CHỜ XÁC NHẬN') || u.includes('CHO XAC NHAN')) return 'confirm';
+    if (u.includes('CHỜ KIỂM') || u.includes('CHỜ KIỂM TRA') || u.includes('CHO KIEM')) return 'pending';
     const compact = u.replace(/\s+/g, '');
-    if (compact.includes('CHỜKIỂM') || compact.includes('CHỜXÁCNHẬN')) return 'pending';
+    if (compact.includes('CHỜXÁCNHẬN') || compact.includes('CHOXACNHAN')) return 'confirm';
+    if (compact.includes('CHỜKIỂM') || compact.includes('CHỜKIỂMTRA') || compact.includes('CHOKIEM')) return 'pending';
     return null;
   }
 
   private mergePutawayStatusKind(a: PutawayIqcStatusKind, b: PutawayIqcStatusKind): PutawayIqcStatusKind {
-    const rank: Record<PutawayIqcStatusKind, number> = { ng: 3, pending: 2, pass: 1 };
+    const rank: Record<PutawayIqcStatusKind, number> = { lock: 5, ng: 4, confirm: 3, pending: 2, pass: 1 };
     return rank[a] >= rank[b] ? a : b;
   }
 
   private putawayStatusShortLabel(kind: PutawayIqcStatusKind): string {
     if (kind === 'pass') return 'Pass';
     if (kind === 'ng') return 'NG';
+    if (kind === 'confirm') return 'Chờ xác nhận';
+    if (kind === 'lock') return 'Lock';
     return 'Chờ kiểm';
   }
 
