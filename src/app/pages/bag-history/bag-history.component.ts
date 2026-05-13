@@ -803,7 +803,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     return out;
   }
 
-  /** Đọc toàn bộ outbound-materials (ASM1 + ASM2), gom theo mã+PO+IMD+bag; chỉ giữ nhóm count > 1. */
+  /** Đọc toàn bộ outbound-materials (ASM1 + ASM2), gom theo mã+PO+IMD+Bịch+Bag; chỉ giữ nhóm count > 1. */
   async loadOutboundExportDuplicates(): Promise<void> {
     this.outboundDupLoading = true;
     this.outboundDupError = '';
@@ -840,32 +840,11 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         const poNumber = String(d['poNumber'] ?? '');
         const imdRaw = d['batchNumber'] ?? d['importDate'];
         const imd = imdRaw != null ? String(imdRaw) : '';
-        const bichRaw = d['bagBatch'];
-        const bichBatchRaw = bichRaw != null ? String(bichRaw) : '';
-        const bagNumberRaw = d['bagNumberDisplay'];
-        const bagNumberDisplayFromDoc =
-          bagNumberRaw != null && String(bagNumberRaw).trim() !== ''
-            ? String(bagNumberRaw).trim()
-            : '';
-        const sticker = this.rmBagHistory.resolveOutboundDupBagSticker({
-          bagNumberDisplay: bagNumberDisplayFromDoc,
-          bagBatch: bichBatchRaw,
-          importDate: String(d['importDate'] ?? ''),
-          batchNumber: String(d['batchNumber'] ?? ''),
-          notes: String(d['notes'] ?? '')
-        }).trim();
-        const bichBatch = this.rmBagHistory.normalizeParenAscii(bichBatchRaw).trim();
-        const bagDisplay = bagNumberDisplayFromDoc?.trim()
-          ? this.rmBagHistory.normalizeParenAscii(bagNumberDisplayFromDoc).trim()
-          : (() => {
-              const st = this.rmBagHistory.normalizeParenAscii(sticker).trim();
-              if (st && st !== bichBatch) {
-                if (!st.includes('/') && /\d/.test(st)) return st;
-                if (/\([Tt]\d+\)/.test(st)) return st;
-              }
-              const m = /^(\d+)\s*\/\s*\d+/.exec(bichBatch);
-              return m?.[1] ? m[1] : (st || bichBatch);
-            })();
+        const { bichBatch, bagDisplay, eligibleForDupScan } =
+          this.rmBagHistory.resolveControlBatchOutboundRowBagFields(d);
+        if (!eligibleForDupScan) {
+          continue;
+        }
 
         if (!this.isOutboundRowEligibleForDupAnalysis(materialCode, poNumber, imd, `${bichBatch} ${bagDisplay}`)) {
           continue;
@@ -967,7 +946,12 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         if (po !== 0) return po;
         const im = String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
         if (im !== 0) return im;
-        return String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
+        const bb = String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
+        if (bb !== 0) return bb;
+        return String((a as any).bagNumberDisplay || '').localeCompare(
+          String((b as any).bagNumberDisplay || ''),
+          'vi'
+        );
       });
       this.outboundDupRows = dupes;
 

@@ -258,38 +258,6 @@ function compositeKey(factory, materialCode, poNumber, imd, bichBatch, bagDispla
     const bag = (bagDisplay || '').trim();
     return `${fac}|${mc}|${po}|${im}|${bich}|${bag}`;
 }
-function deriveBagDisplayFromBich(bichBatch) {
-    const s = String(bichBatch || '').trim();
-    const m = /^(\d+)\s*\/\s*\d+/.exec(s);
-    return (m === null || m === void 0 ? void 0 : m[1]) ? m[1] : '';
-}
-/**
- * Control Batch cần phân biệt:
- * - Bịch: i/tổng (VD 9/62)
- * - Bag: i hoặc i(T...) khi tách (VD 9 hoặc 9(T125...))
- *
- * Rule: nếu trùng ở cột Bịch thì phải so thêm cột Bag để chắc là trùng thật.
- */
-function resolveBichAndBag(d) {
-    const resolved = (0, outbound_bag_resolve_1.resolveOutboundBagDupSticker)(d);
-    const bich = String(resolved.bagBatchRaw || '').trim();
-    const bagFromDoc = String(resolved.bagNumberDisplayRaw || '').trim();
-    if (bagFromDoc) {
-        return { bichBatch: bich, bagDisplay: bagFromDoc };
-    }
-    const sticker = String(resolved.sticker || '').trim();
-    if (sticker && sticker !== bich) {
-        // sticker có thể là "9" hoặc "9(T...)" khi parse được từ notes/importDate/batchNumber
-        if (!sticker.includes('/') && /\d/.test(sticker)) {
-            return { bichBatch: bich, bagDisplay: sticker };
-        }
-        if (/\([Tt]\d+\)/.test(sticker)) {
-            return { bichBatch: bich, bagDisplay: sticker };
-        }
-    }
-    const fallback = deriveBagDisplayFromBich(bich);
-    return { bichBatch: bich, bagDisplay: fallback || sticker || bich };
-}
 async function fetchAllOutboundByFactory(db, factory) {
     const ref = db.collection('outbound-materials');
     const batchSize = 500;
@@ -334,7 +302,10 @@ async function scanOutboundDuplicates(db, cached) {
         const poNumber = String((_c = d.poNumber) !== null && _c !== void 0 ? _c : '');
         const imdRaw = (_d = d.batchNumber) !== null && _d !== void 0 ? _d : d.importDate;
         const imd = imdRaw != null ? String(imdRaw) : '';
-        const { bichBatch, bagDisplay } = resolveBichAndBag(d);
+        const { bichBatch, bagDisplay, eligibleForDupScan } = (0, outbound_bag_resolve_1.resolveControlBatchOutboundRowBagFields)(d);
+        if (!eligibleForDupScan) {
+            continue;
+        }
         // Eligible: cần có số ở IMD, Bịch, Bag
         if (!isOutboundRowEligible(materialCode, poNumber, imd, `${bichBatch} ${bagDisplay}`)) {
             continue;
@@ -425,7 +396,10 @@ async function scanOutboundDuplicates(db, cached) {
         const im = String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
         if (im !== 0)
             return im;
-        return String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
+        const bb = String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
+        if (bb !== 0)
+            return bb;
+        return String(a.bagNumberDisplay || '').localeCompare(String(b.bagNumberDisplay || ''), 'vi');
     });
     return dupes;
 }
@@ -696,7 +670,7 @@ async function sendOutboundDupReportManual(db, settings) {
             to: cfg.to.join(', '),
             subject: `[Control Batch] Báo cáo — không có nhóm trùng (${atStr})`,
             text: `Kiểm tra trùng xuất kho (từ ${s.dupSinceLabel}, đủ điều kiện định dạng).\n` +
-                `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).` +
+                `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + Bịch + Bag, >1 lần).` +
                 exclNote,
             html: `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p><strong>Control Batch</strong> — báo cáo từ nút Send Mail.</p>

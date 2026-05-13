@@ -21,39 +21,12 @@
         <i class="material-icons">add</i>
         Thêm mới
       </button>
+      <button type="button" class="sm-btn sm-btn--outline" (click)="goToMenu()">
+        <i class="material-icons">home</i>
+        Về Menu
+      </button>
     </div>
   </header>
-
-  <section class="sm-kpis">
-    <article class="sm-kpi">
-      <div class="sm-kpi__ico sm-kpi__ico--blue"><i class="material-icons">description</i></div>
-      <div class="sm-kpi__body">
-        <span class="sm-kpi__value">{{ statTotalRows }}</span>
-        <span class="sm-kpi__label">dòng</span>
-      </div>
-    </article>
-    <article class="sm-kpi">
-      <div class="sm-kpi__ico sm-kpi__ico--teal"><i class="material-icons">view_week</i></div>
-      <div class="sm-kpi__body">
-        <span class="sm-kpi__value">{{ statDistinctGw }}</span>
-        <span class="sm-kpi__label">GW</span>
-      </div>
-    </article>
-    <article class="sm-kpi">
-      <div class="sm-kpi__ico sm-kpi__ico--amber"><i class="material-icons">assignment</i></div>
-      <div class="sm-kpi__body">
-        <span class="sm-kpi__value">{{ statTotalQty | number }}</span>
-        <span class="sm-kpi__label">QTY</span>
-      </div>
-    </article>
-    <article class="sm-kpi">
-      <div class="sm-kpi__ico sm-kpi__ico--green"><i class="material-icons">schedule</i></div>
-      <div class="sm-kpi__body">
-        <span class="sm-kpi__value sm-kpi__value--sm">{{ lastUpdatedLabel }}</span>
-        <span class="sm-kpi__label">Cập nhật</span>
-      </div>
-    </article>
-  </section>
 
   <section class="sm-panel">
     <div class="sm-toolbar">
@@ -72,44 +45,40 @@
         <option value="">Tất cả GW</option>
         <option *ngFor="let g of gwOptions" [value]="g">{{ g }}</option>
       </select>
-      <select class="sm-select" [(ngModel)]="filterStatus" (ngModelChange)="onFilterChange()">
-        <option value="">Trạng thái</option>
-        <option value="high">Thiếu nhiều</option>
-        <option value="medium">Thiếu vừa</option>
-        <option value="low">Thiếu ít</option>
-      </select>
       <button type="button" class="sm-btn sm-btn--soft" (click)="refresh()">
         <i class="material-icons">refresh</i>
         Làm mới
       </button>
+      <div class="sm-updated" *ngIf="lastUpdatedAt">Updated: <strong>{{ lastUpdatedLabel }}</strong></div>
     </div>
 
     <div class="sm-table-scroll">
       <table class="sm-table">
         <thead>
           <tr>
-            <th class="sm-th sm-th--narrow">#</th>
             <th class="sm-th">Mã hàng</th>
             <th class="sm-th">GW</th>
-            <th class="sm-th sm-th--num">Số lượng thiếu (QTY)</th>
-            <th class="sm-th">Trạng thái</th>
+            <th class="sm-th sm-th--num">QTY GW</th>
             <th class="sm-th">Ghi chú</th>
-            <th class="sm-th sm-th--act">Thao tác</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of pagedRows; let i = index" class="sm-tr">
-            <td class="sm-td sm-td--muted">{{ rowDisplayIndex(i) }}</td>
             <td class="sm-td">
-              <input
-                type="text"
-                class="sm-cell-input sm-cell-input--code"
-                [(ngModel)]="row.materialCode"
-                (blur)="onMaterialBlur(row)"
-                (ngModelChange)="onFieldChange()"
-                placeholder="MAT-…"
-                spellcheck="false"
-              />
+              <div class="sm-codecell">
+                <input
+                  type="text"
+                  class="sm-cell-input sm-cell-input--code"
+                  [(ngModel)]="row.materialCode"
+                  (blur)="onMaterialBlur(row)"
+                  (ngModelChange)="onFieldChange()"
+                  placeholder="MAT-…"
+                  spellcheck="false"
+                />
+                <button type="button" class="sm-inline-del" (click)="removeRow(row.id)" title="Xóa dòng">
+                  <i class="material-icons">delete_outline</i>
+                </button>
+              </div>
             </td>
             <td class="sm-td">
               <input
@@ -126,9 +95,6 @@
               <input
                 type="number"
                 class="sm-cell-input sm-cell-input--qty"
-                [class.sm-cell-input--qty-high]="shortageLevel(row.gwQty) === 'high'"
-                [class.sm-cell-input--qty-medium]="shortageLevel(row.gwQty) === 'medium'"
-                [class.sm-cell-input--qty-low]="shortageLevel(row.gwQty) === 'low'"
                 [(ngModel)]="row.gwQty"
                 (ngModelChange)="onFieldChange()"
                 (blur)="onQtyBlur()"
@@ -136,13 +102,6 @@
                 step="any"
                 placeholder="0"
               />
-            </td>
-            <td class="sm-td">
-              <span class="sm-pill" [ngClass]="{
-                'sm-pill--high': shortageLevel(row.gwQty) === 'high',
-                'sm-pill--medium': shortageLevel(row.gwQty) === 'medium',
-                'sm-pill--low': shortageLevel(row.gwQty) === 'low'
-              }">{{ statusLabel(shortageLevel(row.gwQty)) }}</span>
             </td>
             <td class="sm-td">
               <input
@@ -153,14 +112,6 @@
                 (blur)="onNotesBlur()"
                 placeholder="Ghi chú"
               />
-            </td>
-            <td class="sm-td sm-td--act">
-              <button type="button" class="sm-act" (click)="viewRow(row)" title="Xem">
-                <i class="material-icons">visibility</i>
-              </button>
-              <button type="button" class="sm-act sm-act--danger" (click)="removeRow(row.id)" title="Xóa">
-                <i class="material-icons">delete_outline</i>
-              </button>
             </td>
           </tr>
         </tbody>

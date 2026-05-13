@@ -113,7 +113,7 @@
 
 
     <!-- Hàng widget: Work Order / Shipment / Putaway (bố cục + typography theo dashboard mẫu) -->
-    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order weekly heatmap, shipment, putaway">
+    <section class="dash-widget-row dash-grid dash-grid--triple" aria-label="Work order weekly heatmap, FG In pending, putaway">
       <article class="card dash-widget wo-chart-widget dash-surface-card">
         <header class="dash-widget__head">
           <div class="dash-widget__headrow">
@@ -159,43 +159,46 @@
         </div>
       </article>
 
-      <article class="card dash-widget ship-widget dash-surface-card">
+      <article class="card dash-widget wo-chart-widget fg-in-widget dash-surface-card">
         <header class="dash-widget__head">
           <div class="dash-widget__headrow">
             <div class="dash-widget__title dash-widget__title--with-icon">
               <span class="dash-widget__ico dash-widget__ico--sky" aria-hidden="true">
                 <i class="material-icons">local_shipping</i>
               </span>
-              <span class="dash-widget__title-text">Shipment Status (7 days)</span>
+              <span class="dash-widget__title-text">Shipment Status (FGs in)</span>
             </div>
-            <div class="dash-widget__pill"><span>7 ngày qua</span><i class="material-icons">expand_more</i></div>
+            <div class="dash-widget__pill"><span>T2–T7 · weekly</span><i class="material-icons">expand_more</i></div>
           </div>
         </header>
-        <div class="card-body card-body--ship-list">
-          <div class="ship-list" *ngIf="shipmentStatus.length; else noShipTpl">
-            <div class="ship-item" *ngFor="let row of shipmentStatus | slice:0:4">
-              <div class="ship-date">
-                <div class="ship-date__d">{{ row.shipDate }}</div>
-              </div>
-              <div class="ship-main">
-                <div class="ship-code">Shipment {{ row.shipment }}</div>
-                <div class="ship-meta">
-                  <span>Customer: {{ row.customer || '—' }}</span>
-                  <span class="dot">·</span>
-                  <span>Carton: {{ row.carton }}</span>
+        <div class="card-body card-body--wo-chart">
+          <div class="wo-chart-wrap wo-chart-wrap--heatmap">
+            <div class="wo-heatmap-inner" *ngIf="fgInHeatmapDays.length">
+              <div class="putaway-heatmap wo-heatmap fg-in-heatmap" aria-label="FG In chờ nhập kho theo ngày trong tuần">
+                <div *ngFor="let col of fgInHeatmapDays" class="putaway-heatmap__col">
+                  <div class="putaway-heatmap__head">
+                    <span class="putaway-heatmap__week">{{ col.weekday }}</span>
+                    <span class="wo-heatmap__date">{{ col.label }}</span>
+                    <span class="putaway-heatmap__cnt wo-heatmap__cnt">{{ col.total }}</span>
+                  </div>
+                  <div class="putaway-heatmap__cells">
+                    <div
+                      *ngFor="let c of col.cells"
+                      class="putaway-heatmap__cell wo-heatmap__cell"
+                      [ngClass]="'fg-in-heatmap__cell--' + c.kind"
+                      [attr.title]="c.tooltip"
+                    ></div>
+                  </div>
                 </div>
               </div>
-              <div class="ship-badge" [class.ship-badge--done]="isShipDone(row.statusDetail)" [class.ship-badge--warn]="isShipWarn(row.statusDetail)">
-                {{ shipBadgeText(row.statusDetail) }}
+              <div class="wo-heatmap-legend" *ngIf="fgInHeatmapHasCells">
+                <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--chua-khoa" aria-hidden="true"></span>Chưa khóa</span>
+                <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--cho-vi-tri" aria-hidden="true"></span>Đã khóa — chờ vị trí</span>
               </div>
+              <button type="button" class="ship-more" (click)="goFgIn()">Mở FG In →</button>
             </div>
-            <button type="button" class="ship-more" (click)="goShipment()">
-              Xem tất cả shipments →
-            </button>
+            <div *ngIf="!fgInHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
           </div>
-          <ng-template #noShipTpl>
-            <div class="text-center text-muted dash-empty-hint">No shipments for the next 7 days.</div>
-          </ng-template>
         </div>
       </article>
 
@@ -433,58 +436,57 @@
         </div>
       </div>
 
-      <!-- Shipment Details -->
+      <!-- FG In — chờ nhập kho (tuần T2–T7) -->
       <div class="card">
         <div class="custom-card-header custom-card-header-amber detail-card-header">
           <div class="detail-card-header__left">
             <h4 class="custom-card-title">
-              <i class="material-icons detail-header-ico detail-header-ico--amber">local_shipping</i>
-              Shipment Status (Details)
+              <i class="material-icons detail-header-ico detail-header-ico--amber">inventory_2</i>
+              Shipment Status (FGs in) — chi tiết
             </h4>
-            <p class="custom-card-desc">Status for the next 7 days</p>
+            <p class="custom-card-desc">Mã TP chờ nhập kho theo ngày nhập trong tuần (T2–T7), factory {{ selectedFactory }}.</p>
           </div>
-          <button type="button" class="detail-viewall-btn" (click)="goShipment()">Xem tất cả</button>
+          <button type="button" class="detail-viewall-btn" (click)="goFgIn()">Mở FG In</button>
         </div>
         <div class="card-body table-responsive">
           <table class="table table-bordered table-striped workorder-status-table">
             <thead>
               <tr>
-                <th>Ship Date</th>
-                <th>Shipment</th>
-                <th>Customer</th>
-                <th>Carton</th>
-                <th>Status Detail</th>
+                <th>Ngày nhập</th>
+                <th>Thứ</th>
+                <th>Mã TP</th>
+                <th>Factory</th>
+                <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let row of shipmentPagedRows">
-                <td [title]="row.shipDate">{{ row.shipDate }}</td>
-                <td [title]="row.shipment">{{ row.shipment }}</td>
-                <td [title]="row.customer">{{ row.customer || '—' }}</td>
-                <td [title]="row.carton">{{ row.carton }}</td>
+              <tr *ngFor="let row of fgInDetailPagedRows">
+                <td [title]="row.importDateLabel">{{ row.importDateLabel }}</td>
+                <td [title]="row.weekdayLabel">{{ row.weekdayLabel }}</td>
+                <td [title]="row.materialCode">{{ row.materialCode }}</td>
+                <td [title]="row.factory">{{ row.factory }}</td>
                 <td>
                   <span class="status-badge"
-                    [class.status-badge--amber]="!isShipDone(row.statusDetail) && !isShipWarn(row.statusDetail)"
-                    [class.status-badge--red]="isShipWarn(row.statusDetail)"
-                    [class.status-badge--green]="isShipDone(row.statusDetail)">
-                    {{ shipBadgeText(row.statusDetail) }}
+                    [class.status-badge--amber]="row.statusBadge === 'amber'"
+                    [class.status-badge--blue]="row.statusBadge === 'blue'">
+                    {{ row.statusLabel }}
                   </span>
                 </td>
               </tr>
-              <tr *ngIf="shipmentStatus.length === 0">
-                <td colspan="5" class="text-center">No shipments for the next 7 days.</td>
+              <tr *ngIf="fgInPendingDetailRows.length === 0">
+                <td colspan="5" class="text-center">Không có mã TP chờ nhập kho trong tuần.</td>
               </tr>
             </tbody>
           </table>
-          <div class="detail-pagination" *ngIf="shipmentStatus.length > 0">
+          <div class="detail-pagination" *ngIf="fgInPendingDetailRows.length > 0">
             <span class="detail-pagination__info">
-              Hiển thị {{ (shipmentCurrentPage-1)*shipmentPageSize+1 }}–{{ shipmentCurrentPage*shipmentPageSize > shipmentStatus.length ? shipmentStatus.length : shipmentCurrentPage*shipmentPageSize }} trong {{ shipmentStatus.length }}
+              Hiển thị {{ (fgInDetailCurrentPage-1)*fgInDetailPageSize+1 }}–{{ fgInDetailCurrentPage*fgInDetailPageSize > fgInPendingDetailRows.length ? fgInPendingDetailRows.length : fgInDetailCurrentPage*fgInDetailPageSize }} trong {{ fgInPendingDetailRows.length }}
             </span>
             <div class="detail-pagination__controls">
-              <button class="pg-btn" (click)="shipmentPrevPage()" [disabled]="shipmentCurrentPage === 1">&#8249;</button>
-              <span class="pg-num">{{ shipmentCurrentPage }}</span>
-              <button class="pg-btn" (click)="shipmentNextPage()" [disabled]="shipmentCurrentPage === shipmentPageCount">&#8250;</button>
-              <span class="pg-sep">{{ shipmentPageSize }} / trang</span>
+              <button class="pg-btn" (click)="fgInDetailPrevPage()" [disabled]="fgInDetailCurrentPage === 1">&#8249;</button>
+              <span class="pg-num">{{ fgInDetailCurrentPage }}</span>
+              <button class="pg-btn" (click)="fgInDetailNextPage()" [disabled]="fgInDetailCurrentPage === fgInDetailPageCount">&#8250;</button>
+              <span class="pg-sep">{{ fgInDetailPageSize }} / trang</span>
             </div>
           </div>
         </div>

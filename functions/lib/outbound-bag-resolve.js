@@ -8,6 +8,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizeParenAscii = normalizeParenAscii;
 exports.parseQrPart4 = parseQrPart4;
 exports.resolveOutboundBagDupSticker = resolveOutboundBagDupSticker;
+exports.outboundAsm1BagColumnFromBagBatchOnly = outboundAsm1BagColumnFromBagBatchOnly;
+exports.bichFirstTotalDenominator = bichFirstTotalDenominator;
+exports.resolveControlBatchOutboundRowBagFields = resolveControlBatchOutboundRowBagFields;
 function normalizeParenAscii(s) {
     return String(s || '')
         .replace(/\uFF08/g, '(')
@@ -110,5 +113,91 @@ function resolveOutboundBagDupSticker(d) {
         }
     }
     return { sticker: bagBatchRaw, bagBatchRaw, bagNumberDisplayRaw };
+}
+/** Cột Bag khi không có `bagNumberDisplay`: giống `outbound-asm1.getBagNumberDisplay(bagBatch)` (tách theo dấu phẩy). */
+function outboundAsm1BagColumnFromBagBatchOnly(bagBatch) {
+    var _a;
+    const s = String(bagBatch !== null && bagBatch !== void 0 ? bagBatch : '').trim();
+    if (!s)
+        return '';
+    const segs = s
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean);
+    const nums = [];
+    for (const seg of segs) {
+        const iPart = (_a = String(seg).split('/')[0]) === null || _a === void 0 ? void 0 : _a.trim();
+        const n = iPart ? parseInt(iPart, 10) : NaN;
+        if (Number.isFinite(n) && n > 0)
+            nums.push(String(n));
+    }
+    return nums.length ? nums.join(', ') : '';
+}
+/** Tử số đầu tiên của bịch `i/tổng` (hoặc segment đầu trước dấu phẩy). */
+function bichFirstNumerator(bich) {
+    var _a;
+    const first = ((_a = String(bich || '').trim().split(',')[0]) === null || _a === void 0 ? void 0 : _a.trim()) || '';
+    const m = /^(\d+)\s*\/\s*\d+/.exec(first);
+    return (m === null || m === void 0 ? void 0 : m[1]) ? m[1] : '';
+}
+/** Mẫu số tổng (tổng số bịch trong lô) từ `i/tổng` đầu tiên; null nếu không parse được. */
+function bichFirstTotalDenominator(bich) {
+    var _a;
+    const first = ((_a = String(bich || '').trim().split(',')[0]) === null || _a === void 0 ? void 0 : _a.trim()) || '';
+    const m = /\/\s*(\d+)\s*$/.exec(first);
+    if (!m)
+        return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) ? n : null;
+}
+/**
+ * Đồng bộ với Outbound ASM1 `mapOutboundDocToMaterial` + `getOutboundBagColumnDisplay`:
+ * - Bịch: `bagBatch` hoặc parse từ `importDate`
+ * - Bag: `bagNumberDisplay` hoặc parse từ `importDate`, không có thì suy từ bịch (chỉ số)
+ *
+ * `eligibleForDupScan=false` khi lô có >1 bịch (tổng > 1) mà Bag chỉ còn số suy từ bịch,
+ * không có `(T…)` và không có `bagNumberDisplay` ghi trên doc — tránh gom nhầm nhiều tem tách.
+ */
+function resolveControlBatchOutboundRowBagFields(d) {
+    const rawImd = d['importDate'] != null && d['importDate'] !== '' ? String(d['importDate']) : '';
+    const pImd = rawImd ? parseQrPart4(rawImd) : null;
+    const bagBatchNorm = (d['bagBatch'] != null && String(d['bagBatch']).trim() !== '' ? String(d['bagBatch']).trim() : '') ||
+        ((pImd === null || pImd === void 0 ? void 0 : pImd.bagFractionLabel) ? String(pImd.bagFractionLabel) : '');
+    const explicitBagNumberField = d['bagNumberDisplay'] != null && String(d['bagNumberDisplay']).trim() !== '';
+    const bagNumNorm = explicitBagNumberField
+        ? normalizeParenAscii(String(d['bagNumberDisplay']).trim())
+        : (pImd === null || pImd === void 0 ? void 0 : pImd.bagNumberDisplay)
+            ? normalizeParenAscii(String(pImd.bagNumberDisplay))
+            : '';
+    const bich = normalizeParenAscii(String(bagBatchNorm || '').trim());
+    let bagUi = String(bagNumNorm || '').trim();
+    if (!bagUi) {
+        bagUi = outboundAsm1BagColumnFromBagBatchOnly(bich);
+    }
+    const den = bichFirstTotalDenominator(bich);
+    const hasSplitTag = /\([Tt]\d+\)/.test(bagUi);
+    const onlyDigitsAndCommaList = /^[\d,\s]+$/.test(bagUi);
+    const weakDupKey = den != null &&
+        den > 1 &&
+        !explicitBagNumberField &&
+        !hasSplitTag &&
+        onlyDigitsAndCommaList &&
+        bagUi.length > 0 &&
+        bagUi === outboundAsm1BagColumnFromBagBatchOnly(bich);
+    // Nếu parse importDate cho bag chỉ là số trùng numerator (không tem T) trong lô >1 → yếu
+    const parsedNumOnlySameAsNumerator = den != null &&
+        den > 1 &&
+        !explicitBagNumberField &&
+        !hasSplitTag &&
+        bagUi.length > 0 &&
+        (pImd === null || pImd === void 0 ? void 0 : pImd.bagNumberDisplay) &&
+        bagUi === bichFirstNumerator(bich);
+    const eligibleForDupScan = bich.length > 0 &&
+        bagUi.length > 0 &&
+        /\d/.test(bich) &&
+        /\d/.test(bagUi) &&
+        !weakDupKey &&
+        !parsedNumOnlySameAsNumerator;
+    return { bichBatch: bich, bagDisplay: bagUi, eligibleForDupScan, explicitBagNumberField };
 }
 //# sourceMappingURL=outbound-bag-resolve.js.map

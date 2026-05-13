@@ -1874,7 +1874,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
         console.log(`🔍 Firebase subscription received ${actions.length} actions`);
-        
+
+        // Auto-set location = E7 for material codes starting with "R" when IQC status is PASS
+        const autoE7Batch = this.firestore.firestore.batch();
+        let autoE7Count = 0;
+        const MAX_BATCH_WRITES = 450; // safety margin under 500
+
         this.inventoryMaterials = actions
           .map(action => {
             const data = action.payload.doc.data() as any;
@@ -1891,6 +1896,25 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               source: data.source || 'manual', // Set default source for old materials
               iqcStatus: data.iqcStatus || undefined // Load IQC status from Firestore
             };
+
+            try {
+              const mc = String(material.materialCode || '').trim().toUpperCase();
+              const iqc = String(material.iqcStatus || '').trim().toUpperCase();
+              const loc = String(material.location || '').trim().toUpperCase();
+              if (mc.startsWith('R') && iqc === 'PASS' && loc !== 'E7') {
+                material.location = 'E7';
+                if (autoE7Count < MAX_BATCH_WRITES) {
+                  autoE7Batch.update(action.payload.doc.ref, {
+                    location: 'E7',
+                    lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+                    modifiedBy: 'materials-asm1-auto-e7'
+                  } as any);
+                  autoE7Count++;
+                }
+              }
+            } catch {
+              // ignore
+            }
             
             // 🔍 DEBUG: Log batchNumber để kiểm tra sequence number
             if (data.batchNumber && (data.batchNumber.includes('01') || data.batchNumber.includes('02') || data.batchNumber.includes('03'))) {
@@ -1933,6 +1957,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             return material;
           })
           .filter(material => material.factory === this.FACTORY); // Double check ASM1 only
+
+        if (autoE7Count > 0) {
+          autoE7Batch
+            .commit()
+            .then(() => console.log(`✅ [ASM1 auto E7] Updated ${autoE7Count} docs (R* + IQC PASS).`))
+            .catch(err => console.warn('⚠️ [ASM1 auto E7] Batch update failed:', err));
+        }
 
         // Set filteredInventory to show all loaded items initially
         this.filteredInventory = [...this.inventoryMaterials];

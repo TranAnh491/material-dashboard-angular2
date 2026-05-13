@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
 
 export type ShortedShortageLevel = 'high' | 'medium' | 'low';
 
@@ -26,7 +27,6 @@ export class ShortedMaterialsComponent implements OnInit {
 
   searchText = '';
   filterGw = '';
-  filterStatus: '' | ShortedShortageLevel = '';
 
   currentPage = 1;
   pageSize = 10;
@@ -34,13 +34,17 @@ export class ShortedMaterialsComponent implements OnInit {
 
   lastUpdatedAt: Date | null = null;
 
-  constructor(private snackBar: MatSnackBar) {}
+  constructor(private snackBar: MatSnackBar, private router: Router) {}
 
   ngOnInit(): void {
     this.loadFromStorage();
     if (this.rows.length === 0) {
       this.addRow();
     }
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
   }
 
   get dataRows(): ShortedMaterialRow[] {
@@ -72,12 +76,6 @@ export class ShortedMaterialsComponent implements OnInit {
       }
       if (this.filterGw && r.gw.trim() !== this.filterGw) {
         return false;
-      }
-      if (this.filterStatus) {
-        const lvl = this.shortageLevel(r.gwQty);
-        if (lvl !== this.filterStatus) {
-          return false;
-        }
       }
       return true;
     });
@@ -152,30 +150,6 @@ export class ShortedMaterialsComponent implements OnInit {
     const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     const date = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     return `${t} ${date}`;
-  }
-
-  shortageLevel(qty: number | null): ShortedShortageLevel {
-    const n = Number(qty);
-    if (Number.isNaN(n) || n <= 0) {
-      return 'low';
-    }
-    if (n >= 100) {
-      return 'high';
-    }
-    if (n >= 25) {
-      return 'medium';
-    }
-    return 'low';
-  }
-
-  statusLabel(level: ShortedShortageLevel): string {
-    if (level === 'high') {
-      return 'Thiếu nhiều';
-    }
-    if (level === 'medium') {
-      return 'Thiếu vừa';
-    }
-    return 'Thiếu ít';
   }
 
   formatQty(q: number | null): string {

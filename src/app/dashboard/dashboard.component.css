@@ -219,7 +219,6 @@
   letter-spacing: 0.02em;
 }
 
-.card-body--ship-list,
 .card-body--putaway {
   padding: 12px 14px 12px;
 }
@@ -285,7 +284,6 @@
 }
 
 .card.dash-widget.wo-chart-widget .card-body.card-body--wo-chart,
-.card.dash-widget.ship-widget .card-body.card-body--ship-list,
 .card.dash-widget.putaway-widget .card-body.card-body--putaway {
   flex: 1 1 auto;
   display: flex;
@@ -407,6 +405,29 @@
 .wo-heatmap__cell--delay {
   background: #ef4444 !important;
   border-color: rgba(153, 27, 27, 0.25) !important;
+}
+
+/* FG In heatmap (tuần T2–T7): 1 ô = 1 mã TP */
+.wo-heatmap .putaway-heatmap__cell.fg-in-heatmap__cell--chua-khoa {
+  background: #f97316 !important;
+  border-color: rgba(154, 52, 18, 0.25) !important;
+}
+
+.wo-heatmap .putaway-heatmap__cell.fg-in-heatmap__cell--cho-vi-tri {
+  background: #3b82f6 !important;
+  border-color: rgba(30, 64, 175, 0.25) !important;
+}
+
+.wo-heatmap.fg-in-heatmap .putaway-heatmap__cnt.wo-heatmap__cnt {
+  color: #0369a1;
+}
+
+.fg-in-legend-dot--chua-khoa {
+  background: #f97316;
+}
+
+.fg-in-legend-dot--cho-vi-tri {
+  background: #3b82f6;
 }
 
 .wo-heatmap-legend {
@@ -1932,7 +1953,6 @@
 
   .card .card-body { padding: 10px; }
   .card.dash-widget.wo-chart-widget .card-body.card-body--wo-chart,
-  .card.dash-widget.ship-widget .card-body.card-body--ship-list,
   .card.dash-widget.putaway-widget .card-body.card-body--putaway {
     padding-top: 0.5rem;
     padding-bottom: 0;
@@ -2037,7 +2057,6 @@
 
   .card .card-body { padding: 8px; }
   .card.dash-widget.wo-chart-widget .card-body.card-body--wo-chart,
-  .card.dash-widget.ship-widget .card-body.card-body--ship-list,
   .card.dash-widget.putaway-widget .card-body.card-body--putaway {
     padding-top: 0.45rem;
     padding-bottom: 0;
@@ -2230,6 +2249,12 @@
   background: rgba(245, 158, 11, 0.14);
   color: #b45309;
   border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.status-badge--blue {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.28);
 }
 
 .status-badge--red {

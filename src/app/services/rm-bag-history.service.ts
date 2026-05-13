@@ -190,6 +190,99 @@ export class RmBagHistoryService {
     return bagBatchRaw;
   }
 
+  /**
+   * Giống Outbound ASM1 `mapOutboundDocToMaterial` + `getOutboundBagColumnDisplay` (Control Batch / mail).
+   * Không dùng notes để suy Bag — khớp cột hiển thị trên tab Xuất.
+   */
+  resolveControlBatchOutboundRowBagFields(d: Record<string, unknown>): {
+    bichBatch: string;
+    bagDisplay: string;
+    eligibleForDupScan: boolean;
+    explicitBagNumberField: boolean;
+  } {
+    const rawImd = d['importDate'] != null && d['importDate'] !== '' ? String(d['importDate']) : '';
+    const pImd = rawImd ? this.parseQrPart4(rawImd) : null;
+    const bagBatchNorm =
+      (d['bagBatch'] != null && String(d['bagBatch']).trim() !== '' ? String(d['bagBatch']).trim() : '') ||
+      (pImd?.bagFractionLabel ? String(pImd.bagFractionLabel) : '');
+    const explicitBagNumberField =
+      d['bagNumberDisplay'] != null && String(d['bagNumberDisplay']).trim() !== '';
+    const bagNumNorm = explicitBagNumberField
+      ? this.normalizeParenAscii(String(d['bagNumberDisplay']).trim())
+      : pImd?.bagNumberDisplay
+        ? this.normalizeParenAscii(String(pImd.bagNumberDisplay))
+        : '';
+
+    const bich = this.normalizeParenAscii(String(bagBatchNorm || '').trim());
+    let bagUi = String(bagNumNorm || '').trim();
+    if (!bagUi) {
+      bagUi = this.outboundAsm1BagColumnFromBagBatchOnly(bich);
+    }
+
+    const den = this.bichFirstTotalDenominator(bich);
+    const hasSplitTag = /\([Tt]\d+\)/.test(bagUi);
+    const onlyDigitsAndCommaList = /^[\d,\s]+$/.test(bagUi);
+    const fromBatchOnly = this.outboundAsm1BagColumnFromBagBatchOnly(bich);
+    const weakDupKey =
+      den != null &&
+      den > 1 &&
+      !explicitBagNumberField &&
+      !hasSplitTag &&
+      onlyDigitsAndCommaList &&
+      bagUi.length > 0 &&
+      bagUi === fromBatchOnly;
+
+    const parsedNumOnlySameAsNumerator =
+      den != null &&
+      den > 1 &&
+      !explicitBagNumberField &&
+      !hasSplitTag &&
+      bagUi.length > 0 &&
+      !!pImd?.bagNumberDisplay &&
+      bagUi === this.bichFirstNumerator(bich);
+
+    const eligibleForDupScan =
+      bich.length > 0 &&
+      bagUi.length > 0 &&
+      /\d/.test(bich) &&
+      /\d/.test(bagUi) &&
+      !weakDupKey &&
+      !parsedNumOnlySameAsNumerator;
+
+    return { bichBatch: bich, bagDisplay: bagUi, eligibleForDupScan, explicitBagNumberField };
+  }
+
+  private bichFirstNumerator(bich: string): string {
+    const first = String(bich || '').trim().split(',')[0]?.trim() || '';
+    const m = /^(\d+)\s*\/\s*\d+/.exec(first);
+    return m?.[1] ? m[1] : '';
+  }
+
+  private bichFirstTotalDenominator(bich: string): number | null {
+    const first = String(bich || '').trim().split(',')[0]?.trim() || '';
+    const m = /\/\s*(\d+)\s*$/.exec(first);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Giống `outbound-asm1.getBagNumberDisplay` — chỉ từ bịch i/tổng. */
+  private outboundAsm1BagColumnFromBagBatchOnly(bagBatch: string): string {
+    const s = String(bagBatch || '').trim();
+    if (!s) return '';
+    const segs = s
+      .split(',')
+      .map(x => x.trim())
+      .filter(Boolean);
+    const nums: string[] = [];
+    for (const seg of segs) {
+      const iPart = String(seg).split('/')[0]?.trim();
+      const n = iPart ? parseInt(iPart, 10) : NaN;
+      if (Number.isFinite(n) && n > 0) nums.push(String(n));
+    }
+    return nums.length ? nums.join(', ') : '';
+  }
+
   /** Ghi một dòng lịch sử (không throw — tránh chặn nhập/xuất). */
   async log(entry: RmBagHistoryEntry): Promise<void> {
     try {

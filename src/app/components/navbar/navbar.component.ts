@@ -281,6 +281,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/pd-control';
     }
 
+    isShortedMaterialsPage(): boolean {
+      return this.currentAppPath() === '/shorted-materials';
+    }
+
     isQcTraceabilityPage(): boolean {
       return this.currentAppPath() === '/qc-traceability';
     }

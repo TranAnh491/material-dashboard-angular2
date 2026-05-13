@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
-import { resolveOutboundBagDupSticker } from './outbound-bag-resolve';
+import { resolveControlBatchOutboundRowBagFields } from './outbound-bag-resolve';
 import {
   emailFrom,
   emailPass,
@@ -291,40 +291,6 @@ function compositeKey(
   return `${fac}|${mc}|${po}|${im}|${bich}|${bag}`;
 }
 
-function deriveBagDisplayFromBich(bichBatch: string): string {
-  const s = String(bichBatch || '').trim();
-  const m = /^(\d+)\s*\/\s*\d+/.exec(s);
-  return m?.[1] ? m[1] : '';
-}
-
-/**
- * Control Batch cần phân biệt:
- * - Bịch: i/tổng (VD 9/62)
- * - Bag: i hoặc i(T...) khi tách (VD 9 hoặc 9(T125...))
- *
- * Rule: nếu trùng ở cột Bịch thì phải so thêm cột Bag để chắc là trùng thật.
- */
-function resolveBichAndBag(d: Record<string, unknown>): { bichBatch: string; bagDisplay: string } {
-  const resolved = resolveOutboundBagDupSticker(d);
-  const bich = String(resolved.bagBatchRaw || '').trim();
-  const bagFromDoc = String(resolved.bagNumberDisplayRaw || '').trim();
-  if (bagFromDoc) {
-    return { bichBatch: bich, bagDisplay: bagFromDoc };
-  }
-  const sticker = String(resolved.sticker || '').trim();
-  if (sticker && sticker !== bich) {
-    // sticker có thể là "9" hoặc "9(T...)" khi parse được từ notes/importDate/batchNumber
-    if (!sticker.includes('/') && /\d/.test(sticker)) {
-      return { bichBatch: bich, bagDisplay: sticker };
-    }
-    if (/\([Tt]\d+\)/.test(sticker)) {
-      return { bichBatch: bich, bagDisplay: sticker };
-    }
-  }
-  const fallback = deriveBagDisplayFromBich(bich);
-  return { bichBatch: bich, bagDisplay: fallback || sticker || bich };
-}
-
 async function fetchAllOutboundByFactory(
   db: admin.firestore.Firestore,
   factory: string
@@ -376,7 +342,12 @@ export async function scanOutboundDuplicates(
     const poNumber = String(d.poNumber ?? '');
     const imdRaw = d.batchNumber ?? d.importDate;
     const imd = imdRaw != null ? String(imdRaw) : '';
-    const { bichBatch, bagDisplay } = resolveBichAndBag(d as Record<string, unknown>);
+    const { bichBatch, bagDisplay, eligibleForDupScan } = resolveControlBatchOutboundRowBagFields(
+      d as Record<string, unknown>
+    );
+    if (!eligibleForDupScan) {
+      continue;
+    }
 
     // Eligible: cần có số ở IMD, Bịch, Bag
     if (!isOutboundRowEligible(materialCode, poNumber, imd, `${bichBatch} ${bagDisplay}`)) {
@@ -474,7 +445,9 @@ export async function scanOutboundDuplicates(
     if (po !== 0) return po;
     const im = String(a.imd || '').localeCompare(String(b.imd || ''), 'vi');
     if (im !== 0) return im;
-    return String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
+    const bb = String(a.bagBatch || '').localeCompare(String(b.bagBatch || ''), 'vi');
+    if (bb !== 0) return bb;
+    return String(a.bagNumberDisplay || '').localeCompare(String(b.bagNumberDisplay || ''), 'vi');
   });
   return dupes;
 }
@@ -817,7 +790,7 @@ export async function sendOutboundDupReportManual(
       subject: `[Control Batch] Báo cáo — không có nhóm trùng (${atStr})`,
       text:
         `Kiểm tra trùng xuất kho (từ ${s.dupSinceLabel}, đủ điều kiện định dạng).\n` +
-        `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + bag, >1 lần).` +
+        `Thời điểm quét: ${atStr}\n\nKhông có nhóm trùng (mã + PO + IMD + Bịch + Bag, >1 lần).` +
         exclNote,
       html: `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p><strong>Control Batch</strong> — báo cáo từ nút Send Mail.</p>

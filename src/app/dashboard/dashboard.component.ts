@@ -31,6 +31,16 @@ interface WoHeatmapDayCol {
   cells: { kind: WoHeatKind }[];
 }
 
+/** FG In — heatmap tuần T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho */
+type FgInHeatKind = 'chua-khoa' | 'cho-vi-tri';
+
+interface FgInHeatmapDayCol {
+  label: string;
+  weekday: string;
+  total: number;
+  cells: { kind: FgInHeatKind; tooltip: string }[];
+}
+
 /** Nhóm IQC hiển thị Putaway staging — màu ô heatmap */
 type PutawayIqcStatusKind = 'pass' | 'ng' | 'pending';
 
@@ -78,7 +88,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
   woHeatmapDays: WoHeatmapDayCol[] = [];
   yesterdayOverdueCount: number = 0;
-  shipmentStatus: any[] = [];
+  /** Chi tiết modal: FG In chờ nhập kho (tuần T2–T7) */
+  fgInPendingDetailRows: Array<{
+    importDateLabel: string;
+    weekdayLabel: string;
+    materialCode: string;
+    factory: string;
+    statusLabel: string;
+    statusBadge: 'amber' | 'blue';
+  }> = [];
+  /** 6 cột T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho */
+  fgInHeatmapDays: FgInHeatmapDayCol[] = [];
 
   // Factory selection
   selectedFactory: string = 'ASM1';
@@ -172,16 +192,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.fgTurnoverMonthValues.reduce((a, b) => a + b, 0);
   }
 
-  // Shipment table pagination
-  shipmentCurrentPage = 1;
-  shipmentPageSize = 10;
-  get shipmentPageCount(): number { return Math.max(1, Math.ceil(this.shipmentStatus.length / this.shipmentPageSize)); }
-  get shipmentPagedRows(): any[] {
-    const start = (this.shipmentCurrentPage - 1) * this.shipmentPageSize;
-    return this.shipmentStatus.slice(start, start + this.shipmentPageSize);
+  // FG In (chờ nhập kho) — pagination trong modal chi tiết
+  fgInDetailCurrentPage = 1;
+  fgInDetailPageSize = 10;
+  get fgInDetailPageCount(): number {
+    return Math.max(1, Math.ceil(this.fgInPendingDetailRows.length / this.fgInDetailPageSize));
   }
-  shipmentPrevPage(): void { if (this.shipmentCurrentPage > 1) this.shipmentCurrentPage--; }
-  shipmentNextPage(): void { if (this.shipmentCurrentPage < this.shipmentPageCount) this.shipmentCurrentPage++; }
+  get fgInDetailPagedRows(): typeof this.fgInPendingDetailRows {
+    const start = (this.fgInDetailCurrentPage - 1) * this.fgInDetailPageSize;
+    return this.fgInPendingDetailRows.slice(start, start + this.fgInDetailPageSize);
+  }
+  fgInDetailPrevPage(): void {
+    if (this.fgInDetailCurrentPage > 1) this.fgInDetailCurrentPage--;
+  }
+  fgInDetailNextPage(): void {
+    if (this.fgInDetailCurrentPage < this.fgInDetailPageCount) this.fgInDetailCurrentPage++;
+  }
 
   // WO table — same pagination
   woCurrentPage = 1;
@@ -708,6 +734,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.woHeatmapDays || []).some((d) => (d.cells?.length || 0) > 0);
   }
 
+  get fgInHeatmapHasCells(): boolean {
+    return (this.fgInHeatmapDays || []).some((d) => (d.cells?.length || 0) > 0);
+  }
+
   woHeatCellTitle(kind: WoHeatKind): string {
     const m: Record<WoHeatKind, string> = {
       done: 'Done',
@@ -832,64 +862,162 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.log(`Shipment (tháng hiện tại): ${this.shipment} (Đã Ship / Tổng số shipment)`);
       console.log(`Breakdown: ${completedShipments} shipment hoàn tất / ${totalShipments} shipment trong tháng`);
 
-      // Shipment Status for next 7 days (chỉ dòng thuộc tháng hiện tại)
-      this.updateShipmentStatus(monthShipments);
     }, error => {
       console.error('Error loading shipment data from Firebase:', error);
       this.shipment = "0/0";
-      this.shipmentStatus = [];
     });
+
+    this.loadFgInPendingWeeklyHeatmap();
   }
-  
-  private updateShipmentStatus(allShipments: any[]) {
-    this.shipmentStatus = [];
-    const today = new Date();
-    
-    console.log('Updating shipment status for next 7 days starting from:', today.toDateString());
-    
-    // Generate next 7 days
-    for (let i = 0; i < 7; i++) {
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + i);
-      
-      const dateStr = targetDate.toLocaleDateString('vi-VN', { 
-        day: '2-digit', 
-        month: '2-digit' 
-      });
-      
-      // Find shipments for this date (based on actualShipDate)
-      const shipmentsForDate = allShipments.filter(s => {
-        if (!s.actualShipDate) return false;
-        const shipDate = s.actualShipDate;
-        return shipDate.toDateString() === targetDate.toDateString();
-      });
-      
-      // Group by shipment code
-      const shipmentGroups = new Map<string, any[]>();
-      shipmentsForDate.forEach(s => {
-        const code = String(s.shipmentCode || '').trim().toUpperCase();
-        if (!shipmentGroups.has(code)) {
-          shipmentGroups.set(code, []);
-        }
-        shipmentGroups.get(code)!.push(s);
-      });
-      
-      // Create rows for each shipment code on this date
-      shipmentGroups.forEach((items, shipmentCode) => {
-        const totalCartons = items.reduce((sum, item) => sum + (item.carton || 0), 0);
-        const statuses = [...new Set(items.map(item => item.status || ''))].join(', ');
-        
-        this.shipmentStatus.push({
-          shipDate: dateStr,
-          shipment: shipmentCode,
-          customer: '', // Để trống cột Customer
-          carton: totalCartons > 0 ? totalCartons.toString() : '—',
-          statusDetail: statuses || '—'
-        });
-      });
+
+  /** FG In: cùng filter factory với WO (ASM1 + Sample 1 / ASM2 + Sample 2). */
+  private materialMatchesDashboardFactory(factory: string): boolean {
+    const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
+    const f = (factory || 'ASM1').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+    const targets = factoryFilter.map((x) => (x || '').toString().trim().toLowerCase().replace(/\s+/g, ' '));
+    return targets.includes(f);
+  }
+
+  private parseFgInImportDate(data: any): Date | null {
+    const v = data?.importDate;
+    if (!v) return null;
+    if (typeof v.toDate === 'function') {
+      const d = v.toDate();
+      return isNaN(d.getTime()) ? null : d;
     }
-    
-    console.log(`Updated Shipment Status for next 7 days:`, this.shipmentStatus);
+    if (v?.seconds != null) {
+      const d = new Date(v.seconds * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (v instanceof Date) {
+      return isNaN(v.getTime()) ? null : v;
+    }
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private isFgTemporaryLocation(location: string): boolean {
+    const s = String(location ?? '').trim();
+    if (!s) return true;
+    return s.toUpperCase() === 'TEMPORARY';
+  }
+
+  /** Chờ nhập kho: chưa khóa, hoặc đã khóa nhưng chưa có vị trí thật (Temporary / rỗng). */
+  private isFgInPendingWarehouseRow(data: { isReceived?: boolean; location?: string }): boolean {
+    if (!data.isReceived) return true;
+    return !!(data.isReceived && this.isFgTemporaryLocation(String(data.location ?? '')));
+  }
+
+  private fgInRowKind(data: { isReceived?: boolean; location?: string }): FgInHeatKind {
+    if (!data.isReceived) return 'chua-khoa';
+    return 'cho-vi-tri';
+  }
+
+  private loadFgInPendingWeeklyHeatmap(): void {
+    this.firestore
+      .collection('fg-in')
+      .get()
+      .subscribe(
+        (snapshot) => {
+          const rows = snapshot.docs.map((doc) => {
+            const data = doc.data() as any;
+            const importDate = this.parseFgInImportDate(data);
+            const factory = data.factory || 'ASM1';
+            const materialCode = String(data.materialCode || data.maTP || '').trim().toUpperCase();
+            const isReceived = !!data.isReceived;
+            const location = data.location || data.viTri || '';
+            return {
+              id: doc.id,
+              factory,
+              materialCode,
+              importDate,
+              isReceived,
+              location
+            };
+          });
+
+          const today = new Date();
+          const monday = this.getMondayOfWeekContaining(today);
+          const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+          this.fgInPendingDetailRows = [];
+          this.fgInHeatmapDays = [];
+          this.fgInDetailCurrentPage = 1;
+
+          for (let i = 0; i < 6; i++) {
+            const targetDate = new Date(monday);
+            targetDate.setDate(monday.getDate() + i);
+            const label = targetDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+
+            const pendingForDay = rows.filter((r) => {
+              if (!r.importDate) return false;
+              if (!this.materialMatchesDashboardFactory(r.factory)) return false;
+              if (!this.isFgInPendingWarehouseRow(r)) return false;
+              return r.importDate.toDateString() === targetDate.toDateString();
+            });
+
+            const skuMap = new Map<string, FgInHeatKind>();
+            for (const r of pendingForDay) {
+              if (!r.materialCode) continue;
+              const kind = this.fgInRowKind(r);
+              const prev = skuMap.get(r.materialCode);
+              if (!prev || kind === 'chua-khoa') {
+                skuMap.set(r.materialCode, kind);
+              }
+            }
+
+            const cells: { kind: FgInHeatKind; tooltip: string }[] = [];
+            skuMap.forEach((kind, code) => {
+              const title =
+                kind === 'chua-khoa'
+                  ? `${code}: Chưa khóa (chờ xác nhận nhập kho)`
+                  : `${code}: Đã khóa — chờ gán vị trí kho`;
+              cells.push({ kind, tooltip: title });
+            });
+
+            this.fgInHeatmapDays.push({
+              label,
+              weekday: vnDays[i] ?? `D${i + 1}`,
+              total: skuMap.size,
+              cells
+            });
+
+            skuMap.forEach((kind, materialCode) => {
+              const r0 = pendingForDay.find((x) => x.materialCode === materialCode);
+              const factory = r0?.factory || this.selectedFactory;
+              const statusLabel = kind === 'chua-khoa' ? 'Chưa khóa' : 'Đã khóa — chờ vị trí';
+              const statusBadge: 'amber' | 'blue' = kind === 'chua-khoa' ? 'amber' : 'blue';
+              this.fgInPendingDetailRows.push({
+                importDateLabel: label,
+                weekdayLabel: vnDays[i] ?? '',
+                materialCode,
+                factory,
+                statusLabel,
+                statusBadge
+              });
+            });
+          }
+
+          this.fgInPendingDetailRows.sort((a, b) => {
+            const da = a.importDateLabel;
+            const db = b.importDateLabel;
+            if (da !== db) return da.localeCompare(db, 'vi');
+            return a.materialCode.localeCompare(b.materialCode, 'vi');
+          });
+
+          console.log(
+            `FG In chờ nhập kho (heatmap T2–T7, ${this.selectedFactory}):`,
+            this.fgInHeatmapDays.map((d) => ({ day: d.weekday, n: d.total }))
+          );
+          this.cdr.detectChanges();
+        },
+        (err) => {
+          console.error('Error loading fg-in for dashboard:', err);
+          this.fgInHeatmapDays = [];
+          this.fgInPendingDetailRows = [];
+          this.cdr.detectChanges();
+        }
+      );
   }
 
   private createCharts() {
@@ -1011,26 +1139,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return Number.isFinite(n) ? n : 0;
   }
 
-  isShipDone(statusDetail: string): boolean {
-    const s = String(statusDetail || '').toLowerCase();
-    return s.includes('đã xong') || s.includes('da xong') || s.includes('done') || s.includes('đã ship') || s.includes('da ship');
-  }
-
-  isShipWarn(statusDetail: string): boolean {
-    const s = String(statusDetail || '').toLowerCase();
-    return s.includes('chưa') || s.includes('cho soan') || s.includes('chờ') || s.includes('delay') || s.includes('warning');
-  }
-
-  shipBadgeText(statusDetail: string): string {
-    const s = String(statusDetail || '').trim();
-    if (!s) return 'Chờ soạn';
-    if (this.isShipDone(s)) return 'Đã xong';
-    if (/chưa/i.test(s)) return 'Chưa đủ';
-    return 'Chờ soạn';
-  }
-
-  goShipment(): void {
-    this.router.navigate(['/shipment']);
+  goFgIn(): void {
+    this.router.navigate(['/fg-in']);
   }
 
   goHome(): void {
