@@ -18,17 +18,57 @@
           </div>
         </div>
 
-        <!-- Scanner Input for Batch Mode - Always Active (mobile chỉ dùng scanner) -->
-        <div class="scanner-input-group">
-          <input type="text" 
-                 #scannerInput
-                 [(ngModel)]="scannerBuffer"
-                 (keydown)="onScannerKeydown($event)"
-                 (blur)="onScannerInputBlur()"
-                 placeholder="Quét barcode/QR code..."
-                 class="scanner-input"
-                 [class.active]="isScannerInputActive || showScanningSetupModal"
-                 autocomplete="off">
+        <!-- Một hàng: ô quét QR + (khi batch) LSX + NV + Review/Done -->
+        <div class="outbound-scan-primary-row">
+          <div class="scanner-input-group">
+            <input type="text"
+                   #scannerInput
+                   [(ngModel)]="scannerBuffer"
+                   (keydown)="onScannerKeydown($event)"
+                   (blur)="onScannerInputBlur()"
+                   placeholder="Quét barcode/QR code..."
+                   class="scanner-input"
+                   [class.active]="isScannerInputActive || showScanningSetupModal"
+                   autocomplete="off">
+          </div>
+
+          <div class="batch-scan-inline"
+               *ngIf="isBatchScanningMode"
+               [class.batch-scan-inline--mobile]="isMobile">
+            <div class="saving-indicator-inline" *ngIf="isSavingBatchData">
+              <i class="material-icons spinning">sync</i>
+              <span>Đang cập nhật dữ liệu...</span>
+            </div>
+            <ng-container *ngIf="!isSavingBatchData">
+              <div class="scan-status-inline">
+                <div class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
+                  <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
+                  <span>LSX: {{ batchProductionOrder || 'Chưa scan' }}</span>
+                </div>
+                <div class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
+                  <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
+                  <span>Nhân viên: {{ batchEmployeeId || 'Chưa scan' }}</span>
+                </div>
+              </div>
+              <div class="scan-buttons-inline">
+                <button type="button"
+                        class="review-btn-desktop"
+                        (click)="showScanReview()"
+                        title="Xem danh sách đã scan"
+                        *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+                  <i class="material-icons">list</i>
+                  Review ({{ pendingScanData.length }})
+                </button>
+                <button type="button"
+                        class="done-btn-desktop"
+                        (click)="stopBatchScanningMode()"
+                        title="Hoàn thành và lưu tất cả">
+                  <i class="material-icons">done</i>
+                  Done ({{ pendingScanData.length }})
+                </button>
+              </div>
+            </ng-container>
+          </div>
         </div>
 
         <!-- LSX Search Box - Desktop and Mobile -->
@@ -75,74 +115,6 @@
           </button>
         </div>
 
-        <!-- Desktop Scanning Controls -->
-        <div class="scan-controls-desktop" *ngIf="isBatchScanningMode && !isMobile">
-          <!-- Saving Progress Indicator -->
-          <div class="saving-indicator" *ngIf="isSavingBatchData">
-            <i class="material-icons spinning">sync</i>
-            <span>Đang cập nhật dữ liệu...</span>
-          </div>
-          
-          <div class="scan-status-desktop" *ngIf="!isSavingBatchData">
-            <div class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
-              <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
-              <span>LSX: {{ batchProductionOrder || 'Chưa scan' }}</span>
-            </div>
-            <div class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
-              <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
-              <span>Nhân viên: {{ batchEmployeeId || 'Chưa scan' }}</span>
-            </div>
-          </div>
-          
-          <div class="scan-buttons-desktop" *ngIf="!isSavingBatchData">
-            <button class="review-btn-desktop" 
-                    (click)="showScanReview()"
-                    title="Xem danh sách đã scan"
-                    *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
-              <i class="material-icons">list</i>
-              Review ({{ pendingScanData.length }})
-            </button>
-            <button class="done-btn-desktop" 
-                    (click)="stopBatchScanningMode()"
-                    title="Hoàn thành và lưu tất cả">
-              <i class="material-icons">done</i>
-              Done ({{ pendingScanData.length }})
-            </button>
-          </div>
-        </div>
-
-        <!-- Mobile Controls Only - Status info removed (using desktop status) -->
-        <div class="scan-status-mobile" *ngIf="isBatchScanningMode">
-          <!-- Mobile Saving Progress Indicator -->
-          <div class="saving-indicator-mobile" *ngIf="isSavingBatchData">
-            <i class="material-icons spinning">sync</i>
-            <span>Đang cập nhật dữ liệu...</span>
-          </div>
-          
-          <div class="status-row" *ngIf="!isSavingBatchData">
-            <button class="review-btn-mobile" 
-                    (click)="showScanReview()"
-                    title="Xem danh sách đã scan"
-                    *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
-              <i class="material-icons">list</i>
-              <span>Review ({{ pendingScanData.length }})</span>
-            </button>
-            <button class="done-btn-mobile" 
-                    (click)="stopBatchScanningMode()"
-                    title="Dừng chế độ scan và lưu tất cả">
-              <i class="material-icons">done</i>
-              <span>Done ({{ pendingScanData.length }})</span>
-            </button>
-          </div>
-          
-          <!-- 🔧 SỬA LỖI: Thêm dòng chữ hướng dẫn khi đã scan đủ LSX và mã nhân viên -->
-          <div class="scan-instruction" *ngIf="isProductionOrderScanned && isEmployeeIdScanned">
-            <i class="material-icons">info</i>
-            <span>Được phép scan xuất kho sau khi scan xong lệnh sản xuất và mã nhân viên</span>
-            
-          </div>
-        </div>
-        
         <!-- More Dropdown -->
         <div class="dropdown" #dropdown [class.mobile-hidden]="isMobile">
           <button class="more-btn" type="button" (click)="toggleDropdown()">

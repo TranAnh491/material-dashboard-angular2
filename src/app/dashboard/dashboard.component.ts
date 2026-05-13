@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -219,21 +219,80 @@ export class DashboardComponent implements OnInit, OnDestroy {
   woPrevPage(): void { if (this.woCurrentPage > 1) this.woCurrentPage--; }
   woNextPage(): void { if (this.woCurrentPage < this.woPageCount) this.woCurrentPage++; }
 
-  // Menu tabs for icon grid
+  /** Layout mobile: lưới module + drill-down nhóm (≤768px). */
+  isMobileLayout = false;
+  mobileNav: 'home' | 'search' | 'fav' | 'profile' = 'home';
+  mobileModuleSearch = '';
+  /** null = lưới theo nhóm; string = danh sách chi tiết một nhóm */
+  mobileDrillCategory: string | null = null;
+  mobileSearchExpanded = false;
+
+  /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). */
+  private readonly desktopOnlyTabPaths: string[] = [
+    '/assistant',
+    '/pxk-preview',
+    '/find-rm1',
+    '/bag-history',
+    '/fg-overview',
+    '/warehouse-loading',
+    '/trace-back',
+    '/qc',
+    '/qc-traceability',
+    '/safety',
+    '/label',
+    '/work-order-status',
+    '/shipment',
+    '/inventory-overview-asm1',
+    '/inventory-overview-asm2',
+    '/fg-out',
+    '/fg-inventory',
+    '/pallet-id',
+    '/utilization',
+    '/checklist',
+    '/equipment',
+    '/manage',
+    '/sxxk',
+    '/settings',
+    '/zalo'
+  ];
+
+  readonly mobileCategoryOrder = [
+    'Main',
+    'Production',
+    'ASM1 RM',
+    'Quality',
+    'ASM2 RM',
+    'ASM FG',
+    'Tools',
+    'Admin'
+  ];
+
+  // Menu tabs for icon grid (+ Main giống menu hệ thống)
   menuTabs = [
+    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', category: 'Main' },
+    { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
+    { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
+    { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Main' },
+    { path: '/pxk-preview', title: 'PXK Preview', icon: 'visibility', category: 'Main' },
+    { path: '/location', title: 'Location', icon: 'location_on', category: 'Main' },
+    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Main' },
+    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Main' },
     // ASM1 RM
     { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },
     { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'arrow_upward', category: 'ASM1 RM' },
     { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', category: 'ASM1 RM' },
     { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'assessment', category: 'ASM1 RM' },
     { path: '/bag-history', title: 'Control Batch', icon: 'history', category: 'ASM1 RM' },
-    
+
+    { path: '/qc', title: 'Quality', icon: 'verified', category: 'Quality' },
+    { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', category: 'Quality' },
+
     // ASM2 RM
     { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'arrow_downward', category: 'ASM2 RM' },
     { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'arrow_upward', category: 'ASM2 RM' },
     { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'inventory', category: 'ASM2 RM' },
     { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'assessment', category: 'ASM2 RM' },
-    
+
     // ASM FG
     { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM FG' },
     { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM FG' },
@@ -241,28 +300,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', category: 'ASM FG' },
-    
+
+    // Production
+    { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', category: 'Production' },
+
     // Tools & Operations
     { path: '/assistant', title: 'Assistant', icon: 'smart_toy', category: 'Tools' },
-    { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Tools' },
-    { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Tools' },
     { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
-    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Main' },
-    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Main' },
-    { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Tools' },
-    { path: '/location', title: 'Location', icon: 'location_on', category: 'Tools' },
     { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', category: 'Tools' },
     { path: '/trace-back', title: 'Trace Back', icon: 'track_changes', category: 'Tools' },
     { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', category: 'Tools' },
-    { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', category: 'Tools' },
     { path: '/safety', title: 'Safety Stock', icon: 'security', category: 'Tools' },
-    
+    { path: '/wh-security', title: 'WH Security', icon: 'shield', category: 'Tools' },
+
     // Admin & Reports
     { path: '/index', title: 'Bonded Report', icon: 'analytics', category: 'Admin' },
     { path: '/utilization', title: 'Utilization', icon: 'assessment', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'integration_instructions', category: 'Admin' },
     { path: '/manage', title: 'Manage', icon: 'manage_search', category: 'Admin' },
+    { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', category: 'Admin' },
+    { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', category: 'Admin' },
+    { path: '/zalo', title: 'Zalo', icon: 'chat', category: 'Admin' },
     { path: '/settings', title: 'Settings', icon: 'settings', category: 'Admin' }
   ];
 
@@ -273,12 +332,106 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private authService: FirebaseAuthService
   ) { }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.updateMobileLayout();
+  }
+
+  private updateMobileLayout(): void {
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    this.isMobileLayout = w <= 768;
+    if (!this.isMobileLayout) {
+      this.mobileDrillCategory = null;
+      this.mobileSearchExpanded = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Tab hiển thị trên lưới mobile (ẩn module chỉ-desktop giống Menu). */
+  isTabShownOnMobile(path: string): boolean {
+    if (!this.isMobileLayout) return true;
+    return !this.desktopOnlyTabPaths.includes(path);
+  }
+
+  mobileTabsFiltered(): typeof this.menuTabs {
+    const q = (this.mobileModuleSearch || '').trim().toLowerCase();
+    return this.menuTabs.filter((t) => {
+      if (!this.isTabShownOnMobile(t.path)) return false;
+      if (!q) return true;
+      return (
+        t.title.toLowerCase().includes(q) ||
+        t.path.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q)
+      );
+    });
+  }
+
+  mobileCategoriesVisible(): string[] {
+    const tabs = this.mobileTabsFiltered();
+    const set = new Set(tabs.map((t) => t.category));
+    return this.mobileCategoryOrder.filter((c) => set.has(c));
+  }
+
+  mobileTabsForCategory(category: string): typeof this.menuTabs {
+    return this.mobileTabsFiltered().filter((t) => t.category === category);
+  }
+
+  openMobileCategoryDrill(category: string): void {
+    this.mobileDrillCategory = category;
+    this.mobileNav = 'home';
+  }
+
+  closeMobileCategoryDrill(): void {
+    this.mobileDrillCategory = null;
+  }
+
+  mobileCardDesc(title: string): string {
+    return `Mở ${title}`;
+  }
+
+  iconTintClass(category: string): string {
+    const map: Record<string, string> = {
+      Main: 'dash-mob-ico--blue',
+      Production: 'dash-mob-ico--violet',
+      'ASM1 RM': 'dash-mob-ico--sky',
+      Quality: 'dash-mob-ico--teal',
+      'ASM2 RM': 'dash-mob-ico--rose',
+      'ASM FG': 'dash-mob-ico--amber',
+      Tools: 'dash-mob-ico--slate',
+      Admin: 'dash-mob-ico--gray'
+    };
+    return map[category] || 'dash-mob-ico--blue';
+  }
+
+  setMobileNav(tab: 'home' | 'search' | 'fav' | 'profile'): void {
+    this.mobileNav = tab;
+    if (tab === 'search') {
+      this.mobileSearchExpanded = true;
+    } else {
+      this.mobileSearchExpanded = false;
+    }
+    if (tab === 'home') {
+      this.closeMobileCategoryDrill();
+      this.mobileSearchExpanded = false;
+    }
+    if (tab === 'profile') {
+      this.navigateToTab('/settings');
+      this.mobileNav = 'home';
+    }
+    if (tab === 'fav') {
+      this.navigateToTab('/menu');
+      this.mobileNav = 'home';
+    }
+    this.cdr.markForCheck();
+  }
   
   navigateToTab(path: string): void {
     this.router.navigate([path]);
   }
 
   ngOnInit() {
+    this.updateMobileLayout();
     // Load selected factory from localStorage
     const savedFactory = localStorage.getItem('selectedFactory');
     if (savedFactory) {

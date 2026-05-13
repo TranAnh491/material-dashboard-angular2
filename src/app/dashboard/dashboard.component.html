@@ -1,4 +1,150 @@
 <div class="main-content">
+  <!-- Giao diện mobile: menu module + drill-down nhóm (≤768px) -->
+  <div class="dash-mobile-app" *ngIf="isMobileLayout">
+    <header class="dash-mob-header">
+      <button type="button" class="dash-mob-iconbtn" (click)="goMenu()" aria-label="Menu đầy đủ">
+        <i class="material-icons">menu</i>
+      </button>
+      <div class="dash-mob-brand">
+        <span class="dash-mob-brand__title">Warehouse</span>
+        <span class="dash-mob-brand__sub">Menu nhanh module</span>
+      </div>
+      <button type="button" class="dash-mob-iconbtn dash-mob-iconbtn--bell" aria-label="Thông báo">
+        <i class="material-icons">notifications_none</i>
+        <span class="dash-mob-dot"></span>
+      </button>
+    </header>
+
+    <!-- Drill-down: danh sách một nhóm -->
+    <div class="dash-mob-drill" *ngIf="mobileDrillCategory">
+      <div class="dash-mob-drill__head">
+        <button type="button" class="dash-mob-iconbtn" (click)="closeMobileCategoryDrill()" aria-label="Quay lại">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <div class="dash-mob-drill__titles">
+          <h1 class="dash-mob-drill__title">{{ mobileDrillCategory }}</h1>
+          <p class="dash-mob-drill__sub">Chọn module để mở</p>
+        </div>
+      </div>
+      <div class="dash-mob-search dash-mob-search--drill" *ngIf="mobileSearchExpanded">
+        <i class="material-icons">search</i>
+        <input
+          type="search"
+          [(ngModel)]="mobileModuleSearch"
+          placeholder="Tìm trong nhóm..."
+          class="dash-mob-search__input"
+        />
+      </div>
+      <ul class="dash-mob-list">
+        <li *ngFor="let t of mobileTabsForCategory(mobileDrillCategory)">
+          <button type="button" class="dash-mob-list__row" (click)="navigateToTab(t.path)">
+            <span class="dash-mob-list__ico" [ngClass]="iconTintClass(t.category)">
+              <i class="material-icons">{{ t.icon }}</i>
+            </span>
+            <span class="dash-mob-list__text">
+              <span class="dash-mob-list__title">{{ t.title }}</span>
+              <span class="dash-mob-list__desc">{{ mobileCardDesc(t.title) }}</span>
+            </span>
+            <i class="material-icons dash-mob-list__chev">chevron_right</i>
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Trang chủ mobile: KPI + lưới theo nhóm -->
+    <div class="dash-mob-hub" *ngIf="!mobileDrillCategory">
+      <div class="dash-mob-hub__intro">
+        <h1 class="dash-mob-hub__title">Menu Overview</h1>
+        <p class="dash-mob-hub__sub">Truy cập nhanh theo nhóm chức năng</p>
+      </div>
+
+      <div class="dash-mob-kpi-strip" aria-label="Tóm tắt nhanh">
+        <div class="dash-mob-kpi-pill">
+          <span class="dash-mob-kpi-pill__l">WO</span>
+          <strong>{{ workOrder }}</strong>
+        </div>
+        <div class="dash-mob-kpi-pill">
+          <span class="dash-mob-kpi-pill__l">Ship</span>
+          <strong>{{ shipment }}</strong>
+        </div>
+        <div class="dash-mob-kpi-pill">
+          <span class="dash-mob-kpi-pill__l">OTD</span>
+          <strong>100%</strong>
+        </div>
+        <div class="dash-mob-kpi-pill dash-mob-kpi-pill--factory">
+          <span class="dash-mob-kpi-pill__l">SX</span>
+          <select class="dash-mob-factory" [(ngModel)]="selectedFactory" (change)="onFactoryChange(selectedFactory)">
+            <option value="ASM1">ASM1</option>
+            <option value="ASM2">ASM2</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="dash-mob-search" *ngIf="mobileSearchExpanded">
+        <i class="material-icons">search</i>
+        <input
+          type="search"
+          [(ngModel)]="mobileModuleSearch"
+          placeholder="Tìm module..."
+          class="dash-mob-search__input"
+        />
+      </div>
+
+      <ng-container *ngFor="let cat of mobileCategoriesVisible()">
+        <section class="dash-mob-section">
+          <button type="button" class="dash-mob-section__head" (click)="openMobileCategoryDrill(cat)">
+            <span class="dash-mob-section__label">{{ cat }}</span>
+            <i class="material-icons">chevron_right</i>
+          </button>
+          <div class="dash-mob-grid">
+            <button
+              type="button"
+              class="dash-mob-card"
+              *ngFor="let t of mobileTabsForCategory(cat)"
+              (click)="navigateToTab(t.path)"
+            >
+              <span class="dash-mob-card__ico" [ngClass]="iconTintClass(cat)">
+                <i class="material-icons">{{ t.icon }}</i>
+              </span>
+              <span class="dash-mob-card__title">{{ t.title }}</span>
+              <span class="dash-mob-card__desc">{{ mobileCardDesc(t.title) }}</span>
+            </button>
+          </div>
+        </section>
+      </ng-container>
+    </div>
+
+    <nav class="dash-mob-bottomnav" aria-label="Điều hướng dưới">
+      <button
+        type="button"
+        class="dash-mob-bottomnav__btn"
+        [class.dash-mob-bottomnav__btn--active]="mobileNav === 'home' && !mobileDrillCategory"
+        (click)="setMobileNav('home')"
+      >
+        <i class="material-icons">home</i>
+        <span>Home</span>
+      </button>
+      <button
+        type="button"
+        class="dash-mob-bottomnav__btn"
+        [class.dash-mob-bottomnav__btn--active]="mobileNav === 'search'"
+        (click)="setMobileNav('search')"
+      >
+        <i class="material-icons">search</i>
+        <span>Search</span>
+      </button>
+      <button type="button" class="dash-mob-bottomnav__btn" (click)="setMobileNav('fav')">
+        <i class="material-icons">star_border</i>
+        <span>Menu</span>
+      </button>
+      <button type="button" class="dash-mob-bottomnav__btn" (click)="setMobileNav('profile')">
+        <i class="material-icons">person_outline</i>
+        <span>Profile</span>
+      </button>
+    </nav>
+  </div>
+
+  <div class="dash-desktop-shell" *ngIf="!isMobileLayout">
   <div class="container-fluid">
     <!-- Dashboard Header (like screenshot) -->
     <div class="dash-topbar">
@@ -493,6 +639,7 @@
         </div>
       </div>
     </section>
+  </div>
   </div>
 </div>
 

@@ -250,14 +250,104 @@
 }
 
 @media (max-width: 768px) {
+  .menu-container {
+    --bg: #f0f4f8;
+    background: var(--bg);
+    padding: 12px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+  }
+
   .menu-topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 10px 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
   }
-  .topbar-center {
-    order: 3;
+
+  .topbar-left {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
   }
+
   .topbar-right {
-    justify-content: flex-start;
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .topbar-center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    order: 0;
+  }
+
+  .topbar-search .search-input {
+    height: 42px;
+    border-radius: 999px;
+    font-size: 14px;
+  }
+
+  .menu-hero {
+    margin-top: 14px;
+    margin-bottom: 6px;
+  }
+
+  .hero-title {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: rgba(15, 23, 42, 0.95);
+  }
+
+  .hero-subtitle {
+    font-size: 13px;
+    color: rgba(100, 116, 139, 0.95);
+  }
+
+  .menu-category-title {
+    margin: 16px 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: rgba(100, 116, 139, 0.95);
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .menu-card {
+    align-items: flex-start;
+    text-align: left;
+    min-height: 108px;
+    padding: 14px;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  }
+
+  .menu-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+  }
+
+  .menu-line-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .menu-card-title {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .menu-card-subtitle {
+    font-size: 11px;
+    line-height: 1.35;
   }
 }
 
@@ -439,245 +529,3 @@
     font-size: 0.95rem;
   }
 }
-
-// —— Mobile / tablet nhỏ: phong cách iOS (Settings / grouped list, dark mode)
-// Khớp `isMobile` trong menu.component.ts (màn ≤1024px)
-@media (max-width: 1024px) {
-  .menu-container.menu-container--ios-mobile {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: #000000;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 0 calc(24px + env(safe-area-inset-bottom, 0px));
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-header {
-    margin-bottom: 8px;
-    padding: 12px 16px 16px;
-    border-bottom: none;
-    background: transparent;
-    box-shadow: none;
-    border-radius: 0;
-  }
-
-  .menu-container.menu-container--ios-mobile .header-content {
-    flex-direction: column;
-    gap: 12px;
-    align-items: center;
-    text-align: center;
-  }
-
-  .menu-container.menu-container--ios-mobile .header-left {
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
-    max-width: 100%;
-    padding: 16px;
-    background: #1c1c1e;
-    border-radius: 12px;
-    box-sizing: border-box;
-  }
-
-  .menu-container.menu-container--ios-mobile .header-logo {
-    height: 72px;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-subtitle {
-    font-size: 15px;
-    font-weight: 400;
-    color: #ebebf5;
-    letter-spacing: -0.24px;
-    line-height: 1.25;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-section {
-    margin-bottom: 20px;
-    padding: 0 16px;
-    border: none;
-    background: transparent;
-    box-shadow: none;
-    border-radius: 0;
-  }
-
-  // Tiêu đề nhóm kiểu iOS (uppercase, xám)
-  .menu-container.menu-container--ios-mobile .menu-category-title {
-    display: block;
-    font-size: 13px;
-    font-weight: 400;
-    text-transform: uppercase;
-    color: #8e8e93;
-    letter-spacing: -0.08px;
-    margin: 0 0 6px 16px;
-    padding: 0;
-    border: none;
-    border-bottom: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    grid-template-columns: none;
-    background: #1c1c1e;
-    border-radius: 10px;
-    overflow: hidden;
-    margin: 0;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 10px 16px;
-    min-height: 44px;
-    border-radius: 0 !important;
-    background: transparent;
-    box-shadow: none;
-    border-bottom: 0.5px solid rgba(84, 84, 88, 0.65);
-    transform: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item:last-child {
-    border-bottom: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item:hover {
-    transform: none;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item:active {
-    transform: none;
-    background: rgba(255, 255, 255, 0.12);
-  }
-
-  .menu-container.menu-container--ios-mobile .ios-menu-icon {
-    width: 29px;
-    height: 29px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-
-    .material-icons {
-      font-size: 18px;
-      color: #ffffff;
-    }
-  }
-
-  .menu-item-main .ios-menu-icon {
-    background: #0a84ff;
-  }
-
-  .menu-item-asm1-rm .ios-menu-icon {
-    background: #30d158;
-  }
-
-  .menu-item-quality .ios-menu-icon {
-    background: #636366;
-  }
-
-  .menu-item-asm2-rm .ios-menu-icon {
-    background: #5ac8fa;
-  }
-
-  .menu-item-asm1-fg .ios-menu-icon {
-    background: #ff9f0a;
-  }
-
-  .menu-item-tools .ios-menu-icon {
-    background: #bf5af2;
-  }
-
-  .menu-item-admin .ios-menu-icon {
-    background: #ff453a;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item-label {
-    flex: 1;
-    font-size: 17px;
-    font-weight: 400;
-    color: #ffffff;
-    letter-spacing: -0.41px;
-    text-align: left;
-    line-height: 1.25;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border: none;
-    padding: 0;
-    border-radius: 0;
-    background: transparent;
-    display: block;
-    max-width: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .ios-row-chevron {
-    font-size: 20px !important;
-    width: 20px;
-    height: 20px;
-    color: #636366;
-    flex-shrink: 0;
-    margin-left: 4px;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item .menu-tab-icon-img {
-    display: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item:hover .ios-menu-icon .material-icons,
-  .menu-container.menu-container--ios-mobile .menu-item:active .ios-menu-icon .material-icons {
-    transform: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-footer {
-    margin-top: 8px;
-    padding: 0 16px;
-    border-top: none;
-  }
-
-  .menu-container.menu-container--ios-mobile .logout-btn {
-    width: 100%;
-    max-width: none;
-    justify-content: center;
-    padding: 14px 16px;
-    font-size: 17px;
-    font-weight: 400;
-    border-radius: 10px;
-    background: #1c1c1e;
-    color: #ff453a;
-    box-shadow: none;
-
-    .material-icons {
-      font-size: 20px;
-      color: #ff453a;
-    }
-
-    span {
-      color: #ff453a;
-    }
-
-    &:hover {
-      transform: none;
-      background: #2c2c2e;
-    }
-
-    &:active {
-      transform: scale(0.98);
-    }
-  }
-}
-
-@media (max-width: 480px) {
-  .menu-container.menu-container--ios-mobile .header-logo {
-    height: 64px;
-  }
-
-  .menu-container.menu-container--ios-mobile .menu-item-label {
-    font-size: 16px;
-  }
-}
-
