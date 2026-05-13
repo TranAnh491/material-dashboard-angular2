@@ -785,7 +785,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const lsx = (wo.productionOrder || '').trim();
       if (!lsx) continue;
       const norm = lsx.toUpperCase().replace(/\s/g, '');
-      if (!lsxMap.has(norm)) lsxMap.set(norm, { lsx, factory: wo.factory || this.selectedFactory || 'ASM1' });
+      if (!lsxMap.has(norm)) {
+        lsxMap.set(norm, { lsx, factory: this.resolveOutboundFactoryFilterForPxk(wo) });
+      }
     }
     const factories = [...new Set([...lsxMap.values()].map(e => e.factory))];
     const normLsx = (s: string) => {
@@ -795,9 +797,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     };
     const factoryToLsxScanMap = new Map<string, Map<string, Map<string, number>>>(); // factory -> lsxNorm -> mat|po -> qty
     for (const fac of factories) {
-      const isAsm1 = (fac || 'ASM1').toUpperCase().includes('ASM1');
       try {
-        const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
+        const factoryFilter = fac === 'ASM2' ? 'ASM2' : 'ASM1';
         const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter);
         factoryToLsxScanMap.set(fac, byLsx);
       } catch (_) {}
@@ -860,6 +861,29 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
     const m = t.match(/(\d{4}[\/\-\.]\d+)/);
     return m ? m[1].replace(/[-.]/g, '/') : t;
+  }
+
+  /**
+   * Factory trên Firestore (ASM1 | ASM2) để khớp outbound-materials / inventory với PXK.
+   * Nếu WO thiếu factory nhưng LSX là LHLSX… thì vẫn dùng ASM2 (không phụ thuộc tab ASM1 đang chọn).
+   */
+  private resolveOutboundFactoryFilterForPxk(wo: WorkOrder): 'ASM1' | 'ASM2' {
+    const facNorm = this.normalizeFactoryName(String(wo?.factory || '').trim());
+    if (facNorm === 'asm2' || facNorm === 'sample 2') return 'ASM2';
+    if (facNorm === 'asm1' || facNorm === 'sample 1') return 'ASM1';
+
+    const lsxU = String(wo?.productionOrder || '').trim().toUpperCase().replace(/\s/g, '');
+    if (lsxU.startsWith('KZ')) return 'ASM1';
+    if (lsxU.startsWith('LH')) return 'ASM2';
+
+    const raw = String(wo?.factory || '').trim().toUpperCase();
+    if (raw.includes('ASM2')) return 'ASM2';
+    if (raw.includes('ASM1')) return 'ASM1';
+    if (raw.includes('ASM3')) return 'ASM2';
+
+    const selNorm = this.normalizeFactoryName(String(this.selectedFactory || 'ASM1').trim());
+    if (selNorm === 'asm2' || selNorm === 'sample 2') return 'ASM2';
+    return 'ASM1';
   }
 
   /** Kiểm tra LSX có bị thiếu không (để disable option Transfer và tô đỏ cột LSX) */
@@ -3938,11 +3962,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */
-  async hasPxkThieuForLsx(lsx: string, factory: string): Promise<boolean> {
+  async hasPxkThieuForLsx(lsx: string, factoryFilter: 'ASM1' | 'ASM2'): Promise<boolean> {
     const lines = this.getPxkLinesForLsx(lsx);
     if (lines.length === 0) return false;
-    const isAsm1 = (factory || 'ASM1').toUpperCase().includes('ASM1');
-    const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
 
     const woLsxNorm = this.normLsxForMatch(lsx);
     const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter);
@@ -3985,8 +4007,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   async isThieuBlockedForWorkOrder(wo: WorkOrder): Promise<boolean> {
     if (!this.isRuleEffectiveDate()) return false;
     if (!this.hasPxkForWorkOrder(wo)) return false;
-    const factory = wo.factory || this.selectedFactory || 'ASM1';
-    return this.hasPxkThieuForLsx(wo.productionOrder || '', factory);
+    const factoryFilter = this.resolveOutboundFactoryFilterForPxk(wo);
+    return this.hasPxkThieuForLsx(wo.productionOrder || '', factoryFilter);
   }
 
   /** @deprecated Dùng isThieuBlockedForWorkOrder */
@@ -4010,8 +4032,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       return;
     }
     const lsx = workOrder.productionOrder || '';
-    const factory = (workOrder.factory || this.selectedFactory || 'ASM1').toUpperCase();
-    const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
+    const factoryFilter = this.resolveOutboundFactoryFilterForPxk(workOrder);
+    const isAsm1 = factoryFilter === 'ASM1';
     let qrImage = '';
     let qrImageLine = '';
     try {
@@ -4044,7 +4066,6 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       locationMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || '-';
     const scanQtyMap = new Map<string, number>();
     const employeeIds = new Set<string>();
-    const factoryFilter = isAsm1 ? 'ASM1' : 'ASM2';
     try {
       const normLsx = (s: string) => {
         const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');

@@ -166,7 +166,7 @@
               <span class="dash-widget__ico dash-widget__ico--sky" aria-hidden="true">
                 <i class="material-icons">local_shipping</i>
               </span>
-              <span class="dash-widget__title-text">Shipment Status (FGs in)</span>
+              <span class="dash-widget__title-text">FG In — tuần T2–T7</span>
             </div>
             <div class="dash-widget__pill"><span>T2–T7 · weekly</span><i class="material-icons">expand_more</i></div>
           </div>
@@ -436,57 +436,62 @@
         </div>
       </div>
 
-      <!-- FG In — chờ nhập kho (tuần T2–T7) -->
+      <!-- Shipment — chi tiết: 7 ngày sắp tới -->
       <div class="card">
         <div class="custom-card-header custom-card-header-amber detail-card-header">
           <div class="detail-card-header__left">
             <h4 class="custom-card-title">
-              <i class="material-icons detail-header-ico detail-header-ico--amber">inventory_2</i>
-              Shipment Status (FGs in) — chi tiết
+              <i class="material-icons detail-header-ico detail-header-ico--amber">local_shipping</i>
+              Shipment — chi tiết
             </h4>
-            <p class="custom-card-desc">Mã TP chờ nhập kho theo ngày nhập trong tuần (T2–T7), factory {{ selectedFactory }}.</p>
+            <p class="custom-card-desc">
+              Chỉ các lô có ngày tham chiếu (Dispatch → Request → Import) nằm trong <strong>7 ngày sắp tới</strong> (từ hôm nay), cùng collection <strong>shipments</strong> với tab Shipment, factory {{ selectedFactory }}.
+            </p>
           </div>
-          <button type="button" class="detail-viewall-btn" (click)="goFgIn()">Mở FG In</button>
+          <button type="button" class="detail-viewall-btn" (click)="goShipment()">Mở Shipment</button>
         </div>
         <div class="card-body table-responsive">
           <table class="table table-bordered table-striped workorder-status-table">
             <thead>
               <tr>
-                <th>Ngày nhập</th>
+                <th>Ngày tham chiếu</th>
                 <th>Thứ</th>
+                <th>Shipment</th>
                 <th>Mã TP</th>
                 <th>Factory</th>
                 <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let row of fgInDetailPagedRows">
-                <td [title]="row.importDateLabel">{{ row.importDateLabel }}</td>
+              <tr *ngFor="let row of shipmentDetailPagedRows">
+                <td [title]="row.refDateLabel">{{ row.refDateLabel }}</td>
                 <td [title]="row.weekdayLabel">{{ row.weekdayLabel }}</td>
+                <td [title]="row.shipmentCode">{{ row.shipmentCode }}</td>
                 <td [title]="row.materialCode">{{ row.materialCode }}</td>
                 <td [title]="row.factory">{{ row.factory }}</td>
                 <td>
                   <span class="status-badge"
                     [class.status-badge--amber]="row.statusBadge === 'amber'"
-                    [class.status-badge--blue]="row.statusBadge === 'blue'">
+                    [class.status-badge--red]="row.statusBadge === 'red'"
+                    [class.status-badge--green]="row.statusBadge === 'green'">
                     {{ row.statusLabel }}
                   </span>
                 </td>
               </tr>
-              <tr *ngIf="fgInPendingDetailRows.length === 0">
-                <td colspan="5" class="text-center">Không có mã TP chờ nhập kho trong tuần.</td>
+              <tr *ngIf="shipmentWeeklyDetailRows.length === 0">
+                <td colspan="6" class="text-center">Không có lô shipment trong 7 ngày sắp tới cho factory đã chọn.</td>
               </tr>
             </tbody>
           </table>
-          <div class="detail-pagination" *ngIf="fgInPendingDetailRows.length > 0">
+          <div class="detail-pagination" *ngIf="shipmentWeeklyDetailRows.length > 0">
             <span class="detail-pagination__info">
-              Hiển thị {{ (fgInDetailCurrentPage-1)*fgInDetailPageSize+1 }}–{{ fgInDetailCurrentPage*fgInDetailPageSize > fgInPendingDetailRows.length ? fgInPendingDetailRows.length : fgInDetailCurrentPage*fgInDetailPageSize }} trong {{ fgInPendingDetailRows.length }}
+              Hiển thị {{ (shipmentDetailCurrentPage-1)*shipmentDetailPageSize+1 }}–{{ shipmentDetailCurrentPage*shipmentDetailPageSize > shipmentWeeklyDetailRows.length ? shipmentWeeklyDetailRows.length : shipmentDetailCurrentPage*shipmentDetailPageSize }} trong {{ shipmentWeeklyDetailRows.length }}
             </span>
             <div class="detail-pagination__controls">
-              <button class="pg-btn" (click)="fgInDetailPrevPage()" [disabled]="fgInDetailCurrentPage === 1">&#8249;</button>
-              <span class="pg-num">{{ fgInDetailCurrentPage }}</span>
-              <button class="pg-btn" (click)="fgInDetailNextPage()" [disabled]="fgInDetailCurrentPage === fgInDetailPageCount">&#8250;</button>
-              <span class="pg-sep">{{ fgInDetailPageSize }} / trang</span>
+              <button class="pg-btn" (click)="shipmentDetailPrevPage()" [disabled]="shipmentDetailCurrentPage === 1">&#8249;</button>
+              <span class="pg-num">{{ shipmentDetailCurrentPage }}</span>
+              <button class="pg-btn" (click)="shipmentDetailNextPage()" [disabled]="shipmentDetailCurrentPage === shipmentDetailPageCount">&#8250;</button>
+              <span class="pg-sep">{{ shipmentDetailPageSize }} / trang</span>
             </div>
           </div>
         </div>

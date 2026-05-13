@@ -60,25 +60,21 @@
             <th class="sm-th">GW</th>
             <th class="sm-th sm-th--num">QTY GW</th>
             <th class="sm-th">Ghi chú</th>
+            <th class="sm-th sm-th--del" scope="col">Xóa</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of pagedRows; let i = index" class="sm-tr">
             <td class="sm-td">
-              <div class="sm-codecell">
-                <input
-                  type="text"
-                  class="sm-cell-input sm-cell-input--code"
-                  [(ngModel)]="row.materialCode"
-                  (blur)="onMaterialBlur(row)"
-                  (ngModelChange)="onFieldChange()"
-                  placeholder="MAT-…"
-                  spellcheck="false"
-                />
-                <button type="button" class="sm-inline-del" (click)="removeRow(row.id)" title="Xóa dòng">
-                  <i class="material-icons">delete_outline</i>
-                </button>
-              </div>
+              <input
+                type="text"
+                class="sm-cell-input sm-cell-input--code"
+                [(ngModel)]="row.materialCode"
+                (blur)="onMaterialBlur(row)"
+                (ngModelChange)="onFieldChange()"
+                placeholder="MAT-…"
+                spellcheck="false"
+              />
             </td>
             <td class="sm-td">
               <input
@@ -112,6 +108,11 @@
                 (blur)="onNotesBlur()"
                 placeholder="Ghi chú"
               />
+            </td>
+            <td class="sm-td sm-td--del">
+              <button type="button" class="sm-del-btn" (click)="removeRow(row.id)" title="Xóa dòng" aria-label="Xóa dòng">
+                <i class="material-icons">delete_outline</i>
+              </button>
             </td>
           </tr>
         </tbody>

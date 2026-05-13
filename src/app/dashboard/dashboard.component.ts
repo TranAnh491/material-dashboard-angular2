@@ -88,16 +88,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
   woHeatmapDays: WoHeatmapDayCol[] = [];
   yesterdayOverdueCount: number = 0;
-  /** Chi tiết modal: FG In chờ nhập kho (tuần T2–T7) */
-  fgInPendingDetailRows: Array<{
-    importDateLabel: string;
+  /** Bảng chi tiết cuối dashboard: dòng shipment trong 7 ngày sắp tới (cùng nguồn tab Shipment) */
+  shipmentWeeklyDetailRows: Array<{
+    refDateLabel: string;
     weekdayLabel: string;
+    shipmentCode: string;
     materialCode: string;
     factory: string;
     statusLabel: string;
-    statusBadge: 'amber' | 'blue';
+    statusBadge: 'green' | 'red' | 'amber';
   }> = [];
-  /** 6 cột T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho */
+  /** 6 cột T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho — chỉ heatmap FG In */
   fgInHeatmapDays: FgInHeatmapDayCol[] = [];
 
   // Factory selection
@@ -192,21 +193,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.fgTurnoverMonthValues.reduce((a, b) => a + b, 0);
   }
 
-  // FG In (chờ nhập kho) — pagination trong modal chi tiết
-  fgInDetailCurrentPage = 1;
-  fgInDetailPageSize = 10;
-  get fgInDetailPageCount(): number {
-    return Math.max(1, Math.ceil(this.fgInPendingDetailRows.length / this.fgInDetailPageSize));
+  // Shipment — pagination bảng chi tiết (7 ngày sắp tới, tab Shipment)
+  shipmentDetailCurrentPage = 1;
+  shipmentDetailPageSize = 10;
+  get shipmentDetailPageCount(): number {
+    return Math.max(1, Math.ceil(this.shipmentWeeklyDetailRows.length / this.shipmentDetailPageSize));
   }
-  get fgInDetailPagedRows(): typeof this.fgInPendingDetailRows {
-    const start = (this.fgInDetailCurrentPage - 1) * this.fgInDetailPageSize;
-    return this.fgInPendingDetailRows.slice(start, start + this.fgInDetailPageSize);
+  get shipmentDetailPagedRows(): typeof this.shipmentWeeklyDetailRows {
+    const start = (this.shipmentDetailCurrentPage - 1) * this.shipmentDetailPageSize;
+    return this.shipmentWeeklyDetailRows.slice(start, start + this.shipmentDetailPageSize);
   }
-  fgInDetailPrevPage(): void {
-    if (this.fgInDetailCurrentPage > 1) this.fgInDetailCurrentPage--;
+  shipmentDetailPrevPage(): void {
+    if (this.shipmentDetailCurrentPage > 1) this.shipmentDetailCurrentPage--;
   }
-  fgInDetailNextPage(): void {
-    if (this.fgInDetailCurrentPage < this.fgInDetailPageCount) this.fgInDetailCurrentPage++;
+  shipmentDetailNextPage(): void {
+    if (this.shipmentDetailCurrentPage < this.shipmentDetailPageCount) this.shipmentDetailCurrentPage++;
   }
 
   // WO table — same pagination
@@ -816,6 +817,103 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   }
 
+  /**
+   * Ngày tham chiếu cho bảng chi tiết Shipment: Dispatch → Request → Import
+   * (cùng thứ tự ưu tiên với tab Shipment).
+   */
+  private getShipmentDashboardWeekReferenceDate(s: any): Date | null {
+    if (s.actualShipDate) return s.actualShipDate as Date;
+    if (s.requestDate) return s.requestDate as Date;
+    if (s.importDate) return s.importDate as Date;
+    return null;
+  }
+
+  /** 7 ngày sắp tới: từ 00:00 hôm nay đến hết ngày thứ 7 (gồm hôm nay + 6 ngày sau). */
+  private isDateInNextSevenDaysFromToday(d: Date): boolean {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    const t = new Date(d);
+    t.setHours(12, 0, 0, 0);
+    return t.getTime() >= start.getTime() && t.getTime() <= end.getTime();
+  }
+
+  private weekdayLabelFromDate(d: Date): string {
+    const day = d.getDay();
+    const vn = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    if (day >= 1 && day <= 6) {
+      return vn[day - 1];
+    }
+    return '';
+  }
+
+  private isShipmentDetailDone(status: string): boolean {
+    const s = String(status || '').toLowerCase();
+    return s.includes('đã xong') || s.includes('da xong') || s.includes('done') || s.includes('đã ship') || s.includes('da ship');
+  }
+
+  private isShipmentDetailWarn(status: string): boolean {
+    const s = String(status || '').toLowerCase();
+    return s.includes('chưa') || s.includes('cho soan') || s.includes('chờ') || s.includes('delay') || s.includes('warning');
+  }
+
+  private shipmentDetailStatusBadge(status: string): 'green' | 'red' | 'amber' {
+    const raw = String(status || '').trim();
+    if (this.isShipmentDetailDone(raw)) {
+      return 'green';
+    }
+    if (this.isShipmentDetailWarn(raw)) {
+      return 'red';
+    }
+    return 'amber';
+  }
+
+  private rebuildShipmentWeeklyDetailRows(allShipments: any[]): void {
+    this.shipmentWeeklyDetailRows = [];
+    this.shipmentDetailCurrentPage = 1;
+
+    for (const s of allShipments) {
+      if (s.hidden) {
+        continue;
+      }
+      if (!this.materialMatchesDashboardFactory(s.factory || 'ASM1')) {
+        continue;
+      }
+      const ref = this.getShipmentDashboardWeekReferenceDate(s);
+      if (!ref || !this.isDateInNextSevenDaysFromToday(ref)) {
+        continue;
+      }
+
+      const refDateLabel = ref.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+      const weekdayLabel = this.weekdayLabelFromDate(ref);
+      const statusLabel = String(s.status || '').trim() || '—';
+      this.shipmentWeeklyDetailRows.push({
+        refDateLabel,
+        weekdayLabel,
+        shipmentCode: s.shipmentCode || '—',
+        materialCode: s.materialCode || '—',
+        factory: s.factory || 'ASM1',
+        statusLabel,
+        statusBadge: this.shipmentDetailStatusBadge(statusLabel)
+      });
+    }
+
+    this.shipmentWeeklyDetailRows.sort((a, b) => {
+      if (a.refDateLabel !== b.refDateLabel) {
+        return a.refDateLabel.localeCompare(b.refDateLabel, 'vi');
+      }
+      const sc = a.shipmentCode.localeCompare(b.shipmentCode, 'vi');
+      if (sc !== 0) {
+        return sc;
+      }
+      return a.materialCode.localeCompare(b.materialCode, 'vi');
+    });
+
+    console.log(`Shipment chi tiết — 7 ngày sắp tới (${this.selectedFactory}): ${this.shipmentWeeklyDetailRows.length} dòng`);
+  }
+
   private loadShipmentDataFromGoogleSheets() {
     // Load shipment data from Firebase collection 'shipments'
     console.log(`Loading shipment data from Firebase (tháng hiện tại)`);
@@ -823,11 +921,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.firestore.collection('shipments').get().subscribe(snapshot => {
       const allShipments = snapshot.docs.map(doc => {
         const data = doc.data() as any;
+        const toD = (v: any): Date | null => {
+          if (!v) return null;
+          if (typeof v.toDate === 'function') {
+            const d = v.toDate();
+            return isNaN(d.getTime()) ? null : d;
+          }
+          if (v?.seconds != null) {
+            const d = new Date(v.seconds * 1000);
+            return isNaN(d.getTime()) ? null : d;
+          }
+          if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+          const d = new Date(v);
+          return isNaN(d.getTime()) ? null : d;
+        };
         return {
           id: doc.id,
           ...data,
-          requestDate: data.requestDate ? (data.requestDate.toDate ? data.requestDate.toDate() : new Date(data.requestDate)) : null,
-          actualShipDate: data.actualShipDate ? (data.actualShipDate.toDate ? data.actualShipDate.toDate() : new Date(data.actualShipDate)) : null,
+          hidden: data.hidden === true,
+          factory: data.factory || 'ASM1',
+          materialCode: String(data.materialCode || '').trim().toUpperCase(),
+          shipmentCode: String(data.shipmentCode || '').trim().toUpperCase(),
+          importDate: toD(data.importDate),
+          requestDate: toD(data.requestDate),
+          actualShipDate: toD(data.actualShipDate),
           status: data.status || 'Chờ soạn'
         };
       });
@@ -862,9 +979,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.log(`Shipment (tháng hiện tại): ${this.shipment} (Đã Ship / Tổng số shipment)`);
       console.log(`Breakdown: ${completedShipments} shipment hoàn tất / ${totalShipments} shipment trong tháng`);
 
+      this.rebuildShipmentWeeklyDetailRows(allShipments);
+      this.cdr.detectChanges();
     }, error => {
       console.error('Error loading shipment data from Firebase:', error);
       this.shipment = "0/0";
+      this.shipmentWeeklyDetailRows = [];
+      this.shipmentDetailCurrentPage = 1;
+      this.cdr.detectChanges();
     });
 
     this.loadFgInPendingWeeklyHeatmap();
@@ -940,9 +1062,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           const monday = this.getMondayOfWeekContaining(today);
           const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
-          this.fgInPendingDetailRows = [];
           this.fgInHeatmapDays = [];
-          this.fgInDetailCurrentPage = 1;
 
           for (let i = 0; i < 6; i++) {
             const targetDate = new Date(monday);
@@ -981,29 +1101,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               total: skuMap.size,
               cells
             });
-
-            skuMap.forEach((kind, materialCode) => {
-              const r0 = pendingForDay.find((x) => x.materialCode === materialCode);
-              const factory = r0?.factory || this.selectedFactory;
-              const statusLabel = kind === 'chua-khoa' ? 'Chưa khóa' : 'Đã khóa — chờ vị trí';
-              const statusBadge: 'amber' | 'blue' = kind === 'chua-khoa' ? 'amber' : 'blue';
-              this.fgInPendingDetailRows.push({
-                importDateLabel: label,
-                weekdayLabel: vnDays[i] ?? '',
-                materialCode,
-                factory,
-                statusLabel,
-                statusBadge
-              });
-            });
           }
-
-          this.fgInPendingDetailRows.sort((a, b) => {
-            const da = a.importDateLabel;
-            const db = b.importDateLabel;
-            if (da !== db) return da.localeCompare(db, 'vi');
-            return a.materialCode.localeCompare(b.materialCode, 'vi');
-          });
 
           console.log(
             `FG In chờ nhập kho (heatmap T2–T7, ${this.selectedFactory}):`,
@@ -1014,7 +1112,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         (err) => {
           console.error('Error loading fg-in for dashboard:', err);
           this.fgInHeatmapDays = [];
-          this.fgInPendingDetailRows = [];
           this.cdr.detectChanges();
         }
       );
@@ -1141,6 +1238,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   goFgIn(): void {
     this.router.navigate(['/fg-in']);
+  }
+
+  goShipment(): void {
+    this.router.navigate(['/shipment']);
   }
 
   goHome(): void {
