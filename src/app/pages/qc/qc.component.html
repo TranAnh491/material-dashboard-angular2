@@ -769,9 +769,44 @@
       <div class="more-menu-options">
         <button class="menu-option-btn" (click)="openDownloadModal(); closeMoreMenu()"><i class="material-icons">download</i><span>Tải về</span></button>
         <button class="menu-option-btn" (click)="loadQCReport(); closeMoreMenu()"><i class="material-icons">description</i><span>IQC report</span></button>
+        <button class="menu-option-btn" (click)="openOutboundQcRuleModal()"><i class="material-icons">policy</i><span>QC rule</span></button>
         <button class="menu-option-btn" (click)="openIqcPermissionModal()"><i class="material-icons">vpn_key</i><span>Quyền</span></button>
         <button class="menu-option-btn" (click)="sendQcReportNow()"><i class="material-icons">send</i><span>Gửi Report</span></button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Outbound QC rule (IQC Status chặn xuất kho RM — theo ASM đang chọn trên tab QC) -->
+<div class="modal-overlay" *ngIf="showOutboundQcRuleModal" (click)="closeOutboundQcRuleModal()">
+  <div class="modal-content report-modal-content" style="max-width: 520px" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">policy</i> QC rule — Outbound {{ selectedFactory }}</h3>
+      <button class="close-btn" type="button" (click)="closeOutboundQcRuleModal()"><i class="material-icons">close</i></button>
+    </div>
+    <div class="modal-body">
+      <p style="margin: 0 0 12px; color: #666; font-size: 14px">
+        Áp dụng cho <strong>scan xuất kho RM</strong> tại xưởng <strong>{{ selectedFactory }}</strong>. Bật rule và nhập các giá trị
+        <strong>IQC Status</strong> (giống cột trên RM Inventory). Khi IQC trên dòng tồn khớp một trong các giá trị dưới →
+        <strong>không cho xuất</strong>. Đổi ASM1/ASM2 ở đầu trang QC trước khi mở More để sửa rule từng xưởng.
+      </p>
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px">
+        <mat-slide-toggle [(ngModel)]="outboundQcRuleModalEnabled" color="primary">Bật rule</mat-slide-toggle>
+      </div>
+      <label style="display: block; margin-bottom: 6px; font-weight: 600">Danh sách IQC cấm xuất (mỗi dòng hoặc cách nhau bởi dấu phẩy/chấm phẩy)</label>
+      <textarea
+        rows="6"
+        class="employee-scan-input"
+        style="width: 100%; box-sizing: border-box; font-family: inherit; resize: vertical"
+        [(ngModel)]="outboundQcRuleModalText"
+        placeholder="NG&#10;CHỜ XÁC NHẬN&#10;CHỜ KIỂM&#10;LOCK"
+      ></textarea>
+    </div>
+    <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end">
+      <button class="close-modal-btn" type="button" (click)="closeOutboundQcRuleModal()"><i class="material-icons">close</i> Hủy</button>
+      <button class="download-btn" type="button" (click)="saveOutboundQcRuleFromModal()" [disabled]="outboundQcRuleSaving">
+        <i class="material-icons">save</i> {{ outboundQcRuleSaving ? 'Đang lưu...' : 'Lưu' }}
+      </button>
     </div>
   </div>
 </div>

@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';
 
 export interface InventoryMaterial {
   id?: string;
@@ -160,6 +161,11 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // More menu (popup modal)
   showMoreMenu: boolean = false;
+  /** More → QC rule: chặn xuất RM khi IQC Status trùng danh sách (outbound-qc-rules / ASM1|ASM2). */
+  showOutboundQcRuleModal = false;
+  outboundQcRuleModalEnabled = false;
+  outboundQcRuleModalText = '';
+  outboundQcRuleSaving = false;
   showReportModal: boolean = false;
   showIqcPermissionModal: boolean = false;
   showSendReportStatusModal: boolean = false;
@@ -215,7 +221,8 @@ export class QCComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private router: Router,
     private fns: AngularFireFunctions,
-    private rmBagHistory: RmBagHistoryService
+    private rmBagHistory: RmBagHistoryService,
+    private outboundQcRule: OutboundQcRuleService
   ) {}
   
   get monthlyTotal(): number {
@@ -2311,6 +2318,41 @@ export class QCComponent implements OnInit, OnDestroy {
   
   closeMoreMenu(): void {
     this.showMoreMenu = false;
+  }
+
+  async openOutboundQcRuleModal(): Promise<void> {
+    this.showMoreMenu = false;
+    const factory = this.selectedFactory;
+    try {
+      const doc = await this.outboundQcRule.loadRule(factory);
+      this.outboundQcRuleModalEnabled = doc.enabled === true;
+      this.outboundQcRuleModalText = doc.blockedStatusesText || '';
+    } catch (e) {
+      console.error(e);
+      this.outboundQcRuleModalEnabled = false;
+      this.outboundQcRuleModalText = '';
+    }
+    this.showOutboundQcRuleModal = true;
+  }
+
+  closeOutboundQcRuleModal(): void {
+    this.showOutboundQcRuleModal = false;
+  }
+
+  async saveOutboundQcRuleFromModal(): Promise<void> {
+    this.outboundQcRuleSaving = true;
+    try {
+      await this.outboundQcRule.saveRule(this.selectedFactory, {
+        enabled: this.outboundQcRuleModalEnabled,
+        blockedStatusesText: this.outboundQcRuleModalText
+      });
+      this.showOutboundQcRuleModal = false;
+    } catch (e) {
+      console.error(e);
+      alert('❌ Không lưu được QC rule.');
+    } finally {
+      this.outboundQcRuleSaving = false;
+    }
   }
 
   openIqcPermissionModal(): void {
