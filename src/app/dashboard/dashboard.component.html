@@ -449,7 +449,7 @@
       <!-- FGs Inventory Turnover -->
       <article class="card card-chart chart-card chart-card-amber dash-surface-card">
         <div class="card-body chart-body acc-card-body acc-card-body--turnover">
-          <div class="chart-badge chart-badge-amber">4/12 tháng</div>
+          <div class="chart-badge chart-badge-amber">{{ fgTurnoverReportedMonthsCount }}/12 tháng</div>
           <h4 class="card-title dash-chart-title">
             <span class="dash-widget__ico dash-widget__ico--amber-sm" aria-hidden="true"><i class="material-icons">autorenew</i></span>
             <span>FGs Inventory Turnover 2026</span>
@@ -458,15 +458,6 @@
             <canvas id="completedTasksChart"></canvas>
           </div>
         </div>
-        <footer class="card-footer dash-chart-footer">
-          <div class="stats">
-            <i class="material-icons">stacked_bar_chart</i>
-            Target tháng: {{ fgTurnoverTargetMonthly | number:'1.2-2' }} (đường đỏ đứt nét) ·
-            T1 {{ fgTurnoverMonthValues[0] | number:'1.2-2' }} · T2 {{ fgTurnoverMonthValues[1] | number:'1.2-2' }} ·
-            T3 {{ fgTurnoverMonthValues[2] | number:'1.2-2' }} · T4 {{ fgTurnoverMonthValues[3] | number:'1.2-2' }} ·
-            Lũy kế T1–T4: {{ fgTurnoverYtd | number:'1.2-2' }}
-          </div>
-        </footer>
       </article>
     </section>
 

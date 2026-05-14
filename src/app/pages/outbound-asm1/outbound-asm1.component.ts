@@ -42,13 +42,15 @@ export interface OutboundMaterial {
   importDate?: string; // Ngày nhập từ QR code để so sánh chính xác với inventory
   /** UI-only: đánh dấu bag bị trùng giữa nhiều LSX khi search theo mã hàng */
   bagDuplicate?: boolean;
+  /** Dòng xem nhanh từ pending scan (mobile, phiên batch), không có bản ghi Firestore */
+  pendingPreview?: boolean;
 
 }
 
 @Component({
   selector: 'app-outbound-asm1',
   templateUrl: './outbound-asm1.component.html',
-  styleUrls: ['./outbound-asm1.component.scss', './lsx-filter-styles.scss']
+  styleUrls: ['./outbound-asm1.component.scss', './lsx-filter-styles.scss', './outbound-asm1-mobile.scss']
 })
 export class OutboundASM1Component implements OnInit, OnDestroy {
   materials: OutboundMaterial[] = [];
@@ -138,9 +140,19 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   qcRuleSaving = false;
   private qcRuleEnabledActive = false;
   private qcRuleBlockedList: string[] = [];
+  /** Ẩn nút Home nổi / toggler navbar toàn cục khi đang ở Outbound mobile (styles.css) */
+  private readonly outboundMobileBodyClass = 'ob-asm1-mobile-layout';
   
   // REMOVED: inventoryMaterials - Không cần tính stock để scan nhanh
   
+  /** Mobile WMS shell — expandable cards + bottom nav (mockup-aligned) */
+  showMobileMoreSheet = false;
+  showMobileFilterSheet = false;
+  /** Sheet lịch sử scan tem trong phiên (theo LSX đang batch) */
+  showMobileLsxHistorySheet = false;
+  mobileMaterialExpanded: { [key: string]: boolean } = {};
+  mobileBottomTab: 'home' | 'outbound' | 'history' | 'location' = 'outbound';
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -149,7 +161,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     private qrScannerService: QRScannerService,
     private dialog: MatDialog,
     private rmBagHistory: RmBagHistoryService,
-    private outboundQcRule: OutboundQcRuleService
+    private outboundQcRule: OutboundQcRuleService,
+    private router: Router
   ) {}
   
   ngOnInit(): void {
@@ -330,6 +343,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     // Remove window resize listener
     window.removeEventListener('resize', this.onWindowResize.bind(this));
+
+    document.body.classList.remove(this.outboundMobileBodyClass);
   }
 
   // 📱 Mobile Detection
@@ -370,6 +385,19 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       console.log(`📱 Device: ${this.isMobile ? 'Mobile' : 'Desktop'} - Chỉ dùng Scanner`);
     } else {
       console.log(`📱 Device detection: ${this.isMobile ? 'Mobile' : 'Desktop'}, keeping: ${this.selectedScanMethod}`);
+    }
+
+    this.syncOutboundMobileBodyClass();
+  }
+
+  private syncOutboundMobileBodyClass(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (this.isMobile) {
+      document.body.classList.add(this.outboundMobileBodyClass);
+    } else {
+      document.body.classList.remove(this.outboundMobileBodyClass);
     }
   }
 
@@ -691,6 +719,159 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   }
 
   trackByIndex(index: number, _: any): number { return index; }
+
+  // ── Mobile WMS UI (layout only; logic unchanged) ─────────────────────────
+  mobileMaterialKey(m: OutboundMaterial): string {
+    const t = m.createdAt instanceof Date ? m.createdAt.getTime() : 0;
+    return m.id || `${m.materialCode}|${m.poNumber}|${t}`;
+  }
+
+  toggleMobileMaterialExpand(m: OutboundMaterial): void {
+    const k = this.mobileMaterialKey(m);
+    this.mobileMaterialExpanded[k] = !this.mobileMaterialExpanded[k];
+  }
+
+  isMobileMaterialExpanded(m: OutboundMaterial): boolean {
+    return !!this.mobileMaterialExpanded[this.mobileMaterialKey(m)];
+  }
+
+  getMobileKpiLsx(): string {
+    const raw =
+      (this.batchProductionOrder || '').trim() ||
+      (this.selectedProductionOrder || '').trim() ||
+      (this.searchProductionOrder || '').trim();
+    if (!raw) {
+      return '—';
+    }
+    return raw.length > 18 ? raw.slice(0, 16) + '…' : raw;
+  }
+
+  getMobileKpiScannedQty(): number {
+    if (this.isBatchScanningMode && this.pendingScanData?.length) {
+      return this.pendingScanData.reduce((s, x) => s + (Number(x?.quantity) || 0), 0);
+    }
+    return this.filteredMaterials.reduce((s, m) => s + (Number(m.exportQuantity) || 0), 0);
+  }
+
+  /** Phiên batch: số dòng chờ Done; ngoài batch: số dòng đang hiển thị */
+  getMobileKpiPendingCount(): number {
+    if (this.isBatchScanningMode) {
+      return this.pendingScanData.length;
+    }
+    return this.filteredMaterials.length;
+  }
+
+  focusMobileScanner(): void {
+    this.mobileBottomTab = 'outbound';
+    setTimeout(() => {
+      const el = document.querySelector('.ob-m .scanner-input') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 0);
+  }
+
+  /** Giữ hành vi cũ: cuộn tới danh sách (gọi từ chỗ khác nếu cần). */
+  scrollMobileToMaterials(): void {
+    this.mobileBottomTab = 'outbound';
+    document.getElementById('ob-m-materials')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  mobileNavOutbound(): void {
+    this.mobileBottomTab = 'outbound';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.focusMobileScanner();
+  }
+
+  goMobileMenu(): void {
+    this.mobileBottomTab = 'home';
+    this.router.navigate(['/menu']);
+  }
+
+  mobileNavHistory(): void {
+    this.openMobileLsxHistorySheet();
+  }
+
+  mobileNavLocation(): void {
+    this.mobileBottomTab = 'location';
+    void this.router.navigate(['/location']);
+  }
+
+  getMobileNotifyCount(): number {
+    const n = this.pendingScanData?.length ?? 0;
+    return n > 99 ? 99 : n;
+  }
+
+  clearMobileScannerBuffer(): void {
+    this.scannerBuffer = '';
+  }
+
+  openMobileFilterSheet(): void {
+    this.closeMobileMoreSheet();
+    this.closeMobileLsxHistorySheet();
+    this.showMobileFilterSheet = true;
+    this.closeDropdown();
+  }
+
+  closeMobileFilterSheet(): void {
+    this.showMobileFilterSheet = false;
+  }
+
+  openMobileMoreSheet(): void {
+    this.mobileBottomTab = 'outbound';
+    this.closeMobileFilterSheet();
+    this.closeMobileLsxHistorySheet();
+    this.showMobileMoreSheet = true;
+    this.closeDropdown();
+  }
+
+  closeMobileMoreSheet(): void {
+    this.showMobileMoreSheet = false;
+  }
+
+  getMobileMaterialCardSubtitle(m: OutboundMaterial): string {
+    const n = (m.notes ?? '').trim();
+    if (n) {
+      return n;
+    }
+    const po = (m.poNumber ?? '').trim();
+    return po ? `PO ${po}` : '—';
+  }
+
+  getMobileMaterialQtyLine(m: OutboundMaterial): string {
+    const u = (m.unit ?? '').trim() || 'PCS';
+    const q = Number(m.exportQuantity);
+    const qStr = Number.isFinite(q) ? String(q) : '0';
+    return `${qStr} ${u}`;
+  }
+
+  runMobileSheetAction(
+    action: 'refresh' | 'excel' | 'add' | 'monthly' | 'cleanup' | 'qc' | 'filter'
+  ): void {
+    this.closeMobileMoreSheet();
+    switch (action) {
+      case 'refresh':
+        this.loadMaterials();
+        break;
+      case 'excel':
+        void this.exportToExcel();
+        break;
+      case 'add':
+        void this.addMaterial();
+        break;
+      case 'monthly':
+        void this.downloadMonthlyHistory();
+        break;
+      case 'cleanup':
+        void this.cleanupData();
+        break;
+      case 'qc':
+        void this.openQcRuleModal();
+        break;
+      case 'filter':
+        this.openMobileFilterSheet();
+        break;
+    }
+  }
 
   // BAG number (i) từ bagBatch dạng "i/tổng" (có thể nhiều giá trị nối bằng dấu phẩy).
   getBagNumberDisplay(bagBatch?: string): string {
@@ -1101,6 +1282,91 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
     return this.filteredMaterials.slice(startIndex, endIndex);
+  }
+
+  /**
+   * Mobile + đang phiên batch scan hàng: danh sách vật tư chỉ hiện đúng 1 dòng = tem vừa quét (mới nhất trong pending).
+   * Các trường hợp khác giữ phân trang như cũ.
+   */
+  getMobileListMaterials(): OutboundMaterial[] {
+    if (this.isMobile && this.isBatchScanningMode) {
+      if (!this.pendingScanData.length) {
+        return [];
+      }
+      const last = this.pendingScanData[this.pendingScanData.length - 1];
+      return [this.mapPendingScanToOutboundPreview(last)];
+    }
+    return this.getPaginatedMaterials();
+  }
+
+  /** Dòng đếm dưới tiêu đề danh sách (mobile batch vs mặc định) */
+  getMobileListCountLabel(): string {
+    if (this.isMobile && this.isBatchScanningMode) {
+      const n = this.pendingScanData.length;
+      if (n <= 0) {
+        return '0 tem trong phiên';
+      }
+      return `${n} tem · hiển thị mã mới nhất`;
+    }
+    return `${this.filteredMaterials.length} dòng`;
+  }
+
+  /** Có hiện phân trang dưới danh sách (mobile batch chỉ 1 dòng preview → ẩn) */
+  showMobileMaterialPagination(): boolean {
+    if (this.isMobile && this.isBatchScanningMode) {
+      return false;
+    }
+    return this.totalPages > 1;
+  }
+
+  private mapPendingScanToOutboundPreview(item: any): OutboundMaterial {
+    const st =
+      item?.scanTime instanceof Date
+        ? item.scanTime
+        : item?.scanTime
+          ? new Date(item.scanTime)
+          : new Date();
+    return {
+      materialCode: String(item?.materialCode ?? '').trim(),
+      poNumber: String(item?.poNumber ?? '').trim(),
+      quantity: Number(item?.quantity) || 1,
+      unit: 'PCS',
+      exportQuantity: Number(item?.quantity) || 1,
+      exportDate: st,
+      location: String(item?.location ?? 'N/A'),
+      exportedBy: '',
+      importDate: item?.importDate != null ? String(item.importDate) : undefined,
+      bagBatch: item?.bagBatch,
+      bagNumberDisplay: item?.bagNumberDisplay,
+      productionOrder: String(item?.productionOrder ?? '').trim(),
+      employeeId: String(item?.employeeId ?? '').trim(),
+      createdAt: st,
+      updatedAt: st,
+      scanCount: item?.scanCount ?? 1,
+      scanMethod: item?.scanMethod || 'SCANNER',
+      pendingPreview: true
+    };
+  }
+
+  getMobileHistoryLsxLabel(): string {
+    const s = (this.batchProductionOrder || this.selectedProductionOrder || '').trim();
+    return s || '—';
+  }
+
+  getMobileLsxHistoryRows(): any[] {
+    return [...this.pendingScanData].reverse();
+  }
+
+  openMobileLsxHistorySheet(): void {
+    this.mobileBottomTab = 'history';
+    this.closeMobileMoreSheet();
+    this.closeMobileFilterSheet();
+    this.showMobileLsxHistorySheet = true;
+  }
+
+  closeMobileLsxHistorySheet(): void {
+    this.showMobileLsxHistorySheet = false;
+    this.mobileBottomTab = 'outbound';
   }
   
 
@@ -2954,5 +3220,6 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     };
     this.pendingScanData = [...this.pendingScanData, scanItem];
     this.savePendingToStorage();
+    this.cdr.markForCheck();
   }
 }

@@ -1,23 +1,299 @@
-<div class="main-content">
-  <div class="excel-container">
+<div class="main-content" [class.ob-m-page]="isMobile">
+  <!-- ═══ Mobile: Apple-style WMS shell (logic unchanged) ═══ -->
+  <div class="ob-m" *ngIf="isMobile">
+    <header class="ob-m-header ob-m-header--mock">
+      <div class="ob-m-header__row1">
+        <button type="button" class="ob-m-header__iconbtn" (click)="goMobileMenu()" aria-label="Menu">
+          <i class="material-icons">menu</i>
+        </button>
+        <div class="ob-m-header__center">
+          <span class="ob-m-app-mark" aria-hidden="true">
+            <i class="material-icons ob-m-app-mark__arrow">arrow_upward</i>
+          </span>
+          <h1 class="ob-m-header__title">OUTBOUND ASM1</h1>
+        </div>
+        <button type="button" class="ob-m-header__iconbtn ob-m-header__bell" (click)="openMobileMoreSheet()" aria-label="Thông báo">
+          <i class="material-icons">notifications_none</i>
+          <span class="ob-m-header__badge-count" *ngIf="getMobileNotifyCount() > 0">{{ getMobileNotifyCount() }}</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="ob-m-loading" *ngIf="isLoading">
+      <i class="material-icons ob-m-spin">sync</i>
+      <span>Đang tải dữ liệu…</span>
+    </div>
+
+    <ng-container *ngIf="!isLoading">
+      <div class="ob-m-err" *ngIf="errorMessage">
+        <i class="material-icons">error_outline</i>
+        {{ errorMessage }}
+      </div>
+
+      <section class="ob-m-scan">
+        <div class="ob-m-scan__row" [class.ob-m-scan__row--batch]="isBatchScanningMode">
+          <button type="button" class="ob-m-scan__start-side" *ngIf="!isBatchScanningMode" (click)="startBatchScanningMode()">
+            <i class="material-icons">qr_code_scanner</i>
+            <span>START</span>
+          </button>
+          <div class="ob-m-scan__input-block" [class.ob-m-scan__input-block--grow]="isBatchScanningMode">
+            <div class="ob-m-scan__input-row">
+              <input
+                id="ob-m-scanner-input"
+                type="text"
+                #scannerInput
+                [(ngModel)]="scannerBuffer"
+                (keydown)="onScannerKeydown($event)"
+                (blur)="onScannerInputBlur()"
+                (focus)="mobileBottomTab = 'outbound'"
+                placeholder="Quét barcode/QR code"
+                aria-label="Quét barcode hoặc QR"
+                class="scanner-input ob-m-scan__input"
+                [class.active]="isScannerInputActive || showScanningSetupModal"
+                autocomplete="off"
+              />
+              <button type="button" class="ob-m-scan__clear" *ngIf="scannerBuffer && scannerBuffer.length" (click)="clearMobileScannerBuffer()" aria-label="Xóa">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="ob-m-scan__batch" *ngIf="isBatchScanningMode">
+          <div class="ob-m-scan__saving" *ngIf="isSavingBatchData">
+            <i class="material-icons ob-m-spin">sync</i>
+            <span>Đang cập nhật…</span>
+          </div>
+          <ng-container *ngIf="!isSavingBatchData">
+            <div class="ob-m-scan__chiprow">
+              <span class="ob-m-chip-pill">
+                <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
+                <b>LSX</b>&nbsp;{{ batchProductionOrder || '…' }}
+              </span>
+              <span class="ob-m-chiprow__sep" aria-hidden="true">·</span>
+              <span class="ob-m-chip-pill">
+                <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
+                <b>NV</b>&nbsp;{{ batchEmployeeId || '…' }}
+              </span>
+            </div>
+            <div class="ob-m-scan__acts">
+              <button type="button" class="ob-m-btn ob-m-btn--ghost" (click)="showScanReview()" *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+                <i class="material-icons">fact_check</i>
+                Review ({{ pendingScanData.length }})
+              </button>
+              <button type="button" class="ob-m-btn ob-m-btn--primary" (click)="stopBatchScanningMode()">
+                <i class="material-icons">done_all</i>
+                Done
+              </button>
+            </div>
+          </ng-container>
+        </div>
+      </section>
+
+      <div class="ob-m-toolbar" *ngIf="!isBatchScanningMode">
+        <div class="ob-m-search">
+          <span class="ob-m-search__prefix" aria-hidden="true">
+            <i class="material-icons">search</i>
+          </span>
+          <input
+            type="text"
+            class="ob-m-search__input"
+            [(ngModel)]="searchProductionOrder"
+            (keyup.enter)="searchByProductionOrder()"
+            placeholder="Nhập LSX hoặc quét mã hàng"
+            title="Nhập LSX hoặc mã hàng rồi Enter"
+          />
+          <button type="button" class="ob-m-search__btn" (click)="focusMobileScanner()" title="Quét mã">
+            <i class="material-icons">qr_code_2</i>
+          </button>
+          <button type="button" class="ob-m-search__btn ob-m-search__btn--primary" (click)="searchByProductionOrder()" [disabled]="!searchProductionOrder || !searchProductionOrder.trim()" title="Tìm">
+            <i class="material-icons">search</i>
+          </button>
+        </div>
+        <button
+          type="button"
+          class="ob-m-toolbar__sidebtn"
+          *ngIf="selectedProductionOrder || materialSearchMode === 'material'"
+          (click)="clearProductionOrderFilter()"
+          title="Xóa lọc"
+        >
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+
+      <div class="lsx-material-inline ob-m-material-hint" *ngIf="materialSearchMode === 'material'">
+        <div class="lsx-material-inline__loading" *ngIf="materialSearchLoading">
+          <i class="material-icons spinning">sync</i>
+          <span>Đang lọc theo mã hàng…</span>
+        </div>
+        <div class="lsx-material-inline__error" *ngIf="!materialSearchLoading && materialSearchError">
+          <i class="material-icons">info</i>
+          <span>{{ materialSearchError }}</span>
+        </div>
+      </div>
+
+      <section class="ob-m-list" id="ob-m-materials">
+        <div class="ob-m-list__head">
+          <span class="ob-m-list__title">Danh sách vật tư</span>
+        </div>
+        <p class="ob-m-list__count">{{ getMobileListCountLabel() }}</p>
+        <div class="ob-m-colhead" *ngIf="getMobileListMaterials().length > 0">
+          <span class="ob-m-colhead__ico" aria-hidden="true"></span>
+          <span class="ob-m-colhead__mat">Mã vật tư</span>
+          <span>PO</span>
+          <span>IMD</span>
+          <span>Bag</span>
+          <span>Bịch</span>
+          <span class="ob-m-colhead__qty">Qty</span>
+          <span class="ob-m-colhead__chev" aria-hidden="true"></span>
+        </div>
+        <p class="ob-m-empty" *ngIf="getMobileListMaterials().length === 0">
+          <ng-container *ngIf="isBatchScanningMode">Chưa có tem trong phiên. Quét tem Material|PO|SL|IMD để hiển thị mã mới nhất tại đây.</ng-container>
+          <ng-container *ngIf="!isBatchScanningMode">Chưa có dữ liệu. Tìm LSX hoặc bắt đầu scan.</ng-container>
+        </p>
+        <article
+          class="ob-m-card"
+          *ngFor="let material of getMobileListMaterials(); let i = index; trackBy: trackByIndex"
+          [class.ob-m-card--dup]="material.bagDuplicate"
+        >
+          <button type="button" class="ob-m-card__top" (click)="toggleMobileMaterialExpand(material)">
+            <span class="ob-m-card__ico" aria-hidden="true"><i class="material-icons">widgets</i></span>
+            <div class="ob-m-card__mat">
+              <span class="ob-m-card__code">{{ material.materialCode }}</span>
+              <span class="ob-m-card__sub">{{ getMobileMaterialCardSubtitle(material) }}</span>
+            </div>
+            <span class="ob-m-card__cell ob-m-card__cell--po">{{ material.poNumber || '—' }}</span>
+            <span class="ob-m-card__cell">{{ material.importDate || '—' }}</span>
+            <span class="ob-m-card__cell" [class.ob-m-card__cell--warn]="material.bagDuplicate">{{ getOutboundBagColumnDisplay(material) }}</span>
+            <span class="ob-m-card__cell ob-m-card__cell--muted">{{ material.bagBatch || '—' }}</span>
+            <span class="ob-m-card__cell ob-m-card__cell--qty">{{ getMobileMaterialQtyLine(material) }}</span>
+            <i class="material-icons ob-m-card__chev">{{ isMobileMaterialExpanded(material) ? 'expand_less' : 'chevron_right' }}</i>
+          </button>
+          <div class="ob-m-card__detail" *ngIf="isMobileMaterialExpanded(material)">
+            <div class="ob-m-dl"><span>IMD</span><b>{{ material.importDate || '—' }}</b></div>
+            <div class="ob-m-dl"><span>Bag</span><b [class.ob-m-dupwarn]="material.bagDuplicate">{{ getOutboundBagColumnDisplay(material) }}</b></div>
+            <div class="ob-m-dl"><span>Bịch</span><b>{{ material.bagBatch || '—' }}</b></div>
+            <div class="ob-m-dl"><span>Số lần quét</span><b>×{{ material.scanCount ?? 0 }}</b></div>
+            <div class="ob-m-dl"><span>Ngày xuất</span><b>{{ material.createdAt | date:'dd/MM/yyyy HH:mm' }}</b></div>
+            <div class="ob-m-dl"><span>NV</span><b>{{ getDisplayEmployeeId(material.employeeId) }}</b></div>
+            <div class="ob-m-dl"><span>LSX</span><b>{{ material.productionOrder || '—' }}</b></div>
+            <button type="button" class="ob-m-del" (click)="deleteMaterial(material); $event.stopPropagation()" *ngIf="material.id">
+              <i class="material-icons">delete_outline</i>
+              Xóa dòng
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <div class="pagination-container ob-m-pagebar" *ngIf="showMobileMaterialPagination()">
+        <div class="pagination-info">Trang {{ currentPage }} / {{ totalPages }}</div>
+        <div class="pagination-controls">
+          <button type="button" class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+            <i class="material-icons">chevron_left</i>
+          </button>
+          <button
+            type="button"
+            class="page-btn"
+            *ngFor="let page of [].constructor(totalPages); let i = index; trackBy: trackByIndex"
+            [class.active]="currentPage === i + 1"
+            (click)="goToPage(i + 1)"
+          >{{ i + 1 }}</button>
+          <button type="button" class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+            <i class="material-icons">chevron_right</i>
+          </button>
+        </div>
+      </div>
+    </ng-container>
+
+    <nav class="ob-m-nav" *ngIf="!isLoading" role="navigation" aria-label="Điều hướng chính">
+      <button type="button" class="ob-m-nav__btn" [class.ob-m-nav__btn--on]="mobileBottomTab === 'home'" (click)="goMobileMenu()">
+        <i class="material-icons">home</i>
+        <span>Trang chủ</span>
+      </button>
+      <button type="button" class="ob-m-nav__btn" [class.ob-m-nav__btn--on]="mobileBottomTab === 'outbound'" (click)="mobileNavOutbound()">
+        <i class="material-icons">upload</i>
+        <span>Xuất NL</span>
+      </button>
+      <button type="button" class="ob-m-nav__btn" [class.ob-m-nav__btn--on]="mobileBottomTab === 'history'" (click)="mobileNavHistory()">
+        <i class="material-icons">history</i>
+        <span>Lịch sử</span>
+      </button>
+      <button type="button" class="ob-m-nav__btn" [class.ob-m-nav__btn--on]="mobileBottomTab === 'location'" (click)="mobileNavLocation()">
+        <i class="material-icons">location_on</i>
+        <span>Location</span>
+      </button>
+    </nav>
+
+    <div class="ob-m-sheet-bg ob-m-sheet-bg--filter" *ngIf="showMobileFilterSheet" (click)="closeMobileFilterSheet()"></div>
+    <div class="ob-m-sheet ob-m-sheet--filter" *ngIf="showMobileFilterSheet" (click)="$event.stopPropagation()">
+      <div class="ob-m-sheet__title">Bộ lọc</div>
+      <div class="ob-m-filter-dates">
+        <label class="ob-m-filter-label">Từ ngày</label>
+        <input type="date" class="ob-m-filter-date" [(ngModel)]="startDate" (change)="onDateRangeChange()" title="Từ ngày" />
+        <label class="ob-m-filter-label">Đến ngày</label>
+        <input type="date" class="ob-m-filter-date" [(ngModel)]="endDate" (change)="onDateRangeChange()" title="Đến ngày" />
+      </div>
+      <label class="ob-m-filter-toggle">
+        <input type="checkbox" [(ngModel)]="hidePreviousDayHistory" (change)="toggleHidePreviousDayHistory()" />
+        <span>{{ hidePreviousDayHistory ? 'Ẩn lịch sử ngày cũ' : 'Hiện tất cả theo ngày' }}</span>
+      </label>
+      <button type="button" class="ob-m-sheet__row" (click)="resetToToday(); closeMobileFilterSheet()">
+        <i class="material-icons">today</i>
+        Hôm nay
+      </button>
+      <button type="button" class="ob-m-sheet__close" (click)="closeMobileFilterSheet()">Đóng</button>
+    </div>
+
+    <div class="ob-m-sheet-bg ob-m-sheet-bg--history" *ngIf="showMobileLsxHistorySheet" (click)="closeMobileLsxHistorySheet()"></div>
+    <div class="ob-m-sheet ob-m-sheet--history" *ngIf="showMobileLsxHistorySheet" (click)="$event.stopPropagation()">
+      <div class="ob-m-sheet__title">Lịch sử scan — LSX {{ getMobileHistoryLsxLabel() }}</div>
+      <p class="ob-m-history-empty" *ngIf="getMobileLsxHistoryRows().length === 0">Chưa có tem nào trong phiên này.</p>
+      <ul class="ob-m-history-list" *ngIf="getMobileLsxHistoryRows().length > 0">
+        <li class="ob-m-history-item" *ngFor="let row of getMobileLsxHistoryRows(); let i = index">
+          <div class="ob-m-history-item__main">
+            <strong>{{ row.materialCode }}</strong>
+            <span class="ob-m-history-item__sub">PO {{ row.poNumber }} · SL {{ row.quantity }}<ng-container *ngIf="row.importDate"> · IMD {{ row.importDate }}</ng-container></span>
+          </div>
+          <span class="ob-m-history-item__time">{{ row.scanTime | date:'HH:mm:ss dd/MM/yyyy' }}</span>
+        </li>
+      </ul>
+      <button type="button" class="ob-m-sheet__close" (click)="closeMobileLsxHistorySheet()">Đóng</button>
+    </div>
+
+    <div class="ob-m-sheet-bg" *ngIf="showMobileMoreSheet" (click)="closeMobileMoreSheet()"></div>
+    <div class="ob-m-sheet" *ngIf="showMobileMoreSheet" (click)="$event.stopPropagation()">
+      <div class="ob-m-sheet__title">Thao tác</div>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('filter')">
+        <i class="material-icons">date_range</i> Lọc theo ngày
+      </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('refresh')">
+        <i class="material-icons">refresh</i> Refresh dữ liệu
+      </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('excel')">
+        <i class="material-icons">download</i> Export Excel
+      </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('add')">
+        <i class="material-icons">add</i> Thêm material
+      </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('monthly')">
+        <i class="material-icons">calendar_month</i> Tải theo tháng
+      </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('cleanup')">
+        <i class="material-icons">cleaning_services</i> Làm sạch dữ liệu
+      </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('qc')">
+        <i class="material-icons">policy</i> QC rule
+      </button>
+      <button type="button" class="ob-m-sheet__close" (click)="closeMobileMoreSheet()">Đóng</button>
+    </div>
+  </div>
+
+  <div class="excel-container" *ngIf="!isMobile">
     <div class="excel-header">
       <h4>📤 OUTBOUND ASM1</h4>
     </div>
     <!-- Excel-like Actions -->
     <div class="excel-actions">
-      <div class="action-controls-horizontal">
-        <!-- Mobile: Chỉ dùng Scanner (không camera) -->
-        <div class="mobile-scanner-selection" *ngIf="isMobile">
-          <div class="scanner-method-buttons">
-            <button class="start-btn-mobile" 
-                    (click)="startBatchScanningMode()"
-                    title="Bắt đầu chế độ scan (máy scanner)">
-              <i class="material-icons">qr_code_scanner</i>
-              <span>Start</span>
-            </button>
-          </div>
-        </div>
-
+        <div class="action-controls-horizontal">
         <!-- Một hàng: ô quét QR + (khi batch) LSX + NV + Review/Done -->
         <div class="outbound-scan-primary-row">
           <div class="scanner-input-group">
@@ -33,8 +309,7 @@
           </div>
 
           <div class="batch-scan-inline"
-               *ngIf="isBatchScanningMode"
-               [class.batch-scan-inline--mobile]="isMobile">
+               *ngIf="isBatchScanningMode">
             <div class="saving-indicator-inline" *ngIf="isSavingBatchData">
               <i class="material-icons spinning">sync</i>
               <span>Đang cập nhật dữ liệu...</span>
@@ -77,7 +352,7 @@
                  class="lsx-search-input"
                  [(ngModel)]="searchProductionOrder"
                  (keyup.enter)="searchByProductionOrder()"
-                 [placeholder]="isMobile ? 'Nhập LSX hoặc quét mã hàng...' : 'Nhập LSX hoặc quét mã hàng (B+6 số / QR: Material|PO|SL|IMD)'"
+                 [placeholder]="'Nhập LSX hoặc quét mã hàng (B+6 số / QR: Material|PO|SL|IMD)'"
                  title="Nhập LSX hoặc mã hàng rồi nhấn Enter">
           <button class="search-btn" 
                   (click)="searchByProductionOrder()"
@@ -116,7 +391,7 @@
         </div>
 
         <!-- More Dropdown -->
-        <div class="dropdown" #dropdown [class.mobile-hidden]="isMobile">
+        <div class="dropdown" #dropdown>
           <button class="more-btn" type="button" (click)="toggleDropdown()">
             <i class="material-icons">more_vert</i>
             More
@@ -151,13 +426,13 @@
         
         
         <!-- Refresh Button -->
-        <button class="refresh-btn" (click)="loadMaterials()" [class.mobile-hidden]="isMobile">
+        <button class="refresh-btn" (click)="loadMaterials()">
           <i class="material-icons">refresh</i>
           Refresh
         </button>
 
         <!-- Date Range Selector -->
-        <div class="date-range-selector" [class.mobile-hidden]="isMobile">
+        <div class="date-range-selector">
           <input type="date" 
                  [(ngModel)]="startDate" 
                  (change)="onDateRangeChange()"
@@ -272,54 +547,6 @@
               <button class="delete-btn" (click)="deleteMaterial(material)" title="Xóa">
                 <i class="material-icons">delete</i>
               </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <!-- Mobile Table - 6 Columns -->
-      <table class="excel-table mobile-optimized" *ngIf="isMobile">
-        <thead>
-          <tr>
-            <th class="col-material">Mã hàng</th>
-            <th class="col-po">Số PO</th>
-            <th class="col-batch">IMD</th>
-            <th class="col-bag-number">Bag</th>
-            <th class="col-bag-batch">Bịch</th>
-            <th class="col-quantity">Xuất</th>
-            <th class="col-scan-count">Số lần</th>
-            <th class="col-employee">Mã nhân viên</th>
-            <th class="col-production">Lệnh sản xuất</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex" [class.row-dup-bag]="material.bagDuplicate">
-            <td class="code-cell readonly-cell">
-              {{material.materialCode}}
-            </td>
-            <td class="po-cell readonly-cell">
-              {{material.poNumber}}
-            </td>
-            <td class="batch-cell readonly-cell">
-              {{material.importDate || 'N/A'}}
-            </td>
-            <td class="bag-number-cell readonly-cell" [class.cell-dup-bag]="material.bagDuplicate">
-              {{ getOutboundBagColumnDisplay(material) }}
-            </td>
-            <td class="bag-batch-cell readonly-cell">
-              {{ material.bagBatch || '—' }}
-            </td>
-            <td class="number-cell readonly-cell">
-              {{material.exportQuantity}}
-            </td>
-            <td class="number-cell readonly-cell">
-              {{ material.scanCount ?? 0 }}
-            </td>
-            <td class="employee-cell readonly-cell">
-              {{getDisplayEmployeeId(material.employeeId)}}
-            </td>
-            <td class="production-order-cell readonly-cell">
-              {{material.productionOrder || 'N/A'}}
             </td>
           </tr>
         </tbody>

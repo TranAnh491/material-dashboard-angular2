@@ -1,7 +1,7 @@
 // Tối ưu hóa RM1 Outbound - Chữ đen, nền trắng, size 13, không hiệu ứng
 
-// Global CSS để tối ưu hóa tốc độ
-* {
+// Global CSS — chỉ áp dụng cho layout desktop (Excel). Mobile `.ob-m-page` dùng outbound-asm1-mobile.scss.
+.main-content:not(.ob-m-page) * {
   font-size: 13px !important;
   color: #000000 !important;
   background: #ffffff !important;
@@ -41,8 +41,8 @@
   }
 }
 
-// Bỏ tất cả hiệu ứng hover
-*:hover {
+// Bỏ tất cả hiệu ứng hover (desktop)
+.main-content:not(.ob-m-page) *:hover {
   background: #ffffff !important;
   color: #000000 !important;
   transform: none !important;

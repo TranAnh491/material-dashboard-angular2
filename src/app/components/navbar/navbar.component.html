@@ -56,12 +56,12 @@
                 </li>
             </ul>
         </div>
-        <!-- Home Button - bên phải thanh; ẩn ở Menu, Shipment (đã có sidebar), QC, Settings, RM Delivery, Inbound (có nút riêng) -->
+        <!-- Home Button - bên phải thanh; ẩn ở Menu, Shipment, QC, Settings, RM Delivery, Inbound/Outbound ASM (có bottom nav / nút riêng) -->
         <button
           type="button"
           class="btn-home ms-2"
           (click)="goToMenu()"
-          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage() && !isPdControlPage() && !isShortedMaterialsPage()"
+          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage() && !isOutboundAsmPage() && !isPdControlPage() && !isShortedMaterialsPage()"
           title="Về Menu"
         >
           <i class="material-icons">home</i>

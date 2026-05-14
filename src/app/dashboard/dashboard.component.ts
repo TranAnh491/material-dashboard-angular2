@@ -182,13 +182,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   matAccuracyThisMonth = 99.85;
   fgAccuracyThisMonth = 100;
 
-  /** FGs Inventory Turnover — theo tháng 2026 (cột) + target tháng */
-  readonly fgTurnoverMonthLabels = ['Thg 1', 'Thg 2', 'Thg 3', 'Thg 4'];
-  readonly fgTurnoverMonthValues = [1.33, 0.4, 0.83, 1.16];
+  /** FGs Inventory Turnover — 12 tháng 2026 (cột có số; tháng chưa có dữ liệu: chỉ nhãn) + target tháng */
+  readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `Thg ${i + 1}`);
+  readonly fgTurnoverMonthValues: readonly (number | null)[] = [
+    1.33, 0.4, 0.83, 0.9, null, null, null, null, null, null, null, null
+  ];
   readonly fgTurnoverTargetMonthly = 1.33;
 
-  get fgTurnoverYtd(): number {
-    return this.fgTurnoverMonthValues.reduce((a, b) => a + b, 0);
+  get fgTurnoverReportedMonthsCount(): number {
+    return this.fgTurnoverMonthValues.filter((v) => typeof v === 'number' && Number.isFinite(v)).length;
   }
 
   // Shipment — pagination bảng chi tiết (7 ngày sắp tới, tab Shipment)
@@ -1294,7 +1296,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.createFgTurnoverMonthlyBarChart('completedTasksChart');
   }
 
-  /** Cột theo tháng + đường target tháng (1.33) */
+  /** Cột 12 tháng + đường target; số vẽ trong cột; tháng chưa có dữ liệu: null (chỉ nhãn trục X) */
   private createFgTurnoverMonthlyBarChart(canvasId: string): void {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
     if (!canvas) return;
@@ -1312,6 +1314,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const bars = [...this.fgTurnoverMonthValues];
     const tgt = this.fgTurnoverTargetMonthly;
     const targetLine = labels.map(() => tgt);
+    const numericBars = bars.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const yTop = Math.max(tgt, ...numericBars, 0.01) * 1.15;
 
     const barBlue = '#2563eb';
     const targetColor = '#ef4444';
@@ -1350,6 +1354,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         responsive: true,
         maintainAspectRatio: false,
         layout: { padding: { top: 4, right: 4, bottom: 0, left: 2 } },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
             display: true,
@@ -1363,10 +1368,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
             }
           },
           tooltip: {
+            filter: (item) => {
+              if (item.datasetIndex !== 0) return true;
+              const raw = item.raw;
+              return typeof raw === 'number' && Number.isFinite(raw);
+            },
             callbacks: {
               label: (context) => {
                 const v = context.parsed.y;
-                if (v === undefined || v === null) return '';
+                if (v === undefined || v === null || Number.isNaN(Number(v))) return '';
                 return `${context.dataset.label}: ${Number(v).toFixed(2)}`;
               }
             }
@@ -1377,13 +1387,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
             grid: { display: false },
             ticks: {
               color: 'rgba(15,23,42,0.55)',
-              font: { size: 11, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+              maxRotation: 45,
+              minRotation: 0,
+              font: { size: 9, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
             },
             border: { display: false }
           },
           y: {
             beginAtZero: true,
-            suggestedMax: Math.max(...bars, tgt) * 1.15,
+            suggestedMax: yTop,
             grid: { color: 'rgba(15,23,42,0.06)' },
             ticks: {
               color: 'rgba(15,23,42,0.45)',
@@ -1392,7 +1404,38 @@ export class DashboardComponent implements OnInit, OnDestroy {
             border: { display: false }
           }
         }
-      }
+      },
+      plugins: [
+        {
+          id: 'fgTurnoverBarValueLabels',
+          afterDatasetsDraw: (chart) => {
+            const ds = chart.data.datasets[0];
+            const meta = chart.getDatasetMeta(0);
+            if (!ds || meta.type !== 'bar' || !meta.data?.length) return;
+            const c = chart.ctx;
+            c.save();
+            c.textAlign = 'center';
+            c.textBaseline = 'middle';
+            c.font =
+              "bold 10px Inter, system-ui, -apple-system, 'Segoe UI', sans-serif";
+            meta.data.forEach((elem, i) => {
+              const raw = ds.data[i];
+              if (typeof raw !== 'number' || !Number.isFinite(raw)) return;
+              const el = elem as unknown as { getProps?: (keys: string[], final?: boolean) => Record<string, number> };
+              if (typeof el.getProps !== 'function') return;
+              const p = el.getProps(['x', 'y', 'base'], true);
+              const x = p.x;
+              const y = p.y;
+              const base = p.base;
+              if (![x, y, base].every((n) => typeof n === 'number' && Number.isFinite(n))) return;
+              const midY = (y + base) / 2;
+              c.fillStyle = '#ffffff';
+              c.fillText(raw.toFixed(2), x, midY);
+            });
+            c.restore();
+          }
+        }
+      ]
     });
   }
 
