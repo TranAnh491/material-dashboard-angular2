@@ -49,6 +49,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // Main tabs
     { key: 'dashboard', name: 'Dashboard' },
     { key: 'assistant', name: 'Assistant' },
+    { key: 'materials-dashboard', name: 'Materials Dashboard' },
+    { key: 'fgs-dashboard', name: 'FGs Dashboard' },
     { key: 'pd-control', name: 'PD Control' },
     { key: 'work-order-status', name: 'Work Order' },
     { key: 'shipment', name: 'Shipment' },

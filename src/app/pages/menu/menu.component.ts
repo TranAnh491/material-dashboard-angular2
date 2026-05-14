@@ -100,6 +100,7 @@ export class MenuComponent implements OnInit {
     { path: '/fg-check', title: 'FG Check', icon: 'fact_check', iconImage: 'assets/img/shipcheck.png', category: 'ASM FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', iconImage: 'assets/img/fginventory.png', category: 'ASM FG' },
     { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', iconImage: 'assets/img/stocktaking.png', category: 'ASM FG' },
+    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', iconImage: 'assets/img/fglocation.png', category: 'ASM FG' },
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', iconImage: 'assets/img/palletid.png', category: 'ASM FG' },
     

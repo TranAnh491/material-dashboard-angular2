@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import * as XLSX from 'xlsx';
-import { ExportManifestRow, ImportManifestRow, MaterialsDashboardService } from '../../services/materials-dashboard.service';
+import { FgExportManifestRow, FgImportManifestRow, FgsDashboardService } from '../../services/fgs-dashboard.service';
 
 type AgingFlagTier = 'green' | 'yellow' | 'orange' | 'red';
 
@@ -21,7 +22,7 @@ type HeatmapColorSettings = {
   stockCheckRing: string;
 };
 
-const HEATMAP_COLORS_STORAGE_KEY = 'materials-dashboard-heatmap-colors';
+const HEATMAP_COLORS_STORAGE_KEY = 'fgs-dashboard-heatmap-colors';
 
 const DEFAULT_HEATMAP_COLORS: HeatmapColorSettings = {
   noExport: '#FFFFFF',
@@ -50,9 +51,10 @@ type CellVM = {
   agingFlag: AgingFlagTier | null;
 };
 
-/** Fill Location — 1 ô lớn / vị trí, bên trong danh sách mã. */
 type LocationTileItemVM = {
   sku: string;
+  /** Tên KH từ collection `fg-customer-mapping` (cùng nguồn tab Shipment / import danh mục KH). */
+  khName: string;
   exportCount: number;
   stockChecked: boolean;
   agingFlag: AgingFlagTier | null;
@@ -67,12 +69,12 @@ type LocationTileVM = {
 };
 
 @Component({
-  selector: 'app-materials-dashboard',
-  templateUrl: './materials-dashboard.component.html',
-  styleUrls: ['./materials-dashboard.component.scss'],
+  selector: 'app-fgs-dashboard',
+  templateUrl: './fgs-dashboard.component.html',
+  styleUrls: ['../materials-dashboard/materials-dashboard.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class MaterialsDashboardComponent implements OnInit {
+export class FgsDashboardComponent implements OnInit, OnDestroy {
   isLoading = false;
   error: string = '';
 
@@ -105,7 +107,7 @@ export class MaterialsDashboardComponent implements OnInit {
   /** SKU chuẩn Bxxxxxx đã xuất hiện trong snapshot kiểm kê (ít nhất một dòng material) */
   private checkedSkuSet = new Set<string>();
 
-  /** Aging import (Firebase `materials-dashboard-aging/current`) — số tháng / SKU khi layer Aging có dữ liệu */
+  /** Aging import (Firebase `fgs-dashboard-aging/current`) — số tháng / mã TP khi layer Aging có dữ liệu */
   private agingBySku = new Map<string, number>();
 
   heatmapColors: HeatmapColorSettings = this.cloneHeatmapDefaults();
@@ -130,7 +132,6 @@ export class MaterialsDashboardComponent implements OnInit {
 
   // Computed model
   cells: CellVM[] = [];
-  /** Khi Fill: Location — nhóm theo từng vị trí (ô lớn). */
   locationTiles: LocationTileVM[] = [];
   titlesEnabled = true;
   private masterSkuList: string[] = [];
@@ -142,6 +143,11 @@ export class MaterialsDashboardComponent implements OnInit {
   isLoadingLocations = false;
   /** Tránh race: nhiều chỗ gọi load vị trí cùng lúc / recompute chạy trước khi Firestore xong. */
   private locationLoadInFlight: Promise<void> | null = null;
+
+  /** Cùng collection `fg-customer-mapping` với tab Shipment — map mã TP (7 ký tự) → tên KH. */
+  private customerMappingItems: Array<{ customerCode: string; materialCode: string; description: string }> = [];
+  private khNameByMaterial7 = new Map<string, string>();
+  private readonly destroy$ = new Subject<void>();
 
   // KPIs
   kpiTotalSkus = 0;
@@ -157,7 +163,7 @@ export class MaterialsDashboardComponent implements OnInit {
   private renderToken = 0;
 
   constructor(
-    private svc: MaterialsDashboardService,
+    private svc: FgsDashboardService,
     private cdr: ChangeDetectorRef,
     private router: Router,
     private firestore: AngularFirestore
@@ -169,7 +175,61 @@ export class MaterialsDashboardComponent implements OnInit {
     this.startDate = '2020-01-01';
     this.endDate = today.toISOString().slice(0, 10);
     this.selectedYear = today.getFullYear() >= 2020 && today.getFullYear() <= 2026 ? today.getFullYear() : 2026;
+    this.subscribeFgCustomerMapping();
     void this.reload();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  /** Giống Shipment: key 7 ký tự đầu (A–Z, 0–9) của mã TP để khớp `fg-customer-mapping`. */
+  private materialKey7(materialCode: string | undefined | null): string {
+    const s = (materialCode || '').toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!s) return '';
+    return s.slice(0, 7);
+  }
+
+  private rebuildKhMaterialIndex(): void {
+    const map = new Map<string, string>();
+    for (const m of this.customerMappingItems) {
+      const d = (m.description || '').trim();
+      const key7 = this.materialKey7(m.materialCode);
+      if (!key7) continue;
+      if (d) map.set(key7, d);
+      else if (!map.has(key7)) map.set(key7, '');
+    }
+    this.khNameByMaterial7 = map;
+  }
+
+  private getTenKhFromMaterialCode(materialCode: string | undefined | null): string {
+    const mat = this.materialKey7(materialCode);
+    if (!mat) return '';
+    return (this.khNameByMaterial7.get(mat) || '').trim();
+  }
+
+  private subscribeFgCustomerMapping(): void {
+    this.firestore
+      .collection('fg-customer-mapping')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((actions) => {
+        this.customerMappingItems = actions.map((action) => {
+          const data = action.payload.doc.data() as any;
+          return {
+            customerCode: (data.customerCode || '').toString().trim(),
+            materialCode: (data.materialCode || '').toString().trim(),
+            description: (data.description || '').toString().trim()
+          };
+        });
+        this.rebuildKhMaterialIndex();
+        if (this.showLocationClusterView) {
+          this.recomputeView();
+        } else {
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   get heatmapColorCssVars(): Record<string, string> {
@@ -296,7 +356,8 @@ export class MaterialsDashboardComponent implements OnInit {
   }
 
   /**
-   * Đọc `stock-check-snapshot` giống tab Stock-Check (mỗi xưởng một doc), gom mã Bxxxxxx đã có dòng kiểm kê.
+   * Đọc `stock-check-snapshot` giống tab Stock-Check (mỗi xưởng một doc).
+   * RM: chuẩn Bxxxxxx; mã khác giữ nguyên (uppercase) để sau này snapshot FG khớp được.
    */
   private async loadStockCheckSnapshotInto(target: Set<string>): Promise<void> {
     target.clear();
@@ -309,11 +370,13 @@ export class MaterialsDashboardComponent implements OnInit {
         const data = snap.data() as { materials?: any[] } | undefined;
         const materials = data?.materials || [];
         for (const it of materials) {
-          const sku = this.normalizeSkuFromAny(it?.materialCode);
-          if (sku) target.add(sku);
+          const rm = this.normalizeRmBSkuFromAny(it?.materialCode);
+          if (rm) target.add(rm);
+          const fg = this.normalizeFgImportCode(it?.materialCode);
+          if (fg && fg !== rm) target.add(fg);
         }
       } catch (e) {
-        console.warn(`[MaterialsDashboard] stock-check-snapshot read failed (${docId}):`, e);
+        console.warn(`[FgsDashboard] stock-check-snapshot read failed (${docId}):`, e);
       }
     }
   }
@@ -324,9 +387,9 @@ export class MaterialsDashboardComponent implements OnInit {
 
   private async refreshAgingMap(): Promise<void> {
     try {
-      this.agingBySku = await this.svc.loadMaterialsAging();
+      this.agingBySku = await this.svc.loadFgsAging();
     } catch (e) {
-      console.warn('[MaterialsDashboard] load aging failed', e);
+      console.warn('[FgsDashboard] load aging failed', e);
       this.agingBySku = new Map();
     }
   }
@@ -372,7 +435,7 @@ export class MaterialsDashboardComponent implements OnInit {
 
       // Master SKU + locations are expensive; cache them and only reload when forced.
       if (forceMaster || !this.masterSkusCache) {
-        this.masterSkusCache = await this.svc.loadMasterSkus(['ASM1', 'ASM2']);
+        this.masterSkusCache = await this.svc.loadMasterFgMaterialCodes(['ASM1', 'ASM2']);
       }
 
       // Only load location map when needed (Location fill). It's expensive.
@@ -444,7 +507,7 @@ export class MaterialsDashboardComponent implements OnInit {
     }
   }
 
-  /** Xuất Excel: A = mã Bxxxxxx, B = số lần xuất, C = Stock check (Có/Không — snapshot ASM1+ASM2). */
+  /** Xuất Excel: A = mã TP, B = số lần xuất, C = Stock check (Có/Không — snapshot ASM1+ASM2). */
   async exportExcel(): Promise<void> {
     if (!this.baseRows?.length || this.isExporting) return;
     this.isExporting = true;
@@ -471,7 +534,7 @@ export class MaterialsDashboardComponent implements OnInit {
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Export');
-      XLSX.writeFile(wb, `materials-dashboard_${start}_${end}.xlsx`);
+      XLSX.writeFile(wb, `fgs-dashboard_${start}_${end}.xlsx`);
     } catch (e: any) {
       console.error(e);
       this.error = e?.message ? String(e.message) : 'Export failed';
@@ -548,18 +611,25 @@ export class MaterialsDashboardComponent implements OnInit {
     return tile.locationKey;
   }
 
-  /** Gom ô theo location (không áp dụng khi Fill: Group). */
   get showLocationClusterView(): boolean {
     return this.fillFunction === 'Location' && !this.fillByGroup;
   }
 
-  private parseSku(code: string): { sku: string; group: string } | null {
-    const s = String(code || '').trim().toUpperCase();
-    // Accept exact "Bxxxxxx" OR extract from longer material codes
-    const m = /B(\d{6})/.exec(s);
-    if (!m) return null;
-    const digits = m[1];
-    return { sku: `B${digits}`, group: digits.slice(0, 3) };
+  /** Mã TP từ fg-inventory: Bxxxxxx giữ nhóm 3 số sau B; mã khác nhóm 3 ký tự alphanumeric đầu. */
+  private parseFgSku(code: string): { sku: string; group: string } | null {
+    const sku = String(code || '').trim().toUpperCase();
+    if (!sku) return null;
+    const m = /B(\d{6})/.exec(sku);
+    if (m) {
+      const digits = m[1];
+      return { sku: `B${digits}`, group: digits.slice(0, 3) };
+    }
+    const alnum = sku.replace(/[^A-Z0-9]/g, '');
+    const group =
+      alnum.length >= 3
+        ? alnum.slice(0, 3)
+        : `${sku.replace(/[^A-Z0-9]/g, '')}XXX`.slice(0, 3).toUpperCase() || 'XXX';
+    return { sku, group };
   }
 
   private parseIsoDate(iso: string, startOfDay: boolean): Date {
@@ -576,7 +646,7 @@ export class MaterialsDashboardComponent implements OnInit {
     let max = 0;
     let active = 0;
     for (const raw of masterSkus) {
-      const p = this.parseSku(raw);
+      const p = this.parseFgSku(raw);
       if (!p) continue;
       const count = exportCountBySku.get(p.sku) || 0;
       if (count > max) max = count;
@@ -730,12 +800,18 @@ export class MaterialsDashboardComponent implements OnInit {
       const displayLocation = key === '__NONE__' ? '— (chưa có vị trí)' : key;
       const items: LocationTileItemVM[] = arr.map((r) => ({
         sku: r.sku,
+        khName: this.getTenKhFromMaterialCode(r.sku) || '',
         exportCount: r.count,
         stockChecked: this.stockCheckCompareEnabled && this.checkedSkuSet.has(r.sku),
         agingFlag: this.agingFlagForSkuVisual(r.sku)
       }));
       const title = this.titlesEnabled
-        ? `Vị trí: ${displayLocation}\nSố mã: ${arr.length}\n${arr.map((x) => `${x.sku} (${x.count})`).join('\n')}`
+        ? `Vị trí: ${displayLocation}\nSố mã: ${arr.length}\n${arr
+            .map((x) => {
+              const kh = this.getTenKhFromMaterialCode(x.sku);
+              return `${x.sku}${kh ? ` | KH: ${kh}` : ''} (${x.count})`;
+            })
+            .join('\n')}`
         : '';
       tiles.push({ locationKey: key, displayLocation, bg, items, title });
     }
@@ -811,11 +887,11 @@ export class MaterialsDashboardComponent implements OnInit {
     this.cdr.markForCheck();
     this.locationLoadInFlight = (async () => {
       try {
-        this.locationBySku = await this.svc.loadMasterSkuLocations(['ASM1', 'ASM2']);
+        this.locationBySku = await this.svc.loadMasterFgLocations(['ASM1', 'ASM2']);
         this.rebuildLocationRank();
         this.masterLocationsLoaded = true;
       } catch (e) {
-        console.warn('[MaterialsDashboard] load locations failed', e);
+        console.warn('[FgsDashboard] load locations failed', e);
       } finally {
         this.isLoadingLocations = false;
         this.locationLoadInFlight = null;
@@ -932,14 +1008,14 @@ export class MaterialsDashboardComponent implements OnInit {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, raw: true }) as any[][];
 
-      const parsed: ExportManifestRow[] = [];
+      const parsed: FgExportManifestRow[] = [];
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i] || [];
         const rawCode = r[0];
         const rawDate = r[1];
         const rawQty = r[2];
 
-        const code = this.normalizeSkuFromAny(rawCode);
+        const code = this.normalizeFgImportCode(rawCode);
         const date = this.parseExcelDate(rawDate);
         const qty = Number(rawQty ?? 0);
         if (!code || !date || !Number.isFinite(qty)) continue;
@@ -978,17 +1054,17 @@ export class MaterialsDashboardComponent implements OnInit {
       const bySku: Record<string, number> = {};
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i] || [];
-        const code = this.normalizeSkuFromAny(r[0]);
+        const code = this.normalizeFgImportCode(r[0]);
         const aging = Number(r[1]);
         if (!code || !Number.isFinite(aging)) continue;
         bySku[code] = aging;
       }
 
       if (!Object.keys(bySku).length) {
-        throw new Error('Không đọc được dòng hợp lệ (cột A = mã Bxxxxxx, cột B = aging — số tháng).');
+        throw new Error('Không đọc được dòng hợp lệ (cột A = mã TP, cột B = aging — số tháng).');
       }
 
-      const res = await this.svc.replaceMaterialsAging(bySku, { sourceName: file.name });
+      const res = await this.svc.replaceFgsAging(bySku, { sourceName: file.name });
       this.importAgingSavedSkuCount = res.saved;
       await this.refreshAgingMap();
       this.recomputeView();
@@ -1017,10 +1093,10 @@ export class MaterialsDashboardComponent implements OnInit {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, raw: true }) as any[][];
 
-      const parsed: ImportManifestRow[] = [];
+      const parsed: FgImportManifestRow[] = [];
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i] || [];
-        const code = this.normalizeSkuFromAny(r[0]);
+        const code = this.normalizeFgImportCode(r[0]);
         const dt = this.parseExcelDate(r[1]);
         if (!code || !dt) continue;
         parsed.push({ materialCode: code, importDate: dt });
@@ -1039,27 +1115,27 @@ export class MaterialsDashboardComponent implements OnInit {
     }
   }
 
-  downloadMaterialsTemplate(kind: 'export' | 'aging' | 'inbound'): void {
+  downloadFgsTemplate(kind: 'export' | 'aging' | 'inbound'): void {
     let aoa: (string | number)[][];
     let filename: string;
     if (kind === 'export') {
       aoa = [
-        ['Mã hàng (B+6 số)', 'Ngày xuất', 'Lượng'],
-        ['B123456', '2025-01-15', 100]
+        ['Mã TP / mã hàng', 'Ngày xuất', 'Lượng'],
+        ['TP-ABC001', '2025-01-15', 100]
       ];
-      filename = 'template-bang-ke-xuat-kho.xlsx';
+      filename = 'fgs-template-bang-ke-xuat.xlsx';
     } else if (kind === 'aging') {
       aoa = [
-        ['Mã hàng (B+6 số)', 'Aging (tháng)'],
-        ['B123456', 24]
+        ['Mã TP / mã hàng', 'Aging (tháng)'],
+        ['TP-ABC001', 24]
       ];
-      filename = 'template-aging.xlsx';
+      filename = 'fgs-template-aging.xlsx';
     } else {
       aoa = [
-        ['Mã hàng (B+6 số)', 'Ngày nhập'],
-        ['B123456', '2025-01-15']
+        ['Mã TP / mã hàng', 'Ngày nhập'],
+        ['TP-ABC001', '2025-01-15']
       ];
-      filename = 'template-bang-ke-nhap.xlsx';
+      filename = 'fgs-template-bang-ke-nhap.xlsx';
     }
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
@@ -1067,13 +1143,20 @@ export class MaterialsDashboardComponent implements OnInit {
     XLSX.writeFile(wb, filename);
   }
 
-  private normalizeSkuFromAny(v: any): string | null {
+  private normalizeRmBSkuFromAny(v: any): string | null {
     const s = String(v ?? '').trim().toUpperCase();
     const m = /B(\d{6})/.exec(s);
     if (m) return `B${m[1]}`;
     const d = /(\d{6})/.exec(s);
     if (d) return `B${d[1]}`;
     return null;
+  }
+
+  /** Mã TP / mã hàng FG — import Excel; khớp `fg-inventory.materialCode`. */
+  private normalizeFgImportCode(v: any): string | null {
+    const t = String(v ?? '').trim().toUpperCase();
+    if (!t || t.length > 120) return null;
+    return t;
   }
 
   private parseExcelDate(v: any): Date | null {

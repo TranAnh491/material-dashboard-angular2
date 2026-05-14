@@ -2,11 +2,11 @@
   <div class="md-headerbar">
     <div class="md-headerbar__left">
       <div class="md-appicon" aria-hidden="true">
-        <i class="material-icons">grid_view</i>
+        <i class="material-icons">palette</i>
       </div>
       <div>
-        <div class="md-title">Materials Dashboard</div>
-        <div class="md-sub">Heatmap SKU activity (ASM1 + ASM2) from Manifest vs Master</div>
+        <div class="md-title">FGs Dashboard</div>
+        <div class="md-sub">Heatmap mã TP (ASM1 + ASM2): hoạt động xuất từ <code>fgs-export-manifest</code> + <code>fg-export</code> vs master <code>fg-inventory</code></div>
       </div>
     </div>
 
@@ -75,7 +75,7 @@
         </div>
 
         <div class="ctrl ctrl--search">
-          <label>Tìm SKU</label>
+          <label>Tìm mã TP</label>
           <div class="search-wrap">
             <i class="material-icons search-ic">search</i>
             <input
@@ -83,7 +83,7 @@
               class="form-control form-control--dense"
               [(ngModel)]="searchSku"
               (input)="onFiltersChanged()"
-              placeholder="B + 6 số hoặc một phần mã…"
+              placeholder="Mã TP hoặc một phần mã…"
               autocomplete="off"
             />
             <button type="button" class="icon-btn" *ngIf="searchSku?.length" (click)="clearSearch()" title="Xóa tìm kiếm">
@@ -99,7 +99,7 @@
   <div class="md-modal-backdrop" *ngIf="showMorePopup" (click)="closeMore()">
     <div class="md-modal md-modal--wide" (click)="$event.stopPropagation()">
       <div class="md-modal__header">
-        <div class="title">More — Import &amp; hướng dẫn</div>
+        <div class="title">More — Import &amp; hướng dẫn (FG)</div>
         <button type="button" class="icon-x" (click)="closeMore()" title="Close">
           <i class="material-icons">close</i>
         </button>
@@ -113,19 +113,19 @@
           <div class="info-details__body">
             <p class="info-lead">Mỗi loại file dùng <strong>sheet đầu tiên</strong>, <strong>dòng 1 có thể là tiêu đề</strong> (sẽ bỏ qua nếu không đọc được dữ liệu).</p>
             <ul class="info-list">
-              <li><strong>Bảng kê xuất kho</strong> — Cột A: mã <code>B</code> + 6 số; B: ngày xuất; C: lượng. Mỗi dòng là một lần xuất. Lưu vào Firebase (collection <code>materials-export-manifest</code>), <strong>không ghi đè</strong> dữ liệu cũ.</li>
-              <li><strong>Aging</strong> — Cột A: mã hàng; B: aging (số <strong>tháng</strong>). Lưu một bản ghi duy nhất và <strong>ghi đè toàn bộ</strong> khi import mới (<code>materials-dashboard-aging/current</code>).</li>
-              <li><strong>Bảng kê nhập</strong> — Cột A: mã hàng; B: ngày nhập. Mỗi dòng một lần nhập. Lưu vào <code>materials-import-manifest</code>.</li>
+              <li><strong>Bảng kê xuất FG</strong> — Cột A: mã TP / mã hàng; B: ngày xuất; C: lượng. Mỗi dòng một lần xuất. Lưu vào <code>fgs-export-manifest</code> (thêm dòng). Hoạt động thực tế từ tab FG Out vẫn ghi <code>fg-export</code> và được heatmap cộng dồn.</li>
+              <li><strong>Aging</strong> — Cột A: mã; B: aging (tháng). Ghi đè toàn bộ tại <code>fgs-dashboard-aging/current</code>.</li>
+              <li><strong>Bảng kê nhập FG</strong> — Cột A: mã; B: ngày nhập. Lưu <code>fgs-import-manifest</code>.</li>
             </ul>
             <div class="template-downloads">
               <span class="template-downloads__label">Template (.xlsx):</span>
-              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadMaterialsTemplate('export')">
+              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadFgsTemplate('export')">
                 <i class="material-icons">download</i> Xuất kho
               </button>
-              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadMaterialsTemplate('aging')">
+              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadFgsTemplate('aging')">
                 <i class="material-icons">download</i> Aging
               </button>
-              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadMaterialsTemplate('inbound')">
+              <button type="button" class="btn btn-default btn-sm btn-dense" (click)="downloadFgsTemplate('inbound')">
                 <i class="material-icons">download</i> Nhập kho
               </button>
             </div>
@@ -133,8 +133,8 @@
         </details>
 
         <div class="section">
-          <div class="section-title">Import bảng kê xuất kho</div>
-          <div class="section-hint">Cột A = mã (Bxxxxxx), B = ngày xuất, C = lượng. Lưu Firebase (thêm dòng).</div>
+          <div class="section-title">Import bảng kê xuất FG</div>
+          <div class="section-hint">Cột A = mã TP, B = ngày xuất, C = lượng. Lưu Firebase <code>fgs-export-manifest</code> (thêm dòng).</div>
           <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportFileSelected($event)" [disabled]="importingExport || importingAging || importingInbound" />
           <div class="import-status" *ngIf="importingExport">
             <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
@@ -150,7 +150,7 @@
 
         <div class="section section--divider">
           <div class="section-title">Import Aging</div>
-          <div class="section-hint">Cột A = mã hàng, B = aging (số <strong>tháng</strong>). <strong>Ghi đè</strong> toàn bộ Aging đã lưu khi import thành công.</div>
+          <div class="section-hint">Cột A = mã TP, B = aging (số <strong>tháng</strong>). <strong>Ghi đè</strong> toàn bộ Aging tại <code>fgs-dashboard-aging/current</code>.</div>
           <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportAgingFileSelected($event)" [disabled]="importingExport || importingAging || importingInbound" />
           <div class="import-status" *ngIf="importingAging">
             <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
@@ -165,8 +165,8 @@
         </div>
 
         <div class="section section--divider">
-          <div class="section-title">Import bảng kê nhập</div>
-          <div class="section-hint">Cột A = mã hàng, B = ngày nhập. Lưu Firebase (thêm dòng).</div>
+          <div class="section-title">Import bảng kê nhập FG</div>
+          <div class="section-hint">Cột A = mã TP, B = ngày nhập. Lưu <code>fgs-import-manifest</code>.</div>
           <input type="file" accept=".xlsx,.xls,.csv" (change)="onImportInboundFileSelected($event)" [disabled]="importingExport || importingAging || importingInbound" />
           <div class="import-status" *ngIf="importingInbound">
             <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
@@ -382,9 +382,12 @@
             <div class="loc-tile__chips">
               <span
                 *ngFor="let it of t.items"
-                class="loc-chip"
+                class="loc-chip loc-chip--fgs-kh"
                 [class.loc-chip--stock]="it.stockChecked">
-                <span class="loc-chip__sku">{{ it.sku }}</span>
+                <span class="loc-chip__mat-kh">
+                  <span class="loc-chip__sku">{{ it.sku }}</span>
+                  <span class="loc-chip__kh">{{ it.khName || '—' }}</span>
+                </span>
                 <span class="loc-chip__n" *ngIf="it.exportCount > 0">{{ it.exportCount }}</span>
                 <span
                   *ngIf="it.agingFlag"

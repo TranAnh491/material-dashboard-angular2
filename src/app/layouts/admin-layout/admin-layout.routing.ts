@@ -41,6 +41,7 @@ import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
+import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { TabPermissionGuard } from '../../guards/tab-permission.guard';
@@ -56,6 +57,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'assistant',            component: AssistantComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-dashboard',  component: MaterialsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'fgs-dashboard',          component: FgsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-asm1',       component: MaterialsASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-asm2',       component: MaterialsASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inventory-overview-asm1', component: InventoryOverviewASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },

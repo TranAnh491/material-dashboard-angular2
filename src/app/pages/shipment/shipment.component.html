@@ -14,6 +14,9 @@
       <button type="button" class="nav-icon-btn" title="Calendar" (click)="openSchedulesFromSidebar()">
         <i class="material-icons">event</i>
       </button>
+      <button type="button" class="nav-icon-btn nav-icon-kh" title="Danh mục KH (khách hàng)" (click)="openKhFilterDialog()">
+        <span class="sidebar-nav-kh" aria-hidden="true">KH</span>
+      </button>
       <button type="button" class="nav-icon-btn" title="Analytics" (click)="openChartFromSidebar()">
         <i class="material-icons">bar_chart</i>
       </button>
@@ -579,6 +582,52 @@
   </div>
 </div>
 
+<!-- Danh mục KH (khách hàng): lọc bảng + import -->
+<div class="custom-modal" [class.show]="showKhFilterDialog" [style.display]="showKhFilterDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeKhFilterDialog()"></div>
+  <div class="modal-container" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">contacts</i>
+        Danh mục KH
+      </h5>
+      <button type="button" class="close-btn" (click)="closeKhFilterDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted" style="margin-bottom: 12px; font-size: 13px;">
+        Tên KH lấy từ import (Mã TP → Tên KH) hoặc từ mã khách trên dòng shipment. Dùng để lọc bảng hoặc hiển thị trong lịch / box ngày.
+      </p>
+      <p style="font-size: 13px; margin-bottom: 12px;">
+        Đang có <strong>{{ customerMappingItems.length }}</strong> dòng mapping •
+        <strong>{{ uniqueKhNamesList.length }}</strong> tên KH khác nhau
+      </p>
+      <div class="input-group" style="margin-bottom: 12px;">
+        <label class="input-label">Lọc bảng theo tên KH</label>
+        <select class="form-input" [(ngModel)]="selectedKhInDialog">
+          <option value="">— Tất cả —</option>
+          <option *ngFor="let name of uniqueKhNamesList" [value]="name">{{ name }}</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-outline-secondary" style="width: 100%; margin-bottom: 8px;" (click)="importCustomerKhCatalog()">
+        <i class="material-icons">file_upload</i>
+        Import Excel danh mục KH
+      </button>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="clearKhCustomerFilter()">
+        <i class="material-icons">filter_alt_off</i>
+        Bỏ lọc
+      </button>
+      <button type="button" class="btn btn-apply" (click)="applyKhCustomerFilterFromDialog()">
+        <i class="material-icons">check</i>
+        Áp dụng lọc
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- More menu (popup) -->
 <div class="custom-modal more-menu-modal-root" [class.show]="isDropdownOpen" [style.display]="isDropdownOpen ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="closeDropdown()"></div>
@@ -593,45 +642,90 @@
       </button>
     </div>
     <div class="modal-body more-menu-modal-body">
-      <button type="button" class="more-menu-item" (click)="downloadTemplate(); closeDropdown()">
-        <i class="material-icons">download</i>
-        <span>Tải Template Shipment</span>
+      <p class="more-menu-intro">
+        Các lệnh bổ sung cho Shipment. Chọn một mục bên dưới; mỗi dòng có mô tả ngắn về chức năng.
+      </p>
+
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="downloadTemplate(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">download</i>
+          <span class="more-menu-item__title">Tải Template Shipment</span>
+        </div>
+        <p class="more-menu-item__hint">Tải file Excel mẫu đúng cấu trúc cột để điền dữ liệu rồi nhập hàng loạt (Import File trên thanh công cụ).</p>
       </button>
-      <button type="button" class="more-menu-item" (click)="importCustomerKhCatalog(); closeDropdown()">
-        <i class="material-icons">contacts</i>
-        <span>Import danh mục KH</span>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="downloadCustomerKhCatalogTemplate(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">description</i>
+          <span class="more-menu-item__title">Tải Template danh mục KH</span>
+        </div>
+        <p class="more-menu-item__hint">File Excel mẫu: cột <strong>Mã TP</strong>, cột <strong>Tên KH</strong> (dòng đầu là tiêu đề). Điền dữ liệu rồi dùng <strong>Import danh mục KH</strong> bên dưới.</p>
       </button>
-      <div class="more-menu-divider"></div>
-      <button type="button" class="more-menu-item" (click)="showTimeRangeDialog = true; closeDropdown()">
-        <i class="material-icons">schedule</i>
-        <span>Chọn thời gian</span>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="importCustomerKhCatalog(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">contacts</i>
+          <span class="more-menu-item__title">Import danh mục KH</span>
+        </div>
+        <p class="more-menu-item__hint">Chọn file Excel: cột A = Mã TP, cột B = Tên KH (có thể bỏ qua dòng tiêu đề). Ghi vào Firebase <strong>fg-customer-mapping</strong> theo 7 ký tự đầu mã TP.</p>
       </button>
-      <button type="button" class="more-menu-item" (click)="showAddShipmentDialog = true; closeDropdown()">
-        <i class="material-icons">add</i>
-        <span>Add Shipment</span>
-      </button>
-      <div class="more-menu-divider"></div>
-      <button type="button" class="more-menu-item" [class.more-menu-item-active]="showHidden" (click)="toggleShowHidden(); closeDropdown()">
-        <i class="material-icons">{{ showHidden ? 'visibility' : 'visibility_off' }}</i>
-        <span>{{ showHidden ? 'Đang hiện cả shipment đã ẩn' : 'Hiện shipment đã ẩn' }}<ng-container *ngIf="getHiddenShipmentsCount() > 0"> ({{ getHiddenShipmentsCount() }})</ng-container></span>
-      </button>
-      <div class="more-menu-divider"></div>
-      <button type="button" class="more-menu-item" (click)="exportToExcel(); closeDropdown()">
-        <i class="material-icons">file_download</i>
-        <span>Export to Excel</span>
-      </button>
-      <button type="button" class="more-menu-item" (click)="exportToExcelByMonth(); closeDropdown()">
-        <i class="material-icons">calendar_today</i>
-        <span>Tải về theo tháng</span>
-      </button>
-      <button type="button" class="more-menu-item" (click)="downloadDayPreReport(); closeDropdown()">
-        <i class="material-icons">assessment</i>
-        <span>Báo cáo ngày chuẩn bị</span>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="openKhFilterDialog(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">filter_list</i>
+          <span class="more-menu-item__title">Danh mục KH &amp; lọc</span>
+        </div>
+        <p class="more-menu-item__hint">Xem danh sách tên KH đã import, lọc bảng shipment theo KH, hoặc mở import từ đây.</p>
       </button>
       <div class="more-menu-divider"></div>
-      <button type="button" class="more-menu-item more-menu-item-danger" *ngIf="filteredShipments.length > 0" (click)="deleteAllShipments(); closeDropdown()">
-        <i class="material-icons">delete_forever</i>
-        <span>Xóa Tất Cả</span>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="showTimeRangeDialog = true; closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">schedule</i>
+          <span class="more-menu-item__title">Chọn thời gian</span>
+        </div>
+        <p class="more-menu-item__hint">Mở hộp thoại chọn khoảng ngày (từ–đến) để lọc danh sách shipment theo thời gian.</p>
+      </button>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="showAddShipmentDialog = true; closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">add</i>
+          <span class="more-menu-item__title">Add Shipment</span>
+        </div>
+        <p class="more-menu-item__hint">Mở form thêm lô shipment mới (mã shipment, mã TP, số lượng, ngày…).</p>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" [class.more-menu-item-active]="showHidden" (click)="toggleShowHidden(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">{{ showHidden ? 'visibility' : 'visibility_off' }}</i>
+          <span class="more-menu-item__title">{{ showHidden ? 'Đang hiện cả shipment đã ẩn' : 'Hiện shipment đã ẩn' }}<ng-container *ngIf="getHiddenShipmentsCount() > 0"> ({{ getHiddenShipmentsCount() }})</ng-container></span>
+        </div>
+        <p class="more-menu-item__hint">Bật/tắt hiển thị các dòng đã đánh dấu ẩn (ví dụ lô đã ship lâu tự ẩn). Tắt thì chỉ xem các dòng đang hiện bình thường.</p>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="exportToExcel(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">file_download</i>
+          <span class="more-menu-item__title">Export to Excel</span>
+        </div>
+        <p class="more-menu-item__hint">Xuất ra file Excel đúng các dòng shipment đang được lọc/hiển thị trên bảng (theo ngày, tìm kiếm, v.v.).</p>
+      </button>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="exportToExcelByMonth(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">calendar_today</i>
+          <span class="more-menu-item__title">Tải về theo tháng</span>
+        </div>
+        <p class="more-menu-item__hint">Nhập tháng/năm trong hộp thoại (định dạng MM/YYYY hoặc MM-YYYY) rồi tải file Excel theo các shipment có CS Date (requestDate) trong tháng đó.</p>
+      </button>
+      <button type="button" class="more-menu-item more-menu-item--with-hint" (click)="downloadDayPreReport(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">assessment</i>
+          <span class="more-menu-item__title">Báo cáo ngày chuẩn bị</span>
+        </div>
+        <p class="more-menu-item__hint">Tải file Excel thống kê carton theo nhóm ngày chuẩn bị (Day Pre) so với Dispatch Date, gom theo tháng. Chỉ tính các dòng có Dispatch Date, Full Date và số carton dương.</p>
+      </button>
+      <div class="more-menu-divider"></div>
+      <button type="button" class="more-menu-item more-menu-item--with-hint more-menu-item-danger" *ngIf="filteredShipments.length > 0" (click)="deleteAllShipments(); closeDropdown()">
+        <div class="more-menu-item__row">
+          <i class="material-icons">delete_forever</i>
+          <span class="more-menu-item__title">Xóa Tất Cả</span>
+        </div>
+        <p class="more-menu-item__hint more-menu-item__hint--danger">Xóa toàn bộ bản ghi trong collection shipment trên Firebase (không chỉ dòng đang lọc). Có hộp thoại xác nhận; không hoàn tác.</p>
       </button>
     </div>
   </div>
@@ -1143,8 +1237,13 @@
               ></span>
             </div>
           </div>
-          <div class="schedule-box-code">{{ b.shipmentCode }}</div>
-          <div class="schedule-box-kh" *ngIf="b.khName">{{ b.khName }}</div>
+          <div class="schedule-box-shipment">{{ b.shipmentCode }}</div>
+          <div class="schedule-box-kh-mat-list" *ngIf="b.lots?.length">
+            <div class="schedule-box-kh-mat-row" *ngFor="let lot of b.lots">
+              <span class="schedule-box-kh-side" [title]="lot.khName || '—'">{{ lot.khName || '—' }}</span>
+              <span class="schedule-box-mat-side" [title]="lot.materialCode">{{ lot.materialCode }}</span>
+            </div>
+          </div>
           <div class="schedule-box-meta">
             <div>Carton: <strong>{{ b.totalCarton | number:'1.0-0':'en-US' }}</strong></div>
             <div>Lô: <strong>{{ b.lots.length }}</strong> • Pallet: <strong>{{ b.totalPallet | number:'1.0-0':'en-US' }}</strong></div>
@@ -1185,6 +1284,7 @@
         <table class="schedule-detail-table">
           <thead>
             <tr>
+              <th class="col-kh">KH</th>
               <th class="col-material">Mã thành phẩm</th>
               <th class="col-pallet text-right">Số lượng pallet</th>
               <th class="col-carton text-right">Số thùng</th>
@@ -1196,6 +1296,7 @@
                 [class.pending-row]="r.status === 'Chờ soạn'"
                 [class.inprogress-row]="r.status === 'Đang soạn'"
                 [class.missing-row]="r.status === 'Chưa Đủ'">
+              <td class="col-kh">{{ r.khName || '—' }}</td>
               <td class="col-material">{{ r.materialCode }}</td>
               <td class="col-pallet text-right">{{ r.qtyPallet | number:'1.0-0':'en-US' }}</td>
               <td class="col-carton text-right">{{ r.carton | number:'1.0-0':'en-US' }}</td>

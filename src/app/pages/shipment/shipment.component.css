@@ -71,6 +71,14 @@
   color: #2563eb;
 }
 
+.nav-icon-kh .sidebar-nav-kh {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(15, 23, 42, 0.78);
+  line-height: 1;
+}
+
 .sidebar-bottom {
   margin-top: auto;
   display: flex;
@@ -714,12 +722,23 @@
 }
 
 .more-menu-modal {
-  max-width: 400px;
+  max-width: 480px;
   width: 92%;
 }
 
 .more-menu-modal-body {
   padding: 8px 0 12px;
+}
+
+.more-menu-intro {
+  margin: 0 20px 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #424242;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
 }
 
 .more-menu-item {
@@ -735,6 +754,39 @@
   text-align: left;
   cursor: pointer;
   transition: background-color 0.15s ease;
+}
+
+.more-menu-item--with-hint {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.more-menu-item__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.more-menu-item__title {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.more-menu-item__hint {
+  margin: 0;
+  padding-left: 38px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #616161;
+  font-weight: 400;
+}
+
+.more-menu-item__hint--danger {
+  color: #b71c1c;
 }
 
 .more-menu-item:hover {
@@ -758,6 +810,10 @@
 }
 
 .more-menu-item-danger {
+  color: #c62828;
+}
+
+.more-menu-item-danger .more-menu-item__title {
   color: #c62828;
 }
 
@@ -2282,21 +2338,61 @@ tr.checked-row:hover {
 .dot-delay { background: rgba(156, 39, 176, 0.92); }
 .dot-other { background: rgba(96, 96, 96, 0.75); }
 
-.schedule-box-code {
+.schedule-box-shipment {
   margin-top: 6px;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 900;
   color: #000;
+  letter-spacing: 0.01em;
 }
 
-.schedule-box-kh {
-  margin-top: 2px;
+.schedule-box-kh-mat-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.schedule-box-kh-mat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 12px;
-  font-weight: 700;
-  color: #000;
-  opacity: 0.85;
+  line-height: 1.25;
+  padding: 4px 0 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
 }
 
+.schedule-box-kh-mat-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.schedule-box-kh-side {
+  flex: 1 1 50%;
+  min-width: 0;
+  text-align: left;
+  font-weight: 700;
+  color: #0d47a1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-box-mat-side {
+  flex: 0 1 50%;
+  text-align: right;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .schedule-box-meta {
   margin-top: 8px;
   font-size: 12px;
@@ -2340,7 +2436,7 @@ tr.checked-row:hover {
 .schedule-detail-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* ép 4 cột vừa popup */
+  table-layout: fixed; /* ép cột vừa popup */
 }
 
 .schedule-detail-table th,
@@ -2373,25 +2469,25 @@ tr.checked-row:hover {
 }
 
 .schedule-detail-table td.col-kh,
-.schedule-detail-table td.col-shipment {
+.schedule-detail-table td.col-material {
   vertical-align: top;
   font-weight: 800;
 }
 
 /* Shipment “Chờ soạn” nổi bật màu cam */
-.schedule-detail-table tbody tr.pending-row td.col-shipment {
+.schedule-detail-table tbody tr.pending-row td.col-material {
   font-weight: 800;
   background: rgba(255, 152, 0, 0.16);
 }
 
 /* Đang soạn: vàng nhạt */
-.schedule-detail-table tbody tr.inprogress-row td.col-shipment {
+.schedule-detail-table tbody tr.inprogress-row td.col-material {
   font-weight: 800;
   background: rgba(249, 168, 37, 0.16);
 }
 
 /* Chưa đủ: đỏ nhạt */
-.schedule-detail-table tbody tr.missing-row td.col-shipment {
+.schedule-detail-table tbody tr.missing-row td.col-material {
   font-weight: 800;
   background: rgba(211, 47, 47, 0.12);
 }
@@ -2422,14 +2518,12 @@ tr.checked-row:hover {
   background: rgba(33, 150, 243, 0.18);
 }
 
-/* Tỷ lệ 4 cột để không cần kéo ngang */
-/* Tỷ lệ 5 cột để không cần kéo ngang */
-.schedule-detail-table .col-kh { width: 18%; }
-.schedule-detail-table .col-shipment { width: 26%; }
-.schedule-detail-table .col-material { width: 18%; }
+/* Tỷ lệ 5 cột: KH | Mã TP | Pallet | Thùng | Trạng thái */
+.schedule-detail-table .col-kh { width: 22%; }
+.schedule-detail-table .col-material { width: 24%; }
 .schedule-detail-table .col-pallet { width: 14%; }
-.schedule-detail-table .col-carton { width: 12%; }
-.schedule-detail-table .col-status { width: 12%; }
+.schedule-detail-table .col-carton { width: 14%; }
+.schedule-detail-table .col-status { width: 26%; }
 
 .status-pill {
   display: inline-block;

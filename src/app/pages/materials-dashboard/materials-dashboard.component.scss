@@ -1017,6 +1017,173 @@
     }
   }
 
+  /* Fill: Location — 1 thẻ / vị trí, bên trong các mã hàng */
+  .location-cluster-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    align-content: start;
+    padding: 10px 6px;
+    width: 100%;
+    min-height: 240px;
+  }
+
+  .loc-tile {
+    position: relative;
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+    padding: 10px 10px 12px;
+    min-height: 100px;
+    outline: 1px solid rgba(148, 163, 184, 0.2);
+    transition: transform 100ms ease, box-shadow 100ms ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+    }
+
+    &__head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+    }
+
+    &__pin {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: rgba(15, 23, 42, 0.75);
+      flex-shrink: 0;
+    }
+
+    &__loc-name {
+      font-weight: 700;
+      font-size: 13px;
+      color: #0f172a;
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+    }
+
+    &__badge {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: #334155;
+      background: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+
+    &__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+  }
+
+  .loc-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 6px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    font-size: 11px;
+    color: #0f172a;
+    max-width: 100%;
+
+    /** FGs Dashboard — Location: trái mã hàng (một dòng), phải KH */
+    &--fgs-kh {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      row-gap: 2px;
+      width: 100%;
+      box-sizing: border-box;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    &__mat-kh {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      flex: 1 1 100%;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+    }
+
+    &--fgs-kh &__kh {
+      flex: 0 1 auto;
+      min-width: 0;
+      text-align: right;
+      font-size: 10px;
+      font-weight: 700;
+      color: #1e3a8a;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &--stock {
+      box-shadow: 0 0 0 2px var(--md-stock-ring, #4ade80);
+    }
+
+    &__sku {
+      font-weight: 600;
+      word-break: break-all;
+    }
+
+    /** Chỉ FGs Location: mã hàng luôn một dòng (không break giữa ký tự / dấu _). */
+    &--fgs-kh &__sku {
+      word-break: normal;
+      overflow-wrap: normal;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      min-width: min-content;
+      text-align: left;
+    }
+
+    &__n {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    &__aging {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      margin-left: 2px;
+      flex-shrink: 0;
+
+      &--green {
+        background: var(--md-aging-green, #22c55e);
+      }
+      &--yellow {
+        background: var(--md-aging-yellow, #eab308);
+      }
+      &--orange {
+        background: var(--md-aging-orange, #f97316);
+      }
+      &--red {
+        background: var(--md-aging-red, #ef4444);
+      }
+    }
+  }
+
   .heatmap-grid {
     display: grid;
     grid-auto-rows: var(--md-cell, 28px);

@@ -57,6 +57,11 @@ export class MaterialsDashboardService {
     return out;
   }
 
+  /** Vị trí kho RM: ưu tiên `location`, fallback `viTri` (dữ liệu cũ). */
+  private extractRmInventoryLocation(d: any): string {
+    return String(d?.location ?? d?.viTri ?? '').trim().toUpperCase();
+  }
+
   private toDateUnsafe(v: any): Date | null {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -104,7 +109,7 @@ export class MaterialsDashboardService {
         const sku = `B${m[1]}`;
         skus.add(sku);
 
-        const loc = String(d?.location ?? '').trim().toUpperCase();
+        const loc = this.extractRmInventoryLocation(d);
         if (!loc) continue;
         let lc = countsBySku.get(sku);
         if (!lc) {
@@ -142,7 +147,7 @@ export class MaterialsDashboardService {
         const m = /B(\d{6})/.exec(code);
         if (!m) continue;
         const sku = `B${m[1]}`;
-        const loc = String(d?.location ?? '').trim().toUpperCase();
+        const loc = this.extractRmInventoryLocation(d);
         if (!loc) continue;
 
         let lc = countsBySku.get(sku);

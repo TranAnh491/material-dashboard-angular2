@@ -121,6 +121,7 @@ export class TabPermissionGuard implements CanActivate {
       '/assistant': 'assistant',
       '/pd-control': 'pd-control',
       '/materials-dashboard': 'materials-dashboard',
+      '/fgs-dashboard': 'fgs-dashboard',
       '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
       

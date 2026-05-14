@@ -13,6 +13,7 @@ import { DashboardComponent } from '../../dashboard/dashboard.component';
 import { AssistantComponent } from '../../pages/assistant/assistant.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
+import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -117,6 +118,7 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
     AssistantComponent,
     MenuComponent,
     MaterialsDashboardComponent,
+    FgsDashboardComponent,
     KpiReportsComponent,
     EquipmentComponent,
     InboundFgsComponent,

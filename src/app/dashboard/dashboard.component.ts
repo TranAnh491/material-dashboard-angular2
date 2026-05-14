@@ -300,6 +300,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM FG' },
     { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
+    { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', category: 'ASM FG' },
+    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', category: 'ASM FG' },
 

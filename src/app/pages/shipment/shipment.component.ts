@@ -105,7 +105,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   scheduleDetailGroups: Array<{
     khName: string;
     shipmentCode: string;
-    rows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+    rows: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
   }> = [];
 
   /** Schedules → click day: mỗi shipment = 1 box */
@@ -115,7 +115,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     khName: string;
     totalCarton: number;
     totalPallet: number;
-    lots: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+    lots: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
     statusDots: Array<{ status: string; css: string }>;
   }> = [];
 
@@ -126,7 +126,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     khName: string;
     totalCarton: number;
     totalPallet: number;
-    lots: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+    lots: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
     statusDots: Array<{ status: string; css: string }>;
   } = null;
 
@@ -2500,7 +2500,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const groups: Array<{
       khName: string;
       shipmentCode: string;
-      rows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+      rows: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
       sumCarton: number;
     }> = [];
 
@@ -2510,7 +2510,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       khName: string;
       totalCarton: number;
       totalPallet: number;
-      lots: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }>;
+      lots: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
       statusDots: Array<{ status: string; css: string }>;
     }> = [];
 
@@ -2525,19 +2525,36 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         byMat.get(mat)!.push(r);
       }
 
-      const detailRows: Array<{ materialCode: string; qtyPallet: number; carton: number; status: string }> = [];
+      const detailRows: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }> = [];
       for (const [mat, matGroup] of byMat.entries()) {
         const carton = matGroup.reduce((s, it) => s + (Number((it as any)?.carton) || 0), 0);
         const qtyPallet = matGroup.reduce((mx, it) => Math.max(mx, Number((it as any)?.qtyPallet) || 0), 0);
         const status = pickStatus(matGroup);
-        detailRows.push({ materialCode: mat || '—', qtyPallet, carton, status });
+        let custFromRows = '';
+        for (const it of matGroup) {
+          const c = String((it as any)?.customerCode || '').trim();
+          if (c) {
+            custFromRows = c;
+            break;
+          }
+        }
+        const rowKh =
+          (this.getTenKhFromMaterialCode(mat) || '').trim() ||
+          (this.getCustomerNameFromMapping(custFromRows) || '').trim() ||
+          '';
+        detailRows.push({ materialCode: mat || '—', khName: rowKh, qtyPallet, carton, status });
       }
 
       // sort inside shipment: carton desc then material
       detailRows.sort((a, b) => (b.carton - a.carton) || a.materialCode.localeCompare(b.materialCode, 'vi'));
 
+      const uniqKh = [...new Set(detailRows.map((r) => r.khName).filter(Boolean))];
       const khName =
-        this.getTenKhFromMaterialCode(detailRows[0]?.materialCode) ||
+        (uniqKh.length === 1
+          ? uniqKh[0]
+          : uniqKh.length > 1
+            ? uniqKh.slice(0, 2).join(' · ') + (uniqKh.length > 2 ? ' …' : '')
+            : '') ||
         this.getCustomerNameFromMapping((shipRows?.[0] as any)?.customerCode || '') ||
         '';
 
@@ -3130,6 +3147,28 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
     XLSX.writeFile(wb, 'Shipment_Template.xlsx');
+  }
+
+  /**
+   * Template danh mục KH — cột A: Mã TP, cột B: Tên KH (đúng format Import danh mục KH; dòng 1 là tiêu đề).
+   * Lưu lên collection fg-customer-mapping (map theo 7 ký tự đầu mã TP).
+   */
+  downloadCustomerKhCatalogTemplate(): void {
+    const templateData = [
+      {
+        'Mã TP': 'ZZZZZZ1',
+        'Tên KH': 'Dòng mẫu — xóa hoặc sửa trước khi Import (tránh import nhầm vào Firebase)'
+      },
+      {
+        'Mã TP': 'P001234',
+        'Tên KH': 'Ví dụ: Tên khách hàng gắn với mã TP'
+      }
+    ];
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+    const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(templateData);
+    ws['!cols'] = [{ wch: 16 }, { wch: 36 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Danh mục KH');
+    XLSX.writeFile(wb, 'Danh_muc_KH_Template.xlsx');
   }
 
   // Export to Excel
