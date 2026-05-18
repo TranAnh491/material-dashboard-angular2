@@ -367,7 +367,9 @@
                   <span class="putaway-heatmap__week">{{ col.week }}</span>
                   <span class="putaway-heatmap__cnt">{{ col.count }}</span>
                 </div>
-                <div class="putaway-heatmap__cells">
+                <div
+                  class="putaway-heatmap__cells"
+                  [style.--putaway-grid-cols]="putawayGridColumnCount(col.cells.length)">
                   <div
                     *ngFor="let c of col.cells"
                     class="putaway-heatmap__cell"

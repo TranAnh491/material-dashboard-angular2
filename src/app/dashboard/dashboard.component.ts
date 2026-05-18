@@ -77,6 +77,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** SKU không thuộc 8 tuần hoặc thiếu ngày — nhãn cột heatmap/modal, luôn đứng trước các tuần Wxx. */
   private readonly putawayLateWeekLabel = 'Late';
+  /** Putaway widget: tối đa 18 hàng/cột; vượt thì thêm cột ngang. */
+  private readonly putawayMaxRowsPerColumn = 18;
 
   /**
    * Tóm tắt tháng hiện tại (Done/Tổng) — cùng nguồn với Cloud Function `notifyDashboardZaloWeekdays1130`
@@ -2024,6 +2026,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const visible = cols.filter((c) => c.count > 0);
     this.iqcHeatmapWeeks = visible;
     this.iqcWeekData = visible.map((c) => ({ week: c.week, count: c.count }));
+  }
+
+  /** Số cột lưới (18 hàng/cột) cho một tuần Putaway. */
+  putawayGridColumnCount(cellCount: number): number {
+    if (cellCount <= 0) return 0;
+    return Math.ceil(cellCount / this.putawayMaxRowsPerColumn);
   }
 
   // Helper: Get ISO week number
