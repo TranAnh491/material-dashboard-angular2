@@ -55,6 +55,14 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   tempLabelError: string = '';
   isPrintingTempLabels: boolean = false;
 
+  // In số (tem 57×32mm hoặc 100×100mm, từ số bắt đầu đến số kết thúc)
+  showNumberLabelModal = false;
+  numberLabelSizeMm: 57 | 100 = 100;
+  numberLabelStart = 1;
+  numberLabelEnd = 1;
+  numberLabelError = '';
+  isPrintingNumberLabels = false;
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
@@ -587,5 +595,163 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     } finally {
       this.isPrintingTempLabels = false;
     }
+  }
+
+  // ====== In số (57×32mm hoặc 100×100mm) ======
+
+  get numberLabelSizeDisplay(): string {
+    return this.numberLabelSizeMm === 57 ? '57mm × 32mm' : '100mm × 100mm';
+  }
+
+  get numberLabelPrintCount(): number | null {
+    const start = Math.floor(Number(this.numberLabelStart));
+    const end = Math.floor(Number(this.numberLabelEnd));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < start) {
+      return null;
+    }
+    return end - start + 1;
+  }
+
+  get canPrintNumberLabels(): boolean {
+    const count = this.numberLabelPrintCount;
+    return count !== null && count >= 1 && count <= 9999;
+  }
+
+  private numberLabelDimensions(sizeMm: 57 | 100): { widthMm: number; heightMm: number } {
+    return sizeMm === 57 ? { widthMm: 57, heightMm: 32 } : { widthMm: 100, heightMm: 100 };
+  }
+
+  openNumberLabelModal(): void {
+    this.numberLabelSizeMm = 100;
+    this.numberLabelStart = 1;
+    this.numberLabelEnd = 1;
+    this.numberLabelError = '';
+    this.showNumberLabelModal = true;
+  }
+
+  closeNumberLabelModal(): void {
+    this.showNumberLabelModal = false;
+    this.numberLabelError = '';
+  }
+
+  setNumberLabelSize(sizeMm: 57 | 100): void {
+    this.numberLabelSizeMm = sizeMm;
+  }
+
+  printNumberLabels(): void {
+    const start = Math.floor(Number(this.numberLabelStart));
+    const end = Math.floor(Number(this.numberLabelEnd));
+    if (start < 1 || end < 1) {
+      this.numberLabelError = 'Số bắt đầu và số kết thúc phải ≥ 1';
+      return;
+    }
+    if (end < start) {
+      this.numberLabelError = 'Số kết thúc phải lớn hơn hoặc bằng số bắt đầu';
+      return;
+    }
+    const qty = end - start + 1;
+    if (qty > 9999) {
+      this.numberLabelError = 'Tối đa 9999 tem mỗi lần in';
+      return;
+    }
+    this.numberLabelError = '';
+    this.isPrintingNumberLabels = true;
+
+    try {
+      const sizeMm = this.numberLabelSizeMm;
+      const { widthMm, heightMm } = this.numberLabelDimensions(sizeMm);
+      const labelHtml = Array.from({ length: qty }, (_, i) => {
+        const n = start + i;
+        const fontSize = this.numberLabelFontSize(n, sizeMm);
+        return `
+        <div class="number-label-container">
+          <div class="number-label-value" style="font-size: ${fontSize}">${n}</div>
+        </div>`;
+      }).join('');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>In số ${start}–${end} (${widthMm}×${heightMm}mm)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, 'Helvetica Neue', sans-serif;
+      padding: 0;
+      margin: 0;
+      background: white;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; }
+      @page { margin: 0 !important; size: ${widthMm}mm ${heightMm}mm !important; }
+      .number-label-container {
+        width: ${widthMm}mm !important;
+        height: ${heightMm}mm !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+      .number-label-container:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+    }
+    .number-label-container {
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #000;
+      page-break-inside: avoid;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .number-label-value {
+      font-weight: 900;
+      line-height: 0.88;
+      color: #000;
+      text-align: center;
+      white-space: nowrap;
+      max-width: 90%;
+      max-height: 90%;
+      letter-spacing: -0.04em;
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 400);
+      this.closeNumberLabelModal();
+    } catch (err) {
+      console.error('Error printing number labels:', err);
+      alert('Lỗi khi in tem số. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingNumberLabels = false;
+    }
+  }
+
+  /** Cỡ chữ (mm) để số chiếm ~90% diện tích tem, tự co theo số chữ số. */
+  private numberLabelFontSize(n: number, sizeMm: 57 | 100): string {
+    const digits = String(n).length;
+    const { widthMm, heightMm } = this.numberLabelDimensions(sizeMm);
+    const boxW = widthMm * 0.9;
+    const boxH = heightMm * 0.9;
+    const digitWidthEm = 0.58;
+    const fromHeight = boxH;
+    const fromWidth = boxW / (digits * digitWidthEm);
+    const fontMm = Math.min(fromHeight, fromWidth) * 0.98;
+    return `${Math.max(4, Math.round(fontMm * 10) / 10)}mm`;
   }
 }

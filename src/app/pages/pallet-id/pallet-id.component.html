@@ -29,6 +29,52 @@
       <i class="material-icons">local_offer</i>
       <span>{{ isPrintingTempLabels ? 'Đang in...' : 'Tạo tem tạm' }}</span>
     </button>
+
+    <button class="btn-number-label" (click)="openNumberLabelModal()" [disabled]="isPrintingNumberLabels">
+      <i class="material-icons">pin</i>
+      <span>{{ isPrintingNumberLabels ? 'Đang in...' : 'In số' }}</span>
+    </button>
+  </div>
+
+  <!-- Modal In số -->
+  <div class="modal-overlay" *ngIf="showNumberLabelModal" (click)="closeNumberLabelModal()">
+    <div class="modal-content number-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>In số</h3>
+        <button class="btn-close" (click)="closeNumberLabelModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="number-label-hint">Chọn kích cỡ tem, nhập <strong>số bắt đầu</strong> và <strong>số kết thúc</strong> — mỗi tem in một số trong khoảng đó (ví dụ 200 → 500).</p>
+        <div class="number-label-size-row">
+          <span class="number-label-size-label">Kích cỡ tem:</span>
+          <button type="button" class="number-label-size-btn" [class.is-active]="numberLabelSizeMm === 57" (click)="setNumberLabelSize(57)">57mm × 32mm</button>
+          <button type="button" class="number-label-size-btn" [class.is-active]="numberLabelSizeMm === 100" (click)="setNumberLabelSize(100)">100mm × 100mm</button>
+        </div>
+        <div class="number-label-range-row">
+          <div class="number-label-input-wrap">
+            <label class="number-label-qty-label" for="numberLabelStart">Số bắt đầu</label>
+            <input id="numberLabelStart" type="number" [(ngModel)]="numberLabelStart" min="1" class="number-label-input" placeholder="Ví dụ: 200">
+          </div>
+          <div class="number-label-input-wrap">
+            <label class="number-label-qty-label" for="numberLabelEnd">Số kết thúc</label>
+            <input id="numberLabelEnd" type="number" [(ngModel)]="numberLabelEnd" min="1" class="number-label-input" placeholder="Ví dụ: 500">
+          </div>
+        </div>
+        <p class="number-label-preview text-muted" *ngIf="numberLabelPrintCount">
+          Sẽ in: <strong>{{ numberLabelStart | number }}</strong> → <strong>{{ numberLabelEnd | number }}</strong> ({{ numberLabelSizeDisplay }}, {{ numberLabelPrintCount | number }} tem)
+        </p>
+        <p class="number-label-error" *ngIf="numberLabelError">{{ numberLabelError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeNumberLabelModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="printNumberLabels()" [disabled]="isPrintingNumberLabels || !canPrintNumberLabels">
+          <i class="material-icons">print</i>
+          In tem
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Modal nhập số lượng tem tạm -->
