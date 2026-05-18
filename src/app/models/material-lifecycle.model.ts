@@ -89,6 +89,8 @@ export interface WorkOrder {
   notes?: string;
   createdDate: Date;
   lastUpdated: Date;
+  /** Thời điểm chuyển sang Kitting (nếu có) */
+  kittingStartedAt?: Date;
   // New fields for the updated format
   isUrgent?: boolean;
   missingMaterials?: string;

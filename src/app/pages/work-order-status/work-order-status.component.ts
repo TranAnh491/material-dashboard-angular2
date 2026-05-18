@@ -101,6 +101,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     { value: 'TUẤN', label: 'Tuấn' },
     { value: 'VŨ', label: 'Vũ' },
     { value: 'PHÚC', label: 'Phúc' },
+    { value: 'TRÍ', label: 'Trí' },
+    { value: 'ĐÔNG', label: 'Đông' },
+    { value: 'THỊNH', label: 'Thịnh' },
+    { value: 'ÂN', label: 'Ân' },
+    { value: 'HOÀNG', label: 'Hoàng' },
   ];
 
   get displayedWorkOrders(): WorkOrder[] {
@@ -556,6 +561,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
       if (processedWo.lastUpdated && typeof processedWo.lastUpdated === 'object' && processedWo.lastUpdated !== null && 'toDate' in processedWo.lastUpdated) {
         processedWo.lastUpdated = (processedWo.lastUpdated as any).toDate();
+      }
+      if (processedWo.kittingStartedAt && typeof processedWo.kittingStartedAt === 'object' && processedWo.kittingStartedAt !== null && 'toDate' in processedWo.kittingStartedAt) {
+        processedWo.kittingStartedAt = (processedWo.kittingStartedAt as any).toDate();
       }
 
       if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
@@ -1079,7 +1087,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       // If changing from DONE to other status, remove completed flag
       const oldStatus = workOrder.status;
       const now = new Date();
-      let updatedWorkOrder = { ...workOrder, status: newStatus, lastUpdated: now };
+      let updatedWorkOrder: WorkOrder = { ...workOrder, status: newStatus, lastUpdated: now };
+      if (newStatus === WorkOrderStatus.KITTING && oldStatus !== WorkOrderStatus.KITTING) {
+        updatedWorkOrder.kittingStartedAt = now;
+      }
       
       if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
         updatedWorkOrder.isCompleted = false;
@@ -1148,6 +1159,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       lastUpdated: new Date() 
     };
     
+    if (field === 'status' && processedValue === WorkOrderStatus.KITTING && workOrder.status !== WorkOrderStatus.KITTING) {
+      updatedWorkOrder.kittingStartedAt = new Date();
+    }
+
     // If updating status field and changing from DONE to other status, remove completed flag
     if (field === 'status' && workOrder.status === WorkOrderStatus.DONE && processedValue !== WorkOrderStatus.DONE) {
       updatedWorkOrder.isCompleted = false;

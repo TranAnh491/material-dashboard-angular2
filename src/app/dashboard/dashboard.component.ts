@@ -24,11 +24,16 @@ interface WorkOrderStatusRow {
 /** Heatmap weekly: mỗi ô = 1 WO theo trạng thái */
 type WoHeatKind = 'done' | 'waiting' | 'kitting' | 'ready' | 'delay';
 
+interface WoHeatmapCell {
+  kind: WoHeatKind;
+  tooltip: string;
+}
+
 interface WoHeatmapDayCol {
   label: string;
   weekday: string;
   total: number;
-  cells: { kind: WoHeatKind }[];
+  cells: WoHeatmapCell[];
 }
 
 /** FG Inbound — heatmap tuần T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho */
@@ -89,6 +94,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrderStatus: WorkOrderStatusRow[] = [];
   /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
   woHeatmapDays: WoHeatmapDayCol[] = [];
+  /** Hiển thị tooltip heatmap — khớp `createdByPickerOptions` tab Work Order Status */
+  private readonly woCreatedByLabels: Record<string, string> = {
+    TÌNH: 'Tình',
+    TUẤN: 'Tuấn',
+    VŨ: 'Vũ',
+    PHÚC: 'Phúc',
+    TRÍ: 'Trí',
+    ĐÔNG: 'Đông',
+    THỊNH: 'Thịnh',
+    ÂN: 'Ân',
+    HOÀNG: 'Hoàng',
+  };
   yesterdayOverdueCount: number = 0;
   /** Bảng chi tiết cuối dashboard: shipment 7 ngày sắp tới (cùng collection tab Shipment) */
   shipmentWeeklyDetailRows: Array<{
@@ -694,19 +711,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
           const data = a.payload.doc.data() as any;
           const id = a.payload.doc.id;
           
-          // Process deliveryDate to ensure proper Date object
-          let deliveryDate: Date | null = null;
-          if (data.deliveryDate) {
-            if (typeof data.deliveryDate === 'object' && data.deliveryDate !== null && 'toDate' in data.deliveryDate) {
-              deliveryDate = data.deliveryDate.toDate();
-            } else if (data.deliveryDate instanceof Date) {
-              deliveryDate = data.deliveryDate;
-            } else {
-              deliveryDate = new Date(data.deliveryDate);
-            }
-          }
+          const deliveryDate = this.parseFirestoreDate(data.deliveryDate);
+          const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
+          const createdDate = this.parseFirestoreDate(data.createdDate);
+          const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
           
-          return { id, ...data, deliveryDate };
+          return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt };
         });
         
         // Filter by factory only.
@@ -821,24 +831,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         month: '2-digit' 
       });
       
-      // Count work orders by status for this date
-      const workOrdersForDate = this.workOrders.filter(wo => {
-        if (!wo.deliveryDate) return false;
-        
-        let deliveryDate: Date;
-        if (wo.deliveryDate instanceof Date) {
-          deliveryDate = wo.deliveryDate;
-        } else if (typeof wo.deliveryDate === 'object' && wo.deliveryDate !== null && 'toDate' in wo.deliveryDate) {
-          // Handle Firestore Timestamp
-          deliveryDate = (wo.deliveryDate as any).toDate();
-        } else {
-          // Handle string date
-          deliveryDate = new Date(wo.deliveryDate as any);
-        }
-        
-        // Compare dates (ignore time)
-        return deliveryDate.toDateString() === targetDate.toDateString();
-      });
+      const workOrdersForDate = this.getWorkOrdersForDeliveryDate(targetDate);
       
       console.log(`Date ${dateStr}: Found ${workOrdersForDate.length} work orders`);
       
@@ -884,7 +877,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     console.log(`Updated Work Order Status (T2–T7, 6 ngày):`, this.workOrderStatus);
 
-    this.rebuildWoHeatmapFromStatus();
+    this.rebuildWoHeatmap(monday);
     this.cdr.detectChanges();
   }
 
@@ -896,7 +889,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.fgInHeatmapDays || []).some((d) => (d.cells?.length || 0) > 0);
   }
 
-  woHeatCellTitle(kind: WoHeatKind): string {
+  private parseFirestoreDate(value: any): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+    if (typeof value === 'object' && value !== null && 'toDate' in value) {
+      const d = (value as { toDate: () => Date }).toDate();
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private getWorkOrdersForDeliveryDate(targetDate: Date): WorkOrder[] {
+    return this.workOrders.filter(wo => {
+      const deliveryDate = this.parseFirestoreDate(wo.deliveryDate);
+      if (!deliveryDate) return false;
+      return deliveryDate.toDateString() === targetDate.toDateString();
+    });
+  }
+
+  private woHeatKindFromWorkOrder(wo: WorkOrder): WoHeatKind | null {
+    if (wo.status === WorkOrderStatus.DONE || wo.isCompleted) return 'done';
+    if (wo.status === WorkOrderStatus.WAITING) return 'waiting';
+    if (wo.status === WorkOrderStatus.KITTING) return 'kitting';
+    if (wo.status === WorkOrderStatus.READY) return 'ready';
+    if (wo.status === WorkOrderStatus.DELAY) return 'delay';
+    return null;
+  }
+
+  private woHeatKindLabel(kind: WoHeatKind): string {
     const m: Record<WoHeatKind, string> = {
       done: 'Done',
       waiting: 'Waiting',
@@ -907,28 +928,68 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return m[kind] || kind;
   }
 
-  private rebuildWoHeatmapFromStatus(): void {
-    const rows = this.workOrderStatus || [];
-    const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-    this.woHeatmapDays = rows.map((row, idx) => {
-      const d = this.parseCellNumber(row.value);
-      const w = this.parseCellNumber(row.note);
-      const k = this.parseCellNumber(row.kitting);
-      const r = this.parseCellNumber(row.ready);
-      const dl = this.parseCellNumber(row.extra);
-      const cells: { kind: WoHeatKind }[] = [];
-      for (let i = 0; i < d; i++) cells.push({ kind: 'done' });
-      for (let i = 0; i < w; i++) cells.push({ kind: 'waiting' });
-      for (let i = 0; i < k; i++) cells.push({ kind: 'kitting' });
-      for (let i = 0; i < r; i++) cells.push({ kind: 'ready' });
-      for (let i = 0; i < dl; i++) cells.push({ kind: 'delay' });
-      return {
-        label: row.code,
-        weekday: vnDays[idx] ?? `D${idx + 1}`,
-        total: d + w + k + r + dl,
-        cells
-      };
+  private formatWoCreatedByLabel(createdBy?: string): string {
+    const key = String(createdBy ?? '').trim().toUpperCase();
+    if (!key) return '—';
+    return this.woCreatedByLabels[key] || createdBy || '—';
+  }
+
+  private formatWoKittingStartTime(wo: WorkOrder): string {
+    const raw = (wo as any).kittingStartedAt ?? wo.lastUpdated ?? wo.createdDate;
+    const d = this.parseFirestoreDate(raw);
+    if (!d) return '—';
+    return d.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
+  }
+
+  private buildWoHeatmapCell(wo: WorkOrder, kind: WoHeatKind): WoHeatmapCell {
+    if (kind !== 'kitting') {
+      const sku = (wo.productCode || '').trim();
+      const base = this.woHeatKindLabel(kind);
+      const tooltip = sku ? `${sku} · ${base}` : base;
+      return { kind, tooltip };
+    }
+    const sku = (wo.productCode || '—').trim();
+    const lsx = (wo.productionOrder || '').trim();
+    const lines = [sku];
+    if (lsx) lines.push(`LSX: ${lsx}`);
+    lines.push(`Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy)}`);
+    lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
+    return { kind, tooltip: lines.join('\n') };
+  }
+
+  private rebuildWoHeatmap(monday: Date): void {
+    const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const kindOrder: WoHeatKind[] = ['done', 'waiting', 'kitting', 'ready', 'delay'];
+    this.woHeatmapDays = [];
+    for (let i = 0; i < 6; i++) {
+      const targetDate = new Date(monday);
+      targetDate.setDate(monday.getDate() + i);
+      const dateStr = targetDate.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit'
+      });
+      const workOrdersForDate = this.getWorkOrdersForDeliveryDate(targetDate);
+      const cells: WoHeatmapCell[] = [];
+      for (const kind of kindOrder) {
+        for (const wo of workOrdersForDate) {
+          if (this.woHeatKindFromWorkOrder(wo) === kind) {
+            cells.push(this.buildWoHeatmapCell(wo, kind));
+          }
+        }
+      }
+      this.woHeatmapDays.push({
+        label: dateStr,
+        weekday: vnDays[i] ?? `D${i + 1}`,
+        total: cells.length,
+        cells
+      });
+    }
   }
 
   private getYesterdayOverdueCount(today: Date): number {

@@ -287,7 +287,7 @@
                       *ngFor="let c of col.cells"
                       class="putaway-heatmap__cell wo-heatmap__cell"
                       [ngClass]="'wo-heatmap__cell--' + c.kind"
-                      [attr.title]="woHeatCellTitle(c.kind)"
+                      [attr.title]="c.tooltip"
                     ></div>
                   </div>
                 </div>
