@@ -1,4 +1,4 @@
-<div class="main-content">
+<div class="main-content" [class.loc-m-page]="isMobile">
   <!-- Require choose ASM1 / ASM2 before using Location -->
   <div class="modal-overlay" *ngIf="showFactorySelect">
     <div class="modal-content factory-select-modal" (click)="$event.stopPropagation()">
@@ -88,8 +88,124 @@
     </div>
   </div>
 
-  <!-- Excel-like Container -->
-  <div class="excel-container">
+
+  <!-- Mobile shell -->
+  <div class="loc-m" *ngIf="isMobile">
+    <header class="loc-m-header">
+      <div class="loc-m-header__left">
+        <span class="loc-m-factory" *ngIf="selectedFactory">{{ selectedFactory }}</span>
+        <h1 class="loc-m-title">Vị trí NVL</h1>
+      </div>
+      <button type="button" class="loc-m-menu-btn" (click)="goMobileMenu()" aria-label="Menu">
+        <i class="material-icons">menu</i>
+      </button>
+    </header>
+
+    <div class="loc-m-body">
+      <section class="loc-m-panel" *ngIf="mobileBottomTab === 'location'">
+        <div class="loc-m-actions">
+          <button type="button" class="store-material-btn mobile" (click)="openStoreMaterialModal()">
+            <i class="material-icons">qr_code_scanner</i>
+            Theo mã hàng
+          </button>
+          <button type="button" class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()">
+            <i class="material-icons">location_on</i>
+            Theo vị trí
+          </button>
+        </div>
+
+        <div class="search-box loc-m-search">
+          <input type="text"
+                 [placeholder]="isLoading ? 'Đang tải...' : 'Tìm kiếm vị trí'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 class="search-input"
+                 [disabled]="isLoading">
+          <button class="clear-search-btn" *ngIf="searchTerm" (click)="clearSearch()" type="button">
+            <i class="material-icons">clear</i>
+          </button>
+        </div>
+
+        <div class="location-lookup loc-m-lookup" *ngIf="searchTerm && searchTerm.trim().length >= 2 && (isLocationLookupLoading || locationLookupLocation)">
+          <div class="lookup-header">
+            <div class="lookup-title">
+              <i class="material-icons">place</i>
+              <span *ngIf="locationLookupLocation">Vị trí: <strong>{{ locationLookupLocation }}</strong></span>
+            </div>
+          </div>
+          <div class="material-box-grid" *ngIf="!isLocationLookupLoading && locationLookupLocation && locationLookupItems.length > 0">
+            <div class="material-box" *ngFor="let m of locationLookupItems">
+              <div class="material-code">{{ m.materialCode }}</div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="loc-m-panel" *ngIf="mobileBottomTab === 'history'">
+        <div class="loc-m-empty" *ngIf="!hasScannedMaterialForMobile">
+          <i class="material-icons">history</i>
+          <p>Scan mã hàng ở <strong>Theo mã hàng</strong> trước, sau đó xem lịch sử đổi vị trí tại đây.</p>
+        </div>
+        <ng-container *ngIf="hasScannedMaterialForMobile">
+          <div class="loc-m-material-card">
+            <div class="loc-m-material-code">{{ lastScannedMaterialForMobile?.materialCode }}</div>
+            <span class="loc-m-material-meta">PO: {{ lastScannedMaterialForMobile?.poNumber || '—' }}</span>
+            <span class="loc-m-material-meta">Vị trí: {{ lastScannedMaterialForMobile?.location || 'Chưa có' }}</span>
+          </div>
+          <div class="loc-m-loading" *ngIf="isLoadingLocationHistory"><i class="material-icons rotating">sync</i> Đang tải...</div>
+          <div class="loc-m-history-list" *ngIf="!isLoadingLocationHistory && locationHistoryRows.length > 0">
+            <div class="loc-m-history-item" *ngFor="let h of locationHistoryRows">
+              <div class="loc-m-history-route">
+                <span>{{ h.fromLocation || '—' }}</span>
+                <i class="material-icons">arrow_forward</i>
+                <span>{{ h.toLocation || '—' }}</span>
+              </div>
+              <div class="loc-m-history-meta">
+                <span>{{ formatHistoryTime(h.changedAt) }}</span>
+                <span class="loc-m-history-id">ID: {{ h.changedBy }}</span>
+              </div>
+            </div>
+          </div>
+          <p class="loc-m-empty" *ngIf="!isLoadingLocationHistory && locationHistoryRows.length === 0">Chưa có lịch sử.</p>
+        </ng-container>
+      </section>
+
+      <section class="loc-m-panel" *ngIf="mobileBottomTab === 'alert'">
+        <div class="loc-m-empty" *ngIf="!hasScannedMaterialForMobile">
+          <i class="material-icons">warning_amber</i>
+          <p>Scan mã hàng ở <strong>Theo mã hàng</strong> trước khi gửi cảnh báo.</p>
+        </div>
+        <ng-container *ngIf="hasScannedMaterialForMobile">
+          <div class="loc-m-material-card">
+            <div class="loc-m-material-code">{{ lastScannedMaterialForMobile?.materialCode }}</div>
+            <span class="loc-m-material-meta">PO: {{ lastScannedMaterialForMobile?.poNumber || '—' }}</span>
+          </div>
+          <button type="button" class="loc-m-alert-btn" (click)="submitWrongLocationAlert()" [disabled]="isSubmittingLocationAlert">
+            <i class="material-icons">report_problem</i>
+            {{ isSubmittingLocationAlert ? 'Đang gửi...' : 'Cảnh báo sai vị trí' }}
+          </button>
+          <p class="loc-m-alert-hint">Gửi thông báo Zalo tới <strong>ASP0106</strong>.</p>
+        </ng-container>
+      </section>
+    </div>
+
+    <nav class="loc-m-bottomnav">
+      <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'location'" (click)="setMobileBottomTab('location')">
+        <i class="material-icons">location_on</i><span>Location</span>
+      </button>
+      <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'history'" (click)="setMobileBottomTab('history')">
+        <i class="material-icons">history</i><span>History</span>
+      </button>
+      <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'alert'" (click)="setMobileBottomTab('alert')">
+        <i class="material-icons">warning_amber</i><span>Alert</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Excel-like Container (desktop) -->
+  <div class="excel-container" *ngIf="!isMobile">
     <!-- Report Title -->
     <div class="excel-header">
       <h4><i class="material-icons">inventory_2</i> MATERIALS MANAGEMENT</h4>
@@ -161,11 +277,11 @@
           <div class="action-buttons">
             <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
               <i class="material-icons">qr_code_scanner</i>
-              SKU
+              Theo mã hàng
             </button>
             <button class="bulk-change-location-btn" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
               <i class="material-icons">location_on</i>
-              Location
+              Theo vị trí
             </button>
             <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Materials">
               <i class="material-icons">refresh</i>
@@ -183,12 +299,12 @@
           <!-- Store Material Button -->
           <button class="store-material-btn mobile" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
             <i class="material-icons">qr_code_scanner</i>
-            SKU
+            Theo mã hàng
           </button>
           <!-- Bulk Change Location Button -->
           <button class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
             <i class="material-icons">location_on</i>
-            Location
+            Theo vị trí
           </button>
         </div>
         

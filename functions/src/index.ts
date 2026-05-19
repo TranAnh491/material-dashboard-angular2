@@ -130,6 +130,43 @@ export const sendQcPriorityResolvedEmailFn = functions
     }
   });
 
+/** Location: cảnh báo sai vị trí NVL → nhắn Zalo cho ASP0106. */
+export const sendMaterialLocationAlertZaloFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const factory = typeof data?.factory === 'string' ? data.factory.trim().slice(0, 40) : '';
+    const materialCode = typeof data?.materialCode === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    const poNumber = typeof data?.poNumber === 'string' ? data.poNumber.trim().slice(0, 120) : '';
+    const reportedLocation =
+      typeof data?.reportedLocation === 'string' ? data.reportedLocation.trim().slice(0, 120) : '';
+    const reportedBy = typeof data?.reportedBy === 'string' ? data.reportedBy.trim().slice(0, 80) : '';
+    const message = typeof data?.message === 'string' ? data.message.trim().slice(0, 200) : 'Sai vị trí';
+    if (!materialCode) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode.');
+    }
+    try {
+      const { sendMaterialLocationAlertZalo } = await import('./material-location-alert-zalo');
+      await sendMaterialLocationAlertZalo(admin.firestore(), {
+        factory,
+        materialCode,
+        poNumber,
+        reportedLocation,
+        reportedBy,
+        message
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 /** QC (ASM1): nếu mã đang bật ưu tiên và bị đổi trạng thái → nhắn Zalo cho ASP0609. */
 export const sendQcPriorityStatusChangedZaloFn = functions
   .runWith({ secrets: [zaloBotToken] })

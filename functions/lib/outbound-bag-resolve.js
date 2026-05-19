@@ -67,6 +67,36 @@ function extractQrPart4HintsFromNotes(notes) {
     }
     return out;
 }
+/** Cùng thứ tự ưu tiên như `resolveOutboundBagDupSticker` — vì `importDate` trên doc thường chỉ còn 8 số IMD. */
+function collectOutboundBagParseCandidates(d) {
+    var _a;
+    const out = [];
+    const seen = new Set();
+    const push = (x) => {
+        const s = normalizeParenAscii(String(x !== null && x !== void 0 ? x : '').trim());
+        if (s && !seen.has(s)) {
+            seen.add(s);
+            out.push(s);
+        }
+    };
+    push(d['importDate']);
+    push(d['batchNumber']);
+    for (const hint of extractQrPart4HintsFromNotes(d['notes'] != null ? String(d['notes']) : '')) {
+        push(hint);
+    }
+    const noteLines = String((_a = d['notes']) !== null && _a !== void 0 ? _a : '').split(/[\r\n]+/);
+    for (const line of noteLines) {
+        const t = line.trim();
+        if (!t)
+            continue;
+        if (t.includes('|')) {
+            const parts = t.split('|').map(p => p.trim());
+            if (parts.length >= 4)
+                push(parts[3]);
+        }
+    }
+    return out;
+}
 /**
  * Khóa Bag cho Control Batch / mail / Zalo:
  * 1) bagNumberDisplay trên doc (chuẩn hoá ngoặc)
@@ -152,23 +182,30 @@ function bichFirstTotalDenominator(bich) {
 }
 /**
  * Đồng bộ với Outbound ASM1 `mapOutboundDocToMaterial` + `getOutboundBagColumnDisplay`:
- * - Bịch: `bagBatch` hoặc parse từ `importDate`
- * - Bag: `bagNumberDisplay` hoặc parse từ `importDate`, không có thì suy từ bịch (chỉ số)
+ * - Bịch: `bagBatch` hoặc parse từ `importDate` / `batchNumber` / gợi ý trong `notes` (giống sticker resolver)
+ * - Bag: `bagNumberDisplay` hoặc parse từ các chuỗi trên, không có thì suy từ bịch (chỉ số)
  *
  * `eligibleForDupScan=false` khi lô có >1 bịch (tổng > 1) mà Bag chỉ còn số suy từ bịch,
  * không có `(T…)` và không có `bagNumberDisplay` ghi trên doc — tránh gom nhầm nhiều tem tách.
  */
 function resolveControlBatchOutboundRowBagFields(d) {
-    const rawImd = d['importDate'] != null && d['importDate'] !== '' ? String(d['importDate']) : '';
-    const pImd = rawImd ? parseQrPart4(rawImd) : null;
-    const bagBatchNorm = (d['bagBatch'] != null && String(d['bagBatch']).trim() !== '' ? String(d['bagBatch']).trim() : '') ||
-        ((pImd === null || pImd === void 0 ? void 0 : pImd.bagFractionLabel) ? String(pImd.bagFractionLabel) : '');
+    let bagBatchNorm = d['bagBatch'] != null && String(d['bagBatch']).trim() !== '' ? String(d['bagBatch']).trim() : '';
     const explicitBagNumberField = d['bagNumberDisplay'] != null && String(d['bagNumberDisplay']).trim() !== '';
-    const bagNumNorm = explicitBagNumberField
+    let bagNumNorm = explicitBagNumberField
         ? normalizeParenAscii(String(d['bagNumberDisplay']).trim())
-        : (pImd === null || pImd === void 0 ? void 0 : pImd.bagNumberDisplay)
-            ? normalizeParenAscii(String(pImd.bagNumberDisplay))
-            : '';
+        : '';
+    /** Parse nào đã cấp `bagNumberDisplay` (không tính field explicit trên doc). */
+    let parsedUsedForBagNum = null;
+    for (const c of collectOutboundBagParseCandidates(d)) {
+        const p = parseQrPart4(c);
+        if (!bagBatchNorm && p.bagFractionLabel) {
+            bagBatchNorm = String(p.bagFractionLabel);
+        }
+        if (!explicitBagNumberField && !bagNumNorm && p.bagNumberDisplay) {
+            bagNumNorm = normalizeParenAscii(String(p.bagNumberDisplay));
+            parsedUsedForBagNum = p;
+        }
+    }
     const bich = normalizeParenAscii(String(bagBatchNorm || '').trim());
     let bagUi = String(bagNumNorm || '').trim();
     if (!bagUi) {
@@ -184,13 +221,13 @@ function resolveControlBatchOutboundRowBagFields(d) {
         onlyDigitsAndCommaList &&
         bagUi.length > 0 &&
         bagUi === outboundAsm1BagColumnFromBagBatchOnly(bich);
-    // Nếu parse importDate cho bag chỉ là số trùng numerator (không tem T) trong lô >1 → yếu
+    // Nếu parse QR cho bag chỉ là số trùng numerator (không tem T) trong lô >1 → yếu
     const parsedNumOnlySameAsNumerator = den != null &&
         den > 1 &&
         !explicitBagNumberField &&
         !hasSplitTag &&
         bagUi.length > 0 &&
-        (pImd === null || pImd === void 0 ? void 0 : pImd.bagNumberDisplay) &&
+        !!(parsedUsedForBagNum === null || parsedUsedForBagNum === void 0 ? void 0 : parsedUsedForBagNum.bagNumberDisplay) &&
         bagUi === bichFirstNumerator(bich);
     const eligibleForDupScan = bich.length > 0 &&
         bagUi.length > 0 &&

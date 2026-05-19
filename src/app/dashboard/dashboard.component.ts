@@ -1541,6 +1541,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onFactoryChange(factory: string) {
     this.selectedFactory = factory;
     this.loadDashboardData();
+    this.loadIQCByWeek();
   }
 
   // Safety Stock Level methods - Copied from Chart tab

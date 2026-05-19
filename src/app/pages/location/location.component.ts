@@ -1,8 +1,12 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Router } from '@angular/router';
+import firebase from 'firebase/compat/app';
 import { Subject, BehaviorSubject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
+import { firstValueFrom } from 'rxjs';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
@@ -45,6 +49,19 @@ interface LocationRule {
   destinationLocationPrefixes: string[];
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface MaterialLocationHistoryRow {
+  id?: string;
+  factory: string;
+  materialId: string;
+  materialCode: string;
+  poNumber?: string;
+  fromLocation: string;
+  toLocation: string;
+  changedBy: string;
+  changedAt: Date;
+  changeType: 'store' | 'bulk';
 }
 
 @Component({
@@ -439,15 +456,38 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   bulkNewPalletInput = '';
   skipBulkNewLocation = false;
   skipBulkNewPallet = false;
+
+  /** Mobile shell (≤768px) */
+  isMobile = false;
+  mobileBottomTab: 'location' | 'history' | 'alert' = 'location';
+  private readonly locationMobileBodyClass = 'location-mobile-tab';
+
+  /** Mã hàng vừa scan (Theo mã hàng) — dùng cho tab History / Alert */
+  lastScannedMaterialForMobile: {
+    id: string;
+    materialCode: string;
+    poNumber?: string;
+    location?: string;
+    importDateStr?: string;
+  } | null = null;
+
+  locationHistoryRows: MaterialLocationHistoryRow[] = [];
+  isLoadingLocationHistory = false;
+  isSubmittingLocationAlert = false;
+
+  private readonly materialLocationHistoryCol = 'material-location-history';
+  private readonly materialLocationAlertsCol = 'material-location-alerts';
   
   private destroy$ = new Subject<void>();
 
   constructor(
     private firestore: AngularFirestore,
     private auth: AngularFireAuth,
+    private fns: AngularFireFunctions,
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private router: Router
   ) {
     // Setup search debouncing
     this.searchSubject.pipe(
@@ -464,6 +504,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showFactorySelect = true;
     this.selectedFactory = null;
 
+    this.updateMobileLayout();
     this.checkPermissions();
     this.loadLocationData();
     this.loadCustomerCodes();
@@ -482,11 +523,203 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.destroy$.next();
     this.destroy$.complete();
     this.rulesSub?.unsubscribe();
+    document.body.classList.remove(this.locationMobileBodyClass);
     
     // Remove event listeners
     document.removeEventListener('click', () => {
       this.isDropdownOpen = false;
     });
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.updateMobileLayout();
+  }
+
+  private updateMobileLayout(): void {
+    const next =
+      window.innerWidth <= 768 ||
+      /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+        (navigator.userAgent || '').toLowerCase()
+      );
+    if (next === this.isMobile) return;
+    this.isMobile = next;
+    if (this.isMobile) {
+      document.body.classList.add(this.locationMobileBodyClass);
+    } else {
+      document.body.classList.remove(this.locationMobileBodyClass);
+    }
+    this.cdr.markForCheck();
+  }
+
+  goMobileMenu(): void {
+    this.router.navigate(['/menu']);
+  }
+
+  setMobileBottomTab(tab: 'location' | 'history' | 'alert'): void {
+    this.mobileBottomTab = tab;
+    if (tab === 'history') {
+      this.loadLocationHistoryForScannedMaterial();
+    }
+    this.cdr.markForCheck();
+  }
+
+  get hasScannedMaterialForMobile(): boolean {
+    return !!this.lastScannedMaterialForMobile?.id;
+  }
+
+  private setLastScannedMaterialForMobile(material: any): void {
+    if (!material?.id) return;
+    this.lastScannedMaterialForMobile = {
+      id: material.id,
+      materialCode: material.materialCode || '',
+      poNumber: material.poNumber || '',
+      location: material.location || '',
+      importDateStr: material.importDateStr || ''
+    };
+  }
+
+  private async resolveOperatorId(): Promise<string> {
+    const user = await this.auth.currentUser;
+    if (!user) return 'UNKNOWN';
+    const email = String(user.email || '').trim().toUpperCase();
+    const asp = email.match(/ASP\d{4}/);
+    if (asp) return asp[0];
+    const name = String(user.displayName || '').trim();
+    if (name) return name.substring(0, 24);
+    return email.substring(0, 24) || 'UNKNOWN';
+  }
+
+  private async logMaterialLocationChange(params: {
+    materialId: string;
+    materialCode: string;
+    poNumber?: string;
+    fromLocation: string;
+    toLocation: string;
+    changeType: 'store' | 'bulk';
+  }): Promise<void> {
+    if (!this.selectedFactory) return;
+    const changedBy = await this.resolveOperatorId();
+    await this.firestore.collection(this.materialLocationHistoryCol).add({
+      factory: this.selectedFactory,
+      materialId: params.materialId,
+      materialCode: params.materialCode,
+      poNumber: params.poNumber || '',
+      fromLocation: params.fromLocation || '',
+      toLocation: params.toLocation || '',
+      changedBy,
+      changeType: params.changeType,
+      changedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  async loadLocationHistoryForScannedMaterial(): Promise<void> {
+    const m = this.lastScannedMaterialForMobile;
+    if (!m?.id) {
+      this.locationHistoryRows = [];
+      return;
+    }
+    this.isLoadingLocationHistory = true;
+    try {
+      const snap = await this.firestore
+        .collection(this.materialLocationHistoryCol, ref =>
+          ref.where('materialId', '==', m.id).limit(40)
+        )
+        .get()
+        .toPromise();
+      const rows: MaterialLocationHistoryRow[] = [];
+      snap?.docs.forEach(doc => {
+        const d = doc.data() as any;
+        const changedAt = d.changedAt?.toDate?.() || new Date();
+        rows.push({
+          id: doc.id,
+          factory: d.factory || '',
+          materialId: d.materialId || m.id,
+          materialCode: d.materialCode || m.materialCode,
+          poNumber: d.poNumber || '',
+          fromLocation: d.fromLocation || '',
+          toLocation: d.toLocation || '',
+          changedBy: d.changedBy || '',
+          changedAt,
+          changeType: d.changeType === 'bulk' ? 'bulk' : 'store'
+        });
+      });
+      rows.sort((a, b) => b.changedAt.getTime() - a.changedAt.getTime());
+      this.locationHistoryRows = rows;
+    } catch (e) {
+      console.error('loadLocationHistoryForScannedMaterial', e);
+      this.locationHistoryRows = [];
+    } finally {
+      this.isLoadingLocationHistory = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  formatHistoryTime(d: Date): string {
+    if (!d || Number.isNaN(d.getTime())) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  /** Zalo ASP0106 khi gửi cảnh báo sai vị trí — không chặn UI nếu Zalo lỗi. */
+  private notifyMaterialLocationAlertZalo(payload: {
+    factory: string;
+    materialCode: string;
+    poNumber: string;
+    reportedLocation: string;
+    reportedBy: string;
+    message: string;
+  }): void {
+    const callable = this.fns.httpsCallable('sendMaterialLocationAlertZaloFn');
+    firstValueFrom(callable(payload))
+      .then(() => console.log('💬 Location alert: đã gửi Zalo ASP0106'))
+      .catch((e) => console.warn('💬 Location alert: gửi Zalo thất bại', e));
+  }
+
+  async submitWrongLocationAlert(): Promise<void> {
+    const m = this.lastScannedMaterialForMobile;
+    if (!m) {
+      alert('⚠️ Vui lòng scan mã hàng (Theo mã hàng) trước khi gửi cảnh báo.');
+      return;
+    }
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
+    if (!confirm(`Gửi cảnh báo sai vị trí cho mã ${m.materialCode}?`)) {
+      return;
+    }
+    this.isSubmittingLocationAlert = true;
+    try {
+      const reportedBy = await this.resolveOperatorId();
+      await this.firestore.collection(this.materialLocationAlertsCol).add({
+        factory: this.selectedFactory,
+        materialId: m.id,
+        materialCode: m.materialCode,
+        poNumber: m.poNumber || '',
+        reportedLocation: m.location || '',
+        status: 'open',
+        message: 'Sai vị trí',
+        reportedBy,
+        reportedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      this.notifyMaterialLocationAlertZalo({
+        factory: this.selectedFactory,
+        materialCode: m.materialCode,
+        poNumber: m.poNumber || '',
+        reportedLocation: m.location || '',
+        reportedBy,
+        message: 'Sai vị trí'
+      });
+      alert('✅ Đã gửi cảnh báo. Thông báo Zalo đã gửi tới ASP0106.');
+    } catch (e) {
+      console.error('submitWrongLocationAlert', e);
+      alert('❌ Không gửi được cảnh báo. Vui lòng thử lại.');
+    } finally {
+      this.isSubmittingLocationAlert = false;
+      this.cdr.markForCheck();
+    }
   }
 
   private async checkPermissions() {
@@ -1552,6 +1785,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       // Chỉ hiển thị material được scan (khớp với QR code)
       this.foundMaterialsForStore = [matchedMaterial];
       this.selectedMaterialForStore = matchedMaterial;
+      this.setLastScannedMaterialForMobile(matchedMaterial);
 
       // Tồn kho của PO được scan
       this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
@@ -1636,6 +1870,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.selectedTargetLocation = targetFormatted;
 
+      const fromLocation = this.selectedMaterialForStore.location || '';
       // Cập nhật location trong Firebase
       await this.firestore
         .collection('inventory-materials')
@@ -1645,6 +1880,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           lastModified: new Date(),
           modifiedBy: 'store-material-scanner'
         });
+
+      await this.logMaterialLocationChange({
+        materialId: this.selectedMaterialForStore.id,
+        materialCode: this.selectedMaterialForStore.materialCode || '',
+        poNumber: this.selectedMaterialForStore.poNumber || '',
+        fromLocation,
+        toLocation: this.selectedTargetLocation,
+        changeType: 'store'
+      });
+      this.setLastScannedMaterialForMobile({
+        ...this.selectedMaterialForStore,
+        location: this.selectedTargetLocation
+      });
 
       alert(`✅ Đã cất material thành công!\n\n` +
             `Mã hàng: ${this.selectedMaterialForStore.materialCode}\n` +
@@ -2226,7 +2474,17 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       const batch = this.firestore.firestore.batch();
       const selectedIds = Array.from(this.bulkSelectedItems);
 
+      const historyLogs: Array<{
+        materialId: string;
+        materialCode: string;
+        poNumber?: string;
+        fromLocation: string;
+        toLocation: string;
+      }> = [];
+
       for (const id of selectedIds) {
+        const bulkItem = this.bulkItems.find(i => i.id === id);
+        const fromLocation = bulkItem?.location || this.bulkCurrentLocation || '';
         const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
         const updateData: any = {
           lastModified: new Date(),
@@ -2237,9 +2495,25 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           if (!this.skipBulkNewPallet) updateData.palletId = newPalletId;
         }
         batch.update(docRef, updateData);
+        if (bulkItem && (!this.skipBulkNewLocation || !this.skipBulkNewPallet)) {
+          historyLogs.push({
+            materialId: id,
+            materialCode: bulkItem.materialCode || '',
+            poNumber: bulkItem.poNumber || '',
+            fromLocation,
+            toLocation: locationToSave
+          });
+        }
       }
 
       await batch.commit();
+
+      for (const log of historyLogs) {
+        await this.logMaterialLocationChange({
+          ...log,
+          changeType: 'bulk'
+        });
+      }
       this.bulkStep = 'complete';
     } catch (error) {
       console.error('❌ Error bulk updating items:', error);
