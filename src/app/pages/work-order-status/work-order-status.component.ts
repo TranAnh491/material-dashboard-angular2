@@ -4063,22 +4063,32 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.warn('Không tạo được QR code Line:', e);
     }
     const locationMap = new Map<string, string>();
+    const iqcStatusMap = new Map<string, string>();
     try {
       const snapshot = await firstValueFrom(this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
       ).get());
       snapshot.docs.forEach((doc: any) => {
         const d = doc.data() as any;
-        const mat = String(d.materialCode || '').trim();
+        const mat = String(d.materialCode || '').trim().toUpperCase();
         const po = String(d.poNumber || d.po || '').trim();
         const loc = String(d.location || '').trim();
-        if (mat && po) locationMap.set(`${mat}|${po}`, loc);
+        const iqc = String(d.iqcStatus || '').trim();
+        if (mat && po) {
+          const key = `${mat}|${po}`;
+          if (loc) locationMap.set(key, loc);
+          if (iqc) iqcStatusMap.set(key, iqc);
+        }
       });
     } catch (e) {
-      console.warn('Không load được vị trí từ inventory:', e);
+      console.warn('Không load được vị trí / IQC từ inventory:', e);
     }
+    const invKey = (materialCode: string, po: string): string =>
+      `${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`;
     const getLocation = (materialCode: string, po: string): string =>
-      locationMap.get(`${String(materialCode || '').trim()}|${String(po || '').trim()}`) || '-';
+      locationMap.get(invKey(materialCode, po)) || '-';
+    const getIqcStatus = (materialCode: string, po: string): string =>
+      iqcStatusMap.get(invKey(materialCode, po)) || '';
     const scanQtyMap = new Map<string, number>();
     const employeeIds = new Set<string>();
     try {
@@ -4207,6 +4217,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const scanQtyStr = scanQty > 0 ? this.formatQuantityForPxk(scanQty) : '';
       const deliveryQty = getDeliveryQty(l.materialCode, po);
       const deliveryQtyStr = deliveryQty > 0 ? this.formatQuantityForPxk(deliveryQty) : '';
+      const ghiChuText = String((l as any).ghiChu || '').trim();
+      const iqcIconHtml = this.getPxkIqcStatusIconHtml(getIqcStatus(l.materialCode, po));
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${sttCounter}</td>
         <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
@@ -4223,7 +4235,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         <td class="col-luong-scan" style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(scanQtyStr)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.escapeHtmlForPrint(soSanhStr)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:right;">${this.escapeHtmlForPrint(deliveryQtyStr)}</td>
-        <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(String((l as any).ghiChu || ''))}</td>
+        <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;position:relative;vertical-align:top;min-height:26px;">
+          <div class="pxk-ghi-chu-text">${this.escapeHtmlForPrint(ghiChuText)}</div>
+          ${iqcIconHtml}
+        </td>
         <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
       </tr>`;
     }).join('');
@@ -4357,7 +4372,13 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 .pxk-table th{background:#f0f0f0;font-weight:bold;text-transform:uppercase}
 .pxk-table th.col-ten-vat-tu{min-width:120px;width:14%}.pxk-table td.col-ten-vat-tu{min-width:120px;width:14%;font-size:8px}
 .pxk-table th.col-vitri,.pxk-table td.col-vitri{min-width:80px;width:9.6%}
-.pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:7%}.pxk-table th.col-ghi-chu,.pxk-table td.col-ghi-chu{min-width:80px;width:9%}
+.pxk-table th.col-luong-scan,.pxk-table td.col-luong-scan,.pxk-table th.col-sx-tra,.pxk-table td.col-sx-tra{min-width:70px;width:7%}.pxk-table th.col-ghi-chu,.pxk-table td.col-ghi-chu{min-width:80px;width:9%;position:relative;vertical-align:top}
+.pxk-ghi-chu-text{display:block;padding:0 20px 18px 0;word-break:break-word;min-height:14px}
+.pxk-iqc-icon{position:absolute;right:3px;bottom:3px;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:3px;border:1px solid rgba(0,0,0,.2);line-height:0;box-shadow:0 0 0 1px #fff}
+.pxk-iqc-icon.pxk-iqc-pass{background:#c8e6c9;color:#1b5e20}
+.pxk-iqc-icon.pxk-iqc-dac-cach{background:#ffe0b2;color:#e65100}
+.pxk-iqc-icon svg{display:block}
+.pxk-iqc-dash{position:absolute;right:4px;bottom:4px;font-size:9px;font-weight:700;color:#757575;line-height:1;letter-spacing:-0.5px}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
 .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}
 .pxk-top-header .logo-cell{width:230px;min-width:230px;text-align:center;vertical-align:middle}
@@ -4419,6 +4440,46 @@ ${nvlSxKsBoxHtml}
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /** Chuẩn hóa IQC: Pass | Đặc cách | còn lại (hiển thị --) */
+  private normalizePxkIqcStatus(raw: string): 'pass' | 'dac_cach' | 'other' {
+    const s = String(raw || '').trim().toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!s) return 'other';
+    if (s === 'PASS' || s === 'PASSED' || s === 'OK') return 'pass';
+    if (s.includes('DAC CACH')) return 'dac_cach';
+    return 'other';
+  }
+
+  /**
+   * Góc phải dưới ô Ghi chú (in PXK):
+   * - Pass → icon duyệt (vòng tròn + tick)
+   * - Đặc cách → icon chấm than
+   * - Còn lại / không có → --
+   */
+  private getPxkIqcStatusIconHtml(statusRaw: string): string {
+    const status = String(statusRaw || '').trim();
+    const kind = status ? this.normalizePxkIqcStatus(status) : 'other';
+    const title = status ? this.escapeHtmlForPrint(status) : 'Không Pass';
+
+    if (kind === 'pass') {
+      return `<span class="pxk-iqc-icon pxk-iqc-pass" title="IQC: ${title}">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 12.2l2.2 2.2 5.8-5.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>`;
+    }
+    if (kind === 'dac_cach') {
+      return `<span class="pxk-iqc-icon pxk-iqc-dac-cach" title="IQC: ${title}">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path d="M12 3.5L4.5 20h15L12 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M12 9v4.5M12 16.2h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </span>`;
+    }
+    return `<span class="pxk-iqc-dash" title="IQC: ${title} — không Pass">--</span>`;
   }
 
 
