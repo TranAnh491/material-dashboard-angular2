@@ -19,6 +19,7 @@ export interface FGCheckItem {
   shipmentCarton?: number; // Số thùng Shipment từ tab shipment
   shipmentQuantity?: number; // Lượng Shipment từ tab shipment
   poShip?: string; // PO Ship để phân biệt các dòng cùng materialCode
+  factory?: string; // Nhà máy: ASM1, ASM2, ASM3 (từ tab Shipment)
   checkResult?: 'Đúng' | 'Sai'; // Kết quả check
   scannedCustomerCode?: boolean; // Đã scan mã hàng (highlight xanh)
   scannedQuantity?: boolean; // Đã scan số lượng (highlight xanh)
@@ -36,6 +37,7 @@ export interface ShipmentData {
   carton: number;
   qtyBox?: number; // Số lượng trong 1 thùng - dùng để tính số thùng = quantity / qtyBox
   poShip?: string; // PO Ship để phân biệt các dòng cùng materialCode
+  factory?: string;
 }
 
 export interface ShipmentDisplayItem {
@@ -43,6 +45,12 @@ export interface ShipmentDisplayItem {
   quantity: number; // Lượng Xuất từ shipment
   carton: number;
   customerCode?: string; // Mã khách hàng (nếu có mapping)
+  factory?: string;
+}
+
+export interface FactoryItemGroup {
+  factory: string;
+  items: FGCheckItem[];
 }
 
 export interface ShipmentCheckBoxItem {
@@ -139,6 +147,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   isLoading: boolean = false;
   checkIdCounter: number = 1;
+
+  /** Thứ tự hiển thị nhóm Factory trên bảng */
+  private readonly factoryDisplayOrder = ['ASM1', 'ASM2', 'ASM3'];
 
   constructor(
     private firestore: AngularFirestore,
@@ -283,6 +294,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             shipmentCarton: data.shipmentCarton || 0,
             shipmentQuantity: data.shipmentQuantity || 0,
             poShip: data.poShip || '',
+            factory: data.factory || '',
             checkResult: data.checkResult || undefined,
             createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
             updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
@@ -306,8 +318,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           return item;
         });
         
-        // Gộp dòng: cùng shipment + materialCode + palletNo thì cộng dồn quantity và carton thành một dòng
+        // Gộp dòng: cùng shipment + materialCode + palletNo + factory thì cộng dồn
         this.items = this.mergeItemsByShipmentMaterialPallet(firebaseItems);
+        this.enrichItemsFactory();
         this.itemsLoaded = true;
         this.isLoading = false;
         
@@ -325,7 +338,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       const s = String(item.shipment || '').trim().toUpperCase();
       const m = String(item.materialCode || '').trim().toUpperCase();
       const p = String(item.palletNo || '').trim().toUpperCase();
-      return `${s}|${m}|${p}`;
+      const f = this.normalizeFactory(item.factory || this.resolveItemFactory(item));
+      return `${s}|${m}|${p}|${f}`;
     };
     const map = new Map<string, FGCheckItem[]>();
     rawItems.forEach(item => {
@@ -388,6 +402,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           const carton = parseFloat(data.carton) || 0;
           const qtyBox = parseFloat(data.qtyBox) || 0; // Số lượng trong 1 thùng (tab Shipment)
           const poShip = String(data.poShip || '').trim(); // PO Ship để phân biệt
+          const factory = this.normalizeFactory(data.factory || 'ASM1');
           
           // CHỈ LƯU KHI CÓ ĐỦ shipmentCode VÀ materialCode
           if (shipmentCode && materialCode) {
@@ -396,14 +411,15 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             }
             
             // Lưu theo shipmentCode, mỗi shipmentCode có thể có nhiều materialCode
-            // VÀ mỗi materialCode có thể có nhiều PO Ship (nhiều dòng)
+            // VÀ mỗi materialCode có thể có nhiều PO Ship / Factory (nhiều dòng)
             this.shipmentDataMap.get(shipmentCode)!.push({
               shipmentCode: shipmentCode,
               materialCode: materialCode, // Mã TP
               quantity: quantity,
               carton: carton,
               qtyBox: qtyBox, // Để tính số thùng = quantity / qtyBox
-              poShip: poShip // PO Ship để phân biệt
+              poShip: poShip, // PO Ship để phân biệt
+              factory
             });
           }
         });
@@ -421,6 +437,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         // Recalculate check results after loading shipment data (only if items are already loaded)
         if (this.itemsLoaded) {
           console.log('🔄 Recalculating check results after shipment data update...');
+          this.enrichItemsFactory();
           this.calculateCheckResults();
         }
       });
@@ -505,7 +522,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       }
 
       const shipmentDataList = this.shipmentDataMap.get(shipmentCode) || [];
-      const matchingShipment = shipmentDataList.find(s => String(s.materialCode || '').trim() === materialCode);
+      const itemFactory = this.normalizeFactory(item.factory || this.resolveItemFactory(item));
+      if (!item.factory) {
+        item.factory = itemFactory;
+      }
+      const matchingShipment =
+        shipmentDataList.find(
+          s =>
+            String(s.materialCode || '').trim() === materialCode &&
+            this.normalizeFactory(s.factory) === itemFactory &&
+            (!item.poShip || String(s.poShip || '').trim() === String(item.poShip || '').trim())
+        ) ||
+        shipmentDataList.find(
+          s =>
+            String(s.materialCode || '').trim() === materialCode &&
+            this.normalizeFactory(s.factory) === itemFactory
+        ) ||
+        shipmentDataList.find(s => String(s.materialCode || '').trim() === materialCode);
       if (!matchingShipment) {
         item.shipmentQuantity = 0;
         return;
@@ -513,6 +546,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
       item.shipmentCarton = matchingShipment.carton;
       item.shipmentQuantity = matchingShipment.quantity;
+      item.factory = this.normalizeFactory(matchingShipment.factory || itemFactory);
     });
 
     this.applyFilters();
@@ -752,13 +786,18 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         item.shipment,
         item.materialCode,
         item.customerCode,
-        item.checkId
+        item.checkId,
+        this.resolveItemFactory(item)
       ].filter(Boolean).join(' ').toUpperCase();
       return searchableText.includes(this.searchTerm.toUpperCase());
     });
     
-    // Sắp xếp: 1) Shipment (theo ABC), 2) Mã TP (theo ABC)
+    // Sắp xếp: 1) Factory, 2) Shipment, 3) Mã TP
     this.filteredItems.sort((a, b) => {
+      const factoryCompare = this.resolveItemFactory(a).localeCompare(this.resolveItemFactory(b));
+      if (factoryCompare !== 0) {
+        return factoryCompare;
+      }
       // Bước 1: So sánh Shipment (theo ABC)
       const shipmentA = String(a.shipment || '').trim().toUpperCase();
       const shipmentB = String(b.shipment || '').trim().toUpperCase();
@@ -773,6 +812,82 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       const materialB = String(b.materialCode || '').trim().toUpperCase();
       return materialA.localeCompare(materialB);
     });
+  }
+
+  normalizeFactory(factory: string | undefined): string {
+    const f = String(factory || '').trim().toUpperCase();
+    return f || 'ASM1';
+  }
+
+  /** Bổ sung factory từ tab Shipment nếu doc fg-check chưa có */
+  private enrichItemsFactory(): void {
+    this.items.forEach(item => {
+      if (!item.factory) {
+        item.factory = this.resolveItemFactory(item);
+      } else {
+        item.factory = this.normalizeFactory(item.factory);
+      }
+    });
+  }
+
+  resolveItemFactory(item: FGCheckItem): string {
+    if (item.factory) {
+      return this.normalizeFactory(item.factory);
+    }
+    return this.getFactoryForMaterialInShipment(
+      String(item.shipment || '').trim().toUpperCase(),
+      String(item.materialCode || '').trim(),
+      String(item.poShip || '').trim()
+    );
+  }
+
+  getFactoryForMaterialInShipment(shipmentCode: string, materialCode: string, poShip?: string): string {
+    const list = this.shipmentDataMap.get(shipmentCode) || [];
+    const mat = String(materialCode || '').trim();
+    if (!shipmentCode || !mat) {
+      return 'ASM1';
+    }
+    let matches = list.filter(s => String(s.materialCode || '').trim() === mat);
+    const ps = String(poShip || '').trim();
+    if (ps) {
+      const byPo = matches.filter(s => String(s.poShip || '').trim() === ps);
+      if (byPo.length) {
+        matches = byPo;
+      }
+    }
+    if (!matches.length) {
+      return 'ASM1';
+    }
+    return this.normalizeFactory(matches[0].factory);
+  }
+
+  getTableColspan(): number {
+    return this.checkMode === 'pn-qty' ? 12 : 13;
+  }
+
+  /** Chia bảng theo Factory (ASM1 / ASM2 / …) để dễ nhìn */
+  getFilteredItemsGroupedByFactory(): FactoryItemGroup[] {
+    const groups = new Map<string, FGCheckItem[]>();
+    for (const item of this.filteredItems) {
+      const factory = this.resolveItemFactory(item);
+      if (!groups.has(factory)) {
+        groups.set(factory, []);
+      }
+      groups.get(factory)!.push(item);
+    }
+
+    const orderIndex = (f: string): number => {
+      const i = this.factoryDisplayOrder.indexOf(f);
+      return i >= 0 ? i : this.factoryDisplayOrder.length + f.charCodeAt(0);
+    };
+
+    return Array.from(groups.entries())
+      .map(([factory, items]) => ({ factory, items }))
+      .sort((a, b) => orderIndex(a.factory) - orderIndex(b.factory) || a.factory.localeCompare(b.factory));
+  }
+
+  trackByFactoryGroup(_index: number, group: FactoryItemGroup): string {
+    return group.factory;
   }
 
   /** Số dòng đã scan của pallet hiện tại (shipment + pallet đang check). Chưa scan gì = 0. */
@@ -1307,6 +1422,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         scanId: this.scannedCheckId || undefined,
         checkMode: this.checkMode,
         palletNo: palletNo,
+        factory: this.getFactoryForMaterialInShipment(shipmentCode, materialCodeUpper),
         isLocked: false,
         scannedCustomerCode: true,
         scannedQuantity: !isCartonMode,
@@ -1318,7 +1434,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         .then((docRef) => {
           newItem.id = docRef.id;
           this.items.push(newItem);
-          console.log(`✅ Tạo mới: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper} = ${quantity}`);
+          console.log(`✅ Tạo mới: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper} = ${quantity}, factory=${newItem.factory}`);
           
           // Recalculate và cập nhật bảng
           this.calculateCheckResults();
@@ -1368,13 +1484,16 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     groupedByMaterial.forEach(({ quantity: totalQuantity, scanCount }, materialCode) => {
       // Tìm item đã có trong Firebase (cùng shipment, materialCode, palletNo)
+      const matUpper = materialCode.toUpperCase();
+      const itemFactory = this.getFactoryForMaterialInShipment(shipmentCode, matUpper);
       const existingItem = this.items.find(item => {
         const itemShipment = String(item.shipment || '').trim().toUpperCase();
         const itemMaterialCode = String(item.materialCode || '').trim().toUpperCase();
         const itemPalletNo = String(item.palletNo || '').trim().toUpperCase();
-        return itemShipment === shipmentCode && 
-               itemMaterialCode === materialCode.toUpperCase() &&
+        return itemShipment === shipmentCode &&
+               itemMaterialCode === matUpper &&
                itemPalletNo === palletNo &&
+               this.resolveItemFactory(item) === itemFactory &&
                !item.isLocked;
       });
       
@@ -1400,6 +1519,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           scanId: this.scannedCheckId || undefined,
           checkMode: this.checkMode,
           palletNo: palletNo,
+          factory: itemFactory,
           isLocked: false,
           scannedCustomerCode: false,
           scannedQuantity: !isCartonMode,
@@ -1412,7 +1532,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             newItem.id = docRef.id;
             this.items.push(newItem);
             savedCount++;
-            console.log(`✅ Tạo mới: ${materialCode} = ${totalQuantity}`);
+            console.log(`✅ Tạo mới: ${materialCode} = ${totalQuantity}, factory=${itemFactory}`);
           })
           .catch(error => {
             errorCount++;
@@ -1480,7 +1600,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         materialCode: shipmentData.materialCode,
         quantity: shipmentData.quantity,
         carton: shipmentData.carton,
-        customerCode: customerCode
+        customerCode: customerCode,
+        factory: this.normalizeFactory(shipmentData.factory)
       };
     });
     
@@ -1527,14 +1648,17 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     shipmentDataList.forEach((shipmentData, index) => {
       // QUAN TRỌNG: Kiểm tra xem item đã tồn tại chưa (dựa vào shipment + materialCode + poShip)
       // Nếu cùng materialCode nhưng khác PO Ship, tạo item mới
+      const dataFactory = this.normalizeFactory(shipmentData.factory);
       const existingItem = this.items.find(item => {
         const itemShipment = String(item.shipment || '').trim().toUpperCase();
         const itemMaterialCode = String(item.materialCode || '').trim();
         const itemPoShip = String(item.poShip || '').trim();
         const dataPoShip = String(shipmentData.poShip || '').trim();
-        return itemShipment === shipmentCode && 
+        const itemFactory = this.resolveItemFactory(item);
+        return itemShipment === shipmentCode &&
                itemMaterialCode === shipmentData.materialCode &&
-               itemPoShip === dataPoShip; // Phải khớp cả PO Ship
+               itemPoShip === dataPoShip &&
+               itemFactory === dataFactory;
       });
       
       if (existingItem) {
@@ -1581,6 +1705,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         shipmentCarton: shipmentData.carton, // Lưu số thùng từ shipment
         shipmentQuantity: shipmentData.quantity, // Lưu số lượng từ shipment
         poShip: shipmentData.poShip, // Lưu PO Ship để phân biệt
+        factory: dataFactory,
         scannedCustomerCode: false,
         scannedQuantity: false,
         isLocked: false, // Mặc định không lock
@@ -1592,7 +1717,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Lưu vào Firebase
       this.firestore.collection('fg-check').add(newItem)
         .then((docRef) => {
-          console.log(`✅ Created item for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}, poShip ${shipmentData.poShip}`);
+          console.log(`✅ Created item for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}, factory ${dataFactory}, poShip ${shipmentData.poShip}`);
           newItem.id = docRef.id;
           this.items.push(newItem);
           this.calculateCheckResults();
@@ -1878,16 +2003,22 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     // Nếu có nhiều dòng cùng materialCode (khác PO Ship), tìm dòng đầu tiên chưa đủ
     // Normalize materialCode để so sánh chính xác
     const normalizedMaterialCode = String(materialCode || '').trim();
+    const targetFactory = this.getFactoryForMaterialInShipment(
+      normalizedShipmentCode,
+      normalizedMaterialCode
+    );
     
-    // Tìm tất cả items cùng shipment + materialCode + palletNo, sắp xếp theo PO Ship
+    // Tìm tất cả items cùng shipment + materialCode + palletNo + factory
     const normalizedPalletNo = String(this.currentPalletNo || '').trim().toUpperCase();
     const matchingItems = this.items.filter(item => {
       const itemShipment = String(item.shipment || '').trim().toUpperCase();
       const itemMaterialCode = String(item.materialCode || '').trim();
       const itemPalletNo = String(item.palletNo || '').trim().toUpperCase();
+      const itemFactory = this.resolveItemFactory(item);
       return itemShipment === normalizedShipmentCode &&
              itemMaterialCode === normalizedMaterialCode &&
-             itemPalletNo === normalizedPalletNo;
+             itemPalletNo === normalizedPalletNo &&
+             itemFactory === targetFactory;
     });
     
     // Sắp xếp theo PO Ship để đảm bảo thứ tự
@@ -2126,6 +2257,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         scannedQuantity: this.checkMode === 'pn-qty' && quantity > 0, // Chỉ highlight khi mode PN+QTY
         isLocked: false, // Mặc định không lock
         palletNo: normalizedPalletNo || '', // Cùng shipment + materialCode + palletNo thì cộng dồn
+        factory: targetFactory,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -2133,7 +2265,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       console.log('🔵 New item to save:', newItem);
       this.firestore.collection('fg-check').add(newItem)
         .then((docRef) => {
-          console.log('✅ Customer code saved:', normalizedCustomerCode, 'materialCode:', materialCode, `QTY: ${quantity}`, 'checkMode:', this.checkMode);
+          console.log('✅ Customer code saved:', normalizedCustomerCode, 'materialCode:', materialCode, `QTY: ${quantity}`, 'factory:', targetFactory, 'checkMode:', this.checkMode);
           newItem.id = docRef.id;
           this.items.push(newItem);
           this.calculateCheckResults();
@@ -2563,16 +2695,49 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   private isShipmentStatusAllowed(status: any): boolean {
     const s = String(status || '').trim().toUpperCase();
-    return s === 'ĐÃ XONG' || s === 'ĐÃ CHECK' || s === 'ĐÃ CHECK';
+    return s === 'ĐÃ XONG' || s === 'ĐÃ CHECK';
+  }
+
+  /**
+   * Đọc toàn bộ collection Firestore theo lô (tránh limit 500 mặc định).
+   * Dùng orderBy documentId + startAfter — không cần composite index.
+   */
+  private async fetchAllCollectionDocs(
+    collectionName: string,
+    batchSize = 2500
+  ): Promise<firebase.firestore.QueryDocumentSnapshot[]> {
+    const col = this.firestore.firestore.collection(collectionName);
+    const all: firebase.firestore.QueryDocumentSnapshot[] = [];
+    let lastDoc: firebase.firestore.QueryDocumentSnapshot | null = null;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let q: firebase.firestore.Query = col
+        .orderBy(firebase.firestore.FieldPath.documentId())
+        .limit(batchSize);
+      if (lastDoc) {
+        q = q.startAfter(lastDoc);
+      }
+      const snap = await q.get();
+      if (snap.empty) {
+        break;
+      }
+      all.push(...snap.docs);
+      if (snap.docs.length < batchSize) {
+        break;
+      }
+      lastDoc = snap.docs[snap.docs.length - 1];
+    }
+    return all;
   }
 
   async loadShipmentCheckBoxes(): Promise<void> {
     this.shipmentCheckLoading = true;
     this.shipmentCheckBoxes = [];
     try {
-      const shipmentSnap = await this.firestore.collection('shipments', ref => ref.limit(500)).get().toPromise();
+      const shipmentDocs = await this.fetchAllCollectionDocs('shipments');
       const statusByShipment = new Map<string, string>();
-      shipmentSnap?.docs?.forEach(doc => {
+      shipmentDocs.forEach(doc => {
         const d = doc.data() as any;
         const shipmentCode = String(d?.shipmentCode || '').trim().toUpperCase();
         const status = String(d?.status || '').trim();
@@ -2583,18 +2748,21 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
       if (statusByShipment.size === 0) {
         this.shipmentCheckLoading = false;
+        this.cdr.detectChanges();
         return;
       }
 
-      const fgOutSnap = await this.firestore.collection('fg-out', ref => ref.limit(500)).get().toPromise();
+      const fgOutDocs = await this.fetchAllCollectionDocs('fg-out');
       const palletsByShipment = new Map<string, Set<string>>();
-      fgOutSnap?.docs?.forEach(doc => {
+      fgOutDocs.forEach(doc => {
         const d = doc.data() as any;
         const shipmentCode = String(d?.shipment || '').trim().toUpperCase();
         const pallet = String(d?.pallet || '').trim().toUpperCase();
         if (!shipmentCode || !pallet) return;
         if (!statusByShipment.has(shipmentCode)) return;
-        if (!palletsByShipment.has(shipmentCode)) palletsByShipment.set(shipmentCode, new Set<string>());
+        if (!palletsByShipment.has(shipmentCode)) {
+          palletsByShipment.set(shipmentCode, new Set<string>());
+        }
         palletsByShipment.get(shipmentCode)!.add(pallet);
       });
 
@@ -2626,22 +2794,42 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.shipmentCheckResults = [];
     this.shipmentCheckLastResult = null;
     try {
-      const snap = await this.firestore.collection('fg-out', ref =>
-        ref.where('shipment', '==', code)
-      ).get().toPromise();
+      const col = this.firestore.firestore.collection('fg-out');
+      const seen = new Set<string>();
+      const palletNames: string[] = [];
+      let lastDoc: firebase.firestore.QueryDocumentSnapshot | null = null;
+      const batchSize = 2500;
+      let totalRows = 0;
 
-      if (!snap || snap.empty) {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        let q: firebase.firestore.Query = col.where('shipment', '==', code).limit(batchSize);
+        if (lastDoc) {
+          q = q.startAfter(lastDoc);
+        }
+        const snap = await q.get();
+        if (snap.empty) {
+          break;
+        }
+        totalRows += snap.docs.length;
+        snap.docs.forEach(doc => {
+          const p = ((doc.data() as any).pallet || '').trim();
+          if (p && !seen.has(p)) {
+            seen.add(p);
+            palletNames.push(p);
+          }
+        });
+        if (snap.docs.length < batchSize) {
+          break;
+        }
+        lastDoc = snap.docs[snap.docs.length - 1];
+      }
+
+      if (totalRows === 0) {
         alert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
         this.shipmentCheckLoading = false;
         return;
       }
-
-      const seen = new Set<string>();
-      const palletNames: string[] = [];
-      snap.docs.forEach(doc => {
-        const p = ((doc.data() as any).pallet || '').trim();
-        if (p && !seen.has(p)) { seen.add(p); palletNames.push(p); }
-      });
       palletNames.sort((a, b) => {
         if (a === 'Không có Pallet') return 1;
         if (b === 'Không có Pallet') return -1;

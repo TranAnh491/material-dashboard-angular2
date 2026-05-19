@@ -248,16 +248,17 @@
       
       <div class="modal-body" *ngIf="selectedPallet">
         <div class="label-preview">
-          <div class="preview-factory">{{ selectedPallet.factory }}</div>
+          <div class="preview-factory">{{ getPalletFactoryPrefix(selectedPallet.factory, selectedPallet.palletCode) }}</div>
           <div class="preview-qr">
             <i class="material-icons">qr_code_2</i>
           </div>
-          <div class="preview-code">{{ selectedPallet.palletCode }}</div>
+          <div class="preview-code">{{ getPalletNumberLine(selectedPallet.palletCode) }}</div>
+          <div class="preview-sub text-muted">{{ selectedPallet.palletCode }}</div>
           <div class="preview-date">Ngày tạo: {{ formatDate(selectedPallet.createdAt) }}</div>
         </div>
         
         <div class="print-info">
-          <p>Kích thước tem: <strong>100mm (rộng) x 130mm (cao)</strong></p>
+          <p>Kích thước tem: <strong>100mm × 130mm</strong> — vùng in <strong>90mm × 120mm</strong> (căn giữa)</p>
           <p>Số lượng: <strong>4 tem</strong> (dán 4 mặt pallet)</p>
           <p>Đã in: <strong>{{ selectedPallet.printCount || 0 }}</strong> lần</p>
         </div>

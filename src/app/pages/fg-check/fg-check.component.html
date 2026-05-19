@@ -128,14 +128,22 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredItems.length === 0">
-            <td [attr.colspan]="checkMode === 'pn-qty' ? 12 : 13" class="text-center" style="padding: 20px; color: #000000;">
+            <td [attr.colspan]="getTableColspan()" class="text-center" style="padding: 20px; color: #000000;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
             </td>
           </tr>
           
-          <tr *ngFor="let item of filteredItems; let i = index; trackBy: trackByIndex">
+          <ng-container *ngFor="let group of getFilteredItemsGroupedByFactory(); trackBy: trackByFactoryGroup">
+            <tr class="factory-section-header-row">
+              <td [attr.colspan]="getTableColspan()" class="factory-section-header-cell">
+                <span class="factory-section-label">Factory</span>
+                <span class="factory-badge" [class.factory-asm2]="group.factory === 'ASM2'">{{ group.factory }}</span>
+                <span class="factory-section-count">{{ group.items.length }} dòng</span>
+              </td>
+            </tr>
+            <tr *ngFor="let item of group.items; let i = index; trackBy: trackByIndex">
             <td>{{item.shipment || ''}}</td>
             <td class="row-header">{{i + 1}}</td>
             <td class="code-cell" [class.duplicate-material]="isDuplicateMaterialCode(item)">{{item.materialCode}}</td>
@@ -188,6 +196,7 @@
               </button>
             </td>
           </tr>
+          </ng-container>
         </tbody>
       </table>
     </div>

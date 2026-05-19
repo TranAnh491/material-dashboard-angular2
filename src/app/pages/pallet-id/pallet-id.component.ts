@@ -238,6 +238,25 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.showPrintPreview = false;
   }
 
+  /** F1 = ASM1, F2 = ASM2 — hiển thị trên tem thay cho ASM1/ASM2 */
+  getPalletFactoryPrefix(factory?: string, palletCode?: string): string {
+    const f = String(factory || '').trim().toUpperCase();
+    if (f === 'ASM2') return 'F2';
+    if (f === 'ASM1') return 'F1';
+    const code = String(palletCode || '').trim().toUpperCase();
+    if (code.startsWith('F2')) return 'F2';
+    return 'F1';
+  }
+
+  /** Dòng số dưới QR (phần số sau dấu -, VD: F1-0123 → 0123) */
+  getPalletNumberLine(palletCode?: string): string {
+    const code = String(palletCode || '').trim();
+    const m = code.match(/-(\d+)$/);
+    if (m) return m[1];
+    const digits = code.match(/(\d+)$/);
+    return digits ? digits[1] : code;
+  }
+
   // Print pallet label - 4 copies with QR code
   async printPalletLabel(): Promise<void> {
     if (!this.selectedPallet) return;
@@ -263,19 +282,24 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       return;
     }
 
+    const factoryPrefix = this.getPalletFactoryPrefix(pallet.factory, pallet.palletCode);
+    const numberLine = this.getPalletNumberLine(pallet.palletCode);
+
     // Generate 4 labels for 4 sides of pallet
     let labelsHtml = '';
     for (let i = 1; i <= 4; i++) {
       labelsHtml += `
         <div class="label-container">
-          <div class="factory-name">${pallet.factory}</div>
-          <div class="qr-code">
-            <img src="${qrCodeDataUrl}" alt="QR Code" />
-          </div>
-          <div class="pallet-code">${pallet.palletCode}</div>
-          <div class="label-footer">
-            <div class="created-date">${this.formatDate(pallet.createdAt)}</div>
-            <div class="label-number">${i}/4</div>
+          <div class="label-inner">
+            <div class="factory-prefix">${factoryPrefix}</div>
+            <div class="qr-code">
+              <img src="${qrCodeDataUrl}" alt="QR Code" />
+            </div>
+          <div class="pallet-number">${numberLine}</div>
+            <div class="label-footer">
+              <div class="created-date">${this.formatDate(pallet.createdAt)}</div>
+              <div class="label-number">${i}/4</div>
+            </div>
           </div>
         </div>
       `;
@@ -302,11 +326,15 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
               width: 100mm !important;
               height: 130mm !important;
             }
-            .label-container {
-              width: 100mm !important;
-              height: 130mm !important;
-              border: none !important;
-            }
+          .label-container {
+            width: 100mm !important;
+            height: 130mm !important;
+            border: none !important;
+          }
+          .label-inner {
+            width: 90mm !important;
+            height: 120mm !important;
+          }
           }
           * {
             margin: 0;
@@ -328,12 +356,10 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
           .label-container {
             width: 100mm;
             height: 130mm;
-            border: 2px solid #000;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            padding: 3mm 4mm;
+            justify-content: center;
+            padding: 0;
             page-break-after: always;
             page-break-inside: avoid;
             box-sizing: border-box;
@@ -342,49 +368,62 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
           .label-container:last-child {
             page-break-after: avoid;
           }
-          .factory-name {
-            font-size: 28pt;
+          .label-inner {
+            width: 90mm;
+            height: 120mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-evenly;
+            text-align: center;
+            box-sizing: border-box;
+          }
+          .factory-prefix {
+            font-size: 36pt;
             font-weight: bold;
             color: #000;
-            text-align: center;
             line-height: 1;
+            flex-shrink: 0;
           }
           .qr-code {
             display: flex;
             align-items: center;
             justify-content: center;
-            flex: 1;
+            flex: 1 1 auto;
+            width: 100%;
+            min-height: 0;
           }
           .qr-code img {
-            width: 70mm !important;
-            height: 70mm !important;
-            max-width: 70mm !important;
-            max-height: 70mm !important;
+            width: 72mm !important;
+            height: 72mm !important;
+            max-width: 72mm !important;
+            max-height: 72mm !important;
             object-fit: contain;
           }
-          .pallet-code {
-            font-size: 64pt;
+          .pallet-number {
+            font-size: 56pt;
             font-weight: bold;
             color: #000;
-            letter-spacing: 2px;
-            text-align: center;
+            letter-spacing: 3px;
             line-height: 1;
             font-family: 'Courier New', monospace;
+            flex-shrink: 0;
           }
           .label-footer {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             width: 100%;
-            padding: 0 2mm;
-            margin-top: 2mm;
+            flex-shrink: 0;
+            padding: 0 1mm;
           }
           .created-date {
-            font-size: 14pt;
+            font-size: 11pt;
             color: #000;
             font-weight: 600;
           }
           .label-number {
-            font-size: 14pt;
+            font-size: 11pt;
             color: #000;
             font-weight: 600;
           }
