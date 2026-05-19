@@ -127,6 +127,17 @@
 }
 
 /* Special styling for ASM1 RM parent tab to match child font size */
+.nav > li.tools-parent > a {
+  font-size: 0.85em !important;
+}
+.nav > li.tools-parent > a p {
+  font-size: 0.85em !important;
+}
+.nav > li.tools-parent > a .material-icons {
+  font-size: 18px !important;
+  min-width: 22px !important;
+}
+
 .nav > li.asm1-rm-parent > a {
   font-size: 0.85em !important; /* Same font size as child tabs */
 }

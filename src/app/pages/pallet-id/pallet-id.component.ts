@@ -63,6 +63,15 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   numberLabelError = '';
   isPrintingNumberLabels = false;
 
+  private readonly PASS_LABEL_PASSWORD = '2026';
+  showPassPasswordModal = false;
+  showPassLabelModal = false;
+  passLabelPassword = '';
+  passLabelPasswordError = '';
+  passLabelQuantity = 1;
+  passLabelError = '';
+  isPrintingPassLabels = false;
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
@@ -739,6 +748,149 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       alert('Lỗi khi in tem số. Vui lòng thử lại.');
     } finally {
       this.isPrintingNumberLabels = false;
+    }
+  }
+
+  // ====== In tem PASS (57×32mm, mật khẩu 2026) ======
+
+  openPassLabelFlow(): void {
+    this.passLabelPassword = '';
+    this.passLabelPasswordError = '';
+    this.showPassPasswordModal = true;
+  }
+
+  closePassPasswordModal(): void {
+    this.showPassPasswordModal = false;
+    this.passLabelPassword = '';
+    this.passLabelPasswordError = '';
+  }
+
+  confirmPassPassword(): void {
+    if (this.passLabelPassword.trim() !== this.PASS_LABEL_PASSWORD) {
+      this.passLabelPasswordError = 'Mật khẩu không đúng';
+      return;
+    }
+    this.closePassPasswordModal();
+    this.openPassLabelModal();
+  }
+
+  openPassLabelModal(): void {
+    this.passLabelQuantity = 1;
+    this.passLabelError = '';
+    this.showPassLabelModal = true;
+  }
+
+  closePassLabelModal(): void {
+    this.showPassLabelModal = false;
+    this.passLabelError = '';
+  }
+
+  get canPrintPassLabels(): boolean {
+    const qty = Math.floor(Number(this.passLabelQuantity));
+    return Number.isFinite(qty) && qty >= 1 && qty <= 9999;
+  }
+
+  printPassLabels(): void {
+    const qty = Math.floor(Number(this.passLabelQuantity));
+    if (qty < 1 || qty > 9999) {
+      this.passLabelError = 'Số lượng phải từ 1 đến 9999';
+      return;
+    }
+    this.passLabelError = '';
+    this.isPrintingPassLabels = true;
+
+    const widthMm = 57;
+    const heightMm = 32;
+
+    try {
+      const labelHtml = Array.from({ length: qty }, () => `
+        <div class="pass-label-container">
+          <div class="pass-label-fit">
+            <svg viewBox="0 0 ${widthMm} ${heightMm}" xmlns="http://www.w3.org/2000/svg" aria-label="PASS">
+              <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
+                    font-family="Arial, Helvetica, sans-serif" font-weight="900"
+                    font-size="17.5" letter-spacing="0.35">PASS</text>
+            </svg>
+          </div>
+        </div>`).join('');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>In tem PASS (${widthMm}×${heightMm}mm)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, 'Helvetica Neue', sans-serif;
+      padding: 0;
+      margin: 0;
+      background: white;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; }
+      @page { margin: 0 !important; size: ${widthMm}mm ${heightMm}mm !important; }
+      .pass-label-container {
+        width: ${widthMm}mm !important;
+        height: ${heightMm}mm !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+      .pass-label-container:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+    }
+    .pass-label-container {
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #000;
+      page-break-inside: avoid;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pass-label-fit {
+      width: 90%;
+      height: 90%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .pass-label-fit svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pass-label-fit text {
+      fill: #000;
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 400);
+      this.closePassLabelModal();
+    } catch (err) {
+      console.error('Error printing PASS labels:', err);
+      alert('Lỗi khi in tem PASS. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingPassLabels = false;
     }
   }
 

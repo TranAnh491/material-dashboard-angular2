@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, HostBinding } from '@angular/core';
 import { Router } from '@angular/router';
 import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -240,8 +240,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   woPrevPage(): void { if (this.woCurrentPage > 1) this.woCurrentPage--; }
   woNextPage(): void { if (this.woCurrentPage < this.woPageCount) this.woCurrentPage++; }
 
-  /** Layout mobile: lưới module + drill-down nhóm (≤768px). */
+  /** Layout mobile: lưới module + drill-down nhóm (≤768px / PDA ≤1024px). */
   isMobileLayout = false;
+  private readonly dashboardMobileBodyClass = 'dashboard-mobile-layout';
+
+  @HostBinding('class.dashboard-host--mobile')
+  get hostMobileClass(): boolean {
+    return this.isMobileLayout;
+  }
   mobileNav: 'home' | 'search' | 'fav' | 'profile' = 'home';
   mobileModuleSearch = '';
   /** null = lưới theo nhóm; string = danh sách chi tiết một nhóm */
@@ -250,16 +256,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). */
   private readonly desktopOnlyTabPaths: string[] = [
-    '/assistant',
-    '/pxk-preview',
-    '/find-rm1',
     '/bag-history',
     '/fg-overview',
-    '/warehouse-loading',
-    '/trace-back',
     '/qc',
     '/qc-traceability',
-    '/safety',
     '/label',
     '/work-order-status',
     '/shipment',
@@ -268,13 +268,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     '/fg-out',
     '/fg-inventory',
     '/pallet-id',
-    '/utilization',
     '/checklist',
     '/equipment',
     '/manage',
     '/sxxk',
     '/settings',
-    '/zalo'
+    '/zalo',
+    '/shorted-materials'
   ];
 
   readonly mobileCategoryOrder = [
@@ -290,13 +290,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Menu tabs for icon grid (+ Main giống menu hệ thống)
   menuTabs = [
-    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', category: 'Main' },
     { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
-    { path: '/find-rm1', title: 'Find RM1', icon: 'search', category: 'Main' },
-    { path: '/pxk-preview', title: 'PXK Preview', icon: 'visibility', category: 'Main' },
-    { path: '/location', title: 'Location', icon: 'location_on', category: 'Main' },
-    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Main' },
+    { path: '/location', title: 'Materials', icon: 'inventory_2', category: 'Main' },
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Main' },
     // ASM1 RM
     { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },
@@ -320,7 +316,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
     { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', category: 'ASM FG' },
-    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', category: 'ASM FG' },
 
@@ -328,17 +323,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', category: 'Production' },
 
     // Tools & Operations
-    { path: '/assistant', title: 'Assistant', icon: 'smart_toy', category: 'Tools' },
+    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', category: 'Tools' },
+    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Tools' },
+    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', category: 'Tools' },
     { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
-    { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', category: 'Tools' },
-    { path: '/trace-back', title: 'Trace Back', icon: 'track_changes', category: 'Tools' },
     { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', category: 'Tools' },
-    { path: '/safety', title: 'Safety Stock', icon: 'security', category: 'Tools' },
-    { path: '/wh-security', title: 'WH Security', icon: 'shield', category: 'Tools' },
 
     // Admin & Reports
     { path: '/index', title: 'Bonded Report', icon: 'analytics', category: 'Admin' },
-    { path: '/utilization', title: 'Utilization', icon: 'assessment', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'integration_instructions', category: 'Admin' },
     { path: '/manage', title: 'Manage', icon: 'manage_search', category: 'Admin' },
@@ -363,12 +355,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private updateMobileLayout(): void {
     const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    this.isMobileLayout = w <= 768;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isMobileUa = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|pda|handheld|mobile/i.test(
+      ua.toLowerCase()
+    );
+    this.isMobileLayout = w <= 768 || (isMobileUa && w <= 1024);
     if (!this.isMobileLayout) {
       this.mobileDrillCategory = null;
       this.mobileSearchExpanded = false;
     }
+    this.syncDashboardMobileBodyClass();
     this.cdr.markForCheck();
+  }
+
+  private syncDashboardMobileBodyClass(): void {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle(this.dashboardMobileBodyClass, this.isMobileLayout);
   }
 
   /** Tab hiển thị trên lưới mobile (ẩn module chỉ-desktop giống Menu). */
@@ -398,6 +400,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   mobileTabsForCategory(category: string): typeof this.menuTabs {
     return this.mobileTabsFiltered().filter((t) => t.category === category);
+  }
+
+  get mobileSearchActive(): boolean {
+    return this.mobileSearchExpanded || this.mobileNav === 'search';
+  }
+
+  get mobileHasSearchQuery(): boolean {
+    return !!(this.mobileModuleSearch || '').trim();
   }
 
   openMobileCategoryDrill(category: string): void {
@@ -437,6 +447,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (tab === 'home') {
       this.closeMobileCategoryDrill();
       this.mobileSearchExpanded = false;
+      this.mobileModuleSearch = '';
     }
     if (tab === 'profile') {
       this.navigateToTab('/settings');
@@ -498,6 +509,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove(this.dashboardMobileBodyClass);
+    }
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     if (this.rackWarningsRefreshInterval) clearInterval(this.rackWarningsRefreshInterval);
     if (this.fgTurnoverChart) {

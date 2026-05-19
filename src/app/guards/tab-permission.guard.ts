@@ -118,7 +118,6 @@ export class TabPermissionGuard implements CanActivate {
     // Map URL paths to tab keys - đồng bộ với FilteredRoutesService và availableTabs
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
-      '/assistant': 'assistant',
       '/pd-control': 'pd-control',
       '/materials-dashboard': 'materials-dashboard',
       '/fgs-dashboard': 'fgs-dashboard',
@@ -149,23 +148,16 @@ export class TabPermissionGuard implements CanActivate {
       
       // Other routes
       '/location': 'location',
-      '/warehouse-loading': 'warehouse-loading',
-      '/trace-back': 'trace-back',
       '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',
       '/index': 'index',
-      '/utilization': 'utilization',
       '/sxxk': 'sxxk',
       '/scrap': 'scrap',
-      '/find-rm1': 'find-rm1',
-      '/pxk-preview': 'pxk-preview',
       '/checklist': 'checklist',
-      '/safety': 'safety',
       '/equipment': 'equipment',
       '/qc': 'qc',
       '/qc-traceability': 'qc',
-      '/wh-security': 'wh-security',
       '/rm1-delivery': 'rm1-delivery',
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',

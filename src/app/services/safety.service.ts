@@ -2,7 +2,30 @@ import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Observable, from, firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { SafetyMaterial } from '../pages/safety/safety.component';
+
+export interface SafetyMaterial {
+  id?: string;
+  materialCode: string;
+  materialName: string;
+  scanDate: Date;
+  quantityASM1: number;
+  palletQuantityASM1: number;
+  palletCountASM1: number;
+  quantityASM2: number;
+  palletQuantityASM2: number;
+  palletCountASM2: number;
+  totalQuantity: number;
+  totalPalletCount: number;
+  safety: number;
+  status: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface SafetyImportData {
+  materialCode: string;
+  safety: number;
+}
 
 @Injectable({
   providedIn: 'root'

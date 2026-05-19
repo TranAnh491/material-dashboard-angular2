@@ -57,7 +57,6 @@ export class TabPermissionService {
     // CHỈ cho phép Dashboard mặc định, các tab khác phải được cấp quyền trong Settings
     const basePermissions = {
       'dashboard': true,
-      'assistant': true,
       // Tất cả các tab khác mặc định KHÔNG được phép (false hoặc không có trong object)
     };
 
@@ -82,9 +81,6 @@ export class TabPermissionService {
       // Location tab - chỉ cho phép khi có quyền truy cập ASM1
       'location': factoryAccess.canAccessASM1 === true,
       
-      // Safety tab - chỉ cho phép khi có quyền truy cập ít nhất một nhà máy
-      'safety': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
-
       // Materials Dashboard - cần quyền ít nhất 1 nhà máy
       'materials-dashboard': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'fgs-dashboard': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true
@@ -151,7 +147,6 @@ export class TabPermissionService {
   availableTabs = [
     // Main tabs
     { key: 'dashboard', name: 'Dashboard' },
-    { key: 'assistant', name: 'Assistant' },
     { key: 'materials-dashboard', name: 'Materials Dashboard' },
     { key: 'fgs-dashboard', name: 'FGs Dashboard' },
     { key: 'work-order-status', name: 'Work Order' },
@@ -181,17 +176,7 @@ export class TabPermissionService {
     { key: 'fg-location', name: 'FG Location' },
     
     // Location tab
-    { key: 'location', name: 'Location' },
-    
-    // Find RM1 tab
-    { key: 'find-rm1', name: 'Find RM1' },
-    { key: 'pxk-preview', name: 'PXK Preview' },
-    
-    // Warehouse Loading tab
-    { key: 'warehouse-loading', name: 'Loading' },
-    
-    // Trace Back tab
-    { key: 'trace-back', name: 'Trace Back' },
+    { key: 'location', name: 'Materials' },
     
     // Manage tab
     { key: 'manage', name: 'Manage' },
@@ -200,14 +185,11 @@ export class TabPermissionService {
     { key: 'stock-check', name: 'Stock Check' },
     { key: 'label', name: 'Label' },
     { key: 'index', name: 'Bonded Report' },
-    { key: 'utilization', name: 'Utilization' },
     { key: 'sxxk', name: 'SXXK' },
     { key: 'scrap', name: 'SCRAP' },
     { key: 'checklist', name: 'Safety & Quality' },
-    { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
     { key: 'qc', name: 'Quality' },
-    { key: 'wh-security', name: 'WH Security' },
     { key: 'rm1-delivery', name: 'RM Delivery' },
     { key: 'shorted-materials', name: 'Shorted materials' },
     { key: 'settings', name: 'Settings' }

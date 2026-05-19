@@ -8,12 +8,9 @@ export interface RouteInfo {
 
 export const ROUTES: RouteInfo[] = [
   { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
-  { path: '/assistant', title: 'Assistant', icon: 'smart_toy', class: '' },
-  { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', class: '' },
   { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
-  { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: '' },
   { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', class: '' },
   { 
     path: '', 
@@ -51,25 +48,29 @@ export const ROUTES: RouteInfo[] = [
       { path: '/fg-check', title: 'FG Check', icon: 'fact_check', class: 'material-child-icon' },
       { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory', class: 'material-child-icon' },
       { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', class: 'material-child-icon' },
-      { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
       { path: '/fg-location', title: 'FG Location', icon: 'location_on', class: 'material-child-icon' },
       { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', class: 'material-child-icon' }
     ]
   },
-  { path: '/label', title: 'Label', icon: 'label', class: '' },
-  { path: '/find-rm1', title: 'Find RM1', icon: 'search', class: '' },
-  { path: '/location', title: 'Location', icon: 'location_on', class: '' },
-  { path: '/warehouse-loading', title: 'Loading', icon: 'assessment', class: '' },
-  { path: '/trace-back', title: 'Trace Back', icon: 'track_changes', class: '' },
-  { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: '' },
+  {
+    path: '',
+    title: 'Tools',
+    icon: 'build',
+    class: 'tools-parent',
+    children: [
+      { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', class: 'material-child-icon' },
+      { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: 'material-child-icon' },
+      { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
+      { path: '/label', title: 'Label', icon: 'label', class: 'material-child-icon' },
+      { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: 'material-child-icon' }
+    ]
+  },
+  { path: '/location', title: 'Materials', icon: 'inventory_2', class: '' },
   { path: '/manage', title: 'Manage', icon: 'manage_search', class: '' },
   { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },
   { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', class: '' },
-  { path: '/wh-security', title: 'WH Security', icon: 'security', class: '' },
-  { path: '/safety', title: 'Safety Stock', icon: 'security', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
 
-  { path: '/utilization', title: 'Utilization', icon: 'assessment', class: '' },
   { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', class: '' },
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },

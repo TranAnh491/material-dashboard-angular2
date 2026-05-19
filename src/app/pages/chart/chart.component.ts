@@ -1,26 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { SafetyService } from '../../services/safety.service';
-
-export interface SafetyMaterial {
-  id?: string;
-  materialCode: string;
-  materialName: string;
-  scanDate: Date;
-  quantityASM1: number;
-  palletQuantityASM1: number;
-  palletCountASM1: number;
-  quantityASM2: number;
-  palletQuantityASM2: number;
-  palletCountASM2: number;
-  totalQuantity: number;
-  totalPalletCount: number;
-  safety: number;
-  status: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+import { SafetyService, SafetyMaterial } from '../../services/safety.service';
 
 @Component({
   selector: 'app-chart',

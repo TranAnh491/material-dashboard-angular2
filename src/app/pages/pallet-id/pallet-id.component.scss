@@ -158,6 +158,34 @@
   }
 }
 
+.btn-pass-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  i {
+    font-size: 20px;
+  }
+
+  &:hover:not(:disabled) {
+    background: #1b5e20;
+  }
+
+  &:disabled {
+    background: #9e9e9e;
+    cursor: not-allowed;
+  }
+}
+
 // Table Container
 .table-container {
   background: #fff;
@@ -550,6 +578,56 @@
 }
 
 .number-label-error {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: #f44336;
+}
+
+// In tem PASS modal
+.pass-password-modal,
+.pass-label-modal {
+  max-width: 400px;
+}
+
+.pass-label-hint {
+  margin: 0 0 14px 0;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.pass-label-input-wrap {
+  margin-bottom: 10px;
+}
+
+.pass-label-qty-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.pass-label-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+
+  &:focus {
+    outline: none;
+    border-color: #2e7d32;
+  }
+}
+
+.pass-label-preview {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pass-label-error {
   margin: 8px 0 0 0;
   font-size: 13px;
   color: #f44336;

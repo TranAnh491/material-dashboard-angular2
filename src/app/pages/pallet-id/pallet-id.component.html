@@ -34,6 +34,77 @@
       <i class="material-icons">pin</i>
       <span>{{ isPrintingNumberLabels ? 'Đang in...' : 'In số' }}</span>
     </button>
+
+    <button class="btn-pass-label" (click)="openPassLabelFlow()" [disabled]="isPrintingPassLabels">
+      <i class="material-icons">verified</i>
+      <span>{{ isPrintingPassLabels ? 'Đang in...' : 'In tem PASS' }}</span>
+    </button>
+  </div>
+
+  <!-- Modal mật khẩu In tem PASS -->
+  <div class="modal-overlay" *ngIf="showPassPasswordModal" (click)="closePassPasswordModal()">
+    <div class="modal-content pass-password-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Xác nhận In tem PASS</h3>
+        <button class="btn-close" (click)="closePassPasswordModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">Nhập mật khẩu để in tem PASS (57mm × 32mm):</p>
+        <div class="pass-label-input-wrap">
+          <input type="password"
+                 [(ngModel)]="passLabelPassword"
+                 class="pass-label-input"
+                 placeholder="Mật khẩu"
+                 (keyup.enter)="confirmPassPassword()">
+        </div>
+        <p class="pass-label-error" *ngIf="passLabelPasswordError">{{ passLabelPasswordError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closePassPasswordModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="confirmPassPassword()">
+          <i class="material-icons">lock_open</i>
+          Xác nhận
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal In tem PASS -->
+  <div class="modal-overlay" *ngIf="showPassLabelModal" (click)="closePassLabelModal()">
+    <div class="modal-content pass-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>In tem PASS</h3>
+        <button class="btn-close" (click)="closePassLabelModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">Tem <strong>57mm × 32mm</strong>, chữ <strong>PASS</strong> căn giữa (~90% diện tích tem).</p>
+        <div class="pass-label-input-wrap">
+          <label class="pass-label-qty-label" for="passLabelQuantity">Số lượng tem cần in</label>
+          <input id="passLabelQuantity"
+                 type="number"
+                 [(ngModel)]="passLabelQuantity"
+                 min="1"
+                 max="9999"
+                 class="pass-label-input"
+                 placeholder="Ví dụ: 10">
+        </div>
+        <p class="pass-label-preview text-muted" *ngIf="canPrintPassLabels">
+          Sẽ in <strong>{{ passLabelQuantity | number }}</strong> tem PASS
+        </p>
+        <p class="pass-label-error" *ngIf="passLabelError">{{ passLabelError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closePassLabelModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="printPassLabels()" [disabled]="isPrintingPassLabels || !canPrintPassLabels">
+          <i class="material-icons">print</i>
+          In tem PASS
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Modal In số -->

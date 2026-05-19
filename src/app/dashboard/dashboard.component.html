@@ -6,8 +6,8 @@
         <i class="material-icons">menu</i>
       </button>
       <div class="dash-mob-brand">
-        <span class="dash-mob-brand__title">Warehouse</span>
-        <span class="dash-mob-brand__sub">Menu nhanh module</span>
+        <span class="dash-mob-brand__title">Dashboard</span>
+        <span class="dash-mob-brand__sub">Tổng quan kho · module</span>
       </div>
       <button type="button" class="dash-mob-iconbtn dash-mob-iconbtn--bell" aria-label="Thông báo">
         <i class="material-icons">notifications_none</i>
@@ -26,7 +26,7 @@
           <p class="dash-mob-drill__sub">Chọn module để mở</p>
         </div>
       </div>
-      <div class="dash-mob-search dash-mob-search--drill" *ngIf="mobileSearchExpanded">
+      <div class="dash-mob-search dash-mob-search--drill" *ngIf="mobileSearchActive">
         <i class="material-icons">search</i>
         <input
           type="search"
@@ -54,8 +54,8 @@
     <!-- Trang chủ mobile: KPI + lưới theo nhóm -->
     <div class="dash-mob-hub" *ngIf="!mobileDrillCategory">
       <div class="dash-mob-hub__intro">
-        <h1 class="dash-mob-hub__title">Menu Overview</h1>
-        <p class="dash-mob-hub__sub">Truy cập nhanh theo nhóm chức năng</p>
+        <h1 class="dash-mob-hub__title">Dashboard</h1>
+        <p class="dash-mob-hub__sub">KPI nhanh và truy cập module theo nhóm</p>
       </div>
 
       <div class="dash-mob-kpi-strip" aria-label="Tóm tắt nhanh">
@@ -80,7 +80,7 @@
         </div>
       </div>
 
-      <div class="dash-mob-search" *ngIf="mobileSearchExpanded">
+      <div class="dash-mob-search dash-mob-search--hub" *ngIf="mobileSearchActive">
         <i class="material-icons">search</i>
         <input
           type="search"
@@ -90,8 +90,24 @@
         />
       </div>
 
-      <ng-container *ngFor="let cat of mobileCategoriesVisible()">
-        <section class="dash-mob-section">
+      <ul class="dash-mob-list dash-mob-list--search" *ngIf="mobileHasSearchQuery">
+        <li *ngFor="let t of mobileTabsFiltered()">
+          <button type="button" class="dash-mob-list__row" (click)="navigateToTab(t.path)">
+            <span class="dash-mob-list__ico" [ngClass]="iconTintClass(t.category)">
+              <i class="material-icons">{{ t.icon }}</i>
+            </span>
+            <span class="dash-mob-list__text">
+              <span class="dash-mob-list__title">{{ t.title }}</span>
+              <span class="dash-mob-list__desc">{{ t.category }}</span>
+            </span>
+            <i class="material-icons dash-mob-list__chev">chevron_right</i>
+          </button>
+        </li>
+        <li class="dash-mob-empty" *ngIf="mobileTabsFiltered().length === 0">Không tìm thấy module.</li>
+      </ul>
+
+      <ng-container *ngIf="!mobileHasSearchQuery">
+        <section class="dash-mob-section" *ngFor="let cat of mobileCategoriesVisible()">
           <button type="button" class="dash-mob-section__head" (click)="openMobileCategoryDrill(cat)">
             <span class="dash-mob-section__label">{{ cat }}</span>
             <i class="material-icons">chevron_right</i>

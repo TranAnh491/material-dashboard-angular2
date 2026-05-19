@@ -48,7 +48,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
   availableTabs = [
     // Main tabs
     { key: 'dashboard', name: 'Dashboard' },
-    { key: 'assistant', name: 'Assistant' },
     { key: 'materials-dashboard', name: 'Materials Dashboard' },
     { key: 'fgs-dashboard', name: 'FGs Dashboard' },
     { key: 'pd-control', name: 'PD Control' },
@@ -78,23 +77,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'pallet-id', name: 'Pallet ID' },
     
     // Other tabs
-    { key: 'location', name: 'Location' },
-    { key: 'find-rm1', name: 'Find RM1' },
-    { key: 'pxk-preview', name: 'PXK Preview' },
-    { key: 'warehouse-loading', name: 'Loading' },
-    { key: 'trace-back', name: 'Trace Back' },
+    { key: 'location', name: 'Materials' },
     { key: 'manage', name: 'Manage' },
     { key: 'stock-check', name: 'Stock Check' },
     { key: 'label', name: 'Label' },
     { key: 'index', name: 'Bonded Report' },
-    { key: 'utilization', name: 'Utilization' },
     { key: 'sxxk', name: 'SXXK' },
     { key: 'scrap', name: 'SCRAP' },
     { key: 'checklist', name: 'Safety & Quality' },
-    { key: 'safety', name: 'Safety Stock' },
     { key: 'equipment', name: 'Training' },
     { key: 'qc', name: 'Quality' },
-    { key: 'wh-security', name: 'WH Security' },
     { key: 'rm1-delivery', name: 'RM Delivery' },
     { key: 'shorted-materials', name: 'Shorted materials' },
     { key: 'settings', name: 'Settings' },

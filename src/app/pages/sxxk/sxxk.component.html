@@ -3,23 +3,32 @@
   <!-- ── TOOLBAR ───────────────────────────────────────────────── -->
   <div class="toolbar">
     <div class="toolbar-left">
-      <span class="page-title"><i class="material-icons">inventory_2</i> SXXK</span>
+      <span class="page-title"><i class="material-icons">inventory_2</i> SXXK 2026</span>
 
-      <select class="sel" [(ngModel)]="yearFilter" (change)="filterRows()">
+      <select class="sel" [(ngModel)]="yearFilter" (change)="onYearChange()">
         <option *ngFor="let y of years" [value]="y">{{y}}</option>
-      </select>
-      <select class="sel" [(ngModel)]="monthFilter" (change)="filterRows()">
-        <option *ngFor="let m of months" [value]="m.value">{{m.label}}</option>
       </select>
 
       <input class="search-input" placeholder="🔍 Tìm Mã NVL..."
              [(ngModel)]="searchTerm" (input)="filterRows()" />
+
+      <span class="row-count" *ngIf="totalRows > 0">{{totalRows | number}} mã NVL</span>
     </div>
 
     <div class="toolbar-right">
       <span class="saved-msg" *ngIf="savedMsg">{{savedMsg}}</span>
+      <span class="import-status" *ngIf="importStatus">{{importStatus}}</span>
 
-      <!-- Import/Template – chỉ hiện khi tab có importKey -->
+      <button class="btn btn-read" (click)="readRawAndCalculate()" [disabled]="isLoading"
+              title="Đọc file thô đã lưu trên Firebase Storage và tính bảng">
+        <i class="material-icons">storage</i> Đọc dữ liệu thô
+      </button>
+
+      <label class="btn btn-multi" title="Lưu file thô lên Storage (NHAP, XUAT, TONDAU, BCTK)">
+        <i class="material-icons">folder_open</i> Import workbook
+        <input type="file" accept=".xlsx,.xls" hidden (change)="onMultiFileSelected($event)" />
+      </label>
+
       <ng-container *ngIf="activeTab.importKey">
         <label class="btn btn-import">
           <i class="material-icons">upload_file</i> Import {{activeTab.label}}
@@ -31,7 +40,11 @@
         </button>
       </ng-container>
 
-      <button class="btn btn-export" (click)="exportExcel()">
+      <button class="btn btn-recalc" (click)="recalcAll()" title="Đọc lại file thô và tính">
+        <i class="material-icons">calculate</i> Đọc thô & tính
+      </button>
+
+      <button class="btn btn-export" (click)="exportExcel()" [disabled]="filteredRows.length === 0">
         <i class="material-icons">download</i> Xuất Excel
       </button>
     </div>
@@ -48,64 +61,91 @@
     </button>
   </div>
 
-  <!-- ── LOADING ────────────────────────────────────────────────── -->
+  <div class="hint-bar" *ngIf="activeTabKey === 'tong-hop'">
+    <span>Nguồn: <b>NHAP</b> (NK/PN) · <b>XUAT</b> (PX) · <b>TONDAU 2026</b> · <b>BCTK 2026</b></span>
+    <span class="hint-formula">Mở trang → tự đọc file thô từ Storage · Import chỉ để cập nhật file gốc</span>
+  </div>
+
   <div class="loading" *ngIf="isLoading">
     <div class="spinner"></div> Đang xử lý...
   </div>
 
-  <!-- ── BẢNG ──────────────────────────────────────────────────── -->
   <div class="table-wrap">
-    <table class="excel-table">
-      <thead>
-        <tr>
+    <table class="excel-table" *ngIf="filteredRows.length > 0 || isLoading">
+
+      <thead *ngIf="hasGroupHeader">
+        <tr class="group-row">
+          <th class="col-stt" rowspan="2">No</th>
+          <th class="col-ma" rowspan="2">Mã NVL</th>
+          <th class="g-ton-dau" [attr.colspan]="getGroupColumns('ton-dau').length">TỒN ĐẦU</th>
+          <th class="g-nk" [attr.colspan]="getGroupColumns('nk').length">NK</th>
+          <th class="g-pn" [attr.colspan]="getGroupColumns('pn').length">PN</th>
+          <th class="g-px" [attr.colspan]="getGroupColumns('px').length">PX</th>
+          <th class="g-ton-kho" [attr.colspan]="getGroupColumns('ton-kho').length">TỒN KHO</th>
+          <th class="g-bctk" [attr.colspan]="getGroupColumns('bctk').length">BCTK</th>
+          <th class="g-chenh" [attr.colspan]="getGroupColumns('chenh').length">CHÊNH LỆCH</th>
+          <th class="g-action" rowspan="2"></th>
+        </tr>
+        <tr class="header-row">
           <ng-container *ngFor="let col of activeTab.columns">
-            <th *ngIf="col.field === 'stt'"    class="col-stt"   [style.background]="col.color || ''">STT</th>
-            <th *ngIf="col.field === 'maNVL'"  class="col-ma"    [style.background]="col.color || ''">Mã NVL</th>
+            <th *ngIf="col.group"
+                class="col-num"
+                [class.col-formula]="col.formula"
+                [style.background]="col.color || ''">
+              {{col.header}}
+            </th>
+          </ng-container>
+        </tr>
+      </thead>
+
+      <thead *ngIf="!hasGroupHeader">
+        <tr class="header-row">
+          <ng-container *ngFor="let col of activeTab.columns">
+            <th *ngIf="col.field === 'stt'" class="col-stt">STT</th>
+            <th *ngIf="col.field === 'maNVL'" class="col-ma">Mã NVL</th>
             <th *ngIf="col.field === 'action'" class="col-action"></th>
             <th *ngIf="col.field !== 'stt' && col.field !== 'maNVL' && col.field !== 'action'"
                 class="col-num"
+                [class.col-formula]="col.formula"
                 [style.background]="col.color || '#e8eaf6'">
               {{col.header}}
             </th>
           </ng-container>
         </tr>
       </thead>
+
       <tbody>
         <tr *ngFor="let r of filteredRows; let i = index"
-            [class.row-diff]="r.ssBCTK !== 0">
+            [class.row-diff]="hasChenhLech(r)">
           <ng-container *ngFor="let col of activeTab.columns">
-            <!-- STT -->
             <td *ngIf="col.field === 'stt'" class="col-stt">{{i + 1}}</td>
-            <!-- Mã NVL -->
             <td *ngIf="col.field === 'maNVL'" class="col-ma">{{r.maNVL}}</td>
-            <!-- Action -->
             <td *ngIf="col.field === 'action'" class="col-action">
               <button class="del-btn" (click)="deleteRow(r)" title="Xóa">
                 <i class="material-icons">delete</i>
               </button>
             </td>
-            <!-- Số -->
             <td *ngIf="col.field !== 'stt' && col.field !== 'maNVL' && col.field !== 'action'"
                 class="col-num"
-                [class.col-result]="isResult(col.field)"
-                [class.ss-diff]="isSsBCTK(col.field) && r.ssBCTK !== 0"
-                [class.ss-ok]="isSsBCTK(col.field) && r.ssBCTK === 0">
+                [class.col-formula]="col.formula"
+                [class.col-result]="col.formula && (col.field === 'totalTonKhoSL' || col.field === 'totalTonKhoValue')"
+                [class.ss-diff]="isChenhLech(col.field) && hasChenhLech(r)"
+                [class.ss-ok]="isChenhLech(col.field) && !hasChenhLech(r)">
               {{cellValue(r, col.field)}}
             </td>
           </ng-container>
         </tr>
 
-        <!-- Hàng tổng -->
-        <tr class="total-row" *ngIf="filteredRows.length > 0">
+        <tr class="total-row">
           <ng-container *ngFor="let col of activeTab.columns; let ci = index">
-            <td *ngIf="col.field === 'stt' && ci === 0" class="col-stt" colspan="2">
+            <td *ngIf="col.field === 'stt' && ci === 0" class="col-stt" [attr.colspan]="2">
               Tổng ({{totalRows}})
             </td>
             <td *ngIf="col.field === 'maNVL'" style="display:none"></td>
             <td *ngIf="col.field === 'action'" class="col-action"></td>
             <td *ngIf="col.field !== 'stt' && col.field !== 'maNVL' && col.field !== 'action'"
                 class="col-num"
-                [class.col-result]="isResult(col.field)">
+                [class.col-formula]="col.formula">
               {{sum($any(col.field))}}
             </td>
           </ng-container>
@@ -115,7 +155,8 @@
 
     <div class="no-data" *ngIf="filteredRows.length === 0 && !isLoading">
       <i class="material-icons">folder_open</i>
-      <p>Chưa có dữ liệu. Hãy import file để bắt đầu.</p>
+      <p>Chưa có dữ liệu SXXK {{yearFilter}}.</p>
+      <p class="sub">Nhấn <b>Đọc dữ liệu thô</b> hoặc import workbook (NHAP, XUAT, TONDAU, BCTK).</p>
     </div>
   </div>
 

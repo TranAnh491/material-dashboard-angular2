@@ -99,13 +99,9 @@ export class SidebarComponent implements OnInit, OnDestroy {
       '/inbound-asm2',        // Tab 8
       '/outbound-asm2',       // Tab 9
       '/materials-asm2',      // Tab 10
-      '/find-rm1',           // Tab 16
       '/location',           // Tab 17
-      '/warehouse-loading',  // Tab Loading
-      '/trace-back',         // Tab Trace Back
       '/stock-check',        // Tab 18
-      '/bag-history',
-      '/safety'              // Tab 20
+      '/bag-history'
     ];
 
     return menuItems.map(menuItem => {

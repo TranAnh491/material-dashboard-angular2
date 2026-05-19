@@ -31,16 +31,10 @@ export class MenuComponent implements OnInit {
   // FG Check, FG Location, FG In được cho phép hiển thị trên mobile
   desktopOnlyTabs: string[] = [
     // Hide on mobile per request (keep on desktop)
-    '/assistant',
-    '/pxk-preview',
-    '/find-rm1',
     '/bag-history',
     '/fg-overview',
-    '/warehouse-loading',
-    '/trace-back',
     '/qc',
     '/qc-traceability',
-    '/safety',
     // PrintLabelComponent is routed as /label (admin-layout.routing.ts)
     '/label',
     '/work-order-status',
@@ -50,28 +44,22 @@ export class MenuComponent implements OnInit {
     '/fg-out',
     '/fg-inventory',
     '/pallet-id',
-    '/utilization',
     '/checklist',
     '/equipment',
     '/manage',
     '/sxxk',
     '/settings',
-    '/zalo'
+    '/zalo',
+    '/shorted-materials'
   ];
   
   menuTabs: MenuTab[] = [
     // Dashboard - First
     { path: '/dashboard', title: 'Dashboard', icon: 'speed', iconImage: 'assets/img/dasboard.png', category: 'Main' },
-    { path: '/assistant', title: 'Assistant', icon: 'smart_toy', iconImage: 'assets/img/dasboard.png', category: 'Main' },
-    
     // Main - Additional tools
-    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Main' },
     { path: '/work-order-status', title: 'Work Order', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Main' },
-    { path: '/find-rm1', title: 'Find RM1', icon: 'search', iconImage: 'assets/img/find.png', category: 'Main' },
-    { path: '/pxk-preview', title: 'PXK Preview', icon: 'preview', iconImage: 'assets/img/preview.png', category: 'Main' },
-    { path: '/location', title: 'Location', icon: 'place', iconImage: 'assets/img/location.png', category: 'Main' },
-    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Main' },
+    { path: '/location', title: 'Materials', icon: 'inventory_2', iconImage: 'assets/img/location.png', category: 'Main' },
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', iconImage: 'assets/img/dasboard.png', category: 'Main' },
 
     // Production
@@ -100,19 +88,16 @@ export class MenuComponent implements OnInit {
     { path: '/fg-check', title: 'FG Check', icon: 'fact_check', iconImage: 'assets/img/shipcheck.png', category: 'ASM FG' },
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', iconImage: 'assets/img/fginventory.png', category: 'ASM FG' },
     { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', iconImage: 'assets/img/stocktaking.png', category: 'ASM FG' },
-    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', iconImage: 'assets/img/fglocation.png', category: 'ASM FG' },
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', iconImage: 'assets/img/palletid.png', category: 'ASM FG' },
     
     // Tools & Operations
-    { path: '/warehouse-loading', title: 'Loading', icon: 'storage', iconImage: 'assets/img/loading.png', category: 'Tools' },
-    { path: '/trace-back', title: 'Trace Back', icon: 'timeline', iconImage: 'assets/img/traceback.png', category: 'Tools' },
+    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
+    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Tools' },
+    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
     { path: '/stock-check', title: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png', category: 'Tools' },
-    { path: '/wh-security', title: 'WH Security', icon: 'security', iconImage: 'assets/img/security.png', category: 'Tools' },
-    { path: '/safety', title: 'Safety Stock', icon: 'shield', iconImage: 'assets/img/safetystock.png', category: 'Tools' },
     
     // Admin & Reports
-    { path: '/utilization', title: 'Utilization', icon: 'trending_up', iconImage: 'assets/img/utilization.png', category: 'Admin' },
     { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', iconImage: 'assets/img/sxxk.png', category: 'Admin' },
     { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', iconImage: 'assets/img/scrap.png', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', iconImage: 'assets/img/safety.png', category: 'Admin' },
@@ -124,11 +109,8 @@ export class MenuComponent implements OnInit {
 
   private readonly iconAccentByPath: Record<string, { bg: string; border: string; fg: string }> = {
     '/dashboard': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' },
-    '/assistant': { bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.18)', fg: '#16a34a' },
     '/work-order-status': { bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.18)', fg: '#ea580c' },
     '/shipment': { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.18)', fg: '#7c3aed' },
-    '/find-rm1': { bg: 'rgba(14,165,233,0.10)', border: 'rgba(14,165,233,0.18)', fg: '#0284c7' },
-    '/pxk-preview': { bg: 'rgba(34,211,238,0.10)', border: 'rgba(34,211,238,0.18)', fg: '#0891b2' },
     '/location': { bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.18)', fg: '#e11d48' },
     '/rm1-delivery': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' }
   };
@@ -185,11 +167,8 @@ export class MenuComponent implements OnInit {
 
     const rawIconsByPath: Record<string, string> = {
       '/dashboard': svg('<path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15l3-4 3 2 4-6"/>'),
-      '/assistant': svg('<path d="M12 8v4"/><path d="M9 12h6"/><rect x="7" y="4.5" width="10" height="12" rx="3"/><path d="M9 19l3-2 3 2"/>'),
       '/work-order-status': svg('<path d="M9 6h10"/><path d="M9 10h10"/><path d="M9 14h6"/><path d="M5 6h.01"/><path d="M5 10h.01"/><path d="M5 14h.01"/><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'),
       '/shipment': svg('<path d="M3 7h12v10H3z"/><path d="M15 10h4l2 2v5h-6z"/><circle cx="7" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/>'),
-      '/find-rm1': svg('<circle cx="11" cy="11" r="6"/><path d="M20 20l-3.5-3.5"/>'),
-      '/pxk-preview': svg('<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>'),
       '/location': svg('<path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/>'),
       '/rm1-delivery': svg('<path d="M4 7h10v10H4z"/><path d="M14 10h4l2 2v5h-6z"/><path d="M7 19h.01"/><path d="M17 19h.01"/><path d="M6.5 19a.5.5 0 0 1 1 0"/><path d="M16.5 19a.5.5 0 0 1 1 0"/>')
     };

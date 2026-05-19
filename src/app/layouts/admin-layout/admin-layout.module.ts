@@ -10,7 +10,6 @@ import { GoogleSheetService } from '../../services/google-sheet.service';
 
 // Các component mặc định của admin layout
 import { DashboardComponent } from '../../dashboard/dashboard.component';
-import { AssistantComponent } from '../../pages/assistant/assistant.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
@@ -59,17 +58,14 @@ import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.compone
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
 import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 import { DocumentsComponent } from 'app/pages/documents/documents.component';
-import { UtilizationComponent } from '../../pages/utilization/utilization.component';
 import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
-import { PxkPreviewComponent } from '../../pages/pxk-preview/pxk-preview.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.component';
-import { WhSecurityComponent } from '../../pages/wh-security/wh-security.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
 import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted-materials.component';
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
@@ -115,7 +111,6 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
   ],
   declarations: [
     DashboardComponent,
-    AssistantComponent,
     MenuComponent,
     MaterialsDashboardComponent,
     FgsDashboardComponent,
@@ -133,17 +128,14 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
     OutboundASM1Component,
     OutboundASM2Component,
     DocumentsComponent,
-    UtilizationComponent,
     StockCheckComponent,
     SettingsComponent,
     PrintLabelComponent,
     IndexComponent,
     SxxkComponent,
     ScrapComponent,
-    PxkPreviewComponent,
     QCComponent,
     QcTraceabilityComponent,
-    WhSecurityComponent,
     Rm1DeliveryComponent,
     ShortedMaterialsComponent,
     BagHistoryComponent,

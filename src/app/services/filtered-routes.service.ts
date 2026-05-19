@@ -97,7 +97,6 @@ export class FilteredRoutesService {
   private getTabKeyFromRoute(path: string): string | null {
     const tabKeyMap: { [key: string]: string } = {
       '/dashboard': 'dashboard',
-      '/assistant': 'assistant',
       '/pd-control': 'pd-control',
       '/materials-dashboard': 'materials-dashboard',
       '/fgs-dashboard': 'fgs-dashboard',
@@ -128,23 +127,16 @@ export class FilteredRoutesService {
       
       // Other routes
       '/location': 'location',
-      '/warehouse-loading': 'warehouse-loading',
-      '/trace-back': 'trace-back',
       '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',
       '/index': 'index',
-      '/utilization': 'utilization',
       '/sxxk': 'sxxk',
       '/scrap': 'scrap',
-      '/find-rm1': 'find-rm1',
-      '/pxk-preview': 'pxk-preview',
       '/checklist': 'checklist',
-      '/safety': 'safety',
       '/equipment': 'equipment',
       '/qc': 'qc',
       '/qc-traceability': 'qc',
-      '/wh-security': 'wh-security',
       '/rm1-delivery': 'rm1-delivery',
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',

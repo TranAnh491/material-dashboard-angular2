@@ -92,7 +92,7 @@
   <div class="excel-container">
     <!-- Report Title -->
     <div class="excel-header">
-      <h4><i class="material-icons">location_on</i> LOCATION MANAGEMENT</h4>
+      <h4><i class="material-icons">inventory_2</i> MATERIALS MANAGEMENT</h4>
     </div>
     
     <!-- Excel Actions -->
@@ -159,15 +159,15 @@
           
           <!-- Action Buttons -->
           <div class="action-buttons">
-            <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Cất nguyên vật liệu">
-              <i class="material-icons">inventory</i>
-              Đổi vị trí đơn lẽ
+            <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
+              <i class="material-icons">qr_code_scanner</i>
+              SKU
             </button>
-            <button class="bulk-change-location-btn" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt (' + (selectedFactory || '...') + ') - chỉ Scanner'">
-              <i class="material-icons">swap_calls</i>
-              Đổi vị trí hàng loạt
+            <button class="bulk-change-location-btn" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
+              <i class="material-icons">location_on</i>
+              Location
             </button>
-            <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Location">
+            <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Materials">
               <i class="material-icons">refresh</i>
               Refresh
             </button>
@@ -181,14 +181,14 @@
         <!-- Mobile Controls -->
         <div class="mobile-controls">
           <!-- Store Material Button -->
-          <button class="store-material-btn mobile" (click)="openStoreMaterialModal()" title="Cất nguyên vật liệu">
-            <i class="material-icons">inventory</i>
-            Đổi vị trí đơn lẽ
+          <button class="store-material-btn mobile" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
+            <i class="material-icons">qr_code_scanner</i>
+            SKU
           </button>
           <!-- Bulk Change Location Button -->
-          <button class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt (' + (selectedFactory || '...') + ') - chỉ Scanner'">
-            <i class="material-icons">swap_calls</i>
-            Đổi vị trí hàng loạt
+          <button class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
+            <i class="material-icons">location_on</i>
+            Location
           </button>
         </div>
         
@@ -297,7 +297,7 @@
     <div class="loading-container" *ngIf="isLoading">
       <div class="loading-spinner">
         <i class="material-icons rotating">sync</i>
-        <span>Đang tải dữ liệu Location...</span>
+        <span>Đang tải dữ liệu Materials...</span>
       </div>
     </div>
 
@@ -512,7 +512,7 @@
         <div class="loading-content">
           <i class="material-icons rotating">sync</i>
           <h4>Đang tìm kiếm...</h4>
-          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong Location</p>
+          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong Materials</p>
         </div>
       </div>
 
@@ -533,7 +533,7 @@
     <div class="modal-header">
       <h3>
         <i class="material-icons">swap_calls</i>
-        Đổi Vị Trí ({{ selectedFactory || '...' }})
+        Location ({{ selectedFactory || '...' }})
       </h3>
       <button class="close-btn" (click)="closeBulkChangeLocationModal()">
         <i class="material-icons">close</i>
