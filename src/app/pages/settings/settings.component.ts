@@ -112,6 +112,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   // User permission modal
   showPermissionModal = false;
+  isLoadingPermissionModal = false;
   selectedUser: User | null = null;
   tempTabPermissions: { [key: string]: boolean } = {};
   tempReadOnlyPermission: boolean = false;
@@ -622,6 +623,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   private async ensureAspAccountsSeeded(): Promise<void> {
     await this.ensureAspAccount('0054', { grantSettingsTab: false });
     await this.ensureAspAccount('0609', { grantSettingsTab: true });
+    await this.refreshFirebaseUsers();
   }
 
   /**
@@ -645,27 +647,36 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const secondaryAuth = secondaryApp.auth();
 
       let uid: string;
+      let isNewUser = false;
+
+      const resolveExistingUid = async (): Promise<string> => {
+        const r: any = await firstValueFrom(
+          this.fns.httpsCallable('adminSetUserPasswordByEmployeeIdFn')({
+            employeeId: fourDigits,
+            newPassword: password
+          })
+        );
+        const existingUid = r?.uid as string;
+        if (!existingUid) {
+          throw new Error(`Không nhận được uid khi seed ${displayName}.`);
+        }
+        return existingUid;
+      };
+
       try {
-        const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
-        uid = cred.user!.uid;
-        await secondaryAuth.signOut();
-      } catch (e: any) {
-        if (e?.code === 'auth/email-already-in-use') {
-          // Email đã tồn tại trên Firebase Auth:
-          // - không phụ thuộc mật khẩu hiện tại
-          // - gọi callable (Admin SDK) để set password đúng 123456 và lấy uid
-          const r: any = await firstValueFrom(
-            this.fns.httpsCallable('adminSetUserPasswordByEmployeeIdFn')({
-              employeeId: fourDigits,
-              newPassword: password
-            })
-          );
-          uid = r?.uid as string;
-          if (!uid) {
-            throw new Error(`Không nhận được uid khi seed ${displayName}.`);
+        uid = await resolveExistingUid();
+      } catch {
+        try {
+          const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+          uid = cred.user!.uid;
+          isNewUser = true;
+          await secondaryAuth.signOut();
+        } catch (createErr: any) {
+          if (createErr?.code === 'auth/email-already-in-use') {
+            uid = await resolveExistingUid();
+          } else {
+            throw createErr;
           }
-        } else {
-          throw e;
         }
       }
 
@@ -684,20 +695,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         { merge: true }
       );
 
-      await this.firestore.collection('user-permissions').doc(uid).set(
-        {
-          uid,
-          email,
-          displayName,
-          hasDeletePermission: false,
-          hasCompletePermission: false,
-          hasReadOnlyPermission: true,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        { merge: true }
-      );
-
       const defaultTabPermissions: { [key: string]: boolean } = {};
       this.availableTabs.forEach((tab) => {
         const allow =
@@ -705,19 +702,43 @@ export class SettingsComponent implements OnInit, OnDestroy {
         defaultTabPermissions[tab.key] = allow;
       });
 
-      await this.firestore.collection('user-tab-permissions').doc(uid).set(
-        {
-          uid,
-          email,
-          displayName,
-          tabPermissions: defaultTabPermissions,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        { merge: true }
-      );
+      const permRef = this.firestore.collection('user-permissions').doc(uid);
+      const tabPermRef = this.firestore.collection('user-tab-permissions').doc(uid);
+      const [permSnap, tabPermSnap] = await Promise.all([
+        permRef.get().toPromise(),
+        tabPermRef.get().toPromise()
+      ]);
 
-      await this.refreshFirebaseUsers();
+      // Chỉ tạo quyền mặc định khi user mới hoặc chưa có doc — không ghi đè quyền admin đã lưu
+      if (isNewUser || !permSnap?.exists) {
+        await permRef.set(
+          {
+            uid,
+            email,
+            displayName,
+            hasDeletePermission: false,
+            hasCompletePermission: false,
+            hasReadOnlyPermission: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          { merge: true }
+        );
+      }
+
+      if (isNewUser || !tabPermSnap?.exists) {
+        await tabPermRef.set(
+          {
+            uid,
+            email,
+            displayName,
+            tabPermissions: defaultTabPermissions,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          { merge: true }
+        );
+      }
     } catch (error) {
       console.error(`❌ ensureAspAccount ${displayName}:`, error);
     } finally {
@@ -933,18 +954,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.firebaseUserPasswords[user.uid]           = user.password   || perm.password || '';
 
         const tabPerms = tabPermMap.get(user.uid);
-        if (tabPerms) {
-          // Ensure all known tabs are present
-          const merged: { [k: string]: boolean } = {};
-          this.availableTabs.forEach(t => merged[t.key] = tabPerms[t.key] ?? false);
-          this.firebaseUserTabPermissions[user.uid] = merged;
-        } else {
-          // New user: create defaults (only dashboard = true) and save async (non-blocking)
-          const defaults: { [k: string]: boolean } = {};
-          this.availableTabs.forEach(t => defaults[t.key] = t.key === 'dashboard');
-          this.firebaseUserTabPermissions[user.uid] = defaults;
-          this.createDefaultTabPermissionsForUser(user, defaults).catch(() => {});
-        }
+        const merged: { [k: string]: boolean } = {};
+        this.availableTabs.forEach(t => {
+          merged[t.key] = tabPerms ? tabPerms[t.key] === true : t.key === 'dashboard';
+        });
+        this.firebaseUserTabPermissions[user.uid] = merged;
       }
 
       this._rebuildUserCache();
@@ -1109,19 +1123,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
   /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
   async loadFirebaseUserTabPermissions(): Promise<void> { this._rebuildUserCache(); }
 
-  private async createDefaultTabPermissionsForUser(user: User, defaultPermissions: { [key: string]: boolean }): Promise<void> {
+  /** Chỉ tạo doc quyền tab nếu chưa có — không ghi đè quyền admin đã lưu */
+  private async createDefaultTabPermissionsForUser(user: User): Promise<void> {
     try {
-      // User mới đăng ký: CHỈ Dashboard = true, các tab khác = false (chờ duyệt)
-      // Chỉ khi admin duyệt thì mới được cấp quyền cho các tab khác
+      const docRef = this.firestore.collection('user-tab-permissions').doc(user.uid);
+      const existing = await docRef.get().toPromise();
+      if (existing?.exists) {
+        return;
+      }
+
       const finalPermissions: { [key: string]: boolean } = {};
-      
-      // CHỈ Dashboard được phép mặc định, các tab khác đều false
       this.availableTabs.forEach(tab => {
         finalPermissions[tab.key] = tab.key === 'dashboard';
       });
-      
-      
-      await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
+
+      await docRef.set({
         uid: user.uid,
         email: user.email,
         displayName: user.displayName || '',
@@ -1129,11 +1145,45 @@ export class SettingsComponent implements OnInit, OnDestroy {
         createdAt: new Date(),
         updatedAt: new Date()
       });
-      
-      // Cập nhật local data
+
       this.firebaseUserTabPermissions[user.uid] = finalPermissions;
     } catch (error) {
       console.error(`❌ Error creating default tab permissions for ${user.email}:`, error);
+    }
+  }
+
+  /** Đọc lại quyền tab từ Firestore (sau lưu / mở popup) */
+  private async reloadTabPermissionsForUser(uid: string): Promise<void> {
+    try {
+      const doc = await this.firestore.collection('user-tab-permissions').doc(uid).get().toPromise();
+      const merged: { [k: string]: boolean } = {};
+      if (doc?.exists) {
+        const tabPerms = (doc.data() as any)?.tabPermissions || {};
+        this.availableTabs.forEach(t => {
+          merged[t.key] = tabPerms[t.key] === true;
+        });
+      } else {
+        this.availableTabs.forEach(t => {
+          merged[t.key] = t.key === 'dashboard';
+        });
+      }
+      this.firebaseUserTabPermissions[uid] = merged;
+    } catch (e) {
+      console.error(`❌ reloadTabPermissionsForUser ${uid}:`, e);
+    }
+  }
+
+  private async reloadReadOnlyPermissionForUser(uid: string): Promise<void> {
+    try {
+      const doc = await this.firestore.collection('user-permissions').doc(uid).get().toPromise();
+      if (doc?.exists) {
+        const data = doc.data() as any;
+        this.firebaseUserReadOnlyPermissions[uid] = !!data?.hasReadOnlyPermission;
+        this.firebaseUserPermissions[uid] = !!data?.hasDeletePermission;
+        this.firebaseUserCompletePermissions[uid] = !!data?.hasCompletePermission;
+      }
+    } catch (e) {
+      console.error(`❌ reloadReadOnlyPermissionForUser ${uid}:`, e);
     }
   }
 
@@ -1864,23 +1914,34 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return this._pendingUsers;
   }
 
-  // Mở popup quản lý permissions cho user
-  openPermissionModal(user: User): void {
+  // Mở popup quản lý permissions cho user (đọc mới từ Firestore)
+  async openPermissionModal(user: User): Promise<void> {
     this.selectedUser = user;
     this.tempDisplayName = (user.displayName || '').trim();
     this.tempDepartment = (user.department || '').trim();
     this.tempProfileEmail = (user.email || '').trim();
-    // Load permissions hiện tại của user
-    this.tempTabPermissions = { ...(this.firebaseUserTabPermissions[user.uid] || {}) };
-    // Đảm bảo tất cả tabs đều có trong tempTabPermissions
-    this.availableTabs.forEach(tab => {
-      if (this.tempTabPermissions[tab.key] === undefined) {
-        this.tempTabPermissions[tab.key] = false;
-      }
-    });
-    // Load read-only permission
-    this.tempReadOnlyPermission = this.firebaseUserReadOnlyPermissions[user.uid] || false;
     this.showPermissionModal = true;
+    this.isLoadingPermissionModal = true;
+    this.cdr.markForCheck();
+
+    try {
+      await Promise.all([
+        this.reloadTabPermissionsForUser(user.uid),
+        this.reloadReadOnlyPermissionForUser(user.uid),
+      ]);
+      this.tempTabPermissions = { ...(this.firebaseUserTabPermissions[user.uid] || {}) };
+      this.availableTabs.forEach(tab => {
+        if (this.tempTabPermissions[tab.key] === undefined) {
+          this.tempTabPermissions[tab.key] = false;
+        }
+      });
+      this.tempReadOnlyPermission = this.firebaseUserReadOnlyPermissions[user.uid] || false;
+    } catch (e) {
+      console.error('❌ openPermissionModal load permissions:', e);
+    } finally {
+      this.isLoadingPermissionModal = false;
+      this.cdr.markForCheck();
+    }
   }
 
   // Đóng popup
@@ -1900,66 +1961,92 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async saveUserPermissions(): Promise<void> {
     if (!this.selectedUser) return;
 
+    const uid = this.selectedUser.uid;
+    const email = (this.tempProfileEmail || '').trim().toLowerCase();
+    const displayName = (this.tempDisplayName || '').trim();
+    const department = (this.tempDepartment || '').trim();
+
+    if (!email) {
+      alert('Email tài khoản (Firebase) không được để trống.');
+      return;
+    }
+
+    const prev = this.selectedUser;
+    const profileChanged =
+      email !== (prev.email || '').toLowerCase().trim() ||
+      displayName !== (prev.displayName || '').trim() ||
+      department !== (prev.department || '').trim();
+
+    const tabPermissionsToSave: { [key: string]: boolean } = {};
+    this.availableTabs.forEach(tab => {
+      tabPermissionsToSave[tab.key] = this.tempTabPermissions[tab.key] === true;
+    });
+
     try {
-      const email = (this.tempProfileEmail || '').trim().toLowerCase();
-      const displayName = (this.tempDisplayName || '').trim();
-      const department = (this.tempDepartment || '').trim();
-
-      if (!email) {
-        alert('Email tài khoản (Firebase) không được để trống.');
-        return;
-      }
-
-      const prev = this.selectedUser;
-      const profileChanged =
-        email !== (prev.email || '').toLowerCase().trim() ||
-        displayName !== (prev.displayName || '').trim() ||
-        department !== (prev.department || '').trim();
-
-      if (profileChanged) {
-        await firstValueFrom(
-          this.fns.httpsCallable('adminUpdateUserProfileFn')({
-            uid: prev.uid,
-            email,
-            displayName,
-            department
-          })
-        );
-        this.selectedUser.email = email;
-        this.selectedUser.displayName = displayName;
-        this.selectedUser.department = department;
-      }
-
-      // Cập nhật local data
-      this.firebaseUserTabPermissions[this.selectedUser.uid] = { ...this.tempTabPermissions };
-      this.firebaseUserReadOnlyPermissions[this.selectedUser.uid] = this.tempReadOnlyPermission;
-
-      // Lưu tab permissions vào Firestore
-      await this.firestore.collection('user-tab-permissions').doc(this.selectedUser.uid).set({
-        uid: this.selectedUser.uid,
+      // 1) Lưu quyền tab trước (quan trọng nhất)
+      await this.firestore.collection('user-tab-permissions').doc(uid).set({
+        uid,
         email,
-        displayName: displayName || this.selectedUser.displayName || '',
-        tabPermissions: this.tempTabPermissions,
+        displayName: displayName || prev.displayName || '',
+        tabPermissions: tabPermissionsToSave,
         updatedAt: new Date()
       }, { merge: true });
 
-      // Lưu read-only permission vào Firestore
-      await this.firestore.collection('user-permissions').doc(this.selectedUser.uid).set({
-        uid: this.selectedUser.uid,
+      await this.firestore.collection('user-permissions').doc(uid).set({
+        uid,
         email,
-        displayName: displayName || this.selectedUser.displayName || '',
-        hasDeletePermission: this.firebaseUserPermissions[this.selectedUser.uid] || false,
-        hasCompletePermission: this.firebaseUserCompletePermissions[this.selectedUser.uid] || false,
+        displayName: displayName || prev.displayName || '',
+        hasDeletePermission: this.firebaseUserPermissions[uid] || false,
+        hasCompletePermission: this.firebaseUserCompletePermissions[uid] || false,
         hasReadOnlyPermission: this.tempReadOnlyPermission,
         updatedAt: new Date()
       }, { merge: true });
 
-      await this.firestore.collection('users').doc(this.selectedUser.uid).set({
+      await this.firestore.collection('users').doc(uid).set({
         email,
-        displayName: displayName || this.selectedUser.displayName || '',
+        displayName: displayName || prev.displayName || '',
         department,
         updatedAt: new Date()
       }, { merge: true });
+
+      this.firebaseUserTabPermissions[uid] = { ...tabPermissionsToSave };
+      this.firebaseUserReadOnlyPermissions[uid] = this.tempReadOnlyPermission;
+      this._rebuildUserCache();
+
+      // 2) Cập nhật profile Auth (có thể lỗi — không làm mất quyền đã lưu)
+      let profileWarning = '';
+      if (profileChanged) {
+        try {
+          await firstValueFrom(
+            this.fns.httpsCallable('adminUpdateUserProfileFn')({
+              uid,
+              email,
+              displayName,
+              department
+            })
+          );
+          prev.email = email;
+          prev.displayName = displayName;
+          prev.department = department;
+        } catch (profileErr: any) {
+          console.error('❌ adminUpdateUserProfileFn:', profileErr);
+          profileWarning =
+            '\n\n⚠️ Quyền tab đã lưu, nhưng cập nhật email/họ tên trên Auth thất bại: ' +
+            (profileErr?.message || 'lỗi không xác định');
+        }
+      }
+
+      // 3) Xác nhận từ Firestore
+      await this.reloadTabPermissionsForUser(uid);
+      await this.reloadReadOnlyPermissionForUser(uid);
+      this._rebuildUserCache();
+
+      const granted = this.availableTabs.filter(t => tabPermissionsToSave[t.key]).map(t => t.name);
+      alert(
+        `✅ Đã lưu quyền cho ${email}.` +
+          (granted.length ? `\nTab được phép: ${granted.join(', ')}` : '\nChưa cấp tab nào (chờ duyệt).') +
+          profileWarning
+      );
 
       this.closePermissionModal();
     } catch (error) {

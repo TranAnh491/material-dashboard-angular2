@@ -419,7 +419,8 @@
           </div>
           <div class="tabs-permissions">
             <h4>Quyền truy cập các tab:</h4>
-            <div class="tabs-grid">
+            <p *ngIf="isLoadingPermissionModal" class="permission-loading-hint">Đang tải quyền từ hệ thống…</p>
+            <div class="tabs-grid" [class.is-loading]="isLoadingPermissionModal">
               <div *ngFor="let tab of availableTabs; trackBy: trackByTabKey" class="tab-permission-item">
                 <label class="tab-checkbox">
                   <input
@@ -435,7 +436,7 @@
         <div class="modal-footer">
           <button class="btn-delete" (click)="deleteUserFromModal()">Xóa</button>
           <button class="btn-cancel" (click)="closePermissionModal()">Hủy</button>
-          <button class="btn-save" (click)="saveUserPermissions()">Lưu</button>
+          <button class="btn-save" (click)="saveUserPermissions()" [disabled]="isLoadingPermissionModal">Lưu</button>
         </div>
       </div>
     </div>
