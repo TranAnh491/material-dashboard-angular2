@@ -147,6 +147,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedMaterialForStore: any = null; // Material được chọn để cất
   suggestedLocations: string[] = []; // Danh sách vị trí hiện tại của material
   selectedTargetLocation = ''; // Vị trí đích được chọn
+  /** Bước 2: bật thì cộng thêm vị trí (VD: F2.1 → F2.1+ G3.4), không thay thế. */
+  storeMaterialMultiLocation = false;
   isSearchingMaterial = false;
   storeMaterialStep: 'scan' | 'select' | 'choose-location' | 'confirm' = 'scan';
   /** Tồn kho của PO được scan (cùng materialCode + poNumber) */
@@ -1592,6 +1594,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isSearchingMaterial = false;
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
+    this.storeMaterialMultiLocation = false;
     
     // Force change detection để đảm bảo modal đã render
     this.cdr.detectChanges();
@@ -1631,6 +1634,24 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isSearchingMaterial = false;
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
+    this.storeMaterialMultiLocation = false;
+  }
+
+  /** Ghép vị trí khi chế độ Nhiều vị trí (giữ nguyên dấu + và khoảng trắng sau +). */
+  private mergeStoreMaterialLocations(existing: string, newSegment: string): string {
+    const cur = String(existing ?? '').trim();
+    const add = String(newSegment ?? '').trim();
+    if (!add) return cur;
+    if (!cur) return add;
+    return `${cur}+ ${add}`;
+  }
+
+  /** Vị trí lưu / hiển thị xem trước ở bước 2. */
+  get storeMaterialResolvedLocation(): string {
+    const segment = this.formatViTriInput(this.selectedTargetLocation || '');
+    if (!this.storeMaterialMultiLocation) return segment;
+    const current = String(this.selectedMaterialForStore?.location ?? '').trim();
+    return this.mergeStoreMaterialLocations(current, segment);
   }
 
   async processStoreMaterialQR(): Promise<void> {
@@ -1844,24 +1865,26 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     try {
-      // Normalize and validate target location
-      const targetFormatted = this.formatViTriInput(this.selectedTargetLocation);
-      if (!targetFormatted || !this.validateViTriInput(targetFormatted)) {
+      const segmentFormatted = this.formatViTriInput(this.selectedTargetLocation);
+      if (!segmentFormatted || !this.validateViTriInput(segmentFormatted)) {
         alert('⚠️ Vị trí đích không hợp lệ');
         return;
       }
 
-      // Resolve rule again at confirm-time (strong guard)
+      const fromLocation = String(this.selectedMaterialForStore.location ?? '').trim();
+      const targetFormatted = this.storeMaterialMultiLocation
+        ? this.mergeStoreMaterialLocations(fromLocation, segmentFormatted)
+        : segmentFormatted;
+
+      // Resolve rule again at confirm-time (strong guard) — kiểm tra phần vị trí mới thêm / vị trí đích
       const matchedRule = await this.resolveMatchedRule(this.selectedMaterialForStore.materialCode || '');
       const requiredPrefixes = matchedRule?.destinationLocationPrefixes || [];
       this.isTargetLocationForced = requiredPrefixes.length > 0;
       this.forcedAllowedDestinationPrefixes = requiredPrefixes;
 
-      // Apply rule constraint (prefix match)
+      const ruleCheckLocation = this.storeMaterialMultiLocation ? segmentFormatted : targetFormatted;
       if (requiredPrefixes.length > 0) {
-        const ok = requiredPrefixes.some(prefix =>
-          targetFormatted.startsWith(prefix)
-        );
+        const ok = requiredPrefixes.some(prefix => ruleCheckLocation.startsWith(prefix));
         if (!ok) {
           alert(`⚠️ Theo rule, vị trí đích phải bắt đầu bằng: ${requiredPrefixes.join(', ')}`);
           return;
@@ -1870,13 +1893,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.selectedTargetLocation = targetFormatted;
 
-      const fromLocation = this.selectedMaterialForStore.location || '';
       // Cập nhật location trong Firebase
       await this.firestore
         .collection('inventory-materials')
         .doc(this.selectedMaterialForStore.id)
         .update({
-          location: this.selectedTargetLocation,
+          location: targetFormatted,
           lastModified: new Date(),
           modifiedBy: 'store-material-scanner'
         });

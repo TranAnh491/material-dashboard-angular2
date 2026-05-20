@@ -956,14 +956,25 @@
           </div>
         </div>
         
+        <label class="store-multi-location-chk">
+          <input type="checkbox" [(ngModel)]="storeMaterialMultiLocation">
+          <span>Nhiều vị trí</span>
+        </label>
+        <p class="store-multi-location-hint" *ngIf="storeMaterialMultiLocation">
+          Cộng thêm vị trí mới vào vị trí hiện tại (không thay thế).
+          <span *ngIf="storeMaterialResolvedLocation" class="store-multi-location-preview">
+            → <strong>{{ storeMaterialResolvedLocation }}</strong>
+          </span>
+        </p>
+
         <div class="custom-location-input">
-          <label>Hoặc nhập/scan vị trí mới:</label>
+          <label>{{ storeMaterialMultiLocation ? 'Nhập/scan vị trí thêm:' : 'Hoặc nhập/scan vị trí mới:' }}</label>
           <input 
             type="text" 
             id="targetLocationInput"
             [(ngModel)]="selectedTargetLocation"
             (keyup.enter)="confirmStoreMaterial()"
-            placeholder="Nhập hoặc scan vị trí mới..."
+            [placeholder]="storeMaterialMultiLocation ? 'VD: G3.4 (sẽ thêm vào vị trí hiện tại)' : 'Nhập hoặc scan vị trí mới...'"
             class="location-input"
             autofocus>
         </div>
