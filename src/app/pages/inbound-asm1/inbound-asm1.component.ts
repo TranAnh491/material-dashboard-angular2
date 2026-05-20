@@ -2653,6 +2653,36 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     return n.toLocaleString('en-US');
   }
 
+  private escapeInboundLabelHtml(s: string): string {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Khối chữ bên phải tem bịch (QR giữ nguyên); Lô hàng nhỏ ở dưới cùng. */
+  private buildInboundQrBagLabelInfoSectionHtml(
+    f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
+    batchNumber: string
+  ): string {
+    const batch = this.escapeInboundLabelHtml((batchNumber || '').trim());
+    const batchRow = batch
+      ? `<div class="info-row info-row-batch">Lô: ${batch}</div>`
+      : '';
+    return `
+                      <div class="info-section">
+                        <div>
+                          <div class="info-row material-code material-code-main">${this.escapeInboundLabelHtml(f.materialCode)}</div>
+                          <div class="info-row">PO: ${this.escapeInboundLabelHtml(f.po)}</div>
+                          <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
+                          <div class="info-row">IMD: ${this.escapeInboundLabelHtml(f.imd)}</div>
+                          <div class="info-row">BAG: ${this.escapeInboundLabelHtml(f.bag)}</div>
+                        </div>
+                        ${batchRow}
+                      </div>`;
+  }
+
   async printQRCode(material: InboundMaterial): Promise<void> {
     if (!this.canGenerateQR) {
       alert('Bạn không có quyền tạo QR code');
@@ -2713,6 +2743,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           return {
             ...qr,
             qrImage,
+            batchNumber: material.batchNumber || '',
             index: index + 1,
             pageNumber: index + 1,
             totalPages: totalPages,
@@ -2780,7 +2811,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   padding: 1mm !important;
                   display: flex !important;
                   flex-direction: column !important;
-                  justify-content: flex-start !important;
+                  justify-content: space-between !important;
                   align-items: flex-start !important;
                   font-size: 9.6px !important; /* Tăng 20% từ 8px */
                   line-height: 1.15 !important;
@@ -2823,6 +2854,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                 .info-row.small.page-number {
                   font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
                   color: #000000 !important; /* Màu đen */
+                }
+                
+                .info-row-batch {
+                  font-size: 6.5px !important;
+                  font-weight: 600 !important;
+                  margin-top: auto !important;
+                  margin-bottom: 0 !important;
+                  line-height: 1.05 !important;
+                  white-space: normal !important;
+                  word-break: break-all !important;
+                  max-width: 26mm !important;
                 }
                 
                 .icon-badge {
@@ -2934,6 +2976,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     color: #000000 !important; /* Màu đen */
                   }
                   
+                  .info-row-batch {
+                    font-size: 6.5px !important;
+                    font-weight: 600 !important;
+                    margin-top: auto !important;
+                    margin-bottom: 0 !important;
+                    line-height: 1.05 !important;
+                    white-space: normal !important;
+                    word-break: break-all !important;
+                    max-width: 26mm !important;
+                  }
+                  
                   .icon-badge {
                     position: absolute !important;
                     bottom: 1mm !important;
@@ -2986,15 +3039,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                       <div class="qr-section">
                         <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                       </div>
-                      <div class="info-section">
-                        <div>
-                          <div class="info-row material-code material-code-main">${f.materialCode}</div>
-                          <div class="info-row">PO: ${f.po}</div>
-                          <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
-                          <div class="info-row">IMD: ${f.imd}</div>
-                          <div class="info-row">BAG: ${f.bag}</div>
-                        </div>
-                      </div>
+                      ${this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '')}
                       ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
                     </div>
                   `;
@@ -3396,7 +3441,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             poNumber: material.poNumber,
             unitNumber: p.unitNumber,
             qrData: p.qrData,
-            batchNumber: p.qrData.split('|')[3] || '',
+            batchNumber: (material.batchNumber || '').trim(),
             bagIndex: p.bagIndex,
             bagTotal: p.bagTotal
           });
@@ -3517,7 +3562,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                   padding: 1mm !important;
                   display: flex !important;
                   flex-direction: column !important;
-                  justify-content: flex-start !important;
+                  justify-content: space-between !important;
                   align-items: flex-start !important;
                   font-size: 9.6px !important;
                   line-height: 1.15 !important;
@@ -3562,6 +3607,17 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                 .info-row.small.page-number {
                   font-size: 10.08px !important;
                   color: #000000 !important;
+                }
+                
+                .info-row-batch {
+                  font-size: 6.5px !important;
+                  font-weight: 600 !important;
+                  margin-top: auto !important;
+                  margin-bottom: 0 !important;
+                  line-height: 1.05 !important;
+                  white-space: normal !important;
+                  word-break: break-all !important;
+                  max-width: 26mm !important;
                 }
                 
                 .icon-badge {
@@ -3733,15 +3789,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
                     <div class="qr-section">
                       <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                     </div>
-                    <div class="info-section">
-                      <div>
-                        <div class="info-row material-code material-code-main">${f.materialCode}</div>
-                        <div class="info-row">PO: ${f.po}</div>
-                        <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
-                        <div class="info-row">IMD: ${f.imd}</div>
-                        <div class="info-row">BAG: ${f.bag}</div>
-                      </div>
-                    </div>
+                    ${this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '')}
                     ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
                   </div>
                 `;
