@@ -43,7 +43,7 @@ export interface InboundMaterial {
   preScanInventoryPending?: boolean;
   /** Doc id trong collection inventory-materials khi nhập chưa scan */
   linkedInventoryDocId?: string;
-  /** Số thùng — In toàn bộ sẽ in N tem 8×8cm (QR + tên mã, PO, IMD, Thùng i/N) */
+  /** Số thùng — In QR in thêm N tem 57×32mm (QTY=0, Mã/PO/IMD/THÙNG i/N) */
   cartonCount?: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -2500,7 +2500,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
 
   /**
-   * Tem thùng 8×8cm: N tem, QR `Mã|PO|1|DDMMYYYY-i/N` (cùng cấu trúc pipe với tem bịch).
+   * Tem thùng 57×32mm (cùng format cột QR): N tem, QR `Mã|PO|0|DDMMYYYY-i/N` — QTY = 0 (dán ngoài thùng).
    */
   private buildCartonLabelPayloads(material: InboundMaterial): { qrData: string; cartonIndex: number; cartonTotal: number }[] | null {
     const n = Math.max(0, Math.floor(Number(material.cartonCount ?? 0)));
@@ -2508,8 +2508,46 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     const imd = this.getInboundQrImdString(material);
     const out: { qrData: string; cartonIndex: number; cartonTotal: number }[] = [];
     for (let i = 1; i <= n; i++) {
-      const qrData = `${material.materialCode.trim()}|${material.poNumber.trim()}|1|${imd}-${i}/${n}`;
+      const qrData = `${material.materialCode.trim()}|${material.poNumber.trim()}|0|${imd}-${i}/${n}`;
       out.push({ qrData, cartonIndex: i, cartonTotal: n });
+    }
+    return out;
+  }
+
+  private getInboundTraIconType(batchNumber: string): 'PD' | 'EN' | null {
+    const bn = String(batchNumber || '').toUpperCase();
+    if (bn.includes('TRA PD')) return 'PD';
+    if (bn.includes('TRA EN')) return 'EN';
+    return null;
+  }
+
+  private async buildCartonQrImageEntries(
+    material: InboundMaterial,
+    QRCode: any,
+    startIndex: number
+  ): Promise<any[]> {
+    const payloads = this.buildCartonLabelPayloads(material);
+    if (!payloads?.length) return [];
+    const batchNumber = material.batchNumber || '';
+    const iconType = this.getInboundTraIconType(batchNumber);
+    const out: any[] = [];
+    for (let i = 0; i < payloads.length; i++) {
+      const p = payloads[i];
+      const qrImage = await QRCode.toDataURL(p.qrData, {
+        width: 240,
+        margin: 1,
+        color: { dark: '#000000', light: '#FFFFFF' }
+      });
+      out.push({
+        qrImage,
+        qrData: p.qrData,
+        batchNumber,
+        index: startIndex + i + 1,
+        iconType,
+        kind: 'carton' as const,
+        cartonIndex: p.cartonIndex,
+        cartonTotal: p.cartonTotal
+      });
     }
     return out;
   }
@@ -2528,67 +2566,51 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       .replace(/"/g, '&quot;');
   }
 
-  private openCartonLabelsPrintWindow(
-    items: Array<{
-      qrImage: string;
-      materialCode: string;
-      materialName: string;
-      poNumber: string;
-      imdPart4: string;
-      cartonIndex: number;
-      cartonTotal: number;
-    }>
-  ): void {
-    if (!items.length) return;
-    const w = window.open('', '_blank');
-    if (!w) {
-      alert('Không mở được cửa sổ in. Cho phép popup.');
-      return;
-    }
-    const rowsHtml = items
-      .map(
-        (it, idx) => `
-      <div class="carton-label">
-        <img class="carton-qr" src="${it.qrImage}" alt="QR" />
-        <div class="carton-name">${this.escapeHtmlPrint(it.materialName || it.materialCode)}</div>
-        <div class="carton-line"><span class="lbl">Mã:</span> ${this.escapeHtmlPrint(it.materialCode)}</div>
-        <div class="carton-line"><span class="lbl">PO:</span> ${this.escapeHtmlPrint(it.poNumber)}</div>
-        <div class="carton-line"><span class="lbl">IMD:</span> ${this.escapeHtmlPrint(it.imdPart4)}</div>
-        <div class="carton-line carton-strong">Thùng: ${it.cartonIndex}/${it.cartonTotal}</div>
-      </div>`
-      )
-      .join('');
-    w.document.write(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>In tem thùng</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: Arial, sans-serif; background:#fff; color:#000; }
-  .carton-label {
-    width: 8cm; height: 8cm;
-    border: 1px solid #000;
-    page-break-after: always;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: flex-start;
-    padding: 2mm; gap: 1mm;
+  /** Khối chữ tem thùng 57×32mm — QTY = 0, THÙNG i/N thay cho BAG. */
+  private buildInboundQrCartonLabelInfoSectionHtml(
+    f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
+    batchNumber: string,
+    cartonIndex: number,
+    cartonTotal: number
+  ): string {
+    const batch = this.escapeInboundLabelHtml((batchNumber || '').trim());
+    const batchRow = batch
+      ? `<div class="info-row info-row-batch">Lô: ${batch}</div>`
+      : '';
+    return `
+                      <div class="info-section">
+                        <div>
+                          <div class="info-row material-code material-code-main">${this.escapeInboundLabelHtml(f.materialCode)}</div>
+                          <div class="info-row">PO: ${this.escapeInboundLabelHtml(f.po)}</div>
+                          <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
+                          <div class="info-row">IMD: ${this.escapeInboundLabelHtml(f.imd)}</div>
+                          <div class="info-row">THÙNG: ${cartonIndex}/${cartonTotal}</div>
+                        </div>
+                        ${batchRow}
+                      </div>`;
   }
-  .carton-qr { width: 32mm; height: 32mm; object-fit: contain; }
-  .carton-name { font-size: 11px; font-weight: 700; text-align: center; max-width: 100%; word-break: break-word; line-height: 1.15; }
-  .carton-line { font-size: 10px; width: 100%; text-align: left; }
-  .carton-line .lbl { font-weight: 600; }
-  .carton-strong { font-weight: 700; font-size: 11px; margin-top: 1mm; }
-  @media print {
-    @page { size: 80mm 80mm; margin: 0; }
-    body { margin: 0; }
-    .carton-label { page-break-after: always; border: 1px solid #000; }
-  }
-</style></head><body>${rowsHtml}
-<script>
-  window.onload = function() {
-    setTimeout(function() { window.print(); }, 400);
-  };
-</script>
-</body></html>`);
-    w.document.close();
+
+  private renderInboundQrLabelContainerHtml(qr: any): string {
+    const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
+    const infoHtml =
+      qr.kind === 'carton'
+        ? this.buildInboundQrCartonLabelInfoSectionHtml(
+            f,
+            qr.batchNumber || '',
+            qr.cartonIndex,
+            qr.cartonTotal
+          )
+        : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '');
+    const iconHtml = qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : '';
+    return `
+                    <div class="qr-container">
+                      <div class="qr-section">
+                        <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
+                      </div>
+                      ${infoHtml}
+                      ${iconHtml}
+                    </div>
+                  `;
   }
 
   /**
@@ -2691,19 +2713,18 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
     const QRCode = await import('qrcode') as any;
     const payloads = this.buildInboundQrLabelPayloads(material);
-    if (!payloads) {
+    const cartonPayloads = this.buildCartonLabelPayloads(material);
+    if (!payloads && !cartonPayloads) {
       alert(
         'Không tạo được tem. Kiểm tra:\n' +
-        '• Lượng đơn vị > 0\n' +
-        '• Số bịch (số nguyên ≥ 1)\n' +
-        '• Lượng nhập > (số bịch − 1) × lượng đơn vị\n' +
-        '(Ví dụ: LDV 3000, 4 bịch, nhập 10000 → 3 tem 3000 + 1 tem 1000)'
+        '• Tem bịch: lượng đơn vị > 0, số bịch ≥ 1, lượng nhập > (số bịch − 1) × lượng đơn vị\n' +
+        '• Tem thùng: nhập Số thùng ≥ 1 (cột sau Số bịch)'
       );
       return;
     }
 
     try {
-      const qrCodes = payloads.map(p => ({
+      const qrCodes = (payloads || []).map(p => ({
         materialCode: material.materialCode,
         poNumber: material.poNumber,
         unitNumber: p.unitNumber,
@@ -2724,35 +2745,45 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       
       // Check if batchNumber contains TRA PD or TRA EN
       const materialBatchNumber = material.batchNumber || '';
-      const hasTRA_PD = materialBatchNumber.toUpperCase().includes('TRA PD');
-      const hasTRA_EN = materialBatchNumber.toUpperCase().includes('TRA EN');
-      const iconType = hasTRA_PD ? 'PD' : (hasTRA_EN ? 'EN' : null);
+      const iconType = this.getInboundTraIconType(materialBatchNumber);
       
-      // Generate QR code images
-      const qrImages = await Promise.all(
-        qrCodes.map(async (qr, index) => {
-          const qrData = qr.qrData;
-          const qrImage = await QRCode.toDataURL(qrData, {
-            width: 240, // 30mm = 240px (8px/mm)
-            margin: 1,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          });
-          return {
-            ...qr,
-            qrImage,
-            batchNumber: material.batchNumber || '',
-            index: index + 1,
-            pageNumber: index + 1,
-            totalPages: totalPages,
-            printDate: printDate,
-            printedBy: currentUser,
-            iconType: iconType // PD or EN or null
-          };
-        })
-      );
+      // Generate QR code images (tem bịch)
+      let qrImages: any[] = [];
+      if (qrCodes.length > 0) {
+        qrImages = await Promise.all(
+          qrCodes.map(async (qr, index) => {
+            const qrData = qr.qrData;
+            const qrImage = await QRCode.toDataURL(qrData, {
+              width: 240,
+              margin: 1,
+              color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+              }
+            });
+            return {
+              ...qr,
+              qrImage,
+              batchNumber: material.batchNumber || '',
+              index: index + 1,
+              pageNumber: index + 1,
+              totalPages: totalPages,
+              printDate: printDate,
+              printedBy: currentUser,
+              iconType,
+              kind: 'bag' as const
+            };
+          })
+        );
+      }
+
+      const cartonEntries = await this.buildCartonQrImageEntries(material, QRCode, qrImages.length);
+      qrImages = [...qrImages, ...cartonEntries];
+
+      if (qrImages.length === 0) {
+        alert('Không tạo được tem để in.');
+        return;
+      }
 
       // Create print window with real QR codes
       const newWindow = window.open('', '_blank');
@@ -3032,18 +3063,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
               </head>
               <body>
                 <div class="qr-grid">
-                  ${qrImages.map(qr => {
-                    const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
-                    return `
-                    <div class="qr-container">
-                      <div class="qr-section">
-                        <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
-                      </div>
-                      ${this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '')}
-                      ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
-                    </div>
-                  `;
-                  }).join('')}
+                  ${qrImages.map(qr => this.renderInboundQrLabelContainerHtml(qr)).join('')}
                 </div>
                 <script>
                   window.onload = function() {
@@ -3146,7 +3166,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
 
   canPrintInboundQr(material: InboundMaterial): boolean {
-    return this.buildInboundQrLabelPayloads(material) !== null;
+    return (
+      this.buildInboundQrLabelPayloads(material) !== null ||
+      this.buildCartonLabelPayloads(material) !== null
+    );
   }
 
   getPrintQrButtonTitle(material: InboundMaterial): string {
@@ -3154,7 +3177,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       return 'Không thể in QR trong trạng thái lô hàng hiện tại';
     }
     if (!this.canPrintInboundQr(material)) {
-      return 'Cần lượng đơn vị > 0, số bịch ≥ 1 và lượng nhập lớn hơn (số bịch − 1) × lượng đơn vị';
+      return 'Cần đủ điều kiện tem bịch HOẶC nhập Số thùng ≥ 1';
+    }
+    const nCarton = Math.floor(Number(material.cartonCount ?? 0));
+    if (nCarton >= 1) {
+      return `In tem QR (bịch + ${nCarton} tem thùng QTY=0)`;
     }
     return 'In tem QR code';
   }
@@ -3194,6 +3221,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         <td>${m.poNumber || ''}</td>
         <td style="text-align:right">${m.quantity != null ? this.formatNumber(m.quantity) : ''}</td>
         <td style="text-align:right">${m.rollsOrBags != null ? this.formatNumber(Number(m.rollsOrBags)) : ''}</td>
+        <td style="text-align:center">${m.gwLdv != null && Number.isFinite(Number(m.gwLdv)) ? Math.floor(Number(m.gwLdv)) : ''}</td>
+        <td style="text-align:center">${Math.floor(Number(m.cartonCount ?? 0)) || ''}</td>
         <td style="text-align:right">${m.unitWeight != null ? this.formatNumber(m.unitWeight) : ''}</td>
         <td>${m.remarks || ''}</td>
       </tr>`).join('');
@@ -3345,6 +3374,8 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         <th><span class="vi">Số PO</span><span class="en">PO Number</span></th>
         <th style="width:90px"><span class="vi">Lượng Nhập</span><span class="en">Import Qty</span></th>
         <th style="width:90px"><span class="vi">Lượng Đơn Vị</span><span class="en">Unit Qty</span></th>
+        <th style="width:55px"><span class="vi">Số Bịch</span><span class="en">Bags</span></th>
+        <th style="width:55px"><span class="vi">Số Thùng</span><span class="en">Cartons</span></th>
         <th style="width:70px"><span class="vi">U.W (g)</span><span class="en">Unit Weight</span></th>
         <th><span class="vi">Lưu Ý</span><span class="en">Remarks</span></th>
       </tr>
@@ -3396,7 +3427,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       alert(
         `Lô "${bn}" không có dòng nào đủ điều kiện:\n` +
           '• Tem bịch: lượng đơn vị, số bịch, lượng nhập theo quy tắc chia tem\n' +
-          '• Tem thùng 8×8cm: nhập số thùng ≥ 1 (cột Thùng)'
+          '• Tem thùng 57×32mm: nhập Số thùng ≥ 1 (cột sau Số bịch, QTY = 0)'
       );
       return;
     }
@@ -3411,7 +3442,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       confirmLines.push(`• Tem bịch: từ ${printableMaterials.length} dòng (theo quy tắc chia tem)`);
     }
     if (cartonMaterials.length > 0) {
-      confirmLines.push(`• Tem thùng 8×8cm: ${cartonTemCount} tem từ ${cartonMaterials.length} dòng`);
+      confirmLines.push(`• Tem thùng 57×32mm (QTY=0): ${cartonTemCount} tem từ ${cartonMaterials.length} dòng`);
     }
     confirmLines.push('', 'Tiếp tục?');
     if (!confirm(confirmLines.join('\n'))) {
@@ -3447,10 +3478,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           });
         }
       }
-
-      if (allQRCodes.length === 0) {
-        alert('Có dòng đủ điều kiện tem bịch nhưng không tạo được QR (kiểm tra lại dữ liệu).');
-      } else {
+      }
 
       // Get current user info
       const user = await this.afAuth.currentUser;
@@ -3471,39 +3499,47 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         }
       });
       
-      // Generate QR code images
-      const qrImages = await Promise.all(
-        allQRCodes.map(async (qr, index) => {
-          const qrData = qr.qrData;
-          const qrImage = await QRCode.toDataURL(qrData, {
-            width: 240, // 30mm = 240px (8px/mm)
-            margin: 1,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          });
-          
-          // Find corresponding material to get batchNumber
-          const materialKey = `${qr.materialCode}_${qr.poNumber}`;
-          const material = materialMap.get(materialKey);
-          const materialBatchNumber = material?.batchNumber || '';
-          const hasTRA_PD = materialBatchNumber.toUpperCase().includes('TRA PD');
-          const hasTRA_EN = materialBatchNumber.toUpperCase().includes('TRA EN');
-          const iconType = hasTRA_PD ? 'PD' : (hasTRA_EN ? 'EN' : null);
-          
-          return {
-            ...qr,
-            qrImage,
-            index: index + 1,
-            pageNumber: index + 1,
-            totalPages: totalPages,
-            printDate: printDate,
-            printedBy: currentUser,
-            iconType: iconType // PD or EN or null
-          } as any;
-        })
-      );
+      let qrImages: any[] = [];
+      if (allQRCodes.length > 0) {
+        qrImages = await Promise.all(
+          allQRCodes.map(async (qr, index) => {
+            const qrData = qr.qrData;
+            const qrImage = await QRCode.toDataURL(qrData, {
+              width: 240,
+              margin: 1,
+              color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+              }
+            });
+            const materialKey = `${qr.materialCode}_${qr.poNumber}`;
+            const material = materialMap.get(materialKey);
+            const materialBatchNumber = material?.batchNumber || qr.batchNumber || '';
+            const iconType = this.getInboundTraIconType(materialBatchNumber);
+            return {
+              ...qr,
+              qrImage,
+              batchNumber: materialBatchNumber,
+              index: index + 1,
+              pageNumber: index + 1,
+              totalPages: totalPages,
+              printDate: printDate,
+              printedBy: currentUser,
+              iconType,
+              kind: 'bag' as const
+            } as any;
+          })
+        );
+      }
+
+      for (const material of cartonMaterials) {
+        const cartonEntries = await this.buildCartonQrImageEntries(material, QRCode, qrImages.length);
+        qrImages = [...qrImages, ...cartonEntries];
+      }
+
+      if (qrImages.length === 0) {
+        alert('Không tạo được tem để in (kiểm tra lại dữ liệu).');
+      } else {
 
       // Create print window with all QR codes
       const newWindow = window.open('', '_blank');
@@ -3782,18 +3818,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             </head>
             <body>
               <div class="qr-grid">
-                ${qrImages.map(qr => {
-                  const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
-                  return `
-                  <div class="qr-container">
-                    <div class="qr-section">
-                      <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
-                    </div>
-                    ${this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '')}
-                    ${qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : ''}
-                  </div>
-                `;
-                }).join('')}
+                ${qrImages.map(qr => this.renderInboundQrLabelContainerHtml(qr)).join('')}
               </div>
               <script>
                 window.onload = function() {
@@ -3816,65 +3841,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         `);
         newWindow.document.close();
         
-        console.log(`✅ Đã tạo ${allQRCodes.length} QR codes để in`);
+        console.log(`✅ Đã tạo ${qrImages.length} tem QR để in`);
         bagQrCount = allQRCodes.length;
-      }
-      }
-      }
-
-      let cartonLabelCount = 0;
-      if (cartonMaterials.length > 0) {
-        await this.ensureDmvtCatalogLoaded();
-        const cartonRows: Array<{
-          qrImage: string;
-          materialCode: string;
-          materialName: string;
-          poNumber: string;
-          imdPart4: string;
-          cartonIndex: number;
-          cartonTotal: number;
-        }> = [];
-        for (const material of cartonMaterials) {
-          const payloads = this.buildCartonLabelPayloads(material);
-          if (!payloads) continue;
-          const materialName = this.getMaterialName(material.materialCode);
-          for (const p of payloads) {
-            const qrImage = await QRCode.toDataURL(p.qrData, {
-              width: 220,
-              margin: 1,
-              color: {
-                dark: '#000000',
-                light: '#FFFFFF'
-              }
-            });
-            cartonRows.push({
-              qrImage,
-              materialCode: material.materialCode,
-              materialName: materialName || material.materialCode,
-              poNumber: material.poNumber,
-              imdPart4: p.qrData.split('|')[3] || '',
-              cartonIndex: p.cartonIndex,
-              cartonTotal: p.cartonTotal
-            });
-          }
-        }
-        cartonLabelCount = cartonRows.length;
-        if (cartonRows.length > 0) {
-          const delayMs = bagQrCount > 0 ? 900 : 0;
-          setTimeout(() => this.openCartonLabelsPrintWindow(cartonRows), delayMs);
+        const cartonLabelCount = qrImages.length - bagQrCount;
+        const summaryParts: string[] = [];
+        if (bagQrCount > 0) summaryParts.push(`${bagQrCount} tem bịch`);
+        if (cartonLabelCount > 0) summaryParts.push(`${cartonLabelCount} tem thùng (QTY=0)`);
+        if (summaryParts.length > 0) {
+          alert(`✅ Đã tạo: ${summaryParts.join(' + ')} trong một cửa sổ in.`);
         }
       }
-
-      const summaryParts: string[] = [];
-      if (bagQrCount > 0) summaryParts.push(`${bagQrCount} tem bịch`);
-      if (cartonLabelCount > 0) summaryParts.push(`${cartonLabelCount} tem thùng 8×8cm`);
-      if (summaryParts.length > 0) {
-        alert(
-          `✅ Đã tạo: ${summaryParts.join(' và ')}.\n\n` +
-            (bagQrCount > 0 && cartonLabelCount > 0
-              ? 'Hai cửa sổ in có thể mở lần lượt (tem bịch trước, tem thùng sau).'
-              : 'Cửa sổ in sẽ tự động mở.')
-        );
       }
     } catch (error) {
       console.error('Error generating all QR codes:', error);

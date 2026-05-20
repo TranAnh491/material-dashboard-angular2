@@ -141,6 +141,22 @@
   padding: 10px 12px;
 }
 
+.tem-thung-row {
+  cursor: pointer;
+  border-radius: 6px;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+
+  &.selected {
+    background: #eff6ff;
+    outline: 2px solid #2563eb;
+  }
+
+  &:hover:not(.selected) {
+    background: #f9fafb;
+  }
+}
+
 .tem-inlai-row {
   display: flex;
   align-items: center;

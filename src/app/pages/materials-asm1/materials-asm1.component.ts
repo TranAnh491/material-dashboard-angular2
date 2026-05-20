@@ -193,6 +193,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   temInLaiImportBusy = false;
   private readonly TEM_INLAI_PRINTED_COLLECTION = 'tem-inlai-printed-codes';
 
+  // ===== In Tem Thùng (mã + PO + IMD, không QTY) =====
+  showTemThungPopup = false;
+  temThungCodeInput = '';
+  temThungError = '';
+  temThungBusy = false;
+  temThungSearching = false;
+  temThungLabelCount = 1;
+  temThungCandidates: Array<{
+    rowKey: string;
+    material: InventoryMaterial;
+    materialCode: string;
+    poNumber: string;
+    imd: string;
+    stock: number;
+  }> = [];
+  temThungSelectedKey: string | null = null;
+
   // ===== Standard Packing manager (More) =====
   showStandardPackingManager = false;
   spSearchCode = '';
@@ -342,6 +359,142 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.temInLaiItems = [];
     this.temInLaiShowAdd = false;
     this.temInLaiAddCodeInput = '';
+  }
+
+  openTemThungPopup(): void {
+    this.showTemThungPopup = true;
+    this.temThungCodeInput = '';
+    this.temThungError = '';
+    this.temThungBusy = false;
+    this.temThungSearching = false;
+    this.temThungLabelCount = 1;
+    this.temThungCandidates = [];
+    this.temThungSelectedKey = null;
+    setTimeout(() => {
+      const el = document.getElementById('tem-thung-code-input-asm1') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 50);
+  }
+
+  closeTemThungPopup(): void {
+    this.showTemThungPopup = false;
+    this.temThungCodeInput = '';
+    this.temThungError = '';
+    this.temThungBusy = false;
+    this.temThungSearching = false;
+    this.temThungLabelCount = 1;
+    this.temThungCandidates = [];
+    this.temThungSelectedKey = null;
+  }
+
+  /** Mã tem thùng: B + đúng 6 chữ số (vd B001680). */
+  private parseTemThungMaterialCode(raw: string): string | null {
+    const s = this.normalizeMaterialCodeUpper(raw);
+    const m = /^B(\d{6})$/.exec(s);
+    return m ? `B${m[1]}` : null;
+  }
+
+  onTemThungCodeInputChange(): void {
+    const code = this.parseTemThungMaterialCode(this.temThungCodeInput);
+    if (!code) {
+      if (!this.temThungCodeInput.trim()) {
+        this.temThungCandidates = [];
+        this.temThungError = '';
+        this.temThungSelectedKey = null;
+      }
+      return;
+    }
+    void this.loadTemThungCandidatesFromCode(code);
+  }
+
+  onTemThungCodeEnter(): void {
+    const code = this.parseTemThungMaterialCode(this.temThungCodeInput);
+    if (!code) {
+      this.temThungError = 'Mã phải dạng B + 6 số (vd: B001680).';
+      this.temThungCandidates = [];
+      this.temThungSelectedKey = null;
+      return;
+    }
+    void this.loadTemThungCandidatesFromCode(code);
+  }
+
+  selectTemThungRow(rowKey: string): void {
+    this.temThungSelectedKey = rowKey;
+    this.temThungError = '';
+  }
+
+  private async loadTemThungCandidatesFromCode(code: string): Promise<void> {
+    this.temThungSearching = true;
+    this.temThungError = '';
+    this.temThungCandidates = [];
+    this.temThungSelectedKey = null;
+    try {
+      const allRows = await this.fetchInventoryRowsByMaterialCodes([code]);
+      const rows = allRows.filter((m) => this.calculateCurrentStock(m) > 0);
+      if (rows.length === 0) {
+        this.temThungError = `Không có dòng tồn kho > 0 cho mã ${code}.`;
+        return;
+      }
+      this.temThungCandidates = rows
+        .map((m) => ({
+          rowKey: String(m.id || `${m.materialCode}|${m.poNumber}|${this.getDisplayIMD(m)}`),
+          material: m,
+          materialCode: m.materialCode,
+          poNumber: m.poNumber || '',
+          imd: this.getDisplayIMD(m),
+          stock: this.calculateCurrentStock(m)
+        }))
+        .sort((a, b) => {
+          const po = a.poNumber.localeCompare(b.poNumber);
+          if (po !== 0) return po;
+          return a.imd.localeCompare(b.imd);
+        });
+    } catch (e: any) {
+      console.error('[TemThung] load candidates failed', e);
+      this.temThungError = e?.message || 'Lỗi khi tải tồn kho.';
+    } finally {
+      this.temThungSearching = false;
+    }
+  }
+
+  async printTemThungLabels(): Promise<void> {
+    const selected = this.temThungCandidates.find((c) => c.rowKey === this.temThungSelectedKey);
+    if (!selected) {
+      this.temThungError = 'Chọn một dòng (Mã + PO + IMD) cần in.';
+      return;
+    }
+    const n = Math.max(1, Math.floor(Number(this.temThungLabelCount) || 0));
+    if (!Number.isFinite(n) || n < 1) {
+      this.temThungError = 'Số tem phải ≥ 1.';
+      return;
+    }
+    this.temThungBusy = true;
+    this.temThungError = '';
+    try {
+      const QRCode = await import('qrcode') as any;
+      const mat = selected.materialCode.trim();
+      const po = selected.poNumber.trim();
+      const imd = selected.imd.trim();
+      const qrImages: Array<{ image: string; qrData: string; index: number }> = [];
+      for (let i = 1; i <= n; i++) {
+        const qrData =
+          n === 1 ? `${mat}|${po}||${imd}` : `${mat}|${po}||${imd}-${i}/${n}`;
+        const qrImage = await QRCode.toDataURL(qrData, {
+          width: 240,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+        qrImages.push({ image: qrImage, qrData, index: i });
+      }
+      this.createQRPrintWindow(qrImages, selected.material, false, true);
+      this.closeTemThungPopup();
+    } catch (e: any) {
+      console.error('[TemThung] print failed', e);
+      this.temThungError = e?.message || 'Lỗi khi in tem thùng.';
+    } finally {
+      this.temThungBusy = false;
+    }
   }
 
   onTemInLaiLsxEnter(): void {
@@ -6888,7 +7041,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   // Create print window for QR codes — cùng layout/cỡ chữ/nội dung như inbound tem bịch
-  private createQRPrintWindow(qrImages: any[], material: InventoryMaterial, isPartialLabel: boolean = false): void {
+  private createQRPrintWindow(
+    qrImages: any[],
+    material: InventoryMaterial,
+    isPartialLabel: boolean = false,
+    hideQtyAndBag: boolean = false
+  ): void {
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
@@ -7131,19 +7289,24 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
                 const qtyLine = qr.displayPrefix
                   ? `${qr.displayPrefix} ${this.formatInboundLabelQuantity(f.quantity)}`
                   : this.formatInboundLabelQuantity(f.quantity);
+                const infoRows = hideQtyAndBag
+                  ? `
+                    <div class="info-row material-code material-code-main">${this.escapeHtmlForPrint(f.materialCode)}</div>
+                    <div class="info-row">PO: ${this.escapeHtmlForPrint(f.po)}</div>
+                    <div class="info-row">IMD: ${this.escapeHtmlForPrint(f.imd)}</div>`
+                  : `
+                    <div class="info-row material-code material-code-main">${f.materialCode}</div>
+                    <div class="info-row">PO: ${f.po}</div>
+                    <div class="info-row material-code">${qtyLine}</div>
+                    <div class="info-row">IMD: ${f.imd}</div>
+                    <div class="info-row">BAG: ${f.bag}</div>`;
                 return `
               <div class="qr-container">
                 <div class="qr-section">
                   <img src="${qr.image}" alt="QR Code" class="qr-image">
                 </div>
                 <div class="info-section">
-                  <div>
-                    <div class="info-row material-code material-code-main">${f.materialCode}</div>
-                    <div class="info-row">PO: ${f.po}</div>
-                    <div class="info-row material-code">${qtyLine}</div>
-                    <div class="info-row">IMD: ${f.imd}</div>
-                    <div class="info-row">BAG: ${f.bag}</div>
-                  </div>
+                  <div>${infoRows}</div>
                 </div>
               </div>
             `;

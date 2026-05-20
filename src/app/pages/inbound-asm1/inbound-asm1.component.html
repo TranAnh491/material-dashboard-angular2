@@ -349,11 +349,11 @@
             <th class="status-cell">ĐÃ NHẬN</th>
             <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
             <th class="number-cell">Số Bịch</th>
+            <th class="number-cell carton-col" title="Số thùng — In QR sẽ in thêm tem thùng (QTY = 0)">SỐ THÙNG</th>
             <th class="number-cell">Bịch (QR)</th>
             <th class="supplier-cell">NHÀ CUNG CẤP</th>
             <th class="unitweight-cell">Số Bịch / Cuộn</th>
             <th class="remarks-cell">LƯU Ý</th>
-            <th class="number-cell carton-col" title="Số thùng — In toàn bộ sẽ in tem 8×8cm">THÙNG</th>
             <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
             <!-- <th class="employee-cell">MSNV</th> -->
             <!-- <th class="time-cell">THỜI GIAN</th> -->
@@ -480,6 +480,20 @@
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Nhập số bịch (đơn vị: bịch, không phải gram)'">
             </td>
+            <td class="number-cell carton-col">
+              <input type="number"
+                     class="editable-input carton-count-input"
+                     [(ngModel)]="material.cartonCount"
+                     [ngModelOptions]="{updateOn: 'blur'}"
+                     (blur)="onCartonCountCommit(material)"
+                     (keydown.enter)="$any($event.target).blur()"
+                     inputmode="numeric"
+                     step="1"
+                     min="0"
+                     placeholder="0"
+                     [disabled]="!canEditMaterials || material.isReceived"
+                     [title]="material.isReceived ? 'Đã nhận' : 'Số thùng — In QR: mỗi thùng một tem 57×32mm (QTY = 0, dán ngoài thùng)'">
+            </td>
             <td class="number-cell">
               <input type="text"
                      class="editable-input"
@@ -521,20 +535,6 @@
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lưu ý'"
                      placeholder="Lưu ý">
-            </td>
-            <td class="number-cell carton-col">
-              <input type="number"
-                     class="editable-input carton-count-input"
-                     [(ngModel)]="material.cartonCount"
-                     [ngModelOptions]="{updateOn: 'blur'}"
-                     (blur)="onCartonCountCommit(material)"
-                     (keydown.enter)="$any($event.target).blur()"
-                     inputmode="numeric"
-                     step="1"
-                     min="0"
-                     placeholder="0"
-                     [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Đã nhận' : 'Số thùng — In toàn bộ: mỗi thùng một tem 8×8cm (QR, tên mã, PO, IMD, Thùng i/N)'">
             </td>
              <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
              <!-- <td class="employee-cell">

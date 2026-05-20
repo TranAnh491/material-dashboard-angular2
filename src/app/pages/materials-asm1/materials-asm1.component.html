@@ -103,6 +103,13 @@
             <i class="material-icons">print</i>
             In Lại Tem
           </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-thung-btn"
+                  (click)="openTemThungPopup()"
+                  title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
+            <i class="material-icons">inventory_2</i>
+            In Tem Thùng
+          </button>
         </div>
         
         <!-- Mobile Stats Section - Individual boxes on mobile -->
@@ -170,6 +177,13 @@
                   title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
             <i class="material-icons">print</i>
             In Lại Tem
+          </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-thung-btn"
+                  (click)="openTemThungPopup()"
+                  title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
+            <i class="material-icons">inventory_2</i>
+            In Tem Thùng
           </button>
         </div>
         
@@ -737,6 +751,82 @@
               (click)="confirmTemLeSplitAndPrint()">
         <i class="material-icons">print</i>
         In 2 tem
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- In Tem Thùng Popup -->
+<div class="modal-overlay" *ngIf="showTemThungPopup" (click)="closeTemThungPopup()">
+  <div class="modal-content tem-le-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>📦 In Tem Thùng — Mã + PO + IMD</h3>
+      <button type="button" class="close-btn" (click)="closeTemThungPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="tem-xuat-hint">
+        Nhập tay <strong>mã B + 6 số</strong> (vd <strong>B001680</strong>) — hệ thống tự lọc các dòng <strong>tồn kho &gt; 0</strong> (Mã + PO + IMD).
+        Chọn dòng cần in, nhập <strong>số tem</strong>. Tem in <strong>57×32mm</strong> (cùng format cột QR) — chỉ Mã, PO, IMD (không QTY/BAG).
+      </p>
+      <input
+        id="tem-thung-code-input-asm1"
+        type="text"
+        class="editable-input"
+        style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="temThungCodeInput"
+        (ngModelChange)="onTemThungCodeInputChange()"
+        (keyup.enter)="onTemThungCodeEnter()"
+        placeholder="B001680 (B + 6 số)"
+        autocomplete="off"
+        maxlength="7"
+        [disabled]="temThungBusy || temThungSearching"
+      />
+
+      <p class="tem-xuat-hint" *ngIf="temThungSearching" style="margin-top:8px;">
+        Đang tải tồn kho...
+      </p>
+
+      <div class="tem-le-error" *ngIf="temThungError">
+        <i class="material-icons">error</i>
+        {{ temThungError }}
+      </div>
+
+      <div class="tem-inlai-list" *ngIf="temThungCandidates.length > 0">
+        <div class="tem-thung-row tem-inlai-row"
+             *ngFor="let it of temThungCandidates"
+             [class.selected]="temThungSelectedKey === it.rowKey"
+             (click)="selectTemThungRow(it.rowKey)">
+          <span class="code">{{ it.materialCode }}</span>
+          <span class="meta">PO: {{ it.poNumber }} · IMD: {{ it.imd }}</span>
+          <span class="meta">Tồn: {{ it.stock | number:'1.0-2' }}</span>
+        </div>
+      </div>
+
+      <div class="tem-le-row" style="margin-top: 14px;" *ngIf="temThungCandidates.length > 0">
+        <div class="tem-le-label">Số tem cần in</div>
+        <input type="number"
+               class="editable-input"
+               style="max-width: 160px;"
+               [(ngModel)]="temThungLabelCount"
+               min="1"
+               step="1"
+               [disabled]="temThungBusy || !temThungSelectedKey">
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeTemThungPopup()" [disabled]="temThungBusy">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="delete-batch-btn" style="background:#111827;"
+              (click)="printTemThungLabels()"
+              [disabled]="temThungBusy || !temThungSelectedKey">
+        <i class="material-icons">print</i>
+        {{ temThungBusy ? 'Đang in...' : 'In tem thùng' }}
       </button>
     </div>
   </div>
