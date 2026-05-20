@@ -19,6 +19,125 @@
     </div>
 
     <div class="row">
+      <div class="col-12">
+        <div class="card zalo-card zalo-card--links">
+          <div class="card-header card-header--links">
+            <div>
+              <h4 class="card-title">Danh sách ID đã liên kết Zalo</h4>
+              <p class="links-hint">
+                Firestore: <strong>zalo_links</strong> (bot webhook) · <strong>zalo-user-links</strong> (admin thủ công)
+              </p>
+            </div>
+            <div class="link-header-actions">
+              <span class="link-count" *ngIf="!linksLoading">
+                {{ userLinks.length }} liên kết
+                <span class="link-count__sub">(bot {{ webhookLinkCount }} · tay {{ manualLinkCount }})</span>
+              </span>
+              <span class="link-count link-count--loading" *ngIf="linksLoading">Đang tải…</span>
+              <button type="button" class="btn btn-small" (click)="refreshUserLinks()" [disabled]="linksLoading">
+                <i class="material-icons">refresh</i>
+                Tải lại
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <input class="input" [(ngModel)]="userFilter" placeholder="Tìm mã NV, Chat ID, tên, SĐT, nguồn…">
+            </div>
+
+            <div class="table-wrap" *ngIf="linksLoading">
+              <div class="empty">Đang tải danh sách từ Firestore…</div>
+            </div>
+
+            <div class="table-wrap" *ngIf="!linksLoading">
+              <table class="table table--links">
+                <thead>
+                  <tr>
+                    <th>Mã NV</th>
+                    <th>Tên</th>
+                    <th>Chat ID</th>
+                    <th>Factory</th>
+                    <th>Nguồn</th>
+                    <th>Cập nhật</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let u of filteredLinks">
+                    <td>
+                      <div class="cell-main">{{ u.employeeId }}</div>
+                      <div class="cell-sub" *ngIf="u.department">BP: {{ u.department }}</div>
+                    </td>
+                    <td>
+                      <div class="cell-main">{{ u.displayName || u.zaloDisplayName || '—' }}</div>
+                      <div class="cell-sub" *ngIf="u.phone">SĐT: {{ u.phone }}</div>
+                    </td>
+                    <td>
+                      <div class="cell-main cell-mono">{{ u.chatId || u.zaloUserId }}</div>
+                      <div class="cell-sub" *ngIf="u.notes">{{ u.notes }}</div>
+                    </td>
+                    <td>{{ u.factory || 'ALL' }}</td>
+                    <td>
+                      <span class="pill pill--src">{{ linkSourceLabel(u) }}</span>
+                      <div class="cell-sub" *ngIf="u.source">{{ u.source }}</div>
+                    </td>
+                    <td>{{ formatLinkTime(u.updatedAt || u.createdAt) }}</td>
+                    <td>
+                      <span class="pill" [class.pill--off]="!u.enabled">{{ u.enabled ? 'ON' : 'OFF' }}</span>
+                    </td>
+                    <td class="actions">
+                      <button type="button" class="btn btn-small" (click)="toggleEnabled(u)">
+                        {{ u.enabled ? 'Disable' : 'Enable' }}
+                      </button>
+                      <button type="button" class="btn btn-small btn-danger" (click)="deleteLink(u)">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredLinks.length === 0">
+                    <td colspan="8" class="empty">Chưa có ID nào liên kết trên Firestore</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <hr class="links-divider" />
+            <p class="links-hint links-hint--form">Thêm / cập nhật thủ công (<strong>zalo-user-links</strong>)</p>
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newLink.employeeId" placeholder="Employee ID (ASPxxxx)">
+              <input class="input" [(ngModel)]="newLink.zaloUserId" placeholder="Chat ID / Zalo User ID">
+              <button type="button" class="btn btn-add" (click)="addUserLink()">
+                <i class="material-icons">person_add</i>
+                Add/Update
+              </button>
+            </div>
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newLink.displayName" placeholder="Tên nhân viên (optional)">
+              <input class="input" [(ngModel)]="newLink.department" placeholder="Bộ phận (optional)">
+              <select class="select" [(ngModel)]="newLink.factory">
+                <option value="ALL">ALL</option>
+                <option value="ASM1">ASM1</option>
+                <option value="ASM2">ASM2</option>
+              </select>
+            </div>
+            <div class="form-row grid-3">
+              <input class="input" [(ngModel)]="newLink.zaloDisplayName" placeholder="Zalo name (optional)">
+              <input class="input" [(ngModel)]="newLink.phone" placeholder="Phone (optional)">
+              <label class="chk inline">
+                <input type="checkbox" [(ngModel)]="newLink.enabled">
+                <span>Enabled</span>
+              </label>
+            </div>
+            <div class="form-row">
+              <input class="input" [(ngModel)]="newLink.notes" placeholder="Notes (optional)">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
       <div class="col-lg-5 col-md-12">
         <div class="card zalo-card">
           <div class="card-header">
@@ -162,92 +281,7 @@
             </div>
           </div>
         </div>
-
-        <div class="card zalo-card">
-          <div class="card-header">
-            <h4 class="card-title">User Zalo ↔ Employee</h4>
-          </div>
-          <div class="card-body">
-            <div class="form-row grid-3">
-              <input class="input" [(ngModel)]="newLink.employeeId" placeholder="Employee ID (ASPxxxx)">
-              <input class="input" [(ngModel)]="newLink.zaloUserId" placeholder="Zalo User ID">
-              <button type="button" class="btn btn-add" (click)="addUserLink()">
-                <i class="material-icons">person_add</i>
-                Add/Update
-              </button>
-            </div>
-
-            <div class="form-row grid-3">
-              <input class="input" [(ngModel)]="newLink.displayName" placeholder="Tên nhân viên (optional)">
-              <input class="input" [(ngModel)]="newLink.department" placeholder="Bộ phận (optional)">
-              <select class="select" [(ngModel)]="newLink.factory">
-                <option value="ALL">ALL</option>
-                <option value="ASM1">ASM1</option>
-                <option value="ASM2">ASM2</option>
-              </select>
-            </div>
-
-            <div class="form-row grid-3">
-              <input class="input" [(ngModel)]="newLink.zaloDisplayName" placeholder="Zalo name (optional)">
-              <input class="input" [(ngModel)]="newLink.phone" placeholder="Phone (optional)">
-              <label class="chk inline">
-                <input type="checkbox" [(ngModel)]="newLink.enabled">
-                <span>Enabled</span>
-              </label>
-            </div>
-
-            <div class="form-row">
-              <input class="input" [(ngModel)]="newLink.notes" placeholder="Notes (optional)">
-            </div>
-
-            <div class="form-row">
-              <input class="input" [(ngModel)]="userFilter" placeholder="Tìm user... (mã, zalo id, tên, sđt)">
-            </div>
-
-            <div class="table-wrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th>Zalo</th>
-                    <th>Factory</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let u of filteredLinks">
-                    <td>
-                      <div class="cell-main">{{ u.employeeId }}</div>
-                      <div class="cell-sub">{{ u.displayName }}</div>
-                    </td>
-                    <td>
-                      <div class="cell-main">{{ u.zaloUserId }}</div>
-                      <div class="cell-sub">{{ u.zaloDisplayName }}</div>
-                    </td>
-                    <td>{{ u.factory || 'ALL' }}</td>
-                    <td>
-                      <span class="pill" [class.pill--off]="!u.enabled">{{ u.enabled ? 'ON' : 'OFF' }}</span>
-                    </td>
-                    <td class="actions">
-                      <button type="button" class="btn btn-small" (click)="toggleEnabled(u)">
-                        {{ u.enabled ? 'Disable' : 'Enable' }}
-                      </button>
-                      <button type="button" class="btn btn-small btn-danger" (click)="deleteLink(u)">
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                  <tr *ngIf="filteredLinks.length === 0">
-                    <td colspan="5" class="empty">Chưa có dữ liệu</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 </div>
-

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.onWorkOrderKittingNotifyZalo = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -577,6 +577,25 @@ exports.adminDeleteAuthUsersNotInSettingsFn = functions
  * Đăng nhập bằng mã ASPxxxx: tra email thật trong Firestore (users.employeeId) để signIn đúng tài khoản
  * đăng ký qua mail (@airspeedmfgvn.com), không chỉ asp####@asp.com.
  */
+/**
+ * Work Order: LSX chuyển sang Kitting + chưa có người soạn → Zalo người quét outbound gần nhất (cách B).
+ */
+exports.onWorkOrderKittingNotifyZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .firestore.document('work-orders/{woId}')
+    .onUpdate(async (change, context) => {
+    const before = (change.before.data() || {});
+    const after = (change.after.data() || {});
+    const woId = context.params.woId;
+    try {
+        const { handleWorkOrderKittingZaloNotify } = await Promise.resolve().then(() => __importStar(require('./work-order-kitting-zalo')));
+        await handleWorkOrderKittingZaloNotify(admin.firestore(), before, after, woId);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('onWorkOrderKittingNotifyZalo failed', woId, msg);
+    }
+});
 exports.lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (data) => {
     var _a;
     const raw = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';

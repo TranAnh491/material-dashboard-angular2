@@ -32,6 +32,14 @@
         { "fieldPath": "factory",      "order": "ASCENDING" },
         { "fieldPath": "location",     "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "outbound-materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productionOrder", "order": "ASCENDING" },
+        { "fieldPath": "createdAt",       "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

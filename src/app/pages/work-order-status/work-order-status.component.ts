@@ -77,6 +77,22 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   selectedFunction: string | null = null;
   /** Popup MORE (thay cho Import Section inline) */
   showMoreDialog: boolean = false;
+
+  /** In BAG: mã R xuất kho theo LSX (MORE → BAG) */
+  showBagPrintDialog = false;
+  bagPrintFactory = '';
+  /** Chọn bất kỳ ngày nào trong tuần cần in (Thứ 2 → Thứ 7). */
+  bagWeekAnchor: Date = new Date();
+  readonly bagWeekDayOptions: ReadonlyArray<{ dow: number; label: string }> = [
+    { dow: 1, label: 'Thứ 2' },
+    { dow: 2, label: 'Thứ 3' },
+    { dow: 3, label: 'Thứ 4' },
+    { dow: 4, label: 'Thứ 5' },
+    { dow: 5, label: 'Thứ 6' },
+    { dow: 6, label: 'Thứ 7' }
+  ];
+  bagWeekDaysSelected: Record<number, boolean> = { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true };
+  bagPrintBusy = false;
   selectedFactory: string = 'ASM1'; // Default to ASM1
   firebaseSaved: boolean = false;
   isSaving: boolean = false;
@@ -4037,6 +4053,454 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const parts = fixed.split('.');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return parts.join('.');
+  }
+
+  /**
+   * In BAG (MORE → BAG): code tách biệt, chỉ chạy khi bấm In.
+   * Không gắn ngOnInit / applyFilters / loadWorkOrders / printPxk.
+   */
+
+  /** Nhà máy có trong work-orders (MORE → BAG). */
+  get bagPrintFactoryOptions(): string[] {
+    const set = new Set<string>();
+    for (const wo of this.workOrders) {
+      const f = String(wo.factory || '').trim();
+      if (f) set.add(f);
+    }
+    if (set.size === 0) {
+      ['ASM1', 'ASM2', 'ASM3', 'Sample 1', 'Sample 2'].forEach((x) => set.add(x));
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }));
+  }
+
+  openBagPrintDialog(): void {
+    const opts = this.bagPrintFactoryOptions;
+    this.bagPrintFactory =
+      opts.includes(this.selectedFactory) ? this.selectedFactory : opts[0] || this.selectedFactory || 'ASM1';
+    this.bagWeekAnchor = new Date();
+    this.selectAllBagWeekDays(true);
+    this.showBagPrintDialog = true;
+  }
+
+  get bagWeekRangeLabel(): string {
+    const mon = this.getBagWeekDayDate(1);
+    const sat = this.getBagWeekDayDate(6);
+    return `${this.formatBagDayLabel(mon)} – ${this.formatBagDayLabel(sat)}`;
+  }
+
+  private getMondayOfBagWeek(anchor: Date): Date {
+    const d = new Date(anchor);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  getBagWeekDayDate(dow: number): Date {
+    const mon = this.getMondayOfBagWeek(this.bagWeekAnchor);
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + (dow - 1));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  isBagWeekDaySelected(dow: number): boolean {
+    return !!this.bagWeekDaysSelected[dow];
+  }
+
+  onBagWeekDayChange(dow: number, checked: boolean): void {
+    this.bagWeekDaysSelected = { ...this.bagWeekDaysSelected, [dow]: checked };
+  }
+
+  selectAllBagWeekDays(all: boolean): void {
+    const next: Record<number, boolean> = {};
+    for (const o of this.bagWeekDayOptions) next[o.dow] = all;
+    this.bagWeekDaysSelected = next;
+  }
+
+  isAllBagWeekDaysSelected(): boolean {
+    return this.bagWeekDayOptions.every((o) => this.isBagWeekDaySelected(o.dow));
+  }
+
+  private getSelectedBagPrintDates(): Date[] {
+    return this.bagWeekDayOptions
+      .filter((o) => this.isBagWeekDaySelected(o.dow))
+      .map((o) => this.getBagWeekDayDate(o.dow));
+  }
+
+  private isSameCalendarDayVn(a: Date, b: Date): boolean {
+    const fa = a.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const fb = b.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    return fa === fb;
+  }
+
+  private isImportedAtOnSelectedBagDay(importedAt: Date, selectedDates: Date[]): boolean {
+    return selectedDates.some((d) => this.isSameCalendarDayVn(importedAt, d));
+  }
+
+  private workOrderMatchesBagFactory(wo: WorkOrder, factoryLabel: string): boolean {
+    const a = this.normalizeFactoryName(String(wo.factory || '').trim());
+    const b = this.normalizeFactoryName(String(factoryLabel || '').trim());
+    if (!a || !b) return false;
+    return a === b;
+  }
+
+  private outboundRecordToDate(d: Record<string, unknown>): Date | null {
+    const raw = d.exportDate ?? d.createdAt ?? d.updatedAt;
+    if (!raw) return null;
+    if (typeof (raw as { toDate?: () => Date }).toDate === 'function') {
+      return (raw as { toDate: () => Date }).toDate();
+    }
+    if (raw instanceof Date) return raw;
+    const parsed = new Date(raw as string | number);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatBagDayLabel(d: Date): string {
+    return d.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  }
+
+  /** PXK BAG: mã R + 6 số, chỉ prefix R029 (loại R028…). */
+  private normalizeBagRMaterialCode(matRaw: string): string {
+    return String(matRaw ?? '').trim().toUpperCase().replace(/\s/g, '');
+  }
+
+  private isBagPrintRMaterialCode(matRaw: string): boolean {
+    const mat = this.normalizeBagRMaterialCode(matRaw);
+    if (!mat.startsWith('R029')) return false;
+    if (mat.startsWith('R028')) return false;
+    return /^R\d{6}$/.test(mat);
+  }
+
+  private pxkDocMatchesBagFactory(docData: Record<string, unknown>, factoryLabel: string): boolean {
+    const docFac = this.normalizeFactoryName(String(docData.factory ?? '').trim());
+    const want = this.normalizeFactoryName(String(factoryLabel || '').trim());
+    if (docFac && want && docFac === want) return true;
+    const lsx = String(docData.lsx ?? '').trim().toUpperCase().replace(/\s/g, '');
+    if (!lsx) return false;
+    if (want === 'asm1' || want === 'sample 1') return lsx.startsWith('KZ');
+    if (want === 'asm2' || want === 'sample 2') return lsx.startsWith('LH');
+    if (want === 'asm3') return lsx.startsWith('LH');
+    return false;
+  }
+
+  /** LSX + Line nhận từ cột Work Order Status (tab hiện tại). */
+  private buildWorkOrderLineMapForBag(factoryLabel: string): Map<string, { lsx: string; line: string }> {
+    const map = new Map<string, { lsx: string; line: string }>();
+    for (const wo of this.workOrders) {
+      if (!this.workOrderMatchesBagFactory(wo, factoryLabel)) continue;
+      const lsx = String(wo.productionOrder || '').trim();
+      if (!lsx) continue;
+      const key = this.normLsxForMatch(lsx);
+      const line = String(wo.productionLine || '').trim() || '-';
+      const existing = map.get(key);
+      if (!existing || (line !== '-' && existing.line === '-')) {
+        map.set(key, { lsx, line });
+      }
+    }
+    return map;
+  }
+
+  /** Khớp LSX PXK với LSX trên Work Order Status. */
+  private findBagWorkOrderNormForLsx(
+    pxkLsx: string,
+    lineByLsx: Map<string, { lsx: string; line: string }>
+  ): string | null {
+    if (!pxkLsx || lineByLsx.size === 0) return null;
+    const norm = this.normLsxForMatch(pxkLsx);
+    if (lineByLsx.has(norm)) return norm;
+    const rawU = String(pxkLsx).trim().toUpperCase().replace(/\s/g, '');
+    for (const [key, meta] of lineByLsx.entries()) {
+      const metaU = String(meta.lsx || key).trim().toUpperCase().replace(/\s/g, '');
+      if (key === norm || metaU === rawU || this.normLsxForMatch(meta.lsx) === norm) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  /** LSX trên tab (có thêm biến thể hoa/thường) để query `in` — giống loadPxkFromFirebase. */
+  private collectLsxKeysForBagQuery(lineByLsx: Map<string, { lsx: string; line: string }>): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (raw: string) => {
+      const t = String(raw || '').trim();
+      if (!t) return;
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+      const u = t.toUpperCase();
+      if (u !== t && !seen.has(u)) {
+        seen.add(u);
+        out.push(u);
+      }
+    };
+    for (const meta of lineByLsx.values()) add(meta.lsx);
+    return out;
+  }
+
+  /** Chỉ đọc PXK của các LSX trên tab — không `.get()` cả collection. */
+  private async loadPxkDocsForBagPrint(
+    lineByLsx: Map<string, { lsx: string; line: string }>
+  ): Promise<Record<string, unknown>[]> {
+    const FIRESTORE_IN_MAX = 30;
+    const lsxList = this.collectLsxKeysForBagQuery(lineByLsx);
+    if (lsxList.length === 0) return [];
+    const docs: Record<string, unknown>[] = [];
+    for (let i = 0; i < lsxList.length; i += FIRESTORE_IN_MAX) {
+      const chunk = lsxList.slice(i, i + FIRESTORE_IN_MAX);
+      const snapshot = await firstValueFrom(
+        this.firestore.collection('pxk-import-data', (ref) => ref.where('lsx', 'in', chunk)).get()
+      );
+      snapshot.docs.forEach((docSnap) => {
+        docs.push(docSnap.data() as Record<string, unknown>);
+      });
+    }
+    return docs;
+  }
+
+  /** Thứ tự in: Line nhận → LSX. */
+  private compareBagRowsByLineThenLsx(
+    a: string,
+    b: string,
+    lineByLsx: Map<string, { lsx: string; line: string }>
+  ): number {
+    const ma = lineByLsx.get(a);
+    const mb = lineByLsx.get(b);
+    const lineCmp = String(ma?.line ?? '-').localeCompare(String(mb?.line ?? '-'), 'vi', {
+      sensitivity: 'base',
+      numeric: true
+    });
+    if (lineCmp !== 0) return lineCmp;
+    return String(ma?.lsx ?? a).localeCompare(String(mb?.lsx ?? b), 'vi', {
+      sensitivity: 'base',
+      numeric: true
+    });
+  }
+
+  async printBagReport(): Promise<void> {
+    if (this.bagPrintBusy) return;
+    const factoryLabel = String(this.bagPrintFactory || '').trim();
+    if (!factoryLabel) {
+      alert('Vui lòng chọn nhà máy.');
+      return;
+    }
+    const selectedDates = this.getSelectedBagPrintDates();
+    if (selectedDates.length === 0) {
+      alert('Vui lòng chọn ít nhất một ngày trong tuần (Thứ 2 – Thứ 7).');
+      return;
+    }
+
+    this.bagPrintBusy = true;
+    try {
+      const lineByLsx = this.buildWorkOrderLineMapForBag(factoryLabel);
+      if (lineByLsx.size === 0) {
+        alert(`Không có LSX nào trên Work Order Status cho nhà máy ${factoryLabel}.`);
+        return;
+      }
+
+      type DayAgg = Map<string, Map<string, number>>;
+      const byDay = new Map<string, DayAgg>();
+
+      const pxkDocs = await this.loadPxkDocsForBagPrint(lineByLsx);
+
+      for (const d of pxkDocs) {
+        if (!this.pxkDocMatchesBagFactory(d, factoryLabel)) continue;
+
+        const importedAt = this.outboundRecordToDate({ createdAt: d.importedAt });
+        if (!importedAt || !this.isImportedAtOnSelectedBagDay(importedAt, selectedDates)) continue;
+
+        const lsxRaw = String(d.lsx ?? '').trim();
+        const woNorm = this.findBagWorkOrderNormForLsx(lsxRaw, lineByLsx);
+        if (!woNorm) continue;
+
+        const lines = Array.isArray(d.lines) ? (d.lines as Record<string, unknown>[]) : [];
+        const dayKey = this.formatBagDayLabel(importedAt);
+
+        for (const line of lines) {
+          const mat = this.normalizeBagRMaterialCode(String(line.materialCode ?? ''));
+          if (!this.isBagPrintRMaterialCode(mat)) continue;
+
+          const qty = Number(line.quantity ?? 0) || 0;
+          if (qty <= 0) continue;
+
+          if (!byDay.has(dayKey)) byDay.set(dayKey, new Map());
+          const byLsx = byDay.get(dayKey)!;
+          if (!byLsx.has(woNorm)) byLsx.set(woNorm, new Map());
+          const byR = byLsx.get(woNorm)!;
+          byR.set(mat, (byR.get(mat) || 0) + qty);
+        }
+      }
+
+      if (byDay.size === 0) {
+        alert(
+          `Không có PXK mã R029 cho LSX trên Work Order Status — nhà máy ${factoryLabel}, ` +
+            `tuần ${this.bagWeekRangeLabel} (ngày đã chọn).\n` +
+            `Kiểm tra đã import PXK (Xuất Kho > 0) cho các LSX trên tab.`
+        );
+        return;
+      }
+
+      const dayKeys = Array.from(byDay.keys()).sort((a, b) => {
+        const pa = a.split('/').reverse().join('-');
+        const pb = b.split('/').reverse().join('-');
+        return pa.localeCompare(pb);
+      });
+
+      const pagesHtml = dayKeys
+        .map((dayKey) => this.buildBagPrintDayPageHtml(dayKey, factoryLabel, byDay.get(dayKey)!, lineByLsx))
+        .join('');
+
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>In BAG — mã R</title>
+<style>
+@page{size:A4 landscape;margin:8mm}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:Arial,sans-serif;font-size:11px;color:#000}
+.bag-day-page{page-break-after:always;padding:4mm 0}
+.bag-day-page:last-child{page-break-after:auto}
+.bag-title{font-size:16px;font-weight:bold;text-align:center;margin-bottom:4px}
+.bag-sub{font-size:12px;text-align:center;margin-bottom:10px;color:#333}
+.bag-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.bag-table th,.bag-table td{border:1px solid #000;padding:4px 5px;text-align:center;word-break:break-word;font-size:10px}
+.bag-table th{background:#e8e8e8;font-weight:bold}
+.bag-table th.col-lsx,.bag-table td.col-lsx{width:14%;text-align:left}
+.bag-table th.col-line,.bag-table td.col-line{width:10%}
+.bag-table th.col-r,.bag-table td.col-r{width:6%}
+.bag-table td.num{text-align:right}
+.bag-section-title{font-size:13px;font-weight:bold;margin:12px 0 6px}
+.bag-table--summary{margin-bottom:14px}
+.bag-table--summary tbody td{background:#f0f4f8}
+.bag-table--summary .col-line{text-align:left;width:12%}
+@media print{
+  html::before,html::after,body::before,body::after{display:none!important}
+}
+</style></head><body>${pagesHtml}
+<script>window.onload=function(){window.print()}</script>
+</body></html>`;
+
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+        this.showBagPrintDialog = false;
+      } else {
+        alert('Không mở được cửa sổ in. Cho phép popup hoặc dùng Ctrl+P.');
+      }
+    } catch (err) {
+      console.error('Lỗi in BAG:', err);
+      alert('Lỗi in BAG: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
+    } finally {
+      this.bagPrintBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private computeBagTotalsByLine(
+    byLsx: Map<string, Map<string, number>>,
+    lineByLsx: Map<string, { lsx: string; line: string }>,
+    rCodes: string[]
+  ): { lineOrder: string[]; totalsByLine: Map<string, Map<string, number>> } {
+    const totalsByLine = new Map<string, Map<string, number>>();
+    for (const lsxNorm of byLsx.keys()) {
+      const line = String(lineByLsx.get(lsxNorm)?.line ?? '-').trim() || '-';
+      if (!totalsByLine.has(line)) {
+        const m = new Map<string, number>();
+        rCodes.forEach((r) => m.set(r, 0));
+        totalsByLine.set(line, m);
+      }
+      const lineMap = totalsByLine.get(line)!;
+      const byR = byLsx.get(lsxNorm)!;
+      for (const r of rCodes) {
+        lineMap.set(r, (lineMap.get(r) || 0) + (byR.get(r) || 0));
+      }
+    }
+    const lineOrder = Array.from(totalsByLine.keys()).sort((a, b) =>
+      a.localeCompare(b, 'vi', { sensitivity: 'base', numeric: true })
+    );
+    return { lineOrder, totalsByLine };
+  }
+
+  private buildBagPrintDayPageHtml(
+    dayKey: string,
+    factoryLabel: string,
+    byLsx: Map<string, Map<string, number>>,
+    lineByLsx: Map<string, { lsx: string; line: string }>
+  ): string {
+    const rSet = new Set<string>();
+    byLsx.forEach((byR) => byR.forEach((_, r) => rSet.add(r)));
+    const rCodes = Array.from(rSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    const lsxKeys = Array.from(byLsx.keys()).sort((a, b) =>
+      this.compareBagRowsByLineThenLsx(a, b, lineByLsx)
+    );
+
+    const rHeaders = rCodes
+      .map((r) => `<th class="col-r">${this.escapeHtmlForPrint(r)}</th>`)
+      .join('');
+
+    const { lineOrder, totalsByLine } = this.computeBagTotalsByLine(byLsx, lineByLsx, rCodes);
+
+    const summaryRows = lineOrder
+      .map((line) => {
+        const lineMap = totalsByLine.get(line)!;
+        const cells = rCodes
+          .map((r) => {
+            const q = lineMap.get(r) || 0;
+            return `<td class="num">${q ? this.escapeHtmlForPrint(this.formatQuantityForPxk(q)) : ''}</td>`;
+          })
+          .join('');
+        return `<tr>
+          <td class="col-line"><strong>${this.escapeHtmlForPrint(line)}</strong></td>
+          ${cells}
+        </tr>`;
+      })
+      .join('');
+
+    const detailRows = lsxKeys
+      .map((lsxNorm) => {
+        const meta = lineByLsx.get(lsxNorm);
+        const lsxDisplay = meta?.lsx || lsxNorm;
+        const line = String(meta?.line ?? '-').trim() || '-';
+        const byR = byLsx.get(lsxNorm)!;
+        const cells = rCodes
+          .map((r) => {
+            const q = byR.get(r) || 0;
+            return `<td class="num">${q ? this.escapeHtmlForPrint(this.formatQuantityForPxk(q)) : ''}</td>`;
+          })
+          .join('');
+        return `<tr>
+          <td class="col-lsx">${this.escapeHtmlForPrint(lsxDisplay)}</td>
+          <td class="col-line">${this.escapeHtmlForPrint(line)}</td>
+          ${cells}
+        </tr>`;
+      })
+      .join('');
+
+    return `<div class="bag-day-page">
+      <div class="bag-title">DANH SÁCH MÃ R XUẤT KHO (BAG)</div>
+      <div class="bag-sub">Nhà máy: ${this.escapeHtmlForPrint(factoryLabel)} · Ngày: ${this.escapeHtmlForPrint(dayKey)}</div>
+      <div class="bag-section-title">Tổng hợp theo Line</div>
+      <table class="bag-table bag-table--summary">
+        <thead><tr>
+          <th class="col-line">Line nhận</th>
+          ${rHeaders}
+        </tr></thead>
+        <tbody>${summaryRows}</tbody>
+      </table>
+      <div class="bag-section-title">Chi tiết theo LSX</div>
+      <table class="bag-table bag-table--detail">
+        <thead><tr>
+          <th class="col-lsx">LSX</th>
+          <th class="col-line">Line nhận</th>
+          ${rHeaders}
+        </tr></thead>
+        <tbody>${detailRows}</tbody>
+      </table>
+    </div>`;
   }
 
   async printPxk(workOrder: WorkOrder): Promise<void> {

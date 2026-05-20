@@ -21,15 +21,20 @@ interface ZaloConfig {
 
 interface ZaloUserLink {
   id?: string;
-  employeeId: string; // ASPxxxx
+  /** Doc id / chat_id trên Zalo Bot (collection zalo_links) */
+  chatId?: string;
+  employeeId: string; // ASPxxxx (memberId trên Firestore)
   displayName?: string;
   department?: string;
   factory?: Factory;
-  zaloUserId: string; // userId từ Zalo
+  zaloUserId: string; // chatId hoặc user id (hiển thị)
   zaloDisplayName?: string;
   phone?: string;
   enabled: boolean;
   notes?: string;
+  /** webhook = zalo_links (bot), manual = zalo-user-links (admin) */
+  linkSource?: 'webhook' | 'manual';
+  source?: string;
   createdAt?: any;
   updatedAt?: any;
   updatedBy?: string;
@@ -76,6 +81,9 @@ export class ZaloComponent implements OnInit, OnDestroy {
   };
 
   userLinks: ZaloUserLink[] = [];
+  linksLoading = false;
+  private webhookLinks: ZaloUserLink[] = [];
+  private manualLinks: ZaloUserLink[] = [];
   userFilter = '';
 
   orderRules: ZaloOrderRule[] = [];
@@ -208,25 +216,64 @@ export class ZaloComponent implements OnInit, OnDestroy {
     }
   }
 
+  get webhookLinkCount(): number {
+    return this.webhookLinks.length;
+  }
+
+  get manualLinkCount(): number {
+    return this.manualLinks.length;
+  }
+
+  linkSourceLabel(u: ZaloUserLink): string {
+    const src = String(u.source || '');
+    if (src.includes('zalo_links +')) return 'Bot + thủ công';
+    if (u.linkSource === 'manual') return 'Thủ công';
+    if (u.linkSource === 'webhook') return 'Bot /link';
+    return '—';
+  }
+
+  refreshUserLinks(): void {
+    this.linksLoading = true;
+    this.webhookLinks = [];
+    this.manualLinks = [];
+    this.userLinks = [];
+    this.subscribeUserLinks();
+  }
+
   get filteredLinks(): ZaloUserLink[] {
     const q = (this.userFilter || '').trim().toLowerCase();
     if (!q) return this.userLinks;
     return this.userLinks.filter((u) => {
       const hay = [
         u.employeeId,
+        u.chatId,
         u.displayName,
         u.department,
         u.factory,
         u.zaloUserId,
         u.zaloDisplayName,
         u.phone,
-        u.notes
+        u.notes,
+        u.source,
+        u.linkSource
       ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
     });
+  }
+
+  formatLinkTime(v: unknown): string {
+    if (!v) return '—';
+    const d =
+      typeof (v as { toDate?: () => Date })?.toDate === 'function'
+        ? (v as { toDate: () => Date }).toDate()
+        : v instanceof Date
+          ? v
+          : new Date(v as string | number);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('vi-VN', { hour12: false });
   }
 
   get filteredOrders(): ZaloOrderRule[] {
@@ -282,38 +329,134 @@ export class ZaloComponent implements OnInit, OnDestroy {
     }
   }
 
-  private subscribeUserLinks(): void {
+  /** Liên kết từ webhook/bot — collection zalo_links (Firestore). */
+  private subscribeWebhookLinks(): void {
+    this.afs
+      .collection('zalo_links')
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (snap) => {
+          this.webhookLinks = snap.map((d) =>
+            this.mapZaloLinksDoc(d.payload.doc.id, d.payload.doc.data() as Record<string, unknown>)
+          );
+          this.mergeUserLinks();
+          this.linksLoading = false;
+        },
+        error: (err) => {
+          console.error('❌ Zalo: subscribeWebhookLinks error', err);
+          this.saveMessage = 'Không load được zalo_links (kiểm tra quyền Firestore).';
+          this.linksLoading = false;
+        }
+      });
+  }
+
+  /** Liên kết thêm thủ công từ admin — collection zalo-user-links. */
+  private subscribeManualUserLinks(): void {
     this.afs
       .collection('zalo-user-links', (ref) => ref.orderBy('employeeId'))
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (snap) => {
-          this.userLinks = snap.map((d) => {
+          this.manualLinks = snap.map((d) => {
             const id = d.payload.doc.id;
             const v = d.payload.doc.data() as any;
             return {
               id,
-              employeeId: String(v.employeeId ?? '').trim(),
+              chatId: String(v.chatId ?? v.zaloUserId ?? id).trim(),
+              employeeId: String(v.employeeId ?? id).trim().toUpperCase(),
               displayName: String(v.displayName ?? '').trim(),
               department: String(v.department ?? '').trim(),
               factory: (String(v.factory ?? 'ALL').trim().toUpperCase() as Factory) || 'ALL',
-              zaloUserId: String(v.zaloUserId ?? '').trim(),
+              zaloUserId: String(v.zaloUserId ?? v.chatId ?? '').trim(),
               zaloDisplayName: String(v.zaloDisplayName ?? '').trim(),
               phone: String(v.phone ?? '').trim(),
               enabled: v.enabled !== false,
               notes: String(v.notes ?? '').trim(),
+              linkSource: 'manual',
+              source: 'zalo-user-links',
               createdAt: v.createdAt,
               updatedAt: v.updatedAt,
               updatedBy: String(v.updatedBy ?? '').trim()
             } as ZaloUserLink;
           });
+          this.mergeUserLinks();
         },
         error: (err) => {
-          console.error('❌ Zalo: subscribeUserLinks error', err);
-          this.saveMessage = 'Không load được danh sách user Zalo (kiểm tra quyền Firestore).';
+          console.error('❌ Zalo: subscribeManualUserLinks error', err);
+          this.saveMessage = 'Không load được zalo-user-links (kiểm tra quyền Firestore).';
         }
       });
+  }
+
+  private mapZaloLinksDoc(docId: string, v: Record<string, unknown>): ZaloUserLink {
+    const chatId = String(v.chatId ?? docId).trim();
+    const memberId = String(v.memberId ?? v.employeeId ?? '').trim().toUpperCase();
+    const name = String(v.name ?? v.displayName ?? v.zaloDisplayName ?? '').trim();
+    return {
+      id: docId,
+      chatId,
+      employeeId: memberId || '—',
+      displayName: name,
+      department: String(v.department ?? '').trim(),
+      factory: (String(v.factory ?? 'ALL').trim().toUpperCase() as Factory) || 'ALL',
+      zaloUserId: chatId,
+      zaloDisplayName: name,
+      phone: String(v.phone ?? '').trim(),
+      enabled: v.enabled !== false,
+      notes: String(v.notes ?? '').trim(),
+      linkSource: 'webhook',
+      source: String(v.source ?? 'zaloWebhook').trim(),
+      createdAt: v.createdAt,
+      updatedAt: v.updatedAt,
+      updatedBy: String(v.updatedBy ?? '').trim()
+    };
+  }
+
+  private mergeUserLinks(): void {
+    const rows: ZaloUserLink[] = [...this.webhookLinks];
+    const byEmployee = new Map<string, number>();
+    rows.forEach((r, i) => {
+      if (r.employeeId && r.employeeId !== '—') {
+        byEmployee.set(r.employeeId, i);
+      }
+    });
+
+    for (const m of this.manualLinks) {
+      const emp = m.employeeId || '';
+      const idx = emp && emp !== '—' ? byEmployee.get(emp) : undefined;
+      if (idx !== undefined) {
+        const existing = rows[idx];
+        rows[idx] = {
+          ...existing,
+          ...m,
+          id: existing.id,
+          chatId: m.chatId || existing.chatId,
+          zaloUserId: m.zaloUserId || existing.zaloUserId,
+          linkSource: 'webhook',
+          source: 'zalo_links + zalo-user-links'
+        };
+      } else {
+        rows.push(m);
+        if (emp && emp !== '—') {
+          byEmployee.set(emp, rows.length - 1);
+        }
+      }
+    }
+
+    this.userLinks = rows.sort((a, b) =>
+      (a.employeeId || '').localeCompare(b.employeeId || '', undefined, {
+        sensitivity: 'base',
+        numeric: true
+      })
+    );
+  }
+
+  private subscribeUserLinks(): void {
+    this.linksLoading = true;
+    this.subscribeWebhookLinks();
+    this.subscribeManualUserLinks();
   }
 
   private subscribeOrderRules(): void {
@@ -546,7 +689,11 @@ export class ZaloComponent implements OnInit, OnDestroy {
     if (!u?.id) return;
     try {
       const userEmail = (await this.afAuth.currentUser)?.email || '';
-      await this.afs.collection('zalo-user-links').doc(u.id).set(
+      const col =
+        u.linkSource === 'webhook' || String(u.source || '').includes('zalo_links')
+          ? 'zalo_links'
+          : 'zalo-user-links';
+      await this.afs.collection(col).doc(u.id).set(
         { enabled: !u.enabled, updatedAt: new Date(), updatedBy: userEmail },
         { merge: true }
       );
@@ -561,11 +708,15 @@ export class ZaloComponent implements OnInit, OnDestroy {
     const ok = confirm(`Xóa liên kết Zalo của ${u.employeeId}?`);
     if (!ok) return;
     try {
-      await this.afs.collection('zalo-user-links').doc(u.id).delete();
-      this.saveMessage = '✅ Đã xóa user Zalo.';
+      if (u.linkSource === 'webhook' || u.source?.includes('zaloWebhook')) {
+        await this.afs.collection('zalo_links').doc(u.id).delete();
+      } else {
+        await this.afs.collection('zalo-user-links').doc(u.id).delete();
+      }
+      this.saveMessage = '✅ Đã xóa liên kết Zalo.';
     } catch (e) {
       console.error('❌ Zalo: deleteLink error', e);
-      this.saveMessage = '❌ Lỗi xóa user Zalo.';
+      this.saveMessage = '❌ Lỗi xóa liên kết Zalo.';
     }
   }
 }

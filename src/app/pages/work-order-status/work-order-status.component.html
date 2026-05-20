@@ -194,6 +194,10 @@
                               style="color: #607d8b;" title="Tải lịch sử PXK theo tháng">
                         <i class="material-icons">download</i> Tải PXK
                       </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openBagPrintDialog()"
+                              style="color: #1565c0; font-weight: 600;" title="In danh sách mã R xuất kho theo LSX">
+                        <i class="material-icons">print</i> BAG
+                      </button>
                     </div>
 
                     <div class="import-info">
@@ -878,6 +882,66 @@
         <div class="dialog-actions" style="margin-top: 16px;">
           <button mat-button (click)="closeScanStatusSelectDialog()">
             <mat-icon>close</mat-icon> Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BAG Print Dialog -->
+  <div class="time-range-dialog-overlay" *ngIf="showBagPrintDialog">
+    <div class="time-range-dialog bag-print-dialog">
+      <div class="dialog-header">
+        <h4><i class="material-icons" style="vertical-align:middle;margin-right:6px;">print</i> In BAG — mã R xuất kho</h4>
+        <button mat-icon-button type="button" (click)="showBagPrintDialog = false">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p class="bag-print-hint">LSX từ Work Order Status · số lượng từ <strong>PXK</strong> (R029). Chọn <strong>tuần</strong> và các ngày (T2–T7). Mỗi ngày chọn = 1 trang A4 ngang.</p>
+        <div class="form-group">
+          <label>Nhà máy:</label>
+          <mat-form-field class="full-width">
+            <mat-select [(ngModel)]="bagPrintFactory" panelClass="wo-status-select-panel">
+              <mat-option *ngFor="let f of bagPrintFactoryOptions" [value]="f">{{ f }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="form-group">
+          <label>Chọn tuần (chọn một ngày bất kỳ trong tuần):</label>
+          <mat-form-field class="full-width">
+            <input matInput [matDatepicker]="bagWeekPicker" [(ngModel)]="bagWeekAnchor" placeholder="Chọn tuần">
+            <mat-datepicker-toggle matSuffix [for]="bagWeekPicker"></mat-datepicker-toggle>
+            <mat-datepicker #bagWeekPicker></mat-datepicker>
+          </mat-form-field>
+          <div class="bag-week-range">Tuần in: <strong>{{ bagWeekRangeLabel }}</strong> (Thứ 2 – Thứ 7)</div>
+        </div>
+        <div class="form-group">
+          <label>Ngày in trong tuần:</label>
+          <div class="bag-week-days">
+            <label class="chk bag-week-day" *ngFor="let d of bagWeekDayOptions">
+              <input type="checkbox"
+                     [checked]="isBagWeekDaySelected(d.dow)"
+                     (change)="onBagWeekDayChange(d.dow, $any($event.target).checked)">
+              <span>{{ d.label }}</span>
+              <span class="bag-week-day-date">({{ getBagWeekDayDate(d.dow) | date:'dd/MM/yyyy' }})</span>
+            </label>
+          </div>
+          <button type="button" class="btn btn-small btn-outline-secondary bag-week-select-all"
+                  (click)="selectAllBagWeekDays(!isAllBagWeekDaysSelected())">
+            {{ isAllBagWeekDaysSelected() ? 'Bỏ chọn cả tuần' : 'Chọn cả tuần' }}
+          </button>
+        </div>
+        <div class="loading-indicator" *ngIf="bagPrintBusy">
+          <div class="spinner"></div>
+          <span>Đang tải dữ liệu xuất kho…</span>
+        </div>
+        <div class="dialog-actions">
+          <button mat-raised-button color="primary" type="button" (click)="printBagReport()" [disabled]="bagPrintBusy">
+            <mat-icon>print</mat-icon> In
+          </button>
+          <button mat-raised-button type="button" (click)="showBagPrintDialog = false" [disabled]="bagPrintBusy">
+            <mat-icon>cancel</mat-icon> Hủy
           </button>
         </div>
       </div>
