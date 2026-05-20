@@ -256,6 +256,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). */
   private readonly desktopOnlyTabPaths: string[] = [
+    '/dashboard',
     '/bag-history',
     '/fg-overview',
     '/qc',
@@ -285,6 +286,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     'ASM2 RM',
     'ASM FG',
     'Tools',
+    'Report',
     'Admin'
   ];
 
@@ -293,7 +295,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
     { path: '/location', title: 'Materials', icon: 'inventory_2', category: 'Main' },
-    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Main' },
+    // Report
+    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Report' },
     // ASM1 RM
     { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },
     { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'arrow_upward', category: 'ASM1 RM' },
@@ -359,10 +362,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const isMobileUa = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|pda|handheld|mobile/i.test(
       ua.toLowerCase()
     );
+    const wasMobile = this.isMobileLayout;
     this.isMobileLayout = w <= 768 || (isMobileUa && w <= 1024);
     if (!this.isMobileLayout) {
       this.mobileDrillCategory = null;
       this.mobileSearchExpanded = false;
+    } else if (!wasMobile && this.isMobileLayout) {
+      this.router.navigate(['/menu']);
     }
     this.syncDashboardMobileBodyClass();
     this.cdr.markForCheck();
@@ -432,6 +438,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       'ASM2 RM': 'dash-mob-ico--rose',
       'ASM FG': 'dash-mob-ico--amber',
       Tools: 'dash-mob-ico--slate',
+      Report: 'dash-mob-ico--teal',
       Admin: 'dash-mob-ico--gray'
     };
     return map[category] || 'dash-mob-ico--blue';
@@ -466,6 +473,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.updateMobileLayout();
+    if (this.isMobileLayout) {
+      this.router.navigate(['/menu']);
+      return;
+    }
     // Load selected factory from localStorage
     const savedFactory = localStorage.getItem('selectedFactory');
     if (savedFactory) {

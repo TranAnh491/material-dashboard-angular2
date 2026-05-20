@@ -31,6 +31,7 @@ export class MenuComponent implements OnInit {
   // FG Check, FG Location, FG In được cho phép hiển thị trên mobile
   desktopOnlyTabs: string[] = [
     // Hide on mobile per request (keep on desktop)
+    '/dashboard',
     '/bag-history',
     '/fg-overview',
     '/qc',
@@ -60,7 +61,9 @@ export class MenuComponent implements OnInit {
     { path: '/work-order-status', title: 'Work Order', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Main' },
     { path: '/location', title: 'Materials', icon: 'inventory_2', iconImage: 'assets/img/location.png', category: 'Main' },
-    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', iconImage: 'assets/img/dasboard.png', category: 'Main' },
+
+    // Report
+    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', iconImage: 'assets/img/dasboard.png', category: 'Report' },
 
     // Production
     { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', iconImage: 'assets/img/analytics.png', category: 'Production' },
@@ -207,6 +210,7 @@ export class MenuComponent implements OnInit {
       'ASM2 RM': [],
       'ASM FG': [],
       Tools: [],
+      Report: [],
       Admin: []
     };
     for (const t of filtered) {

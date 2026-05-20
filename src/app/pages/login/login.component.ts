@@ -108,12 +108,23 @@ export class LoginComponent implements OnInit {
       this.currentLanguage = savedLanguage;
     }
 
-    // Kiểm tra nếu đã đăng nhập thì chuyển về dashboard
+    // Kiểm tra nếu đã đăng nhập thì chuyển về menu (mobile) hoặc dashboard (desktop)
     this.authService.isAuthenticated.subscribe(isAuth => {
       if (isAuth) {
-        this.router.navigate(['/dashboard']);
+        this.navigateAfterLogin();
       }
     });
+  }
+
+  /** Mobile: /menu — Desktop: /dashboard */
+  private navigateAfterLogin(): void {
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isMobileUa = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|pda|handheld|mobile/i.test(
+      ua.toLowerCase()
+    );
+    const isMobile = w <= 768 || (isMobileUa && w <= 1024);
+    this.router.navigate([isMobile ? '/menu' : '/dashboard']);
   }
 
   async onLogin(): Promise<void> {
@@ -129,7 +140,7 @@ export class LoginComponent implements OnInit {
             this.currentLanguage === 'en' ? 'Admin login successful!' : 'Đăng nhập quản lý thành công!', 
             'success'
           );
-          this.router.navigate(['/dashboard']);
+          this.navigateAfterLogin();
           return;
         }
 
@@ -141,7 +152,7 @@ export class LoginComponent implements OnInit {
           this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!', 
           'success'
         );
-        this.router.navigate(['/dashboard']);
+        this.navigateAfterLogin();
       } catch (error: any) {
         this.showMessage(this.getErrorMessage(error), 'error');
       } finally {

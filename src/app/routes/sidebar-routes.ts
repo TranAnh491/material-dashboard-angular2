@@ -11,7 +11,6 @@ export const ROUTES: RouteInfo[] = [
   { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
-  { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', class: '' },
   { 
     path: '', 
     title: 'ASM1 RM', 
@@ -63,6 +62,15 @@ export const ROUTES: RouteInfo[] = [
       { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
       { path: '/label', title: 'Label', icon: 'label', class: 'material-child-icon' },
       { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: 'material-child-icon' }
+    ]
+  },
+  {
+    path: '',
+    title: 'Report',
+    icon: 'assessment',
+    class: 'report-parent',
+    children: [
+      { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', class: 'material-child-icon' }
     ]
   },
   { path: '/location', title: 'Materials', icon: 'inventory_2', class: '' },

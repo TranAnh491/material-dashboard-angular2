@@ -91,7 +91,6 @@ export class SidebarComponent implements OnInit, OnDestroy {
   private filterMobileMenuItems(menuItems: any[]): any[] {
     // Danh sách các path được phép trên mobile
     const allowedMobilePaths = [
-      '/dashboard',           // Tab 1
       '/pd-control',
       '/inbound-asm1',        // Tab 4
       '/outbound-asm1',       // Tab 5
