@@ -4166,8 +4166,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return String(matRaw ?? '').trim().toUpperCase().replace(/\s/g, '');
   }
 
+  /** Mã R không in trên báo cáo BAG. */
+  private readonly bagPrintExcludedRMaterialCodes = new Set(['R029032', 'R029045', 'R029046']);
+
   private isBagPrintRMaterialCode(matRaw: string): boolean {
     const mat = this.normalizeBagRMaterialCode(matRaw);
+    if (this.bagPrintExcludedRMaterialCodes.has(mat)) return false;
     if (!mat.startsWith('R029')) return false;
     if (mat.startsWith('R028')) return false;
     return /^R\d{6}$/.test(mat);
@@ -4261,25 +4265,6 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return docs;
   }
 
-  /** Thứ tự in: Line nhận → LSX. */
-  private compareBagRowsByLineThenLsx(
-    a: string,
-    b: string,
-    lineByLsx: Map<string, { lsx: string; line: string }>
-  ): number {
-    const ma = lineByLsx.get(a);
-    const mb = lineByLsx.get(b);
-    const lineCmp = String(ma?.line ?? '-').localeCompare(String(mb?.line ?? '-'), 'vi', {
-      sensitivity: 'base',
-      numeric: true
-    });
-    if (lineCmp !== 0) return lineCmp;
-    return String(ma?.lsx ?? a).localeCompare(String(mb?.lsx ?? b), 'vi', {
-      sensitivity: 'base',
-      numeric: true
-    });
-  }
-
   async printBagReport(): Promise<void> {
     if (this.bagPrintBusy) return;
     const factoryLabel = String(this.bagPrintFactory || '').trim();
@@ -4367,12 +4352,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 .bag-table{width:100%;border-collapse:collapse;table-layout:fixed}
 .bag-table th,.bag-table td{border:1px solid #000;padding:4px 5px;text-align:center;word-break:break-word;font-size:10px}
 .bag-table th{background:#e8e8e8;font-weight:bold}
-.bag-table th.col-lsx,.bag-table td.col-lsx{width:14%;text-align:left}
-.bag-table th.col-line,.bag-table td.col-line{width:10%}
+.bag-table th.col-line,.bag-table td.col-line{width:12%}
 .bag-table th.col-r,.bag-table td.col-r{width:6%}
 .bag-table td.num{text-align:right}
-.bag-section-title{font-size:13px;font-weight:bold;margin:12px 0 6px}
-.bag-table--summary{margin-bottom:14px}
+.bag-table--summary{margin-top:4px}
 .bag-table--summary tbody td{background:#f0f4f8}
 .bag-table--summary .col-line{text-align:left;width:12%}
 @media print{
@@ -4434,10 +4417,6 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     byLsx.forEach((byR) => byR.forEach((_, r) => rSet.add(r)));
     const rCodes = Array.from(rSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-    const lsxKeys = Array.from(byLsx.keys()).sort((a, b) =>
-      this.compareBagRowsByLineThenLsx(a, b, lineByLsx)
-    );
-
     const rHeaders = rCodes
       .map((r) => `<th class="col-r">${this.escapeHtmlForPrint(r)}</th>`)
       .join('');
@@ -4460,45 +4439,15 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       })
       .join('');
 
-    const detailRows = lsxKeys
-      .map((lsxNorm) => {
-        const meta = lineByLsx.get(lsxNorm);
-        const lsxDisplay = meta?.lsx || lsxNorm;
-        const line = String(meta?.line ?? '-').trim() || '-';
-        const byR = byLsx.get(lsxNorm)!;
-        const cells = rCodes
-          .map((r) => {
-            const q = byR.get(r) || 0;
-            return `<td class="num">${q ? this.escapeHtmlForPrint(this.formatQuantityForPxk(q)) : ''}</td>`;
-          })
-          .join('');
-        return `<tr>
-          <td class="col-lsx">${this.escapeHtmlForPrint(lsxDisplay)}</td>
-          <td class="col-line">${this.escapeHtmlForPrint(line)}</td>
-          ${cells}
-        </tr>`;
-      })
-      .join('');
-
     return `<div class="bag-day-page">
       <div class="bag-title">DANH SÁCH MÃ R XUẤT KHO (BAG)</div>
       <div class="bag-sub">Nhà máy: ${this.escapeHtmlForPrint(factoryLabel)} · Ngày: ${this.escapeHtmlForPrint(dayKey)}</div>
-      <div class="bag-section-title">Tổng hợp theo Line</div>
       <table class="bag-table bag-table--summary">
         <thead><tr>
           <th class="col-line">Line nhận</th>
           ${rHeaders}
         </tr></thead>
         <tbody>${summaryRows}</tbody>
-      </table>
-      <div class="bag-section-title">Chi tiết theo LSX</div>
-      <table class="bag-table bag-table--detail">
-        <thead><tr>
-          <th class="col-lsx">LSX</th>
-          <th class="col-line">Line nhận</th>
-          ${rHeaders}
-        </tr></thead>
-        <tbody>${detailRows}</tbody>
       </table>
     </div>`;
   }

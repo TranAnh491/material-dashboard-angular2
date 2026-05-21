@@ -23,6 +23,10 @@
         <i class="material-icons">refresh</i>
         Refresh
       </button>
+      <button type="button" class="btn btn-default btn-sm btn-dense" (click)="openCartonTotalsPopup()" [disabled]="isLoading">
+        <i class="material-icons">inventory</i>
+        Tổng Carton
+      </button>
       <button type="button" class="icon-plain" title="More" (click)="openMore()">
         <i class="material-icons">more_horiz</i>
       </button>
@@ -182,6 +186,87 @@
       </div>
       <div class="md-modal__footer">
         <button type="button" class="btn btn-default" (click)="closeMore()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tổng carton theo mã TP -->
+  <div class="md-modal-backdrop" *ngIf="showCartonTotalsPopup" (click)="closeCartonTotalsPopup()">
+    <div class="md-modal md-modal--wide" (click)="$event.stopPropagation()">
+      <div class="md-modal__header">
+        <div class="title">Tổng số thùng (Carton) theo mã TP</div>
+        <button type="button" class="icon-x" (click)="closeCartonTotalsPopup()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="md-modal__body md-modal__body--scroll">
+        <p class="color-settings-lead">
+          Cộng dồn cột <strong>Carton</strong> từ <code>fg-inventory</code> (ASM1 + ASM2), gom theo mã TP.
+        </p>
+        <div class="ctrl ctrl--search" style="margin-bottom: 10px;">
+          <label>Tìm mã / tên KH</label>
+          <div class="search-wrap">
+            <i class="material-icons search-ic">search</i>
+            <input
+              type="text"
+              class="form-control form-control--dense"
+              [(ngModel)]="cartonTotalsSearch"
+              placeholder="Mã TP hoặc tên KH..."
+              autocomplete="off"
+            />
+          </div>
+        </div>
+        <div class="import-status" *ngIf="cartonTotalsLoading">
+          <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
+          <span>Đang tải tồn FG...</span>
+        </div>
+        <div class="import-err" *ngIf="cartonTotalsError">
+          ❌ {{ cartonTotalsError }}
+        </div>
+        <div class="carton-totals-summary" *ngIf="!cartonTotalsLoading && !cartonTotalsError">
+          <strong>{{ filteredCartonTotalsRows.length | number }}</strong> mã (đang lọc) —
+          ASM1: <strong>{{ cartonTotalsAsm1Sum | number }}</strong> carton ·
+          ASM2: <strong>{{ cartonTotalsAsm2Sum | number }}</strong> carton ·
+          Tổng: <strong>{{ cartonTotalsGrandSum | number }}</strong> carton
+        </div>
+        <div class="carton-totals-table-wrap" *ngIf="!cartonTotalsLoading && filteredCartonTotalsRows.length">
+          <table class="carton-totals-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Mã TP</th>
+                <th>Tên KH</th>
+                <th class="num">Carton ASM1</th>
+                <th class="num">Carton ASM2</th>
+                <th class="num">Tổng carton</th>
+                <th class="num">Dòng ASM1</th>
+                <th class="num">Dòng ASM2</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of filteredCartonTotalsRows; let i = index">
+                <td>{{ i + 1 }}</td>
+                <td><strong>{{ r.materialCode }}</strong></td>
+                <td>{{ r.khName || '—' }}</td>
+                <td class="num">{{ r.cartonAsm1 | number }}</td>
+                <td class="num">{{ r.cartonAsm2 | number }}</td>
+                <td class="num"><strong>{{ r.totalCarton | number }}</strong></td>
+                <td class="num">{{ r.lineCountAsm1 | number }}</td>
+                <td class="num">{{ r.lineCountAsm2 | number }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="color-settings-lead" *ngIf="!cartonTotalsLoading && !cartonTotalsError && !filteredCartonTotalsRows.length">
+          Không có dữ liệu carton (hoặc không khớp từ khóa tìm).
+        </p>
+      </div>
+      <div class="md-modal__footer">
+        <button type="button" class="btn btn-default" (click)="exportCartonTotalsExcel()" [disabled]="cartonTotalsLoading || !filteredCartonTotalsRows.length || isExporting">
+          <i class="material-icons">file_download</i>
+          Export Excel
+        </button>
+        <button type="button" class="btn btn-default" (click)="closeCartonTotalsPopup()">Đóng</button>
       </div>
     </div>
   </div>

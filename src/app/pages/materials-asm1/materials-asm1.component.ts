@@ -244,6 +244,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   canEdit = false;
   canExport = false;
   canDelete = false;
+
+  /** Cột Vị trí: sửa tay sau khi nhập đúng mật khẩu */
+  isLocationColumnUnlocked = false;
+  private readonly LOCATION_EDIT_PASSWORD = '2026';
   // canEditHSD = false; // Removed - HSD column deleted
 
   constructor(
@@ -4747,11 +4751,24 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // Update methods for editing
   // updateExported method removed - exported quantity is now read-only and auto-updated from outbound
 
+  /** Mở/khóa sửa tay cột Vị trí (mật khẩu 2026). */
+  tryUnlockLocationColumn(): void {
+    if (this.isLocationColumnUnlocked) {
+      this.isLocationColumnUnlocked = false;
+      return;
+    }
+    const pass = window.prompt('Nhập mật khẩu để sửa cột Vị trí:');
+    if (pass === null) return;
+    if (pass.trim() === this.LOCATION_EDIT_PASSWORD) {
+      this.isLocationColumnUnlocked = true;
+    } else {
+      alert('Mật khẩu không đúng');
+    }
+  }
+
   updateLocation(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
+    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
     this.updateMaterialInFirebase(material);
-    
-    // Update negative stock count for real-time display
     this.updateNegativeStockCount();
   }
 
@@ -5055,7 +5072,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   // }
 
   onLocationChange(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
+    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
     
     // Nếu location là F62 hoặc F62TRA, tự động set iqcStatus = 'Pass'
     if ((material.location === 'F62' || material.location === 'F62TRA') && material.iqcStatus !== 'Pass') {

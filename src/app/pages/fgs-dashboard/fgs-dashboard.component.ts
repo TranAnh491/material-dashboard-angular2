@@ -4,7 +4,12 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import * as XLSX from 'xlsx';
-import { FgExportManifestRow, FgImportManifestRow, FgsDashboardService } from '../../services/fgs-dashboard.service';
+import {
+  FgCartonTotalRow,
+  FgExportManifestRow,
+  FgImportManifestRow,
+  FgsDashboardService
+} from '../../services/fgs-dashboard.service';
 
 type AgingFlagTier = 'green' | 'yellow' | 'orange' | 'red';
 
@@ -114,6 +119,13 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   /** Bản chỉnh trong popup màu (Lưu mới ghi vào heatmapColors + localStorage) */
   colorSettingsDraft: HeatmapColorSettings = this.cloneHeatmapDefaults();
   showColorSettingsPopup = false;
+
+  /** Tổng carton theo mã TP (nguồn `fg-inventory`). */
+  showCartonTotalsPopup = false;
+  cartonTotalsLoading = false;
+  cartonTotalsError = '';
+  cartonTotalsRows: Array<FgCartonTotalRow & { khName: string }> = [];
+  cartonTotalsSearch = '';
 
   readonly activityBucketLabels = ['1–10', '11–20', '21–30', '31–40', '41–50', '51–60', '61–70', '71+'];
 
@@ -491,6 +503,95 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   get kpiNoActivityPct(): number {
     if (!this.kpiTotalSkus) return 0;
     return Math.round((this.kpiNoActivitySkus / this.kpiTotalSkus) * 1000) / 10;
+  }
+
+  get filteredCartonTotalsRows(): Array<FgCartonTotalRow & { khName: string }> {
+    const q = String(this.cartonTotalsSearch || '').trim().toUpperCase();
+    if (!q) return this.cartonTotalsRows;
+    return this.cartonTotalsRows.filter(
+      (r) => r.materialCode.includes(q) || (r.khName || '').toUpperCase().includes(q)
+    );
+  }
+
+  get cartonTotalsAsm1Sum(): number {
+    return this.filteredCartonTotalsRows.reduce((s, r) => s + (r.cartonAsm1 || 0), 0);
+  }
+
+  get cartonTotalsAsm2Sum(): number {
+    return this.filteredCartonTotalsRows.reduce((s, r) => s + (r.cartonAsm2 || 0), 0);
+  }
+
+  get cartonTotalsGrandSum(): number {
+    return this.cartonTotalsAsm1Sum + this.cartonTotalsAsm2Sum;
+  }
+
+  async openCartonTotalsPopup(): Promise<void> {
+    this.showCartonTotalsPopup = true;
+    this.cartonTotalsSearch = '';
+    this.cartonTotalsError = '';
+    this.cartonTotalsRows = [];
+    this.cartonTotalsLoading = true;
+    this.cdr.markForCheck();
+    try {
+      const rows = await this.svc.loadCartonTotalsByMaterialCode(['ASM1', 'ASM2']);
+      this.cartonTotalsRows = rows.map((r) => ({
+        ...r,
+        khName: this.getTenKhFromMaterialCode(r.materialCode)
+      }));
+    } catch (e: any) {
+      console.error('[FgsDashboard] loadCartonTotals', e);
+      this.cartonTotalsError = e?.message ? String(e.message) : 'Không tải được dữ liệu carton';
+    } finally {
+      this.cartonTotalsLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  closeCartonTotalsPopup(): void {
+    this.showCartonTotalsPopup = false;
+    this.cdr.markForCheck();
+  }
+
+  async exportCartonTotalsExcel(): Promise<void> {
+    const rows = this.filteredCartonTotalsRows;
+    if (!rows.length || this.isExporting) return;
+    this.isExporting = true;
+    this.cdr.markForCheck();
+    try {
+      const aoa: (string | number)[][] = [
+        ['Mã TP', 'Tên KH', 'Carton ASM1', 'Carton ASM2', 'Tổng carton', 'Dòng ASM1', 'Dòng ASM2', 'Tổng dòng'],
+        ...rows.map((r) => [
+          r.materialCode,
+          r.khName || '',
+          r.cartonAsm1,
+          r.cartonAsm2,
+          r.totalCarton,
+          r.lineCountAsm1,
+          r.lineCountAsm2,
+          r.lineCount
+        ]),
+        [
+          '',
+          'TỔNG',
+          this.cartonTotalsAsm1Sum,
+          this.cartonTotalsAsm2Sum,
+          this.cartonTotalsGrandSum,
+          '',
+          '',
+          ''
+        ]
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Carton');
+      XLSX.writeFile(wb, `fgs-carton-totals_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e: any) {
+      console.error(e);
+      this.cartonTotalsError = e?.message ? String(e.message) : 'Export thất bại';
+    } finally {
+      this.isExporting = false;
+      this.cdr.markForCheck();
+    }
   }
 
   private formatNow(): string {

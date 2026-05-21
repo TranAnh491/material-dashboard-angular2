@@ -632,13 +632,6 @@
         </div>
       </div>
 
-      <!-- Box view: tất cả vị trí (A,B,C...) -->
-      <div class="location-box-grid" *ngIf="!isLoading && filteredItems.length > 0">
-        <div class="location-box" *ngFor="let item of filteredItems; trackBy: trackByFn" [title]="item.viTri">
-          <div class="location-box-code">{{ item.viTri }}</div>
-          <div class="location-box-meta">STT: {{ item.stt }}</div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -896,8 +889,8 @@
           </p>
         </div>
         
-        <!-- Material Info -->
-        <div class="material-info-card" *ngIf="selectedMaterialForStore">
+        <!-- Material Info (ẩn chi tiết khi Nhiều mã — xem danh sách bên dưới) -->
+        <div class="material-info-card" *ngIf="selectedMaterialForStore && !storeMaterialMultiCode">
           <div class="info-row">
             <span class="label">Mã hàng:</span>
             <span class="value">{{ selectedMaterialForStore.materialCode }}</span>
@@ -929,7 +922,7 @@
         </div>
 
         <!-- Tồn kho theo vị trí (cùng mã hàng) -->
-        <div class="stock-by-location-section" *ngIf="storeMaterialStockByLocation.length > 0">
+        <div class="stock-by-location-section" *ngIf="storeMaterialStockByLocation.length > 0 && !storeMaterialMultiCode">
           <p class="locations-title">Tồn kho theo vị trí (cùng mã hàng):</p>
           <div class="stock-by-location-list">
             <div *ngFor="let item of storeMaterialStockByLocation" class="stock-by-location-row">
@@ -940,7 +933,7 @@
         </div>
         
         <!-- All Current Locations (clickable) -->
-        <div class="other-locations-section" *ngIf="suggestedLocations.length > 0">
+        <div class="other-locations-section" *ngIf="suggestedLocations.length > 0 && !storeMaterialMultiCode">
           <p class="locations-title">Các vị trí hiện có (bấm để chọn):</p>
           <div class="location-options">
             <button 
@@ -956,11 +949,56 @@
           </div>
         </div>
         
-        <label class="store-multi-location-chk">
-          <input type="checkbox" [(ngModel)]="storeMaterialMultiLocation">
-          <span>Nhiều vị trí</span>
-        </label>
-        <p class="store-multi-location-hint" *ngIf="storeMaterialMultiLocation">
+        <div class="store-step-options">
+          <label class="store-multi-location-chk">
+            <input type="checkbox" [(ngModel)]="storeMaterialMultiCode" (ngModelChange)="onStoreMaterialMultiCodeChange()">
+            <span>Nhiều mã</span>
+          </label>
+          <label class="store-multi-location-chk">
+            <input type="checkbox" [(ngModel)]="storeMaterialMultiLocation">
+            <span>Nhiều vị trí</span>
+          </label>
+        </div>
+        <p class="store-multi-location-hint" *ngIf="storeMaterialMultiCode">
+          Scan thêm mã QR (tối đa {{ STORE_MATERIAL_BATCH_MAX }} mã), sau đó scan vị trí mới — tất cả mã chuyển cùng một lần.
+        </p>
+        <div class="store-batch-section" *ngIf="storeMaterialMultiCode">
+          <p class="store-batch-count">{{ storeMaterialBatchCount }}/{{ STORE_MATERIAL_BATCH_MAX }} mã</p>
+          <ul class="store-batch-list" *ngIf="storeMaterialBatchItems.length > 0">
+            <li *ngFor="let m of storeMaterialBatchItems" class="store-batch-item">
+              <span class="store-batch-item__code">{{ m.materialCode }}</span>
+              <span class="store-batch-item__meta">PO: {{ m.poNumber || '—' }}</span>
+              <span class="store-batch-item__loc">{{ m.location || 'Chưa có' }}</span>
+              <button
+                type="button"
+                class="store-batch-item__remove"
+                *ngIf="storeMaterialBatchItems.length > 1"
+                (click)="removeStoreMaterialBatchItem(m.id)"
+                title="Xóa khỏi danh sách">
+                <i class="material-icons">close</i>
+              </button>
+            </li>
+          </ul>
+          <div class="scan-input-container store-batch-scan" *ngIf="storeMaterialBatchCanAddMore">
+            <input
+              type="text"
+              id="storeMaterialBatchQRInput"
+              [(ngModel)]="storeMaterialBatchQRInput"
+              (keyup.enter)="processStoreMaterialBatchQR()"
+              placeholder="Scan mã QR tiếp theo..."
+              class="scan-input"
+              [disabled]="isSearchingMaterial">
+            <button
+              class="scan-btn"
+              type="button"
+              (click)="processStoreMaterialBatchQR()"
+              [disabled]="isSearchingMaterial || !storeMaterialBatchQRInput.trim()">
+              <i class="material-icons">{{ isSearchingMaterial ? 'hourglass_empty' : 'add' }}</i>
+              Thêm
+            </button>
+          </div>
+        </div>
+        <p class="store-multi-location-hint" *ngIf="storeMaterialMultiLocation && !storeMaterialMultiCode">
           Cộng thêm vị trí mới vào vị trí hiện tại (không thay thế).
           <span *ngIf="storeMaterialResolvedLocation" class="store-multi-location-preview">
             → <strong>{{ storeMaterialResolvedLocation }}</strong>
@@ -1016,9 +1054,9 @@
         *ngIf="storeMaterialStep === 'choose-location'"
         class="btn btn-confirm"
         (click)="confirmStoreMaterial()"
-        [disabled]="!selectedTargetLocation.trim()">
+        [disabled]="!selectedTargetLocation.trim() || (storeMaterialMultiCode && storeMaterialBatchCount === 0)">
         <i class="material-icons">check</i>
-        Xác nhận
+        {{ storeMaterialMultiCode && storeMaterialBatchCount > 1 ? ('Xác nhận ' + storeMaterialBatchCount + ' mã') : 'Xác nhận' }}
       </button>
     </div>
   </div>

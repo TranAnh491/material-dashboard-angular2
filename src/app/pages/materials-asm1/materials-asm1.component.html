@@ -314,8 +314,20 @@
           <div class="info-row location-row">
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="value">{{ material.location || '-' }}</span>
-              <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
+              <span class="value" *ngIf="!isLocationColumnUnlocked">{{ material.location || '-' }}</span>
+              <input *ngIf="isLocationColumnUnlocked"
+                     type="text"
+                     class="mobile-input location-input"
+                     [(ngModel)]="material.location"
+                     (change)="updateLocation(material)"
+                     (blur)="onLocationChange(material)"
+                     placeholder="Nhập vị trí">
+              <button type="button"
+                      class="location-unlock-btn"
+                      (click)="tryUnlockLocationColumn()"
+                      [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mật khẩu)'">
+                <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
+              </button>
             </div>
           </div>
           
@@ -419,7 +431,15 @@
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Số lượng cần xuất (nhập tay)">XT</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
-            <th>Vị trí</th>
+            <th class="location-header-cell" [title]="isLocationColumnUnlocked ? 'Đã mở khóa — click ổ khóa để khóa lại' : 'Click ổ khóa để mở sửa Vị trí (mật khẩu)'">
+              <span>Vị trí</span>
+              <button type="button"
+                      class="location-unlock-btn"
+                      (click)="tryUnlockLocationColumn(); $event.stopPropagation()"
+                      [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mật khẩu)'">
+                <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
+              </button>
+            </th>
             <th>Change</th>
             <th>Loại Hình</th>
 
@@ -556,8 +576,18 @@
                 [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' = ' + calculateCurrentStock(material)">
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
-            <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">
-              <span class="location-text">{{ material.location || '-' }}</span>
+            <td class="location-cell"
+                [class.iqc-location]="isIQCLocation(material.location)"
+                [class.readonly-cell]="!isLocationColumnUnlocked"
+                [title]="isLocationColumnUnlocked ? 'Sửa vị trí (blur/Enter để lưu)' : 'Click ổ khóa ở cột Vị trí để mở sửa (mật khẩu)'">
+              <span class="location-text" *ngIf="!isLocationColumnUnlocked">{{ material.location || '-' }}</span>
+              <input *ngIf="isLocationColumnUnlocked"
+                     type="text"
+                     class="editable-cell location-input"
+                     [(ngModel)]="material.location"
+                     (change)="updateLocation(material)"
+                     (blur)="onLocationChange(material)"
+                     placeholder="Vị trí">
             </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>

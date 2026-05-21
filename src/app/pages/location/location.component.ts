@@ -149,6 +149,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedTargetLocation = ''; // Vị trí đích được chọn
   /** Bước 2: bật thì cộng thêm vị trí (VD: F2.1 → F2.1+ G3.4), không thay thế. */
   storeMaterialMultiLocation = false;
+  /** Bước 2: scan nhiều mã (tối đa 10), cùng chuyển sang vị trí mới một lần. */
+  storeMaterialMultiCode = false;
+  storeMaterialBatchItems: any[] = [];
+  storeMaterialBatchQRInput = '';
+  readonly STORE_MATERIAL_BATCH_MAX = 10;
   isSearchingMaterial = false;
   storeMaterialStep: 'scan' | 'select' | 'choose-location' | 'confirm' = 'scan';
   /** Tồn kho của PO được scan (cùng materialCode + poNumber) */
@@ -1595,6 +1600,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
     this.storeMaterialMultiLocation = false;
+    this.storeMaterialMultiCode = false;
+    this.storeMaterialBatchItems = [];
+    this.storeMaterialBatchQRInput = '';
     
     // Force change detection để đảm bảo modal đã render
     this.cdr.detectChanges();
@@ -1635,6 +1643,17 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
     this.storeMaterialMultiLocation = false;
+    this.storeMaterialMultiCode = false;
+    this.storeMaterialBatchItems = [];
+    this.storeMaterialBatchQRInput = '';
+  }
+
+  get storeMaterialBatchCount(): number {
+    return this.storeMaterialBatchItems.length;
+  }
+
+  get storeMaterialBatchCanAddMore(): boolean {
+    return this.storeMaterialBatchCount < this.STORE_MATERIAL_BATCH_MAX;
   }
 
   /** Ghép vị trí khi chế độ Nhiều vị trí (giữ nguyên dấu + và khoảng trắng sau +). */
@@ -1654,25 +1673,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.mergeStoreMaterialLocations(current, segment);
   }
 
-  async processStoreMaterialQR(): Promise<void> {
-    if (!this.selectedFactory) {
-      this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
-      return;
-    }
-    const qrCode = this.storeMaterialQRInput.trim();
-    if (!qrCode) {
-      alert('⚠️ Vui lòng nhập hoặc scan mã QR');
-      return;
-    }
-
-    this.isSearchingMaterial = true;
-    this.scannedMaterialCodeForStore = qrCode;
-    this.scannedIMDForStore = '';
-
-    try {
-      // Parse QR code: MaterialCode|PO|Quantity|Date
-      const parts = qrCode.split('|');
+  /** Parse QR và tra inventory-materials — dùng bước 1 và thêm mã ở bước 2. */
+  private async lookupStoreMaterialFromQR(qrCode: string): Promise<{
+    matchedMaterial: any;
+    relevantMaterials: any[];
+    suggestedLocations: string[];
+    imd: string;
+  } | null> {
+    const parts = qrCode.split('|');
       let materialCode = '';
       let poNumber = '';
       let imd = '';
@@ -1703,16 +1711,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         materialCode = qrCode.trim().substring(0, 7);
       }
 
-      if (!materialCode) {
-        alert('❌ Không thể đọc mã hàng từ QR code');
-        this.isSearchingMaterial = false;
-        return;
-      }
+    if (!materialCode) {
+      alert('❌ Không thể đọc mã hàng từ QR code');
+      return null;
+    }
 
-      this.scannedIMDForStore = imd || '';
-      console.log(`🔍 Searching for material: ${materialCode}, PO: ${poNumber || 'N/A'}, IMD: ${imd || 'N/A'}`);
-
-      const toDDMMYYYY = (dateValue: any): string => {
+    const toDDMMYYYY = (dateValue: any): string => {
         if (!dateValue) return '';
         try {
           const d: Date =
@@ -1733,14 +1737,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .get()
         .toPromise();
 
-      if (!allMaterialsSnapshot || allMaterialsSnapshot.empty) {
-        alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
-        this.isSearchingMaterial = false;
-        return;
-      }
+    if (!allMaterialsSnapshot || allMaterialsSnapshot.empty) {
+      alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
+      return null;
+    }
 
-      // Lấy tất cả materials để tìm các vị trí khác (nhưng chỉ gom "đúng bản ghi" theo Mã + PO + IMD khi có)
-      const relevantMaterials: any[] = [];
+    const relevantMaterials: any[] = [];
       const locationSet = new Set<string>();
       let matchedMaterial: any = null;
 
@@ -1790,65 +1792,177 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
-      // Nếu không tìm thấy material khớp chính xác, lấy material đầu tiên
-      if (!matchedMaterial) {
-        // Theo yêu cầu: tìm theo Mã + PO + IMD (nếu có)
-        if (!poNumber) {
-          alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
-        } else {
-          const imdLine = imd ? `\nIMD: ${imd}` : '';
-          alert(`❌ Không tìm thấy material đúng theo Mã + PO${imd ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`);
-        }
-        this.isSearchingMaterial = false;
-        return;
+    if (!matchedMaterial) {
+      if (!poNumber) {
+        alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
+      } else {
+        const imdLine = imd ? `\nIMD: ${imd}` : '';
+        alert(
+          `❌ Không tìm thấy material đúng theo Mã + PO${imd ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`
+        );
       }
+      return null;
+    }
 
-      // Chỉ hiển thị material được scan (khớp với QR code)
-      this.foundMaterialsForStore = [matchedMaterial];
-      this.selectedMaterialForStore = matchedMaterial;
-      this.setLastScannedMaterialForMobile(matchedMaterial);
+    const suggestedLocations = Array.from(locationSet)
+      .filter(loc => loc && loc.trim() !== '')
+      .sort();
 
-      // Tồn kho của PO được scan
-      this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
+    return { matchedMaterial, relevantMaterials, suggestedLocations, imd };
+  }
 
-      // Tồn kho theo từng vị trí (theo đúng Mã + PO + IMD):
-      const stockByLoc = new Map<string, number>();
-      relevantMaterials.forEach(m => {
-        const loc = (m.location || '').trim();
-        if (!loc) return;
-        const current = stockByLoc.get(loc) ?? 0;
-        stockByLoc.set(loc, current + (m.stock ?? 0));
-      });
-      this.storeMaterialStockByLocation = Array.from(stockByLoc.entries())
-        .map(([location, stock]) => ({ location, stock }))
-        .sort((a, b) => a.location.localeCompare(b.location));
+  private applyStoreMaterialSelection(
+    matchedMaterial: any,
+    relevantMaterials: any[],
+    suggestedLocations: string[],
+    imd: string
+  ): void {
+    this.foundMaterialsForStore = [matchedMaterial];
+    this.selectedMaterialForStore = matchedMaterial;
+    this.setLastScannedMaterialForMobile(matchedMaterial);
+    this.scannedIMDForStore = imd || '';
+    this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
 
-      // Danh sách vị trí hiện có của đúng bản ghi (Mã + PO + IMD)
-      this.suggestedLocations = Array.from(locationSet).filter(loc => loc && loc.trim() !== '').sort();
+    const stockByLoc = new Map<string, number>();
+    relevantMaterials.forEach(m => {
+      const loc = (m.location || '').trim();
+      if (!loc) return;
+      const current = stockByLoc.get(loc) ?? 0;
+      stockByLoc.set(loc, current + (m.stock ?? 0));
+    });
+    this.storeMaterialStockByLocation = Array.from(stockByLoc.entries())
+      .map(([location, stock]) => ({ location, stock }))
+      .sort((a, b) => a.location.localeCompare(b.location));
 
-      console.log(`✅ Found material: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber}, IMD: ${matchedMaterial.importDateStr || 'N/A'})`);
-      console.log(`📍 Material hiện tại ở vị trí: ${matchedMaterial.location || 'Chưa có'}`);
-      console.log(`📍 Tất cả các vị trí hiện có của đúng bản ghi: ${this.suggestedLocations.join(', ') || 'Không có'}`);
+    this.suggestedLocations = suggestedLocations;
+  }
 
-      // Chuyển sang bước chọn vị trí
-      this.storeMaterialStep = 'choose-location';
-      
-      // Clear và focus vào input để sẵn sàng scan/nhập vị trí mới
-      this.selectedTargetLocation = '';
-      this.applyLocationRuleToSelectedMaterial();
-      this.storeMaterialQRInput = '';
-      this.isSearchingMaterial = false;
-      
-      // Auto focus vào input vị trí sau khi modal render
+  onStoreMaterialMultiCodeChange(): void {
+    if (this.storeMaterialMultiCode) {
+      this.initStoreMaterialBatchFromSelection();
+      setTimeout(() => this.focusStoreMaterialBatchInput(), 150);
+    } else {
+      this.storeMaterialBatchItems = [];
+      this.storeMaterialBatchQRInput = '';
       setTimeout(() => {
         const locationInput = document.querySelector('.location-input') as HTMLInputElement;
-        if (locationInput) {
-          locationInput.focus();
-        }
+        locationInput?.focus();
+      }, 150);
+    }
+  }
+
+  private initStoreMaterialBatchFromSelection(): void {
+    if (!this.selectedMaterialForStore?.id) {
+      this.storeMaterialBatchItems = [];
+      return;
+    }
+    const id = this.selectedMaterialForStore.id;
+    if (!this.storeMaterialBatchItems.some(m => m.id === id)) {
+      this.storeMaterialBatchItems = [{ ...this.selectedMaterialForStore }];
+    }
+  }
+
+  removeStoreMaterialBatchItem(materialId: string): void {
+    if (!this.storeMaterialMultiCode) return;
+    const next = this.storeMaterialBatchItems.filter(m => m.id !== materialId);
+    if (next.length === 0) {
+      alert('⚠️ Cần ít nhất 1 mã trong danh sách. Tắt "Nhiều mã" nếu chỉ đổi một mã.');
+      return;
+    }
+    this.storeMaterialBatchItems = next;
+    if (this.selectedMaterialForStore?.id === materialId) {
+      this.selectedMaterialForStore = next[0];
+      this.applyStoreMaterialSelection(next[0], [next[0]], this.suggestedLocations, this.scannedIMDForStore);
+      this.applyLocationRuleToSelectedMaterial();
+    }
+  }
+
+  private focusStoreMaterialBatchInput(): void {
+    const input = document.getElementById('storeMaterialBatchQRInput') as HTMLInputElement;
+    input?.focus();
+  }
+
+  async processStoreMaterialBatchQR(): Promise<void> {
+    if (!this.storeMaterialMultiCode) return;
+    if (!this.storeMaterialBatchCanAddMore) {
+      alert(`⚠️ Đã đủ ${this.STORE_MATERIAL_BATCH_MAX} mã. Scan vị trí mới rồi xác nhận.`);
+      return;
+    }
+    const qrCode = this.storeMaterialBatchQRInput.trim();
+    if (!qrCode) {
+      alert('⚠️ Vui lòng scan mã QR tiếp theo');
+      return;
+    }
+
+    this.isSearchingMaterial = true;
+    try {
+      const result = await this.lookupStoreMaterialFromQR(qrCode);
+      if (!result) return;
+
+      const { matchedMaterial } = result;
+      if (this.storeMaterialBatchItems.some(m => m.id === matchedMaterial.id)) {
+        alert(`⚠️ Mã đã có trong danh sách: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber})`);
+        this.storeMaterialBatchQRInput = '';
+        this.focusStoreMaterialBatchInput();
+        return;
+      }
+      this.storeMaterialBatchItems = [...this.storeMaterialBatchItems, matchedMaterial];
+      this.storeMaterialBatchQRInput = '';
+      if (!this.storeMaterialBatchCanAddMore) {
+        setTimeout(() => {
+          const locationInput = document.querySelector('.location-input') as HTMLInputElement;
+          locationInput?.focus();
+        }, 150);
+      } else {
+        this.focusStoreMaterialBatchInput();
+      }
+    } catch (error) {
+      console.error('❌ Error adding batch material:', error);
+      alert(`❌ Lỗi khi thêm mã: ${error}`);
+    } finally {
+      this.isSearchingMaterial = false;
+    }
+  }
+
+  async processStoreMaterialQR(): Promise<void> {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
+    const qrCode = this.storeMaterialQRInput.trim();
+    if (!qrCode) {
+      alert('⚠️ Vui lòng nhập hoặc scan mã QR');
+      return;
+    }
+
+    this.isSearchingMaterial = true;
+    this.scannedMaterialCodeForStore = qrCode;
+    this.scannedIMDForStore = '';
+
+    try {
+      const result = await this.lookupStoreMaterialFromQR(qrCode);
+      if (!result) return;
+
+      const { matchedMaterial, relevantMaterials, suggestedLocations, imd } = result;
+      this.applyStoreMaterialSelection(matchedMaterial, relevantMaterials, suggestedLocations, imd);
+
+      this.storeMaterialStep = 'choose-location';
+      this.selectedTargetLocation = '';
+      this.storeMaterialMultiCode = false;
+      this.storeMaterialBatchItems = [];
+      this.storeMaterialBatchQRInput = '';
+      this.applyLocationRuleToSelectedMaterial();
+      this.storeMaterialQRInput = '';
+
+      setTimeout(() => {
+        const locationInput = document.querySelector('.location-input') as HTMLInputElement;
+        locationInput?.focus();
       }, 200);
     } catch (error) {
       console.error('❌ Error searching material:', error);
       alert(`❌ Lỗi khi tìm kiếm material: ${error}`);
+    } finally {
       this.isSearchingMaterial = false;
     }
   }
@@ -1859,7 +1973,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async confirmStoreMaterial(): Promise<void> {
-    if (!this.selectedMaterialForStore || !this.selectedTargetLocation) {
+    const items =
+      this.storeMaterialMultiCode && this.storeMaterialBatchItems.length > 0
+        ? [...this.storeMaterialBatchItems]
+        : this.selectedMaterialForStore
+          ? [this.selectedMaterialForStore]
+          : [];
+
+    if (items.length === 0 || !this.selectedTargetLocation.trim()) {
       alert('⚠️ Vui lòng chọn material và vị trí đích');
       return;
     }
@@ -1871,57 +1992,72 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      const fromLocation = String(this.selectedMaterialForStore.location ?? '').trim();
-      const targetFormatted = this.storeMaterialMultiLocation
-        ? this.mergeStoreMaterialLocations(fromLocation, segmentFormatted)
-        : segmentFormatted;
+      const updates: { item: any; fromLocation: string; targetFormatted: string }[] = [];
 
-      // Resolve rule again at confirm-time (strong guard) — kiểm tra phần vị trí mới thêm / vị trí đích
-      const matchedRule = await this.resolveMatchedRule(this.selectedMaterialForStore.materialCode || '');
-      const requiredPrefixes = matchedRule?.destinationLocationPrefixes || [];
-      this.isTargetLocationForced = requiredPrefixes.length > 0;
-      this.forcedAllowedDestinationPrefixes = requiredPrefixes;
+      for (const item of items) {
+        const fromLocation = String(item.location ?? '').trim();
+        const targetFormatted = this.storeMaterialMultiLocation
+          ? this.mergeStoreMaterialLocations(fromLocation, segmentFormatted)
+          : segmentFormatted;
 
-      const ruleCheckLocation = this.storeMaterialMultiLocation ? segmentFormatted : targetFormatted;
-      if (requiredPrefixes.length > 0) {
-        const ok = requiredPrefixes.some(prefix => ruleCheckLocation.startsWith(prefix));
-        if (!ok) {
-          alert(`⚠️ Theo rule, vị trí đích phải bắt đầu bằng: ${requiredPrefixes.join(', ')}`);
-          return;
+        const matchedRule = await this.resolveMatchedRule(item.materialCode || '');
+        const requiredPrefixes = matchedRule?.destinationLocationPrefixes || [];
+        const ruleCheckLocation = this.storeMaterialMultiLocation ? segmentFormatted : targetFormatted;
+        if (requiredPrefixes.length > 0) {
+          const ok = requiredPrefixes.some(prefix => ruleCheckLocation.startsWith(prefix));
+          if (!ok) {
+            alert(
+              `⚠️ Mã ${item.materialCode} (PO: ${item.poNumber}): vị trí đích phải bắt đầu bằng: ${requiredPrefixes.join(', ')}`
+            );
+            return;
+          }
         }
+
+        updates.push({ item, fromLocation, targetFormatted });
       }
 
-      this.selectedTargetLocation = targetFormatted;
-
-      // Cập nhật location trong Firebase
-      await this.firestore
-        .collection('inventory-materials')
-        .doc(this.selectedMaterialForStore.id)
-        .update({
+      for (const { item, fromLocation, targetFormatted } of updates) {
+        await this.firestore.collection('inventory-materials').doc(item.id).update({
           location: targetFormatted,
           lastModified: new Date(),
           modifiedBy: 'store-material-scanner'
         });
 
-      await this.logMaterialLocationChange({
-        materialId: this.selectedMaterialForStore.id,
-        materialCode: this.selectedMaterialForStore.materialCode || '',
-        poNumber: this.selectedMaterialForStore.poNumber || '',
-        fromLocation,
-        toLocation: this.selectedTargetLocation,
-        changeType: 'store'
-      });
+        await this.logMaterialLocationChange({
+          materialId: item.id,
+          materialCode: item.materialCode || '',
+          poNumber: item.poNumber || '',
+          fromLocation,
+          toLocation: targetFormatted,
+          changeType: 'store'
+        });
+      }
+
+      const last = updates[updates.length - 1];
       this.setLastScannedMaterialForMobile({
-        ...this.selectedMaterialForStore,
-        location: this.selectedTargetLocation
+        ...last.item,
+        location: last.targetFormatted
       });
 
-      alert(`✅ Đã cất material thành công!\n\n` +
-            `Mã hàng: ${this.selectedMaterialForStore.materialCode}\n` +
-            `PO: ${this.selectedMaterialForStore.poNumber}\n` +
-            `Vị trí mới: ${this.selectedTargetLocation}`);
+      if (updates.length === 1) {
+        const u = updates[0];
+        alert(
+          `✅ Đã cất material thành công!\n\n` +
+            `Mã hàng: ${u.item.materialCode}\n` +
+            `PO: ${u.item.poNumber}\n` +
+            `Vị trí mới: ${u.targetFormatted}`
+        );
+      } else {
+        const locLabel = this.storeMaterialMultiLocation
+          ? `cộng thêm "${segmentFormatted}" (theo từng mã)`
+          : segmentFormatted;
+        alert(
+          `✅ Đã chuyển ${updates.length} mã sang vị trí mới!\n\n` +
+            `Vị trí: ${locLabel}\n` +
+            updates.map(u => `• ${u.item.materialCode} (PO: ${u.item.poNumber})`).join('\n')
+        );
+      }
 
-      // Đóng modal và reset
       this.closeStoreMaterialModal();
     } catch (error) {
       console.error('❌ Error storing material:', error);

@@ -16,6 +16,16 @@ export type FgImportManifestRow = {
   importDate: Date;
 };
 
+export type FgCartonTotalRow = {
+  materialCode: string;
+  cartonAsm1: number;
+  cartonAsm2: number;
+  totalCarton: number;
+  lineCountAsm1: number;
+  lineCountAsm2: number;
+  lineCount: number;
+};
+
 @Injectable({ providedIn: 'root' })
 export class FgsDashboardService {
   constructor(private firestore: AngularFirestore) {}
@@ -139,6 +149,54 @@ export class FgsDashboardService {
   async loadMasterFgLocations(factories: FactoryCode[]): Promise<Map<string, string>> {
     const { locationBySku } = await this.loadMasterFgMaterialIndex(factories);
     return locationBySku;
+  }
+
+  /** Tổng số thùng (carton) theo mã TP — tách ASM1 / ASM2 từ `fg-inventory`. */
+  async loadCartonTotalsByMaterialCode(factories: FactoryCode[] = ['ASM1', 'ASM2']): Promise<FgCartonTotalRow[]> {
+    const totals = new Map<
+      string,
+      { cartonAsm1: number; cartonAsm2: number; lineCountAsm1: number; lineCountAsm2: number }
+    >();
+
+    for (const f of factories) {
+      const docs = await this.pageByDocId('fg-inventory', (ref) => ref.where('factory', '==', f), (doc) => doc);
+      for (const doc of docs as any[]) {
+        const d: any = doc.data();
+        const code = this.normalizeFgMaterialCode(d?.materialCode ?? d?.maTP);
+        if (!code) continue;
+        const carton = Number(d?.carton ?? 0);
+        const add = Number.isFinite(carton) ? Math.max(0, carton) : 0;
+        const cur = totals.get(code) || {
+          cartonAsm1: 0,
+          cartonAsm2: 0,
+          lineCountAsm1: 0,
+          lineCountAsm2: 0
+        };
+        if (f === 'ASM1') {
+          cur.cartonAsm1 += add;
+          cur.lineCountAsm1 += 1;
+        } else if (f === 'ASM2') {
+          cur.cartonAsm2 += add;
+          cur.lineCountAsm2 += 1;
+        }
+        totals.set(code, cur);
+      }
+    }
+
+    return Array.from(totals.entries())
+      .map(([materialCode, v]) => ({
+        materialCode,
+        cartonAsm1: v.cartonAsm1,
+        cartonAsm2: v.cartonAsm2,
+        totalCarton: v.cartonAsm1 + v.cartonAsm2,
+        lineCountAsm1: v.lineCountAsm1,
+        lineCountAsm2: v.lineCountAsm2,
+        lineCount: v.lineCountAsm1 + v.lineCountAsm2
+      }))
+      .sort((a, b) => {
+        if (b.totalCarton !== a.totalCarton) return b.totalCarton - a.totalCarton;
+        return a.materialCode.localeCompare(b.materialCode);
+      });
   }
 
   async saveExportManifest(rows: FgExportManifestRow[], meta?: { sourceName?: string }): Promise<{ saved: number }> {

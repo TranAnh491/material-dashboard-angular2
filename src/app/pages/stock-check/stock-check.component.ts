@@ -2830,6 +2830,16 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     this.materialByKey.clear();
     this.displayedMaterials = [];
 
+    // Pre-fetch snapshot song song với inventory để giảm latency (thay vì tuần tự)
+    const snapshotDocId = `${this.selectedFactory}_stock_check_current`;
+    const snapshotPreloadPromise = this.firestore
+      .collection('stock-check-snapshot')
+      .doc(snapshotDocId)
+      .get()
+      .toPromise()
+      .then((doc: any) => (doc?.exists ? (doc.data() as any) : null))
+      .catch(() => null);
+
     // Load inventory materials: chỉ load 1 lần để tránh xử lý nặng lặp lại khi Firestore realtime thay đổi.
     // (snapshot stock-check đã subscribe riêng để cập nhật check realtime)
     this.dataSubscription = this.firestore
@@ -2922,8 +2932,9 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         console.log(`📊 Stock Check: Loaded ${materialsArray.length} materials (KHÔNG group - giống materials-asm1)`);
         console.log(`📊 Stock Check: Total from inventory-materials: ${materials.length}, After filter A/B: ${materialsArray.length}`);
 
-        // Load stock check data from Firebase
-        await this.loadStockCheckData(materialsArray);
+        // Load stock check data — dùng snapshot đã pre-fetch song song với inventory
+        const preloadedSnapshot = await snapshotPreloadPromise;
+        await this.loadStockCheckData(materialsArray, preloadedSnapshot);
         // Apply report date ON/OFF switches
         this.applyReportDateRecognitionToMaterials(materialsArray);
 
@@ -2990,23 +3001,30 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     if (!codes.length) return;
     const standardPackingMap = new Map<string, string>();
     try {
-      // Dùng whereIn (chunks 10) thay vì N individual doc reads — giảm số round-trip Firestore
-      const IN_LIMIT = 10; // Giới hạn Firestore 'in' operator
+      const IN_LIMIT = 10;
+      const chunks: string[][] = [];
       for (let i = 0; i < codes.length; i += IN_LIMIT) {
-        const chunk = codes.slice(i, i + IN_LIMIT);
-        const snap = await this.firestore
-          .collection('materials', ref =>
-            ref.where(firebase.default.firestore.FieldPath.documentId(), 'in', chunk)
-          )
-          .get()
-          .toPromise();
+        chunks.push(codes.slice(i, i + IN_LIMIT));
+      }
+      // Gửi tất cả chunks song song thay vì tuần tự — giảm latency từ N*100ms xuống ~100ms
+      const snaps = await Promise.all(
+        chunks.map(chunk =>
+          this.firestore
+            .collection('materials', ref =>
+              ref.where(firebase.default.firestore.FieldPath.documentId(), 'in', chunk)
+            )
+            .get()
+            .toPromise()
+        )
+      );
+      snaps.forEach(snap => {
         if (snap && !snap.empty) {
           snap.forEach(doc => {
             const sp = (doc.data() as any)?.['standardPacking'];
             if (sp != null) standardPackingMap.set(doc.id, sp.toString());
           });
         }
-      }
+      });
       this.allMaterials.forEach(m => {
         const sp = standardPackingMap.get(m.materialCode);
         if (sp) m.standardPacking = sp;
@@ -3150,11 +3168,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
       let checkedMaterials: any[] = [];
       const cacheKey = this.selectedFactory;
 
-      if (snapshotData) {
-        // Nếu có snapshotData trực tiếp (từ subscription), dùng luôn
+      // snapshotData === undefined → chưa pre-fetch, cần load từ Firestore
+      // snapshotData === null     → doc không tồn tại (đã pre-fetch, không cần gọi lại)
+      // snapshotData === object   → dữ liệu từ subscription hoặc pre-fetch
+      if (snapshotData !== undefined) {
+        if (!snapshotData) {
+          console.log(`⚠️ [loadStockCheckData] No snapshot found for factory: ${this.selectedFactory}`);
+          this.snapshotCache[this.selectedFactory] = { materials: [], lastUpdated: new Date() };
+          materials.forEach(mat => { mat.stockCheck = ''; mat.qtyCheck = null; mat.idCheck = ''; mat.dateCheck = null; });
+          return;
+        }
         checkedMaterials = snapshotData.materials || [];
       } else {
-        // Nếu không có, load từ Firebase
+        // Chưa có pre-fetch, load từ Firebase
         const docId = `${this.selectedFactory}_stock_check_current`;
         const doc = await this.firestore
           .collection('stock-check-snapshot')

@@ -37,13 +37,6 @@
         <div class="card">
           <!-- Sticky Header Wrapper -->
           <div class="sticky-header-wrapper">
-            <div class="dashboard-header">
-              <div class="dashboard-header-left">
-                <div class="dashboard-title">Shipment Dashboard</div>
-                <div class="dashboard-subtitle">Real-time overview of your import shipments</div>
-              </div>
-              <!-- Hide top-right menu/notify button (per request) -->
-            </div>
             <!-- Summary Cards -->
             <div class="row summary-row">
             <div class="col-lg-2 col-md-4 col-sm-6">
@@ -221,12 +214,12 @@
           </div>
           <!-- End Sticky Header Wrapper -->
           
-          <div class="card-body">
+          <div class="card-body shipment-content">
     
             <!-- Data Table -->
             <div class="table-responsive">
               <div class="table-scroll-wrapper">
-              <table class="table table-striped table-hover">
+              <table class="table shipment-data-table">
                 <thead>
           <tr>
             <th class="row-header">NO</th>
@@ -273,19 +266,17 @@
                       <tr *ngIf="i === 0 || isFirstOfShipment(i)" class="shipment-group-header">
                         <td colspan="29">
                           <div class="shipment-group-card">
-                            <div class="shipment-group-left">
-                              <div class="shipment-group-accent"></div>
-                              <div class="shipment-group-title">
-                                Import #{{ shipment.shipmentCode }}
-                              </div>
-                              <div class="shipment-group-meta">
-                                NGÀY IMPORT:
-                                <strong>{{ getShipmentGroupSummary(shipment).importDate | date : 'MM/dd/yyyy' }}</strong>
-                                &nbsp;&nbsp;DISPATCH DATE:
-                                <strong>{{ getShipmentGroupSummary(shipment).actualShipDate | date : 'MM/dd/yyyy' }}</strong>
-                              </div>
+                            <div class="shipment-group-accent"></div>
+                            <div class="shipment-group-title">
+                              Import #{{ shipment.shipmentCode }}
                             </div>
-                            <div class="shipment-group-right">
+                            <div class="shipment-group-meta">
+                              NGÀY IMPORT:
+                              <strong>{{ getShipmentGroupSummary(shipment).importDate | date : 'MM/dd/yyyy' }}</strong>
+                              &nbsp;&nbsp;DISPATCH DATE:
+                              <strong>{{ getShipmentGroupSummary(shipment).actualShipDate | date : 'MM/dd/yyyy' }}</strong>
+                            </div>
+                            <div class="shipment-group-stats">
                               <div class="group-stat">
                                 <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalCarton | number : '1.0-0' }}</div>
                                 <div class="stat-label">CARTON</div>

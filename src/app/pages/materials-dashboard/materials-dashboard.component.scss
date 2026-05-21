@@ -1556,6 +1556,50 @@
   }
 }
 
+.carton-totals-summary {
+  margin: 8px 0 12px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.carton-totals-table-wrap {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.carton-totals-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+
+  th,
+  td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 6px 10px;
+    text-align: left;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: #f1f5f9;
+    font-weight: 700;
+    z-index: 1;
+  }
+
+  td.num,
+  th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  tbody tr:hover td {
+    background: #f8fafc;
+  }
+}
+
 ::ng-deep .md-tooltip {
   white-space: pre-line;
   font-size: 12px;
