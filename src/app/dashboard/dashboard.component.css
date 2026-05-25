@@ -1848,6 +1848,54 @@
   gap: var(--dash-box-gap);
 }
 
+.putaway-modal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 14px;
+}
+
+.putaway-modal-summary__pass strong {
+  color: #059669;
+}
+
+.putaway-modal-summary__not-pass strong {
+  color: #dc2626;
+}
+
+.putaway-modal-summary__hint {
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.putaway-sku-table .col-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.putaway-sku-code {
+  font-weight: 600;
+}
+
+.putaway-sku-pass {
+  color: #059669;
+  font-weight: 600;
+}
+
+.putaway-sku-not-pass {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.putaway-sku-table tbody tr.putaway-sku-row--has-not-pass {
+  background: rgba(254, 226, 226, 0.35);
+}
+
 .iqc-week-section {
   border: 1px solid var(--dash-border);
   border-radius: 12px;

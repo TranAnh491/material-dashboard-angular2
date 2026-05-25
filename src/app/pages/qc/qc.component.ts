@@ -9,6 +9,7 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';
+import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.model';
 
 export interface InventoryMaterial {
   id?: string;
@@ -111,6 +112,9 @@ export class QCComponent implements OnInit, OnDestroy {
 
   // Priority for "Pending QC" list (can be multiple)
   priorityPendingQcIds: string[] = [];
+
+  /** Mã NVL trên PXK của WO chưa Done — dùng auto ưu tiên Chờ kiểm */
+  private pxkNeededMaterialCodes = new Set<string>();
 
   // Monthly counts (current month)
   monthlyPassCount: number = 0;
@@ -400,13 +404,18 @@ export class QCComponent implements OnInit, OnDestroy {
       this.loadMonthlyStatusCounts();
       this.loadRecentCheckedMaterials();
 
-      // Load priority state from backend so F5 won't lose "ưu tiên"
-      this.loadQcPriorityFromBackend();
+      // Auto ưu tiên từ PXK (WO chưa Done) rồi load cờ ưu tiên
+      await this.syncAutoPriorityAndReloadPriority();
     } catch (error) {
       console.error('❌ Error validating saved employee access:', error);
       this.showEmployeeModal = true;
       this.isEmployeeVerified = false;
     }
+  }
+
+  private async syncAutoPriorityAndReloadPriority(): Promise<void> {
+    await this.syncAutoPriorityFromPxk();
+    await this.loadQcPriorityFromBackend();
   }
 
   /**
@@ -459,6 +468,172 @@ export class QCComponent implements OnInit, OnDestroy {
     } catch (error) {
       console.warn('⚠️ Failed to load QC priority from backend:', error);
       // Fallback: keep whatever current UI has
+    }
+  }
+
+  private normalizeMaterialCodeKey(code: string): string {
+    return (code || '').replace(/\s/g, '').toUpperCase().trim();
+  }
+
+  private resolveWorkOrderFactory(wo: WorkOrder): 'ASM1' | 'ASM2' {
+    const fac = String(wo?.factory || '').trim().toUpperCase();
+    if (fac.includes('ASM2') || fac === 'SAMPLE 2') return 'ASM2';
+    if (fac.includes('ASM1') || fac === 'SAMPLE 1') return 'ASM1';
+
+    const lsx = String(wo?.productionOrder || '').trim().toUpperCase().replace(/\s/g, '');
+    if (lsx.startsWith('LH')) return 'ASM2';
+    if (lsx.startsWith('KZ')) return 'ASM1';
+    return this.selectedFactory;
+  }
+
+  private isWorkOrderActiveForPxk(wo: WorkOrder): boolean {
+    if (wo.status === WorkOrderStatus.DONE) return false;
+    if (wo.isCompleted === true) return false;
+    return true;
+  }
+
+  private collectLsxFromActiveWorkOrders(workOrders: WorkOrder[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const addVariant = (raw: string) => {
+      const t = String(raw || '').trim();
+      if (!t) return;
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+      const u = t.toUpperCase();
+      if (u !== t && !seen.has(u)) {
+        seen.add(u);
+        out.push(u);
+      }
+    };
+
+    for (const wo of workOrders) {
+      if (!this.isWorkOrderActiveForPxk(wo)) continue;
+      if (this.resolveWorkOrderFactory(wo) !== this.selectedFactory) continue;
+      addVariant(wo.productionOrder || '');
+    }
+    return out;
+  }
+
+  private pxkDocMatchesSelectedFactory(docData: any): boolean {
+    const docFactory = String(docData?.factory || '').trim().toUpperCase();
+    if (docFactory) return docFactory === this.selectedFactory;
+
+    const lsx = String(docData?.lsx || '').trim().toUpperCase().replace(/\s/g, '');
+    if (this.selectedFactory === 'ASM2' && lsx.startsWith('KZ')) return false;
+    if (this.selectedFactory === 'ASM1' && lsx.startsWith('LH')) return false;
+    return true;
+  }
+
+  /** Mã NVL trên phiếu PXK của WO chưa Done (khớp mã, không theo PO). */
+  private async fetchPxkMaterialCodesForActiveWorkOrders(): Promise<Set<string>> {
+    const codes = new Set<string>();
+    try {
+      const woSnap = await this.firestore.collection('work-orders', ref => ref.limit(3000)).get().toPromise();
+      const workOrders = (woSnap?.docs || []).map(d => ({ id: d.id, ...(d.data() as WorkOrder) }));
+      const lsxList = this.collectLsxFromActiveWorkOrders(workOrders);
+      if (lsxList.length === 0) {
+        return codes;
+      }
+
+      const FIRESTORE_IN_MAX = 30;
+      for (let i = 0; i < lsxList.length; i += FIRESTORE_IN_MAX) {
+        const chunk = lsxList.slice(i, i + FIRESTORE_IN_MAX);
+        const pxkSnap = await this.firestore
+          .collection('pxk-import-data', ref => ref.where('lsx', 'in', chunk))
+          .get()
+          .toPromise();
+
+        (pxkSnap?.docs || []).forEach(doc => {
+          const d = doc.data() as any;
+          if (!this.pxkDocMatchesSelectedFactory(d)) return;
+
+          const lines = Array.isArray(d?.lines) ? d.lines : [];
+          lines.forEach((line: any) => {
+            const mc = this.normalizeMaterialCodeKey(line?.materialCode || '');
+            const qty = Number(line?.quantity) || 0;
+            if (mc && qty > 0) {
+              codes.add(mc);
+            }
+          });
+        });
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to load PXK material codes for QC auto-priority:', error);
+    }
+    return codes;
+  }
+
+  /**
+   * Tự bật ưu tiên Chờ kiểm khi mã nằm trên PXK (WO chưa Done, đúng factory).
+   * Chỉ auto-clear khi ưu tiên được bật tự động (`qcPriorityAutoPendingQC`).
+   */
+  private async syncAutoPriorityFromPxk(): Promise<void> {
+    if (!this.selectedFactory) return;
+
+    const pxkCodes = await this.fetchPxkMaterialCodesForActiveWorkOrders();
+    this.pxkNeededMaterialCodes = pxkCodes;
+
+    const pendingSnap = await this.firestore
+      .collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory).where('iqcStatus', '==', 'CHỜ KIỂM')
+      )
+      .get()
+      .toPromise();
+
+    const now = new Date();
+    const toSetPriority: string[] = [];
+    const toClearPriority: string[] = [];
+
+    (pendingSnap?.docs || []).forEach(doc => {
+      const data = doc.data() as any;
+      if (!this.isPendingQcAtIqc(data)) return;
+
+      const mc = this.normalizeMaterialCodeKey(data?.materialCode || '');
+      if (!mc) return;
+
+      const inPxk = pxkCodes.has(mc);
+      const hasPriority = !!data.qcPriorityPendingQC;
+      const isAuto = !!data.qcPriorityAutoPendingQC;
+
+      if (inPxk && !hasPriority) {
+        toSetPriority.push(doc.id);
+      } else if (!inPxk && hasPriority && isAuto) {
+        toClearPriority.push(doc.id);
+      }
+    });
+
+    const writeChunk = async (ids: string[], payload: Record<string, unknown>) => {
+      const CHUNK = 20;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        await Promise.all(
+          slice.map(id => this.firestore.collection('inventory-materials').doc(id).update(payload))
+        );
+      }
+    };
+
+    if (toSetPriority.length > 0) {
+      await writeChunk(toSetPriority, {
+        qcPriorityPendingQC: true,
+        qcPriorityAutoPendingQC: true,
+        qcPriorityUpdatedAt: now,
+      });
+    }
+    if (toClearPriority.length > 0) {
+      await writeChunk(toClearPriority, {
+        qcPriorityPendingQC: false,
+        qcPriorityAutoPendingQC: false,
+        qcPriorityUpdatedAt: now,
+      });
+    }
+
+    if (toSetPriority.length > 0 || toClearPriority.length > 0) {
+      console.log(
+        `✅ QC auto-priority PXK sync (${this.selectedFactory}): +${toSetPriority.length}, -${toClearPriority.length}, PXK codes=${pxkCodes.size}`
+      );
     }
   }
   
@@ -1375,6 +1550,7 @@ export class QCComponent implements OnInit, OnDestroy {
     }
     if (shouldClearPendingQcPriority) {
       updatePayload.qcPriorityPendingQC = false;
+      updatePayload.qcPriorityAutoPendingQC = false;
     }
 
     // Save extra fields by selected status
@@ -2769,6 +2945,7 @@ export class QCComponent implements OnInit, OnDestroy {
     const now = new Date();
     this.firestore.collection('inventory-materials').doc(id).update({
       qcPriorityPendingQC: !wasPriority,
+      qcPriorityAutoPendingQC: false,
       qcPriorityUpdatedAt: now
     }).catch(() => {
       // Revert on failure
@@ -3107,6 +3284,8 @@ export class QCComponent implements OnInit, OnDestroy {
     
     try {
       console.log('📊 Loading pending QC materials...');
+
+      await this.syncAutoPriorityFromPxk();
       
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
@@ -3392,7 +3571,7 @@ export class QCComponent implements OnInit, OnDestroy {
     this.loadPendingConfirmCount();
     this.loadMonthlyStatusCounts();
     this.loadRecentCheckedMaterials();
-    this.loadQcPriorityFromBackend();
+    void this.syncAutoPriorityAndReloadPriority();
 
     // Refresh current inline list (if any)
     if (this.iqcHistoryContext === 'pendingConfirm' && this.showIqcSearchResults) {

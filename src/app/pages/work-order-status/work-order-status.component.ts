@@ -78,6 +78,17 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   /** Popup MORE (thay cho Import Section inline) */
   showMoreDialog: boolean = false;
 
+  /** Tìm LSX đã từng có trên Firebase */
+  showLsxSearchDialog = false;
+  lsxSearchInput = '';
+  lsxSearchLoading = false;
+  lsxSearchResult: {
+    query: string;
+    normalized: string;
+    found: boolean;
+    hits: Array<{ source: string; lsx: string; detail: string }>;
+  } | null = null;
+
   /** In BAG: mã R xuất kho theo LSX (MORE → BAG) */
   showBagPrintDialog = false;
   bagPrintFactory = '';
@@ -324,13 +335,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   selectFactory(factory: string): void {
     // Factory access check disabled for work order tab - only applies to materials inventory
-    // Direct factory selection without permission check
     this.selectedFactory = factory;
     console.log('🏭 Selected factory:', factory);
-    // Re-apply filters to show only work orders from selected factory
-    this.applyFilters();
-    // Update summary cards based on selected factory
-    this.calculateSummary();
+    // Tải lại theo Năm/Tháng + Nhà máy (tránh chỉ lọc trên batch 500 WO đã load trước đó)
+    void this.loadWorkOrders();
   }
 
   // Helper method to normalize factory names for comparison
@@ -619,6 +627,21 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Tải theo Năm/Tháng; lọc nhà máy ở client (tránh lệch SAMPLE 2 vs Sample 2 trên Firestore). */
+  private readonly woFetchLimit = 3500;
+
+  private woYearMonthValue(v: unknown): number {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  private woMatchesYearMonth(wo: WorkOrder): boolean {
+    return (
+      this.woYearMonthValue(wo.year) === this.woYearMonthValue(this.yearFilter) &&
+      this.woYearMonthValue(wo.month) === this.woYearMonthValue(this.monthFilter)
+    );
+  }
+
   private async fetchWorkOrdersWithFirebaseV9(): Promise<WorkOrder[]> {
     const app = this.getFirebaseV9App();
     const db = getFirestore(app);
@@ -626,7 +649,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       collection(db, 'work-orders'),
       where('year', '==', this.yearFilter),
       where('month', '==', this.monthFilter),
-      limit(500)
+      limit(this.woFetchLimit)
     );
     const querySnapshot = await getDocs(q);
     const workOrders: WorkOrder[] = [];
@@ -638,13 +661,53 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   private async fetchWorkOrdersWithCompatGet(): Promise<WorkOrder[]> {
     const snap = await firstValueFrom(
-      this.firestore
-        .collection('work-orders', (ref) =>
-          ref.where('year', '==', this.yearFilter).where('month', '==', this.monthFilter).limit(500)
-        )
-        .get()
+      this.firestore.collection('work-orders', (ref) =>
+        ref
+          .where('year', '==', this.yearFilter)
+          .where('month', '==', this.monthFilter)
+          .limit(this.woFetchLimit)
+      ).get()
     );
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as WorkOrder) }));
+  }
+
+  /**
+   * Prefix LSX cho logic nghiệp vụ (PXK, outbound, tồn kho…) — không quyết tab khi đã có cột factory:
+   * KZ → ASM1 (Sample 1 dùng kho ASM1), LH → ASM2 (Sample 2 dùng kho ASM2).
+   */
+  inferFactoryFromLsxPrefix(lsx: string): 'ASM1' | 'ASM2' | null {
+    const u = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
+    if (u.startsWith('LH')) return 'ASM2';
+    if (u.startsWith('KZ')) return 'ASM1';
+    return null;
+  }
+
+  /** Sample 1 / ASM1 → kho ASM1; Sample 2 / ASM2 → kho ASM2 (PXK, outbound). */
+  private mapDisplayFactoryToOperationalAsm(displayFactory: string): 'ASM1' | 'ASM2' | null {
+    const n = this.normalizeFactoryName(String(displayFactory || '').trim());
+    if (n === 'asm1' || n === 'sample 1') return 'ASM1';
+    if (n === 'asm2' || n === 'sample 2' || n === 'asm3') return 'ASM2';
+    return null;
+  }
+
+  /**
+   * Tab / bảng: chỉ theo cột `factory` (Sample 1, Sample 2, ASM1…).
+   * Thiếu factory: KZ → tab ASM1, LH → tab ASM2 (không gán Sample 1/2 nếu không có cột).
+   */
+  getWorkOrderDisplayFactory(wo: WorkOrder): string {
+    const raw = String(wo?.factory ?? '').trim();
+    if (raw) return raw;
+    return this.inferFactoryFromLsxPrefix(wo?.productionOrder || '') || '';
+  }
+
+  private woMatchesSelectedFactory(wo: WorkOrder): boolean {
+    if (!this.selectedFactory) return true;
+    const displayFactory = this.getWorkOrderDisplayFactory(wo);
+    if (!displayFactory) return false;
+    return (
+      this.normalizeFactoryName(displayFactory) ===
+      this.normalizeFactoryName(this.selectedFactory)
+    );
   }
 
   // Auto-mark old completed work orders as completed
@@ -731,24 +794,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         wo.productionOrder.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         wo.customer.toLowerCase().includes(this.searchTerm.toLowerCase());
       
-      // Lọc theo thứ tự: Năm → Tháng → Trạng thái
-      const matchesYear = wo.year === this.yearFilter;
-      const matchesMonth = wo.month === this.monthFilter;
+      const matchesYear = this.woYearMonthValue(wo.year) === this.woYearMonthValue(this.yearFilter);
+      const matchesMonth = this.woYearMonthValue(wo.month) === this.woYearMonthValue(this.monthFilter);
       const matchesStatus = this.statusFilter === 'all' || wo.status === this.statusFilter;
       
-      // Filter by selected factory - but be more flexible to handle missing factory data
-      let matchesFactory = false;
-      if (!this.selectedFactory) {
-        matchesFactory = true; // No factory filter selected, show all
-      } else if (wo.factory) {
-        const normalizedData = this.normalizeFactoryName(wo.factory);
-        const normalizedSelected = this.normalizeFactoryName(this.selectedFactory);
-        matchesFactory = normalizedData === normalizedSelected;
-        
-      } else {
-        // No factory in work order, default to ASM1
-        matchesFactory = this.selectedFactory === 'ASM1';
-      }
+      const matchesFactory = this.woMatchesSelectedFactory(wo);
       
       // Apply done filter
       let matchesDoneFilter = true;
@@ -887,27 +937,169 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return m ? m[1].replace(/[-.]/g, '/') : t;
   }
 
+  openLsxSearchDialog(): void {
+    this.lsxSearchInput = '';
+    this.lsxSearchResult = null;
+    this.lsxSearchLoading = false;
+    this.showLsxSearchDialog = true;
+  }
+
+  closeLsxSearchDialog(): void {
+    this.showLsxSearchDialog = false;
+    this.lsxSearchLoading = false;
+  }
+
+  private buildLsxSearchVariants(input: string): string[] {
+    const raw = String(input || '').trim();
+    if (!raw) return [];
+    const set = new Set<string>();
+    set.add(raw);
+    const u = raw.toUpperCase().replace(/\s/g, '');
+    set.add(u);
+    set.add(u.replace(/-/g, '/').replace(/\./g, '/'));
+    return Array.from(set).filter(Boolean);
+  }
+
+  private storedLsxMatchesTarget(stored: string, targetNorm: string, variants: string[]): boolean {
+    const s = String(stored || '').trim();
+    if (!s) return false;
+    if (this.normLsxForMatch(s) === targetNorm) return true;
+    const su = s.toUpperCase().replace(/\s/g, '');
+    return variants.some((v) => su === String(v || '').toUpperCase().replace(/\s/g, ''));
+  }
+
+  async searchLsxInFirebase(): Promise<void> {
+    const raw = (this.lsxSearchInput || '').trim();
+    if (!raw) {
+      alert('Vui lòng nhập LSX cần tìm.');
+      return;
+    }
+
+    const targetNorm = this.normLsxForMatch(raw);
+    const variants = this.buildLsxSearchVariants(raw);
+    const hitKeys = new Set<string>();
+    const hits: Array<{ source: string; lsx: string; detail: string }> = [];
+
+    const pushHit = (source: string, lsx: string, detail: string, dedupeKey?: string) => {
+      const key = dedupeKey || `${source}|${lsx}|${detail}`;
+      if (hitKeys.has(key)) return;
+      hitKeys.add(key);
+      hits.push({ source, lsx, detail });
+    };
+
+    this.lsxSearchLoading = true;
+    this.lsxSearchResult = null;
+    this.cdr.detectChanges();
+
+    try {
+      for (const variant of variants) {
+        const woSnap = await firstValueFrom(
+          this.firestore
+            .collection('work-orders', (ref) => ref.where('productionOrder', '==', variant).limit(30))
+            .get()
+        );
+        woSnap.docs.forEach((docSnap: any) => {
+          const d = docSnap.data() as WorkOrder;
+          const lsx = String(d.productionOrder || variant).trim();
+          pushHit(
+            'Work Orders',
+            lsx,
+            `Nhà máy: ${d.factory || '—'} · ${d.year}/${d.month} · Trạng thái: ${d.status || '—'}`,
+            `wo|${docSnap.id}`
+          );
+        });
+      }
+
+      const woFallbackSnap = await firstValueFrom(
+        this.firestore.collection('work-orders', (ref) => ref.limit(5000)).get()
+      );
+      woFallbackSnap.docs.forEach((docSnap: any) => {
+        const d = docSnap.data() as WorkOrder;
+        const lsx = String(d.productionOrder || '').trim();
+        if (!this.storedLsxMatchesTarget(lsx, targetNorm, variants)) return;
+        pushHit(
+          'Work Orders',
+          lsx,
+          `Nhà máy: ${d.factory || '—'} · ${d.year}/${d.month} · Trạng thái: ${d.status || '—'}`,
+          `wo|${docSnap.id}`
+        );
+      });
+
+      const pxkSnap = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
+      pxkSnap.docs.forEach((docSnap: any) => {
+        const d = docSnap.data() as any;
+        const lsx = String(d?.lsx || '').trim();
+        if (!this.storedLsxMatchesTarget(lsx, targetNorm, variants)) return;
+        const lineCount = Array.isArray(d?.lines) ? d.lines.length : 0;
+        const importedAt = d?.importedAt?.toDate?.() || d?.importedAt;
+        const importedLabel = importedAt instanceof Date ? importedAt.toLocaleString('vi-VN') : '—';
+        pushHit(
+          'PXK import',
+          lsx,
+          `Nhà máy: ${d?.factory || '—'} · ${lineCount} dòng · Import: ${importedLabel}`,
+          `pxk|${docSnap.id}`
+        );
+      });
+
+      for (const variant of variants) {
+        const scanSnap = await firstValueFrom(
+          this.firestore
+            .collection('workOrderScans', (ref) => ref.where('lsx', '==', variant).limit(30))
+            .get()
+        );
+        scanSnap.docs.forEach((docSnap: any) => {
+          const d = docSnap.data() as any;
+          const lsx = String(d?.lsx || variant).trim();
+          const scannedAt = d?.scannedAt?.toDate?.() || d?.scannedAt || d?.createdAt?.toDate?.() || d?.createdAt;
+          const atLabel = scannedAt instanceof Date ? scannedAt.toLocaleString('vi-VN') : '—';
+          pushHit(
+            'Work Order Scans',
+            lsx,
+            `Nhà máy: ${d?.factory || '—'} · Scan: ${atLabel}`,
+            `scan|${docSnap.id}`
+          );
+        });
+      }
+
+      this.lsxSearchResult = {
+        query: raw,
+        normalized: targetNorm,
+        found: hits.length > 0,
+        hits,
+      };
+    } catch (e) {
+      console.error('searchLsxInFirebase failed:', e);
+      alert('❌ Lỗi khi tìm LSX trên Firebase. Xem Console để biết chi tiết.');
+      this.lsxSearchResult = {
+        query: raw,
+        normalized: targetNorm,
+        found: false,
+        hits: [],
+      };
+    } finally {
+      this.lsxSearchLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   /**
-   * Factory trên Firestore (ASM1 | ASM2) để khớp outbound-materials / inventory với PXK.
-   * Nếu WO thiếu factory nhưng LSX là LHLSX… thì vẫn dùng ASM2 (không phụ thuộc tab ASM1 đang chọn).
+   * Kho outbound/PXK: Sample 1 → ASM1, Sample 2 → ASM2; thiếu factory thì KZ/LH.
+   * Khác tab hiển thị (WO Sample 1 + KZ vẫn tra tồn ASM1).
    */
   private resolveOutboundFactoryFilterForPxk(wo: WorkOrder): 'ASM1' | 'ASM2' {
-    const facNorm = this.normalizeFactoryName(String(wo?.factory || '').trim());
-    if (facNorm === 'asm2' || facNorm === 'sample 2') return 'ASM2';
-    if (facNorm === 'asm1' || facNorm === 'sample 1') return 'ASM1';
+    const fromColumn = this.mapDisplayFactoryToOperationalAsm(String(wo?.factory || '').trim());
+    if (fromColumn) return fromColumn;
 
-    const lsxU = String(wo?.productionOrder || '').trim().toUpperCase().replace(/\s/g, '');
-    if (lsxU.startsWith('KZ')) return 'ASM1';
-    if (lsxU.startsWith('LH')) return 'ASM2';
+    const fromLsx = this.inferFactoryFromLsxPrefix(wo?.productionOrder || '');
+    if (fromLsx) return fromLsx;
 
     const raw = String(wo?.factory || '').trim().toUpperCase();
     if (raw.includes('ASM2')) return 'ASM2';
     if (raw.includes('ASM1')) return 'ASM1';
     if (raw.includes('ASM3')) return 'ASM2';
 
-    const selNorm = this.normalizeFactoryName(String(this.selectedFactory || 'ASM1').trim());
-    if (selNorm === 'asm2' || selNorm === 'sample 2') return 'ASM2';
-    return 'ASM1';
+    const selAsm = this.mapDisplayFactoryToOperationalAsm(this.selectedFactory || 'ASM1');
+    return selAsm || 'ASM1';
   }
 
   /** Kiểm tra LSX có bị thiếu không (để disable option Transfer và tô đỏ cột LSX) */
@@ -1348,10 +1540,10 @@ Please check the console for error details.`);
 
   exportToCSV(): void {
     // Filter by selected factory and current month/year
-    const filteredData = this.workOrders.filter(wo => 
-      wo.factory === this.selectedFactory && 
-      wo.year === this.yearFilter && 
-      wo.month === this.monthFilter
+    const filteredData = this.workOrders.filter(
+      (wo) =>
+        this.woMatchesSelectedFactory(wo) &&
+        this.woMatchesYearMonth(wo)
     );
 
     if (filteredData.length === 0) {
@@ -2413,10 +2605,22 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           continue;
         }
         
-        // ASM2 chỉ dùng LHLSX, không dùng KZLSX
-        const factory = (workOrder.factory || this.selectedFactory || '').toUpperCase();
-        if (factory === 'ASM2' && lsx.toUpperCase().startsWith('KZLSX')) {
-          invalidLsxFactory.push(`${lsx} (ASM2 phải dùng LHLSX, không dùng KZLSX)`);
+        const facNorm = this.normalizeFactoryName(
+          String(workOrder.factory || this.selectedFactory || '').trim()
+        );
+        const lsxU = lsx.toUpperCase();
+        if (
+          (facNorm === 'asm2' || facNorm === 'sample 2') &&
+          (lsxU.startsWith('KZLSX') || lsxU.startsWith('KZ'))
+        ) {
+          invalidLsxFactory.push(`${lsx} (${workOrder.factory || this.selectedFactory}: phải LHLSX, không KZ)`);
+          continue;
+        }
+        if (
+          (facNorm === 'asm1' || facNorm === 'sample 1') &&
+          (lsxU.startsWith('LHLSX') || lsxU.startsWith('LH'))
+        ) {
+          invalidLsxFactory.push(`${lsx} (${workOrder.factory || this.selectedFactory}: phải KZLSX, không LH)`);
           continue;
         }
         
@@ -2867,8 +3071,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     });
     
     // Check if current year exists in data
-    const hasCurrentYear = availableYears.includes(this.yearFilter);
-    const hasCurrentMonth = this.workOrders.some(wo => wo.year === this.yearFilter && wo.month === this.monthFilter);
+    const yf = this.woYearMonthValue(this.yearFilter);
+    const mf = this.woYearMonthValue(this.monthFilter);
+    const hasCurrentYear = availableYears.some((y) => this.woYearMonthValue(y) === yf);
+    const hasCurrentMonth = this.workOrders.some(
+      (wo) => this.woYearMonthValue(wo.year) === yf && this.woYearMonthValue(wo.month) === mf
+    );
     
     if (!hasCurrentYear && availableYears.length > 0) {
       console.log(`⚡ Auto-adjusting year filter from ${this.yearFilter} to ${availableYears[availableYears.length - 1]}`);
@@ -2942,17 +3150,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     this.showHiddenWorkOrders = !this.showHiddenWorkOrders;
     
     if (this.showHiddenWorkOrders) {
-      // Show all work orders including manually completed ones
       this.doneFilter = 'completed';
-      this.filteredWorkOrders = this.workOrders.filter(wo => wo.factory === this.selectedFactory);
       console.log(`👁️ Hiển thị tất cả work orders của nhà máy ${this.selectedFactory} (bao gồm đã hoàn thành)`);
     } else {
-      // Show only non-completed work orders
       this.doneFilter = 'notCompleted';
-      this.filteredWorkOrders = this.workOrders.filter(wo => wo.factory === this.selectedFactory && !wo.isCompleted);
       console.log(`👁️ Chỉ hiển thị work orders chưa hoàn thành của nhà máy ${this.selectedFactory}`);
     }
-    
+
     this.applyFilters();
     this.calculateSummary();
   }
@@ -4140,10 +4344,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   private workOrderMatchesBagFactory(wo: WorkOrder, factoryLabel: string): boolean {
-    const a = this.normalizeFactoryName(String(wo.factory || '').trim());
-    const b = this.normalizeFactoryName(String(factoryLabel || '').trim());
-    if (!a || !b) return false;
-    return a === b;
+    const display = this.getWorkOrderDisplayFactory(wo);
+    if (!display) return false;
+    return (
+      this.normalizeFactoryName(display) ===
+      this.normalizeFactoryName(String(factoryLabel || '').trim())
+    );
   }
 
   private outboundRecordToDate(d: Record<string, unknown>): Date | null {
@@ -4180,9 +4386,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   private pxkDocMatchesBagFactory(docData: Record<string, unknown>, factoryLabel: string): boolean {
     const docFac = this.normalizeFactoryName(String(docData.factory ?? '').trim());
     const want = this.normalizeFactoryName(String(factoryLabel || '').trim());
-    if (docFac && want && docFac === want) return true;
+    if (docFac && want) return docFac === want;
     const lsx = String(docData.lsx ?? '').trim().toUpperCase().replace(/\s/g, '');
-    if (!lsx) return false;
+    if (!lsx || !want) return false;
     if (want === 'asm1' || want === 'sample 1') return lsx.startsWith('KZ');
     if (want === 'asm2' || want === 'sample 2') return lsx.startsWith('LH');
     if (want === 'asm3') return lsx.startsWith('LH');

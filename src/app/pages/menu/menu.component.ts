@@ -60,7 +60,14 @@ export class MenuComponent implements OnInit {
     // Main - Additional tools
     { path: '/work-order-status', title: 'Work Order', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Main' },
-    { path: '/location', title: 'Materials', icon: 'inventory_2', iconImage: 'assets/img/location.png', category: 'Main' },
+    {
+      path: '/location',
+      title: 'Materials',
+      icon: 'inventory_2',
+      iconImage: 'assets/img/location.png',
+      category: 'Main',
+      subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
+    },
 
     // Report
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', iconImage: 'assets/img/dasboard.png', category: 'Report' },
@@ -220,6 +227,24 @@ export class MenuComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
+  getMenuCardSubtitle(tab: MenuTabView): string {
+    if (tab.subtitle) {
+      return tab.subtitle;
+    }
+    const byCategory: Record<string, string> = {
+      Main: 'Manage all shipments and deliveries',
+      Production: 'Production control and monitoring',
+      'ASM1 RM': 'Manage inbound/outbound RM1',
+      Quality: 'Quality control and traceability',
+      'ASM2 RM': 'Manage inbound/outbound RM2',
+      'ASM FG': 'FG inventory management',
+      Report: 'Reports and analytics',
+      Tools: 'Tools and operations',
+      Admin: 'Admin and reports',
+    };
+    return byCategory[tab.category] || '';
+  }
+
   trackByPath(_: number, tab: MenuTabView): string {
     return tab.path;
   }
@@ -238,7 +263,14 @@ export class MenuComponent implements OnInit {
   }
 }
 
-type MenuTab = { path: string; title: string; icon: string; iconImage?: string; category: string };
+type MenuTab = {
+  path: string;
+  title: string;
+  icon: string;
+  iconImage?: string;
+  category: string;
+  subtitle?: string;
+};
 type MenuTabView = MenuTab & {
   accent: { bg: string; border: string; fg: string };
   lineIcon: SafeHtml;

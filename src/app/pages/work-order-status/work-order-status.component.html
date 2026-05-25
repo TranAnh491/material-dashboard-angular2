@@ -198,6 +198,10 @@
                               style="color: #1565c0; font-weight: 600;" title="In danh sách mã R xuất kho theo LSX">
                         <i class="material-icons">print</i> BAG
                       </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
+                              style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
+                        <i class="material-icons">search</i> Search
+                      </button>
                     </div>
 
                     <div class="import-info">
@@ -468,7 +472,7 @@
                       <tbody>
                         <tr *ngFor="let wo of displayedWorkOrders; let i = index" 
                             [class]="getStatusClass(wo.status || 'waiting') + ' ' + getPriorityClass(wo.deliveryDate) + (isSelected(wo) ? ' selected-row' : '') + (wo.isUrgent && wo.status !== 'done' ? ' urgent-row' : '')">
-                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.factory || selectedFactory}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{ wo.factory || getWorkOrderDisplayFactory(wo) || '—' }}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.year}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.month}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{i + 1}}</td>
@@ -798,6 +802,61 @@
             <mat-icon>cancel</mat-icon> Đóng
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search LSX on Firebase -->
+  <div class="time-range-dialog-overlay" *ngIf="showLsxSearchDialog">
+    <div class="time-range-dialog lsx-search-dialog" style="max-width: 560px;">
+      <div class="dialog-header">
+        <h4><mat-icon style="vertical-align:middle;margin-right:6px;">search</mat-icon> Tìm LSX trên Firebase</h4>
+        <button mat-icon-button type="button" (click)="closeLsxSearchDialog()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">
+          Nhập LSX cần kiểm tra (ví dụ: <strong>KZLSX0326/0089</strong>). Hệ thống tìm khớp chính xác trên Work Orders, PXK import và lịch sử scan.
+        </p>
+        <mat-form-field class="full-width">
+          <mat-label>LSX</mat-label>
+          <input
+            matInput
+            [(ngModel)]="lsxSearchInput"
+            placeholder="KZLSX0326/0089"
+            (keyup.enter)="searchLsxInFirebase()"
+            [disabled]="lsxSearchLoading"
+          />
+        </mat-form-field>
+
+        <div class="loading-indicator" *ngIf="lsxSearchLoading" style="margin: 12px 0;">
+          <div class="spinner"></div>
+          <span>Đang tìm trên Firebase...</span>
+        </div>
+
+        <div *ngIf="lsxSearchResult && !lsxSearchLoading" class="lsx-search-result">
+          <p *ngIf="lsxSearchResult.found" style="color: #2e7d32; font-weight: 600;">
+            ✅ Đã tìm thấy LSX <strong>{{ lsxSearchResult.query }}</strong> (chuẩn: {{ lsxSearchResult.normalized }})
+          </p>
+          <p *ngIf="!lsxSearchResult.found" style="color: #c62828; font-weight: 600;">
+            ❌ Không tìm thấy LSX <strong>{{ lsxSearchResult.query }}</strong> trên Firebase
+          </p>
+          <ul *ngIf="lsxSearchResult.hits.length > 0" class="lsx-search-hits">
+            <li *ngFor="let h of lsxSearchResult.hits">
+              <strong>{{ h.source }}</strong> — {{ h.lsx }}<br />
+              <span class="lsx-search-hit-detail">{{ h.detail }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end; gap:8px;">
+        <button mat-raised-button color="primary" type="button" (click)="searchLsxInFirebase()" [disabled]="lsxSearchLoading">
+          <mat-icon>search</mat-icon> Tìm
+        </button>
+        <button mat-raised-button type="button" (click)="closeLsxSearchDialog()">
+          <mat-icon>close</mat-icon> Đóng
+        </button>
       </div>
     </div>
   </div>

@@ -43,7 +43,7 @@
             </span>
             <span class="dash-mob-list__text">
               <span class="dash-mob-list__title">{{ t.title }}</span>
-              <span class="dash-mob-list__desc">{{ mobileCardDesc(t.title) }}</span>
+              <span class="dash-mob-list__desc">{{ mobileCardDesc(t) }}</span>
             </span>
             <i class="material-icons dash-mob-list__chev">chevron_right</i>
           </button>
@@ -123,7 +123,7 @@
                 <i class="material-icons">{{ t.icon }}</i>
               </span>
               <span class="dash-mob-card__title">{{ t.title }}</span>
-              <span class="dash-mob-card__desc">{{ mobileCardDesc(t.title) }}</span>
+              <span class="dash-mob-card__desc">{{ mobileCardDesc(t) }}</span>
             </button>
           </div>
         </section>
@@ -677,7 +677,7 @@
     
     <div class="modal-body">
       <div class="iqc-modal-actions">
-        <button class="download-btn" (click)="downloadIQCMaterialsReport()" [disabled]="iqcMaterialsLoading || iqcMaterialsByWeek.length === 0">
+        <button class="download-btn" (click)="downloadIQCMaterialsReport()" [disabled]="iqcMaterialsLoading || iqcMaterialsBySku.length === 0">
           <i class="material-icons">download</i>
           Tải danh sách Excel
         </button>
@@ -689,52 +689,43 @@
       </div>
       
       <div class="iqc-materials-content" *ngIf="!iqcMaterialsLoading">
-        <div class="no-materials" *ngIf="iqcMaterialsByWeek.length === 0">
-          <p>Không có mã hàng nào khớp điều kiện Putaway (IQC + status + tồn + tuần).</p>
+        <div class="no-materials" *ngIf="iqcMaterialsBySku.length === 0">
+          <p>Không có mã hàng nào khớp điều kiện Putaway (vị trí IQC, có tồn, có IQC status).</p>
         </div>
-        <div *ngFor="let weekData of iqcMaterialsByWeek" class="iqc-week-section">
-          <div class="week-header">
-            <h4>{{ weekData.week }}</h4>
-            <span class="week-count">({{ weekData.materials.length }} mã)</span>
-          </div>
-          
-          <div class="materials-list" *ngIf="weekData.materials.length > 0">
-            <table class="materials-table">
-              <thead>
-                <tr>
-                  <th>STT</th>
-                  <th>Mã hàng</th>
-                  <th>PO</th>
-                  <th>IMD</th>
-                  <th>IQC status</th>
-                  <th>Tồn kho</th>
-                  <th>Vị trí</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  *ngFor="let material of weekData.materials; let i = index"
-                  [class.iqc-material-row--pass]="material.statusKind === 'pass'"
-                  [class.iqc-material-row--ng]="material.statusKind === 'ng'"
-                  [class.iqc-material-row--pending]="material.statusKind === 'pending'"
-                  [class.iqc-material-row--confirm]="material.statusKind === 'confirm'"
-                  [class.iqc-material-row--lock]="material.statusKind === 'lock'"
-                >
-                  <td>{{ i + 1 }}</td>
-                  <td>{{ material.materialCode }}</td>
-                  <td>{{ material.poNumber }}</td>
-                  <td>{{ material.imd }}</td>
-                  <td>{{ material.iqcStatus || '-' }}</td>
-                  <td>{{ material.stock | number:'1.0-2' }}</td>
-                  <td>{{ material.location }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          
-          <div class="no-materials" *ngIf="weekData.materials.length === 0">
-            <p>Không có mã hàng nào</p>
-          </div>
+
+        <div class="putaway-modal-summary" *ngIf="iqcMaterialsBySku.length > 0">
+          <span><strong>{{ iqcMaterialsBySku.length }}</strong> mã hàng (SKU)</span>
+          <span class="putaway-modal-summary__pass">Đã Pass: <strong>{{ putawayModalTotalPassSku }}</strong> SKU</span>
+          <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong> SKU</span>
+          <span class="putaway-modal-summary__hint text-muted">Sắp xếp: Chưa Pass nhiều → Pass nhiều → Mã A–Z</span>
+        </div>
+
+        <div class="materials-list" *ngIf="iqcMaterialsBySku.length > 0">
+          <table class="materials-table putaway-sku-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Mã hàng (SKU)</th>
+                <th class="col-num">Đã Pass</th>
+                <th class="col-num">Chưa Pass</th>
+                <th class="col-num">Tổng SKU</th>
+                <th class="col-num">Tồn kho</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let row of iqcMaterialsBySku; let i = index"
+                [class.putaway-sku-row--has-not-pass]="row.notPassCount > 0"
+              >
+                <td>{{ i + 1 }}</td>
+                <td class="putaway-sku-code">{{ row.materialCode }}</td>
+                <td class="col-num putaway-sku-pass">{{ row.passCount }}</td>
+                <td class="col-num putaway-sku-not-pass">{{ row.notPassCount }}</td>
+                <td class="col-num">{{ row.totalSkuCount }}</td>
+                <td class="col-num">{{ row.totalStock | number:'1.0-2' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

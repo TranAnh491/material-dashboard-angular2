@@ -2259,6 +2259,22 @@ textarea.mat-input-element {
   margin-top: 4px;
 }
 
+.lsx-search-dialog {
+  .lsx-search-hits {
+    margin: 12px 0 0;
+    padding-left: 20px;
+    max-height: 280px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .lsx-search-hit-detail {
+    color: #666;
+    font-size: 12px;
+  }
+}
+
 .more-dialog {
   // Popup MORE: to hơn ~50% so với mặc định
   max-width: 1050px;

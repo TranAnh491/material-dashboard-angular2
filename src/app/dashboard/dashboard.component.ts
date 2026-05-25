@@ -73,6 +73,15 @@ interface IqcHeatmapWeekCol {
   cells: IqcHeatmapCell[];
 }
 
+/** Popup Putaway: 1 dòng = 1 mã hàng (SKU), gom số SKU con đã/chưa Pass */
+interface PutawayModalSkuRow {
+  materialCode: string;
+  passCount: number;
+  notPassCount: number;
+  totalSkuCount: number;
+  totalStock: number;
+}
+
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
@@ -170,23 +179,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.iqcHeatmapWeeks || []).some((c) => (c.cells?.length || 0) > 0);
   }
   
-  // IQC Materials Modal
+  // IQC Materials Modal (Putaway popup — 1 mã = 1 SKU)
   showIQCMaterialsModal: boolean = false;
-  iqcMaterialsByWeek: Array<{
-    week: string;
-    weekNum: number;
-    startDate: Date;
-    endDate: Date;
-    materials: Array<{
-      materialCode: string;
-      poNumber: string;
-      imd: string;
-      stock: number;
-      location: string;
-      iqcStatus?: string;
-      statusKind: PutawayIqcStatusKind;
-    }>;
-  }> = [];
+  iqcMaterialsBySku: PutawayModalSkuRow[] = [];
   iqcMaterialsLoading: boolean = false;
 
   refreshInterval: any;
@@ -294,7 +289,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   menuTabs = [
     { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
-    { path: '/location', title: 'Materials', icon: 'inventory_2', category: 'Main' },
+    {
+      path: '/location',
+      title: 'Materials',
+      icon: 'inventory_2',
+      category: 'Main',
+      subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
+    },
     // Report
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Report' },
     // ASM1 RM
@@ -425,8 +426,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.mobileDrillCategory = null;
   }
 
-  mobileCardDesc(title: string): string {
-    return `Mở ${title}`;
+  mobileCardDesc(tab: { title: string; path?: string; subtitle?: string }): string {
+    if (tab?.subtitle) {
+      return tab.subtitle;
+    }
+    const hit = this.menuTabs.find(
+      (t) => t.path === tab?.path || t.title === tab?.title
+    );
+    return hit?.subtitle || `Mở ${tab?.title || ''}`;
   }
 
   iconTintClass(category: string): string {
@@ -2177,271 +2184,163 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Close IQC Materials Modal
   closeIQCMaterialsModal(): void {
     this.showIQCMaterialsModal = false;
-    this.iqcMaterialsByWeek = [];
+    this.iqcMaterialsBySku = [];
   }
 
-  // Load IQC Materials by Week for modal
+  private parsePutawayInventoryDate(data: any): Date | null {
+    const fields = ['importDate', 'lastUpdated', 'createdAt'];
+    for (const key of fields) {
+      const raw = data?.[key];
+      if (!raw) continue;
+      if (raw.toDate && typeof raw.toDate === 'function') {
+        return raw.toDate();
+      }
+      if (raw instanceof Date) {
+        return raw;
+      }
+      if (raw.seconds) {
+        return new Date(raw.seconds * 1000);
+      }
+      const parsed = new Date(raw);
+      if (!isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    return null;
+  }
+
+  /** Gom inventory IQC staging → 1 dòng / mã hàng, đếm SKU con Pass vs chưa Pass. */
+  private buildPutawayModalSkuRows(docs: any[]): PutawayModalSkuRow[] {
+    const skuLines = new Map<
+      string,
+      { materialCode: string; statusKind: PutawayIqcStatusKind; stock: number }
+    >();
+
+    docs.forEach((doc: any) => {
+      const data = doc.data() as any;
+      const locRaw = (data.location || '').trim();
+      if (!this.isIqcStagingLocation(locRaw)) {
+        return;
+      }
+
+      const openingStock =
+        data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+      const quantity = Number(data.quantity) || 0;
+      const exported = Number(data.exported) || 0;
+      const xt = Number(data.xt) || 0;
+      const stock = openingStock + quantity - exported - xt;
+      if (stock <= 0) {
+        return;
+      }
+
+      const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
+      if (!statusKind) {
+        return;
+      }
+
+      const materialCode = (data.materialCode || '').toUpperCase().trim();
+      if (!materialCode) {
+        return;
+      }
+
+      const poNumber = (data.poNumber || '').trim();
+      const batchNumber = (data.batchNumber || '').trim();
+      const materialDate = this.parsePutawayInventoryDate(data) || new Date();
+      const imd = this.getIMDFromDate(materialDate, batchNumber);
+      const lineKey = `${materialCode}|${poNumber}|${imd}`;
+
+      const existing = skuLines.get(lineKey);
+      if (existing) {
+        existing.stock += stock;
+        existing.statusKind = this.mergePutawayStatusKind(existing.statusKind, statusKind);
+      } else {
+        skuLines.set(lineKey, { materialCode, statusKind, stock });
+      }
+    });
+
+    const byCode = new Map<string, { passCount: number; notPassCount: number; totalStock: number }>();
+    skuLines.forEach((line) => {
+      const bucket = byCode.get(line.materialCode) || { passCount: 0, notPassCount: 0, totalStock: 0 };
+      if (line.statusKind === 'pass') {
+        bucket.passCount += 1;
+      } else {
+        bucket.notPassCount += 1;
+      }
+      bucket.totalStock += line.stock;
+      byCode.set(line.materialCode, bucket);
+    });
+
+    return Array.from(byCode.entries())
+      .map(([materialCode, v]) => ({
+        materialCode,
+        passCount: v.passCount,
+        notPassCount: v.notPassCount,
+        totalSkuCount: v.passCount + v.notPassCount,
+        totalStock: v.totalStock,
+      }))
+      .sort((a, b) => {
+        if (b.notPassCount !== a.notPassCount) {
+          return b.notPassCount - a.notPassCount;
+        }
+        if (b.passCount !== a.passCount) {
+          return b.passCount - a.passCount;
+        }
+        return a.materialCode.localeCompare(b.materialCode);
+      });
+  }
+
+  // Load Putaway popup: 1 mã hàng = 1 SKU, xếp theo Pass / Chưa Pass
   async loadIQCMaterialsByWeek(): Promise<void> {
     this.iqcMaterialsLoading = true;
     try {
-      // Get current week number (ISO week)
-      const now = new Date();
-      const weeks = this.buildPutawayWeekBuckets(now);
-
       const factory = this.selectedFactory || 'ASM1';
       const docs = await this.fetchPutawayStagingInventoryDocs(factory);
+      this.iqcMaterialsBySku = docs.length > 0 ? this.buildPutawayModalSkuRows(docs) : [];
 
-      // Initialize materials array for each week
-      this.iqcMaterialsByWeek = weeks.map(w => ({
-        week: w.week,
-        weekNum: w.weekNum,
-        startDate: w.startDate,
-        endDate: w.endDate,
-        materials: []
-      }));
-
-      if (docs.length > 0) {
-        const materialsMap = new Map<string, Array<{
-          materialCode: string;
-          poNumber: string;
-          imd: string;
-          stock: number;
-          location: string;
-          iqcStatus?: string;
-          statusKind: PutawayIqcStatusKind;
-        }>>();
-
-        // Initialize map for each week
-        weeks.forEach(w => {
-          materialsMap.set(w.week, []);
-        });
-
-        docs.forEach((doc: any) => {
-          const data = doc.data() as any;
-          const locRaw = (data.location || '').trim();
-          if (!this.isIqcStagingLocation(locRaw)) {
-            return;
-          }
-
-          // Calculate stock: openingStock + quantity - exported - xt
-          const openingStock = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
-          const quantity = Number(data.quantity) || 0;
-          const exported = Number(data.exported) || 0;
-          const xt = Number(data.xt) || 0;
-          const stock = openingStock + quantity - exported - xt;
-          
-          // Only count materials with stock > 0
-          if (stock <= 0) {
-            return;
-          }
-
-          const iqcStatus = (data.iqcStatus || '').trim();
-          const statusKind = this.normalizePutawayIqcStatus(iqcStatus);
-          if (!statusKind) {
-            return;
-          }
-
-          // Get date for week calculation
-          let materialDate: Date | null = null;
-          
-          // Priority 1: importDate
-          if (data.importDate) {
-            if (data.importDate.toDate && typeof data.importDate.toDate === 'function') {
-              materialDate = data.importDate.toDate();
-            } else if (data.importDate instanceof Date) {
-              materialDate = data.importDate;
-            } else if (data.importDate.seconds) {
-              materialDate = new Date(data.importDate.seconds * 1000);
-            } else {
-              materialDate = new Date(data.importDate);
-            }
-          }
-          
-          // Priority 2: lastUpdated
-          if (!materialDate && data.lastUpdated) {
-            if (data.lastUpdated.toDate && typeof data.lastUpdated.toDate === 'function') {
-              materialDate = data.lastUpdated.toDate();
-            } else if (data.lastUpdated instanceof Date) {
-              materialDate = data.lastUpdated;
-            } else if (data.lastUpdated.seconds) {
-              materialDate = new Date(data.lastUpdated.seconds * 1000);
-            } else {
-              materialDate = new Date(data.lastUpdated);
-            }
-          }
-          
-          // Priority 3: createdAt
-          if (!materialDate && data.createdAt) {
-            if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
-              materialDate = data.createdAt.toDate();
-            } else if (data.createdAt instanceof Date) {
-              materialDate = data.createdAt;
-            } else if (data.createdAt.seconds) {
-              materialDate = new Date(data.createdAt.seconds * 1000);
-            } else {
-              materialDate = new Date(data.createdAt);
-            }
-          }
-          
-          const pushOrMerge = (weekKey: string) => {
-            const materialCode = (data.materialCode || '').toUpperCase().trim();
-            const poNumber = (data.poNumber || '').trim();
-            const batchNumber = (data.batchNumber || '').trim();
-            const imd = this.getIMDFromDate(materialDate || new Date(), batchNumber);
-            const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
-            const weekMaterials = materialsMap.get(weekKey) || [];
-            const existingIndex = weekMaterials.findIndex(m =>
-              m.materialCode === materialCode &&
-              m.poNumber === poNumber &&
-              m.imd === imd
-            );
-            if (existingIndex >= 0) {
-              weekMaterials[existingIndex].stock += stock;
-              weekMaterials[existingIndex].iqcStatus = iqcStatus;
-              weekMaterials[existingIndex].statusKind = this.mergePutawayStatusKind(
-                weekMaterials[existingIndex].statusKind,
-                statusKind
-              );
-              weekMaterials[existingIndex].location = locRaw;
-            } else {
-              weekMaterials.push({
-                materialCode,
-                poNumber,
-                imd,
-                stock,
-                location: locRaw,
-                iqcStatus,
-                statusKind
-              });
-            }
-            materialsMap.set(weekKey, weekMaterials);
-          };
-
-          // Nếu không có date => gom vào Late
-          if (!materialDate) {
-            pushOrMerge(this.putawayLateWeekLabel);
-            return;
-          }
-
-          // Find which week this material belongs to (8 tuần); nếu không match => Late
-          let placed = false;
-          for (const week of weeks) {
-            if (week.week === this.putawayLateWeekLabel) continue;
-            if (materialDate >= week.startDate && materialDate <= week.endDate) {
-              const materialCode = (data.materialCode || '').toUpperCase().trim();
-              const poNumber = (data.poNumber || '').trim();
-              const batchNumber = (data.batchNumber || '').trim();
-              const imd = this.getIMDFromDate(materialDate, batchNumber);
-              
-              // Check if material already exists in this week (unique by materialCode_PO_IMD)
-              const uniqueKey = `${materialCode}_${poNumber}_${imd}`;
-              const weekMaterials = materialsMap.get(week.week) || [];
-              const existingIndex = weekMaterials.findIndex(m => 
-                m.materialCode === materialCode && 
-                m.poNumber === poNumber && 
-                m.imd === imd
-              );
-              
-              if (existingIndex >= 0) {
-                weekMaterials[existingIndex].stock += stock;
-                weekMaterials[existingIndex].iqcStatus = iqcStatus;
-                weekMaterials[existingIndex].statusKind = this.mergePutawayStatusKind(
-                  weekMaterials[existingIndex].statusKind,
-                  statusKind
-                );
-              } else {
-                weekMaterials.push({
-                  materialCode: materialCode,
-                  poNumber: poNumber,
-                  imd: imd,
-                  stock: stock,
-                  location: locRaw,
-                  iqcStatus: iqcStatus,
-                  statusKind
-                });
-              }
-              
-              materialsMap.set(week.week, weekMaterials);
-              placed = true;
-              break;
-            }
-          }
-          if (!placed) {
-            pushOrMerge(this.putawayLateWeekLabel);
-          }
-        });
-
-        // Update iqcMaterialsByWeek with materials
-        this.iqcMaterialsByWeek = this.iqcMaterialsByWeek
-          .map((weekData) => ({
-            ...weekData,
-            materials: materialsMap.get(weekData.week) || []
-          }))
-          .filter((w) => w.materials.length > 0);
-      } else {
-        this.iqcMaterialsByWeek = [];
-      }
-
-      console.log('📊 IQC Materials by Week loaded:', this.iqcMaterialsByWeek);
+      console.log('📊 Putaway modal SKU rows:', this.iqcMaterialsBySku.length);
       this.cdr.detectChanges();
     } catch (error) {
-      console.error('❌ Error loading IQC materials by week:', error);
-      this.iqcMaterialsByWeek = [];
+      console.error('❌ Error loading Putaway staging modal:', error);
+      this.iqcMaterialsBySku = [];
     } finally {
       this.iqcMaterialsLoading = false;
     }
   }
 
+  get putawayModalTotalPassSku(): number {
+    return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + r.passCount, 0);
+  }
+
+  get putawayModalTotalNotPassSku(): number {
+    return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + r.notPassCount, 0);
+  }
+
   // Download IQC Materials Report
   downloadIQCMaterialsReport(): void {
-    if (this.iqcMaterialsByWeek.length === 0) {
+    if (this.iqcMaterialsBySku.length === 0) {
       alert('Không có dữ liệu để tải xuống!');
       return;
     }
 
     try {
-      // Prepare data for Excel - one sheet per week
       const wb = XLSX.utils.book_new();
-      
-      this.iqcMaterialsByWeek.forEach(weekData => {
-        const excelData = weekData.materials.map((material, index) => ({
-          'STT': index + 1,
-          'Mã hàng': material.materialCode,
-          'PO': material.poNumber,
-          'IMD': material.imd,
-          'IQC status': material.iqcStatus || '',
-          'Tồn kho': material.stock,
-          'Vị trí': material.location
-        }));
+      const excelData = this.iqcMaterialsBySku.map((row, index) => ({
+        STT: index + 1,
+        'Mã hàng (SKU)': row.materialCode,
+        'Đã Pass': row.passCount,
+        'Chưa Pass': row.notPassCount,
+        'Tổng SKU (PO+IMD)': row.totalSkuCount,
+        'Tồn kho': row.totalStock,
+      }));
 
-        const isOtherBucket = weekData.week === this.putawayLateWeekLabel;
-        // Add header row with week info
-        const headerRow = [{
-          'STT': weekData.week,
-          'Mã hàng': isOtherBucket
-            ? 'Ngoài 8 tuần gần nhất (hoặc thiếu ngày import/updated/created)'
-            : `Từ ${weekData.startDate.toLocaleDateString('vi-VN')} đến ${weekData.endDate.toLocaleDateString('vi-VN')}`,
-          'PO': `Tổng: ${weekData.materials.length} mã`,
-          'IMD': '',
-          'IQC status': '',
-          'Tồn kho': '',
-          'Vị trí': ''
-        }];
-        
-        const allData = [...headerRow, ...excelData];
-        
-        // Create worksheet
-        const ws = XLSX.utils.json_to_sheet(allData);
-        XLSX.utils.book_append_sheet(wb, ws, weekData.week);
-      });
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Putaway_SKU');
 
-      // Generate filename
       const date = new Date().toISOString().split('T')[0];
-      const filename = `IQC_Materials_Report_${date}.xlsx`;
+      const filename = `Putaway_Staging_SKU_${this.selectedFactory}_${date}.xlsx`;
 
-      // Write and download
       XLSX.writeFile(wb, filename);
-      console.log(`✅ IQC Materials Report downloaded: ${filename}`);
+      console.log(`✅ Putaway SKU report downloaded: ${filename}`);
       alert(`✅ Đã tải báo cáo: ${filename}`);
     } catch (error) {
       console.error('❌ Error downloading IQC materials report:', error);
