@@ -105,6 +105,14 @@ interface InventoryRow {
   importDate?: unknown;
   stock?: number;
   exported?: number;
+  /** Thời điểm đổi vị trí gần nhất (từ inventory-materials.lastModified) */
+  lastModified?: Date | null;
+  /** Loại thao tác đổi vị trí (từ inventory-materials.modifiedBy) */
+  modifiedBy?: string;
+  /** ID người scan đổi vị trí (từ material-location-history.changedBy) */
+  locationChangedBy?: string;
+  /** Thời điểm scan đổi vị trí (từ material-location-history.changedAt) */
+  locationChangedAt?: Date | null;
 }
 
 @Component({
@@ -436,7 +444,15 @@ export class QcTraceabilityComponent implements AfterViewInit {
         rows: [
           { label: 'Vị trí', value: inv.location || '—' },
           { label: 'Ngày lưu', value: this.formatDateShortVi(inv.qcCheckedAt || impD) },
-          { label: 'SL hiện tại', value: summary.stockDisplay }
+          { label: 'SL hiện tại', value: summary.stockDisplay },
+          {
+            label: 'ID scan đổi vị trí',
+            value: inv.locationChangedBy || (inv.modifiedBy ? inv.modifiedBy : '—')
+          },
+          {
+            label: 'Ngày giờ đổi vị trí',
+            value: this.formatDateShortVi(inv.locationChangedAt || inv.lastModified || null)
+          }
         ],
         subTitle: 'KHO',
         subLines: [{ label: 'Xưởng', value: inv.factory || '—' }]
@@ -603,8 +619,40 @@ export class QcTraceabilityComponent implements AfterViewInit {
       qcCheckedAt: this.parseFirestoreDate(data.qcCheckedAt),
       importDate: data.importDate,
       stock: data.stock != null ? Number(data.stock) : undefined,
-      exported: data.exported != null ? Number(data.exported) : undefined
+      exported: data.exported != null ? Number(data.exported) : undefined,
+      lastModified: this.parseFirestoreDate(data.lastModified),
+      modifiedBy: this.coerceText(data.modifiedBy)
     };
+  }
+
+  /** Tải lịch sử đổi vị trí mới nhất cho tồn kho từ `material-location-history`. */
+  private async loadLatestLocationChange(inv: InventoryRow): Promise<void> {
+    if (!inv.id) return;
+    try {
+      const snap = await this.firestore
+        .collection('material-location-history', ref =>
+          ref.where('materialId', '==', inv.id).orderBy('changedAt', 'desc').limit(1)
+        )
+        .get()
+        .toPromise();
+      if (!snap || snap.empty) {
+        // Fallback: dùng lastModified + modifiedBy từ inventory-materials
+        if (inv.lastModified) {
+          inv.locationChangedAt = inv.lastModified;
+          inv.locationChangedBy = inv.modifiedBy || '—';
+        }
+        return;
+      }
+      const d = snap.docs[0].data() as Record<string, unknown>;
+      inv.locationChangedBy = this.coerceText(d.changedBy) || this.coerceText(d.modifiedBy) || '—';
+      inv.locationChangedAt = this.parseFirestoreDate(d.changedAt) || this.parseFirestoreDate(d.lastModified);
+    } catch {
+      // Nếu lỗi (index chưa tạo, v.v.) thì dùng fallback từ inventory-materials
+      if (inv.lastModified) {
+        inv.locationChangedAt = inv.lastModified;
+        inv.locationChangedBy = inv.modifiedBy || '—';
+      }
+    }
   }
 
   private async queryByMaterialPoImd(
@@ -877,7 +925,12 @@ export class QcTraceabilityComponent implements AfterViewInit {
       };
 
       this.lastInventory = inv;
-      this.issues = await this.loadOutboundIssues(inv);
+      // Tải song song: xuất kho + lịch sử đổi vị trí
+      const [issues] = await Promise.all([
+        this.loadOutboundIssues(inv),
+        this.loadLatestLocationChange(inv)
+      ]);
+      this.issues = issues;
       this.treeRoot = this.buildIssuedTree(this.summary, this.issues);
       this.rebuildDashboard(inv, this.summary, this.qcNode, this.issues);
       this.touchUpdatedAt();
