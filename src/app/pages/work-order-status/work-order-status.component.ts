@@ -93,6 +93,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   showBagQrDialog = false;
   bagQrLsxInput = '';
   bagQrScannedLsx = '';
+  /** Cột Line của Work Order tương ứng LSX đã scan */
+  bagQrProductionLine = '';
   bagQrLines: Array<{materialCode: string; tenVatTu: string; quantity: number; unit: string; po: string; soChungTu: string}> = [];
   bagQrLoading = false;
   bagQrBusy = false;
@@ -4316,12 +4318,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const lsx = (this.bagQrLsxInput || '').trim().toUpperCase().replace(/\s/g, '');
     if (!lsx) return;
     this.bagQrScannedLsx = lsx;
+    this.bagQrProductionLine = '';
     this.bagQrLines = [];
     this.bagQrNotFound = false;
     this.bagQrError = '';
     this.bagQrLoading = true;
     this.cdr.detectChanges();
     try {
+      // Tìm Work Order để lấy cột Line
+      const wo = await this.findWorkOrderForScanByLsx(lsx);
+      this.bagQrProductionLine = wo ? (String(wo.productionLine || '').trim()) : '';
+
       const lines = await this.loadBagQrLinesFromFirestore(lsx);
       if (lines.length === 0) {
         this.bagQrNotFound = true;
@@ -4420,14 +4427,42 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 </div>`;
   }
 
+  /** Tem Line (tem đầu tiên) — chỉ chữ Line, không QR */
+  private renderBagLineHeaderLabelHtml(_qrImageSrc: string, line: string, _lsx: string): string {
+    const e = (s: string) => this.escapeInboundLabelHtmlForBag(s);
+    return `<div class="qr-container" style="justify-content:center!important;align-items:center!important;">
+  <div style="width:100%!important;height:100%!important;display:flex!important;align-items:center!important;justify-content:center!important;">
+    <span style="font-family:Arial,sans-serif!important;font-size:28px!important;font-weight:bold!important;color:#000!important;letter-spacing:1px!important;">${e(line || '—')}</span>
+  </div>
+</div>`;
+  }
+
+  /** Tem LSX (tem thứ hai) — chỉ chữ LSX, không QR */
+  private renderBagLsxHeaderLabelHtml(_qrImageSrc: string, lsx: string, _line: string): string {
+    const e = (s: string) => this.escapeInboundLabelHtmlForBag(s);
+    return `<div class="qr-container" style="justify-content:center!important;align-items:center!important;">
+  <div style="width:100%!important;height:100%!important;display:flex!important;align-items:center!important;justify-content:center!important;">
+    <span style="font-family:Arial,sans-serif!important;font-size:18px!important;font-weight:bold!important;color:#000!important;letter-spacing:0.5px!important;">${e(lsx)}</span>
+  </div>
+</div>`;
+  }
+
   async printBagQrLabels(): Promise<void> {
     if (!this.bagQrLines.length || this.bagQrBusy) return;
     this.bagQrBusy = true;
     this.cdr.detectChanges();
     try {
       const lsx = this.bagQrScannedLsx;
+      const prodLine = this.bagQrProductionLine;
       const labelHtmlParts: string[] = [];
 
+      // ── Tem 1: Line soạn (chỉ chữ, không QR) ──
+      labelHtmlParts.push(this.renderBagLineHeaderLabelHtml('', prodLine, lsx));
+
+      // ── Tem 2: LSX (chỉ chữ, không QR) ──
+      labelHtmlParts.push(this.renderBagLsxHeaderLabelHtml('', lsx, prodLine));
+
+      // ── Tem 3..N: các mã R029 ──
       for (const line of this.bagQrLines) {
         // QR payload: Mã|PO|qty (cùng format inbound-asm1, không có IMD/BAG field)
         const qrPayload = `${line.materialCode}|${line.po}|${line.quantity}`;

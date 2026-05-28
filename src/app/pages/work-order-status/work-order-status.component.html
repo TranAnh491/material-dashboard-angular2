@@ -1004,7 +1004,9 @@
         <div *ngIf="bagQrLines.length && !bagQrLoading">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
             <span style="font-size:13px;font-weight:600;color:#1565c0;">
-              LSX: {{ bagQrScannedLsx }} — {{ bagQrLines.length }} mã túi
+              LSX: {{ bagQrScannedLsx }}
+              <span *ngIf="bagQrProductionLine" style="margin-left:8px;color:#1a237e;">· Line: {{ bagQrProductionLine }}</span>
+              · {{ bagQrLines.length }} mã túi
             </span>
             <button mat-raised-button color="accent" type="button"
                     (click)="printBagQrLabels()"
