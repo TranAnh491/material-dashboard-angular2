@@ -1087,6 +1087,26 @@
     }
   }
 
+  .loc-chip--btn {
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+
+    &:hover {
+      filter: brightness(0.97);
+    }
+  }
+
+  .heatmap-empty,
+  .pallet-cluster-loading {
+    grid-column: 1 / -1;
+    padding: 24px 12px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+  }
+
   .loc-chip {
     position: relative;
     display: inline-flex;

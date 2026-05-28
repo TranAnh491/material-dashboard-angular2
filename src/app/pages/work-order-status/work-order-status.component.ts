@@ -89,6 +89,16 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     hits: Array<{ source: string; lsx: string; detail: string }>;
   } | null = null;
 
+  /** BAG QR: scan LSX → danh sách túi R029 → in tem QR */
+  showBagQrDialog = false;
+  bagQrLsxInput = '';
+  bagQrScannedLsx = '';
+  bagQrLines: Array<{materialCode: string; tenVatTu: string; quantity: number; unit: string; po: string; soChungTu: string}> = [];
+  bagQrLoading = false;
+  bagQrBusy = false;
+  bagQrNotFound = false;
+  bagQrError = '';
+
   /** In BAG: mã R xuất kho theo LSX (MORE → BAG) */
   showBagPrintDialog = false;
   bagPrintFactory = '';
@@ -4275,6 +4285,322 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       ['ASM1', 'ASM2', 'ASM3', 'Sample 1', 'Sample 2'].forEach((x) => set.add(x));
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }));
+  }
+
+  /** BAG QR: mở dialog scan LSX → hiển thị danh sách túi R029 → in tem QR */
+  openBagQrDialog(): void {
+    this.bagQrLsxInput = '';
+    this.bagQrScannedLsx = '';
+    this.bagQrLines = [];
+    this.bagQrLoading = false;
+    this.bagQrBusy = false;
+    this.bagQrNotFound = false;
+    this.bagQrError = '';
+    this.showMoreDialog = false;
+    this.showBagQrDialog = true;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const input = document.getElementById('bagQrLsxInput') as HTMLInputElement | null;
+      if (input) input.focus();
+    }, 120);
+  }
+
+  closeBagQrDialog(): void {
+    this.showBagQrDialog = false;
+    this.bagQrLines = [];
+    this.bagQrScannedLsx = '';
+    this.cdr.detectChanges();
+  }
+
+  async onBagQrLsxSubmit(): Promise<void> {
+    const lsx = (this.bagQrLsxInput || '').trim().toUpperCase().replace(/\s/g, '');
+    if (!lsx) return;
+    this.bagQrScannedLsx = lsx;
+    this.bagQrLines = [];
+    this.bagQrNotFound = false;
+    this.bagQrError = '';
+    this.bagQrLoading = true;
+    this.cdr.detectChanges();
+    try {
+      const lines = await this.loadBagQrLinesFromFirestore(lsx);
+      if (lines.length === 0) {
+        this.bagQrNotFound = true;
+      } else {
+        this.bagQrLines = lines;
+      }
+    } catch (e: any) {
+      this.bagQrError = e?.message ? String(e.message) : 'Lỗi tải dữ liệu PXK';
+      console.error('[BAG QR]', e);
+    } finally {
+      this.bagQrLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async loadBagQrLinesFromFirestore(
+    lsx: string
+  ): Promise<Array<{materialCode: string; tenVatTu: string; quantity: number; unit: string; po: string; soChungTu: string}>> {
+    const variants = Array.from(new Set([lsx, lsx.toUpperCase()]));
+    const docs: Record<string, unknown>[] = [];
+    const CHUNK = 30;
+    for (let i = 0; i < variants.length; i += CHUNK) {
+      const chunk = variants.slice(i, i + CHUNK);
+      const snap = await firstValueFrom(
+        this.firestore.collection('pxk-import-data', (ref) => ref.where('lsx', 'in', chunk)).get()
+      );
+      snap.docs.forEach((d) => docs.push(d.data() as Record<string, unknown>));
+    }
+
+    // Kết hợp in-memory + Firestore
+    const inMemLines = this.getPxkLinesForLsx(lsx);
+    const allLines: PxkLine[] = [...inMemLines];
+    for (const d of docs) {
+      const lines = Array.isArray(d.lines) ? (d.lines as PxkLine[]) : [];
+      allLines.push(...lines);
+    }
+
+    // Giữ riêng từng dòng materialCode+PO (không gộp), dedup theo key
+    type BagLine = {materialCode: string; tenVatTu: string; quantity: number; unit: string; po: string; soChungTu: string};
+    const seen = new Map<string, BagLine>();
+    for (const line of allLines) {
+      const mat = this.normalizeBagRMaterialCode(String(line.materialCode ?? ''));
+      if (!this.isBagPrintRMaterialCode(mat)) continue;
+      const qty = Number(line.quantity ?? 0) || 0;
+      const po = String(line.po ?? '').trim();
+      const soChungTu = String(line.soChungTu ?? '').trim();
+      const key = `${mat}||${po}||${soChungTu}`;
+      if (seen.has(key)) {
+        seen.get(key)!.quantity += qty;
+      } else {
+        seen.set(key, {
+          materialCode: mat,
+          tenVatTu: String(line.tenVatTu ?? '').trim(),
+          quantity: qty,
+          unit: String(line.unit ?? '').trim() || 'cái',
+          po,
+          soChungTu
+        });
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) =>
+      a.materialCode.localeCompare(b.materialCode) || a.po.localeCompare(b.po)
+    );
+  }
+
+  private escapeInboundLabelHtmlForBag(s: string): string {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  private formatBagLabelQuantity(qty: number, unit: string): string {
+    const n = Number(qty);
+    const formatted = Number.isFinite(n) ? n.toLocaleString('en-US') : String(qty);
+    return unit ? `${formatted} ${unit}` : formatted;
+  }
+
+  /** Render một tem 57×32mm theo đúng format inbound-asm1 */
+  private renderBagQrLabelHtml(qrImageSrc: string, materialCode: string, po: string, quantity: number, unit: string, lsx: string): string {
+    const e = (s: string) => this.escapeInboundLabelHtmlForBag(s);
+    const qtyFormatted = this.formatBagLabelQuantity(quantity, unit);
+    return `<div class="qr-container">
+  <div class="qr-section">
+    ${qrImageSrc ? `<img src="${qrImageSrc}" class="qr-image" alt="${e(materialCode)}">` : ''}
+  </div>
+  <div class="info-section">
+    <div>
+      <div class="info-row material-code material-code-main">${e(materialCode)}</div>
+      <div class="info-row">PO: ${e(po || '—')}</div>
+      <div class="info-row material-code">${e(qtyFormatted)}</div>
+      <div class="info-row">LSX: ${e(lsx)}</div>
+    </div>
+  </div>
+</div>`;
+  }
+
+  async printBagQrLabels(): Promise<void> {
+    if (!this.bagQrLines.length || this.bagQrBusy) return;
+    this.bagQrBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const lsx = this.bagQrScannedLsx;
+      const labelHtmlParts: string[] = [];
+
+      for (const line of this.bagQrLines) {
+        // QR payload: Mã|PO|qty (cùng format inbound-asm1, không có IMD/BAG field)
+        const qrPayload = `${line.materialCode}|${line.po}|${line.quantity}`;
+        let qrDataUrl = '';
+        try {
+          qrDataUrl = await QRCode.toDataURL(qrPayload, {
+            width: 240,
+            margin: 1,
+            color: { dark: '#000000', light: '#FFFFFF' }
+          });
+        } catch (e) {
+          console.warn('[BAG QR] QR gen failed for', line.materialCode, e);
+        }
+        labelHtmlParts.push(this.renderBagQrLabelHtml(qrDataUrl, line.materialCode, line.po, line.quantity, line.unit, lsx));
+      }
+
+      // CSS và cấu trúc giống hệt inbound-asm1 (@page 57×32mm, mỗi tem 1 trang)
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <style>
+    * { margin: 0 !important; padding: 0 !important; box-sizing: border-box !important; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: white !important;
+      overflow: hidden !important;
+      width: 57mm !important;
+      height: 32mm !important;
+    }
+    .qr-container {
+      display: flex !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 1px solid #000 !important;
+      width: 57mm !important;
+      height: 32mm !important;
+      page-break-inside: avoid !important;
+      background: white !important;
+      box-sizing: border-box !important;
+    }
+    .qr-section {
+      width: 30mm !important;
+      height: 30mm !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      border-right: 1px solid #ccc !important;
+      box-sizing: border-box !important;
+    }
+    .qr-image {
+      width: 28mm !important;
+      height: 28mm !important;
+      display: block !important;
+    }
+    .info-section {
+      flex: 1 !important;
+      padding: 1mm !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      align-items: flex-start !important;
+      font-size: 9.6px !important;
+      line-height: 1.15 !important;
+      box-sizing: border-box !important;
+      color: #000000 !important;
+      text-align: left !important;
+    }
+    .info-row {
+      margin: 0.8mm 0 !important;
+      font-weight: bold !important;
+      color: #000000 !important;
+      text-align: left !important;
+      display: block !important;
+      white-space: nowrap !important;
+      font-family: Arial, sans-serif !important;
+      letter-spacing: 0 !important;
+    }
+    .info-row.material-code {
+      font-size: 17.7408px !important;
+      line-height: 1.05 !important;
+      font-weight: bold !important;
+    }
+    .info-row.material-code.material-code-main {
+      font-size: 21.356368px !important;
+      line-height: 1.05 !important;
+      font-weight: bold !important;
+    }
+    .qr-grid {
+      text-align: left !important;
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: wrap !important;
+      align-items: flex-start !important;
+      justify-content: flex-start !important;
+      gap: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 57mm !important;
+      height: 32mm !important;
+    }
+    @media print {
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        width: 57mm !important;
+        height: 32mm !important;
+      }
+      @page {
+        margin: 0 !important;
+        size: 57mm 32mm !important;
+        padding: 0 !important;
+      }
+      .qr-container {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 57mm !important;
+        height: 32mm !important;
+        page-break-inside: avoid !important;
+        border: 1px solid #000 !important;
+      }
+      .qr-section { width: 30mm !important; height: 30mm !important; }
+      .qr-image { width: 28mm !important; height: 28mm !important; }
+      .info-section {
+        font-size: 9.6px !important;
+        padding: 1mm !important;
+        color: #000000 !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        align-items: flex-start !important;
+        line-height: 1.15 !important;
+      }
+      .info-row { text-align: left !important; display: block !important; white-space: nowrap !important; }
+      .info-row.material-code { font-size: 17.7408px !important; line-height: 1.05 !important; font-weight: bold !important; }
+      .info-row.material-code.material-code-main { font-size: 21.356368px !important; line-height: 1.05 !important; font-weight: bold !important; }
+      .qr-grid { gap: 0 !important; padding: 0 !important; margin: 0 !important; width: 57mm !important; height: 32mm !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="qr-grid">
+    ${labelHtmlParts.join('\n')}
+  </div>
+  <script>
+    window.onload = function() {
+      document.title = '';
+      const style = document.createElement('style');
+      style.textContent = '@media print { body { margin: 0 !important; padding: 0 !important; width: 57mm !important; height: 32mm !important; } @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; } }';
+      document.head.appendChild(style);
+      setTimeout(function() { window.print(); }, 500);
+    };
+  <\/script>
+</body>
+</html>`;
+
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+      } else {
+        alert('Không mở được cửa sổ in. Hãy cho phép popup.');
+      }
+    } catch (err) {
+      console.error('[BAG QR] print error', err);
+      alert('Lỗi in tem QR: ' + ((err as Error)?.message || 'Vui lòng thử lại.'));
+    } finally {
+      this.bagQrBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   openBagPrintDialog(): void {

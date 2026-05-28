@@ -411,10 +411,11 @@
 
       <div class="toolbar-group">
         <span class="tool-label">Add layer:</span>
-        <select class="form-control form-control--dense tool-select" [(ngModel)]="layerMode" (ngModelChange)="setLayerMode(layerMode)">
+        <select class="form-control form-control--dense tool-select" [(ngModel)]="layerMode" (ngModelChange)="setLayerModeAny(layerMode)">
           <option [ngValue]="'None'">None</option>
           <option [ngValue]="'Aging'">Aging</option>
           <option [ngValue]="'Location'">Location</option>
+          <option [ngValue]="'Pallet'">Pallet</option>
         </select>
       </div>
 
@@ -453,7 +454,49 @@
   <div class="heatmap-card card">
     <div class="card-body card-body--heatmap">
       <div class="heatmap-wrap" *ngIf="!isLoading; else loadingTpl">
-        <div class="location-cluster-grid" *ngIf="showLocationClusterView; else skuGridTpl">
+        <div class="import-status pallet-cluster-loading" *ngIf="showPalletClusterView && isLoadingPallets">
+          <mat-progress-spinner mode="indeterminate" diameter="22"></mat-progress-spinner>
+          <span>Đang tải danh sách pallet (cột vị trí)...</span>
+        </div>
+
+        <div class="location-cluster-grid" *ngIf="showPalletClusterView && !isLoadingPallets">
+          <div
+            class="loc-tile"
+            *ngFor="let t of palletTiles; trackBy: trackByPalletTile"
+            [style.background]="t.bg"
+            [attr.title]="titlesEnabled ? t.title : null">
+            <div class="loc-tile__head">
+              <i class="material-icons loc-tile__pin" aria-hidden="true">place</i>
+              <span class="loc-tile__loc-name">{{ t.displayLocation }}</span>
+              <span class="loc-tile__badge">{{ t.displayPallet }} · {{ t.lines.length }} dòng</span>
+            </div>
+            <div class="loc-tile__chips">
+              <button
+                type="button"
+                *ngFor="let ln of t.lines"
+                class="loc-chip loc-chip--fgs-kh loc-chip--btn"
+                [class.loc-chip--stock]="ln.stockChecked"
+                (click)="openPalletLineDetail(t.palletKey, ln)">
+                <span class="loc-chip__mat-kh">
+                  <span class="loc-chip__sku">{{ ln.sku }}</span>
+                  <span class="loc-chip__kh">{{ ln.khName || '—' }}</span>
+                </span>
+                <span class="loc-chip__n">SL {{ ln.quantity }}</span>
+                <span class="loc-chip__kh">{{ palletImportDateLabel(ln.importDate) }}</span>
+                <span
+                  *ngIf="ln.agingFlag"
+                  class="loc-chip__aging"
+                  [ngClass]="'loc-chip__aging--' + ln.agingFlag"
+                  aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+          <div class="heatmap-empty" *ngIf="!palletTiles.length">
+            Không có pallet F1-xxxx trong khoảng lọc hiện tại.
+          </div>
+        </div>
+
+        <div class="location-cluster-grid" *ngIf="showLocationClusterView">
           <div
             class="loc-tile"
             *ngFor="let t of locationTiles; trackBy: trackByLocationTile"
@@ -483,14 +526,14 @@
             </div>
           </div>
         </div>
-        <ng-template #skuGridTpl>
-          <div class="sku-grid" [style.--md-cell.px]="cellSizePx">
+        <div class="sku-grid" *ngIf="!showClusterGrid" [style.--md-cell.px]="cellSizePx">
             <div
               class="sku-cell"
               *ngFor="let cell of cells; trackBy: trackBySku"
               [class.sku-cell--stock-checked]="cell.stockChecked"
               [style.background]="cell.bg"
-              [attr.title]="titlesEnabled ? cell.title : null">
+              [attr.title]="titlesEnabled ? cell.title : null"
+              (click)="onSkuCellClick(cell)">
               <span
                 *ngIf="cell.agingFlag"
                 class="sku-cell__aging-flag"
@@ -498,7 +541,6 @@
                 aria-hidden="true"></span>
             </div>
           </div>
-        </ng-template>
       </div>
 
       <ng-template #loadingTpl>
@@ -518,6 +560,61 @@
         <span>Total SKUs: <b>{{ kpiTotalSkus | number }}</b></span>
         <span>Active SKUs: <b class="green">{{ kpiActiveSkus | number }} ({{ kpiActivePct }}%)</b></span>
         <span>No Activity: <b class="red">{{ kpiNoActivitySkus | number }} ({{ kpiNoActivityPct }}%)</b></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pallet details theo mã TP -->
+  <div class="md-modal-backdrop" *ngIf="showPalletPopup" (click)="closePalletPopup()">
+    <div class="md-modal md-modal--wide" (click)="$event.stopPropagation()">
+      <div class="md-modal__header">
+        <div class="title">Pallet (F1-xxxx) — {{ palletSku }}</div>
+        <button type="button" class="icon-x" (click)="closePalletPopup()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="md-modal__body md-modal__body--scroll">
+        <div class="import-status" *ngIf="palletLoading">
+          <mat-progress-spinner mode="indeterminate" diameter="18"></mat-progress-spinner>
+          <span>Đang tải chi tiết pallet...</span>
+        </div>
+        <div class="import-err" *ngIf="palletError">
+          ❌ {{ palletError }}
+        </div>
+
+        <div *ngIf="!palletLoading && !palletError && palletRows.length" class="carton-totals-table-wrap">
+          <table class="carton-totals-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Pallet</th>
+                <th>Mã hàng</th>
+                <th>Vị trí</th>
+                <th class="num">Số lượng</th>
+                <th>Ngày nhập</th>
+                <th>ID nhập</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of palletRows; let i = index">
+                <td>{{ i + 1 }}</td>
+                <td><strong>{{ r.pallet }}</strong></td>
+                <td>{{ r.materialCode }}</td>
+                <td>{{ r.location || '—' }}</td>
+                <td class="num"><strong>{{ r.quantity | number }}</strong></td>
+                <td>{{ palletImportDateLabel(r.importDate) }}</td>
+                <td><code>{{ r.id }}</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="color-settings-lead" *ngIf="!palletLoading && !palletError && !palletRows.length">
+          Không có pallet dạng <strong>F1-xxxx</strong> cho mã <strong>{{ palletSku }}</strong> (hoặc chưa gán palletId).
+        </p>
+      </div>
+      <div class="md-modal__footer">
+        <button type="button" class="btn btn-default" (click)="closePalletPopup()">Đóng</button>
       </div>
     </div>
   </div>

@@ -312,6 +312,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   /** Cho phép scan vật tư khi chưa scan vị trí (list/code mode). */
   private allowMaterialScanWithoutLocation = false;
 
+  // ======================== LOCK KIỂM KÊ ========================
+  /** Khi bật: nút KIỂM KÊ bị chặn, báo người dùng chỉ được dùng KK Tùy Chỉnh */
+  lockKiemKe = false;
+
   // ======================== KIỂM DS (IMPORT FILE) ========================
   showStockCheckMoreModal = false;
   showDsSettingsModal = false;
@@ -973,12 +977,19 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   openStockCheckMoreModal(): void {
+    this.lockKiemKe = localStorage.getItem('stockcheck_lockKiemKe') === '1';
     this.showStockCheckMoreModal = true;
     this.cdr.detectChanges();
   }
 
   closeStockCheckMoreModal(): void {
     this.showStockCheckMoreModal = false;
+    this.cdr.detectChanges();
+  }
+
+  toggleLockKiemKe(): void {
+    this.lockKiemKe = !this.lockKiemKe;
+    localStorage.setItem('stockcheck_lockKiemKe', this.lockKiemKe ? '1' : '0');
     this.cdr.detectChanges();
   }
 
@@ -2521,6 +2532,7 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.lockKiemKe = localStorage.getItem('stockcheck_lockKiemKe') === '1';
     this.checkMobile();
     // Reset factory selection to show selection screen
     this.selectedFactory = null;
@@ -3637,6 +3649,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
    * Start inventory checking (Kiểm Kê)
    */
   startInventoryCheck(): void {
+    if (this.lockKiemKe) {
+      alert('⚠️ Chỉ Được Bấm Kiểm Kê Tùy Chỉnh');
+      return;
+    }
     if (this.isLoading) {
       return;
     }

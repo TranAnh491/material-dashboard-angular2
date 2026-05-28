@@ -98,8 +98,8 @@
 
         <!-- Nút hành động chính -->
         <div class="main-actions">
-          <button class="main-btn primary" (click)="startInventoryCheck()" [disabled]="isLoading">
-            <i class="material-icons">qr_code_scanner</i>
+          <button class="main-btn primary" [class.locked]="lockKiemKe" (click)="startInventoryCheck()" [disabled]="isLoading" [title]="lockKiemKe ? 'Đang bị khóa — Chỉ Được Bấm Kiểm Kê Tùy Chỉnh' : 'Bắt đầu kiểm kê'">
+            <i class="material-icons">{{ lockKiemKe ? 'lock' : 'qr_code_scanner' }}</i>
             KIỂM KÊ
           </button>
           <button class="main-btn" (click)="openDsListModal()" title="Danh sách mã cần kiểm (từ PXK)">
@@ -450,6 +450,11 @@
         <button type="button" class="more-grid-btn" *ngIf="selectedFactory" (click)="loadArchiveHistory(); closeStockCheckMoreModal()">
           <i class="material-icons">history</i>
           <span>LỊCH SỬ</span>
+        </button>
+        <!-- Lock Kiểm Kê -->
+        <button type="button" class="more-grid-btn" [class.active]="lockKiemKe" (click)="toggleLockKiemKe()" title="Bật: nút KIỂM KÊ bị khóa, chỉ dùng KK Tùy Chỉnh">
+          <i class="material-icons">{{ lockKiemKe ? 'lock' : 'lock_open' }}</i>
+          <span>LOCK KK<br><strong>{{ lockKiemKe ? 'BẬT' : 'TẮT' }}</strong></span>
         </button>
         <!-- Reset -->
         <button type="button" class="more-grid-btn danger" *ngIf="selectedFactory" (click)="openResetModal(); closeStockCheckMoreModal()">

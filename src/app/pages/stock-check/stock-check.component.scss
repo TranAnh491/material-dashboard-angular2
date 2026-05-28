@@ -889,6 +889,17 @@
           color: #fff;
           box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
         }
+        &.locked {
+          background: #64748b;
+          border-color: #64748b;
+          box-shadow: none;
+          opacity: 0.85;
+          &:hover:not(:disabled) {
+            background: #475569;
+            border-color: #475569;
+            color: #fff;
+          }
+        }
       }
 
       &.more-btn {

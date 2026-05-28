@@ -8,6 +8,7 @@ import {
   FgCartonTotalRow,
   FgExportManifestRow,
   FgImportManifestRow,
+  FgPalletDetailRow,
   FgsDashboardService
 } from '../../services/fgs-dashboard.service';
 
@@ -73,6 +74,28 @@ type LocationTileVM = {
   title: string;
 };
 
+type PalletTileLineVM = {
+  sku: string;
+  khName: string;
+  quantity: number;
+  importDate: Date | null;
+  importId: string;
+  location: string;
+  exportCount: number;
+  stockChecked: boolean;
+  agingFlag: AgingFlagTier | null;
+};
+
+type PalletTileVM = {
+  palletKey: string;
+  displayPallet: string;
+  /** Giá trị cột vị trí trên fg-inventory (có thể là KỆ-F1-xxxx). */
+  displayLocation: string;
+  bg: string;
+  lines: PalletTileLineVM[];
+  title: string;
+};
+
 @Component({
   selector: 'app-fgs-dashboard',
   templateUrl: './fgs-dashboard.component.html',
@@ -102,7 +125,7 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   // Fill controls
   fillByGroup = false;
   fillFunction: 'Activities' | 'Location' = 'Activities';
-  layerMode: 'None' | 'Aging' | 'Location' = 'Aging';
+  layerMode: 'None' | 'Aging' | 'Location' | 'Pallet' = 'Aging';
 
   /**
    * Yes: so khớp với dữ liệu snapshot Stock Check (cùng nguồn tab Stock-Check: ASM1/ASM2_stock_check_current).
@@ -127,6 +150,13 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   cartonTotalsRows: Array<FgCartonTotalRow & { khName: string }> = [];
   cartonTotalsSearch = '';
 
+  /** Pallet details theo mã TP (fg-inventory). */
+  showPalletPopup = false;
+  palletLoading = false;
+  palletError = '';
+  palletSku = '';
+  palletRows: FgPalletDetailRow[] = [];
+
   readonly activityBucketLabels = ['1–10', '11–20', '21–30', '31–40', '41–50', '51–60', '61–70', '71+'];
 
   // More popup — import / info / templates
@@ -145,16 +175,22 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   // Computed model
   cells: CellVM[] = [];
   locationTiles: LocationTileVM[] = [];
+  palletTiles: PalletTileVM[] = [];
   titlesEnabled = true;
   private masterSkuList: string[] = [];
   baseRows: Array<{ sku: string; group: string; count: number }> = [];
   private locationBySku = new Map<string, string>();
   private locationRank = new Map<string, number>();
+  private palletInventoryLines: FgPalletDetailRow[] = [];
+  private palletRank = new Map<string, number>();
   private masterSkusCache: Set<string> | null = null;
   private masterLocationsLoaded = false;
+  private masterPalletsLoaded = false;
   isLoadingLocations = false;
+  isLoadingPallets = false;
   /** Tránh race: nhiều chỗ gọi load vị trí cùng lúc / recompute chạy trước khi Firestore xong. */
   private locationLoadInFlight: Promise<void> | null = null;
+  private palletLoadInFlight: Promise<void> | null = null;
 
   /** Cùng collection `fg-customer-mapping` với tab Shipment — map mã TP (7 ký tự) → tên KH. */
   private customerMappingItems: Array<{ customerCode: string; materialCode: string; description: string }> = [];
@@ -236,7 +272,7 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
           };
         });
         this.rebuildKhMaterialIndex();
-        if (this.showLocationClusterView) {
+        if (this.showLocationClusterView || this.showPalletClusterView) {
           this.recomputeView();
         } else {
           this.cdr.markForCheck();
@@ -418,6 +454,21 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     this.onFiltersChanged();
   }
 
+  async setLayerModeAny(mode: 'None' | 'Aging' | 'Location' | 'Pallet'): Promise<void> {
+    this.layerMode = mode;
+    this.fillByGroup = false;
+    if (mode === 'Location') {
+      this.fillFunction = 'Location';
+      await this.ensureLocationsLoaded();
+    } else if (mode === 'Pallet') {
+      this.fillFunction = 'Activities';
+      await this.ensurePalletLinesLoaded();
+    } else {
+      this.fillFunction = 'Activities';
+    }
+    this.onFiltersChanged();
+  }
+
   /** Template: hiển thị legend cờ aging */
   hasAgingImportData(): boolean {
     return this.agingBySku.size > 0;
@@ -455,9 +506,15 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
         this.masterLocationsLoaded = false;
         this.locationBySku = new Map<string, string>();
         this.locationRank.clear();
+        this.masterPalletsLoaded = false;
+        this.palletInventoryLines = [];
+        this.palletRank.clear();
       }
       if (!this.fillByGroup && this.fillFunction === 'Location') {
         await this.ensureLocationsLoaded();
+      }
+      if (!this.fillByGroup && this.layerMode === 'Pallet') {
+        await this.ensurePalletLinesLoaded();
       }
       const activityBySku = await this.svc.loadManifestActivity({ start, end });
 
@@ -712,8 +769,21 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     return tile.locationKey;
   }
 
+  trackByPalletTile(_: number, tile: PalletTileVM): string {
+    return tile.palletKey;
+  }
+
   get showLocationClusterView(): boolean {
-    return this.fillFunction === 'Location' && !this.fillByGroup;
+    return this.fillFunction === 'Location' && !this.fillByGroup && this.layerMode !== 'Pallet';
+  }
+
+  /** Layer Pallet: danh sách theo pallet (F1-xxxx) từ cột vị trí fg-inventory. */
+  get showPalletClusterView(): boolean {
+    return this.layerMode === 'Pallet' && !this.fillByGroup;
+  }
+
+  get showClusterGrid(): boolean {
+    return this.showLocationClusterView || this.showPalletClusterView;
   }
 
   /** Mã TP từ fg-inventory: Bxxxxxx giữ nhóm 3 số sau B; mã khác nhóm 3 ký tự alphanumeric đầu. */
@@ -777,23 +847,35 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
 
   private recomputeViewFrom(base: Array<{ sku: string; group: string; count: number }>): void {
     const filtered = this.filterAndSortRows(base);
-    const locCluster = this.showLocationClusterView;
-    this.titlesEnabled = locCluster ? filtered.length <= 800 : filtered.length <= 6000;
+    const cluster = this.showClusterGrid;
+    this.titlesEnabled = cluster ? filtered.length <= 800 : filtered.length <= 6000;
 
-    if (locCluster) {
+    if (this.showPalletClusterView) {
       ++this.renderToken;
       this.cells.length = 0;
+      this.locationTiles = [];
+      this.buildPalletTiles(filtered);
+      this.cdr.markForCheck();
+      return;
+    }
+
+    if (this.showLocationClusterView) {
+      ++this.renderToken;
+      this.cells.length = 0;
+      this.palletTiles = [];
       this.buildLocationTiles(filtered);
       this.cdr.markForCheck();
       return;
     }
 
     this.locationTiles = [];
+    this.palletTiles = [];
     this.renderCellsIncrementally(filtered);
   }
 
   private renderCellsIncrementally(rows: Array<{ sku: string; group: string; count: number }>): void {
     this.locationTiles = [];
+    this.palletTiles = [];
     const token = ++this.renderToken;
     // Mutate existing array to avoid realloc churn; render progressively to keep UI responsive.
     this.cells.length = 0;
@@ -919,6 +1001,78 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     this.locationTiles = tiles;
   }
 
+  private buildPalletTiles(rows: Array<{ sku: string; group: string; count: number }>): void {
+    const exportBySku = new Map(rows.map((r) => [r.sku, r.count]));
+    const skuSet = new Set(rows.map((r) => r.sku));
+    const byPallet = new Map<string, FgPalletDetailRow[]>();
+
+    for (const line of this.palletInventoryLines) {
+      if (!skuSet.has(line.materialCode)) continue;
+      const key = line.pallet;
+      let arr = byPallet.get(key);
+      if (!arr) {
+        arr = [];
+        byPallet.set(key, arr);
+      }
+      arr.push(line);
+    }
+
+    for (const arr of byPallet.values()) {
+      arr.sort((a, b) => {
+        const ta = a.importDate?.getTime?.() ?? 0;
+        const tb = b.importDate?.getTime?.() ?? 0;
+        if (tb !== ta) return tb - ta;
+        return a.materialCode.localeCompare(b.materialCode);
+      });
+    }
+
+    const palletKeys = Array.from(byPallet.keys()).sort((a, b) => {
+      const la = byPallet.get(a)!;
+      const lb = byPallet.get(b)!;
+      const ta = la[0]?.importDate?.getTime?.() ?? 0;
+      const tb = lb[0]?.importDate?.getTime?.() ?? 0;
+      if (tb !== ta) return tb - ta;
+      const ra = this.palletRank.get(a) ?? 0;
+      const rb = this.palletRank.get(b) ?? 0;
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    });
+
+    const tiles: PalletTileVM[] = [];
+    for (const key of palletKeys) {
+      const invLines = byPallet.get(key)!;
+      const displayLocation = invLines[0]?.location || key;
+      const tileLines: PalletTileLineVM[] = invLines.map((ln) => ({
+        sku: ln.materialCode,
+        khName: this.getTenKhFromMaterialCode(ln.materialCode) || '',
+        quantity: ln.quantity,
+        importDate: ln.importDate,
+        importId: ln.id,
+        location: ln.location,
+        exportCount: exportBySku.get(ln.materialCode) || 0,
+        stockChecked: this.stockCheckCompareEnabled && this.checkedSkuSet.has(ln.materialCode),
+        agingFlag: this.agingFlagForSkuVisual(ln.materialCode)
+      }));
+      const title = this.titlesEnabled
+        ? `Pallet: ${key}\nVị trí: ${displayLocation}\n${tileLines.length} dòng\n${tileLines
+            .map(
+              (x) =>
+                `${x.sku} | SL ${x.quantity} | ${this.palletImportDateLabel(x.importDate)} | ${x.importId}`
+            )
+            .join('\n')}`
+        : '';
+      tiles.push({
+        palletKey: key,
+        displayPallet: key,
+        displayLocation,
+        bg: this.palletColor(key),
+        lines: tileLines,
+        title
+      });
+    }
+    this.palletTiles = tiles;
+  }
+
   private agingFlagTierFromMonths(months: number): AgingFlagTier {
     const m = Number(months);
     if (!Number.isFinite(m)) return 'green';
@@ -1000,6 +1154,44 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
       }
     })();
     await this.locationLoadInFlight;
+  }
+
+  private async ensurePalletLinesLoaded(): Promise<void> {
+    if (this.masterPalletsLoaded) return;
+    if (this.palletLoadInFlight) {
+      await this.palletLoadInFlight;
+      return;
+    }
+    this.isLoadingPallets = true;
+    this.cdr.markForCheck();
+    this.palletLoadInFlight = (async () => {
+      try {
+        this.palletInventoryLines = await this.svc.loadFgPalletInventoryLines(['ASM1', 'ASM2']);
+        this.rebuildPalletRank();
+        this.masterPalletsLoaded = true;
+      } catch (e) {
+        console.warn('[FgsDashboard] load pallet lines failed', e);
+        this.palletInventoryLines = [];
+      } finally {
+        this.isLoadingPallets = false;
+        this.palletLoadInFlight = null;
+        this.cdr.markForCheck();
+      }
+    })();
+    await this.palletLoadInFlight;
+  }
+
+  private rebuildPalletRank(): void {
+    const pallets = Array.from(new Set(this.palletInventoryLines.map((x) => x.pallet))).sort();
+    this.palletRank.clear();
+    pallets.forEach((p, i) => this.palletRank.set(p, i));
+  }
+
+  private palletColor(pallet: string): string {
+    const idx = this.palletRank.get(pallet) ?? 0;
+    const max = Math.max(1, this.palletRank.size - 1);
+    const t = Math.min(1, Math.max(0, idx / max));
+    return this.lerpColor(this.heatmapColors.locationLight, this.heatmapColors.locationDark, t);
   }
 
   private groupColor(group: string): string {
@@ -1282,6 +1474,72 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
       return !Number.isNaN(d2.getTime()) ? d2 : null;
     }
     return null;
+  }
+
+  async onSkuCellClick(cell: CellVM): Promise<void> {
+    if (this.layerMode !== 'Pallet') return;
+    await this.openPalletPopup(cell.sku);
+  }
+
+  openPalletLineDetail(palletKey: string, line: PalletTileLineVM): void {
+    this.palletSku = line.sku;
+    this.palletRows = this.palletInventoryLines.filter(
+      (r) => r.pallet === palletKey && r.materialCode === line.sku
+    );
+    if (!this.palletRows.length) {
+      this.palletRows = [
+        {
+          id: line.importId,
+          materialCode: line.sku,
+          pallet: palletKey,
+          location: line.location,
+          quantity: line.quantity,
+          importDate: line.importDate
+        }
+      ];
+    }
+    this.showPalletPopup = true;
+    this.palletLoading = false;
+    this.palletError = '';
+    this.cdr.markForCheck();
+  }
+
+  async openPalletPopup(sku: string): Promise<void> {
+    const code = String(sku || '').trim().toUpperCase();
+    if (!code) return;
+    this.showPalletPopup = true;
+    this.palletLoading = true;
+    this.palletError = '';
+    this.palletSku = code;
+    this.palletRows = [];
+    this.cdr.markForCheck();
+    try {
+      this.palletRows = await this.svc.loadFgPalletDetailsBySku(code);
+    } catch (e: any) {
+      console.error('[FgsDashboard] load pallet details failed', e);
+      this.palletError = e?.message ? String(e.message) : 'Không tải được dữ liệu pallet';
+    } finally {
+      this.palletLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  closePalletPopup(): void {
+    this.showPalletPopup = false;
+    this.palletLoading = false;
+    this.palletError = '';
+    this.palletSku = '';
+    this.palletRows = [];
+    this.cdr.markForCheck();
+  }
+
+  palletImportDateLabel(d: Date | null): string {
+    if (!d) return '—';
+    try {
+      return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+    } catch {
+      return d.toLocaleString();
+    }
   }
 }
 

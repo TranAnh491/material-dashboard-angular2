@@ -26,6 +26,15 @@ export type FgCartonTotalRow = {
   lineCount: number;
 };
 
+export type FgPalletDetailRow = {
+  id: string;
+  materialCode: string;
+  pallet: string;
+  location: string;
+  quantity: number;
+  importDate: Date | null;
+};
+
 @Injectable({ providedIn: 'root' })
 export class FgsDashboardService {
   constructor(private firestore: AngularFirestore) {}
@@ -400,5 +409,104 @@ export class FgsDashboardService {
       if (sku && Number.isFinite(n)) m.set(sku, n);
     }
     return m;
+  }
+
+  /** Pallet ASM1: F1-xxxx (từ palletId hoặc cột location). */
+  extractPalletIdFromLocationOrField(d: any): string {
+    const pid = String(d?.palletId ?? '').trim().toUpperCase();
+    if (/^F1-[A-Z0-9]{3,}$/i.test(pid)) return pid;
+    const loc = String(d?.location ?? d?.viTri ?? '').trim().toUpperCase();
+    if (!loc) return '';
+    const m = loc.match(/(F1-[A-Z0-9]{3,})/i);
+    return m ? String(m[1]).trim().toUpperCase() : '';
+  }
+
+  private mapFgInventoryDocToPalletRow(doc: firebase.firestore.QueryDocumentSnapshot): FgPalletDetailRow | null {
+    const d: any = doc.data();
+    const pallet = this.extractPalletIdFromLocationOrField(d);
+    if (!/^F1-[A-Z0-9]{3,}$/i.test(pallet)) return null;
+    const materialCode = this.normalizeFgMaterialCode(d?.materialCode ?? d?.maTP);
+    if (!materialCode) return null;
+    const location = String(d?.location ?? d?.viTri ?? '').trim().toUpperCase() || '—';
+    return {
+      id: doc.id,
+      materialCode,
+      pallet,
+      location,
+      quantity: this.extractFgInventoryQuantity(d),
+      importDate: this.toDateUnsafe(d?.importDate)
+    };
+  }
+
+  private extractFgInventoryQuantity(d: any): number {
+    const candidates = [d?.ton, d?.stock, d?.nhap, d?.quantity, d?.qty];
+    for (const v of candidates) {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return 0;
+  }
+
+  /** Tất cả dòng fg-inventory có pallet F1-xxxx (theo cột vị trí / palletId). */
+  async loadFgPalletInventoryLines(factories: FactoryCode[] = ['ASM1', 'ASM2']): Promise<FgPalletDetailRow[]> {
+    const rows: FgPalletDetailRow[] = [];
+    const seen = new Set<string>();
+    for (const f of factories) {
+      const docs = await this.pageByDocId('fg-inventory', (ref) => ref.where('factory', '==', f), (doc) => doc);
+      for (const doc of docs as firebase.firestore.QueryDocumentSnapshot[]) {
+        const row = this.mapFgInventoryDocToPalletRow(doc);
+        if (!row || seen.has(row.id)) continue;
+        seen.add(row.id);
+        rows.push(row);
+      }
+    }
+    rows.sort((x, y) => {
+      const tx = x.importDate?.getTime?.() ?? 0;
+      const ty = y.importDate?.getTime?.() ?? 0;
+      if (ty !== tx) return ty - tx;
+      return x.pallet.localeCompare(y.pallet) || x.materialCode.localeCompare(y.materialCode);
+    });
+    return rows;
+  }
+
+  /** Pallet details theo một mã TP. */
+  async loadFgPalletDetailsBySku(materialCode: string): Promise<FgPalletDetailRow[]> {
+    const code = this.normalizeFgMaterialCode(materialCode);
+    if (!code) return [];
+
+    const runQuery = async (field: 'materialCode' | 'maTP'): Promise<FgPalletDetailRow[]> => {
+      try {
+        const docs = await this.pageByDocId(
+          'fg-inventory',
+          (ref) => ref.where(field, '==', code),
+          (doc) => doc
+        );
+        const rows: FgPalletDetailRow[] = [];
+        for (const doc of docs) {
+          const row = this.mapFgInventoryDocToPalletRow(doc);
+          if (row) rows.push(row);
+        }
+        return rows;
+      } catch {
+        return [];
+      }
+    };
+
+    const a = await runQuery('materialCode');
+    const b = await runQuery('maTP');
+    const merged = [...a];
+    const seen = new Set(a.map((x) => x.id));
+    for (const r of b) {
+      if (r.id && seen.has(r.id)) continue;
+      merged.push(r);
+    }
+
+    merged.sort((x, y) => {
+      const tx = x.importDate?.getTime?.() ?? 0;
+      const ty = y.importDate?.getTime?.() ?? 0;
+      if (ty !== tx) return ty - tx;
+      return x.pallet.localeCompare(y.pallet) || x.id.localeCompare(y.id);
+    });
+    return merged;
   }
 }
