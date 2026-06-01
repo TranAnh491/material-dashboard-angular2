@@ -530,6 +530,149 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     return `${factory}_${sanitizedMaterialCode}_${sanitizedPoNumber}_${sanitizedImd}`;
   }
 
+  /** In report A4 – ACC: phân loại mã scan / loại trừ / chưa kiểm */
+  printDsAccReport(): void {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn nhà máy trước!');
+      return;
+    }
+    if (!this.dsImportedCodes || this.dsImportedCodes.length === 0) {
+      alert('Chưa có danh sách import. Vui lòng import file DS trước.');
+      return;
+    }
+
+    // ── Group 1: Đã kiểm bằng scan ──────────────────────────────────────────
+    const scannedRows = this.dsRows.filter(r => this.dsIsCheckedByRule(r));
+
+    // ── Group 2: Loại trừ (kiểm manual) ─────────────────────────────────────
+    // Codes in imported list that were removed by exclude rules
+    const excludedCodes: string[] = this.dsExcludeEnabled
+      ? this.dsImportedCodes.filter(c => this.isCodeExcludedByRules(c))
+      : [];
+
+    // ── Group 3: Chưa kiểm ───────────────────────────────────────────────────
+    const uncheckedRows = this.dsRows.filter(r => !this.dsIsCheckedByRule(r));
+
+    const now = new Date();
+    const nowStr = now.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+    const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const buildTable = (headers: string[], rows: string[][]): string => {
+      if (rows.length === 0) return '<p class="none-msg">Không có mã nào.</p>';
+      const head = headers.map(h => `<th>${esc(h)}</th>`).join('');
+      const body = rows.map(cells =>
+        `<tr>${cells.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`
+      ).join('');
+      return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    };
+
+    // Section 1
+    const sec1Rows = scannedRows.map((r, i) => [
+      String(i + 1),
+      r.materialCode,
+      r.poNumber,
+      r.imd,
+      r.location,
+      r.qtyCheck != null ? r.qtyCheck.toLocaleString('vi-VN') : '0',
+      r.dateCheck ? new Date(r.dateCheck).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        + ' ' + new Date(r.dateCheck).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''
+    ]);
+
+    // Section 2
+    const sec2Rows = excludedCodes.map((c, i) => [String(i + 1), c, 'Loại trừ theo catalog']);
+
+    // Section 3
+    const sec3Rows = uncheckedRows.map((r, i) => [
+      String(i + 1),
+      r.materialCode,
+      r.poNumber,
+      r.imd,
+      r.location
+    ]);
+
+    const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<title>ACC – KK Tùy Chỉnh – ${esc(this.selectedFactory)}</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; }
+  .report-header { text-align: center; margin-bottom: 10px; }
+  .report-header h1 { font-size: 15pt; font-weight: bold; }
+  .report-header .sub { font-size: 10pt; color: #444; margin-top: 3px; }
+  .section { margin-top: 14px; page-break-inside: avoid; }
+  .section-title {
+    font-size: 11pt; font-weight: bold;
+    padding: 5px 8px; border-radius: 3px;
+    margin-bottom: 6px;
+  }
+  .title-scan  { background: #d4edda; color: #155724; }
+  .title-excl  { background: #fff3cd; color: #856404; }
+  .title-unchk { background: #f8d7da; color: #721c24; }
+  .badge {
+    display: inline-block;
+    background: rgba(0,0,0,0.12);
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 9pt;
+    margin-left: 6px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th { background: #f0f0f0; font-weight: bold; text-align: left; padding: 4px 6px; border: 1px solid #bbb; }
+  td { padding: 3px 6px; border: 1px solid #ddd; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .none-msg { color: #888; font-style: italic; padding: 4px 0; }
+  .footer { margin-top: 16px; font-size: 8pt; color: #888; text-align: right; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="report-header">
+  <h1>BÁO CÁO ACC – KK TÙY CHỈNH</h1>
+  <div class="sub">${esc(this.selectedFactory)} &nbsp;|&nbsp; ${nowStr} &nbsp;|&nbsp; Tổng import: ${this.dsImportedCodes.length} mã</div>
+</div>
+
+<div class="section">
+  <div class="section-title title-scan">
+    ✅ ĐÃ KIỂM BẰNG SCAN
+    <span class="badge">${scannedRows.length} mã dòng</span>
+  </div>
+  ${buildTable(['#', 'Mã hàng', 'PO', 'IMD', 'Vị trí', 'SL kiểm', 'Ngày kiểm'], sec1Rows)}
+</div>
+
+<div class="section">
+  <div class="section-title title-excl">
+    🚫 LOẠI TRỪ – PHẢI KIỂM MANUAL
+    <span class="badge">${excludedCodes.length} mã</span>
+  </div>
+  ${buildTable(['#', 'Mã hàng', 'Ghi chú'], sec2Rows)}
+</div>
+
+<div class="section">
+  <div class="section-title title-unchk">
+    ⏳ CHƯA KIỂM
+    <span class="badge">${uncheckedRows.length} mã dòng</span>
+  </div>
+  ${buildTable(['#', 'Mã hàng', 'PO', 'IMD', 'Vị trí'], sec3Rows)}
+</div>
+
+<div class="footer">In lúc ${nowStr} – ${esc(this.selectedFactory)}</div>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w) { alert('Trình duyệt chặn popup. Vui lòng cho phép popup và thử lại.'); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 600);
+  }
+
   /** REPORT cho KIỂM DS: xuất danh sách DS + lịch sử scan chi tiết (có bag) */
   async exportDsReport(): Promise<void> {
     if (!this.selectedFactory) {
@@ -1060,13 +1203,33 @@ export class StockCheckComponent implements OnInit, OnDestroy {
     }
     this.dsError = '';
     this.showDsListPage = true;
-    // reset permission flag mỗi lần mở DS page (trường hợp user vừa đăng nhập/cấp quyền)
     this.dsPermissionDenied = false;
+    this.cdr.detectChanges();
     try {
-      await this.loadDsSettings(); // dùng rule đã lưu
+      await this.loadDsSettings();
     } catch (e) {
       console.warn('[StockCheck DS] load settings failed', e);
     }
+
+    // Nếu dữ liệu kho chưa load xong, chờ tối đa 8s rồi tiếp tục
+    if (this.allMaterials.length === 0 && this.isLoading) {
+      this.dsError = 'Đang tải dữ liệu kho, vui lòng chờ…';
+      this.cdr.detectChanges();
+      await new Promise<void>(resolve => {
+        const maxWait = 8000;
+        const start = Date.now();
+        const check = () => {
+          if (!this.isLoading || this.allMaterials.length > 0 || Date.now() - start > maxWait) {
+            resolve();
+          } else {
+            setTimeout(check, 300);
+          }
+        };
+        check();
+      });
+      this.dsError = '';
+    }
+
     await this.reloadDsRowsFromImportedCodes();
   }
 
@@ -1239,8 +1402,8 @@ export class StockCheckComponent implements OnInit, OnDestroy {
         if (!mc) continue;
         if (!this.dsImportedCodesSet.has(mc)) continue;
         if (this.isCodeExcludedByRules(mc)) continue;
-        const stockVal = Number((m as any)?.stock ?? 0);
-        if (!Number.isFinite(stockVal) || Math.abs(stockVal) <= 1e-9) continue;
+        // Không lọc theo stock — KK Tùy Chỉnh hiển thị tất cả mã được import,
+        // kể cả tồn = 0 hoặc âm (để người kiểm biết trạng thái thực tế).
         rows.push({
           materialCode: mc,
           poNumber: String(m.poNumber || '').replace(/\s+/g, '').trim(),

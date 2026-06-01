@@ -745,6 +745,18 @@
           color: #fff;
         }
       }
+      &.hdr-btn--acc {
+        border-color: #6ee7b7;
+        background: #ecfdf5;
+        color: #065f46;
+        i.material-icons { font-size: 16px; pointer-events: none; }
+        &:hover:not(:disabled) {
+          background: #065f46;
+          border-color: #065f46;
+          color: #fff;
+        }
+        &:disabled { opacity: 0.45; cursor: not-allowed; }
+      }
     }
 
     // Hub “Tùy chỉnh KK DS”

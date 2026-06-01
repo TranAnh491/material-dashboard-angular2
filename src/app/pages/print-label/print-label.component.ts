@@ -2447,6 +2447,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         const qrData = `${d.maTem}|${d.soLuongTem}|${d.lenhSanXuat}`;
         const qtyPcs = this.formatQtyPcs(d.soLuongTem);
         const lineNhan = (item.lineNhan || '').toString().trim();
+        const ngayNhan = (item.ngayNhanKeHoach || '').toString().trim();
 
         const qrImage = await QRCode.toDataURL(qrData, {
           width: 240,
@@ -2465,6 +2466,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
                 <div class="info-row big">${qtyPcs}</div>
                 <div class="info-row">LSX: ${d.lenhSanXuat}</div>
                 <div class="info-row">LINE: ${lineNhan || '-'}</div>
+                <div class="info-row">Ngày nhận: ${ngayNhan || '-'}</div>
               </div>
               <div>
                 <div class="info-row small">NV: ${employeeCode}</div>
@@ -2576,6 +2578,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       const lenhSanXuat = item.lenhSanXuat || '';
       const qtyPcs = this.formatQtyPcs(soLuongTem);
       const lineNhan = (item.lineNhan || '').toString().trim();
+      const ngayNhan = (item.ngayNhanKeHoach || '').toString().trim();
       
       const qrData = `${maTem}|${soLuongTem}|${lenhSanXuat}`;
       console.log('📝 QR Data:', qrData);
@@ -2744,6 +2747,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
                     <div class="info-row big">${qtyPcs}</div>
                     <div class="info-row">LSX: ${lenhSanXuat}</div>
                     <div class="info-row">LINE: ${lineNhan || '-'}</div>
+                    <div class="info-row">Ngày nhận: ${ngayNhan || '-'}</div>
                   </div>
                   <div>
                     <div class="info-row small">NV: ${employeeCode}</div>

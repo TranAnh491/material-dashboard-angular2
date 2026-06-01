@@ -140,6 +140,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   /** More — mở popup (giống ASM2) */
   showMorePopup = false;
 
+  /** In Tùy Chỉnh dialog */
+  showCustomPrintDialog = false;
+  customPrintCode = '';
+  customPrintPo = '';
+  customPrintQty = '';
+  customPrintImd = '';
+  customPrintNumLabels = 1;
+  customPrintBusy = false;
+
   /** QTY BAG rule: ON = multiple of Standard Packing; OFF = legacy free input */
   qtyBagRuleEnabled = true;
   private readonly QTY_BAG_RULE_KEY = 'materials-asm1:qty-bag-rule-enabled:v1';
@@ -7055,6 +7064,124 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  // ─── In Tùy Chỉnh ───────────────────────────────────────────────────────────
+
+  openCustomPrintDialog(): void {
+    this.customPrintCode = '';
+    this.customPrintPo = '';
+    this.customPrintQty = '';
+    this.customPrintImd = '';
+    this.customPrintNumLabels = 1;
+    this.customPrintBusy = false;
+    this.showCustomPrintDialog = true;
+    this.closeMorePopup();
+  }
+
+  closeCustomPrintDialog(): void {
+    this.showCustomPrintDialog = false;
+  }
+
+  async printCustomLabels(): Promise<void> {
+    const code = (this.customPrintCode || '').trim().toUpperCase();
+    const po   = (this.customPrintPo   || '').trim();
+    const qty  = (this.customPrintQty  || '').trim();
+    const imd  = (this.customPrintImd  || '').trim();
+    const num  = Math.max(1, Math.min(200, Math.floor(Number(this.customPrintNumLabels) || 1)));
+
+    if (!code) { alert('Vui lòng nhập Mã hàng.'); return; }
+    if (!po)   { alert('Vui lòng nhập PO.'); return; }
+    if (!qty || isNaN(Number(qty.replace(/,/g, ''))) || Number(qty.replace(/,/g, '')) <= 0) {
+      alert('Vui lòng nhập Qty hợp lệ (> 0).'); return;
+    }
+
+    this.customPrintBusy = true;
+    try {
+      const QRCode = await import('qrcode') as any;
+      const qrImages: any[] = [];
+
+      for (let i = 1; i <= num; i++) {
+        // payload: code|po|qty|imd-i/num  (nếu không có IMD thì phần 4 = i/num)
+        const imdSegment = imd ? `${imd}-${i}/${num}` : `${i}/${num}`;
+        const qrData = `${code}|${po}|${qty}|${imdSegment}`;
+        const image = await QRCode.toDataURL(qrData, {
+          width: 240, margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+        qrImages.push({ image, qrData, index: i });
+      }
+
+      this.openCustomLabelPrintWindow(qrImages, code, po, qty, imd, num);
+    } catch (e: any) {
+      console.error('[Custom Print] error', e);
+      alert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
+    } finally {
+      this.customPrintBusy = false;
+    }
+  }
+
+  private openCustomLabelPrintWindow(
+    qrImages: { image: string; qrData: string; index: number }[],
+    code: string, po: string, qty: string, imd: string, total: number
+  ): void {
+    const esc = (s: string) => this.escapeHtmlForPrint(s);
+    const fmtQty = (q: string) => {
+      const n = Number(String(q).replace(/,/g, ''));
+      return Number.isFinite(n) ? n.toLocaleString('en-US') : q;
+    };
+
+    const labels = qrImages.map(qr => {
+      const p = this.parseInboundQrLabelDisplayFields(qr.qrData);
+      return `
+        <div class="qr-container">
+          <div class="qr-section">
+            <img src="${qr.image}" alt="QR" class="qr-image">
+          </div>
+          <div class="info-section">
+            <div>
+              <div class="info-row material-code material-code-main">${esc(p.materialCode)}</div>
+              <div class="info-row">PO: ${esc(p.po)}</div>
+              <div class="info-row material-code">${fmtQty(p.quantity)}</div>
+              ${imd ? `<div class="info-row">IMD: ${esc(p.imd)}</div>` : ''}
+              <div class="info-row">BAG: ${esc(p.bag)}</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!'); return; }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><title>In Tùy Chỉnh – ${esc(code)}</title>
+<style>
+  * { margin:0!important; padding:0!important; box-sizing:border-box!important; }
+  body { font-family:Arial,sans-serif; background:white!important; overflow:hidden!important; width:57mm!important; height:32mm!important; }
+  .qr-container { display:flex!important; border:1px solid #000!important; width:57mm!important; height:32mm!important; page-break-inside:avoid!important; background:white!important; box-sizing:border-box!important; }
+  .qr-section { width:30mm!important; height:30mm!important; display:flex!important; align-items:center!important; justify-content:center!important; border-right:1px solid #ccc!important; box-sizing:border-box!important; }
+  .qr-image { width:28mm!important; height:28mm!important; display:block!important; }
+  .info-section { flex:1!important; padding:1mm!important; display:flex!important; flex-direction:column!important; justify-content:flex-start!important; align-items:flex-start!important; font-size:9.6px!important; line-height:1.15!important; box-sizing:border-box!important; color:#000!important; }
+  .info-row { margin:0.8mm 0!important; font-weight:bold!important; color:#000!important; display:block!important; white-space:nowrap!important; font-family:Arial,sans-serif!important; }
+  .info-row.material-code { font-size:17.74px!important; line-height:1.05!important; }
+  .info-row.material-code.material-code-main { font-size:21.36px!important; line-height:1.05!important; }
+  .qr-grid { display:flex!important; flex-direction:row!important; flex-wrap:wrap!important; align-items:flex-start!important; justify-content:flex-start!important; gap:0!important; padding:0!important; margin:0!important; width:57mm!important; height:32mm!important; }
+  @media print {
+    body { width:57mm!important; height:32mm!important; }
+    @page { margin:0!important; size:57mm 32mm!important; padding:0!important; }
+    .qr-container { width:57mm!important; height:32mm!important; page-break-inside:avoid!important; border:1px solid #000!important; }
+    .qr-section { width:30mm!important; height:30mm!important; }
+    .qr-image { width:28mm!important; height:28mm!important; }
+    .info-section { font-size:9.6px!important; padding:1mm!important; }
+    .info-row.material-code { font-size:17.74px!important; }
+    .info-row.material-code.material-code-main { font-size:21.36px!important; }
+    .qr-grid { gap:0!important; padding:0!important; margin:0!important; width:57mm!important; height:32mm!important; }
+  }
+</style></head>
+<body><div class="qr-grid">${labels}</div>
+<script>window.onload=function(){setTimeout(function(){window.print();},500);};</script>
+</body></html>`);
+    printWindow.document.close();
   }
 
   // Create print window for QR codes — cùng layout/cỡ chữ/nội dung như inbound tem bịch

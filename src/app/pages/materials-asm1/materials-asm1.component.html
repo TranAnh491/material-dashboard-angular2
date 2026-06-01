@@ -1003,6 +1003,16 @@
 
     <div class="modal-body more-popup-body">
       <div class="popup-section">
+        <h4 class="popup-section-title">🖨️ In tem</h4>
+        <div class="popup-actions">
+          <button type="button" class="popup-action-btn" (click)="openCustomPrintDialog()">
+            <i class="material-icons">print</i>
+            <span>In Tùy Chỉnh</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="popup-section">
         <h4 class="popup-section-title">📥 Export/Import</h4>
         <div class="popup-actions">
           <button type="button" class="popup-action-btn" (click)="exportToExcel(); closeMorePopup()">
@@ -1104,6 +1114,60 @@
           </button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- In Tùy Chỉnh dialog -->
+<div class="modal-overlay" *ngIf="showCustomPrintDialog" (click)="closeCustomPrintDialog()">
+  <div class="modal-content" style="max-width:380px;width:94%" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🖨️ In Tùy Chỉnh</h3>
+      <button type="button" class="close-btn" (click)="closeCustomPrintDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151">Mã hàng <span style="color:#dc2626">*</span></label>
+        <input type="text" class="scan-input" placeholder="Nhập mã hàng…"
+               [(ngModel)]="customPrintCode" style="text-transform:uppercase">
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151">PO <span style="color:#dc2626">*</span></label>
+        <input type="text" class="scan-input" placeholder="Nhập PO…"
+               [(ngModel)]="customPrintPo">
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151">Qty <span style="color:#dc2626">*</span></label>
+        <input type="number" class="scan-input" placeholder="Số lượng…"
+               [(ngModel)]="customPrintQty" min="1">
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151">IMD <span style="font-weight:400;color:#6b7280">(không bắt buộc)</span></label>
+        <input type="text" class="scan-input" placeholder="Nhập IMD (nếu có)…"
+               [(ngModel)]="customPrintImd">
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:12px;font-weight:600;color:#374151">Lượng tem <span style="color:#dc2626">*</span></label>
+        <input type="number" class="scan-input" placeholder="Số lượng tem cần in…"
+               [(ngModel)]="customPrintNumLabels" min="1" max="200">
+      </div>
+
+    </div>
+    <div class="modal-footer" style="padding:12px 16px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #e5e7eb">
+      <button type="button" class="cancel-btn" (click)="closeCustomPrintDialog()">Huỷ</button>
+      <button type="button" class="confirm-btn"
+              [disabled]="customPrintBusy || !customPrintCode || !customPrintPo || !customPrintQty"
+              (click)="printCustomLabels()">
+        <i class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">print</i>
+        {{ customPrintBusy ? 'Đang tạo tem…' : 'In tem' }}
+      </button>
     </div>
   </div>
 </div>
