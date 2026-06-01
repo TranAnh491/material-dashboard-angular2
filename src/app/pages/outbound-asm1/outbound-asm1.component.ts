@@ -879,6 +879,26 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     }
   }
 
+  async deleteBsItem(item: BsPendingItem): Promise<void> {
+    if (!confirm(`Xoá khỏi danh sách BS?\n${item.materialCode} | PO: ${item.po} | LSX: ${item.lsx}`)) return;
+    try {
+      const docSnap = await this.firestore.collection('pxk-bs-data').doc(item.docId).get().toPromise();
+      if (docSnap && docSnap.exists) {
+        const data = docSnap.data() as any;
+        const lines: any[] = [...(data.lines || [])];
+        if (lines[item.lineIndex]) {
+          lines[item.lineIndex] = { ...lines[item.lineIndex], done: true };
+        }
+        await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
+      }
+      this.bsItems = this.bsItems.filter(
+        b => !(b.docId === item.docId && b.lineIndex === item.lineIndex)
+      );
+    } catch (e: any) {
+      alert('❌ Lỗi xoá: ' + (e?.message || e));
+    }
+  }
+
   openBsScanDialog(item: BsPendingItem): void {
     this.bsScanItem = item;
     this.bsScanLines = [];

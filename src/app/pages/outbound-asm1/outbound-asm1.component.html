@@ -149,10 +149,17 @@
             <span><strong>PO:</strong> {{ item.po }}</span>
             <span><strong>SL:</strong> {{ item.quantity | number }} {{ item.unit }}</span>
           </div>
-          <button type="button" (click)="openBsScanDialog(item)"
-                  style="margin-top:6px;padding:5px 16px;background:#b71c1c;color:#fff;border:none;border-radius:4px;font-weight:600;font-size:13px;cursor:pointer;width:100%">
-            Xuất kho
-          </button>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button type="button" (click)="openBsScanDialog(item)"
+                    style="flex:1;padding:5px 16px;background:#b71c1c;color:#fff;border:none;border-radius:4px;font-weight:600;font-size:13px;cursor:pointer">
+              Xuất kho
+            </button>
+            <button type="button" (click)="deleteBsItem(item)"
+                    style="padding:5px 10px;background:transparent;color:#888;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:13px"
+                    title="Xoá">
+              <i class="material-icons" style="font-size:16px;vertical-align:middle">delete</i>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -569,10 +576,15 @@
             <td style="padding:5px 8px;border:1px solid #f8bbd9">{{ item.po }}</td>
             <td style="padding:5px 8px;border:1px solid #f8bbd9;text-align:right;font-weight:600">{{ item.quantity | number }}</td>
             <td style="padding:5px 8px;border:1px solid #f8bbd9">{{ item.unit }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9;text-align:center">
+            <td style="padding:5px 8px;border:1px solid #f8bbd9;text-align:center;display:flex;gap:6px;align-items:center;justify-content:center">
               <button type="button" (click)="openBsScanDialog(item)"
                       style="padding:3px 12px;background:#b71c1c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">
                 Xuất kho
+              </button>
+              <button type="button" (click)="deleteBsItem(item)"
+                      style="padding:3px 8px;background:transparent;color:#888;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:12px"
+                      title="Xoá khỏi danh sách BS">
+                <i class="material-icons" style="font-size:14px;vertical-align:middle">delete</i>
               </button>
             </td>
           </tr>
