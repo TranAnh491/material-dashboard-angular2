@@ -14,6 +14,29 @@ import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scan
 import * as firebase from 'firebase/compat/app';
 
 
+/** Một dòng scan trong phiên xuất BS */
+export interface BsScanLine {
+  materialCode: string;
+  po: string;
+  imd: string;
+  qty: number;
+  rawQr: string;
+}
+
+/** Một dòng vật tư cần xuất Bổ Sung, đọc từ pxk-bs-data */
+export interface BsPendingItem {
+  docId: string;
+  lsx: string;
+  factory: string;
+  lineIndex: number;
+  materialCode: string;
+  po: string;
+  quantity: number;
+  unit: string;
+  tenVatTu?: string;
+  done?: boolean;
+}
+
 export interface OutboundMaterial {
   id?: string;
   factory?: string;
@@ -145,13 +168,31 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   
   // REMOVED: inventoryMaterials - Không cần tính stock để scan nhanh
   
+  // ── Xuất BS (Bổ Sung) ────────────────────────────────────────────────────
+  exportMode: 'NL' | 'BS' = 'NL';
+  bsItems: BsPendingItem[] = [];
+  bsLoading = false;
+  bsError = '';
+
+  // Scan dialog
+  bsScanOpen = false;
+  bsScanItem: BsPendingItem | null = null;
+  bsScanInput = '';
+  bsScanLines: BsScanLine[] = [];
+  bsScanError = '';
+  bsSaving = false;
+
+  get bsScanTotal(): number {
+    return this.bsScanLines.reduce((s, l) => s + l.qty, 0);
+  }
+
   /** Mobile WMS shell — expandable cards + bottom nav (mockup-aligned) */
   showMobileMoreSheet = false;
   showMobileFilterSheet = false;
   /** Sheet lịch sử scan tem trong phiên (theo LSX đang batch) */
   showMobileLsxHistorySheet = false;
   mobileMaterialExpanded: { [key: string]: boolean } = {};
-  mobileBottomTab: 'home' | 'outbound' | 'history' | 'location' = 'outbound';
+  mobileBottomTab: 'home' | 'outbound' | 'history' | 'location' | 'bs' = 'outbound';
 
   constructor(
     private firestore: AngularFirestore,
@@ -785,6 +826,192 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   goMobileMenu(): void {
     this.mobileBottomTab = 'home';
     this.router.navigate(['/menu']);
+  }
+
+  // ── Xuất BS methods ─────────────────────────────────────────────────────
+
+  switchExportMode(mode: 'NL' | 'BS'): void {
+    this.exportMode = mode;
+    if (mode === 'BS') {
+      this.mobileBottomTab = 'bs';
+      void this.loadBsItems();
+    } else {
+      this.mobileBottomTab = 'outbound';
+    }
+  }
+
+  async loadBsItems(): Promise<void> {
+    this.bsLoading = true;
+    this.bsError = '';
+    this.bsItems = [];
+    try {
+      const snap = await this.firestore
+        .collection('pxk-bs-data', ref => ref.where('factory', '==', 'ASM1'))
+        .get().toPromise();
+      if (!snap || snap.empty) { this.bsLoading = false; return; }
+      const items: BsPendingItem[] = [];
+      for (const doc of snap.docs) {
+        const data = doc.data() as any;
+        const lines: any[] = data.lines || [];
+        lines.forEach((line: any, idx: number) => {
+          if (line.done) return;
+          items.push({
+            docId: doc.id,
+            lsx: data.lsx || '',
+            factory: data.factory || 'ASM1',
+            lineIndex: idx,
+            materialCode: line.materialCode || '',
+            po: line.po || '',
+            quantity: Number(line.quantity) || 0,
+            unit: line.unit || '',
+            tenVatTu: line.tenVatTu || '',
+            done: false
+          });
+        });
+      }
+      items.sort((a, b) => a.lsx.localeCompare(b.lsx) || a.materialCode.localeCompare(b.materialCode));
+      this.bsItems = items;
+    } catch (e: any) {
+      this.bsError = 'Không tải được danh sách Xuất BS.';
+      console.error('[BS] loadBsItems error', e);
+    } finally {
+      this.bsLoading = false;
+    }
+  }
+
+  openBsScanDialog(item: BsPendingItem): void {
+    this.bsScanItem = item;
+    this.bsScanLines = [];
+    this.bsScanInput = '';
+    this.bsScanError = '';
+    this.bsSaving = false;
+    this.bsScanOpen = true;
+    setTimeout(() => {
+      const el = document.getElementById('bs-scan-input');
+      if (el) el.focus();
+    }, 100);
+  }
+
+  closeBsScanDialog(): void {
+    this.bsScanOpen = false;
+    this.bsScanItem = null;
+    this.bsScanLines = [];
+    this.bsScanInput = '';
+    this.bsScanError = '';
+  }
+
+  onBsScanKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      const val = (this.bsScanInput || '').trim();
+      this.bsScanInput = '';
+      if (val) this.processBsScan(val);
+      event.preventDefault();
+    }
+  }
+
+  processBsScan(raw: string): void {
+    const item = this.bsScanItem;
+    if (!item) return;
+
+    // QR format: materialCode|PO|qty|IMD-bag/total
+    const parts = raw.split('|');
+    if (parts.length < 3) {
+      this.bsScanError = `❌ QR không đúng định dạng. Mong đợi: Mã|PO|SL|IMD`;
+      return;
+    }
+
+    const scannedCode = (parts[0] || '').trim().toUpperCase();
+    const scannedPo   = (parts[1] || '').trim();
+    const scannedQty  = parseFloat((parts[2] || '').replace(/,/g, '')) || 0;
+    const part4       = (parts[3] || '').trim();
+
+    // Extract IMD (before '-') from part4
+    const dashIdx = part4.lastIndexOf('-');
+    const scannedImd = dashIdx >= 0 ? part4.slice(0, dashIdx).trim() : part4.trim();
+
+    // Validate mã
+    if (scannedCode !== item.materialCode.toUpperCase().trim()) {
+      this.bsScanError = `❌ Sai mã hàng. Scan: "${scannedCode}" — Cần: "${item.materialCode}"`;
+      return;
+    }
+
+    // Validate PO (normalize spaces)
+    const normPo      = (scannedPo).replace(/\s+/g, '').toUpperCase();
+    const normItemPo  = (item.po || '').replace(/\s+/g, '').toUpperCase();
+    if (normPo !== normItemPo) {
+      this.bsScanError = `❌ Sai PO. Scan: "${scannedPo}" — Cần: "${item.po}"`;
+      return;
+    }
+
+    if (scannedQty <= 0) {
+      this.bsScanError = `❌ Số lượng scan không hợp lệ: ${scannedQty}`;
+      return;
+    }
+
+    this.bsScanError = '';
+    this.bsScanLines.push({
+      materialCode: scannedCode,
+      po: scannedPo,
+      imd: scannedImd,
+      qty: scannedQty,
+      rawQr: raw
+    });
+  }
+
+  removeBsScanLine(idx: number): void {
+    this.bsScanLines.splice(idx, 1);
+  }
+
+  async doneBsScan(): Promise<void> {
+    const item = this.bsScanItem;
+    if (!item || this.bsSaving || this.bsScanLines.length === 0) return;
+    this.bsSaving = true;
+    try {
+      const exportDate = new Date();
+
+      // 1. Ghi từng scan vào outbound-materials và trừ tồn kho
+      for (const line of this.bsScanLines) {
+        await this.firestore.collection('outbound-materials').add({
+          factory: 'ASM1',
+          materialCode: line.materialCode,
+          poNumber: line.po,
+          exportQuantity: line.qty,
+          unit: item.unit,
+          productionOrder: item.lsx,
+          importDate: line.imd,
+          exportDate,
+          createdAt: exportDate,
+          bsExport: true,
+          employeeId: 'BS'
+        });
+        await this.updateInventoryExported(line.materialCode, line.po, line.qty, line.imd);
+      }
+
+      // 2. Đánh dấu done trong pxk-bs-data
+      const docSnap = await this.firestore.collection('pxk-bs-data').doc(item.docId).get().toPromise();
+      if (docSnap && docSnap.exists) {
+        const data = docSnap.data() as any;
+        const lines: any[] = [...(data.lines || [])];
+        if (lines[item.lineIndex]) {
+          lines[item.lineIndex] = { ...lines[item.lineIndex], done: true };
+        }
+        await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
+      }
+
+      // 3. Ẩn khỏi danh sách local
+      this.bsItems = this.bsItems.filter(
+        b => !(b.docId === item.docId && b.lineIndex === item.lineIndex)
+      );
+
+      const totalScanned = this.bsScanTotal;
+      this.closeBsScanDialog();
+      alert(`✅ Đã xuất BS: ${item.materialCode} | ${totalScanned.toLocaleString('vi-VN')} ${item.unit}`);
+    } catch (e: any) {
+      console.error('[BS] doneBsScan error', e);
+      this.bsScanError = '❌ Lỗi khi ghi xuất: ' + (e?.message || e);
+    } finally {
+      this.bsSaving = false;
+    }
   }
 
   mobileNavHistory(): void {

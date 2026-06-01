@@ -259,6 +259,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   showPxkDownloadDialog: boolean = false;
   /** Popup trước khi chọn file import PXK (mô tả nguồn dữ liệu) */
   showPxkImportDialog: boolean = false;
+  /** Nếu true → import PXK vào pxk-bs-data (Bổ Sung), không lưu vào pxk-import-data */
+  isBsImport: boolean = false;
   pxkDownloadDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   pxkDownloadAllMonths: boolean = false; // true = tải tất cả, false = lọc theo tháng
   isDownloadingPxk: boolean = false;
@@ -4085,11 +4087,13 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const docId = `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
           const sanitizedLines = lines.map(sanitizeLine);
           try {
-            await this.firestore.collection('pxk-import-data').doc(docId).set({
+            const targetCollection = this.isBsImport ? 'pxk-bs-data' : 'pxk-import-data';
+            await this.firestore.collection(targetCollection).doc(docId).set({
               lsx: lsxKey,
               factory: factorySave,
               lines: sanitizedLines,
-              importedAt: new Date()
+              importedAt: new Date(),
+              ...(this.isBsImport ? { isBoSung: true } : {})
             });
             saveOk++;
             console.log(`[PXK Save] ✅ Đã lưu LSX ${lsxKey} (${sanitizedLines.length} dòng), docId: ${docId}`);
@@ -4115,6 +4119,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       alert('Lỗi khi đọc file PXK: ' + (err as Error).message);
     } finally {
       this.isImportingPxk = false;
+      this.isBsImport = false;
       input.value = '';
     }
   }
