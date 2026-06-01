@@ -323,6 +323,11 @@
 
     <!-- Mode toggle bar — always visible, separate from header and actions -->
     <div class="export-mode-bar">
+      <button type="button" class="ob-home-btn" (click)="goMobileMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        Về Menu
+      </button>
+      <span class="export-mode-bar__sep"></span>
       <span class="export-mode-bar__label">Chế độ:</span>
       <button type="button" class="export-mode-bar__btn export-mode-bar__btn--nl"
               [class.export-mode-bar__btn--active-nl]="exportMode==='NL'"
