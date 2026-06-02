@@ -75,6 +75,14 @@ interface IqcHeatmapWeekCol {
   cells: IqcHeatmapCell[];
 }
 
+/** Cột Day trong grid Day 1–Day >11 của Putaway Staging box */
+interface PutawayDayCol {
+  dayLabel: string;   // 'Day 1' … 'Day >11'
+  colIdx: number;     // 0–11
+  counts: { pass: number; ng: number; pending: number; confirm: number };
+  total: number;
+}
+
 /** Popup Putaway: 1 dòng = 1 mã hàng (SKU), gom số SKU con đã/chưa Pass */
 interface PutawayModalSkuRow {
   materialCode: string;
@@ -82,6 +90,8 @@ interface PutawayModalSkuRow {
   notPassCount: number;
   totalSkuCount: number;
   totalStock: number;
+  /** Số ngày kể từ khi nhập IQC (Day 1 = hôm nay, Day 2 = hôm qua, ...) */
+  dayInIqc: number;
 }
 
 @Component({
@@ -181,6 +191,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.iqcHeatmapWeeks || []).some((c) => (c.cells?.length || 0) > 0);
   }
   
+  /** Grid Day 1–Day >11 hiển thị trong box Putaway Staging Area */
+  putawayDayGrid: PutawayDayCol[] = [];
+
   // IQC Materials Modal (Putaway popup — 1 mã = 1 SKU)
   showIQCMaterialsModal: boolean = false;
   iqcMaterialsBySku: PutawayModalSkuRow[] = [];
@@ -2107,6 +2120,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
 
       this.finalizeIqcHeatmapFromWeekMaps(weeks, weekCells);
+      this.putawayDayGrid = this.buildPutawayDayGrid(docs);
       console.log('📊 IQC Week Data:', this.iqcWeekData);
       this.cdr.detectChanges();
     } catch (error) {
@@ -2141,6 +2155,56 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const visible = cols.filter((c) => c.count > 0);
     this.iqcHeatmapWeeks = visible;
     this.iqcWeekData = visible.map((c) => ({ week: c.week, count: c.count }));
+  }
+
+  /** Xây grid Day 1 – Day >11 từ cùng docs đã load */
+  private buildPutawayDayGrid(docs: any[]): PutawayDayCol[] {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const MS_DAY = 86400000;
+    const COLS = 12;
+
+    const cols: PutawayDayCol[] = Array.from({ length: COLS }, (_, i) => ({
+      dayLabel: i < 11 ? `Day ${i + 1}` : '>11',
+      colIdx: i,
+      counts: { pass: 0, ng: 0, pending: 0, confirm: 0 },
+      total: 0
+    }));
+
+    // Track unique materialCode per (colIdx, status) to avoid double-counting
+    const seen = new Set<string>();
+
+    docs.forEach((doc: any) => {
+      const data = doc.data ? doc.data() : doc;
+      const locRaw = (data.location || '').trim();
+      if (!this.isIqcStagingLocation(locRaw)) return;
+
+      const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
+      if (!statusKind) return;
+
+      const materialCode = (data.materialCode || '').toUpperCase().trim();
+      if (!materialCode) return;
+
+      const matDate = this.parsePutawayInventoryDate(data);
+      if (!matDate) return;
+
+      const d0 = new Date(matDate); d0.setHours(0, 0, 0, 0);
+      const daysDiff = Math.max(0, Math.floor((today.getTime() - d0.getTime()) / MS_DAY));
+      const colIdx = Math.min(daysDiff, 11);
+
+      // map lock → ng
+      const mapped: 'pass' | 'ng' | 'pending' | 'confirm' =
+        statusKind === 'lock' ? 'ng' : statusKind;
+
+      const key = `${colIdx}|${materialCode}|${mapped}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      cols[colIdx].counts[mapped]++;
+      cols[colIdx].total++;
+    });
+
+    return cols;
   }
 
   /** Số cột lưới (18 hàng/cột) cho một tuần Putaway. */
@@ -2234,17 +2298,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Gom inventory IQC staging → 1 dòng / mã hàng, đếm SKU con Pass vs chưa Pass. */
   private buildPutawayModalSkuRows(docs: any[]): PutawayModalSkuRow[] {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const MS_DAY = 86400000;
+
     const skuLines = new Map<
       string,
       { materialCode: string; statusKind: PutawayIqcStatusKind; stock: number }
     >();
+    // earliest importDate per materialCode
+    const earliestDate = new Map<string, Date>();
 
     docs.forEach((doc: any) => {
       const data = doc.data() as any;
       const locRaw = (data.location || '').trim();
-      if (!this.isIqcStagingLocation(locRaw)) {
-        return;
-      }
+      if (!this.isIqcStagingLocation(locRaw)) return;
 
       const openingStock =
         data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
@@ -2252,25 +2319,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const exported = Number(data.exported) || 0;
       const xt = Number(data.xt) || 0;
       const stock = openingStock + quantity - exported - xt;
-      if (stock <= 0) {
-        return;
-      }
+      if (stock <= 0) return;
 
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
-      if (!statusKind) {
-        return;
-      }
+      if (!statusKind) return;
 
       const materialCode = (data.materialCode || '').toUpperCase().trim();
-      if (!materialCode) {
-        return;
-      }
+      if (!materialCode) return;
 
       const poNumber = (data.poNumber || '').trim();
       const batchNumber = (data.batchNumber || '').trim();
       const materialDate = this.parsePutawayInventoryDate(data) || new Date();
       const imd = this.getIMDFromDate(materialDate, batchNumber);
       const lineKey = `${materialCode}|${poNumber}|${imd}`;
+
+      // Track earliest date per materialCode
+      const prev = earliestDate.get(materialCode);
+      if (!prev || materialDate < prev) earliestDate.set(materialCode, materialDate);
 
       const existing = skuLines.get(lineKey);
       if (existing) {
@@ -2284,30 +2349,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const byCode = new Map<string, { passCount: number; notPassCount: number; totalStock: number }>();
     skuLines.forEach((line) => {
       const bucket = byCode.get(line.materialCode) || { passCount: 0, notPassCount: 0, totalStock: 0 };
-      if (line.statusKind === 'pass') {
-        bucket.passCount += 1;
-      } else {
-        bucket.notPassCount += 1;
-      }
+      if (line.statusKind === 'pass') bucket.passCount += 1;
+      else bucket.notPassCount += 1;
       bucket.totalStock += line.stock;
       byCode.set(line.materialCode, bucket);
     });
 
     return Array.from(byCode.entries())
-      .map(([materialCode, v]) => ({
-        materialCode,
-        passCount: v.passCount,
-        notPassCount: v.notPassCount,
-        totalSkuCount: v.passCount + v.notPassCount,
-        totalStock: v.totalStock,
-      }))
+      .map(([materialCode, v]) => {
+        const d0 = earliestDate.get(materialCode) || today;
+        const d0noon = new Date(d0); d0noon.setHours(0, 0, 0, 0);
+        const daysDiff = Math.max(0, Math.floor((today.getTime() - d0noon.getTime()) / MS_DAY));
+        return {
+          materialCode,
+          passCount: v.passCount,
+          notPassCount: v.notPassCount,
+          totalSkuCount: v.passCount + v.notPassCount,
+          totalStock: v.totalStock,
+          dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay
+        };
+      })
       .sort((a, b) => {
-        if (b.notPassCount !== a.notPassCount) {
-          return b.notPassCount - a.notPassCount;
-        }
-        if (b.passCount !== a.passCount) {
-          return b.passCount - a.passCount;
-        }
+        if (b.notPassCount !== a.notPassCount) return b.notPassCount - a.notPassCount;
+        if (b.passCount !== a.passCount) return b.passCount - a.passCount;
         return a.materialCode.localeCompare(b.materialCode);
       });
   }

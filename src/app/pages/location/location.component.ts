@@ -19,6 +19,7 @@ export interface LocationItem {
   viTri: string;
   qrCode: string;
   printCount?: number; // Số lần in (Lần in)
+  createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -95,6 +96,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Lọc theo từng cột */
   filterByStt = '';
   filterByViTri = '';
+  filterByCreatedBy = '';
   filterByPrintCount = '';
   private searchSubject = new Subject<string>();
   
@@ -108,8 +110,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Dropdown state
   isDropdownOpen = false;
 
+  // ── Employee scan (step before factory select) ──────────────────────────
+  private readonly EMP_STORAGE_KEY = 'loc_employee_id';
+  private readonly EMP_PATTERN = /^ASP\d{4}$/i;
+  showEmployeeScan = true;
+  employeeScanInput = '';
+  employeeScanError = '';
+  /** Mã nhân viên đang dùng tab (ASP + 4 số) */
+  activeEmployeeId = '';
+  /** Thời điểm ký tự cuối được nhập — dùng để phân biệt scan vs gõ tay */
+  private lastEmpKeyTime = 0;
+
   // Factory selection (ASM1/ASM2) - required before using Location tab features
-  showFactorySelect = true;
+  showFactorySelect = false;   // mở sau khi employee đã xác nhận
   selectedFactory: 'ASM1' | 'ASM2' | null = null;
   
   // New item form
@@ -121,6 +134,68 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Auto STT counter
   nextStt = 1;
+
+  /**
+   * Phân biệt scan vs gõ tay:
+   * Scanner gửi toàn bộ ký tự liên tiếp nhanh (< 100ms/ký tự).
+   * Nếu ký tự tiếp theo đến sau > 150ms khi input đã có dữ liệu
+   * → gõ tay → xoá input và báo lỗi.
+   */
+  onEmpScanKeydown(event: KeyboardEvent): void {
+    const SCAN_SPEED_MS = 150;
+    const now = Date.now();
+    const gap = now - this.lastEmpKeyTime;
+
+    // Phím hệ thống: luôn cho phép
+    if (['Backspace', 'Delete', 'Enter', 'Tab', 'Shift',
+         'Control', 'Alt', 'Meta', 'CapsLock'].includes(event.key)) {
+      this.lastEmpKeyTime = now;
+      return;
+    }
+
+    // Nếu input đang có dữ liệu VÀ gap quá chậm → gõ tay → chặn + reset
+    if (this.employeeScanInput.length > 0 && gap > SCAN_SPEED_MS) {
+      event.preventDefault();
+      this.employeeScanInput = '';
+      this.employeeScanError = 'Vui lòng sử dụng máy scan thẻ nhân viên.';
+      this.lastEmpKeyTime = 0;
+      return;
+    }
+
+    this.lastEmpKeyTime = now;
+  }
+
+  /** Gọi mỗi khi scanner ghi vào input — tự confirm khi đủ 7 ký tự hợp lệ */
+  onEmployeeScanChange(value: string): void {
+    const raw = (value || '').trim().toUpperCase();
+    this.employeeScanInput = raw;
+    if (raw.length === 7) {
+      this.confirmEmployee();
+    }
+  }
+
+  confirmEmployee(): void {
+    const raw = this.employeeScanInput.trim().toUpperCase();
+    if (!this.EMP_PATTERN.test(raw)) {
+      this.employeeScanError = 'Mã không hợp lệ. Định dạng: ASP + 4 số (VD: ASP0106)';
+      this.employeeScanInput = '';
+      return;
+    }
+    this.activeEmployeeId = raw;
+    localStorage.setItem(this.EMP_STORAGE_KEY, raw);
+    this.employeeScanInput = '';
+    this.employeeScanError = '';
+    this.showEmployeeScan = false;
+    this.showFactorySelect = true;
+  }
+
+  changeEmployee(): void {
+    this.employeeScanInput = '';
+    this.employeeScanError = '';
+    this.showEmployeeScan = true;
+    this.showFactorySelect = false;
+    this.selectedFactory = null;
+  }
 
   selectFactory(factory: 'ASM1' | 'ASM2') {
     this.selectedFactory = factory;
@@ -507,8 +582,16 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnInit() {
-    // Require choosing ASM1/ASM2 when opening Location tab
-    this.showFactorySelect = true;
+    // Restore saved employee ID (localStorage)
+    const saved = localStorage.getItem(this.EMP_STORAGE_KEY) || '';
+    if (this.EMP_PATTERN.test(saved)) {
+      this.activeEmployeeId = saved.toUpperCase();
+      this.showEmployeeScan = false;
+      this.showFactorySelect = true;   // đã có employee → chọn factory
+    } else {
+      this.showEmployeeScan = true;
+      this.showFactorySelect = false;
+    }
     this.selectedFactory = null;
 
     this.updateMobileLayout();
@@ -750,16 +833,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .subscribe((items: any[]) => {
           this.locationItems = items;
           
-          // Sort by Vị Trí (A,B,C) then by STT
+          // Mới nhất lên trên: sort theo createdAt giảm dần
           this.locationItems.sort((a, b) => {
-            // First sort by Vị Trí alphabetically
-            const viTriComparison = a.viTri.localeCompare(b.viTri);
-            if (viTriComparison !== 0) return viTriComparison;
-            // If Vị Trí is same, sort by STT
-            return a.stt - b.stt;
+            const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return tb - ta;
           });
           
-          // Reassign STT automatically starting from 1
+          // Reassign STT theo thứ tự hiển thị
           this.locationItems.forEach((item, index) => {
             item.stt = index + 1;
           });
@@ -822,6 +903,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       const term = this.filterByViTri.trim().toLowerCase();
       items = items.filter(item => item.viTri.toLowerCase().includes(term));
     }
+    // Lọc theo cột ID Tạo
+    if (this.filterByCreatedBy.trim()) {
+      const term = this.filterByCreatedBy.trim().toLowerCase();
+      items = items.filter(item => (item.createdBy || '').toLowerCase().includes(term));
+    }
     // Lọc theo cột Lần in
     if (this.filterByPrintCount.trim()) {
       const term = this.filterByPrintCount.trim();
@@ -847,6 +933,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   clearColumnFilters() {
     this.filterByStt = '';
     this.filterByViTri = '';
+    this.filterByCreatedBy = '';
     this.filterByPrintCount = '';
     this.applyFilters();
   }
@@ -1014,10 +1101,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     const newItem: Omit<LocationItem, 'id'> = {
-      stt: this.nextStt, // Use auto-generated STT
+      stt: this.nextStt,
       viTri: this.newItem.viTri!,
       qrCode: this.generateQRCode(this.newItem.viTri!),
       printCount: 0,
+      createdBy: this.activeEmployeeId || '',
       createdAt: new Date()
     };
 
@@ -1496,7 +1584,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
               line-height: 1.2;
               word-break: break-word;
             ">
-              ${item.viTri}
+              ${((): string => {
+                const m = item.viTri.match(/^(LOCKER)\s*(\d+)$/i);
+                return m ? `${m[1].toUpperCase()}<br>${m[2]}` : item.viTri;
+              })()}
             </div>
           </div>
         </div>

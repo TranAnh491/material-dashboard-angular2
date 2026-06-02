@@ -378,42 +378,29 @@
           </div>
         </header>
         <div class="card-body card-body--putaway">
-          <div class="putaway-wrap" *ngIf="!iqcLoading">
-            <div class="putaway-heatmap" *ngIf="iqcHeatmapHasAnySku; else putawayHeatEmpty" aria-label="Heatmap Putaway: Late trước, sau đó các tuần có SKU — vị trí bắt đầu bằng IQC">
-              <div *ngFor="let col of iqcHeatmapWeeks" class="putaway-heatmap__col">
-                <div class="putaway-heatmap__head">
-                  <span class="putaway-heatmap__week">{{ col.week }}</span>
-                  <span class="putaway-heatmap__cnt">{{ col.count }}</span>
-                </div>
-                <div
-                  class="putaway-heatmap__cells"
-                  [style.--putaway-grid-cols]="putawayGridColumnCount(col.cells.length)">
-                  <div
-                    *ngFor="let c of col.cells"
-                    class="putaway-heatmap__cell"
-                    [class.putaway-heatmap__cell--pass]="c.statusKind === 'pass'"
-                    [class.putaway-heatmap__cell--ng]="c.statusKind === 'ng'"
-                    [class.putaway-heatmap__cell--pending]="c.statusKind === 'pending'"
-                    [class.putaway-heatmap__cell--confirm]="c.statusKind === 'confirm'"
-                    [class.putaway-heatmap__cell--lock]="c.statusKind === 'lock'"
-                    [title]="c.tooltip"
-                  ></div>
-                </div>
-              </div>
-            </div>
-            <ng-template #putawayHeatEmpty>
-              <div class="putaway-heatmap putaway-heatmap--empty putaway-empty-msg text-muted text-center">
-                <span class="putaway-empty-msg__title">Không có SKU trong 8 tuần gần nhất.</span>
-                <span class="putaway-empty-msg__hint">Chỉ đếm hàng có <strong>vị trí bắt đầu bằng IQC</strong>, IQC status Pass / NG / Chờ kiểm và tồn &gt; 0. Cột <strong>Late</strong> gom SKU ngoài 8 tuần hoặc thiếu ngày. Tuần không có SKU (0 mã) không hiển thị.</span>
-              </div>
-            </ng-template>
+          <div class="putaway-day-wrap" *ngIf="!iqcLoading">
 
-            <div class="wo-heatmap-legend" aria-label="Putaway staging IQC legend">
-              <span><span class="wo-legend-dot wo-legend-dot--iqc-pending" aria-hidden="true"></span>Pending inspection</span>
-              <span><span class="wo-legend-dot wo-legend-dot--iqc-pass" aria-hidden="true"></span>Pass</span>
-              <span><span class="wo-legend-dot wo-legend-dot--iqc-confirm" aria-hidden="true"></span>Pending confirmation</span>
-              <span><span class="wo-legend-dot wo-legend-dot--iqc-ng" aria-hidden="true"></span>NG</span>
+            <!-- Day grid -->
+            <div class="pdg-grid">
+              <div *ngFor="let col of putawayDayGrid" class="pdg-col"
+                   [class.pdg-col--active]="col.total > 0"
+                   [class.pdg-col--late]="col.colIdx === 11">
+                <div class="pdg-col__head">{{ col.dayLabel }}</div>
+                <div class="pdg-cell pdg-cell--pass"    [class.pdg-cell--empty]="!col.counts.pass"   >{{ col.counts.pass    || '' }}</div>
+                <div class="pdg-cell pdg-cell--ng"      [class.pdg-cell--empty]="!col.counts.ng"     >{{ col.counts.ng      || '' }}</div>
+                <div class="pdg-cell pdg-cell--pending" [class.pdg-cell--empty]="!col.counts.pending">{{ col.counts.pending || '' }}</div>
+                <div class="pdg-cell pdg-cell--confirm" [class.pdg-cell--empty]="!col.counts.confirm">{{ col.counts.confirm || '' }}</div>
+              </div>
             </div>
+
+            <!-- Legend bottom -->
+            <div class="pdg-legend">
+              <span class="pdg-legend__dot pdg-legend__dot--pass"></span><span>Pass</span>
+              <span class="pdg-legend__dot pdg-legend__dot--ng"></span><span>NG</span>
+              <span class="pdg-legend__dot pdg-legend__dot--pending"></span><span>Waiting IQC</span>
+              <span class="pdg-legend__dot pdg-legend__dot--confirm"></span><span>Hold</span>
+            </div>
+
           </div>
           <div class="iqc-loading" *ngIf="iqcLoading">
             <i class="material-icons rotating">refresh</i>
@@ -823,6 +810,12 @@
                   <div class="cat-sku-box__stat">
                     <span class="cat-pass" *ngIf="row.passCount">✓{{ row.passCount }}</span>
                     <span class="cat-not-pass" *ngIf="row.notPassCount">✗{{ row.notPassCount }}</span>
+                  </div>
+
+                  <!-- Day badge -->
+                  <div class="cat-sku-box__day"
+                       [class.cat-sku-box__day--late]="row.dayInIqc > 11">
+                    D{{ row.dayInIqc > 11 ? '>11' : row.dayInIqc }}
                   </div>
 
                   <!-- Assignee badge -->

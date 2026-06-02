@@ -1,5 +1,38 @@
 <div class="main-content" [class.loc-m-page]="isMobile">
-  <!-- Require choose ASM1 / ASM2 before using Location -->
+
+  <!-- Step 1: Scan employee ID -->
+  <div class="modal-overlay" *ngIf="showEmployeeScan">
+    <div class="modal-content emp-scan-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3><i class="material-icons">badge</i> Xác nhận nhân viên</h3>
+      </div>
+      <div class="modal-body emp-scan-body">
+        <p class="emp-scan-hint">Scan mã nhân viên để sử dụng chức năng Location.</p>
+        <div class="emp-scan-format">Định dạng: <strong>ASP + 4 số</strong> — VD: ASP0106</div>
+        <div class="emp-scan-input-wrap">
+          <i class="material-icons">qr_code_scanner</i>
+          <input
+            class="emp-scan-input"
+            type="text"
+            [(ngModel)]="employeeScanInput"
+            (ngModelChange)="onEmployeeScanChange($event)"
+            (keydown)="onEmpScanKeydown($event)"
+            placeholder="Đưa thẻ vào máy scan..."
+            maxlength="7"
+            autocomplete="off"
+            #empScanInputRef
+          />
+        </div>
+        <div class="emp-scan-only-note">
+          <i class="material-icons">info</i>
+          Vui lòng sử dụng máy scan thẻ nhân viên
+        </div>
+        <div class="emp-scan-error" *ngIf="employeeScanError">{{ employeeScanError }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Require choose ASM1 / ASM2 before using Location -->
   <div class="modal-overlay" *ngIf="showFactorySelect">
     <div class="modal-content factory-select-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
@@ -96,9 +129,14 @@
         <span class="loc-m-factory" *ngIf="selectedFactory">{{ selectedFactory }}</span>
         <h1 class="loc-m-title">Vị trí NVL</h1>
       </div>
-      <button type="button" class="loc-m-menu-btn" (click)="goMobileMenu()" aria-label="Menu">
-        <i class="material-icons">menu</i>
-      </button>
+      <div class="loc-m-header__right">
+        <button class="emp-badge" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
+          <i class="material-icons">badge</i>{{ activeEmployeeId }}
+        </button>
+        <button type="button" class="loc-m-menu-btn" (click)="goMobileMenu()" aria-label="Menu">
+          <i class="material-icons">menu</i>
+        </button>
+      </div>
     </header>
 
     <div class="loc-m-body">
@@ -275,6 +313,10 @@
           
           <!-- Action Buttons -->
           <div class="action-buttons">
+            <!-- Employee badge (desktop) -->
+            <button class="emp-badge" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
+              <i class="material-icons">badge</i>{{ activeEmployeeId }}
+            </button>
             <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
               <i class="material-icons">qr_code_scanner</i>
               Theo mã hàng
@@ -445,6 +487,8 @@
             </th>
             <th>STT</th>
             <th>Vị Trí</th>
+            <th>ID Tạo</th>
+            <th>Date</th>
             <th>Lần in</th>
             <th>QR Code</th>
             <th>Thao Tác</th>
@@ -467,6 +511,14 @@
                      class="column-filter-input"
                      placeholder="Lọc Vị Trí">
             </th>
+            <th class="filter-cell">
+              <input type="text"
+                     [(ngModel)]="filterByCreatedBy"
+                     (input)="onColumnFilterChange()"
+                     class="column-filter-input"
+                     placeholder="Lọc ID Tạo">
+            </th>
+            <th></th>
             <th class="filter-cell">
               <input type="text" 
                      [(ngModel)]="filterByPrintCount" 
@@ -528,6 +580,17 @@
                   </span>
                 </div>
               </ng-template>
+            </td>
+            
+            <!-- ID Tạo Column -->
+            <td class="created-by-cell">{{ item.createdBy || '—' }}</td>
+
+            <!-- Date Column -->
+            <td class="created-at-cell">
+              <ng-container *ngIf="item.createdAt">
+                {{ item.createdAt | date:'dd/MM/yy HH:mm' }}
+              </ng-container>
+              <ng-container *ngIf="!item.createdAt">—</ng-container>
             </td>
             
             <!-- Lần in Column -->

@@ -220,8 +220,88 @@
 }
 
 .card-body--putaway {
-  padding: 12px 14px 12px;
+  padding: 8px 10px 10px;
 }
+
+/* ── Putaway Day Grid ──────────────────────────────────────────────────── */
+.putaway-day-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+}
+
+.pdg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 6px 4px 2px;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.5);
+  letter-spacing: 0.02em;
+}
+
+.pdg-legend__dot {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.pdg-legend__dot--pass    { background: #2563EB; }
+.pdg-legend__dot--ng      { background: #EF4444; }
+.pdg-legend__dot--pending { background: #EAB308; }
+.pdg-legend__dot--confirm { background: #F97316; }
+
+/* Grid: 12 columns */
+.pdg-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+  flex: 1;
+}
+
+.pdg-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0.38;
+}
+.pdg-col--active { opacity: 1; }
+
+.pdg-col__head {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--dash-text-muted, #6b7280);
+  text-align: center;
+  padding-bottom: 2px;
+  white-space: nowrap;
+}
+.pdg-col--late .pdg-col__head { color: #dc2626; }
+
+/* Cell */
+.pdg-cell {
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  padding: 2px 1px;
+  min-height: 20px;
+  line-height: 16px;
+  color: #fff;
+  transition: opacity .15s;
+}
+
+.pdg-cell--empty {
+  opacity: 0.18;
+}
+
+.pdg-cell--pass    { background: #2563EB; }
+.pdg-cell--ng      { background: #EF4444; }
+.pdg-cell--pending { background: #EAB308; }
+.pdg-cell--confirm { background: #F97316; }
 
 /* Hàng 3 box: cùng chiều cao card; vùng body đồng min-height */
 .dash-widget-row.dash-grid--triple {
@@ -461,10 +541,10 @@
 .wo-legend-dot--delay { background: #ef4444; }
 
 /* Putaway staging — cùng kích thước/chữ với wo-heatmap-legend, màu khớp ô heatmap */
-.wo-legend-dot--iqc-pending { background: rgba(255, 237, 0, 0.96); }
-.wo-legend-dot--iqc-pass { background: rgba(14, 165, 233, 0.92); }
-.wo-legend-dot--iqc-confirm { background: rgba(249, 115, 22, 0.95); }
-.wo-legend-dot--iqc-ng { background: rgba(220, 38, 38, 0.92); }
+.wo-legend-dot--iqc-pending { background: #EAB308; }
+.wo-legend-dot--iqc-pass    { background: #2563EB; }
+.wo-legend-dot--iqc-confirm { background: #F97316; }
+.wo-legend-dot--iqc-ng      { background: #EF4444; }
 
 .putaway-widget .putaway-wrap {
   flex: 1 1 auto;
@@ -1568,50 +1648,17 @@
   background: rgba(30, 64, 175, 0.95);
 }
 
-.putaway-widget .putaway-heatmap__cell--pass {
-  /* Pass: xanh da trời */
-  background: rgba(14, 165, 233, 0.92);
-}
+.putaway-widget .putaway-heatmap__cell--pass    { background: #2563EB; }
+.putaway-widget .putaway-heatmap__cell--ng      { background: #EF4444; }
+.putaway-widget .putaway-heatmap__cell--pending { background: #EAB308; }
+.putaway-widget .putaway-heatmap__cell--confirm { background: #F97316; }
+.putaway-widget .putaway-heatmap__cell--lock    { background: #EF4444; }
 
-.putaway-widget .putaway-heatmap__cell--ng {
-  /* NG: đỏ */
-  background: rgba(220, 38, 38, 0.92);
-}
-
-.putaway-widget .putaway-heatmap__cell--pending {
-  /* Chờ kiểm: vàng */
-  background: rgba(255, 237, 0, 0.96);
-}
-
-.putaway-widget .putaway-heatmap__cell--confirm {
-  /* Chờ xác nhận: cam */
-  background: rgba(249, 115, 22, 0.95);
-}
-
-.putaway-widget .putaway-heatmap__cell--lock {
-  /* Lock: tím */
-  background: rgba(168, 85, 247, 0.95);
-}
-
-.putaway-heatmap__cell--pass {
-  background: rgba(14, 165, 233, 0.82);
-}
-
-.putaway-heatmap__cell--ng {
-  background: rgba(239, 68, 68, 0.85);
-}
-
-.putaway-heatmap__cell--pending {
-  background: rgba(255, 241, 56, 0.94);
-}
-
-.putaway-heatmap__cell--confirm {
-  background: rgba(251, 146, 60, 0.92);
-}
-
-.putaway-heatmap__cell--lock {
-  background: rgba(192, 132, 252, 0.92);
-}
+.putaway-heatmap__cell--pass    { background: #2563EB; }
+.putaway-heatmap__cell--ng      { background: #EF4444; }
+.putaway-heatmap__cell--pending { background: #EAB308; }
+.putaway-heatmap__cell--confirm { background: #F97316; }
+.putaway-heatmap__cell--lock    { background: #EF4444; }
 
 .putaway-heatmap__cell:hover {
   outline: 2px solid rgba(37, 99, 235, 0.45);
@@ -2174,6 +2221,21 @@
   color: #22c55e;
 }
 
+/* Day badge */
+.cat-sku-box__day {
+  font-size: 8px;
+  font-weight: 800;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 3px;
+  padding: 1px 3px;
+  letter-spacing: 0.3px;
+}
+.cat-sku-box__day--late {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 /* Assignee badge */
 .cat-sku-box__assignee {
   font-size: 8px;
@@ -2371,23 +2433,23 @@
 }
 
 .materials-table tbody tr.iqc-material-row--pass td:first-child {
-  box-shadow: inset 4px 0 0 0 rgb(14, 165, 233);
+  box-shadow: inset 4px 0 0 0 #2563EB;
 }
 
 .materials-table tbody tr.iqc-material-row--ng td:first-child {
-  box-shadow: inset 4px 0 0 0 rgb(220, 38, 38);
+  box-shadow: inset 4px 0 0 0 #EF4444;
 }
 
 .materials-table tbody tr.iqc-material-row--pending td:first-child {
-  box-shadow: inset 4px 0 0 0 rgb(255, 214, 0);
+  box-shadow: inset 4px 0 0 0 #EAB308;
 }
 
 .materials-table tbody tr.iqc-material-row--confirm td:first-child {
-  box-shadow: inset 4px 0 0 0 rgb(249, 115, 22);
+  box-shadow: inset 4px 0 0 0 #F97316;
 }
 
 .materials-table tbody tr.iqc-material-row--lock td:first-child {
-  box-shadow: inset 4px 0 0 0 rgb(168, 85, 247);
+  box-shadow: inset 4px 0 0 0 #EF4444;
 }
 
 .no-materials {

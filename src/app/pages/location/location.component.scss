@@ -546,42 +546,46 @@
 .excel-table {
   width: 100%;
   border-collapse: collapse;
-  
+  table-layout: fixed;
+
   th, td {
-    padding: 10px 12px;
-    text-align: left;
-    border-bottom: 1px solid #e0e0e0;
+    padding: 8px 10px;
+    text-align: center;
     font-size: 13px;
+    border: 1px solid #000;
+    width: calc(100% / 9); // 9 cột (checkbox + STT + Vị Trí + ID Tạo + Date + Lần in + QR + Thao Tác + Xóa)
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  
+
   th {
     background: #f5f5f5;
     font-weight: 600;
     color: #333;
-    border-bottom: 2px solid #e0e0e0;
   }
 
   .filter-row th {
     background: #fafafa;
-    padding: 6px 8px;
+    padding: 4px;
     font-weight: normal;
-    border-bottom: 1px solid #e8e8e8;
 
     &.filter-cell {
       padding: 4px;
 
       .column-filter-input {
-        min-width: 80px;
+        width: 100%;
       }
     }
   }
 
   .column-filter-input {
     width: 100%;
-    padding: 6px 8px;
-    border: 1px solid #e0e0e0;
-    font-size: 12px;
+    padding: 5px 6px;
+    border: 1px solid #ccc;
+    font-size: 11px;
     background: #fff;
+    box-sizing: border-box;
 
     &::placeholder {
       color: #999;
@@ -593,7 +597,7 @@
       border-color: #333;
     }
   }
-  
+
   tr:hover td {
     background: #fafafa;
   }
@@ -601,9 +605,8 @@
   tr.row-selected td {
     background: #e3f2fd;
   }
-  
+
   .checkbox-col {
-    width: 40px;
     text-align: center;
     vertical-align: middle;
 
@@ -611,12 +614,15 @@
       cursor: pointer;
     }
   }
-  
-  .stt-cell { width: 60px; text-align: center; }
-  .vitri-cell { min-width: 120px; }
-  .qr-cell { width: 80px; text-align: center; }
-  .actions-cell { width: 100px; text-align: center; }
-  .delete-cell { width: 60px; text-align: center; }
+
+  // Xóa width riêng — tất cả dùng table-layout: fixed chia đều
+  .stt-cell, .vitri-cell, .created-by-cell, .created-at-cell,
+  .qr-cell, .actions-cell, .delete-cell, .print-count-cell {
+    width: auto;
+    text-align: center;
+  }
+
+  .vitri-cell { text-align: left; }
 }
 
 // Table buttons
@@ -2108,4 +2114,116 @@ body.location-mobile-tab {
   &.is-active {
     color: #1976d2;
   }
+}
+
+// ── Employee Scan Modal ────────────────────────────────────────────────────
+.emp-scan-modal {
+  max-width: 420px;
+  width: 92%;
+}
+
+.emp-scan-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+
+.emp-scan-hint {
+  font-size: 14px;
+  color: #374151;
+  margin: 0;
+}
+
+.emp-scan-format {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.emp-scan-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid #3b82f6;
+  border-radius: 10px;
+  padding: 4px 8px 4px 12px;
+  background: #fff;
+
+  .material-icons {
+    color: #3b82f6;
+    font-size: 22px;
+  }
+}
+
+.emp-scan-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #1e293b;
+  text-transform: uppercase;
+  background: transparent;
+  min-width: 0;
+  padding: 6px 0;
+  caret-color: transparent;
+  cursor: default;
+  user-select: none;
+
+  &::placeholder {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: #9ca3af;
+  }
+}
+
+.emp-scan-only-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+
+  .material-icons { font-size: 15px; color: #9ca3af; }
+}
+
+.emp-scan-error {
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+// ── Employee badge (header) ────────────────────────────────────────────────
+.emp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s;
+
+  &:hover { background: #dbeafe; }
+
+  .material-icons { font-size: 15px; }
+}
+
+// mobile header right
+.loc-m-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
