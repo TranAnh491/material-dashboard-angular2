@@ -2,6 +2,8 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, HostBind
 import { Router } from '@angular/router';
 import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
+import { firstValueFrom } from 'rxjs';
 import { WorkOrder, WorkOrderStatus } from '../models/material-lifecycle.model';
 import { SafetyService } from '../services/safety.service';
 import { FirebaseAuthService } from '../services/firebase-auth.service';
@@ -183,6 +185,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
   showIQCMaterialsModal: boolean = false;
   iqcMaterialsBySku: PutawayModalSkuRow[] = [];
   iqcMaterialsLoading: boolean = false;
+  /** 'all' | 'pass' | 'not-pass' */
+  putawayFilterMode: 'all' | 'pass' | 'not-pass' = 'all';
+
+  // ── Cất NVL dialog ─────────────────────────────────────────────────────
+  showCatNvlDialog = false;
+  catNvlEmployees: { memberId: string; name: string; selected: boolean }[] = [];
+  catNvlEmployeesLoading = false;
+  catNvlSelectedMaterials: Set<string> = new Set();
+  /** memberId → danh sách mã được phân công ngẫu nhiên */
+  catNvlAssignments: Map<string, string[]> = new Map();
+  /** Mã hàng đã được gửi (load từ Firestore + cập nhật sau khi gửi) */
+  catNvlSentMaterials: Map<string, { sentAt: Date; sentTo: string[] }> = new Map();
+  catNvlSentLoading = false;
+  catNvlSubmitting = false;
+  catNvlSuccess = false;
+  catNvlError = '';
+  private readonly MATS_PER_EMPLOYEE = 5;
+  private readonly CAT_NVL_EXCLUDED_IDS = new Set(['ASP0121', 'ASP0609', 'ASP0054', 'ASP0061']);
 
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
@@ -345,7 +365,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    private firestore: AngularFirestore, 
+    private firestore: AngularFirestore,
+    private fns: AngularFireFunctions,
     private safetyService: SafetyService, 
     private cdr: ChangeDetectorRef,
     private router: Router,
@@ -2185,6 +2206,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeIQCMaterialsModal(): void {
     this.showIQCMaterialsModal = false;
     this.iqcMaterialsBySku = [];
+    this.putawayFilterMode = 'all';
+    this.showCatNvlDialog = false;
   }
 
   private parsePutawayInventoryDate(data: any): Date | null {
@@ -2313,6 +2336,226 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get putawayModalTotalNotPassSku(): number {
     return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + r.notPassCount, 0);
+  }
+
+  /** Danh sách hiển thị trong modal theo filter + sort */
+  get putawayModalDisplayRows(): PutawayModalSkuRow[] {
+    let rows = this.iqcMaterialsBySku || [];
+    if (this.putawayFilterMode === 'pass') {
+      rows = rows.filter(r => r.passCount > 0);
+      return [...rows].sort((a, b) => {
+        if (b.passCount !== a.passCount) return b.passCount - a.passCount;
+        return a.materialCode.localeCompare(b.materialCode);
+      });
+    }
+    if (this.putawayFilterMode === 'not-pass') {
+      rows = rows.filter(r => r.notPassCount > 0);
+      return [...rows].sort((a, b) => {
+        if (b.notPassCount !== a.notPassCount) return b.notPassCount - a.notPassCount;
+        return a.materialCode.localeCompare(b.materialCode);
+      });
+    }
+    // all: chưa pass nhiều → pass nhiều → A→Z
+    return [...rows].sort((a, b) => {
+      if (b.notPassCount !== a.notPassCount) return b.notPassCount - a.notPassCount;
+      if (b.passCount !== a.passCount) return b.passCount - a.passCount;
+      return a.materialCode.localeCompare(b.materialCode);
+    });
+  }
+
+  /** Màu nền xanh gradient theo tỷ lệ pass (đậm = nhiều pass, nhạt = ít) */
+  passRowBackground(row: PutawayModalSkuRow): string {
+    if (!row.passCount || !row.totalSkuCount) return '';
+    const ratio = row.passCount / row.totalSkuCount; // 0..1
+    // lightness: ratio=1 → 78%, ratio→0 → 94%
+    const l = Math.round(94 - ratio * 16);
+    return `hsl(142, 72%, ${l}%)`;
+  }
+
+  // ── Cất NVL ──────────────────────────────────────────────────────────────
+
+  async openCatNvlDialog(): Promise<void> {
+    this.showCatNvlDialog = true;
+    this.catNvlSelectedMaterials = new Set();
+    this.catNvlAssignments = new Map();
+    this.catNvlSuccess = false;
+    this.catNvlError = '';
+    await Promise.all([this.loadCatNvlEmployees(), this.loadCatNvlSentStatus()]);
+  }
+
+  closeCatNvlDialog(): void {
+    this.showCatNvlDialog = false;
+    this.catNvlAssignments = new Map();
+    this.catNvlSuccess = false;
+    this.catNvlError = '';
+  }
+
+  private async loadCatNvlEmployees(): Promise<void> {
+    this.catNvlEmployeesLoading = true;
+    try {
+      const snap = await this.firestore.collection('zalo_links').get().toPromise();
+      const seen = new Set<string>();
+      this.catNvlEmployees = (snap?.docs || [])
+        .map(d => d.data() as any)
+        .filter(d => d.memberId
+          && !seen.has(d.memberId) && seen.add(d.memberId)
+          && !this.CAT_NVL_EXCLUDED_IDS.has(d.memberId))
+        .map(d => ({ memberId: d.memberId, name: d.name || d.memberId, selected: false }))
+        .sort((a, b) => a.memberId.localeCompare(b.memberId));
+    } catch (e) {
+      this.catNvlError = 'Không tải được danh sách nhân viên';
+    } finally {
+      this.catNvlEmployeesLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async loadCatNvlSentStatus(): Promise<void> {
+    this.catNvlSentLoading = true;
+    try {
+      const factory = this.selectedFactory || 'ASM1';
+      const snap = await this.firestore.doc(`putaway-sent-status/${factory}`).get().toPromise();
+      const data: any = snap?.data() || {};
+      const sentMap = new Map<string, { sentAt: Date; sentTo: string[] }>();
+      for (const [code, val] of Object.entries(data.sent || {})) {
+        const v: any = val;
+        sentMap.set(code, {
+          sentAt: v.sentAt?.toDate ? v.sentAt.toDate() : new Date(v.sentAt || 0),
+          sentTo: Array.isArray(v.sentTo) ? v.sentTo : []
+        });
+      }
+      this.catNvlSentMaterials = sentMap;
+    } catch {
+      this.catNvlSentMaterials = new Map();
+    } finally {
+      this.catNvlSentLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  toggleCatNvlEmployee(emp: { memberId: string; selected: boolean }): void {
+    emp.selected = !emp.selected;
+    this.autoAssignMaterials();
+    this.cdr.markForCheck();
+  }
+
+  autoAssignMaterials(): void {
+    const selected = this.catNvlSelectedEmployees;
+    if (!selected.length) {
+      this.catNvlAssignments = new Map();
+      this.catNvlSelectedMaterials = new Set();
+      return;
+    }
+    const available = this.catNvlSortedRows
+      .filter(r => r.passCount > 0 && !this.catNvlSentMaterials.has(r.materialCode))
+      .map(r => r.materialCode)
+      .sort(() => Math.random() - 0.5);
+
+    const assignments = new Map<string, string[]>();
+    selected.forEach((emp, idx) => {
+      assignments.set(emp.memberId,
+        available.slice(idx * this.MATS_PER_EMPLOYEE, (idx + 1) * this.MATS_PER_EMPLOYEE));
+    });
+    this.catNvlAssignments = assignments;
+
+    const allAssigned = new Set<string>();
+    assignments.forEach(mats => mats.forEach(m => allAssigned.add(m)));
+    this.catNvlSelectedMaterials = allAssigned;
+  }
+
+  getMaterialAssignee(code: string): string | null {
+    for (const [empId, mats] of this.catNvlAssignments) {
+      if (mats.includes(code)) return empId;
+    }
+    return null;
+  }
+
+  toggleCatNvlMaterial(code: string): void {
+    if (this.catNvlSentMaterials.has(code)) return; // đã gửi, không toggle
+    if (this.catNvlSelectedMaterials.has(code)) {
+      this.catNvlSelectedMaterials.delete(code);
+      for (const mats of this.catNvlAssignments.values()) {
+        const idx = mats.indexOf(code);
+        if (idx !== -1) mats.splice(idx, 1);
+      }
+    } else {
+      this.catNvlSelectedMaterials.add(code);
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Danh sách mã hàng cho dialog Cất NVL: pass trước, chưa pass sau */
+  get catNvlSortedRows(): PutawayModalSkuRow[] {
+    return [...this.putawayModalDisplayRows].sort((a, b) => {
+      const aPass = a.passCount > 0 ? 0 : 1;
+      const bPass = b.passCount > 0 ? 0 : 1;
+      if (aPass !== bPass) return aPass - bPass;
+      if (b.passCount !== a.passCount) return b.passCount - a.passCount;
+      return a.materialCode.localeCompare(b.materialCode);
+    });
+  }
+
+  selectAllPassMaterials(): void {
+    this.putawayModalDisplayRows
+      .filter(r => r.passCount > 0)
+      .forEach(r => this.catNvlSelectedMaterials.add(r.materialCode));
+  }
+
+  clearMaterialSelection(): void {
+    this.catNvlSelectedMaterials.clear();
+    this.catNvlAssignments = new Map();
+  }
+
+  get catNvlSelectedEmployees() {
+    return this.catNvlEmployees.filter(e => e.selected);
+  }
+
+  async submitCatNvl(): Promise<void> {
+    if (!this.catNvlSelectedMaterials.size) return;
+    const factory = this.selectedFactory || 'ASM1';
+
+    this.catNvlSubmitting = true;
+    this.catNvlError = '';
+    try {
+      const nowDate = new Date();
+      const batch = this.firestore.firestore.batch();
+
+      // 1 doc per employee với mã của riêng họ
+      if (this.catNvlAssignments.size > 0) {
+        for (const [memberId, materials] of this.catNvlAssignments) {
+          if (!materials.length) continue;
+          const ref = this.firestore.collection('putaway-assignments').doc().ref;
+          batch.set(ref, { factory, memberIds: [memberId], materials, createdAt: nowDate });
+        }
+      } else {
+        const ref = this.firestore.collection('putaway-assignments').doc().ref;
+        batch.set(ref, {
+          factory,
+          memberIds: this.catNvlSelectedEmployees.map(e => e.memberId),
+          materials: Array.from(this.catNvlSelectedMaterials),
+          createdAt: nowDate
+        });
+      }
+      await batch.commit();
+
+      // Cập nhật sent-status
+      const sentUpdate: any = {};
+      const sentEmployees = this.catNvlSelectedEmployees.map(e => e.memberId);
+      for (const code of this.catNvlSelectedMaterials) {
+        sentUpdate[`sent.${code}`] = { sentAt: nowDate, sentTo: sentEmployees };
+        this.catNvlSentMaterials.set(code, { sentAt: nowDate, sentTo: sentEmployees });
+      }
+      await this.firestore
+        .doc(`putaway-sent-status/${factory}`)
+        .set(sentUpdate, { merge: true });
+
+      this.catNvlSuccess = true;
+    } catch (e: any) {
+      this.catNvlError = 'Lỗi gửi thông báo: ' + (e?.message || String(e));
+    } finally {
+      this.catNvlSubmitting = false;
+      this.cdr.markForCheck();
+    }
   }
 
   // Download IQC Materials Report

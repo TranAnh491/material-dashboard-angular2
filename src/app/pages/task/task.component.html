@@ -1,0 +1,375 @@
+<div class="task-page">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div class="page-header__left">
+      <span class="page-title">Quản lý công việc (Task)</span>
+    </div>
+    <div class="page-header__right">
+      <button class="btn-create" (click)="openCreateDialog()">
+        <mat-icon>add</mat-icon>
+        <span>Tạo công việc</span>
+      </button>
+      <a class="btn-task-home" routerLink="/menu">
+        <mat-icon>home</mat-icon>
+        <span>Về Menu</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Stats ──────────────────────────────────────────────────────────── -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-card__icon stat-card__icon--blue"><mat-icon>assignment</mat-icon></div>
+      <div class="stat-card__body">
+        <div class="stat-card__label">Tổng công việc</div>
+        <div class="stat-card__value">{{ totalCount }}</div>
+        <div class="stat-card__sub">Tất cả</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__icon stat-card__icon--orange"><mat-icon>pending</mat-icon></div>
+      <div class="stat-card__body">
+        <div class="stat-card__label">Đang thực hiện</div>
+        <div class="stat-card__value">{{ inProgressCount }}</div>
+        <div class="stat-card__sub">{{ inProgressPct() }}%</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__icon stat-card__icon--green"><mat-icon>check_circle</mat-icon></div>
+      <div class="stat-card__body">
+        <div class="stat-card__label">Hoàn thành</div>
+        <div class="stat-card__value">{{ doneCount }}</div>
+        <div class="stat-card__sub">{{ donePct() }}%</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__icon stat-card__icon--red"><mat-icon>error</mat-icon></div>
+      <div class="stat-card__body">
+        <div class="stat-card__label">Quá hạn</div>
+        <div class="stat-card__value">{{ overdueCount }}</div>
+        <div class="stat-card__sub">{{ overduePct() }}%</div>
+      </div>
+    </div>
+    <div class="stat-card stat-card--chart">
+      <div class="stat-card__label" style="font-weight:700;margin-bottom:8px;">Tỷ lệ theo trạng thái</div>
+      <div class="mini-legend">
+        <span class="legend-dot" style="background:#22c55e"></span>Hoàn thành ({{ donePct() }}%)
+      </div>
+      <div class="mini-legend">
+        <span class="legend-dot" style="background:#f59e0b"></span>Đang thực hiện ({{ inProgressPct() }}%)
+      </div>
+      <div class="mini-legend">
+        <span class="legend-dot" style="background:#ef4444"></span>Quá hạn ({{ overduePct() }}%)
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Body ───────────────────────────────────────────────────────────── -->
+  <div class="body-row">
+    <!-- Main left -->
+    <div class="main-col">
+
+      <!-- Tabs + Filters -->
+      <div class="filters-bar">
+        <div class="tabs">
+          <button class="tab-btn" [class.active]="activeTab==='all'"      (click)="activeTab='all'">Tất cả</button>
+          <button class="tab-btn" [class.active]="activeTab==='mine'"     (click)="activeTab='mine'">Giao cho tôi</button>
+          <button class="tab-btn" [class.active]="activeTab==='assigned'" (click)="activeTab='assigned'">Tôi giao</button>
+          <button class="tab-btn" [class.active]="activeTab==='follow'"   (click)="activeTab='follow'">Theo dõi</button>
+        </div>
+
+        <div class="filter-chips">
+          <select class="filter-select" [(ngModel)]="filterStatus">
+            <option value="">Trạng thái: Tất cả</option>
+            <option *ngFor="let s of STATUSES" [value]="s">{{ s }}</option>
+            <option value="Quá hạn">Quá hạn</option>
+          </select>
+          <select class="filter-select" [(ngModel)]="filterPriority">
+            <option value="">Ưu tiên: Tất cả</option>
+            <option *ngFor="let p of PRIORITIES" [value]="p">{{ p }}</option>
+          </select>
+          <select class="filter-select" [(ngModel)]="filterDue">
+            <option value="">Hạn chót: Tất cả</option>
+            <option value="today">Hôm nay</option>
+            <option value="week">7 ngày tới</option>
+            <option value="overdue">Quá hạn</option>
+          </select>
+          <button class="btn-clear-filter" *ngIf="hasFilters()" (click)="clearFilters()">
+            <mat-icon>refresh</mat-icon> Xóa bộ lọc
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div class="loading-row" *ngIf="loading">
+        <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+        <span>Đang tải…</span>
+      </div>
+      <div class="error-row" *ngIf="error">{{ error }}</div>
+
+      <!-- Table -->
+      <div class="table-wrap" *ngIf="!loading">
+        <table class="task-table">
+          <thead>
+            <tr>
+              <th class="col-check"></th>
+              <th class="col-title">CÔNG VIỆC</th>
+              <th class="col-assign">GIAO CHO</th>
+              <th class="col-pri">ƯU TIÊN</th>
+              <th class="col-status">TRẠNG THÁI</th>
+              <th class="col-due">HẠN CHÓT</th>
+              <th class="col-prog">TIẾN ĐỘ</th>
+              <th class="col-action">THAO TÁC</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="filteredTasks.length === 0">
+              <td colspan="8" class="empty-row">Không có công việc nào</td>
+            </tr>
+            <tr *ngFor="let t of filteredTasks"
+                (click)="openDetail(t)"
+                [class.row-selected]="detailTask?.id === t.id">
+              <td class="col-check">
+                <button class="check-btn"
+                        [class.checked]="t.status === 'Hoàn thành'"
+                        (click)="t.status !== 'Hoàn thành' && markDone(t, $event)"
+                        [title]="t.status === 'Hoàn thành' ? 'Đã hoàn thành' : 'Đánh dấu xong'">
+                  <mat-icon>{{ t.status === 'Hoàn thành' ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                </button>
+              </td>
+              <td class="col-title">
+                <div class="task-title">{{ t.title }}</div>
+                <div class="task-desc" *ngIf="t.description">{{ t.description }}</div>
+                <span class="task-cat" *ngIf="t.category">{{ t.category }}</span>
+              </td>
+              <td class="col-assign">
+                <div class="assignee">
+                  <div class="avatar">{{ avatarLetters(t.assignedToName) }}</div>
+                  <div class="assignee-name">
+                    <span>{{ t.assignedToName }}</span>
+                    <small>{{ t.createdByName ? 'Giao bởi: ' + t.createdByName : '' }}</small>
+                  </div>
+                </div>
+              </td>
+              <td class="col-pri">
+                <span class="pri-badge" [class]="priorityClass(t.priority)">
+                  <mat-icon>arrow_upward</mat-icon>{{ t.priority }}
+                </span>
+              </td>
+              <td class="col-status">
+                <span class="status-badge" [class]="statusClass(t.status)">{{ t.status }}</span>
+              </td>
+              <td class="col-due">
+                <div class="due-date">{{ formatDate(t.dueDate) }}</div>
+                <div class="due-left" [class]="daysClass(t.dueDate)">{{ daysLeft(t.dueDate) }}</div>
+              </td>
+              <td class="col-prog">
+                <div class="prog-wrap">
+                  <div class="prog-bar">
+                    <div class="prog-fill" [style.width.%]="t.progress" [style.background]="progressColor(t.progress)"></div>
+                  </div>
+                  <span class="prog-label">{{ t.progress }}%</span>
+                </div>
+              </td>
+              <td class="col-action" (click)="$event.stopPropagation()">
+                <button class="action-btn" [matMenuTriggerFor]="rowMenu" title="Thao tác">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #rowMenu="matMenu">
+                  <button mat-menu-item (click)="openEditDialog(t, $event)">
+                    <mat-icon>edit</mat-icon><span>Chỉnh sửa</span>
+                  </button>
+                  <button mat-menu-item (click)="markDone(t, $event)" *ngIf="t.status !== 'Hoàn thành'">
+                    <mat-icon>check</mat-icon><span>Hoàn thành</span>
+                  </button>
+                  <button mat-menu-item class="menu-delete" (click)="deleteTask(t.id!, $event)">
+                    <mat-icon>delete</mat-icon><span>Xóa</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="sidebar-col">
+
+      <!-- My tasks summary -->
+      <div class="side-card">
+        <div class="side-card__title">Công việc của tôi</div>
+        <div class="side-stat">
+          <span class="side-dot" style="background:#3b82f6"></span>
+          <span class="side-label">Đang thực hiện</span>
+          <span class="side-val">{{ myInProgress }}</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-dot" style="background:#6b7280"></span>
+          <span class="side-label">Chưa hoàn thành</span>
+          <span class="side-val">{{ myNotDone }}</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-dot" style="background:#22c55e"></span>
+          <span class="side-label">Hoàn thành</span>
+          <span class="side-val">{{ myDone }}</span>
+        </div>
+      </div>
+
+      <!-- Overdue -->
+      <div class="side-card" *ngIf="overdueList.length > 0">
+        <div class="side-card__title">
+          Quá hạn
+          <span class="overdue-badge">{{ overdueCount }}</span>
+        </div>
+        <div class="overdue-item" *ngFor="let t of overdueList" (click)="openDetail(t)">
+          <span class="overdue-title">{{ t.title }}</span>
+          <span class="overdue-date">{{ formatDate(t.dueDate) }}</span>
+        </div>
+      </div>
+
+      <!-- Recently assigned by me -->
+      <div class="side-card" *ngIf="recentAssigned.length > 0">
+        <div class="side-card__title">Giao việc gần đây</div>
+        <div class="recent-item" *ngFor="let t of recentAssigned">
+          <div class="avatar avatar--sm">{{ avatarLetters(t.assignedToName) }}</div>
+          <div class="recent-info">
+            <span>Bạn đã giao việc cho <strong>{{ t.assignedToName }}</strong></span>
+          </div>
+        </div>
+        <button class="see-all-btn" (click)="activeTab='assigned'">Xem tất cả</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Detail panel overlay ─────────────────────────────────────────────── -->
+<div class="detail-overlay" *ngIf="detailTask" (click)="closeDetail()">
+  <div class="detail-panel" (click)="$event.stopPropagation()">
+    <div class="detail-header">
+      <span class="detail-panel__title">Chi tiết công việc</span>
+      <button class="detail-close" (click)="closeDetail()"><mat-icon>close</mat-icon></button>
+    </div>
+    <div class="detail-body">
+      <h3 class="detail-title">{{ detailTask.title }}</h3>
+      <p class="detail-desc" *ngIf="detailTask.description">{{ detailTask.description }}</p>
+
+      <div class="detail-row">
+        <span class="dl">Giao cho:</span>
+        <span class="dv">{{ detailTask.assignedToName }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="dl">Giao bởi:</span>
+        <span class="dv">{{ detailTask.createdByName }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="dl">Ưu tiên:</span>
+        <span class="pri-badge dv" [class]="priorityClass(detailTask.priority)">{{ detailTask.priority }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="dl">Trạng thái:</span>
+        <span class="status-badge dv" [class]="statusClass(detailTask.status)">{{ detailTask.status }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="dl">Hạn chót:</span>
+        <span class="dv" [class]="daysClass(detailTask.dueDate)">
+          {{ formatDate(detailTask.dueDate) }} · {{ daysLeft(detailTask.dueDate) }}
+        </span>
+      </div>
+      <div class="detail-row" *ngIf="detailTask.category">
+        <span class="dl">Phân loại:</span>
+        <span class="dv task-cat">{{ detailTask.category }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="dl">Tiến độ:</span>
+        <span class="dv">{{ detailTask.progress }}%</span>
+      </div>
+      <div class="prog-bar detail-prog">
+        <div class="prog-fill" [style.width.%]="detailTask.progress" [style.background]="progressColor(detailTask.progress)"></div>
+      </div>
+      <div class="detail-row" *ngIf="detailTask.note">
+        <span class="dl">Ghi chú:</span>
+        <span class="dv">{{ detailTask.note }}</span>
+      </div>
+    </div>
+    <div class="detail-footer">
+      <button class="btn-edit" (click)="openEditDialog(detailTask, $event)">
+        <mat-icon>edit</mat-icon> Chỉnh sửa
+      </button>
+      <button class="btn-done-detail" *ngIf="detailTask.status !== 'Hoàn thành'" (click)="markDone(detailTask, $event)">
+        <mat-icon>check</mat-icon> Hoàn thành
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Create / Edit dialog ──────────────────────────────────────────────── -->
+<div class="modal-overlay" *ngIf="showFormDialog" (click)="closeFormDialog()">
+  <div class="modal-box" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <span>{{ editingTask ? 'Chỉnh sửa công việc' : 'Tạo công việc mới' }}</span>
+      <button class="modal-close" (click)="closeFormDialog()"><mat-icon>close</mat-icon></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Tiêu đề <span class="req">*</span></label>
+        <input [(ngModel)]="formData.title" placeholder="Nhập tiêu đề công việc…" />
+      </div>
+      <div class="form-row">
+        <label>Mô tả</label>
+        <textarea [(ngModel)]="formData.description" rows="2" placeholder="Mô tả chi tiết…"></textarea>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Phân loại</label>
+          <select [(ngModel)]="formData.category">
+            <option value="">— Chọn —</option>
+            <option *ngFor="let c of CATEGORIES" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Ưu tiên</label>
+          <select [(ngModel)]="formData.priority">
+            <option *ngFor="let p of PRIORITIES" [value]="p">{{ p }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Trạng thái</label>
+          <select [(ngModel)]="formData.status">
+            <option *ngFor="let s of STATUSES" [value]="s">{{ s }}</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Hạn chót</label>
+          <input type="date" [(ngModel)]="formData.dueDate" />
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Tên người nhận việc</label>
+          <input [(ngModel)]="formData.assignedToName" placeholder="Tên nhân viên…" />
+        </div>
+        <div class="form-row">
+          <label>Tiến độ ({{ formData.progress }}%)</label>
+          <input type="range" min="0" max="100" step="5" [(ngModel)]="formData.progress" class="prog-range" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Ghi chú</label>
+        <textarea [(ngModel)]="formData.note" rows="2" placeholder="Ghi chú thêm…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" (click)="closeFormDialog()" [disabled]="formBusy">Hủy</button>
+      <button class="btn-save" (click)="saveTask()" [disabled]="formBusy || !formData.title.trim()">
+        <mat-icon>{{ formBusy ? 'sync' : 'save' }}</mat-icon>
+        {{ editingTask ? 'Lưu thay đổi' : 'Tạo công việc' }}
+      </button>
+    </div>
+  </div>
+</div>

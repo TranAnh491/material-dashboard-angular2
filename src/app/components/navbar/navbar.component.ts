@@ -244,7 +244,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
 
     isMenuPage(): boolean {
       const p = this.currentAppPath();
-      return p === '/menu' || p === '/';
+      return p === '/menu' || p === '/' || p === '/task';
     }
 
     isQCPage(): boolean {

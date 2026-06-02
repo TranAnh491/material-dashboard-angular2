@@ -37,6 +37,7 @@ import { BagHistoryComponent } from '../../pages/bag-history/bag-history.compone
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
+import { TaskComponent } from '../../pages/task/task.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { TabPermissionGuard } from '../../guards/tab-permission.guard';
@@ -92,5 +93,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'zalo',                 component: ZaloComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] }
+  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },
+  { path: 'task',                 component: TaskComponent, canActivate: [AuthGuard, TabPermissionGuard] }
 ];

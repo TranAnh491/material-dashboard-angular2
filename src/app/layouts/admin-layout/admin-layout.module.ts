@@ -74,6 +74,7 @@ import { PrintOptionDialogComponent } from '../../components/print-option-dialog
 
 import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
+import { TaskComponent } from '../../pages/task/task.component';
 
 @NgModule({
   imports: [
@@ -141,9 +142,9 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
     BagHistoryComponent,
     PrintOptionDialogComponent,
 
-    ChartComponent
-    ,
-    ZaloComponent
+    ChartComponent,
+    ZaloComponent,
+    TaskComponent
   ],
   providers: [
     GoogleSheetService,

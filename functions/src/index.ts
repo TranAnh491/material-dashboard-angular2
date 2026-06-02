@@ -614,6 +614,42 @@ export const adminDeleteAuthUsersNotInSettingsFn = functions
     }
   });
 
+/** Putaway Staging Area: gửi thông báo Zalo cho danh sách nhân viên + mã hàng cần cất. */
+export const sendPutawayNotifyFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const factory = typeof data?.factory === 'string' ? data.factory.trim().slice(0, 40) : '';
+    const memberIds = Array.isArray(data?.memberIds)
+      ? (data.memberIds as unknown[])
+          .map(m => (typeof m === 'string' ? m.trim().toUpperCase() : ''))
+          .filter(Boolean)
+          .slice(0, 20)
+      : [];
+    const materials = Array.isArray(data?.materials)
+      ? (data.materials as unknown[])
+          .map(m => (typeof m === 'string' ? m.trim() : ''))
+          .filter(Boolean)
+          .slice(0, 100)
+      : [];
+    if (!memberIds.length) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu danh sách nhân viên.');
+    }
+    if (!materials.length) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu danh sách mã hàng.');
+    }
+    try {
+      const { sendPutawayNotifyZalo } = await import('./putaway-notify-zalo');
+      const r = await sendPutawayNotifyZalo(admin.firestore(), { factory, memberIds, materials });
+      return r;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError('internal', msg);
+    }
+  });
+
 /**
  * Đăng nhập bằng mã ASPxxxx: tra email thật trong Firestore (users.employeeId) để signIn đúng tài khoản
  * đăng ký qua mail (@airspeedmfgvn.com), không chỉ asp####@asp.com.

@@ -827,6 +827,248 @@ exports.notifyOutboundDuplicates = onDocumentCreated(
 );
 
 /**
+ * Firestore trigger: khi Angular ghi vào `putaway-assignments/{id}`,
+ * gửi Zalo cho danh sách nhân viên được chọn.
+ *
+ * Payload: { factory, memberIds: string[], materials: string[], createdAt }
+ */
+exports.notifyPutawayAssignment = onDocumentCreated(
+  {
+    document: "putaway-assignments/{assignId}",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const data = snap.data() || {};
+
+    const factory = String(data.factory || "").trim();
+    const memberIds = Array.isArray(data.memberIds) ? data.memberIds.map(String) : [];
+    const materials = Array.isArray(data.materials) ? data.materials.map(String) : [];
+
+    if (!memberIds.length || !materials.length) return;
+
+    // Resolve chatIds từ zalo_links
+    const linkSnap = await db
+      .collection("zalo_links")
+      .where("memberId", "in", memberIds.slice(0, 10))
+      .get()
+      .catch((e) => { logger.error("putaway: lookup zalo_links failed", e); return null; });
+
+    if (!linkSnap || linkSnap.empty) {
+      logger.warn("putaway: no chatId found", {memberIds});
+      return;
+    }
+
+    const chatIds = linkSnap.docs
+      .map((d) => String((d.data() || {}).chatId || "").trim())
+      .filter(Boolean);
+
+    if (!chatIds.length) return;
+
+    const now = new Date();
+    const dateStr = now.toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour12: false,
+    });
+    const matList = materials.map((m) => `  • ${m}`).join("\n");
+    const msg =
+      `📦 [Cất NVL${factory ? ` — ${factory}` : ""}]\n` +
+      `Thời gian: ${dateStr}\n` +
+      `Các mã cần cất:\n${matList}\n` +
+      `Vui lòng xác nhận và tiến hành cất kho.`;
+
+    const botToken = ZALO_BOT_TOKEN.value();
+    await Promise.all(
+      chatIds.map((chatId) =>
+        fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({chat_id: chatId, text: msg}),
+        }).catch((e) => logger.error("putaway: sendMessage failed", {chatId, e}))
+      )
+    );
+
+    logger.info("putaway: sent to", {memberIds, factory, count: materials.length});
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Putaway reminder: kiểm tra mã hàng đã được giao nhưng vị trí vẫn là IQC
+// Gửi báo cáo tổng hợp theo nhân viên tới ASP0106
+// Schedule: 11:16 và 16:18 (Asia/Ho_Chi_Minh) hàng ngày
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lấy chatId của ASP0106 từ zalo_links, dùng chung cho 2 reminder.
+ */
+async function getAsp0106ChatId() {
+  const snap = await db
+    .collection("zalo_links")
+    .where("memberId", "==", "ASP0106")
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  return String((snap.docs[0].data() || {}).chatId || "").trim() || null;
+}
+
+/**
+ * Core logic: lấy putaway-assignments (7 ngày gần nhất), kiểm tra xem materialCode
+ * nào vẫn còn tồn kho tại vị trí IQC* → tổng hợp theo nhân viên → gửi cho ASP0106.
+ */
+async function runPutawayReminder(botToken) {
+  const chatId = await getAsp0106ChatId();
+  if (!chatId) {
+    logger.warn("putaway-reminder: không tìm được chatId ASP0106");
+    return;
+  }
+
+  // Lấy assignments trong 7 ngày qua
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const assignSnap = await db
+    .collection("putaway-assignments")
+    .where("createdAt", ">=", since)
+    .get()
+    .catch((e) => { logger.error("putaway-reminder: query assignments failed", e); return null; });
+
+  if (!assignSnap || assignSnap.empty) {
+    logger.info("putaway-reminder: không có assignment nào trong 7 ngày qua");
+    return;
+  }
+
+  // Map: materialCode → Set<memberId>
+  const materialToEmployees = new Map();
+  const factorySet = new Set();
+
+  for (const doc of assignSnap.docs) {
+    const d = doc.data() || {};
+    const factory = String(d.factory || "ASM1").trim();
+    const materials = Array.isArray(d.materials) ? d.materials.map(String) : [];
+    const memberIds = Array.isArray(d.memberIds) ? d.memberIds.map(String) : [];
+    factorySet.add(factory);
+    for (const mat of materials) {
+      if (!materialToEmployees.has(mat)) {
+        materialToEmployees.set(mat, { employees: new Set(), factory });
+      }
+      for (const emp of memberIds) {
+        materialToEmployees.get(mat).employees.add(emp);
+      }
+    }
+  }
+
+  if (!materialToEmployees.size) return;
+
+  // Kiểm tra từng factory xem materialCode còn ở IQC không
+  const stillAtIqc = new Map(); // materialCode → { employees: Set, factory }
+
+  for (const factory of factorySet) {
+    // Query inventory-materials có location bắt đầu bằng IQC (uppercase + lowercase)
+    const [snapUpper, snapLower] = await Promise.all([
+      db.collection("inventory-materials")
+        .where("factory", "==", factory)
+        .where("location", ">=", "IQC")
+        .where("location", "<", "IQD")
+        .get()
+        .catch(() => null),
+      db.collection("inventory-materials")
+        .where("factory", "==", factory)
+        .where("location", ">=", "iqc")
+        .where("location", "<", "iqd")
+        .get()
+        .catch(() => null),
+    ]);
+
+    const codesAtIqc = new Set();
+    for (const snap of [snapUpper, snapLower]) {
+      if (!snap || snap.empty) continue;
+      for (const doc of snap.docs) {
+        const mc = String((doc.data() || {}).materialCode || "").toUpperCase().trim();
+        if (mc) codesAtIqc.add(mc);
+      }
+    }
+
+    // Giao nhau: mã được giao VÀ vẫn còn ở IQC
+    for (const [mat, info] of materialToEmployees.entries()) {
+      if (info.factory !== factory) continue;
+      const matUpper = mat.toUpperCase().trim();
+      if (codesAtIqc.has(matUpper)) {
+        stillAtIqc.set(matUpper, info);
+      }
+    }
+  }
+
+  if (!stillAtIqc.size) {
+    logger.info("putaway-reminder: tất cả mã đã được cất, không cần nhắc");
+    return;
+  }
+
+  // Tổng hợp theo nhân viên
+  const empToMaterials = new Map(); // memberId → Set<materialCode>
+  for (const [mat, info] of stillAtIqc.entries()) {
+    for (const emp of info.employees) {
+      if (!empToMaterials.has(emp)) empToMaterials.set(emp, new Set());
+      empToMaterials.get(emp).add(mat);
+    }
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour12: false,
+  });
+
+  const lines = [];
+  for (const [emp, mats] of empToMaterials.entries()) {
+    lines.push(`👤 ${emp} (${mats.size} mã):`);
+    for (const m of mats) lines.push(`   • ${m}`);
+  }
+
+  const msg =
+    `⏰ Nhắc cất NVL — ${dateStr}\n` +
+    `Có ${stillAtIqc.size} mã hàng đã được giao nhưng vị trí vẫn là IQC:\n\n` +
+    lines.join("\n") +
+    `\n\nVui lòng nhắc nhở nhân viên hoàn thành cất kho.`;
+
+  await fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({chat_id: chatId, text: msg}),
+  }).catch((e) => logger.error("putaway-reminder: sendMessage failed", e));
+
+  logger.info("putaway-reminder: sent report", {
+    stillAtIqcCount: stillAtIqc.size,
+    employeeCount: empToMaterials.size,
+  });
+}
+
+/** 11:16 (Asia/Ho_Chi_Minh) hàng ngày */
+exports.putawayReminderAt1116 = onSchedule(
+  {
+    schedule: "16 11 * * *",
+    timeZone: "Asia/Ho_Chi_Minh",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async () => {
+    await runPutawayReminder(ZALO_BOT_TOKEN.value());
+  }
+);
+
+/** 16:18 (Asia/Ho_Chi_Minh) hàng ngày */
+exports.putawayReminderAt1618 = onSchedule(
+  {
+    schedule: "18 16 * * *",
+    timeZone: "Asia/Ho_Chi_Minh",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async () => {
+    await runPutawayReminder(ZALO_BOT_TOKEN.value());
+  }
+);
+
+/**
  * Thứ 2–thứ 6, 11:30 (VN) — gửi Zalo cho ASP0106 (Work Order + Shipment, cùng logic tab Dashboard).
  * Chỉ secret ZALO_BOT_TOKEN; deploy: firebase deploy --only functions:zalo:notifyDashboardZaloWeekdays1130
  */

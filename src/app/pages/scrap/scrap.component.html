@@ -45,8 +45,12 @@
     <div class="toolbar-actions">
       <div class="search-wrap">
         <mat-icon class="search-icon">search</mat-icon>
-        <input class="search-input" type="text" placeholder="Tìm mã thùng hoặc mã NVL để xem chi tiết…"
-               [(ngModel)]="searchTerm" />
+        <input class="search-input" type="text" placeholder="Tìm mã thùng hoặc mã NVL… (Enter để tải)"
+               [(ngModel)]="searchTerm"
+               (keyup.enter)="loadData()" />
+        <button type="button" class="search-load-btn" (click)="loadData()" [disabled]="listLoading" title="Tải / tìm kiếm">
+          <mat-icon>{{ listLoading ? 'sync' : 'search' }}</mat-icon>
+        </button>
       </div>
       <button class="btn-scan" (click)="startScan()" *ngIf="scanStep === 'idle'">
         <mat-icon>qr_code_scanner</mat-icon>
@@ -138,12 +142,19 @@
   <!-- Data Table (luôn có khung — tránh màn hình trống khi đang tải) -->
   <div class="table-wrap">
     <div class="scrap-load-error" *ngIf="loadError">{{ loadError }}</div>
+
+    <!-- Chưa tải: hướng dẫn người dùng -->
+    <div class="scrap-not-loaded" *ngIf="!hasLoaded && !listLoading && scanStep === 'idle'">
+      <mat-icon>search</mat-icon>
+      <p>Nhập mã tìm kiếm và nhấn <strong>Enter</strong> hoặc bấm nút 🔍 để tải dữ liệu.</p>
+    </div>
+
     <div class="loading-wrap loading-wrap--table" *ngIf="listLoading && sessions.length === 0 && !loadError && scanStep === 'idle'">
       <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
       <span class="loading-label">Đang tải danh sách thùng…</span>
     </div>
 
-    <ng-container *ngIf="!listLoading || sessions.length > 0 || loadError">
+    <ng-container *ngIf="hasLoaded && (!listLoading || sessions.length > 0 || loadError)">
     <div class="table-meta">
       {{ filteredGrouped.length }} thùng
       <span *ngIf="searchTrim"> (lọc từ {{ allGrouped.length }})</span>
@@ -248,9 +259,14 @@
       <span class="loading-label">Đang tải…</span>
     </div>
 
+    <div class="scrap-not-loaded" *ngIf="!hasLoaded && !listLoading">
+      <mat-icon>search</mat-icon>
+      <p>Bấm <strong>Làm mới</strong> hoặc tìm kiếm để tải dữ liệu.</p>
+    </div>
+
     <div class="scrap-load-error nvl-load-error" *ngIf="loadError">{{ loadError }}</div>
 
-    <div class="nvl-list-body" *ngIf="!listLoading || sessions.length > 0 || loadError">
+    <div class="nvl-list-body" *ngIf="hasLoaded && (!listLoading || sessions.length > 0 || loadError)">
       <p class="nvl-list-meta">
         {{ nvlListFlatRows.length }} dòng NVL
         <span *ngIf="nvlListSearch.trim()"> · {{ nvlListFilteredGrouped.length }} thùng sau lọc (tổng {{ allGrouped.length }} thùng)</span>

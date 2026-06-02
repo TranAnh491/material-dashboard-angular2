@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, HostListener } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -9,7 +9,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
   styleUrls: ['./menu.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class MenuComponent implements OnInit {
+export class MenuComponent implements OnInit, OnDestroy {
   
   isMobile: boolean = false;
   searchTerm: string = '';
@@ -58,6 +58,7 @@ export class MenuComponent implements OnInit {
     // Dashboard - First
     { path: '/dashboard', title: 'Dashboard', icon: 'speed', iconImage: 'assets/img/dasboard.png', category: 'Main' },
     // Main - Additional tools
+    { path: '/task', title: 'Task', icon: 'task_alt', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/work-order-status', title: 'Work Order', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Main' },
     {
@@ -140,6 +141,8 @@ export class MenuComponent implements OnInit {
     this.buildTabViews();
     this.updateFiltered();
   }
+
+  ngOnDestroy(): void { }
   
   @HostListener('window:resize', ['$event'])
   onResize(event: any): void {

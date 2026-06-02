@@ -9,7 +9,7 @@ import { RolePermissionService } from '../services/role-permission.service';
   providedIn: 'root'
 })
 export class TabPermissionGuard implements CanActivate {
-  
+
   constructor(
     private tabPermissionService: TabPermissionService,
     private rolePermissionService: RolePermissionService,
@@ -62,6 +62,11 @@ export class TabPermissionGuard implements CanActivate {
           return of(false);
         })
       );
+    }
+
+    // Task - cho phép tất cả user đã đăng nhập
+    if (tabKey === 'task') {
+      return of(true);
     }
 
     // Đặc biệt cho Manage - chỉ Admin mới có quyền
@@ -162,6 +167,7 @@ export class TabPermissionGuard implements CanActivate {
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',
       '/zalo': 'zalo',
+      '/task': 'task',
       
       // Menu route - cho phép truy cập (không cần permission)
       '/menu': 'dashboard'

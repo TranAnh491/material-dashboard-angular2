@@ -677,9 +677,30 @@
     
     <div class="modal-body">
       <div class="iqc-modal-actions">
-        <button class="download-btn" (click)="downloadIQCMaterialsReport()" [disabled]="iqcMaterialsLoading || iqcMaterialsBySku.length === 0">
+        <!-- Filter tabs -->
+        <div class="putaway-filter-tabs">
+          <button class="pf-tab" [class.pf-tab--active]="putawayFilterMode==='all'"
+                  (click)="putawayFilterMode='all'">Tất cả</button>
+          <button class="pf-tab pf-tab--pass" [class.pf-tab--active]="putawayFilterMode==='pass'"
+                  (click)="putawayFilterMode='pass'">
+            <span class="pf-dot pf-dot--pass"></span>Pass
+          </button>
+          <button class="pf-tab pf-tab--not-pass" [class.pf-tab--active]="putawayFilterMode==='not-pass'"
+                  (click)="putawayFilterMode='not-pass'">
+            <span class="pf-dot pf-dot--not-pass"></span>Chưa Pass
+          </button>
+        </div>
+        <span class="iqc-modal-actions__spacer"></span>
+        <!-- Cất NVL -->
+        <button class="cat-nvl-btn" (click)="openCatNvlDialog()"
+                [disabled]="iqcMaterialsLoading || iqcMaterialsBySku.length === 0">
+          <i class="material-icons">move_to_inbox</i>
+          Cất NVL
+        </button>
+        <button class="download-btn" (click)="downloadIQCMaterialsReport()"
+                [disabled]="iqcMaterialsLoading || iqcMaterialsBySku.length === 0">
           <i class="material-icons">download</i>
-          Tải danh sách Excel
+          Excel
         </button>
       </div>
       
@@ -694,10 +715,9 @@
         </div>
 
         <div class="putaway-modal-summary" *ngIf="iqcMaterialsBySku.length > 0">
-          <span><strong>{{ iqcMaterialsBySku.length }}</strong> mã hàng (SKU)</span>
-          <span class="putaway-modal-summary__pass">Đã Pass: <strong>{{ putawayModalTotalPassSku }}</strong> SKU</span>
-          <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong> SKU</span>
-          <span class="putaway-modal-summary__hint text-muted">Sắp xếp: Chưa Pass nhiều → Pass nhiều → Mã A–Z</span>
+          <span><strong>{{ putawayModalDisplayRows.length }}</strong> / {{ iqcMaterialsBySku.length }} mã hàng</span>
+          <span class="putaway-modal-summary__pass">Pass: <strong>{{ putawayModalTotalPassSku }}</strong></span>
+          <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong></span>
         </div>
 
         <div class="materials-list" *ngIf="iqcMaterialsBySku.length > 0">
@@ -714,13 +734,14 @@
             </thead>
             <tbody>
               <tr
-                *ngFor="let row of iqcMaterialsBySku; let i = index"
-                [class.putaway-sku-row--has-not-pass]="row.notPassCount > 0"
+                *ngFor="let row of putawayModalDisplayRows; let i = index"
+                [class.putaway-sku-row--has-not-pass]="row.notPassCount > 0 && row.passCount === 0"
+                [style.background]="row.passCount > 0 ? passRowBackground(row) : ''"
               >
                 <td>{{ i + 1 }}</td>
                 <td class="putaway-sku-code">{{ row.materialCode }}</td>
                 <td class="col-num putaway-sku-pass">{{ row.passCount }}</td>
-                <td class="col-num putaway-sku-not-pass">{{ row.notPassCount }}</td>
+                <td class="col-num putaway-sku-not-pass">{{ row.notPassCount > 0 ? row.notPassCount : '' }}</td>
                 <td class="col-num">{{ row.totalSkuCount }}</td>
                 <td class="col-num">{{ row.totalStock | number:'1.0-2' }}</td>
               </tr>
@@ -729,5 +750,123 @@
         </div>
       </div>
     </div>
+
+    <!-- ── Cất NVL sub-dialog (overlay bên trong modal) ── -->
+    <div class="cat-nvl-overlay" *ngIf="showCatNvlDialog" (click)="closeCatNvlDialog()">
+      <div class="cat-nvl-dialog" (click)="$event.stopPropagation()">
+        <div class="cat-nvl-header">
+          <span><i class="material-icons">move_to_inbox</i> Cất NVL — Gửi thông báo Zalo</span>
+          <button class="close-btn" (click)="closeCatNvlDialog()"><i class="material-icons">close</i></button>
+        </div>
+
+        <!-- Success state -->
+        <div class="cat-nvl-success" *ngIf="catNvlSuccess">
+          <i class="material-icons">check_circle</i>
+          <p>Đã gửi yêu cầu! Zalo bot sẽ thông báo đến nhân viên được chọn.</p>
+          <button class="cat-btn cat-btn--close" (click)="closeCatNvlDialog()">Đóng</button>
+        </div>
+
+        <ng-container *ngIf="!catNvlSuccess">
+          <div class="cat-nvl-body">
+
+            <!-- Step 1: Chọn nhân viên -->
+            <div class="cat-section">
+              <div class="cat-section__title">
+                <i class="material-icons">people</i>Chọn nhân viên nhận thông báo
+              </div>
+              <div class="cat-loading" *ngIf="catNvlEmployeesLoading">
+                <i class="material-icons rotating">refresh</i> Đang tải...
+              </div>
+              <div class="cat-emp-list" *ngIf="!catNvlEmployeesLoading">
+                <div *ngIf="catNvlEmployees.length === 0" class="cat-empty">
+                  Chưa có nhân viên liên kết Zalo. Vào tab Zalo để thiết lập.
+                </div>
+                <label *ngFor="let emp of catNvlEmployees" class="cat-emp-item"
+                       [class.cat-emp-item--selected]="emp.selected"
+                       (click)="toggleCatNvlEmployee(emp)">
+                  <span class="cat-emp-avatar">{{ emp.memberId.slice(-3) }}</span>
+                  <span class="cat-emp-info">
+                    <span class="cat-emp-id">{{ emp.memberId }}</span>
+                    <span class="cat-emp-name">{{ emp.name }}</span>
+                  </span>
+                  <i class="material-icons cat-emp-check">{{ emp.selected ? 'check_circle' : 'radio_button_unchecked' }}</i>
+                </label>
+              </div>
+            </div>
+
+            <!-- Step 2: Chọn mã hàng -->
+            <div class="cat-section">
+              <div class="cat-section__title">
+                <i class="material-icons">inventory_2</i>
+                Chọn mã hàng
+                <span class="cat-mat-count">{{ catNvlSelectedMaterials.size }} / {{ catNvlSortedRows.length }}</span>
+                <button class="cat-btn-sm" (click)="selectAllPassMaterials()">Chọn tất cả Pass</button>
+                <button class="cat-btn-sm cat-btn-sm--clear" (click)="clearMaterialSelection()">Bỏ chọn</button>
+              </div>
+              <div class="cat-mat-grid">
+                <div *ngFor="let row of catNvlSortedRows"
+                     class="cat-sku-box"
+                     [class.cat-sku-box--pass]="row.passCount > 0"
+                     [class.cat-sku-box--selected]="catNvlSelectedMaterials.has(row.materialCode)"
+                     [class.cat-sku-box--sent]="catNvlSentMaterials.has(row.materialCode)"
+                     [style.background]="catNvlSentMaterials.has(row.materialCode) ? '' :
+                       (catNvlSelectedMaterials.has(row.materialCode) ? '' :
+                       (row.passCount > 0 ? passRowBackground(row) : ''))"
+                     (click)="toggleCatNvlMaterial(row.materialCode)">
+
+                  <!-- Sent badge -->
+                  <div class="cat-sku-box__sent-badge" *ngIf="catNvlSentMaterials.has(row.materialCode)">
+                    <i class="material-icons">check_circle</i>
+                  </div>
+
+                  <div class="cat-sku-box__code">{{ row.materialCode }}</div>
+                  <div class="cat-sku-box__stat">
+                    <span class="cat-pass" *ngIf="row.passCount">✓{{ row.passCount }}</span>
+                    <span class="cat-not-pass" *ngIf="row.notPassCount">✗{{ row.notPassCount }}</span>
+                  </div>
+
+                  <!-- Assignee badge -->
+                  <div class="cat-sku-box__assignee"
+                       *ngIf="getMaterialAssignee(row.materialCode) as emp">
+                    {{ emp.slice(-4) }}
+                  </div>
+
+                  <i class="material-icons cat-sku-box__check"
+                     *ngIf="!catNvlSentMaterials.has(row.materialCode)">
+                    {{ catNvlSelectedMaterials.has(row.materialCode) ? 'check_circle' : 'radio_button_unchecked' }}
+                  </i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error -->
+          <div class="cat-error" *ngIf="catNvlError">{{ catNvlError }}</div>
+
+          <!-- Footer -->
+          <div class="cat-nvl-footer">
+            <span class="cat-nvl-sel-info">
+              <span *ngIf="catNvlAssignments.size > 0">
+                <ng-container *ngFor="let emp of catNvlSelectedEmployees">
+                  <span class="cat-assign-chip">
+                    {{ emp.memberId.slice(-4) }}: {{ (catNvlAssignments.get(emp.memberId) || []).length }} mã
+                  </span>
+                </ng-container>
+              </span>
+              <span *ngIf="!catNvlAssignments.size">
+                {{ catNvlSelectedEmployees.length }} nhân viên · {{ catNvlSelectedMaterials.size }} mã
+              </span>
+            </span>
+            <button class="cat-btn cat-btn--cancel" (click)="closeCatNvlDialog()" [disabled]="catNvlSubmitting">Hủy</button>
+            <button class="cat-btn cat-btn--send" (click)="submitCatNvl()"
+                    [disabled]="catNvlSubmitting || !catNvlSelectedEmployees.length || !catNvlSelectedMaterials.size">
+              <i class="material-icons">{{ catNvlSubmitting ? 'sync' : 'send' }}</i>
+              {{ catNvlSubmitting ? 'Đang gửi…' : 'Gửi thông báo' }}
+            </button>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+
   </div>
 </div>

@@ -77,8 +77,11 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   constructor(private firestore: AngularFirestore) {}
 
+  /** true sau khi user đã bấm tải/tìm kiếm ít nhất 1 lần */
+  hasLoaded = false;
+
   ngOnInit(): void {
-    this.loadData();
+    // Không load tự động — chỉ load khi user chủ động tìm kiếm
   }
 
   ngOnDestroy(): void {
@@ -101,6 +104,7 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.listSub?.unsubscribe();
     this.loadError = null;
     this.listLoading = true;
+    this.hasLoaded = true;
     this.listSub = this.firestore
       .collection<ScrapSession>('scrap-data', ref =>
         ref.orderBy('createdAt', 'desc').limit(ScrapComponent.LIST_PAGE_SIZE)
@@ -158,10 +162,22 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
+  private static readonly MAX_BAGS_PER_CODE = 3;
+
   addMaterial(): void {
     const raw = this.materialInputVal.trim();
     if (!raw) return;
     const code = raw.slice(0, 7);
+
+    // Kiểm tra giới hạn 3 bịch / mã
+    const currentCount = this.currentMaterials.filter(m => m === code).length;
+    if (currentCount >= ScrapComponent.MAX_BAGS_PER_CODE) {
+      alert(`⚠️ Mã "${code}" đã có ${currentCount} bịch (tối đa ${ScrapComponent.MAX_BAGS_PER_CODE}). Bỏ qua!`);
+      this.materialInputVal = '';
+      this.needFocusMaterial = true;
+      return;
+    }
+
     this.currentMaterials.push(code);
     this.materialInputVal = '';
     this.needFocusMaterial = true;
