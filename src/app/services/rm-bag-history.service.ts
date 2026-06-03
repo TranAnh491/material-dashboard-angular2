@@ -81,34 +81,41 @@ export class RmBagHistoryService {
       splitSuffix = tag ? `(${tag.toUpperCase()})` : '';
     }
 
-    // Một số tem có thêm hậu tố sau DDMMYYYY (VD: DDMMYYYY01-2/2).
-    // Vẫn lấy imdKey = 8 số đầu, bag = phần sau dấu '-'.
-    const m = /^(\d{8})\d*-(\d+)\/(\d+)$/.exec(head);
+    // IMD key: ưu tiên 10 số nếu có, fallback về 8 số.
+    // Định dạng: DDMMYYYY[XX][-bag/total]  (XX = 2 số suffix tùy chọn)
+    const m = /^(\d{10}|\d{8})\d*-(\d+)\/(\d+)$/.exec(head);
     if (m) {
       const num = m[2];
       const den = m[3];
       const bagFractionLabel = `${num}/${den}`;
       const bagNumberDisplay = splitSuffix ? `${num}${splitSuffix}` : num;
       return {
-        imdKey: m[1],
+        imdKey: m[1],  // 10 hoặc 8 số
         bagDelta: 1,
         bagFractionLabel,
         bagNumberDisplay
       };
     }
 
+    // Standalone 10 số
+    if (/^\d{10}$/.test(head)) {
+      return { imdKey: head, bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
+    }
+
+    // Standalone 8 số
     if (/^\d{8}$/.test(head)) {
       return { imdKey: head, bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
     }
 
+    // Lấy 10 số đầu nếu có, rồi mới fallback 8 số
+    const lead10 = /^(\d{10})/.exec(head);
+    if (lead10) {
+      return { imdKey: lead10[1], bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
+    }
+
     const lead8 = /^(\d{8})/.exec(head);
     if (lead8) {
-      return {
-        imdKey: lead8[1],
-        bagDelta: 0,
-        bagFractionLabel: '',
-        bagNumberDisplay: ''
-      };
+      return { imdKey: lead8[1], bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };
     }
 
     return { imdKey: head, bagDelta: 0, bagFractionLabel: '', bagNumberDisplay: '' };

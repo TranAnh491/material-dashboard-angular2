@@ -273,6 +273,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private labelReprintFlags: LabelReprintFlagService
   ) {}
 
+  /**
+   * Nếu rawImportDate là chuỗi 10 số (DDMMYYYY + 2 suffix) và batchNumber trống/8 số,
+   * ưu tiên dùng rawImportDate làm batchNumber để giữ đủ 10 số.
+   */
+  private resolveRawImd(data: any): string {
+    const bn = String(data?.batchNumber ?? '').trim();
+    const raw = String(data?.importDate ?? '').trim();
+    if (/^\d{10}$/.test(bn)) return bn;   // batchNumber đã là 10 số → dùng
+    if (/^\d{10}$/.test(raw)) return raw; // importDate là 10 số → dùng thay batchNumber
+    if (/^\d{8,9}$/.test(bn)) return bn;  // batchNumber 8-9 số → dùng
+    if (/^\d{8}$/.test(raw)) return raw;  // importDate 8 số → dùng
+    return bn;                             // fallback
+  }
+
   private getImdKeyFromImportDate(d: Date | null | undefined): string {
     return d ? d.toLocaleDateString('en-GB').split('/').join('') : new Date().toLocaleDateString('en-GB').split('/').join('');
   }
@@ -530,7 +544,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             factory: d.factory || this.FACTORY,
             importDate: this.parseImportDate(d.importDate),
             receivedDate: d.receivedDate?.toDate?.() || undefined,
-            batchNumber: d.batchNumber || '',
+            batchNumber: this.resolveRawImd(d),
             materialCode: d.materialCode || '',
             materialName: d.materialName || '',
             poNumber: d.poNumber || '',
@@ -1060,6 +1074,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       ...data,
       factory: this.FACTORY,
       importDate: this.parseImportDate(data.importDate),
+      batchNumber: this.resolveRawImd(data),
       receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
       expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
       openingStock: data.openingStock || null,
@@ -2286,8 +2301,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return new Date(importDate.seconds * 1000);
     }
     
-    // If it's a string in format "26082025" (DDMMYYYY)
-    if (typeof importDate === 'string' && /^\d{8}$/.test(importDate)) {
+    // 8 hoặc 10 số dạng DDMMYYYY[XX] — lấy 8 số đầu làm ngày
+    if (typeof importDate === 'string' && /^\d{8,10}$/.test(importDate)) {
       const day = importDate.substring(0, 2);
       const month = importDate.substring(2, 4);
       const year = importDate.substring(4, 8);

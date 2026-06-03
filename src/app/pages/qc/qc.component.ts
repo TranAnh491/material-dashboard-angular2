@@ -666,7 +666,7 @@ export class QCComponent implements OnInit, OnDestroy {
               factory: data.factory || this.selectedFactory,
               importDate: this.parseImportDate(data.importDate),
               receivedDate: data.receivedDate?.toDate() || undefined,
-              batchNumber: data.batchNumber || '',
+              batchNumber: this.resolveImdBatchNumber(data),
               materialCode: data.materialCode || '',
               materialName: data.materialName || '',
               poNumber: data.poNumber || '',
@@ -786,8 +786,8 @@ export class QCComponent implements OnInit, OnDestroy {
       return new Date(importDate.seconds * 1000);
     }
     
-    // If it's a string in format "26082025" (DDMMYYYY)
-    if (typeof importDate === 'string' && /^\d{8}$/.test(importDate)) {
+    // If it's a string in format "26082025" (DDMMYYYY) or "2608202501" (DDMMYYYYxx)
+    if (typeof importDate === 'string' && /^\d{8,10}$/.test(importDate)) {
       const day = importDate.substring(0, 2);
       const month = importDate.substring(2, 4);
       const year = importDate.substring(4, 8);
@@ -823,24 +823,70 @@ export class QCComponent implements OnInit, OnDestroy {
     return new Date();
   }
   
+  /**
+   * Trích IMD key (phần số trước dấu '-') từ part4 QR.
+   * VD: "2805202601-1/1" → "2805202601"
+   *     "28052026-1/1"   → "28052026"
+   *     "2805202601"     → "2805202601"
+   */
+  private extractImdKeyFromPart4(part4: string): string {
+    const t = (part4 || '').trim();
+    const di = t.indexOf('-');
+    return di >= 0 ? t.slice(0, di).trim() : t;
+  }
+
+  /**
+   * Nếu scannedImdKey dài hơn batchNumber hiện tại và là 10 số hợp lệ
+   * → cập nhật batchNumber (trong bộ nhớ) để getDisplayIMD hiển thị đúng.
+   */
+  private applyScannedImdToBatchNumber(material: InventoryMaterial, scannedPart4: string): void {
+    const key = this.extractImdKeyFromPart4(scannedPart4);
+    if (!/^\d{10}$/.test(key)) return;
+    const current = String(material.batchNumber || '').trim();
+    if (current.length < 10) {
+      material.batchNumber = key;
+    }
+  }
+
+  /**
+   * Lấy IMD key chuẩn từ raw Firestore data.
+   * Ưu tiên: batchNumber (10 số) > importDate (10 số) > batchNumber (8 số) > importDate (8 số)
+   */
+  private resolveImdBatchNumber(data: any): string {
+    const bn = String(data.batchNumber || '').trim();
+    const rawDate = String(data.importDate || '').trim();
+    // batchNumber đã là 10 chữ số → dùng luôn
+    if (/^\d{10}$/.test(bn)) return bn;
+    // importDate là 10 chữ số → dùng làm IMD key
+    if (/^\d{10}$/.test(rawDate)) return rawDate;
+    // batchNumber là 8 chữ số → dùng
+    if (/^\d{8}$/.test(bn)) return bn;
+    // importDate là 8 chữ số → dùng
+    if (/^\d{8}$/.test(rawDate)) return rawDate;
+    // Fallback: trả về batchNumber gốc
+    return bn;
+  }
+
   // Get display IMD (importDate + sequence if any)
   getDisplayIMD(material: InventoryMaterial): string {
     if (!material.importDate) return 'N/A';
-    
-    const baseDate = material.importDate.toLocaleDateString('en-GB').split('/').join('');
-    
-    // Kiểm tra nếu batchNumber có format đúng (chỉ chứa số và có độ dài hợp lý)
+
+    const baseDate = material.importDate.toLocaleDateString('en-GB').split('/').join(''); // DDMMYYYY
+
     if (material.batchNumber && material.batchNumber !== baseDate) {
-      // Chỉ xử lý nếu batchNumber bắt đầu bằng baseDate và chỉ có thêm số sequence
+      // batchNumber là 10 số thuần (DDMMYYYY + 2 suffix) → trả về toàn bộ
+      if (/^\d{10}$/.test(material.batchNumber) && material.batchNumber.startsWith(baseDate)) {
+        return material.batchNumber;
+      }
+      // batchNumber bắt đầu bằng baseDate + 1-2 số suffix
       if (material.batchNumber.startsWith(baseDate)) {
         const suffix = material.batchNumber.substring(baseDate.length);
-        // Chỉ chấp nhận suffix nếu nó chỉ chứa số và có độ dài <= 2
         if (/^\d{1,2}$/.test(suffix)) {
           return baseDate + suffix;
         }
       }
     }
-    
+
     return baseDate;
   }
   
@@ -1140,7 +1186,7 @@ export class QCComponent implements OnInit, OnDestroy {
       factory: data.factory || this.selectedFactory,
       importDate: this.parseImportDate(data.importDate),
       receivedDate: data.receivedDate?.toDate() || undefined,
-      batchNumber: data.batchNumber || '',
+      batchNumber: this.resolveImdBatchNumber(data),
       materialCode: data.materialCode || '',
       materialName: data.materialName || '',
       poNumber: data.poNumber || '',
@@ -1318,37 +1364,37 @@ export class QCComponent implements OnInit, OnDestroy {
       return;
     }
     
-    // Find material by comparing materialCode, PO, and IMD
-    const foundMaterial = this.materials.find(m => {
-      const materialIMD = this.getDisplayIMD(m);
-      const materialMatch = m.materialCode === materialCode;
-      
-      // So sánh PO number - linh hoạt hơn với dấu "/" và khoảng trắng
+    // Trích IMD key từ part4 QR (bỏ phần bag fraction "-x/y")
+    const scannedImdKey = this.extractImdKeyFromPart4(scannedIMD);
+
+    const isMaterialAndPoMatch = (m: InventoryMaterial) => {
+      if (m.materialCode !== materialCode) return false;
       const normalizedMaterialPO = (m.poNumber || '').trim();
       const normalizedScannedPO = poNumber.trim();
-      const poMatch = normalizedMaterialPO === normalizedScannedPO || 
-                      normalizedMaterialPO.replace(/\s+/g, '') === normalizedScannedPO.replace(/\s+/g, '');
-      
-      // So sánh IMD - có thể match exact hoặc startsWith
-      const imdMatch = materialIMD === scannedIMD || 
-                       materialIMD.startsWith(scannedIMD) || 
-                       scannedIMD.startsWith(materialIMD);
-      
-      console.log(`🔍 Comparing material ${m.materialCode}:`, {
-        materialCode: m.materialCode,
-        materialPO: normalizedMaterialPO,
-        scannedPO: normalizedScannedPO,
-        materialIMD,
-        scannedIMD,
-        materialMatch,
-        poMatch,
-        imdMatch
+      return normalizedMaterialPO === normalizedScannedPO ||
+             normalizedMaterialPO.replace(/\s+/g, '') === normalizedScannedPO.replace(/\s+/g, '');
+    };
+
+    // Ưu tiên exact match IMD key trước, sau đó mới dùng prefix match
+    let foundMaterial: InventoryMaterial | undefined =
+      this.materials.find(m => {
+        if (!isMaterialAndPoMatch(m)) return false;
+        const materialIMD = this.getDisplayIMD(m);
+        return materialIMD === scannedImdKey;
       });
-      
-      return materialMatch && poMatch && imdMatch;
-    });
+
+    if (!foundMaterial) {
+      foundMaterial = this.materials.find(m => {
+        if (!isMaterialAndPoMatch(m)) return false;
+        const materialIMD = this.getDisplayIMD(m);
+        return scannedImdKey.startsWith(materialIMD) || materialIMD.startsWith(scannedImdKey);
+      });
+    }
+
+    console.log('🔍 Match result:', { scannedImdKey, scannedIMD, foundMaterial: foundMaterial?.materialCode });
     
     if (foundMaterial) {
+      this.applyScannedImdToBatchNumber(foundMaterial, scannedIMD);
       this.scannedMaterial = foundMaterial;
       this.clearIqcPassLeEntriesOnly();
       this.iqcScanInput = '';
@@ -1382,6 +1428,10 @@ export class QCComponent implements OnInit, OnDestroy {
       // Tìm material có IMD khớp
       let foundMaterial: InventoryMaterial | null = null;
       
+      // Trích IMD key từ part4 QR (bỏ bag fraction "-x/y")
+      const scannedImdKey = this.extractImdKeyFromPart4(scannedIMD);
+
+      const allCandidates: InventoryMaterial[] = [];
       querySnapshot.forEach(doc => {
         const data = doc.data() as any;
         const material: InventoryMaterial = {
@@ -1389,7 +1439,7 @@ export class QCComponent implements OnInit, OnDestroy {
           factory: data.factory || this.selectedFactory,
           importDate: this.parseImportDate(data.importDate),
           receivedDate: data.receivedDate?.toDate() || undefined,
-          batchNumber: data.batchNumber || '',
+          batchNumber: this.resolveImdBatchNumber(data),
           materialCode: data.materialCode || '',
           materialName: data.materialName || '',
           poNumber: data.poNumber || '',
@@ -1413,24 +1463,27 @@ export class QCComponent implements OnInit, OnDestroy {
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date()
         };
-        
+
         const materialIMD = this.getDisplayIMD(material);
-        const imdMatch = materialIMD === scannedIMD || 
-                         materialIMD.startsWith(scannedIMD) || 
-                         scannedIMD.startsWith(materialIMD);
-        
+        const isExact = materialIMD === scannedImdKey;
+        const isPrefix = scannedImdKey.startsWith(materialIMD) || materialIMD.startsWith(scannedImdKey);
+
         console.log(`🔍 Checking Firestore material ${material.materialCode}:`, {
-          materialIMD,
-          scannedIMD,
-          imdMatch
+          materialIMD, scannedImdKey, isExact, isPrefix
         });
-        
-        if (imdMatch && !foundMaterial) {
-          foundMaterial = material;
+
+        if (isExact || isPrefix) {
+          allCandidates.push(material);
         }
       });
+
+      // Ưu tiên exact match trước
+      foundMaterial = allCandidates.find(m => this.getDisplayIMD(m) === scannedImdKey)
+                   || allCandidates[0]
+                   || null;
       
       if (foundMaterial) {
+        this.applyScannedImdToBatchNumber(foundMaterial, scannedIMD);
         this.scannedMaterial = foundMaterial;
         this.clearIqcPassLeEntriesOnly();
         // Thêm vào materials array nếu chưa có

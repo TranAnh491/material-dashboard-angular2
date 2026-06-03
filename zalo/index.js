@@ -872,12 +872,11 @@ exports.notifyPutawayAssignment = onDocumentCreated(
       timeZone: "Asia/Ho_Chi_Minh",
       hour12: false,
     });
-    const matList = materials.map((m) => `  • ${m}`).join("\n");
+    const matList = materials.map((m) => `"${m}"`).join("\n");
     const msg =
-      `📦 [Cất NVL${factory ? ` — ${factory}` : ""}]\n` +
-      `Thời gian: ${dateStr}\n` +
-      `Các mã cần cất:\n${matList}\n` +
-      `Vui lòng xác nhận và tiến hành cất kho.`;
+      `Vui lòng cất mã nguyên liệu:\n` +
+      `${matList}\n\n` +
+      `Thời gian gửi:\n${dateStr}`;
 
     const botToken = ZALO_BOT_TOKEN.value();
     await Promise.all(

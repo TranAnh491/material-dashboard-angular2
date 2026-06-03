@@ -206,7 +206,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   catNvlEmployees: { memberId: string; name: string; selected: boolean }[] = [];
   catNvlEmployeesLoading = false;
   catNvlSelectedMaterials: Set<string> = new Set();
-  /** memberId → danh sách mã được phân công ngẫu nhiên */
+  /** true = user đã chọn mã tay, không auto-assign khi toggle nhân viên */
+  catNvlManualMode = false;
+  /** memberId → danh sách mã được phân công */
   catNvlAssignments: Map<string, string[]> = new Map();
   /** Mã hàng đã được gửi (load từ Firestore + cập nhật sau khi gửi) */
   catNvlSentMaterials: Map<string, { sentAt: Date; sentTo: string[] }> = new Map();
@@ -2179,6 +2181,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const locRaw = (data.location || '').trim();
       if (!this.isIqcStagingLocation(locRaw)) return;
 
+      // Lọc stock giống modal — tránh đếm mã có tồn kho = 0
+      const openingStock =
+        data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+      const quantity = Number(data.quantity) || 0;
+      const exported = Number(data.exported) || 0;
+      const xt = Number(data.xt) || 0;
+      const stock = openingStock + quantity - exported - xt;
+      if (stock < 0) return;
+
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
       if (!statusKind) return;
 
@@ -2319,7 +2330,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const exported = Number(data.exported) || 0;
       const xt = Number(data.xt) || 0;
       const stock = openingStock + quantity - exported - xt;
-      if (stock <= 0) return;
+      if (stock < 0) return;
 
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
       if (!statusKind) return;
@@ -2442,6 +2453,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.showCatNvlDialog = true;
     this.catNvlSelectedMaterials = new Set();
     this.catNvlAssignments = new Map();
+    this.catNvlManualMode = false;
     this.catNvlSuccess = false;
     this.catNvlError = '';
     await Promise.all([this.loadCatNvlEmployees(), this.loadCatNvlSentStatus()]);
@@ -2450,6 +2462,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeCatNvlDialog(): void {
     this.showCatNvlDialog = false;
     this.catNvlAssignments = new Map();
+    this.catNvlManualMode = false;
     this.catNvlSuccess = false;
     this.catNvlError = '';
   }
@@ -2499,8 +2512,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   toggleCatNvlEmployee(emp: { memberId: string; selected: boolean }): void {
     emp.selected = !emp.selected;
-    this.autoAssignMaterials();
+    if (this.catNvlManualMode) {
+      this.distributeManualMaterials();
+    } else {
+      this.autoAssignMaterials();
+    }
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Manual mode: phân bổ đều các mã đã chọn tay cho các nhân viên đang được chọn.
+   * Nếu không có nhân viên nào được chọn thì xóa assignments.
+   */
+  distributeManualMaterials(): void {
+    const selected = this.catNvlSelectedEmployees;
+    if (!selected.length || !this.catNvlSelectedMaterials.size) {
+      this.catNvlAssignments = new Map();
+      return;
+    }
+    const mats = Array.from(this.catNvlSelectedMaterials);
+    const assignments = new Map<string, string[]>();
+    selected.forEach(emp => assignments.set(emp.memberId, []));
+    mats.forEach((code, i) => {
+      const emp = selected[i % selected.length];
+      assignments.get(emp.memberId)!.push(code);
+    });
+    this.catNvlAssignments = assignments;
   }
 
   autoAssignMaterials(): void {
@@ -2535,16 +2572,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleCatNvlMaterial(code: string): void {
-    if (this.catNvlSentMaterials.has(code)) return; // đã gửi, không toggle
+    if (this.catNvlSentMaterials.has(code)) return;
+    this.catNvlManualMode = true; // user chọn tay
     if (this.catNvlSelectedMaterials.has(code)) {
       this.catNvlSelectedMaterials.delete(code);
-      for (const mats of this.catNvlAssignments.values()) {
-        const idx = mats.indexOf(code);
-        if (idx !== -1) mats.splice(idx, 1);
-      }
     } else {
       this.catNvlSelectedMaterials.add(code);
     }
+    // Phân bổ lại mã đã chọn cho các nhân viên hiện tại
+    this.distributeManualMaterials();
     this.cdr.markForCheck();
   }
 
@@ -2560,14 +2596,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   selectAllPassMaterials(): void {
+    this.catNvlManualMode = true;
     this.putawayModalDisplayRows
-      .filter(r => r.passCount > 0)
+      .filter(r => r.passCount > 0 && !this.catNvlSentMaterials.has(r.materialCode))
       .forEach(r => this.catNvlSelectedMaterials.add(r.materialCode));
+    this.distributeManualMaterials();
   }
 
   clearMaterialSelection(): void {
     this.catNvlSelectedMaterials.clear();
     this.catNvlAssignments = new Map();
+    this.catNvlManualMode = false;
+    // Nếu đang có nhân viên được chọn thì auto-assign lại
+    if (this.catNvlSelectedEmployees.length) {
+      this.autoAssignMaterials();
+    }
   }
 
   get catNvlSelectedEmployees() {
