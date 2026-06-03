@@ -1897,6 +1897,8 @@
 
 .pf-tab--active { background: #f0fdf4; color: #15803d; }
 .pf-tab--active.pf-tab--not-pass { background: #fef2f2; color: #b91c1c; }
+.pf-tab--day { color: #1e40af; font-weight: 600; }
+.pf-tab--day:hover { background: #eff6ff; }
 
 .pf-dot {
   width: 8px; height: 8px;
@@ -1990,6 +1992,11 @@
 
 .putaway-sku-code {
   font-weight: 600;
+}
+
+.putaway-sku-day {
+  font-weight: 700;
+  color: #1e40af;
 }
 
 .putaway-sku-pass {

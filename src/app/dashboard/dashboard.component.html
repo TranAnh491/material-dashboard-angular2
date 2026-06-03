@@ -676,6 +676,12 @@
                   (click)="putawayFilterMode='not-pass'">
             <span class="pf-dot pf-dot--not-pass"></span>Chưa Pass
           </button>
+          <button class="pf-tab pf-tab--day" (click)="togglePutawaySortDay()">
+            <i class="material-icons" style="font-size:14px;vertical-align:middle;">
+              {{ putawaySortByDay === 'asc' ? 'arrow_upward' : putawaySortByDay === 'desc' ? 'arrow_downward' : 'swap_vert' }}
+            </i>
+            Day
+          </button>
         </div>
         <span class="iqc-modal-actions__spacer"></span>
         <!-- Cất NVL -->
@@ -713,6 +719,7 @@
               <tr>
                 <th>STT</th>
                 <th>Mã hàng (SKU)</th>
+                <th class="col-num">Day</th>
                 <th class="col-num">Đã Pass</th>
                 <th class="col-num">Chưa Pass</th>
                 <th class="col-num">Tổng SKU</th>
@@ -727,6 +734,7 @@
               >
                 <td>{{ i + 1 }}</td>
                 <td class="putaway-sku-code">{{ row.materialCode }}</td>
+                <td class="col-num putaway-sku-day">{{ row.dayInIqc }}</td>
                 <td class="col-num putaway-sku-pass">{{ row.passCount }}</td>
                 <td class="col-num putaway-sku-not-pass">{{ row.notPassCount > 0 ? row.notPassCount : '' }}</td>
                 <td class="col-num">{{ row.totalSkuCount }}</td>

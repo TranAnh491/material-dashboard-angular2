@@ -200,6 +200,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   iqcMaterialsLoading: boolean = false;
   /** 'all' | 'pass' | 'not-pass' */
   putawayFilterMode: 'all' | 'pass' | 'not-pass' = 'all';
+  putawaySortByDay: 'none' | 'asc' | 'desc' = 'none';
+
+  togglePutawaySortDay(): void {
+    if (this.putawaySortByDay === 'none' || this.putawaySortByDay === 'desc') {
+      this.putawaySortByDay = 'asc';
+    } else {
+      this.putawaySortByDay = 'desc';
+    }
+  }
 
   // ── Cất NVL dialog ─────────────────────────────────────────────────────
   showCatNvlDialog = false;
@@ -2160,10 +2169,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Xây grid Day 1 – Day >11 từ cùng docs đã load */
+  /**
+   * Đếm số ngày từ 'from' đến 'to', bỏ qua Chủ Nhật (getDay() === 0).
+   * from/to phải được normalize về 00:00:00.
+   */
+  private countDaysNoSunday(from: Date, to: Date): number {
+    if (to <= from) return 0;
+    let count = 0;
+    const cursor = new Date(from);
+    while (cursor < to) {
+      cursor.setDate(cursor.getDate() + 1);
+      if (cursor.getDay() !== 0) count++;
+    }
+    return count;
+  }
+
   private buildPutawayDayGrid(docs: any[]): PutawayDayCol[] {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const MS_DAY = 86400000;
     const COLS = 12;
 
     const cols: PutawayDayCol[] = Array.from({ length: COLS }, (_, i) => ({
@@ -2200,7 +2223,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (!matDate) return;
 
       const d0 = new Date(matDate); d0.setHours(0, 0, 0, 0);
-      const daysDiff = Math.max(0, Math.floor((today.getTime() - d0.getTime()) / MS_DAY));
+      const daysDiff = this.countDaysNoSunday(d0, today);
       const colIdx = Math.min(daysDiff, 11);
 
       // map lock → ng
@@ -2282,6 +2305,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.showIQCMaterialsModal = false;
     this.iqcMaterialsBySku = [];
     this.putawayFilterMode = 'all';
+    this.putawaySortByDay = 'none';
     this.showCatNvlDialog = false;
   }
 
@@ -2310,7 +2334,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Gom inventory IQC staging → 1 dòng / mã hàng, đếm SKU con Pass vs chưa Pass. */
   private buildPutawayModalSkuRows(docs: any[]): PutawayModalSkuRow[] {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const MS_DAY = 86400000;
 
     const skuLines = new Map<
       string,
@@ -2370,17 +2393,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .map(([materialCode, v]) => {
         const d0 = earliestDate.get(materialCode) || today;
         const d0noon = new Date(d0); d0noon.setHours(0, 0, 0, 0);
-        const daysDiff = Math.max(0, Math.floor((today.getTime() - d0noon.getTime()) / MS_DAY));
+        const daysDiff = this.countDaysNoSunday(d0noon, today);
         return {
           materialCode,
           passCount: v.passCount,
           notPassCount: v.notPassCount,
           totalSkuCount: v.passCount + v.notPassCount,
           totalStock: v.totalStock,
-          dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay
+          dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay (không tính Chủ Nhật)
         };
       })
       .sort((a, b) => {
+        // Sắp xếp Day từ lớn đến nhỏ
+        if (b.dayInIqc !== a.dayInIqc) return b.dayInIqc - a.dayInIqc;
         if (b.notPassCount !== a.notPassCount) return b.notPassCount - a.notPassCount;
         if (b.passCount !== a.passCount) return b.passCount - a.passCount;
         return a.materialCode.localeCompare(b.materialCode);
@@ -2416,22 +2441,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Danh sách hiển thị trong modal theo filter + sort */
   get putawayModalDisplayRows(): PutawayModalSkuRow[] {
     let rows = this.iqcMaterialsBySku || [];
+
     if (this.putawayFilterMode === 'pass') {
       rows = rows.filter(r => r.passCount > 0);
-      return [...rows].sort((a, b) => {
-        if (b.passCount !== a.passCount) return b.passCount - a.passCount;
-        return a.materialCode.localeCompare(b.materialCode);
-      });
-    }
-    if (this.putawayFilterMode === 'not-pass') {
+    } else if (this.putawayFilterMode === 'not-pass') {
       rows = rows.filter(r => r.notPassCount > 0);
+    }
+
+    // Nếu đang sort theo Day
+    if (this.putawaySortByDay !== 'none') {
+      const dir = this.putawaySortByDay === 'asc' ? 1 : -1;
       return [...rows].sort((a, b) => {
-        if (b.notPassCount !== a.notPassCount) return b.notPassCount - a.notPassCount;
+        if (a.dayInIqc !== b.dayInIqc) return (a.dayInIqc - b.dayInIqc) * dir;
         return a.materialCode.localeCompare(b.materialCode);
       });
     }
-    // all: chưa pass nhiều → pass nhiều → A→Z
+
+    // Mặc định: sort theo Day lớn → nhỏ (đã set trong buildPutawayModalSkuRows)
     return [...rows].sort((a, b) => {
+      if (b.dayInIqc !== a.dayInIqc) return b.dayInIqc - a.dayInIqc;
       if (b.notPassCount !== a.notPassCount) return b.notPassCount - a.notPassCount;
       if (b.passCount !== a.passCount) return b.passCount - a.passCount;
       return a.materialCode.localeCompare(b.materialCode);
