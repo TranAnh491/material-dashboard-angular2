@@ -241,7 +241,7 @@
   padding: 6px 4px 2px;
   font-size: 10px;
   font-weight: 800;
-  color: rgba(15, 23, 42, 0.5);
+  color: #000;
   letter-spacing: 0.02em;
 }
 
@@ -250,9 +250,9 @@
   border-radius: 2px;
   display: inline-block;
 }
-.pdg-legend__dot--pass    { background: #2563EB; }
+.pdg-legend__dot--pass    { background: #48CAE4; }
 .pdg-legend__dot--ng      { background: #EF4444; }
-.pdg-legend__dot--pending { background: #EAB308; }
+.pdg-legend__dot--pending { background: #FFFF00; }
 .pdg-legend__dot--confirm { background: #F97316; }
 
 /* Grid: 12 columns */
@@ -274,7 +274,7 @@
 .pdg-col__head {
   font-size: 8.5px;
   font-weight: 700;
-  color: var(--dash-text-muted, #6b7280);
+  color: #000;
   text-align: center;
   padding-bottom: 2px;
   white-space: nowrap;
@@ -290,7 +290,7 @@
   padding: 2px 1px;
   min-height: 20px;
   line-height: 16px;
-  color: #fff;
+  color: #000;
   transition: opacity .15s;
 }
 
@@ -298,9 +298,9 @@
   opacity: 0.18;
 }
 
-.pdg-cell--pass    { background: #2563EB; }
+.pdg-cell--pass    { background: #48CAE4; }
 .pdg-cell--ng      { background: #EF4444; }
-.pdg-cell--pending { background: #EAB308; }
+.pdg-cell--pending { background: #FFFF00; }
 .pdg-cell--confirm { background: #F97316; }
 
 /* Hàng 3 box: cùng chiều cao card; vùng body đồng min-height */
@@ -463,13 +463,13 @@
 }
 
 .wo-heatmap__cell--done {
-  background: #22c55e !important;
-  border-color: rgba(22, 101, 52, 0.25) !important;
+  background: #48CAE4 !important;
+  border-color: rgba(0, 119, 182, 0.25) !important;
 }
 
 .wo-heatmap__cell--waiting {
-  background: #3b82f6 !important;
-  border-color: rgba(30, 64, 175, 0.25) !important;
+  background: #FFFF00 !important;
+  border-color: rgba(180, 180, 0, 0.25) !important;
 }
 
 .wo-heatmap__cell--kitting {
@@ -534,15 +534,15 @@
   vertical-align: -1px;
 }
 
-.wo-legend-dot--done { background: #22c55e; }
-.wo-legend-dot--waiting { background: #3b82f6; }
+.wo-legend-dot--done { background: #48CAE4; }
+.wo-legend-dot--waiting { background: #FFFF00; }
 .wo-legend-dot--kitting { background: #f97316; }
 .wo-legend-dot--ready { background: #64748b; }
 .wo-legend-dot--delay { background: #ef4444; }
 
 /* Putaway staging — cùng kích thước/chữ với wo-heatmap-legend, màu khớp ô heatmap */
-.wo-legend-dot--iqc-pending { background: #EAB308; }
-.wo-legend-dot--iqc-pass    { background: #2563EB; }
+.wo-legend-dot--iqc-pending { background: #FFFF00; }
+.wo-legend-dot--iqc-pass    { background: #48CAE4; }
 .wo-legend-dot--iqc-confirm { background: #F97316; }
 .wo-legend-dot--iqc-ng      { background: #EF4444; }
 
@@ -1562,7 +1562,7 @@
 .putaway-heatmap__cnt {
   font-size: 12px;
   font-weight: 900;
-  color: #2563eb;
+  color: #000;
 }
 
 .putaway-heatmap__cells {
@@ -1648,15 +1648,15 @@
   background: rgba(30, 64, 175, 0.95);
 }
 
-.putaway-widget .putaway-heatmap__cell--pass    { background: #2563EB; }
+.putaway-widget .putaway-heatmap__cell--pass    { background: #48CAE4; }
 .putaway-widget .putaway-heatmap__cell--ng      { background: #EF4444; }
-.putaway-widget .putaway-heatmap__cell--pending { background: #EAB308; }
+.putaway-widget .putaway-heatmap__cell--pending { background: #FFFF00; }
 .putaway-widget .putaway-heatmap__cell--confirm { background: #F97316; }
 .putaway-widget .putaway-heatmap__cell--lock    { background: #EF4444; }
 
-.putaway-heatmap__cell--pass    { background: #2563EB; }
+.putaway-heatmap__cell--pass    { background: #48CAE4; }
 .putaway-heatmap__cell--ng      { background: #EF4444; }
-.putaway-heatmap__cell--pending { background: #EAB308; }
+.putaway-heatmap__cell--pending { background: #FFFF00; }
 .putaway-heatmap__cell--confirm { background: #F97316; }
 .putaway-heatmap__cell--lock    { background: #EF4444; }
 
@@ -2433,7 +2433,7 @@
 }
 
 .materials-table tbody tr.iqc-material-row--pass td:first-child {
-  box-shadow: inset 4px 0 0 0 #2563EB;
+  box-shadow: inset 4px 0 0 0 #48CAE4;
 }
 
 .materials-table tbody tr.iqc-material-row--ng td:first-child {

@@ -831,12 +831,25 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .valueChanges({ idField: 'id' })
         .pipe(takeUntil(this.destroy$))
         .subscribe((items: any[]) => {
-          this.locationItems = items;
-          
+          // Convert Firestore Timestamp → Date để date pipe hiển thị được
+          const toDate = (v: any): Date | undefined => {
+            if (!v) return undefined;
+            if (v instanceof Date) return v;
+            if (typeof v.toDate === 'function') return v.toDate();
+            if (typeof v.seconds === 'number') return new Date(v.seconds * 1000);
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? undefined : d;
+          };
+
+          this.locationItems = items.map((item: any) => ({
+            ...item,
+            createdAt: toDate(item.createdAt)
+          }));
+
           // Mới nhất lên trên: sort theo createdAt giảm dần
           this.locationItems.sort((a, b) => {
-            const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const ta = a.createdAt ? (a.createdAt as Date).getTime() : 0;
+            const tb = b.createdAt ? (b.createdAt as Date).getTime() : 0;
             return tb - ta;
           });
           
@@ -1217,7 +1230,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       viTri: boxCode,
       qrCode: this.generateQRCode(boxCode),
       printCount: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
+      createdBy: this.activeEmployeeId || ''
     };
 
     this.firestore.collection('locations').add(newItem).then(() => {
@@ -1566,14 +1580,16 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
                  title="QR Code: ${item.viTri}">
           </div>
           
-          <!-- Phía phải: Tên vị trí -->
+          <!-- Phía phải: Tên vị trí + Date -->
           <div class="location-section" style="
             width: 20mm; 
             height: 25mm; 
             display: flex; 
+            flex-direction: column;
             align-items: center; 
             justify-content: center;
             padding-left: 2mm;
+            gap: 2mm;
           ">
             <div style="
               font-size: 14px; 
@@ -1587,6 +1603,21 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
               ${((): string => {
                 const m = item.viTri.match(/^(LOCKER)\s*(\d+)$/i);
                 return m ? `${m[1].toUpperCase()}<br>${m[2]}` : item.viTri;
+              })()}
+            </div>
+            <div style="
+              font-size: 10px;
+              font-weight: normal;
+              color: #000;
+              font-family: 'Arial', sans-serif;
+              text-align: center;
+            ">
+              ${((): string => {
+                const d = item.createdAt ? new Date(item.createdAt) : new Date();
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yy = String(d.getFullYear()).slice(-2);
+                return `${dd}${mm}${yy}`;
               })()}
             </div>
           </div>
@@ -1674,7 +1705,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   openStoreMaterialModal(): void {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     this.showStoreMaterialModal = true;
@@ -2485,7 +2515,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   openBulkChangeLocationModal(): void {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     this.showBulkChangeLocationModal = true;
