@@ -2223,8 +2223,18 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
       this.saveGwLdvToCatalog(material);
 
-      if (material.isReceived) {
-        console.log(`ℹ️ Note: ${material.materialCode} is already in inventory, changes here won't affect inventory data`);
+      // Nếu đã nhận kho và có linkedInventoryDocId → đồng bộ totalBags (gwLdv) vào inventory
+      if (material.isReceived && material.linkedInventoryDocId) {
+        const newTotalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
+        this.firestore.collection('inventory-materials').doc(material.linkedInventoryDocId).update({
+          totalBags: newTotalBags,
+          openingBagsAtInit: newTotalBags,
+          updatedAt: new Date()
+        }).then(() => {
+          console.log(`✅ Synced totalBags → inventory for ${material.materialCode}: ${newTotalBags}`);
+        }).catch(err => {
+          console.error(`❌ Failed to sync totalBags → inventory for ${material.materialCode}:`, err);
+        });
       }
     }).catch((error) => {
       console.error(`❌ Error updating material ${material.materialCode}:`, error);

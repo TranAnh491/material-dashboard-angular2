@@ -29,6 +29,8 @@ type WoHeatKind = 'done' | 'waiting' | 'kitting' | 'ready' | 'delay';
 interface WoHeatmapCell {
   kind: WoHeatKind;
   tooltip: string;
+  /** Ghi chú LSX = "Giao ASM3" → chấm xanh giữa ô SKU */
+  giaoAsm3?: boolean;
 }
 
 interface WoHeatmapDayCol {
@@ -1024,12 +1026,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Ghi chú WO khớp "Giao ASM3" (không phân biệt hoa thường). */
+  private isGiaoAsm3Notes(notes?: string): boolean {
+    return (notes || '').trim().toLowerCase() === 'giao asm3';
+  }
+
   private buildWoHeatmapCell(wo: WorkOrder, kind: WoHeatKind): WoHeatmapCell {
+    const giaoAsm3 = this.isGiaoAsm3Notes(wo.notes);
     if (kind !== 'kitting') {
       const sku = (wo.productCode || '').trim();
       const base = this.woHeatKindLabel(kind);
-      const tooltip = sku ? `${sku} · ${base}` : base;
-      return { kind, tooltip };
+      const parts = sku ? [`${sku} · ${base}`] : [base];
+      if (giaoAsm3) parts.push('Giao ASM3');
+      return { kind, tooltip: parts.join('\n'), giaoAsm3 };
     }
     const sku = (wo.productCode || '—').trim();
     const lsx = (wo.productionOrder || '').trim();
@@ -1037,7 +1046,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (lsx) lines.push(`LSX: ${lsx}`);
     lines.push(`Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy)}`);
     lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
-    return { kind, tooltip: lines.join('\n') };
+    if (giaoAsm3) lines.push('Giao ASM3');
+    return { kind, tooltip: lines.join('\n'), giaoAsm3 };
   }
 
   private rebuildWoHeatmap(monday: Date): void {
@@ -2204,14 +2214,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const locRaw = (data.location || '').trim();
       if (!this.isIqcStagingLocation(locRaw)) return;
 
-      // Lọc stock giống modal — tránh đếm mã có tồn kho = 0
+      // Ẩn mã có tồn kho <= 0
       const openingStock =
         data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
       const quantity = Number(data.quantity) || 0;
       const exported = Number(data.exported) || 0;
       const xt = Number(data.xt) || 0;
       const stock = openingStock + quantity - exported - xt;
-      if (stock < 0) return;
+      if (stock <= 0) return;
 
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
       if (!statusKind) return;
@@ -2353,7 +2363,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const exported = Number(data.exported) || 0;
       const xt = Number(data.xt) || 0;
       const stock = openingStock + quantity - exported - xt;
-      if (stock < 0) return;
+      if (stock <= 0) return;
 
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
       if (!statusKind) return;

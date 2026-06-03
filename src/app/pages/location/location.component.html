@@ -133,6 +133,9 @@
         <button class="emp-badge" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
           <i class="material-icons">badge</i>{{ activeEmployeeId }}
         </button>
+        <button class="logout-btn" *ngIf="activeEmployeeId" (click)="logout()" title="Đăng xuất">
+          <i class="material-icons">logout</i>
+        </button>
         <button type="button" class="loc-m-menu-btn" (click)="goMobileMenu()" aria-label="Menu">
           <i class="material-icons">menu</i>
         </button>
@@ -316,6 +319,10 @@
             <!-- Employee badge (desktop) -->
             <button class="emp-badge" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
               <i class="material-icons">badge</i>{{ activeEmployeeId }}
+            </button>
+            <button class="logout-btn" *ngIf="activeEmployeeId" (click)="logout()" title="Đăng xuất">
+              <i class="material-icons">logout</i>
+              Đăng xuất
             </button>
             <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
               <i class="material-icons">qr_code_scanner</i>

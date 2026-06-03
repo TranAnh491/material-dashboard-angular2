@@ -8,6 +8,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';
+import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
 import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
@@ -148,8 +149,30 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     private qrScannerService: QRScannerService,
     private dialog: MatDialog,
     private rmBagHistory: RmBagHistoryService,
-    private outboundQcRule: OutboundQcRuleService
+    private outboundQcRule: OutboundQcRuleService,
+    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService
   ) {}
+
+  private syncWorkOrderCreatedByAfterExport(lsx?: string, employeeId?: string): void {
+    const po = (lsx || this.batchProductionOrder || '').trim();
+    const emp = (employeeId || this.batchEmployeeId || '').trim();
+    if (!po || !emp || emp === 'BS') return;
+    void this.woOutboundCreatedBy.syncFromOutboundScan('ASM2', po, emp);
+  }
+
+  private syncWorkOrderCreatedByFromPendingScans(): void {
+    const lsxToEmp = new Map<string, string>();
+    for (const item of this.pendingScanData) {
+      const lsx = String(item?.productionOrder || this.batchProductionOrder || '').trim();
+      const emp = String(item?.employeeId || this.batchEmployeeId || '').trim();
+      if (lsx && emp && emp !== 'BS') lsxToEmp.set(lsx, emp);
+    }
+    if (lsxToEmp.size === 0 && this.batchProductionOrder && this.batchEmployeeId) {
+      this.syncWorkOrderCreatedByAfterExport();
+      return;
+    }
+    lsxToEmp.forEach((emp, lsx) => this.syncWorkOrderCreatedByAfterExport(lsx, emp));
+  }
   
   ngOnInit(): void {
     console.log('🏭 Outbound ASM2 component initialized');
@@ -1685,7 +1708,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       // Commit batch
       await batch.commit();
       console.log(`✅ Successfully saved ${this.pendingScanData.length} items to outbound-materials collection`);
-      
+      this.syncWorkOrderCreatedByFromPendingScans();
+
       // 🔧 UNIFIED: Cập nhật inventory exported quantity cho từng item (TUẦN TỰ)
       console.log('📦 Updating inventory exported quantities sequentially...');
       for (let i = 0; i < this.pendingScanData.length; i++) {
@@ -2050,7 +2074,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log('🔥 Adding to Firebase collection: outbound-materials');
     const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
     console.log('✅ New outbound record created with ID:', docRef.id);
-    
+    this.syncWorkOrderCreatedByAfterExport();
+
     // Verify data was saved correctly
     const savedDoc = await docRef.get();
     const savedData = savedDoc.data() as any;
@@ -2334,7 +2359,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log(`📦 Committing ${consolidatedMap.size} records to Firebase...`);
     await batch.commit();
     console.log(`✅ Successfully saved ${consolidatedMap.size} outbound records!`);
-    
+    this.syncWorkOrderCreatedByFromPendingScans();
+
     // 4. Update inventory - Chạy SONG SONG không chờ để không làm chậm
     console.log(`📦 Updating inventory in background...`);
     this.updateInventoryInBackground(this.pendingScanData);
@@ -2908,6 +2934,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       return;
     }
 
+    // Kiểm tra vị trí hiện tại của mã hàng — nếu bắt đầu bằng IQC thì cảnh báo
+    await this.checkAndWarnIqcLocation(materialCode, poNumber, importDate, 'ASM2');
+
     const p = this.rmBagHistory.parseQrPart4(importDate);
     const exportedBagsDelta = p.bagDelta;
     const bagBatch = p.bagFractionLabel || this.rmBagHistory.extractBagLabelFromQrPart4(importDate);
@@ -2929,5 +2958,50 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     };
     this.pendingScanData = [...this.pendingScanData, scanItem];
     this.savePendingToStorage();
+  }
+
+  private async checkAndWarnIqcLocation(
+    materialCode: string,
+    poNumber: string,
+    importDate: string | null,
+    factory: string
+  ): Promise<void> {
+    try {
+      const snap = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', factory)
+           .where('materialCode', '==', materialCode)
+           .where('poNumber', '==', poNumber)
+           .limit(5)
+      ).get().toPromise();
+
+      if (!snap || snap.empty) return;
+
+      const iqcDocs = snap.docs.filter(d => {
+        const loc = String((d.data() as any)?.location || '').trim().toUpperCase();
+        return loc.startsWith('IQC');
+      });
+
+      if (!iqcDocs.length) return;
+
+      const location = String((iqcDocs[0].data() as any)?.location || '').trim();
+
+      await this.firestore.collection('outbound-iqc-warnings').add({
+        factory,
+        materialCode,
+        poNumber,
+        importDate: importDate || '',
+        location,
+        employeeId: this.batchEmployeeId || '',
+        productionOrder: this.batchProductionOrder || '',
+        detectedAt: new Date(),
+        resolved: false
+      });
+
+      this.showScanError(
+        `⚠️ ${materialCode} đang ở vị trí ${location} (IQC)!\nVui lòng đưa về vị trí kho trước khi xuất.`
+      );
+    } catch (e) {
+      console.error('checkAndWarnIqcLocation error:', e);
+    }
   }
 }

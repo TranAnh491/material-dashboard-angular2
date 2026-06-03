@@ -18,6 +18,7 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
 
 // Interface for scanned items
 interface ScannedItem {
@@ -225,7 +226,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   // Key: factoryFilter ('ASM1' | 'ASM2') -> value: lsxNorm -> (mat|po -> qty)
   private outboundLsxScanMapCacheByFactory = new Map<
     string,
-    { byLsx: Map<string, Map<string, number>>; loadedAt: number }
+    {
+      byLsx: Map<string, Map<string, number>>;
+      /** LSX norm → mã NV scan xuất kho gần nhất */
+      lsxToMemberId: Map<string, string>;
+      loadedAt: number;
+    }
   >();
   private readonly OUTBOUND_LSX_SCAN_MAP_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -304,7 +310,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private qrScannerService: QRScannerService,
     private dialog: MatDialog,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -417,6 +424,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const workOrders = await this.fetchWorkOrdersForCurrentFilters();
       await this.loadPxkFromFirebase(workOrders);
       this.processLoadedWorkOrders(workOrders);
+      await this.applyOutboundCreatedByOverrides();
     } catch (e) {
       console.error('❌ loadWorkOrders failed:', e);
       alert(`⚠️ Lỗi tải dữ liệu Work Order: ${(e as Error)?.message || e}`);
@@ -604,7 +612,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         processedWo.kittingStartedAt = (processedWo.kittingStartedAt as any).toDate();
       }
 
-      if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
+      if (processedWo.createdByFromOutbound) {
+        processedWo.createdBy = String(processedWo.createdBy || '').trim();
+      } else if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
         processedWo.createdBy = this.normalizeCreatedBy(processedWo.createdBy);
       }
       
@@ -1370,16 +1380,21 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Người soạn: normalize còn 1 tên + UPPERCASE
+    // Người soạn: normalize còn 1 tên + UPPERCASE (trừ khi từ outbound/zalo)
     if (field === 'createdBy') {
       processedValue = this.normalizeCreatedBy(value);
     }
     
-    let updatedWorkOrder = { 
+    let updatedWorkOrder: WorkOrder = { 
       ...workOrder, 
       [field]: processedValue, 
       lastUpdated: new Date() 
     };
+
+    if (field === 'createdBy') {
+      updatedWorkOrder.createdByFromOutbound = false;
+      updatedWorkOrder.createdByMemberId = undefined;
+    }
     
     if (field === 'status' && processedValue === WorkOrderStatus.KITTING && workOrder.status !== WorkOrderStatus.KITTING) {
       updatedWorkOrder.kittingStartedAt = new Date();
@@ -4174,13 +4189,24 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   private async getOutboundLsxScanMapForFactoryFilter(
     factoryFilter: string
   ): Promise<Map<string, Map<string, number>>> {
+    const meta = await this.loadOutboundLsxMetaForFactory(factoryFilter);
+    return meta.byLsx;
+  }
+
+  private async loadOutboundLsxMetaForFactory(factoryFilter: string): Promise<{
+    byLsx: Map<string, Map<string, number>>;
+    lsxToMemberId: Map<string, string>;
+  }> {
     const now = Date.now();
     const cached = this.outboundLsxScanMapCacheByFactory.get(factoryFilter);
     if (cached && now - cached.loadedAt < this.OUTBOUND_LSX_SCAN_MAP_CACHE_TTL_MS) {
-      return cached.byLsx;
+      return { byLsx: cached.byLsx, lsxToMemberId: cached.lsxToMemberId };
     }
 
     const byLsx = new Map<string, Map<string, number>>();
+    const lsxToMemberId = new Map<string, string>();
+    const lsxMemberIdAt = new Map<string, number>();
+
     try {
       const outboundSnapshot = await firstValueFrom(
         this.firestore.collection('outbound-materials', ref =>
@@ -4192,6 +4218,18 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const d = doc.data() as any;
         const poLsxNorm = this.normLsxForMatch(d.productionOrder || '');
         if (!poLsxNorm) return;
+
+        const memberId = this.woOutboundCreatedBy.normalizeMemberId(
+          d.employeeId || d.exportedBy || ''
+        );
+        if (memberId) {
+          const exportMs = this.parseOutboundExportDateMs(d.exportDate || d.createdAt);
+          const prevMs = lsxMemberIdAt.get(poLsxNorm) || 0;
+          if (exportMs >= prevMs) {
+            lsxToMemberId.set(poLsxNorm, memberId);
+            lsxMemberIdAt.set(poLsxNorm, exportMs);
+          }
+        }
 
         const mat = String(d.materialCode || '').trim().toUpperCase();
         if (mat.charAt(0) !== 'B') return;
@@ -4205,12 +4243,62 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         scanMap.set(key, (scanMap.get(key) || 0) + qty);
       });
     } catch (e) {
-      // Fail-safe: return empty map if network/permission errors occur.
-      return new Map<string, Map<string, number>>();
+      return { byLsx: new Map(), lsxToMemberId: new Map() };
     }
 
-    this.outboundLsxScanMapCacheByFactory.set(factoryFilter, { byLsx, loadedAt: now });
-    return byLsx;
+    this.outboundLsxScanMapCacheByFactory.set(factoryFilter, { byLsx, lsxToMemberId, loadedAt: now });
+    return { byLsx, lsxToMemberId };
+  }
+
+  private parseOutboundExportDateMs(v: unknown): number {
+    if (!v) return 0;
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === 'object' && v !== null && 'toDate' in v) {
+      try {
+        return (v as { toDate: () => Date }).toDate().getTime();
+      } catch {
+        return 0;
+      }
+    }
+    if (typeof v === 'object' && v !== null && 'seconds' in v) {
+      return Number((v as { seconds: number }).seconds) * 1000;
+    }
+    const d = new Date(v as string | number);
+    return Number.isFinite(d.getTime()) ? d.getTime() : 0;
+  }
+
+  /** Ghi đè Người soạn theo người scan xuất kho + tên zalo_links. */
+  private async applyOutboundCreatedByOverrides(): Promise<void> {
+    const zalo = await this.woOutboundCreatedBy.getZaloNameMap();
+    const metaAsm1 = await this.loadOutboundLsxMetaForFactory('ASM1');
+    const metaAsm2 = await this.loadOutboundLsxMetaForFactory('ASM2');
+
+    for (const wo of this.workOrders) {
+      const fac = this.resolveOutboundFactoryFilterForPxk(wo);
+      const lsxNorm = this.normLsxForMatch(wo.productionOrder || '');
+      if (!lsxNorm) continue;
+
+      const meta = fac === 'ASM2' ? metaAsm2 : metaAsm1;
+      const memberId = meta.lsxToMemberId.get(lsxNorm);
+      if (!memberId) continue;
+
+      const name = zalo.get(memberId) || memberId;
+      wo.createdBy = name;
+      wo.createdByFromOutbound = true;
+      wo.createdByMemberId = memberId;
+    }
+
+    this.applyFilters();
+    this.cdr.markForCheck();
+  }
+
+  isCreatedByFromOutbound(wo: WorkOrder): boolean {
+    return !!wo.createdByFromOutbound;
+  }
+
+  getCreatedByDisplay(wo: WorkOrder): string {
+    const v = String(wo.createdBy || '').trim();
+    return v || 'Chưa có';
   }
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */

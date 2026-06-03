@@ -2230,6 +2230,25 @@ body.location-mobile-tab {
   .material-icons { font-size: 15px; }
 }
 
+.logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff1f2;
+  color: #dc2626;
+  border: 1.5px solid #fecaca;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+
+  &:hover { background: #fee2e2; }
+
+  .material-icons { font-size: 15px; }
+}
+
 // mobile header right
 .loc-m-header__right {
   display: flex;

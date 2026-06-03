@@ -305,8 +305,11 @@
                       *ngFor="let c of col.cells"
                       class="putaway-heatmap__cell wo-heatmap__cell"
                       [ngClass]="'wo-heatmap__cell--' + c.kind"
+                      [class.wo-heatmap__cell--giao-asm3]="c.giaoAsm3"
                       [attr.title]="c.tooltip"
-                    ></div>
+                    >
+                      <span *ngIf="c.giaoAsm3" class="wo-heatmap__asm3-dot" aria-hidden="true"></span>
+                    </div>
                   </div>
                 </div>
               </div>

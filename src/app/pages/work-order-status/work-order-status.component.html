@@ -529,7 +529,7 @@
                             <span *ngIf="!canEdit()" [class.red-text]="wo.missingMaterials" style="font-size: 10px; color: #666;">{{wo.missingMaterials || 'Chưa có'}}</span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">
-                            <mat-form-field class="full-width compact-field flat-field" *ngIf="canEdit()">
+                            <mat-form-field class="full-width compact-field flat-field" *ngIf="canEdit() && !isCreatedByFromOutbound(wo)">
                               <mat-select panelClass="wo-status-select-panel"
                                           [value]="wo.createdBy || ''"
                                           (selectionChange)="updateWorkOrder(wo, 'createdBy', $event.value)"
@@ -538,10 +538,18 @@
                                 <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
                               </mat-select>
                             </mat-form-field>
+                            <span *ngIf="canEdit() && isCreatedByFromOutbound(wo)"
+                                  class="wo-created-by-outbound"
+                                  [title]="'Xuất kho: ' + (wo.createdByMemberId || '')">
+                              {{ getCreatedByDisplay(wo) }}
+                            </span>
                             <span *ngIf="!canEdit()"
-                                  style="font-size: 10px; color: #666; text-transform: uppercase;"
-                                  [title]="wo.createdBy || 'Chưa có'">
-                              {{wo.createdBy || 'Chưa có'}}
+                                  [class.wo-created-by-outbound]="isCreatedByFromOutbound(wo)"
+                                  [style.font-size]="'10px'"
+                                  [style.color]="'#666'"
+                                  [style.text-transform]="isCreatedByFromOutbound(wo) ? 'none' : 'uppercase'"
+                                  [title]="wo.createdByMemberId ? ('Xuất kho: ' + wo.createdByMemberId) : (wo.createdBy || 'Chưa có')">
+                              {{ getCreatedByDisplay(wo) }}
                             </span>
                           </td>
                           <td style="text-align: center; vertical-align: middle;">

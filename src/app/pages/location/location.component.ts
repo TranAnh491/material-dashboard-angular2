@@ -197,6 +197,34 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.selectedFactory = null;
   }
 
+  logout(): void {
+    this.activeEmployeeId = '';
+    localStorage.removeItem(this.EMP_STORAGE_KEY);
+    this.employeeScanInput = '';
+    this.employeeScanError = '';
+    this.showEmployeeScan = true;
+    this.showFactorySelect = false;
+    this.selectedFactory = null;
+  }
+
+  /** Tính ms đến 7:00 sáng ngày hôm sau (hoặc hôm nay nếu chưa tới). */
+  private msUntilNextSevenAM(): number {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(7, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next.getTime() - now.getTime();
+  }
+
+  private scheduleAutoLogout(): void {
+    const ms = this.msUntilNextSevenAM();
+    setTimeout(() => {
+      this.logout();
+      // Lặp lại mỗi 24h sau đó
+      setInterval(() => this.logout(), 24 * 60 * 60 * 1000);
+    }, ms);
+  }
+
   selectFactory(factory: 'ASM1' | 'ASM2') {
     this.selectedFactory = factory;
     this.showFactorySelect = false;
@@ -593,6 +621,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.showFactorySelect = false;
     }
     this.selectedFactory = null;
+    this.scheduleAutoLogout();
 
     this.updateMobileLayout();
     this.checkPermissions();

@@ -1083,3 +1083,227 @@ exports.notifyDashboardZaloWeekdays1130 = onSchedule(
     await runDashboardZaloDigest(db, token);
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Outbound IQC Warning: khi scan outbound mà mã hàng đang ở vị trí IQC
+// → ngay lập tức báo người scan + ASP0106
+// ─────────────────────────────────────────────────────────────────────────────
+
+exports.notifyOutboundIqcWarning = onDocumentCreated(
+  {
+    document: "outbound-iqc-warnings/{docId}",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const data = snap.data() || {};
+
+    const materialCode = String(data.materialCode || "").trim();
+    const location = String(data.location || "").trim();
+    const employeeId = String(data.employeeId || "").trim();
+    const factory = String(data.factory || "").trim();
+    const productionOrder = String(data.productionOrder || "").trim();
+
+    if (!materialCode || !employeeId) return;
+
+    const botToken = ZALO_BOT_TOKEN.value();
+    const now = new Date();
+    const timeStr = now.toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour12: false,
+    });
+
+    const msg =
+      `⚠️ CẢNH BÁO XUẤT KHO IQC\n\n` +
+      `Mã hàng: ${materialCode}\n` +
+      `Vị trí hiện tại: ${location}\n` +
+      `Nhà máy: ${factory}\n` +
+      (productionOrder ? `LSX: ${productionOrder}\n` : "") +
+      `\nMã hàng đang ở vị trí IQC, vui lòng chuyển về vị trí kho trước khi xuất.\n` +
+      `Thời gian: ${timeStr}`;
+
+    // Gửi tới người scan
+    const recipientIds = [employeeId, "ASP0106"].filter(
+      (id, i, arr) => id && arr.indexOf(id) === i
+    );
+
+    const linkSnap = await db
+      .collection("zalo_links")
+      .where("memberId", "in", recipientIds.slice(0, 10))
+      .get()
+      .catch((e) => {
+        logger.error("outbound-iqc: lookup zalo_links failed", e);
+        return null;
+      });
+
+    if (!linkSnap || linkSnap.empty) {
+      logger.warn("outbound-iqc: no chatId found", { recipientIds });
+      return;
+    }
+
+    const chatIds = linkSnap.docs
+      .map((d) => String((d.data() || {}).chatId || "").trim())
+      .filter(Boolean);
+
+    await Promise.all(
+      chatIds.map((chatId) =>
+        fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text: msg }),
+        }).catch((e) => logger.error("outbound-iqc: sendMessage failed", { chatId, e }))
+      )
+    );
+
+    logger.info("outbound-iqc: sent warning", { materialCode, employeeId, factory });
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Outbound IQC Daily Reminder: 8h sáng hàng ngày, kiểm tra mã hàng IQC chưa giải quyết
+// → nhắc nhở từng nhân viên + gửi báo cáo cho ASP0106
+// ─────────────────────────────────────────────────────────────────────────────
+
+exports.outboundIqcDailyReminder = onSchedule(
+  {
+    schedule: "0 8 * * *",
+    timeZone: "Asia/Ho_Chi_Minh",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async () => {
+    const botToken = ZALO_BOT_TOKEN.value();
+
+    // Lấy warnings chưa resolved trong 30 ngày gần nhất
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const warnSnap = await db
+      .collection("outbound-iqc-warnings")
+      .where("resolved", "==", false)
+      .where("detectedAt", ">=", since)
+      .get()
+      .catch((e) => {
+        logger.error("outbound-iqc-reminder: query failed", e);
+        return null;
+      });
+
+    if (!warnSnap || warnSnap.empty) {
+      logger.info("outbound-iqc-reminder: không có warning nào chưa resolved");
+      return;
+    }
+
+    // Map: employeeId → list materialCode+location
+    const employeeMap = new Map();
+    const stillInIqc = [];
+
+    for (const doc of warnSnap.docs) {
+      const d = doc.data() || {};
+      const materialCode = String(d.materialCode || "").trim();
+      const factory = String(d.factory || "ASM1").trim();
+      const poNumber = String(d.poNumber || "").trim();
+      const employeeId = String(d.employeeId || "").trim();
+      const location = String(d.location || "").trim();
+
+      if (!materialCode) continue;
+
+      // Kiểm tra xem mã hàng còn ở IQC không
+      let stillIqc = false;
+      try {
+        const invSnap = await db
+          .collection("inventory-materials")
+          .where("factory", "==", factory)
+          .where("materialCode", "==", materialCode)
+          .where("poNumber", "==", poNumber)
+          .limit(5)
+          .get();
+
+        if (!invSnap.empty) {
+          stillIqc = invSnap.docs.some((d2) => {
+            const loc = String((d2.data() || {}).location || "").trim().toUpperCase();
+            return loc.startsWith("IQC");
+          });
+        }
+      } catch (e) {
+        logger.error("outbound-iqc-reminder: check inventory failed", { materialCode, e });
+        stillIqc = true; // Giả sử vẫn còn nếu lỗi
+      }
+
+      if (stillIqc) {
+        stillInIqc.push({ docId: doc.id, materialCode, factory, poNumber, employeeId, location });
+        if (employeeId) {
+          if (!employeeMap.has(employeeId)) employeeMap.set(employeeId, []);
+          employeeMap.get(employeeId).push(`${materialCode} (${location})`);
+        }
+      } else {
+        // Tự động resolve nếu không còn ở IQC
+        await db.collection("outbound-iqc-warnings").doc(doc.id).update({ resolved: true }).catch(() => {});
+      }
+    }
+
+    if (stillInIqc.length === 0) {
+      logger.info("outbound-iqc-reminder: tất cả đã được giải quyết");
+      return;
+    }
+
+    const now = new Date();
+    const timeStr = now.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+
+    // Gửi nhắc nhở tới từng nhân viên
+    for (const [empId, materials] of employeeMap.entries()) {
+      const linkSnap = await db
+        .collection("zalo_links")
+        .where("memberId", "==", empId)
+        .limit(1)
+        .get()
+        .catch(() => null);
+
+      if (!linkSnap || linkSnap.empty) continue;
+      const chatId = String((linkSnap.docs[0].data() || {}).chatId || "").trim();
+      if (!chatId) continue;
+
+      const matList = materials.map((m) => `  • ${m}`).join("\n");
+      const msg =
+        `🔔 NHẮC NHỞ XUẤT KHO IQC\n\n` +
+        `Các mã hàng sau vẫn đang ở vị trí IQC:\n${matList}\n\n` +
+        `Vui lòng chuyển về vị trí kho sớm nhất có thể.\n` +
+        `Thời gian: ${timeStr}`;
+
+      await fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: msg }),
+      }).catch((e) => logger.error("outbound-iqc-reminder: send to emp failed", { empId, e }));
+    }
+
+    // Gửi báo cáo tổng hợp tới ASP0106
+    const asp0106Snap = await db
+      .collection("zalo_links")
+      .where("memberId", "==", "ASP0106")
+      .limit(1)
+      .get()
+      .catch(() => null);
+
+    if (asp0106Snap && !asp0106Snap.empty) {
+      const asp0106ChatId = String((asp0106Snap.docs[0].data() || {}).chatId || "").trim();
+      if (asp0106ChatId) {
+        const reportLines = stillInIqc.map(
+          (w) => `  • ${w.materialCode} | ${w.factory} | ${w.location} | NV: ${w.employeeId || "—"}`
+        );
+        const reportMsg =
+          `📋 BÁO CÁO XUẤT KHO IQC (8h sáng)\n\n` +
+          `Tổng: ${stillInIqc.length} mã hàng vẫn còn ở vị trí IQC:\n` +
+          reportLines.join("\n") +
+          `\n\nThời gian: ${timeStr}`;
+
+        await fetch(ZALO_BOT_SEND_MESSAGE_URL(botToken), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: asp0106ChatId, text: reportMsg }),
+        }).catch((e) => logger.error("outbound-iqc-reminder: send to ASP0106 failed", e));
+      }
+    }
+
+    logger.info("outbound-iqc-reminder: done", { total: stillInIqc.length });
+  }
+);
