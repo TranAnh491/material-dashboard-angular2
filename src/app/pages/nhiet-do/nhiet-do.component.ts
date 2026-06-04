@@ -8,12 +8,17 @@ import {
   NhietDoFactoryGroup,
   NhietDoFormDef,
   NhietDoFormType,
+  REGULAR_WAREHOUSE_SHEET_NOTES,
   TEMP_LIMITS_BY_FORM,
   TempChartLimits
 } from './nhiet-do.model';
 import {
+  NHET_DO_ZALO_DAILY_ASSIGNEE_COUNT,
+  NHET_DO_ZALO_SLOTS_PER_DAY,
   NhietDoZaloFactory,
   NhietDoZaloSettingsService,
+  nhietDoVnDateKey,
+  pickDailyZaloAssignees,
   ZaloLinkRow
 } from '../../services/nhiet-do-zalo-settings.service';
 
@@ -51,6 +56,7 @@ export class NhietDoComponent implements OnInit {
   readonly collection = 'warehouse-temp-humidity-checklists';
   readonly dayNumbers = Array.from({ length: 31 }, (_, i) => i + 1);
   readonly factoryGroups: NhietDoFactoryGroup[] = buildNhietDoFactoryGroups();
+  readonly regularWarehouseNotes = REGULAR_WAREHOUSE_SHEET_NOTES;
 
   view: NhietDoView = 'picker';
   activeForm: NhietDoFormDef | null = null;
@@ -97,6 +103,9 @@ export class NhietDoComponent implements OnInit {
   zaloSettingsSaving = false;
 
   readonly zaloEscalationIds = ['ASP0119', 'ASP1761', 'ASP0538'];
+  readonly zaloSlotsPerDay = NHET_DO_ZALO_SLOTS_PER_DAY;
+  readonly zaloDailyAssigneeCount = NHET_DO_ZALO_DAILY_ASSIGNEE_COUNT;
+  zaloVnDateKey = nhietDoVnDateKey();
 
   years: number[] = [];
 
@@ -364,6 +373,7 @@ export class NhietDoComponent implements OnInit {
 
   async openZaloSettings(factory: NhietDoZaloFactory): Promise<void> {
     this.zaloSettingsTab = factory;
+    this.zaloVnDateKey = nhietDoVnDateKey();
     this.showZaloSettings = true;
     this.zaloSettingsLoading = true;
     try {
@@ -392,19 +402,58 @@ export class NhietDoComponent implements OnInit {
 
   zaloSettingsTabChange(tab: NhietDoZaloFactory): void {
     this.zaloSettingsTab = tab;
+    this.zaloVnDateKey = nhietDoVnDateKey();
+  }
+
+  /** ID zalo_links thuộc ASM1 / ASM2 / ALL */
+  get zaloLinksForTab(): ZaloLinkRow[] {
+    const f = this.zaloSettingsTab;
+    return this.zaloLinks.filter(row => {
+      const fac = row.factory || 'ALL';
+      return fac === 'ALL' || fac === f;
+    });
+  }
+
+  get zaloPoolMemberIds(): string[] {
+    const set = this.zaloSettingsTab === 'ASM1' ? this.zaloSelectedAsm1 : this.zaloSelectedAsm2;
+    return [...set];
+  }
+
+  /** Tổng ID trong danh sách nhà máy (được chọn để luân phiên nhắc) */
+  get zaloSelectedCount(): number {
+    return this.zaloPoolMemberIds.length;
+  }
+
+  /** 2 ID nhận nhắc Zalo hôm nay — chia ngẫu nhiên (ổn định theo ngày) */
+  get zaloTodayAssignees(): string[] {
+    return pickDailyZaloAssignees(this.zaloPoolMemberIds, this.zaloSettingsTab, this.zaloVnDateKey);
+  }
+
+  /** ~ số lần ghi/ngày cho mỗi ID khi đủ 2 người */
+  get zaloEntriesPerAssigneeToday(): number {
+    const n = this.zaloTodayAssignees.length;
+    if (!n) return 0;
+    return Math.ceil(this.zaloSlotsPerDay / n);
+  }
+
+  isZaloTodayAssignee(memberId: string): boolean {
+    const id = this.nhietDoZaloSettings.normalizeMemberId(memberId);
+    return this.zaloTodayAssignees.includes(id);
   }
 
   isZaloMemberSelected(memberId: string): boolean {
+    const id = this.nhietDoZaloSettings.normalizeMemberId(memberId);
     const set = this.zaloSettingsTab === 'ASM1' ? this.zaloSelectedAsm1 : this.zaloSelectedAsm2;
-    return set.has(memberId);
+    return set.has(id);
   }
 
   toggleZaloMember(memberId: string): void {
+    const id = this.nhietDoZaloSettings.normalizeMemberId(memberId);
     const set = this.zaloSettingsTab === 'ASM1' ? this.zaloSelectedAsm1 : this.zaloSelectedAsm2;
-    if (set.has(memberId)) {
-      set.delete(memberId);
+    if (set.has(id)) {
+      set.delete(id);
     } else {
-      set.add(memberId);
+      set.add(id);
     }
   }
 

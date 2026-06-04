@@ -192,10 +192,10 @@
 
       <div class="sheet-header__box sheet-header__box--meta">
         <table class="meta-table">
-          <tr><td>Mã quản lý /Code</td><td>{{ activeForm.manageCode }}</td></tr>
-          <tr><td>Phiên bản /Version</td><td>{{ activeForm.docVersion }}</td></tr>
-          <tr><td>Ngày ban hành /Issued date</td><td>{{ activeForm.issuedDate }}</td></tr>
-          <tr><td>Số trang /Page</td><td>1/1</td></tr>
+          <tr><td class="meta-table__label">Mã quản lý /Code</td><td class="meta-table__value">{{ activeForm.manageCode }}</td></tr>
+          <tr><td class="meta-table__label">Phiên bản /Version</td><td class="meta-table__value">{{ activeForm.docVersion }}</td></tr>
+          <tr><td class="meta-table__label">Ngày ban hành /Issued date</td><td class="meta-table__value">{{ activeForm.issuedDate }}</td></tr>
+          <tr><td class="meta-table__label">Số trang /Page</td><td class="meta-table__value">1/1</td></tr>
         </table>
       </div>
     </div>
@@ -511,30 +511,18 @@
     </div><!-- /form-sheet__body-scroll -->
 
     <!-- Lưu ý -->
-    <div class="sheet-notes">
+    <div class="sheet-notes sheet-notes--full">
       <div class="sheet-notes__head">Lưu ý / Note:</div>
       <div class="sheet-notes__grid4">
-        <div>
-          <span class="vi">1. {{ tempLimits.noteVi }}</span>
-          <span class="en">{{ tempLimits.noteEn }}</span>
-        </div>
-        <div>
-          <span class="vi">2. Độ ẩm: 25% – 75%.</span>
-          <span class="en">Humidity: 25% – 75%.</span>
+        <div *ngFor="let note of regularWarehouseNotes.grid">
+          <span class="vi">{{ note.vi }}</span>
+          <span class="en">{{ note.en }}</span>
         </div>
       </div>
       <div class="sheet-notes__list">
-        <div class="sheet-notes__item">
-          <span class="vi">3. Thời gian kiểm tra: Sáng (9:00 am) và Chiều (3:00 pm).</span>
-          <span class="en">Check time: morning (9:00 am) and afternoon (3:00 pm).</span>
-        </div>
-        <div class="sheet-notes__item">
-          <span class="vi">4. Khi nhiệt độ, độ ẩm vượt gần tới mức giới hạn, đồng hồ sẽ phát tín hiệu cảnh báo bằng âm thanh, cần tiến hành điều chỉnh nhiệt độ, độ ẩm bằng cách mở điều hòa/quạt, máy hút ẩm.</span>
-          <span class="en">When the temperature and humidity are close to the limit, the watch will give an audible warning signal. It is necessary to adjust the temperature and humidity by turning on the air conditioner/fan or dehumidifier.</span>
-        </div>
-        <div class="sheet-notes__item">
-          <span class="vi">5. Khi nhiệt độ hoặc độ ẩm chạm ngưỡng cảnh báo (tiếp xúc đường màu vàng), người kiểm tra ngay lập tức thông báo cho trưởng bộ phận để xử lý kịp thời.</span>
-          <span class="en">When the temperature or humidity reaches the warning threshold (contacts the yellow line), the inspector immediately notifies the department head for timely handling.</span>
+        <div class="sheet-notes__item" *ngFor="let note of regularWarehouseNotes.list">
+          <span class="vi">{{ note.vi }}</span>
+          <span class="en">{{ note.en }}</span>
         </div>
       </div>
     </div>
@@ -578,9 +566,40 @@
     </div>
 
     <p class="zalo-settings-modal__info">
-      <span class="vi">Chọn nhân viên (ID từ <strong>zalo_links</strong>) nhận nhắc cập nhật biểu mẫu.</span>
-      <span class="en">Select staff (IDs from zalo_links) to receive update reminders.</span>
+      <span class="vi">Chọn <strong>tổng danh sách ID</strong> (từ <strong>zalo_links</strong>, nhà máy {{ zaloSettingsTab }} / ALL). Hệ thống mỗi ngày <strong>chọn ngẫu nhiên {{ zaloDailyAssigneeCount }} ID</strong> để nhận tin nhắc Zalo và ghi đủ nhiệt độ/độ ẩm.</span>
+      <span class="en">Select the full ID pool for {{ zaloSettingsTab }}. Each day <strong>{{ zaloDailyAssigneeCount }} IDs</strong> are picked at random for Zalo reminders and data entry.</span>
     </p>
+
+    <div class="zalo-settings-plan" *ngIf="!zaloSettingsLoading">
+      <div class="zalo-settings-plan__row">
+        <span class="zalo-settings-plan__label vi">① Tổng số ID được nhắc (đã chọn)</span>
+        <span class="zalo-settings-plan__label en">① Total IDs in reminder pool</span>
+        <strong class="zalo-settings-plan__value">{{ zaloSelectedCount }}</strong>
+      </div>
+      <div class="zalo-settings-plan__row">
+        <span class="zalo-settings-plan__label vi">② Mỗi ngày {{ zaloSettingsTab }}: 3 biểu mẫu × 2 ca (sáng/chiều) = <strong>{{ zaloSlotsPerDay }} lần</strong> ghi</span>
+        <span class="zalo-settings-plan__label en">② Daily workload: 3 forms × 2 shifts = {{ zaloSlotsPerDay }} entries</span>
+      </div>
+      <div class="zalo-settings-plan__row zalo-settings-plan__row--highlight">
+        <span class="zalo-settings-plan__label vi">③ Hôm nay: <strong>{{ zaloDailyAssigneeCount }} ID</strong> phụ trách ghi (chia ngẫu nhiên, đổi mỗi ngày)</span>
+        <span class="zalo-settings-plan__label en">③ Today: {{ zaloDailyAssigneeCount }} assignees (random, changes daily)</span>
+        <strong class="zalo-settings-plan__value zalo-settings-plan__ids">
+          {{ zaloTodayAssignees.length ? zaloTodayAssignees.join(', ') : '—' }}
+        </strong>
+      </div>
+      <p class="zalo-settings-plan__hint" *ngIf="zaloTodayAssignees.length >= zaloDailyAssigneeCount">
+        <span class="vi">Chỉ <strong>{{ zaloTodayAssignees.join(', ') }}</strong> nhận tin Zalo hôm nay; mỗi người ~<strong>{{ zaloEntriesPerAssigneeToday }}</strong> lần ghi ({{ zaloSlotsPerDay }} ÷ {{ zaloTodayAssignees.length }}).</span>
+        <span class="en">Only today’s assignees get Zalo messages; ~{{ zaloEntriesPerAssigneeToday }} entries per person.</span>
+      </p>
+      <p class="zalo-settings-plan__hint" *ngIf="zaloSelectedCount > 0 && zaloSelectedCount < zaloDailyAssigneeCount">
+        <span class="vi">Ít hơn {{ zaloDailyAssigneeCount }} ID → nhắc <strong>toàn bộ {{ zaloSelectedCount }}</strong> người đã chọn.</span>
+        <span class="en">Fewer than {{ zaloDailyAssigneeCount }} IDs → remind all {{ zaloSelectedCount }} selected members.</span>
+      </p>
+      <p class="zalo-settings-plan__hint" *ngIf="!zaloSelectedCount">
+        <span class="vi">Chưa chọn ID — không gửi nhắc.</span>
+        <span class="en">No IDs selected — no reminders sent.</span>
+      </p>
+    </div>
     <p class="zalo-settings-modal__schedule">
       <span class="vi">Tự động: <strong>8:55</strong> &amp; <strong>14:55</strong> (T2–T7); chưa nhập → nhắc thêm sau 30 phút; sau 2 lần →
         <strong>{{ zaloEscalationIds.join(', ') }}</strong>. Chủ nhật không nhắc.</span>
@@ -596,13 +615,15 @@
     <div class="zalo-settings-loading" *ngIf="zaloSettingsLoading">Đang tải… / Loading…</div>
 
     <div class="zalo-settings-list" *ngIf="!zaloSettingsLoading">
-      <label class="zalo-settings-row" *ngFor="let row of zaloLinks">
+      <label class="zalo-settings-row" *ngFor="let row of zaloLinksForTab"
+             [class.zalo-settings-row--today]="isZaloMemberSelected(row.memberId) && isZaloTodayAssignee(row.memberId)">
         <input type="checkbox" [checked]="isZaloMemberSelected(row.memberId)" (change)="toggleZaloMember(row.memberId)" />
         <span class="zalo-settings-row__id">{{ row.memberId }}</span>
+        <span class="zalo-settings-row__badge" *ngIf="isZaloMemberSelected(row.memberId) && isZaloTodayAssignee(row.memberId)">Hôm nay</span>
         <span class="zalo-settings-row__name">{{ row.name }}</span>
         <span class="zalo-settings-row__chat" title="Chat ID">{{ row.chatId }}</span>
       </label>
-      <p class="zalo-settings-empty" *ngIf="!zaloLinks.length">Không có bản ghi zalo_links.</p>
+      <p class="zalo-settings-empty" *ngIf="!zaloLinksForTab.length">Không có bản ghi zalo_links cho {{ zaloSettingsTab }}.</p>
     </div>
 
     <div class="zalo-settings-modal__foot">

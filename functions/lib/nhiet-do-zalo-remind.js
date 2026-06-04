@@ -33,9 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DAILY_ASSIGNEE_COUNT = exports.SLOTS_PER_DAY = void 0;
 exports.getVnDateTime = getVnDateTime;
 exports.slotFromHour = slotFromHour;
 exports.getReminderAction = getReminderAction;
+exports.pickDailyAssignees = pickDailyAssignees;
 exports.isFactorySlotComplete = isFactorySlotComplete;
 exports.runNhietDoZaloRemind = runNhietDoZaloRemind;
 const admin = __importStar(require("firebase-admin"));
@@ -43,6 +45,10 @@ const params_config_1 = require("./params-config");
 const FACTORIES = ['ASM1', 'ASM2'];
 const FORM_TYPES = ['regular', 'special', 'cold'];
 const ESCALATION_MEMBER_IDS = ['ASP0119', 'ASP1761', 'ASP0538'];
+/** 3 biểu mẫu × 2 ca/ngày */
+exports.SLOTS_PER_DAY = 6;
+/** Số ID nhận nhắc mỗi ngày */
+exports.DAILY_ASSIGNEE_COUNT = 2;
 const SETTINGS_COLLECTION = 'nhiet-do-zalo-settings';
 const STATE_COLLECTION = 'nhiet-do-reminder-state';
 const CHECKLIST_COLLECTION = 'warehouse-temp-humidity-checklists';
@@ -101,6 +107,34 @@ function getReminderAction(hour, minute, slot) {
             return 'escalate';
     }
     return null;
+}
+function seededRandom(seed) {
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i++) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return () => {
+        h += 0x6d2b79f5;
+        let t = Math.imul(h ^ (h >>> 15), 1 | h);
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+/** Chọn ngẫu nhiên (ổn định theo ngày) 2 ID từ danh sách nhà máy */
+function pickDailyAssignees(memberIds, factory, dateKey, count = exports.DAILY_ASSIGNEE_COUNT) {
+    const ids = [...new Set(memberIds.map(normalizeMemberId).filter(Boolean))];
+    if (!ids.length)
+        return [];
+    if (ids.length <= count)
+        return ids;
+    const rng = seededRandom(`${factory}:${dateKey}`);
+    const arr = [...ids];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.slice(0, count);
 }
 function normalizeMemberId(raw) {
     const t = String(raw || '').trim().toUpperCase();
@@ -174,20 +208,26 @@ async function isFactorySlotComplete(db, factory, vn, slot) {
 function stateDocId(factory, dateKey, slot) {
     return `${factory}_${dateKey}_${slot}`;
 }
-function buildMessage(factory, slot, action, missing, vn) {
+function buildMessage(factory, slot, action, missing, vn, assigneeIds) {
     const slotVi = slot === 'morning' ? 'Sáng (9:00)' : 'Chiều (15:00)';
     const slotEn = slot === 'morning' ? 'Morning' : 'Afternoon';
     const dateStr = `${String(vn.day).padStart(2, '0')}/${String(vn.month).padStart(2, '0')}/${vn.year}`;
     const missLines = missing.map(m => `  • ${m}`).join('\n');
+    const dutyLine = (assigneeIds === null || assigneeIds === void 0 ? void 0 : assigneeIds.length)
+        ? `Phụ trách hôm nay: ${assigneeIds.join(', ')}\n`
+        : '';
     if (action === 'escalate') {
         return (`🚨 [Nhiệt độ & Độ ẩm — ${factory}] Chưa cập nhật sau 2 lần nhắc\n` +
             `Ca: ${slotVi} · Ngày ${dateStr}\n` +
+            dutyLine +
             `Thiếu biểu mẫu:\n${missLines}\n` +
             `Vui lòng xử lý gấp. / Urgent update required.`);
     }
     const remindNo = action === 1 ? '1' : '2';
     return (`🌡️ [Nhiệt độ & Độ ẩm — ${factory}] Nhắc cập nhật (lần ${remindNo})\n` +
         `Ca: ${slotVi} (${slotEn}) · Ngày ${dateStr}\n` +
+        dutyLine +
+        `(3 biểu mẫu × 2 ca = ${exports.SLOTS_PER_DAY} lần ghi/ngày)\n` +
         `Vui lòng nhập số liệu các biểu mẫu:\n${missLines}\n` +
         `Tab: Nhiệt Độ → ${factory}`);
 }
@@ -232,15 +272,17 @@ async function runNhietDoZaloRemind(db) {
             const expectedStage = action === 1 ? 0 : action === 2 ? 1 : 2;
             if (stage !== expectedStage)
                 continue;
+            const pool = (settings.memberIds || []).map(normalizeMemberId).filter(Boolean);
+            const dailyAssignees = pickDailyAssignees(pool, factory, dateKey);
             const memberIds = action === 'escalate'
-                ? [...new Set([...(settings.memberIds || []).map(normalizeMemberId), ...ESCALATION_MEMBER_IDS])]
-                : (settings.memberIds || []).map(normalizeMemberId).filter(Boolean);
+                ? [...new Set([...dailyAssignees, ...ESCALATION_MEMBER_IDS])]
+                : dailyAssignees;
             const links = await resolveChatIds(db, memberIds);
             if (!links.length) {
                 console.warn(`[nhiet-do-zalo] ${factory} ${slot} no chatId for`, memberIds);
                 continue;
             }
-            const msg = buildMessage(factory, slot, action, missing, vn);
+            const msg = buildMessage(factory, slot, action, missing, vn, dailyAssignees);
             await sendZaloText(token, links.map(l => l.chatId), msg);
             const newStage = action === 'escalate' ? 3 : action === 2 ? 2 : 1;
             await stateRef.set({

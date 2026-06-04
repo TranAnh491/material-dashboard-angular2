@@ -8,6 +8,10 @@ export type ReminderAction = 1 | 2 | 'escalate';
 const FACTORIES: NhietDoFactory[] = ['ASM1', 'ASM2'];
 const FORM_TYPES = ['regular', 'special', 'cold'] as const;
 const ESCALATION_MEMBER_IDS = ['ASP0119', 'ASP1761', 'ASP0538'];
+/** 3 biểu mẫu × 2 ca/ngày */
+export const SLOTS_PER_DAY = 6;
+/** Số ID nhận nhắc mỗi ngày */
+export const DAILY_ASSIGNEE_COUNT = 2;
 const SETTINGS_COLLECTION = 'nhiet-do-zalo-settings';
 const STATE_COLLECTION = 'nhiet-do-reminder-state';
 const CHECKLIST_COLLECTION = 'warehouse-temp-humidity-checklists';
@@ -91,6 +95,39 @@ export function getReminderAction(
     if (t >= 15 * 60 + 53 && t <= 15 * 60 + 59) return 'escalate';
   }
   return null;
+}
+
+function seededRandom(seed: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h += 0x6d2b79f5;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Chọn ngẫu nhiên (ổn định theo ngày) 2 ID từ danh sách nhà máy */
+export function pickDailyAssignees(
+  memberIds: string[],
+  factory: NhietDoFactory,
+  dateKey: string,
+  count = DAILY_ASSIGNEE_COUNT
+): string[] {
+  const ids = [...new Set(memberIds.map(normalizeMemberId).filter(Boolean))];
+  if (!ids.length) return [];
+  if (ids.length <= count) return ids;
+  const rng = seededRandom(`${factory}:${dateKey}`);
+  const arr = [...ids];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, count);
 }
 
 function normalizeMemberId(raw: string): string {
@@ -189,17 +226,23 @@ function buildMessage(
   slot: NhietDoSlot,
   action: ReminderAction,
   missing: string[],
-  vn: VnDateTime
+  vn: VnDateTime,
+  assigneeIds?: string[]
 ): string {
   const slotVi = slot === 'morning' ? 'Sáng (9:00)' : 'Chiều (15:00)';
   const slotEn = slot === 'morning' ? 'Morning' : 'Afternoon';
   const dateStr = `${String(vn.day).padStart(2, '0')}/${String(vn.month).padStart(2, '0')}/${vn.year}`;
   const missLines = missing.map(m => `  • ${m}`).join('\n');
 
+  const dutyLine = assigneeIds?.length
+    ? `Phụ trách ghi hôm nay (${assigneeIds.length} ID, ${SLOTS_PER_DAY} lần/ngày): ${assigneeIds.join(', ')}\n`
+    : '';
+
   if (action === 'escalate') {
     return (
       `🚨 [Nhiệt độ & Độ ẩm — ${factory}] Chưa cập nhật sau 2 lần nhắc\n` +
       `Ca: ${slotVi} · Ngày ${dateStr}\n` +
+      dutyLine +
       `Thiếu biểu mẫu:\n${missLines}\n` +
       `Vui lòng xử lý gấp. / Urgent update required.`
     );
@@ -209,6 +252,8 @@ function buildMessage(
   return (
     `🌡️ [Nhiệt độ & Độ ẩm — ${factory}] Nhắc cập nhật (lần ${remindNo})\n` +
     `Ca: ${slotVi} (${slotEn}) · Ngày ${dateStr}\n` +
+    dutyLine +
+    `(3 biểu mẫu × 2 ca = ${SLOTS_PER_DAY} lần ghi/ngày · chỉ nhắc ${DAILY_ASSIGNEE_COUNT} ID/ngày)\n` +
     `Vui lòng nhập số liệu các biểu mẫu:\n${missLines}\n` +
     `Tab: Nhiệt Độ → ${factory}`
   );
@@ -266,10 +311,13 @@ export async function runNhietDoZaloRemind(db: admin.firestore.Firestore): Promi
       const expectedStage = action === 1 ? 0 : action === 2 ? 1 : 2;
       if (stage !== expectedStage) continue;
 
+      const pool = (settings.memberIds || []).map(normalizeMemberId).filter(Boolean);
+      const dailyAssignees = pickDailyAssignees(pool, factory, dateKey);
+
       const memberIds =
         action === 'escalate'
-          ? [...new Set([...(settings.memberIds || []).map(normalizeMemberId), ...ESCALATION_MEMBER_IDS])]
-          : (settings.memberIds || []).map(normalizeMemberId).filter(Boolean);
+          ? [...new Set([...dailyAssignees, ...ESCALATION_MEMBER_IDS])]
+          : dailyAssignees;
 
       const links = await resolveChatIds(db, memberIds);
       if (!links.length) {
@@ -277,7 +325,7 @@ export async function runNhietDoZaloRemind(db: admin.firestore.Firestore): Promi
         continue;
       }
 
-      const msg = buildMessage(factory, slot, action, missing, vn);
+      const msg = buildMessage(factory, slot, action, missing, vn, dailyAssignees);
       await sendZaloText(
         token,
         links.map(l => l.chatId),

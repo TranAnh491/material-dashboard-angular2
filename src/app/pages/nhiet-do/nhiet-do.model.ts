@@ -39,8 +39,8 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     sheetTitleEn: 'SPECIAL STORAGE WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'inventory_2',
     manageCode: 'WH-P01/F07',
-    docVersion: '00',
-    issuedDate: '20/06/2026'
+    docVersion: '08',
+    issuedDate: '26/05/2025'
   },
   {
     id: 'ASM1-cold',
@@ -78,8 +78,8 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     sheetTitleEn: 'SPECIAL STORAGE WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'inventory_2',
     manageCode: 'WH-P01/F07',
-    docVersion: '00',
-    issuedDate: '20/06/2026'
+    docVersion: '08',
+    issuedDate: '26/05/2025'
   },
   {
     id: 'ASM2-cold',
@@ -146,11 +146,55 @@ export const TEMP_LIMITS_BY_FORM: Record<NhietDoFormType, TempChartLimits> = {
     gridLines: [12, 10, 8, 6, 4, 2, 0],
     redLow: 2,
     redHigh: 8,
-    warnLow: 3,
-    warnHigh: 7,
+    warnLow: 2.5,
+    warnHigh: 7.5,
     noteVi: 'Nhiệt độ tủ lạnh: 2°C – 8°C.',
     noteEn: 'Refrigerator temperature: 2°C – 8°C.'
   }
+};
+
+/** Lưu ý đầy đủ — Kho Thường (F08), Kho Đặc Biệt (F07), Tủ Lạnh (F09) */
+export interface SheetNoteLine {
+  vi: string;
+  en: string;
+}
+
+export const REGULAR_WAREHOUSE_SHEET_NOTES: {
+  grid: SheetNoteLine[];
+  list: SheetNoteLine[];
+} = {
+  grid: [
+    {
+      vi: '1. Nhiệt độ kho thường: 15-35°C',
+      en: 'Normal warehouse temperature: 15-35°C'
+    },
+    {
+      vi: '2. Nhiệt độ kho đặc biệt (phòng lạnh) 16-25°C',
+      en: 'Special warehouse temperature 16-25°C'
+    },
+    {
+      vi: '3. Nhiệt độ tủ lạnh 2-8°C',
+      en: 'Refrigerator temperature 2-8°C'
+    },
+    {
+      vi: '4. Độ ẩm: 25%-75%',
+      en: 'Humidity: 25%-75%'
+    }
+  ],
+  list: [
+    {
+      vi: '5. Thời gian kiểm tra : sáng (9:00 am) và chiều ( 3:00 pm).',
+      en: 'Check time: morning (9:00 am) and afternoon (3:00 pm).'
+    },
+    {
+      vi: '6. Khi nhiệt độ, độ ẩm vượt gần tới mức giới hạn , đồng hồ sẽ phát tín hiệu cảnh báo bằng âm thanh, cần tiến hành điều chỉnh nhiệt độ, độ ẩm bằng cách mở điều hòa/ quạt, máy hút ẩm.',
+      en: 'When the temperature and humidity are close to the limit, the watch will give an audible warning signal. It is necessary to adjust the temperature and humidity by turning on the air conditioner/fan or dehumidifier.'
+    },
+    {
+      vi: '7. Khi nhiệt độ hoặc độ ẩm chạm ngưỡng cảnh báo (tiếp xúc đường màu vàng), người kiểm tra ngay lập tức thông báo cho trưởng bộ phận để xử lý kịp thời.',
+      en: 'When the temperature or humidity reaches the warning threshold (contacts the yellow line), the inspector immediately notifies the department head for timely handling.'
+    }
+  ]
 };
 
 export function buildNhietDoFactoryGroups(): NhietDoFactoryGroup[] {
