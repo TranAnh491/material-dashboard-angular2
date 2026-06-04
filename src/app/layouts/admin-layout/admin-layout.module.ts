@@ -75,6 +75,7 @@ import { PrintOptionDialogComponent } from '../../components/print-option-dialog
 import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { TaskComponent } from '../../pages/task/task.component';
+import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 
 @NgModule({
   imports: [
@@ -144,7 +145,8 @@ import { TaskComponent } from '../../pages/task/task.component';
 
     ChartComponent,
     ZaloComponent,
-    TaskComponent
+    TaskComponent,
+    NhietDoComponent
   ],
   providers: [
     GoogleSheetService,

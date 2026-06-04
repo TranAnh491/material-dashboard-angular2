@@ -1,0 +1,522 @@
+<div class="nhiet-do-page">
+
+  <!-- ══ Màn chọn 6 biểu mẫu ══ -->
+  <ng-container *ngIf="view === 'picker'">
+    <div class="nhiet-do-toolbar no-print">
+      <div class="nhiet-do-toolbar__left">
+        <img src="assets/img/logo.png" alt="AIRSPEED" class="nhiet-do-toolbar__logo" />
+        <div class="nhiet-do-toolbar__title">
+          <span class="nhiet-do-toolbar__title-vi">Nhiệt độ &amp; Độ ẩm</span>
+          <span class="nhiet-do-toolbar__title-en">Temperature &amp; Humidity</span>
+        </div>
+      </div>
+      <div class="nhiet-do-toolbar__actions">
+        <button type="button" class="tool-icon tool-icon--menu"
+                (click)="goToMenu()" title="Về Menu / Back to Menu" aria-label="Về Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="nhiet-do-hub no-print">
+      <p class="nhiet-do-hub__hint">
+        <span class="vi">Chọn biểu mẫu kiểm tra</span>
+        <span class="en">Select a checklist form</span>
+      </p>
+
+      <section *ngFor="let group of factoryGroups" class="nhiet-do-hub__section" [ngClass]="group.accentClass">
+        <header class="nhiet-do-hub__section-head">
+          <span class="nhiet-do-hub__factory-badge">{{ group.labelVi }}</span>
+          <span class="nhiet-do-hub__factory-sub">{{ group.labelEn }}</span>
+        </header>
+        <div class="nhiet-do-hub__grid">
+          <button type="button" class="nhiet-do-form-card" *ngFor="let form of group.forms"
+                  (click)="openForm(form)">
+            <span class="nhiet-do-form-card__icon" aria-hidden="true">
+              <svg *ngIf="form.formType === 'regular'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 9.5 12 4l9 5.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+                <path d="M9 21V12h6v9"/>
+              </svg>
+              <svg *ngIf="form.formType === 'special'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="7" width="18" height="13" rx="1.5"/>
+                <path d="M3 11h18M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              <svg *ngIf="form.formType === 'cold'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="3" width="14" height="18" rx="2"/>
+                <path d="M12 7v10M9 10h6M9 14h6"/>
+              </svg>
+            </span>
+            <span class="nhiet-do-form-card__text">
+              <span class="nhiet-do-form-card__title-vi">{{ form.titleVi }}</span>
+              <span class="nhiet-do-form-card__title-en">{{ form.titleEn }}</span>
+            </span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </ng-container>
+
+  <!-- ══ Biểu mẫu chi tiết ══ -->
+  <ng-container *ngIf="view === 'form' && activeForm">
+  <div class="nhiet-do-toolbar no-print">
+    <div class="nhiet-do-toolbar__left">
+      <button type="button" class="tool-icon tool-icon--back"
+              (click)="backToPicker()" title="Quay lại / Back" aria-label="Quay lại">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <img src="assets/img/logo.png" alt="AIRSPEED" class="nhiet-do-toolbar__logo" />
+      <div class="nhiet-do-toolbar__form-label">
+        <span class="nhiet-do-toolbar__form-label-vi">{{ activeForm.factory }} — {{ activeForm.titleVi }}</span>
+        <span class="nhiet-do-toolbar__form-label-en">{{ activeForm.factory }} — {{ activeForm.titleEn }}</span>
+      </div>
+      <div class="nhiet-do-toolbar__filters">
+      <select class="fc-select fc-select--month" title="Tháng / Month"
+              [(ngModel)]="selectedMonth" (ngModelChange)="onMonthYearChange()">
+        <option *ngFor="let m of [1,2,3,4,5,6,7,8,9,10,11,12]" [value]="m">{{ m }}</option>
+      </select>
+      <select class="fc-select fc-select--year" title="Năm / Year"
+              [(ngModel)]="selectedYear" (ngModelChange)="onMonthYearChange()">
+        <option *ngFor="let y of years" [value]="y">{{ y }}</option>
+      </select>
+      <span class="fc-loading" *ngIf="isLoading">
+        <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        <span class="vi">Đang tải…</span>
+        <span class="en">Loading…</span>
+      </span>
+      </div>
+    </div>
+    <div class="nhiet-do-toolbar__actions">
+      <button type="button" class="tool-icon tool-icon--save"
+              (click)="saveMonth()" [disabled]="isSaving || isLoading"
+              [title]="isSaving ? 'Đang lưu…' : 'Lưu'"
+              [attr.aria-label]="isSaving ? 'Đang lưu' : 'Lưu'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+      </button>
+      <button type="button" class="tool-icon tool-icon--print"
+              (click)="printForm()" title="In" aria-label="In">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 9 6 2 18 2 18 9"/>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+      </button>
+      <button type="button" class="tool-icon tool-icon--menu"
+              (click)="goToMenu()" title="Về Menu" aria-label="Về Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ Tờ biểu mẫu ══ -->
+  <div class="form-sheet" id="temp-humidity-sheet">
+
+    <!-- Header 3 cột: logo | tiêu đề | bảng meta -->
+    <div class="sheet-header">
+      <div class="sheet-header__logo">
+        <img src="assets/img/logo.png" alt="AIRSPEED" class="company-logo" />
+      </div>
+
+      <div class="sheet-header__center">
+        <div class="sheet-header__company">AIRSPEED MANUFACTURING VIETNAM</div>
+        <div class="sheet-header__title-vi">
+          {{ activeForm.sheetTitleVi }}
+          ( THÁNG <strong>{{ selectedMonth }}</strong>/NĂM <strong>{{ selectedYear }}</strong> )
+        </div>
+        <div class="sheet-header__title-en">
+          {{ activeForm.sheetTitleEn }}
+          ( MONTH <strong>{{ selectedMonth }}</strong>/YEAR <strong>{{ selectedYear }}</strong> )
+        </div>
+      </div>
+
+      <table class="meta-table">
+        <tr><td>Mã quản lý /Code</td><td>{{ activeForm.manageCode }}</td></tr>
+        <tr><td>Phiên bản /Version</td><td>08</td></tr>
+        <tr><td>Ngày ban hành /Issued date</td><td>26/05/2025</td></tr>
+        <tr><td>Số trang /Page</td><td>1/1</td></tr>
+      </table>
+    </div>
+
+    <!-- Tên thiết bị -->
+    <div class="equipment-row">
+      <span class="equipment-row__label">Tên thiết bị đo / Measurement Equipment Name:</span>
+      <input type="text" class="equipment-input no-print" [(ngModel)]="equipmentName" />
+      <span class="print-only equipment-dots">{{ equipmentName || '........................................................' }}</span>
+    </div>
+
+    <!-- Bảng dữ liệu + biểu đồ SVG -->
+    <div class="table-scroll-wrap">
+      <table class="main-table">
+        <colgroup>
+          <col class="col-group">
+          <col class="col-slot">
+          <col *ngFor="let d of dayNumbers" [ngClass]="isDayActive(d) ? 'col-day' : 'col-day col-day--off'">
+          <col class="col-ucl">
+        </colgroup>
+
+        <tbody>
+
+          <!-- Hàng tiêu đề ngày -->
+          <tr class="row-date-head">
+            <td class="corner-cell" colspan="2">Ngày /Date</td>
+            <td *ngFor="let d of dayNumbers"
+                class="day-head" [class.day-head--off]="!isDayActive(d)">{{ d }}</td>
+            <td class="ucl-head"></td>
+          </tr>
+
+          <!-- Nhiệt độ Sáng -->
+          <tr class="row-data">
+            <td class="group-label group-label--temp" rowspan="2">
+              <div class="glabel-vi">Nhiệt độ (°C)</div>
+              <div class="glabel-en">Temperature</div>
+            </td>
+            <td class="slot-label">Sáng /Morning</td>
+            <td *ngFor="let d of dayNumbers"
+                class="data-cell"
+                [class.data-cell--off]="!isDayActive(d)"
+                [class.data-cell--warn]="cellStatusClass(d,'temp','morning')==='cell--warn'"
+                [class.data-cell--danger]="cellStatusClass(d,'temp','morning')==='cell--danger'">
+              <input type="number" step="0.1" class="cell-input" inputmode="decimal"
+                     [disabled]="!isDayActive(d)"
+                     [ngModel]="days[d-1].tempMorning"
+                     (ngModelChange)="onDayNumberChange(d, 'tempMorning', $event)" />
+            </td>
+            <td class="ucl-cell"></td>
+          </tr>
+
+          <!-- Nhiệt độ Chiều -->
+          <tr class="row-data">
+            <td class="slot-label">Chiều /Afternoon</td>
+            <td *ngFor="let d of dayNumbers"
+                class="data-cell"
+                [class.data-cell--off]="!isDayActive(d)"
+                [class.data-cell--warn]="cellStatusClass(d,'temp','afternoon')==='cell--warn'"
+                [class.data-cell--danger]="cellStatusClass(d,'temp','afternoon')==='cell--danger'">
+              <input type="number" step="0.1" class="cell-input" inputmode="decimal"
+                     [disabled]="!isDayActive(d)"
+                     [ngModel]="days[d-1].tempAfternoon"
+                     (ngModelChange)="onDayNumberChange(d, 'tempAfternoon', $event)" />
+            </td>
+            <td class="ucl-cell"></td>
+          </tr>
+
+          <!-- Độ ẩm Sáng -->
+          <tr class="row-data">
+            <td class="group-label group-label--hum" rowspan="2">
+              <div class="glabel-vi">Độ ẩm (%)</div>
+              <div class="glabel-en">Humidity</div>
+            </td>
+            <td class="slot-label">Sáng /Morning</td>
+            <td *ngFor="let d of dayNumbers"
+                class="data-cell"
+                [class.data-cell--off]="!isDayActive(d)"
+                [class.data-cell--warn]="cellStatusClass(d,'hum','morning')==='cell--warn'"
+                [class.data-cell--danger]="cellStatusClass(d,'hum','morning')==='cell--danger'">
+              <input type="number" step="0.1" class="cell-input" inputmode="decimal"
+                     [disabled]="!isDayActive(d)"
+                     [ngModel]="days[d-1].humidityMorning"
+                     (ngModelChange)="onDayNumberChange(d, 'humidityMorning', $event)" />
+            </td>
+            <td class="ucl-cell"></td>
+          </tr>
+
+          <!-- Độ ẩm Chiều -->
+          <tr class="row-data">
+            <td class="slot-label">Chiều /Afternoon</td>
+            <td *ngFor="let d of dayNumbers"
+                class="data-cell"
+                [class.data-cell--off]="!isDayActive(d)"
+                [class.data-cell--warn]="cellStatusClass(d,'hum','afternoon')==='cell--warn'"
+                [class.data-cell--danger]="cellStatusClass(d,'hum','afternoon')==='cell--danger'">
+              <input type="number" step="0.1" class="cell-input" inputmode="decimal"
+                     [disabled]="!isDayActive(d)"
+                     [ngModel]="days[d-1].humidityAfternoon"
+                     (ngModelChange)="onDayNumberChange(d, 'humidityAfternoon', $event)" />
+            </td>
+            <td class="ucl-cell"></td>
+          </tr>
+
+          <!-- Ghi chép -->
+          <tr class="row-data">
+            <td class="group-label group-label--notes" colspan="2">
+              <span class="glabel-vi">Ghi chép</span><span class="glabel-en"> /Notes</span>
+            </td>
+            <td *ngFor="let d of dayNumbers"
+                class="data-cell data-cell--note"
+                [class.data-cell--off]="!isDayActive(d)">
+              <input type="text" class="cell-input cell-input--note"
+                     [disabled]="!isDayActive(d)"
+                     [(ngModel)]="days[d-1].note" />
+            </td>
+            <td class="ucl-cell"></td>
+          </tr>
+
+          <!-- ═══ Hàng biểu đồ SVG (span toàn bộ cột) ═══ -->
+          <tr>
+            <td class="chart-svg-cell" colspan="34">
+
+              <svg [attr.viewBox]="svgViewBox"
+                   preserveAspectRatio="xMidYMid meet"
+                   class="chart-svg">
+
+                <!-- ── Nhãn section bên trái ────────────────────── -->
+                <text [attr.transform]="'translate(16,' + (svgTempTop + svgTempH/2) + ') rotate(-90)'"
+                      text-anchor="middle" class="svg-section-label svg-section-label--temp">
+                  Nhiệt độ (°C) / Temperature
+                </text>
+                <text [attr.transform]="'translate(16,' + (svgHumTop + svgHumH/2) + ') rotate(-90)'"
+                      text-anchor="middle" class="svg-section-label svg-section-label--hum">
+                  Độ ẩm (%) / Humidity
+                </text>
+
+                <!-- ══ NHIỆT ĐỘ ══════════════════════════════════ -->
+                <g [attr.transform]="'translate(' + svgLabelW + ',' + svgTempTop + ')'">
+
+                  <!-- Đường viền ngoài vùng nhiệt độ -->
+                  <rect x="0" y="0" [attr.width]="svgPlotW" [attr.height]="svgTempH"
+                        fill="white" stroke="#000" stroke-width="0.8"/>
+
+                  <!-- Lưới ngang + nhãn Y -->
+                  <ng-container *ngFor="let v of tempGridLines">
+                    <line x1="0" [attr.y1]="svgTempY(v)"
+                          [attr.x2]="svgPlotW" [attr.y2]="svgTempY(v)"
+                          class="svg-grid-h"/>
+                    <text [attr.x]="-3" [attr.y]="svgTempY(v)+3"
+                          text-anchor="end" class="svg-y-label">{{ v }}°C</text>
+                  </ng-container>
+
+                  <!-- Lưới dọc theo ngày -->
+                  <ng-container *ngFor="let d of dayNumbers">
+                    <line *ngIf="isDayActive(d)"
+                          [attr.x1]="svgDayX(d)" y1="0"
+                          [attr.x2]="svgDayX(d)" [attr.y2]="svgTempH"
+                          class="svg-grid-v"/>
+                  </ng-container>
+
+                  <!-- Vạch đỏ giới hạn nhiệt độ -->
+                  <line x1="0" [attr.y1]="svgTempY(tempLimits.redHigh)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.redHigh)"
+                        class="svg-limit-red"/>
+                  <line x1="0" [attr.y1]="svgTempY(tempLimits.redLow)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.redLow)"
+                        class="svg-limit-red"/>
+                  <!-- Vạch vàng cảnh báo -->
+                  <line x1="0" [attr.y1]="svgTempY(tempLimits.warnHigh)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.warnHigh)"
+                        class="svg-limit-yellow"/>
+                  <line x1="0" [attr.y1]="svgTempY(tempLimits.warnLow)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.warnLow)"
+                        class="svg-limit-yellow"/>
+
+                  <!-- Label đỏ bên phải -->
+                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgTempY(tempLimits.redHigh) - 2"
+                        class="svg-limit-label-red">{{ tempLimits.redHigh }}°C</text>
+                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgTempY(tempLimits.redLow) + 8"
+                        class="svg-limit-label-red">{{ tempLimits.redLow }}°C</text>
+
+                  <!-- Đường nối dữ liệu Sáng (xanh dương, liền) -->
+                  <polyline *ngIf="tempAmPts"
+                            [attr.points]="tempAmPts"
+                            class="svg-line svg-line--am"/>
+                  <!-- Đường nối dữ liệu Chiều (đỏ, đứt) -->
+                  <polyline *ngIf="tempPmPts"
+                            [attr.points]="tempPmPts"
+                            class="svg-line svg-line--pm"/>
+
+                  <!-- Chấm điểm dữ liệu -->
+                  <ng-container *ngFor="let d of dayNumbers">
+                    <ng-container *ngIf="isDayActive(d)">
+                      <circle *ngIf="hasTempPoint(d,'morning')"
+                              [attr.cx]="getTempPoint(d,'morning')!.x"
+                              [attr.cy]="getTempPoint(d,'morning')!.y"
+                              r="2.8" class="svg-dot svg-dot--am"/>
+                      <circle *ngIf="hasTempPoint(d,'afternoon')"
+                              [attr.cx]="getTempPoint(d,'afternoon')!.x"
+                              [attr.cy]="getTempPoint(d,'afternoon')!.y"
+                              r="2.8" class="svg-dot svg-dot--pm"/>
+                    </ng-container>
+                  </ng-container>
+                </g>
+
+                <!-- ── Đường phân cách giữa 2 vùng ─────────────── -->
+                <line x1="0"
+                      [attr.y1]="svgTempTop + svgTempH + svgGap/2"
+                      [attr.x2]="svgTotalW"
+                      [attr.y2]="svgTempTop + svgTempH + svgGap/2"
+                      class="svg-zone-sep"/>
+
+                <!-- ══ ĐỘ ẨM ══════════════════════════════════════ -->
+                <g [attr.transform]="'translate(' + svgLabelW + ',' + svgHumTop + ')'">
+
+                  <!-- Đường viền ngoài vùng độ ẩm -->
+                  <rect x="0" y="0" [attr.width]="svgPlotW" [attr.height]="svgHumH"
+                        fill="white" stroke="#000" stroke-width="0.8"/>
+
+                  <!-- Lưới ngang + nhãn Y -->
+                  <ng-container *ngFor="let v of humGridLines">
+                    <line x1="0" [attr.y1]="svgHumY(v)"
+                          [attr.x2]="svgPlotW" [attr.y2]="svgHumY(v)"
+                          class="svg-grid-h"/>
+                    <text [attr.x]="-3" [attr.y]="svgHumY(v)+3"
+                          text-anchor="end" class="svg-y-label">{{ v }}%</text>
+                  </ng-container>
+
+                  <!-- Lưới dọc theo ngày -->
+                  <ng-container *ngFor="let d of dayNumbers">
+                    <line *ngIf="isDayActive(d)"
+                          [attr.x1]="svgDayX(d)" y1="0"
+                          [attr.x2]="svgDayX(d)" [attr.y2]="svgHumH"
+                          class="svg-grid-v"/>
+                  </ng-container>
+
+                  <!-- Vạch đỏ giới hạn: 75% và 25% -->
+                  <line x1="0" [attr.y1]="svgHumY(75)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(75)"
+                        class="svg-limit-red"/>
+                  <line x1="0" [attr.y1]="svgHumY(25)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(25)"
+                        class="svg-limit-red"/>
+                  <!-- Vạch vàng cảnh báo: 73% và 27% -->
+                  <line x1="0" [attr.y1]="svgHumY(73)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(73)"
+                        class="svg-limit-yellow"/>
+                  <line x1="0" [attr.y1]="svgHumY(27)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(27)"
+                        class="svg-limit-yellow"/>
+
+                  <!-- Label đỏ bên phải -->
+                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgHumY(75)-2"
+                        class="svg-limit-label-red">75%</text>
+                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgHumY(25)+8"
+                        class="svg-limit-label-red">25%</text>
+
+                  <!-- Đường nối dữ liệu Sáng -->
+                  <polyline *ngIf="humAmPts"
+                            [attr.points]="humAmPts"
+                            class="svg-line svg-line--am"/>
+                  <!-- Đường nối dữ liệu Chiều -->
+                  <polyline *ngIf="humPmPts"
+                            [attr.points]="humPmPts"
+                            class="svg-line svg-line--pm"/>
+
+                  <!-- Chấm điểm dữ liệu -->
+                  <ng-container *ngFor="let d of dayNumbers">
+                    <ng-container *ngIf="isDayActive(d)">
+                      <circle *ngIf="hasHumPoint(d,'morning')"
+                              [attr.cx]="getHumPoint(d,'morning')!.x"
+                              [attr.cy]="getHumPoint(d,'morning')!.y"
+                              r="2.8" class="svg-dot svg-dot--am"/>
+                      <circle *ngIf="hasHumPoint(d,'afternoon')"
+                              [attr.cx]="getHumPoint(d,'afternoon')!.x"
+                              [attr.cy]="getHumPoint(d,'afternoon')!.y"
+                              r="2.8" class="svg-dot svg-dot--pm"/>
+                    </ng-container>
+                  </ng-container>
+                </g>
+
+                <!-- ── Trục X ngày ─────────────────────────────── -->
+                <g [attr.transform]="'translate(' + svgLabelW + ',' + (svgHumTop + svgHumH + 13) + ')'">
+                  <text *ngFor="let d of dayNumbers"
+                        [attr.x]="svgDayX(d)" y="0"
+                        text-anchor="middle"
+                        [class]="isDayActive(d) ? 'svg-x-label' : 'svg-x-label svg-x-label--off'">{{ d }}</text>
+                </g>
+
+                <!-- ── Chú thích (legend) ──────────────────────── -->
+                <g [attr.transform]="'translate(' + (svgLabelW + 10) + ',' + (svgTotalH - 4) + ')'">
+                  <line x1="0" y1="-1" x2="18" y2="-1" class="svg-line svg-line--am"/>
+                  <circle cx="9" cy="-1" r="2.5" class="svg-dot svg-dot--am"/>
+                  <text x="22" y="2" class="svg-legend-text">Sáng</text>
+                  <line x1="56" y1="-1" x2="74" y2="-1" class="svg-line svg-line--pm"/>
+                  <circle cx="65" cy="-1" r="2.5" class="svg-dot svg-dot--pm"/>
+                  <text x="78" y="2" class="svg-legend-text">Chiều</text>
+                </g>
+
+              </svg>
+
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div><!-- /table-scroll-wrap -->
+
+    <!-- Lưu ý -->
+    <div class="sheet-notes">
+      <div class="sheet-notes__head">Lưu ý / Note:</div>
+      <div class="sheet-notes__grid4">
+        <div>
+          <span class="vi">1. {{ tempLimits.noteVi }}</span>
+          <span class="en">{{ tempLimits.noteEn }}</span>
+        </div>
+        <div>
+          <span class="vi">2. Độ ẩm: 25% – 75%.</span>
+          <span class="en">Humidity: 25% – 75%.</span>
+        </div>
+      </div>
+      <div class="sheet-notes__list">
+        <div class="sheet-notes__item">
+          <span class="vi">3. Thời gian kiểm tra: Sáng (9:00 am) và Chiều (3:00 pm).</span>
+          <span class="en">Check time: morning (9:00 am) and afternoon (3:00 pm).</span>
+        </div>
+        <div class="sheet-notes__item">
+          <span class="vi">4. Khi nhiệt độ, độ ẩm vượt gần tới mức giới hạn, đồng hồ sẽ phát tín hiệu cảnh báo bằng âm thanh, cần tiến hành điều chỉnh nhiệt độ, độ ẩm bằng cách mở điều hòa/quạt, máy hút ẩm.</span>
+          <span class="en">When the temperature and humidity are close to the limit, the watch will give an audible warning signal. It is necessary to adjust the temperature and humidity by turning on the air conditioner/fan or dehumidifier.</span>
+        </div>
+        <div class="sheet-notes__item">
+          <span class="vi">5. Khi nhiệt độ hoặc độ ẩm chạm ngưỡng cảnh báo (tiếp xúc đường màu vàng), người kiểm tra ngay lập tức thông báo cho trưởng bộ phận để xử lý kịp thời.</span>
+          <span class="en">When the temperature or humidity reaches the warning threshold (contacts the yellow line), the inspector immediately notifies the department head for timely handling.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chữ ký -->
+    <div class="sheet-signatures">
+      <div class="sign-box">
+        <div class="sign-box__title">Thẩm định<br>Assessment</div>
+        <div class="sign-box__area no-print">
+          <input type="text" class="sign-input" [(ngModel)]="assessmentSign" />
+        </div>
+        <div class="sign-box__area print-only">{{ assessmentSign }}</div>
+      </div>
+      <div class="sign-box">
+        <div class="sign-box__title">Kiểm tra<br>Inspection</div>
+        <div class="sign-box__area no-print">
+          <input type="text" class="sign-input" [(ngModel)]="inspectionSign" />
+        </div>
+        <div class="sign-box__area print-only">{{ inspectionSign }}</div>
+      </div>
+    </div>
+
+  </div><!-- /form-sheet -->
+  </ng-container>
+
+</div><!-- /nhiet-do-page -->
+
+<!-- ══ Toast thông báo lưu ══ -->
+<div class="save-toast no-print"
+     [class.save-toast--visible]="!!saveMessage"
+     [class.save-toast--error]="saveMessage.includes('Lỗi') || saveMessage.includes('không')">
+  <svg *ngIf="!saveMessage.includes('Lỗi') && !saveMessage.includes('không')"
+       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+  <svg *ngIf="saveMessage.includes('Lỗi') || saveMessage.includes('không')"
+       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+  <span>{{ saveMessage }}</span>
+</div>

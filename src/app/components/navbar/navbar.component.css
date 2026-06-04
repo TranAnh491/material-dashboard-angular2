@@ -126,7 +126,9 @@
 .navbar.navbar--pd-pass-through,
 .navbar.navbar--pd-pass-through .container-fluid,
 .navbar.navbar--qc-trace-pass-through,
-.navbar.navbar--qc-trace-pass-through .container-fluid {
+.navbar.navbar--qc-trace-pass-through .container-fluid,
+.navbar.navbar--nhiet-do-pass-through,
+.navbar.navbar--nhiet-do-pass-through .container-fluid {
   pointer-events: none;
 }
 
@@ -135,7 +137,8 @@
   pointer-events: auto;
 }
 
-.navbar.navbar--inbound-pass-through .btn-home {
+.navbar.navbar--inbound-pass-through .btn-home,
+.navbar.navbar--nhiet-do-pass-through .btn-home {
   pointer-events: auto;
 }
 

@@ -2,7 +2,8 @@
      [class.navbar--inbound-pass-through]="isInboundAsmPage()"
      [class.navbar--dashboard-pass-through]="isDashboard()"
      [class.navbar--pd-pass-through]="isPdControlPage()"
-     [class.navbar--qc-trace-pass-through]="isQcTraceabilityPage()">
+     [class.navbar--qc-trace-pass-through]="isQcTraceabilityPage()"
+     [class.navbar--nhiet-do-pass-through]="isNhietDoPage()">
     <div class="container-fluid">
         <div class="navbar-wrapper">
           <a class="navbar-brand" href="javascript:void(0)">{{getTitle()}}</a>
@@ -61,7 +62,7 @@
           type="button"
           class="btn-home ms-2"
           (click)="goToMenu()"
-          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage() && !isOutboundAsmPage() && !isPdControlPage() && !isShortedMaterialsPage()"
+          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage() && !isOutboundAsmPage() && !isPdControlPage() && !isShortedMaterialsPage() && !isNhietDoPage()"
           title="Về Menu"
         >
           <i class="material-icons">home</i>

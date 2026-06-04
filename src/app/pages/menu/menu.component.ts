@@ -86,6 +86,7 @@ export class MenuComponent implements OnInit, OnDestroy {
 
     // Quality
     { path: '/qc', title: 'Quality', icon: 'verified', iconImage: 'assets/img/qc.png', category: 'Quality' },
+    { path: '/nhiet-do', title: 'Nhiệt Độ', icon: 'thermostat', iconImage: 'assets/img/qc.png', category: 'Quality' },
     { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', iconImage: 'assets/img/traceback.png', category: 'Quality' },
     // ASM2 RM
     { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'download', iconImage: 'assets/img/rmin.png', category: 'ASM2 RM' },

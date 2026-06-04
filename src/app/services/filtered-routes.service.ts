@@ -137,6 +137,7 @@ export class FilteredRoutesService {
       '/equipment': 'equipment',
       '/qc': 'qc',
       '/qc-traceability': 'qc',
+      '/nhiet-do': 'nhiet-do',
       '/rm1-delivery': 'rm1-delivery',
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',

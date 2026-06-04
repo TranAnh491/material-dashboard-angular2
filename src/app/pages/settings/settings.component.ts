@@ -88,6 +88,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'checklist', name: 'Safety & Quality' },
     { key: 'equipment', name: 'Training' },
     { key: 'qc', name: 'Quality' },
+    { key: 'nhiet-do', name: 'Nhiệt Độ' },
     { key: 'rm1-delivery', name: 'RM Delivery' },
     { key: 'shorted-materials', name: 'Shorted materials' },
     { key: 'settings', name: 'Settings' },
