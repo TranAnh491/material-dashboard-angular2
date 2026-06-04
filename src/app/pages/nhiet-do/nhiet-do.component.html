@@ -27,7 +27,21 @@
         <span class="en">Select a checklist form</span>
       </p>
 
-      <section *ngFor="let group of factoryGroups" class="nhiet-do-hub__section" [ngClass]="group.accentClass">
+      <div *ngFor="let group of factoryGroups" class="nhiet-do-hub__section-row">
+        <button type="button"
+                class="nhiet-do-hub__factory-settings"
+                [ngClass]="group.factory === 'ASM1' ? 'nhiet-do-hub__factory-settings--asm1' : 'nhiet-do-hub__factory-settings--asm2'"
+                (click)="openZaloSettings(group.factory)"
+                [attr.title]="'Cài đặt Zalo ' + group.factory + ' / ' + group.factory + ' settings'"
+                [attr.aria-label]="'Cài đặt Zalo ' + group.factory">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span class="nhiet-do-hub__factory-settings-label">{{ group.factory }}</span>
+        </button>
+
+      <section class="nhiet-do-hub__section" [ngClass]="group.accentClass">
         <header class="nhiet-do-hub__section-head">
           <span class="nhiet-do-hub__factory-badge">{{ group.labelVi }}</span>
           <span class="nhiet-do-hub__factory-sub">{{ group.labelEn }}</span>
@@ -56,11 +70,14 @@
           </button>
         </div>
       </section>
+      </div>
     </div>
   </ng-container>
 
-  <!-- ══ Biểu mẫu chi tiết ══ -->
-  <ng-container *ngIf="view === 'form' && activeForm">
+  <!-- ══ Biểu mẫu chi tiết (font Arial) ══ -->
+  <div class="nhiet-do-form-layout" *ngIf="view === 'form' && activeForm">
+  <div class="nhiet-do-form-layout__main">
+  <div class="nhiet-do-form-view">
   <div class="nhiet-do-toolbar no-print">
     <div class="nhiet-do-toolbar__left">
       <button type="button" class="tool-icon tool-icon--back"
@@ -93,6 +110,15 @@
       </div>
     </div>
     <div class="nhiet-do-toolbar__actions">
+      <button type="button" class="tool-icon tool-icon--settings"
+              (click)="openZaloSettings(activeForm.factory)"
+              [attr.title]="'Cài đặt Zalo ' + activeForm.factory"
+              [attr.aria-label]="'Cài đặt Zalo ' + activeForm.factory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
       <button type="button" class="tool-icon tool-icon--save"
               (click)="saveMonth()" [disabled]="isSaving || isLoading"
               [title]="isSaving ? 'Đang lưu…' : 'Lưu'"
@@ -111,6 +137,25 @@
           <rect x="6" y="14" width="12" height="8"/>
         </svg>
       </button>
+      <button type="button" class="tool-icon tool-icon--pdf"
+              (click)="downloadPdf()" [disabled]="isExporting || isLoading"
+              title="Tải PDF / Download PDF" aria-label="Tải PDF">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="9" y1="15" x2="15" y2="15"/>
+          <line x1="9" y1="11" x2="13" y2="11"/>
+        </svg>
+      </button>
+      <button type="button" class="tool-icon tool-icon--jpg"
+              (click)="downloadJpg()" [disabled]="isExporting || isLoading"
+              title="Tải JPG / Download JPG" aria-label="Tải JPG">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </svg>
+      </button>
       <button type="button" class="tool-icon tool-icon--menu"
               (click)="goToMenu()" title="Về Menu" aria-label="Về Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -124,30 +169,35 @@
   <!-- ══ Tờ biểu mẫu ══ -->
   <div class="form-sheet" id="temp-humidity-sheet">
 
-    <!-- Header 3 cột: logo | tiêu đề | bảng meta -->
+    <!-- Header 4 box: Logo | Tên công ty | Tiêu đề bảng | Meta -->
     <div class="sheet-header">
-      <div class="sheet-header__logo">
+      <div class="sheet-header__box sheet-header__box--logo">
         <img src="assets/img/logo.png" alt="AIRSPEED" class="company-logo" />
       </div>
 
-      <div class="sheet-header__center">
+      <div class="sheet-header__box sheet-header__box--company">
         <div class="sheet-header__company">AIRSPEED MANUFACTURING VIETNAM</div>
-        <div class="sheet-header__title-vi">
-          {{ activeForm.sheetTitleVi }}
-          ( THÁNG <strong>{{ selectedMonth }}</strong>/NĂM <strong>{{ selectedYear }}</strong> )
+      </div>
+
+      <div class="sheet-header__box sheet-header__box--titles">
+        <div class="sheet-header__title-line sheet-header__title-line--vi">
+          <span class="sheet-header__title-vi">{{ activeForm.sheetTitleVi }}</span>
+          <span class="sheet-header__period">( THÁNG <strong>{{ selectedMonth }}</strong> / NĂM <strong>{{ selectedYear }}</strong> )</span>
         </div>
-        <div class="sheet-header__title-en">
-          {{ activeForm.sheetTitleEn }}
-          ( MONTH <strong>{{ selectedMonth }}</strong>/YEAR <strong>{{ selectedYear }}</strong> )
+        <div class="sheet-header__title-line sheet-header__title-line--en">
+          <span class="sheet-header__title-en">{{ activeForm.sheetTitleEn }}</span>
+          <span class="sheet-header__period">( MONTH <strong>{{ selectedMonth }}</strong> / YEAR <strong>{{ selectedYear }}</strong> )</span>
         </div>
       </div>
 
-      <table class="meta-table">
-        <tr><td>Mã quản lý /Code</td><td>{{ activeForm.manageCode }}</td></tr>
-        <tr><td>Phiên bản /Version</td><td>08</td></tr>
-        <tr><td>Ngày ban hành /Issued date</td><td>26/05/2025</td></tr>
-        <tr><td>Số trang /Page</td><td>1/1</td></tr>
-      </table>
+      <div class="sheet-header__box sheet-header__box--meta">
+        <table class="meta-table">
+          <tr><td>Mã quản lý /Code</td><td>{{ activeForm.manageCode }}</td></tr>
+          <tr><td>Phiên bản /Version</td><td>{{ activeForm.docVersion }}</td></tr>
+          <tr><td>Ngày ban hành /Issued date</td><td>{{ activeForm.issuedDate }}</td></tr>
+          <tr><td>Số trang /Page</td><td>1/1</td></tr>
+        </table>
+      </div>
     </div>
 
     <!-- Tên thiết bị -->
@@ -157,7 +207,9 @@
       <span class="print-only equipment-dots">{{ equipmentName || '........................................................' }}</span>
     </div>
 
-    <!-- Bảng dữ liệu + biểu đồ SVG -->
+    <!-- Bảng + biểu đồ: cuộn ngang trong khung, không tràn viewport -->
+    <div class="form-sheet__body-scroll">
+    <div class="form-sheet__body-inner">
     <div class="table-scroll-wrap">
       <table class="main-table">
         <colgroup>
@@ -273,13 +325,15 @@
                    class="chart-svg">
 
                 <!-- ── Nhãn section bên trái ────────────────────── -->
-                <text [attr.transform]="'translate(16,' + (svgTempTop + svgTempH/2) + ') rotate(-90)'"
+                <text [attr.transform]="'translate(18,' + (svgTempTop + svgTempH/2) + ') rotate(-90)'"
                       text-anchor="middle" class="svg-section-label svg-section-label--temp">
-                  Nhiệt độ (°C) / Temperature
+                  <tspan class="svg-section-label__vi" x="0" dy="-7">Nhiệt độ (°C)</tspan>
+                  <tspan class="svg-section-label__en" x="0" dy="15">Temperature</tspan>
                 </text>
-                <text [attr.transform]="'translate(16,' + (svgHumTop + svgHumH/2) + ') rotate(-90)'"
+                <text [attr.transform]="'translate(18,' + (svgHumTop + svgHumH/2) + ') rotate(-90)'"
                       text-anchor="middle" class="svg-section-label svg-section-label--hum">
-                  Độ ẩm (%) / Humidity
+                  <tspan class="svg-section-label__vi" x="0" dy="-7">Độ ẩm (%)</tspan>
+                  <tspan class="svg-section-label__en" x="0" dy="15">Humidity</tspan>
                 </text>
 
                 <!-- ══ NHIỆT ĐỘ ══════════════════════════════════ -->
@@ -428,21 +482,21 @@
                 </g>
 
                 <!-- ── Trục X ngày ─────────────────────────────── -->
-                <g [attr.transform]="'translate(' + svgLabelW + ',' + (svgHumTop + svgHumH + 13) + ')'">
+                <g [attr.transform]="'translate(' + svgLabelW + ',' + svgXAxisY + ')'">
                   <text *ngFor="let d of dayNumbers"
                         [attr.x]="svgDayX(d)" y="0"
                         text-anchor="middle"
                         [class]="isDayActive(d) ? 'svg-x-label' : 'svg-x-label svg-x-label--off'">{{ d }}</text>
                 </g>
 
-                <!-- ── Chú thích (legend) ──────────────────────── -->
-                <g [attr.transform]="'translate(' + (svgLabelW + 10) + ',' + (svgTotalH - 4) + ')'">
-                  <line x1="0" y1="-1" x2="18" y2="-1" class="svg-line svg-line--am"/>
-                  <circle cx="9" cy="-1" r="2.5" class="svg-dot svg-dot--am"/>
-                  <text x="22" y="2" class="svg-legend-text">Sáng</text>
-                  <line x1="56" y1="-1" x2="74" y2="-1" class="svg-line svg-line--pm"/>
-                  <circle cx="65" cy="-1" r="2.5" class="svg-dot svg-dot--pm"/>
-                  <text x="78" y="2" class="svg-legend-text">Chiều</text>
+                <!-- ── Chú thích Sáng / Chiều (dưới trục ngày) ── -->
+                <g [attr.transform]="'translate(' + svgLegendX + ',' + svgLegendY + ')'">
+                  <line x1="0" y1="0" x2="18" y2="0" class="svg-line svg-line--am"/>
+                  <circle cx="9" cy="0" r="2.5" class="svg-dot svg-dot--am"/>
+                  <text x="22" y="4" class="svg-legend-text">Sáng</text>
+                  <line x1="56" y1="0" x2="74" y2="0" class="svg-line svg-line--pm"/>
+                  <circle cx="65" cy="0" r="2.5" class="svg-dot svg-dot--pm"/>
+                  <text x="78" y="4" class="svg-legend-text">Chiều</text>
                 </g>
 
               </svg>
@@ -453,6 +507,8 @@
         </tbody>
       </table>
     </div><!-- /table-scroll-wrap -->
+    </div><!-- /form-sheet__body-inner -->
+    </div><!-- /form-sheet__body-scroll -->
 
     <!-- Lưu ý -->
     <div class="sheet-notes">
@@ -483,38 +539,90 @@
       </div>
     </div>
 
-    <!-- Chữ ký -->
+    <!-- Chữ ký: nhãn | ký tên | nhãn | ký tên -->
     <div class="sheet-signatures">
-      <div class="sign-box">
-        <div class="sign-box__title">Thẩm định<br>Assessment</div>
-        <div class="sign-box__area no-print">
-          <input type="text" class="sign-input" [(ngModel)]="assessmentSign" />
-        </div>
-        <div class="sign-box__area print-only">{{ assessmentSign }}</div>
+      <div class="sign-cell sign-cell--label">
+        <span class="sign-cell__title">Thẩm định</span>
+        <span class="sign-cell__title-en">Assessment</span>
       </div>
-      <div class="sign-box">
-        <div class="sign-box__title">Kiểm tra<br>Inspection</div>
-        <div class="sign-box__area no-print">
-          <input type="text" class="sign-input" [(ngModel)]="inspectionSign" />
-        </div>
-        <div class="sign-box__area print-only">{{ inspectionSign }}</div>
+      <div class="sign-cell sign-cell--field">
+        <input type="text" class="sign-input no-print" [(ngModel)]="assessmentSign" placeholder="" />
+        <span class="sign-field-print print-only">{{ assessmentSign }}</span>
+      </div>
+      <div class="sign-cell sign-cell--label">
+        <span class="sign-cell__title">Kiểm tra</span>
+        <span class="sign-cell__title-en">Inspection</span>
+      </div>
+      <div class="sign-cell sign-cell--field">
+        <input type="text" class="sign-input no-print" [(ngModel)]="inspectionSign" placeholder="" />
+        <span class="sign-field-print print-only">{{ inspectionSign }}</span>
       </div>
     </div>
 
   </div><!-- /form-sheet -->
-  </ng-container>
+  </div><!-- /nhiet-do-form-view -->
+  </div><!-- /nhiet-do-form-layout__main -->
+  </div><!-- /nhiet-do-form-layout -->
 
 </div><!-- /nhiet-do-page -->
+
+<!-- ══ Cài đặt nhắc Zalo ══ -->
+<div class="zalo-settings-overlay no-print" *ngIf="showZaloSettings" (click)="closeZaloSettings()">
+  <div class="zalo-settings-modal" (click)="$event.stopPropagation()">
+    <div class="zalo-settings-modal__head">
+      <div>
+        <h3>Cài đặt nhắc Zalo — {{ zaloSettingsTab }}</h3>
+        <p class="zalo-settings-modal__sub">Zalo reminder settings · {{ zaloSettingsTab }}</p>
+      </div>
+      <button type="button" class="zalo-settings-modal__close" (click)="closeZaloSettings()" aria-label="Đóng">×</button>
+    </div>
+
+    <p class="zalo-settings-modal__info">
+      <span class="vi">Chọn nhân viên (ID từ <strong>zalo_links</strong>) nhận nhắc cập nhật biểu mẫu.</span>
+      <span class="en">Select staff (IDs from zalo_links) to receive update reminders.</span>
+    </p>
+    <p class="zalo-settings-modal__schedule">
+      <span class="vi">Tự động: <strong>8:55</strong> &amp; <strong>14:55</strong> (T2–T7); chưa nhập → nhắc thêm sau 30 phút; sau 2 lần →
+        <strong>{{ zaloEscalationIds.join(', ') }}</strong>. Chủ nhật không nhắc.</span>
+      <span class="en">Auto: 8:55 AM &amp; 2:55 PM (Mon–Sat); +30 min if missing; after 2 tries → supervisors. No reminders on Sunday.</span>
+    </p>
+
+    <label class="zalo-settings-enable">
+      <input type="checkbox" [(ngModel)]="zaloSettingsEnabled" />
+      <span class="vi">Bật nhắc tự động cho {{ zaloSettingsTab }}</span>
+      <span class="en">Enable auto reminders for {{ zaloSettingsTab }}</span>
+    </label>
+
+    <div class="zalo-settings-loading" *ngIf="zaloSettingsLoading">Đang tải… / Loading…</div>
+
+    <div class="zalo-settings-list" *ngIf="!zaloSettingsLoading">
+      <label class="zalo-settings-row" *ngFor="let row of zaloLinks">
+        <input type="checkbox" [checked]="isZaloMemberSelected(row.memberId)" (change)="toggleZaloMember(row.memberId)" />
+        <span class="zalo-settings-row__id">{{ row.memberId }}</span>
+        <span class="zalo-settings-row__name">{{ row.name }}</span>
+        <span class="zalo-settings-row__chat" title="Chat ID">{{ row.chatId }}</span>
+      </label>
+      <p class="zalo-settings-empty" *ngIf="!zaloLinks.length">Không có bản ghi zalo_links.</p>
+    </div>
+
+    <div class="zalo-settings-modal__foot">
+      <button type="button" class="btn btn-outline" (click)="closeZaloSettings()">Hủy / Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="saveZaloSettings()" [disabled]="zaloSettingsSaving || zaloSettingsLoading">
+        {{ zaloSettingsSaving ? 'Đang lưu…' : 'Lưu / Save' }}
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ Toast thông báo lưu ══ -->
 <div class="save-toast no-print"
      [class.save-toast--visible]="!!saveMessage"
-     [class.save-toast--error]="saveMessage.includes('Lỗi') || saveMessage.includes('không')">
-  <svg *ngIf="!saveMessage.includes('Lỗi') && !saveMessage.includes('không')"
+     [class.save-toast--error]="saveMessage.includes('Lỗi') || saveMessage.includes('không') || saveMessage.includes('Không')">
+  <svg *ngIf="!saveMessage.includes('Lỗi') && !saveMessage.includes('không') && !saveMessage.includes('Không')"
        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
     <polyline points="20 6 9 17 4 12"/>
   </svg>
-  <svg *ngIf="saveMessage.includes('Lỗi') || saveMessage.includes('không')"
+  <svg *ngIf="saveMessage.includes('Lỗi') || saveMessage.includes('không') || saveMessage.includes('Không')"
        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
   </svg>

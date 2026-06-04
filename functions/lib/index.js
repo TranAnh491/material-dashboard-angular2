@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.onWorkOrderKittingNotifyZalo = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -88,6 +88,25 @@ exports.notifyOutboundDuplicatesAt20 = functions
     .pubsub.schedule('0 20 * * 1-6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(runOutboundDupNotify5m);
+/**
+ * Nhiệt Độ: nhắc cập nhật biểu mẫu qua Zalo (T2–T7, không nhắc CN).
+ * 8:55 / 9:25 / 9:55 và 14:55 / 15:25 / 15:55 — sau 2 lần nhắc → ASP0119, ASP1761, ASP0538.
+ * Cấu hình NV: Firestore `nhiet-do-zalo-settings` (ASM1, ASM2).
+ */
+const runNhietDoZaloRemindJob = async () => {
+    const { runNhietDoZaloRemind } = await Promise.resolve().then(() => __importStar(require('./nhiet-do-zalo-remind')));
+    await runNhietDoZaloRemind(admin.firestore());
+};
+exports.notifyNhietDoZaloRemindMorning = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .pubsub.schedule('*/5 8-10 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(runNhietDoZaloRemindJob);
+exports.notifyNhietDoZaloRemindAfternoon = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .pubsub.schedule('*/5 14-16 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(runNhietDoZaloRemindJob);
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 exports.sendControlBatchReportEmail = functions
     .runWith({ secrets: [params_config_1.emailPass] })
@@ -573,29 +592,46 @@ exports.adminDeleteAuthUsersNotInSettingsFn = functions
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
 });
+/** Putaway Staging Area: gửi thông báo Zalo cho danh sách nhân viên + mã hàng cần cất. */
+exports.sendPutawayNotifyFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const factory = typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 40) : '';
+    const memberIds = Array.isArray(data === null || data === void 0 ? void 0 : data.memberIds)
+        ? data.memberIds
+            .map(m => (typeof m === 'string' ? m.trim().toUpperCase() : ''))
+            .filter(Boolean)
+            .slice(0, 20)
+        : [];
+    const materials = Array.isArray(data === null || data === void 0 ? void 0 : data.materials)
+        ? data.materials
+            .map(m => (typeof m === 'string' ? m.trim() : ''))
+            .filter(Boolean)
+            .slice(0, 100)
+        : [];
+    if (!memberIds.length) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu danh sách nhân viên.');
+    }
+    if (!materials.length) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu danh sách mã hàng.');
+    }
+    try {
+        const { sendPutawayNotifyZalo } = await Promise.resolve().then(() => __importStar(require('./putaway-notify-zalo')));
+        const r = await sendPutawayNotifyZalo(admin.firestore(), { factory, memberIds, materials });
+        return r;
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError('internal', msg);
+    }
+});
 /**
  * Đăng nhập bằng mã ASPxxxx: tra email thật trong Firestore (users.employeeId) để signIn đúng tài khoản
  * đăng ký qua mail (@airspeedmfgvn.com), không chỉ asp####@asp.com.
  */
-/**
- * Work Order: LSX chuyển sang Kitting + chưa có người soạn → Zalo người quét outbound gần nhất (cách B).
- */
-exports.onWorkOrderKittingNotifyZalo = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .firestore.document('work-orders/{woId}')
-    .onUpdate(async (change, context) => {
-    const before = (change.before.data() || {});
-    const after = (change.after.data() || {});
-    const woId = context.params.woId;
-    try {
-        const { handleWorkOrderKittingZaloNotify } = await Promise.resolve().then(() => __importStar(require('./work-order-kitting-zalo')));
-        await handleWorkOrderKittingZaloNotify(admin.firestore(), before, after, woId);
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error('onWorkOrderKittingNotifyZalo failed', woId, msg);
-    }
-});
 exports.lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (data) => {
     var _a;
     const raw = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';

@@ -11,6 +11,8 @@ export interface NhietDoFormDef {
   sheetTitleEn: string;
   icon: string;
   manageCode: string;
+  docVersion: string;
+  issuedDate: string;
 }
 
 export const NHET_DO_FORMS: NhietDoFormDef[] = [
@@ -21,9 +23,11 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     titleVi: 'Kho Thường',
     titleEn: 'Regular Warehouse',
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO THƯỜNG',
-    sheetTitleEn: 'REGULAR WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
+    sheetTitleEn: 'NORMAL WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'warehouse',
-    manageCode: 'WH-P01/F01'
+    manageCode: 'WH-P01/F08',
+    docVersion: '03',
+    issuedDate: '26/05/2025'
   },
   {
     id: 'ASM1-special',
@@ -34,7 +38,9 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO LƯU TRỮ ĐẶC BIỆT',
     sheetTitleEn: 'SPECIAL STORAGE WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'inventory_2',
-    manageCode: 'WH-P01/F07'
+    manageCode: 'WH-P01/F07',
+    docVersion: '00',
+    issuedDate: '20/06/2026'
   },
   {
     id: 'ASM1-cold',
@@ -42,10 +48,12 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     formType: 'cold',
     titleVi: 'Tủ Lạnh',
     titleEn: 'Refrigerator',
-    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM TỦ LẠNH',
-    sheetTitleEn: 'REFRIGERATOR TEMPERATURE AND HUMIDITY CHECKLIST',
+    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHU VỰC TỦ LẠNH',
+    sheetTitleEn: 'CHECKLIST OF TEMPERATURE AND HUMIDITY IN REFRIGERATOR',
     icon: 'ac_unit',
-    manageCode: 'WH-P01/F03'
+    manageCode: 'WH-P01/F09',
+    docVersion: '00',
+    issuedDate: '26/05/2025'
   },
   {
     id: 'ASM2-regular',
@@ -54,9 +62,11 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     titleVi: 'Kho Thường',
     titleEn: 'Regular Warehouse',
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO THƯỜNG',
-    sheetTitleEn: 'REGULAR WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
+    sheetTitleEn: 'NORMAL WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'warehouse',
-    manageCode: 'WH-P01/F01'
+    manageCode: 'WH-P01/F08',
+    docVersion: '03',
+    issuedDate: '26/05/2025'
   },
   {
     id: 'ASM2-special',
@@ -67,7 +77,9 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO LƯU TRỮ ĐẶC BIỆT',
     sheetTitleEn: 'SPECIAL STORAGE WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'inventory_2',
-    manageCode: 'WH-P01/F07'
+    manageCode: 'WH-P01/F07',
+    docVersion: '00',
+    issuedDate: '20/06/2026'
   },
   {
     id: 'ASM2-cold',
@@ -75,10 +87,12 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     formType: 'cold',
     titleVi: 'Tủ Lạnh',
     titleEn: 'Refrigerator',
-    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM TỦ LẠNH',
-    sheetTitleEn: 'REFRIGERATOR TEMPERATURE AND HUMIDITY CHECKLIST',
+    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHU VỰC TỦ LẠNH',
+    sheetTitleEn: 'CHECKLIST OF TEMPERATURE AND HUMIDITY IN REFRIGERATOR',
     icon: 'ac_unit',
-    manageCode: 'WH-P01/F03'
+    manageCode: 'WH-P01/F09',
+    docVersion: '00',
+    issuedDate: '26/05/2025'
   }
 ];
 

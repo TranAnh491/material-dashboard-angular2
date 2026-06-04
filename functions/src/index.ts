@@ -62,6 +62,28 @@ export const notifyOutboundDuplicatesAt20 = functions
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(runOutboundDupNotify5m);
 
+/**
+ * Nhiệt Độ: nhắc cập nhật biểu mẫu qua Zalo (T2–T7, không nhắc CN).
+ * 8:55 / 9:25 / 9:55 và 14:55 / 15:25 / 15:55 — sau 2 lần nhắc → ASP0119, ASP1761, ASP0538.
+ * Cấu hình NV: Firestore `nhiet-do-zalo-settings` (ASM1, ASM2).
+ */
+const runNhietDoZaloRemindJob = async () => {
+  const { runNhietDoZaloRemind } = await import('./nhiet-do-zalo-remind');
+  await runNhietDoZaloRemind(admin.firestore());
+};
+
+export const notifyNhietDoZaloRemindMorning = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .pubsub.schedule('*/5 8-10 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(runNhietDoZaloRemindJob);
+
+export const notifyNhietDoZaloRemindAfternoon = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .pubsub.schedule('*/5 14-16 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(runNhietDoZaloRemindJob);
+
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 export const sendControlBatchReportEmail = functions
   .runWith({ secrets: [emailPass] })
