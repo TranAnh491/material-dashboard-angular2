@@ -40,6 +40,7 @@ exports.getReminderAction = getReminderAction;
 exports.pickDailyAssignees = pickDailyAssignees;
 exports.isFactorySlotComplete = isFactorySlotComplete;
 exports.runNhietDoZaloRemind = runNhietDoZaloRemind;
+exports.sendNhietDoZaloRemindTest = sendNhietDoZaloRemindTest;
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
 const FACTORIES = ['ASM1', 'ASM2'];
@@ -214,7 +215,7 @@ function buildMessage(factory, slot, action, missing, vn, assigneeIds) {
     const dateStr = `${String(vn.day).padStart(2, '0')}/${String(vn.month).padStart(2, '0')}/${vn.year}`;
     const missLines = missing.map(m => `  • ${m}`).join('\n');
     const dutyLine = (assigneeIds === null || assigneeIds === void 0 ? void 0 : assigneeIds.length)
-        ? `Phụ trách hôm nay: ${assigneeIds.join(', ')}\n`
+        ? `Phụ trách ghi hôm nay (${assigneeIds.length} ID, ${exports.SLOTS_PER_DAY} lần/ngày): ${assigneeIds.join(', ')}\n`
         : '';
     if (action === 'escalate') {
         return (`🚨 [Nhiệt độ & Độ ẩm — ${factory}] Chưa cập nhật sau 2 lần nhắc\n` +
@@ -227,7 +228,7 @@ function buildMessage(factory, slot, action, missing, vn, assigneeIds) {
     return (`🌡️ [Nhiệt độ & Độ ẩm — ${factory}] Nhắc cập nhật (lần ${remindNo})\n` +
         `Ca: ${slotVi} (${slotEn}) · Ngày ${dateStr}\n` +
         dutyLine +
-        `(3 biểu mẫu × 2 ca = ${exports.SLOTS_PER_DAY} lần ghi/ngày)\n` +
+        `(3 biểu mẫu × 2 ca = ${exports.SLOTS_PER_DAY} lần ghi/ngày · chỉ nhắc ${exports.DAILY_ASSIGNEE_COUNT} ID/ngày)\n` +
         `Vui lòng nhập số liệu các biểu mẫu:\n${missLines}\n` +
         `Tab: Nhiệt Độ → ${factory}`);
 }
@@ -300,5 +301,58 @@ async function runNhietDoZaloRemind(db) {
             console.error(`[nhiet-do-zalo] ${factory} error`, e);
         }
     }
+}
+/** Gửi thử tin Zalo tới 2 ID phụ trách hôm nay (nút「Gửi ngay」trên UI). */
+async function sendNhietDoZaloRemindTest(db, factory, options) {
+    var _a, _b;
+    const token = params_config_1.zaloBotToken.value().trim();
+    if (!token) {
+        throw new Error('Thiếu ZALO_BOT_TOKEN trên Cloud Functions.');
+    }
+    const vn = getVnDateTime();
+    const slot = (options === null || options === void 0 ? void 0 : options.slot) === 'afternoon' || (options === null || options === void 0 ? void 0 : options.slot) === 'morning'
+        ? options.slot
+        : (_a = slotFromHour(vn.hour)) !== null && _a !== void 0 ? _a : 'morning';
+    const dateKey = `${vn.year}-${String(vn.month).padStart(2, '0')}-${String(vn.day).padStart(2, '0')}`;
+    let pool;
+    if ((_b = options === null || options === void 0 ? void 0 : options.memberIds) === null || _b === void 0 ? void 0 : _b.length) {
+        pool = options.memberIds.map(normalizeMemberId).filter(Boolean);
+    }
+    else {
+        const settings = await loadFactorySettings(db, factory);
+        pool = (settings.memberIds || []).map(normalizeMemberId).filter(Boolean);
+    }
+    if (!pool.length) {
+        throw new Error('Chưa chọn ID trong danh sách nhắc. Chọn ít nhất 1 ID rồi thử lại.');
+    }
+    const dailyAssignees = pickDailyAssignees(pool, factory, dateKey);
+    if (!dailyAssignees.length) {
+        throw new Error('Không xác định được ID phụ trách hôm nay.');
+    }
+    const { complete, missing } = await isFactorySlotComplete(db, factory, vn, slot);
+    const slotVi = slot === 'morning' ? 'Sáng (9:00)' : 'Chiều (15:00)';
+    const dateStr = `${String(vn.day).padStart(2, '0')}/${String(vn.month).padStart(2, '0')}/${vn.year}`;
+    const missLines = missing.length ? missing.map(m => `  • ${m}`).join('\n') : '  • (đã nhập đủ 3 biểu mẫu)';
+    const preview = `🧪 [TEST — Nhiệt độ & Độ ẩm — ${factory}]\n` +
+        `Tin nhắn thử — không tính lần nhắc tự động.\n` +
+        `Ca: ${slotVi} · Ngày ${dateStr}\n` +
+        `Phụ trách ghi hôm nay (${dailyAssignees.length} ID, ${exports.SLOTS_PER_DAY} lần/ngày): ${dailyAssignees.join(', ')}\n` +
+        `(3 biểu mẫu × 2 ca = ${exports.SLOTS_PER_DAY} lần ghi/ngày)\n` +
+        `Trạng thái nhập liệu ca này: ${complete ? 'Đủ' : 'Thiếu'}\n` +
+        `${complete ? '' : 'Thiếu biểu mẫu:\n' + missLines + '\n'}` +
+        `Tab: Nhiệt Độ → ${factory}`;
+    const links = await resolveChatIds(db, dailyAssignees);
+    if (!links.length) {
+        throw new Error(`Không tìm thấy chatId zalo_links cho: ${dailyAssignees.join(', ')}`);
+    }
+    await sendZaloText(token, links.map(l => l.chatId), preview);
+    console.log(`[nhiet-do-zalo] TEST sent ${factory} ${slot} → ${dailyAssignees.join(', ')}`);
+    return {
+        ok: true,
+        sent: links.length,
+        memberIds: dailyAssignees,
+        slot,
+        preview
+    };
 }
 //# sourceMappingURL=nhiet-do-zalo-remind.js.map

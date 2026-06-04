@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -107,6 +107,31 @@ exports.notifyNhietDoZaloRemindAfternoon = functions
     .pubsub.schedule('*/5 14-16 * * 1-6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(runNhietDoZaloRemindJob);
+/** Nhiệt Độ: gửi thử tin nhắc Zalo (nút「Gửi ngay」— cài đặt nhắc). */
+exports.sendNhietDoZaloRemindTestFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const factory = (data === null || data === void 0 ? void 0 : data.factory) === 'ASM2' ? 'ASM2' : 'ASM1';
+    const slotRaw = data === null || data === void 0 ? void 0 : data.slot;
+    const slot = slotRaw === 'afternoon' ? 'afternoon' : slotRaw === 'morning' ? 'morning' : undefined;
+    const memberIds = Array.isArray(data === null || data === void 0 ? void 0 : data.memberIds)
+        ? data.memberIds.map(m => String(m !== null && m !== void 0 ? m : ''))
+        : undefined;
+    try {
+        const { sendNhietDoZaloRemindTest } = await Promise.resolve().then(() => __importStar(require('./nhiet-do-zalo-remind')));
+        const r = await sendNhietDoZaloRemindTest(admin.firestore(), factory, { slot, memberIds });
+        return r;
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('Chưa') || msg.includes('Không')
+            ? 'failed-precondition'
+            : 'internal', msg);
+    }
+});
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 exports.sendControlBatchReportEmail = functions
     .runWith({ secrets: [params_config_1.emailPass] })

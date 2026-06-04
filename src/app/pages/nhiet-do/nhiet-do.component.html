@@ -562,15 +562,31 @@
         <h3>Cài đặt nhắc Zalo — {{ zaloSettingsTab }}</h3>
         <p class="zalo-settings-modal__sub">Zalo reminder settings · {{ zaloSettingsTab }}</p>
       </div>
-      <button type="button" class="zalo-settings-modal__close" (click)="closeZaloSettings()" aria-label="Đóng">×</button>
+      <div class="zalo-settings-modal__head-actions">
+        <button type="button"
+                class="zalo-settings-info-btn"
+                [class.zalo-settings-info-btn--open]="zaloSettingsInfoOpen"
+                (click)="toggleZaloSettingsInfo()"
+                [attr.aria-expanded]="zaloSettingsInfoOpen"
+                title="Hướng dẫn / Info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 16v-4M12 8h.01"/>
+          </svg>
+          <span>Info</span>
+        </button>
+        <button type="button" class="zalo-settings-modal__close" (click)="closeZaloSettings()" aria-label="Đóng">×</button>
+      </div>
     </div>
 
+    <div class="zalo-settings-modal__body">
+    <div class="zalo-settings-info-panel" *ngIf="zaloSettingsInfoOpen && !zaloSettingsLoading">
     <p class="zalo-settings-modal__info">
       <span class="vi">Chọn <strong>tổng danh sách ID</strong> (từ <strong>zalo_links</strong>, nhà máy {{ zaloSettingsTab }} / ALL). Hệ thống mỗi ngày <strong>chọn ngẫu nhiên {{ zaloDailyAssigneeCount }} ID</strong> để nhận tin nhắc Zalo và ghi đủ nhiệt độ/độ ẩm.</span>
       <span class="en">Select the full ID pool for {{ zaloSettingsTab }}. Each day <strong>{{ zaloDailyAssigneeCount }} IDs</strong> are picked at random for Zalo reminders and data entry.</span>
     </p>
 
-    <div class="zalo-settings-plan" *ngIf="!zaloSettingsLoading">
+    <div class="zalo-settings-plan">
       <div class="zalo-settings-plan__row">
         <span class="zalo-settings-plan__label vi">① Tổng số ID được nhắc (đã chọn)</span>
         <span class="zalo-settings-plan__label en">① Total IDs in reminder pool</span>
@@ -605,6 +621,7 @@
         <strong>{{ zaloEscalationIds.join(', ') }}</strong>. Chủ nhật không nhắc.</span>
       <span class="en">Auto: 8:55 AM &amp; 2:55 PM (Mon–Sat); +30 min if missing; after 2 tries → supervisors. No reminders on Sunday.</span>
     </p>
+    </div><!-- /zalo-settings-info-panel -->
 
     <label class="zalo-settings-enable">
       <input type="checkbox" [(ngModel)]="zaloSettingsEnabled" />
@@ -614,21 +631,52 @@
 
     <div class="zalo-settings-loading" *ngIf="zaloSettingsLoading">Đang tải… / Loading…</div>
 
-    <div class="zalo-settings-list" *ngIf="!zaloSettingsLoading">
-      <label class="zalo-settings-row" *ngFor="let row of zaloLinksForTab"
-             [class.zalo-settings-row--today]="isZaloMemberSelected(row.memberId) && isZaloTodayAssignee(row.memberId)">
-        <input type="checkbox" [checked]="isZaloMemberSelected(row.memberId)" (change)="toggleZaloMember(row.memberId)" />
-        <span class="zalo-settings-row__id">{{ row.memberId }}</span>
-        <span class="zalo-settings-row__badge" *ngIf="isZaloMemberSelected(row.memberId) && isZaloTodayAssignee(row.memberId)">Hôm nay</span>
-        <span class="zalo-settings-row__name">{{ row.name }}</span>
-        <span class="zalo-settings-row__chat" title="Chat ID">{{ row.chatId }}</span>
+    <div class="zalo-settings-list-wrap" *ngIf="!zaloSettingsLoading">
+      <div class="zalo-settings-list__head">
+        <span class="vi">Danh sách ID — chọn người trong pool nhắc</span>
+        <span class="en">ID list — select reminder pool</span>
+      </div>
+      <div class="zalo-settings-list">
+        <label class="zalo-settings-row" *ngFor="let row of zaloLinksForTab"
+               [class.zalo-settings-row--today]="isZaloMemberSelected(row.memberId) && isZaloTodayAssignee(row.memberId)">
+          <input type="checkbox" [checked]="isZaloMemberSelected(row.memberId)" (change)="toggleZaloMember(row.memberId)" />
+          <span class="zalo-settings-row__id">{{ row.memberId }}</span>
+          <span class="zalo-settings-row__badge" *ngIf="isZaloMemberSelected(row.memberId) && isZaloTodayAssignee(row.memberId)">Hôm nay</span>
+          <span class="zalo-settings-row__name">{{ row.name }}</span>
+          <span class="zalo-settings-row__chat" title="Chat ID">{{ row.chatId }}</span>
+        </label>
+        <p class="zalo-settings-empty" *ngIf="!zaloLinksForTab.length">Không có bản ghi zalo_links cho {{ zaloSettingsTab }}.</p>
+      </div>
+    </div>
+    </div><!-- /zalo-settings-modal__body -->
+
+    <div class="zalo-settings-test no-print" *ngIf="!zaloSettingsLoading">
+      <label class="zalo-settings-test__slot">
+        <span class="vi">Ca gửi thử</span>
+        <span class="en">Test shift</span>
+        <select [(ngModel)]="zaloTestSlot">
+          <option value="morning">Sáng / Morning</option>
+          <option value="afternoon">Chiều / Afternoon</option>
+        </select>
       </label>
-      <p class="zalo-settings-empty" *ngIf="!zaloLinksForTab.length">Không có bản ghi zalo_links cho {{ zaloSettingsTab }}.</p>
+      <button type="button" class="btn btn-zalo-test"
+              (click)="sendZaloTestNow()"
+              [disabled]="zaloTestSending || zaloSettingsSaving || !zaloSelectedCount"
+              title="Gửi tin thử tới ID phụ trách hôm nay">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+        {{ zaloTestSending ? 'Đang gửi…' : 'Gửi ngay (test)' }}
+      </button>
+      <p class="zalo-settings-test__hint">
+        <span class="vi">Gửi tới <strong>2 ID phụ trách hôm nay</strong> (theo danh sách đang chọn). Không tính lần nhắc tự động.</span>
+        <span class="en">Sends to today’s 2 assignees. Does not affect scheduled reminders.</span>
+      </p>
     </div>
 
     <div class="zalo-settings-modal__foot">
       <button type="button" class="btn btn-outline" (click)="closeZaloSettings()">Hủy / Cancel</button>
-      <button type="button" class="btn btn-primary" (click)="saveZaloSettings()" [disabled]="zaloSettingsSaving || zaloSettingsLoading">
+      <button type="button" class="btn btn-primary" (click)="saveZaloSettings()" [disabled]="zaloSettingsSaving || zaloSettingsLoading || zaloTestSending">
         {{ zaloSettingsSaving ? 'Đang lưu…' : 'Lưu / Save' }}
       </button>
     </div>

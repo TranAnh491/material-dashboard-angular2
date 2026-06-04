@@ -352,3 +352,86 @@ export async function runNhietDoZaloRemind(db: admin.firestore.Firestore): Promi
     }
   }
 }
+
+export interface NhietDoZaloTestSendResult {
+  ok: true;
+  sent: number;
+  memberIds: string[];
+  slot: NhietDoSlot;
+  preview: string;
+}
+
+/** Gửi thử tin Zalo tới 2 ID phụ trách hôm nay (nút「Gửi ngay」trên UI). */
+export async function sendNhietDoZaloRemindTest(
+  db: admin.firestore.Firestore,
+  factory: NhietDoFactory,
+  options?: { slot?: NhietDoSlot; memberIds?: string[] }
+): Promise<NhietDoZaloTestSendResult> {
+  const token = zaloBotToken.value().trim();
+  if (!token) {
+    throw new Error('Thiếu ZALO_BOT_TOKEN trên Cloud Functions.');
+  }
+
+  const vn = getVnDateTime();
+  const slot: NhietDoSlot =
+    options?.slot === 'afternoon' || options?.slot === 'morning'
+      ? options.slot
+      : slotFromHour(vn.hour) ?? 'morning';
+
+  const dateKey = `${vn.year}-${String(vn.month).padStart(2, '0')}-${String(vn.day).padStart(2, '0')}`;
+
+  let pool: string[];
+  if (options?.memberIds?.length) {
+    pool = options.memberIds.map(normalizeMemberId).filter(Boolean);
+  } else {
+    const settings = await loadFactorySettings(db, factory);
+    pool = (settings.memberIds || []).map(normalizeMemberId).filter(Boolean);
+  }
+
+  if (!pool.length) {
+    throw new Error('Chưa chọn ID trong danh sách nhắc. Chọn ít nhất 1 ID rồi thử lại.');
+  }
+
+  const dailyAssignees = pickDailyAssignees(pool, factory, dateKey);
+  if (!dailyAssignees.length) {
+    throw new Error('Không xác định được ID phụ trách hôm nay.');
+  }
+
+  const { complete, missing } = await isFactorySlotComplete(db, factory, vn, slot);
+  const slotVi = slot === 'morning' ? 'Sáng (9:00)' : 'Chiều (15:00)';
+  const dateStr = `${String(vn.day).padStart(2, '0')}/${String(vn.month).padStart(2, '0')}/${vn.year}`;
+  const missLines = missing.length ? missing.map(m => `  • ${m}`).join('\n') : '  • (đã nhập đủ 3 biểu mẫu)';
+
+  const preview =
+    `🧪 [TEST — Nhiệt độ & Độ ẩm — ${factory}]\n` +
+    `Tin nhắn thử — không tính lần nhắc tự động.\n` +
+    `Ca: ${slotVi} · Ngày ${dateStr}\n` +
+    `Phụ trách ghi hôm nay (${dailyAssignees.length} ID, ${SLOTS_PER_DAY} lần/ngày): ${dailyAssignees.join(', ')}\n` +
+    `(3 biểu mẫu × 2 ca = ${SLOTS_PER_DAY} lần ghi/ngày)\n` +
+    `Trạng thái nhập liệu ca này: ${complete ? 'Đủ' : 'Thiếu'}\n` +
+    `${complete ? '' : 'Thiếu biểu mẫu:\n' + missLines + '\n'}` +
+    `Tab: Nhiệt Độ → ${factory}`;
+
+  const links = await resolveChatIds(db, dailyAssignees);
+  if (!links.length) {
+    throw new Error(
+      `Không tìm thấy chatId zalo_links cho: ${dailyAssignees.join(', ')}`
+    );
+  }
+
+  await sendZaloText(
+    token,
+    links.map(l => l.chatId),
+    preview
+  );
+
+  console.log(`[nhiet-do-zalo] TEST sent ${factory} ${slot} → ${dailyAssignees.join(', ')}`);
+
+  return {
+    ok: true,
+    sent: links.length,
+    memberIds: dailyAssignees,
+    slot,
+    preview
+  };
+}

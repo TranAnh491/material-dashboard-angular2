@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
+import { firstValueFrom } from 'rxjs';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
@@ -101,6 +103,9 @@ export class NhietDoComponent implements OnInit {
   zaloSettingsEnabledAsm2 = true;
   zaloSettingsLoading = false;
   zaloSettingsSaving = false;
+  zaloTestSending = false;
+  zaloTestSlot: 'morning' | 'afternoon' = 'morning';
+  zaloSettingsInfoOpen = false;
 
   readonly zaloEscalationIds = ['ASP0119', 'ASP1761', 'ASP0538'];
   readonly zaloSlotsPerDay = NHET_DO_ZALO_SLOTS_PER_DAY;
@@ -112,7 +117,8 @@ export class NhietDoComponent implements OnInit {
   constructor(
     private firestore: AngularFirestore,
     private router: Router,
-    private nhietDoZaloSettings: NhietDoZaloSettingsService
+    private nhietDoZaloSettings: NhietDoZaloSettingsService,
+    private fns: AngularFireFunctions
   ) {
     const y = new Date().getFullYear();
     for (let i = y - 2; i <= y + 2; i++) this.years.push(i);
@@ -374,6 +380,9 @@ export class NhietDoComponent implements OnInit {
   async openZaloSettings(factory: NhietDoZaloFactory): Promise<void> {
     this.zaloSettingsTab = factory;
     this.zaloVnDateKey = nhietDoVnDateKey();
+    const h = new Date().getHours();
+    this.zaloTestSlot = h >= 12 && h < 18 ? 'afternoon' : 'morning';
+    this.zaloSettingsInfoOpen = false;
     this.showZaloSettings = true;
     this.zaloSettingsLoading = true;
     try {
@@ -398,6 +407,11 @@ export class NhietDoComponent implements OnInit {
 
   closeZaloSettings(): void {
     this.showZaloSettings = false;
+    this.zaloSettingsInfoOpen = false;
+  }
+
+  toggleZaloSettingsInfo(): void {
+    this.zaloSettingsInfoOpen = !this.zaloSettingsInfoOpen;
   }
 
   zaloSettingsTabChange(tab: NhietDoZaloFactory): void {
@@ -466,6 +480,38 @@ export class NhietDoComponent implements OnInit {
       this.zaloSettingsEnabledAsm1 = v;
     } else {
       this.zaloSettingsEnabledAsm2 = v;
+    }
+  }
+
+  async sendZaloTestNow(): Promise<void> {
+    if (!this.zaloSelectedCount) {
+      this.showExportMessage('Chọn ít nhất 1 ID trong danh sách trước khi gửi thử.', true);
+      return;
+    }
+    this.zaloTestSending = true;
+    try {
+      const callable = this.fns.httpsCallable<
+        { factory: string; slot: string; memberIds: string[] },
+        { sent: number; memberIds: string[] }
+      >('sendNhietDoZaloRemindTestFn');
+      const data = await firstValueFrom(
+        callable({
+          factory: this.zaloSettingsTab,
+          slot: this.zaloTestSlot,
+          memberIds: this.zaloPoolMemberIds
+        })
+      );
+      const ids = data?.memberIds?.join(', ') ?? '';
+      this.showExportMessage(`Đã gửi thử Zalo (${data?.sent ?? 0} người): ${ids}`);
+    } catch (e: unknown) {
+      console.error('[Nhiệt Độ] zalo test send:', e);
+      const msg =
+        (e as { message?: string })?.message ||
+        (e as { error?: { message?: string } })?.error?.message ||
+        'Gửi thử Zalo thất bại.';
+      this.showExportMessage(msg, true);
+    } finally {
+      this.zaloTestSending = false;
     }
   }
 

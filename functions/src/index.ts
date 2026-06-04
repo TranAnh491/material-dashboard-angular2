@@ -84,6 +84,35 @@ export const notifyNhietDoZaloRemindAfternoon = functions
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(runNhietDoZaloRemindJob);
 
+/** Nhiệt Độ: gửi thử tin nhắc Zalo (nút「Gửi ngay」— cài đặt nhắc). */
+export const sendNhietDoZaloRemindTestFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const factory = data?.factory === 'ASM2' ? 'ASM2' : 'ASM1';
+    const slotRaw = data?.slot;
+    const slot =
+      slotRaw === 'afternoon' ? 'afternoon' : slotRaw === 'morning' ? 'morning' : undefined;
+    const memberIds = Array.isArray(data?.memberIds)
+      ? (data.memberIds as unknown[]).map(m => String(m ?? ''))
+      : undefined;
+    try {
+      const { sendNhietDoZaloRemindTest } = await import('./nhiet-do-zalo-remind');
+      const r = await sendNhietDoZaloRemindTest(admin.firestore(), factory, { slot, memberIds });
+      return r;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('Chưa') || msg.includes('Không')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 export const sendControlBatchReportEmail = functions
   .runWith({ secrets: [emailPass] })
