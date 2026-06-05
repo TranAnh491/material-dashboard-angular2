@@ -739,8 +739,8 @@ export class PrintLabelComponent implements OnInit {
         await this.saveDoneItemsToSeparateCollection(doneItems);
       }
       
-      // Chỉ lưu mã chưa Done vào collection chính
-      const dataToSave = notDoneItems;
+      // Chỉ lưu mã chưa Done vào collection chính (sắp xếp: ngày nhận KH → mã tem)
+      const dataToSave = this.sortScheduleItems(notDoneItems);
       
       // Get batch number from the first new item
       const batchNumber = data.length > 0 && data[0].batch ? parseInt(data[0].batch) : 1;
@@ -833,8 +833,8 @@ export class PrintLabelComponent implements OnInit {
         await this.saveDoneItemsToSeparateCollection(doneItems);
       }
       
-      // Chỉ lưu mã chưa Done vào collection chính
-      const dataToSave = notDoneItems;
+      // Chỉ lưu mã chưa Done vào collection chính (sắp xếp: ngày nhận KH → mã tem)
+      const dataToSave = this.sortScheduleItems(notDoneItems);
       
       // Get the latest document ID to update
       const snapshot = await this.firestore.collection('print-schedules', ref => 
@@ -1003,7 +1003,7 @@ export class PrintLabelComponent implements OnInit {
         
         if (confirmRestore) {
           // Khôi phục dữ liệu (chỉ mã chưa Done)
-          this.scheduleData = allNotDoneItems;
+          this.scheduleData = this.sortScheduleItems(allNotDoneItems);
           await this.saveToFirebaseDirect(this.scheduleData);
           
           alert(`✅ Đã khôi phục ${lostCount} mã bị mất!\n\n` +
@@ -1144,7 +1144,7 @@ export class PrintLabelComponent implements OnInit {
         }
       }
       
-      this.scheduleData = allData;
+      this.scheduleData = this.sortScheduleItems(allData);
       this.firebaseSaved = this.scheduleData.length > 0;
       console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase (Done items excluded)`);
       
@@ -1249,7 +1249,7 @@ export class PrintLabelComponent implements OnInit {
     
     if (confirm(confirmMessage)) {
       // Cập nhật dữ liệu
-      this.scheduleData = uniqueItems;
+      this.scheduleData = this.sortScheduleItems(uniqueItems);
       
       // Lưu vào Firebase (không tách mã Done khi xóa trùng)
       await this.saveToFirebaseDirect(this.scheduleData);
@@ -1654,16 +1654,34 @@ export class PrintLabelComponent implements OnInit {
    * Chuẩn hóa "Ngày nhận kế hoạch" để sắp xếp (DD/MM/YYYY phổ biến trong sheet / Firebase).
    * Trả về timestamp; không có ngày hoặc không đọc được → cuối danh sách.
    */
-  private parseNgayNhanKeHoachToTime(raw?: string): number {
-    const s = String(raw ?? '').trim();
+  private parseNgayNhanKeHoachToTime(raw?: string | number): number {
+    if (raw === null || raw === undefined) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const excelEpoch = new Date(1900, 0, 1);
+      const dt = new Date(excelEpoch.getTime() + (raw - 2) * 24 * 60 * 60 * 1000);
+      if (!isNaN(dt.getTime())) {
+        return dt.getTime();
+      }
+    }
+    const s = String(raw).trim();
     if (!s) {
       return Number.MAX_SAFE_INTEGER;
     }
-    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-    if (m) {
-      const d = parseInt(m[1], 10);
-      const mo = parseInt(m[2], 10) - 1;
-      const y = parseInt(m[3], 10);
+    if (/^\d{4,6}$/.test(s)) {
+      const serial = parseInt(s, 10);
+      const excelEpoch = new Date(1900, 0, 1);
+      const dt = new Date(excelEpoch.getTime() + (serial - 2) * 24 * 60 * 60 * 1000);
+      if (!isNaN(dt.getTime())) {
+        return dt.getTime();
+      }
+    }
+    const slashOrDash = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(s);
+    if (slashOrDash) {
+      const d = parseInt(slashOrDash[1], 10);
+      const mo = parseInt(slashOrDash[2], 10) - 1;
+      const y = parseInt(slashOrDash[3], 10);
       const dt = new Date(y, mo, d);
       if (!isNaN(dt.getTime())) {
         return dt.getTime();
@@ -1681,6 +1699,21 @@ export class PrintLabelComponent implements OnInit {
       return t;
     }
     return Number.MAX_SAFE_INTEGER - 1;
+  }
+
+  /** Sắp xếp: Ngày nhận kế hoạch (tăng dần) → Mã tem (A→Z). */
+  private sortScheduleItems(items: ScheduleItem[]): ScheduleItem[] {
+    return [...items].sort((a, b) => {
+      const ta = this.parseNgayNhanKeHoachToTime(a.ngayNhanKeHoach);
+      const tb = this.parseNgayNhanKeHoachToTime(b.ngayNhanKeHoach);
+      if (ta !== tb) {
+        return ta - tb;
+      }
+      return String(a.maTem ?? '').localeCompare(String(b.maTem ?? ''), 'vi', {
+        sensitivity: 'base',
+        numeric: true,
+      });
+    });
   }
 
   getFilteredData(): ScheduleItem[] {
@@ -1718,17 +1751,7 @@ export class PrintLabelComponent implements OnInit {
     // Note: Done items are already filtered out at Firebase level
     // No need to filter again here
 
-    filtered.sort((a, b) => {
-      const ta = this.parseNgayNhanKeHoachToTime(a.ngayNhanKeHoach);
-      const tb = this.parseNgayNhanKeHoachToTime(b.ngayNhanKeHoach);
-      if (ta !== tb) {
-        return ta - tb;
-      }
-      return String(a.maTem ?? '').localeCompare(String(b.maTem ?? ''), 'vi', { sensitivity: 'base' });
-    });
-
-    console.log('🔍 Final filtered count:', filtered.length);
-    return filtered;
+    return this.sortScheduleItems(filtered);
   }
 
   getDisplayScheduleData(): ScheduleItem[] {
@@ -1894,15 +1917,8 @@ export class PrintLabelComponent implements OnInit {
         });
       }
       
-      // Sắp xếp theo thời gian lưu gần nhất
-      allDoneItems.sort((a, b) => {
-        const timeA = a.statusUpdateTime || new Date(0);
-        const timeB = b.statusUpdateTime || new Date(0);
-        return timeB.getTime() - timeA.getTime();
-      });
-      
-      // Chỉ lấy 100 mã gần nhất
-      this.doneItems = allDoneItems.slice(0, 100);
+      const sortedDone = this.sortScheduleItems(allDoneItems);
+      this.doneItems = sortedDone.slice(0, 100);
       this.doneItemsLoaded = true;
       
       console.log(`📦 Loaded ${this.doneItems.length} Done items (latest 100)`);
