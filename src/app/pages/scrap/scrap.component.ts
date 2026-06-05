@@ -1,7 +1,17 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  ElementRef,
+  AfterViewChecked
+} from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import * as QRCode from 'qrcode';
 
 export interface ScrapSession {
@@ -29,15 +39,26 @@ export interface ScrapNvlFlatRow {
 
 type ScanStep = 'idle' | 'scan-box' | 'scan-materials';
 
+/** Dòng bảng đã tính sẵn — tránh gọi hàm lặp trong template. */
+export interface ScrapGroupedDisplayRow {
+  group: ScrapBoxGroup;
+  materialRows: { code: string; bags: number }[];
+  codeCount: number;
+  bagTotal: number;
+}
+
 @Component({
   selector: 'app-scrap',
   templateUrl: './scrap.component.html',
-  styleUrls: ['./scrap.component.scss']
+  styleUrls: ['./scrap.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
 
-  /** Chỉ tải N bản ghi mới nhất — tránh đọc cả collection (rất chậm). */
-  private static readonly LIST_PAGE_SIZE = 400;
+  /** Giống materials-asm1: orderBy + limit khi subscribe Firestore. */
+  private static readonly LIST_PAGE_SIZE = 1000;
+  /** Bổ sung khi tìm mã NVL (array-contains) — gộp với dữ liệu đã tải. */
+  private static readonly MATERIAL_SEARCH_LIMIT = 500;
 
   @ViewChild('boxInput') boxInputRef!: ElementRef<HTMLInputElement>;
   @ViewChild('materialInput') materialInputRef!: ElementRef<HTMLInputElement>;
@@ -51,7 +72,16 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
   loadError: string | null = null;
   savedMsg = '';
 
+  /** Cache sau khi gộp theo thùng — chỉ rebuild khi sessions đổi. */
+  allGrouped: ScrapBoxGroup[] = [];
+  filteredDisplayRows: ScrapGroupedDisplayRow[] = [];
+  nvlListFlatRows: ScrapNvlFlatRow[] = [];
+  nvlFilteredBoxCount = 0;
+  totalUniqueMaterialCodes = 0;
+
+  private readonly destroy$ = new Subject<void>();
   private listSub?: Subscription;
+  private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   showPrintModal = false;
   printBoxCount = 1;
@@ -75,18 +105,32 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
   /** Khóa dòng đang xóa (box + mã) để khóa nút */
   nvlRowDeletingKey: string | null = null;
 
-  constructor(private firestore: AngularFirestore) {}
+  constructor(
+    private firestore: AngularFirestore,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   /** true sau khi user đã bấm tải/tìm kiếm ít nhất 1 lần */
   hasLoaded = false;
 
   ngOnInit(): void {
-    // Không load tự động — chỉ load khi user chủ động tìm kiếm
+    this.loadScrapAndSetupSearch();
   }
 
   ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
     this.listSub?.unsubscribe();
     this.listSub = undefined;
+    if (this.filterDebounceTimer) {
+      clearTimeout(this.filterDebounceTimer);
+      this.filterDebounceTimer = null;
+    }
+  }
+
+  /** Giống materials-asm1: tải Firestore ngay khi mở tab + lọc client-side. */
+  private loadScrapAndSetupSearch(): void {
+    this.loadScrapFromFirebase();
   }
 
   ngAfterViewChecked(): void {
@@ -100,28 +144,198 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  loadData(): void {
+  onSearchTermChange(): void {
+    if (!this.hasLoaded) {
+      return;
+    }
+    if (this.filterDebounceTimer) {
+      clearTimeout(this.filterDebounceTimer);
+    }
+    this.filterDebounceTimer = setTimeout(() => {
+      this.rebuildFilteredDisplay();
+      this.rebuildNvlFlatRows();
+      this.cdr.markForCheck();
+    }, 120);
+  }
+
+  /** Làm mới / Enter — tải lại list; nếu là mã NVL thì bổ sung thêm doc khớp array-contains. */
+  async loadData(): Promise<void> {
+    if (this.filterDebounceTimer) {
+      clearTimeout(this.filterDebounceTimer);
+      this.filterDebounceTimer = null;
+    }
+    const q = this.searchTerm.trim();
+    if (this.isMaterialCodeQuery(q)) {
+      await this.supplementSessionsByMaterialCode(q);
+      this.applySessionsToView();
+      return;
+    }
+    this.loadScrapFromFirebase();
+  }
+
+  /**
+   * Đọc scrap-data giống materials-asm1: snapshotChanges + orderBy + limit.
+   * Lọc theo ô tìm kiếm xử lý trên client (debounce).
+   */
+  private loadScrapFromFirebase(): void {
     this.listSub?.unsubscribe();
     this.loadError = null;
     this.listLoading = true;
     this.hasLoaded = true;
+    this.cdr.markForCheck();
+
     this.listSub = this.firestore
       .collection<ScrapSession>('scrap-data', ref =>
         ref.orderBy('createdAt', 'desc').limit(ScrapComponent.LIST_PAGE_SIZE)
       )
-      .valueChanges({ idField: 'id' })
+      .snapshotChanges()
+      .pipe(takeUntil(this.destroy$))
       .subscribe(
-        data => {
-          this.sessions = data;
-          this.listLoading = false;
+        actions => {
+          this.sessions = actions.map(action => ({
+            id: action.payload.doc.id,
+            ...(action.payload.doc.data() as ScrapSession)
+          }));
+          this.applySessionsToView();
         },
         err => {
           this.listLoading = false;
           this.loadError =
             'Không tải được dữ liệu. Kiểm tra mạng / quyền Firestore hoặc index cho createdAt. ' +
             (err?.message || err);
+          this.cdr.markForCheck();
         }
       );
+  }
+
+  private isMaterialCodeQuery(raw: string): boolean {
+    const code7 = String(raw || '').trim().toUpperCase().slice(0, 7);
+    return /^[ABR]\d{4,6}$/i.test(code7) || /^[AB]\d{6}$/i.test(code7);
+  }
+
+  /** Gộp thêm doc chứa mã NVL (có thể nằm ngoài 1000 bản ghi mới nhất). */
+  private async supplementSessionsByMaterialCode(raw: string): Promise<void> {
+    const code7 = raw.trim().toUpperCase().slice(0, 7);
+    if (!code7) {
+      return;
+    }
+    this.listLoading = true;
+    this.cdr.markForCheck();
+    try {
+      const snap = await this.firestore
+        .collection<ScrapSession>('scrap-data', ref =>
+          ref.where('materials', 'array-contains', code7).limit(ScrapComponent.MATERIAL_SEARCH_LIMIT)
+        )
+        .get()
+        .toPromise();
+      const byId = new Map<string, ScrapSession>();
+      for (const s of this.sessions) {
+        if (s.id) {
+          byId.set(s.id, s);
+        }
+      }
+      for (const doc of snap?.docs || []) {
+        byId.set(doc.id, { id: doc.id, ...(doc.data() as ScrapSession) });
+      }
+      this.sessions = Array.from(byId.values());
+    } catch (err: any) {
+      this.loadError =
+        'Không tải bổ sung theo mã NVL. ' + (err?.message || err);
+    } finally {
+      this.listLoading = false;
+    }
+  }
+
+  private applySessionsToView(): void {
+    this.rebuildAllGrouped();
+    this.rebuildFilteredDisplay();
+    this.rebuildNvlFlatRows();
+    this.updateMaterialCodeStats();
+    this.listLoading = false;
+    this.cdr.markForCheck();
+  }
+
+  private updateMaterialCodeStats(): void {
+    const codes = new Set<string>();
+    for (const g of this.allGrouped) {
+      for (const m of g.materials || []) {
+        const c = String(m || '').slice(0, 7).trim();
+        if (c) {
+          codes.add(c);
+        }
+      }
+    }
+    this.totalUniqueMaterialCodes = codes.size;
+  }
+
+  private rebuildAllGrouped(): void {
+    this.allGrouped = this.groupByBoxCode(this.sessions);
+  }
+
+  private rebuildFilteredDisplay(): void {
+    const q = this.searchTerm.trim().toLowerCase();
+    const groups = !q
+      ? this.allGrouped
+      : this.allGrouped.filter(
+          g =>
+            g.boxCode.toLowerCase().includes(q) ||
+            g.materials.some(m => (m || '').toLowerCase().includes(q))
+        );
+
+    this.filteredDisplayRows = groups.map(g => {
+      const materialRows = q ? this.getMaterialsWithBagsForSearch(g) : [];
+      const codeCount = q ? materialRows.length : this.getMaterialsWithBags(g.materials).length;
+      const bagTotal = q
+        ? materialRows.reduce((s, x) => s + x.bags, 0)
+        : g.materials.length;
+      return { group: g, materialRows, codeCount, bagTotal };
+    });
+  }
+
+  private rebuildNvlFlatRows(): void {
+    const q = this.nvlListSearch.trim().toLowerCase();
+    const base = !q
+      ? this.allGrouped
+      : this.allGrouped.filter(
+          g =>
+            g.boxCode.toLowerCase().includes(q) ||
+            g.materials.some(m => (m || '').toLowerCase().includes(q))
+        );
+
+    const rows: ScrapNvlFlatRow[] = [];
+    for (const g of base) {
+      for (const x of this.getMaterialsWithBags(g.materials)) {
+        rows.push({ code: x.code, bags: x.bags, boxCode: g.boxCode });
+      }
+    }
+    rows.sort(
+      (a, b) =>
+        a.code.localeCompare(b.code, 'vi', { sensitivity: 'base', numeric: true }) ||
+        a.boxCode.localeCompare(b.boxCode, 'vi', { numeric: true })
+    );
+    this.nvlListFlatRows = rows;
+    this.nvlFilteredBoxCount = base.length;
+  }
+
+  onNvlListSearchChange(): void {
+    if (!this.hasLoaded) {
+      return;
+    }
+    if (this.filterDebounceTimer) {
+      clearTimeout(this.filterDebounceTimer);
+    }
+    this.filterDebounceTimer = setTimeout(() => {
+      this.rebuildNvlFlatRows();
+      this.cdr.markForCheck();
+    }, 120);
+  }
+
+  trackGroupedRow(_index: number, row: ScrapGroupedDisplayRow): string {
+    return row.group.boxCode;
+  }
+
+  trackNvlRow(_index: number, row: ScrapNvlFlatRow): string {
+    return this.nvlFlatRowKey(row);
   }
 
   startScan(): void {
@@ -131,6 +345,7 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.materialInputVal = '';
     this.boxInputVal = '';
     this.needFocusBox = true;
+    this.cdr.markForCheck();
   }
 
   cancelScan(): void {
@@ -139,6 +354,7 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.currentMaterials = [];
     this.materialInputVal = '';
     this.boxInputVal = '';
+    this.cdr.markForCheck();
   }
 
   onBoxKeydown(event: KeyboardEvent): void {
@@ -221,12 +437,19 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
         }
       }
       this.savedMsg = 'Đã lưu!';
-      setTimeout(() => (this.savedMsg = ''), 2500);
+      setTimeout(() => {
+        this.savedMsg = '';
+        this.cdr.markForCheck();
+      }, 2500);
       this.cancelScan();
+      if (this.hasLoaded) {
+        void this.loadData();
+      }
     } catch (e) {
       alert('Lỗi khi lưu: ' + e);
     } finally {
       this.isSaving = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -259,20 +482,6 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     return order.map(k => map.get(k)!);
   }
 
-  get allGrouped(): ScrapBoxGroup[] {
-    return this.groupByBoxCode(this.sessions);
-  }
-
-  get filteredGrouped(): ScrapBoxGroup[] {
-    const q = this.searchTerm.trim().toLowerCase();
-    if (!q) return this.allGrouped;
-    return this.allGrouped.filter(
-      g =>
-        g.boxCode.toLowerCase().includes(q) ||
-        g.materials.some(m => (m || '').toLowerCase().includes(q))
-    );
-  }
-
   get searchTrim(): string {
     return this.searchTerm.trim();
   }
@@ -286,41 +495,17 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
   openNvlListView(): void {
     this.showNvlListView = true;
     this.nvlListSearch = '';
+    if (!this.hasLoaded) {
+      void this.loadData();
+    } else {
+      this.rebuildNvlFlatRows();
+      this.cdr.markForCheck();
+    }
   }
 
   closeNvlListView(): void {
     this.showNvlListView = false;
     this.nvlListSearch = '';
-  }
-
-  get nvlListFilteredGrouped(): ScrapBoxGroup[] {
-    const q = this.nvlListSearch.trim().toLowerCase();
-    const base = this.allGrouped;
-    if (!q) {
-      return base;
-    }
-    return base.filter(
-      g =>
-        g.boxCode.toLowerCase().includes(q) ||
-        g.materials.some(m => (m || '').toLowerCase().includes(q))
-    );
-  }
-
-  /** Bảng NVL chung: Mã | Bag | Vị trí (thùng), sắp xếp theo thùng rồi mã */
-  get nvlListFlatRows(): ScrapNvlFlatRow[] {
-    const rows: ScrapNvlFlatRow[] = [];
-    for (const g of this.nvlListFilteredGrouped) {
-      for (const x of this.getMaterialsWithBags(g.materials)) {
-        rows.push({ code: x.code, bags: x.bags, boxCode: g.boxCode });
-      }
-    }
-    // Sắp xếp mã theo thứ tự chữ cái (a, b, c…), cùng mã thì theo vị trí thùng
-    rows.sort(
-      (a, b) =>
-        a.code.localeCompare(b.code, 'vi', { sensitivity: 'base', numeric: true }) ||
-        a.boxCode.localeCompare(b.boxCode, 'vi', { numeric: true })
-    );
-    return rows;
   }
 
   nvlFlatRowKey(row: ScrapNvlFlatRow): string {
@@ -377,10 +562,14 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
       if (toRemove > 0) {
         alert('Chưa xóa hết (dữ liệu có thể đã đổi). Hãy làm mới trang.');
       }
+      if (this.hasLoaded) {
+        await this.loadData();
+      }
     } catch (e) {
       alert('Lỗi khi xóa: ' + e);
     } finally {
       this.nvlRowDeletingKey = null;
+      this.cdr.markForCheck();
     }
   }
 
@@ -389,6 +578,9 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (!confirm(`Xóa toàn bộ dữ liệu thùng ${g.boxCode}?`)) return;
     for (const id of g.docIds) {
       await this.firestore.collection('scrap-data').doc(id).delete();
+    }
+    if (this.hasLoaded) {
+      await this.loadData();
     }
   }
 
@@ -423,20 +615,6 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     return [];
   }
 
-  /** Số mã hiển thị (khi tìm kiếm: theo bộ lọc NVL; không tìm: toàn bộ). */
-  getDisplayMaterialCodeCount(g: ScrapBoxGroup): number {
-    if (this.searchTrim) return this.getMaterialsWithBagsForSearch(g).length;
-    return this.getMaterialsWithBags(g.materials).length;
-  }
-
-  /** Tổng Bag hiển thị (khi tìm: chỉ bag của các mã NVL đang hiển thị). */
-  getDisplayBagTotal(g: ScrapBoxGroup): number {
-    if (this.searchTrim) {
-      return this.getMaterialsWithBagsForSearch(g).reduce((s, x) => s + x.bags, 0);
-    }
-    return g.materials.length;
-  }
-
   getDateKey(d?: Date): string {
     const d2 = d || new Date();
     const day = String(d2.getDate()).padStart(2, '0');
@@ -455,10 +633,12 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
     await this.loadNextSequence();
     this.updatePrintPreview();
     this.showPrintModal = true;
+    this.cdr.markForCheck();
   }
 
   closePrintModal(): void {
     this.showPrintModal = false;
+    this.cdr.markForCheck();
   }
 
   async loadNextSequence(): Promise<void> {

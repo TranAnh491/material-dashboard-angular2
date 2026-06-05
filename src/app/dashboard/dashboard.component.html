@@ -386,13 +386,14 @@
             <!-- Day grid -->
             <div class="pdg-grid">
               <div *ngFor="let col of putawayDayGrid" class="pdg-col"
-                   [class.pdg-col--active]="col.total > 0"
+                   [class.pdg-col--active]="col.total > 0 || col.counts.tra > 0"
                    [class.pdg-col--late]="col.colIdx === 11">
                 <div class="pdg-col__head">{{ col.dayLabel }}</div>
                 <div class="pdg-cell pdg-cell--pass"    [class.pdg-cell--empty]="!col.counts.pass"   >{{ col.counts.pass    || '' }}</div>
                 <div class="pdg-cell pdg-cell--ng"      [class.pdg-cell--empty]="!col.counts.ng"     >{{ col.counts.ng      || '' }}</div>
                 <div class="pdg-cell pdg-cell--pending" [class.pdg-cell--empty]="!col.counts.pending">{{ col.counts.pending || '' }}</div>
                 <div class="pdg-cell pdg-cell--confirm" [class.pdg-cell--empty]="!col.counts.confirm">{{ col.counts.confirm || '' }}</div>
+                <div class="pdg-cell pdg-cell--tra"     [class.pdg-cell--empty]="!col.counts.tra"    >{{ col.counts.tra     || '' }}</div>
               </div>
             </div>
 
@@ -402,6 +403,7 @@
               <span class="pdg-legend__dot pdg-legend__dot--ng"></span><span>NG</span>
               <span class="pdg-legend__dot pdg-legend__dot--pending"></span><span>Waiting IQC</span>
               <span class="pdg-legend__dot pdg-legend__dot--confirm"></span><span>Hold</span>
+              <span class="pdg-legend__dot pdg-legend__dot--tra"></span><span>TRA</span>
             </div>
 
           </div>
@@ -679,6 +681,10 @@
                   (click)="putawayFilterMode='not-pass'">
             <span class="pf-dot pf-dot--not-pass"></span>Chưa Pass
           </button>
+          <button class="pf-tab pf-tab--tra" [class.pf-tab--active]="putawayFilterMode==='tra'"
+                  (click)="putawayFilterMode='tra'">
+            <span class="pf-dot pf-dot--tra"></span>TRA
+          </button>
           <button class="pf-tab pf-tab--day" (click)="togglePutawaySortDay()">
             <i class="material-icons" style="font-size:14px;vertical-align:middle;">
               {{ putawaySortByDay === 'asc' ? 'arrow_upward' : putawaySortByDay === 'desc' ? 'arrow_downward' : 'swap_vert' }}
@@ -689,12 +695,12 @@
         <span class="iqc-modal-actions__spacer"></span>
         <!-- Cất NVL -->
         <button class="cat-nvl-btn" (click)="openCatNvlDialog()"
-                [disabled]="iqcMaterialsLoading || iqcMaterialsBySku.length === 0">
+                [disabled]="iqcMaterialsLoading || putawayFilterMode === 'tra' || iqcMaterialsBySku.length === 0">
           <i class="material-icons">move_to_inbox</i>
           Cất NVL
         </button>
         <button class="download-btn" (click)="downloadIQCMaterialsReport()"
-                [disabled]="iqcMaterialsLoading || iqcMaterialsBySku.length === 0">
+                [disabled]="iqcMaterialsLoading || putawayModalIsEmpty">
           <i class="material-icons">download</i>
           Excel
         </button>
@@ -706,17 +712,23 @@
       </div>
       
       <div class="iqc-materials-content" *ngIf="!iqcMaterialsLoading">
-        <div class="no-materials" *ngIf="iqcMaterialsBySku.length === 0">
-          <p>Không có mã hàng nào khớp điều kiện Putaway (vị trí IQC, có tồn, có IQC status).</p>
+        <div class="no-materials" *ngIf="putawayModalIsEmpty">
+          <p *ngIf="putawayFilterMode === 'tra'">Không có mã hàng nào ở vị trí TRA (có tồn).</p>
+          <p *ngIf="putawayFilterMode !== 'tra'">Không có mã hàng nào khớp điều kiện Putaway (vị trí IQC, có tồn, có IQC status).</p>
         </div>
 
-        <div class="putaway-modal-summary" *ngIf="iqcMaterialsBySku.length > 0">
-          <span><strong>{{ putawayModalDisplayRows.length }}</strong> / {{ iqcMaterialsBySku.length }} mã hàng</span>
-          <span class="putaway-modal-summary__pass">Pass: <strong>{{ putawayModalTotalPassSku }}</strong></span>
-          <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong></span>
+        <div class="putaway-modal-summary" *ngIf="!putawayModalIsEmpty">
+          <span><strong>{{ putawayModalDisplayRows.length }}</strong> / {{ putawayModalActiveSourceRows.length }} mã hàng</span>
+          <span class="putaway-modal-summary__tra" *ngIf="putawayFilterMode === 'tra'">
+            Vị trí: <strong>TRA</strong>
+          </span>
+          <ng-container *ngIf="putawayFilterMode !== 'tra'">
+            <span class="putaway-modal-summary__pass">Pass: <strong>{{ putawayModalTotalPassSku }}</strong></span>
+            <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong></span>
+          </ng-container>
         </div>
 
-        <div class="materials-list" *ngIf="iqcMaterialsBySku.length > 0">
+        <div class="materials-list" *ngIf="!putawayModalIsEmpty">
           <table class="materials-table putaway-sku-table">
             <thead>
               <tr>

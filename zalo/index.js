@@ -243,6 +243,7 @@ exports.zaloWebhook = onRequest(
       "- /tonkho ASM1 <mã hàng>\n" +
       "- /tonkho ASM2 <mã hàng>\n" +
       "- /scrap  (tra cứu kho scrap, có password)\n" +
+      "- Sau khi có hàng: Xuất <số pcs> (vd: Xuất 100 pcs) → giao việc qua ASP0106\n" +
       "- /link   (liên kết mã nhân viên để nhận thông báo)\n" +
       "- /id     (xem mã nhân viên đã liên kết)";
 
@@ -372,26 +373,36 @@ exports.zaloWebhook = onRequest(
     }
 
     // Quick link: user sends "ASPxxxx" then confirms by /id
+    // (bỏ qua khi đang giao việc xuất scrap — xử lý ở block /scrap bên dưới)
     if (eventName === "message.text.received" && chatId && typeof text === "string") {
       const t = text.trim().toUpperCase();
       if (isValidEmployeeCode(t)) {
-        try {
-          const profile = await getLinkedProfile(chatId);
-          if (profile?.memberId) {
-            // already linked
-            res.status(200).json({ok: true});
-            return;
+        const pendingForLink = await db
+          .collection("zalo_pending")
+          .doc(chatId)
+          .get()
+          .catch(() => null);
+        const pendingLink = pendingForLink?.exists ? pendingForLink.data() : null;
+        if (pendingLink?.intent === "scrap_export_assign") {
+          // fall through → scrap_export_assign handler
+        } else {
+          try {
+            const profile = await getLinkedProfile(chatId);
+            if (profile?.memberId) {
+              res.status(200).json({ok: true});
+              return;
+            }
+            await db.collection("zalo_pending").doc(chatId).set(
+              {intent: "link_emp", step: "confirm", memberId: t, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+              {merge: true}
+            );
+            await sendText(chatId, `Đã nhận mã ${t}. Vui lòng gõ: /id để xác nhận liên kết.`);
+          } catch (e) {
+            logger.error("set pending link_emp failed", e);
           }
-          await db.collection("zalo_pending").doc(chatId).set(
-            {intent: "link_emp", step: "confirm", memberId: t, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
-            {merge: true}
-          );
-          await sendText(chatId, `Đã nhận mã ${t}. Vui lòng gõ: /id để xác nhận liên kết.`);
-        } catch (e) {
-          logger.error("set pending link_emp failed", e);
+          res.status(200).json({ok: true});
+          return;
         }
-        res.status(200).json({ok: true});
-        return;
       }
     }
 
@@ -402,6 +413,114 @@ exports.zaloWebhook = onRequest(
     // - User: B001680 -> bot checks scrap store and replies
     const SCRAP_PASSWORD = "2026";
     const SCRAP_AUTH_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+    const SCRAP_COORDINATOR_ID = "ASP0106";
+    const SCRAP_EXPORT_UNIT = "pcs";
+
+    const stripAccents = (s) =>
+      String(s || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/gi, "d");
+
+    /** Lệnh xuất kho scrap: "Xuất 100 pcs" (tồn tra cứu vẫn theo bag). */
+    const parseScrapExportQty = (s) => {
+      const norm = stripAccents(String(s || "").trim().toLowerCase());
+      const withUnit = norm.match(/^xuat\s+(\d+)\s*pcs?\s*$/);
+      if (withUnit) {
+        const qty = parseInt(withUnit[1], 10);
+        return Number.isFinite(qty) && qty > 0 ? qty : null;
+      }
+      const bare = norm.match(/^xuat\s+(\d+)\s*$/);
+      if (bare) {
+        const qty = parseInt(bare[1], 10);
+        return Number.isFinite(qty) && qty > 0 ? qty : null;
+      }
+      return null;
+    };
+
+    const getZaloLinkByMemberId = async (memberId) => {
+      const emp = String(memberId || "").trim().toUpperCase();
+      if (!emp) return null;
+      try {
+        const snap = await db.collection("zalo_links").where("memberId", "==", emp).limit(1).get();
+        if (snap.empty) return null;
+        const d = snap.docs[0].data() || {};
+        return {
+          chatId: String(d.chatId || snap.docs[0].id || "").trim(),
+          memberId: emp,
+          name: String(d.name || "").trim(),
+        };
+      } catch (e) {
+        logger.error("zalo_links lookup failed", e);
+        return null;
+      }
+    };
+
+    const getChatIdByMemberId = async (memberId) => {
+      const link = await getZaloLinkByMemberId(memberId);
+      return link?.chatId || "";
+    };
+
+    const getDisplayNameForMemberId = async (memberId) => {
+      const emp = String(memberId || "").trim().toUpperCase();
+      if (!emp) return "—";
+      const link = await getZaloLinkByMemberId(emp);
+      if (link?.name) return link.name;
+      const fromDir = await getEmployeeNameFromDirectory(emp);
+      return fromDir || emp;
+    };
+
+    /** Danh sách NV đã liên kết Zalo (zalo_links) — ASP0106 chọn ID để giao việc xuất scrap. */
+    const buildZaloLinksAssigneeListText = async () => {
+      try {
+        const [linksSnap, dirSnap] = await Promise.all([
+          db.collection("zalo_links").limit(300).get(),
+          db.collection("employee-directory").limit(500).get().catch(() => null),
+        ]);
+
+        const nameById = new Map();
+        if (dirSnap && !dirSnap.empty) {
+          for (const doc of dirSnap.docs) {
+            const d = doc.data() || {};
+            const id = String(d.employeeId || doc.id || "").trim().toUpperCase();
+            const name = String(d.name || d.employeeName || "").trim();
+            if (id && name) nameById.set(id, name);
+          }
+        }
+
+        if (!linksSnap || linksSnap.empty) {
+          return "(Chưa có ai liên kết Zalo — NV cần gõ /link rồi /id trước)";
+        }
+
+        const byMember = new Map();
+        for (const doc of linksSnap.docs) {
+          const d = doc.data() || {};
+          const id = String(d.memberId || "").trim().toUpperCase();
+          if (!isValidEmployeeCode(id)) continue;
+          if (id === SCRAP_COORDINATOR_ID) continue;
+          const name = String(d.name || "").trim() || nameById.get(id) || "";
+          const chatId = String(d.chatId || doc.id || "").trim();
+          const prev = byMember.get(id);
+          if (!prev || (name && !prev.name)) {
+            byMember.set(id, {id, name, chatId});
+          }
+        }
+
+        const rows = Array.from(byMember.values()).sort((a, b) =>
+          a.id.localeCompare(b.id, "vi")
+        );
+        if (rows.length === 0) {
+          return "(Chưa có NV ASPxxxx liên kết Zalo — trừ điều phối)";
+        }
+
+        const lines = rows.slice(0, 40).map((r) => `- ${r.id} — ${r.name || "—"}`);
+        const more = rows.length > 40 ? `\n... và ${rows.length - 40} NV khác` : "";
+        return `${lines.join("\n")}${more}`;
+      } catch (e) {
+        logger.error("zalo_links assignee list failed", e);
+        return "(Không tải được danh sách zalo_links)";
+      }
+    };
 
     const isScrapCommand = (s) => {
       const tt = String(s || "").trim().toLowerCase();
@@ -424,7 +543,13 @@ exports.zaloWebhook = onRequest(
           .limit(20)
           .get();
 
+        const pendingRef = db.collection("zalo_pending").doc(chatId);
+
         if (snap.empty) {
+          await pendingRef.set(
+            {lastScrapCode7: admin.firestore.FieldValue.delete(), lastScrapTotalBags: admin.firestore.FieldValue.delete()},
+            {merge: true}
+          );
           await sendText(chatId, `Kho scrap: KHÔNG có mã ${code7}.`);
           return;
         }
@@ -446,14 +571,80 @@ exports.zaloWebhook = onRequest(
           .map(([box, bags]) => `- ${box}: ${bags} bag`)
           .join("\n");
 
+        await pendingRef.set(
+          {lastScrapCode7: code7, lastScrapTotalBags: totalBags, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+          {merge: true}
+        );
+
         await sendText(
           chatId,
-          `Kho scrap: CÓ mã ${code7}.\nTổng (ước tính): ${totalBags} bag.\nThùng:\n${boxes || "—"}`
+          `Kho scrap: CÓ mã ${code7}.\nTổng tồn (ước tính): ${totalBags} bag.\nThùng:\n${boxes || "—"}\n\n` +
+            `Tồn đếm theo bag; yêu cầu xuất theo pcs.\n` +
+            `Cần xuất: gõ "Xuất <số pcs>" (vd: Xuất 100 pcs).`
         );
       } catch (err) {
         logger.error("scrap lookup failed", err);
         await sendText(chatId, "Lỗi khi tra cứu kho scrap.");
       }
+    };
+
+    const createScrapExportRequest = async (requesterChatId, materialCode, quantity, requesterProfile) => {
+      const requesterMemberId = String(requesterProfile?.memberId || "").trim().toUpperCase();
+      const requesterName = String(requesterProfile?.name || requesterMemberId || "—").trim();
+      const reqRef = await db.collection("scrap-export-requests").add({
+        materialCode,
+        quantity,
+        unit: SCRAP_EXPORT_UNIT,
+        requesterMemberId: requesterMemberId || "",
+        requesterName,
+        requesterChatId,
+        status: "pending_assign",
+        coordinatorMemberId: SCRAP_COORDINATOR_ID,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      const coordinatorChatId = await getChatIdByMemberId(SCRAP_COORDINATOR_ID);
+      if (!coordinatorChatId) {
+        await sendText(
+          requesterChatId,
+          `Đã ghi yêu cầu xuất ${quantity} ${SCRAP_EXPORT_UNIT} (mã ${materialCode}), nhưng chưa liên kết Zalo ${SCRAP_COORDINATOR_ID}.`
+        );
+        return;
+      }
+
+      const empList = await buildZaloLinksAssigneeListText();
+      const coordPendingRef = db.collection("zalo_pending").doc(coordinatorChatId);
+      await coordPendingRef.set(
+        {
+          intent: "scrap_export_assign",
+          step: "pick_worker",
+          requestId: reqRef.id,
+          materialCode,
+          quantity,
+          unit: SCRAP_EXPORT_UNIT,
+          requesterMemberId,
+          requesterName,
+          requesterChatId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        {merge: true}
+      );
+
+      await sendText(
+        coordinatorChatId,
+        `📦 Yêu cầu xuất kho scrap\n` +
+          `Mã NVL: ${materialCode}\n` +
+          `Số lượng xuất: ${quantity} ${SCRAP_EXPORT_UNIT}\n` +
+          `(Tồn kho tra cứu theo bag — NV nhận việc tự quy đổi/xử lý.)\n` +
+          `Người yêu cầu: ${requesterMemberId || "—"} — ${requesterName}\n\n` +
+          `Danh sách NV đã liên kết Zalo (chỉ cần nhập ID):\n${empList}\n\n` +
+          `👉 Nhập mã ASPxxxx (vd: ASP0123) để giao việc xuất kho scrap.`
+      );
+
+      await sendText(
+        requesterChatId,
+        `Đã gửi yêu cầu xuất kho scrap (${quantity} ${SCRAP_EXPORT_UNIT}, mã ${materialCode}) tới ${SCRAP_COORDINATOR_ID}. Chờ phân công.`
+      );
     };
 
     if (eventName === "message.text.received" && chatId && typeof text === "string") {
@@ -464,6 +655,132 @@ exports.zaloWebhook = onRequest(
 
       const authedUntilMs = pending?.scrapAuthedUntilMs ? Number(pending.scrapAuthedUntilMs) : 0;
       const isAuthed = Number.isFinite(authedUntilMs) && authedUntilMs > Date.now();
+
+      // ASP0106: chọn NV thực hiện xuất scrap
+      if (pending?.intent === "scrap_export_assign" && pending?.step === "pick_worker") {
+        const workerId = t.toUpperCase();
+        if (!isValidEmployeeCode(workerId)) {
+          await sendText(chatId, "Mã chưa đúng. Nhập ID dạng ASP + 4 số (vd: ASP0123).");
+          res.status(200).json({ok: true});
+          return;
+        }
+        if (workerId === SCRAP_COORDINATOR_ID) {
+          await sendText(
+            chatId,
+            `Không giao xuất kho scrap cho chính ${SCRAP_COORDINATOR_ID}. Chọn ID NV khác trong danh sách zalo_links.`
+          );
+          res.status(200).json({ok: true});
+          return;
+        }
+
+        const requestId = String(pending.requestId || "").trim();
+        const materialCode = String(pending.materialCode || "").trim();
+        const quantity = Number(pending.quantity || 0);
+        const requesterChatId = String(pending.requesterChatId || "").trim();
+        const requesterName = String(pending.requesterName || "").trim();
+        const requesterMemberId = String(pending.requesterMemberId || "").trim();
+
+        const workerName = await getDisplayNameForMemberId(workerId);
+        const workerChatId = await getChatIdByMemberId(workerId);
+
+        if (requestId) {
+          await db
+            .collection("scrap-export-requests")
+            .doc(requestId)
+            .set(
+              {
+                status: "assigned",
+                assigneeMemberId: workerId,
+                assigneeName: workerName,
+                assignedAt: admin.firestore.FieldValue.serverTimestamp(),
+                assignedBy: SCRAP_COORDINATOR_ID,
+              },
+              {merge: true}
+            )
+            .catch((e) => logger.error("scrap-export-requests update failed", e));
+        }
+
+        const exportUnit = String(pending.unit || SCRAP_EXPORT_UNIT).trim() || SCRAP_EXPORT_UNIT;
+
+        const taskMsg =
+          `📦 Lệnh xuất kho scrap\n` +
+          `Mã NVL: ${materialCode}\n` +
+          `Số lượng xuất: ${quantity} ${exportUnit}\n` +
+          `Người yêu cầu: ${requesterMemberId || "—"} — ${requesterName}\n` +
+          `Điều phối: ${SCRAP_COORDINATOR_ID}\n\n` +
+          `(Tồn kho scrap đếm theo bag — anh/chị tự quy đổi và xử lý xuất.)\n\n` +
+          `Vui lòng thực hiện xuất kho scrap theo yêu cầu trên.`;
+
+        const assignSummary =
+          `xuất kho scrap — ${quantity} ${exportUnit}, mã NVL ${materialCode}`;
+
+        if (workerChatId) {
+          await sendText(workerChatId, taskMsg);
+          await sendText(
+            chatId,
+            `✅ Đã giao ${workerId} (${workerName}) ${assignSummary}. Đã gửi Zalo cho NV.`
+          );
+        } else {
+          await sendText(
+            chatId,
+            `⚠️ Đã ghi nhận giao ${workerId} (${workerName}) ${assignSummary}, nhưng NV chưa liên kết Zalo (/link).`
+          );
+        }
+
+        if (requesterChatId && requesterChatId !== chatId) {
+          await sendText(
+            requesterChatId,
+            `✅ ${SCRAP_COORDINATOR_ID} đã giao ${workerId} (${workerName}) ${assignSummary}.`
+          );
+        }
+
+        await pendingRef
+          .set(
+            {
+              intent: admin.firestore.FieldValue.delete(),
+              step: admin.firestore.FieldValue.delete(),
+              requestId: admin.firestore.FieldValue.delete(),
+              materialCode: admin.firestore.FieldValue.delete(),
+              quantity: admin.firestore.FieldValue.delete(),
+              requesterChatId: admin.firestore.FieldValue.delete(),
+              requesterName: admin.firestore.FieldValue.delete(),
+              requesterMemberId: admin.firestore.FieldValue.delete(),
+            },
+            {merge: true}
+          )
+          .catch(() => {});
+
+        res.status(200).json({ok: true});
+        return;
+      }
+
+      // Lệnh xuất: "Xuất 100 pcs" (sau tra cứu /scrap)
+      const exportQty = parseScrapExportQty(t);
+      if (exportQty != null) {
+        if (!isAuthed) {
+          await sendText(chatId, "Hết hạn tra cứu scrap. Gõ /scrap và nhập password trước.");
+          res.status(200).json({ok: true});
+          return;
+        }
+        const code7 = String(pending?.lastScrapCode7 || "").trim().toUpperCase();
+        if (!code7) {
+          await sendText(
+            chatId,
+            "Chưa có mã hàng vừa tra. Dùng /scrap, tra mã có hàng, rồi gõ Xuất <số pcs> (vd: Xuất 100 pcs)."
+          );
+          res.status(200).json({ok: true});
+          return;
+        }
+        const profile = await getLinkedProfile(chatId);
+        try {
+          await createScrapExportRequest(chatId, code7, exportQty, profile);
+        } catch (e) {
+          logger.error("scrap export request failed", e);
+          await sendText(chatId, "Lỗi khi tạo yêu cầu xuất. Thử lại sau.");
+        }
+        res.status(200).json({ok: true});
+        return;
+      }
 
       // Start /scrap or /scarp
       if (isScrapCommand(t)) {

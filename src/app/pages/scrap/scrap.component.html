@@ -45,8 +45,9 @@
     <div class="toolbar-actions">
       <div class="search-wrap">
         <mat-icon class="search-icon">search</mat-icon>
-        <input class="search-input" type="text" placeholder="Tìm mã thùng hoặc mã NVL… (Enter để tải)"
+        <input class="search-input" type="text" placeholder="Lọc mã thùng / mã NVL… (Enter = tải thêm theo mã)"
                [(ngModel)]="searchTerm"
+               (ngModelChange)="onSearchTermChange()"
                (keyup.enter)="loadData()" />
         <button type="button" class="search-load-btn" (click)="loadData()" [disabled]="listLoading" title="Tải / tìm kiếm">
           <mat-icon>{{ listLoading ? 'sync' : 'search' }}</mat-icon>
@@ -143,12 +144,6 @@
   <div class="table-wrap">
     <div class="scrap-load-error" *ngIf="loadError">{{ loadError }}</div>
 
-    <!-- Chưa tải: hướng dẫn người dùng -->
-    <div class="scrap-not-loaded" *ngIf="!hasLoaded && !listLoading && scanStep === 'idle'">
-      <mat-icon>search</mat-icon>
-      <p>Nhập mã tìm kiếm và nhấn <strong>Enter</strong> hoặc bấm nút 🔍 để tải dữ liệu.</p>
-    </div>
-
     <div class="loading-wrap loading-wrap--table" *ngIf="listLoading && sessions.length === 0 && !loadError && scanStep === 'idle'">
       <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
       <span class="loading-label">Đang tải danh sách thùng…</span>
@@ -156,9 +151,9 @@
 
     <ng-container *ngIf="hasLoaded && (!listLoading || sessions.length > 0 || loadError)">
     <div class="table-meta">
-      {{ filteredGrouped.length }} thùng
-      <span *ngIf="searchTrim"> (lọc từ {{ allGrouped.length }})</span>
-      <span class="table-meta-hint" *ngIf="isListLikelyTruncated"> · Chỉ hiển thị {{ listPageSize }} bản ghi mới nhất (tải nhanh hơn).</span>
+      {{ filteredDisplayRows.length }} thùng · {{ totalUniqueMaterialCodes }} mã NVL
+      <span *ngIf="searchTrim"> (lọc từ {{ allGrouped.length }} thùng)</span>
+      <span class="table-meta-hint" *ngIf="isListLikelyTruncated"> · Đã tải {{ listPageSize }} thùng mới nhất — nhập mã NVL + Enter để tải thêm thùng chứa mã đó.</span>
     </div>
 
     <!-- Desktop table -->
@@ -174,28 +169,28 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let g of filteredGrouped; let i = index">
+        <tr *ngFor="let row of filteredDisplayRows; let i = index; trackBy: trackGroupedRow">
           <td class="col-stt">{{ i + 1 }}</td>
-          <td class="col-box"><strong>{{ g.boxCode }}</strong></td>
-          <td class="col-count">{{ getDisplayMaterialCodeCount(g) }}</td>
-          <td class="col-bag">{{ getDisplayBagTotal(g) }}</td>
+          <td class="col-box"><strong>{{ row.group.boxCode }}</strong></td>
+          <td class="col-count">{{ row.codeCount }}</td>
+          <td class="col-bag">{{ row.bagTotal }}</td>
           <td class="col-materials">
             <div *ngIf="searchTrim">
-              <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBagsForSearch(g)">
+              <div class="mat-bag-row" *ngFor="let x of row.materialRows">
                 <span class="mat-code">{{ x.code }}</span>
                 <span class="mat-bag">| {{ x.bags }}</span>
               </div>
-              <span class="no-mat" *ngIf="getMaterialsWithBagsForSearch(g).length === 0">—</span>
+              <span class="no-mat" *ngIf="row.materialRows.length === 0">—</span>
             </div>
             <span *ngIf="!searchTrim" class="detail-hint">Nhập ô tìm để xem mã</span>
           </td>
           <td class="col-action">
-            <button class="btn-delete" (click)="deleteAggregated(g)" title="Xóa thùng">
+            <button class="btn-delete" (click)="deleteAggregated(row.group)" title="Xóa thùng">
               <mat-icon>delete</mat-icon>
             </button>
           </td>
         </tr>
-        <tr *ngIf="filteredGrouped.length === 0">
+        <tr *ngIf="filteredDisplayRows.length === 0">
           <td colspan="6" class="empty-row">Không có dữ liệu</td>
         </tr>
       </tbody>
@@ -203,31 +198,31 @@
 
     <!-- Mobile cards -->
     <div class="mobile-cards">
-      <div class="record-card" *ngFor="let g of filteredGrouped; let i = index">
+      <div class="record-card" *ngFor="let row of filteredDisplayRows; trackBy: trackGroupedRow">
         <div class="card-header">
           <div class="card-box-code">
             <mat-icon>inventory_2</mat-icon>
-            <span>{{ g.boxCode }}</span>
+            <span>{{ row.group.boxCode }}</span>
           </div>
           <div class="card-meta">
-            <span class="card-count">{{ getDisplayMaterialCodeCount(g) }} mã · {{ getDisplayBagTotal(g) }} Bag</span>
-            <button class="btn-delete" (click)="deleteAggregated(g)">
+            <span class="card-count">{{ row.codeCount }} mã · {{ row.bagTotal }} Bag</span>
+            <button class="btn-delete" (click)="deleteAggregated(row.group)">
               <mat-icon>delete</mat-icon>
             </button>
           </div>
         </div>
         <div class="card-materials" *ngIf="searchTrim">
-          <div class="mat-bag-row" *ngFor="let x of getMaterialsWithBagsForSearch(g)">
+          <div class="mat-bag-row" *ngFor="let x of row.materialRows">
             <span class="mat-code">{{ x.code }}</span>
             <span class="mat-bag">| {{ x.bags }}</span>
           </div>
-          <span class="no-mat" *ngIf="getMaterialsWithBagsForSearch(g).length === 0">—</span>
+          <span class="no-mat" *ngIf="row.materialRows.length === 0">—</span>
         </div>
         <div class="card-search-hint" *ngIf="!searchTrim">
           <span class="detail-hint">Nhập ô tìm để xem mã NVL</span>
         </div>
       </div>
-      <div class="empty-card" *ngIf="filteredGrouped.length === 0">
+      <div class="empty-card" *ngIf="filteredDisplayRows.length === 0">
         Không có dữ liệu
       </div>
     </div>
@@ -250,7 +245,8 @@
       <div class="nvl-search-wrap">
         <mat-icon class="nvl-search-icon">search</mat-icon>
         <input class="nvl-search-input" type="text" placeholder="Lọc mã thùng hoặc mã NVL…"
-               [(ngModel)]="nvlListSearch" />
+               [(ngModel)]="nvlListSearch"
+               (ngModelChange)="onNvlListSearchChange()" />
       </div>
     </div>
 
@@ -259,17 +255,12 @@
       <span class="loading-label">Đang tải…</span>
     </div>
 
-    <div class="scrap-not-loaded" *ngIf="!hasLoaded && !listLoading">
-      <mat-icon>search</mat-icon>
-      <p>Bấm <strong>Làm mới</strong> hoặc tìm kiếm để tải dữ liệu.</p>
-    </div>
-
     <div class="scrap-load-error nvl-load-error" *ngIf="loadError">{{ loadError }}</div>
 
     <div class="nvl-list-body" *ngIf="hasLoaded && (!listLoading || sessions.length > 0 || loadError)">
       <p class="nvl-list-meta">
-        {{ nvlListFlatRows.length }} dòng NVL
-        <span *ngIf="nvlListSearch.trim()"> · {{ nvlListFilteredGrouped.length }} thùng sau lọc (tổng {{ allGrouped.length }} thùng)</span>
+        {{ nvlListFlatRows.length }} dòng NVL · {{ totalUniqueMaterialCodes }} mã
+        <span *ngIf="nvlListSearch.trim()"> · {{ nvlFilteredBoxCount }} thùng sau lọc (tổng {{ allGrouped.length }} thùng)</span>
       </p>
 
       <div class="nvl-table-scroll">
@@ -283,7 +274,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let r of nvlListFlatRows">
+            <tr *ngFor="let r of nvlListFlatRows; trackBy: trackNvlRow">
               <td class="col-nvl-code"><span class="mono">{{ r.code }}</span></td>
               <td class="col-nvl-bag">{{ r.bags }}</td>
               <td class="col-nvl-pos"><span class="mono">{{ r.boxCode }}</span></td>

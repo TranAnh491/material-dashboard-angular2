@@ -752,10 +752,10 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         const finalBatchNumber = result.sequenceNumber;
       
         // Xử lý location đặc biệt cho hàng trả (TRA)
-        // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành F62 khi thêm vào inventory
+        // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành TRA khi thêm vào inventory
         let inventoryLocation = material.location;
         if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
-          inventoryLocation = 'F62';
+          inventoryLocation = 'TRA';
         }
         
         const totalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
@@ -783,7 +783,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           supplier: material.supplier,
           remarks: material.remarks,
           source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
-          iqcStatus: (inventoryLocation === 'F62' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM', // 🆕 Nếu location là F62 hoặc F62TRA thì mặc định là Pass, nếu không thì CHỜ KIỂM
+          iqcStatus: (inventoryLocation === 'TRA' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM', // Nếu location là TRA hoặc F62TRA (dữ liệu cũ) thì mặc định Pass
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -932,7 +932,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       const imd = String(inv['batchNumber'] || '');
       let inventoryLocation = (material.location || inv['location'] || 'IQC') as string;
       if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
-        inventoryLocation = 'F62';
+        inventoryLocation = 'TRA';
       }
       const totalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
       const bb = (material.bagBatch || '').trim();
@@ -942,7 +942,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         exportedBags: 0,
         location: inventoryLocation,
         stock: material.quantity,
-        iqcStatus: (inventoryLocation === 'F62' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM',
+        iqcStatus: (inventoryLocation === 'TRA' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM',
         bagsPendingPhysicalScan: firebase.firestore.FieldValue.delete(),
         updatedAt: new Date()
       }).then(() => {
