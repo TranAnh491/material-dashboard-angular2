@@ -4451,15 +4451,32 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       snap.docs.forEach((d) => docs.push(d.data() as Record<string, unknown>));
     }
 
-    // Kết hợp in-memory + Firestore
-    const inMemLines = this.getPxkLinesForLsx(lsx);
-    const allLines: PxkLine[] = [...inMemLines];
-    for (const d of docs) {
-      const lines = Array.isArray(d.lines) ? (d.lines as PxkLine[]) : [];
-      allLines.push(...lines);
+    // Chỉ dùng một nguồn: Firestore (ưu tiên) hoặc cache tab — tránh cộng đôi với pxkDataByLsx đã load từ Firestore
+    let allLines: PxkLine[] = [];
+    if (docs.length > 0) {
+      const targetNorm = this.normLsxForMatch(lsx);
+      let best: { importedAt: Date | null; lines: PxkLine[] } | null = null;
+      for (const d of docs) {
+        const docLsx = String(d.lsx ?? '').trim();
+        if (!docLsx) continue;
+        const docNorm = this.normLsxForMatch(docLsx);
+        if (docNorm !== targetNorm && docLsx.toUpperCase() !== lsx.toUpperCase()) continue;
+        const lines = Array.isArray(d.lines) ? (d.lines as PxkLine[]) : [];
+        if (lines.length === 0) continue;
+        const importedAt = this.outboundRecordToDate({ createdAt: d.importedAt });
+        if (
+          !best ||
+          (importedAt && (!best.importedAt || importedAt.getTime() > best.importedAt.getTime()))
+        ) {
+          best = { importedAt, lines };
+        }
+      }
+      allLines = best?.lines ?? [];
+    } else {
+      allLines = this.getPxkLinesForLsx(lsx);
     }
 
-    // Giữ riêng từng dòng materialCode+PO (không gộp), dedup theo key
+    // Giữ riêng từng dòng materialCode+PO+soChungTu; trùng key → giữ bản đầu (không cộng dồn)
     type BagLine = {materialCode: string; tenVatTu: string; quantity: number; unit: string; po: string; soChungTu: string};
     const seen = new Map<string, BagLine>();
     for (const line of allLines) {
@@ -4469,18 +4486,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const po = String(line.po ?? '').trim();
       const soChungTu = String(line.soChungTu ?? '').trim();
       const key = `${mat}||${po}||${soChungTu}`;
-      if (seen.has(key)) {
-        seen.get(key)!.quantity += qty;
-      } else {
-        seen.set(key, {
-          materialCode: mat,
-          tenVatTu: String(line.tenVatTu ?? '').trim(),
-          quantity: qty,
-          unit: String(line.unit ?? '').trim() || 'cái',
-          po,
-          soChungTu
-        });
-      }
+      if (seen.has(key)) continue;
+      seen.set(key, {
+        materialCode: mat,
+        tenVatTu: String(line.tenVatTu ?? '').trim(),
+        quantity: qty,
+        unit: String(line.unit ?? '').trim() || 'cái',
+        po,
+        soChungTu
+      });
     }
     return Array.from(seen.values()).sort((a, b) =>
       a.materialCode.localeCompare(b.materialCode) || a.po.localeCompare(b.po)

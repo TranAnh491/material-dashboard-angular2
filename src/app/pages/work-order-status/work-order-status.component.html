@@ -107,6 +107,11 @@
                           [style.background]="selectedFactory === 'Sample 2' ? '#fce4ec' : 'transparent'">
                     <i class="material-icons">factory</i> Sample 2
                   </button>
+                  <button class="btn btn-bag-workorder" type="button" (click)="openBagQrDialog()"
+                          title="Soạn túi R029 theo LSX và in tem QR">
+                    <i class="material-icons">qr_code_2</i>
+                    BAG
+                  </button>
                   <button class="btn btn-outline-primary" 
                           [class.active]="selectedFunction === 'import'"
                           (click)="showMoreDialog = true"
@@ -193,10 +198,6 @@
                       <button class="btn btn-outline-secondary" type="button" (click)="showPxkDownloadDialog = true"
                               style="color: #607d8b;" title="Tải lịch sử PXK theo tháng">
                         <i class="material-icons">download</i> Tải PXK
-                      </button>
-                      <button class="btn btn-outline-primary" type="button" (click)="openBagQrDialog()"
-                              style="color: #1565c0; font-weight: 600;" title="Soạn túi R029 theo LSX và in tem QR">
-                        <i class="material-icons">qr_code_2</i> BAG
                       </button>
                       <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
                               style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
