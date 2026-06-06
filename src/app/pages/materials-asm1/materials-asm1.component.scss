@@ -114,7 +114,7 @@
 
 /* Tem Lẽ button: reuse More button styling */
 .tem-le-btn {
-  margin-left: 8px;
+  margin-left: 0;
 }
 
 .tem-inlai-toolbar {
@@ -319,6 +319,43 @@
   .no-iqc-status {
     color: #999;
     font-size: 12px;
+  }
+}
+
+.last-status-cell {
+  text-align: center;
+  padding: 4px 6px;
+  min-width: 108px;
+  max-width: 140px;
+  font-size: 11px;
+  line-height: 1.25;
+
+  .last-status-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .last-status-time {
+    font-family: Consolas, 'Courier New', monospace;
+    color: #334155;
+    white-space: nowrap;
+  }
+
+  .last-status-by {
+    font-size: 10px;
+    font-weight: 600;
+    color: #0369a1;
+    white-space: nowrap;
+  }
+
+  .last-status-loading {
+    color: #94a3b8;
+  }
+
+  .no-last-status {
+    color: #999;
   }
 }
 
@@ -867,67 +904,83 @@
   font-weight: normal !important;
 }
 
+// Chiều cao chung toolbar (nút, ô search, tick Location)
+$asm1-toolbar-h: 36px;
+
 // Horizontal Layout Styles - Copy from inbound
 .action-controls-horizontal {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 10px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
-  flex-wrap: wrap;
-  
+  flex-wrap: nowrap;
+  overflow-x: hidden;
+
+  .desktop-stats-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .desktop-search-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+
+  .action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .catalog-ready-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: $asm1-toolbar-h;
+    flex-shrink: 0;
+  }
+
   // Mobile menu button
   .mobile-menu-btn {
-    order: 1;
     flex-shrink: 0;
   }
-  
+
   // More button
   .more-btn {
-    order: 2;
     flex-shrink: 0;
   }
-  
-  // Search sections
+
+  // Search sections — desktop mặc định; mobile bật trong @media max-width
   .mobile-search-section {
-    order: 3;
+    display: none;
     flex: 1;
     min-width: 0;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
   }
-  
-  .desktop-search-section {
-    order: 3;
-    flex: 1;
-    min-width: 0;
-  }
-  
-  // Counter boxes
-  .negative-stock-counter-box {
-    order: 4;
-    flex-shrink: 0;
-  }
-  
-  .total-counter-box {
-    order: 5;
-    flex-shrink: 0;
-  }
-  
-  .total-stock-counter-box {
-    order: 6;
-    flex-shrink: 0;
-  }
-  
-  // Action buttons
-  .action-buttons {
-    order: 7;
-    flex-shrink: 0;
-  }
-  
-  // Catalog ready icon
-  .catalog-ready-icon {
-    order: 8;
-    flex-shrink: 0;
+
+  @media (max-width: 1200px) {
+    .more-btn .btn-label,
+    .tem-le-btn .btn-label,
+    .download-search-btn .btn-label {
+      display: none;
+    }
+
+    .more-btn,
+    .tem-le-btn {
+      padding: 0 6px;
+      min-width: $asm1-toolbar-h;
+    }
   }
 }
 
@@ -935,21 +988,22 @@
 .more-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 8px 16px;
+  padding: 0 8px;
   background: #6b7280;
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
-  height: 36px; // Đồng bộ với các button khác
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: $asm1-toolbar-h;
+  box-sizing: border-box;
   box-shadow: 0 2px 4px rgba(107, 114, 128, 0.2);
+  flex-shrink: 0;
+  white-space: nowrap;
   
   &:hover {
     background: #4b5563;
@@ -968,12 +1022,12 @@
 .total-counter-box {
   background: #ffffff;
   color: #000000;
-  padding: 8px 16px;
+  padding: 0 8px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  min-width: 140px;
+  min-width: 0;
   text-align: center;
   display: flex;
   align-items: center;
@@ -1032,12 +1086,12 @@
 .total-stock-counter-box {
   background: #ffffff;
   color: #000000;
-  padding: 8px 16px;
+  padding: 0 8px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: normal !important;
-  min-width: 160px;
+  min-width: 0;
   text-align: center;
   display: flex;
   align-items: center;
@@ -1136,18 +1190,73 @@
   }
 }
 
+.search-location-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: $asm1-toolbar-h;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  .search-location-toggle__label {
+    @media (max-width: 1280px) {
+      display: none;
+    }
+  }
+
+  input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .material-icons {
+    font-size: 18px;
+    color: #0ea5e9;
+    line-height: 1;
+  }
+
+  &:has(input:checked) {
+    border-color: #0ea5e9;
+    background: #f0f9ff;
+    color: #0369a1;
+  }
+}
+
 // Search box styling
 .search-box {
   position: relative;
-  
+  display: flex;
+  align-items: center;
+  height: $asm1-toolbar-h;
+  flex: 1 1 120px;
+  min-width: 100px;
+  max-width: 160px;
+
   .search-input {
-    padding: 6px 10px;
+    padding: 0 32px 0 10px;
     border: 1px solid #d1d5db;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 13px !important;
-    width: 200px;
+    width: 100%;
     background: white;
-    height: 32px;
+    height: $asm1-toolbar-h;
+    box-sizing: border-box;
+    line-height: $asm1-toolbar-h;
     
     &:focus {
       outline: none;
@@ -1281,9 +1390,12 @@
   
   .refresh-btn,
   .sync-btn,
-  .reset-btn {
-    height: 32px;
-    padding: 6px 12px;
+  .reset-btn,
+  .download-search-btn {
+    height: $asm1-toolbar-h;
+    box-sizing: border-box;
+    padding: 0 8px;
+    font-size: 12px !important;
     border: 1px solid #d1d5db;
     background: #ffffff;
     color: #000000;
@@ -1326,18 +1438,20 @@
     .negative-stock-counter-box {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
+    gap: 4px;
+    padding: 0 8px;
     background: #fef3c7; // Light yellow background
     color: #92400e; // Dark orange text
     border: 1px solid #f59e0b; // Orange border
     border-radius: 6px;
     font-weight: normal !important;
-    font-size: 13px !important;
+    font-size: 12px !important;
     height: 36px;
+    min-width: 0;
     transition: all 0.3s ease;
-    margin-right: 12px;
+    margin-right: 0;
     box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+    flex-shrink: 0;
     
     i {
       font-size: 13px !important;
@@ -1515,8 +1629,8 @@
     display: none;
   }
   
-  .mobile-search-section {
-    display: flex;
+  .action-controls-horizontal .mobile-search-section {
+    display: flex !important;
     flex-direction: row;
     align-items: center;
     gap: 8px;
@@ -1525,23 +1639,20 @@
     padding: 10px;
     background: #f8f9fa;
     border-radius: 6px;
-    
-    .search-type-selector {
-      flex-shrink: 0;
-      min-width: 80px; // Thu nhỏ box chọn
-      max-width: 80px;
+    flex-wrap: nowrap;
+
+    .search-box {
+      flex: 1;
+      min-width: 0;
+      max-width: none;
+      height: $asm1-toolbar-h;
+
+      .search-input {
+        width: 100%;
+        max-width: none;
+        height: $asm1-toolbar-h;
+      }
     }
-    
-  .search-box {
-    flex: 1;
-    min-width: 0;
-    max-width: 300px; // Giới hạn chiều rộng tối đa
-    
-    .search-input {
-      width: 100%;
-      max-width: 250px; // Giới hạn chiều rộng input để không che nút reset
-    }
-  }
   }
   
   // Mobile stats section - HIDDEN on mobile
@@ -1560,6 +1671,7 @@
   .total-counter-box,
   .total-stock-counter-box,
   .reset-btn,
+  .download-search-btn,
   .catalog-ready-icon,
   .mobile-search-section .search-type-selector {
     display: none !important;
@@ -1888,8 +2000,8 @@
     display: none;
   }
   
-  .mobile-search-section {
-    display: none;
+  .action-controls-horizontal .mobile-search-section {
+    display: none !important;
   }
   
   .mobile-stats-section {
@@ -1941,14 +2053,14 @@
   .desktop-stats-section .total-stock-counter-box {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
+    gap: 4px;
+    padding: 0 8px;
     background: #ffffff;
     border: 1px solid #d1d5db;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    min-width: 140px;
+    min-width: 0;
     text-align: center;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;

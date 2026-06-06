@@ -13,6 +13,7 @@ import { ExcelImportService } from '../../services/excel-import.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { TemXuatKhoService, PxkLineExport } from '../../services/tem-xuat-kho.service';
 import { LabelReprintFlagService } from '../../services/label-reprint-flag.service';
+import { MaterialsDashboardService } from '../../services/materials-dashboard.service';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import * as firebase from 'firebase/compat/app';
@@ -48,6 +49,10 @@ export interface InventoryMaterial {
   importStatus?: string;
   source?: 'inbound' | 'manual' | 'import'; // Nguồn gốc của dòng dữ liệu
   iqcStatus?: string; // IQC Status: PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
+  lastStatusAt?: Date | null;
+  lastStatusKind?: 'Outbound' | 'Change location' | '';
+  lastStatusBy?: string;
+  lastStatusLoading?: boolean;
   /** Tổng số bịch (Inbound gwLdv) */
   totalBags?: number;
   /** Số bag tồn đầu (lấy từ Inbound "số bịch") */
@@ -113,6 +118,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   isLoading = false;
   isCatalogLoading = false;
   isResetting = false; // Loading state for reset operation
+  isDownloadingSearch = false;
   showResetLowStockPopup = false;
   resetLowStockRows: ResetLowStockRow[] = [];
   isDeletingResetLowStock = false;
@@ -131,9 +137,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private catalogCache = new Map<string, any>();
   public catalogLoaded = false;
   
-  // Search and filter - chỉ tìm theo mã hàng
+  // Search and filter — mã hàng hoặc vị trí (tick Location)
   searchTerm = '';
   searchType: 'material' = 'material';
+  searchByLocation = false;
   private searchSubject = new Subject<string>();
   
   // 🚀 OPTIMIZATION: Add loading states
@@ -284,7 +291,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private router: Router,
     private rmBagHistory: RmBagHistoryService,
     private temXuatKho: TemXuatKhoService,
-    private labelReprintFlags: LabelReprintFlagService
+    private labelReprintFlags: LabelReprintFlagService,
+    private materialsDashboard: MaterialsDashboardService
   ) {}
 
   /**
@@ -3020,10 +3028,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return false;
       }
 
-      // Chỉ tìm theo mã hàng
       if (this.searchTerm) {
         const term = this.searchTerm.trim().toUpperCase();
-        if (!material.materialCode?.toUpperCase().includes(term)) {
+        if (this.searchByLocation) {
+          const loc = String(material.location ?? (material as any).viTri ?? '').trim().toUpperCase();
+          if (!loc.includes(term)) return false;
+        } else if (!material.materialCode?.toUpperCase().includes(term)) {
           return false;
         }
       }
@@ -3119,6 +3129,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  get searchInputPlaceholder(): string {
+    if (this.isLoading) return '🔍 Đang tải...';
+    return this.searchByLocation ? 'Vị trí (H12, TRA…)…' : 'Mã hàng…';
+  }
+
+  onSearchByLocationChange(): void {
+    this.clearSearch();
+  }
+
   // Clear search and reset to initial state
   clearSearch(): void {
     this.searchTerm = '';
@@ -3132,7 +3151,12 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
   }
 
-  // Perform search - chỉ tìm theo mã hàng (materialCode), tham khảo materials-asm2
+  private docMatchesLocationSearch(data: any, normalizedLocation: string): boolean {
+    const loc = String(data?.location ?? data?.viTri ?? '').trim().toUpperCase();
+    return loc.includes(normalizedLocation);
+  }
+
+  // Perform search — mã hàng hoặc vị trí (tick Location)
   private async performSearch(searchTerm: string): Promise<void> {
     if (searchTerm.length === 0) {
       this.filteredInventory = [];
@@ -3141,10 +3165,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
 
-    // Giống ASM2: chỉ search khi có ít nhất 3 ký tự (tìm theo mã hàng)
-    if (searchTerm.length < 3) {
+    if (!this.searchByLocation && searchTerm.length < 3) {
       this.filteredInventory = [];
       console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
+      return;
+    }
+
+    if (this.searchByLocation && searchTerm.trim().length < 1) {
+      this.filteredInventory = [];
       return;
     }
 
@@ -3154,47 +3182,92 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.searchProgress = 0;
 
     try {
-      console.log(`🔍 ASM1 Searching for materialCode: "${searchTerm}" - Loading from Firebase...`);
-      const normalizedCode = searchTerm.trim().toUpperCase();
       let querySnapshot: { docs: any[]; empty: boolean } | undefined;
 
-      try {
-        // Giống ASM2: exact match trước (chính xác nhất)
-        this.searchProgress = 25;
-        querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('factory', '==', this.FACTORY)
-             .where('materialCode', '==', normalizedCode)
-             .limit(50)
-        ).get().toPromise();
-
-        // Nếu không tìm thấy, thử pattern/prefix (giống ASM2)
-        if (!querySnapshot || querySnapshot.empty) {
-          console.log(`🔍 ASM1 No exact match for "${normalizedCode}", trying pattern search...`);
-          this.searchProgress = 50;
+      if (this.searchByLocation) {
+        const normalizedLocation = searchTerm.trim().toUpperCase();
+        console.log(`🔍 ASM1 Searching by location: "${normalizedLocation}" - Loading from Firebase...`);
+        try {
+          this.searchProgress = 25;
           querySnapshot = await this.firestore.collection('inventory-materials', ref =>
             ref.where('factory', '==', this.FACTORY)
-               .where('materialCode', '>=', normalizedCode)
-               .where('materialCode', '<=', normalizedCode + '\uf8ff')
-               .limit(100)
+               .where('location', '==', normalizedLocation)
+               .limit(200)
           ).get().toPromise();
-        }
-      } catch (indexError: any) {
-        // Firestore chưa có index → fallback: load theo factory rồi lọc theo mã hàng trên client
-        const msg = indexError?.message || '';
-        if (msg.includes('index') || msg.includes('Index')) {
-          this.searchProgress = 50;
-          const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
-            ref.where('factory', '==', this.FACTORY).limit(3000)
-          ).get().toPromise();
-          if (allSnapshot && !allSnapshot.empty) {
-            const filtered = allSnapshot.docs.filter(doc => {
-              const code = (doc.data() as any).materialCode;
-              return code && String(code).toUpperCase().includes(normalizedCode);
-            });
-            querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+
+          if (!querySnapshot || querySnapshot.empty) {
+            console.log(`🔍 ASM1 No exact location match, trying prefix search...`);
+            this.searchProgress = 50;
+            querySnapshot = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.FACTORY)
+                 .where('location', '>=', normalizedLocation)
+                 .where('location', '<=', normalizedLocation + '\uf8ff')
+                 .limit(200)
+            ).get().toPromise();
           }
-        } else {
-          throw indexError;
+        } catch (indexError: any) {
+          const msg = indexError?.message || '';
+          if (msg.includes('index') || msg.includes('Index')) {
+            this.searchProgress = 50;
+            const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.FACTORY).limit(3000)
+            ).get().toPromise();
+            if (allSnapshot && !allSnapshot.empty) {
+              const filtered = allSnapshot.docs.filter((doc) =>
+                this.docMatchesLocationSearch(doc.data(), normalizedLocation)
+              );
+              querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+            }
+          } else {
+            throw indexError;
+          }
+        }
+
+        if (querySnapshot && !querySnapshot.empty) {
+          const filtered = querySnapshot.docs.filter((doc) =>
+            this.docMatchesLocationSearch(doc.data(), normalizedLocation)
+          );
+          querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+        }
+      } else {
+        console.log(`🔍 ASM1 Searching for materialCode: "${searchTerm}" - Loading from Firebase...`);
+        const normalizedCode = searchTerm.trim().toUpperCase();
+
+        try {
+          this.searchProgress = 25;
+          querySnapshot = await this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.FACTORY)
+               .where('materialCode', '==', normalizedCode)
+               .limit(50)
+          ).get().toPromise();
+
+          if (!querySnapshot || querySnapshot.empty) {
+            console.log(`🔍 ASM1 No exact match for "${normalizedCode}", trying pattern search...`);
+            this.searchProgress = 50;
+            querySnapshot = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.FACTORY)
+                 .where('materialCode', '>=', normalizedCode)
+                 .where('materialCode', '<=', normalizedCode + '\uf8ff')
+                 .limit(100)
+            ).get().toPromise();
+          }
+        } catch (indexError: any) {
+          const msg = indexError?.message || '';
+          if (msg.includes('index') || msg.includes('Index')) {
+            this.searchProgress = 50;
+            const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.FACTORY).limit(3000)
+            ).get().toPromise();
+            if (allSnapshot && !allSnapshot.empty) {
+              const filtered = allSnapshot.docs.filter(doc => {
+                const code = (doc.data() as any).materialCode;
+                return code && String(code).toUpperCase().includes(normalizedCode);
+              });
+              querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+            }
+          } else {
+            throw indexError;
+          }
         }
       }
 
@@ -3212,6 +3285,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             id: doc.id,
             ...data,
             factory: this.FACTORY, // Force ASM1
+            location: String(data.location || data.viTri || '').trim().toUpperCase(),
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
             expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
@@ -3289,6 +3363,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       this.isLoading = false;
       this.isSearching = false;
       this.searchProgress = 100;
+      if (this.filteredInventory.length > 0) {
+        void this.refreshLastStatusForMaterials(this.filteredInventory);
+      }
     }
   }
 
@@ -3425,6 +3502,59 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   getIQCStatusText(item: InventoryMaterial): string {
     return item.iqcStatus || '-';
+  }
+
+  formatLastStatusDate(d: Date | null | undefined): string {
+    if (!d || Number.isNaN(d.getTime())) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  getLastStatusTitle(material: InventoryMaterial): string {
+    if (!material.lastStatusAt) return '';
+    const who = material.lastStatusBy && material.lastStatusBy !== '—' ? ` — ID: ${material.lastStatusBy}` : '';
+    if (material.lastStatusKind === 'Outbound') return `Outbound (Xuất kho) gần nhất${who}`;
+    if (material.lastStatusKind === 'Change location') return `Change location (Đổi vị trí) gần nhất${who}`;
+    return `Hoạt động gần nhất${who}`;
+  }
+
+  private async refreshLastStatusForMaterials(materials: InventoryMaterial[]): Promise<void> {
+    if (!materials?.length) return;
+    for (const m of materials) {
+      m.lastStatusLoading = true;
+      m.lastStatusAt = null;
+      m.lastStatusKind = '';
+      m.lastStatusBy = '';
+    }
+    this.cdr.detectChanges();
+
+    const chunkSize = 8;
+    for (let i = 0; i < materials.length; i += chunkSize) {
+      const chunk = materials.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map(async (m) => {
+          try {
+            const status = await this.materialsDashboard.loadLastOutboundOrLocationStatus({
+              inventoryDocId: m.id,
+              materialCode: m.materialCode,
+              poNumber: m.poNumber || '',
+              imdKey: this.getDisplayIMD(m),
+              factory: 'ASM1'
+            });
+            m.lastStatusAt = status.at;
+            m.lastStatusKind = status.kind;
+            m.lastStatusBy = status.performedBy || '';
+          } catch {
+            m.lastStatusAt = null;
+            m.lastStatusKind = '';
+            m.lastStatusBy = '';
+          } finally {
+            m.lastStatusLoading = false;
+          }
+        })
+      );
+      this.cdr.detectChanges();
+    }
   }
 
   getExpiryDateText(expiryDate: Date): string {
@@ -8031,6 +8161,67 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       alert(`❌ Lỗi khi gộp dòng: ${error.message}\n\nVui lòng thử lại!`);
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  /** Tải Excel toàn bộ kết quả đang search (filteredInventory). */
+  async downloadSearchResultsExcel(): Promise<void> {
+    if (!this.filteredInventory?.length) {
+      alert('Không có dữ liệu để tải. Hãy search trước.');
+      return;
+    }
+    this.isDownloadingSearch = true;
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = this.filteredInventory.map((m, idx) => ({
+        'STT': idx + 1,
+        'QTY BAG': m.rollsOrBags ?? '',
+        'Mã hàng': m.materialCode || '',
+        'Tên hàng': m.materialName || '',
+        'PO': m.poNumber || '',
+        'IMD': this.getDisplayIMD(m),
+        'BAG': this.getBagsBreakdownText(m),
+        'Tồn đầu': m.openingStock ?? '',
+        'NK': m.quantity ?? 0,
+        'Đã xuất': m.exported ?? 0,
+        'XT': m.xt ?? 0,
+        'Tồn kho': this.calculateCurrentStock(m),
+        'Vị trí': m.location || '',
+        'Loại Hình': m.type || '',
+        'Lưu ý': m.remarks || '',
+        'Standard Packing': this.getStandardPacking(m.materialCode),
+        'Trạng thái': this.getStatusText(m),
+        'IQC Status': this.getIQCStatusText(m),
+        'Last status': this.formatLastStatusDate(m.lastStatusAt),
+        'Last status loại': m.lastStatusKind || '',
+        'Người thực hiện': m.lastStatusBy && m.lastStatusBy !== '—' ? m.lastStatusBy : '',
+        'Factory': m.factory || 'ASM1',
+        'Đơn vị': m.unit || '',
+        'Hạn dùng': m.expiryDate
+          ? m.expiryDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+          : ''
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      worksheet['!cols'] = [
+        { wch: 5 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 12 }, { wch: 12 },
+        { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
+        { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+        { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 8 }, { wch: 6 }, { wch: 12 }
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM1_Search');
+      const date = new Date().toISOString().split('T')[0];
+      const hint = (this.searchTerm || 'all').trim().slice(0, 24).replace(/[^\w\-.]/g, '_') || 'all';
+      const fileName = `ASM1_Search_${hint}_${date}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      alert(`✅ Đã tải ${exportData.length} dòng kết quả search.\n\nFile: ${fileName}`);
+    } catch (error: any) {
+      console.error('❌ Download search Excel error:', error);
+      alert('❌ Lỗi tải file Excel: ' + (error?.message || error));
+    } finally {
+      this.isDownloadingSearch = false;
     }
   }
 

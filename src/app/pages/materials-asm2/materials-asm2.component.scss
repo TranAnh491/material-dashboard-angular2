@@ -322,6 +322,43 @@
   }
 }
 
+.last-status-cell {
+  text-align: center;
+  padding: 4px 6px;
+  min-width: 108px;
+  max-width: 140px;
+  font-size: 11px;
+  line-height: 1.25;
+
+  .last-status-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .last-status-time {
+    font-family: Consolas, 'Courier New', monospace;
+    color: #334155;
+    white-space: nowrap;
+  }
+
+  .last-status-by {
+    font-size: 10px;
+    font-weight: 600;
+    color: #0369a1;
+    white-space: nowrap;
+  }
+
+  .last-status-loading {
+    color: #94a3b8;
+  }
+
+  .no-last-status {
+    color: #999;
+  }
+}
+
 // Loading spinner minimal
 .loading-spinner {
   color: #333333;
@@ -866,11 +903,14 @@
   // Inputs
   .search-input {
     height: 36px;
-    padding: 6px 10px;
+    box-sizing: border-box;
+    padding: 0 10px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 13px;
     min-width: 150px;
+    flex: 0 1 200px;
+    line-height: 36px;
   }
   
   // Counter boxes
@@ -916,6 +956,47 @@
     color: #10b981;
   }
   
+  .search-location-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 36px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    input {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .material-icons {
+      font-size: 18px;
+      color: #0ea5e9;
+      line-height: 1;
+    }
+
+    &:has(input:checked) {
+      border-color: #0ea5e9;
+      background: #f0f9ff;
+      color: #0369a1;
+    }
+  }
+
   .search-type-btn {
     padding: 6px 12px;
     background: white;
@@ -932,6 +1013,12 @@
     
     &:hover {
       background: #f1f5f9;
+    }
+
+    &.is-disabled,
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     
     .material-icons {
@@ -964,7 +1051,8 @@
     }
   }
   
-  .reset-btn {
+  .reset-btn,
+  .download-search-btn {
     padding: 6px 12px;
     background: white;
     border: 1px solid #ddd;
@@ -978,7 +1066,16 @@
     gap: 4px;
     border-radius: 4px;
     
-    &:hover {
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .material-icons.rotating {
+      animation: rotate 1s linear infinite;
+    }
+    
+    &:hover:not(:disabled) {
       background: #fef3c7;
       border-color: #f59e0b;
     }
@@ -1351,7 +1448,8 @@
   
   .refresh-btn,
   .sync-btn,
-  .reset-btn {
+  .reset-btn,
+  .download-search-btn {
     height: 32px;
     padding: 6px 12px;
     border: 1px solid #d1d5db;
@@ -1605,6 +1703,7 @@
   .total-stock-counter-box,
   .search-type-btn,
   .reset-btn,
+  .download-search-btn,
   .catalog-ready-icon {
     display: none !important;
   }

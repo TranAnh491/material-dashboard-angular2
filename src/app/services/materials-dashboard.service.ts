@@ -40,6 +40,13 @@ export type RecentActionMaterialRow = LocationInventoryDetailLine & {
   lastActionAt: Date | null;
 };
 
+/** Outbound hoặc đổi vị trí gần nhất của một dòng inventory. */
+export type InventoryLastStatus = {
+  at: Date | null;
+  kind: 'Outbound' | 'Change location' | '';
+  performedBy: string;
+};
+
 /** Một hoạt động scan của nhân viên (ASP) trong ngày — gộp từ nhiều tab. */
 export type EmployeeScanActivityRow = {
   id: string;
@@ -717,6 +724,92 @@ export class MaterialsDashboardService {
     }
     rows.sort((a, b) => (b.lastActionAt?.getTime() ?? 0) - (a.lastActionAt?.getTime() ?? 0));
     return rows;
+  }
+
+  private formatPerformerId(raw: string): string {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    const upper = s.toUpperCase();
+    const asp = upper.match(/ASP\d{4}/);
+    if (asp) return asp[0];
+    if (upper.length > 7 && upper.startsWith('ASP')) return upper.substring(0, 7);
+    return s.length > 28 ? s.substring(0, 28) : s;
+  }
+
+  /** Ngày giờ + ID người thực hiện — outbound hoặc đổi vị trí gần nhất. */
+  async loadLastOutboundOrLocationStatus(params: {
+    inventoryDocId?: string;
+    materialCode: string;
+    poNumber: string;
+    imdKey?: string;
+    factory: FactoryCode;
+  }): Promise<InventoryLastStatus> {
+    const code = String(params.materialCode || '').trim().toUpperCase();
+    const po = String(params.poNumber || '').trim().toUpperCase();
+    const imd = String(params.imdKey || '').trim();
+
+    let outboundBest: { at: Date; by: string } | null = null;
+    if (code) {
+      try {
+        const snap = await this.db
+          .collection('outbound-materials')
+          .where('factory', '==', params.factory)
+          .where('materialCode', '==', code)
+          .limit(50)
+          .get();
+        for (const doc of snap.docs) {
+          const d = doc.data() as Record<string, unknown>;
+          const docPo = String(d['poNumber'] ?? '').trim().toUpperCase();
+          if (po && docPo && docPo !== po) continue;
+          if (imd) {
+            const docImd = String(d['importDate'] ?? d['batchNumber'] ?? '').trim();
+            if (docImd && docImd !== imd) continue;
+          }
+          const at =
+            this.toDateUnsafe(d['exportDate']) ||
+            this.toDateUnsafe(d['createdAt']) ||
+            this.toDateUnsafe(d['createdDate']);
+          if (!at) continue;
+          const by = this.formatPerformerId(String(d['employeeId'] ?? d['exportedBy'] ?? ''));
+          if (!outboundBest || at.getTime() > outboundBest.at.getTime()) {
+            outboundBest = { at, by };
+          }
+        }
+      } catch (e) {
+        console.warn('[MaterialsDashboard] outbound last status failed', e);
+      }
+    }
+
+    let locationBest: { at: Date; by: string } | null = null;
+    const invId = String(params.inventoryDocId || '').trim();
+    if (invId) {
+      try {
+        const snap = await this.db
+          .collection('material-location-history')
+          .where('materialId', '==', invId)
+          .limit(25)
+          .get();
+        for (const doc of snap.docs) {
+          const d = doc.data() as Record<string, unknown>;
+          const at = this.toDateUnsafe(d['changedAt']);
+          if (!at) continue;
+          const by = this.formatPerformerId(String(d['changedBy'] ?? ''));
+          if (!locationBest || at.getTime() > locationBest.at.getTime()) {
+            locationBest = { at, by };
+          }
+        }
+      } catch (e) {
+        console.warn('[MaterialsDashboard] location last status failed', e);
+      }
+    }
+
+    const outMs = outboundBest?.at.getTime() ?? -1;
+    const locMs = locationBest?.at.getTime() ?? -1;
+    if (outMs < 0 && locMs < 0) return { at: null, kind: '', performedBy: '' };
+    if (outMs >= locMs) {
+      return { at: outboundBest!.at, kind: 'Outbound', performedBy: outboundBest!.by || '—' };
+    }
+    return { at: locationBest!.at, kind: 'Change location', performedBy: locationBest!.by || '—' };
   }
 
   /** Chuẩn hóa mã ASP (VD: ASP0701). */

@@ -30,7 +30,7 @@
         <!-- More — mở popup -->
         <button class="more-btn" type="button" (click)="openMorePopup()">
           <i class="material-icons">more_vert</i>
-          More
+          <span class="btn-label">More</span>
         </button>
         
         <!-- Desktop Stats Boxes -->
@@ -65,10 +65,15 @@
         
         <!-- Mobile Search Section - Always visible on mobile -->
         <div class="mobile-search-section">
-          <!-- Search Box - chỉ tìm theo mã hàng -->
+          <label class="search-location-toggle" title="Tick để tìm theo vị trí kho">
+            <input type="checkbox" [(ngModel)]="searchByLocation" (change)="onSearchByLocationChange()" />
+            <i class="material-icons">place</i>
+            <span class="search-location-toggle__label">Location</span>
+          </label>
+          <!-- Search Box -->
           <div class="search-box">
             <input type="text"
-                   [placeholder]="isLoading ? '🔍 Đang tải...' : 'Tìm theo mã hàng'"
+                   [placeholder]="searchInputPlaceholder"
                    [(ngModel)]="searchTerm"
                    (input)="onSearchInput($event)"
                    (keyup)="onSearchKeyUp($event)"
@@ -84,7 +89,7 @@
           </button>
             
             <!-- Search warning -->
-            <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+            <div class="search-warning" *ngIf="searchTerm && !searchByLocation && searchTerm.length < 3">
               <i class="material-icons">info</i>
               Cần ít nhất 3 ký tự
             </div>
@@ -139,11 +144,16 @@
           </div>
         </div>
         
-        <!-- Desktop Search Section - chỉ tìm theo mã hàng -->
+        <!-- Desktop Search Section -->
         <div class="desktop-search-section">
+        <label class="search-location-toggle" title="Tick để tìm theo vị trí kho">
+          <input type="checkbox" [(ngModel)]="searchByLocation" (change)="onSearchByLocationChange()" />
+          <i class="material-icons">place</i>
+          <span class="search-location-toggle__label">Location</span>
+        </label>
         <div class="search-box">
           <input type="text"
-                 [placeholder]="isLoading ? '🔍 Đang tải...' : 'Tìm theo mã hàng'"
+                 [placeholder]="searchInputPlaceholder"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchInput($event)"
                  (keyup)="onSearchKeyUp($event)"
@@ -159,7 +169,7 @@
           </button>
           
           <!-- Search warning -->
-          <div class="search-warning" *ngIf="searchTerm && searchTerm.length < 3">
+          <div class="search-warning" *ngIf="searchTerm && !searchByLocation && searchTerm.length < 3">
             <i class="material-icons">info</i>
             Cần ít nhất 3 ký tự
             </div>
@@ -169,26 +179,33 @@
                   (click)="openTemLePopup()"
                   title="Tách tem lẻ từ tem hiện tại">
             <i class="material-icons">call_split</i>
-            Tem Lẽ
+            <span class="btn-label">Tem lẻ</span>
           </button>
           <button type="button"
                   class="more-btn tem-le-btn tem-reprint-btn"
                   (click)="openTemInLaiPopup()"
                   title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
             <i class="material-icons">print</i>
-            In Lại Tem
+            <span class="btn-label">In lại</span>
           </button>
           <button type="button"
                   class="more-btn tem-le-btn tem-thung-btn"
                   (click)="openTemThungPopup()"
                   title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
             <i class="material-icons">inventory_2</i>
-            In Tem Thùng
+            <span class="btn-label">Tem thùng</span>
           </button>
         </div>
         
         <!-- Action Buttons -->
         <div class="action-buttons">
+          <button class="download-search-btn"
+                  (click)="downloadSearchResultsExcel()"
+                  [disabled]="isDownloadingSearch || !filteredInventory?.length"
+                  title="Tải Excel toàn bộ kết quả đang search">
+            <i class="material-icons" [class.rotating]="isDownloadingSearch">{{ isDownloadingSearch ? 'sync' : 'download' }}</i>
+            <span class="btn-label">{{ isDownloadingSearch ? 'Đang tải...' : 'Tải về' }}</span>
+          </button>
           <button class="reset-btn" 
                   (click)="resetZeroStock()" 
                   [disabled]="isResetting || isDeletingResetLowStock"
@@ -447,6 +464,7 @@
             <th>Standard Packing</th>
             <th>Trạng thái</th>
             <th>IQC Status</th>
+            <th>Last status</th>
             <th>Xóa</th>
             <th>Factory</th>
           </tr>
@@ -639,6 +657,18 @@
                 {{ getIQCStatusText(material) }}
               </span>
               <span *ngIf="!material.iqcStatus" class="no-iqc-status">-</span>
+            </td>
+            <td class="last-status-cell">
+              <span *ngIf="material.lastStatusLoading" class="last-status-loading">…</span>
+              <div *ngIf="!material.lastStatusLoading && material.lastStatusAt"
+                   class="last-status-block"
+                   [title]="getLastStatusTitle(material)">
+                <span class="last-status-time">{{ formatLastStatusDate(material.lastStatusAt) }}</span>
+                <span class="last-status-by" *ngIf="material.lastStatusBy && material.lastStatusBy !== '—'">
+                  {{ material.lastStatusBy }}
+                </span>
+              </div>
+              <span *ngIf="!material.lastStatusLoading && !material.lastStatusAt" class="no-last-status">—</span>
             </td>
             <td class="delete-cell">
               <button class="delete-btn" 

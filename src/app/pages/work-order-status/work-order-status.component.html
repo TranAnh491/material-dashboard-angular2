@@ -476,7 +476,7 @@
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{ wo.factory || getWorkOrderDisplayFactory(wo) || '—' }}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.year}}</td>
                           <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{wo.month}}</td>
-                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{i + 1}}</td>
+                          <td style="font-size: 11.67px; text-align: center; vertical-align: middle;">{{ (currentPage - 1) * itemsPerPage + i + 1 }}</td>
                                                     <td style="text-align: center; vertical-align: middle;">
                             <button mat-icon-button color="success"
                                     (click)="completeWorkOrder(wo)"
@@ -618,11 +618,24 @@
                       </tbody>
                     </table>
                     
-                    <div *ngIf="hasMoreToDisplay" class="load-more-row" style="padding: 12px; text-align: center; border-top: 1px solid #e9ecef;">
-                      <button mat-stroked-button (click)="loadMoreDisplayed()" style="min-width: 160px;">
-                        <mat-icon>expand_more</mat-icon>
-                        Hiển thị thêm (còn {{ remainingCount }})
-                      </button>
+                    <div class="wo-pagination" *ngIf="filteredWorkOrders.length > 0">
+                      <span class="wo-pagination__info">
+                        Trang {{ currentPage }} / {{ totalPages }}
+                        · {{ displayedWorkOrders.length }} / {{ filteredWorkOrders.length }} LSX
+                      </span>
+                      <div class="wo-pagination__controls" *ngIf="totalPages > 1">
+                        <button mat-stroked-button type="button" (click)="previousPage()" [disabled]="currentPage <= 1">
+                          <mat-icon>chevron_left</mat-icon>
+                        </button>
+                        <select class="wo-pagination__select" [(ngModel)]="currentPage" (ngModelChange)="goToPage($event)">
+                          <option *ngFor="let p of [].constructor(totalPages); let idx = index" [ngValue]="idx + 1">
+                            {{ idx + 1 }}
+                          </option>
+                        </select>
+                        <button mat-stroked-button type="button" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+                          <mat-icon>chevron_right</mat-icon>
+                        </button>
+                      </div>
                     </div>
                     
                     <div *ngIf="filteredWorkOrders.length === 0" class="no-data">

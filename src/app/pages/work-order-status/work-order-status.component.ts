@@ -129,8 +129,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   yearFilter: number = new Date().getFullYear();
   monthFilter: number = new Date().getMonth() + 1;
 
-  displayLimit = 100; // Chỉ hiển thị 100 dòng đầu để tránh chậm
-  readonly DISPLAY_PAGE_SIZE = 100;
+  currentPage = 1;
+  totalPages = 1;
+  readonly itemsPerPage = 8;
 
   /**
    * Người soạn: `value` phải trùng kết quả `normalizeCreatedBy(label)` (IN HOA có dấu)
@@ -149,13 +150,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   ];
 
   get displayedWorkOrders(): WorkOrder[] {
-    return this.filteredWorkOrders.slice(0, this.displayLimit);
-  }
-  get hasMoreToDisplay(): boolean {
-    return this.displayLimit < this.filteredWorkOrders.length;
-  }
-  get remainingCount(): number {
-    return this.filteredWorkOrders.length - this.displayLimit;
+    const start = (this.currentPage - 1) * this.itemsPerPage;
+    return this.filteredWorkOrders.slice(start, start + this.itemsPerPage);
   }
   
   // Summary data
@@ -810,7 +806,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   applyFilters(): void {
-    this.displayLimit = this.DISPLAY_PAGE_SIZE;
+    this.currentPage = 1;
     this.filteredWorkOrders = this.workOrders.filter(wo => {
       const matchesSearch = !this.searchTerm || 
         wo.orderNumber.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
@@ -836,18 +832,40 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     });
     
     
-    // Sort filtered results: urgent first, then by delivery date (earliest first)
+    // Sắp xếp: Ngày giao NVL (sớm trước), sau đó LSX
     this.filteredWorkOrders.sort((a, b) => {
-      // First priority: urgent work orders go to the top
-      if (a.isUrgent && !b.isUrgent) return -1;
-      if (!a.isUrgent && b.isUrgent) return 1;
-      
-      // Second priority: delivery date (earliest first)
-      const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : 0;
-      const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : 0;
-      return dateA - dateB;
+      const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
+      if (dateA !== dateB) return dateA - dateB;
+      const lsxA = (a.productionOrder || '').trim();
+      const lsxB = (b.productionOrder || '').trim();
+      return lsxA.localeCompare(lsxB, 'vi', { numeric: true, sensitivity: 'base' });
     });
-    
+
+    this.updatePagination();
+  }
+
+  private updatePagination(): void {
+    this.totalPages = Math.max(1, Math.ceil(this.filteredWorkOrders.length / this.itemsPerPage));
+    if (this.currentPage > this.totalPages) {
+      this.currentPage = this.totalPages;
+    }
+    if (this.currentPage < 1) {
+      this.currentPage = 1;
+    }
+  }
+
+  goToPage(page: number): void {
+    const p = Math.max(1, Math.min(Math.floor(page) || 1, this.totalPages));
+    this.currentPage = p;
+  }
+
+  nextPage(): void {
+    this.goToPage(this.currentPage + 1);
+  }
+
+  previousPage(): void {
+    this.goToPage(this.currentPage - 1);
   }
 
   calculateSummary(): void {
@@ -1140,13 +1158,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.clearSelection();
     this.applyFilters();
     this.calculateSummary();
-  }
-
-  loadMoreDisplayed(): void {
-    this.displayLimit = Math.min(
-      this.displayLimit + this.DISPLAY_PAGE_SIZE,
-      this.filteredWorkOrders.length
-    );
   }
 
   onStatusFilterChange(): void {

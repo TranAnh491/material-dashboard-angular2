@@ -51,17 +51,25 @@
           <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
         </div>
         
-        <!-- Search Type Selector -->
-        <button class="search-type-btn" 
+        <label class="search-location-toggle" title="Tick để tìm theo vị trí kho">
+          <input type="checkbox" [(ngModel)]="searchByLocation" (change)="onSearchByLocationChange()" />
+          <i class="material-icons">place</i>
+          <span>Location</span>
+        </label>
+
+        <!-- Search Type Selector (Mã / PO) -->
+        <button class="search-type-btn"
                 (click)="cycleSearchType()"
-                [title]="'Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí')">
+                [disabled]="searchByLocation"
+                [class.is-disabled]="searchByLocation"
+                [title]="searchByLocation ? 'Bỏ tick Location để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
           <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
           {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
         </button>
         
         <!-- Search Box -->
         <input type="text"
-               [placeholder]="'Tìm kiếm...'"
+               [placeholder]="searchInputPlaceholder"
                [(ngModel)]="searchTerm"
                (input)="onSearchInput($event)"
                class="search-input"
@@ -96,6 +104,14 @@
           <i class="material-icons">clear</i>
         </button>
         
+        <button class="download-search-btn"
+                (click)="downloadSearchResultsExcel()"
+                [disabled]="isDownloadingSearch || !filteredInventory?.length"
+                title="Tải Excel toàn bộ kết quả đang search">
+          <i class="material-icons" [class.rotating]="isDownloadingSearch">{{ isDownloadingSearch ? 'sync' : 'download' }}</i>
+          {{ isDownloadingSearch ? 'Đang tải...' : 'Tải về' }}
+        </button>
+
         <!-- Reset Button -->
         <button
           class="reset-btn"
@@ -328,6 +344,7 @@
             <th>Standard Packing</th>
             <th>Trạng thái</th>
             <th>IQC Status</th>
+            <th>Last status</th>
             <th>Xóa</th>
             <th>Factory</th>
           </tr>
@@ -502,6 +519,18 @@
                 {{ getIQCStatusText(material) }}
               </span>
               <span *ngIf="!material.iqcStatus" class="no-iqc-status">-</span>
+            </td>
+            <td class="last-status-cell">
+              <span *ngIf="material.lastStatusLoading" class="last-status-loading">…</span>
+              <div *ngIf="!material.lastStatusLoading && material.lastStatusAt"
+                   class="last-status-block"
+                   [title]="getLastStatusTitle(material)">
+                <span class="last-status-time">{{ formatLastStatusDate(material.lastStatusAt) }}</span>
+                <span class="last-status-by" *ngIf="material.lastStatusBy && material.lastStatusBy !== '—'">
+                  {{ material.lastStatusBy }}
+                </span>
+              </div>
+              <span *ngIf="!material.lastStatusLoading && !material.lastStatusAt" class="no-last-status">—</span>
             </td>
             <td class="delete-cell">
               <button class="delete-btn" 

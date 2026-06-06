@@ -83,57 +83,72 @@ html, body {
 
 // Compact summary cards
 .summary-row {
-  margin-bottom: 12px; /* Further increased spacing */
-  margin-top: 5px; /* Add downward space */
+  margin-bottom: 10px;
+  margin-top: 4px;
 }
 
 .compact-stats {
-  margin-bottom: 10px; /* Reduced from 20px */
-  
+  margin-bottom: 8px;
+
   .card-header-icon {
-    padding-bottom: 10px; /* Reduced */
+    padding-bottom: 8px;
   }
-  
+
   .card-category {
-    margin-top: 5px; /* Reduced from 10px */
+    margin-top: 4px;
     font-size: 0.8em;
   }
-  
+
   .card-title {
-    font-size: 1.3em; /* Slightly smaller */
+    font-size: 1.04em;
   }
 }
 
-// Summary cards without colors and reduced height
+// Summary cards without colors and reduced height (~80% chiều cao)
 .summary-card {
-  height: 50% !important; /* Reduce height to 50% */
-  min-height: 60px; /* Set minimum height */
-  margin-bottom: 5px; /* Reduced spacing */
-  
+  $summary-h: 0.8;
+
+  height: 40% !important;
+  min-height: calc(50px * #{$summary-h});
+  margin-bottom: calc(5px * #{$summary-h});
+
   &.card-warning .card-header {
     background: #fff3e0 !important;
-    border-left: 4px solid #ff9800;
+    border-left: calc(4px * #{$summary-h}) solid #ff9800;
   }
-  
+
   .card-header {
-    padding: 8px 15px !important; /* Reduced padding */
-    background: #f8f9fa !important; /* Neutral background color */
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: calc(8px * #{$summary-h}) !important;
+    padding: calc(8px * #{$summary-h}) calc(12px * #{$summary-h}) !important;
+    background: #f8f9fa !important;
     border: none !important;
-    
+    min-height: calc(50px * #{$summary-h});
+
     .card-category {
-      margin: 0 0 3px 0 !important;
-      font-size: 0.75em !important;
+      margin: 0 !important;
+      flex: 1 1 auto;
+      text-align: left !important;
+      font-size: calc(0.75em * #{$summary-h}) !important;
       text-transform: uppercase !important;
       font-weight: bold !important;
       color: #000 !important;
+      white-space: nowrap;
+      line-height: 1.1 !important;
     }
-    
+
     .card-title {
-      font-size: 1.1em !important;
+      flex: 0 0 auto;
+      text-align: right !important;
+      font-size: calc(1.25em * #{$summary-h}) !important;
       margin: 0 !important;
       font-weight: bold !important;
-      text-transform: uppercase !important;
+      text-transform: none !important;
       color: #000 !important;
+      line-height: 1 !important;
     }
   }
 }
@@ -2104,11 +2119,7 @@ textarea.mat-input-element {
   }
 }
 
-// Reduce summary cards height for more table space
-.summary-card {
-  height: 40% !important; /* Reduced from 50% */
-  min-height: 50px; /* Reduced from 60px */
-}
+// (chiều cao summary-card đã scale 80% ở block .summary-card phía trên)
 
 // Reduce header spacing
 .card-header {
@@ -3815,6 +3826,136 @@ textarea.mat-input-element {
 :host ::ng-deep .wo-status-select-panel .mat-mdc-option {
   animation: none !important;
   transition: none !important;
+}
+
+.wo-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 8px;
+  border-top: 1px solid #e9ecef;
+  background: #fafafa;
+}
+
+.wo-pagination__info {
+  font-size: 13px;
+  color: #444;
+}
+
+.wo-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wo-pagination__select {
+  min-width: 56px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+}
+
+/* Chiều cao dòng LSX ~85% so với trước */
+.table-container table.compact-table {
+  $row-scale: 0.85;
+
+  tbody td {
+    padding: #{6px * $row-scale} #{6px * $row-scale} !important;
+    line-height: 1.05 !important;
+    font-size: calc(11.67px * #{$row-scale}) !important;
+  }
+
+  tbody td *,
+  tbody td input,
+  tbody td span,
+  tbody td select,
+  tbody td .badge {
+    font-size: calc(11.67px * #{$row-scale}) !important;
+  }
+
+  tbody td .mat-form-field,
+  tbody td .mat-form-field input,
+  tbody td .mat-form-field .mat-form-field-infix {
+    font-size: calc(11.67px * #{$row-scale}) !important;
+  }
+
+  tbody td .mat-form-field-infix {
+    padding: calc(4px * #{$row-scale}) 0 !important;
+    min-height: calc(22px * #{$row-scale}) !important;
+  }
+
+  tbody td .mat-form-field-wrapper,
+  tbody td .mat-mdc-form-field-subscript-wrapper {
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  tbody button[mat-icon-button] {
+    width: calc(36px * #{$row-scale}) !important;
+    height: calc(36px * #{$row-scale}) !important;
+    min-width: calc(36px * #{$row-scale}) !important;
+    line-height: calc(36px * #{$row-scale}) !important;
+  }
+
+  tbody button[mat-icon-button] mat-icon {
+    font-size: calc(24px * #{$row-scale}) !important;
+    width: calc(24px * #{$row-scale}) !important;
+    height: calc(24px * #{$row-scale}) !important;
+  }
+
+  tbody .compact-btn mat-icon {
+    font-size: calc(21px * #{$row-scale}) !important;
+    width: calc(21px * #{$row-scale}) !important;
+    height: calc(21px * #{$row-scale}) !important;
+  }
+
+  tbody select {
+    padding: calc(6px * #{$row-scale}) !important;
+  }
+
+  tbody .print-qr-btn {
+    padding: calc(4px * #{$row-scale}) calc(8px * #{$row-scale}) !important;
+    font-size: calc(12px * #{$row-scale}) !important;
+    min-height: calc(28px * #{$row-scale}) !important;
+
+    .material-icons {
+      font-size: calc(16px * #{$row-scale}) !important;
+    }
+  }
+
+  tbody .mat-datepicker-toggle,
+  tbody .mat-datepicker-toggle .mat-mdc-icon-button,
+  tbody .mat-datepicker-toggle button {
+    width: calc(20px * #{$row-scale}) !important;
+    height: calc(20px * #{$row-scale}) !important;
+    min-width: calc(20px * #{$row-scale}) !important;
+    padding: 0 !important;
+  }
+}
+
+:host ::ng-deep .table-container table.compact-table tbody {
+  $row-scale: 0.85;
+
+  .mat-mdc-form-field-infix {
+    min-height: calc(22px * #{$row-scale}) !important;
+    padding-top: calc(3px * #{$row-scale}) !important;
+    padding-bottom: calc(3px * #{$row-scale}) !important;
+  }
+
+  .mat-mdc-text-field-wrapper,
+  .mdc-text-field {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .mat-mdc-form-field-subscript-wrapper {
+    display: none !important;
+  }
 }
 
 
