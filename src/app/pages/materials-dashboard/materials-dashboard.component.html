@@ -19,7 +19,7 @@
         <i class="material-icons">file_download</i>
         Export
       </button>
-      <button type="button" class="btn btn-primary btn-sm btn-dense" (click)="reload()" [disabled]="isLoading">
+      <button type="button" class="btn btn-primary btn-sm btn-dense" (click)="reload()" [disabled]="isLoading || !dashboardStarted">
         <i class="material-icons">refresh</i>
         Refresh
       </button>
@@ -68,14 +68,27 @@
         <div class="ctrl ctrl--daterange">
           <label>Date range</label>
           <div class="date-range">
-            <input class="form-control form-control--dense" type="date" [(ngModel)]="startDate" (change)="reload()" />
+            <input class="form-control form-control--dense" type="date" [(ngModel)]="startDate" />
             <span class="sep">–</span>
-            <input class="form-control form-control--dense" type="date" [(ngModel)]="endDate" (change)="reload()" />
+            <input class="form-control form-control--dense" type="date" [(ngModel)]="endDate" />
           </div>
         </div>
 
+        <div class="ctrl ctrl--fillmode">
+          <label>Hiển thị</label>
+          <select
+            class="form-control form-control--dense"
+            [ngModel]="fillFunction"
+            (ngModelChange)="setFillFunction($event)">
+            <option [ngValue]="'Activities'">Activities</option>
+            <option [ngValue]="'Location'">Location</option>
+            <option [ngValue]="'LastAction'">Last Action</option>
+            <option [ngValue]="'ID'">ID</option>
+          </select>
+        </div>
+
         <div class="ctrl ctrl--search">
-          <label>Tìm SKU</label>
+          <label>{{ lastActionSearchLabel }}</label>
           <div class="search-wrap">
             <i class="material-icons search-ic">search</i>
             <input
@@ -83,7 +96,7 @@
               class="form-control form-control--dense"
               [(ngModel)]="searchSku"
               (input)="onFiltersChanged()"
-              placeholder="B + 6 số hoặc một phần mã…"
+              [placeholder]="lastActionSearchPlaceholder"
               autocomplete="off"
             />
             <button type="button" class="icon-btn" *ngIf="searchSku?.length" (click)="clearSearch()" title="Xóa tìm kiếm">
@@ -359,6 +372,15 @@
         </select>
       </div>
 
+      <button
+        type="button"
+        class="btn-start"
+        title="Tải heatmap theo lựa chọn hiện tại"
+        (click)="startDashboard()"
+        [disabled]="isLoading">
+        <i class="material-icons">play_arrow</i>
+        Start
+      </button>
       <button type="button" class="icon-plain icon-plain--gear" title="Cài đặt màu heatmap" (click)="openColorSettings()">
         <i class="material-icons">settings</i>
       </button>
@@ -367,34 +389,211 @@
 
   <div class="heatmap-card card">
     <div class="card-body card-body--heatmap">
-      <div class="heatmap-wrap" *ngIf="!isLoading; else loadingTpl">
-        <div class="location-cluster-grid" *ngIf="showLocationClusterView; else skuGridTpl">
-          <div
-            class="loc-tile"
-            *ngFor="let t of locationTiles; trackBy: trackByLocationTile"
-            [style.background]="t.bg"
-            [attr.title]="titlesEnabled ? t.title : null">
-            <div class="loc-tile__head">
-              <i class="material-icons loc-tile__pin" aria-hidden="true">place</i>
-              <span class="loc-tile__loc-name">{{ t.displayLocation }}</span>
-              <span class="loc-tile__badge">{{ t.items.length }} mã</span>
+      <div class="heatmap-wrap heatmap-wrap--idle" *ngIf="!dashboardStarted && !isLoading">
+        <div class="heatmap-empty heatmap-empty--start">
+          <i class="material-icons">tune</i>
+          <p>Chọn <strong>Year</strong>, <strong>Date range</strong>, <strong>Hiển thị</strong> và các tùy chọn bên dưới, sau đó bấm <strong>Start</strong> (cạnh nút cài đặt) để tải dữ liệu.</p>
+        </div>
+      </div>
+      <div class="heatmap-wrap" *ngIf="dashboardStarted && !isLoading; else loadingTpl">
+        <!-- ID: công việc scan hôm nay theo mã ASP -->
+        <div class="loc-detail-panel id-activity-panel" *ngIf="showIdActivityView">
+          <div class="loc-detail-panel__head">
+            <div class="loc-detail-panel__title">
+              <i class="material-icons">badge</i>
+              <span>ID — <strong>{{ idActivityEmployeeId || '—' }}</strong> · hôm nay {{ idActivityDateLabel }}</span>
             </div>
-            <div class="loc-tile__chips">
-              <span
-                *ngFor="let it of t.items"
-                class="loc-chip"
-                [class.loc-chip--stock]="it.stockChecked">
-                <span class="loc-chip__sku">{{ it.sku }}</span>
-                <span class="loc-chip__n" *ngIf="it.exportCount > 0">{{ it.exportCount }}</span>
-                <span
-                  *ngIf="it.agingFlag"
-                  class="loc-chip__aging"
-                  [ngClass]="'loc-chip__aging--' + it.agingFlag"
-                  aria-hidden="true"></span>
-              </span>
-            </div>
+            <span class="loc-detail-meta" *ngIf="idActivityRows.length">
+              {{ idActivityDisplayRows.length }} / {{ idActivityRows.length }} hoạt động
+            </span>
+          </div>
+          <div class="loc-detail-hint id-activity-hint" *ngIf="idActivityEmployeeId">
+            Nguồn: Outbound ASM1, Inbound ASM1, Work Order, Location, Stock Check, Materials ASM1 (in lại tem).
+            Print Label chưa lưu mã ASP trên Firestore.
+          </div>
+          <div class="loc-detail-empty" *ngIf="idActivityEmployeeId && !idActivityRows.length">
+            Không có hoạt động nào của <strong>{{ idActivityEmployeeId }}</strong> trong ngày hôm nay.
+          </div>
+          <div class="loc-detail-empty" *ngIf="!idActivityEmployeeId">
+            Nhập mã ID (VD: ASP0701) và bấm <strong>Start</strong>.
+          </div>
+          <div class="loc-detail-table-wrap" *ngIf="idActivityRows.length">
+            <table class="loc-detail-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Tab</th>
+                  <th>Hành động</th>
+                  <th>NM</th>
+                  <th>Chi tiết</th>
+                  <th>Thời gian</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of idActivityDisplayRows; let i = index; trackBy: trackByIdActivityRow">
+                  <td>{{ i + 1 }}</td>
+                  <td>{{ row.tab }}</td>
+                  <td>{{ row.action }}</td>
+                  <td>{{ row.factory }}</td>
+                  <td class="loc-detail-code">{{ row.detail }}</td>
+                  <td class="loc-detail-time">{{ formatLocationActionDate(row.at) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
+
+        <!-- Last Action: 100 mã hành động gần nhất -->
+        <div class="loc-detail-panel last-action-panel" *ngIf="showLastActionView">
+          <div class="loc-detail-panel__head">
+            <div class="loc-detail-panel__title">
+              <i class="material-icons">history</i>
+              <span>Last Action — <strong>{{ lastActionLimit }} mã đổi vị trí gần nhất</strong></span>
+            </div>
+            <span class="loc-detail-meta" *ngIf="lastActionRows.length">
+              {{ lastActionDisplayRows.length }} / {{ lastActionRows.length }} mã
+            </span>
+          </div>
+          <div class="loc-detail-empty" *ngIf="!lastActionRows.length">
+            Không có dữ liệu hành động gần đây.
+          </div>
+          <div class="loc-detail-table-wrap" *ngIf="lastActionRows.length">
+            <table class="loc-detail-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>NM</th>
+                  <th>Mã hàng</th>
+                  <th>PO</th>
+                  <th>IMD</th>
+                  <th class="col-num">Tồn kho</th>
+                  <th>Vị trí</th>
+                  <th>Last action</th>
+                  <th>ID thực hiện</th>
+                  <th>Thời gian</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of lastActionDisplayRows; let i = index; trackBy: trackByLastActionRow">
+                  <td>{{ i + 1 }}</td>
+                  <td>{{ row.factory }}</td>
+                  <td class="loc-detail-code">{{ row.materialCode }}</td>
+                  <td>{{ row.poNumber || '—' }}</td>
+                  <td>{{ row.imd || '—' }}</td>
+                  <td class="col-num">{{ row.stock | number:'1.0-2' }}</td>
+                  <td>{{ row.location }}</td>
+                  <td>{{ row.lastActionLabel }}</td>
+                  <td class="loc-detail-by">{{ row.lastActionBy }}</td>
+                  <td class="loc-detail-time">{{ formatLocationActionDate(row.lastActionAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <ng-container *ngIf="!showLastActionView && !showIdActivityView">
+        <ng-container *ngIf="showLocationClusterView; else skuGridTpl">
+          <!-- Drill-down: chi tiết vị trí (cùng vùng heatmap) -->
+          <div class="loc-detail-panel" *ngIf="locationDetailOpen">
+            <div class="loc-detail-panel__head">
+              <button type="button" class="loc-detail-back" (click)="backFromLocationDetail()">
+                <i class="material-icons">arrow_back</i>
+                Danh sách vị trí
+              </button>
+              <div class="loc-detail-panel__title">
+                <i class="material-icons">place</i>
+                <span>Vị trí: <strong>{{ locationDetailTitle }}</strong></span>
+              </div>
+              <span class="loc-detail-meta" *ngIf="locationDetailRows.length && !locationDetailLoading">
+                {{ locationDetailRows.length }} dòng
+              </span>
+            </div>
+
+            <div class="loc-detail-loading" *ngIf="locationDetailLoading">
+              <mat-progress-spinner mode="indeterminate" diameter="24"></mat-progress-spinner>
+              <span>Đang tải mã hàng tại vị trí…</span>
+            </div>
+            <div class="loc-detail-error" *ngIf="!locationDetailLoading && locationDetailError">
+              <i class="material-icons">error_outline</i>
+              {{ locationDetailError }}
+            </div>
+            <div class="loc-detail-empty" *ngIf="!locationDetailLoading && !locationDetailError && locationDetailRows.length === 0">
+              Không có dòng tồn kho tại vị trí này.
+            </div>
+            <div class="loc-detail-table-wrap" *ngIf="!locationDetailLoading && locationDetailRows.length > 0">
+              <table class="loc-detail-table">
+                <thead>
+                  <tr>
+                    <th>STT</th>
+                    <th>NM</th>
+                    <th>Mã hàng</th>
+                    <th>PO</th>
+                    <th>IMD</th>
+                    <th class="col-num">Tồn kho</th>
+                    <th>Vị trí</th>
+                    <th>Last action</th>
+                    <th>ID thực hiện</th>
+                    <th>Thời gian</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of locationDetailRows; let i = index; trackBy: trackByLocationDetailRow">
+                    <td>{{ i + 1 }}</td>
+                    <td>{{ row.factory }}</td>
+                    <td class="loc-detail-code">{{ row.materialCode }}</td>
+                    <td>{{ row.poNumber || '—' }}</td>
+                    <td>{{ row.imd || '—' }}</td>
+                    <td class="col-num">{{ row.stock | number:'1.0-2' }}</td>
+                    <td>{{ row.location }}</td>
+                    <td>{{ row.lastActionLabel }}</td>
+                    <td class="loc-detail-by">{{ row.lastActionBy }}</td>
+                    <td class="loc-detail-time">{{ formatLocationActionDate(row.lastActionAt) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Lưới ô vị trí -->
+          <div class="location-cluster-grid" *ngIf="!locationDetailOpen">
+            <div class="heatmap-empty" *ngIf="!isLoadingLocations && !locationTiles.length">
+              <ng-container *ngIf="searchSku?.trim(); else locEmptyAll">
+                Không có mã tại vị trí khớp «{{ searchSku.trim() }}».
+              </ng-container>
+              <ng-template #locEmptyAll>Không có dữ liệu vị trí để hiển thị.</ng-template>
+            </div>
+            <div
+              class="loc-tile loc-tile--clickable"
+              *ngFor="let t of locationTiles; trackBy: trackByLocationTile"
+              [style.background]="t.bg"
+              [attr.title]="titlesEnabled ? t.title : null"
+              role="button"
+              tabindex="0"
+              (click)="openLocationDetailView(t)"
+              (keydown.enter)="openLocationDetailView(t)"
+              (keydown.space)="$event.preventDefault(); openLocationDetailView(t)">
+              <div class="loc-tile__head">
+                <i class="material-icons loc-tile__pin" aria-hidden="true">place</i>
+                <span class="loc-tile__loc-name">{{ t.displayLocation }}</span>
+                <span class="loc-tile__badge">{{ t.items.length }} mã</span>
+              </div>
+              <div class="loc-tile__chips">
+                <span
+                  *ngFor="let it of t.items"
+                  class="loc-chip"
+                  [class.loc-chip--stock]="it.stockChecked">
+                  <span class="loc-chip__sku">{{ it.sku }}</span>
+                  <span class="loc-chip__n" *ngIf="it.exportCount > 0">{{ it.exportCount }}</span>
+                  <span
+                    *ngIf="it.agingFlag"
+                    class="loc-chip__aging"
+                    [ngClass]="'loc-chip__aging--' + it.agingFlag"
+                    aria-hidden="true"></span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
         <ng-template #skuGridTpl>
           <div class="sku-grid" [style.--md-cell.px]="cellSizePx">
             <div
@@ -411,10 +610,11 @@
             </div>
           </div>
         </ng-template>
+        </ng-container>
       </div>
 
       <ng-template #loadingTpl>
-        <div class="loading">
+        <div class="loading" *ngIf="isLoading">
           <mat-progress-spinner mode="indeterminate" diameter="28"></mat-progress-spinner>
           <span>Loading dashboard data...</span>
         </div>
@@ -433,5 +633,6 @@
       </div>
     </div>
   </div>
+
 </div>
 

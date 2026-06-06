@@ -97,9 +97,13 @@
         </button>
         
         <!-- Reset Button -->
-        <button class="reset-btn" (click)="resetZeroStock()" title="Xóa hàng tồn = 0">
-          <i class="material-icons">restart_alt</i>
-          Reset
+        <button
+          class="reset-btn"
+          (click)="resetZeroStock()"
+          [disabled]="isResetting || isDeletingResetLowStock"
+          title="Xóa tồn = 0, sau đó chọn xóa các mã tồn &lt; 1">
+          <i class="material-icons" [class.rotating]="isResetting">{{ isResetting ? 'sync' : 'restart_alt' }}</i>
+          {{ isResetting ? 'Đang xóa...' : 'Reset' }}
         </button>
         
         <!-- Catalog Ready Icon -->
@@ -1130,6 +1134,77 @@
           </button>
         </div>
         <p style="margin-top: 8px; color:#666;">Ghi vào collection <strong>materials</strong>. Nếu mã chưa có tên, hệ thống sẽ tạo tên mặc định = mã.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reset: chọn xóa mã tồn < 1 -->
+<div class="modal-overlay" *ngIf="showResetLowStockPopup" (click)="closeResetLowStockPopup()">
+  <div class="modal-content reset-low-stock-popup" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Tồn kho &lt; 1 — chọn mã cần xóa</h3>
+      <button type="button" class="close-btn" (click)="closeResetLowStockPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="reset-low-stock-hint" *ngIf="resetZeroDeletedCount > 0">
+        Đã xóa <strong>{{ resetZeroDeletedCount }}</strong> mã tồn = 0.
+        Còn <strong>{{ resetLowStockRows.length }}</strong> mã tồn &lt; 1.
+      </p>
+      <p class="reset-low-stock-hint" *ngIf="resetZeroDeletedCount === 0 && resetLowStockRows.length">
+        Tìm thấy <strong>{{ resetLowStockRows.length }}</strong> mã tồn &lt; 1 — tick chọn mã cần xóa.
+      </p>
+      <div class="reset-low-stock-toolbar">
+        <label class="reset-low-stock-select-all">
+          <input
+            type="checkbox"
+            [checked]="resetLowStockAllSelected"
+            (change)="toggleAllResetLowStock($any($event.target).checked)"
+          />
+          Chọn tất cả
+        </label>
+        <span>{{ resetLowStockSelectedCount }} / {{ resetLowStockRows.length }} đã chọn</span>
+      </div>
+      <div class="reset-low-stock-table-wrap">
+        <table class="reset-low-stock-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Mã hàng</th>
+              <th>PO</th>
+              <th>IMD</th>
+              <th>Vị trí</th>
+              <th>Tồn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of resetLowStockRows">
+              <td>
+                <input type="checkbox" [(ngModel)]="row.selected" />
+              </td>
+              <td>{{ row.materialCode }}</td>
+              <td>{{ row.poNumber || '—' }}</td>
+              <td>{{ row.imd }}</td>
+              <td>{{ row.location }}</td>
+              <td class="col-num">{{ row.stock | number:'1.0-4' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="reset-low-stock-actions">
+        <button type="button" class="cancel-btn" (click)="closeResetLowStockPopup()" [disabled]="isDeletingResetLowStock">
+          Đóng
+        </button>
+        <button
+          type="button"
+          class="delete-batch-btn"
+          (click)="deleteSelectedLowStock()"
+          [disabled]="isDeletingResetLowStock || resetLowStockSelectedCount === 0">
+          <i class="material-icons">{{ isDeletingResetLowStock ? 'sync' : 'delete' }}</i>
+          {{ isDeletingResetLowStock ? 'Đang xóa...' : 'Xóa đã chọn' }}
+        </button>
       </div>
     </div>
   </div>

@@ -3,7 +3,13 @@ import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import * as XLSX from 'xlsx';
-import { ExportManifestRow, ImportManifestRow, MaterialsDashboardService } from '../../services/materials-dashboard.service';
+import {
+  EmployeeScanActivityRow,
+  ExportManifestRow,
+  ImportManifestRow,
+  LocationInventoryDetailLine,
+  MaterialsDashboardService
+} from '../../services/materials-dashboard.service';
 
 type AgingFlagTier = 'green' | 'yellow' | 'orange' | 'red';
 
@@ -66,6 +72,12 @@ type LocationTileVM = {
   title: string;
 };
 
+type LocationDetailRowVM = LocationInventoryDetailLine & {
+  lastActionLabel: string;
+  lastActionBy: string;
+  lastActionAt: Date | null;
+};
+
 @Component({
   selector: 'app-materials-dashboard',
   templateUrl: './materials-dashboard.component.html',
@@ -74,6 +86,8 @@ type LocationTileVM = {
 })
 export class MaterialsDashboardComponent implements OnInit {
   isLoading = false;
+  /** Chưa bấm Start — không tự tải heatmap / KPI. */
+  dashboardStarted = false;
   error: string = '';
 
   // Heatmap sizing (dense view)
@@ -94,7 +108,13 @@ export class MaterialsDashboardComponent implements OnInit {
 
   // Fill controls
   fillByGroup = false;
-  fillFunction: 'Activities' | 'Location' = 'Activities';
+  fillFunction: 'Activities' | 'Location' | 'LastAction' | 'ID' = 'Activities';
+  readonly lastActionLimit = 100;
+  lastActionRows: LocationDetailRowVM[] = [];
+  lastActionDisplayRows: LocationDetailRowVM[] = [];
+  idActivityEmployeeId = '';
+  idActivityRows: EmployeeScanActivityRow[] = [];
+  idActivityDisplayRows: EmployeeScanActivityRow[] = [];
   layerMode: 'None' | 'Aging' | 'Location' = 'Aging';
 
   /**
@@ -132,6 +152,12 @@ export class MaterialsDashboardComponent implements OnInit {
   cells: CellVM[] = [];
   /** Khi Fill: Location — nhóm theo từng vị trí (ô lớn). */
   locationTiles: LocationTileVM[] = [];
+
+  locationDetailOpen = false;
+  locationDetailTitle = '';
+  locationDetailRows: LocationDetailRowVM[] = [];
+  locationDetailLoading = false;
+  locationDetailError = '';
   titlesEnabled = true;
   private masterSkuList: string[] = [];
   baseRows: Array<{ sku: string; group: string; count: number }> = [];
@@ -169,7 +195,13 @@ export class MaterialsDashboardComponent implements OnInit {
     this.startDate = '2020-01-01';
     this.endDate = today.toISOString().slice(0, 10);
     this.selectedYear = today.getFullYear() >= 2020 && today.getFullYear() <= 2026 ? today.getFullYear() : 2026;
-    void this.reload();
+    this.applyYearDatesOnly();
+  }
+
+  /** Bấm Start — tải dữ liệu theo lựa chọn hiện tại. */
+  async startDashboard(): Promise<void> {
+    this.dashboardStarted = true;
+    await this.reload(true);
   }
 
   get heatmapColorCssVars(): Record<string, string> {
@@ -201,7 +233,9 @@ export class MaterialsDashboardComponent implements OnInit {
     } catch {
       /* ignore quota */
     }
-    this.recomputeView();
+    if (this.dashboardStarted) {
+      this.recomputeView();
+    }
     this.closeColorSettings();
   }
 
@@ -270,10 +304,13 @@ export class MaterialsDashboardComponent implements OnInit {
   }
 
   applyYear(): void {
+    this.applyYearDatesOnly();
+  }
+
+  private applyYearDatesOnly(): void {
     if (this.selectedYear === 'All') {
       this.startDate = '2020-01-01';
       this.endDate = new Date().toISOString().slice(0, 10);
-      void this.reload();
       return;
     }
 
@@ -282,10 +319,13 @@ export class MaterialsDashboardComponent implements OnInit {
     const end = y === new Date().getFullYear() ? new Date() : new Date(y, 11, 31);
     this.startDate = start.toISOString().slice(0, 10);
     this.endDate = end.toISOString().slice(0, 10);
-    void this.reload();
   }
 
   async onStockCheckCompareChange(): Promise<void> {
+    if (!this.dashboardStarted) {
+      this.cdr.markForCheck();
+      return;
+    }
     if (this.stockCheckCompareEnabled) {
       await this.refreshStockCheckCheckedSkus();
     } else {
@@ -336,11 +376,17 @@ export class MaterialsDashboardComponent implements OnInit {
     this.fillByGroup = false;
     if (mode === 'Location') {
       this.fillFunction = 'Location';
-      await this.ensureLocationsLoaded();
+      if (this.dashboardStarted) {
+        await this.ensureLocationsLoaded();
+      }
     } else {
       this.fillFunction = 'Activities';
+      this.backFromLocationDetail();
     }
-    this.onFiltersChanged();
+    if (this.dashboardStarted) {
+      this.onFiltersChanged();
+    }
+    this.cdr.markForCheck();
   }
 
   /** Template: hiển thị legend cờ aging */
@@ -350,23 +396,51 @@ export class MaterialsDashboardComponent implements OnInit {
 
   setFillByGroup(on: boolean): void {
     this.fillByGroup = on;
-    this.onFiltersChanged();
+    if (this.dashboardStarted) {
+      this.onFiltersChanged();
+    }
   }
 
-  async setFillFunction(fn: 'Activities' | 'Location'): Promise<void> {
+  async setFillFunction(fn: 'Activities' | 'Location' | 'LastAction' | 'ID'): Promise<void> {
     this.fillFunction = fn;
-    if (!this.fillByGroup && fn === 'Location') {
+    if (fn !== 'Location') {
+      this.backFromLocationDetail();
+    }
+    if (fn !== 'LastAction') {
+      this.lastActionRows = [];
+      this.lastActionDisplayRows = [];
+    }
+    if (fn !== 'ID') {
+      this.idActivityRows = [];
+      this.idActivityDisplayRows = [];
+      this.idActivityEmployeeId = '';
+    }
+    if (this.dashboardStarted && !this.fillByGroup && fn === 'Location') {
       await this.ensureLocationsLoaded();
     }
-    this.onFiltersChanged();
+    if (this.dashboardStarted) {
+      this.onFiltersChanged();
+    }
+    this.cdr.markForCheck();
   }
 
   async reload(forceMaster = false): Promise<void> {
+    this.dashboardStarted = true;
     this.isLoading = true;
     this.error = '';
     this.cdr.markForCheck();
 
     try {
+      if (this.fillFunction === 'ID') {
+        await this.loadIdActivityView();
+        return;
+      }
+
+      if (this.fillFunction === 'LastAction') {
+        await this.loadLastActionView();
+        return;
+      }
+
       const start = this.parseIsoDate(this.startDate, true);
       const end = this.parseIsoDate(this.endDate, false);
 
@@ -394,6 +468,11 @@ export class MaterialsDashboardComponent implements OnInit {
 
       await this.refreshAgingMap();
 
+      this.lastActionRows = [];
+      this.lastActionDisplayRows = [];
+      this.idActivityRows = [];
+      this.idActivityDisplayRows = [];
+      this.idActivityEmployeeId = '';
       this.applyModel(this.masterSkusCache, activityBySku);
     } catch (e: any) {
       console.error(e);
@@ -406,6 +485,7 @@ export class MaterialsDashboardComponent implements OnInit {
   }
 
   onFiltersChanged(): void {
+    if (!this.dashboardStarted) return;
     // Debounce to avoid recompute on every keystroke/change burst.
     if (this.filtersTimer) window.clearTimeout(this.filtersTimer);
     this.filtersTimer = window.setTimeout(() => {
@@ -416,7 +496,9 @@ export class MaterialsDashboardComponent implements OnInit {
 
   clearSearch(): void {
     this.searchSku = '';
-    this.recomputeView();
+    if (this.dashboardStarted) {
+      this.recomputeView();
+    }
     this.cdr.markForCheck();
   }
 
@@ -487,7 +569,14 @@ export class MaterialsDashboardComponent implements OnInit {
 
     const filtered = base.filter((x) => {
       if (only && x.group !== only) return false;
-      if (q && !x.sku.includes(q)) return false;
+      if (q) {
+        if (this.fillFunction === 'Location') {
+          const loc = (this.locationBySku.get(x.sku) || '').trim().toUpperCase();
+          if (!loc.includes(q)) return false;
+        } else if (!x.sku.includes(q)) {
+          return false;
+        }
+      }
       return true;
     });
 
@@ -548,6 +637,59 @@ export class MaterialsDashboardComponent implements OnInit {
     return tile.locationKey;
   }
 
+  trackByLocationDetailRow(_: number, row: LocationDetailRowVM): string {
+    return row.id || `${row.materialCode}|${row.poNumber}|${row.imd}`;
+  }
+
+  trackByLastActionRow(_: number, row: LocationDetailRowVM): string {
+    return row.id || `${row.materialCode}|${row.poNumber}|${row.imd}`;
+  }
+
+  async openLocationDetailView(tile: LocationTileVM): Promise<void> {
+    this.locationDetailOpen = true;
+    this.locationDetailTitle = tile.displayLocation;
+    this.locationDetailRows = [];
+    this.locationDetailLoading = true;
+    this.locationDetailError = '';
+    this.cdr.markForCheck();
+
+    try {
+      const lines = await this.svc.loadInventoryLinesAtLocation(tile.locationKey, tile.displayLocation);
+      const actions = await this.svc.loadLastActionsForInventoryLines(lines);
+      this.locationDetailRows = lines.map((line) => {
+        const action = actions.get(line.id);
+        return {
+          ...line,
+          lastActionLabel: action?.actionLabel || '—',
+          lastActionBy: action?.performedBy || '—',
+          lastActionAt: action?.actionAt ?? null
+        };
+      });
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
+      this.locationDetailError = msg || 'Không tải được chi tiết vị trí';
+      this.locationDetailRows = [];
+    } finally {
+      this.locationDetailLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  backFromLocationDetail(): void {
+    this.locationDetailOpen = false;
+    this.locationDetailTitle = '';
+    this.locationDetailRows = [];
+    this.locationDetailError = '';
+    this.locationDetailLoading = false;
+    this.cdr.markForCheck();
+  }
+
+  formatLocationActionDate(d: Date | null): string {
+    if (!d || Number.isNaN(d.getTime())) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   /** Gom ô theo location (không áp dụng khi Fill: Group). */
   get showLocationClusterView(): boolean {
     return this.fillFunction === 'Location' && !this.fillByGroup;
@@ -599,9 +741,121 @@ export class MaterialsDashboardComponent implements OnInit {
   }
 
   private recomputeView(): void {
+    if (this.fillFunction === 'ID') {
+      this.applyIdActivitySearchFilter();
+      this.cdr.markForCheck();
+      return;
+    }
+    if (this.fillFunction === 'LastAction') {
+      this.applyLastActionSearchFilter();
+      this.cdr.markForCheck();
+      return;
+    }
     // Use cached base rows (master SKU + activity count) to avoid rebuilding
     // maps from the rendered cells on every filter/sort change.
     this.recomputeViewFrom(this.baseRows || []);
+  }
+
+  private async loadLastActionView(): Promise<void> {
+    this.backFromLocationDetail();
+    this.cells.length = 0;
+    this.locationTiles = [];
+    this.baseRows = [];
+
+    const rows = await this.svc.loadTopRecentMaterialActions(this.lastActionLimit);
+    this.lastActionRows = rows.map((r) => ({
+      ...r,
+      poNumber: r.poNumber || '—',
+      imd: r.imd || '—'
+    }));
+    this.kpiTotalSkus = this.lastActionRows.length;
+    this.kpiActiveSkus = this.lastActionRows.length;
+    this.kpiNoActivitySkus = 0;
+    this.applyLastActionSearchFilter();
+  }
+
+  private applyLastActionSearchFilter(): void {
+    const q = String(this.searchSku || '').trim().toUpperCase();
+    let rows = this.lastActionRows || [];
+    if (q) {
+      rows = rows.filter(
+        (r) =>
+          r.materialCode.toUpperCase().includes(q) ||
+          (r.poNumber || '').toUpperCase().includes(q) ||
+          (r.imd || '').toUpperCase().includes(q) ||
+          (r.location || '').toUpperCase().includes(q)
+      );
+    }
+    this.lastActionDisplayRows = rows;
+  }
+
+  get showLastActionView(): boolean {
+    return this.fillFunction === 'LastAction';
+  }
+
+  get showIdActivityView(): boolean {
+    return this.fillFunction === 'ID';
+  }
+
+  get idActivityDateLabel(): string {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+
+  get lastActionSearchLabel(): string {
+    if (this.fillFunction === 'ID') return 'Mã ID (ASP)';
+    if (this.fillFunction === 'Location') return 'Tìm vị trí';
+    if (this.fillFunction === 'LastAction') return 'Tìm mã / PO / IMD';
+    return 'Tìm SKU';
+  }
+
+  get lastActionSearchPlaceholder(): string {
+    if (this.fillFunction === 'ID') return 'VD: ASP0701 — bấm Start để tải…';
+    if (this.fillFunction === 'Location') return 'Nhập vị trí (VD: H12, TRA, IQC)…';
+    if (this.fillFunction === 'LastAction') return 'Lọc trong 100 mã đổi vị trí gần nhất…';
+    return 'B + 6 số hoặc một phần mã…';
+  }
+
+  trackByIdActivityRow(_: number, row: EmployeeScanActivityRow): string {
+    return row.id;
+  }
+
+  private async loadIdActivityView(): Promise<void> {
+    this.backFromLocationDetail();
+    this.cells.length = 0;
+    this.locationTiles = [];
+    this.baseRows = [];
+    this.lastActionRows = [];
+    this.lastActionDisplayRows = [];
+
+    const empId = this.svc.normalizeEmployeeId(this.searchSku);
+    if (!empId) {
+      throw new Error('Mã ID không hợp lệ. Định dạng: ASP + 4 số (VD: ASP0701).');
+    }
+
+    this.idActivityEmployeeId = empId;
+    const rows = await this.svc.loadEmployeeScanActivitiesToday(empId);
+    this.idActivityRows = rows;
+    this.kpiTotalSkus = rows.length;
+    this.kpiActiveSkus = rows.length;
+    this.kpiNoActivitySkus = 0;
+    this.applyIdActivitySearchFilter();
+  }
+
+  private applyIdActivitySearchFilter(): void {
+    const q = String(this.searchSku || '').trim().toUpperCase();
+    let rows = this.idActivityRows || [];
+    if (q && q !== this.idActivityEmployeeId) {
+      rows = rows.filter(
+        (r) =>
+          r.tab.toUpperCase().includes(q) ||
+          r.action.toUpperCase().includes(q) ||
+          r.detail.toUpperCase().includes(q) ||
+          r.factory.toUpperCase().includes(q)
+      );
+    }
+    this.idActivityDisplayRows = rows;
   }
 
   private recomputeViewFrom(base: Array<{ sku: string; group: string; count: number }>): void {

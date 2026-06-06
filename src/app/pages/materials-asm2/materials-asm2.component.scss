@@ -2703,3 +2703,102 @@
   }
 }
 
+.reset-low-stock-popup {
+  max-width: 920px;
+  width: 94%;
+}
+
+.reset-low-stock-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.reset-low-stock-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.reset-low-stock-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.reset-low-stock-table-wrap {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.reset-low-stock-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th,
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    font-weight: 600;
+    color: #334155;
+    z-index: 1;
+  }
+
+  .col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.reset-low-stock-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+
+  .cancel-btn,
+  .delete-batch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .cancel-btn {
+    background: #fff;
+    color: #374151;
+  }
+
+  .delete-batch-btn {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+  }
+}
+
