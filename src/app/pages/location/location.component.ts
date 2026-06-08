@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { Router } from '@angular/router';
 import firebase from 'firebase/compat/app';
 import { Subject, BehaviorSubject, Subscription } from 'rxjs';
@@ -49,6 +49,33 @@ interface LocationRule {
   materialCode: string;
   destinationLocationPrefixes: string[];
   createdAt?: Date;
+  updatedAt?: Date;
+}
+
+type WarehouseType = 'Kho Thường' | 'Kho Mát';
+
+interface LocationWarehouseRow {
+  viTri: string;
+  warehouseType: WarehouseType | '';
+}
+
+interface MaterialPrefixWarehouseRow {
+  materialPrefix: string;
+  warehouseType: WarehouseType;
+}
+
+interface LocationRuleParentGroup {
+  parentKey: string;
+  children: LocationWarehouseRow[];
+  totalCount: number;
+  assignedCount: number;
+}
+
+interface LocationWarehouseRulesDoc {
+  factory: 'ASM1' | 'ASM2';
+  locationByViTri?: Record<string, WarehouseType>;
+  locationByFirstChar?: Record<string, WarehouseType>;
+  materialByPrefix?: Record<string, WarehouseType>;
   updatedAt?: Date;
 }
 
@@ -120,6 +147,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   activeEmployeeId = '';
   /** Thời điểm ký tự cuối được nhập — dùng để phân biệt scan vs gõ tay */
   private lastEmpKeyTime = 0;
+
+  @ViewChild('empScanInputRef') empScanInputRef?: ElementRef<HTMLInputElement>;
 
   // Factory selection (ASM1/ASM2) - required before using Location tab features
   showFactorySelect = false;   // mở sau khi employee đã xác nhận
@@ -195,6 +224,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showEmployeeScan = true;
     this.showFactorySelect = false;
     this.selectedFactory = null;
+    this.cdr.markForCheck();
+    this.focusEmployeeScanInput();
   }
 
   logout(): void {
@@ -205,6 +236,24 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showEmployeeScan = true;
     this.showFactorySelect = false;
     this.selectedFactory = null;
+    this.cdr.markForCheck();
+    this.focusEmployeeScanInput();
+  }
+
+  /** Tự focus ô scan nhân viên để quét thẻ ngay khi mở tab / mở lại modal. */
+  private focusEmployeeScanInput(retry = 0): void {
+    if (!this.showEmployeeScan) return;
+    setTimeout(() => {
+      const el = this.empScanInputRef?.nativeElement;
+      if (el) {
+        el.focus();
+        this.lastEmpKeyTime = 0;
+        return;
+      }
+      if (retry < 8) {
+        this.focusEmployeeScanInput(retry + 1);
+      }
+    }, retry === 0 ? 0 : 80);
   }
 
   /** Tính ms đến 7:00 sáng ngày hôm sau (hoặc hôm nay nếu chưa tới). */
@@ -231,6 +280,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     // Clear lookup state when switching factory
     this.clearLocationLookup();
     this.setupRulesListener();
+    void this.loadWarehouseRulesFromFirestore();
     this.applyFilters();
   }
   
@@ -292,14 +342,27 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   customerSearchTerm = '';
   showCustomerModal = false;
 
-  // Rule (materialCode prefix 4 or exact 7 -> allowed destination location prefixes)
+  // Rule ép vị trí: ký tự đầu vị trí → loại kho; đầu mã B+3 số → loại kho
+  readonly warehouseTypeOptions: WarehouseType[] = ['Kho Thường', 'Kho Mát'];
   showRuleModal = false;
-  ruleMaterialCodeInput = '';
-  ruleDestinationLocationInput = '';
   rules: LocationRule[] = [];
   rulesLoadError = '';
   isTargetLocationForced = false;
   forcedAllowedDestinationPrefixes: string[] = [];
+  forcedWarehouseType: WarehouseType | '' = '';
+  forcedAllowedLocations: string[] = [];
+  locationWarehouseRows: LocationWarehouseRow[] = [];
+  locationRuleParentGroups: LocationRuleParentGroup[] = [];
+  expandedLocationRuleParent: string | null = null;
+  materialPrefixRows: MaterialPrefixWarehouseRow[] = [];
+  newMaterialPrefixInput = '';
+  newMaterialPrefixWarehouse: WarehouseType = 'Kho Thường';
+  isWarehouseRulesSaving = false;
+  isWarehouseRulesLoading = false;
+  isMaterialPrefixRulesSaving = false;
+  warehouseRulesLoadError = '';
+  private locationByViTriMap: Record<string, WarehouseType> = {};
+  private materialPrefixWarehouseMap: Record<string, WarehouseType> = {};
   private rulesSub?: Subscription;
 
   /**
@@ -313,19 +376,388 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return (code || '').replace(/\s/g, '').toUpperCase().substring(0, 7);
   }
 
-  openRuleModal(): void {
+  async openRuleModal(): Promise<void> {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
       alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
+    this.expandedLocationRuleParent = null;
     this.showRuleModal = true;
-    this.ruleMaterialCodeInput = '';
-    this.ruleDestinationLocationInput = '';
+    await this.loadWarehouseRulesFromFirestore();
+    this.rebuildRuleModalRows();
+    this.cdr.markForCheck();
   }
 
   closeRuleModal(): void {
     this.showRuleModal = false;
+    this.expandedLocationRuleParent = null;
+  }
+
+  private rebuildRuleModalRows(): void {
+    this.buildLocationWarehouseRows();
+    this.buildLocationRuleParentGroups();
+    this.syncMaterialPrefixRowsFromMap();
+  }
+
+  private getLocationParentKey(viTri: string): string {
+    const s = String(viTri || '').trim().toUpperCase();
+    if (/^BOX-\d/i.test(s)) return 'BOX';
+    return s.charAt(0) || '';
+  }
+
+  private buildLocationRuleParentGroups(): void {
+    const map = new Map<string, LocationWarehouseRow[]>();
+    for (const row of this.locationWarehouseRows) {
+      const parentKey = this.getLocationParentKey(row.viTri);
+      if (!parentKey) continue;
+      if (!map.has(parentKey)) map.set(parentKey, []);
+      map.get(parentKey)!.push(row);
+    }
+    this.locationRuleParentGroups = Array.from(map.entries())
+      .map(([parentKey, children]) => {
+        const sorted = [...children].sort((a, b) =>
+          a.viTri.localeCompare(b.viTri, 'vi', { numeric: true })
+        );
+        return {
+          parentKey,
+          children: sorted,
+          totalCount: sorted.length,
+          assignedCount: sorted.filter(c => !!c.warehouseType).length
+        };
+      })
+      .sort((a, b) => a.parentKey.localeCompare(b.parentKey, 'vi', { numeric: true }));
+  }
+
+  get expandedLocationRuleChildren(): LocationWarehouseRow[] {
+    const parent = (this.expandedLocationRuleParent || '').trim().toUpperCase();
+    if (!parent) return [];
+    const group = this.locationRuleParentGroups.find(g => g.parentKey === parent);
+    return group?.children || [];
+  }
+
+  openLocationRuleParent(parentKey: string): void {
+    const key = String(parentKey || '').trim().toUpperCase();
+    if (!key) return;
+    this.expandedLocationRuleParent = key;
+    this.cdr.markForCheck();
+  }
+
+  backFromLocationRuleParent(): void {
+    this.expandedLocationRuleParent = null;
+    this.cdr.markForCheck();
+  }
+
+  onMaterialPrefixWarehouseChange(prefix: string, warehouseType: WarehouseType): void {
+    this.materialPrefixWarehouseMap[prefix] = warehouseType;
+    void this.persistMaterialPrefixRules();
+  }
+
+  trackByLocationRuleParentGroup(_index: number, group: LocationRuleParentGroup): string {
+    return group.parentKey;
+  }
+
+  /** Vị trí IQC (VD: IQC, IQC+F1-0001): không áp rule Kho Thường/Mát — mọi mã đều được cất. */
+  isIqcExemptLocation(location: string): boolean {
+    const raw = String(location || '').replace(/\s/g, '').toUpperCase();
+    return raw.startsWith('IQC');
+  }
+
+  private normalizeLocationWarehouseKey(viTri: string): string {
+    const formatted = this.formatViTriInput(String(viTri || '').trim());
+    return formatted || this.normalizeLocationCode(viTri) || String(viTri || '').trim().toUpperCase();
+  }
+
+  private buildLocationWarehouseRows(): void {
+    const seen = new Set<string>();
+    const rows: LocationWarehouseRow[] = [];
+    const legacyByChar = this.getLegacyLocationByFirstCharMap();
+
+    for (const item of this.locationItems) {
+      const viTri = String(item.viTri || '').trim();
+      if (!viTri || this.isIqcExemptLocation(viTri)) continue;
+      const key = this.normalizeLocationWarehouseKey(viTri);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        viTri,
+        warehouseType:
+          this.locationByViTriMap[key] ||
+          this.locationByViTriMap[viTri.toUpperCase()] ||
+          legacyByChar[this.getLocationFirstChar(viTri)] ||
+          ''
+      });
+    }
+
+    for (const [locKey, wh] of Object.entries(this.locationByViTriMap)) {
+      if (this.isIqcExemptLocation(locKey)) continue;
+      if (!seen.has(locKey)) {
+        seen.add(locKey);
+        rows.push({ viTri: locKey, warehouseType: wh });
+      }
+    }
+
+    this.locationWarehouseRows = rows.sort((a, b) => a.viTri.localeCompare(b.viTri, 'vi', { numeric: true }));
+    if (this.showRuleModal) {
+      this.buildLocationRuleParentGroups();
+    }
+  }
+
+  private getLocationFirstChar(viTri: string): string {
+    return String(viTri || '').trim().toUpperCase().charAt(0);
+  }
+
+  private syncMaterialPrefixRowsFromMap(): void {
+    const seen = new Set<string>();
+    const rows: MaterialPrefixWarehouseRow[] = [];
+    for (const [materialPrefix, warehouseType] of Object.entries(this.materialPrefixWarehouseMap)) {
+      const prefix = this.normalizeMaterialPrefixForWarehouse(materialPrefix);
+      const wh = this.normalizeWarehouseType(warehouseType);
+      if (!prefix || !wh || seen.has(prefix)) continue;
+      seen.add(prefix);
+      rows.push({ materialPrefix: prefix, warehouseType: wh });
+    }
+    this.materialPrefixRows = rows.sort((a, b) => a.materialPrefix.localeCompare(b.materialPrefix));
+  }
+
+  private normalizeWarehouseType(value: unknown): WarehouseType | '' {
+    const s = String(value || '').trim();
+    if (!s) return '';
+    const lower = s.toLowerCase();
+    if (lower === 'kho thường' || lower === 'kho thuong') return 'Kho Thường';
+    if (lower === 'kho mát' || lower === 'kho mat') return 'Kho Mát';
+    return this.warehouseTypeOptions.includes(s as WarehouseType) ? (s as WarehouseType) : '';
+  }
+
+  private legacyFirstCharMap: Record<string, WarehouseType> = {};
+
+  private applyWarehouseMapsFromDoc(data: LocationWarehouseRulesDoc | null | undefined): void {
+    const locMap: Record<string, WarehouseType> = {};
+    const legacyMap: Record<string, WarehouseType> = {};
+    const matMap: Record<string, WarehouseType> = {};
+    const rawByViTri = data?.locationByViTri || {};
+    const rawByChar = data?.locationByFirstChar || {};
+    const rawMat = data?.materialByPrefix || {};
+
+    for (const [k, v] of Object.entries(rawByViTri)) {
+      const key = this.normalizeLocationWarehouseKey(k);
+      const wh = this.normalizeWarehouseType(v);
+      if (key && wh) {
+        locMap[key] = wh;
+      }
+    }
+    for (const [k, v] of Object.entries(rawByChar)) {
+      const c = String(k || '').trim().toUpperCase().charAt(0);
+      const wh = this.normalizeWarehouseType(v);
+      if (c && wh) {
+        legacyMap[c] = wh;
+      }
+    }
+    for (const [k, v] of Object.entries(rawMat)) {
+      const p = this.normalizeMaterialPrefixForWarehouse(k);
+      const wh = this.normalizeWarehouseType(v);
+      if (p && wh) {
+        matMap[p] = wh;
+      }
+    }
+    this.locationByViTriMap = locMap;
+    this.legacyFirstCharMap = legacyMap;
+    this.materialPrefixWarehouseMap = matMap;
+    this.syncMaterialPrefixRowsFromMap();
+  }
+
+  private getLegacyLocationByFirstCharMap(): Record<string, WarehouseType> {
+    return this.legacyFirstCharMap;
+  }
+
+  private async loadWarehouseRulesFromFirestore(): Promise<void> {
+    if (!this.selectedFactory) return;
+    this.isWarehouseRulesLoading = true;
+    this.warehouseRulesLoadError = '';
+    try {
+      const snap = await this.firestore
+        .collection<LocationWarehouseRulesDoc>('location-warehouse-rules')
+        .doc(this.selectedFactory)
+        .get()
+        .toPromise();
+      this.applyWarehouseMapsFromDoc(snap?.exists ? (snap.data() as LocationWarehouseRulesDoc) : null);
+      if (this.showRuleModal) {
+        this.rebuildRuleModalRows();
+      }
+    } catch (e: unknown) {
+      this.warehouseRulesLoadError = (e as Error)?.message || String(e);
+      console.error('❌ loadWarehouseRulesFromFirestore:', e);
+    } finally {
+      this.isWarehouseRulesLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private normalizeMaterialPrefixForWarehouse(raw: string): string {
+    const compact = String(raw || '').replace(/\s/g, '').toUpperCase();
+    const m = /^B(\d{3})/.exec(compact);
+    return m ? `B${m[1]}` : '';
+  }
+
+  private getMaterialPrefix4ForWarehouse(materialCode: string): string {
+    return this.normalizeMaterialPrefixForWarehouse(this.normalizeMaterialCodeForRule(materialCode));
+  }
+
+  private getWarehouseTypeForMaterial(materialCode: string): WarehouseType | '' {
+    const prefix = this.getMaterialPrefix4ForWarehouse(materialCode);
+    return prefix ? this.materialPrefixWarehouseMap[prefix] || '' : '';
+  }
+
+  private getLocationsForWarehouse(warehouseType: WarehouseType): string[] {
+    const fromViTri = Object.entries(this.locationByViTriMap)
+      .filter(([loc, wh]) => wh === warehouseType && !this.isIqcExemptLocation(loc))
+      .map(([loc]) => loc);
+    if (fromViTri.length > 0) {
+      return fromViTri.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+    }
+    const legacyChars = Object.entries(this.legacyFirstCharMap)
+      .filter(([, wh]) => wh === warehouseType)
+      .map(([c]) => c);
+    return legacyChars.sort((a, b) => a.localeCompare(b));
+  }
+
+  private resolveAllowedDestinationsForMaterial(materialCode: string): { warehouseType: WarehouseType | ''; locations: string[] } {
+    const warehouseType = this.getWarehouseTypeForMaterial(materialCode);
+    if (warehouseType) {
+      return { warehouseType, locations: this.getLocationsForWarehouse(warehouseType) };
+    }
+    const legacy = this.findMatchedRuleFromList(materialCode);
+    return { warehouseType: '', locations: legacy?.destinationLocationPrefixes || [] };
+  }
+
+  private locationMatchesAllowedDestinations(target: string, allowed: string[]): boolean {
+    if (this.isIqcExemptLocation(target)) return true;
+    const formatted = this.formatViTriInput(target || '');
+    if (!formatted || !allowed.length) return false;
+    const normalized = this.normalizeLocationWarehouseKey(formatted);
+    return allowed.some(allowedLoc => {
+      const a = this.normalizeLocationWarehouseKey(allowedLoc);
+      if (!a) return false;
+      if (normalized === a) return true;
+      if (normalized.startsWith(a)) return true;
+      if (a.length === 1 && normalized.startsWith(a)) return true;
+      return formatted.startsWith(this.formatViTriInput(allowedLoc));
+    });
+  }
+
+  addMaterialPrefixRuleRow(): void {
+    const prefix = this.normalizeMaterialPrefixForWarehouse(this.newMaterialPrefixInput);
+    if (!prefix) {
+      alert('Đầu mã phải đúng định dạng B + 3 số (VD: B034, B013).');
+      return;
+    }
+    if (this.materialPrefixRows.some(r => r.materialPrefix === prefix)) {
+      alert(`Đầu mã ${prefix} đã có trong danh sách.`);
+      return;
+    }
+    this.materialPrefixRows = [
+      ...this.materialPrefixRows,
+      { materialPrefix: prefix, warehouseType: this.newMaterialPrefixWarehouse }
+    ].sort((a, b) => a.materialPrefix.localeCompare(b.materialPrefix));
+    this.materialPrefixWarehouseMap[prefix] = this.newMaterialPrefixWarehouse;
+    this.newMaterialPrefixInput = '';
+    this.cdr.markForCheck();
+    void this.persistMaterialPrefixRules();
+  }
+
+  removeMaterialPrefixRuleRow(prefix: string): void {
+    this.materialPrefixRows = this.materialPrefixRows.filter(r => r.materialPrefix !== prefix);
+    delete this.materialPrefixWarehouseMap[prefix];
+    this.cdr.markForCheck();
+    void this.persistMaterialPrefixRules();
+  }
+
+  private buildMaterialByPrefixForSave(): Record<string, WarehouseType> {
+    const materialByPrefix: Record<string, WarehouseType> = {};
+    for (const row of this.materialPrefixRows) {
+      const prefix = this.normalizeMaterialPrefixForWarehouse(row.materialPrefix);
+      const wh = this.normalizeWarehouseType(row.warehouseType);
+      if (prefix && wh) {
+        materialByPrefix[prefix] = wh;
+      }
+    }
+    return materialByPrefix;
+  }
+
+  /** Lưu ngay rule đầu mã B — không cần chờ bấm Lưu rule toàn bộ. */
+  private async persistMaterialPrefixRules(): Promise<void> {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
+    const materialByPrefix = this.buildMaterialByPrefixForSave();
+    this.isMaterialPrefixRulesSaving = true;
+    this.cdr.markForCheck();
+    try {
+      await this.firestore.collection('location-warehouse-rules').doc(this.selectedFactory).set(
+        {
+          factory: this.selectedFactory,
+          materialByPrefix,
+          updatedAt: new Date()
+        },
+        { merge: true }
+      );
+      this.materialPrefixWarehouseMap = { ...materialByPrefix };
+      this.syncMaterialPrefixRowsFromMap();
+      this.applyLocationRuleToSelectedMaterial();
+    } catch (e: unknown) {
+      console.error('❌ persistMaterialPrefixRules:', e);
+      alert(`❌ Không lưu được rule đầu mã: ${(e as Error)?.message || e}`);
+    } finally {
+      this.isMaterialPrefixRulesSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async saveWarehouseRules(): Promise<void> {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
+    const locationByViTri: Record<string, WarehouseType> = {};
+    for (const row of this.locationWarehouseRows) {
+      if (row.viTri && row.warehouseType && !this.isIqcExemptLocation(row.viTri)) {
+        locationByViTri[this.normalizeLocationWarehouseKey(row.viTri)] = row.warehouseType;
+      }
+    }
+    const materialByPrefix = this.buildMaterialByPrefixForSave();
+
+    this.isWarehouseRulesSaving = true;
+    try {
+      await this.firestore.collection('location-warehouse-rules').doc(this.selectedFactory).set(
+        {
+          factory: this.selectedFactory,
+          locationByViTri,
+          materialByPrefix,
+          updatedAt: new Date()
+        },
+        { merge: true }
+      );
+      this.locationByViTriMap = { ...locationByViTri };
+      this.materialPrefixWarehouseMap = { ...materialByPrefix };
+      this.rebuildRuleModalRows();
+      this.applyLocationRuleToSelectedMaterial();
+      alert('✅ Đã lưu rule ép vị trí');
+    } catch (e: unknown) {
+      console.error('❌ saveWarehouseRules:', e);
+      alert(`❌ Không lưu được rule: ${(e as Error)?.message || e}`);
+    } finally {
+      this.isWarehouseRulesSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  trackByLocationWarehouseRow(_index: number, row: LocationWarehouseRow): string {
+    return row.viTri;
+  }
+
+  trackByMaterialPrefixRow(_index: number, row: MaterialPrefixWarehouseRow): string {
+    return row.materialPrefix;
   }
 
   private setupRulesListener(): void {
@@ -366,108 +798,27 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
-  async upsertRuleFromInputs(): Promise<void> {
-    const cleaned = (this.ruleMaterialCodeInput || '').replace(/\s/g, '').toUpperCase();
-    const normalized = this.normalizeMaterialCodeForRule(cleaned);
-    // matching rule chỉ hỗ trợ key độ dài 4 hoặc 7
-    const keyLen = normalized.length;
-    const materialCode = normalized;
-    const destinationPrefixes = (this.ruleDestinationLocationInput || '')
-      .split(',')
-      .map(s => this.formatViTriInput(s))
-      .filter(s => s && this.validateViTriInput(s));
-
-    if (!materialCode || (keyLen !== 4 && keyLen !== 7)) {
-      alert('Vui lòng nhập mã nguyên liệu');
-      return;
-    }
-    if (!destinationPrefixes || destinationPrefixes.length === 0) {
-      alert('Vui lòng nhập danh sách prefix vị trí đích (ví dụ: H,J,K)');
-      return;
-    }
-
-    if (!this.selectedFactory) {
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
-      return;
-    }
-
-    const existing = this.rules.find(r => r.materialCode === materialCode);
-    const payload = {
-      factory: this.selectedFactory,
-      materialCode,
-      destinationLocationPrefixes: destinationPrefixes,
-      updatedAt: new Date(),
-    };
-
-    if (existing?.id) {
-      await this.firestore.collection('location-rules').doc(existing.id).update(payload);
-    } else {
-      await this.firestore.collection('location-rules').add({
-        ...payload,
-        createdAt: new Date(),
-      });
-    }
-
-    // Nếu đang ở bước chọn vị trí cho modal cất -> ép theo rule vừa thêm
-    this.applyLocationRuleToSelectedMaterial();
-
-    alert('✅ Đã lưu rule');
-    this.ruleMaterialCodeInput = '';
-    this.ruleDestinationLocationInput = '';
-  }
-
-  async deleteRule(rule: { id?: string; materialCode: string; destinationLocationPrefixes: string[] }): Promise<void> {
-    if (!rule?.materialCode) return;
-    if (!confirm(`Xóa rule cho mã ${rule.materialCode}?`)) return;
-    if (rule.id) {
-      await this.firestore.collection('location-rules').doc(rule.id).delete();
-    } else {
-      // Fallback for legacy in-memory item without id
-      this.rules = this.rules.filter(r => r.materialCode !== rule.materialCode);
-    }
-    this.applyLocationRuleToSelectedMaterial();
-  }
-
   private applyLocationRuleToSelectedMaterial(): void {
     if (!this.selectedMaterialForStore) {
       this.isTargetLocationForced = false;
       this.forcedAllowedDestinationPrefixes = [];
+      this.forcedAllowedLocations = [];
+      this.forcedWarehouseType = '';
       return;
     }
 
-    const scannedCode7 = this.normalizeMaterialCodeForRule(this.selectedMaterialForStore.materialCode);
-
-    // Ưu tiên exact match cho key 7 ký tự
-    const exactRule = this.rules.find(
-      r => r.materialCode.length === 7 && r.materialCode === scannedCode7
-    );
-    if (exactRule) {
-      this.isTargetLocationForced = true;
-      this.forcedAllowedDestinationPrefixes = exactRule.destinationLocationPrefixes || [];
-      return;
-    }
-
-    // Nếu không có exact 7, áp dụng rule nhóm theo prefix (ưu tiên rule dài hơn)
-    // - Rule dài 4 ký tự sẽ match theo 4 ký tự đầu
-    // - Nếu có rule cũ dài <4 thì vẫn có thể match (tùy dữ liệu đã lưu)
-    const prefixRules = this.rules
-      .filter(r => r.materialCode.length < 7)
-      .filter(r => scannedCode7.startsWith(r.materialCode));
-
-    // Nếu có nhiều rule trùng prefix 4 (hiếm), lấy rule cụ thể nhất.
-    // Hiện tại tất cả prefix rule đều dài 4, nhưng vẫn giữ sort để an toàn.
-    const matchedRule = prefixRules.sort((a, b) => b.materialCode.length - a.materialCode.length)[0];
-    this.isTargetLocationForced = !!matchedRule;
-    this.forcedAllowedDestinationPrefixes = matchedRule?.destinationLocationPrefixes || [];
+    const code = this.selectedMaterialForStore.materialCode || '';
+    const resolved = this.resolveAllowedDestinationsForMaterial(code);
+    this.forcedWarehouseType = resolved.warehouseType;
+    this.forcedAllowedLocations = resolved.locations;
+    this.forcedAllowedDestinationPrefixes = resolved.locations;
+    this.isTargetLocationForced = resolved.locations.length > 0;
 
     if (this.isTargetLocationForced) {
       const allowedSuggested = this.suggestedLocations.filter(loc => this.isDestinationAllowed(loc));
-      // "Ép" theo rule: chỉ giữ giá trị hợp lệ nếu đang chọn; còn lại chọn option phù hợp đầu tiên
       if (!this.selectedTargetLocation || !this.isDestinationAllowed(this.selectedTargetLocation)) {
         this.selectedTargetLocation = allowedSuggested[0] || '';
       }
-    } else {
-      this.forcedAllowedDestinationPrefixes = [];
     }
   }
 
@@ -539,10 +890,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isDestinationAllowed(location: string): boolean {
+    if (this.isIqcExemptLocation(location)) return true;
     const formatted = this.formatViTriInput(location || '');
     if (!formatted) return false;
     if (!this.isTargetLocationForced) return true;
-    return this.forcedAllowedDestinationPrefixes.some(prefix => formatted.startsWith(prefix));
+    return this.locationMatchesAllowedDestinations(formatted, this.forcedAllowedLocations);
   }
 
   // Dời Kệ (Move Shelf) Modal
@@ -636,6 +988,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngAfterViewInit() {
     this.cdr.detectChanges();
+    this.focusEmployeeScanInput();
   }
 
   ngOnDestroy() {
@@ -1722,10 +2075,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return item.id || index.toString();
   }
 
-  trackByRule(index: number, item: { materialCode: string }): string {
-    return item.materialCode || index.toString();
-  }
-
   trackByFG(index: number, item: FGLocation): string {
     return item.id || index.toString();
   }
@@ -2150,14 +2499,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           ? this.mergeStoreMaterialLocations(fromLocation, segmentFormatted)
           : segmentFormatted;
 
-        const matchedRule = await this.resolveMatchedRule(item.materialCode || '');
-        const requiredPrefixes = matchedRule?.destinationLocationPrefixes || [];
+        const resolved = this.resolveAllowedDestinationsForMaterial(item.materialCode || '');
         const ruleCheckLocation = this.storeMaterialMultiLocation ? segmentFormatted : targetFormatted;
-        if (requiredPrefixes.length > 0) {
-          const ok = requiredPrefixes.some(prefix => ruleCheckLocation.startsWith(prefix));
+        if (resolved.locations.length > 0) {
+          const ok = this.locationMatchesAllowedDestinations(ruleCheckLocation, resolved.locations);
           if (!ok) {
+            const whHint = resolved.warehouseType ? ` (${resolved.warehouseType})` : '';
             alert(
-              `⚠️ Mã ${item.materialCode} (PO: ${item.poNumber}): vị trí đích phải bắt đầu bằng: ${requiredPrefixes.join(', ')}`
+              `⚠️ Mã ${item.materialCode} (PO: ${item.poNumber})${whHint}: vị trí đích phải thuộc: ${resolved.locations.join(', ')}`
             );
             return;
           }

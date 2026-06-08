@@ -831,11 +831,24 @@
 }
 
 .rule-modal {
-  max-width: 750px;
+  max-width: min(1280px, 96vw);
+  width: min(1280px, 96vw);
 
   .rule-modal-body {
     padding: 12px 16px 16px 16px;
     overflow: auto;
+    max-height: 82vh;
+  }
+
+  .rule-section-desc {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.45;
+    margin: 0 0 14px;
+  }
+
+  .rule-section-gap {
+    margin-top: 18px;
   }
 
   .rule-form-row {
@@ -843,10 +856,11 @@
     gap: 12px;
     flex-wrap: wrap;
     margin-bottom: 12px;
+    align-items: flex-end;
 
     .form-group {
       flex: 1;
-      min-width: 220px;
+      min-width: 160px;
 
       label {
         display: block;
@@ -854,6 +868,207 @@
         color: #666;
         margin-bottom: 6px;
       }
+    }
+  }
+
+  .rule-material-add {
+    margin-bottom: 10px;
+  }
+
+  .rule-material-hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .rule-add-btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    margin-bottom: 2px;
+  }
+
+  .rules-count {
+    font-weight: 500;
+    color: #888;
+    font-size: 12px;
+  }
+
+  .rule-box-grid {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .rule-box-grid--10 {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+
+    @media (max-width: 1200px) {
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+    @media (max-width: 900px) {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    @media (max-width: 600px) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .rule-loc-parent-box {
+    position: relative;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    background: #fafafa;
+    padding: 8px 6px 6px;
+    min-height: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    box-sizing: border-box;
+    cursor: pointer;
+    text-align: center;
+    width: 100%;
+
+    &:hover {
+      border-color: #90caf9;
+      background: #f3f9ff;
+    }
+  }
+
+  .rule-loc-parent-box--assigned {
+    border-color: #90caf9;
+    background: #f3f9ff;
+  }
+
+  .rule-loc-parent-box__icon {
+    font-size: 18px !important;
+    color: #666;
+  }
+
+  .rule-loc-parent-box__code {
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+    line-height: 1.2;
+  }
+
+  .rule-loc-parent-box__meta {
+    font-size: 10px;
+    color: #888;
+    line-height: 1.2;
+  }
+
+  .rule-child-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0 6px;
+  }
+
+  .rule-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    color: #333;
+
+    .material-icons {
+      font-size: 16px;
+    }
+
+    &:hover {
+      background: #f5f5f5;
+    }
+  }
+
+  .rule-child-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #333;
+
+    .material-icons {
+      font-size: 18px;
+      color: #666;
+    }
+  }
+
+  .rule-loc-box,
+  .rule-mat-box {
+    position: relative;
+    border: 1px solid #d8d8d8;
+    border-radius: 8px;
+    background: #fafafa;
+    padding: 8px 6px 6px;
+    min-height: 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
+  }
+
+  .rule-loc-box--assigned {
+    border-color: #90caf9;
+    background: #f3f9ff;
+  }
+
+  .rule-loc-box__code,
+  .rule-mat-box__code {
+    font-size: 11px;
+    font-weight: 700;
+    color: #333;
+    text-align: center;
+    line-height: 1.2;
+    word-break: break-all;
+    min-height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .rule-loc-box__select,
+  .rule-mat-box__select,
+  .rule-select {
+    width: 100%;
+    padding: 4px 2px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 10px;
+    background: #fff;
+    text-align: center;
+  }
+
+  .rule-mat-box {
+    border-color: #c8e6c9;
+    background: #f1f8f4;
+  }
+
+  .rule-mat-box__delete {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+
+    .material-icons {
+      font-size: 14px;
+    }
+
+    &:hover {
+      color: #d32f2f;
     }
   }
 
