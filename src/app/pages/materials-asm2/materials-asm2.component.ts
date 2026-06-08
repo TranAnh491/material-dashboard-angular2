@@ -13,6 +13,8 @@ import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { TemXuatKhoService, PxkLineExport } from '../../services/tem-xuat-kho.service';
 import { LabelReprintFlagService } from '../../services/label-reprint-flag.service';
 import { MaterialsDashboardService } from '../../services/materials-dashboard.service';
+import { LocationUnlockService } from '../../services/location-unlock.service';
+import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import * as firebase from 'firebase/compat/app';
@@ -256,6 +258,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   canEdit = false;
   canExport = false;
   canDelete = false;
+  /** Cột Vị trí: sửa tay sau khi xác thực OTP Zalo (10 phút, hết khi F5). */
+  isLocationColumnUnlocked = false;
   // canEditHSD = false; // Removed - HSD column deleted
 
   constructor(
@@ -269,7 +273,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     private rmBagHistory: RmBagHistoryService,
     private temXuatKho: TemXuatKhoService,
     private labelReprintFlags: LabelReprintFlagService,
-    private materialsDashboard: MaterialsDashboardService
+    private materialsDashboard: MaterialsDashboardService,
+    private locationUnlock: LocationUnlockService
   ) {}
 
   private getImdKeyFromImportDate(d: Date | null | undefined): string {
@@ -1540,6 +1545,11 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       console.log('📚 ASM2 Catalog loaded, inventory ready for search');
     });
     this.loadPermissions();
+    this.isLocationColumnUnlocked = this.locationUnlock.isUnlocked();
+    this.locationUnlock.unlocked$.pipe(takeUntil(this.destroy$)).subscribe(unlocked => {
+      this.isLocationColumnUnlocked = unlocked;
+      this.cdr.markForCheck();
+    });
     
     // 🔧 FIX: KHÔNG tự động load inventory - chỉ load khi search
     // Setup search mechanism only (không gọi loadInventoryFromFirebase)
@@ -2926,6 +2936,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             material.materialName = catalogItem.materialName;
             material.unit = catalogItem.unit;
           }
+
+          this.stampLocationAtLoad(material);
           
           return material;
         });
@@ -3142,7 +3154,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
               inventoryDocId: m.id,
               materialCode: m.materialCode,
               poNumber: m.poNumber || '',
-              imdKey: this.getDisplayIMD(m),
+              imdKey: this.getInventoryImdBaseKey(m) || this.getDisplayIMD(m),
+              batchNumber: m.batchNumber || '',
               factory: 'ASM2'
             });
             m.lastStatusAt = status.at;
@@ -4575,12 +4588,126 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // Update methods for editing
   // updateExported method removed - exported quantity is now read-only and auto-updated from outbound
 
+  /** Mở/khóa sửa tay cột Vị trí — OTP 4 số qua Zalo bot. */
+  tryUnlockLocationColumn(): void {
+    if (this.locationUnlock.isUnlocked()) {
+      this.locationUnlock.lock();
+      return;
+    }
+    const ref = this.dialog.open(LocationUnlockDialogComponent, {
+      width: '400px',
+      maxWidth: '95vw',
+      disableClose: false
+    });
+    ref.afterClosed().pipe(takeUntil(this.destroy$)).subscribe(ok => {
+      if (ok) {
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  rememberLocationBeforeEdit(material: InventoryMaterial): void {
+    (material as { __prevLocation?: string }).__prevLocation = material.location || '';
+  }
+
+  private stampLocationAtLoad(material: InventoryMaterial): void {
+    (material as { __locationAtLoad?: string }).__locationAtLoad = String(material.location || '').trim().toUpperCase();
+  }
+
+  onLocationKeyEnter(material: InventoryMaterial, event: KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    void this.persistLocationChange(material);
+  }
+
+  private async resolveLocationOperatorId(): Promise<string> {
+    const unlocked = this.locationUnlock.getEmployeeId();
+    if (unlocked) return unlocked;
+    const user = await this.afAuth.currentUser;
+    if (!user) return 'UNKNOWN';
+    const email = String(user.email || '').trim().toUpperCase();
+    const asp = email.match(/ASP\d{4}/);
+    if (asp) return asp[0];
+    const name = String(user.displayName || '').trim();
+    if (name) return name.substring(0, 24);
+    return email.substring(0, 24) || 'UNKNOWN';
+  }
+
+  /** Lưu riêng cột Vị trí lên inventory-materials + material-location-history. */
+  private async persistLocationChange(material: InventoryMaterial): Promise<void> {
+    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
+    if (!material?.id) return;
+
+    const row = material as {
+      __prevLocation?: string;
+      __locationAtLoad?: string;
+      locationManualOverride?: boolean;
+      modifiedBy?: string;
+    };
+    const fromLocation = String(row.__prevLocation ?? row.__locationAtLoad ?? '')
+      .trim()
+      .toUpperCase();
+    const newLocation = String(material.location ?? '').trim().toUpperCase();
+    if (!newLocation) {
+      alert('⚠️ Vui lòng nhập vị trí trước khi lưu.');
+      return;
+    }
+    if (newLocation === fromLocation) return;
+
+    const previousUiLocation = material.location;
+    material.location = newLocation;
+
+    const modifiedBy = await this.resolveLocationOperatorId();
+    const updatePayload: Record<string, unknown> = {
+      location: newLocation,
+      updatedAt: new Date(),
+      lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+      modifiedBy,
+      locationManualOverride: true
+    };
+
+    if ((newLocation === 'F62' || newLocation === 'F62TRA') && material.iqcStatus !== 'Pass') {
+      material.iqcStatus = 'Pass';
+      updatePayload.iqcStatus = 'Pass';
+    }
+
+    try {
+      await this.firestore.collection('inventory-materials').doc(material.id).update(updatePayload);
+
+      const changedAt = new Date();
+      await this.firestore.collection('material-location-history').add({
+        factory: this.FACTORY,
+        materialId: material.id,
+        materialCode: material.materialCode,
+        poNumber: material.poNumber || '',
+        fromLocation,
+        toLocation: newLocation,
+        changedBy: modifiedBy,
+        changeType: 'bulk',
+        changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+
+      material.lastStatusAt = changedAt;
+      material.lastStatusKind = 'Change location';
+      material.lastStatusBy = modifiedBy;
+      row.__prevLocation = newLocation;
+      row.__locationAtLoad = newLocation;
+      row.locationManualOverride = true;
+      row.modifiedBy = modifiedBy;
+      console.log(`✅ [ASM2] Đã lưu vị trí ${material.materialCode}: ${fromLocation} → ${newLocation} (${modifiedBy})`);
+      alert(`✅ Đã lưu vị trí: ${newLocation}`);
+      this.cdr.markForCheck();
+    } catch (error) {
+      material.location = previousUiLocation;
+      console.error('[ASM2] persistLocationChange failed', error);
+      alert('❌ Không lưu được vị trí lên tồn kho. Vui lòng thử lại hoặc báo IT.');
+      this.cdr.markForCheck();
+    }
+  }
+
   updateLocation(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
-    this.updateMaterialInFirebase(material);
-    
-    // Update negative stock count for real-time display
-    this.updateNegativeStockCount();
+    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
+    void this.persistLocationChange(material);
   }
 
   updateType(material: InventoryMaterial): void {
@@ -4840,15 +4967,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   // }
 
   onLocationChange(material: InventoryMaterial): void {
-    if (!this.canEdit) return;
-    
-    // Nếu location là F62 hoặc F62TRA, tự động set iqcStatus = 'Pass'
-    if ((material.location === 'F62' || material.location === 'F62TRA') && material.iqcStatus !== 'Pass') {
-      material.iqcStatus = 'Pass';
-      console.log(`✅ Auto-set IQC status to Pass for ${material.materialCode} (location: ${material.location})`);
-    }
-    
-    this.updateMaterialInFirebase(material);
+    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
+    void this.persistLocationChange(material);
   }
 
 
@@ -4935,7 +5055,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       this.showUpdateSuccessMessage(material);
       
     }).catch(error => {
-      console.error(`❌ Error updating ASM1 material ${material.materialCode}:`, error);
+      console.error(`❌ Error updating ASM2 material ${material.materialCode}:`, error);
       
       // Show error message to user
       this.showUpdateErrorMessage(material, error);
@@ -6670,12 +6790,12 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       if (result && result.success && result.location) {
         // Update location
         const oldLocation = material.location;
+        (material as { __prevLocation?: string }).__prevLocation = oldLocation || '';
         material.location = result.location;
         
         console.log(`📍 Location changed: ${oldLocation} → ${result.location}`);
         
-        // Save to Firebase
-        this.updateLocation(material);
+        void this.persistLocationChange(material);
         
         // Show success message
         const method = result.manual ? 'nhập thủ công' : 'quét QR';

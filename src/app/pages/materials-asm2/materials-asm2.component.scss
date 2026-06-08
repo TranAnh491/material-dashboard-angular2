@@ -759,6 +759,46 @@
   }
 }
 
+.location-header-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.location-unlock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #666;
+  vertical-align: middle;
+
+  .material-icons {
+    font-size: 18px;
+  }
+
+  &:hover {
+    color: #1976d2;
+  }
+}
+
+.location-text {
+  display: block;
+  text-align: center;
+  width: 100%;
+}
+
+.change-locked-label {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 // Giao diện phẳng cho cột Vị trí
 .location-cell {
   width: 113px !important; // Bằng cột Tồn kho

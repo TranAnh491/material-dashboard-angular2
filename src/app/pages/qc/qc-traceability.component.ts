@@ -26,7 +26,27 @@ export interface TraceabilityIssue {
   qtyLabel: string;
   exportQty: number;
   timestamp: Date | null;
+  performedBy: string;
 }
+
+export interface TracePoImdOption {
+  factory: string;
+  poNumber: string;
+  imdKey: string;
+  batchNumber: string;
+  inventoryId: string;
+  materialCode: string;
+  materialName: string;
+  quantity: number;
+  unit: string;
+  location: string;
+  label: string;
+}
+
+type ParsedScanInput =
+  | { type: 'qr'; material: string; po: string; imd: string }
+  | { type: 'batch'; batch: string }
+  | { type: 'material'; material: string };
 
 type TraceIssueRowTone = 'done' | 'progress' | 'pending';
 
@@ -56,6 +76,13 @@ type TraceabilityTreeRoot = {
 
 export type TraceFlowBadgeVariant = 'done' | 'pending' | 'neutral';
 
+export interface TraceFlowTimelineEvent {
+  at: Date | null;
+  performedBy: string;
+  label: string;
+  detail: string;
+}
+
 export interface TraceFlowStage {
   title: string;
   caption: string;
@@ -65,6 +92,9 @@ export interface TraceFlowStage {
   rows: { label: string; value: string }[];
   subTitle: string;
   subLines: { label: string; value: string }[];
+  at: Date | null;
+  performedBy: string;
+  timelineEvents: TraceFlowTimelineEvent[];
 }
 
 export interface TraceQuickStat {
@@ -201,6 +231,9 @@ export class QcTraceabilityComponent implements AfterViewInit {
   scanCode = '';
   isLoading = false;
   errorMessage = '';
+  showPoImdPicker = false;
+  poImdCandidates: TracePoImdOption[] = [];
+  pendingLookupMaterial = '';
   summary: TraceabilitySummary | null = null;
   qcNode: TraceabilityQcNode | null = null;
   issues: TraceabilityIssue[] = [];
@@ -273,7 +306,7 @@ export class QcTraceabilityComponent implements AfterViewInit {
           exportQtyLabel: exp > 0 ? `${exp} ${unit}`.trim() : `— ${unit}`.trim(),
           exportDateLabel: issue.timestamp ? this.formatDateShortVi(issue.timestamp) : '—',
           factoryLineLabel: (this.lastInventory?.factory || '—').toString(),
-          issuerLabel: (this.qcNode?.inspector || '—').toString(),
+          issuerLabel: (issue.performedBy || this.qcNode?.inspector || '—').toString(),
           statusLabel,
           statusTone,
           remainAfterLabel: `${remain} ${unit}`.trim()
@@ -330,6 +363,146 @@ export class QcTraceabilityComponent implements AfterViewInit {
     this.overviewRows = [];
     this.quickStats = [];
     this.lastUpdatedText = '—';
+    this.showPoImdPicker = false;
+    this.poImdCandidates = [];
+    this.pendingLookupMaterial = '';
+  }
+
+  formatFlowDate(d: Date | null | undefined): string {
+    return this.formatDateShortVi(d ?? null);
+  }
+
+  async selectPoImdAndTrace(opt: TracePoImdOption): Promise<void> {
+    this.showPoImdPicker = false;
+    this.isLoading = true;
+    this.errorMessage = '';
+    try {
+      const inv = await this.loadInventoryById(opt.inventoryId, opt.factory);
+      if (!inv) {
+        const fallback = await this.queryByMaterialPoImd(opt.materialCode, opt.poNumber, opt.imdKey);
+        if (!fallback) {
+          this.errorMessage = 'Không tải được dữ liệu lô đã chọn. Thử lại.';
+          return;
+        }
+        await this.applyInventoryTrace(fallback);
+        return;
+      }
+      await this.applyInventoryTrace(inv);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.errorMessage = `Lỗi tải dữ liệu: ${msg}`;
+    } finally {
+      this.isLoading = false;
+      this.focusScanField();
+    }
+  }
+
+  private formatPerformerId(raw: string): string {
+    const s = String(raw || '').trim();
+    if (!s) return '—';
+    const upper = s.toUpperCase();
+    const asp = upper.match(/ASP\d{4}/);
+    if (asp) return asp[0];
+    if (upper.length > 7 && upper.startsWith('ASP')) return upper.substring(0, 7);
+    return s.length > 28 ? s.substring(0, 28) : s;
+  }
+
+  private parseScanInput(raw: string): ParsedScanInput | null {
+    const t = raw.trim();
+    if (!t) return null;
+    if (t.includes('|')) {
+      const parts = t.split('|').map(p => p.trim());
+      if (parts.length >= 4) {
+        return { type: 'qr', material: parts[0].toUpperCase(), po: parts[1].toUpperCase(), imd: parts[3] };
+      }
+    }
+    if (/^\d{8}(-\d+\/\d+)?$/i.test(t)) {
+      return { type: 'batch', batch: t };
+    }
+    return { type: 'material', material: t.toUpperCase() };
+  }
+
+  private buildPoImdOptions(rows: InventoryRow[]): TracePoImdOption[] {
+    const map = new Map<string, TracePoImdOption>();
+    for (const r of rows) {
+      const imd = this.inventoryImdKey(r) || (r.batchNumber || '').trim() || '—';
+      const po = (r.poNumber || '').trim() || '—';
+      const key = `${r.factory}|${r.materialCode}|${po}|${imd}`;
+      if (map.has(key)) continue;
+      map.set(key, {
+        factory: r.factory,
+        poNumber: po,
+        imdKey: imd,
+        batchNumber: r.batchNumber || imd,
+        inventoryId: r.id,
+        materialCode: r.materialCode,
+        materialName: r.materialName || '—',
+        quantity: r.quantity,
+        unit: (r.unit || '').trim() || 'PCS',
+        location: r.location || '—',
+        label: `PO: ${po} · IMD: ${imd}`
+      });
+    }
+    return [...map.values()].sort(
+      (a, b) => a.poNumber.localeCompare(b.poNumber, 'vi') || a.imdKey.localeCompare(b.imdKey, 'vi')
+    );
+  }
+
+  private async queryAllByMaterialCode(code: string): Promise<InventoryRow[]> {
+    const c = code.trim().toUpperCase();
+    const rows: InventoryRow[] = [];
+    for (const factory of ['ASM1', 'ASM2']) {
+      const snap = await this.firestore
+        .collection('inventory-materials', ref => ref.where('factory', '==', factory).where('materialCode', '==', c).limit(80))
+        .get()
+        .toPromise();
+      if (!snap || snap.empty) continue;
+      snap.forEach(doc => rows.push(this.mapDoc(doc.id, doc.data() as Record<string, unknown>, factory)));
+    }
+    return rows;
+  }
+
+  private async loadInventoryById(id: string, factory: string): Promise<InventoryRow | null> {
+    if (!id) return null;
+    try {
+      const doc = await this.firestore.collection('inventory-materials').doc(id).get().toPromise();
+      if (!doc?.exists) return null;
+      return this.mapDoc(doc.id, doc.data() as Record<string, unknown>, factory);
+    } catch {
+      return null;
+    }
+  }
+
+  private async applyInventoryTrace(inv: InventoryRow): Promise<void> {
+    const status = this.mapOverallStatus(inv.iqcStatus || '');
+    const cond = this.mapConditionBadge(inv.iqcStatus || '');
+    const qcTime = inv.qcCheckedAt || this.parseFirestoreDate(inv.importDate as unknown);
+
+    this.summary = {
+      itemCode: inv.materialCode,
+      itemName: inv.materialName || '—',
+      batchLabel: inv.batchNumber || this.inventoryImdKey(inv) || '—',
+      poNumber: inv.poNumber || '—',
+      stockDisplay: this.stockDisplay(inv),
+      location: inv.location || '—',
+      statusLabel: status.label,
+      statusVariant: status.variant
+    };
+
+    this.qcNode = {
+      inspector: this.formatPerformerId(inv.qcCheckedBy || ''),
+      timestamp: qcTime,
+      scannedLabel: this.buildScannedRollsLabel(inv),
+      conditionLabel: cond.label,
+      conditionVariant: cond.variant
+    };
+
+    this.lastInventory = inv;
+    const [issues] = await Promise.all([this.loadOutboundIssues(inv), this.loadLatestLocationChange(inv)]);
+    this.issues = issues;
+    this.treeRoot = this.buildIssuedTree(this.summary, this.issues);
+    this.rebuildDashboard(inv, this.summary, this.qcNode, this.issues);
+    this.touchUpdatedAt();
   }
 
   zoomTree(deltaPct: number): void {
@@ -405,6 +578,22 @@ export class QcTraceabilityComponent implements AfterViewInit {
     const woSummary =
       issues.length === 0 ? '—' : issues.length <= 2 ? issues.map(i => i.workOrder).join(', ') : `${issues.length} LSX`;
 
+    const storageAt = inv.locationChangedAt || inv.lastModified || inv.qcCheckedAt || impD;
+    const storageBy = this.formatPerformerId(inv.locationChangedBy || inv.modifiedBy || '');
+    const inboundBy = this.formatPerformerId(inv.modifiedBy || '');
+
+    const exportTimelineAsc = [...issues]
+      .filter(i => i.timestamp || i.exportQty > 0)
+      .sort((a, b) => (a.timestamp?.getTime() || 0) - (b.timestamp?.getTime() || 0))
+      .map(i => ({
+        at: i.timestamp,
+        performedBy: this.formatPerformerId(i.performedBy),
+        label: i.workOrder || 'Xuất kho',
+        detail: i.qtyLabel || '—'
+      }));
+
+    const latestExportBy = latestExport ? this.formatPerformerId(latestExport.performedBy) : '—';
+
     this.flowStages = [
       {
         title: 'NHẬP KHO',
@@ -412,9 +601,20 @@ export class QcTraceabilityComponent implements AfterViewInit {
         icon: 'inventory_2',
         badgeLabel: 'Hoàn thành',
         badgeVariant: 'done',
+        at: impD,
+        performedBy: inboundBy,
+        timelineEvents: [
+          {
+            at: impD,
+            performedBy: inboundBy,
+            label: 'Tiếp nhận nguyên vật liệu',
+            detail: this.qtyOriginal(inv)
+          }
+        ],
         rows: [
           { label: 'Nhà cung cấp', value: (inv.supplierName || '').trim() || (inv.poNumber ? `Theo PO ${inv.poNumber}` : '—') },
           { label: 'Ngày nhập', value: this.formatDateShortVi(impD) },
+          { label: 'ID thực hiện', value: inboundBy },
           { label: 'Số lượng', value: this.qtyOriginal(inv) }
         ],
         subTitle: 'LÔ NHẬP',
@@ -426,9 +626,20 @@ export class QcTraceabilityComponent implements AfterViewInit {
         icon: 'verified_user',
         badgeLabel: qcDone ? 'Hoàn thành' : 'Chờ xử lý',
         badgeVariant: qcDone ? 'done' : 'pending',
+        at: qc.timestamp,
+        performedBy: qc.inspector || '—',
+        timelineEvents: [
+          {
+            at: qc.timestamp,
+            performedBy: qc.inspector || '—',
+            label: 'Kiểm tra chất lượng',
+            detail: qc.conditionLabel || '—'
+          }
+        ],
         rows: [
           { label: 'Nhân viên', value: qc.inspector || '—' },
           { label: 'Ngày giờ', value: this.formatDateShortVi(qc.timestamp) },
+          { label: 'ID thực hiện', value: qc.inspector || '—' },
           { label: 'Kết quả', value: qc.conditionLabel || '—' },
           { label: 'Số đã scan', value: (qc.scannedLabel || '').replace(/^Scanned:\s*/i, '') || '—' }
         ],
@@ -441,18 +652,21 @@ export class QcTraceabilityComponent implements AfterViewInit {
         icon: 'local_shipping',
         badgeLabel: stored ? 'Hoàn thành' : 'Chờ xử lý',
         badgeVariant: stored ? 'done' : 'pending',
+        at: storageAt,
+        performedBy: storageBy,
+        timelineEvents: [
+          {
+            at: storageAt,
+            performedBy: storageBy,
+            label: 'Lưu trữ / đổi vị trí',
+            detail: inv.location || '—'
+          }
+        ],
         rows: [
           { label: 'Vị trí', value: inv.location || '—' },
-          { label: 'Ngày lưu', value: this.formatDateShortVi(inv.qcCheckedAt || impD) },
-          { label: 'SL hiện tại', value: summary.stockDisplay },
-          {
-            label: 'ID scan đổi vị trí',
-            value: inv.locationChangedBy || (inv.modifiedBy ? inv.modifiedBy : '—')
-          },
-          {
-            label: 'Ngày giờ đổi vị trí',
-            value: this.formatDateShortVi(inv.locationChangedAt || inv.lastModified || null)
-          }
+          { label: 'Ngày lưu', value: this.formatDateShortVi(storageAt) },
+          { label: 'ID thực hiện', value: storageBy },
+          { label: 'SL hiện tại', value: summary.stockDisplay }
         ],
         subTitle: 'KHO',
         subLines: [{ label: 'Xưởng', value: inv.factory || '—' }]
@@ -463,12 +677,25 @@ export class QcTraceabilityComponent implements AfterViewInit {
         icon: 'precision_manufacturing',
         badgeLabel: outboundDone ? 'Hoàn thành' : issues.length > 0 ? 'Đang xử lý' : 'Chờ xử lý',
         badgeVariant: outboundDone ? 'done' : issues.length > 0 ? 'neutral' : 'pending',
+        at: latestExport?.timestamp ?? null,
+        performedBy: latestExportBy,
+        timelineEvents: exportTimelineAsc.length
+          ? exportTimelineAsc
+          : [
+              {
+                at: null,
+                performedBy: '—',
+                label: 'Chưa có xuất kho',
+                detail: '—'
+              }
+            ],
         rows: [
           { label: 'Kế hoạch', value: woSummary },
           {
             label: 'Ngày xuất gần nhất',
             value: latestExport?.timestamp ? this.formatDateShortVi(latestExport.timestamp) : '—'
           },
+          { label: 'ID xuất gần nhất', value: latestExportBy },
           {
             label: 'Đã xuất',
             value:
@@ -639,18 +866,20 @@ export class QcTraceabilityComponent implements AfterViewInit {
         // Fallback: dùng lastModified + modifiedBy từ inventory-materials
         if (inv.lastModified) {
           inv.locationChangedAt = inv.lastModified;
-          inv.locationChangedBy = inv.modifiedBy || '—';
+          inv.locationChangedBy = this.formatPerformerId(inv.modifiedBy || '');
         }
         return;
       }
       const d = snap.docs[0].data() as Record<string, unknown>;
-      inv.locationChangedBy = this.coerceText(d.changedBy) || this.coerceText(d.modifiedBy) || '—';
+      inv.locationChangedBy = this.formatPerformerId(
+        this.coerceText(d.changedBy) || this.coerceText(d.modifiedBy)
+      );
       inv.locationChangedAt = this.parseFirestoreDate(d.changedAt) || this.parseFirestoreDate(d.lastModified);
     } catch {
       // Nếu lỗi (index chưa tạo, v.v.) thì dùng fallback từ inventory-materials
       if (inv.lastModified) {
         inv.locationChangedAt = inv.lastModified;
-        inv.locationChangedBy = inv.modifiedBy || '—';
+        inv.locationChangedBy = this.formatPerformerId(inv.modifiedBy || '');
       }
     }
   }
@@ -863,11 +1092,15 @@ export class QcTraceabilityComponent implements AfterViewInit {
         const unit = ((data.unit as string) || row.unit || '').trim() || 'rolls';
         const wo = ((data.productionOrder as string) || '').trim() || '—';
         const ts = this.parseFirestoreDate(data.exportDate) || this.parseFirestoreDate(data.updatedAt) || this.parseFirestoreDate(data.createdAt);
+        const performedBy = this.formatPerformerId(
+          this.coerceText(data.employeeId) || this.coerceText(data.exportedBy) || this.coerceText(data.createdBy)
+        );
         issues.push({
           workOrder: wo,
           qtyLabel: exportQty ? `-${exportQty} ${unit}` : `— ${unit}`,
           exportQty,
-          timestamp: ts
+          timestamp: ts,
+          performedBy
         });
       });
     }
@@ -885,6 +1118,9 @@ export class QcTraceabilityComponent implements AfterViewInit {
 
     this.isLoading = true;
     this.errorMessage = '';
+    this.showPoImdPicker = false;
+    this.poImdCandidates = [];
+    this.pendingLookupMaterial = '';
     this.summary = null;
     this.qcNode = null;
     this.issues = [];
@@ -895,45 +1131,40 @@ export class QcTraceabilityComponent implements AfterViewInit {
     this.quickStats = [];
 
     try {
-      const inv = await this.resolveInventory(code);
-      if (!inv) {
-        this.errorMessage = 'Không tìm thấy tồn kho khớp mã quét. Thử QR đầy đủ (Material|PO|SL|IMD) hoặc mã lô chính xác.';
+      const parsed = this.parseScanInput(code);
+      if (!parsed) {
+        this.errorMessage = 'Vui lòng quét hoặc nhập mã lô / QR.';
         return;
       }
 
-      const status = this.mapOverallStatus(inv.iqcStatus || '');
-      const cond = this.mapConditionBadge(inv.iqcStatus || '');
-      const qcTime = inv.qcCheckedAt || this.parseFirestoreDate(inv.importDate as unknown);
+      let inv: InventoryRow | null = null;
 
-      this.summary = {
-        itemCode: inv.materialCode,
-        itemName: inv.materialName || '—',
-        batchLabel: inv.batchNumber || this.inventoryImdKey(inv) || '—',
-        poNumber: inv.poNumber || '—',
-        stockDisplay: this.stockDisplay(inv),
-        location: inv.location || '—',
-        statusLabel: status.label,
-        statusVariant: status.variant
-      };
+      if (parsed.type === 'qr') {
+        inv = await this.queryByMaterialPoImd(parsed.material, parsed.po, parsed.imd);
+      } else if (parsed.type === 'batch') {
+        inv = await this.queryByBatch(parsed.batch);
+      } else {
+        const all = await this.queryAllByMaterialCode(parsed.material);
+        if (!all.length) {
+          this.errorMessage = `Không tìm thấy mã hàng ${parsed.material} trên tồn kho ASM1/ASM2.`;
+          return;
+        }
+        const options = this.buildPoImdOptions(all);
+        if (options.length > 1) {
+          this.poImdCandidates = options;
+          this.pendingLookupMaterial = parsed.material;
+          this.showPoImdPicker = true;
+          return;
+        }
+        inv = (await this.loadInventoryById(options[0].inventoryId, options[0].factory)) || all[0];
+      }
 
-      this.qcNode = {
-        inspector: inv.qcCheckedBy || '—',
-        timestamp: qcTime,
-        scannedLabel: this.buildScannedRollsLabel(inv),
-        conditionLabel: cond.label,
-        conditionVariant: cond.variant
-      };
+      if (!inv) {
+        this.errorMessage = 'Không tìm thấy tồn kho khớp mã quét. Thử QR đầy đủ (Material|PO|SL|IMD) hoặc chọn PO/IMD.';
+        return;
+      }
 
-      this.lastInventory = inv;
-      // Tải song song: xuất kho + lịch sử đổi vị trí
-      const [issues] = await Promise.all([
-        this.loadOutboundIssues(inv),
-        this.loadLatestLocationChange(inv)
-      ]);
-      this.issues = issues;
-      this.treeRoot = this.buildIssuedTree(this.summary, this.issues);
-      this.rebuildDashboard(inv, this.summary, this.qcNode, this.issues);
-      this.touchUpdatedAt();
+      await this.applyInventoryTrace(inv);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       this.errorMessage = `Lỗi tải dữ liệu: ${msg}`;

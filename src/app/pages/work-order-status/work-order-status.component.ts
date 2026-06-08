@@ -626,7 +626,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.assignSequentialNumbers();
     
     // Debug: Check current filters
-    
+
+    this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
     
@@ -806,7 +807,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   applyFilters(): void {
-    this.currentPage = 1;
     this.filteredWorkOrders = this.workOrders.filter(wo => {
       const matchesSearch = !this.searchTerm || 
         wo.orderNumber.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
@@ -1156,18 +1156,21 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   onSearchChange(): void {
     this.clearSelection();
+    this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
   }
 
   onStatusFilterChange(): void {
     this.clearSelection();
+    this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
   }
 
   onDoneFilterChange(): void {
     this.clearSelection();
+    this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
   }
@@ -3132,6 +3135,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
     
     // Re-apply filters after adjustment
+    this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
     
@@ -3197,6 +3201,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.log(`👁️ Chỉ hiển thị work orders chưa hoàn thành của nhà máy ${this.selectedFactory}`);
     }
 
+    this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
   }

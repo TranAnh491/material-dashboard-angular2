@@ -238,13 +238,23 @@
           <div class="info-row location-row">
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <input type="text" 
-                     class="mobile-input location-input" 
-                     [(ngModel)]="material.location" 
-                     (change)="updateLocation(material)"
+              <span class="value" *ngIf="!isLocationColumnUnlocked">{{ material.location || '-' }}</span>
+              <input *ngIf="isLocationColumnUnlocked"
+                     type="text"
+                     class="mobile-input location-input"
+                     [(ngModel)]="material.location"
+                     (focus)="rememberLocationBeforeEdit(material)"
                      (blur)="onLocationChange(material)"
+                     (keydown.enter)="onLocationKeyEnter(material, $event)"
                      placeholder="Nhập vị trí">
-              <button class="scan-btn" 
+              <button type="button"
+                      class="location-unlock-btn"
+                      (click)="tryUnlockLocationColumn()"
+                      [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
+                <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
+              </button>
+              <button class="scan-btn"
+                      *ngIf="isLocationColumnUnlocked"
                       (click)="scanLocationQR(material)"
                       title="Scan QR để thay đổi vị trí">
                 <i class="material-icons">qr_code_scanner</i>
@@ -336,7 +346,15 @@
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Số lượng cần xuất (nhập tay)">XT</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
-            <th>Vị trí</th>
+            <th class="location-header-cell" [title]="isLocationColumnUnlocked ? 'Đã mở khóa — click ổ khóa để khóa lại' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
+              <span>Vị trí</span>
+              <button type="button"
+                      class="location-unlock-btn"
+                      (click)="tryUnlockLocationColumn(); $event.stopPropagation()"
+                      [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
+                <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
+              </button>
+            </th>
             <th>Change</th>
             <th>Loại Hình</th>
 
@@ -474,19 +492,28 @@
                 [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' = ' + calculateCurrentStock(material)">
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
-            <td class="location-cell" [class.iqc-location]="isIQCLocation(material.location)">
-              <input type="text" 
-                     class="editable-cell location-input" 
-                     [(ngModel)]="material.location" 
-                     (change)="updateLocation(material)"
-                     (blur)="onLocationChange(material)">
+            <td class="location-cell"
+                [class.iqc-location]="isIQCLocation(material.location)"
+                [class.readonly-cell]="!isLocationColumnUnlocked"
+                [title]="isLocationColumnUnlocked ? 'Sửa vị trí (blur/Enter để lưu)' : 'Click ổ khóa ở cột Vị trí để mở sửa (mã Zalo OTP)'">
+              <span class="location-text" *ngIf="!isLocationColumnUnlocked">{{ material.location || '-' }}</span>
+              <input *ngIf="isLocationColumnUnlocked"
+                     type="text"
+                     class="editable-cell location-input"
+                     [(ngModel)]="material.location"
+                     (focus)="rememberLocationBeforeEdit(material)"
+                     (blur)="onLocationChange(material)"
+                     (keydown.enter)="onLocationKeyEnter(material, $event)"
+                     placeholder="Vị trí">
             </td>
             <td class="change-cell">
-              <button class="scan-change-btn" 
+              <button class="scan-change-btn"
+                      *ngIf="isLocationColumnUnlocked"
                       (click)="scanLocationQR(material)"
                       title="Scan QR để thay đổi vị trí">
                 Scan
               </button>
+              <span *ngIf="!isLocationColumnUnlocked" class="change-locked-label" title="Mở khóa cột Vị trí để scan">Khóa</span>
             </td>
             <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">

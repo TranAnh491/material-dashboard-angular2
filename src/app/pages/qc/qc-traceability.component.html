@@ -58,6 +58,35 @@
     <button type="button" class="trace-alert-dismiss" (click)="errorMessage = ''" title="Đóng">×</button>
   </div>
 
+  <section class="trace-po-imd-picker" *ngIf="showPoImdPicker && poImdCandidates.length">
+    <div class="trace-po-imd-picker-head">
+      <h3 class="trace-po-imd-picker-title">
+        <i class="material-icons">playlist_add_check</i>
+        Chọn PO / IMD để truy xuất
+      </h3>
+      <p class="trace-po-imd-picker-sub">
+        Mã <strong>{{ pendingLookupMaterial }}</strong> có <strong>{{ poImdCandidates.length }}</strong> lô — chọn một dòng để tiếp tục.
+      </p>
+    </div>
+    <div class="trace-po-imd-picker-list">
+      <button
+        type="button"
+        class="trace-po-imd-option"
+        *ngFor="let opt of poImdCandidates"
+        (click)="selectPoImdAndTrace(opt)"
+        [disabled]="isLoading">
+        <span class="trace-po-imd-option-main">{{ opt.label }}</span>
+        <span class="trace-po-imd-option-meta">
+          {{ opt.factory }} · {{ opt.materialName || opt.materialCode }} · {{ opt.quantity }} {{ opt.unit }}
+          <ng-container *ngIf="opt.location && opt.location !== '—'"> · {{ opt.location }}</ng-container>
+        </span>
+      </button>
+    </div>
+    <button type="button" class="trace-po-imd-cancel" (click)="showPoImdPicker = false; poImdCandidates = []">
+      Hủy chọn
+    </button>
+  </section>
+
   <main class="trace-main">
     <!-- KPI: luôn hiển thị — giá trị mặc định khi chưa tra cứu -->
     <section class="trace-kpi-strip" [class.trace-kpi-strip--five]="!!summary" aria-label="Thống kê nhanh">
@@ -112,29 +141,53 @@
     </div>
 
     <section class="trace-flow-section" *ngIf="summary && qcNode && flowStages.length">
-      <h3 class="trace-section-title trace-section-title--flow">Luồng truy xuất</h3>
-      <div class="trace-flow-card">
-        <div class="trace-flow-card-inner">
+      <h3 class="trace-section-title trace-section-title--flow">Luồng truy xuất (theo thời gian)</h3>
+      <div class="trace-flow-card trace-flow-card--vertical">
+        <div class="trace-flow-timeline">
           <ng-container *ngFor="let st of flowStages; let i = index">
-            <article class="trace-flow-step" [attr.data-variant]="st.badgeVariant">
-              <div class="trace-flow-step-head">
+            <article class="trace-flow-step trace-flow-step--vertical" [attr.data-variant]="st.badgeVariant">
+              <div class="trace-flow-step-rail" aria-hidden="true">
                 <span class="trace-flow-step-num">{{ i + 1 }}</span>
-                <div class="trace-flow-step-titles">
-                  <div class="trace-flow-step-title">{{ st.title }}</div>
-                  <div class="trace-flow-step-caption">({{ st.caption }})</div>
-                </div>
-                <span class="trace-flow-step-badge" [attr.data-variant]="st.badgeVariant">{{ st.badgeLabel }}</span>
+                <span class="trace-flow-step-line" *ngIf="i < flowStages.length - 1"></span>
               </div>
-              <div class="trace-flow-step-body">
-                <div class="trace-flow-kv" *ngFor="let r of st.rows">
-                  <span class="trace-flow-k">{{ r.label }}</span>
-                  <span class="trace-flow-v">{{ r.value }}</span>
+              <div class="trace-flow-step-content">
+                <div class="trace-flow-step-head">
+                  <div class="trace-flow-step-titles">
+                    <div class="trace-flow-step-title">{{ st.title }}</div>
+                    <div class="trace-flow-step-caption">({{ st.caption }})</div>
+                  </div>
+                  <span class="trace-flow-step-badge" [attr.data-variant]="st.badgeVariant">{{ st.badgeLabel }}</span>
+                </div>
+                <div class="trace-flow-step-meta">
+                  <span class="trace-flow-step-meta-item">
+                    <i class="material-icons">schedule</i>
+                    {{ formatFlowDate(st.at) }}
+                  </span>
+                  <span class="trace-flow-step-meta-item trace-flow-step-meta-item--id">
+                    <i class="material-icons">badge</i>
+                    ID: {{ st.performedBy || '—' }}
+                  </span>
+                </div>
+                <div class="trace-flow-events" *ngIf="st.timelineEvents?.length">
+                  <div class="trace-flow-event" *ngFor="let ev of st.timelineEvents">
+                    <div class="trace-flow-event-top">
+                      <strong class="trace-flow-event-label">{{ ev.label }}</strong>
+                      <span class="trace-flow-event-detail">{{ ev.detail }}</span>
+                    </div>
+                    <div class="trace-flow-event-meta">
+                      <span><i class="material-icons">schedule</i>{{ formatFlowDate(ev.at) }}</span>
+                      <span><i class="material-icons">badge</i>ID: {{ ev.performedBy || '—' }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="trace-flow-step-body">
+                  <div class="trace-flow-kv" *ngFor="let r of st.rows">
+                    <span class="trace-flow-k">{{ r.label }}</span>
+                    <span class="trace-flow-v">{{ r.value }}</span>
+                  </div>
                 </div>
               </div>
             </article>
-            <div class="trace-flow-step-join" *ngIf="i < flowStages.length - 1" aria-hidden="true">
-              <i class="material-icons">chevron_right</i>
-            </div>
           </ng-container>
         </div>
       </div>
@@ -280,7 +333,7 @@
     </details>
 
     <!-- Màn hình đầu: layout cây + sidebar (mock) -->
-    <section class="trace-landing" *ngIf="!summary && !isLoading">
+    <section class="trace-landing" *ngIf="!summary && !isLoading && !showPoImdPicker">
       <div class="trace-landing-inner">
         <div class="trace-landing-main">
           <div class="trace-tree-empty">

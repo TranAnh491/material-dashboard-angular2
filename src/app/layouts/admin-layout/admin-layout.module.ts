@@ -71,6 +71,7 @@ import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
+import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 
 import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
@@ -142,6 +143,7 @@ import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
     ShortedMaterialsComponent,
     BagHistoryComponent,
     PrintOptionDialogComponent,
+    LocationUnlockDialogComponent,
 
     ChartComponent,
     ZaloComponent,

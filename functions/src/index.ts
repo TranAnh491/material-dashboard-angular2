@@ -218,6 +218,59 @@ export const sendMaterialLocationAlertZaloFn = functions
     }
   });
 
+/** Materials ASM1/ASM2: gửi mã OTP 4 số qua Zalo để mở khóa cột Vị trí. */
+export const requestLocationUnlockOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim().slice(0, 20) : '';
+    if (!employeeId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã nhân viên.');
+    }
+    try {
+      const { requestLocationUnlockOtp } = await import('./location-unlock-otp');
+      await requestLocationUnlockOtp(admin.firestore(), employeeId);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không được phép') || msg.includes('Thiếu') || msg.includes('zalo_links')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Materials ASM1/ASM2: xác nhận mã OTP mở khóa cột Vị trí. */
+export const verifyLocationUnlockOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim().slice(0, 20) : '';
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!employeeId || !code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã nhân viên hoặc mã OTP.');
+    }
+    try {
+      const { verifyLocationUnlockOtp } = await import('./location-unlock-otp');
+      const result = await verifyLocationUnlockOtp(admin.firestore(), employeeId, code);
+      return result;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** QC (ASM1): nếu mã đang bật ưu tiên và bị đổi trạng thái → nhắn Zalo cho ASP0609. */
 export const sendQcPriorityStatusChangedZaloFn = functions
   .runWith({ secrets: [zaloBotToken] })
