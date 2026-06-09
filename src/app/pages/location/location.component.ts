@@ -71,7 +71,7 @@ interface LocationRuleParentGroup {
   assignedCount: number;
 }
 
-/** Hiển thị tổng hợp mọi rule áp cho mã hàng (B+3 → kho + rule cũ theo mã/prefix). */
+/** Hiển thị tổng hợp mọi rule áp cho mã hàng (B+6/B+3 → kho + rule cũ theo mã/prefix). */
 interface MaterialLocationRuleDisplayRow {
   materialCode: string;
   ruleKind: 'b-prefix-warehouse' | 'legacy-code';
@@ -352,7 +352,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   customerSearchTerm = '';
   showCustomerModal = false;
 
-  // Rule ép vị trí: ký tự đầu vị trí → loại kho; đầu mã B+3 số → loại kho
+  // Rule ép vị trí: ký tự đầu vị trí → loại kho; đầu mã B+6 (ưu tiên) / B+3 → loại kho
   readonly warehouseTypeOptions: WarehouseType[] = ['Kho Thường', 'Kho Mát'];
   showRuleModal = false;
   rules: LocationRule[] = [];
@@ -562,7 +562,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   getMaterialRuleKindLabel(row: MaterialLocationRuleDisplayRow): string {
     if (row.ruleKind === 'b-prefix-warehouse') {
-      return row.warehouseType ? `B+3 → ${row.warehouseType}` : 'B+3 → Loại kho';
+      const kind = row.materialCode.length === 7 ? 'B+6' : 'B+3';
+      return row.warehouseType ? `${kind} → ${row.warehouseType}` : `${kind} → Loại kho`;
     }
     return row.materialCode.length >= 7 ? 'Mã đầy đủ (cũ)' : 'Prefix mã (cũ)';
   }
@@ -717,7 +718,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const seen = new Set<string>();
     const rows: MaterialPrefixWarehouseRow[] = [];
     for (const [materialPrefix, warehouseType] of Object.entries(this.materialPrefixWarehouseMap)) {
-      const prefix = this.normalizeMaterialPrefixForWarehouse(materialPrefix);
+      const prefix = this.normalizeMaterialPrefixKey(materialPrefix);
       const wh = this.normalizeWarehouseType(warehouseType);
       if (!prefix || !wh || seen.has(prefix)) continue;
       seen.add(prefix);
@@ -760,7 +761,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
     for (const [k, v] of Object.entries(rawMat)) {
-      const p = this.normalizeMaterialPrefixForWarehouse(k);
+      const p = this.normalizeMaterialPrefixKey(k);
       const wh = this.normalizeWarehouseType(v);
       if (p && wh) {
         matMap[p] = wh;
@@ -817,19 +818,40 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private normalizeMaterialPrefixForWarehouse(raw: string): string {
+  /** Chuẩn hoá key rule đầu mã: B+3 (B034) hoặc B+6 (B034567). */
+  private normalizeMaterialPrefixKey(raw: string): string {
     const compact = String(raw || '').replace(/\s/g, '').toUpperCase();
+    if (/^B\d{6}$/.test(compact)) return compact;
+    if (/^B\d{3}$/.test(compact)) return compact;
+    const m6 = /^B(\d{6})/.exec(compact);
+    if (m6) return `B${m6[1]}`;
+    const m3 = /^B(\d{3})/.exec(compact);
+    if (m3) return `B${m3[1]}`;
+    return '';
+  }
+
+  private getMaterialB6Prefix(materialCode: string): string {
+    const compact = this.normalizeMaterialCodeForRule(materialCode);
+    const m = /^B(\d{6})/.exec(compact);
+    return m ? `B${m[1]}` : '';
+  }
+
+  private getMaterialB3Prefix(materialCode: string): string {
+    const compact = this.normalizeMaterialCodeForRule(materialCode);
     const m = /^B(\d{3})/.exec(compact);
     return m ? `B${m[1]}` : '';
   }
 
-  private getMaterialPrefix4ForWarehouse(materialCode: string): string {
-    return this.normalizeMaterialPrefixForWarehouse(this.normalizeMaterialCodeForRule(materialCode));
-  }
-
   private getWarehouseTypeForMaterial(materialCode: string): WarehouseType | '' {
-    const prefix = this.getMaterialPrefix4ForWarehouse(materialCode);
-    return prefix ? this.materialPrefixWarehouseMap[prefix] || '' : '';
+    const b6 = this.getMaterialB6Prefix(materialCode);
+    if (b6 && this.materialPrefixWarehouseMap[b6]) {
+      return this.materialPrefixWarehouseMap[b6];
+    }
+    const b3 = this.getMaterialB3Prefix(materialCode);
+    if (b3 && this.materialPrefixWarehouseMap[b3]) {
+      return this.materialPrefixWarehouseMap[b3];
+    }
+    return '';
   }
 
   private getLocationsForWarehouse(warehouseType: WarehouseType): string[] {
@@ -875,9 +897,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   addMaterialPrefixRuleRow(): void {
-    const prefix = this.normalizeMaterialPrefixForWarehouse(this.newMaterialPrefixInput);
+    const prefix = this.normalizeMaterialPrefixKey(this.newMaterialPrefixInput);
     if (!prefix) {
-      alert('Đầu mã phải đúng định dạng B + 3 số (VD: B034, B013).');
+      alert('Đầu mã phải đúng định dạng B+3 số (VD: B034) hoặc B+6 số (VD: B034567).');
       return;
     }
     if (this.materialPrefixRows.some(r => r.materialPrefix === prefix)) {
@@ -904,7 +926,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private buildMaterialByPrefixForSave(): Record<string, WarehouseType> {
     const materialByPrefix: Record<string, WarehouseType> = {};
     for (const row of this.materialPrefixRows) {
-      const prefix = this.normalizeMaterialPrefixForWarehouse(row.materialPrefix);
+      const prefix = this.normalizeMaterialPrefixKey(row.materialPrefix);
       const wh = this.normalizeWarehouseType(row.warehouseType);
       if (prefix && wh) {
         materialByPrefix[prefix] = wh;

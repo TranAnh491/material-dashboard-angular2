@@ -267,6 +267,52 @@ export class OutboundQcRuleService {
     return this.pickIqcFromRows(rows, importDatePart4);
   }
 
+  /**
+   * Vị trí kho của đúng dòng tồn khớp tem (mã + PO + IMD).
+   * Không có IMD trên tem hoặc không khớp dòng nào → null (không suy từ lô khác).
+   */
+  async getLocationForScan(
+    factory: string,
+    materialCode: string,
+    poNumber: string,
+    importDatePart4: string | null
+  ): Promise<string | null> {
+    const imdRaw = String(importDatePart4 ?? '').trim();
+    if (!imdRaw) {
+      return null;
+    }
+
+    const snapshot = await this.firestore
+      .collection('inventory-materials', ref =>
+        ref
+          .where('materialCode', '==', materialCode)
+          .where('poNumber', '==', poNumber)
+          .where('factory', '==', factory)
+      )
+      .get()
+      .toPromise();
+
+    if (!snapshot || snapshot.empty) {
+      return null;
+    }
+
+    const imdFromQr = this.parseImdFromQrPart4(imdRaw).imdKey || this.normalizeImportDate(imdRaw);
+    if (!imdFromQr) {
+      return null;
+    }
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      const normImd = this.normalizeImportDate(data['importDate']);
+      if (normImd === imdFromQr) {
+        const loc = String(data['location'] ?? '').trim();
+        return loc || null;
+      }
+    }
+
+    return null;
+  }
+
   async shouldBlockOutbound(
     factory: 'ASM1' | 'ASM2',
     ruleEnabled: boolean,

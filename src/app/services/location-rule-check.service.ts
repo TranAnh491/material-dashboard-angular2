@@ -214,8 +214,15 @@ export class LocationRuleCheckService {
   }
 
   private getWarehouseTypeForMaterial(context: RuleCheckContext, materialCode: string): WarehouseType | '' {
-    const prefix = this.getMaterialPrefix4ForWarehouse(materialCode);
-    return prefix ? context.materialPrefixWarehouseMap[prefix] || '' : '';
+    const b6 = this.getMaterialB6Prefix(materialCode);
+    if (b6 && context.materialPrefixWarehouseMap[b6]) {
+      return context.materialPrefixWarehouseMap[b6];
+    }
+    const b3 = this.getMaterialB3Prefix(materialCode);
+    if (b3 && context.materialPrefixWarehouseMap[b3]) {
+      return context.materialPrefixWarehouseMap[b3];
+    }
+    return '';
   }
 
   private findMatchedRuleFromList(context: RuleCheckContext, materialCode: string): LocationRule | null {
@@ -251,7 +258,7 @@ export class LocationRuleCheckService {
       if (c && wh) legacyMap[c] = wh;
     }
     for (const [k, v] of Object.entries(data?.materialByPrefix || {})) {
-      const p = this.normalizeMaterialPrefixForWarehouse(k);
+      const p = this.normalizeMaterialPrefixKey(k);
       const wh = this.normalizeWarehouseType(v);
       if (p && wh) matMap[p] = wh;
     }
@@ -288,14 +295,27 @@ export class LocationRuleCheckService {
     return (code || '').replace(/\s/g, '').toUpperCase().substring(0, 7);
   }
 
-  private normalizeMaterialPrefixForWarehouse(raw: string): string {
+  private normalizeMaterialPrefixKey(raw: string): string {
     const compact = String(raw || '').replace(/\s/g, '').toUpperCase();
-    const m = /^B(\d{3})/.exec(compact);
+    if (/^B\d{6}$/.test(compact)) return compact;
+    if (/^B\d{3}$/.test(compact)) return compact;
+    const m6 = /^B(\d{6})/.exec(compact);
+    if (m6) return `B${m6[1]}`;
+    const m3 = /^B(\d{3})/.exec(compact);
+    if (m3) return `B${m3[1]}`;
+    return '';
+  }
+
+  private getMaterialB6Prefix(materialCode: string): string {
+    const compact = this.normalizeMaterialCodeForRule(materialCode);
+    const m = /^B(\d{6})/.exec(compact);
     return m ? `B${m[1]}` : '';
   }
 
-  private getMaterialPrefix4ForWarehouse(materialCode: string): string {
-    return this.normalizeMaterialPrefixForWarehouse(this.normalizeMaterialCodeForRule(materialCode));
+  private getMaterialB3Prefix(materialCode: string): string {
+    const compact = this.normalizeMaterialCodeForRule(materialCode);
+    const m = /^B(\d{3})/.exec(compact);
+    return m ? `B${m[1]}` : '';
   }
 
   private normalizeRuleDestinationPrefix(raw: string): string {

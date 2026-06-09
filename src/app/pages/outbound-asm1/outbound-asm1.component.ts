@@ -3511,25 +3511,16 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     factory: string
   ): Promise<void> {
     try {
-      const snap = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', factory)
-           .where('materialCode', '==', materialCode)
-           .where('poNumber', '==', poNumber)
-           .limit(5)
-      ).get().toPromise();
+      const location = await this.outboundQcRule.getLocationForScan(
+        factory,
+        materialCode,
+        poNumber,
+        importDate
+      );
+      if (!location || !location.toUpperCase().startsWith('IQC')) {
+        return;
+      }
 
-      if (!snap || snap.empty) return;
-
-      const iqcDocs = snap.docs.filter(d => {
-        const loc = String((d.data() as any)?.location || '').trim().toUpperCase();
-        return loc.startsWith('IQC');
-      });
-
-      if (!iqcDocs.length) return;
-
-      const location = String((iqcDocs[0].data() as any)?.location || '').trim();
-
-      // Ghi cảnh báo — Firestore trigger sẽ gửi Zalo
       await this.firestore.collection('outbound-iqc-warnings').add({
         factory,
         materialCode,
@@ -3542,8 +3533,9 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         resolved: false
       });
 
+      const imdLabel = String(importDate || '').trim();
       this.showScanError(
-        `⚠️ ${materialCode} đang ở vị trí ${location} (IQC)!\nVui lòng đưa về vị trí kho trước khi xuất.`
+        `⚠️ ${materialCode} (PO: ${poNumber}${imdLabel ? `, IMD: ${imdLabel}` : ''}) đang ở vị trí ${location} (IQC)!\nVui lòng đưa về vị trí kho trước khi xuất.`
       );
     } catch (e) {
       console.error('checkAndWarnIqcLocation error:', e);

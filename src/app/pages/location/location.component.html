@@ -116,10 +116,10 @@
             </div>
           </section>
 
-          <!-- Cột 2: B+3 -->
+          <!-- Cột 2: B+3 / B+6 -->
           <section class="rule-panel rule-panel--mat">
             <header class="rule-panel__head">
-              <span class="rule-panel__title">B+3 → Loại kho</span>
+              <span class="rule-panel__title">B+3 / B+6 → Loại kho</span>
               <span class="rule-panel__count">{{ materialPrefixRows.length }}</span>
             </header>
             <div class="rule-panel__add">
@@ -127,8 +127,9 @@
                 type="text"
                 class="rule-inline-input"
                 [(ngModel)]="newMaterialPrefixInput"
-                maxlength="4"
-                placeholder="B034"
+                maxlength="7"
+                placeholder="B034 / B034567"
+                style="text-transform: uppercase"
                 (keyup.enter)="addMaterialPrefixRuleRow()"
               />
               <select class="rule-inline-select" [(ngModel)]="newMaterialPrefixWarehouse">
