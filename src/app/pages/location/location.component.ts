@@ -71,6 +71,16 @@ interface LocationRuleParentGroup {
   assignedCount: number;
 }
 
+/** Hiển thị tổng hợp mọi rule áp cho mã hàng (B+3 → kho + rule cũ theo mã/prefix). */
+interface MaterialLocationRuleDisplayRow {
+  materialCode: string;
+  ruleKind: 'b-prefix-warehouse' | 'legacy-code';
+  warehouseType?: WarehouseType;
+  allowedLocations: string[];
+  allowedLocationsLabel: string;
+  legacyRuleId?: string;
+}
+
 interface LocationWarehouseRulesDoc {
   factory: 'ASM1' | 'ASM2';
   locationByViTri?: Record<string, WarehouseType>;
@@ -354,12 +364,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   locationWarehouseRows: LocationWarehouseRow[] = [];
   locationRuleParentGroups: LocationRuleParentGroup[] = [];
   expandedLocationRuleParent: string | null = null;
+  locationRuleFilter = '';
   materialPrefixRows: MaterialPrefixWarehouseRow[] = [];
+  materialLocationRuleRows: MaterialLocationRuleDisplayRow[] = [];
   newMaterialPrefixInput = '';
   newMaterialPrefixWarehouse: WarehouseType = 'Kho Thường';
+  /** Rule cũ: mã 4/7 ký tự → prefix vị trí (collection location-rules). */
+  ruleMaterialCodeInput = '';
+  ruleDestinationLocationInput = '';
+  editingLegacyRuleId: string | null = null;
   isWarehouseRulesSaving = false;
   isWarehouseRulesLoading = false;
   isMaterialPrefixRulesSaving = false;
+  isLegacyRulesSaving = false;
   warehouseRulesLoadError = '';
   private locationByViTriMap: Record<string, WarehouseType> = {};
   private materialPrefixWarehouseMap: Record<string, WarehouseType> = {};
@@ -383,8 +400,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     this.expandedLocationRuleParent = null;
+    this.locationRuleFilter = '';
     this.showRuleModal = true;
-    await this.loadWarehouseRulesFromFirestore();
+    await Promise.all([
+      this.loadWarehouseRulesFromFirestore(),
+      this.reloadLocationRulesFromFirestore()
+    ]);
     this.rebuildRuleModalRows();
     this.cdr.markForCheck();
   }
@@ -392,12 +413,162 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   closeRuleModal(): void {
     this.showRuleModal = false;
     this.expandedLocationRuleParent = null;
+    this.clearLegacyRuleForm();
+  }
+
+  clearLegacyRuleForm(): void {
+    this.ruleMaterialCodeInput = '';
+    this.ruleDestinationLocationInput = '';
+    this.editingLegacyRuleId = null;
+  }
+
+  startEditLegacyRule(rule: LocationRule): void {
+    this.editingLegacyRuleId = rule.id || null;
+    this.ruleMaterialCodeInput = rule.materialCode || '';
+    this.ruleDestinationLocationInput = (rule.destinationLocationPrefixes || []).join(', ');
+    this.cdr.markForCheck();
+  }
+
+  private parseLegacyRuleDestinationInput(raw: string): string[] {
+    return String(raw || '')
+      .split(',')
+      .map(s => this.normalizeRuleDestinationPrefix(s))
+      .filter(s => !!s);
+  }
+
+  async upsertLegacyRuleFromInputs(): Promise<void> {
+    if (!this.selectedFactory) {
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
+    const materialCode = this.normalizeMaterialCodeForRule(this.ruleMaterialCodeInput);
+    const keyLen = materialCode.length;
+    const destinationPrefixes = this.parseLegacyRuleDestinationInput(this.ruleDestinationLocationInput);
+
+    if (!materialCode || (keyLen !== 4 && keyLen !== 7)) {
+      alert('Mã nguyên liệu phải đúng 4 ký tự (prefix) hoặc 7 ký tự (mã đầy đủ), VD: B034 hoặc B037005');
+      return;
+    }
+    if (!destinationPrefixes.length) {
+      alert('Vui lòng nhập ít nhất một prefix vị trí đích (cách nhau bởi dấu phẩy), VD: Z, K hoặc FRIDGE hoặc IQC+F7');
+      return;
+    }
+
+    const payload = {
+      factory: this.selectedFactory,
+      materialCode,
+      destinationLocationPrefixes: destinationPrefixes,
+      updatedAt: new Date()
+    };
+
+    this.isLegacyRulesSaving = true;
+    this.cdr.markForCheck();
+    try {
+      if (this.editingLegacyRuleId) {
+        await this.firestore.collection('location-rules').doc(this.editingLegacyRuleId).update(payload);
+      } else {
+        const existing = this.rules.find(r => r.materialCode === materialCode);
+        if (existing?.id) {
+          await this.firestore.collection('location-rules').doc(existing.id).update(payload);
+        } else {
+          await this.firestore.collection('location-rules').add({
+            ...payload,
+            createdAt: new Date()
+          });
+        }
+      }
+      await this.reloadLocationRulesFromFirestore();
+      this.buildMaterialLocationRuleDisplayRows();
+      this.applyLocationRuleToSelectedMaterial();
+      alert('✅ Đã lưu rule cũ');
+      this.clearLegacyRuleForm();
+    } catch (e: unknown) {
+      console.error('❌ upsertLegacyRuleFromInputs:', e);
+      alert(`❌ Không lưu được rule cũ: ${(e as Error)?.message || e}`);
+    } finally {
+      this.isLegacyRulesSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async deleteLegacyRule(rule: LocationRule): Promise<void> {
+    if (!rule?.materialCode) return;
+    if (!confirm(`Xóa rule cũ cho mã ${rule.materialCode}?`)) return;
+    this.isLegacyRulesSaving = true;
+    this.cdr.markForCheck();
+    try {
+      if (rule.id) {
+        await this.firestore.collection('location-rules').doc(rule.id).delete();
+      }
+      if (this.editingLegacyRuleId === rule.id) {
+        this.clearLegacyRuleForm();
+      }
+      await this.reloadLocationRulesFromFirestore();
+      this.buildMaterialLocationRuleDisplayRows();
+      this.applyLocationRuleToSelectedMaterial();
+    } catch (e: unknown) {
+      console.error('❌ deleteLegacyRule:', e);
+      alert(`❌ Không xóa được rule: ${(e as Error)?.message || e}`);
+    } finally {
+      this.isLegacyRulesSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  trackByLegacyRule(_index: number, rule: LocationRule): string {
+    return rule.id || rule.materialCode;
   }
 
   private rebuildRuleModalRows(): void {
     this.buildLocationWarehouseRows();
     this.buildLocationRuleParentGroups();
     this.syncMaterialPrefixRowsFromMap();
+    this.buildMaterialLocationRuleDisplayRows();
+  }
+
+  private buildMaterialLocationRuleDisplayRows(): void {
+    const rows: MaterialLocationRuleDisplayRow[] = [];
+
+    for (const row of this.materialPrefixRows) {
+      const locations = this.getLocationsForWarehouse(row.warehouseType);
+      rows.push({
+        materialCode: row.materialPrefix,
+        ruleKind: 'b-prefix-warehouse',
+        warehouseType: row.warehouseType,
+        allowedLocations: locations,
+        allowedLocationsLabel: locations.length
+          ? locations.join(', ')
+          : '(chưa gán vị trí thuộc loại kho này)'
+      });
+    }
+
+    for (const rule of this.rules) {
+      const prefixes = rule.destinationLocationPrefixes || [];
+      rows.push({
+        materialCode: rule.materialCode,
+        ruleKind: 'legacy-code',
+        allowedLocations: prefixes,
+        allowedLocationsLabel: prefixes.length ? prefixes.join(', ') : '—',
+        legacyRuleId: rule.id
+      });
+    }
+
+    this.materialLocationRuleRows = rows.sort((a, b) => {
+      const codeCmp = a.materialCode.localeCompare(b.materialCode, 'vi', { numeric: true });
+      if (codeCmp !== 0) return codeCmp;
+      return a.ruleKind === b.ruleKind ? 0 : a.ruleKind === 'b-prefix-warehouse' ? -1 : 1;
+    });
+  }
+
+  getMaterialRuleKindLabel(row: MaterialLocationRuleDisplayRow): string {
+    if (row.ruleKind === 'b-prefix-warehouse') {
+      return row.warehouseType ? `B+3 → ${row.warehouseType}` : 'B+3 → Loại kho';
+    }
+    return row.materialCode.length >= 7 ? 'Mã đầy đủ (cũ)' : 'Prefix mã (cũ)';
+  }
+
+  trackByMaterialLocationRuleRow(_index: number, row: MaterialLocationRuleDisplayRow): string {
+    return `${row.ruleKind}:${row.materialCode}:${row.legacyRuleId || ''}`;
   }
 
   private getLocationParentKey(viTri: string): string {
@@ -436,6 +607,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return group?.children || [];
   }
 
+  get filteredLocationWarehouseRows(): LocationWarehouseRow[] {
+    const q = this.locationRuleFilter.trim().toUpperCase();
+    if (!q) return this.locationWarehouseRows;
+    return this.locationWarehouseRows.filter(r =>
+      String(r.viTri || '').toUpperCase().includes(q)
+    );
+  }
+
   openLocationRuleParent(parentKey: string): void {
     const key = String(parentKey || '').trim().toUpperCase();
     if (!key) return;
@@ -461,6 +640,33 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   isIqcExemptLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();
     return raw.startsWith('IQC');
+  }
+
+  /** Chuẩn hoá prefix vị trí trong rule cũ — giữ nguyên IQC+ (không qua formatViTriInput). */
+  private normalizeRuleDestinationPrefix(raw: string): string {
+    const s = String(raw || '').replace(/\s/g, '').toUpperCase();
+    if (!s) return '';
+    if (this.isIqcExemptLocation(s)) return s;
+    const formatted = this.formatViTriInput(s);
+    return formatted && this.validateViTriInput(formatted) ? formatted : '';
+  }
+
+  private parseLocationRulesFromDocs(docs: { id: string; data: () => any }[]): LocationRule[] {
+    return docs
+      .map(doc => ({ id: doc.id, raw: doc.data() || {} }))
+      .filter(({ raw }) => !raw.factory || raw.factory === this.selectedFactory)
+      .map(({ id, raw }) => ({
+        id,
+        factory: (raw.factory || this.selectedFactory) as 'ASM1' | 'ASM2',
+        materialCode: this.normalizeMaterialCodeForRule(raw.materialCode || ''),
+        destinationLocationPrefixes: Array.isArray(raw.destinationLocationPrefixes)
+          ? raw.destinationLocationPrefixes
+              .map((p: any) => this.normalizeRuleDestinationPrefix(String(p || '')))
+              .filter((p: string) => !!p)
+          : []
+      }))
+      .filter(r => r.materialCode && r.destinationLocationPrefixes.length > 0)
+      .sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
   }
 
   private normalizeLocationWarehouseKey(viTri: string): string {
@@ -564,6 +770,24 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.legacyFirstCharMap = legacyMap;
     this.materialPrefixWarehouseMap = matMap;
     this.syncMaterialPrefixRowsFromMap();
+    if (this.showRuleModal) {
+      this.buildMaterialLocationRuleDisplayRows();
+    }
+  }
+
+  private async reloadLocationRulesFromFirestore(): Promise<void> {
+    if (!this.selectedFactory) return;
+    try {
+      const snap = await this.firestore.collection('location-rules').get().toPromise();
+      const docs = (snap?.docs || []).map(doc => ({ id: doc.id, data: () => doc.data() }));
+      this.rules = this.parseLocationRulesFromDocs(docs);
+      if (this.showRuleModal) {
+        this.buildMaterialLocationRuleDisplayRows();
+      }
+    } catch (e: unknown) {
+      console.error('❌ reloadLocationRulesFromFirestore:', e);
+      this.rulesLoadError = (e as Error)?.message || String(e);
+    }
   }
 
   private getLegacyLocationByFirstCharMap(): Record<string, WarehouseType> {
@@ -632,10 +856,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private locationMatchesAllowedDestinations(target: string, allowed: string[]): boolean {
     if (this.isIqcExemptLocation(target)) return true;
+    const targetRaw = String(target || '').replace(/\s/g, '').toUpperCase();
     const formatted = this.formatViTriInput(target || '');
-    if (!formatted || !allowed.length) return false;
-    const normalized = this.normalizeLocationWarehouseKey(formatted);
+    if (!allowed.length) return false;
+    const normalized = formatted ? this.normalizeLocationWarehouseKey(formatted) : targetRaw;
     return allowed.some(allowedLoc => {
+      const allowedRaw = String(allowedLoc || '').replace(/\s/g, '').toUpperCase();
+      if (this.isIqcExemptLocation(allowedRaw)) {
+        return targetRaw.startsWith(allowedRaw);
+      }
       const a = this.normalizeLocationWarehouseKey(allowedLoc);
       if (!a) return false;
       if (normalized === a) return true;
@@ -704,6 +933,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       );
       this.materialPrefixWarehouseMap = { ...materialByPrefix };
       this.syncMaterialPrefixRowsFromMap();
+      this.buildMaterialLocationRuleDisplayRows();
       this.applyLocationRuleToSelectedMaterial();
     } catch (e: unknown) {
       console.error('❌ persistMaterialPrefixRules:', e);
@@ -776,21 +1006,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .valueChanges({ idField: 'id' })
       .pipe(takeUntil(this.destroy$))
       .subscribe((items: any[]) => {
-        this.rules = (items || [])
+        const docs = (items || [])
           .filter(r => r && typeof r.materialCode === 'string')
-          .filter((r: any) => !r.factory || r.factory === this.selectedFactory)
-          .map((r: any) => ({
-            id: r.id,
-            factory: (r.factory || this.selectedFactory) as 'ASM1' | 'ASM2',
-            materialCode: this.normalizeMaterialCodeForRule(r.materialCode || ''),
-            destinationLocationPrefixes: Array.isArray(r.destinationLocationPrefixes)
-              ? r.destinationLocationPrefixes
-                  .map((p: any) => this.formatViTriInput(String(p || '')))
-                  .filter((p: string) => !!p && this.validateViTriInput(p))
-              : [],
-          }))
-          .filter(r => r.materialCode && r.destinationLocationPrefixes.length > 0)
-          .sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+          .map((r: any) => ({ id: r.id, data: () => r }));
+        this.rules = this.parseLocationRulesFromDocs(docs);
+        if (this.showRuleModal) {
+          this.buildMaterialLocationRuleDisplayRows();
+        }
+        this.cdr.markForCheck();
       }, (err: any) => {
         console.error('❌ Cannot load location-rules:', err);
         this.rules = [];
@@ -858,19 +1081,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const fetched: LocationRule[] = [];
       snap?.forEach(doc => {
-        const d = doc.data() as any;
-        fetched.push({
-          id: doc.id,
-          factory: d.factory,
-          materialCode: this.normalizeMaterialCodeForRule(d.materialCode || ''),
-          destinationLocationPrefixes: Array.isArray(d.destinationLocationPrefixes)
-            ? d.destinationLocationPrefixes
-                .map((p: any) => this.formatViTriInput(String(p || '')))
-                .filter((p: string) => !!p && this.validateViTriInput(p))
-            : [],
-          createdAt: d.createdAt,
-          updatedAt: d.updatedAt
-        });
+        const parsed = this.parseLocationRulesFromDocs([{ id: doc.id, data: () => doc.data() }]);
+        if (parsed[0]) {
+          const d = doc.data() as any;
+          fetched.push({
+            ...parsed[0],
+            createdAt: d.createdAt,
+            updatedAt: d.updatedAt
+          });
+        }
       });
 
       if (fetched.length > 0) {

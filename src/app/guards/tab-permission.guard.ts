@@ -153,6 +153,7 @@ export class TabPermissionGuard implements CanActivate {
       
       // Other routes
       '/location': 'location',
+      '/layout-warehouse': 'layout-warehouse',
       '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',

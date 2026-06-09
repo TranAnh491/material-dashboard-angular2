@@ -1,0 +1,212 @@
+<div class="lw-page">
+  <aside class="lw-panel lw-panel--left">
+    <header class="lw-panel__head">
+      <div class="lw-panel__icon"><i class="material-icons">map</i></div>
+      <div>
+        <h1 class="lw-panel__title">Layout Warehouse</h1>
+        <p class="lw-panel__sub">Sơ đồ kho ASM1</p>
+      </div>
+    </header>
+
+    <section class="lw-section">
+      <h2 class="lw-section__title"><i class="material-icons">search</i> Tìm kiếm</h2>
+      <div class="lw-field">
+        <input
+          type="text"
+          class="lw-input"
+          [(ngModel)]="searchLoc"
+          placeholder="Mã hàng hoặc vị trí…"
+          (keyup.enter)="jumpToLocation()"
+        />
+      </div>
+      <div class="lw-btn-row">
+        <button type="button" class="lw-btn lw-btn--primary" [disabled]="isSearching" (click)="jumpToLocation()">
+          <i class="material-icons">travel_explore</i>
+          {{ isSearching ? 'Đang tìm…' : 'Tìm' }}
+        </button>
+        <button type="button" class="lw-btn lw-btn--soft" *ngIf="selectedLoc || searchResult" (click)="clearSelection()">
+          Bỏ chọn
+        </button>
+      </div>
+      <span class="lw-chip" *ngIf="selectedLoc">{{ selectedLoc }}</span>
+    </section>
+
+    <section class="lw-card lw-card--success" *ngIf="searchResult">
+      <h3 class="lw-card__title">Kết quả tìm</h3>
+      <dl class="lw-kv">
+        <div class="lw-kv__row" *ngIf="searchResult.materialCode">
+          <dt>Mã hàng</dt><dd>{{ searchResult.materialCode }}</dd>
+        </div>
+        <div class="lw-kv__row">
+          <dt>Vị trí</dt><dd>{{ searchResult.location }}</dd>
+        </div>
+        <div class="lw-kv__row">
+          <dt>Kệ</dt><dd class="lw-kv__accent">{{ searchResult.shelf }}</dd>
+        </div>
+        <div class="lw-kv__row">
+          <dt>Chi tiết</dt><dd>{{ slotDetailText }}</dd>
+        </div>
+      </dl>
+      <p class="lw-hint" *ngIf="searchResult.hitCount && searchResult.hitCount > 1">
+        Có {{ searchResult.hitCount }} dòng — hiển thị dòng đầu tiên
+      </p>
+    </section>
+
+    <section class="lw-guidance" *ngIf="activeGuidanceLoc">
+      <h2 class="lw-section__title">
+        <i class="material-icons">menu_book</i> Hướng dẫn lưu trữ
+      </h2>
+      <p class="lw-guidance__loc">{{ activeGuidanceLoc }}</p>
+
+      <div class="lw-guidance__loading" *ngIf="guidanceLoading">
+        <i class="material-icons lw-spin">sync</i> Đang tải…
+      </div>
+
+      <ng-container *ngIf="!guidanceLoading">
+        <textarea
+          class="lw-guidance__input"
+          [(ngModel)]="guidanceDraft"
+          rows="6"
+          placeholder="Nhập hướng dẫn vị trí này lưu trữ gì…"
+        ></textarea>
+        <button
+          type="button"
+          class="lw-btn lw-btn--primary"
+          [disabled]="guidanceSaving"
+          (click)="saveLocationGuidance()">
+          <i class="material-icons">{{ guidanceSaving ? 'hourglass_top' : 'save' }}</i>
+          {{ guidanceSaving ? 'Đang lưu…' : 'Lưu hướng dẫn' }}
+        </button>
+        <p class="lw-guidance__meta" *ngIf="guidanceSavedAt">
+          Cập nhật: {{ guidanceSavedAt | date:'dd/MM/yyyy HH:mm' }}
+          <span *ngIf="guidanceUpdatedBy"> · {{ guidanceUpdatedBy }}</span>
+        </p>
+        <p class="lw-alert lw-alert--error lw-guidance__error" *ngIf="guidanceError">
+          <i class="material-icons">error</i> {{ guidanceError }}
+        </p>
+      </ng-container>
+    </section>
+
+    <section class="lw-section lw-section--bottom">
+      <h2 class="lw-section__title"><i class="material-icons">zoom_in</i> Thu phóng</h2>
+      <div class="lw-zoom">
+        <button type="button" class="lw-btn lw-btn--icon" (click)="setZoom(-0.1)" title="Thu nhỏ">−</button>
+        <span class="lw-zoom__value">{{ (zoom * 100) | number:'1.0-0' }}%</span>
+        <button type="button" class="lw-btn lw-btn--icon" (click)="setZoom(0.1)" title="Phóng to">+</button>
+        <button type="button" class="lw-btn lw-btn--soft lw-btn--sm" (click)="resetZoom()">Mặc định</button>
+      </div>
+    </section>
+  </aside>
+
+  <main class="lw-canvas">
+    <div class="lw-canvas__toolbar">
+      <span class="lw-canvas__label"><i class="material-icons">grid_view</i> Warehouse Map</span>
+      <span class="lw-canvas__zoom">{{ (zoom * 100) | number:'1.0-0' }}%</span>
+    </div>
+
+    <div class="lw-status lw-status--loading" *ngIf="isLoading">
+      <i class="material-icons lw-spin">sync</i> Đang tải sơ đồ kho…
+    </div>
+    <div class="lw-status lw-status--error" *ngIf="loadError">
+      <i class="material-icons">error_outline</i> {{ loadError }}
+    </div>
+
+    <div #viewport class="lw-viewport" *ngIf="!isLoading && !loadError">
+      <div
+        class="lw-scale-wrap"
+        [style.width.px]="svgWidth * zoom"
+        [style.height.px]="svgNativeHeight * zoom">
+        <div class="lw-scale" [style.--lw-zoom]="zoom">
+          <div
+            #svgHost
+            class="lw-svg-host"
+            *ngIf="svgHtml"
+            [innerHTML]="svgHtml"
+            (click)="onZoneClick($event)">
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="lw-panel lw-panel--right">
+    <header class="lw-panel__head lw-panel__head--rule">
+      <div class="lw-panel__icon lw-panel__icon--rule"><i class="material-icons">rule_folder</i></div>
+      <div>
+        <h1 class="lw-panel__title">Rule Storage</h1>
+        <p class="lw-panel__sub">Kiểm tra vị trí lưu</p>
+      </div>
+    </header>
+
+    <section class="lw-section">
+      <button
+        type="button"
+        class="lw-btn lw-btn--rule"
+        [disabled]="isRuleChecking || isLoading"
+        (click)="checkRuleStorage()">
+        <i class="material-icons">{{ isRuleChecking ? 'hourglass_top' : 'fact_check' }}</i>
+        {{ isRuleChecking ? 'Đang kiểm tra…' : 'Check Rule Storage' }}
+      </button>
+      <button
+        type="button"
+        class="lw-btn lw-btn--download"
+        [disabled]="!canDownloadRuleResults"
+        (click)="downloadRuleCheckResults()">
+        <i class="material-icons">download</i>
+        Tải kết quả
+      </button>
+    </section>
+
+    <div class="lw-alert lw-alert--error" *ngIf="ruleCheckError">
+      <i class="material-icons">error</i> {{ ruleCheckError }}
+    </div>
+
+    <section class="lw-stats" *ngIf="ruleCheckResult && !ruleCheckError">
+      <div class="lw-stat">
+        <span class="lw-stat__label">Đã kiểm tra</span>
+        <strong class="lw-stat__value">{{ ruleCheckResult.checkedCount }}</strong>
+      </div>
+      <div class="lw-stat" [class.lw-stat--bad]="ruleCheckResult.violations.length">
+        <span class="lw-stat__label">Sai rule</span>
+        <strong class="lw-stat__value">{{ ruleCheckResult.violations.length }}</strong>
+      </div>
+      <div class="lw-stat lw-stat--ok" *ngIf="!ruleCheckResult.violations.length">
+        <i class="material-icons">check_circle</i>
+        <span>Không có lỗi</span>
+      </div>
+    </section>
+
+    <div class="lw-btn-row" *ngIf="ruleCheckResult">
+      <button type="button" class="lw-btn lw-btn--soft lw-btn--sm" (click)="clearRuleCheck()">Xóa kết quả</button>
+    </div>
+
+    <section class="lw-rule-list" *ngIf="violationGroups.length">
+      <h2 class="lw-section__title lw-section__title--warn">
+        <i class="material-icons">warning_amber</i>
+        Vị trí sai ({{ violationGroups.length }})
+      </h2>
+      <button
+        type="button"
+        class="lw-rule-item"
+        *ngFor="let group of violationGroups"
+        (click)="jumpToViolation(group)">
+        <div class="lw-rule-item__top">
+          <span class="lw-rule-item__loc">{{ group.location }}</span>
+          <span class="lw-rule-item__badge">{{ group.items.length }}</span>
+        </div>
+        <div class="lw-rule-item__detail" *ngFor="let item of group.items | slice:0:2">
+          <span class="lw-rule-item__code">{{ item.materialCode }}</span>
+          <span class="lw-rule-item__expect">{{ item.reason }}</span>
+        </div>
+        <div class="lw-rule-item__more" *ngIf="group.items.length > 2">
+          +{{ group.items.length - 2 }} mã khác
+        </div>
+      </button>
+    </section>
+
+    <p class="lw-empty" *ngIf="ruleCheckResult && !violationGroups.length && !ruleCheckError">
+      <i class="material-icons">verified</i>
+      Tất cả vị trí đều đúng rule.
+    </p>
+  </aside>
+</div>

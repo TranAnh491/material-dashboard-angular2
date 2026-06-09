@@ -79,6 +79,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     
     // Other tabs
     { key: 'location', name: 'Materials' },
+    { key: 'layout-warehouse', name: 'Layout Warehouse' },
     { key: 'manage', name: 'Manage' },
     { key: 'stock-check', name: 'Stock Check' },
     { key: 'label', name: 'Label' },
