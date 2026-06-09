@@ -36,7 +36,14 @@ import {
 } from '../../services/layout-warehouse-guidance.service';
 import {
   parseWarehouseLocation,
-  ParsedWarehouseLocation
+  ParsedWarehouseLocation,
+  extractRackLetter,
+  extractMaterialPrefix4,
+  compareRackLetters,
+  isFinishedGoodsShelf,
+  isIqcPrefixLocation,
+  extractIqcPlusRef,
+  FINISHED_GOODS_GUIDANCE
 } from './layout-warehouse-location.util';
 
 
@@ -66,6 +73,27 @@ interface SearchResultInfo {
 interface ViolationGroup {
   location: string;
   items: RuleViolation[];
+}
+
+interface ShelfStorageGuideRow {
+  rackLetter: string;
+  prefixes: string[];
+  itemCount: number;
+}
+
+interface IqcLiveMove {
+  materialCode: string;
+  fromLocation: string;
+  toLocation: string;
+  poNumber: string;
+  changedAt: Date | null;
+}
+
+interface LiveShelfRow {
+  toLocation: string;
+  materialCodes: string[];
+  count: number;
+  onMap: boolean;
 }
 
 
@@ -126,8 +154,25 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   guidanceSavedAt: Date | null = null;
   guidanceUpdatedBy = '';
 
+  showStorageGuideModal = false;
+  storageGuideLoading = false;
+  storageGuideError = '';
+  storageGuideRows: ShelfStorageGuideRow[] = [];
+  finishedGoodsPrefixes: string[] = [];
+  readonly finishedGoodsGuidance = FINISHED_GOODS_GUIDANCE;
+
+  liveModeActive = false;
+  liveLoading = false;
+  liveError = '';
+  liveMoves: IqcLiveMove[] = [];
+  liveShelfCount = 0;
+  liveUnmappedCount = 0;
+  liveShelfRows: LiveShelfRow[] = [];
+
   private knownShelves: string[] = [];
   private guidanceSub?: Subscription;
+  private liveRefreshTimer?: ReturnType<typeof setInterval>;
+  private readonly materialLocationHistoryCol = 'material-location-history';
 
   private highlightedEl: Element | null = null;
 
@@ -214,6 +259,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
     this.loadSub?.unsubscribe();
     this.unsubscribeGuidance();
+    this.stopLiveMode();
 
   }
 
@@ -363,6 +409,131 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
   }
 
+  openStorageGuide(): void {
+    this.showStorageGuideModal = true;
+    void this.loadStorageGuide();
+  }
+
+  closeStorageGuide(): void {
+    this.showStorageGuideModal = false;
+  }
+
+  async toggleLiveMode(): Promise<void> {
+    if (this.liveModeActive) {
+      this.stopLiveMode();
+      return;
+    }
+    this.liveModeActive = true;
+    await this.refreshLiveMoves();
+    this.liveRefreshTimer = setInterval(() => void this.refreshLiveMoves(), 120_000);
+  }
+
+  stopLiveMode(): void {
+    this.liveModeActive = false;
+    this.liveLoading = false;
+    this.liveError = '';
+    this.liveMoves = [];
+    this.liveShelfCount = 0;
+    this.liveUnmappedCount = 0;
+    this.liveShelfRows = [];
+    if (this.liveRefreshTimer) {
+      clearInterval(this.liveRefreshTimer);
+      this.liveRefreshTimer = undefined;
+    }
+    this.clearLiveHighlights();
+    this.cdr.markForCheck();
+  }
+
+  async refreshLiveMoves(): Promise<void> {
+    if (!this.liveModeActive) return;
+
+    this.liveLoading = true;
+    this.liveError = '';
+    this.cdr.markForCheck();
+
+    try {
+      if (!this.knownShelves.length) {
+        this.collectKnownShelves();
+      }
+      this.liveMoves = await this.loadTodayIqcToShelfMoves();
+      this.applyLiveHighlights(this.liveMoves);
+    } catch (err) {
+      this.liveError = (err as Error)?.message || String(err);
+      this.clearLiveHighlights();
+    } finally {
+      this.liveLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async loadStorageGuide(): Promise<void> {
+    this.storageGuideLoading = true;
+    this.storageGuideError = '';
+    this.storageGuideRows = [];
+    this.finishedGoodsPrefixes = [];
+    this.cdr.markForCheck();
+
+    try {
+      if (!this.knownShelves.length) {
+        this.collectKnownShelves();
+      }
+
+      const snap = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.factory).limit(10000)
+        )
+        .get()
+        .toPromise();
+
+      const byRack = new Map<string, Set<string>>();
+      const finishedSet = new Set<string>();
+
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as Record<string, unknown>;
+        const materialCode = String(data['materialCode'] || '').trim();
+        const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+        if (!materialCode || !location) continue;
+
+        const qty = Number(data['quantity']) || 0;
+        const exported = Number(data['exported']) || 0;
+        const stockField = Number(data['stock']) || 0;
+        const available = qty > 0 ? qty - exported : stockField;
+        if (available <= 0) continue;
+
+        const prefix = extractMaterialPrefix4(materialCode);
+        if (!prefix) continue;
+
+        if (isFinishedGoodsShelf(location, this.knownShelves)) {
+          finishedSet.add(prefix);
+          continue;
+        }
+
+        const rack = extractRackLetter(location, this.knownShelves);
+        if (!rack) continue;
+
+        if (!byRack.has(rack)) byRack.set(rack, new Set());
+        byRack.get(rack)!.add(prefix);
+      }
+
+      this.finishedGoodsPrefixes = Array.from(finishedSet).sort((a, b) =>
+        a.localeCompare(b, 'vi', { numeric: true })
+      );
+
+      this.storageGuideRows = Array.from(byRack.entries())
+        .map(([rackLetter, prefixes]) => ({
+          rackLetter,
+          prefixes: Array.from(prefixes).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true })),
+          itemCount: prefixes.size
+        }))
+        .sort((a, b) => compareRackLetters(a.rackLetter, b.rackLetter));
+    } catch (err) {
+      this.storageGuideError = (err as Error)?.message || String(err);
+    } finally {
+      this.storageGuideLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   async saveLocationGuidance(): Promise<void> {
     if (!this.activeGuidanceLoc) return;
 
@@ -454,7 +625,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       `Thời gian,${esc(ts)}`,
       `Đã kiểm tra,${result.checkedCount}`,
       `Sai rule,${result.violations.length}`,
-      `Bỏ qua (IQC/NG),${result.skippedExempt}`,
+      `Bỏ qua (IQC/NG/ASM3),${result.skippedExempt}`,
       `Không có rule,${result.skippedNoRule}`,
       `Không có vị trí,${result.skippedEmptyLocation}`,
       '',
@@ -971,7 +1142,14 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private applyGuidanceDoc(doc: LocationGuidanceDoc | null): void {
-    this.guidanceDraft = String(doc?.guidance || '');
+    const saved = String(doc?.guidance || '').trim();
+    if (saved) {
+      this.guidanceDraft = saved;
+    } else if (isFinishedGoodsShelf(this.activeGuidanceLoc, this.knownShelves)) {
+      this.guidanceDraft = FINISHED_GOODS_GUIDANCE;
+    } else {
+      this.guidanceDraft = '';
+    }
     this.guidanceUpdatedBy = String(doc?.updatedBy || '');
     this.guidanceSavedAt = this.toDate(doc?.updatedAt);
     this.guidanceLoading = false;
@@ -1012,6 +1190,212 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     const name = String(user.displayName || '').trim();
     if (name) return name.substring(0, 24);
     return email.substring(0, 24) || 'UNKNOWN';
+  }
+
+  private getTodayStart(): Date {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  }
+
+  private isIqcLocation(loc: string): boolean {
+    return isIqcPrefixLocation(loc);
+  }
+
+  private normalizeLiveLocKey(loc: string): string {
+    return String(loc || '').replace(/\s/g, '').toUpperCase();
+  }
+
+  private async loadTodayIqcToShelfMoves(): Promise<IqcLiveMove[]> {
+    const start = this.getTodayStart();
+    const moves: IqcLiveMove[] = [];
+
+    const pushMoveFromDoc = (doc: { data: () => unknown }): void => {
+      const d = doc.data() as Record<string, unknown>;
+      const fromLocation = String(d['fromLocation'] || '').trim();
+      const toLocation = String(d['toLocation'] || '').trim();
+      if (!fromLocation || !toLocation) return;
+      if (!this.isIqcLocation(fromLocation)) return;
+      if (this.isIqcLocation(toLocation)) return;
+
+      moves.push({
+        materialCode: String(d['materialCode'] || '').trim(),
+        fromLocation,
+        toLocation,
+        poNumber: String(d['poNumber'] || '').trim(),
+        changedAt: this.toDate(d['changedAt'] as LocationGuidanceDoc['updatedAt'])
+      });
+    };
+
+    try {
+      const snap = await this.firestore
+        .collection(this.materialLocationHistoryCol, ref =>
+          ref
+            .where('factory', '==', this.factory)
+            .where('changedAt', '>=', start)
+            .orderBy('changedAt', 'desc')
+            .limit(500)
+        )
+        .get()
+        .toPromise();
+      for (const doc of snap?.docs || []) {
+        pushMoveFromDoc(doc);
+      }
+    } catch {
+      const snap = await this.firestore
+        .collection(this.materialLocationHistoryCol, ref =>
+          ref.where('factory', '==', this.factory).limit(3000)
+        )
+        .get()
+        .toPromise();
+      for (const doc of snap?.docs || []) {
+        const raw = doc.data() as Record<string, unknown>;
+        const changedAt = this.toDate(raw['changedAt'] as LocationGuidanceDoc['updatedAt']);
+        if (!changedAt || changedAt < start) continue;
+        pushMoveFromDoc(doc);
+      }
+    }
+
+    return moves.sort(
+      (a, b) => (b.changedAt?.getTime() || 0) - (a.changedAt?.getTime() || 0)
+    );
+  }
+
+  private findZoneForLocation(location: string): Element | null {
+    const host = this.svgHost?.nativeElement;
+    if (!host) return null;
+
+    const raw = String(location || '').trim();
+    if (!raw) return null;
+
+    const parsed = parseWarehouseLocation(raw, this.knownShelves);
+    const candidates = new Set<string>();
+    candidates.add(raw);
+    candidates.add(raw.toUpperCase());
+    if (parsed?.shelf) candidates.add(parsed.shelf);
+    if (parsed?.raw) candidates.add(parsed.raw);
+
+    const compact = raw.toUpperCase().replace(/\s/g, '');
+    candidates.add(compact);
+
+    const iqcPlusRef = extractIqcPlusRef(compact);
+    if (iqcPlusRef) {
+      candidates.add(iqcPlusRef);
+      const iqcShelf = iqcPlusRef.match(/^([A-Z]+\d*)/)?.[1];
+      if (iqcShelf) candidates.add(iqcShelf);
+    }
+
+    for (const term of candidates) {
+      const zone =
+        host.querySelector(`[data-loc="${term}"]`) ||
+        host.querySelector(`[data-shelf="${term}"]`) ||
+        this.findMapZone(term);
+      if (zone) return zone;
+    }
+
+    return null;
+  }
+
+  jumpToLiveShelf(row: LiveShelfRow): void {
+    if (!row.onMap) return;
+    const zone = this.findZoneForLocation(row.toLocation);
+    if (!zone) return;
+    this.selectZoneElement(zone);
+    zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }
+
+  /** Chỉ tô ô kệ nhỏ — không tô khu vực lớn (Secured WH, IQC, …). */
+  private resolveLiveHighlightTarget(zone: Element): Element | null {
+    const shelf = zone.getAttribute('data-shelf')
+      ? (zone.closest('[data-loc]') as Element) || zone
+      : zone;
+
+    const loc = String(shelf.getAttribute('data-loc') || '').trim();
+    if (!loc || loc.includes(' ')) return null;
+
+    const rect = shelf.querySelector('rect:not(.lw-slot-marker)') as SVGRectElement | null;
+    if (!rect) return null;
+
+    const w = Number(rect.getAttribute('width') || 0);
+    const h = Number(rect.getAttribute('height') || 0);
+    if (w > 25 || h > 35) return null;
+
+    return shelf;
+  }
+
+  private clearLiveHighlights(): void {
+    const host = this.svgHost?.nativeElement;
+    if (!host) return;
+    host.querySelectorAll('.lw-zone--live').forEach(el => el.classList.remove('lw-zone--live'));
+    host.querySelectorAll('title.lw-live-title').forEach(el => el.remove());
+    host.querySelector('#lw-live-layer')?.remove();
+  }
+
+  private applyLiveHighlights(moves: IqcLiveMove[]): void {
+    this.clearLiveHighlights();
+    this.liveShelfCount = 0;
+    this.liveUnmappedCount = 0;
+    this.liveShelfRows = [];
+
+    if (!moves.length) {
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const groups = new Map<string, IqcLiveMove[]>();
+    for (const move of moves) {
+      const key = this.normalizeLiveLocKey(move.toLocation);
+      const list = groups.get(key) || [];
+      list.push(move);
+      groups.set(key, list);
+    }
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const rows: LiveShelfRow[] = [];
+
+    for (const [, groupMoves] of groups) {
+      const sample = groupMoves[0];
+      const codes = [...new Set(groupMoves.map(m => m.materialCode).filter(Boolean))];
+      const count = groupMoves.length;
+
+      const zone = this.findZoneForLocation(sample.toLocation);
+      const target = zone ? this.resolveLiveHighlightTarget(zone) : null;
+
+      if (!target) {
+        this.liveUnmappedCount += 1;
+        rows.push({
+          toLocation: sample.toLocation,
+          materialCodes: codes,
+          count,
+          onMap: false
+        });
+        continue;
+      }
+
+      target.classList.add('lw-zone--live');
+
+      const titleText = `${sample.toLocation}: ${codes.join(', ')} (${count} lần)`;
+      let titleEl = target.querySelector('title.lw-live-title');
+      if (!titleEl) {
+        titleEl = document.createElementNS(ns, 'title');
+        titleEl.setAttribute('class', 'lw-live-title');
+        target.insertBefore(titleEl, target.firstChild);
+      }
+      titleEl.textContent = titleText;
+
+      this.liveShelfCount += 1;
+      rows.push({
+        toLocation: sample.toLocation,
+        materialCodes: codes,
+        count,
+        onMap: true
+      });
+    }
+
+    this.liveShelfRows = rows.sort((a, b) =>
+      a.toLocation.localeCompare(b.toLocation, 'vi', { numeric: true })
+    );
+
+    this.cdr.markForCheck();
   }
 
 }

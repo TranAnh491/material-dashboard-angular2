@@ -87,6 +87,52 @@
       </ng-container>
     </section>
 
+    <section class="lw-section lw-section--actions">
+      <button
+        type="button"
+        class="lw-btn lw-btn--guide"
+        [disabled]="isLoading"
+        (click)="openStorageGuide()">
+        <i class="material-icons">inventory_2</i>
+        Hướng Dẫn Lưu Trữ
+      </button>
+      <button
+        type="button"
+        class="lw-btn lw-btn--live"
+        [class.lw-btn--live-active]="liveModeActive"
+        [disabled]="isLoading || liveLoading"
+        (click)="toggleLiveMode()">
+        <i class="material-icons">{{ liveLoading ? 'hourglass_top' : 'sensors' }}</i>
+        {{ liveLoading ? 'Đang tải…' : (liveModeActive ? 'Live (' + liveMoves.length + ')' : 'Live') }}
+      </button>
+      <p class="lw-live-hint" *ngIf="liveModeActive && !liveLoading">
+        Hôm nay: {{ liveMoves.length }} lần cất (IQC* → kệ) · {{ liveShelfCount }} kệ màu cam
+        <span *ngIf="liveUnmappedCount"> · {{ liveUnmappedCount }} kệ không có trên sơ đồ</span>
+      </p>
+      <p class="lw-alert lw-alert--error lw-live-hint" *ngIf="liveError">
+        <i class="material-icons">error</i> {{ liveError }}
+      </p>
+
+      <div class="lw-live-list" *ngIf="liveModeActive && !liveLoading && liveShelfRows.length">
+        <h3 class="lw-live-list__title">
+          <i class="material-icons">list_alt</i> Danh sách cất hôm nay
+        </h3>
+        <button
+          type="button"
+          class="lw-live-item"
+          [class.lw-live-item--offmap]="!row.onMap"
+          *ngFor="let row of liveShelfRows"
+          (click)="jumpToLiveShelf(row)">
+          <div class="lw-live-item__top">
+            <span class="lw-live-item__loc">{{ row.toLocation }}</span>
+            <span class="lw-live-item__badge">×{{ row.count }}</span>
+          </div>
+          <div class="lw-live-item__codes">{{ row.materialCodes.join(', ') }}</div>
+          <span class="lw-live-item__warn" *ngIf="!row.onMap">Không có trên sơ đồ</span>
+        </button>
+      </div>
+    </section>
+
     <section class="lw-section lw-section--bottom">
       <h2 class="lw-section__title"><i class="material-icons">zoom_in</i> Thu phóng</h2>
       <div class="lw-zoom">
@@ -101,6 +147,9 @@
   <main class="lw-canvas">
     <div class="lw-canvas__toolbar">
       <span class="lw-canvas__label"><i class="material-icons">grid_view</i> Warehouse Map</span>
+      <span class="lw-live-badge" *ngIf="liveModeActive">
+        <i class="material-icons">sensors</i> LIVE
+      </span>
       <span class="lw-canvas__zoom">{{ (zoom * 100) | number:'1.0-0' }}%</span>
     </div>
 
@@ -209,4 +258,65 @@
       Tất cả vị trí đều đúng rule.
     </p>
   </aside>
+</div>
+
+<div class="lw-modal-backdrop" *ngIf="showStorageGuideModal" (click)="closeStorageGuide()">
+  <div class="lw-modal" role="dialog" (click)="$event.stopPropagation()">
+    <header class="lw-modal__head">
+      <div>
+        <h2 class="lw-modal__title"><i class="material-icons">inventory_2</i> Hướng Dẫn Lưu Trữ</h2>
+        <p class="lw-modal__sub">Đầu mã hàng đang có tồn theo từng dãy kệ</p>
+      </div>
+      <button type="button" class="lw-modal__close" (click)="closeStorageGuide()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+
+    <div class="lw-modal__toolbar">
+      <button
+        type="button"
+        class="lw-btn lw-btn--soft lw-btn--sm"
+        [disabled]="storageGuideLoading"
+        (click)="loadStorageGuide()">
+        <i class="material-icons">refresh</i>
+        Làm mới
+      </button>
+    </div>
+
+    <div class="lw-modal__loading" *ngIf="storageGuideLoading">
+      <i class="material-icons lw-spin">sync</i> Đang đọc tồn kho…
+    </div>
+
+    <div class="lw-alert lw-alert--error lw-modal__error" *ngIf="storageGuideError">
+      <i class="material-icons">error</i> {{ storageGuideError }}
+    </div>
+
+    <div class="lw-modal__body" *ngIf="!storageGuideLoading && !storageGuideError">
+      <div class="lw-guide-rack lw-guide-rack--finished">
+        <div class="lw-guide-rack__head">
+          <span class="lw-guide-rack__letter">A1–A6, B1–B9, C1–C9</span>
+        </div>
+        <p class="lw-guide-rack__guidance">{{ finishedGoodsGuidance }}</p>
+        <div class="lw-guide-rack__prefixes" *ngIf="finishedGoodsPrefixes.length">
+          <span class="lw-guide-prefix" *ngFor="let p of finishedGoodsPrefixes">{{ p }}</span>
+        </div>
+        <p class="lw-guide-rack__empty-prefix" *ngIf="!finishedGoodsPrefixes.length">
+          Chưa có tồn tại các vị trí này.
+        </p>
+      </div>
+
+      <div class="lw-guide-empty" *ngIf="!storageGuideRows.length && !finishedGoodsPrefixes.length">
+        Không có hàng tồn trên sơ đồ.
+      </div>
+      <div class="lw-guide-rack" *ngFor="let row of storageGuideRows">
+        <div class="lw-guide-rack__head">
+          <span class="lw-guide-rack__letter">Kệ {{ row.rackLetter }}</span>
+          <span class="lw-guide-rack__count">{{ row.prefixes.length }} đầu mã</span>
+        </div>
+        <div class="lw-guide-rack__prefixes">
+          <span class="lw-guide-prefix" *ngFor="let p of row.prefixes">{{ p }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
