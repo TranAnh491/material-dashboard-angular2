@@ -116,6 +116,16 @@ export function isFinishedGoodsShelf(shelfOrLoc: string, knownShelves: string[] 
   return false;
 }
 
+/** Kệ Quality R,S,T,U,V,W,X,Y,Z,O — Z1.5(R) trên hệ thống = ô Z1(R) trên sơ đồ (2 ký tự đầu + hậu tố (L)/(R)). */
+const DOT_RACK_MAP_LETTERS = 'RSTUVWXYZO';
+
+export function mapDotRackLocationToMapCell(location: string): string | null {
+  const compact = String(location || '').replace(/\s/g, '').toUpperCase();
+  const m = new RegExp(`^([${DOT_RACK_MAP_LETTERS}])(\\d)\\.\\d+(\\([LR]\\))$`).exec(compact);
+  if (!m) return null;
+  return `${m[1]}${m[2]}${m[3]}`;
+}
+
 export function compareRackLetters(a: string, b: string): number {
   const ai = RACK_LETTER_ORDER.indexOf(a);
   const bi = RACK_LETTER_ORDER.indexOf(b);

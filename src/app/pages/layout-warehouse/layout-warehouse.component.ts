@@ -20,6 +20,7 @@ import {
 
 import { HttpClient } from '@angular/common/http';
 
+import { Router } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 import { Subscription } from 'rxjs';
@@ -43,6 +44,7 @@ import {
   isFinishedGoodsShelf,
   isIqcPrefixLocation,
   extractIqcPlusRef,
+  mapDotRackLocationToMapCell,
   FINISHED_GOODS_GUIDANCE
 } from './layout-warehouse-location.util';
 
@@ -192,8 +194,13 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     private auth: AngularFireAuth,
     private guidanceService: LayoutWarehouseGuidanceService,
     private ruleCheckService: LocationRuleCheckService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private router: Router
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
 
 
@@ -842,12 +849,15 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
 
     const upper = term.toUpperCase();
+    const dotRackCell = mapDotRackLocationToMapCell(upper);
 
     return (
 
       host.querySelector(`[data-loc="${term}"]`) ||
 
       host.querySelector(`[data-loc="${upper}"]`) ||
+
+      (dotRackCell ? host.querySelector(`[data-loc="${dotRackCell}"]`) : null) ||
 
       host.querySelector(`[data-shelf="${upper}"]`) ||
 
@@ -1276,6 +1286,9 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
     const compact = raw.toUpperCase().replace(/\s/g, '');
     candidates.add(compact);
+
+    const dotRackCell = mapDotRackLocationToMapCell(compact);
+    if (dotRackCell) candidates.add(dotRackCell);
 
     const iqcPlusRef = extractIqcPlusRef(compact);
     if (iqcPlusRef) {

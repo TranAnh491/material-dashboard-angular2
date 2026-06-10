@@ -1,11 +1,17 @@
 <div class="lw-page">
   <aside class="lw-panel lw-panel--left">
     <header class="lw-panel__head">
-      <div class="lw-panel__icon"><i class="material-icons">map</i></div>
-      <div>
-        <h1 class="lw-panel__title">Layout Warehouse</h1>
-        <p class="lw-panel__sub">Sơ đồ kho ASM1</p>
+      <div class="lw-panel__head-main">
+        <div class="lw-panel__icon"><i class="material-icons">map</i></div>
+        <div>
+          <h1 class="lw-panel__title">Layout Warehouse</h1>
+          <p class="lw-panel__sub">Sơ đồ kho ASM1</p>
+        </div>
       </div>
+      <button type="button" class="lw-panel__menu" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        <span>Menu</span>
+      </button>
     </header>
 
     <section class="lw-section">
