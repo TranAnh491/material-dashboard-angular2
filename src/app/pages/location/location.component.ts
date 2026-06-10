@@ -11,6 +11,11 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import {
+  blocksSingleLetterPrefixMatch,
+  getDefaultLocationsForWarehouse,
+  mergeWarehouseMapsFromFirestore
+} from '../../services/location-warehouse-defaults.util';
 import { trigger, state, style, transition, animate } from '@angular/animations';
 
 export interface LocationItem {
@@ -765,8 +770,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         matMap[p] = wh;
       }
     }
-    this.locationByViTriMap = locMap;
-    this.legacyFirstCharMap = legacyMap;
+    const merged = mergeWarehouseMapsFromFirestore(locMap, legacyMap);
+    this.locationByViTriMap = merged.locationByViTriMap;
+    this.legacyFirstCharMap = merged.legacyFirstCharMap;
     this.materialPrefixWarehouseMap = matMap;
     this.syncMaterialPrefixRowsFromMap();
     if (this.showRuleModal) {
@@ -853,17 +859,20 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private getLocationsForWarehouse(warehouseType: WarehouseType): string[] {
-    const fromViTri = Object.entries(this.locationByViTriMap)
-      .filter(([loc, wh]) => wh === warehouseType && !this.isIqcExemptLocation(loc))
-      .map(([loc]) => loc);
-    if (fromViTri.length > 0) {
-      return fromViTri.sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+    const locs = new Set<string>(getDefaultLocationsForWarehouse(warehouseType));
+    for (const [loc, wh] of Object.entries(this.locationByViTriMap)) {
+      if (wh === warehouseType && !this.isIqcExemptLocation(loc)) {
+        locs.add(loc);
+      }
     }
-    const legacyChars = Object.entries(this.legacyFirstCharMap)
-      .filter(([, wh]) => wh === warehouseType)
-      .map(([c]) => c);
-    return legacyChars.sort((a, b) => a.localeCompare(b));
+    for (const [c, wh] of Object.entries(this.legacyFirstCharMap)) {
+      if (wh === warehouseType) {
+        locs.add(c);
+      }
+    }
+    return Array.from(locs).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
   }
+
 
   private resolveAllowedDestinationsForMaterial(materialCode: string): { warehouseType: WarehouseType | ''; locations: string[] } {
     const warehouseType = this.getWarehouseTypeForMaterial(materialCode);
@@ -880,18 +889,26 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const formatted = this.formatViTriInput(target || '');
     if (!allowed.length) return false;
     const normalized = formatted ? this.normalizeLocationWarehouseKey(formatted) : targetRaw;
-    return allowed.some(allowedLoc => {
+    const sorted = [...allowed].sort((a, b) => b.length - a.length);
+    for (const allowedLoc of sorted) {
       const allowedRaw = String(allowedLoc || '').replace(/\s/g, '').toUpperCase();
       if (this.isIqcExemptLocation(allowedRaw)) {
-        return targetRaw.startsWith(allowedRaw);
+        if (targetRaw.startsWith(allowedRaw)) return true;
+        continue;
       }
-      const a = this.normalizeLocationWarehouseKey(allowedLoc);
-      if (!a) return false;
-      if (normalized === a) return true;
-      if (normalized.startsWith(a)) return true;
-      if (a.length === 1 && normalized.startsWith(a)) return true;
-      return formatted.startsWith(this.formatViTriInput(allowedLoc));
-    });
+      const key = this.normalizeLocationWarehouseKey(allowedLoc);
+      if (!key) continue;
+      if (normalized === key) return true;
+      if (key.length >= 2 && normalized.startsWith(key)) return true;
+      if (
+        key.length === 1 &&
+        !blocksSingleLetterPrefixMatch(normalized, key) &&
+        normalized.startsWith(key)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   addMaterialPrefixRuleRow(): void {

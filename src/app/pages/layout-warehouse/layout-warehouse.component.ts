@@ -599,10 +599,11 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       const result = await this.ruleCheckService.checkInventoryAgainstRules(this.factory as 'ASM1');
       this.ruleCheckResult = result;
       this.violationGroups = this.buildViolationGroups(result.violations);
-      this.highlightRuleViolations(result.violations);
+      this.isRuleChecking = false;
+      this.cdr.markForCheck();
+      requestAnimationFrame(() => this.highlightRuleViolations(result.violations));
     } catch (err) {
       this.ruleCheckError = (err as Error)?.message || String(err);
-    } finally {
       this.isRuleChecking = false;
       this.cdr.markForCheck();
     }
@@ -636,13 +637,11 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       `Không có rule,${result.skippedNoRule}`,
       `Không có vị trí,${result.skippedEmptyLocation}`,
       '',
-      ['Vị trí', 'Mã hàng', 'PO', 'Lý do', 'Kệ đúng'].map(esc).join(',')
+      ['Mã hàng', 'Vị trí sai'].map(esc).join(',')
     ];
 
     for (const v of result.violations) {
-      lines.push(
-        [v.location, v.materialCode, v.poNumber || '', v.reason, v.expectedLabel].map(esc).join(',')
-      );
+      lines.push([v.materialCode, v.location].map(esc).join(','));
     }
 
     const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
@@ -693,33 +692,13 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     if (!host) return;
 
     const seen = new Set<Element>();
-    for (const v of violations) {
-      const loc = v.location.toUpperCase();
-      const parsed = parseWarehouseLocation(loc, this.knownShelves);
-      const candidates: Element[] = [];
+    const uniqueLocs = [...new Set(violations.map(v => v.location))];
 
-      if (parsed) {
-        const shelf =
-          host.querySelector(`[data-loc="${parsed.shelf}"]`) ||
-          host.querySelector(`[data-shelf="${parsed.shelf}"]`);
-        if (shelf) candidates.push(shelf);
-      }
-
-      const exact = host.querySelector(`[data-loc="${loc}"]`);
-      if (exact) candidates.push(exact);
-
-      Array.from(host.querySelectorAll('[data-loc]')).forEach(el => {
-        const dataLoc = String(el.getAttribute('data-loc') || '').toUpperCase();
-        if (loc.startsWith(dataLoc) || dataLoc.startsWith(loc)) {
-          candidates.push(el);
-        }
-      });
-
-      for (const el of candidates) {
-        if (seen.has(el)) continue;
-        seen.add(el);
-        el.classList.add('lw-zone--violation');
-      }
+    for (const loc of uniqueLocs) {
+      const zone = this.findZoneForLocation(loc);
+      if (!zone || seen.has(zone)) continue;
+      seen.add(zone);
+      zone.classList.add('lw-zone--violation');
     }
   }
 

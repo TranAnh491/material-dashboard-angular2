@@ -1,5 +1,10 @@
 import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import {
+  blocksSingleLetterPrefixMatch,
+  getDefaultLocationsForWarehouse,
+  mergeWarehouseMapsFromFirestore
+} from './location-warehouse-defaults.util';
 
 export type WarehouseType = 'Kho Thường' | 'Kho Mát';
 
@@ -41,17 +46,38 @@ export interface LocationRuleCheckResult {
   skippedEmptyLocation: number;
 }
 
+interface PreparedAllowedEntry {
+  raw: string;
+  key: string;
+  exempt: boolean;
+}
+
+interface PreparedAllowedLocations {
+  entries: PreparedAllowedEntry[];
+}
+
+interface MaterialRuleResolution {
+  warehouseType: WarehouseType | '';
+  allowed: PreparedAllowedLocations;
+  expectedLabel: string;
+}
+
 interface RuleCheckContext {
   factory: 'ASM1' | 'ASM2';
   rules: LocationRule[];
   locationByViTriMap: Record<string, WarehouseType>;
   legacyFirstCharMap: Record<string, WarehouseType>;
   materialPrefixWarehouseMap: Record<string, WarehouseType>;
+  allowedByWarehouse: Record<WarehouseType, PreparedAllowedLocations>;
+  materialRuleCache: Map<string, MaterialRuleResolution | null>;
+  prefixRules: LocationRule[];
 }
 
 @Injectable({ providedIn: 'root' })
 export class LocationRuleCheckService {
   private readonly warehouseTypeOptions: WarehouseType[] = ['Kho Thường', 'Kho Mát'];
+  private contextCache: { factory: 'ASM1' | 'ASM2'; ctx: RuleCheckContext; at: number } | null = null;
+  private readonly contextCacheTtlMs = 120_000;
 
   constructor(private firestore: AngularFirestore) {}
 
@@ -81,22 +107,21 @@ export class LocationRuleCheckService {
         continue;
       }
 
-      const resolved = this.resolveAllowedFirstChars(context, materialCode);
-      if (!resolved.allowedChars.length) {
+      const resolved = this.resolveMaterialRule(context, materialCode);
+      if (!resolved) {
         skippedNoRule++;
         continue;
       }
 
       checkedCount++;
-      const locationChar = this.getLocationFirstChar(location);
-      if (!resolved.allowedChars.includes(locationChar)) {
+      if (!this.matchesPreparedAllowed(location, resolved.allowed)) {
         violations.push({
           materialCode,
           location,
           poNumber: row.poNumber,
           reason: resolved.warehouseType
-            ? `Mã thuộc ${resolved.warehouseType} — kệ ${locationChar} sai`
-            : `Kệ ${locationChar} sai rule cũ`,
+            ? `Mã thuộc ${resolved.warehouseType} — vị trí không đúng kho`
+            : 'Vị trí không đúng rule cũ',
           expectedLabel: resolved.expectedLabel
         });
       }
@@ -125,9 +150,22 @@ export class LocationRuleCheckService {
   }
 
   private async loadRuleContext(factory: 'ASM1' | 'ASM2'): Promise<RuleCheckContext> {
+    const now = Date.now();
+    if (
+      this.contextCache &&
+      this.contextCache.factory === factory &&
+      now - this.contextCache.at < this.contextCacheTtlMs
+    ) {
+      return this.contextCache.ctx;
+    }
+
     const [warehouseSnap, rulesSnap] = await Promise.all([
       this.firestore.collection<LocationWarehouseRulesDoc>('location-warehouse-rules').doc(factory).get().toPromise(),
-      this.firestore.collection('location-rules').get().toPromise()
+      this.firestore
+        .collection('location-rules', ref => ref.where('factory', '==', factory))
+        .get()
+        .toPromise()
+        .catch(() => this.firestore.collection('location-rules').get().toPromise())
     ]);
 
     const warehouseDoc = warehouseSnap?.exists ? (warehouseSnap.data() as LocationWarehouseRulesDoc) : null;
@@ -136,12 +174,24 @@ export class LocationRuleCheckService {
       (rulesSnap?.docs || []).map(doc => ({ id: doc.id, data: () => doc.data() })),
       factory
     );
+    const prefixRules = rules
+      .filter(r => r.materialCode.length < 7)
+      .sort((a, b) => b.materialCode.length - a.materialCode.length);
 
-    return {
+    const ctx: RuleCheckContext = {
       factory,
       rules,
+      prefixRules,
+      materialRuleCache: new Map(),
+      allowedByWarehouse: {
+        'Kho Thường': this.prepareAllowedLocations(this.buildLocationListForWarehouse(maps, 'Kho Thường')),
+        'Kho Mát': this.prepareAllowedLocations(this.buildLocationListForWarehouse(maps, 'Kho Mát'))
+      },
       ...maps
     };
+
+    this.contextCache = { factory, ctx, at: now };
+    return ctx;
   }
 
   private async loadInventoryWithLocation(factory: 'ASM1' | 'ASM2'): Promise<InventoryLocationRow[]> {
@@ -164,53 +214,99 @@ export class LocationRuleCheckService {
       .filter(row => row.materialCode && row.location);
   }
 
-  private resolveAllowedFirstChars(
+  private resolveMaterialRule(
     context: RuleCheckContext,
     materialCode: string
-  ): { warehouseType: WarehouseType | ''; allowedChars: string[]; expectedLabel: string } {
+  ): MaterialRuleResolution | null {
+    const code7 = this.normalizeMaterialCodeForRule(materialCode);
+    if (context.materialRuleCache.has(code7)) {
+      return context.materialRuleCache.get(code7) || null;
+    }
+
     const warehouseType = this.getWarehouseTypeForMaterial(context, materialCode);
+    let resolved: MaterialRuleResolution | null = null;
+
     if (warehouseType) {
-      const allowedChars = this.getFirstCharsForWarehouse(context, warehouseType);
-      return {
+      const allowed = context.allowedByWarehouse[warehouseType];
+      const locLabels = allowed.entries.map(e => e.raw);
+      resolved = {
         warehouseType,
-        allowedChars,
-        expectedLabel: `${warehouseType} — kệ: ${allowedChars.join(', ')}`
+        allowed,
+        expectedLabel: locLabels.length ? `${warehouseType} — ${locLabels.join(', ')}` : warehouseType
       };
+    } else {
+      const legacy = this.findMatchedRuleFromList(context, materialCode);
+      const prefixes = legacy?.destinationLocationPrefixes || [];
+      if (prefixes.length) {
+        resolved = {
+          warehouseType: '',
+          allowed: this.prepareAllowedLocations(prefixes),
+          expectedLabel: `Vị trí: ${prefixes.join(', ')}`
+        };
+      }
     }
 
-    const legacy = this.findMatchedRuleFromList(context, materialCode);
-    const allowedChars = Array.from(
-      new Set((legacy?.destinationLocationPrefixes || []).map(p => this.getLocationFirstChar(p)).filter(Boolean))
-    ).sort();
-    return {
-      warehouseType: '',
-      allowedChars,
-      expectedLabel: allowedChars.length ? `Kệ: ${allowedChars.join(', ')}` : ''
-    };
+    context.materialRuleCache.set(code7, resolved);
+    return resolved;
   }
 
-  private getFirstCharsForWarehouse(context: RuleCheckContext, warehouseType: WarehouseType): string[] {
-    const chars = new Set<string>();
-
-    for (const [loc, wh] of Object.entries(context.locationByViTriMap)) {
+  private buildLocationListForWarehouse(
+    maps: Pick<RuleCheckContext, 'locationByViTriMap' | 'legacyFirstCharMap'>,
+    warehouseType: WarehouseType
+  ): string[] {
+    const locs = new Set<string>(getDefaultLocationsForWarehouse(warehouseType));
+    for (const [loc, wh] of Object.entries(maps.locationByViTriMap)) {
       if (wh === warehouseType && !this.isRuleExemptLocation(loc)) {
-        const c = this.getLocationFirstChar(loc);
-        if (c) chars.add(c);
+        locs.add(loc);
       }
     }
-
-    if (!chars.size) {
-      for (const [c, wh] of Object.entries(context.legacyFirstCharMap)) {
-        if (wh === warehouseType) chars.add(c);
+    for (const [c, wh] of Object.entries(maps.legacyFirstCharMap)) {
+      if (wh === warehouseType) {
+        locs.add(c);
       }
     }
-
-    return Array.from(chars).sort((a, b) => a.localeCompare(b));
+    return Array.from(locs);
   }
 
-  private getLocationFirstChar(viTri: string): string {
-    const formatted = this.formatViTriInput(String(viTri || '').trim());
-    return (formatted || String(viTri || '').trim().toUpperCase()).charAt(0);
+  private prepareAllowedLocations(locations: string[]): PreparedAllowedLocations {
+    const entries = locations
+      .map(raw => {
+        const exempt = this.isRuleExemptLocation(raw);
+        const allowedRaw = String(raw || '').replace(/\s/g, '').toUpperCase();
+        const key = exempt
+          ? allowedRaw
+          : this.normalizeLocationWarehouseKey(this.formatViTriInput(raw) || raw);
+        return { raw, key, exempt };
+      })
+      .filter(e => !!e.key)
+      .sort((a, b) => b.key.length - a.key.length);
+    return { entries };
+  }
+
+  private matchesPreparedAllowed(target: string, prepared: PreparedAllowedLocations): boolean {
+    if (this.isRuleExemptLocation(target)) return true;
+    if (!prepared.entries.length) return false;
+
+    const targetRaw = String(target || '').replace(/\s/g, '').toUpperCase();
+    const formatted = this.formatViTriInput(target || '');
+    const normalized = formatted ? this.normalizeLocationWarehouseKey(formatted) : targetRaw;
+
+    for (const { key, exempt } of prepared.entries) {
+      if (exempt) {
+        if (targetRaw.startsWith(key)) return true;
+        continue;
+      }
+      if (normalized === key) return true;
+      if (key.length >= 2 && normalized.startsWith(key)) return true;
+      if (
+        key.length === 1 &&
+        !blocksSingleLetterPrefixMatch(normalized, key) &&
+        normalized.startsWith(key)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private getWarehouseTypeForMaterial(context: RuleCheckContext, materialCode: string): WarehouseType | '' {
@@ -230,12 +326,7 @@ export class LocationRuleCheckService {
     const exactRule = context.rules.find(r => r.materialCode.length === 7 && r.materialCode === scannedCode7);
     if (exactRule) return exactRule;
 
-    const prefixRules = context.rules
-      .filter(r => r.materialCode.length < 7)
-      .filter(r => scannedCode7.startsWith(r.materialCode))
-      .sort((a, b) => b.materialCode.length - a.materialCode.length);
-
-    return prefixRules[0] || null;
+    return context.prefixRules.find(r => scannedCode7.startsWith(r.materialCode)) || null;
   }
 
   private applyWarehouseMapsFromDoc(data: LocationWarehouseRulesDoc | null | undefined): {
@@ -263,9 +354,10 @@ export class LocationRuleCheckService {
       if (p && wh) matMap[p] = wh;
     }
 
+    const merged = mergeWarehouseMapsFromFirestore(locMap, legacyMap);
     return {
-      locationByViTriMap: locMap,
-      legacyFirstCharMap: legacyMap,
+      locationByViTriMap: merged.locationByViTriMap,
+      legacyFirstCharMap: merged.legacyFirstCharMap,
       materialPrefixWarehouseMap: matMap
     };
   }

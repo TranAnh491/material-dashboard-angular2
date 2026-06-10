@@ -70,6 +70,7 @@ export function extractRackLetter(location: string, knownShelves: string[]): str
   const shelf = parsed?.shelf || raw;
 
   if (shelf === 'A12') return 'A12';
+  if (shelf === 'H11') return 'H11';
   if (shelf.startsWith('IQC')) return 'IQC';
   if (shelf.startsWith('NG')) return 'NG';
 
@@ -87,7 +88,7 @@ export function extractMaterialPrefix4(materialCode: string): string {
 
 const RACK_LETTER_ORDER = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G',
-  'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'O', 'Q', 'A12', 'K',
+  'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'O', 'Q', 'A12', 'H11', 'K',
   'IQC', 'NG'
 ];
 
