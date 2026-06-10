@@ -310,8 +310,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedMaterialForStore: any = null; // Material được chọn để cất
   suggestedLocations: string[] = []; // Danh sách vị trí hiện tại của material
   selectedTargetLocation = ''; // Vị trí đích được chọn
-  /** Bước 2: bật thì cộng thêm vị trí (VD: F2.1 → F2.1+ G3.4), không thay thế. */
-  storeMaterialMultiLocation = false;
   /** Bước 2: scan nhiều mã (tối đa 10), cùng chuyển sang vị trí mới một lần. */
   storeMaterialMultiCode = false;
   storeMaterialBatchItems: any[] = [];
@@ -1058,13 +1056,23 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.forcedAllowedLocations = resolved.locations;
     this.forcedAllowedDestinationPrefixes = resolved.locations;
     this.isTargetLocationForced = resolved.locations.length > 0;
+  }
 
-    if (this.isTargetLocationForced) {
-      const allowedSuggested = this.suggestedLocations.filter(loc => this.isDestinationAllowed(loc));
-      if (!this.selectedTargetLocation || !this.isDestinationAllowed(this.selectedTargetLocation)) {
-        this.selectedTargetLocation = allowedSuggested[0] || '';
-      }
+  /** Gợi ý rule ngắn gọn — không liệt kê toàn bộ tên vị trí. */
+  get storeMaterialForcedRuleLabel(): string {
+    if (!this.isTargetLocationForced) return '';
+    if (this.forcedWarehouseType === 'Kho Mát') {
+      return 'Nguyên liệu này cần lưu trữ tại kho mát';
     }
+    if (this.forcedWarehouseType === 'Kho Thường') {
+      return 'Nguyên liệu này cần lưu trữ tại kho thường';
+    }
+    const racks = [
+      ...new Set(
+        this.forcedAllowedLocations.map(loc => this.getLocationFirstChar(loc)).filter(Boolean)
+      )
+    ].sort((a, b) => a.localeCompare(b, 'vi'));
+    return racks.length ? `Rule ép vị trí — kệ: ${racks.join(', ')}` : 'Rule ép vị trí';
   }
 
   private findMatchedRuleFromList(materialCode: string): LocationRule | null {
@@ -2339,7 +2347,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isSearchingMaterial = false;
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
-    this.storeMaterialMultiLocation = false;
     this.storeMaterialMultiCode = false;
     this.storeMaterialBatchItems = [];
     this.storeMaterialBatchQRInput = '';
@@ -2382,7 +2389,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isSearchingMaterial = false;
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
-    this.storeMaterialMultiLocation = false;
     this.storeMaterialMultiCode = false;
     this.storeMaterialBatchItems = [];
     this.storeMaterialBatchQRInput = '';
@@ -2394,23 +2400,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   get storeMaterialBatchCanAddMore(): boolean {
     return this.storeMaterialBatchCount < this.STORE_MATERIAL_BATCH_MAX;
-  }
-
-  /** Ghép vị trí khi chế độ Nhiều vị trí (giữ nguyên dấu + và khoảng trắng sau +). */
-  private mergeStoreMaterialLocations(existing: string, newSegment: string): string {
-    const cur = String(existing ?? '').trim();
-    const add = String(newSegment ?? '').trim();
-    if (!add) return cur;
-    if (!cur) return add;
-    return `${cur}+ ${add}`;
-  }
-
-  /** Vị trí lưu / hiển thị xem trước ở bước 2. */
-  get storeMaterialResolvedLocation(): string {
-    const segment = this.formatViTriInput(this.selectedTargetLocation || '');
-    if (!this.storeMaterialMultiLocation) return segment;
-    const current = String(this.selectedMaterialForStore?.location ?? '').trim();
-    return this.mergeStoreMaterialLocations(current, segment);
   }
 
   /** Parse QR và tra inventory-materials — dùng bước 1 và thêm mã ở bước 2. */
@@ -2736,12 +2725,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       for (const item of items) {
         const fromLocation = String(item.location ?? '').trim();
-        const targetFormatted = this.storeMaterialMultiLocation
-          ? this.mergeStoreMaterialLocations(fromLocation, segmentFormatted)
-          : segmentFormatted;
+        const targetFormatted = segmentFormatted;
 
         const resolved = this.resolveAllowedDestinationsForMaterial(item.materialCode || '');
-        const ruleCheckLocation = this.storeMaterialMultiLocation ? segmentFormatted : targetFormatted;
+        const ruleCheckLocation = targetFormatted;
         if (resolved.locations.length > 0) {
           const ok = this.locationMatchesAllowedDestinations(ruleCheckLocation, resolved.locations);
           if (!ok) {
@@ -2788,12 +2775,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             `Vị trí mới: ${u.targetFormatted}`
         );
       } else {
-        const locLabel = this.storeMaterialMultiLocation
-          ? `cộng thêm "${segmentFormatted}" (theo từng mã)`
-          : segmentFormatted;
         alert(
           `✅ Đã chuyển ${updates.length} mã sang vị trí mới!\n\n` +
-            `Vị trí: ${locLabel}\n` +
+            `Vị trí: ${segmentFormatted}\n` +
             updates.map(u => `• ${u.item.materialCode} (PO: ${u.item.poNumber})`).join('\n')
         );
       }

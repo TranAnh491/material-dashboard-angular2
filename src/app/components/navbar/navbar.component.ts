@@ -301,6 +301,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/nhiet-do';
     }
 
+    isLocationPage(): boolean {
+      return this.currentAppPath() === '/location';
+    }
+
     isQcTraceabilityPage(): boolean {
       return this.currentAppPath() === '/qc-traceability';
     }
