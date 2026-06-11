@@ -79,6 +79,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     },
 
     // Report
+    { path: '/report', title: 'Report', icon: 'analytics', iconImage: 'assets/img/dasboard.png', category: 'Report' },
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', iconImage: 'assets/img/dasboard.png', category: 'Report' },
 
     // Production

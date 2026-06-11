@@ -194,6 +194,7 @@ export class TabPermissionService {
     { key: 'qc', name: 'Quality' },
     { key: 'nhiet-do', name: 'Nhiệt Độ' },
     { key: 'rm1-delivery', name: 'RM Delivery' },
+    { key: 'report', name: 'Report' },
     { key: 'shorted-materials', name: 'Shorted materials' },
     { key: 'settings', name: 'Settings' }
   ];

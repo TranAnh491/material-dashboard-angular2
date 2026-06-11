@@ -40,6 +40,14 @@
         { "fieldPath": "productionOrder", "order": "ASCENDING" },
         { "fieldPath": "createdAt",       "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "fg-inventory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",       "order": "ASCENDING" },
+        { "fieldPath": "materialCode",  "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

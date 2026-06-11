@@ -70,6 +70,7 @@ export const ROUTES: RouteInfo[] = [
     icon: 'assessment',
     class: 'report-parent',
     children: [
+      { path: '/report', title: 'Report', icon: 'analytics', class: 'material-child-icon' },
       { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', class: 'material-child-icon' }
     ]
   },

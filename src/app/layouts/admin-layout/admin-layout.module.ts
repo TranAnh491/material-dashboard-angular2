@@ -68,6 +68,7 @@ import { QCComponent } from '../../pages/qc/qc.component';
 import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
 import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted-materials.component';
+import { ReportComponent } from '../../pages/report/report.component';
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
@@ -141,6 +142,7 @@ import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
     QcTraceabilityComponent,
     Rm1DeliveryComponent,
     ShortedMaterialsComponent,
+    ReportComponent,
     BagHistoryComponent,
     PrintOptionDialogComponent,
     LocationUnlockDialogComponent,

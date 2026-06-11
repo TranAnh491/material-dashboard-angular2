@@ -78,6 +78,71 @@ export function extractRackLetter(location: string, knownShelves: string[]): str
   return m ? m[1] : shelf.charAt(0);
 }
 
+/** Mã thành phẩm P + 6 số (VD: P011022, P011022.E → P011022). */
+export function normalizeFinishedGoodsPCode(input: string): string | null {
+  const compact = String(input || '').replace(/\s/g, '').toUpperCase().replace(/\./g, '');
+  const m = /^P(\d{6})/.exec(compact);
+  return m ? `P${m[1]}` : null;
+}
+
+/** So khớp 7 ký tự đầu mã hàng FG (P + 6 số) — cùng logic cột Mã TP fg-inventory. */
+export function matchesFinishedGoodsPCode(materialCode: string, pCode: string): boolean {
+  const norm = String(materialCode || '').replace(/\s/g, '').toUpperCase().replace(/\./g, '');
+  return norm.substring(0, 7) === pCode;
+}
+
+/** Pallet ASM1 (F1-xxxx) — không phải kệ F1 trên sơ đồ layout. */
+const FG_PALLET_PREFIX_RE = /^F1-[A-Z0-9]/i;
+
+/** Vị trí chỉ là pallet (VD: F1-0025), chưa gán kệ cụ thể. */
+export function isFgPalletOnlyLocation(location: string): boolean {
+  return FG_PALLET_PREFIX_RE.test(String(location || '').trim());
+}
+
+/**
+ * Phần kệ trong cột vị trí fg-inventory (bỏ pallet F1-xxxx).
+ * VD: B6.2-F1-0025 → B6.2; IQC+F1-0001 → IQC; F1-0025 → null.
+ */
+export function extractFgShelfPartFromLocation(location: string): string | null {
+  const raw = String(location || '').trim().toUpperCase();
+  if (!raw) return null;
+  if (isFgPalletOnlyLocation(raw)) return null;
+  if (/^IQC\+F1-/i.test(raw)) return 'IQC';
+  const infix = raw.match(/^(.+?)[-+]F1-[A-Z0-9]/i);
+  if (infix) {
+    const part = infix[1].replace(/[.\s-]+$/g, '').trim();
+    return part || null;
+  }
+  return raw;
+}
+
+/**
+ * Map cột vị trí fg-inventory → kệ trên layout.
+ * Bỏ qua pallet F1-xxxx; lấy 2 ký tự đầu phần kệ (VD: A3-01 → A3, B6.2-F1-0025 → B6).
+ * Nếu khớp kệ đầy đủ trên sơ đồ (A12, H11…) thì ưu tiên kệ đó.
+ */
+export function mapFgLocationToLayoutShelf(location: string, knownShelves: string[] = []): string {
+  const shelfPart = extractFgShelfPartFromLocation(location);
+  if (!shelfPart) return '';
+
+  const raw = shelfPart.toUpperCase();
+  if (raw.startsWith('IQC')) return 'IQC';
+
+  if (knownShelves.length) {
+    const sorted = [...new Set(knownShelves.map(s => s.toUpperCase()))].sort(
+      (a, b) => b.length - a.length
+    );
+    const compact = raw.replace(/[^A-Z0-9]/g, '');
+    for (const shelf of sorted) {
+      if (raw.startsWith(shelf) || compact.startsWith(shelf)) {
+        return shelf;
+      }
+    }
+  }
+
+  return raw.substring(0, 2);
+}
+
 /** Đầu mã B+3 số (VD: B018127 → B018). */
 export function extractMaterialPrefix4(materialCode: string): string {
   const compact = String(materialCode || '').replace(/\s/g, '').toUpperCase();
@@ -106,6 +171,34 @@ export function extractIqcPlusRef(loc: string): string | null {
 
 export const FINISHED_GOODS_GUIDANCE = 'Lưu trữ thành phẩm';
 
+export const GENERAL_MATERIAL_SHELF_RANGE_LABEL = 'D1–D9, E1–E9, F1–F6, G1–G6';
+
+export const GENERAL_MATERIAL_GUIDANCE =
+  'Được để tất cả nguyên liệu không bắt buộc phải lưu trữ ở Kho mát và Tủ lạnh\n\n' +
+  'Như : Dây điện, Đồ đóng gói, Ống co nhiệt, Ống chống nhiễu, Các loại ống lưới,';
+
+/** D1–D9, E1–E9, F1–F6, G1–G6: nguyên liệu thường (không bắt buộc kho mát/tủ lạnh). */
+export function isGeneralMaterialShelf(shelfOrLoc: string, knownShelves: string[] = []): boolean {
+  const raw = String(shelfOrLoc || '').trim().toUpperCase();
+  const parsed = knownShelves.length ? parseWarehouseLocation(raw, knownShelves) : null;
+  const shelf = (parsed?.shelf || raw).toUpperCase();
+  if (/^D[1-9]$/.test(shelf)) return true;
+  if (/^E[1-9]$/.test(shelf)) return true;
+  if (/^F[1-6]$/.test(shelf)) return true;
+  if (/^G[1-6]$/.test(shelf)) return true;
+  return false;
+}
+
+export function isGeneralMaterialRackLetter(rack: string): boolean {
+  return /^[DEFG]$/.test(String(rack || '').trim().toUpperCase());
+}
+
+export function getDefaultLocationGuidance(loc: string, knownShelves: string[] = []): string {
+  if (isFinishedGoodsShelf(loc, knownShelves)) return FINISHED_GOODS_GUIDANCE;
+  if (isGeneralMaterialShelf(loc, knownShelves)) return GENERAL_MATERIAL_GUIDANCE;
+  return '';
+}
+
 /** A1–A6, B1–B9, C1–C9: khu lưu thành phẩm. */
 export function isFinishedGoodsShelf(shelfOrLoc: string, knownShelves: string[] = []): boolean {
   const raw = String(shelfOrLoc || '').trim().toUpperCase();
@@ -125,6 +218,30 @@ export function mapDotRackLocationToMapCell(location: string): string | null {
   const m = new RegExp(`^([${DOT_RACK_MAP_LETTERS}])(\\d)\\.\\d+(\\([LR]\\))$`).exec(compact);
   if (!m) return null;
   return `${m[1]}${m[2]}${m[3]}`;
+}
+
+/** Kệ thuộc MIXZONE P trên sơ đồ (F7–F9, G7–G9). */
+export const MIXZONE_SHELVES = new Set(['P', 'F7', 'F8', 'F9', 'G7', 'G8', 'G9']);
+
+/** F71 / G91… (thiếu dấu chấm) → kệ MIXZONE F7 / G9. */
+export function resolveMixzoneShelfFromLocation(location: string): string | null {
+  const raw = String(location || '').trim().toUpperCase();
+  if (!raw) return null;
+  if (raw === 'P') return 'P';
+  if (MIXZONE_SHELVES.has(raw)) return raw;
+  const compact = /^(F[7-9]|G[7-9])(\d+)$/.exec(raw);
+  if (compact && MIXZONE_SHELVES.has(compact[1])) return compact[1];
+  return null;
+}
+
+/** Gom F7 / F7.1 / F71… về nhãn P trên Live list. */
+export function normalizeMixzoneLiveLocation(location: string, knownShelves: string[] = []): string {
+  const raw = String(location || '').trim().toUpperCase();
+  if (!raw) return '';
+  if (resolveMixzoneShelfFromLocation(raw)) return 'P';
+  const parsed = knownShelves.length ? parseWarehouseLocation(raw, knownShelves) : null;
+  if (parsed?.shelf && MIXZONE_SHELVES.has(parsed.shelf.toUpperCase())) return 'P';
+  return raw;
 }
 
 export function compareRackLetters(a: string, b: string): number {

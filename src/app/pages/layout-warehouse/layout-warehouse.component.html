@@ -21,7 +21,7 @@
           type="text"
           class="lw-input"
           [(ngModel)]="searchLoc"
-          placeholder="Mã hàng hoặc vị trí…"
+          placeholder="Mã P (P+6 số), NVL hoặc vị trí…"
           (keyup.enter)="jumpToLocation()"
         />
       </div>
@@ -43,17 +43,29 @@
         <div class="lw-kv__row" *ngIf="searchResult.materialCode">
           <dt>Mã hàng</dt><dd>{{ searchResult.materialCode }}</dd>
         </div>
-        <div class="lw-kv__row">
+        <div class="lw-kv__row" *ngIf="searchResult.searchKind !== 'fg-p'">
           <dt>Vị trí</dt><dd>{{ searchResult.location }}</dd>
         </div>
-        <div class="lw-kv__row">
+        <div class="lw-kv__row" *ngIf="searchResult.searchKind !== 'fg-p'">
           <dt>Kệ</dt><dd class="lw-kv__accent">{{ searchResult.shelf }}</dd>
         </div>
-        <div class="lw-kv__row">
+        <div class="lw-kv__row" *ngIf="searchResult.searchKind !== 'fg-p'">
           <dt>Chi tiết</dt><dd>{{ slotDetailText }}</dd>
         </div>
       </dl>
-      <p class="lw-hint" *ngIf="searchResult.hitCount && searchResult.hitCount > 1">
+      <div class="lw-fg-locs" *ngIf="searchResult.searchKind === 'fg-p' && searchResult.locationHits?.length">
+        <p class="lw-fg-locs__title">Đang ở các kệ (FG Inventory):</p>
+        <button
+          type="button"
+          class="lw-fg-loc-item"
+          *ngFor="let hit of searchResult.locationHits"
+          (click)="jumpToFgLocation(hit)">
+          <span class="lw-fg-loc-item__shelf">{{ hit.shelf }}</span>
+          <span class="lw-fg-loc-item__loc">{{ hit.location }}</span>
+          <span class="lw-fg-loc-item__ton" *ngIf="hit.stock != null">Tồn: {{ hit.stock | number:'1.0-0' }}</span>
+        </button>
+      </div>
+      <p class="lw-hint" *ngIf="searchResult.hitCount && searchResult.hitCount > 1 && searchResult.searchKind !== 'fg-p'">
         Có {{ searchResult.hitCount }} dòng — hiển thị dòng đầu tiên
       </p>
     </section>
@@ -112,7 +124,7 @@
         {{ liveLoading ? 'Đang tải…' : (liveModeActive ? 'Live (' + liveMoves.length + ')' : 'Live') }}
       </button>
       <p class="lw-live-hint" *ngIf="liveModeActive && !liveLoading">
-        Hôm nay: {{ liveMoves.length }} lần cất (IQC* → kệ) · {{ liveShelfCount }} kệ màu cam
+        Hôm nay: {{ liveMoves.length }} lần đổi vị trí · {{ liveShelfCount }} kệ màu cam (theo vị trí mới nhất)
         <span *ngIf="liveUnmappedCount"> · {{ liveUnmappedCount }} kệ không có trên sơ đồ</span>
       </p>
       <p class="lw-alert lw-alert--error lw-live-hint" *ngIf="liveError">
@@ -186,12 +198,23 @@
 
   <aside class="lw-panel lw-panel--right">
     <header class="lw-panel__head lw-panel__head--rule">
-      <div class="lw-panel__icon lw-panel__icon--rule"><i class="material-icons">rule_folder</i></div>
-      <div>
-        <h1 class="lw-panel__title">Rule Storage</h1>
-        <p class="lw-panel__sub">Kiểm tra vị trí lưu</p>
+      <div class="lw-panel__head-main">
+        <div class="lw-panel__icon lw-panel__icon--rule"><i class="material-icons">rule_folder</i></div>
+        <div>
+          <h1 class="lw-panel__title">Rule Storage</h1>
+          <p class="lw-panel__sub">Kiểm tra vị trí lưu</p>
+        </div>
       </div>
+      <button type="button" class="lw-panel__menu" (click)="openRuleSettings()" title="Cài đặt loại trừ">
+        <i class="material-icons">settings</i>
+        <span>Setting</span>
+      </button>
     </header>
+
+    <p class="lw-hint lw-hint--rule" *ngIf="ruleExcludedCodes.length">
+      <i class="material-icons">block</i>
+      {{ ruleExcludedCodes.length }} mã loại trừ
+    </p>
 
     <section class="lw-section">
       <button
@@ -217,10 +240,6 @@
     </div>
 
     <section class="lw-stats" *ngIf="ruleCheckResult && !ruleCheckError">
-      <div class="lw-stat">
-        <span class="lw-stat__label">Đã kiểm tra</span>
-        <strong class="lw-stat__value">{{ ruleCheckResult.checkedCount }}</strong>
-      </div>
       <div class="lw-stat" [class.lw-stat--bad]="ruleCheckResult.violations.length">
         <span class="lw-stat__label">Sai rule</span>
         <strong class="lw-stat__value">{{ ruleCheckResult.violations.length }}</strong>
@@ -264,6 +283,73 @@
       Tất cả vị trí đều đúng rule.
     </p>
   </aside>
+</div>
+
+<div class="lw-modal-backdrop" *ngIf="showRuleSettingsModal" (click)="closeRuleSettings()">
+  <div class="lw-modal lw-modal--settings" role="dialog" (click)="$event.stopPropagation()">
+    <header class="lw-modal__head">
+      <div>
+        <h2 class="lw-modal__title"><i class="material-icons">settings</i> Cài đặt Rule Storage</h2>
+        <p class="lw-modal__sub">Mã loại trừ sẽ không hiện trong kết quả Check Rule Storage</p>
+      </div>
+      <button type="button" class="lw-modal__close" (click)="closeRuleSettings()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+
+    <div class="lw-modal__loading" *ngIf="ruleSettingsLoading">
+      <i class="material-icons lw-spin">sync</i> Đang tải…
+    </div>
+
+    <div class="lw-modal__body" *ngIf="!ruleSettingsLoading">
+      <section class="lw-settings-block">
+        <h3 class="lw-settings-block__title">
+          <i class="material-icons">block</i> Loại trừ
+        </h3>
+        <p class="lw-settings-block__hint">Nhập mã hàng (mỗi dòng hoặc cách nhau bằng dấu phẩy)</p>
+        <textarea
+          class="lw-settings-input"
+          [(ngModel)]="ruleExcludeDraft"
+          rows="3"
+          placeholder="VD: B001681, B017511"
+          (keyup.enter)="$event.preventDefault(); addRuleExclusionFromDraft()"
+        ></textarea>
+        <button
+          type="button"
+          class="lw-btn lw-btn--soft lw-btn--sm"
+          [disabled]="!ruleExcludeDraft.trim()"
+          (click)="addRuleExclusionFromDraft()">
+          <i class="material-icons">add</i> Thêm vào danh sách
+        </button>
+
+        <div class="lw-exclude-list" *ngIf="ruleExcludedCodes.length">
+          <span class="lw-exclude-chip" *ngFor="let code of ruleExcludedCodes">
+            {{ code }}
+            <button type="button" class="lw-exclude-chip__remove" (click)="removeRuleExclusion(code)" title="Xóa">
+              <i class="material-icons">close</i>
+            </button>
+          </span>
+        </div>
+        <p class="lw-settings-empty" *ngIf="!ruleExcludedCodes.length">Chưa có mã loại trừ.</p>
+      </section>
+
+      <div class="lw-alert lw-alert--error lw-modal__error" *ngIf="ruleSettingsError">
+        <i class="material-icons">error</i> {{ ruleSettingsError }}
+      </div>
+
+      <div class="lw-modal__actions">
+        <button type="button" class="lw-btn lw-btn--soft" (click)="closeRuleSettings()">Hủy</button>
+        <button
+          type="button"
+          class="lw-btn lw-btn--primary"
+          [disabled]="ruleSettingsSaving"
+          (click)="saveRuleExclusions()">
+          <i class="material-icons">{{ ruleSettingsSaving ? 'hourglass_top' : 'save' }}</i>
+          {{ ruleSettingsSaving ? 'Đang lưu…' : 'Lưu lại' }}
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="lw-modal-backdrop" *ngIf="showStorageGuideModal" (click)="closeStorageGuide()">
@@ -311,6 +397,13 @@
         </p>
       </div>
 
+      <div class="lw-guide-rack lw-guide-rack--general">
+        <div class="lw-guide-rack__head">
+          <span class="lw-guide-rack__letter">{{ generalMaterialShelfRangeLabel }}</span>
+        </div>
+        <p class="lw-guide-rack__guidance lw-guide-rack__guidance--multiline">{{ generalMaterialGuidance }}</p>
+      </div>
+
       <div class="lw-guide-empty" *ngIf="!storageGuideRows.length && !finishedGoodsPrefixes.length">
         Không có hàng tồn trên sơ đồ.
       </div>
@@ -319,6 +412,11 @@
           <span class="lw-guide-rack__letter">Kệ {{ row.rackLetter }}</span>
           <span class="lw-guide-rack__count">{{ row.prefixes.length }} đầu mã</span>
         </div>
+        <p
+          class="lw-guide-rack__guidance lw-guide-rack__guidance--multiline"
+          *ngIf="isGeneralMaterialRack(row.rackLetter)">
+          {{ generalMaterialGuidance }}
+        </p>
         <div class="lw-guide-rack__prefixes">
           <span class="lw-guide-prefix" *ngFor="let p of row.prefixes">{{ p }}</span>
         </div>

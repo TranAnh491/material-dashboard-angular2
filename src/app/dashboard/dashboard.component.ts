@@ -246,7 +246,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** FGs Inventory Turnover — 12 tháng 2026 (cột có số; tháng chưa có dữ liệu: chỉ nhãn) + target tháng */
   readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `Thg ${i + 1}`);
   readonly fgTurnoverMonthValues: readonly (number | null)[] = [
-    1.33, 0.4, 0.83, 0.9, null, null, null, null, null, null, null, null
+    1.33, 0.4, 0.83, 0.8, 1, null, null, null, null, null, null, null
   ];
   readonly fgTurnoverTargetMonthly = 1.33;
 
@@ -344,6 +344,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
     },
     // Report
+    { path: '/report', title: 'Report', icon: 'analytics', category: 'Report' },
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Report' },
     // ASM1 RM
     { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },

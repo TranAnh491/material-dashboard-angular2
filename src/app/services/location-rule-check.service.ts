@@ -43,6 +43,7 @@ export interface LocationRuleCheckResult {
   checkedCount: number;
   skippedNoRule: number;
   skippedExempt: number;
+  skippedExcluded: number;
   skippedEmptyLocation: number;
 }
 
@@ -83,14 +84,21 @@ export class LocationRuleCheckService {
 
   async checkInventoryAgainstRules(
     factory: 'ASM1' | 'ASM2',
-    rows?: InventoryLocationRow[]
+    rows?: InventoryLocationRow[],
+    options?: { excludedMaterialCodes?: string[] }
   ): Promise<LocationRuleCheckResult> {
     const context = await this.loadRuleContext(factory);
     const inventory = rows?.length ? rows : await this.loadInventoryWithLocation(factory);
+    const excluded = new Set(
+      (options?.excludedMaterialCodes || [])
+        .map(c => this.normalizeMaterialCodeForRule(c))
+        .filter(Boolean)
+    );
 
     const violations: RuleViolation[] = [];
     let skippedNoRule = 0;
     let skippedExempt = 0;
+    let skippedExcluded = 0;
     let skippedEmptyLocation = 0;
     let checkedCount = 0;
 
@@ -104,6 +112,10 @@ export class LocationRuleCheckService {
       }
       if (this.isRuleExemptLocation(location)) {
         skippedExempt++;
+        continue;
+      }
+      if (excluded.has(this.normalizeMaterialCodeForRule(materialCode))) {
+        skippedExcluded++;
         continue;
       }
 
@@ -134,6 +146,7 @@ export class LocationRuleCheckService {
       checkedCount,
       skippedNoRule,
       skippedExempt,
+      skippedExcluded,
       skippedEmptyLocation
     };
   }

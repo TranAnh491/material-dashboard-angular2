@@ -24,6 +24,7 @@ import { Router } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 import { Subscription } from 'rxjs';
+import firebase from 'firebase/compat/app';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import {
@@ -35,6 +36,7 @@ import {
   LayoutWarehouseGuidanceService,
   LocationGuidanceDoc
 } from '../../services/layout-warehouse-guidance.service';
+import { LayoutWarehouseSettingsService } from '../../services/layout-warehouse-settings.service';
 import {
   parseWarehouseLocation,
   ParsedWarehouseLocation,
@@ -45,7 +47,17 @@ import {
   isIqcPrefixLocation,
   extractIqcPlusRef,
   mapDotRackLocationToMapCell,
-  FINISHED_GOODS_GUIDANCE
+  normalizeFinishedGoodsPCode,
+  matchesFinishedGoodsPCode,
+  mapFgLocationToLayoutShelf,
+  extractFgShelfPartFromLocation,
+  normalizeMixzoneLiveLocation,
+  resolveMixzoneShelfFromLocation,
+  FINISHED_GOODS_GUIDANCE,
+  GENERAL_MATERIAL_GUIDANCE,
+  GENERAL_MATERIAL_SHELF_RANGE_LABEL,
+  getDefaultLocationGuidance,
+  isGeneralMaterialRackLetter
 } from './layout-warehouse-location.util';
 
 
@@ -64,12 +76,21 @@ interface MaterialLocationHit {
 
 
 
+interface SearchLocationHit {
+  location: string;
+  shelf: string;
+  slot: string | null;
+  stock?: number;
+}
+
 interface SearchResultInfo {
   materialCode?: string;
   location: string;
   shelf: string;
   slot: string | null;
   hitCount?: number;
+  searchKind?: 'fg-p' | 'nvl' | 'location';
+  locationHits?: SearchLocationHit[];
 }
 
 interface ViolationGroup {
@@ -84,6 +105,7 @@ interface ShelfStorageGuideRow {
 }
 
 interface IqcLiveMove {
+  materialId: string;
   materialCode: string;
   fromLocation: string;
   toLocation: string;
@@ -148,6 +170,13 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   ruleCheckResult: LocationRuleCheckResult | null = null;
   violationGroups: ViolationGroup[] = [];
 
+  showRuleSettingsModal = false;
+  ruleSettingsLoading = false;
+  ruleSettingsSaving = false;
+  ruleSettingsError = '';
+  ruleExcludedCodes: string[] = [];
+  ruleExcludeDraft = '';
+
   activeGuidanceLoc = '';
   guidanceDraft = '';
   guidanceLoading = false;
@@ -162,6 +191,8 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   storageGuideRows: ShelfStorageGuideRow[] = [];
   finishedGoodsPrefixes: string[] = [];
   readonly finishedGoodsGuidance = FINISHED_GOODS_GUIDANCE;
+  readonly generalMaterialGuidance = GENERAL_MATERIAL_GUIDANCE;
+  readonly generalMaterialShelfRangeLabel = GENERAL_MATERIAL_SHELF_RANGE_LABEL;
 
   liveModeActive = false;
   liveLoading = false;
@@ -193,6 +224,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     private firestore: AngularFirestore,
     private auth: AngularFireAuth,
     private guidanceService: LayoutWarehouseGuidanceService,
+    private warehouseSettingsService: LayoutWarehouseSettingsService,
     private ruleCheckService: LocationRuleCheckService,
     private cdr: ChangeDetectorRef,
     private router: Router
@@ -205,6 +237,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
 
   ngOnInit(): void {
+    void this.loadRuleExclusions();
 
     const sub = this.http.get('assets/img/LayoutD.svg', { responseType: 'text' }).subscribe({
 
@@ -301,6 +334,14 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
 
     try {
+      const fgPCode = normalizeFinishedGoodsPCode(term);
+      if (fgPCode) {
+        const fgHits = await this.lookupFgInventoryByPCode(fgPCode);
+        if (fgHits.length) {
+          this.applyFgSearchResult(fgPCode, fgHits);
+          return;
+        }
+      }
 
       if (term.length >= 3) {
 
@@ -388,8 +429,15 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
 
 
-      alert(`Không tìm thấy mã hàng hoặc vị trí "${term}"`);
+      if (fgPCode) {
+        alert(`Không tìm thấy mã ${fgPCode} trong FG Inventory (kho thành phẩm).`);
+      } else {
+        alert(`Không tìm thấy mã hàng hoặc vị trí "${term}"`);
+      }
 
+    } catch (e) {
+      console.error('[LayoutWarehouse] jumpToLocation failed', e);
+      alert('Lỗi tra cứu. Vui lòng thử lại sau.');
     } finally {
 
       this.isSearching = false;
@@ -588,6 +636,78 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     return `Ô ${this.searchResult.slot}`;
   }
 
+  isGeneralMaterialRack(rackLetter: string): boolean {
+    return isGeneralMaterialRackLetter(rackLetter);
+  }
+
+  async openRuleSettings(): Promise<void> {
+    this.showRuleSettingsModal = true;
+    this.ruleSettingsError = '';
+    this.ruleExcludeDraft = '';
+    await this.loadRuleExclusions();
+    this.cdr.markForCheck();
+  }
+
+  closeRuleSettings(): void {
+    this.showRuleSettingsModal = false;
+    this.ruleSettingsError = '';
+    this.ruleExcludeDraft = '';
+    this.cdr.markForCheck();
+  }
+
+  private async loadRuleExclusions(): Promise<void> {
+    this.ruleSettingsLoading = true;
+    try {
+      this.ruleExcludedCodes = await this.warehouseSettingsService.loadRuleExclusions(this.factory);
+    } catch (err) {
+      this.ruleSettingsError = (err as Error)?.message || String(err);
+    } finally {
+      this.ruleSettingsLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  addRuleExclusionFromDraft(): void {
+    const added = this.warehouseSettingsService.parseExcludedCodesInput(this.ruleExcludeDraft);
+    if (!added.length) return;
+    const merged = new Set([...this.ruleExcludedCodes, ...added]);
+    this.ruleExcludedCodes = Array.from(merged).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+    this.ruleExcludeDraft = '';
+    this.cdr.markForCheck();
+  }
+
+  removeRuleExclusion(code: string): void {
+    const norm = this.warehouseSettingsService.normalizeExcludedCode(code);
+    this.ruleExcludedCodes = this.ruleExcludedCodes.filter(c => c !== norm);
+    this.cdr.markForCheck();
+  }
+
+  async saveRuleExclusions(): Promise<void> {
+    this.ruleSettingsSaving = true;
+    this.ruleSettingsError = '';
+    try {
+      if (this.ruleExcludeDraft.trim()) {
+        this.addRuleExclusionFromDraft();
+      }
+      const user = await this.auth.currentUser;
+      const updatedBy = user?.email || user?.displayName || 'layout-warehouse';
+      await this.warehouseSettingsService.saveRuleExclusions(
+        this.factory,
+        this.ruleExcludedCodes,
+        updatedBy
+      );
+      this.showRuleSettingsModal = false;
+      this.ruleExcludeDraft = '';
+      this.cdr.markForCheck();
+    } catch (err) {
+      this.ruleSettingsError = (err as Error)?.message || String(err);
+      this.cdr.markForCheck();
+    } finally {
+      this.ruleSettingsSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   async checkRuleStorage(): Promise<void> {
     this.isRuleChecking = true;
     this.ruleCheckError = '';
@@ -596,7 +716,9 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.clearRuleViolationHighlights();
 
     try {
-      const result = await this.ruleCheckService.checkInventoryAgainstRules(this.factory as 'ASM1');
+      const result = await this.ruleCheckService.checkInventoryAgainstRules(this.factory as 'ASM1', undefined, {
+        excludedMaterialCodes: this.ruleExcludedCodes
+      });
       this.ruleCheckResult = result;
       this.violationGroups = this.buildViolationGroups(result.violations);
       this.isRuleChecking = false;
@@ -634,6 +756,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       `Đã kiểm tra,${result.checkedCount}`,
       `Sai rule,${result.violations.length}`,
       `Bỏ qua (IQC/NG/ASM3),${result.skippedExempt}`,
+      `Loại trừ (setting),${result.skippedExcluded}`,
       `Không có rule,${result.skippedNoRule}`,
       `Không có vị trí,${result.skippedEmptyLocation}`,
       '',
@@ -710,6 +833,166 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   }
 
 
+
+  /** Prefix trên materialCode — không kèm factory (tránh composite index). */
+  private async queryFgInventoryDocsByMaterialPrefix(prefix: string): Promise<firebase.firestore.QueryDocumentSnapshot[]> {
+    try {
+      const snap = await this.firestore
+        .collection('fg-inventory', ref =>
+          ref
+            .where('materialCode', '>=', prefix)
+            .where('materialCode', '<=', prefix + '\uf8ff')
+            .limit(500)
+        )
+        .get()
+        .toPromise();
+      return snap?.docs || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Fallback: quét theo factory (cùng pattern fgs-dashboard). */
+  private async queryFgInventoryDocsByFactory(): Promise<firebase.firestore.QueryDocumentSnapshot[]> {
+    const snap = await this.firestore
+      .collection('fg-inventory', ref => ref.where('factory', '==', this.factory))
+      .get()
+      .toPromise();
+    return snap?.docs || [];
+  }
+
+  private async lookupFgInventoryByPCode(pCode: string): Promise<MaterialLocationHit[]> {
+    const prefix = pCode.toUpperCase();
+    let docs = await this.queryFgInventoryDocsByMaterialPrefix(prefix);
+    if (!docs.length) {
+      docs = await this.queryFgInventoryDocsByFactory();
+    }
+
+    const byLocation = new Map<string, { materialCode: string; stock: number }>();
+
+    for (const doc of docs) {
+      const data = doc.data() as Record<string, unknown>;
+      if (String(data['factory'] || '').toUpperCase() !== this.factory) continue;
+
+      const materialCode = String(data['materialCode'] || data['maTP'] || '').trim().toUpperCase();
+      if (!matchesFinishedGoodsPCode(materialCode, prefix)) continue;
+
+      const location = String(data['location'] || data['viTri'] || '').trim().toUpperCase();
+      if (!location || location === 'TEMPORARY') continue;
+
+      const tonDau = Number(data['tonDau'] ?? 0);
+      const nhap = Number(data['nhap'] ?? data['quantity'] ?? 0);
+      const xuat = Number(data['xuat'] ?? data['exported'] ?? 0);
+      const ton =
+        data['ton'] != null
+          ? Number(data['ton'])
+          : data['stock'] != null
+            ? Number(data['stock'])
+            : tonDau + nhap - xuat;
+
+      if (ton <= 0) continue;
+
+      const prev = byLocation.get(location);
+      byLocation.set(location, {
+        materialCode: prev?.materialCode || materialCode,
+        stock: (prev?.stock || 0) + ton
+      });
+    }
+
+    return Array.from(byLocation.entries())
+      .map(([location, v]) => ({
+        materialCode: v.materialCode,
+        location,
+        stock: v.stock
+      }))
+      .sort((a, b) => a.location.localeCompare(b.location, 'vi', { numeric: true }));
+  }
+
+  private applyFgSearchResult(pCode: string, hits: MaterialLocationHit[]): void {
+    const locationHits: SearchLocationHit[] = hits.map(hit => {
+      const layoutShelf = mapFgLocationToLayoutShelf(hit.location, this.knownShelves);
+      const shelfPart = extractFgShelfPartFromLocation(hit.location);
+      const parsed = shelfPart
+        ? parseWarehouseLocation(shelfPart, this.knownShelves)
+        : null;
+      return {
+        location: hit.location,
+        shelf: layoutShelf || hit.location,
+        slot: parsed?.slot ?? null,
+        stock: hit.stock
+      };
+    });
+
+    const first = locationHits[0];
+    this.searchResult = {
+      materialCode: pCode,
+      location: first.location,
+      shelf: first.shelf,
+      slot: first.slot,
+      hitCount: locationHits.length,
+      searchKind: 'fg-p',
+      locationHits
+    };
+
+    this.highlightFgLocations(locationHits);
+    this.selectedLoc = `${pCode} · ${locationHits.length} kệ`;
+  }
+
+  jumpToFgLocation(hit: SearchLocationHit): void {
+    const layoutShelf = mapFgLocationToLayoutShelf(hit.location, this.knownShelves);
+    if (!layoutShelf) return;
+
+    const shelfPart = extractFgShelfPartFromLocation(hit.location);
+    const parsed = shelfPart ? parseWarehouseLocation(shelfPart, this.knownShelves) : null;
+    if (parsed) {
+      this.highlightParsedLocation(parsed);
+    } else {
+      const zone = this.findMapZone(layoutShelf);
+      if (zone) {
+        this.selectZoneElement(zone);
+        zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+    }
+    if (this.searchResult) {
+      this.searchResult = {
+        ...this.searchResult,
+        location: hit.location,
+        shelf: hit.shelf,
+        slot: hit.slot
+      };
+    }
+    this.cdr.markForCheck();
+  }
+
+  private highlightFgLocations(hits: SearchLocationHit[]): void {
+    this.clearHighlights();
+    const host = this.svgHost?.nativeElement;
+    if (!host) return;
+
+    const seen = new Set<Element>();
+    let firstEl: Element | null = null;
+
+    for (const hit of hits) {
+      const layoutShelf = mapFgLocationToLayoutShelf(hit.location, this.knownShelves);
+      if (!layoutShelf) continue;
+
+      const zone =
+        host.querySelector(`[data-loc="${layoutShelf}"]`) ||
+        host.querySelector(`[data-shelf="${layoutShelf}"]`) ||
+        this.findMapZone(layoutShelf);
+
+      if (!zone || seen.has(zone)) continue;
+      seen.add(zone);
+      const target = zone.getAttribute('data-shelf') ? zone.closest('[data-loc]') || zone : zone;
+      target.classList.add('lw-zone--shelf');
+      if (!firstEl) firstEl = target;
+    }
+
+    if (firstEl) {
+      this.highlightedEl = firstEl;
+      firstEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
+  }
 
   private async lookupMaterialByCode(code: string): Promise<MaterialLocationHit[]> {
 
@@ -1134,10 +1417,8 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     const saved = String(doc?.guidance || '').trim();
     if (saved) {
       this.guidanceDraft = saved;
-    } else if (isFinishedGoodsShelf(this.activeGuidanceLoc, this.knownShelves)) {
-      this.guidanceDraft = FINISHED_GOODS_GUIDANCE;
     } else {
-      this.guidanceDraft = '';
+      this.guidanceDraft = getDefaultLocationGuidance(this.activeGuidanceLoc, this.knownShelves);
     }
     this.guidanceUpdatedBy = String(doc?.updatedBy || '');
     this.guidanceSavedAt = this.toDate(doc?.updatedAt);
@@ -1191,7 +1472,20 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private normalizeLiveLocKey(loc: string): string {
-    return String(loc || '').replace(/\s/g, '').toUpperCase();
+    return normalizeMixzoneLiveLocation(loc, this.knownShelves);
+  }
+
+  /** Mỗi mã chỉ giữ lần đổi vị trí mới nhất trong ngày (F71 → P thì hiện P, không còn F71). */
+  private collapseLatestMovePerMaterial(moves: IqcLiveMove[]): IqcLiveMove[] {
+    const latest = new Map<string, IqcLiveMove>();
+    const sorted = [...moves].sort(
+      (a, b) => (b.changedAt?.getTime() || 0) - (a.changedAt?.getTime() || 0)
+    );
+    for (const move of sorted) {
+      const key = move.materialId || `${move.materialCode}\0${move.poNumber}`;
+      if (!latest.has(key)) latest.set(key, move);
+    }
+    return Array.from(latest.values());
   }
 
   private async loadTodayIqcToShelfMoves(): Promise<IqcLiveMove[]> {
@@ -1203,10 +1497,9 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       const fromLocation = String(d['fromLocation'] || '').trim();
       const toLocation = String(d['toLocation'] || '').trim();
       if (!fromLocation || !toLocation) return;
-      if (!this.isIqcLocation(fromLocation)) return;
-      if (this.isIqcLocation(toLocation)) return;
 
       moves.push({
+        materialId: String(d['materialId'] || '').trim(),
         materialCode: String(d['materialCode'] || '').trim(),
         fromLocation,
         toLocation,
@@ -1257,9 +1550,14 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     if (!raw) return null;
 
     const parsed = parseWarehouseLocation(raw, this.knownShelves);
+    const mixzoneShelf = resolveMixzoneShelfFromLocation(raw);
     const candidates = new Set<string>();
     candidates.add(raw);
     candidates.add(raw.toUpperCase());
+    if (mixzoneShelf) {
+      candidates.add(mixzoneShelf);
+      if (mixzoneShelf !== 'P') candidates.add('P');
+    }
     if (parsed?.shelf) candidates.add(parsed.shelf);
     if (parsed?.raw) candidates.add(parsed.raw);
 
@@ -1295,23 +1593,30 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   }
 
-  /** Chỉ tô ô kệ nhỏ — không tô khu vực lớn (Secured WH, IQC, …). */
+  /** Chỉ tô ô kệ nhỏ — không tô khu Secured WH; MIXZONE P được tô các ô F7–G9 bên trong. */
   private resolveLiveHighlightTarget(zone: Element): Element | null {
-    const shelf = zone.getAttribute('data-shelf')
-      ? (zone.closest('[data-loc]') as Element) || zone
-      : zone;
+    if (zone.getAttribute('data-shelf')) {
+      const inner = zone.querySelector('rect:not(.lw-slot-marker)') as SVGRectElement | null;
+      if (inner && this.isLiveHighlightRect(inner)) return zone;
+    }
 
-    const loc = String(shelf.getAttribute('data-loc') || '').trim();
+    const loc = String(zone.getAttribute('data-loc') || '').trim();
+    if (zone.getAttribute('data-zone-border') === 'mixzone' || loc === 'P') {
+      return zone;
+    }
+
     if (!loc || loc.includes(' ')) return null;
 
-    const rect = shelf.querySelector('rect:not(.lw-slot-marker)') as SVGRectElement | null;
-    if (!rect) return null;
+    const rect = zone.querySelector('rect:not(.lw-slot-marker)') as SVGRectElement | null;
+    if (!rect || !this.isLiveHighlightRect(rect)) return null;
 
+    return zone;
+  }
+
+  private isLiveHighlightRect(rect: SVGRectElement): boolean {
     const w = Number(rect.getAttribute('width') || 0);
     const h = Number(rect.getAttribute('height') || 0);
-    if (w > 25 || h > 35) return null;
-
-    return shelf;
+    return w <= 25 && h <= 35;
   }
 
   private clearLiveHighlights(): void {
@@ -1328,13 +1633,14 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.liveUnmappedCount = 0;
     this.liveShelfRows = [];
 
-    if (!moves.length) {
+    const effective = this.collapseLatestMovePerMaterial(moves);
+    if (!effective.length) {
       this.cdr.markForCheck();
       return;
     }
 
     const groups = new Map<string, IqcLiveMove[]>();
-    for (const move of moves) {
+    for (const move of effective) {
       const key = this.normalizeLiveLocKey(move.toLocation);
       const list = groups.get(key) || [];
       list.push(move);
@@ -1345,17 +1651,17 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     const rows: LiveShelfRow[] = [];
 
     for (const [, groupMoves] of groups) {
-      const sample = groupMoves[0];
+      const displayLoc = this.normalizeLiveLocKey(groupMoves[0].toLocation);
       const codes = [...new Set(groupMoves.map(m => m.materialCode).filter(Boolean))];
       const count = groupMoves.length;
 
-      const zone = this.findZoneForLocation(sample.toLocation);
+      const zone = this.findZoneForLocation(displayLoc === 'P' ? 'P' : groupMoves[0].toLocation);
       const target = zone ? this.resolveLiveHighlightTarget(zone) : null;
 
       if (!target) {
         this.liveUnmappedCount += 1;
         rows.push({
-          toLocation: sample.toLocation,
+          toLocation: displayLoc,
           materialCodes: codes,
           count,
           onMap: false
@@ -1363,20 +1669,11 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
         continue;
       }
 
-      target.classList.add('lw-zone--live');
-
-      const titleText = `${sample.toLocation}: ${codes.join(', ')} (${count} lần)`;
-      let titleEl = target.querySelector('title.lw-live-title');
-      if (!titleEl) {
-        titleEl = document.createElementNS(ns, 'title');
-        titleEl.setAttribute('class', 'lw-live-title');
-        target.insertBefore(titleEl, target.firstChild);
-      }
-      titleEl.textContent = titleText;
+      this.markLiveHighlight(target, ns, `${displayLoc}: ${codes.join(', ')} (${count} mã)`);
 
       this.liveShelfCount += 1;
       rows.push({
-        toLocation: sample.toLocation,
+        toLocation: displayLoc,
         materialCodes: codes,
         count,
         onMap: true
@@ -1388,6 +1685,21 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     );
 
     this.cdr.markForCheck();
+  }
+
+  private markLiveHighlight(target: Element, ns: string, titleText: string): void {
+    target.classList.add('lw-zone--live');
+    if (target.getAttribute('data-zone-border') === 'mixzone') {
+      target.querySelectorAll('g[data-shelf]').forEach(el => el.classList.add('lw-zone--live'));
+    }
+
+    let titleEl = target.querySelector('title.lw-live-title');
+    if (!titleEl) {
+      titleEl = document.createElementNS(ns, 'title');
+      titleEl.setAttribute('class', 'lw-live-title');
+      target.insertBefore(titleEl, target.firstChild);
+    }
+    titleEl.textContent = titleText;
   }
 
 }

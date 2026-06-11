@@ -166,6 +166,7 @@ export class TabPermissionGuard implements CanActivate {
       '/qc-traceability': 'qc',
       '/nhiet-do': 'nhiet-do',
       '/rm1-delivery': 'rm1-delivery',
+      '/report': 'report',
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',
       '/zalo': 'zalo',
