@@ -1916,6 +1916,7 @@
 .pf-tab--active { background: #f0fdf4; color: #15803d; }
 .pf-tab--active.pf-tab--not-pass { background: #fef2f2; color: #b91c1c; }
 .pf-tab--active.pf-tab--tra { background: #dcfce7; color: #15803d; }
+.pf-tab--active.pf-tab--hold { background: #fff7ed; color: #c2410c; }
 .pf-tab--day { color: #1e40af; font-weight: 600; }
 .pf-tab--day:hover { background: #eff6ff; }
 
@@ -1928,6 +1929,7 @@
 .pf-dot--pass     { background: #22c55e; }
 .pf-dot--not-pass { background: #ef4444; }
 .pf-dot--tra      { background: #22c55e; }
+.pf-dot--hold     { background: #f97316; }
 
 .putaway-modal-summary__tra strong {
   color: #15803d;
@@ -2000,6 +2002,10 @@
   color: #059669;
 }
 
+.putaway-modal-summary__hold strong {
+  color: #c2410c;
+}
+
 .putaway-modal-summary__not-pass strong {
   color: #dc2626;
 }
@@ -2025,6 +2031,11 @@
 
 .putaway-sku-pass {
   color: #059669;
+  font-weight: 600;
+}
+
+.putaway-sku-hold {
+  color: #c2410c;
   font-weight: 600;
 }
 

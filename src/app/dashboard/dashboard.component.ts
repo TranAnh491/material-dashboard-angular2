@@ -89,6 +89,7 @@ interface PutawayDayCol {
 interface PutawayModalSkuRow {
   materialCode: string;
   passCount: number;
+  holdCount: number;
   notPassCount: number;
   totalSkuCount: number;
   totalStock: number;
@@ -201,8 +202,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   iqcMaterialsBySku: PutawayModalSkuRow[] = [];
   putawayTraMaterialsBySku: PutawayModalSkuRow[] = [];
   iqcMaterialsLoading: boolean = false;
-  /** 'all' | 'pass' | 'not-pass' | 'tra' */
-  putawayFilterMode: 'all' | 'pass' | 'not-pass' | 'tra' = 'all';
+  /** 'all' | 'pass' | 'not-pass' | 'hold' | 'tra' */
+  putawayFilterMode: 'all' | 'pass' | 'not-pass' | 'hold' | 'tra' = 'all';
   putawaySortByDay: 'none' | 'asc' | 'desc' = 'none';
 
   togglePutawaySortDay(): void {
@@ -1907,6 +1908,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (u === 'PASS') return 'pass';
     if (u === 'NG') return 'ng';
     if (u.includes('LOCK') || u.includes('KHÓA') || u.includes('KHOA')) return 'lock';
+    if (u === 'HOLD' || u.includes('ĐẶC CÁCH') || u.includes('DAC CACH')) return 'confirm';
     if (u.includes('CHỜ XÁC NHẬN') || u.includes('CHO XAC NHAN')) return 'confirm';
     if (u.includes('CHỜ KIỂM') || u.includes('CHỜ KIỂM TRA') || u.includes('CHO KIEM')) return 'pending';
     const compact = u.replace(/\s+/g, '');
@@ -2459,10 +2461,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     });
 
-    const byCode = new Map<string, { passCount: number; notPassCount: number; totalStock: number }>();
+    const byCode = new Map<string, { passCount: number; holdCount: number; notPassCount: number; totalStock: number }>();
     skuLines.forEach((line) => {
-      const bucket = byCode.get(line.materialCode) || { passCount: 0, notPassCount: 0, totalStock: 0 };
+      const bucket = byCode.get(line.materialCode) || { passCount: 0, holdCount: 0, notPassCount: 0, totalStock: 0 };
       if (line.statusKind === 'pass') bucket.passCount += 1;
+      else if (line.statusKind === 'confirm') bucket.holdCount += 1;
       else bucket.notPassCount += 1;
       bucket.totalStock += line.stock;
       byCode.set(line.materialCode, bucket);
@@ -2476,8 +2479,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return {
           materialCode,
           passCount: v.passCount,
+          holdCount: v.holdCount,
           notPassCount: v.notPassCount,
-          totalSkuCount: v.passCount + v.notPassCount,
+          totalSkuCount: v.passCount + v.holdCount + v.notPassCount,
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay (không tính Chủ Nhật)
         };
@@ -2538,10 +2542,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     });
 
-    const byCode = new Map<string, { passCount: number; notPassCount: number; totalStock: number }>();
+    const byCode = new Map<string, { passCount: number; holdCount: number; notPassCount: number; totalStock: number }>();
     skuLines.forEach((line) => {
-      const bucket = byCode.get(line.materialCode) || { passCount: 0, notPassCount: 0, totalStock: 0 };
+      const bucket = byCode.get(line.materialCode) || { passCount: 0, holdCount: 0, notPassCount: 0, totalStock: 0 };
       if (line.statusKind === 'pass') bucket.passCount += 1;
+      else if (line.statusKind === 'confirm') bucket.holdCount += 1;
       else bucket.notPassCount += 1;
       bucket.totalStock += line.stock;
       byCode.set(line.materialCode, bucket);
@@ -2556,8 +2561,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return {
           materialCode,
           passCount: v.passCount,
+          holdCount: v.holdCount,
           notPassCount: v.notPassCount,
-          totalSkuCount: v.passCount + v.notPassCount,
+          totalSkuCount: v.passCount + v.holdCount + v.notPassCount,
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,
         };
@@ -2600,6 +2606,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + r.notPassCount, 0);
   }
 
+  get putawayModalTotalHoldSku(): number {
+    return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + (r.holdCount || 0), 0);
+  }
+
   get putawayModalActiveSourceRows(): PutawayModalSkuRow[] {
     return this.putawayFilterMode === 'tra'
       ? (this.putawayTraMaterialsBySku || [])
@@ -2622,6 +2632,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       rows = rows.filter(r => r.passCount > 0);
     } else if (this.putawayFilterMode === 'not-pass') {
       rows = rows.filter(r => r.notPassCount > 0);
+    } else if (this.putawayFilterMode === 'hold') {
+      rows = rows.filter(r => (r.holdCount || 0) > 0);
     }
 
     return this.sortPutawayModalRows(rows);
@@ -2885,6 +2897,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         STT: index + 1,
         'Mã hàng (SKU)': row.materialCode,
         'Đã Pass': row.passCount,
+        Hold: row.holdCount || 0,
         'Chưa Pass': row.notPassCount,
         'Tổng SKU (PO+IMD)': row.totalSkuCount,
         'Tồn kho': row.totalStock,
@@ -2894,7 +2907,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       XLSX.utils.book_append_sheet(wb, ws, 'Putaway_SKU');
 
       const date = new Date().toISOString().split('T')[0];
-      const traSuffix = this.putawayFilterMode === 'tra' ? '_TRA' : '';
+      const traSuffix = this.putawayFilterMode === 'tra' ? '_TRA' : this.putawayFilterMode === 'hold' ? '_Hold' : '';
       const filename = `Putaway_Staging_SKU_${this.selectedFactory}${traSuffix}_${date}.xlsx`;
 
       XLSX.writeFile(wb, filename);

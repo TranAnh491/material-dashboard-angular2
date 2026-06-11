@@ -681,6 +681,10 @@
                   (click)="putawayFilterMode='not-pass'">
             <span class="pf-dot pf-dot--not-pass"></span>Chưa Pass
           </button>
+          <button class="pf-tab pf-tab--hold" [class.pf-tab--active]="putawayFilterMode==='hold'"
+                  (click)="putawayFilterMode='hold'">
+            <span class="pf-dot pf-dot--hold"></span>Hold
+          </button>
           <button class="pf-tab pf-tab--tra" [class.pf-tab--active]="putawayFilterMode==='tra'"
                   (click)="putawayFilterMode='tra'">
             <span class="pf-dot pf-dot--tra"></span>TRA
@@ -695,7 +699,7 @@
         <span class="iqc-modal-actions__spacer"></span>
         <!-- Cất NVL -->
         <button class="cat-nvl-btn" (click)="openCatNvlDialog()"
-                [disabled]="iqcMaterialsLoading || putawayFilterMode === 'tra' || iqcMaterialsBySku.length === 0">
+                [disabled]="iqcMaterialsLoading || putawayFilterMode === 'tra' || putawayFilterMode === 'hold' || iqcMaterialsBySku.length === 0">
           <i class="material-icons">move_to_inbox</i>
           Cất NVL
         </button>
@@ -714,7 +718,8 @@
       <div class="iqc-materials-content" *ngIf="!iqcMaterialsLoading">
         <div class="no-materials" *ngIf="putawayModalIsEmpty">
           <p *ngIf="putawayFilterMode === 'tra'">Không có mã hàng nào ở vị trí TRA (có tồn).</p>
-          <p *ngIf="putawayFilterMode !== 'tra'">Không có mã hàng nào khớp điều kiện Putaway (vị trí IQC, có tồn, có IQC status).</p>
+          <p *ngIf="putawayFilterMode === 'hold'">Không có mã hàng nào đang Hold (Chờ xác nhận / HOLD).</p>
+          <p *ngIf="putawayFilterMode !== 'tra' && putawayFilterMode !== 'hold'">Không có mã hàng nào khớp điều kiện Putaway (vị trí IQC, có tồn, có IQC status).</p>
         </div>
 
         <div class="putaway-modal-summary" *ngIf="!putawayModalIsEmpty">
@@ -724,6 +729,7 @@
           </span>
           <ng-container *ngIf="putawayFilterMode !== 'tra'">
             <span class="putaway-modal-summary__pass">Pass: <strong>{{ putawayModalTotalPassSku }}</strong></span>
+            <span class="putaway-modal-summary__hold">Hold: <strong>{{ putawayModalTotalHoldSku }}</strong></span>
             <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong></span>
           </ng-container>
         </div>
@@ -736,6 +742,7 @@
                 <th>Mã hàng (SKU)</th>
                 <th class="col-num">Day</th>
                 <th class="col-num">Đã Pass</th>
+                <th class="col-num">Hold</th>
                 <th class="col-num">Chưa Pass</th>
                 <th class="col-num">Tổng SKU</th>
                 <th class="col-num">Tồn kho</th>
@@ -751,6 +758,7 @@
                 <td class="putaway-sku-code">{{ row.materialCode }}</td>
                 <td class="col-num putaway-sku-day">{{ row.dayInIqc }}</td>
                 <td class="col-num putaway-sku-pass">{{ row.passCount }}</td>
+                <td class="col-num putaway-sku-hold">{{ row.holdCount > 0 ? row.holdCount : '' }}</td>
                 <td class="col-num putaway-sku-not-pass">{{ row.notPassCount > 0 ? row.notPassCount : '' }}</td>
                 <td class="col-num">{{ row.totalSkuCount }}</td>
                 <td class="col-num">{{ row.totalStock | number:'1.0-2' }}</td>
