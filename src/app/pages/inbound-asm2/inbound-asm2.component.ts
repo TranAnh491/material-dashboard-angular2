@@ -2807,7 +2807,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                 }
 
                 .info-row.info-row-ncc {
-                  font-size: 7px !important;
+                  font-size: 10.5px !important;
                   white-space: normal !important;
                   line-height: 1.1 !important;
                   margin: 0.4mm 0 !important;
@@ -3522,7 +3522,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                 }
 
                 .info-row.info-row-ncc {
-                  font-size: 7px !important;
+                  font-size: 10.5px !important;
                   white-space: normal !important;
                   line-height: 1.1 !important;
                   margin: 0.4mm 0 !important;
