@@ -2439,6 +2439,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
         qrImage,
         qrData: p.qrData,
         batchNumber,
+        supplier: material.supplier || '',
         index: startIndex + i + 1,
         iconType,
         kind: 'carton' as const,
@@ -2461,36 +2462,44 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
     batchNumber: string,
     cartonIndex: number,
-    cartonTotal: number
+    cartonTotal: number,
+    supplier?: string
   ): string {
-    const batch = this.escapeInboundLabelHtml((batchNumber || '').trim());
-    const batchRow = batch
-      ? `<div class="info-row info-row-batch">Lô: ${batch}</div>`
+    const ncc = this.formatHistoryNcc(supplier);
+    const nccRow = ncc
+      ? `<div class="info-row small info-row-ncc">NCC: ${this.escapeInboundLabelHtml(ncc)}</div>`
       : '';
+    const bagLotRow = this.buildInboundBagLotRowHtml(
+      'THÙNG',
+      `${cartonIndex}/${cartonTotal}`,
+      batchNumber
+    );
     return `
                       <div class="info-section">
                         <div>
                           <div class="info-row material-code material-code-main">${this.escapeInboundLabelHtml(f.materialCode)}</div>
                           <div class="info-row">PO: ${this.escapeInboundLabelHtml(f.po)}</div>
+                          ${nccRow}
                           <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
                           <div class="info-row">IMD: ${this.escapeInboundLabelHtml(f.imd)}</div>
-                          <div class="info-row">THÙNG: ${cartonIndex}/${cartonTotal}</div>
+                          ${bagLotRow}
                         </div>
-                        ${batchRow}
                       </div>`;
   }
 
   private renderInboundQrLabelContainerHtml(qr: any): string {
     const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
+    const supplier = qr.supplier || '';
     const infoHtml =
       qr.kind === 'carton'
         ? this.buildInboundQrCartonLabelInfoSectionHtml(
             f,
             qr.batchNumber || '',
             qr.cartonIndex,
-            qr.cartonTotal
+            qr.cartonTotal,
+            supplier
           )
-        : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '');
+        : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '', supplier);
     const iconHtml = qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : '';
     return `
                     <div class="qr-container">
@@ -2568,25 +2577,53 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       .replace(/"/g, '&quot;');
   }
 
-  /** Khối chữ bên phải tem bịch (QR giữ nguyên); Lô hàng nhỏ ở dưới cùng. */
-  private buildInboundQrBagLabelInfoSectionHtml(
-    f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
+  /** Lô trên tem in: chỉ lấy phần số (VD "3793 PGIIN" → "3793"). */
+  private formatInboundLabelLotNumber(batchNumber: string): string {
+    const raw = String(batchNumber || '').trim();
+    if (!raw) return '';
+    const first = raw.split(/\s+/)[0];
+    if (/^\d+$/.test(first)) return first;
+    const m = raw.match(/(\d+)/);
+    return m ? m[1] : '';
+  }
+
+  /** BAG/THÙNG và Lô trên cùng một hàng. */
+  private buildInboundBagLotRowHtml(
+    unitLabel: string,
+    unitValue: string,
     batchNumber: string
   ): string {
-    const batch = this.escapeInboundLabelHtml((batchNumber || '').trim());
-    const batchRow = batch
-      ? `<div class="info-row info-row-batch">Lô: ${batch}</div>`
+    const lot = this.formatInboundLabelLotNumber(batchNumber);
+    const lotHtml = lot
+      ? `<span class="bag-lot-item">Lô: ${this.escapeInboundLabelHtml(lot)}</span>`
       : '';
+    return `<div class="info-row info-row-bag-lot">
+                          <span class="bag-lot-item">${this.escapeInboundLabelHtml(unitLabel)}: ${this.escapeInboundLabelHtml(unitValue)}</span>
+                          ${lotHtml}
+                        </div>`;
+  }
+
+  /** Khối chữ bên phải tem bịch (QR giữ nguyên). */
+  private buildInboundQrBagLabelInfoSectionHtml(
+    f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
+    batchNumber: string,
+    supplier?: string
+  ): string {
+    const ncc = this.formatHistoryNcc(supplier);
+    const nccRow = ncc
+      ? `<div class="info-row small info-row-ncc">NCC: ${this.escapeInboundLabelHtml(ncc)}</div>`
+      : '';
+    const bagLotRow = this.buildInboundBagLotRowHtml('BAG', f.bag, batchNumber);
     return `
                       <div class="info-section">
                         <div>
                           <div class="info-row material-code material-code-main">${this.escapeInboundLabelHtml(f.materialCode)}</div>
                           <div class="info-row">PO: ${this.escapeInboundLabelHtml(f.po)}</div>
+                          ${nccRow}
                           <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
                           <div class="info-row">IMD: ${this.escapeInboundLabelHtml(f.imd)}</div>
-                          <div class="info-row">BAG: ${this.escapeInboundLabelHtml(f.bag)}</div>
+                          ${bagLotRow}
                         </div>
-                        ${batchRow}
                       </div>`;
   }
 
@@ -2648,6 +2685,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
               ...qr,
               qrImage,
               batchNumber: material.batchNumber || '',
+              supplier: material.supplier || '',
               index: index + 1,
               pageNumber: index + 1,
               totalPages: totalPages,
@@ -2767,6 +2805,31 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                   font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
                   color: #000000 !important; /* Màu đen */
                 }
+
+                .info-row.info-row-ncc {
+                  font-size: 7px !important;
+                  white-space: normal !important;
+                  line-height: 1.1 !important;
+                  margin: 0.4mm 0 !important;
+                  word-break: break-word !important;
+                }
+
+                .info-row.info-row-bag-lot {
+                  display: flex !important;
+                  flex-direction: row !important;
+                  justify-content: space-between !important;
+                  align-items: baseline !important;
+                  width: 100% !important;
+                  white-space: nowrap !important;
+                  font-size: 9px !important;
+                  margin: 0.6mm 0 0 !important;
+                  gap: 2px !important;
+                }
+
+                .info-row-bag-lot .bag-lot-item {
+                  display: inline-block;
+                  flex: 0 1 auto;
+                }
                 
                 .qr-grid {
                   text-align: left !important;
@@ -2850,6 +2913,13 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                   .info-row.small.page-number {
                     font-size: 10.08px !important; /* Tăng thêm 20% từ 8.4px */
                     color: #000000 !important; /* Màu đen */
+                  }
+
+                  .info-row.info-row-bag-lot {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    justify-content: space-between !important;
+                    white-space: nowrap !important;
                   }
                   
                   .qr-grid {
@@ -3329,6 +3399,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
               ...qr,
               qrImage,
               batchNumber: materialBatchNumber,
+              supplier: material?.supplier || '',
               index: index + 1,
               pageNumber: index + 1,
               totalPages: totalPages,
@@ -3449,15 +3520,30 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                   font-size: 10.08px !important;
                   color: #000000 !important;
                 }
-                .info-row-batch {
-                  font-size: 6.5px !important;
-                  font-weight: 600 !important;
-                  margin-top: auto !important;
-                  margin-bottom: 0 !important;
-                  line-height: 1.05 !important;
+
+                .info-row.info-row-ncc {
+                  font-size: 7px !important;
                   white-space: normal !important;
-                  word-break: break-all !important;
-                  max-width: 26mm !important;
+                  line-height: 1.1 !important;
+                  margin: 0.4mm 0 !important;
+                  word-break: break-word !important;
+                }
+
+                .info-row.info-row-bag-lot {
+                  display: flex !important;
+                  flex-direction: row !important;
+                  justify-content: space-between !important;
+                  align-items: baseline !important;
+                  width: 100% !important;
+                  white-space: nowrap !important;
+                  font-size: 9px !important;
+                  margin: 0.6mm 0 0 !important;
+                  gap: 2px !important;
+                }
+
+                .info-row-bag-lot .bag-lot-item {
+                  display: inline-block;
+                  flex: 0 1 auto;
                 }
 
                 
@@ -3544,15 +3630,12 @@ export class InboundASM2Component implements OnInit, OnDestroy {
                     font-size: 10.08px !important;
                     color: #000000 !important;
                   }
-                  .info-row-batch {
-                    font-size: 6.5px !important;
-                    font-weight: 600 !important;
-                    margin-top: auto !important;
-                    margin-bottom: 0 !important;
-                    line-height: 1.05 !important;
-                    white-space: normal !important;
-                    word-break: break-all !important;
-                    max-width: 26mm !important;
+
+                  .info-row.info-row-bag-lot {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    justify-content: space-between !important;
+                    white-space: nowrap !important;
                   }
 
                   

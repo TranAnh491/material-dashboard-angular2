@@ -1248,7 +1248,19 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   private isAsm3ProductionLine(line: string): boolean {
     const key = this.normalizeProductionLineKey(line);
-    return key === 'WHE' || key === 'WHD';
+    if (!key || key === '-') return false;
+    if (key === 'WHE' || key === 'WHD') return true;
+    return key.startsWith('WHE') || key.startsWith('WHD');
+  }
+
+  /** KZ + Line WHE/WHD → ASM3 trên PXK; KZ khác → ASM1; LH → ASM2. */
+  private resolvePxkFactoryBadge(lsx: string, productionLine: string): 'ASM1' | 'ASM2' | 'ASM3' | null {
+    const lsxUpper = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
+    if (lsxUpper.startsWith('LH')) return 'ASM2';
+    if (lsxUpper.startsWith('KZ')) {
+      return this.isAsm3ProductionLine(productionLine) ? 'ASM3' : 'ASM1';
+    }
+    return null;
   }
 
   private resolveAutoNotesForProductionLine(line: string): string | null {
@@ -5197,7 +5209,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     } catch (e) {
       console.warn('Không tạo được QR code:', e);
     }
-    const lineNhan = (workOrder.productionLine || '').trim() || '-';
+    const productionLineRaw = (workOrder.productionLine || '').trim();
+    const lineNhan = productionLineRaw || '-';
     try {
       if (lineNhan !== '-') qrImageLine = await QRCode.toDataURL(lineNhan, { width: 120, margin: 1 });
     } catch (e) {
@@ -5457,15 +5470,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const boxStyle = `flex:1;min-height:120px;border:1px solid #000;padding:6px;display:flex;flex-direction:column;font-size:13px;box-sizing:border-box;position:relative`;
     const infoBox = (label: string, value: string) =>
       `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">${label}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${value}</span></div></div>`;
-    const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
-    const isKZ = lsxUpper.startsWith('KZ');
-    const isLH = lsxUpper.startsWith('LH');
-    const isAsm3Line = this.isAsm3ProductionLine(lineNhan);
-    const factoryIconHtml = isKZ
-      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${isAsm3Line ? 'ASM3' : 'ASM1'}</span>`
-      : isLH
-        ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">ASM2</span>`
-        : '';
+    const pxkFactoryBadge = this.resolvePxkFactoryBadge(lsx, productionLineRaw);
+    const factoryIconHtml = pxkFactoryBadge
+      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${pxkFactoryBadge}</span>`
+      : '';
     const maTPVNBox = `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Mã TP VN</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.escapeHtmlForPrint(workOrder.productCode || '-')}</span></div></div>`;
     const maKhachHangDisplay = lines.map(l => String((l as any).maKhachHang || '').trim()).find(v => v) || workOrder.customer || '-';
     const maKhachHangBox = infoBox('Mã Khách Hàng', this.escapeHtmlForPrint(maKhachHangDisplay));

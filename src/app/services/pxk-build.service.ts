@@ -162,12 +162,17 @@ export class PxkBuildService {
     const infoBox = (label: string, value: string) =>
       `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">${this.esc(label)}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.esc(value || '-')}</span></div></div>`;
     const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
-    const isKZ = lsxUpper.startsWith('KZ');
-    const isLH = lsxUpper.startsWith('LH');
-    const isWHE = lineNhan.trim().toUpperCase() === 'WH E';
-    const factoryIconHtml = isKZ
-      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${isWHE ? 'ASM3' : 'ASM1'}</span>`
-      : isLH ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">ASM2</span>` : '';
+    const lineKey = lineNhanRaw.replace(/\s/g, '').toUpperCase();
+    const isAsm3Line = lineKey && lineKey !== '-'
+      && (lineKey === 'WHE' || lineKey === 'WHD' || lineKey.startsWith('WHE') || lineKey.startsWith('WHD'));
+    const factoryBadge = lsxUpper.startsWith('LH')
+      ? 'ASM2'
+      : lsxUpper.startsWith('KZ')
+        ? (isAsm3Line ? 'ASM3' : 'ASM1')
+        : null;
+    const factoryIconHtml = factoryBadge
+      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${factoryBadge}</span>`
+      : '';
     const maTPVNBox = `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Mã TP VN</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.esc(workOrder.productCode || '-')}</span></div></div>`;
     const maKhachHangBox = infoBox('Mã Khách Hàng', this.esc(maKhachHangDisplay));
     const lsxBox = `<div style="${boxStyle};flex-direction:row;align-items:center;justify-content:space-between;gap:6px;"><div style="flex:1;display:flex;flex-direction:column;"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Lệnh Sản Xuất</strong><span style="word-break:break-all;font-size:11px;">${this.esc(lsx)}</span></div>${qrImage ? `<img src="${qrImage}" alt="QR" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
