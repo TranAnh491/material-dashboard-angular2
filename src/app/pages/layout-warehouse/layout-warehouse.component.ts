@@ -120,6 +120,12 @@ interface LiveShelfRow {
   onMap: boolean;
 }
 
+interface HeatmapShelfRow {
+  shelf: string;
+  codeCount: number;
+  materialCodes: string[];
+}
+
 
 
 @Component({
@@ -201,6 +207,13 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   liveShelfCount = 0;
   liveUnmappedCount = 0;
   liveShelfRows: LiveShelfRow[] = [];
+
+  heatmapModeActive = false;
+  heatmapLoading = false;
+  heatmapError = '';
+  heatmapMaxCount = 0;
+  heatmapShelfCount = 0;
+  heatmapRows: HeatmapShelfRow[] = [];
 
   private knownShelves: string[] = [];
   private guidanceSub?: Subscription;
@@ -300,6 +313,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.loadSub?.unsubscribe();
     this.unsubscribeGuidance();
     this.stopLiveMode();
+    this.stopHeatmapMode();
 
   }
 
@@ -478,6 +492,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       this.stopLiveMode();
       return;
     }
+    this.stopHeatmapMode();
     this.liveModeActive = true;
     await this.refreshLiveMoves();
     this.liveRefreshTimer = setInterval(() => void this.refreshLiveMoves(), 120_000);
@@ -499,7 +514,118 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.cdr.markForCheck();
   }
 
-  async refreshLiveMoves(): Promise<void> {
+  async toggleHeatmapMode(): Promise<void> {
+    if (this.heatmapModeActive) {
+      this.stopHeatmapMode();
+      return;
+    }
+    this.stopLiveMode();
+    this.heatmapModeActive = true;
+    await this.refreshHeatmap();
+  }
+
+  stopHeatmapMode(): void {
+    this.heatmapModeActive = false;
+    this.heatmapLoading = false;
+    this.heatmapError = '';
+    this.heatmapMaxCount = 0;
+    this.heatmapShelfCount = 0;
+    this.heatmapRows = [];
+    this.clearHeatmapHighlights();
+    this.cdr.markForCheck();
+  }
+
+  async refreshHeatmap(): Promise<void> {
+    if (!this.heatmapModeActive) return;
+
+    this.heatmapLoading = true;
+    this.heatmapError = '';
+    this.cdr.markForCheck();
+
+    try {
+      if (!this.knownShelves.length) {
+        this.collectKnownShelves();
+      }
+      const shelfCounts = await this.loadHeatmapShelfCounts();
+      this.applyHeatmapHighlights(shelfCounts);
+    } catch (err) {
+      this.heatmapError = (err as Error)?.message || String(err);
+      this.clearHeatmapHighlights();
+    } finally {
+      this.heatmapLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  jumpToHeatmapShelf(row: HeatmapShelfRow): void {
+    const zone = this.findZoneForLocation(row.shelf);
+    if (!zone) return;
+    this.selectZoneElement(zone);
+    zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }
+
+  private async loadHeatmapShelfCounts(): Promise<Map<string, Set<string>>> {
+    const snap = await this.firestore
+      .collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.factory).limit(10000)
+      )
+      .get()
+      .toPromise();
+
+    const byShelf = new Map<string, Set<string>>();
+
+    for (const doc of snap?.docs || []) {
+      const data = doc.data() as Record<string, unknown>;
+      const materialCode = String(data['materialCode'] || '').trim().toUpperCase();
+      const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+      if (!materialCode || !location || location.toUpperCase() === 'TEMPORARY') continue;
+
+      const qty = Number(data['quantity']) || 0;
+      const exported = Number(data['exported']) || 0;
+      const stockField = Number(data['stock']) || 0;
+      const openingStock =
+        data['openingStock'] != null ? Number(data['openingStock']) : 0;
+      const xt = Number(data['xt']) || 0;
+      const available =
+        qty > 0 ? openingStock + qty - exported - xt : stockField > 0 ? stockField : openingStock;
+      if (available <= 0) continue;
+
+      const shelfKey = this.resolveHeatmapMapKey(location);
+      if (!shelfKey) continue;
+
+      const codes = byShelf.get(shelfKey) || new Set<string>();
+      codes.add(materialCode);
+      byShelf.set(shelfKey, codes);
+    }
+
+    return byShelf;
+  }
+
+  private resolveHeatmapMapKey(location: string): string | null {
+    const zone = this.findZoneForLocation(location);
+    if (!zone) return null;
+    const target = this.resolveLiveHighlightTarget(zone);
+    if (!target) return null;
+    const shelf = String(target.getAttribute('data-shelf') || '').trim().toUpperCase();
+    const loc = String(target.getAttribute('data-loc') || '').trim().toUpperCase();
+    return shelf || loc || null;
+  }
+
+  private heatmapColors(count: number, max: number): { fill: string; stroke: string } {
+    if (count <= 0 || max <= 0) {
+      return { fill: '#ffffff', stroke: '#94a3b8' };
+    }
+    const t = Math.min(1, count / max);
+    const lightness = Math.round(94 - t * 54);
+    const saturation = Math.round(65 + t * 30);
+    const strokeLight = Math.max(22, lightness - 18);
+    return {
+      fill: `hsl(217, ${saturation}%, ${lightness}%)`,
+      stroke: `hsl(217, ${saturation}%, ${strokeLight}%)`
+    };
+  }
+
+  private async refreshLiveMoves(): Promise<void> {
     if (!this.liveModeActive) return;
 
     this.liveLoading = true;
@@ -1697,6 +1823,100 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     if (!titleEl) {
       titleEl = document.createElementNS(ns, 'title');
       titleEl.setAttribute('class', 'lw-live-title');
+      target.insertBefore(titleEl, target.firstChild);
+    }
+    titleEl.textContent = titleText;
+  }
+
+  private clearHeatmapHighlights(): void {
+    const host = this.svgHost?.nativeElement;
+    if (!host) return;
+    host.querySelectorAll('.lw-zone--heatmap').forEach(el => {
+      el.classList.remove('lw-zone--heatmap');
+      el.querySelectorAll('rect').forEach(rect => {
+        const r = rect as SVGRectElement;
+        r.style.removeProperty('fill');
+        r.style.removeProperty('stroke');
+        r.style.removeProperty('stroke-width');
+      });
+    });
+    host.querySelectorAll('title.lw-heatmap-title').forEach(el => el.remove());
+  }
+
+  private applyHeatmapHighlights(shelfCounts: Map<string, Set<string>>): void {
+    this.clearHeatmapHighlights();
+    this.heatmapMaxCount = 0;
+    this.heatmapShelfCount = 0;
+    this.heatmapRows = [];
+
+    if (!shelfCounts.size) {
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const host = this.svgHost?.nativeElement;
+    if (!host) return;
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const rows: HeatmapShelfRow[] = [];
+
+    for (const [, codes] of shelfCounts) {
+      if (codes.size > this.heatmapMaxCount) this.heatmapMaxCount = codes.size;
+    }
+    const max = this.heatmapMaxCount;
+
+    for (const [shelf, codes] of shelfCounts) {
+      const count = codes.size;
+      const zone = this.findZoneForLocation(shelf);
+      const target = zone ? this.resolveLiveHighlightTarget(zone) : null;
+      if (!target) continue;
+
+      const { fill, stroke } = this.heatmapColors(count, max);
+      this.paintHeatmapTarget(target, fill, stroke, ns, `${shelf}: ${count} mã`, count);
+
+      this.heatmapShelfCount += 1;
+      rows.push({
+        shelf,
+        codeCount: count,
+        materialCodes: [...codes].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }))
+      });
+    }
+
+    this.heatmapRows = rows.sort(
+      (a, b) => b.codeCount - a.codeCount || a.shelf.localeCompare(b.shelf, 'vi', { numeric: true })
+    );
+    this.cdr.markForCheck();
+  }
+
+  private paintHeatmapTarget(
+    target: Element,
+    fill: string,
+    stroke: string,
+    ns: string,
+    titleText: string,
+    count: number
+  ): void {
+    const paintRects = (el: Element): void => {
+      el.classList.add('lw-zone--heatmap');
+      el.setAttribute('data-heat-count', String(count));
+      el.querySelectorAll('rect:not(.lw-slot-marker)').forEach(rect => {
+        const r = rect as SVGRectElement;
+        r.style.fill = fill;
+        r.style.stroke = stroke;
+        r.style.strokeWidth = '1px';
+      });
+    };
+
+    if (target.getAttribute('data-zone-border') === 'mixzone') {
+      target.querySelectorAll('g[data-shelf]').forEach(el => paintRects(el));
+    } else {
+      paintRects(target);
+    }
+
+    let titleEl = target.querySelector('title.lw-heatmap-title');
+    if (!titleEl) {
+      titleEl = document.createElementNS(ns, 'title');
+      titleEl.setAttribute('class', 'lw-heatmap-title');
       target.insertBefore(titleEl, target.firstChild);
     }
     titleEl.textContent = titleText;

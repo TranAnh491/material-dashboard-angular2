@@ -19,26 +19,24 @@
     <!-- Excel-like Actions -->
     <div class="excel-actions">
       <div class="action-controls">
-        <div class="toolbar-left">
+        <div class="toolbar-row toolbar-row--actions">
           <button class="custom-btn btn-more" type="button" (click)="openMorePopup()">
             <i class="material-icons">more_vert</i>
             <span>MORE</span>
             <i class="material-icons caret">expand_more</i>
           </button>
 
-          <div class="search-box" style="display: flex; align-items: center; gap: 8px;">
-            <div class="search-wrap">
-              <input type="text" 
-                   placeholder="Tìm kiếm..." 
-                   [(ngModel)]="searchTerm"
-                   (input)="onSearchChange($event)"
-                   class="custom-input search-input-uppercase"
-                   style="width: 4cm;"
-                   title="Tìm theo: IMD (001), Mã tem, Khách hàng">
-              <i class="material-icons search-ico">search</i>
-            </div>
+          <div class="search-wrap">
+            <input type="text"
+                 placeholder="Tìm kiếm..."
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchChange($event)"
+                 class="custom-input search-input-uppercase"
+                 title="Tìm theo: IMD (001), Mã tem, Khách hàng">
+            <i class="material-icons search-ico">search</i>
+          </div>
 
-            <!-- 3 nút icon như ảnh -->
+          <div class="toolbar-icon-group">
             <button class="icon-btn" type="button" (click)="refreshDisplay()" title="Làm mới">
               <i class="material-icons">refresh</i>
             </button>
@@ -48,16 +46,19 @@
             <button class="icon-btn" type="button" (click)="openDownloadModal()" title="Tải xuống lịch sử">
               <i class="material-icons">download</i>
             </button>
+          </div>
 
-            <button class="custom-btn custom-btn--iqc" 
+          <div class="toolbar-btn-group">
+            <button class="custom-btn custom-btn--iqc"
+                    type="button"
                     (click)="openIQCModal()"
-                    title="IQC - Kiểm tra chất lượng"
-                    >
+                    title="IQC - Kiểm tra chất lượng">
               <i class="material-icons">check_circle</i>
               IQC
             </button>
 
             <button class="custom-btn custom-btn--print"
+                    type="button"
                     (click)="printBatchPrintedQrLabels()"
                     title="In hàng loạt các tem có tình trạng Đã in">
               <i class="material-icons">print</i>
@@ -65,9 +66,9 @@
             </button>
           </div>
         </div>
-        
+
         <!-- Status Indicators (đồng bộ danh mục Tình trạng trong More → Tình trạng) -->
-        <div class="toolbar-stats">
+        <div class="toolbar-row toolbar-row--stats">
           <button
             type="button"
             class="stat-card"
@@ -112,7 +113,7 @@
           </button>
         </div>
       </div>
-      </div>
+    </div>
 
     <!-- Popup xác nhận xóa -->
     <div *ngIf="showDeleteDialog" class="delete-confirm-overlay">
@@ -553,46 +554,52 @@
     
     .action-controls {
       display: flex;
+      flex-direction: column;
       gap: 10px;
-      align-items: center;
-      flex-wrap: nowrap;
-      justify-content: space-between;
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .toolbar-left {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: nowrap;
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-
-    .toolbar-stats {
-      display: flex;
-      gap: 8px;
       align-items: stretch;
+    }
+
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .toolbar-row--actions {
+      flex-wrap: wrap;
+      row-gap: 8px;
+    }
+
+    .toolbar-row--stats {
       flex-wrap: nowrap;
-      justify-content: flex-end;
-      margin-left: auto;
       overflow-x: auto;
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
       padding-bottom: 2px;
+      scrollbar-width: thin;
+    }
+
+    .toolbar-icon-group,
+    .toolbar-btn-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       flex: 0 0 auto;
+    }
+
+    .toolbar-btn-group {
+      margin-left: auto;
     }
     
     .custom-btn {
       background: #fff;
       border: 1px solid #e5e7eb;
       color: #111827;
-      padding: 8px 14px;
+      padding: 7px 12px;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       transition: background 0.15s ease, border-color 0.15s ease;
       display: inline-flex;
       align-items: center;
@@ -600,6 +607,10 @@
       font-weight: 400;
       box-shadow: none;
       text-transform: uppercase;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      height: 34px;
+      box-sizing: border-box;
     }
 
     .btn-more {
@@ -696,19 +707,24 @@
       border-top: 1px solid #e9ecef;
     }
     
-    .search-box {
-      flex: 1;
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 1 1 140px;
+      min-width: 120px;
       max-width: 220px;
     }
 
-    .search-wrap { position: relative; display:flex; align-items:center; }
     .search-wrap input {
+      width: 100%;
       padding-right: 30px !important;
       height: 34px;
       border-radius: 6px;
       border: 1px solid #e5e7eb;
       font-size: 12px;
       text-transform: none;
+      box-sizing: border-box;
     }
     .search-ico {
       position:absolute;
@@ -725,10 +741,13 @@
       border: 1px solid #e5e7eb;
       background: #ffffff;
       display: inline-flex;
-      align-items:center;
-      justify-content:center;
-      cursor:pointer;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
       transition: background 0.15s ease, border-color 0.15s ease;
+      flex: 0 0 34px;
+      padding: 0;
+      box-sizing: border-box;
     }
     .icon-btn i { font-size: 18px; color:#111827; }
     .icon-btn:hover { background:#f9fafb; border-color:#d1d5db; }
@@ -806,7 +825,7 @@
     
     .table-container {
       /* Chừa chỗ cho pagination, hạn chế scroll toàn trang */
-      max-height: calc(100vh - 260px);
+      max-height: calc(100vh - 300px);
       overflow-y: auto;
       border: 1px solid #e5e7eb;
       border-radius: 10px;
@@ -866,11 +885,11 @@
       cursor: pointer;
       box-shadow: none;
       display: inline-flex;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
-      min-width: 92px;
+      min-width: 88px;
       justify-content: flex-start;
-      transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease;
       text-transform: none;
       flex: 0 0 auto;
     }
@@ -878,7 +897,6 @@
     .stat-card:hover {
       background: #f9fafb;
       border-color: #d1d5db;
-      transform: translateY(-1px);
     }
 
     .stat-card.active {
@@ -1020,17 +1038,33 @@
         padding: 10px 15px;
       }
       
-      .action-controls {
+      .toolbar-row--actions {
         flex-direction: column;
         align-items: stretch;
+      }
+
+      .toolbar-btn-group {
+        margin-left: 0;
+        width: 100%;
+      }
+
+      .toolbar-btn-group .custom-btn {
+        flex: 1;
+        justify-content: center;
+      }
+
+      .search-wrap {
+        max-width: none;
+        width: 100%;
+      }
+
+      .toolbar-icon-group {
+        width: 100%;
+        justify-content: flex-start;
       }
       
       .custom-btn {
         justify-content: center;
-      }
-      
-      .search-box {
-        max-width: none;
       }
       
       .excel-table {

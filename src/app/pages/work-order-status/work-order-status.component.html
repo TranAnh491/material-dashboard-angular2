@@ -383,7 +383,11 @@
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
                             <mat-label>Line</mat-label>
-                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.productionLine" name="productionLine" required>
+                            <mat-select panelClass="wo-status-select-panel"
+                                        [(value)]="newWorkOrder.productionLine"
+                                        (selectionChange)="onNewWorkOrderLineChange($event.value)"
+                                        name="productionLine"
+                                        required>
                               <mat-option *ngFor="let line of availableLines" [value]="line">{{line}}</mat-option>
                             </mat-select>
                           </mat-form-field>

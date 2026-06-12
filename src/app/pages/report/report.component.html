@@ -1,135 +1,307 @@
 <div class="report-page">
+  <!-- Header -->
   <header class="report-header">
-    <div class="report-header__brand">
-      <span class="report-header__logo">ASM</span>
-      <h1 class="report-header__title">Material Analysis</h1>
+    <!-- Row 1: brand + controls -->
+    <div class="report-header__row">
+      <div class="report-header__brand">
+        <span class="report-header__logo">ASM</span>
+        <div>
+          <h1 class="report-header__title">
+            {{ dataType === 'materials' ? 'Material Analysis' : 'Finished Goods Analysis' }}
+          </h1>
+          <p class="report-header__sub" *ngIf="lastUpdated">
+            Updated: {{ lastUpdated | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+        </div>
+      </div>
+
+      <div class="report-header__controls">
+        <!-- Data type toggle -->
+        <div class="report-type-toggle">
+          <button
+            class="report-type-btn"
+            [class.report-type-btn--active]="dataType === 'materials'"
+            (click)="setDataType('materials')"
+          >
+            <i class="material-icons">inventory_2</i>
+            Materials
+          </button>
+          <button
+            class="report-type-btn"
+            [class.report-type-btn--active]="dataType === 'fgs'"
+            (click)="setDataType('fgs')"
+          >
+            <i class="material-icons">category</i>
+            Finished Goods
+          </button>
+        </div>
+
+        <!-- Import button -->
+        <button type="button" class="report-import-btn" (click)="openImportModal()">
+          <i class="material-icons">upload_file</i>
+          Import Data
+        </button>
+
+        <button type="button" class="report-menu-btn" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+          Về Menu
+        </button>
+      </div>
     </div>
+
+    <!-- Row 2: meta info -->
     <div class="report-header__meta">
       <div class="report-meta-item">
         <i class="material-icons">event</i>
-        <span>Tracking Period: <strong>{{ trackingPeriod }}</strong></span>
+        <span>Period: <strong>{{ trackingPeriod }}</strong></span>
       </div>
       <div class="report-meta-item">
-        <i class="material-icons">inventory_2</i>
+        <i class="material-icons">{{ dataType === 'materials' ? 'inventory_2' : 'category' }}</i>
         <span>Scope: <strong>{{ scope }}</strong></span>
+      </div>
+      <div class="report-meta-item" *ngIf="usdRateUsed">
+        <i class="material-icons">currency_exchange</i>
+        <span>USD rate: <strong>{{ usdRateUsed | number:'1.0-0' }}</strong> VND/USD</span>
       </div>
     </div>
   </header>
 
-  <section class="report-row report-row--split">
-    <article class="report-panel">
-      <h2 class="report-panel__title">MATERIAL TURNOVER BY MATERIAL (x)</h2>
-      <div class="report-panel__body report-panel__body--chart-table">
-        <div class="report-chart-wrap report-chart-wrap--bar">
-          <canvas #turnoverCanvas></canvas>
+  <!-- Loading -->
+  <div class="report-loading" *ngIf="isLoading">
+    <i class="material-icons report-loading__icon">hourglass_empty</i>
+    <span>Loading data…</span>
+  </div>
+
+  <ng-container *ngIf="!isLoading">
+    <!-- Charts row -->
+    <section class="report-row report-row--split">
+      <article class="report-panel">
+        <h2 class="report-panel__title">
+          {{ usesInventoryValueMode
+            ? 'MATERIAL INVENTORY VALUE BY CODE — USD (Top 20)'
+            : (dataType === 'materials' ? 'MATERIAL' : 'FG') + ' TURNOVER BY CODE (x)' }}
+        </h2>
+        <div class="report-panel__body report-panel__body--chart-table">
+          <div class="report-chart-wrap report-chart-wrap--bar">
+            <canvas #turnoverCanvas></canvas>
+          </div>
+          <div class="report-table-wrap">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Customer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of tableRows">
+                  <td class="report-table__code">{{ row.materialCode }}</td>
+                  <td class="report-table__customer">{{ row.customer || 'N/A' }}</td>
+                </tr>
+                <tr *ngIf="!tableRows.length">
+                  <td colspan="2" class="report-table__empty">Chưa có dữ liệu</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="report-table-wrap">
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>Material Code</th>
-                <th>Customer</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of rows">
-                <td>{{ row.materialCode }}</td>
-                <td>{{ row.customer }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <p class="report-avg report-avg--right" *ngIf="usesInventoryValueMode">
+          Top 20 theo <strong>Số dư cuối kỳ</strong>
+        </p>
+        <p class="report-avg report-avg--right" *ngIf="!usesInventoryValueMode">
+          Average: <strong>{{ avgTurnover | number:'1.2-2' }}x</strong>
+        </p>
+      </article>
+
+      <article class="report-panel">
+        <h2 class="report-panel__title">
+          DAYS OF INVENTORY (DOI) BY {{ dataType === 'materials' ? 'MATERIAL' : 'FG' }} (Days)
+        </h2>
+        <div class="report-panel__body report-panel__body--chart-table">
+          <div class="report-chart-wrap report-chart-wrap--bar">
+            <canvas #doiCanvas></canvas>
+          </div>
+          <div class="report-table-wrap">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Customer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of doiRows">
+                  <td class="report-table__code">{{ row.materialCode }}</td>
+                  <td class="report-table__customer">{{ row.customer || 'N/A' }}</td>
+                </tr>
+                <tr *ngIf="!doiRows.length">
+                  <td colspan="2" class="report-table__empty">Chưa có dữ liệu</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-      <p class="report-avg report-avg--right">Average: <strong>{{ avgTurnover | number:'1.2-2' }}x</strong></p>
-    </article>
+        <p class="report-avg">Average: <strong>{{ avgDoi | number:'1.0-0' }} Days</strong></p>
+      </article>
+    </section>
 
-    <article class="report-panel">
-      <h2 class="report-panel__title">DAYS OF INVENTORY (DOI) BY MATERIAL (Days)</h2>
-      <div class="report-panel__body report-panel__body--chart-table">
-        <div class="report-chart-wrap report-chart-wrap--bar">
-          <canvas #doiCanvas></canvas>
+    <!-- Bubble chart -->
+    <section class="report-panel report-panel--bubble">
+      <h2 class="report-panel__title report-panel__title--center">
+        {{ dataType === 'materials' ? 'MATERIAL' : 'FINISHED GOODS' }} ANALYSIS: TURNOVER vs DOI
+      </h2>
+      <div class="report-chart-wrap report-chart-wrap--bubble">
+        <canvas #bubbleCanvas></canvas>
+      </div>
+      <p class="report-note">Note: Bubble size represents average inventory value.</p>
+    </section>
+
+    <!-- Insights -->
+    <section class="report-insights">
+      <article class="report-insight report-insight--success">
+        <div class="report-insight__head">
+          <i class="material-icons">emoji_events</i>
+          <h3>TOP PERFORMERS</h3>
         </div>
-        <div class="report-table-wrap">
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>Material Code</th>
-                <th>Customer</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of doiRows">
-                <td>{{ row.materialCode }}</td>
-                <td>{{ row.customer }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <p *ngIf="topPerformers.length; else noTop">
+          <strong>{{ topPerformers[0].materialCode }}</strong> leads with
+          {{ topPerformers[0].turnover | number:'1.1-1' }}x turnover and
+          {{ topPerformers[0].doi }} day DOI.
+          <span *ngIf="topPerformers.length > 1">
+            Also strong: {{ topPerformers[1].materialCode }}<span *ngIf="topPerformers[2]">, {{ topPerformers[2].materialCode }}</span>.
+          </span>
+        </p>
+        <ng-template #noTop><p>No items in Excellent quadrant.</p></ng-template>
+      </article>
+
+      <article class="report-insight report-insight--danger">
+        <div class="report-insight__head">
+          <i class="material-icons">warning</i>
+          <h3>AT RISK</h3>
         </div>
-      </div>
-      <p class="report-avg">Average: <strong>{{ avgDoi | number:'1.0-0' }} Days</strong></p>
-    </article>
-  </section>
+        <p *ngIf="atRisk.length; else noRisk">
+          <strong>{{ atRisk[0].materialCode }}</strong> has the highest DOI
+          ({{ atRisk[0].doi }} days) with low turnover.
+          <span *ngIf="atRisk.length > 1">
+            Also flagged: {{ atRisk[1].materialCode }}<span *ngIf="atRisk[2]">, {{ atRisk[2].materialCode }}</span>.
+          </span>
+        </p>
+        <ng-template #noRisk><p>No items in At Risk quadrant.</p></ng-template>
+      </article>
 
-  <section class="report-panel report-panel--bubble">
-    <h2 class="report-panel__title report-panel__title--center">
-      MATERIAL ANALYSIS: TURNOVER vs DOI
-    </h2>
-    <div class="report-chart-wrap report-chart-wrap--bubble">
-      <canvas #bubbleCanvas></canvas>
-    </div>
-    <p class="report-note">Note: Bubble size represents average inventory value.</p>
-  </section>
+      <article class="report-insight report-insight--warn">
+        <div class="report-insight__head">
+          <i class="material-icons">schedule</i>
+          <h3>NEEDS ATTENTION</h3>
+        </div>
+        <p>Review items with DOI &gt; 30 days. Focus on slow-moving inventory to reduce holding costs.</p>
+      </article>
 
-  <section class="report-insights">
-    <article class="report-insight report-insight--success">
-      <div class="report-insight__head">
-        <i class="material-icons">emoji_events</i>
-        <h3>TOP PERFORMERS</h3>
-      </div>
-      <p *ngIf="topPerformers.length; else noTop">
-        <strong>{{ topPerformers[0].materialCode }}</strong> leads with
-        {{ topPerformers[0].turnover | number:'1.1-1' }}x turnover and
-        {{ topPerformers[0].doi }} day DOI.
-        <span *ngIf="topPerformers.length > 1">
-          Also strong: {{ topPerformers[1].materialCode }}<span *ngIf="topPerformers[2]">, {{ topPerformers[2].materialCode }}</span>.
-        </span>
-      </p>
-      <ng-template #noTop><p>No materials in Excellent quadrant.</p></ng-template>
-    </article>
-
-    <article class="report-insight report-insight--danger">
-      <div class="report-insight__head">
-        <i class="material-icons">warning</i>
-        <h3>AT RISK</h3>
-      </div>
-      <p *ngIf="atRisk.length; else noRisk">
-        <strong>{{ atRisk[0].materialCode }}</strong> has the highest DOI
-        ({{ atRisk[0].doi }} days) with low turnover.
-        <span *ngIf="atRisk.length > 1">
-          Also flagged: {{ atRisk[1].materialCode }}<span *ngIf="atRisk[2]">, {{ atRisk[2].materialCode }}</span>.
-        </span>
-      </p>
-      <ng-template #noRisk><p>No materials in At Risk quadrant.</p></ng-template>
-    </article>
-
-    <article class="report-insight report-insight--warn">
-      <div class="report-insight__head">
-        <i class="material-icons">schedule</i>
-        <h3>NEEDS ATTENTION</h3>
-      </div>
-      <p>Review materials with DOI &gt; 30 days. Focus on slow-moving items to reduce holding costs.</p>
-    </article>
-
-    <article class="report-insight report-insight--info">
-      <div class="report-insight__head">
-        <i class="material-icons">trending_up</i>
-        <h3>OPPORTUNITY</h3>
-      </div>
-      <p>Maintain high-turnover benchmarks and optimize purchase planning to improve working capital.</p>
-    </article>
-  </section>
+      <article class="report-insight report-insight--info">
+        <div class="report-insight__head">
+          <i class="material-icons">trending_up</i>
+          <h3>OPPORTUNITY</h3>
+        </div>
+        <p>Maintain high-turnover benchmarks and optimize purchase planning to improve working capital.</p>
+      </article>
+    </section>
+  </ng-container>
 
   <footer class="report-footer">
     <span>Source: LinkQ</span>
   </footer>
+</div>
+
+<!-- ── Import Modal ─────────────────────────────────────────────────────── -->
+<div class="rim-backdrop" *ngIf="showImportModal" (click)="closeImportModal()"></div>
+<div class="rim" *ngIf="showImportModal" role="dialog" aria-modal="true">
+  <div class="rim__header">
+    <span class="rim__title">
+      <i class="material-icons">upload_file</i>
+      Import Data
+    </span>
+    <button class="rim__close" (click)="closeImportModal()" [disabled]="importLoading">
+      <i class="material-icons">close</i>
+    </button>
+  </div>
+
+  <div class="rim__body">
+    <div class="rim__note">
+      <i class="material-icons">info</i>
+      <strong>Giá trị:</strong> quy đổi <code>VND → USD</code> tỷ giá tạm tính <code>26,200</code>.<br>
+      <strong>Customer:</strong> <code>XUẤT</code> (PX → mã vật tư → mã TP) → <code>DMTP</code> Firebase (cột <code>A</code> = mã TP, cột <code>H</code> = khách hàng).<br>
+      <strong>Materials:</strong> sheet <code>BCTK NVL</code>, mã <code>B*</code>, top 20 theo <code>Số dư cuối kỳ</code>.
+    </div>
+
+    <!-- Period -->
+    <div class="rim__field">
+      <label class="rim__label">Tracking Period <span class="rim__opt">(optional)</span></label>
+      <input
+        class="rim__input"
+        type="text"
+        placeholder="e.g. Jan – Jun 2026"
+        [(ngModel)]="importPeriod"
+        [disabled]="importLoading"
+      />
+    </div>
+
+    <!-- File upload -->
+    <div class="rim__field">
+      <label class="rim__label">Excel File (.xlsx / .csv)</label>
+      <div class="rim__file-row">
+        <label class="rim__file-btn" [class.rim__file-btn--disabled]="importLoading">
+          <i class="material-icons">attach_file</i>
+          Chọn file
+          <input
+            #fileInput
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            (change)="onFileSelected($event)"
+            [disabled]="importLoading"
+            hidden
+          />
+        </label>
+        <span class="rim__file-name" [class.rim__file-name--set]="importFileName">
+          {{ importFileName || 'Chưa chọn file' }}
+        </span>
+      </div>
+
+      <div class="rim__preview" *ngIf="parsedImport">
+        <i class="material-icons rim__preview__icon">check_circle</i>
+        {{ parsedImport.sheetNames.length }} sheet
+        · Materials: {{ parsedImport.materials.length }}
+        · Tỷ giá: {{ parsedImport.usdRate | number:'1.0-0' }} VND/USD
+        · DMTP: {{ importLookupStats.dmtp }} mã TP
+        · XUẤT map: {{ importLookupStats.xuat }} mã B*
+        · Có customer: {{ countCustomers(parsedImport.materials) }}/{{ parsedImport.materials.length }}
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="rim__error" *ngIf="importError">
+      <i class="material-icons">error_outline</i>
+      {{ importError }}
+    </div>
+
+    <!-- Success -->
+    <div class="rim__success" *ngIf="importSuccess">
+      <i class="material-icons">check_circle</i>
+      Lưu thành công! Đang tải lại dữ liệu…
+    </div>
+  </div>
+
+  <div class="rim__footer">
+    <button class="rim__cancel" (click)="closeImportModal()" [disabled]="importLoading">
+      Hủy
+    </button>
+    <button
+      class="rim__confirm"
+      (click)="confirmImport()"
+      [disabled]="importLoading || !parsedImport || !parsedImport.materials.length"
+    >
+      <span *ngIf="importLoading" class="rim__spinner"></span>
+      <i class="material-icons" *ngIf="!importLoading">save</i>
+      {{ importLoading ? 'Đang lưu…' : 'Lưu vào Firebase' }}
+    </button>
+  </div>
 </div>

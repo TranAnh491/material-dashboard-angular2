@@ -123,6 +123,15 @@
         <i class="material-icons">{{ liveLoading ? 'hourglass_top' : 'sensors' }}</i>
         {{ liveLoading ? 'Đang tải…' : (liveModeActive ? 'Live (' + liveMoves.length + ')' : 'Live') }}
       </button>
+      <button
+        type="button"
+        class="lw-btn lw-btn--heatmap"
+        [class.lw-btn--heatmap-active]="heatmapModeActive"
+        [disabled]="isLoading || heatmapLoading"
+        (click)="toggleHeatmapMode()">
+        <i class="material-icons">{{ heatmapLoading ? 'hourglass_top' : 'grid_on' }}</i>
+        {{ heatmapLoading ? 'Đang tải…' : (heatmapModeActive ? 'Heatmap (' + heatmapShelfCount + ')' : 'Heatmap') }}
+      </button>
       <p class="lw-live-hint" *ngIf="liveModeActive && !liveLoading">
         Hôm nay: {{ liveMoves.length }} lần đổi vị trí · {{ liveShelfCount }} kệ màu cam (theo vị trí mới nhất)
         <span *ngIf="liveUnmappedCount"> · {{ liveUnmappedCount }} kệ không có trên sơ đồ</span>
@@ -130,6 +139,33 @@
       <p class="lw-alert lw-alert--error lw-live-hint" *ngIf="liveError">
         <i class="material-icons">error</i> {{ liveError }}
       </p>
+
+      <p class="lw-heatmap-hint" *ngIf="heatmapModeActive && !heatmapLoading">
+        <span class="lw-heatmap-legend">
+          <span class="lw-heatmap-legend__label">Ít</span>
+          <span class="lw-heatmap-legend__bar"></span>
+          <span class="lw-heatmap-legend__label">Nhiều mã</span>
+        </span>
+        · {{ heatmapShelfCount }} kệ
+        <span *ngIf="heatmapMaxCount"> · tối đa {{ heatmapMaxCount }} mã/kệ</span>
+      </p>
+      <p class="lw-alert lw-alert--error lw-live-hint" *ngIf="heatmapError">
+        <i class="material-icons">error</i> {{ heatmapError }}
+      </p>
+
+      <div class="lw-heatmap-list" *ngIf="heatmapModeActive && !heatmapLoading && heatmapRows.length">
+        <h3 class="lw-heatmap-list__title">
+          <i class="material-icons">leaderboard</i> Mật độ theo kệ
+        </h3>
+        <button
+          type="button"
+          class="lw-heatmap-item"
+          *ngFor="let row of heatmapRows | slice:0:12"
+          (click)="jumpToHeatmapShelf(row)">
+          <span class="lw-heatmap-item__shelf">{{ row.shelf }}</span>
+          <span class="lw-heatmap-item__count">{{ row.codeCount }} mã</span>
+        </button>
+      </div>
 
       <div class="lw-live-list" *ngIf="liveModeActive && !liveLoading && liveShelfRows.length">
         <h3 class="lw-live-list__title">
@@ -167,6 +203,9 @@
       <span class="lw-canvas__label"><i class="material-icons">grid_view</i> Warehouse Map</span>
       <span class="lw-live-badge" *ngIf="liveModeActive">
         <i class="material-icons">sensors</i> LIVE
+      </span>
+      <span class="lw-heatmap-badge" *ngIf="heatmapModeActive">
+        <i class="material-icons">grid_on</i> HEATMAP
       </span>
       <span class="lw-canvas__zoom">{{ (zoom * 100) | number:'1.0-0' }}%</span>
     </div>

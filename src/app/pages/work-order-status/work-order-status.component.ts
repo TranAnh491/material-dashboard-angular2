@@ -1197,11 +1197,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       // Normalize creator: 1 name, uppercase
       this.newWorkOrder.createdBy = this.normalizeCreatedBy(this.newWorkOrder.createdBy);
 
-      const workOrder: WorkOrder = {
+      const workOrder: WorkOrder = this.applyAutoNotesForProductionLine({
         ...this.newWorkOrder,
         createdDate: new Date(),
         lastUpdated: new Date()
-      } as WorkOrder;
+      } as WorkOrder);
 
       this.materialService.addWorkOrder(workOrder)
         .then((docRef) => {
@@ -1239,6 +1239,36 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.normalizeCreatedBy(this.newWorkOrder.createdBy) &&
       this.newWorkOrder.planReceivedDate
     );
+  }
+
+  /** Line nhận WHE / WHD → ghi chú tự động ASM3. */
+  private normalizeProductionLineKey(line: string): string {
+    return String(line || '').replace(/\s/g, '').toUpperCase();
+  }
+
+  private isAsm3ProductionLine(line: string): boolean {
+    const key = this.normalizeProductionLineKey(line);
+    return key === 'WHE' || key === 'WHD';
+  }
+
+  private resolveAutoNotesForProductionLine(line: string): string | null {
+    return this.isAsm3ProductionLine(line) ? 'ASM3' : null;
+  }
+
+  private applyAutoNotesForProductionLine<T extends { productionLine?: string; notes?: string }>(wo: T): T {
+    const autoNotes = this.resolveAutoNotesForProductionLine(wo.productionLine || '');
+    if (autoNotes) {
+      return { ...wo, notes: autoNotes };
+    }
+    return wo;
+  }
+
+  onNewWorkOrderLineChange(line: string): void {
+    this.newWorkOrder.productionLine = line;
+    const autoNotes = this.resolveAutoNotesForProductionLine(line);
+    if (autoNotes) {
+      this.newWorkOrder.notes = autoNotes;
+    }
   }
 
   /** Người soạn: chỉ 1 tên, nhập tay, lưu dạng UPPERCASE */
@@ -1408,6 +1438,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     if (field === 'createdBy') {
       updatedWorkOrder.createdByFromOutbound = false;
       updatedWorkOrder.createdByMemberId = undefined;
+    }
+
+    if (field === 'productionLine') {
+      updatedWorkOrder = this.applyAutoNotesForProductionLine(updatedWorkOrder);
     }
     
     if (field === 'status' && processedValue === WorkOrderStatus.KITTING && workOrder.status !== WorkOrderStatus.KITTING) {
@@ -1947,7 +1981,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         workOrder.planReceivedDate = planParsed;
 
         console.log(`Successfully parsed work order:`, workOrder);
-        workOrders.push(workOrder);
+        workOrders.push(this.applyAutoNotesForProductionLine(workOrder as WorkOrder));
       } catch (error) {
         const errorMsg = `Row ${i + 1}: ${error?.message || error?.toString() || 'Unknown parsing error'}`;
         console.error(errorMsg, error);
@@ -2148,6 +2182,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
                      // Add default values if missing
            if (!workOrder.status) workOrder.status = WorkOrderStatus.WAITING;
            if (!workOrder.productionLine) workOrder.productionLine = 'Line 1';
+          const autoNotesWo = this.applyAutoNotesForProductionLine(workOrder as WorkOrder);
+          if (autoNotesWo.notes) workOrder.notes = autoNotesWo.notes;
           if (!workOrder.year) workOrder.year = new Date().getFullYear();
           if (!workOrder.month) workOrder.month = new Date().getMonth() + 1;
           
@@ -2612,7 +2648,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         notes: row[16]?.toString() || '',
         createdDate: new Date(),
         lastUpdated: new Date()
-      } as WorkOrder)).filter(wo => wo.productionOrder); // Filter out empty LSX
+      } as WorkOrder))
+        .map(wo => this.applyAutoNotesForProductionLine(wo))
+        .filter(wo => wo.productionOrder); // Filter out empty LSX
 
       console.log('📋 Processed new work order data:', newWorkOrderData.length, 'items');
 
@@ -5422,9 +5460,9 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
     const isKZ = lsxUpper.startsWith('KZ');
     const isLH = lsxUpper.startsWith('LH');
-    const isWHE = lineNhan.trim().toUpperCase() === 'WH E';
+    const isAsm3Line = this.isAsm3ProductionLine(lineNhan);
     const factoryIconHtml = isKZ
-      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${isWHE ? 'ASM3' : 'ASM1'}</span>`
+      ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">${isAsm3Line ? 'ASM3' : 'ASM1'}</span>`
       : isLH
         ? `<span style="position:absolute;top:6px;left:6px;font-size:16px;font-weight:bold;">ASM2</span>`
         : '';

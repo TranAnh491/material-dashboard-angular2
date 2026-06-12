@@ -313,6 +313,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/qc-traceability';
     }
 
+    isReportPage(): boolean {
+      return this.currentAppPath() === '/report';
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }
