@@ -278,6 +278,46 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }, retry === 0 ? 0 : 80);
   }
 
+  /** Giữ focus ô scan vị trí mới (Cất NVL) sau tick ASM3 / thao tác khác. */
+  private focusStoreTargetLocationInput(retry = 0): void {
+    if (this.storeMaterialStep !== 'choose-location') return;
+    setTimeout(() => {
+      const el = document.getElementById('targetLocationInput') as HTMLInputElement | null;
+      if (el && !el.disabled) {
+        el.focus();
+        return;
+      }
+      if (retry < 8) {
+        this.focusStoreTargetLocationInput(retry + 1);
+      }
+    }, retry === 0 ? 0 : 50);
+  }
+
+  onStoreMaterialAsm3Change(): void {
+    this.cdr.markForCheck();
+    this.focusStoreTargetLocationInput();
+  }
+
+  /** Giữ focus ô scan vị trí mới (đổi vị trí hàng loạt) sau tick ASM3. */
+  private focusBulkNewLocationInput(retry = 0): void {
+    if (this.bulkStep !== 'scan-targets' || this.skipBulkNewLocation) return;
+    setTimeout(() => {
+      const el = document.getElementById('bulkAsm1NewLocationInput') as HTMLInputElement | null;
+      if (el && !el.disabled) {
+        el.focus();
+        return;
+      }
+      if (retry < 8) {
+        this.focusBulkNewLocationInput(retry + 1);
+      }
+    }, retry === 0 ? 0 : 50);
+  }
+
+  onBulkAsm3Change(): void {
+    this.cdr.markForCheck();
+    this.focusBulkNewLocationInput();
+  }
+
   private clearAutoLogoutTimer(): void {
     if (this.autoLogoutTimer) {
       clearTimeout(this.autoLogoutTimer);
@@ -330,6 +370,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedTargetLocation = ''; // Vị trí đích được chọn
   /** Bước 2: scan nhiều mã (tối đa 10), cùng chuyển sang vị trí mới một lần. */
   storeMaterialMultiCode = false;
+  /** Tick ASM3: ghép ASM3+ + vị trí scan; không áp rule kệ. */
+  storeMaterialUseAsm3 = false;
   storeMaterialBatchItems: any[] = [];
   storeMaterialBatchQRInput = '';
   readonly STORE_MATERIAL_BATCH_MAX = 10;
@@ -657,6 +699,53 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   isIqcExemptLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();
     return raw.startsWith('IQC');
+  }
+
+  /** Mã pallet F1-xxxx / F2-xxxx — luôn cho phép, không áp rule kệ. */
+  private isPalletCodeLocation(location: string): boolean {
+    const raw = String(location || '').replace(/\s/g, '').toUpperCase();
+    return /^F[12]-/.test(raw);
+  }
+
+  private buildAsm3PrefixedLocation(raw: string): string {
+    const s = String(raw || '')
+      .replace(/\s/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9.\-()+]/g, '');
+    const body = s.replace(/^ASM3[+_-]?/, '');
+    return body ? `ASM3+${body}` : '';
+  }
+
+  private normalizeTargetLocationInput(raw: string, useAsm3: boolean): string {
+    const compact = String(raw || '')
+      .trim()
+      .replace(/\s+/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9.\-()+]/g, '');
+    if (!compact) return '';
+    if (useAsm3) return this.buildAsm3PrefixedLocation(compact);
+    if (this.isPalletCodeLocation(compact)) return compact;
+    return this.formatViTriInput(compact);
+  }
+
+  private isTargetRuleExempt(targetLocation: string, useAsm3: boolean): boolean {
+    const raw = String(targetLocation || '').replace(/\s/g, '').toUpperCase();
+    if (useAsm3 || raw.startsWith('ASM3')) return true;
+    if (this.isIqcExemptLocation(raw)) return true;
+    if (this.isPalletCodeLocation(raw)) return true;
+    return false;
+  }
+
+  private materialLocationPassesRules(
+    materialCode: string,
+    targetLocation: string,
+    options: { ruleExempt?: boolean; useAsm3?: boolean } = {}
+  ): boolean {
+    const { ruleExempt = false, useAsm3 = false } = options;
+    if (ruleExempt || this.isTargetRuleExempt(targetLocation, useAsm3)) return true;
+    const resolved = this.resolveAllowedDestinationsForMaterial(materialCode);
+    if (resolved.locations.length === 0) return true;
+    return this.locationMatchesAllowedDestinations(targetLocation, resolved.locations);
   }
 
   /** Chuẩn hoá prefix vị trí trong rule cũ — giữ nguyên IQC+ (không qua formatViTriInput). */
@@ -1197,6 +1286,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   bulkNewPalletInput = '';
   skipBulkNewLocation = false;
   skipBulkNewPallet = false;
+  /** Tick ASM3: ghép ASM3+ + vị trí scan; mọi vị trí ASM3 đều hợp lệ (không check rule). */
+  bulkUseAsm3 = false;
+
+  private readonly LOCATION_RULE_ERROR = '⚠️ Sai rule vị trí';
 
   /** Mobile shell (≤768px) */
   isMobile = false;
@@ -2379,6 +2472,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
     this.storeMaterialMultiCode = false;
+    this.storeMaterialUseAsm3 = false;
     this.storeMaterialBatchItems = [];
     this.storeMaterialBatchQRInput = '';
     
@@ -2421,6 +2515,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.storeMaterialPOStock = 0;
     this.storeMaterialStockByLocation = [];
     this.storeMaterialMultiCode = false;
+    this.storeMaterialUseAsm3 = false;
     this.storeMaterialBatchItems = [];
     this.storeMaterialBatchQRInput = '';
   }
@@ -2710,6 +2805,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.storeMaterialStep = 'choose-location';
       this.selectedTargetLocation = '';
       this.storeMaterialMultiCode = false;
+      this.storeMaterialUseAsm3 = false;
       this.storeMaterialBatchItems = [];
       this.storeMaterialBatchQRInput = '';
       this.applyLocationRuleToSelectedMaterial();
@@ -2746,8 +2842,17 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     try {
-      const segmentFormatted = this.formatViTriInput(this.selectedTargetLocation);
-      if (!segmentFormatted || !this.validateViTriInput(segmentFormatted)) {
+      const targetFormatted = this.normalizeTargetLocationInput(
+        this.selectedTargetLocation,
+        this.storeMaterialUseAsm3
+      );
+      if (!targetFormatted) {
+        alert('⚠️ Vị trí đích không hợp lệ');
+        return;
+      }
+
+      const ruleExempt = this.isTargetRuleExempt(targetFormatted, this.storeMaterialUseAsm3);
+      if (!ruleExempt && !this.validateViTriInput(targetFormatted)) {
         alert('⚠️ Vị trí đích không hợp lệ');
         return;
       }
@@ -2756,19 +2861,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       for (const item of items) {
         const fromLocation = String(item.location ?? '').trim();
-        const targetFormatted = segmentFormatted;
 
-        const resolved = this.resolveAllowedDestinationsForMaterial(item.materialCode || '');
-        const ruleCheckLocation = targetFormatted;
-        if (resolved.locations.length > 0) {
-          const ok = this.locationMatchesAllowedDestinations(ruleCheckLocation, resolved.locations);
-          if (!ok) {
-            const whHint = resolved.warehouseType ? ` (${resolved.warehouseType})` : '';
-            alert(
-              `⚠️ Mã ${item.materialCode} (PO: ${item.poNumber})${whHint}: vị trí đích phải thuộc: ${resolved.locations.join(', ')}`
-            );
-            return;
-          }
+        if (
+          !this.materialLocationPassesRules(item.materialCode || '', targetFormatted, {
+            ruleExempt,
+            useAsm3: this.storeMaterialUseAsm3
+          })
+        ) {
+          alert(this.LOCATION_RULE_ERROR);
+          return;
         }
 
         updates.push({ item, fromLocation, targetFormatted });
@@ -2808,7 +2909,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       } else {
         alert(
           `✅ Đã chuyển ${updates.length} mã sang vị trí mới!\n\n` +
-            `Vị trí: ${segmentFormatted}\n` +
+            `Vị trí: ${targetFormatted}\n` +
             updates.map(u => `• ${u.item.materialCode} (PO: ${u.item.poNumber})`).join('\n')
         );
       }
@@ -3162,6 +3263,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkNewPalletInput = '';
     this.skipBulkNewLocation = false;
     this.skipBulkNewPallet = false;
+    this.bulkUseAsm3 = false;
 
     setTimeout(() => {
       const input = document.getElementById('bulkAsm1LocationInput') as HTMLInputElement;
@@ -3181,6 +3283,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkNewPalletInput = '';
     this.skipBulkNewLocation = false;
     this.skipBulkNewPallet = false;
+    this.bulkUseAsm3 = false;
   }
 
   async processBulkAsm1Location(): Promise<void> {
@@ -3312,6 +3415,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkNewPalletInput = '';
     this.skipBulkNewLocation = false;
     this.skipBulkNewPallet = false;
+    this.bulkUseAsm3 = false;
 
     setTimeout(() => {
       const input = document.getElementById('bulkAsm1NewLocationInput') as HTMLInputElement;
@@ -3346,7 +3450,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Bỏ qua vị trí mới được tick: nhảy focus sang ô pallet. */
   onSkipBulkLocationChange(): void {
-    if (this.skipBulkNewLocation) this.focusBulkPalletInput();
+    if (this.skipBulkNewLocation) {
+      this.bulkUseAsm3 = false;
+      this.focusBulkPalletInput();
+    }
   }
 
   async confirmBulkChange(): Promise<void> {
@@ -3357,20 +3464,43 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const newLocationRaw = this.skipBulkNewLocation
       ? ''
-      : this.formatViTriInput((this.bulkNewLocationInput || '').trim().toUpperCase());
+      : this.normalizeTargetLocationInput(this.bulkNewLocationInput, this.bulkUseAsm3);
     const newPalletId = this.skipBulkNewPallet ? '' : (this.bulkNewPalletInput || '').trim().toUpperCase();
 
     if (!this.skipBulkNewLocation) {
-      if (!this.validateViTriInput(newLocationRaw)) {
+      if (!newLocationRaw) {
         alert('❌ Vị trí mới không hợp lệ');
         return;
       }
-      const locationExists = this.locationItems.some(item =>
-        this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocationRaw)
-      );
-      if (!locationExists) {
-        alert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
-        return;
+
+      const ruleExempt = this.isTargetRuleExempt(newLocationRaw, this.bulkUseAsm3);
+      if (!ruleExempt) {
+        if (!this.validateViTriInput(newLocationRaw)) {
+          alert('❌ Vị trí mới không hợp lệ');
+          return;
+        }
+        const locationExists = this.locationItems.some(item =>
+          this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocationRaw)
+        );
+        if (!locationExists) {
+          alert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
+          return;
+        }
+      }
+
+      const selectedIds = Array.from(this.bulkSelectedItems);
+      for (const id of selectedIds) {
+        const bulkItem = this.bulkItems.find(i => i.id === id);
+        if (!bulkItem) continue;
+        if (
+          !this.materialLocationPassesRules(bulkItem.materialCode || '', newLocationRaw, {
+            ruleExempt,
+            useAsm3: this.bulkUseAsm3
+          })
+        ) {
+          alert(this.LOCATION_RULE_ERROR);
+          return;
+        }
       }
     }
 

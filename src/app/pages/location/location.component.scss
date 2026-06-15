@@ -1666,6 +1666,19 @@
   }
 }
 
+.store-scan-block__toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.store-asm3-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
 .store-step {
   .step-title {
     margin-bottom: 16px;
@@ -2058,6 +2071,12 @@
       color: #333;
     }
 
+    .target-toggles {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
+
     .skip-toggle {
       display: inline-flex;
       align-items: center;
@@ -2070,6 +2089,12 @@
         height: 16px;
       }
     }
+  }
+
+  .target-hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #64748b;
   }
 }
 

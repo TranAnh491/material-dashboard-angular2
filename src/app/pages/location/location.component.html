@@ -962,11 +962,22 @@
         <div class="target-section">
           <div class="target-header">
             <span class="target-label">Scan vị trí mới</span>
-            <label class="skip-toggle">
-              <input type="checkbox" [(ngModel)]="skipBulkNewLocation" (ngModelChange)="onSkipBulkLocationChange()">
-              <span>Bỏ qua</span>
-            </label>
+            <div class="target-toggles">
+              <label class="skip-toggle">
+                <input
+                  type="checkbox"
+                  [(ngModel)]="bulkUseAsm3"
+                  (ngModelChange)="onBulkAsm3Change()"
+                  [disabled]="skipBulkNewLocation || isBulkLoading">
+                <span>ASM3</span>
+              </label>
+              <label class="skip-toggle">
+                <input type="checkbox" [(ngModel)]="skipBulkNewLocation" (ngModelChange)="onSkipBulkLocationChange()">
+                <span>Bỏ qua</span>
+              </label>
+            </div>
           </div>
+          <p class="target-hint" *ngIf="bulkUseAsm3 && !skipBulkNewLocation">Vị trí lưu: <strong>ASM3+</strong> + mã scan (không áp rule kệ)</p>
           <div class="scan-input-container">
             <input
               type="text"
@@ -1110,7 +1121,7 @@
       <div *ngIf="storeMaterialStep === 'choose-location'" class="store-step store-step--compact">
         <div class="store-step-head">
           <h4>Bước 2: Chọn vị trí đích</h4>
-          <p class="rule-forced-desc" *ngIf="isTargetLocationForced">{{ storeMaterialForcedRuleLabel }}</p>
+          <p class="rule-forced-desc" *ngIf="isTargetLocationForced && !storeMaterialUseAsm3">{{ storeMaterialForcedRuleLabel }}</p>
         </div>
 
         <div class="store-summary" *ngIf="selectedMaterialForStore && !storeMaterialMultiCode">
@@ -1153,11 +1164,18 @@
         <div class="store-scan-block">
           <div class="store-scan-block__head">
             <label for="targetLocationInput">Scan vị trí mới</label>
-            <label class="store-multi-location-chk">
-              <input type="checkbox" [(ngModel)]="storeMaterialMultiCode" (ngModelChange)="onStoreMaterialMultiCodeChange()">
-              <span>Nhiều mã</span>
-            </label>
+            <div class="store-scan-block__toggles">
+              <label class="store-multi-location-chk">
+                <input type="checkbox" [(ngModel)]="storeMaterialUseAsm3" (ngModelChange)="onStoreMaterialAsm3Change()">
+                <span>ASM3</span>
+              </label>
+              <label class="store-multi-location-chk">
+                <input type="checkbox" [(ngModel)]="storeMaterialMultiCode" (ngModelChange)="onStoreMaterialMultiCodeChange()">
+                <span>Nhiều mã</span>
+              </label>
+            </div>
           </div>
+          <p class="store-asm3-hint" *ngIf="storeMaterialUseAsm3">Vị trí lưu: <strong>ASM3+</strong> + mã scan (không áp rule kệ)</p>
           <input
             type="text"
             id="targetLocationInput"
