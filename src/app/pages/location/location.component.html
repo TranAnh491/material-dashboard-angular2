@@ -52,6 +52,71 @@
     </div>
   </div>
 
+  <!-- OTP thêm vị trí mới (Zalo → ASP0106) -->
+  <div class="modal-overlay" *ngIf="showLocationAddOtpModal" (click)="closeLocationAddOtpModal()">
+    <div class="modal-content location-add-otp-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3><i class="material-icons">lock</i> Xác nhận thêm vị trí</h3>
+        <button type="button" class="close-btn" (click)="closeLocationAddOtpModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="location-add-otp-hint">
+          Mã 4 số sẽ được gửi qua <strong>Zalo tới ASP0106</strong> để xác nhận thêm vị trí mới (hiệu lực 10 phút).
+        </p>
+        <p class="location-add-otp-target" *ngIf="locationAddOtpTargetName">
+          <span class="location-add-otp-target__label">Vị trí:</span>
+          <strong>{{ locationAddOtpTargetName }}</strong>
+        </p>
+        <ng-container *ngIf="locationAddOtpStep === 2">
+          <label class="location-add-otp-label">Mã từ Zalo (4 số)</label>
+          <input
+            type="text"
+            class="location-add-otp-input"
+            [(ngModel)]="locationAddOtpCode"
+            maxlength="4"
+            inputmode="numeric"
+            placeholder="0000"
+            [disabled]="locationAddOtpVerifying"
+            (keyup.enter)="verifyLocationAddOtp()"
+            autofocus>
+        </ng-container>
+        <p class="location-add-otp-error" *ngIf="locationAddOtpError">{{ locationAddOtpError }}</p>
+        <p class="location-add-otp-info" *ngIf="locationAddOtpInfo">{{ locationAddOtpInfo }}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-cancel" (click)="closeLocationAddOtpModal()" [disabled]="locationAddOtpSending || locationAddOtpVerifying">
+          Hủy
+        </button>
+        <button
+          type="button"
+          class="btn btn-cancel"
+          *ngIf="locationAddOtpStep === 2"
+          (click)="locationAddOtpStep = 1; locationAddOtpCode = ''; locationAddOtpError = ''"
+          [disabled]="locationAddOtpSending || locationAddOtpVerifying">
+          Gửi lại mã
+        </button>
+        <button
+          type="button"
+          class="btn btn-confirm"
+          *ngIf="locationAddOtpStep === 1"
+          (click)="sendLocationAddOtp()"
+          [disabled]="locationAddOtpSending">
+          {{ locationAddOtpSending ? 'Đang gửi…' : 'Gửi mã Zalo' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-confirm"
+          *ngIf="locationAddOtpStep === 2"
+          (click)="verifyLocationAddOtp()"
+          [disabled]="locationAddOtpVerifying || locationAddOtpCode.trim().length !== 4">
+          {{ locationAddOtpVerifying ? 'Đang xác nhận…' : 'Xác nhận' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Rule Modal -->
   <div class="modal-overlay" *ngIf="showRuleModal" (click)="closeRuleModal()">
     <div class="modal-content rule-modal" (click)="$event.stopPropagation()">
@@ -572,6 +637,14 @@
     <!-- Add New Item Form -->
     <div class="add-item-form">
       <h5><i class="material-icons">add</i> Thêm Vị Trí Mới</h5>
+      <p class="add-location-lock-hint" *ngIf="!locationAddUnlocked">
+        <i class="material-icons">lock</i>
+        Thêm vị trí cần mã OTP 4 số (Zalo gửi tới ASP0106). <strong>Thêm BOX</strong> không cần mã.
+      </p>
+      <p class="add-location-unlock-hint" *ngIf="locationAddUnlocked">
+        <i class="material-icons">lock_open</i>
+        Đã mở khóa thêm vị trí (10 phút).
+      </p>
       <div class="form-row form-row-equal">
         <div class="form-group form-group-vitri">
           <label for="newViTri">Vị Trí:</label>
@@ -599,8 +672,8 @@
         </div>
         
         <div class="form-group form-group-btn">
-          <button class="add-btn" (click)="addLocationItem()" title="Thêm vị trí mới">
-            <i class="material-icons">add</i>
+          <button class="add-btn" (click)="onAddLocationClick()" title="Thêm vị trí mới (cần mã OTP Zalo)">
+            <i class="material-icons">{{ locationAddUnlocked ? 'add' : 'lock' }}</i>
             Thêm
           </button>
         </div>

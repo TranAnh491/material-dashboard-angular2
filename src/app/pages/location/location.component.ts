@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
+import { LocationAddUnlockService } from '../../services/location-add-unlock.service';
 import {
   blocksSingleLetterPrefixMatch,
   getDefaultLocationsForWarehouse,
@@ -1291,6 +1292,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private readonly LOCATION_RULE_ERROR = '⚠️ Sai rule vị trí';
 
+  /** OTP thêm vị trí mới — mã gửi Zalo tới ASP0106 */
+  showLocationAddOtpModal = false;
+  locationAddOtpStep: 1 | 2 = 1;
+  locationAddOtpCode = '';
+  locationAddOtpSending = false;
+  locationAddOtpVerifying = false;
+  locationAddOtpError = '';
+  locationAddOtpInfo = '';
+  private pendingLocationAddAction: 'add' | 'import' | null = null;
+  /** Vị trí đang chờ OTP (hiển thị trên Zalo + modal). */
+  locationAddOtpTargetName = '';
+  locationAddUnlocked = false;
+
   /** Mobile shell (≤768px) */
   isMobile = false;
   mobileBottomTab: 'location' | 'history' | 'alert' = 'location';
@@ -1320,6 +1334,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     private fns: AngularFireFunctions,
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
+    private locationAddUnlock: LocationAddUnlockService,
     private cdr: ChangeDetectorRef,
     private router: Router
   ) {
@@ -1347,6 +1362,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.selectedFactory = null;
 
+    this.locationAddUnlocked = this.locationAddUnlock.isUnlocked();
+    this.locationAddUnlock.unlocked$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(unlocked => {
+        this.locationAddUnlocked = unlocked;
+        this.cdr.markForCheck();
+      });
+
     this.updateMobileLayout();
     this.checkPermissions();
     this.loadLocationData();
@@ -1365,6 +1388,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy() {
     this.clearAutoLogoutTimer();
+    this.locationAddUnlock.lock();
     this.destroy$.next();
     this.destroy$.complete();
     this.rulesSub?.unsubscribe();
@@ -1837,7 +1861,98 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     event.target.value = formatted;
   }
 
-  // Add new location item
+  // Add new location item — cần OTP Zalo (gửi tới ASP0106)
+  onAddLocationClick(): void {
+    if (this.locationAddUnlock.isUnlocked()) {
+      this.addLocationItem();
+      return;
+    }
+    if (!this.newItem.viTri?.trim()) {
+      alert('Vui lòng nhập Vị Trí trước khi thêm');
+      return;
+    }
+    if (!this.validateViTriInput(this.newItem.viTri)) {
+      alert('Vị Trí không hợp lệ');
+      return;
+    }
+    this.pendingLocationAddAction = 'add';
+    this.locationAddOtpTargetName = this.formatViTriInput(this.newItem.viTri.trim());
+    this.openLocationAddOtpModal();
+  }
+
+  private openLocationAddOtpModal(): void {
+    this.showLocationAddOtpModal = true;
+    this.locationAddOtpStep = 1;
+    this.locationAddOtpCode = '';
+    this.locationAddOtpError = '';
+    this.locationAddOtpInfo = '';
+    this.cdr.markForCheck();
+  }
+
+  closeLocationAddOtpModal(): void {
+    this.showLocationAddOtpModal = false;
+    this.pendingLocationAddAction = null;
+    this.locationAddOtpTargetName = '';
+    this.locationAddOtpCode = '';
+    this.locationAddOtpError = '';
+    this.locationAddOtpInfo = '';
+    this.cdr.markForCheck();
+  }
+
+  async sendLocationAddOtp(): Promise<void> {
+    this.locationAddOtpError = '';
+    this.locationAddOtpInfo = '';
+    this.locationAddOtpSending = true;
+    try {
+      await this.locationAddUnlock.requestOtp(this.activeEmployeeId, this.locationAddOtpTargetName);
+      this.locationAddOtpStep = 2;
+      this.locationAddOtpInfo = `Đã gửi mã 4 số qua Zalo tới ASP0106 (vị trí: ${this.locationAddOtpTargetName}).`;
+    } catch (e: unknown) {
+      this.locationAddOtpError = this.extractCallableError(e);
+    } finally {
+      this.locationAddOtpSending = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async verifyLocationAddOtp(): Promise<void> {
+    this.locationAddOtpError = '';
+    if (this.locationAddOtpCode.trim().length !== 4) {
+      this.locationAddOtpError = 'Mã OTP phải gồm 4 chữ số.';
+      return;
+    }
+    this.locationAddOtpVerifying = true;
+    try {
+      const ok = await this.locationAddUnlock.verifyOtp(this.locationAddOtpCode);
+      if (!ok) {
+        this.locationAddOtpError = 'Mã OTP không đúng.';
+        return;
+      }
+      const action = this.pendingLocationAddAction;
+      this.closeLocationAddOtpModal();
+      if (action === 'add') {
+        this.addLocationItem();
+      } else if (action === 'import') {
+        this.openImportLocationsFilePicker();
+      }
+    } catch (e: unknown) {
+      this.locationAddOtpError = this.extractCallableError(e);
+    } finally {
+      this.locationAddOtpVerifying = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private extractCallableError(e: unknown): string {
+    const err = e as { message?: string; details?: string; code?: string };
+    const raw = String(err?.message || err?.details || e || 'Có lỗi xảy ra.')
+      .replace(/^FirebaseError:\s*/i, '');
+    if (/cors|failed to fetch|network|internal/i.test(raw) || err?.code === 'internal') {
+      return 'Không gửi được mã OTP. Kiểm tra đăng nhập Firebase và kết nối mạng.';
+    }
+    return raw;
+  }
+
   addLocationItem() {
     if (!this.newItem.viTri) {
       alert('Vui lòng nhập Vị Trí');
@@ -2113,8 +2228,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  // Import locations from file
+  // Import locations from file — cần OTP (chỉ Thêm BOX được phép không OTP)
   importLocations() {
+    if (!this.locationAddUnlock.isUnlocked()) {
+      this.pendingLocationAddAction = 'import';
+      this.locationAddOtpTargetName = 'Import danh sách vị trí';
+      this.openLocationAddOtpModal();
+      return;
+    }
+    this.openImportLocationsFilePicker();
+  }
+
+  private openImportLocationsFilePicker(): void {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls,.csv';

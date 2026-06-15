@@ -218,20 +218,29 @@ export const sendMaterialLocationAlertZaloFn = functions
     }
   });
 
-/** Materials ASM1/ASM2: gửi mã OTP 4 số qua Zalo để mở khóa cột Vị trí. */
+/** Materials ASM1/ASM2: gửi mã OTP 4 số qua Zalo để mở khóa cột Vị trí.
+ *  Tab Location: truyền forLocationAdd=true → tin Zalo yêu cầu thêm vị trí (gửi ASP0106). */
 export const requestLocationUnlockOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: Record<string, unknown>, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
+    const forLocationAdd = data?.forLocationAdd === true;
+    const requestedBy = typeof data?.requestedBy === 'string' ? data.requestedBy.trim().slice(0, 20) : '';
+    const locationName = typeof data?.locationName === 'string' ? data.locationName.trim().slice(0, 80) : '';
     const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim().slice(0, 20) : '';
-    if (!employeeId) {
+    if (!forLocationAdd && !employeeId) {
       throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã nhân viên.');
     }
     try {
-      const { requestLocationUnlockOtp } = await import('./location-unlock-otp');
-      await requestLocationUnlockOtp(admin.firestore(), employeeId);
+      if (forLocationAdd) {
+        const { requestLocationAddOtp } = await import('./location-add-otp');
+        await requestLocationAddOtp(admin.firestore(), requestedBy, locationName);
+      } else {
+        const { requestLocationUnlockOtp } = await import('./location-unlock-otp');
+        await requestLocationUnlockOtp(admin.firestore(), employeeId);
+      }
       return { ok: true };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -244,21 +253,79 @@ export const requestLocationUnlockOtpFn = functions
     }
   });
 
-/** Materials ASM1/ASM2: xác nhận mã OTP mở khóa cột Vị trí. */
+/** Materials ASM1/ASM2: xác nhận mã OTP mở khóa cột Vị trí.
+ *  Tab Location: truyền forLocationAdd=true. */
 export const verifyLocationUnlockOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: Record<string, unknown>, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
+    const forLocationAdd = data?.forLocationAdd === true;
     const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim().slice(0, 20) : '';
     const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
-    if (!employeeId || !code) {
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    if (!forLocationAdd && !employeeId) {
       throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã nhân viên hoặc mã OTP.');
     }
     try {
+      if (forLocationAdd) {
+        const { verifyLocationAddOtp } = await import('./location-add-otp');
+        await verifyLocationAddOtp(admin.firestore(), code);
+        return { ok: true };
+      }
       const { verifyLocationUnlockOtp } = await import('./location-unlock-otp');
       const result = await verifyLocationUnlockOtp(admin.firestore(), employeeId, code);
+      return result;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Location tab: gửi mã OTP 4 số qua Zalo tới ASP0106 để thêm vị trí mới. */
+export const requestLocationAddOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const requestedBy = typeof data?.requestedBy === 'string' ? data.requestedBy.trim().slice(0, 20) : '';
+    const locationName = typeof data?.locationName === 'string' ? data.locationName.trim().slice(0, 80) : '';
+    try {
+      const { requestLocationAddOtp } = await import('./location-add-otp');
+      await requestLocationAddOtp(admin.firestore(), requestedBy, locationName);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Location tab: xác nhận mã OTP thêm vị trí mới. */
+export const verifyLocationAddOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+      const { verifyLocationAddOtp } = await import('./location-add-otp');
+      const result = await verifyLocationAddOtp(admin.firestore(), code);
       return result;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
