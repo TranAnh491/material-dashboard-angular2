@@ -165,6 +165,12 @@ export class QCComponent implements OnInit, OnDestroy {
   
   // More menu (popup modal)
   showMoreMenu: boolean = false;
+  /** More → Mail Hold Putaway (Cloud Function đọc doc này, gửi mail thứ 2 hằng tuần 08:00 VN) */
+  private readonly HOLD_NOTIFICATION_EMAILS_DOC = 'qc-settings/hold-notification-emails';
+  showHoldNotificationEmailsModal = false;
+  holdEmailText = '';
+  holdEmailsSaving = false;
+  holdNotifyManualRunning = false;
   /** More → QC rule: chặn xuất RM khi IQC Status trùng danh sách (outbound-qc-rules / ASM1|ASM2). */
   showOutboundQcRuleModal = false;
   outboundQcRuleModalEnabled = false;
@@ -2547,6 +2553,100 @@ export class QCComponent implements OnInit, OnDestroy {
   
   closeMoreMenu(): void {
     this.showMoreMenu = false;
+  }
+
+  openHoldNotificationEmailsModal(): void {
+    this.showMoreMenu = false;
+    this.showHoldNotificationEmailsModal = true;
+    void this.loadHoldNotificationEmails();
+  }
+
+  closeHoldNotificationEmailsModal(): void {
+    this.showHoldNotificationEmailsModal = false;
+    this.holdEmailText = '';
+  }
+
+  private parseHoldEmailsFromTextarea(): string[] {
+    return this.holdEmailText
+      .split(/[\n,;\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+  }
+
+  async loadHoldNotificationEmails(): Promise<void> {
+    try {
+      const snap = await this.firestore.doc(this.HOLD_NOTIFICATION_EMAILS_DOC).get().toPromise();
+      const d = (snap && snap.exists ? snap.data() : null) as { emails?: unknown } | null;
+      const arr = Array.isArray(d?.emails) ? d.emails : [];
+      const list = arr.map((x: unknown) => String(x ?? '').trim()).filter(Boolean);
+      this.holdEmailText = list.join('\n');
+    } catch (e) {
+      console.error('loadHoldNotificationEmails:', e);
+      this.holdEmailText = '';
+    }
+  }
+
+  async saveHoldNotificationEmails(): Promise<void> {
+    if (this.holdEmailsSaving) {
+      return;
+    }
+    this.holdEmailsSaving = true;
+    try {
+      const emails = Array.from(new Set(this.parseHoldEmailsFromTextarea())).sort((a, b) =>
+        a.localeCompare(b, 'vi')
+      );
+      await this.firestore.doc(this.HOLD_NOTIFICATION_EMAILS_DOC).set(
+        { emails, updatedAt: new Date() },
+        { merge: true }
+      );
+      this.holdEmailText = emails.join('\n');
+      alert('Đã lưu danh sách mail.');
+    } catch (e) {
+      console.error('saveHoldNotificationEmails:', e);
+      alert('Không lưu được danh sách mail.');
+    } finally {
+      this.holdEmailsSaving = false;
+    }
+  }
+
+  async triggerPutawayHoldWeeklyEmailManual(): Promise<void> {
+    if (this.holdNotifyManualRunning) {
+      return;
+    }
+    this.holdNotifyManualRunning = true;
+    try {
+      const fn = this.fns.httpsCallable<
+        object,
+        {
+          ok: boolean;
+          sent: boolean;
+          holdMaterialCount: number;
+          holdSkuCount: number;
+          recipientCount: number;
+        }
+      >('sendPutawayHoldWeeklyEmailManualFn');
+      const data = await firstValueFrom(fn({}));
+      if (!data?.ok) {
+        alert('Không xác định được kết quả từ server.');
+        return;
+      }
+      if (data.recipientCount === 0) {
+        alert('Chưa cấu hình email nhận (lưu danh sách mail trước).');
+        return;
+      }
+      if (data.sent) {
+        alert(
+          `Đã gửi mail báo cáo Hold.\nMã hàng Hold: ${data.holdMaterialCount}\nSKU Hold: ${data.holdSkuCount}\nNgười nhận: ${data.recipientCount}`
+        );
+      } else {
+        alert(`Đã xử lý. sent=${data.sent}, recipientCount=${data.recipientCount}.`);
+      }
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      alert(`Lỗi: ${msg}`);
+    } finally {
+      this.holdNotifyManualRunning = false;
+    }
   }
 
   async openOutboundQcRuleModal(): Promise<void> {

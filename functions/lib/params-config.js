@@ -14,6 +14,8 @@ exports.qcMonthlyReportEmailTo = exports.qcPriorityEmailTo = exports.zaloBotToke
  *   EMAIL_SMTP_HOST=smtp.gmail.com
  *   EMAIL_SMTP_PORT=587
  *   QC_PRIORITY_EMAIL_TO=plan4@airspeedmfgvn.com   (mail khi ưu tiên Chờ kiểm: CHỜ KIỂM → trạng thái khác)
+ *
+ * Putaway Hold (tuần): danh sách mail lưu Firestore `qc-settings/hold-notification-emails` (tab QC → More).
  */
 const params_1 = require("firebase-functions/params");
 exports.emailUser = (0, params_1.defineString)('EMAIL_USER', { default: '', description: 'SMTP user (e.g. Gmail)' });

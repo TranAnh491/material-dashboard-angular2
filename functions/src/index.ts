@@ -380,6 +380,45 @@ export const sendPrintLabelLateNotifyManualFn = functions
     }
   });
 
+/**
+ * Putaway Hold: thứ 2 hằng tuần 08:00 (VN) — gửi mail chi tiết mã Hold tại khu IQC.
+ * Danh sách người nhận: Firestore `qc-settings/hold-notification-emails` (cấu hình tab QC → More).
+ */
+export const notifyPutawayHoldWeekly = functions
+  .runWith({ secrets: [emailPass] })
+  .pubsub.schedule('0 8 * * 1')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runPutawayHoldWeeklyEmail } = await import('./putaway-hold-weekly-email');
+    await runPutawayHoldWeeklyEmail(admin.firestore());
+  });
+
+/** Callable: gửi thử báo cáo Hold Putaway (tab QC → More → Mail Hold Putaway). */
+export const sendPutawayHoldWeeklyEmailManualFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { runPutawayHoldWeeklyEmail } = await import('./putaway-hold-weekly-email');
+      const r = await runPutawayHoldWeeklyEmail(admin.firestore());
+      return {
+        ok: true,
+        sent: r.sent,
+        holdMaterialCount: r.holdMaterialCount,
+        holdSkuCount: r.holdSkuCount,
+        recipientCount: r.recipientCount
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 export const sendQcMonthlyReportManualFn = functions
   .runWith({ secrets: [emailPass] })
   .https.onCall(async (data: { factory?: string; mode?: string }, context) => {

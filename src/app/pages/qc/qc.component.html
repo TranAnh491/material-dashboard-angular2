@@ -772,7 +772,42 @@
         <button class="menu-option-btn" (click)="openOutboundQcRuleModal()"><i class="material-icons">policy</i><span>QC rule</span></button>
         <button class="menu-option-btn" (click)="openIqcPermissionModal()"><i class="material-icons">vpn_key</i><span>Quyền</span></button>
         <button class="menu-option-btn" (click)="sendQcReportNow()"><i class="material-icons">send</i><span>Gửi Report</span></button>
+        <button class="menu-option-btn" (click)="openHoldNotificationEmailsModal()"><i class="material-icons">mail</i><span>Mail Hold Putaway</span></button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mail Hold Putaway — danh sách người nhận báo cáo tuần (Dashboard Putaway → Hold) -->
+<div class="modal-overlay" *ngIf="showHoldNotificationEmailsModal" (click)="closeHoldNotificationEmailsModal()">
+  <div class="modal-content report-modal-content" style="max-width: 520px" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">mail</i> Mail Hold Putaway</h3>
+      <button class="close-btn" type="button" (click)="closeHoldNotificationEmailsModal()"><i class="material-icons">close</i></button>
+    </div>
+    <div class="modal-body">
+      <p style="margin: 0 0 12px; color: #666; font-size: 14px; line-height: 1.45">
+        Mỗi dòng hoặc phân tách bằng dấu phẩy / chấm phẩy. Hệ thống gửi mail tự động
+        <strong>mỗi tuần (thứ 2, 08:00)</strong> với chi tiết các mã hàng đang <strong>Hold</strong>
+        (Chờ xác nhận / HOLD) tại khu IQC — cùng nguồn với tab Dashboard → Putaway → Hold.
+      </p>
+      <textarea
+        rows="8"
+        class="employee-scan-input"
+        style="width: 100%; box-sizing: border-box; font-family: inherit; resize: vertical"
+        [(ngModel)]="holdEmailText"
+        placeholder="vd: qc@company.com&#10;planning@company.com"
+      ></textarea>
+    </div>
+    <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap">
+      <button class="close-modal-btn" type="button" (click)="loadHoldNotificationEmails()"><i class="material-icons">refresh</i> Reload</button>
+      <button class="close-modal-btn" type="button" (click)="closeHoldNotificationEmailsModal()"><i class="material-icons">close</i> Đóng</button>
+      <button class="download-btn" type="button" (click)="saveHoldNotificationEmails()" [disabled]="holdEmailsSaving">
+        {{ holdEmailsSaving ? 'Đang lưu...' : 'Lưu danh sách' }}
+      </button>
+      <button class="download-btn" type="button" (click)="triggerPutawayHoldWeeklyEmailManual()" [disabled]="holdNotifyManualRunning">
+        {{ holdNotifyManualRunning ? 'Đang gửi...' : 'Gửi thử / chạy ngay' }}
+      </button>
     </div>
   </div>
 </div>

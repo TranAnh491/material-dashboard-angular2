@@ -52,7 +52,11 @@ import {
   mapFgLocationToLayoutShelf,
   extractFgShelfPartFromLocation,
   normalizeMixzoneLiveLocation,
+  normalizeLockerLiveLocation,
   resolveMixzoneShelfFromLocation,
+  isAsm3PrefixLocation,
+  resolveAsm3WarehouseShelf,
+  mapAsm3ShelfToLayoutCell,
   FINISHED_GOODS_GUIDANCE,
   GENERAL_MATERIAL_GUIDANCE,
   GENERAL_MATERIAL_SHELF_RANGE_LABEL,
@@ -214,6 +218,8 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   heatmapMaxCount = 0;
   heatmapShelfCount = 0;
   heatmapRows: HeatmapShelfRow[] = [];
+  /** Tổng mã ASM3 (vị trí ASM3* hoặc factory ASM3) — hiển thị box Factory 3 */
+  asm3HeatmapTotal = 0;
 
   private knownShelves: string[] = [];
   private guidanceSub?: Subscription;
@@ -531,6 +537,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.heatmapMaxCount = 0;
     this.heatmapShelfCount = 0;
     this.heatmapRows = [];
+    this.asm3HeatmapTotal = 0;
     this.clearHeatmapHighlights();
     this.cdr.markForCheck();
   }
@@ -547,7 +554,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
         this.collectKnownShelves();
       }
       const shelfCounts = await this.loadHeatmapShelfCounts();
-      this.applyHeatmapHighlights(shelfCounts);
+      this.applyHeatmapHighlights(shelfCounts.byShelf, shelfCounts.asm3Total);
     } catch (err) {
       this.heatmapError = (err as Error)?.message || String(err);
       this.clearHeatmapHighlights();
@@ -564,21 +571,28 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   }
 
-  private async loadHeatmapShelfCounts(): Promise<Map<string, Set<string>>> {
-    const snap = await this.firestore
-      .collection('inventory-materials', ref =>
-        ref.where('factory', '==', this.factory).limit(10000)
-      )
-      .get()
-      .toPromise();
+  private async loadHeatmapShelfCounts(): Promise<{
+    byShelf: Map<string, Set<string>>;
+    asm3Total: Set<string>;
+  }> {
+    const [asm1Snap, asm3Snap] = await Promise.all([
+      this.firestore
+        .collection('inventory-materials', ref => ref.where('factory', '==', 'ASM1').limit(10000))
+        .get()
+        .toPromise(),
+      this.firestore
+        .collection('inventory-materials', ref => ref.where('factory', '==', 'ASM3').limit(10000))
+        .get()
+        .toPromise()
+    ]);
 
     const byShelf = new Map<string, Set<string>>();
+    const asm3Total = new Set<string>();
 
-    for (const doc of snap?.docs || []) {
-      const data = doc.data() as Record<string, unknown>;
+    const ingest = (data: Record<string, unknown>, factory: string): void => {
       const materialCode = String(data['materialCode'] || '').trim().toUpperCase();
       const location = String(data['location'] ?? data['viTri'] ?? '').trim();
-      if (!materialCode || !location || location.toUpperCase() === 'TEMPORARY') continue;
+      if (!materialCode || !location || location.toUpperCase() === 'TEMPORARY') return;
 
       const qty = Number(data['quantity']) || 0;
       const exported = Number(data['exported']) || 0;
@@ -588,20 +602,44 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       const xt = Number(data['xt']) || 0;
       const available =
         qty > 0 ? openingStock + qty - exported - xt : stockField > 0 ? stockField : openingStock;
-      if (available <= 0) continue;
+      if (available <= 0) return;
+
+      const isAsm3Loc = isAsm3PrefixLocation(location) || factory === 'ASM3';
+      if (isAsm3Loc) {
+        asm3Total.add(materialCode);
+        const asm3Shelf = resolveAsm3WarehouseShelf(location, factory);
+        if (asm3Shelf) {
+          const codes = byShelf.get(asm3Shelf) || new Set<string>();
+          codes.add(materialCode);
+          byShelf.set(asm3Shelf, codes);
+        }
+        return;
+      }
 
       const shelfKey = this.resolveHeatmapMapKey(location);
-      if (!shelfKey) continue;
+      if (!shelfKey) return;
 
       const codes = byShelf.get(shelfKey) || new Set<string>();
       codes.add(materialCode);
       byShelf.set(shelfKey, codes);
+    };
+
+    for (const doc of asm1Snap?.docs || []) {
+      ingest(doc.data() as Record<string, unknown>, 'ASM1');
+    }
+    for (const doc of asm3Snap?.docs || []) {
+      ingest(doc.data() as Record<string, unknown>, 'ASM3');
     }
 
-    return byShelf;
+    return { byShelf, asm3Total };
   }
 
   private resolveHeatmapMapKey(location: string): string | null {
+    const asm3Shelf = resolveAsm3WarehouseShelf(location);
+    if (asm3Shelf) {
+      return asm3Shelf;
+    }
+
     const zone = this.findZoneForLocation(location);
     if (!zone) return null;
     const target = this.resolveLiveHighlightTarget(zone);
@@ -1598,6 +1636,8 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   private normalizeLiveLocKey(loc: string): string {
+    const locker = normalizeLockerLiveLocation(loc);
+    if (locker) return locker;
     return normalizeMixzoneLiveLocation(loc, this.knownShelves);
   }
 
@@ -1686,6 +1726,20 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     }
     if (parsed?.shelf) candidates.add(parsed.shelf);
     if (parsed?.raw) candidates.add(parsed.raw);
+    if (parsed?.shelf?.toUpperCase() === 'LOCKER') {
+      candidates.add('Locker');
+      if (parsed.slot) {
+        candidates.add(`Locker${parsed.slot}`);
+        candidates.add(`Locker+${parsed.slot}`);
+      }
+    }
+
+    const asm3Shelf = resolveAsm3WarehouseShelf(raw);
+    if (asm3Shelf) {
+      candidates.add(asm3Shelf);
+      const mapCell = mapAsm3ShelfToLayoutCell(asm3Shelf);
+      if (mapCell) candidates.add(mapCell);
+    }
 
     const compact = raw.toUpperCase().replace(/\s/g, '');
     candidates.add(compact);
@@ -1841,15 +1895,20 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       });
     });
     host.querySelectorAll('title.lw-heatmap-title').forEach(el => el.remove());
+    host.querySelectorAll('.lw-heatmap-count-label').forEach(el => el.remove());
   }
 
-  private applyHeatmapHighlights(shelfCounts: Map<string, Set<string>>): void {
+  private applyHeatmapHighlights(
+    shelfCounts: Map<string, Set<string>>,
+    asm3Total: Set<string>
+  ): void {
     this.clearHeatmapHighlights();
     this.heatmapMaxCount = 0;
     this.heatmapShelfCount = 0;
     this.heatmapRows = [];
+    this.asm3HeatmapTotal = asm3Total.size;
 
-    if (!shelfCounts.size) {
+    if (!shelfCounts.size && !asm3Total.size) {
       this.cdr.markForCheck();
       return;
     }
@@ -1867,12 +1926,22 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
     for (const [shelf, codes] of shelfCounts) {
       const count = codes.size;
-      const zone = this.findZoneForLocation(shelf);
+      const mapCell = mapAsm3ShelfToLayoutCell(shelf) || shelf;
+      const zone =
+        this.findZoneForLocation(mapCell) ||
+        this.findZoneForLocation(shelf);
       const target = zone ? this.resolveLiveHighlightTarget(zone) : null;
       if (!target) continue;
 
       const { fill, stroke } = this.heatmapColors(count, max);
-      this.paintHeatmapTarget(target, fill, stroke, ns, `${shelf}: ${count} mã`, count);
+      this.paintHeatmapTarget(
+        target,
+        fill,
+        stroke,
+        ns,
+        `${shelf}: ${count} mã`,
+        count
+      );
 
       this.heatmapShelfCount += 1;
       rows.push({
@@ -1920,8 +1989,30 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       target.insertBefore(titleEl, target.firstChild);
     }
     titleEl.textContent = titleText;
+
+    if (count > 0) {
+      const rect = target.querySelector('rect:not(.lw-slot-marker)') as SVGRectElement | null;
+      if (rect) {
+        const x = Number(rect.getAttribute('x') || 0);
+        const y = Number(rect.getAttribute('y') || 0);
+        const w = Number(rect.getAttribute('width') || 10);
+        const h = Number(rect.getAttribute('height') || 10);
+        let labelEl = target.querySelector('.lw-heatmap-count-label');
+        if (!labelEl) {
+          labelEl = document.createElementNS(ns, 'text');
+          labelEl.setAttribute('class', 'lw-heatmap-count-label');
+          target.appendChild(labelEl);
+        }
+        labelEl.setAttribute('x', String(x + w - 0.5));
+        labelEl.setAttribute('y', String(y + 3.2));
+        labelEl.setAttribute('font-size', String(Math.min(4.5, w * 0.35)));
+        labelEl.setAttribute('text-anchor', 'end');
+        labelEl.setAttribute('dominant-baseline', 'middle');
+        labelEl.setAttribute('fill', '#1e3a8a');
+        labelEl.setAttribute('font-weight', 'bold');
+        labelEl.textContent = String(count);
+      }
+    }
   }
 
 }
-
-

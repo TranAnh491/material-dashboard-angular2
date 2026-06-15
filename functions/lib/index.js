@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendQcPriorityStatusChangedZaloFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -362,6 +362,41 @@ exports.sendPrintLabelLateNotifyManualFn = functions
             ok: true,
             sent: r.sent,
             lateCount: r.lateCount,
+            recipientCount: r.recipientCount
+        };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/**
+ * Putaway Hold: thứ 2 hằng tuần 08:00 (VN) — gửi mail chi tiết mã Hold tại khu IQC.
+ * Danh sách người nhận: Firestore `qc-settings/hold-notification-emails` (cấu hình tab QC → More).
+ */
+exports.notifyPutawayHoldWeekly = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .pubsub.schedule('0 8 * * 1')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runPutawayHoldWeeklyEmail } = await Promise.resolve().then(() => __importStar(require('./putaway-hold-weekly-email')));
+    await runPutawayHoldWeeklyEmail(admin.firestore());
+});
+/** Callable: gửi thử báo cáo Hold Putaway (tab QC → More → Mail Hold Putaway). */
+exports.sendPutawayHoldWeeklyEmailManualFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+        const { runPutawayHoldWeeklyEmail } = await Promise.resolve().then(() => __importStar(require('./putaway-hold-weekly-email')));
+        const r = await runPutawayHoldWeeklyEmail(admin.firestore());
+        return {
+            ok: true,
+            sent: r.sent,
+            holdMaterialCount: r.holdMaterialCount,
+            holdSkuCount: r.holdSkuCount,
             recipientCount: r.recipientCount
         };
     }

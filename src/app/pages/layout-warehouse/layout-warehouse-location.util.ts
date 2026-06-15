@@ -4,12 +4,90 @@ export interface ParsedWarehouseLocation {
   raw: string;
 }
 
+/** Locker, Locker1, Locker+3, LOCKER 2… → kệ Locker trên sơ đồ. */
+export function isLockerPrefixLocation(loc: string): boolean {
+  const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
+  return raw === 'LOCKER' || /^LOCKER(?:\+?\d+)$/.test(raw);
+}
+
+/** Gom mọi Locker+N về nhãn Locker (Live list / heatmap). */
+export function normalizeLockerLiveLocation(loc: string): string {
+  return isLockerPrefixLocation(loc) ? 'Locker' : '';
+}
+
+function parseLockerLocation(raw: string): ParsedWarehouseLocation | null {
+  const compact = raw.replace(/\s/g, '').toUpperCase();
+  if (compact === 'LOCKER') {
+    return { shelf: 'Locker', slot: null, raw };
+  }
+  const m = /^LOCKER(?:\+?(\d+))$/.exec(compact);
+  if (m) {
+    return { shelf: 'Locker', slot: m[1] || null, raw };
+  }
+  return null;
+}
+
+/** ASM3+U3.2(R)03, ASM3-U3.2(R)03, ASM3U3.2(R)03… */
+export function isAsm3PrefixLocation(loc: string): boolean {
+  const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
+  return raw.startsWith('ASM3');
+}
+
+/** Bỏ tiền tố ASM3 (+ / - / dính liền). */
+export function extractAsm3LocationBody(location: string): string | null {
+  const raw = String(location || '').replace(/\s/g, '').toUpperCase();
+  if (!raw.startsWith('ASM3')) return null;
+  const rest = raw.replace(/^ASM3[+_-]?/, '');
+  return rest || null;
+}
+
+/**
+ * Bỏ số ô sau (R)/(L): U3.2(R)03 → U3.2(R), Z1.5(L)12 → Z1.5(L).
+ * Áp dụng cho kệ Quality có hậu tố (L)/(R).
+ */
+export function stripQualityRackSlotSuffix(location: string): string {
+  const compact = String(location || '').replace(/\s/g, '').toUpperCase();
+  const m = /^(.+\([LR]\))\d*$/.exec(compact);
+  return m ? m[1] : compact;
+}
+
+/** Kệ ASM3 từ vị trí (ASM3+… hoặc factory ASM3). */
+export function resolveAsm3WarehouseShelf(location: string, factory?: string): string | null {
+  const body = extractAsm3LocationBody(location);
+  if (body) {
+    return stripQualityRackSlotSuffix(body);
+  }
+  if (String(factory || '').toUpperCase() === 'ASM3') {
+    const compact = String(location || '').replace(/\s/g, '').toUpperCase();
+    if (!compact) return null;
+    return stripQualityRackSlotSuffix(compact);
+  }
+  return null;
+}
+
+/** U3.2(R) → U3(R) trên sơ đồ SVG (ô hiện có). */
+export function mapAsm3ShelfToLayoutCell(shelf: string): string | null {
+  const compact = String(shelf || '').replace(/\s/g, '').toUpperCase();
+  if (!compact) return null;
+  return mapDotRackLocationToMapCell(compact) || compact;
+}
+
 export function parseWarehouseLocation(
   location: string,
   knownShelves: string[]
 ): ParsedWarehouseLocation | null {
   const raw = String(location || '').trim().toUpperCase();
   if (!raw) return null;
+
+  const lockerParsed = parseLockerLocation(raw);
+  if (lockerParsed) return lockerParsed;
+
+  const asm3Body = extractAsm3LocationBody(raw);
+  if (asm3Body) {
+    const shelf = stripQualityRackSlotSuffix(asm3Body);
+    const slotTail = asm3Body.slice(shelf.length).replace(/\D/g, '') || null;
+    return { shelf, slot: slotTail, raw };
+  }
 
   const sorted = [...new Set(knownShelves.map(s => s.toUpperCase()))].sort(
     (a, b) => b.length - a.length
@@ -71,6 +149,7 @@ export function extractRackLetter(location: string, knownShelves: string[]): str
 
   if (shelf === 'A12') return 'A12';
   if (shelf === 'H11') return 'H11';
+  if (shelf.toUpperCase() === 'LOCKER' || shelf.toUpperCase().startsWith('LOCKER')) return 'Locker';
   if (shelf.startsWith('IQC')) return 'IQC';
   if (shelf.startsWith('NG')) return 'NG';
 
@@ -154,7 +233,7 @@ export function extractMaterialPrefix4(materialCode: string): string {
 const RACK_LETTER_ORDER = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G',
   'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'O', 'Q', 'A12', 'H11', 'K',
-  'IQC', 'NG'
+  'Locker', 'IQC', 'NG'
 ];
 
 /** Mọi vị trí bắt đầu bằng IQC (IQC, IQC+F1-0001, IQC+F7, …). */

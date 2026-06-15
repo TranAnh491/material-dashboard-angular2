@@ -147,6 +147,7 @@
           <span class="lw-heatmap-legend__label">Nhiều mã</span>
         </span>
         · {{ heatmapShelfCount }} kệ
+        <span *ngIf="asm3HeatmapTotal"> · Factory 3: <strong>{{ asm3HeatmapTotal }}</strong> mã</span>
         <span *ngIf="heatmapMaxCount"> · tối đa {{ heatmapMaxCount }} mã/kệ</span>
       </p>
       <p class="lw-alert lw-alert--error lw-live-hint" *ngIf="heatmapError">
@@ -218,18 +219,29 @@
     </div>
 
     <div #viewport class="lw-viewport" *ngIf="!isLoading && !loadError">
-      <div
-        class="lw-scale-wrap"
-        [style.width.px]="svgWidth * zoom"
-        [style.height.px]="svgNativeHeight * zoom">
-        <div class="lw-scale" [style.--lw-zoom]="zoom">
-          <div
-            #svgHost
-            class="lw-svg-host"
-            *ngIf="svgHtml"
-            [innerHTML]="svgHtml"
-            (click)="onZoneClick($event)">
+      <div class="lw-map-row">
+        <div
+          class="lw-scale-wrap"
+          [style.width.px]="svgWidth * zoom"
+          [style.height.px]="svgNativeHeight * zoom">
+          <div class="lw-scale" [style.--lw-zoom]="zoom">
+            <div
+              #svgHost
+              class="lw-svg-host"
+              *ngIf="svgHtml"
+              [innerHTML]="svgHtml"
+              (click)="onZoneClick($event)">
+            </div>
           </div>
+        </div>
+        <div
+          class="lw-factory3-outside"
+          [class.lw-factory3-outside--heatmap]="heatmapModeActive && asm3HeatmapTotal > 0"
+          [title]="heatmapModeActive ? ('ASM3: ' + asm3HeatmapTotal + ' mã') : 'Factory 3 (ASM3) — ngoài layout ASM1'">
+          <span class="lw-factory3-outside__label">Factory 3</span>
+          <span class="lw-factory3-outside__sub">ASM3</span>
+          <span class="lw-factory3-outside__count" *ngIf="heatmapModeActive">{{ asm3HeatmapTotal }}</span>
+          <span class="lw-factory3-outside__unit" *ngIf="heatmapModeActive">mã</span>
         </div>
       </div>
     </div>

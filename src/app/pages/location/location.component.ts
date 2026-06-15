@@ -154,7 +154,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // ── Employee scan (step before factory select) ──────────────────────────
   private readonly EMP_STORAGE_KEY = 'loc_employee_id';
+  private readonly EMP_LOGIN_TIME_KEY = 'loc_employee_login_at';
+  private readonly SESSION_TIMEOUT_MS = 30 * 60 * 1000;
   private readonly EMP_PATTERN = /^ASP\d{4}$/i;
+  private autoLogoutTimer: ReturnType<typeof setTimeout> | null = null;
   showEmployeeScan = true;
   employeeScanInput = '';
   employeeScanError = '';
@@ -227,10 +230,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.activeEmployeeId = raw;
     localStorage.setItem(this.EMP_STORAGE_KEY, raw);
+    localStorage.setItem(this.EMP_LOGIN_TIME_KEY, String(Date.now()));
     this.employeeScanInput = '';
     this.employeeScanError = '';
     this.showEmployeeScan = false;
     this.showFactorySelect = true;
+    this.scheduleAutoLogout();
   }
 
   changeEmployee(): void {
@@ -244,8 +249,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   logout(): void {
+    this.clearAutoLogoutTimer();
     this.activeEmployeeId = '';
     localStorage.removeItem(this.EMP_STORAGE_KEY);
+    localStorage.removeItem(this.EMP_LOGIN_TIME_KEY);
     this.employeeScanInput = '';
     this.employeeScanError = '';
     this.showEmployeeScan = true;
@@ -271,22 +278,28 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }, retry === 0 ? 0 : 80);
   }
 
-  /** Tính ms đến 7:00 sáng ngày hôm sau (hoặc hôm nay nếu chưa tới). */
-  private msUntilNextSevenAM(): number {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(7, 0, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next.getTime() - now.getTime();
+  private clearAutoLogoutTimer(): void {
+    if (this.autoLogoutTimer) {
+      clearTimeout(this.autoLogoutTimer);
+      this.autoLogoutTimer = null;
+    }
   }
 
+  /** Tự đăng xuất sau 30 phút kể từ lúc quét thẻ nhân viên. */
   private scheduleAutoLogout(): void {
-    const ms = this.msUntilNextSevenAM();
-    setTimeout(() => {
+    this.clearAutoLogoutTimer();
+    if (!this.activeEmployeeId) return;
+
+    const loginAt = Number(localStorage.getItem(this.EMP_LOGIN_TIME_KEY) || '0');
+    const elapsed = Date.now() - loginAt;
+    const remaining = this.SESSION_TIMEOUT_MS - elapsed;
+
+    if (!loginAt || remaining <= 0) {
       this.logout();
-      // Lặp lại mỗi 24h sau đó
-      setInterval(() => this.logout(), 24 * 60 * 60 * 1000);
-    }, ms);
+      return;
+    }
+
+    this.autoLogoutTimer = setTimeout(() => this.logout(), remaining);
   }
 
   selectFactory(factory: 'ASM1' | 'ASM2') {
@@ -1234,12 +1247,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.activeEmployeeId = saved.toUpperCase();
       this.showEmployeeScan = false;
       this.showFactorySelect = true;   // đã có employee → chọn factory
+      this.scheduleAutoLogout();
     } else {
       this.showEmployeeScan = true;
       this.showFactorySelect = false;
     }
     this.selectedFactory = null;
-    this.scheduleAutoLogout();
 
     this.updateMobileLayout();
     this.checkPermissions();
@@ -1258,6 +1271,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy() {
+    this.clearAutoLogoutTimer();
     this.destroy$.next();
     this.destroy$.complete();
     this.rulesSub?.unsubscribe();

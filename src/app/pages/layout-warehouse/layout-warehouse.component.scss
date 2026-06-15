@@ -789,6 +789,65 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
     #f8fafc;
 }
 
+.lw-map-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.lw-factory3-outside {
+  flex-shrink: 0;
+  min-width: 72px;
+  padding: 10px 12px;
+  border: 2px solid #7c3aed;
+  border-radius: 8px;
+  background: #f5f3ff;
+  color: #5b21b6;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.12);
+  align-self: flex-start;
+  margin-top: 88px;
+
+  &__label {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+  }
+
+  &__sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.75;
+  }
+
+  &__count {
+    display: block;
+    margin-top: 8px;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+    color: #4c1d95;
+  }
+
+  &__unit {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.8;
+  }
+
+  &--heatmap {
+    background: linear-gradient(180deg, #ede9fe 0%, #ddd6fe 100%);
+    border-color: #6d28d9;
+  }
+}
+
 .lw-scale-wrap {
   flex-shrink: 0;
   position: relative;
@@ -1036,6 +1095,11 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
 .lw-svg-host ::ng-deep [data-zone-border='rack-green'] [data-cell-id] > rect {
   stroke: #4caf50 !important;
   stroke-dasharray: none !important;
+}
+
+.lw-svg-host ::ng-deep .lw-heatmap-count-label {
+  pointer-events: none;
+  font-family: Arial, sans-serif;
 }
 
 .lw-svg-host ::ng-deep svg > g[font-size='6'] {
