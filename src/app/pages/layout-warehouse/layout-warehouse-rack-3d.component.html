@@ -1,0 +1,13 @@
+<div class="lw-rack3d">
+  <div class="lw-rack3d__legend">
+    <span class="lw-rack3d__legend-item lw-rack3d__legend-item--empty">Trống</span>
+    <span class="lw-rack3d__legend-item lw-rack3d__legend-item--full">Có hàng</span>
+    <span class="lw-rack3d__legend-item lw-rack3d__legend-item--pick">Đang chọn</span>
+    <span class="lw-rack3d__hint">Kéo xoay · Cuộn phóng to · Click ô để xem chi tiết</span>
+  </div>
+  <div
+    #canvasHost
+    class="lw-rack3d__canvas"
+    (click)="onCanvasClick($event)">
+  </div>
+</div>

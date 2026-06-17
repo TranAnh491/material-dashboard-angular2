@@ -42,13 +42,47 @@ export function extractAsm3LocationBody(location: string): string | null {
 }
 
 /**
- * Bỏ số ô sau (R)/(L): U3.2(R)03 → U3.2(R), Z1.5(L)12 → Z1.5(L).
- * Áp dụng cho kệ Quality có hậu tố (L)/(R).
+ * Bỏ số ô sau (R)/(L) và mọi hậu tố phía sau (05, -TX, TX…).
+ * VD: X1.2(L)05 → X1.2(L); X1.2(L)05-TX → X1.2(L).
  */
 export function stripQualityRackSlotSuffix(location: string): string {
+  const core = extractQualityRackCore(location);
+  if (core) return core;
   const compact = String(location || '').replace(/\s/g, '').toUpperCase();
   const m = /^(.+\([LR]\))\d*$/.exec(compact);
   return m ? m[1] : compact;
+}
+
+/** Kệ Quality R,S,T,U,V,W,X,Y,Z,O — Z1.5(R) trên hệ thống = ô Z1(R) trên sơ đồ (2 ký tự đầu + hậu tố (L)/(R)). */
+const DOT_RACK_MAP_LETTERS = 'RSTUVWXYZO';
+
+/**
+ * Lấy phần kệ Quality từ đầu chuỗi — bỏ số ô và hậu tố (-TX, TX, pallet…).
+ * VD: X1.2(L)05 → X1.2(L); U3.2(R)03-F1-0001 → U3.2(R).
+ */
+export function extractQualityRackCore(location: string): string | null {
+  const compact = String(location || '').replace(/\s/g, '').toUpperCase();
+  const m = new RegExp(`^([${DOT_RACK_MAP_LETTERS}]\\d(?:\\.\\d+)?\\([LR]\\))`).exec(compact);
+  return m ? m[1] : null;
+}
+
+/** Vị trí/kệ Quality → ô trên sơ đồ (VD: X1.2(L)05 → X1(L)). */
+export function resolveQualityRackLayoutCell(location: string): string | null {
+  const core = extractQualityRackCore(location);
+  if (!core) return null;
+  return mapDotRackLocationToMapCell(core) || core;
+}
+
+/** Gom vị trí Quality về ô layout cho Live list / heatmap. */
+export function normalizeQualityRackLiveLocation(location: string): string {
+  return resolveQualityRackLayoutCell(location) || '';
+}
+
+export function mapDotRackLocationToMapCell(location: string): string | null {
+  const compact = stripQualityRackSlotSuffix(location);
+  const m = new RegExp(`^([${DOT_RACK_MAP_LETTERS}])(\\d)\\.\\d+(\\([LR]\\))$`).exec(compact);
+  if (!m) return null;
+  return `${m[1]}${m[2]}${m[3]}`;
 }
 
 /** Kệ ASM3 từ vị trí (ASM3+… hoặc factory ASM3). */
@@ -67,9 +101,10 @@ export function resolveAsm3WarehouseShelf(location: string, factory?: string): s
 
 /** U3.2(R) → U3(R) trên sơ đồ SVG (ô hiện có). */
 export function mapAsm3ShelfToLayoutCell(shelf: string): string | null {
+  const resolved = resolveQualityRackLayoutCell(shelf);
+  if (resolved) return resolved;
   const compact = String(shelf || '').replace(/\s/g, '').toUpperCase();
-  if (!compact) return null;
-  return mapDotRackLocationToMapCell(compact) || compact;
+  return mapDotRackLocationToMapCell(compact) || compact || null;
 }
 
 export function parseWarehouseLocation(
@@ -85,8 +120,16 @@ export function parseWarehouseLocation(
   const asm3Body = extractAsm3LocationBody(raw);
   if (asm3Body) {
     const shelf = stripQualityRackSlotSuffix(asm3Body);
+    const layoutShelf = mapDotRackLocationToMapCell(shelf) || shelf;
     const slotTail = asm3Body.slice(shelf.length).replace(/\D/g, '') || null;
-    return { shelf, slot: slotTail, raw };
+    return { shelf: layoutShelf, slot: slotTail, raw };
+  }
+
+  const qualityCore = extractQualityRackCore(raw);
+  if (qualityCore) {
+    const layoutShelf = mapDotRackLocationToMapCell(qualityCore) || qualityCore;
+    const slot = raw.slice(qualityCore.length).match(/^(\d+)/)?.[1] || null;
+    return { shelf: layoutShelf, slot, raw };
   }
 
   const sorted = [...new Set(knownShelves.map(s => s.toUpperCase()))].sort(
@@ -126,6 +169,12 @@ export function parseWarehouseLocation(
     }
     const suffix = raw.slice(3).match(/^(\d+)/)?.[1] || null;
     return { shelf: 'IQC', slot: suffix, raw };
+  }
+
+  if (isNgPrefixLocation(raw)) {
+    const tail = raw.slice(2).replace(/^[-+_.]/, '');
+    const slot = tail.match(/^(\d+)/)?.[1] || null;
+    return { shelf: 'NG', slot, raw };
   }
 
   return null;
@@ -241,6 +290,17 @@ export function isIqcPrefixLocation(loc: string): boolean {
   return String(loc || '').replace(/\s/g, '').toUpperCase().startsWith('IQC');
 }
 
+/** Mọi vị trí NG (NG, NG-01, NG01, …). */
+export function isNgPrefixLocation(loc: string): boolean {
+  const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
+  return raw === 'NG' || /^NG(?:[+_.-]?\d*)$/.test(raw);
+}
+
+/** Gom mọi vị trí NG về nhãn NG (Live list / heatmap). */
+export function normalizeNgLiveLocation(loc: string): string {
+  return isNgPrefixLocation(loc) ? 'NG' : '';
+}
+
 /** Phần sau IQC+ (VD: IQC+F1-0001 → F1-0001). */
 export function extractIqcPlusRef(loc: string): string | null {
   const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
@@ -289,16 +349,6 @@ export function isFinishedGoodsShelf(shelfOrLoc: string, knownShelves: string[] 
   return false;
 }
 
-/** Kệ Quality R,S,T,U,V,W,X,Y,Z,O — Z1.5(R) trên hệ thống = ô Z1(R) trên sơ đồ (2 ký tự đầu + hậu tố (L)/(R)). */
-const DOT_RACK_MAP_LETTERS = 'RSTUVWXYZO';
-
-export function mapDotRackLocationToMapCell(location: string): string | null {
-  const compact = String(location || '').replace(/\s/g, '').toUpperCase();
-  const m = new RegExp(`^([${DOT_RACK_MAP_LETTERS}])(\\d)\\.\\d+(\\([LR]\\))$`).exec(compact);
-  if (!m) return null;
-  return `${m[1]}${m[2]}${m[3]}`;
-}
-
 /** Kệ thuộc MIXZONE P trên sơ đồ (F7–F9, G7–G9). */
 export const MIXZONE_SHELVES = new Set(['P', 'F7', 'F8', 'F9', 'G7', 'G8', 'G9']);
 
@@ -321,6 +371,95 @@ export function normalizeMixzoneLiveLocation(location: string, knownShelves: str
   const parsed = knownShelves.length ? parseWarehouseLocation(raw, knownShelves) : null;
   if (parsed?.shelf && MIXZONE_SHELVES.has(parsed.shelf.toUpperCase())) return 'P';
   return raw;
+}
+
+/** Số tầng / ô mặc định trên kệ Quality (VD: V1.1 … V1.5, ô 01–05). */
+export const QUALITY_RACK_LEVEL_COUNT = 7;
+export const QUALITY_RACK_SLOT_COUNT = 5;
+
+export interface LayoutQualityRackCell {
+  letter: string;
+  column: number;
+  side: 'L' | 'R';
+  label: string;
+}
+
+/** Ô trên sơ đồ: V1(R), X1(L)… */
+export function isLayoutQualityRackCell(loc: string): boolean {
+  return !!parseLayoutQualityRackCell(loc);
+}
+
+export function parseLayoutQualityRackCell(loc: string): LayoutQualityRackCell | null {
+  const m = /^([RSTUVWXYZO])(\d)\(([LR])\)$/.exec(String(loc || '').replace(/\s/g, '').toUpperCase());
+  if (!m) return null;
+  return {
+    letter: m[1],
+    column: Number(m[2]),
+    side: m[3] as 'L' | 'R',
+    label: `${m[1]}${m[2]}(${m[3]})`
+  };
+}
+
+export function buildQualityRackLevelLabel(cell: LayoutQualityRackCell, level: number): string {
+  return `${cell.letter}${cell.column}.${level}(${cell.side})`;
+}
+
+export function buildQualityRackSlotLocation(cell: LayoutQualityRackCell, level: number, slot: number): string {
+  return `${buildQualityRackLevelLabel(cell, level)}${String(slot).padStart(2, '0')}`;
+}
+
+/**
+ * Chuẩn hoá vị trí Quality theo quy ước 4 ký tự:
+ * - V1.1(R)  -> V11R
+ * - V1.1(R)05-TX -> V11R05TX (khi so khớp chỉ lấy 4 ký tự đầu V11R)
+ * Bỏ toàn bộ ký tự không phải chữ/số.
+ */
+export function normalizeQualityRackCompact(location: string): string {
+  return String(location || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+/** Lấy key 4 ký tự đầu (VD: V1.1(R) -> V11R). */
+export function getQualityRackKey4(location: string): string {
+  return normalizeQualityRackCompact(location).slice(0, 4);
+}
+
+/** Parse key4 kiểu Y15R -> { level: 5 } (kệ Y1, tầng 5, bên R). */
+export function parseQualityRackLevelFromKey4(key4: string): { level: number } | null {
+  const m = /^([RSTUVWXYZO])(\d)(\d)([LR])$/.exec(String(key4 || '').trim().toUpperCase());
+  if (!m) return null;
+  const level = Number(m[3]);
+  if (!Number.isFinite(level) || level <= 0) return null;
+  return { level };
+}
+
+/** V1.2(R)05-TX thuộc kệ layout V1(R). */
+export function locationBelongsToLayoutQualityRack(location: string, layoutCell: string): boolean {
+  const cell = parseLayoutQualityRackCell(layoutCell);
+  if (!cell) return false;
+  const core = extractQualityRackCore(location);
+  if (!core) return false;
+  const m = /^([RSTUVWXYZO])(\d)\.(\d+)\(([LR])\)$/.exec(core);
+  if (!m) return false;
+  return m[1] === cell.letter && Number(m[2]) === cell.column && m[4] === cell.side;
+}
+
+export function parseQualityRackSlotFromLocation(location: string): { level: number; slot: number } | null {
+  // Theo rule mới: chỉ cần khớp 4 ký tự đầu (V11R) để map lên tầng.
+  const compact = normalizeQualityRackCompact(location);
+  const key4 = compact.slice(0, 4);
+  const parsed = parseQualityRackLevelFromKey4(key4);
+  if (!parsed) return null;
+  const level = parsed.level;
+
+  // Slot: nếu có số phía sau key4 (VD: V11R05...) thì lấy 2 số đầu làm slot.
+  const tail = compact.slice(4);
+  const slotM = /^(\d{1,2})/.exec(tail);
+  const slotRaw = slotM ? Number(slotM[1]) : 1;
+  const slot = Math.max(1, Math.min(QUALITY_RACK_SLOT_COUNT, slotRaw || 1));
+  return { level, slot };
 }
 
 export function compareRackLetters(a: string, b: string): number {

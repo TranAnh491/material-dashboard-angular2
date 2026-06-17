@@ -973,41 +973,21 @@
         </div>
         <div class="info-row">
           <label>Qty Pallet:</label>
-          <span class="info-value">{{selectedShipmentForPrint.qtyPallet || 0}}</span>
+          <span class="info-value">{{getPrintQtyPalletTotal()}}</span>
         </div>
       </div>
-      
-      <div class="print-label-options">
-        <button class="print-option-btn shipment-order-btn" (click)="printShipmentOrder()">
-          <i class="material-icons">description</i>
-          <div class="btn-content">
-            <span class="btn-title">SHIPMENT ORDER</span>
-            <small class="btn-desc">In A4: toàn bộ thông tin (P1 + P2 + P3)</small>
-          </div>
-        </button>
 
-        <button class="print-option-btn" (click)="printP1Only()">
-          <i class="material-icons">fact_check</i>
-          <div class="btn-content">
-            <span class="btn-title">THÔNG TIN SOẠN HÀNG</span>
-            <small class="btn-desc">In A4: chỉ P1 – thông tin soạn hàng / picking information</small>
-          </div>
-        </button>
-
-        <button class="print-option-btn" (click)="printP2Only()">
-          <i class="material-icons">checklist</i>
-          <div class="btn-content">
-            <span class="btn-title">CÁC MỤC KIỂM TRA</span>
-            <small class="btn-desc">In A4: chỉ P2 – các mục kiểm tra / inspection items</small>
-          </div>
-        </button>
-
-        <button class="print-option-btn" (click)="printPalletLabelsFromPKL()">
-          <i class="material-icons">label</i>
-          <div class="btn-content">
-            <span class="btn-title">PALLET LABEL</span>
-            <small class="btn-desc">In tem 57×32mm: mỗi pallet 1 tem (QR + mã pallet)</small>
-          </div>
+      <p class="print-form-hint">Chọn in tất cả hoặc từng mẫu:</p>
+      <div class="print-form-row">
+        <button
+          type="button"
+          *ngFor="let form of printFormOptions"
+          class="print-form-icon-btn"
+          [class.print-form-all]="form.id === 'all'"
+          [title]="form.title"
+          (click)="onPrintFormSelected(form.id)">
+          <i class="material-icons">{{form.icon}}</i>
+          <span class="print-form-label">{{form.label}}</span>
         </button>
       </div>
     </div>

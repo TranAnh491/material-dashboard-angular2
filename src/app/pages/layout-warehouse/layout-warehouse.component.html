@@ -35,6 +35,22 @@
         </button>
       </div>
       <span class="lw-chip" *ngIf="selectedLoc">{{ selectedLoc }}</span>
+      <button
+        type="button"
+        class="lw-btn lw-btn--3d"
+        *ngIf="canOpenRack3d"
+        (click)="openRack3d()">
+        <i class="material-icons">view_in_ar</i>
+        3D
+      </button>
+      <button
+        type="button"
+        class="lw-btn lw-btn--soft"
+        *ngIf="rack3dActive"
+        (click)="closeRack3d()">
+        <i class="material-icons">map</i>
+        Quay lại sơ đồ
+      </button>
     </section>
 
     <section class="lw-card lw-card--success" *ngIf="searchResult">
@@ -70,7 +86,70 @@
       </p>
     </section>
 
-    <section class="lw-guidance" *ngIf="activeGuidanceLoc">
+    <section class="lw-section lw-rack3d-panel" *ngIf="rack3dActive">
+      <h2 class="lw-section__title">
+        <i class="material-icons">view_in_ar</i> Kệ {{ rack3dCell }}
+      </h2>
+      <p class="lw-rack3d-panel__sub">
+        {{ qualityRackLevelCount }} tầng
+      </p>
+      <div class="lw-rack3d-panel__loading" *ngIf="rack3dLoading">
+        <i class="material-icons lw-spin">sync</i> Đang tải tồn kho…
+      </div>
+      <p class="lw-alert lw-alert--error" *ngIf="rack3dError">
+        <i class="material-icons">error</i> {{ rack3dError }}
+      </p>
+      <div class="lw-rack3d-levels" *ngIf="!rack3dLoading">
+        <button
+          type="button"
+          class="lw-rack3d-level"
+          *ngFor="let row of rack3dLevelSummaries"
+          [class.lw-rack3d-level--active]="rack3dSelectedLevel === row.level && !rack3dSelectedSlot"
+          (click)="jumpToRack3dLevel(row.level)">
+          <span class="lw-rack3d-level__label">Tầng {{ row.level }}</span>
+          <span class="lw-rack3d-level__code">{{ row.label }}</span>
+          <span class="lw-rack3d-level__count">{{ row.occupied }} ô có hàng</span>
+        </button>
+      </div>
+      <div class="lw-rack3d-pick" *ngIf="rack3dSelectedPick">
+        <h3 class="lw-rack3d-pick__title">
+          <span *ngIf="rack3dSelectedSlot">Ô {{ rack3dSelectedSlot }}</span>
+          <span *ngIf="!rack3dSelectedSlot">Tầng {{ rack3dSelectedLevel }}</span>
+          · {{ rack3dSelectedPick.location }}
+        </h3>
+        <div class="lw-rack3d-po" *ngIf="rack3dSelectedLevelPoStats as s">
+          <div class="lw-rack3d-po__title">Tỷ lệ theo PO (mmyy)</div>
+          <div class="lw-rack3d-po__row">
+            <span>&lt; 1 năm</span>
+            <strong>{{ s.total ? ((s.under1y * 100) / s.total) : 0 | number:'1.0-0' }}%</strong>
+            <span class="lw-rack3d-po__meta">({{ s.under1y }}/{{ s.total }})</span>
+          </div>
+          <div class="lw-rack3d-po__row">
+            <span>&lt; 2 năm</span>
+            <strong>{{ s.total ? ((s.under2y * 100) / s.total) : 0 | number:'1.0-0' }}%</strong>
+            <span class="lw-rack3d-po__meta">({{ s.under2y }}/{{ s.total }})</span>
+          </div>
+          <div class="lw-rack3d-po__row">
+            <span>2–&lt;3 năm</span>
+            <strong>{{ s.total ? ((s.between2and3y * 100) / s.total) : 0 | number:'1.0-0' }}%</strong>
+            <span class="lw-rack3d-po__meta">({{ s.between2and3y }}/{{ s.total }})</span>
+          </div>
+          <div class="lw-rack3d-po__row">
+            <span>≥ 3 năm</span>
+            <strong>{{ s.total ? ((s.overOrEq3y * 100) / s.total) : 0 | number:'1.0-0' }}%</strong>
+            <span class="lw-rack3d-po__meta">({{ s.overOrEq3y }}/{{ s.total }})</span>
+          </div>
+        </div>
+        <p class="lw-rack3d-pick__empty" *ngIf="!rack3dSelectedPick.items.length">Không có hàng tại vị trí này.</p>
+        <div class="lw-rack3d-pick__item" *ngFor="let item of rack3dSelectedPick.items">
+          <span class="lw-rack3d-pick__code">{{ item.materialCode }}</span>
+          <span class="lw-rack3d-pick__stock">Tồn: {{ item.stock | number:'1.0-2' }}</span>
+          <span class="lw-rack3d-pick__loc">{{ item.location }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="lw-guidance" *ngIf="activeGuidanceLoc && !rack3dActive">
       <h2 class="lw-section__title">
         <i class="material-icons">menu_book</i> Hướng dẫn lưu trữ
       </h2>
@@ -188,7 +267,7 @@
       </div>
     </section>
 
-    <section class="lw-section lw-section--bottom">
+    <section class="lw-section lw-section--bottom" *ngIf="!rack3dActive">
       <h2 class="lw-section__title"><i class="material-icons">zoom_in</i> Thu phóng</h2>
       <div class="lw-zoom">
         <button type="button" class="lw-btn lw-btn--icon" (click)="setZoom(-0.1)" title="Thu nhỏ">−</button>
@@ -199,9 +278,14 @@
     </section>
   </aside>
 
-  <main class="lw-canvas">
+  <main class="lw-canvas" [class.lw-canvas--rack3d]="rack3dActive">
     <div class="lw-canvas__toolbar">
-      <span class="lw-canvas__label"><i class="material-icons">grid_view</i> Warehouse Map</span>
+      <span class="lw-canvas__label" *ngIf="!rack3dActive">
+        <i class="material-icons">grid_view</i> Warehouse Map
+      </span>
+      <span class="lw-canvas__label" *ngIf="rack3dActive">
+        <i class="material-icons">view_in_ar</i> Kệ 3D · {{ rack3dCell }}
+      </span>
       <span class="lw-live-badge" *ngIf="liveModeActive">
         <i class="material-icons">sensors</i> LIVE
       </span>
@@ -211,14 +295,23 @@
       <span class="lw-canvas__zoom">{{ (zoom * 100) | number:'1.0-0' }}%</span>
     </div>
 
-    <div class="lw-status lw-status--loading" *ngIf="isLoading">
+    <div class="lw-status lw-status--loading" *ngIf="isLoading && !rack3dActive">
       <i class="material-icons lw-spin">sync</i> Đang tải sơ đồ kho…
     </div>
-    <div class="lw-status lw-status--error" *ngIf="loadError">
+    <div class="lw-status lw-status--error" *ngIf="loadError && !rack3dActive">
       <i class="material-icons">error_outline</i> {{ loadError }}
     </div>
 
-    <div #viewport class="lw-viewport" *ngIf="!isLoading && !loadError">
+    <app-layout-warehouse-rack-3d
+      *ngIf="rack3dActive && rack3dCell"
+      [rackCell]="rack3dCell"
+      [occupancy]="rack3dOccupancy"
+      [selectedLevel]="rack3dSelectedLevel"
+      [selectedSlot]="rack3dSelectedSlot"
+      (slotPick)="onRack3dSlotPick($event)">
+    </app-layout-warehouse-rack-3d>
+
+    <div #viewport class="lw-viewport" *ngIf="!isLoading && !loadError && !rack3dActive">
       <div class="lw-map-row">
         <div
           class="lw-scale-wrap"

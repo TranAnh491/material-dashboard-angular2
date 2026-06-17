@@ -6,9 +6,10 @@ import { HttpClientModule } from '@angular/common/http';
 import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 import { AngularFireAuthModule } from '@angular/fire/compat/auth';
 import { LayoutWarehouseComponent } from './layout-warehouse.component';
+import { LayoutWarehouseRack3dComponent } from './layout-warehouse-rack-3d.component';
 
 @NgModule({
-  declarations: [LayoutWarehouseComponent],
+  declarations: [LayoutWarehouseComponent, LayoutWarehouseRack3dComponent],
   imports: [
     CommonModule,
     FormsModule,

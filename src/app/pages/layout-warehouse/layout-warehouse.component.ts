@@ -47,12 +47,16 @@ import {
   isIqcPrefixLocation,
   extractIqcPlusRef,
   mapDotRackLocationToMapCell,
+  resolveQualityRackLayoutCell,
+  normalizeQualityRackLiveLocation,
   normalizeFinishedGoodsPCode,
   matchesFinishedGoodsPCode,
   mapFgLocationToLayoutShelf,
   extractFgShelfPartFromLocation,
   normalizeMixzoneLiveLocation,
   normalizeLockerLiveLocation,
+  normalizeNgLiveLocation,
+  isNgPrefixLocation,
   resolveMixzoneShelfFromLocation,
   isAsm3PrefixLocation,
   resolveAsm3WarehouseShelf,
@@ -61,8 +65,19 @@ import {
   GENERAL_MATERIAL_GUIDANCE,
   GENERAL_MATERIAL_SHELF_RANGE_LABEL,
   getDefaultLocationGuidance,
-  isGeneralMaterialRackLetter
+  isGeneralMaterialRackLetter,
+  isLayoutQualityRackCell,
+  parseLayoutQualityRackCell,
+  locationBelongsToLayoutQualityRack,
+  parseQualityRackSlotFromLocation,
+  buildQualityRackLevelLabel,
+  QUALITY_RACK_LEVEL_COUNT,
+  QUALITY_RACK_SLOT_COUNT
 } from './layout-warehouse-location.util';
+import {
+  QualityRackSlotOccupancy,
+  QualityRackSlotPick
+} from './layout-warehouse-rack-3d.component';
 
 
 
@@ -128,6 +143,14 @@ interface HeatmapShelfRow {
   shelf: string;
   codeCount: number;
   materialCodes: string[];
+}
+
+interface PoAgeStats {
+  total: number;
+  under1y: number;
+  under2y: number;
+  between2and3y: number;
+  overOrEq3y: number;
 }
 
 
@@ -220,6 +243,17 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   heatmapRows: HeatmapShelfRow[] = [];
   /** Tổng mã ASM3 (vị trí ASM3* hoặc factory ASM3) — hiển thị box Factory 3 */
   asm3HeatmapTotal = 0;
+
+  rack3dActive = false;
+  rack3dLoading = false;
+  rack3dError = '';
+  rack3dCell = '';
+  rack3dOccupancy: QualityRackSlotOccupancy[] = [];
+  rack3dSelectedLevel: number | null = null;
+  rack3dSelectedSlot: number | null = null;
+  rack3dSelectedPick: QualityRackSlotPick | null = null;
+  readonly qualityRackLevelCount = QUALITY_RACK_LEVEL_COUNT;
+  readonly qualityRackSlotCount = 0;
 
   private knownShelves: string[] = [];
   private guidanceSub?: Subscription;
@@ -320,6 +354,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.unsubscribeGuidance();
     this.stopLiveMode();
     this.stopHeatmapMode();
+    this.closeRack3d();
 
   }
 
@@ -481,7 +516,205 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.searchResult = null;
 
     this.clearGuidanceState();
+    this.closeRack3d();
 
+  }
+
+  get canOpenRack3d(): boolean {
+    return !!this.resolveSelectedQualityRackCell() && !this.rack3dActive;
+  }
+
+  private resolveSelectedQualityRackCell(): string {
+    const raw = String(this.selectedLoc || '').trim();
+    if (isLayoutQualityRackCell(raw)) return raw;
+
+    const head = raw.split('—')[0].trim();
+    if (isLayoutQualityRackCell(head)) return head;
+
+    const compact = raw.replace(/\s/g, '').toUpperCase();
+    const m = /^([RSTUVWXYZO]\d\([LR]\))/.exec(compact);
+    if (m && isLayoutQualityRackCell(m[1])) return m[1];
+
+    const shelf = String(this.searchResult?.shelf || '').trim();
+    if (isLayoutQualityRackCell(shelf)) return shelf;
+
+    return '';
+  }
+
+  get rack3dLevelSummaries(): { level: number; label: string; occupied: number }[] {
+    const cell = parseLayoutQualityRackCell(this.rack3dCell);
+    if (!cell) return [];
+    const rows: { level: number; label: string; occupied: number }[] = [];
+    for (let level = 1; level <= QUALITY_RACK_LEVEL_COUNT; level++) {
+      const occupied = this.uniqueRack3dLevelCount(level);
+      rows.push({
+        level,
+        label: buildQualityRackLevelLabel(cell, level),
+        occupied
+      });
+    }
+    return rows;
+  }
+
+  get rack3dSelectedLevelPoStats(): PoAgeStats | null {
+    if (!this.rack3dSelectedLevel) return null;
+    const rows = this.rack3dOccupancy.filter(o => o.level === this.rack3dSelectedLevel);
+    if (!rows.length) {
+      return { total: 0, under1y: 0, under2y: 0, between2and3y: 0, overOrEq3y: 0 };
+    }
+    return this.calcPoAgeStats(rows.map(r => r.poNumber));
+  }
+
+  private uniqueRack3dLevelCount(level: number): number {
+    const set = new Set<string>();
+    for (const row of this.rack3dOccupancy) {
+      if (row.level !== level) continue;
+      // Unique theo materialCode + PO + IMD để đúng nhu cầu "mỗi mã hàng, po, imd"
+      const key = `${row.materialCode}\0${row.poNumber}\0${row.imd ? row.imd.toISOString().slice(0, 10) : ''}`;
+      set.add(key);
+    }
+    return set.size;
+  }
+
+  private parsePoMmyy(po: string): { month: number; year: number } | null {
+    const raw = String(po || '').trim();
+    const m = /^(\d{2})(\d{2})\/\d+/.exec(raw);
+    if (!m) return null;
+    const month = Number(m[1]);
+    const yy = Number(m[2]);
+    if (!Number.isFinite(month) || month < 1 || month > 12) return null;
+    // PO mmyy -> assume 20yy
+    const year = 2000 + yy;
+    return { month, year };
+  }
+
+  private monthsDiff(fromYear: number, fromMonth: number, to: Date): number {
+    const y2 = to.getFullYear();
+    const m2 = to.getMonth() + 1;
+    return (y2 - fromYear) * 12 + (m2 - fromMonth);
+  }
+
+  private calcPoAgeStats(pos: string[]): PoAgeStats {
+    const now = new Date();
+    const stats: PoAgeStats = { total: 0, under1y: 0, under2y: 0, between2and3y: 0, overOrEq3y: 0 };
+    for (const po of pos) {
+      const parsed = this.parsePoMmyy(po);
+      if (!parsed) continue;
+      const months = this.monthsDiff(parsed.year, parsed.month, now);
+      if (!Number.isFinite(months) || months < 0) continue;
+      stats.total += 1;
+      if (months < 12) stats.under1y += 1;
+      else if (months < 24) stats.under2y += 1;
+      else if (months < 36) stats.between2and3y += 1;
+      else stats.overOrEq3y += 1;
+    }
+    return stats;
+  }
+
+  async openRack3d(): Promise<void> {
+    const label = this.resolveSelectedQualityRackCell();
+    const cell = parseLayoutQualityRackCell(label);
+    if (!cell) return;
+
+    this.rack3dCell = cell.label;
+    this.rack3dActive = true;
+    this.rack3dSelectedLevel = null;
+    this.rack3dSelectedSlot = null;
+    this.rack3dSelectedPick = null;
+    this.rack3dError = '';
+    this.cdr.markForCheck();
+
+    await this.loadRack3dInventory();
+  }
+
+  closeRack3d(): void {
+    this.rack3dActive = false;
+    this.rack3dLoading = false;
+    this.rack3dError = '';
+    this.rack3dCell = '';
+    this.rack3dOccupancy = [];
+    this.rack3dSelectedLevel = null;
+    this.rack3dSelectedSlot = null;
+    this.rack3dSelectedPick = null;
+    this.cdr.markForCheck();
+  }
+
+  onRack3dSlotPick(pick: QualityRackSlotPick): void {
+    this.rack3dSelectedLevel = pick.level;
+    this.rack3dSelectedSlot = null;
+    this.rack3dSelectedPick = pick;
+    this.cdr.markForCheck();
+  }
+
+  jumpToRack3dLevel(level: number): void {
+    this.rack3dSelectedLevel = level;
+    this.rack3dSelectedSlot = null;
+    const cell = parseLayoutQualityRackCell(this.rack3dCell);
+    if (!cell) return;
+    const items = this.rack3dOccupancy.filter(o => o.level === level);
+    this.rack3dSelectedPick = {
+      level,
+      location: buildQualityRackLevelLabel(cell, level),
+      items
+    };
+    this.cdr.markForCheck();
+  }
+
+  private async loadRack3dInventory(): Promise<void> {
+    const layoutCell = this.rack3dCell;
+    if (!layoutCell) return;
+
+    this.rack3dLoading = true;
+    this.rack3dError = '';
+    this.rack3dOccupancy = [];
+    this.cdr.markForCheck();
+
+    try {
+      const snap = await this.firestore
+        .collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.factory).limit(10000)
+        )
+        .get()
+        .toPromise();
+
+      const rows: QualityRackSlotOccupancy[] = [];
+
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as Record<string, unknown>;
+        const materialCode = String(data['materialCode'] || '').trim();
+        const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+        if (!materialCode || !location) continue;
+        if (!locationBelongsToLayoutQualityRack(location, layoutCell)) continue;
+
+        const qty = Number(data['quantity']) || 0;
+        const exported = Number(data['exported']) || 0;
+        const stockField = Number(data['stock']) || 0;
+        const stock = qty > 0 ? qty - exported : stockField;
+        if (stock <= 0) continue;
+
+        const slotInfo = parseQualityRackSlotFromLocation(location);
+        if (!slotInfo) continue;
+
+        const poNumber = String(data['poNumber'] || '').trim();
+        const imd = this.toDate(data['importDate'] as unknown as LocationGuidanceDoc['updatedAt']);
+
+        rows.push({
+          level: slotInfo.level,
+          location,
+          materialCode,
+          poNumber,
+          imd,
+          stock
+        });
+      }
+
+      this.rack3dOccupancy = rows;
+    } catch (err) {
+      this.rack3dError = (err as Error)?.message || String(err);
+    } finally {
+      this.rack3dLoading = false;
+      this.cdr.markForCheck();
+    }
   }
 
   openStorageGuide(): void {
@@ -1275,7 +1508,8 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
 
     const upper = term.toUpperCase();
-    const dotRackCell = mapDotRackLocationToMapCell(upper);
+    const qualityCell = resolveQualityRackLayoutCell(term);
+    const dotRackCell = qualityCell || mapDotRackLocationToMapCell(upper);
 
     return (
 
@@ -1638,6 +1872,10 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   private normalizeLiveLocKey(loc: string): string {
     const locker = normalizeLockerLiveLocation(loc);
     if (locker) return locker;
+    const ng = normalizeNgLiveLocation(loc);
+    if (ng) return ng;
+    const quality = normalizeQualityRackLiveLocation(loc);
+    if (quality) return quality;
     return normalizeMixzoneLiveLocation(loc, this.knownShelves);
   }
 
@@ -1744,6 +1982,13 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     const compact = raw.toUpperCase().replace(/\s/g, '');
     candidates.add(compact);
 
+    if (isNgPrefixLocation(compact)) {
+      candidates.add('NG');
+    }
+
+    const qualityCell = resolveQualityRackLayoutCell(raw);
+    if (qualityCell) candidates.add(qualityCell);
+
     const dotRackCell = mapDotRackLocationToMapCell(compact);
     if (dotRackCell) candidates.add(dotRackCell);
 
@@ -1781,7 +2026,12 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     }
 
     const loc = String(zone.getAttribute('data-loc') || '').trim();
-    if (zone.getAttribute('data-zone-border') === 'mixzone' || loc === 'P') {
+    if (
+      zone.getAttribute('data-zone-border') === 'mixzone' ||
+      zone.getAttribute('data-zone-border') === 'ng' ||
+      loc === 'P' ||
+      loc === 'NG'
+    ) {
       return zone;
     }
 

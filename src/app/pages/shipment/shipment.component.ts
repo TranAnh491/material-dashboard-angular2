@@ -195,6 +195,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Print Label dialog
   showPrintLabelDialog: boolean = false;
   selectedShipmentForPrint: ShipmentItem | null = null;
+  /** Snapshot mã shipment + id dòng khi mở dialog — tránh in sai sau khi Firebase reload */
+  private printContext: { shipmentCode: string; anchorRowId?: string } | null = null;
+  /** Các mẫu in trên popup (icon ngang) */
+  printFormOptions: Array<{ id: string; icon: string; label: string; title: string }> = [
+    { id: 'all', icon: 'library_books', label: 'Tất cả', title: 'In tất cả mẫu' },
+    { id: 'shipment-order', icon: 'description', label: 'Order', title: 'SHIPMENT ORDER (P1 + P2 + P3)' },
+    { id: 'p1', icon: 'fact_check', label: 'P1', title: 'Thông tin soạn hàng' },
+    { id: 'p2', icon: 'checklist', label: 'P2', title: 'Các mục kiểm tra' },
+    { id: 'pallet-label', icon: 'label', label: 'Tem pallet', title: 'Tem pallet 57×32mm' }
+  ];
 
   // PKL (Packing List) dialog
   showPKLDialog: boolean = false;
@@ -3221,23 +3231,133 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Print Label Methods
   openPrintLabelDialog(shipment: ShipmentItem): void {
-    this.selectedShipmentForPrint = shipment;
+    this.printContext = {
+      shipmentCode: this.normalizeShipmentCode(shipment.shipmentCode),
+      anchorRowId: shipment.id
+    };
+    this.selectedShipmentForPrint = this.resolvePrintAnchorRow() || shipment;
     this.showPrintLabelDialog = true;
   }
 
   closePrintLabelDialog(): void {
     this.showPrintLabelDialog = false;
     this.selectedShipmentForPrint = null;
+    this.printContext = null;
+  }
+
+  /** Tất cả dòng cùng shipment (từ this.shipments, không lọc filter UI). */
+  private getShipmentRowsByCode(code: string): ShipmentItem[] {
+    const norm = this.normalizeShipmentCode(code);
+    if (!norm) return [];
+    return this.shipments
+      .filter(s => this.normalizeShipmentCode(s.shipmentCode) === norm)
+      .sort((a, b) => String(a.materialCode || '').localeCompare(String(b.materialCode || '')));
+  }
+
+  /** Resolve dòng anchor từ snapshot (ưu tiên id dòng đã click). */
+  private resolvePrintAnchorRow(): ShipmentItem | null {
+    if (!this.printContext?.shipmentCode) return null;
+    const { shipmentCode, anchorRowId } = this.printContext;
+    if (anchorRowId) {
+      const byId = this.shipments.find(s => s.id === anchorRowId);
+      if (byId && this.normalizeShipmentCode(byId.shipmentCode) === shipmentCode) {
+        return byId;
+      }
+    }
+    const rows = this.getShipmentRowsByCode(shipmentCode);
+    return rows[0] || null;
+  }
+
+  /** Cập nhật selectedShipmentForPrint từ dữ liệu mới nhất trước khi in. */
+  private refreshPrintSelection(): ShipmentItem | null {
+    if (!this.printContext && this.selectedShipmentForPrint) {
+      this.printContext = {
+        shipmentCode: this.normalizeShipmentCode(this.selectedShipmentForPrint.shipmentCode),
+        anchorRowId: this.selectedShipmentForPrint.id
+      };
+    }
+    const resolved = this.resolvePrintAnchorRow();
+    if (resolved) {
+      this.selectedShipmentForPrint = resolved;
+    }
+    return this.selectedShipmentForPrint;
+  }
+
+  /** Tên KH trên bản in — gộp từ tất cả dòng shipment (ưu tiên mã TP). */
+  private getPrintCustomerLabel(rows: ShipmentItem[]): string {
+    const names = [...new Set(rows.map(r => this.getKhNameForShipment(r)).filter(Boolean))];
+    if (names.length === 1) return names[0];
+    if (names.length > 1) return names.join(' · ');
+    const codes = [...new Set(rows.map(r => String(r.customerCode || '').trim()).filter(Boolean))];
+    return codes.join(', ');
+  }
+
+  /** Qty pallet của dòng đang chọn in (cột QTY PALLET trên bảng). */
+  getPrintQtyPalletTotal(): number {
+    const anchor = this.refreshPrintSelection();
+    return Number(anchor?.qtyPallet) || 0;
+  }
+
+  onPrintFormSelected(formId: string): void {
+    switch (formId) {
+      case 'all':
+        void this.printAllForms();
+        break;
+      case 'shipment-order':
+        void this.printShipmentOrder();
+        break;
+      case 'p1':
+        void this.printP1Only();
+        break;
+      case 'p2':
+        void this.printP2Only();
+        break;
+      case 'pallet-label':
+        void this.printPalletLabelsFromPKL();
+        break;
+    }
+  }
+
+  /** In tất cả: Shipment Order đầy đủ + tem pallet. */
+  async printAllForms(): Promise<void> {
+    await this.printShipmentOrder({ closeDialog: false });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    await this.printPalletLabelsFromPKL({ closeDialog: true });
+  }
+
+  private openPrintHtmlWindow(html: string, title?: string): Window | null {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
+      return null;
+    }
+    if (title) printWindow.document.title = title;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 300);
+    };
+    setTimeout(() => {
+      if (printWindow && !printWindow.closed) {
+        printWindow.focus();
+        printWindow.print();
+      }
+    }, 800);
+    return printWindow;
   }
 
   // Open PKL Dialog - Load FG Out data for shipment
   async openPKLDialog(): Promise<void> {
-    if (!this.selectedShipmentForPrint) {
+    const anchor = this.refreshPrintSelection();
+    if (!anchor || !this.printContext?.shipmentCode) {
       alert('❌ Không có shipment được chọn!');
       return;
     }
 
-    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '').trim().toUpperCase();
+    const shipmentCode = this.printContext.shipmentCode;
     if (!shipmentCode) {
       alert('❌ Mã Shipment không hợp lệ!');
       return;
@@ -3342,11 +3462,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
 
     const currentDate = new Date().toLocaleDateString('vi-VN');
-    const shipment = this.selectedShipmentForPrint;
-    const dispatchDate = shipment?.actualShipDate
-      ? new Date(shipment.actualShipDate).toLocaleDateString('vi-VN')
-      : '—';
-    const factory = (shipment as any)?.factory || 'ASM1';
+    const anchor = this.refreshPrintSelection();
+    const group = anchor ? this.getShipmentGroupSummary(anchor) : null;
+    const dispatchDate = group?.actualShipDate
+      ? new Date(group.actualShipDate).toLocaleDateString('vi-VN')
+      : (anchor?.actualShipDate
+        ? new Date(anchor.actualShipDate).toLocaleDateString('vi-VN')
+        : '—');
+    const factory = (anchor as any)?.factory || 'ASM1';
     const logoSrc = (typeof window !== 'undefined' && window.location?.origin)
       ? window.location.origin + '/assets/img/logo.png'
       : '/assets/img/logo.png';
@@ -3498,16 +3621,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   async printShipmentLabel(): Promise<void> {
-    if (!this.selectedShipmentForPrint) {
+    const anchor = this.refreshPrintSelection();
+    if (!anchor || !this.printContext?.shipmentCode) {
       alert('❌ Không có shipment được chọn!');
       return;
     }
     
-    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '');
-    if (!shipmentCode || shipmentCode.trim() === '') {
-      alert('❌ Mã Shipment không hợp lệ!');
-      return;
-    }
+    const shipmentCode = this.printContext.shipmentCode;
     
     console.log('🏷️ Printing Shipment Label:', shipmentCode);
     
@@ -3521,24 +3641,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   async printPalletLabels(): Promise<void> {
-    if (!this.selectedShipmentForPrint) {
+    const anchor = this.refreshPrintSelection();
+    if (!anchor || !this.printContext?.shipmentCode) {
       alert('❌ Không có shipment được chọn!');
       return;
     }
     
-    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '').trim();
-    if (!shipmentCode) {
-      alert('❌ Mã Shipment không hợp lệ!');
-      return;
-    }
-    
-    // Cộng dồn tổng số pallet: cùng shipmentCode có thể nhiều dòng (nhiều mã TP), mỗi dòng có qtyPallet riêng
-    const normalizedCode = this.normalizeShipmentCode(shipmentCode);
-    const sameShipmentRows = this.shipments.filter(s => this.normalizeShipmentCode(s.shipmentCode) === normalizedCode);
-    const qtyPallet = sameShipmentRows.reduce((sum, s) => sum + (Number(s.qtyPallet) || 0), 0);
+    const normalizedCode = this.printContext.shipmentCode;
+    const qtyPallet = Number(anchor.qtyPallet) || 0;
     
     if (qtyPallet <= 0) {
-      alert('❌ Tổng Qty Pallet phải lớn hơn 0! (Cộng dồn ' + sameShipmentRows.length + ' dòng cùng shipment)');
+      alert('❌ Qty Pallet phải lớn hơn 0!');
       return;
     }
     
@@ -3547,7 +3660,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return;
     }
     
-    console.log('🏷️ Printing Pallet Labels:', shipmentCode, 'Tổng pallet (cộng dồn', sameShipmentRows.length, 'dòng):', qtyPallet);
+    console.log('🏷️ Printing Pallet Labels:', normalizedCode, 'Qty pallet (dòng đã chọn):', qtyPallet);
     
     try {
       const palletCodes: string[] = [];
@@ -3564,6 +3677,124 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('❌ Error printing pallet labels:', error);
       alert('❌ Lỗi khi in tem pallet: ' + error.message);
     }
+  }
+
+  private normalizeFgOutMergeCarton(value: unknown): string {
+    const v = String(value ?? '').trim();
+    if (!v) return '';
+    if (/^\d+$/.test(v)) return v.padStart(2, '0');
+    return v;
+  }
+
+  /** Sort pallet giống tab FG Out (6P/27P → theo số đầu). */
+  private compareFgOutPalletForSort(a: string | undefined | null, b: string | undefined | null): number {
+    const getOrdinal = (pallet: string | undefined | null): number => {
+      const s = String(pallet ?? '').trim();
+      const m = s.match(/^(\d+)/);
+      return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+    };
+    const ordA = getOrdinal(a);
+    const ordB = getOrdinal(b);
+    if (ordA !== ordB) return ordA - ordB;
+    return String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  /**
+   * Cộng cột Carton từ FG Out theo từng pallet của shipment
+   * (cùng quy tắc gộp thùng: mergeCarton chỉ tính 1 ở dòng đầu).
+   */
+  private buildPalletCartonRowsFromFgOut(
+    shipmentCode: string,
+    fgItems: Array<{
+      id?: string;
+      shipment?: string;
+      pallet?: string;
+      carton?: number;
+      mergeCarton?: string;
+      materialCode?: string;
+    }> = []
+  ): Array<{ palletLabel: string; carton: number }> {
+    const normShip = this.normalizeShipmentCode(shipmentCode);
+    const rows = fgItems
+      .filter(it => this.normalizeShipmentCode(it.shipment) === normShip)
+      .filter(it => String(it.materialCode || '').trim())
+      .sort((a, b) => {
+        const palletCmp = this.compareFgOutPalletForSort(a.pallet, b.pallet);
+        if (palletCmp !== 0) return palletCmp;
+        const mcA = String(a.mergeCarton ?? '').padStart(3, '0');
+        const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
+        if (mcA !== mcB) return mcA.localeCompare(mcB);
+        return String(a.materialCode || '').localeCompare(String(b.materialCode || ''));
+      });
+
+    const mergeCartonFirstIdx = new Map<string, number>();
+    rows.forEach((row, idx) => {
+      const mc = this.normalizeFgOutMergeCarton(row.mergeCarton);
+      if (!mc || mergeCartonFirstIdx.has(mc)) return;
+      mergeCartonFirstIdx.set(mc, idx);
+    });
+
+    const palletTotals = new Map<string, number>();
+    rows.forEach((row, idx) => {
+      const pallet = String(row.pallet || '').trim();
+      if (!pallet || pallet === 'Không có Pallet') return;
+
+      const mc = this.normalizeFgOutMergeCarton(row.mergeCarton);
+      let cartonCount = 0;
+      if (mc) {
+        if (mergeCartonFirstIdx.get(mc) === idx) cartonCount = 1;
+      } else {
+        cartonCount = Number(row.carton) || 0;
+      }
+
+      palletTotals.set(pallet, (palletTotals.get(pallet) || 0) + cartonCount);
+    });
+
+    return Array.from(palletTotals.entries())
+      .sort((a, b) => this.compareFgOutPalletForSort(a[0], b[0]))
+      .map(([palletLabel, carton]) => ({ palletLabel, carton }));
+  }
+
+  /** HTML bảng tick số carton từng pallet (P1). */
+  private buildPalletCartonTickHtml(rows: Array<{ palletLabel: string; carton: number }>): string {
+    if (!rows.length) {
+      return `
+      <div class="pallet-carton-section">
+        <div class="pallet-carton-title">Số carton từng pallet / Cartons per pallet</div>
+        <p class="pallet-carton-empty">Chưa có dữ liệu FG Out (cột Carton theo pallet) cho shipment này.</p>
+      </div>`;
+    }
+    const total = rows.reduce((sum, row) => sum + row.carton, 0);
+    const bodyRows = rows.map((row, idx) => `
+      <tr>
+        <td class="pc-col-no">${idx + 1}</td>
+        <td class="pc-col-pallet">${this.escapeHtml(row.palletLabel)}</td>
+        <td class="pc-col-carton">${this.formatNumber(row.carton)}</td>
+        <td class="pc-col-tick tick-cell">☐</td>
+      </tr>`).join('');
+    return `
+      <div class="pallet-carton-section">
+        <div class="pallet-carton-title">Số carton từng pallet / Cartons per pallet</div>
+        <p class="pallet-carton-hint">Số carton cộng từ cột Carton (tab FG Out) theo từng pallet của shipment — tick xác nhận khi soạn.</p>
+        <table class="pallet-carton-table">
+          <thead>
+            <tr>
+              <th class="pc-col-no">STT</th>
+              <th class="pc-col-pallet">Mã pallet / Pallet</th>
+              <th class="pc-col-carton">Số carton / Cartons</th>
+              <th class="pc-col-tick">Xác nhận / Tick</th>
+            </tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" class="pc-total-label"><strong>Tổng carton / Total cartons</strong></td>
+              <td class="pc-col-carton"><strong>${this.formatNumber(total)}</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
   }
 
   private getShipmentOrderPrintStorageKey(shipmentCode: string): string {
@@ -3642,14 +3873,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   /** Tạo HTML template Shipment Order (dùng cho in và xem mẫu). */
   async buildShipmentOrderHtml(options: { incrementPrintCount?: boolean } = {}): Promise<string> {
-    if (!this.selectedShipmentForPrint) return '';
-    const s = this.selectedShipmentForPrint;
-    const shipmentCode = String(s.shipmentCode || '').trim().toUpperCase();
-
-    const allItemsInShipment = this.shipments.filter(item => {
-      const itemCode = String(item.shipmentCode || '').trim().toUpperCase();
-      return itemCode === shipmentCode;
-    });
+    const anchor = this.refreshPrintSelection();
+    if (!anchor || !this.printContext?.shipmentCode) return '';
+    const shipmentCode = this.printContext.shipmentCode;
+    const printItems = [anchor];
+    const s = anchor;
+    const group = this.getShipmentGroupSummary(anchor);
 
     const fmtDate = (d: Date | null | undefined): string => {
       if (!d) return '—';
@@ -3664,13 +3893,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('QR generate error:', e);
     }
 
-    const importDate = fmtDate(s.importDate);
-    const dispatchDate = fmtDate(s.actualShipDate);
+    const importDate = fmtDate(group.importDate);
+    const dispatchDate = fmtDate(group.actualShipDate);
     const currentDate = new Date().toLocaleDateString('vi-VN');
     const factory = (s as any).factory || 'ASM1';
 
     // Print count + change detection (stored by shipmentCode)
-    const signature = this.computeShipmentOrderSignature(shipmentCode, s, allItemsInShipment);
+    const signature = this.computeShipmentOrderSignature(shipmentCode, s, printItems);
     const prevState = this.getShipmentOrderPrintState(shipmentCode);
     const hasPrevSignature = Boolean(prevState.signature);
     const isContentChanged = hasPrevSignature && prevState.signature !== signature;
@@ -3683,8 +3912,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       ? window.location.origin + '/assets/img/logo.png'
       : '';
 
-    // Load FG Out data for PKL (Part 3)
+    // Load FG Out data for PKL (Part 3) + pallet carton (P1)
     let pklHtml = '<p style="font-style:italic;color:#666">Không có dữ liệu FG Out cho shipment này.</p>';
+    let fgItemsForPrint: Array<{
+      id?: string;
+      shipment?: string;
+      pallet?: string;
+      carton?: number;
+      mergeCarton?: string;
+      materialCode?: string;
+    }> = [];
     try {
       const fgSnap = await this.firestore.collection('fg-out', ref =>
         ref.where('shipment', '==', shipmentCode)
@@ -3697,6 +3934,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         const fgItems: any[] = fgSnap.docs.map(doc => {
           const d = doc.data() as any;
           return {
+            id: doc.id,
+            shipment: d.shipment || '',
             materialCode: d.materialCode || '',
             batchNumber: d.batchNumber || '',
             lot: d.lot || '',
@@ -3705,6 +3944,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             carton: d.carton || 0,
             odd: d.odd || 0,
             pallet: d.pallet || '',
+            mergeCarton: d.mergeCarton || '',
             location: d.location || '',
             productType: d.productType || '',
             notes: d.notes || '',
@@ -3713,6 +3953,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
               : (d.exportDate ? new Date(d.exportDate) : null)
           };
         });
+        fgItemsForPrint = fgItems;
 
         const palletGroups = new Map<string, any[]>();
         fgItems.forEach(item => {
@@ -3792,7 +4033,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('PKL load error in buildShipmentOrderHtml:', e);
     }
 
-    const itemBoxes = allItemsInShipment.map(item => `
+    const itemBoxes = printItems.map(item => `
       <div class="item-box">
         <div class="item-row">
           <div class="item-cell item-cell-tick"><span class="tick-box">☐</span> <strong>Mã TP:</strong> ${this.escapeHtml(String(item.materialCode || ''))}</div>
@@ -3805,17 +4046,21 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       </div>
     `).join('');
 
-    const allNotes = allItemsInShipment
+    const allNotes = printItems
       .map(item => item.notes)
       .filter(note => note && note.trim())
       .join('\n');
 
-    const totalPallets = allItemsInShipment.reduce((sum, it) => sum + (Number(it.qtyPallet) || 0), 0);
+    const totalPallets = Number(s.qtyPallet) || 0;
     const packingLower = (s.packing || '').toLowerCase();
     const isPallet = packingLower.includes('pallet');
     const isCarton = packingLower.includes('carton') || packingLower.includes('box') || !isPallet;
 
-    const customerName = this.getCustomerNameFromMapping(s.customerCode || '') || (s.customerCode || '');
+    const palletCartonTickHtml = this.buildPalletCartonTickHtml(
+      this.buildPalletCartonRowsFromFgOut(shipmentCode, fgItemsForPrint)
+    );
+
+    const customerName = this.getPrintCustomerLabel(printItems);
     const factoryNorm = (s.factory || 'ASM1').toString().trim().toUpperCase();
     const warehouse = factoryNorm === 'ASM2' ? 'LH' : 'Main';
 
@@ -3880,6 +4125,20 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .humidity-box { border: 2px solid #000; padding: 12px; margin-top: 12px; background: #f9f9f9; }
     .humidity-box-label { font-size: 12px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
     .humidity-box-input { width: 100%; max-width: 200px; padding: 6px 8px; border: 1px solid #000; font-size: 14px; }
+    
+    .pallet-carton-section { margin-bottom: 16px; border: 2px solid #000; padding: 12px; background: #fafafa; }
+    .pallet-carton-title { font-size: 14px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; color: #000; }
+    .pallet-carton-hint { font-size: 11px; color: #333; margin-bottom: 8px; font-style: italic; }
+    .pallet-carton-empty { font-size: 12px; color: #666; font-style: italic; }
+    .pallet-carton-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .pallet-carton-table th, .pallet-carton-table td { border: 1px solid #000; padding: 8px 10px; vertical-align: middle; color: #000; }
+    .pallet-carton-table th { background: #e8e8e8; font-weight: bold; text-align: center; }
+    .pallet-carton-table tfoot td { background: #f5f5f5; }
+    .pallet-carton-table .pc-col-no { width: 48px; text-align: center; }
+    .pallet-carton-table .pc-col-pallet { min-width: 140px; }
+    .pallet-carton-table .pc-col-carton { width: 120px; text-align: center; font-weight: 600; }
+    .pallet-carton-table .pc-col-tick { width: 100px; text-align: center; font-size: 16px; }
+    .pallet-carton-table .pc-total-label { text-align: right; }
     
     .items-section { margin-bottom: 16px; }
     .items-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; padding: 5px; background: #e8e8e8; color: #000; text-transform: uppercase; }
@@ -3982,7 +4241,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   <div class="customer-warehouse-row">
     <div class="cw-box">
       <div class="cw-title">Khách hàng / Customer</div>
-      <div class="cw-value">&nbsp;</div>
+      <div class="cw-value">${this.escapeHtml(customerName) || '&nbsp;'}</div>
     </div>
     <div class="cw-box">
       <div class="cw-title">Kho / Warehouse</div>
@@ -4032,6 +4291,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     <div class="humidity-box-label">Độ ẩm pallet (nếu có) / Pallet humidity (if any)</div>
     <input type="text" class="humidity-box-input" />
   </div>
+  
+  ${palletCartonTickHtml}
   
   <div class="items-section">
     <div class="items-title">Chi tiết hàng soạn / Picking details</div>
@@ -4179,37 +4440,22 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   /** In SHIPMENT ORDER: giấy A4, toàn bộ thông tin shipment + mã QR + ký tên soạn */
-  async printShipmentOrder(): Promise<void> {
+  async printShipmentOrder(options: { closeDialog?: boolean; incrementPrintCount?: boolean } = {}): Promise<void> {
+    const closeDialog = options.closeDialog !== false;
+    const incrementPrintCount = options.incrementPrintCount !== false;
     if (!this.selectedShipmentForPrint) {
       alert('❌ Không có shipment được chọn!');
       return;
     }
-    const html = await this.buildShipmentOrderHtml({ incrementPrintCount: true });
+    const html = await this.buildShipmentOrderHtml({ incrementPrintCount });
     if (!html) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
-      return;
-    }
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-      }, 300);
-    };
-    setTimeout(() => {
-      if (printWindow && !printWindow.closed) {
-        printWindow.focus();
-        printWindow.print();
-      }
-    }, 800);
-    this.closePrintLabelDialog();
+    if (!this.openPrintHtmlWindow(html)) return;
+    if (closeDialog) this.closePrintLabelDialog();
   }
 
   /** In chỉ P1: Thông tin soạn hàng / Picking information */
-  async printP1Only(): Promise<void> {
+  async printP1Only(options: { closeDialog?: boolean } = {}): Promise<void> {
+    const closeDialog = options.closeDialog !== false;
     if (!this.selectedShipmentForPrint) {
       alert('❌ Không có shipment được chọn!');
       return;
@@ -4217,7 +4463,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const fullHtml = await this.buildShipmentOrderHtml();
     if (!fullHtml) return;
 
-    // Parse nội dung P1: từ đầu body đến trước div.page-break-before đầu tiên (P2)
     const bodyStart = fullHtml.indexOf('<body>') + '<body>'.length;
     const p2Start = fullHtml.indexOf('<div class="page-break-before">');
     const p1Content = p2Start > -1
@@ -4227,17 +4472,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const headPart = fullHtml.substring(0, fullHtml.indexOf('</head>') + '</head>'.length);
     const p1Html = `${headPart}\n<body>${p1Content}</body>\n</html>`;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!'); return; }
-    printWindow.document.write(p1Html);
-    printWindow.document.close();
-    printWindow.onload = () => { setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300); };
-    setTimeout(() => { if (printWindow && !printWindow.closed) { printWindow.focus(); printWindow.print(); } }, 800);
-    this.closePrintLabelDialog();
+    if (!this.openPrintHtmlWindow(p1Html)) return;
+    if (closeDialog) this.closePrintLabelDialog();
   }
 
   /** In chỉ P2: Các mục kiểm tra / Inspection Items */
-  async printP2Only(): Promise<void> {
+  async printP2Only(options: { closeDialog?: boolean } = {}): Promise<void> {
+    const closeDialog = options.closeDialog !== false;
     if (!this.selectedShipmentForPrint) {
       alert('❌ Không có shipment được chọn!');
       return;
@@ -4245,36 +4486,30 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const fullHtml = await this.buildShipmentOrderHtml();
     if (!fullHtml) return;
 
-    // P2 là div.page-break-before đầu tiên, P3 là cái thứ hai
     const p2Start = fullHtml.indexOf('<div class="page-break-before">');
     const p3Start = fullHtml.indexOf('<div class="page-break-before">', p2Start + 1);
     const p2Content = (p2Start > -1 && p3Start > -1)
       ? fullHtml.substring(p2Start, p3Start).trim()
       : (p2Start > -1 ? fullHtml.substring(p2Start, fullHtml.indexOf('</body>')).trim() : '');
 
-    // Bỏ thuộc tính page-break-before khi in riêng
     const p2ContentClean = p2Content.replace(/class="page-break-before"/, 'class=""');
 
     const headPart = fullHtml.substring(0, fullHtml.indexOf('</head>') + '</head>'.length);
     const p2Html = `${headPart}\n<body>${p2ContentClean}</body>\n</html>`;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!'); return; }
-    printWindow.document.write(p2Html);
-    printWindow.document.close();
-    printWindow.onload = () => { setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300); };
-    setTimeout(() => { if (printWindow && !printWindow.closed) { printWindow.focus(); printWindow.print(); } }, 800);
-    this.closePrintLabelDialog();
+    if (!this.openPrintHtmlWindow(p2Html)) return;
+    if (closeDialog) this.closePrintLabelDialog();
   }
 
   /** In Pallet Label (57×32mm): từ danh sách pallet trong FG Out */
-  async printPalletLabelsFromPKL(): Promise<void> {
-    if (!this.selectedShipmentForPrint) {
+  async printPalletLabelsFromPKL(options: { closeDialog?: boolean } = {}): Promise<void> {
+    const closeDialog = options.closeDialog !== false;
+    const anchor = this.refreshPrintSelection();
+    if (!anchor || !this.printContext?.shipmentCode) {
       alert('❌ Không có shipment được chọn!');
       return;
     }
-    const shipmentCode = String(this.selectedShipmentForPrint.shipmentCode || '').trim().toUpperCase();
-    if (!shipmentCode) { alert('❌ Mã Shipment không hợp lệ!'); return; }
+    const shipmentCode = this.printContext.shipmentCode;
 
     // Load FG Out data
     let palletNames: string[] = [];
@@ -4395,13 +4630,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 </body>
 </html>`;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!'); return; }
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.onload = () => { setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300); };
-    setTimeout(() => { if (printWindow && !printWindow.closed) { printWindow.focus(); printWindow.print(); } }, 800);
-    this.closePrintLabelDialog();
+    if (!this.openPrintHtmlWindow(html, `Pallet Labels - ${shipmentCode}`)) return;
+    if (closeDialog) this.closePrintLabelDialog();
   }
 
   /** Xem mẫu format Shipment Order (mở tab mới, không in). */
