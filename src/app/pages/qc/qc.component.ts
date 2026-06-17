@@ -1547,13 +1547,16 @@ export class QCComponent implements OnInit, OnDestroy {
     const employeeIdToSave = this.currentEmployeeId.trim();
 
     const oldIqcStatus = (materialToUpdate.iqcStatus || '').trim();
-    // Mail chỉ khi: cột ưu tiên = ưu tiên (danh sách Chờ kiểm), trạng thái CHỜ KIỂM → trạng thái khác (ưu tiên sẽ mất).
     const wasPendingQcPriority = (this.priorityPendingQcIds || []).includes(materialId);
     const wasPendingConfirmPriority = this.priorityMaterialId === materialId;
+    const shouldTransferQcPriorityToConfirm =
+      wasPendingQcPriority &&
+      oldIqcStatus === 'CHỜ KIỂM' &&
+      statusToUpdate === 'CHỜ XÁC NHẬN';
     const shouldNotifyPriorityResolved =
       wasPendingQcPriority &&
       oldIqcStatus === 'CHỜ KIỂM' &&
-      statusToUpdate !== 'CHỜ KIỂM';
+      this.isQcPriorityTerminalStatus(statusToUpdate);
 
     // Zalo (ASM1): nếu mã đang bật ưu tiên (Pending QC hoặc Pending Confirm) và bị đổi trạng thái
     const shouldNotifyPriorityStatusChangedZalo =
@@ -1562,16 +1565,17 @@ export class QCComponent implements OnInit, OnDestroy {
       oldIqcStatus !== String(statusToUpdate || '').trim();
 
     const shouldClearPendingConfirmPriority =
-      wasPendingConfirmPriority && statusToUpdate !== 'CHỜ XÁC NHẬN';
+      wasPendingConfirmPriority && this.isQcPriorityTerminalStatus(statusToUpdate);
     const shouldClearPendingQcPriority =
-      wasPendingQcPriority && statusToUpdate !== 'CHỜ KIỂM';
+      wasPendingQcPriority && this.isQcPriorityTerminalStatus(statusToUpdate);
 
-    // Priority disappears once the material status changes away from required state
-    if (statusToUpdate !== 'CHỜ XÁC NHẬN' && this.priorityMaterialId === materialId) {
-      this.priorityMaterialId = null;
-    }
-    if (statusToUpdate !== 'CHỜ KIỂM') {
-      // If item no longer pending QC, drop from pending-QC priorities
+    if (shouldTransferQcPriorityToConfirm) {
+      this.priorityPendingQcIds = (this.priorityPendingQcIds || []).filter(id => id !== materialId);
+      this.priorityMaterialId = materialId;
+    } else if (this.isQcPriorityTerminalStatus(statusToUpdate)) {
+      if (this.priorityMaterialId === materialId) {
+        this.priorityMaterialId = null;
+      }
       this.priorityPendingQcIds = (this.priorityPendingQcIds || []).filter(id => id !== materialId);
     }
     
@@ -1603,13 +1607,21 @@ export class QCComponent implements OnInit, OnDestroy {
       qcCheckedAt: now
     };
 
-    // Clear backend priority flags when leaving priority-required statuses
+    // Clear backend priority flags — giữ ưu tiên khi chuyển CHỜ KIỂM → CHỜ XÁC NHẬN; chỉ xóa khi Pass/NG
+    if (shouldTransferQcPriorityToConfirm) {
+      updatePayload.qcPriorityPendingQC = false;
+      updatePayload.qcPriorityAutoPendingQC = false;
+      updatePayload.qcPriorityPendingConfirm = true;
+      updatePayload.qcPriorityUpdatedAt = now;
+    }
     if (shouldClearPendingConfirmPriority) {
       updatePayload.qcPriorityPendingConfirm = false;
+      updatePayload.qcPriorityUpdatedAt = now;
     }
     if (shouldClearPendingQcPriority) {
       updatePayload.qcPriorityPendingQC = false;
       updatePayload.qcPriorityAutoPendingQC = false;
+      updatePayload.qcPriorityUpdatedAt = now;
     }
 
     // Save extra fields by selected status
@@ -1839,6 +1851,12 @@ export class QCComponent implements OnInit, OnDestroy {
       return status || 'CHỜ KIỂM';
     }
     return status;
+  }
+
+  /** Ưu tiên QC chỉ kết thúc khi Pass hoặc NG. */
+  private isQcPriorityTerminalStatus(status: string): boolean {
+    const s = String(status || '').trim().toUpperCase();
+    return s === 'PASS' || s === 'NG';
   }
   
   // Close Employee Modal
