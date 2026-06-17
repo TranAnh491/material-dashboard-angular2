@@ -265,36 +265,40 @@
                     <ng-container *ngFor="let shipment of filteredShipments; let i = index">
                       <tr *ngIf="i === 0 || isFirstOfShipment(i)" class="shipment-group-header">
                         <td colspan="29">
+                          <ng-container *ngIf="getShipmentGroupSummary(shipment) as g">
                           <div class="shipment-group-card">
                             <div class="shipment-group-accent"></div>
                             <div class="shipment-group-title">
-                              Import #{{ shipment.shipmentCode }}
+                              Shipment {{ shipment.shipmentCode }}
                             </div>
                             <div class="shipment-group-meta">
-                              NGÀY IMPORT:
-                              <strong>{{ getShipmentGroupSummary(shipment).importDate | date : 'MM/dd/yyyy' }}</strong>
-                              &nbsp;&nbsp;DISPATCH DATE:
-                              <strong>{{ getShipmentGroupSummary(shipment).actualShipDate | date : 'MM/dd/yyyy' }}</strong>
+                              DISPATCH DATE:
+                              <strong>{{ g.actualShipDate ? (g.actualShipDate | date : 'MM/dd/yyyy') : '—' }}</strong>
                             </div>
                             <div class="shipment-group-stats">
+                              <div class="group-stat" *ngIf="g.totalPallet > 0">
+                                <div class="stat-value">{{ g.totalPallet | number : '1.0-0' }}</div>
+                                <div class="stat-label">PALLET</div>
+                              </div>
                               <div class="group-stat">
-                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalCarton | number : '1.0-0' }}</div>
+                                <div class="stat-value">{{ g.totalCarton | number : '1.0-0' }}</div>
                                 <div class="stat-label">CARTON</div>
                               </div>
                               <div class="group-stat">
-                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalQtyBox | number : '1.0-0' }}</div>
-                                <div class="stat-label">QTYBOX</div>
+                                <div class="stat-value">{{ g.totalQty | number : '1.0-0' }}</div>
+                                <div class="stat-label">QTY</div>
                               </div>
-                              <div class="group-stat">
-                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalOdd | number : '1.0-0' }}</div>
-                                <div class="stat-label">ODD</div>
-                              </div>
-                              <div class="group-stat">
-                                <div class="stat-value">{{ getShipmentGroupSummary(shipment).totalInventory | number : '1.0-0' }}</div>
-                                <div class="stat-label">TỒN</div>
+                              <div class="group-stat group-stat-status">
+                                <div class="stat-value">
+                                  <span class="status-pill group-status-pill" [ngClass]="getStatusClass(g.status)">
+                                    {{ g.status }}
+                                  </span>
+                                </div>
+                                <div class="stat-label">STATUS</div>
                               </div>
                             </div>
                           </div>
+                          </ng-container>
                         </td>
                       </tr>
 

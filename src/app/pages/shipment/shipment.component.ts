@@ -48,7 +48,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   shipments: ShipmentItem[] = [];
   filteredShipments: ShipmentItem[] = [];
 
-  /** UI: group header per shipmentCode (Import #...) */
+  /** UI: group header per shipmentCode */
   private shipmentGroupSummaryByCode: Map<
     string,
     {
@@ -56,9 +56,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       importDate: Date | null;
       actualShipDate: Date | null;
       totalCarton: number;
-      totalQtyBox: number;
-      totalOdd: number;
-      totalInventory: number;
+      totalQty: number;
+      totalPallet: number;
+      status: string;
     }
   > = new Map();
   
@@ -754,35 +754,65 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return materialA.localeCompare(materialB);
     });
 
-    // Build group summaries for UI (Import #... header blocks)
+    // Build group summaries for UI (Shipment ... header blocks)
     this.shipmentGroupSummaryByCode = new Map();
+    const rowsByCode = new Map<string, ShipmentItem[]>();
     for (const s of this.filteredShipments) {
       const code = this.normalizeShipmentCode(s.shipmentCode);
       if (!code) continue;
+      if (!rowsByCode.has(code)) rowsByCode.set(code, []);
+      rowsByCode.get(code)!.push(s);
+
       const cur = this.shipmentGroupSummaryByCode.get(code) || {
         shipmentCode: code,
         importDate: null as Date | null,
         actualShipDate: null as Date | null,
         totalCarton: 0,
-        totalQtyBox: 0,
-        totalOdd: 0,
-        totalInventory: 0
+        totalQty: 0,
+        totalPallet: 0,
+        status: ''
       };
       const imp = s.importDate ? new Date(s.importDate) : null;
       const dis = s.actualShipDate ? new Date(s.actualShipDate) : null;
       if (imp && !isNaN(imp.getTime())) {
-        // giữ ngày đầu tiên (nhỏ nhất) để hiển thị
         if (!cur.importDate || imp.getTime() < cur.importDate.getTime()) cur.importDate = imp;
       }
       if (dis && !isNaN(dis.getTime())) {
         if (!cur.actualShipDate || dis.getTime() < cur.actualShipDate.getTime()) cur.actualShipDate = dis;
       }
       cur.totalCarton += Number(s.carton) || 0;
-      cur.totalQtyBox += Number(s.qtyBox) || 0;
-      cur.totalOdd += Number(s.odd) || 0;
-      cur.totalInventory += Number((s as any).inventory) || 0;
+      cur.totalQty += Number(s.quantity) || 0;
+      cur.totalPallet += Number(s.qtyPallet) || 0;
       this.shipmentGroupSummaryByCode.set(code, cur);
     }
+    for (const [code, cur] of this.shipmentGroupSummaryByCode.entries()) {
+      cur.status = this.pickShipmentGroupStatus(rowsByCode.get(code) || []);
+    }
+  }
+
+  /** Status ưu tiên (Delay → … → Đã Ship) cho header nhóm shipment. */
+  private pickShipmentGroupStatus(rows: ShipmentItem[]): string {
+    const statusRank: Record<string, number> = {
+      'Delay': 1,
+      'Chưa Đủ': 2,
+      'Đang soạn': 3,
+      'Chờ soạn': 4,
+      'Đã xong': 5,
+      'Đã Check': 6,
+      'Đã Ship': 7
+    };
+    let best = '';
+    let bestRank = 999;
+    for (const it of rows) {
+      const st = String(it?.status || '').trim();
+      if (!st) continue;
+      const r = statusRank[st] ?? 500;
+      if (r < bestRank) {
+        bestRank = r;
+        best = st;
+      }
+    }
+    return best || '—';
   }
 
   /** UI: lấy summary theo shipmentCode (để render group header). */
@@ -791,9 +821,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     importDate: Date | null;
     actualShipDate: Date | null;
     totalCarton: number;
-    totalQtyBox: number;
-    totalOdd: number;
-    totalInventory: number;
+    totalQty: number;
+    totalPallet: number;
+    status: string;
   } {
     const code = this.normalizeShipmentCode(shipment?.shipmentCode);
     return (
@@ -802,9 +832,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         importDate: shipment?.importDate || null,
         actualShipDate: shipment?.actualShipDate || null,
         totalCarton: Number(shipment?.carton) || 0,
-        totalQtyBox: Number((shipment as any)?.qtyBox) || 0,
-        totalOdd: Number((shipment as any)?.odd) || 0,
-        totalInventory: Number((shipment as any)?.inventory) || 0
+        totalQty: Number(shipment?.quantity) || 0,
+        totalPallet: Number(shipment?.qtyPallet) || 0,
+        status: String(shipment?.status || '').trim() || '—'
       }
     );
   }
@@ -3687,72 +3717,182 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   /** Sort pallet giống tab FG Out (6P/27P → theo số đầu). */
+  private getFgOutPalletOrdinalForSort(pallet: string | undefined | null): number {
+    const s = String(pallet ?? '').trim();
+    if (!s) return 0;
+    const m = s.match(/\d+/);
+    if (!m) return 0;
+    const n = parseInt(m[0], 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   private compareFgOutPalletForSort(a: string | undefined | null, b: string | undefined | null): number {
-    const getOrdinal = (pallet: string | undefined | null): number => {
-      const s = String(pallet ?? '').trim();
-      const m = s.match(/^(\d+)/);
-      return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
-    };
-    const ordA = getOrdinal(a);
-    const ordB = getOrdinal(b);
-    if (ordA !== ordB) return ordA - ordB;
-    return String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+    const pa = String(a ?? '').trim();
+    const pb = String(b ?? '').trim();
+    const oa = this.getFgOutPalletOrdinalForSort(pa);
+    const ob = this.getFgOutPalletOrdinalForSort(pb);
+    if (oa !== ob) return oa - ob;
+    return pa.toUpperCase().localeCompare(pb.toUpperCase());
+  }
+
+  private sortFgOutRowsLikeTable<T extends {
+    shipment?: string;
+    pallet?: string;
+    mergeCarton?: string;
+    materialCode?: string;
+    lsx?: string;
+    exportDate?: Date | null;
+    batchNumber?: string;
+  }>(rows: T[]): T[] {
+    return [...rows].sort((a, b) => {
+      const shipA = String(a.shipment ?? '').toUpperCase();
+      const shipB = String(b.shipment ?? '').toUpperCase();
+      if (shipA !== shipB) return shipA.localeCompare(shipB);
+
+      const palletCmp = this.compareFgOutPalletForSort(a.pallet, b.pallet);
+      if (palletCmp !== 0) return palletCmp;
+
+      const mcA = String(a.mergeCarton ?? '').padStart(3, '0');
+      const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
+      if (mcA !== mcB) return mcA.localeCompare(mcB);
+
+      const codeA = String(a.materialCode ?? '').toUpperCase();
+      const codeB = String(b.materialCode ?? '').toUpperCase();
+      if (codeA !== codeB) return codeA.localeCompare(codeB);
+
+      const lsxA = String(a.lsx ?? '').toUpperCase();
+      const lsxB = String(b.lsx ?? '').toUpperCase();
+      if (lsxA !== lsxB) return lsxA.localeCompare(lsxB);
+
+      const dateA = a.exportDate ? new Date(a.exportDate).getTime() : 0;
+      const dateB = b.exportDate ? new Date(b.exportDate).getTime() : 0;
+      if (dateA !== dateB) return dateB - dateA;
+
+      const batchA = String(a.batchNumber ?? '').toUpperCase();
+      const batchB = String(b.batchNumber ?? '').toUpperCase();
+      return batchA.localeCompare(batchB);
+    });
+  }
+
+  private async loadFgCatalogStandardMap(): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    try {
+      const snap = await this.firestore.collection('fg-catalog').get().toPromise();
+      snap?.docs.forEach(doc => {
+        const d = doc.data() as any;
+        const code = String(d.materialCode || '').trim().toUpperCase();
+        const num = parseFloat(String(d.standard ?? '').trim());
+        if (code && !isNaN(num) && num > 0) {
+          map.set(code, num);
+        }
+      });
+    } catch (e) {
+      console.error('Load fg-catalog for print error:', e);
+    }
+    return map;
+  }
+
+  private getFgOutCartonCountForDetailRow(
+    row: {
+      materialCode?: string;
+      mergeCarton?: string;
+      quantity?: number;
+      carton?: number;
+    },
+    matIdx: number,
+    mergeCartonFirstMatIdx: Map<string, number>,
+    standardByCode: Map<string, number>
+  ): number {
+    if (!String(row.materialCode || '').trim()) return 0;
+    const mc = this.normalizeFgOutMergeCarton(row.mergeCarton);
+    if (mc) {
+      return mergeCartonFirstMatIdx.get(mc) === matIdx ? 1 : 0;
+    }
+    const code = String(row.materialCode || '').trim().toUpperCase();
+    const standard = standardByCode.get(code);
+    if (standard && standard > 0) {
+      const qty = Number(row.quantity) || 0;
+      return Math.floor(qty / standard);
+    }
+    return Number(row.carton) || 0;
   }
 
   /**
-   * Cộng cột Carton từ FG Out theo từng pallet của shipment
-   * (cùng quy tắc gộp thùng: mergeCarton chỉ tính 1 ở dòng đầu).
+   * Lấy số carton từng pallet = đúng dòng "Tổng Carton Pallet" trên tab FG Out.
    */
   private buildPalletCartonRowsFromFgOut(
     shipmentCode: string,
     fgItems: Array<{
-      id?: string;
       shipment?: string;
       pallet?: string;
       carton?: number;
       mergeCarton?: string;
       materialCode?: string;
-    }> = []
+      quantity?: number;
+      lsx?: string;
+      exportDate?: Date | null;
+      batchNumber?: string;
+    }> = [],
+    standardByCode: Map<string, number> = new Map()
   ): Array<{ palletLabel: string; carton: number }> {
     const normShip = this.normalizeShipmentCode(shipmentCode);
-    const rows = fgItems
-      .filter(it => this.normalizeShipmentCode(it.shipment) === normShip)
-      .filter(it => String(it.materialCode || '').trim())
-      .sort((a, b) => {
-        const palletCmp = this.compareFgOutPalletForSort(a.pallet, b.pallet);
-        if (palletCmp !== 0) return palletCmp;
-        const mcA = String(a.mergeCarton ?? '').padStart(3, '0');
-        const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
-        if (mcA !== mcB) return mcA.localeCompare(mcB);
-        return String(a.materialCode || '').localeCompare(String(b.materialCode || ''));
-      });
+    const sorted = this.sortFgOutRowsLikeTable(
+      fgItems
+        .filter(it => this.normalizeShipmentCode(it.shipment) === normShip)
+        .filter(it => String(it.materialCode || '').trim())
+    );
 
-    const mergeCartonFirstIdx = new Map<string, number>();
-    rows.forEach((row, idx) => {
-      const mc = this.normalizeFgOutMergeCarton(row.mergeCarton);
-      if (!mc || mergeCartonFirstIdx.has(mc)) return;
-      mergeCartonFirstIdx.set(mc, idx);
+    const displayRows = sorted.map((material, matIdx) => ({ material, matIdx }));
+
+    const mergeCartonFirstMatIdx = new Map<string, number>();
+    displayRows.forEach(r => {
+      const mc = this.normalizeFgOutMergeCarton(r.material.mergeCarton);
+      if (!mc || mergeCartonFirstMatIdx.has(mc)) return;
+      mergeCartonFirstMatIdx.set(mc, r.matIdx);
     });
 
-    const palletTotals = new Map<string, number>();
-    rows.forEach((row, idx) => {
-      const pallet = String(row.pallet || '').trim();
-      if (!pallet || pallet === 'Không có Pallet') return;
+    const palletTotals: Array<{ pallet: string; totalCarton: number; shipment: string }> = [];
+    let prevPallet = '';
+    let prevShipment = '';
+    let cartonAccum = 0;
+    let lastShipment = '';
 
-      const mc = this.normalizeFgOutMergeCarton(row.mergeCarton);
-      let cartonCount = 0;
-      if (mc) {
-        if (mergeCartonFirstIdx.get(mc) === idx) cartonCount = 1;
-      } else {
-        cartonCount = Number(row.carton) || 0;
+    for (const r of displayRows) {
+      const currentShipment = String(r.material.shipment ?? '');
+      lastShipment = currentShipment;
+
+      if (currentShipment !== prevShipment) {
+        if (prevPallet && cartonAccum > 0) {
+          palletTotals.push({ pallet: prevPallet, totalCarton: cartonAccum, shipment: prevShipment });
+        }
+        prevPallet = '';
+        cartonAccum = 0;
+        prevShipment = currentShipment;
       }
 
-      palletTotals.set(pallet, (palletTotals.get(pallet) || 0) + cartonCount);
-    });
+      const pallet = String(r.material.pallet ?? '').trim();
+      if (pallet) {
+        if (pallet !== prevPallet && prevPallet) {
+          palletTotals.push({ pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+          cartonAccum = 0;
+        }
+        prevPallet = pallet;
+        cartonAccum += this.getFgOutCartonCountForDetailRow(
+          r.material,
+          r.matIdx,
+          mergeCartonFirstMatIdx,
+          standardByCode
+        );
+      }
+    }
+    if (prevPallet && cartonAccum > 0) {
+      palletTotals.push({ pallet: prevPallet, totalCarton: cartonAccum, shipment: lastShipment });
+    }
 
-    return Array.from(palletTotals.entries())
-      .sort((a, b) => this.compareFgOutPalletForSort(a[0], b[0]))
-      .map(([palletLabel, carton]) => ({ palletLabel, carton }));
+    return palletTotals
+      .filter(p => this.normalizeShipmentCode(p.shipment) === normShip)
+      .sort((a, b) => this.compareFgOutPalletForSort(a.pallet, b.pallet))
+      .map(({ pallet, totalCarton }) => ({ palletLabel: pallet, carton: totalCarton }));
   }
 
   /** HTML bảng tick số carton từng pallet (P1). */
@@ -3777,7 +3917,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return `
       <div class="pallet-carton-section">
         <div class="pallet-carton-title">Số carton từng pallet / Cartons per pallet</div>
-        <p class="pallet-carton-hint">Số carton cộng từ cột Carton (tab FG Out) theo từng pallet của shipment — tick xác nhận khi soạn.</p>
+        <p class="pallet-carton-hint">Số carton = dòng <strong>Tổng Carton Pallet</strong> trên tab FG Out (cùng thuật toán gộp thùng / Standard).</p>
         <table class="pallet-carton-table">
           <thead>
             <tr>
@@ -3927,7 +4067,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       carton?: number;
       mergeCarton?: string;
       materialCode?: string;
+      quantity?: number;
+      lsx?: string;
+      exportDate?: Date | null;
+      batchNumber?: string;
     }> = [];
+    const fgCatalogStandard = await this.loadFgCatalogStandardMap();
     try {
       const fgSnap = await this.firestore.collection('fg-out', ref =>
         ref.where('shipment', '==', shipmentCode)
@@ -4063,7 +4208,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const isCarton = packingLower.includes('carton') || packingLower.includes('box') || !isPallet;
 
     const palletCartonTickHtml = this.buildPalletCartonTickHtml(
-      this.buildPalletCartonRowsFromFgOut(shipmentCode, fgItemsForPrint)
+      this.buildPalletCartonRowsFromFgOut(shipmentCode, fgItemsForPrint, fgCatalogStandard)
     );
 
     const customerName = this.getPrintCustomerLabel(printItems);

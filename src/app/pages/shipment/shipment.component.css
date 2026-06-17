@@ -666,6 +666,21 @@
   letter-spacing: 0.02em;
 }
 
+.group-stat-status {
+  min-width: 72px;
+}
+
+.group-stat-status .group-status-pill {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 /* Ô nội dung phẳng: input/select lấp đầy ô, không viền bo tròn riêng */
 .shipment-content .table tbody tr:not(.shipment-group-header) td input,
 .shipment-content .table tbody tr:not(.shipment-group-header) td select,
