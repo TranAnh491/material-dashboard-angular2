@@ -72,6 +72,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   passLabelError = '';
   isPrintingPassLabels = false;
 
+  // In tem Đã Kiểm (57×32mm, không cần mật khẩu)
+  showDaKiemLabelModal = false;
+  daKiemLabelQuantity = 1;
+  daKiemLabelError = '';
+  isPrintingDaKiemLabels = false;
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
@@ -930,6 +936,128 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       alert('Lỗi khi in tem PASS. Vui lòng thử lại.');
     } finally {
       this.isPrintingPassLabels = false;
+    }
+  }
+
+  // ====== In tem Đã Kiểm (57×32mm, không mật khẩu) ======
+
+  openDaKiemLabelModal(): void {
+    this.daKiemLabelQuantity = 1;
+    this.daKiemLabelError = '';
+    this.showDaKiemLabelModal = true;
+  }
+
+  closeDaKiemLabelModal(): void {
+    this.showDaKiemLabelModal = false;
+    this.daKiemLabelError = '';
+  }
+
+  get canPrintDaKiemLabels(): boolean {
+    const qty = Math.floor(Number(this.daKiemLabelQuantity));
+    return Number.isFinite(qty) && qty >= 1 && qty <= 9999;
+  }
+
+  printDaKiemLabels(): void {
+    const qty = Math.floor(Number(this.daKiemLabelQuantity));
+    if (qty < 1 || qty > 9999) {
+      this.daKiemLabelError = 'Số lượng phải từ 1 đến 9999';
+      return;
+    }
+    this.daKiemLabelError = '';
+    this.isPrintingDaKiemLabels = true;
+
+    const widthMm = 57;
+    const heightMm = 32;
+
+    try {
+      const labelHtml = Array.from({ length: qty }, () => `
+        <div class="pass-label-container">
+          <div class="pass-label-fit">
+            <svg viewBox="0 0 ${widthMm} ${heightMm}" xmlns="http://www.w3.org/2000/svg" aria-label="Đã Kiểm">
+              <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
+                    font-family="Arial, Helvetica, sans-serif" font-weight="900"
+                    font-size="9.8" letter-spacing="0.15">Đã Kiểm</text>
+            </svg>
+          </div>
+        </div>`).join('');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>In tem Đã Kiểm (${widthMm}×${heightMm}mm)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, 'Helvetica Neue', sans-serif;
+      padding: 0;
+      margin: 0;
+      background: white;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; }
+      @page { margin: 0 !important; size: ${widthMm}mm ${heightMm}mm !important; }
+      .pass-label-container {
+        width: ${widthMm}mm !important;
+        height: ${heightMm}mm !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+      .pass-label-container:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+    }
+    .pass-label-container {
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #000;
+      page-break-inside: avoid;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pass-label-fit {
+      width: 90%;
+      height: 90%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .pass-label-fit svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pass-label-fit text {
+      fill: #000;
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 400);
+      this.closeDaKiemLabelModal();
+    } catch (err) {
+      console.error('Error printing Đã Kiểm labels:', err);
+      alert('Lỗi khi in tem Đã Kiểm. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingDaKiemLabels = false;
     }
   }
 

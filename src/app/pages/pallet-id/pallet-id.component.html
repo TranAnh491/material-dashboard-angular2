@@ -39,6 +39,11 @@
       <i class="material-icons">verified</i>
       <span>{{ isPrintingPassLabels ? 'Đang in...' : 'In tem PASS' }}</span>
     </button>
+
+    <button class="btn-da-kiem-label" (click)="openDaKiemLabelModal()" [disabled]="isPrintingDaKiemLabels">
+      <i class="material-icons">task_alt</i>
+      <span>{{ isPrintingDaKiemLabels ? 'Đang in...' : 'In tem Đã Kiểm' }}</span>
+    </button>
   </div>
 
   <!-- Modal mật khẩu In tem PASS -->
@@ -102,6 +107,42 @@
         <button class="btn-print-confirm" (click)="printPassLabels()" [disabled]="isPrintingPassLabels || !canPrintPassLabels">
           <i class="material-icons">print</i>
           In tem PASS
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal In tem Đã Kiểm -->
+  <div class="modal-overlay" *ngIf="showDaKiemLabelModal" (click)="closeDaKiemLabelModal()">
+    <div class="modal-content pass-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>In tem Đã Kiểm</h3>
+        <button class="btn-close" (click)="closeDaKiemLabelModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">Tem <strong>57mm × 32mm</strong>, chữ <strong>Đã Kiểm</strong> căn giữa (cùng kích cỡ tem PASS).</p>
+        <div class="pass-label-input-wrap">
+          <label class="pass-label-qty-label" for="daKiemLabelQuantity">Số lượng tem cần in</label>
+          <input id="daKiemLabelQuantity"
+                 type="number"
+                 [(ngModel)]="daKiemLabelQuantity"
+                 min="1"
+                 max="9999"
+                 class="pass-label-input"
+                 placeholder="Ví dụ: 10">
+        </div>
+        <p class="pass-label-preview text-muted" *ngIf="canPrintDaKiemLabels">
+          Sẽ in <strong>{{ daKiemLabelQuantity | number }}</strong> tem Đã Kiểm
+        </p>
+        <p class="pass-label-error" *ngIf="daKiemLabelError">{{ daKiemLabelError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeDaKiemLabelModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="printDaKiemLabels()" [disabled]="isPrintingDaKiemLabels || !canPrintDaKiemLabels">
+          <i class="material-icons">print</i>
+          In tem Đã Kiểm
         </button>
       </div>
     </div>

@@ -130,6 +130,9 @@ export class FgInComponent implements OnInit, OnDestroy {
   mergedCatalogItems: MergedCatalogItem[] = [];
   filteredMergedCatalogItems: MergedCatalogItem[] = [];
   mergedSearchTerm: string = '';
+  mergedCatalogLastImportAt: Date | null = null;
+  mergedCatalogLastImportDetail: string = '';
+  private readonly mergedCatalogImportMetaPath = 'fg-catalog-meta/merged-import';
   newMergedItem: { materialCode: string; standard: string; customerCode: string; description: string } = {
     materialCode: '',
     standard: '',
@@ -1324,6 +1327,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.showCatalogDialog = true;
     if (this.catalogItems.length === 0) this.loadCatalogFromFirebase();
     if (this.mappingItems.length === 0) this.loadMappingFromFirebase();
+    this.loadMergedCatalogLastImport();
     this.buildMergedCatalogItems();
     this.applyMergedCatalogFilters();
   }
@@ -1333,8 +1337,56 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.showCatalogDialog = true;
     if (this.catalogItems.length === 0) this.loadCatalogFromFirebase();
     if (this.mappingItems.length === 0) this.loadMappingFromFirebase();
+    this.loadMergedCatalogLastImport();
     this.buildMergedCatalogItems();
     this.applyMergedCatalogFilters();
+  }
+
+  loadMergedCatalogLastImport(): void {
+    this.firestore.doc(this.mergedCatalogImportMetaPath).get()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(snap => {
+        if (!snap.exists) {
+          this.mergedCatalogLastImportAt = null;
+          this.mergedCatalogLastImportDetail = '';
+          return;
+        }
+        const d = snap.data() as any;
+        const at = d?.lastImportAt;
+        this.mergedCatalogLastImportAt = at?.toDate
+          ? at.toDate()
+          : (at ? new Date(at) : null);
+        const parts: string[] = [];
+        if (d?.fileName) parts.push(String(d.fileName));
+        const added = Number(d?.addedCount) || 0;
+        const updated = Number(d?.updatedCount) || 0;
+        if (added > 0 || updated > 0) {
+          parts.push(`thêm ${added}, ghi đè ${updated}`);
+        }
+        this.mergedCatalogLastImportDetail = parts.join(' · ');
+      });
+  }
+
+  private async saveMergedCatalogLastImport(meta: {
+    addedCount: number;
+    updatedCount: number;
+    fileName?: string;
+  }): Promise<void> {
+    const now = new Date();
+    await this.firestore.doc(this.mergedCatalogImportMetaPath).set({
+      lastImportAt: now,
+      addedCount: meta.addedCount,
+      updatedCount: meta.updatedCount,
+      fileName: meta.fileName || '',
+      updatedAt: now
+    }, { merge: true });
+    this.mergedCatalogLastImportAt = now;
+    const parts: string[] = [];
+    if (meta.fileName) parts.push(meta.fileName);
+    if (meta.addedCount > 0 || meta.updatedCount > 0) {
+      parts.push(`thêm ${meta.addedCount}, ghi đè ${meta.updatedCount}`);
+    }
+    this.mergedCatalogLastImportDetail = parts.join(' · ');
   }
 
   // Close catalog dialog
@@ -1421,6 +1473,59 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (pending === 0) done();
   }
 
+  /** Cập nhật Standard + Tên KH cho dòng danh mục gộp. */
+  updateMergedCatalogItem(item: MergedCatalogItem): void {
+    if (!item.catalogId && !item.mappingId) {
+      alert('❌ Không tìm thấy dữ liệu để cập nhật');
+      return;
+    }
+    const standard = String(item.standard ?? '').trim();
+    const description = String(item.description ?? '').trim();
+    const tasks: Promise<void>[] = [];
+
+    if (item.catalogId) {
+      tasks.push(
+        this.firestore.collection('fg-catalog').doc(item.catalogId).update({
+          standard,
+          customer: description,
+          updatedAt: new Date()
+        }) as Promise<void>
+      );
+    }
+    if (item.mappingId) {
+      tasks.push(
+        this.firestore.collection('fg-customer-mapping').doc(item.mappingId).update({
+          description,
+          updatedAt: new Date()
+        }) as Promise<void>
+      );
+    }
+
+    Promise.all(tasks)
+      .then(() => {
+        if (item.catalogId) {
+          const c = this.catalogItems.find(x => x.id === item.catalogId);
+          if (c) {
+            c.standard = standard;
+            c.customer = description;
+          }
+        }
+        if (item.mappingId) {
+          const m = this.mappingItems.find(x => x.id === item.mappingId);
+          if (m) {
+            m.description = description;
+          }
+        }
+        this.buildMergedCatalogItems();
+      })
+      .catch(err => {
+        console.error('Error updating merged catalog item:', err);
+        alert('❌ Lỗi khi cập nhật: ' + (err?.message || err));
+        this.loadCatalogFromFirebase();
+        this.loadMappingFromFirebase();
+      });
+  }
+
   // Import Excel gộp: cột Mã TP, Standard, Mã KH, Tên KH -> ghi cả catalog + mapping
   // Nếu trùng Mã TP + Mã KH → ghi đè Standard và Tên KH
   // Nếu không trùng → thêm mới
@@ -1490,6 +1595,11 @@ export class FgInComponent implements OnInit, OnDestroy {
           }
         }
         
+        await this.saveMergedCatalogLastImport({
+          addedCount,
+          updatedCount,
+          fileName: file.name
+        });
         this.loadCatalogFromFirebase();
         this.loadMappingFromFirebase();
         alert(`✅ Import hoàn tất!\n- Thêm mới: ${addedCount} dòng\n- Ghi đè: ${updatedCount} dòng`);
