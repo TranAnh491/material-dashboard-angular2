@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Subject, combineLatest } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, debounceTime } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import Chart from 'chart.js/auto';
@@ -61,6 +61,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       status: string;
     }
   > = new Map();
+
+  /** Tổng carton FG Out theo shipment (cùng thuật toán tab FG Out) */
+  private fgOutCartonTotalByShipment = new Map<string, number>();
+  private fgOutCartonCheckReady = false;
+  private fgOutCartonCheckRequestId = 0;
   
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
@@ -301,6 +306,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.loadCustomerMapping();
     this.loadFGInventoryCacheOnce();
     this.loadFGCheckStatus(); // Realtime: load và lắng nghe thay đổi từ fg-check
+    this.loadFgOutCartonCheckListener();
     // applyFilters() sẽ được gọi tự động trong loadShipmentsFromFirebase
   }
 
@@ -788,6 +794,170 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     for (const [code, cur] of this.shipmentGroupSummaryByCode.entries()) {
       cur.status = this.pickShipmentGroupStatus(rowsByCode.get(code) || []);
     }
+
+    this.refreshFgOutCartonCheckCache();
+  }
+
+  /** Mã shipment đang hiển thị (giữ nguyên chuỗi gốc để query Firestore). */
+  private getVisibleShipmentCodesForFgOutQuery(): string[] {
+    const set = new Set<string>();
+    for (const s of this.filteredShipments) {
+      const c = String(s.shipmentCode ?? '').trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set);
+  }
+
+  private loadFgOutCartonCheckListener(): void {
+    this.firestore.collection('fg-out')
+      .snapshotChanges()
+      .pipe(debounceTime(1200), takeUntil(this.destroy$))
+      .subscribe(() => {
+        if (this.filteredShipments.length) {
+          this.refreshFgOutCartonCheckCache();
+        }
+      });
+  }
+
+  private async refreshFgOutCartonCheckCache(): Promise<void> {
+    const requestId = ++this.fgOutCartonCheckRequestId;
+    const codes = this.getVisibleShipmentCodesForFgOutQuery();
+
+    if (!codes.length) {
+      this.fgOutCartonTotalByShipment = new Map();
+      this.fgOutCartonCheckReady = true;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.fgOutCartonCheckReady = false;
+
+    try {
+      const standardByCode = await this.loadFgCatalogStandardMap();
+      if (requestId !== this.fgOutCartonCheckRequestId) return;
+
+      const allItems: Array<{
+        shipment?: string;
+        materialCode?: string;
+        mergeCarton?: string;
+        quantity?: number;
+        carton?: number;
+        pallet?: string;
+        lsx?: string;
+        exportDate?: Date | null;
+        batchNumber?: string;
+      }> = [];
+
+      for (let i = 0; i < codes.length; i += 10) {
+        const batch = codes.slice(i, i + 10);
+        const snap = await this.firestore.collection('fg-out', ref =>
+          ref.where('shipment', 'in', batch)
+        ).get().toPromise();
+
+        snap?.docs.forEach(doc => {
+          const data = doc.data() as any;
+          allItems.push({
+            shipment: data.shipment || '',
+            materialCode: data.materialCode || '',
+            mergeCarton: data.mergeCarton || '',
+            quantity: data.quantity || 0,
+            carton: data.carton || 0,
+            pallet: data.pallet || '',
+            lsx: data.lsx || '',
+            exportDate: data.exportDate?.seconds
+              ? new Date(data.exportDate.seconds * 1000)
+              : (data.exportDate ? new Date(data.exportDate) : null),
+            batchNumber: data.batchNumber || ''
+          });
+        });
+      }
+
+      if (requestId !== this.fgOutCartonCheckRequestId) return;
+
+      const totals = new Map<string, number>();
+      for (const code of codes) {
+        const norm = this.normalizeShipmentCode(code);
+        totals.set(
+          norm,
+          this.computeFgOutTotalCartonForShipment(code, allItems, standardByCode)
+        );
+      }
+
+      this.fgOutCartonTotalByShipment = totals;
+      this.fgOutCartonCheckReady = true;
+      this.ngZone.run(() => this.cdr.markForCheck());
+    } catch (error) {
+      console.error('FG Out carton check error:', error);
+      if (requestId === this.fgOutCartonCheckRequestId) {
+        this.fgOutCartonCheckReady = true;
+        this.cdr.markForCheck();
+      }
+    }
+  }
+
+  /** Tổng carton FG Out — cùng cách đếm cột Carton trên tab FG Out. */
+  private computeFgOutTotalCartonForShipment(
+    shipmentCode: string,
+    fgItems: Array<{
+      shipment?: string;
+      materialCode?: string;
+      mergeCarton?: string;
+      quantity?: number;
+      carton?: number;
+      pallet?: string;
+      lsx?: string;
+      exportDate?: Date | null;
+      batchNumber?: string;
+    }>,
+    standardByCode: Map<string, number>
+  ): number {
+    const normShip = this.normalizeShipmentCode(shipmentCode);
+    const sorted = this.sortFgOutRowsLikeTable(
+      fgItems
+        .filter(it => this.normalizeShipmentCode(it.shipment) === normShip)
+        .filter(it => String(it.materialCode || '').trim())
+    );
+
+    const displayRows = sorted.map((material, matIdx) => ({ material, matIdx }));
+    const mergeCartonFirstMatIdx = new Map<string, number>();
+    displayRows.forEach(r => {
+      const mc = this.normalizeFgOutMergeCarton(r.material.mergeCarton);
+      if (!mc || mergeCartonFirstMatIdx.has(mc)) return;
+      mergeCartonFirstMatIdx.set(mc, r.matIdx);
+    });
+
+    let sum = 0;
+    for (const r of displayRows) {
+      sum += this.getFgOutCartonCountForDetailRow(
+        r.material,
+        r.matIdx,
+        mergeCartonFirstMatIdx,
+        standardByCode
+      );
+    }
+    return sum;
+  }
+
+  /** Tổng carton FG Out cho header nhóm (null = đang tải). */
+  getFgOutCartonTotalForGroup(shipment: ShipmentItem): number | null {
+    if (!this.fgOutCartonCheckReady) return null;
+    const code = this.normalizeShipmentCode(shipment?.shipmentCode);
+    return this.fgOutCartonTotalByShipment.get(code) ?? 0;
+  }
+
+  /** So sánh tổng carton Shipment vs FG Out. */
+  isCartonCheckMatched(shipment: ShipmentItem): boolean | null {
+    if (!this.fgOutCartonCheckReady) return null;
+    const fgTotal = this.getFgOutCartonTotalForGroup(shipment);
+    if (fgTotal === null) return null;
+    const g = this.getShipmentGroupSummary(shipment);
+    return g.totalCarton === fgTotal;
+  }
+
+  getCartonCheckDisplay(shipment: ShipmentItem): string {
+    const matched = this.isCartonCheckMatched(shipment);
+    if (matched === null) return '…';
+    return matched ? 'Đúng' : 'Sai';
   }
 
   /** Status ưu tiên (Delay → … → Đã Ship) cho header nhóm shipment. */

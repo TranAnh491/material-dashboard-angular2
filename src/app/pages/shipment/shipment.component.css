@@ -586,10 +586,9 @@
 
 .shipment-group-card {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 8px 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   border-radius: 8px;
   border: 1px solid #000000;
   background: #ffffff;
@@ -598,6 +597,14 @@
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
+}
+
+.shipment-group-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px 14px;
 }
 
 /* Dòng dữ liệu trong nhóm shipment: viền đen đồng nhất */
@@ -668,6 +675,35 @@
 
 .group-stat-status {
   min-width: 72px;
+}
+
+.group-stat-carton-check .stat-value {
+  font-weight: 800;
+}
+
+.group-stat-carton-check.carton-check-ok .stat-value {
+  color: #15803d;
+}
+
+.group-stat-carton-check.carton-check-fail .stat-value {
+  color: #dc2626;
+}
+
+.shipment-carton-mismatch-warn {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.shipment-carton-mismatch-detail {
+  font-weight: 600;
+  color: #991b1b;
 }
 
 .group-stat-status .group-status-pill {

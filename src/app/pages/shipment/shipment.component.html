@@ -267,6 +267,7 @@
                         <td colspan="29">
                           <ng-container *ngIf="getShipmentGroupSummary(shipment) as g">
                           <div class="shipment-group-card">
+                            <div class="shipment-group-row">
                             <div class="shipment-group-accent"></div>
                             <div class="shipment-group-title">
                               Shipment {{ shipment.shipmentCode }}
@@ -288,6 +289,12 @@
                                 <div class="stat-value">{{ g.totalQty | number : '1.0-0' }}</div>
                                 <div class="stat-label">QTY</div>
                               </div>
+                              <div class="group-stat group-stat-carton-check"
+                                   [class.carton-check-ok]="isCartonCheckMatched(shipment) === true"
+                                   [class.carton-check-fail]="isCartonCheckMatched(shipment) === false">
+                                <div class="stat-value">{{ getCartonCheckDisplay(shipment) }}</div>
+                                <div class="stat-label">CHECK CARTON</div>
+                              </div>
                               <div class="group-stat group-stat-status">
                                 <div class="stat-value">
                                   <span class="status-pill group-status-pill" [ngClass]="getStatusClass(g.status)">
@@ -296,6 +303,13 @@
                                 </div>
                                 <div class="stat-label">STATUS</div>
                               </div>
+                            </div>
+                            </div>
+                            <div class="shipment-carton-mismatch-warn" *ngIf="isCartonCheckMatched(shipment) === false">
+                              Lượng thùng ở Fg-Out đang sai
+                              <span class="shipment-carton-mismatch-detail">
+                                (Shipment {{ g.totalCarton | number : '1.0-0' }} · FG-Out {{ getFgOutCartonTotalForGroup(shipment) | number : '1.0-0' }})
+                              </span>
                             </div>
                           </div>
                           </ng-container>
