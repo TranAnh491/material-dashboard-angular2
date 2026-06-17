@@ -7453,7 +7453,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   async printCustomLabels(): Promise<void> {
     const code = (this.customPrintCode || '').trim().toUpperCase();
     const po   = (this.customPrintPo   || '').trim();
-    const qty  = (this.customPrintQty  || '').trim();
+    const qty  = String(this.customPrintQty ?? '').trim();
     const imd  = (this.customPrintImd  || '').trim();
     const num  = Math.max(1, Math.min(200, Math.floor(Number(this.customPrintNumLabels) || 1)));
 
@@ -7462,6 +7462,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (!qty || isNaN(Number(qty.replace(/,/g, ''))) || Number(qty.replace(/,/g, '')) <= 0) {
       alert('Vui lòng nhập Qty hợp lệ (> 0).'); return;
     }
+
+    // Mở cửa sổ in NGAY trong click handler để tránh bị chặn popup (do code bên dưới có await).
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!'); return; }
 
     this.customPrintBusy = true;
     try {
@@ -7479,16 +7483,18 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         qrImages.push({ image, qrData, index: i });
       }
 
-      this.openCustomLabelPrintWindow(qrImages, code, po, qty, imd, num);
+      this.openCustomLabelPrintWindow(printWindow, qrImages, code, po, qty, imd, num);
     } catch (e: any) {
       console.error('[Custom Print] error', e);
       alert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
+      try { printWindow.close(); } catch {}
     } finally {
       this.customPrintBusy = false;
     }
   }
 
   private openCustomLabelPrintWindow(
+    printWindow: Window,
     qrImages: { image: string; qrData: string; index: number }[],
     code: string, po: string, qty: string, imd: string, total: number
   ): void {
@@ -7516,9 +7522,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           </div>
         </div>`;
     }).join('');
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!'); return; }
 
     printWindow.document.write(`<!DOCTYPE html>
 <html><head><title>In Tùy Chỉnh – ${esc(code)}</title>
