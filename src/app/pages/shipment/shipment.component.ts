@@ -3770,6 +3770,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         <td class="pc-col-no">${idx + 1}</td>
         <td class="pc-col-pallet">${this.escapeHtml(row.palletLabel)}</td>
         <td class="pc-col-carton">${this.formatNumber(row.carton)}</td>
+        <td class="pc-col-emp"><div class="pc-fill-line"></div></td>
+        <td class="pc-col-sign"><div class="pc-sign-line"></div></td>
         <td class="pc-col-tick tick-cell">☐</td>
       </tr>`).join('');
     return `
@@ -3782,6 +3784,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
               <th class="pc-col-no">STT</th>
               <th class="pc-col-pallet">Mã pallet / Pallet</th>
               <th class="pc-col-carton">Số carton / Cartons</th>
+              <th class="pc-col-emp">Mã số NV<br><span class="pc-th-sub">Employee ID</span></th>
+              <th class="pc-col-sign">Người đóng pallet<br><span class="pc-th-sub">Pallet packer</span></th>
               <th class="pc-col-tick">Xác nhận / Tick</th>
             </tr>
           </thead>
@@ -3790,6 +3794,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             <tr>
               <td colspan="2" class="pc-total-label"><strong>Tổng carton / Total cartons</strong></td>
               <td class="pc-col-carton"><strong>${this.formatNumber(total)}</strong></td>
+              <td></td>
+              <td></td>
               <td></td>
             </tr>
           </tfoot>
@@ -4136,8 +4142,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     .pallet-carton-table tfoot td { background: #f5f5f5; }
     .pallet-carton-table .pc-col-no { width: 48px; text-align: center; }
     .pallet-carton-table .pc-col-pallet { min-width: 140px; }
-    .pallet-carton-table .pc-col-carton { width: 120px; text-align: center; font-weight: 600; }
-    .pallet-carton-table .pc-col-tick { width: 100px; text-align: center; font-size: 16px; }
+    .pallet-carton-table .pc-col-carton { width: 90px; text-align: center; font-weight: 600; }
+    .pallet-carton-table .pc-col-emp { width: 100px; min-width: 90px; text-align: center; }
+    .pallet-carton-table .pc-col-sign { min-width: 120px; width: 22%; }
+    .pallet-carton-table .pc-fill-line { min-height: 28px; border-bottom: 1px dashed #666; margin-top: 4px; }
+    .pallet-carton-table .pc-sign-line { min-height: 36px; border-bottom: 1px dashed #666; margin-top: 4px; }
+    .pallet-carton-table .pc-th-sub { font-size: 9px; font-weight: normal; text-transform: none; }
+    .pallet-carton-table .pc-col-tick { width: 80px; text-align: center; font-size: 16px; }
     .pallet-carton-table .pc-total-label { text-align: right; }
     
     .items-section { margin-bottom: 16px; }
