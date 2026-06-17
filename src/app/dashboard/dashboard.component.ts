@@ -29,7 +29,7 @@ type WoHeatKind = 'done' | 'waiting' | 'kitting' | 'ready' | 'delay';
 interface WoHeatmapCell {
   kind: WoHeatKind;
   tooltip: string;
-  /** Ghi chú LSX = "Giao ASM3" → chấm xanh giữa ô SKU */
+  /** Line WHE/WHD hoặc ghi chú ASM3 → chấm xanh giữa ô SKU */
   giaoAsm3?: boolean;
 }
 
@@ -1029,18 +1029,47 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Ghi chú WO khớp "Giao ASM3" (không phân biệt hoa thường). */
+  /** Ghi chú WO khớp "Giao ASM3" / "ASM3" (không phân biệt hoa thường). */
   private isGiaoAsm3Notes(notes?: string): boolean {
-    return (notes || '').trim().toLowerCase() === 'giao asm3';
+    const n = (notes || '').trim().toLowerCase();
+    return n === 'giao asm3' || n === 'asm3';
+  }
+
+  private normalizeProductionLineKey(line: string): string {
+    return String(line || '').replace(/\s/g, '').toUpperCase();
+  }
+
+  /** Line nhận WHE / WHD → ASM3 (cùng quy tắc tab Work Order Status). */
+  private isAsm3ProductionLine(line?: string): boolean {
+    const key = this.normalizeProductionLineKey(line || '');
+    if (!key || key === '-') return false;
+    if (key === 'WHE' || key === 'WHD') return true;
+    return key.startsWith('WHE') || key.startsWith('WHD');
+  }
+
+  private isWoAsm3Marked(wo: WorkOrder): boolean {
+    return this.isAsm3ProductionLine(wo.productionLine) || this.isGiaoAsm3Notes(wo.notes);
+  }
+
+  private formatWoAsm3TooltipSuffix(wo: WorkOrder): string | null {
+    if (this.isAsm3ProductionLine(wo.productionLine)) {
+      const line = String(wo.productionLine || '').trim();
+      return line ? `ASM3 (Line ${line})` : 'ASM3';
+    }
+    const notes = (wo.notes || '').trim().toLowerCase();
+    if (notes === 'giao asm3') return 'Giao ASM3';
+    if (notes === 'asm3') return 'ASM3';
+    return null;
   }
 
   private buildWoHeatmapCell(wo: WorkOrder, kind: WoHeatKind): WoHeatmapCell {
-    const giaoAsm3 = this.isGiaoAsm3Notes(wo.notes);
+    const giaoAsm3 = this.isWoAsm3Marked(wo);
+    const asm3Label = this.formatWoAsm3TooltipSuffix(wo);
     if (kind !== 'kitting') {
       const sku = (wo.productCode || '').trim();
       const base = this.woHeatKindLabel(kind);
       const parts = sku ? [`${sku} · ${base}`] : [base];
-      if (giaoAsm3) parts.push('Giao ASM3');
+      if (asm3Label) parts.push(asm3Label);
       return { kind, tooltip: parts.join('\n'), giaoAsm3 };
     }
     const sku = (wo.productCode || '—').trim();
@@ -1049,7 +1078,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (lsx) lines.push(`LSX: ${lsx}`);
     lines.push(`Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy)}`);
     lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
-    if (giaoAsm3) lines.push('Giao ASM3');
+    if (asm3Label) lines.push(asm3Label);
     return { kind, tooltip: lines.join('\n'), giaoAsm3 };
   }
 

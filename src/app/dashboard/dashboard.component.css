@@ -454,7 +454,7 @@
   border-radius: 3px;
 }
 
-/* Ghi chú "Giao ASM3" — chấm xanh giữa ô SKU */
+/* Line WHE/WHD hoặc ghi chú ASM3 — chấm xanh giữa ô SKU */
 .wo-heatmap__asm3-dot {
   position: absolute;
   top: 50%;
@@ -557,6 +557,13 @@
 .wo-legend-dot--kitting { background: #f97316; }
 .wo-legend-dot--ready { background: #64748b; }
 .wo-legend-dot--delay { background: #ef4444; }
+.wo-legend-dot--asm3 {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
 
 /* Putaway staging — cùng kích thước/chữ với wo-heatmap-legend, màu khớp ô heatmap */
 .wo-legend-dot--iqc-pending { background: #FFFF00; }

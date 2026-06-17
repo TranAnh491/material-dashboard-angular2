@@ -2643,6 +2643,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const date = new Date(this.scheduleYear, this.scheduleMonth, day);
       const shipments = this.getShipmentsByDate(date);
       const totalCarton = shipments.reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
+      const shipmentCount = this.countUniqueShipmentsForDay(shipments);
       const hasAttention = shipments.some(s => {
         const st = String((s as any)?.status || '').trim();
         return st === 'Chờ soạn' || st === 'Đang soạn' || st === 'Chưa Đủ' || st === 'Delay';
@@ -2652,10 +2653,20 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         day: day,
         shipments: shipments,
         totalCarton,
-        shipmentCount: shipments.length,
+        shipmentCount,
         hasAttention
       });
     }
+  }
+
+  /** Số shipment trong ngày = số mã shipment khác nhau (không đếm theo dòng). */
+  private countUniqueShipmentsForDay(rows: ShipmentItem[]): number {
+    const codes = new Set<string>();
+    for (const s of rows) {
+      const code = this.normalizeShipmentCode(s?.shipmentCode);
+      if (code) codes.add(code);
+    }
+    return codes.size;
   }
 
   // Get shipments for a specific date
