@@ -702,6 +702,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return raw.startsWith('IQC');
   }
 
+  /** Vị trí BOX (VD: BOX-0001): không áp rule — mọi mã đều được cất. */
+  isBoxExemptLocation(location: string): boolean {
+    const raw = String(location || '').replace(/\s/g, '').toUpperCase();
+    return /^BOX-\d/.test(raw);
+  }
+
   /** Mã pallet F1-xxxx / F2-xxxx — luôn cho phép, không áp rule kệ. */
   private isPalletCodeLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();
@@ -733,6 +739,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = String(targetLocation || '').replace(/\s/g, '').toUpperCase();
     if (useAsm3 || raw.startsWith('ASM3')) return true;
     if (this.isIqcExemptLocation(raw)) return true;
+    if (this.isBoxExemptLocation(raw)) return true;
     if (this.isPalletCodeLocation(raw)) return true;
     return false;
   }
@@ -788,7 +795,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     for (const item of this.locationItems) {
       const viTri = String(item.viTri || '').trim();
-      if (!viTri || this.isIqcExemptLocation(viTri)) continue;
+      if (!viTri || this.isIqcExemptLocation(viTri) || this.isBoxExemptLocation(viTri)) continue;
       const key = this.normalizeLocationWarehouseKey(viTri);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -803,7 +810,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     for (const [locKey, wh] of Object.entries(this.locationByViTriMap)) {
-      if (this.isIqcExemptLocation(locKey)) continue;
+      if (this.isIqcExemptLocation(locKey) || this.isBoxExemptLocation(locKey)) continue;
       if (!seen.has(locKey)) {
         seen.add(locKey);
         rows.push({ viTri: locKey, warehouseType: wh });
@@ -964,7 +971,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private getLocationsForWarehouse(warehouseType: WarehouseType): string[] {
     const locs = new Set<string>(getDefaultLocationsForWarehouse(warehouseType));
     for (const [loc, wh] of Object.entries(this.locationByViTriMap)) {
-      if (wh === warehouseType && !this.isIqcExemptLocation(loc)) {
+      if (wh === warehouseType && !this.isIqcExemptLocation(loc) && !this.isBoxExemptLocation(loc)) {
         locs.add(loc);
       }
     }
@@ -987,7 +994,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private locationMatchesAllowedDestinations(target: string, allowed: string[]): boolean {
-    if (this.isIqcExemptLocation(target)) return true;
+    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target)) return true;
     const targetRaw = String(target || '').replace(/\s/g, '').toUpperCase();
     const formatted = this.formatViTriInput(target || '');
     if (!allowed.length) return false;
@@ -1091,7 +1098,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const locationByViTri: Record<string, WarehouseType> = {};
     for (const row of this.locationWarehouseRows) {
-      if (row.viTri && row.warehouseType && !this.isIqcExemptLocation(row.viTri)) {
+      if (row.viTri && row.warehouseType && !this.isIqcExemptLocation(row.viTri) && !this.isBoxExemptLocation(row.viTri)) {
         locationByViTri[this.normalizeLocationWarehouseKey(row.viTri)] = row.warehouseType;
       }
     }
@@ -1259,7 +1266,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isDestinationAllowed(location: string): boolean {
-    if (this.isIqcExemptLocation(location)) return true;
+    if (this.isIqcExemptLocation(location) || this.isBoxExemptLocation(location)) return true;
     const formatted = this.formatViTriInput(location || '');
     if (!formatted) return false;
     if (!this.isTargetLocationForced) return true;

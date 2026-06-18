@@ -151,10 +151,15 @@ export class LocationRuleCheckService {
     };
   }
 
-  /** IQC*, NG, ASM3*: không áp rule — mọi mã đều được cất (ASM3 không có trên sơ đồ layout). */
+  /** IQC*, NG, ASM3*, BOX-*: không áp rule — mọi mã đều được cất (ASM3 không có trên sơ đồ layout). */
   isRuleExemptLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();
-    return raw.startsWith('IQC') || raw.startsWith('NG') || raw.startsWith('ASM3');
+    return (
+      raw.startsWith('IQC') ||
+      raw.startsWith('NG') ||
+      raw.startsWith('ASM3') ||
+      /^BOX-\d/.test(raw)
+    );
   }
 
   /** @deprecated dùng isRuleExemptLocation */
