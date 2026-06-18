@@ -1021,6 +1021,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return value.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
   }
 
+  /** Số lượng / QTY xuất trên bản in: 1,000 pcs */
+  formatQtyPcs(value: number | null | undefined): string {
+    return `${this.formatNumber(value)} pcs`;
+  }
+
   // Get status class for styling
   getStatusClass(status: string | undefined): string {
     if (!status) return 'status-default';
@@ -3700,7 +3705,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           <td>${this.escapeHtml(item.materialCode)}</td>
           <td>${this.escapeHtml(item.lot)}</td>
           <td>${this.escapeHtml(item.lsx)}</td>
-          <td style="text-align:right;">${(item.quantity || 0).toLocaleString()}</td>
+          <td style="text-align:right;">${this.escapeHtml(this.formatQtyPcs(item.quantity || 0))}</td>
           <td style="text-align:center;">${item.carton || 0}</td>
           <td style="text-align:center;">${item.odd || 0}</td>
           <td>${this.escapeHtml(item.location)}</td>
@@ -4203,7 +4208,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const anchor = this.refreshPrintSelection();
     if (!anchor || !this.printContext?.shipmentCode) return '';
     const shipmentCode = this.printContext.shipmentCode;
-    const printItems = [anchor];
+    const printItems = this.getShipmentRowsByCode(shipmentCode);
+    if (!printItems.length) {
+      printItems.push(anchor);
+    }
     const s = anchor;
     const group = this.getShipmentGroupSummary(anchor);
 
@@ -4313,7 +4321,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
               <td>${this.escapeHtml(item.materialCode)}</td>
               <td>${this.escapeHtml(item.lot)}</td>
               <td>${this.escapeHtml(item.lsx)}</td>
-              <td style="text-align:right">${(item.quantity || 0).toLocaleString()}</td>
+              <td style="text-align:right">${this.escapeHtml(this.formatQtyPcs(item.quantity || 0))}</td>
               <td style="text-align:center">${item.carton || 0}</td>
               <td style="text-align:center">${item.odd || 0}</td>
               <td>${this.escapeHtml(item.location)}</td>
@@ -4369,7 +4377,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       <div class="item-box">
         <div class="item-row">
           <div class="item-cell item-cell-tick"><span class="tick-box">☐</span> <strong>Mã TP:</strong> ${this.escapeHtml(String(item.materialCode || ''))}</div>
-          <div class="item-cell item-cell-tick"><span class="tick-box">☐</span> <strong>Số lượng:</strong> ${this.escapeHtml(String(item.quantity ?? ''))}</div>
+          <div class="item-cell item-cell-tick"><span class="tick-box">☐</span> <strong>Số lượng:</strong> ${this.escapeHtml(this.formatQtyPcs(item.quantity))}</div>
         </div>
         <div class="item-row">
           <div class="item-cell"><strong>Carton:</strong> ${this.escapeHtml(String(item.carton ?? ''))}</div>
@@ -4383,7 +4391,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       .filter(note => note && note.trim())
       .join('\n');
 
-    const totalPallets = Number(s.qtyPallet) || 0;
+    const totalPallets = group.totalPallet > 0
+      ? group.totalPallet
+      : printItems.reduce((sum, item) => sum + (Number(item.qtyPallet) || 0), 0);
     const packingLower = (s.packing || '').toLowerCase();
     const isPallet = packingLower.includes('pallet');
     const isCarton = packingLower.includes('carton') || packingLower.includes('box') || !isPallet;
