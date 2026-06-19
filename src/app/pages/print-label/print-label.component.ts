@@ -131,11 +131,6 @@ export class PrintLabelComponent implements OnInit {
   statusHistoryModalItem: ScheduleItem | null = null;
   showTinhTrangPickerModal = false;
   tinhTrangPickerItem: ScheduleItem | null = null;
-  readonly STATUS_PICKER_COLUMNS: { statuses: string[] }[] = [
-    { statuses: ['Chờ in', 'Chờ bản vẽ', 'Chờ Template', 'Đã in'] },
-    { statuses: ['IQC'] },
-    { statuses: ['IQC (Chờ DMS)'] }
-  ];
   private readonly NGUOI_IN_TRIGGER_STATUSES = ['Chờ in', 'Chờ bản vẽ', 'Chờ Template'];
 
   // More popup + danh mục Người in
@@ -158,9 +153,10 @@ export class PrintLabelComponent implements OnInit {
   lateEmailsSaving = false;
   lateNotifyManualRunning = false;
   /** Giá trị mặc định khi Firestore chưa có cấu hình */
+  private readonly IQC_CHO_ENG_STATUS = 'IQC (Chờ ENG)';
   private readonly DEFAULT_TINH_TRANG: string[] = [
     'IQC',
-    'IQC (Chờ DMS)',
+    'IQC (Chờ ENG)',
     'Late',
     'Chờ in',
     'Chờ bản vẽ',
@@ -436,6 +432,19 @@ export class PrintLabelComponent implements OnInit {
     return String(v ?? '').trim();
   }
 
+  /** Đổi tên cũ IQC (Chờ DMS) → IQC (Chờ ENG) */
+  private resolveTinhTrangName(v: string): string {
+    const n = this.normalizeTinhTrangName(v);
+    if (!n) {
+      return n;
+    }
+    const lower = n.toLowerCase();
+    if (lower === 'iqc (chờ dms)' || lower === 'iqc (cho dms)') {
+      return this.IQC_CHO_ENG_STATUS;
+    }
+    return n;
+  }
+
   /** Pass / NG / Done: luồng IQC — không nằm trong danh mục dropdown thường */
   private isLockedTinhTrang(value: string): boolean {
     const v = this.normalizeTinhTrangName(value);
@@ -459,12 +468,20 @@ export class PrintLabelComponent implements OnInit {
       const d = (snap && snap.exists ? snap.data() : null) as any;
       const arr = Array.isArray(d?.statuses) ? d.statuses : [];
       let list: string[] = arr
-        .map((x: any) => this.normalizeTinhTrangName(String(x ?? '')))
+        .map((x: any) => this.resolveTinhTrangName(String(x ?? '')))
         .filter((x: string) => Boolean(x));
       if (list.length === 0) {
         list = [...this.DEFAULT_TINH_TRANG];
       }
       this.tinhTrangCatalog = Array.from(new Set<string>(list)).sort((a, b) => a.localeCompare(b, 'vi'));
+
+      const hadLegacyDms = arr.some(
+        (x: unknown) =>
+          this.resolveTinhTrangName(String(x ?? '')) !== this.normalizeTinhTrangName(String(x ?? ''))
+      );
+      if (hadLegacyDms) {
+        void this.saveTinhTrangCatalog(this.tinhTrangCatalog);
+      }
     } catch (e) {
       console.error('❌ loadTinhTrangCatalog:', e);
       this.tinhTrangCatalog = [...this.DEFAULT_TINH_TRANG];
@@ -2223,6 +2240,9 @@ export class PrintLabelComponent implements OnInit {
 
   private normalizeItemStatusFields(item: ScheduleItem): ScheduleItem {
     item.nguoiIn = String(item.nguoiIn ?? '').trim();
+    if (item.tinhTrang) {
+      item.tinhTrang = this.resolveTinhTrangName(item.tinhTrang);
+    }
     item.statusUpdateTime =
       this.parseFirestoreLikeDate(item.statusUpdateTime) || item.statusUpdateTime || undefined;
 
@@ -2230,7 +2250,7 @@ export class PrintLabelComponent implements OnInit {
       item.statusHistory = item.statusHistory
         .map(h => {
           const entry: StatusHistoryEntry = {
-            status: String(h?.status || '').trim(),
+            status: this.resolveTinhTrangName(String(h?.status || '')),
             at: this.parseFirestoreLikeDate(h?.at) || new Date(0)
           };
           const emp = this.normalizeAspEmployeeId(h?.employeeId) || String(h?.employeeId || '').trim();
@@ -2328,18 +2348,34 @@ export class PrintLabelComponent implements OnInit {
     this.tinhTrangPickerItem = null;
   }
 
-  getStatusPickerColumnEmployeeId(item: ScheduleItem | null, statuses: string[]): string {
+  /** Các tình trạng chọn được trong popup — lấy từ More → Tình trạng */
+  getTinhTrangPickerOptions(item: ScheduleItem | null): string[] {
+    const src = this.tinhTrangCatalog.length > 0 ? this.tinhTrangCatalog : [...this.DEFAULT_TINH_TRANG];
+    const options = src.filter((s) => !this.isLockedTinhTrang(s));
+    if (!item) {
+      return options;
+    }
+    if (this.shouldShowOrphanTinhTrangOption(item)) {
+      const current = this.normalizeTinhTrangName(String(item.tinhTrang ?? ''));
+      if (current && !options.includes(current)) {
+        return [...options, current];
+      }
+    }
+    return options;
+  }
+
+  getStatusPickerEmployeeIdForStatus(item: ScheduleItem | null, status: string): string {
     if (!item) {
       return '';
     }
     const history = item.statusHistory || [];
-    const normalizedSet = new Set(statuses.map((s) => this.normalizeTinhTrangName(s)));
+    const normalized = this.normalizeTinhTrangName(status);
     for (let i = history.length - 1; i >= 0; i--) {
       const entry = history[i];
       if (!entry.employeeId) {
         continue;
       }
-      if (!normalizedSet.has(this.normalizeTinhTrangName(entry.status))) {
+      if (this.normalizeTinhTrangName(entry.status) !== normalized) {
         continue;
       }
       const id = this.formatStatusHistoryEmployeeId(entry.employeeId);
@@ -2394,7 +2430,7 @@ export class PrintLabelComponent implements OnInit {
     if (s === 'iqc') {
       return { ...base, background: '#e3f2fd', color: '#1565c0', border: '1px solid #90caf9' };
     }
-    if (s.includes('iqc') && s.includes('dms')) {
+    if (s.includes('iqc') && (s.includes('eng') || s.includes('dms'))) {
       return { ...base, background: '#fff3e0', color: '#e65100', border: '1px solid #ffcc80' };
     }
     if (s === 'đã in' || s === 'da in') {

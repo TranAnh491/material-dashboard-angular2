@@ -1156,21 +1156,23 @@
           <div><strong>Hiện tại:</strong> {{ rowItem.tinhTrang || '—' }}</div>
         </div>
 
-        <div class="tinh-trang-picker-grid">
-          <div class="tinh-trang-picker-col" *ngFor="let col of STATUS_PICKER_COLUMNS">
+        <div class="tinh-trang-picker-list">
+          <div class="tinh-trang-picker-item" *ngFor="let status of getTinhTrangPickerOptions(rowItem)">
             <div
               class="tinh-trang-picker-col-id"
-              *ngIf="getStatusPickerColumnEmployeeId(rowItem, col.statuses) as colEmpId">
-              {{ colEmpId }}
+              *ngIf="getStatusPickerEmployeeIdForStatus(rowItem, status) as statusEmpId">
+              {{ statusEmpId }}
             </div>
             <button
               type="button"
               class="tinh-trang-picker-btn"
-              *ngFor="let status of col.statuses"
               [class.is-current]="isTinhTrangPickerCurrent(status)"
               (click)="selectTinhTrangFromPicker(status)">
               {{ status }}
             </button>
+          </div>
+          <div class="tinh-trang-picker-empty" *ngIf="getTinhTrangPickerOptions(rowItem).length === 0">
+            Chưa có tình trạng trong danh mục. Thêm tại More → Tình trạng.
           </div>
         </div>
       </div>
