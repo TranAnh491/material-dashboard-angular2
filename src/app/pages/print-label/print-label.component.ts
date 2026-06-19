@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
@@ -6,6 +7,13 @@ import { PermissionService } from '../../services/permission.service';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
+
+interface StatusHistoryEntry {
+  status: string;
+  at: Date;
+  /** Mã nhân viên thực hiện đổi tình trạng (ASP + 4 số) */
+  employeeId?: string;
+}
 
 interface ScheduleItem {
   importDate?: Date; // Import Date để theo dõi các mã hàng import cùng lúc
@@ -27,6 +35,8 @@ interface ScheduleItem {
   nguoiIn?: string;
   tinhTrang?: string;
   statusUpdateTime?: Date;
+  /** Lịch sử mỗi lần đổi tình trạng — hiển thị khi hover cột Thời gian */
+  statusHistory?: StatusHistoryEntry[];
   banVe?: string;
   ghiChu?: string;
   isUrgent?: boolean;
@@ -59,6 +69,8 @@ export class PrintLabelComponent implements OnInit {
   currentEmployeeId: string = '';
   currentPassword: string = '';
   loginError: string = '';
+  /** Mã ASP đăng nhập hiện tại — dùng khi ghi lịch sử đổi tình trạng */
+  loggedInEmployeeId: string = '';
 
   // Additional properties for HTML template
   showLoginDialog: boolean = false;
@@ -113,6 +125,8 @@ export class PrintLabelComponent implements OnInit {
   printerNewName = '';
   printerCatalogSaving = false;
   private readonly PRINTER_CATALOG_DOC = 'print-label-settings/printers';
+  /** Danh mục Người in mặc định */
+  private readonly DEFAULT_PRINTERS: string[] = ['Thủy', 'Tân', 'Tình', 'Vũ'];
 
   /** Danh mục tình trạng cho cột "Tình trạng" (cấu hình trong More → Tình trạng) */
   tinhTrangCatalog: string[] = [];
@@ -139,12 +153,18 @@ export class PrintLabelComponent implements OnInit {
     private firestore: AngularFirestore,
     private permissionService: PermissionService,
     private auth: AngularFireAuth,
-    private fns: AngularFireFunctions
+    private fns: AngularFireFunctions,
+    private router: Router
   ) { }
+
+  goToMenu(): void {
+    void this.router.navigateByUrl('/menu');
+  }
 
   ngOnInit(): void {
     console.log('🚀 PrintLabelComponent initialized');
-    
+    void this.loadLoggedInEmployeeId();
+
     // Auto-select print function
     this.selectedFunction = 'print';
     
@@ -288,27 +308,44 @@ export class PrintLabelComponent implements OnInit {
     return String(v ?? '').trim();
   }
 
+  hasNguoiIn(item: ScheduleItem): boolean {
+    return Boolean(this.normalizePrinterName(String(item.nguoiIn ?? '')));
+  }
+
+  canChangeTinhTrang(item: ScheduleItem): boolean {
+    return this.hasNguoiIn(item);
+  }
+
+  getTinhTrangRequireNguoiInTooltip(): string {
+    return 'Vui lòng chọn Người in trước khi đổi Tình trạng';
+  }
+
   async loadPrinterCatalog(): Promise<void> {
     try {
       const snap = await this.firestore.doc(this.PRINTER_CATALOG_DOC).get().toPromise();
       const d = (snap && snap.exists ? snap.data() : null) as any;
       const arr = Array.isArray(d?.printers) ? d.printers : [];
-      const list: string[] = arr
+      let list: string[] = arr
         .map((x: any) => this.normalizePrinterName(String(x ?? '')))
         .filter((x: string) => Boolean(x));
-      // unique, giữ thứ tự alpha theo vi
-      this.printerCatalog = Array.from(new Set<string>(list)).sort((a, b) => a.localeCompare(b, 'vi'));
 
       // Nếu chưa có danh mục, seed từ các giá trị đang có trong dữ liệu (để không mất trải nghiệm)
-      if (this.printerCatalog.length === 0 && this.scheduleData.length > 0) {
-        const fromData = this.scheduleData
+      if (list.length === 0 && this.scheduleData.length > 0) {
+        list = this.scheduleData
           .map(it => this.normalizePrinterName(String(it.nguoiIn ?? '')))
           .filter(Boolean);
-        this.printerCatalog = Array.from(new Set(fromData)).sort((a, b) => a.localeCompare(b, 'vi'));
       }
+
+      if (list.length === 0) {
+        list = [...this.DEFAULT_PRINTERS];
+      }
+
+      // Luôn có sẵn các tùy chọn mặc định trong dropdown Người in
+      this.printerCatalog = Array.from(new Set([...list, ...this.DEFAULT_PRINTERS]))
+        .sort((a, b) => a.localeCompare(b, 'vi'));
     } catch (e) {
       console.error('❌ loadPrinterCatalog:', e);
-      this.printerCatalog = [];
+      this.printerCatalog = [...this.DEFAULT_PRINTERS];
     }
   }
 
@@ -669,6 +706,7 @@ export class PrintLabelComponent implements OnInit {
       });
       
       item.statusUpdateTime = new Date();
+      this.recordStatusChange(item, item.tinhTrang || 'Chờ in');
       return item;
     }).filter(item => item.maTem && item.maTem.trim() !== '');
   }
@@ -1126,18 +1164,7 @@ export class PrintLabelComponent implements OnInit {
           const notDoneItems = data.data.filter((item: any) => {
             const status = item.tinhTrang?.toLowerCase()?.trim();
             return status !== 'done' && status !== 'completed' && status !== 'hoàn thành';
-          }).map((item: any) => {
-            // Convert Firestore timestamp to Date
-            if (item.statusUpdateTime && item.statusUpdateTime.toDate) {
-              item.statusUpdateTime = item.statusUpdateTime.toDate();
-            } else if (item.statusUpdateTime && typeof item.statusUpdateTime === 'string') {
-              item.statusUpdateTime = new Date(item.statusUpdateTime);
-            } else if (!item.statusUpdateTime) {
-              // Nếu chưa có thời gian, tạo mới
-              item.statusUpdateTime = new Date();
-            }
-            return item;
-          });
+          }).map((item: any) => this.normalizeItemStatusFields(item as ScheduleItem));
           
           allData.push(...notDoneItems);
           console.log(`📊 Filtered: ${data.data.length} total → ${notDoneItems.length} not done items`);
@@ -1772,6 +1799,68 @@ export class PrintLabelComponent implements OnInit {
     return code.toUpperCase();
   }
 
+  /** Chuẩn hóa mã nhân viên ASP + 4 số */
+  private normalizeAspEmployeeId(raw: unknown): string {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/ÁP/g, 'ASP');
+    if (/^ASP\d{4}$/.test(s)) {
+      return s;
+    }
+    if (s.includes('@')) {
+      const prefix = s.split('@')[0];
+      if (/^ASP\d{4}$/i.test(prefix)) {
+        return prefix.toUpperCase();
+      }
+    }
+    return '';
+  }
+
+  /** Lấy mã ASP từ phiên đăng nhập (Firestore users + email) */
+  private async loadLoggedInEmployeeId(): Promise<void> {
+    try {
+      const user = await this.auth.currentUser;
+      if (!user) {
+        this.loggedInEmployeeId = '';
+        return;
+      }
+
+      const doc = await this.firestore.doc(`users/${user.uid}`).get().toPromise();
+      const data = doc?.data() as { employeeId?: string; displayName?: string } | undefined;
+
+      const fromEmployeeId = this.normalizeAspEmployeeId(data?.employeeId);
+      if (fromEmployeeId) {
+        this.loggedInEmployeeId = fromEmployeeId;
+        return;
+      }
+
+      const fromDisplayName = this.normalizeAspEmployeeId(data?.displayName);
+      if (fromDisplayName) {
+        this.loggedInEmployeeId = fromDisplayName;
+        return;
+      }
+
+      const email = user.email || user.uid || '';
+      const fromEmail = this.normalizeAspEmployeeId(this.formatEmployeeCode(email));
+      this.loggedInEmployeeId = fromEmail;
+    } catch {
+      this.loggedInEmployeeId = '';
+    }
+  }
+
+  /** Mã NV ghi vào lịch sử: ưu tiên IQC scanner, sau đó phiên đăng nhập */
+  private getEmployeeIdForStatusChange(override?: string): string {
+    const custom = this.normalizeAspEmployeeId(override);
+    if (custom) {
+      return custom;
+    }
+    if (this.iqcEmployeeVerified && this.iqcEmployeeId) {
+      const iqcId = this.normalizeAspEmployeeId(this.iqcEmployeeId);
+      if (iqcId) {
+        return iqcId;
+      }
+    }
+    return this.loggedInEmployeeId || '—';
+  }
+
   /**
    * Màu theo hạn Ngày nhận kế hoạch:
    * - future: chưa tới ngày (xanh)
@@ -2033,12 +2122,123 @@ export class PrintLabelComponent implements OnInit {
     return true;
   }
 
+  private parseFirestoreLikeDate(value: unknown): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof (value as { toDate?: () => Date }).toDate === 'function') {
+      try {
+        return (value as { toDate: () => Date }).toDate();
+      } catch {
+        return null;
+      }
+    }
+    if (typeof value === 'string' || typeof value === 'number') {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+
+  private normalizeItemStatusFields(item: ScheduleItem): ScheduleItem {
+    item.statusUpdateTime =
+      this.parseFirestoreLikeDate(item.statusUpdateTime) || item.statusUpdateTime || undefined;
+
+    if (Array.isArray(item.statusHistory)) {
+      item.statusHistory = item.statusHistory
+        .map(h => ({
+          status: String(h?.status || '').trim(),
+          at: this.parseFirestoreLikeDate(h?.at) || new Date(0),
+          employeeId: this.normalizeAspEmployeeId(h?.employeeId) || String(h?.employeeId || '').trim() || undefined
+        }))
+        .filter(h => h.status && h.at.getTime() > 0);
+    } else {
+      item.statusHistory = [];
+    }
+
+    if (!item.statusHistory.length && item.tinhTrang) {
+      item.statusHistory = [
+        {
+          status: item.tinhTrang,
+          at: item.statusUpdateTime || new Date(),
+          employeeId: undefined
+        }
+      ];
+    }
+
+    if (!item.statusUpdateTime && item.statusHistory.length) {
+      item.statusUpdateTime = item.statusHistory[item.statusHistory.length - 1].at;
+    }
+
+    return item;
+  }
+
+  private recordStatusChange(item: ScheduleItem, status: string, employeeIdOverride?: string): void {
+    const s = String(status || '').trim();
+    if (!s) return;
+
+    const now = new Date();
+    const employeeId = this.getEmployeeIdForStatusChange(employeeIdOverride);
+    item.statusUpdateTime = now;
+    if (!item.statusHistory) {
+      item.statusHistory = [];
+    }
+
+    const last = item.statusHistory[item.statusHistory.length - 1];
+    if (last && this.normalizeTinhTrangName(last.status) === this.normalizeTinhTrangName(s)) {
+      return;
+    }
+
+    item.statusHistory.push({ status: s, at: now, employeeId });
+  }
+
+  private formatStatusHistoryDate(d: Date | null | undefined): string {
+    if (!d || Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  private formatStatusHistoryLine(entry: StatusHistoryEntry): string {
+    const emp = entry.employeeId
+      ? (this.normalizeAspEmployeeId(entry.employeeId) || entry.employeeId)
+      : '—';
+    return `${entry.status} — ${this.formatStatusHistoryDate(entry.at)} — ${emp}`;
+  }
+
+  getStatusHistoryTooltip(item: ScheduleItem): string {
+    const history = item.statusHistory || [];
+    if (!history.length) {
+      if (item.tinhTrang) {
+        return this.formatStatusHistoryLine({
+          status: item.tinhTrang,
+          at: item.statusUpdateTime || new Date()
+        });
+      }
+      return 'Chưa có lịch sử tình trạng';
+    }
+    return history.map(h => this.formatStatusHistoryLine(h)).join('\n');
+  }
+
   onFieldChange(item: ScheduleItem, fieldName: string): void {
     console.log(`Field ${fieldName} changed for item:`, item.maTem);
+
+    if (fieldName === 'tinhTrang' && !this.canChangeTinhTrang(item)) {
+      alert('⚠️ Vui lòng chọn Người in trước khi đổi Tình trạng!');
+      const prev = item.statusHistory?.length
+        ? item.statusHistory[item.statusHistory.length - 1].status
+        : 'Chờ in';
+      item.tinhTrang = prev;
+      this.scheduleData = [...this.scheduleData];
+      return;
+    }
     
     // Cập nhật thời gian khi thay đổi tình trạng
     if (fieldName === 'tinhTrang') {
-      item.statusUpdateTime = new Date();
+      this.recordStatusChange(item, item.tinhTrang || '');
       console.log('Status update time set to:', item.statusUpdateTime);
       
       // Trigger change detection
@@ -2934,7 +3134,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
 
       if (labelIndex !== -1) {
         this.scheduleData[labelIndex].tinhTrang = status;
-        this.scheduleData[labelIndex].statusUpdateTime = new Date();
+        this.recordStatusChange(this.scheduleData[labelIndex], status, this.iqcEmployeeId);
 
         // 🔧 FIX: Update in Firebase collection 'print-schedules' (not 'schedule')
         const snapshot = await this.firestore.collection('print-schedules', ref => 
@@ -2955,9 +3155,11 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
             );
 
             if (itemIndex !== -1) {
+              const updated = this.scheduleData[labelIndex];
               // Update item trong array
               dataArray[itemIndex].tinhTrang = status;
-              dataArray[itemIndex].statusUpdateTime = new Date();
+              dataArray[itemIndex].statusUpdateTime = updated.statusUpdateTime;
+              dataArray[itemIndex].statusHistory = updated.statusHistory;
               
               // Update document trong Firebase
               await this.firestore.collection('print-schedules').doc(docId).update({
@@ -3098,6 +3300,11 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
    * Update status from Pass to Done
    */
   async updateStatusToDone(item: ScheduleItem): Promise<void> {
+    if (!this.canChangeTinhTrang(item)) {
+      alert('⚠️ Vui lòng chọn Người in trước khi đổi Tình trạng!');
+      return;
+    }
+
     if (item.tinhTrang !== 'Pass') {
       alert('⚠️ Chỉ có thể chuyển từ Pass sang Done!');
       return;
@@ -3110,7 +3317,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     try {
       // Update local data
       item.tinhTrang = 'Done';
-      item.statusUpdateTime = new Date();
+      this.recordStatusChange(item, 'Done');
 
       // Update in Firebase
       const querySnapshot = await this.firestore.collection('schedule')

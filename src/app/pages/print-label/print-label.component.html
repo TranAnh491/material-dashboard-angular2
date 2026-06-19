@@ -1,7 +1,7 @@
 <div class="main-content">
   <!-- Excel-like Container -->
   <div class="excel-container">
-    <!-- Excel-like Header -->
+    <!-- Excel-like Header: tiêu đề + box đếm cùng một hàng -->
     <div class="excel-header">
       <div class="page-header">
         <div class="page-header-left">
@@ -12,6 +12,49 @@
               <div class="page-subtitle">Theo dõi trạng thái in tem nhãn sản xuất</div>
             </div>
           </div>
+        </div>
+        <div class="page-header-stats">
+          <button
+            type="button"
+            class="stat-card"
+            *ngFor="let st of getStatusChipsForDisplay()"
+            (click)="filterByStatus(st)"
+            [class.active]="currentStatusFilter === st"
+          >
+            <div class="stat-icon">
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ BẢN VẼ'">description</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ IN'">schedule</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ TEMPLATE'">view_quilt</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'DONE'">check_circle</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'ĐÃ IN'">print</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'IQC'">verified</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'PASS'">task_alt</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'NG'">cancel</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'LATE'">warning</i>
+              <i class="material-icons" *ngIf="getStatusChipLabel(st) !== 'CHỜ BẢN VẼ' 
+                                            && getStatusChipLabel(st) !== 'CHỜ IN' 
+                                            && getStatusChipLabel(st) !== 'CHỜ TEMPLATE'
+                                            && getStatusChipLabel(st) !== 'DONE'
+                                            && getStatusChipLabel(st) !== 'ĐÃ IN'
+                                            && getStatusChipLabel(st) !== 'IQC'
+                                            && getStatusChipLabel(st) !== 'PASS'
+                                            && getStatusChipLabel(st) !== 'NG'
+                                            && getStatusChipLabel(st) !== 'LATE'">label</i>
+            </div>
+            <div class="stat-meta">
+              <div class="stat-label">{{ getStatusChipLabel(st) }}</div>
+              <div class="stat-value">{{ getTinhTrangCount(st) }}</div>
+            </div>
+          </button>
+          <button type="button" class="stat-card stat-card--total" (click)="clearStatusFilter()">
+            <div class="stat-icon">
+              <i class="material-icons">shield</i>
+            </div>
+            <div class="stat-meta">
+              <div class="stat-label">TOTAL</div>
+              <div class="stat-value">{{getNotDoneItemsCount()}}</div>
+            </div>
+          </button>
         </div>
       </div>
     </div>
@@ -46,6 +89,10 @@
             <button class="icon-btn" type="button" (click)="openDownloadModal()" title="Tải xuống lịch sử">
               <i class="material-icons">download</i>
             </button>
+            <button class="custom-btn custom-btn--menu" type="button" (click)="goToMenu()" title="Về Menu">
+              <i class="material-icons">home</i>
+              Về Menu
+            </button>
           </div>
 
           <div class="toolbar-btn-group">
@@ -65,52 +112,6 @@
               Print
             </button>
           </div>
-        </div>
-
-        <!-- Status Indicators (đồng bộ danh mục Tình trạng trong More → Tình trạng) -->
-        <div class="toolbar-row toolbar-row--stats">
-          <button
-            type="button"
-            class="stat-card"
-            *ngFor="let st of getStatusChipsForDisplay()"
-            (click)="filterByStatus(st)"
-            [class.active]="currentStatusFilter === st"
-          >
-            <div class="stat-icon">
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ BẢN VẼ'">description</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ IN'">schedule</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'CHỜ TEMPLATE'">view_quilt</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'DONE'">check_circle</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'ĐÃ IN'">print</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'IQC'">verified</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'PASS'">task_alt</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'NG'">cancel</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) === 'LATE'">warning</i>
-              <i class="material-icons" *ngIf="getStatusChipLabel(st) !== 'CHỜ BẢN VẼ' 
-                                            && getStatusChipLabel(st) !== 'CHỜ IN' 
-                                            && getStatusChipLabel(st) !== 'CHỜ TEMPLATE'
-                                            && getStatusChipLabel(st) !== 'DONE'
-                                            && getStatusChipLabel(st) !== 'ĐÃ IN'
-                                            && getStatusChipLabel(st) !== 'IQC'
-                                            && getStatusChipLabel(st) !== 'PASS'
-                                            && getStatusChipLabel(st) !== 'NG'
-                                            && getStatusChipLabel(st) !== 'LATE'">label</i>
-            </div>
-            <div class="stat-meta">
-              <div class="stat-label">{{ getStatusChipLabel(st) }}</div>
-              <div class="stat-value">{{ getTinhTrangCount(st) }}</div>
-            </div>
-          </button>
-
-          <button type="button" class="stat-card stat-card--total" (click)="clearStatusFilter()">
-            <div class="stat-icon">
-              <i class="material-icons">shield</i>
-            </div>
-            <div class="stat-meta">
-              <div class="stat-label">TOTAL</div>
-              <div class="stat-value">{{getNotDoneItemsCount()}}</div>
-            </div>
-          </button>
         </div>
       </div>
     </div>
@@ -144,7 +145,7 @@
 
     <!-- Excel-like Body -->
     <div class="excel-body">
-      <div *ngIf="scheduleData.length > 0">
+      <div class="print-label-data-pane" *ngIf="scheduleData.length > 0">
 
                 <div class="table-container">
           <table class="excel-table" style="border: 2px solid #000000;">
@@ -234,9 +235,9 @@
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
               <td style="border: 1px solid #000000; text-align: center;">
-                  <!-- Nếu là Pass thì có thể click để chuyển thành Done -->
+                  <!-- Pass: click chuyển Done (cần có Người in) -->
                   <span 
-                    *ngIf="item.tinhTrang === 'Pass'"
+                    *ngIf="item.tinhTrang === 'Pass' && canChangeTinhTrang(item)"
                     (click)="updateStatusToDone(item)"
                     [style.background]="'#4caf50'"
                     [style.color]="'white'"
@@ -250,6 +251,21 @@
                     [title]="'Click để chuyển thành Done'"
                     onmouseover="this.style.background='#388e3c'; this.style.transform='scale(1.05)'"
                     onmouseout="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                    {{ item.tinhTrang }}
+                  </span>
+                  <span 
+                    *ngIf="item.tinhTrang === 'Pass' && !canChangeTinhTrang(item)"
+                    [style.background]="'#4caf50'"
+                    [style.color]="'white'"
+                    [style.padding]="'6px 12px'"
+                    [style.border-radius]="'4px'"
+                    [style.font-weight]="'bold'"
+                    [style.font-size]="'13px'"
+                    [style.display]="'inline-block'"
+                    [style.cursor]="'not-allowed'"
+                    [style.opacity]="'0.75'"
+                    [matTooltip]="getTinhTrangRequireNguoiInTooltip()"
+                    matTooltipPosition="above">
                     {{ item.tinhTrang }}
                   </span>
                   
@@ -281,23 +297,35 @@
                     {{ item.tinhTrang }}
                   </span>
                   
-                  <!-- Các tình trạng khác thì cho phép chọn -->
-                  <select 
+                  <!-- Các tình trạng khác: cần chọn Người in trước -->
+                  <span
                     *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG' && item.tinhTrang !== 'Done'"
+                    [matTooltip]="!canChangeTinhTrang(item) ? getTinhTrangRequireNguoiInTooltip() : ''"
+                    matTooltipPosition="above"
+                    style="display: block; width: 100%;">
+                  <select 
                     [(ngModel)]="item.tinhTrang" 
                     (change)="onFieldChange(item, 'tinhTrang')" 
+                    [disabled]="!canChangeTinhTrang(item)"
                     style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000000;" 
-                    onmouseover="this.style.background='#f0f8ff'" 
+                    [style.cursor]="canChangeTinhTrang(item) ? 'pointer' : 'not-allowed'"
+                    [style.opacity]="canChangeTinhTrang(item) ? '1' : '0.65'"
+                    onmouseover="if(!this.disabled) this.style.background='#f0f8ff'" 
                     onmouseout="this.style.background='transparent'" 
-                    onfocus="this.style.background='#e6f3ff'" 
+                    onfocus="if(!this.disabled) this.style.background='#e6f3ff'" 
                     onblur="this.style.background='transparent'">
                     <option value="">Chọn tình trạng</option>
                     <option *ngFor="let s of tinhTrangCatalog" [value]="s">{{ s }}</option>
                     <option *ngIf="shouldShowOrphanTinhTrangOption(item)" [value]="item.tinhTrang">{{ item.tinhTrang }} (hiện tại)</option>
                   </select>
+                  </span>
               </td>
               <td style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000;">
-                  <span class="status-time">
+                  <span
+                    class="status-time"
+                    [matTooltip]="getStatusHistoryTooltip(item)"
+                    matTooltipClass="status-history-tooltip"
+                    matTooltipPosition="above">
                       {{ item.statusUpdateTime ? (item.statusUpdateTime | date:'dd/MM/yyyy HH:mm') : '-' }}
                   </span>
               </td>
@@ -366,9 +394,8 @@
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nguoiIn || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; text-align: center;">
-                <!-- Nếu là Pass thì có thể click để chuyển thành Done -->
                 <span 
-                  *ngIf="item.tinhTrang === 'Pass'"
+                  *ngIf="item.tinhTrang === 'Pass' && canChangeTinhTrang(item)"
                   (click)="updateStatusToDone(item)"
                   [style.background]="'#4caf50'"
                   [style.color]="'white'"
@@ -382,6 +409,21 @@
                   [title]="'Click để chuyển thành Done'"
                   onmouseover="this.style.background='#388e3c'; this.style.transform='scale(1.05)'"
                   onmouseout="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                  {{ item.tinhTrang }}
+                </span>
+                <span 
+                  *ngIf="item.tinhTrang === 'Pass' && !canChangeTinhTrang(item)"
+                  [style.background]="'#4caf50'"
+                  [style.color]="'white'"
+                  [style.padding]="'4px 8px'"
+                  [style.border-radius]="'4px'"
+                  [style.font-weight]="'bold'"
+                  [style.font-size]="'10px'"
+                  [style.display]="'inline-block'"
+                  [style.cursor]="'not-allowed'"
+                  [style.opacity]="'0.75'"
+                  [matTooltip]="getTinhTrangRequireNguoiInTooltip()"
+                  matTooltipPosition="above">
                   {{ item.tinhTrang }}
                 </span>
                 
@@ -529,18 +571,51 @@
       margin: 0;
       overflow: hidden;
       height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
     
     .excel-header {
-      background: white;
+      background: #fff7ed;
       color: #000;
-      padding: 14px 16px;
+      padding: 21px 16px;
       text-align: left;
       margin: 0;
-      border-bottom: 1px solid #eef2f7;
+      border-bottom: 1px solid #fed7aa;
+      min-height: 63px;
+      box-sizing: border-box;
+      position: relative;
+      z-index: 10;
+      flex-shrink: 0;
     }
     
-    .page-header { display:flex; align-items:center; justify-content: space-between; }
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+    .page-header-left {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+    .page-header-stats {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 2px;
+      scrollbar-width: thin;
+      justify-content: flex-end;
+      position: relative;
+      z-index: 11;
+      pointer-events: auto;
+    }
     .page-title-row { display:flex; align-items:flex-start; gap: 10px; }
     .page-title-icon { font-size: 22px; color:#2563eb; margin-top: 2px; }
     .page-title { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
@@ -550,6 +625,7 @@
       background: #ffffff;
       padding: 12px 16px;
       border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
     }
     
     .action-controls {
@@ -569,15 +645,6 @@
     .toolbar-row--actions {
       flex-wrap: wrap;
       row-gap: 8px;
-    }
-
-    .toolbar-row--stats {
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-      padding-bottom: 2px;
-      scrollbar-width: thin;
     }
 
     .toolbar-icon-group,
@@ -651,6 +718,14 @@
     }
     .custom-btn--print i { color:#fff; }
     .custom-btn--print:hover { background:#1d4ed8; border-color:#1d4ed8; }
+
+    .custom-btn--menu {
+      background: #ffffff;
+      border-color: #e5e7eb;
+      color: #111827;
+      text-transform: none;
+    }
+    .custom-btn--menu .material-icons { font-size: 18px; }
     
     .dropdown-toggle::after {
       content: '';
@@ -819,14 +894,34 @@
       border-radius: 10px;
     }
     
-    .excel-body { padding: 16px; text-align: center; }
-    /* Chừa khoảng trống để pagination fixed không che nội dung */
-    .excel-body { padding-bottom: 58px; }
+    .excel-body {
+      padding: 16px;
+      text-align: center;
+      /* Chừa khoảng trống để pagination fixed không che nội dung */
+      padding-bottom: 58px;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .print-label-data-pane {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+    }
     
     .table-container {
-      /* Chừa chỗ cho pagination, hạn chế scroll toàn trang */
-      max-height: calc(100vh - 300px);
-      overflow-y: auto;
+      /* Chiều cao theo nội dung — đủ 10 dòng/trang, không còn khoảng trống phía dưới */
+      flex: 0 0 auto;
+      min-height: 0;
+      max-height: none;
+      height: auto;
+      overflow-x: auto;
+      overflow-y: visible;
       border: 1px solid #e5e7eb;
       border-radius: 10px;
     }
@@ -844,12 +939,12 @@
     }
     
     .excel-table th {
-      background: #f9fafb;
-      padding: 9px 6px;
+      background: #fff7ed;
+      padding: 13.5px 9px;
       text-align: center;
       font-weight: 400;
       color: #111827;
-      border: 1px solid #e5e7eb !important;
+      border: 1px solid #fed7aa !important;
       position: sticky;
       top: 0;
       z-index: 10;
@@ -892,6 +987,9 @@
       transition: background 0.15s ease, border-color 0.15s ease;
       text-transform: none;
       flex: 0 0 auto;
+      position: relative;
+      z-index: 12;
+      pointer-events: auto;
     }
 
     .stat-card:hover {
@@ -1035,9 +1133,19 @@
       }
       
       .excel-header {
-        padding: 10px 15px;
+        padding: 16px 12px;
+        min-height: auto;
       }
-      
+
+      .page-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .page-header-stats {
+        justify-content: flex-start;
+      }
+
       .toolbar-row--actions {
         flex-direction: column;
         align-items: stretch;
@@ -1082,7 +1190,9 @@
       }
       
       .table-container {
-        max-height: calc(100vh - 320px);
+        max-height: none;
+        flex: 0 0 auto;
+        overflow-y: visible;
       }
       
       .complete-btn {

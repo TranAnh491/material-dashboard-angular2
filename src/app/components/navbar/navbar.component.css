@@ -130,7 +130,9 @@
 .navbar.navbar--nhiet-do-pass-through,
 .navbar.navbar--nhiet-do-pass-through .container-fluid,
 .navbar.navbar--report-pass-through,
-.navbar.navbar--report-pass-through .container-fluid {
+.navbar.navbar--report-pass-through .container-fluid,
+.navbar.navbar--print-label-pass-through,
+.navbar.navbar--print-label-pass-through .container-fluid {
   pointer-events: none;
 }
 
@@ -148,7 +150,9 @@
 .navbar.navbar--pd-pass-through .navbar-wrapper,
 .navbar.navbar--pd-pass-through .navbar-wrapper .navbar-brand,
 .navbar.navbar--qc-trace-pass-through .navbar-wrapper,
-.navbar.navbar--qc-trace-pass-through .navbar-wrapper .navbar-brand {
+.navbar.navbar--qc-trace-pass-through .navbar-wrapper .navbar-brand,
+.navbar.navbar--print-label-pass-through .navbar-wrapper,
+.navbar.navbar--print-label-pass-through .navbar-wrapper .navbar-brand {
   pointer-events: auto;
 }
 

@@ -1267,6 +1267,12 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
   stroke-dasharray: none !important;
 }
 
+.lw-svg-host ::ng-deep [data-zone-border='temporary'] > rect {
+  stroke: #4caf50 !important;
+  stroke-width: 1.2 !important;
+  stroke-dasharray: none !important;
+}
+
 .lw-svg-host ::ng-deep [data-zone-border='rack-green'] [data-cell-id] > rect {
   stroke: #4caf50 !important;
   stroke-dasharray: none !important;

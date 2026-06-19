@@ -77,7 +77,8 @@
         [disabled]="isLoading">
         <span class="trace-po-imd-option-main">{{ opt.label }}</span>
         <span class="trace-po-imd-option-meta">
-          {{ opt.factory }} · {{ opt.materialName || opt.materialCode }} · {{ opt.quantity }} {{ opt.unit }}
+          {{ opt.factory }} · {{ opt.materialName || opt.materialCode }} · {{ opt.quantity }}
+          <ng-container *ngIf="!opt.inventoryId"> · Lịch sử xuất</ng-container>
           <ng-container *ngIf="opt.location && opt.location !== '—'"> · {{ opt.location }}</ng-container>
         </span>
       </button>

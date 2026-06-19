@@ -317,6 +317,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/report';
     }
 
+    isPrintLabelPage(): boolean {
+      return this.currentAppPath() === '/label';
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

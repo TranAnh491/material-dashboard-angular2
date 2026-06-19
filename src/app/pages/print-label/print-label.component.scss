@@ -32,7 +32,9 @@
   .excel-table thead th {
     font-weight: 400 !important;
     text-transform: uppercase !important;
-    background: #f9fafb !important;
+    background: #fff7ed !important;
+    padding: 13.5px 9px !important;
+    border-color: #fed7aa !important;
   }
 
   /* Override tất cả shadow / bold do inline style */
@@ -52,9 +54,9 @@
 
   // Excel header styling
   .excel-header {
-    background: #ffffff !important;
-    border-bottom: 2px solid #000000 !important;
-    padding: 16px 24px;
+    background: #fff7ed !important;
+    border-bottom: 1px solid #fed7aa !important;
+    padding: 21px 24px;
     
     h4 {
       margin: 0;
@@ -246,9 +248,9 @@
           border: 2px solid #000000;
           border-radius: 8px;
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-          overflow: hidden;
-          position: relative;
           overflow-x: auto;
+          overflow-y: visible;
+          position: relative;
 
           .schedules-table {
             width: 100%;
@@ -995,4 +997,17 @@ html .print-label-container,
       font-size: 18px;
     }
   }
+}
+
+.status-time {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+:host ::ng-deep .status-history-tooltip {
+  white-space: pre-line;
+  max-width: 380px;
+  font-size: 12px;
+  line-height: 1.5;
 }

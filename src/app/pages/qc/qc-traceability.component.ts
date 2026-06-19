@@ -41,6 +41,8 @@ export interface TracePoImdOption {
   unit: string;
   location: string;
   label: string;
+  /** Dòng tra cứu (tồn kho hoặc suy ra từ outbound khi không còn tồn). */
+  sourceRow?: InventoryRow;
 }
 
 type ParsedScanInput =
@@ -248,9 +250,16 @@ export class QcTraceabilityComponent implements AfterViewInit {
 
   constructor(private firestore: AngularFirestore, private router: Router) {}
 
+  /** Hiển thị số lượng — không kèm đơn vị (KG, PCS, …). */
+  private formatQtyOnly(value: number | null | undefined, empty = '—'): string {
+    const n = Number(value);
+    if (value == null || Number.isNaN(n)) return empty;
+    return String(n);
+  }
+
   /** KPI hàng trên — giá trị mặc định khi chưa search giống mock */
   get kpiStockDisplay(): string {
-    return this.summary?.stockDisplay ?? '0 PCS';
+    return this.summary?.stockDisplay ?? '0';
   }
 
   get kpiLocationDisplay(): string {
@@ -267,15 +276,14 @@ export class QcTraceabilityComponent implements AfterViewInit {
 
   get kpiTotalExportDisplay(): string {
     if (!this.summary || !this.lastInventory) {
-      return '0 PCS';
+      return '0';
     }
-    const unit = (this.lastInventory.unit || '').trim() || 'PCS';
     const total = this.totalExportedQty(this.issues);
-    return `${total} ${unit}`.trim();
+    return this.formatQtyOnly(total, '0');
   }
 
   get kpiRemainAfterExportDisplay(): string {
-    return this.summary?.stockDisplay ?? '0 PCS';
+    return this.summary?.stockDisplay ?? '0';
   }
 
   get issueRows(): TraceIssueRow[] {
@@ -283,7 +291,6 @@ export class QcTraceabilityComponent implements AfterViewInit {
       return [];
     }
 
-    const unit = ((this.lastInventory.unit as string) || '').trim() || 'PCS';
     const q0 = Number(this.lastInventory.quantity) || 0;
 
     const asc = [...(this.issues || [])].sort((a, b) => (a.timestamp?.getTime() || 0) - (b.timestamp?.getTime() || 0));
@@ -303,13 +310,13 @@ export class QcTraceabilityComponent implements AfterViewInit {
         const statusLabel = remain <= 0 ? 'Hoàn thành' : exp > 0 ? 'Đang xử lý' : 'Chờ xuất';
         return {
           workOrder: issue.workOrder || '—',
-          exportQtyLabel: exp > 0 ? `${exp} ${unit}`.trim() : `— ${unit}`.trim(),
+          exportQtyLabel: exp > 0 ? this.formatQtyOnly(exp) : '—',
           exportDateLabel: issue.timestamp ? this.formatDateShortVi(issue.timestamp) : '—',
           factoryLineLabel: (this.lastInventory?.factory || '—').toString(),
           issuerLabel: (issue.performedBy || this.qcNode?.inspector || '—').toString(),
           statusLabel,
           statusTone,
-          remainAfterLabel: `${remain} ${unit}`.trim()
+          remainAfterLabel: this.formatQtyOnly(remain, '0')
         };
       });
   }
@@ -320,7 +327,11 @@ export class QcTraceabilityComponent implements AfterViewInit {
 
   onScanInput(event: Event): void {
     const el = event.target as HTMLInputElement | null;
-    this.scanCode = el?.value ?? '';
+    const upper = (el?.value ?? '').toUpperCase();
+    this.scanCode = upper;
+    if (el && el.value !== upper) {
+      el.value = upper;
+    }
   }
 
   onScanEnter(): void {
@@ -377,14 +388,13 @@ export class QcTraceabilityComponent implements AfterViewInit {
     this.isLoading = true;
     this.errorMessage = '';
     try {
-      const inv = await this.loadInventoryById(opt.inventoryId, opt.factory);
+      const inv =
+        (opt.inventoryId ? await this.loadInventoryById(opt.inventoryId, opt.factory) : null) ||
+        opt.sourceRow ||
+        (await this.queryByMaterialPoImd(opt.materialCode, opt.poNumber, opt.imdKey)) ||
+        (await this.queryOutboundByMaterialPoImd(opt.materialCode, opt.poNumber, opt.imdKey, opt.factory));
       if (!inv) {
-        const fallback = await this.queryByMaterialPoImd(opt.materialCode, opt.poNumber, opt.imdKey);
-        if (!fallback) {
-          this.errorMessage = 'Không tải được dữ liệu lô đã chọn. Thử lại.';
-          return;
-        }
-        await this.applyInventoryTrace(fallback);
+        this.errorMessage = 'Không tải được dữ liệu lô đã chọn. Thử lại.';
         return;
       }
       await this.applyInventoryTrace(inv);
@@ -440,7 +450,8 @@ export class QcTraceabilityComponent implements AfterViewInit {
         quantity: r.quantity,
         unit: (r.unit || '').trim() || 'PCS',
         location: r.location || '—',
-        label: `PO: ${po} · IMD: ${imd}`
+        label: `PO: ${po} · IMD: ${imd}`,
+        sourceRow: r
       });
     }
     return [...map.values()].sort(
@@ -448,7 +459,13 @@ export class QcTraceabilityComponent implements AfterViewInit {
     );
   }
 
-  private async queryAllByMaterialCode(code: string): Promise<InventoryRow[]> {
+  private materialPoImdKey(row: InventoryRow): string {
+    const imd = this.inventoryImdKey(row) || (row.batchNumber || '').trim() || '—';
+    const po = (row.poNumber || '').trim() || '—';
+    return `${row.factory}|${row.materialCode}|${po}|${imd}`;
+  }
+
+  private async queryInventoryByMaterialCode(code: string): Promise<InventoryRow[]> {
     const c = code.trim().toUpperCase();
     const rows: InventoryRow[] = [];
     for (const factory of ['ASM1', 'ASM2']) {
@@ -460,6 +477,118 @@ export class QcTraceabilityComponent implements AfterViewInit {
       snap.forEach(doc => rows.push(this.mapDoc(doc.id, doc.data() as Record<string, unknown>, factory)));
     }
     return rows;
+  }
+
+  private mapOutboundDocToInventoryRow(docId: string, data: Record<string, unknown>, factory: string): InventoryRow {
+    const imdKey = this.normalizeOutboundImdKey(data) || this.coerceText(data.batchNumber);
+    const batchNumber = this.coerceText(data.batchNumber) || imdKey;
+    const exportQty = Number(data.exportQuantity) || 0;
+    const qty = Number(data.quantity) || exportQty;
+
+    return {
+      id: '',
+      factory: this.coerceText(data.factory) || factory,
+      materialCode: this.coerceText(data.materialCode),
+      materialName: this.coerceText(data.materialName) || this.coerceText(data.materialCode),
+      poNumber: this.coerceText(data.poNumber),
+      batchNumber,
+      quantity: qty,
+      unit: this.coerceText(data.unit) || 'PCS',
+      rollsOrBags: '',
+      location: this.coerceText(data.location) || '—',
+      iqcStatus: '',
+      qcCheckedBy: '',
+      qcCheckedAt: null,
+      importDate: data.importDate ?? data.batchNumber,
+      stock: 0,
+      exported: exportQty,
+      lastModified:
+        this.parseFirestoreDate(data.updatedAt) ||
+        this.parseFirestoreDate(data.exportDate) ||
+        this.parseFirestoreDate(data.createdAt),
+      modifiedBy: this.coerceText(data.exportedBy) || this.coerceText(data.employeeId)
+    };
+  }
+
+  /** Tra cứu outbound-asm1 / outbound-asm2 (collection outbound-materials). */
+  private async queryOutboundByMaterialCode(code: string): Promise<InventoryRow[]> {
+    const c = code.trim().toUpperCase();
+    const rowMap = new Map<string, InventoryRow>();
+
+    for (const factory of ['ASM1', 'ASM2']) {
+      const snap = await this.firestore
+        .collection('outbound-materials', ref => ref.where('factory', '==', factory).where('materialCode', '==', c).limit(200))
+        .get()
+        .toPromise();
+      if (!snap || snap.empty) continue;
+
+      snap.forEach(doc => {
+        const row = this.mapOutboundDocToInventoryRow(doc.id, doc.data() as Record<string, unknown>, factory);
+        const key = this.materialPoImdKey(row);
+        const existing = rowMap.get(key);
+        const newTime = row.lastModified?.getTime() || 0;
+        const oldTime = existing?.lastModified?.getTime() || 0;
+        if (!existing || newTime >= oldTime) {
+          rowMap.set(key, row);
+        }
+      });
+    }
+
+    return [...rowMap.values()];
+  }
+
+  private async queryOutboundByMaterialPoImd(
+    materialCode: string,
+    poNumber: string,
+    scannedImd: string,
+    preferredFactory?: string
+  ): Promise<InventoryRow | null> {
+    const factories = [preferredFactory, 'ASM1', 'ASM2'].filter((v, i, a): v is string => !!v && a.indexOf(v) === i);
+
+    for (const factory of factories) {
+      const snap = await this.firestore
+        .collection('outbound-materials', ref =>
+          ref.where('factory', '==', factory).where('materialCode', '==', materialCode).where('poNumber', '==', poNumber).limit(40)
+        )
+        .get()
+        .toPromise();
+
+      if (!snap || snap.empty) continue;
+
+      let found: InventoryRow | null = null;
+      snap.forEach(doc => {
+        if (found) return;
+        const row = this.mapOutboundDocToInventoryRow(doc.id, doc.data() as Record<string, unknown>, factory);
+        const materialImd = this.inventoryImdKey(row) || row.batchNumber;
+        const imdMatch =
+          materialImd === scannedImd ||
+          materialImd.startsWith(scannedImd) ||
+          scannedImd.startsWith(materialImd);
+        if (imdMatch) {
+          found = row;
+        }
+      });
+
+      if (found) return found;
+    }
+
+    return null;
+  }
+
+  private async queryAllByMaterialCode(code: string): Promise<InventoryRow[]> {
+    const [inventoryRows, outboundRows] = await Promise.all([
+      this.queryInventoryByMaterialCode(code),
+      this.queryOutboundByMaterialCode(code)
+    ]);
+
+    const map = new Map<string, InventoryRow>();
+    for (const row of outboundRows) {
+      map.set(this.materialPoImdKey(row), row);
+    }
+    for (const row of inventoryRows) {
+      map.set(this.materialPoImdKey(row), row);
+    }
+    return [...map.values()];
   }
 
   private async loadInventoryById(id: string, factory: string): Promise<InventoryRow | null> {
@@ -543,8 +672,7 @@ export class QcTraceabilityComponent implements AfterViewInit {
 
   private qtyOriginal(inv: InventoryRow): string {
     const q = inv.quantity;
-    const u = (inv.unit || '').trim() || '—';
-    return q > 0 ? `${q} ${u}` : `— ${u}`;
+    return q > 0 ? this.formatQtyOnly(q) : '—';
   }
 
   private totalExportedQty(issues: TraceabilityIssue[]): number {
@@ -698,8 +826,7 @@ export class QcTraceabilityComponent implements AfterViewInit {
           { label: 'ID xuất gần nhất', value: latestExportBy },
           {
             label: 'Đã xuất',
-            value:
-              exportedTotal > 0 ? `${exportedTotal} ${(inv.unit || '').trim() || ''}`.trim() : outboundDone ? issues[0]?.qtyLabel || '—' : '—'
+            value: exportedTotal > 0 ? this.formatQtyOnly(exportedTotal) : outboundDone ? issues[0]?.qtyLabel || '—' : '—'
           }
         ],
         subTitle: 'LSX',
@@ -941,25 +1068,17 @@ export class QcTraceabilityComponent implements AfterViewInit {
   }
 
   private async queryByMaterialCode(code: string): Promise<InventoryRow | null> {
-    const c = code.trim().toUpperCase();
+    const rows = await this.queryAllByMaterialCode(code);
+    if (!rows.length) return null;
+
     let best: InventoryRow | null = null;
     let bestTime = 0;
-    for (const factory of ['ASM1', 'ASM2']) {
-      const snap = await this.firestore
-        .collection('inventory-materials', ref => ref.where('factory', '==', factory).where('materialCode', '==', c).limit(40))
-        .get()
-        .toPromise();
-      if (!snap || snap.empty) {
-        continue;
+    for (const row of rows) {
+      const t = row.lastModified?.getTime() || 0;
+      if (!best || t >= bestTime) {
+        best = row;
+        bestTime = t;
       }
-      snap.forEach(doc => {
-        const row = this.mapDoc(doc.id, doc.data() as Record<string, unknown>, factory);
-        const ua = this.parseFirestoreDate((doc.data() as Record<string, unknown>).updatedAt)?.getTime() || 0;
-        if (!best || ua >= bestTime) {
-          best = row;
-          bestTime = ua;
-        }
-      });
     }
     return best;
   }
@@ -1033,21 +1152,20 @@ export class QcTraceabilityComponent implements AfterViewInit {
       return `Scanned: ${rb}`;
     }
     const q = row.quantity;
-    const u = row.unit || 'rolls';
     if (q > 0) {
-      return `Scanned: ${q} ${u}`;
+      return `Scanned: ${this.formatQtyOnly(q)}`;
     }
     return 'Scanned: —';
   }
 
   private stockDisplay(row: InventoryRow): string {
     if (row.stock != null && !Number.isNaN(row.stock)) {
-      return `${row.stock} ${row.unit}`.trim();
+      return this.formatQtyOnly(row.stock, '0');
     }
     const exp = row.exported != null ? row.exported : 0;
     const q = row.quantity;
     const remain = Math.max(0, q - exp);
-    return `${remain} ${row.unit}`.trim();
+    return this.formatQtyOnly(remain, '0');
   }
 
   private async loadOutboundIssues(row: InventoryRow): Promise<TraceabilityIssue[]> {
@@ -1089,7 +1207,6 @@ export class QcTraceabilityComponent implements AfterViewInit {
         }
         seenDocIds.add(doc.id);
         const exportQty = Number(data.exportQuantity) || 0;
-        const unit = ((data.unit as string) || row.unit || '').trim() || 'rolls';
         const wo = ((data.productionOrder as string) || '').trim() || '—';
         const ts = this.parseFirestoreDate(data.exportDate) || this.parseFirestoreDate(data.updatedAt) || this.parseFirestoreDate(data.createdAt);
         const performedBy = this.formatPerformerId(
@@ -1097,7 +1214,7 @@ export class QcTraceabilityComponent implements AfterViewInit {
         );
         issues.push({
           workOrder: wo,
-          qtyLabel: exportQty ? `-${exportQty} ${unit}` : `— ${unit}`,
+          qtyLabel: exportQty ? `-${this.formatQtyOnly(exportQty)}` : '—',
           exportQty,
           timestamp: ts,
           performedBy
@@ -1146,7 +1263,7 @@ export class QcTraceabilityComponent implements AfterViewInit {
       } else {
         const all = await this.queryAllByMaterialCode(parsed.material);
         if (!all.length) {
-          this.errorMessage = `Không tìm thấy mã hàng ${parsed.material} trên tồn kho ASM1/ASM2.`;
+          this.errorMessage = `Không tìm thấy mã hàng ${parsed.material} trên tồn kho hoặc lịch sử xuất ASM1/ASM2.`;
           return;
         }
         const options = this.buildPoImdOptions(all);
@@ -1156,7 +1273,12 @@ export class QcTraceabilityComponent implements AfterViewInit {
           this.showPoImdPicker = true;
           return;
         }
-        inv = (await this.loadInventoryById(options[0].inventoryId, options[0].factory)) || all[0];
+        inv =
+          (options[0].inventoryId
+            ? await this.loadInventoryById(options[0].inventoryId, options[0].factory)
+            : null) ||
+          options[0].sourceRow ||
+          all[0];
       }
 
       if (!inv) {
