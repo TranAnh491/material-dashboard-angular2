@@ -233,101 +233,47 @@
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || ''}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || ''}}</td>
-              <td style="border: 1px solid #000000;">
-                  <select [(ngModel)]="item.nguoiIn" (change)="onFieldChange(item, 'nguoiIn')" 
-                          [disabled]="!canEditField('nguoiIn')"
-                          style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
-                          onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
-                    <option value="">Chọn người in</option>
-                    <option *ngFor="let p of printerCatalog" [value]="p">{{ p }}</option>
-                    <option *ngIf="shouldShowOrphanPrinterOption(item)" [value]="item.nguoiIn">{{ item.nguoiIn }} (hiện tại)</option>
-                  </select>
-                  <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
+              <td style="border: 1px solid #000000; text-align: center; font-size: 13px; color: #000000;">
+                {{ getNguoiInDisplay(item) }}
               </td>
-              <td style="border: 1px solid #000000; text-align: center;">
-                  <!-- Pass: click chuyển Done (cần có Người in) -->
+              <td class="tinh-trang-cell" style="border: 1px solid #000000; text-align: center;">
+                  <!-- Pass: click chuyển Done -->
                   <span 
-                    *ngIf="item.tinhTrang === 'Pass' && canChangeTinhTrang(item)"
+                    *ngIf="item.tinhTrang === 'Pass'"
+                    class="tinh-trang-badge"
                     (click)="updateStatusToDone(item)"
-                    [style.background]="'#4caf50'"
-                    [style.color]="'white'"
-                    [style.padding]="'6px 12px'"
-                    [style.border-radius]="'4px'"
-                    [style.font-weight]="'bold'"
-                    [style.font-size]="'13px'"
-                    [style.display]="'inline-block'"
-                    [style.cursor]="'pointer'"
-                    [style.transition]="'all 0.2s ease'"
+                    [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)"
                     [title]="'Click để chuyển thành Done'"
-                    onmouseover="this.style.background='#388e3c'; this.style.transform='scale(1.05)'"
-                    onmouseout="this.style.background='#4caf50'; this.style.transform='scale(1)'">
-                    {{ item.tinhTrang }}
-                  </span>
-                  <span 
-                    *ngIf="item.tinhTrang === 'Pass' && !canChangeTinhTrang(item)"
-                    [style.background]="'#4caf50'"
-                    [style.color]="'white'"
-                    [style.padding]="'6px 12px'"
-                    [style.border-radius]="'4px'"
-                    [style.font-weight]="'bold'"
-                    [style.font-size]="'13px'"
-                    [style.display]="'inline-block'"
-                    [style.cursor]="'not-allowed'"
-                    [style.opacity]="'0.75'"
-                    [matTooltip]="getTinhTrangRequireNguoiInTooltip()"
-                    matTooltipPosition="above">
+                    onmouseover="this.style.transform='scale(1.05)'"
+                    onmouseout="this.style.transform='scale(1)'">
                     {{ item.tinhTrang }}
                   </span>
                   
-                  <!-- Nếu là NG thì hiển thị text, không cho edit -->
+                  <!-- NG: chỉ đổi qua IQC Scanner -->
                   <span 
                     *ngIf="item.tinhTrang === 'NG'" 
-                    [style.background]="'#f44336'"
-                    [style.color]="'white'"
-                    [style.padding]="'6px 12px'"
-                    [style.border-radius]="'4px'"
-                    [style.font-weight]="'bold'"
-                    [style.font-size]="'13px'"
-                    [style.display]="'inline-block'"
-                    [style.cursor]="'not-allowed'"
+                    class="tinh-trang-badge"
+                    [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)"
                     [title]="'Trạng thái này chỉ có thể thay đổi qua IQC Scanner'">
                     {{ item.tinhTrang }}
                   </span>
                   
-                  <!-- Nếu là Done thì hiển thị text -->
+                  <!-- Done: khóa -->
                   <span 
                     *ngIf="item.tinhTrang === 'Done'" 
-                    [style.background]="'#9c27b0'"
-                    [style.color]="'white'"
-                    [style.padding]="'6px 12px'"
-                    [style.border-radius]="'4px'"
-                    [style.font-weight]="'bold'"
-                    [style.font-size]="'13px'"
-                    [style.display]="'inline-block'">
+                    class="tinh-trang-badge"
+                    [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)">
                     {{ item.tinhTrang }}
                   </span>
                   
-                  <!-- Các tình trạng khác: cần chọn Người in trước -->
+                  <!-- Các tình trạng khác: click mở popup chọn -->
                   <span
-                    *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG' && item.tinhTrang !== 'Done'"
-                    [matTooltip]="!canChangeTinhTrang(item) ? getTinhTrangRequireNguoiInTooltip() : ''"
-                    matTooltipPosition="above"
-                    style="display: block; width: 100%;">
-                  <select 
-                    [(ngModel)]="item.tinhTrang" 
-                    (change)="onFieldChange(item, 'tinhTrang')" 
-                    [disabled]="!canChangeTinhTrang(item)"
-                    style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000000;" 
-                    [style.cursor]="canChangeTinhTrang(item) ? 'pointer' : 'not-allowed'"
-                    [style.opacity]="canChangeTinhTrang(item) ? '1' : '0.65'"
-                    onmouseover="if(!this.disabled) this.style.background='#f0f8ff'" 
-                    onmouseout="this.style.background='transparent'" 
-                    onfocus="if(!this.disabled) this.style.background='#e6f3ff'" 
-                    onblur="this.style.background='transparent'">
-                    <option value="">Chọn tình trạng</option>
-                    <option *ngFor="let s of tinhTrangCatalog" [value]="s">{{ s }}</option>
-                    <option *ngIf="shouldShowOrphanTinhTrangOption(item)" [value]="item.tinhTrang">{{ item.tinhTrang }} (hiện tại)</option>
-                  </select>
+                    *ngIf="canOpenTinhTrangPicker(item)"
+                    class="tinh-trang-badge"
+                    (click)="openTinhTrangPickerModal(item)"
+                    [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)"
+                    [title]="'Click để đổi tình trạng'">
+                    {{ item.tinhTrang || '—' }}
                   </span>
               </td>
               <td
@@ -402,69 +348,35 @@
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || '-'}}</td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nguoiIn || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; text-align: center;">
+              <td style="border: 1px solid #000000; font-size: 10px; color: #000000; text-align: center;">{{ getNguoiInDisplay(item) }}</td>
+              <td class="tinh-trang-cell" style="border: 1px solid #000000; font-size: 10px; text-align: center;">
                 <span 
-                  *ngIf="item.tinhTrang === 'Pass' && canChangeTinhTrang(item)"
+                  *ngIf="item.tinhTrang === 'Pass'"
+                  class="tinh-trang-badge"
                   (click)="updateStatusToDone(item)"
-                  [style.background]="'#4caf50'"
-                  [style.color]="'white'"
-                  [style.padding]="'4px 8px'"
-                  [style.border-radius]="'4px'"
-                  [style.font-weight]="'bold'"
-                  [style.font-size]="'10px'"
-                  [style.display]="'inline-block'"
-                  [style.cursor]="'pointer'"
-                  [style.transition]="'all 0.2s ease'"
-                  [title]="'Click để chuyển thành Done'"
-                  onmouseover="this.style.background='#388e3c'; this.style.transform='scale(1.05)'"
-                  onmouseout="this.style.background='#4caf50'; this.style.transform='scale(1)'">
+                  [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)"
+                  [title]="'Click để chuyển thành Done'">
                   {{ item.tinhTrang }}
                 </span>
-                <span 
-                  *ngIf="item.tinhTrang === 'Pass' && !canChangeTinhTrang(item)"
-                  [style.background]="'#4caf50'"
-                  [style.color]="'white'"
-                  [style.padding]="'4px 8px'"
-                  [style.border-radius]="'4px'"
-                  [style.font-weight]="'bold'"
-                  [style.font-size]="'10px'"
-                  [style.display]="'inline-block'"
-                  [style.cursor]="'not-allowed'"
-                  [style.opacity]="'0.75'"
-                  [matTooltip]="getTinhTrangRequireNguoiInTooltip()"
-                  matTooltipPosition="above">
-                  {{ item.tinhTrang }}
-                </span>
-                
-                <!-- Nếu là NG thì hiển thị text -->
                 <span 
                   *ngIf="item.tinhTrang === 'NG'"
-                  [style.background]="'#f44336'"
-                  [style.color]="'white'"
-                  [style.padding]="'4px 8px'"
-                  [style.border-radius]="'4px'"
-                  [style.font-weight]="'bold'"
-                  [style.font-size]="'10px'"
-                  [style.display]="'inline-block'">
+                  class="tinh-trang-badge"
+                  [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)">
                   {{ item.tinhTrang }}
                 </span>
-                
-                <!-- Nếu là Done thì hiển thị text -->
                 <span 
                   *ngIf="item.tinhTrang === 'Done'"
-                  [style.background]="'#9c27b0'"
-                  [style.color]="'white'"
-                  [style.padding]="'4px 8px'"
-                  [style.border-radius]="'4px'"
-                  [style.font-weight]="'bold'"
-                  [style.font-size]="'10px'"
-                  [style.display]="'inline-block'">
+                  class="tinh-trang-badge"
+                  [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)">
                   {{ item.tinhTrang }}
                 </span>
-                
-                <span *ngIf="item.tinhTrang !== 'Pass' && item.tinhTrang !== 'NG' && item.tinhTrang !== 'Done'" style="color: #000000;">
-                  {{ item.tinhTrang || '-' }}
+                <span
+                  *ngIf="canOpenTinhTrangPicker(item)"
+                  class="tinh-trang-badge"
+                  (click)="openTinhTrangPickerModal(item)"
+                  [ngStyle]="getTinhTrangBadgeStyle(item.tinhTrang)"
+                  [title]="'Click để đổi tình trạng'">
+                  {{ item.tinhTrang || '—' }}
                 </span>
               </td>
               <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.banVe || '-'}}</td>
@@ -1238,6 +1150,46 @@
       }
     }
   </style>
+
+  <!-- Popup chọn Tình trạng -->
+  <div class="modal-overlay" *ngIf="showTinhTrangPickerModal" (click)="closeTinhTrangPickerModal()">
+    <div class="modal-content tinh-trang-picker-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header tinh-trang-picker-header">
+        <h3>
+          <i class="material-icons">swap_horiz</i>
+          Đổi tình trạng
+        </h3>
+        <button type="button" class="close-btn" (click)="closeTinhTrangPickerModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+
+      <div class="modal-body" *ngIf="tinhTrangPickerItem as rowItem">
+        <div class="tinh-trang-picker-meta">
+          <div><strong>Mã tem:</strong> {{ rowItem.maTem || '—' }}</div>
+          <div><strong>Hiện tại:</strong> {{ rowItem.tinhTrang || '—' }}</div>
+        </div>
+
+        <div class="tinh-trang-picker-grid">
+          <div class="tinh-trang-picker-col" *ngFor="let col of STATUS_PICKER_COLUMNS">
+            <div
+              class="tinh-trang-picker-col-id"
+              *ngIf="getStatusPickerColumnEmployeeId(rowItem, col.statuses) as colEmpId">
+              {{ colEmpId }}
+            </div>
+            <button
+              type="button"
+              class="tinh-trang-picker-btn"
+              *ngFor="let status of col.statuses"
+              [class.is-current]="isTinhTrangPickerCurrent(status)"
+              (click)="selectTinhTrangFromPicker(status)">
+              {{ status }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- IQC Modal -->
   <div class="modal-overlay" *ngIf="showStatusHistoryModal" (click)="closeStatusHistoryModal()">

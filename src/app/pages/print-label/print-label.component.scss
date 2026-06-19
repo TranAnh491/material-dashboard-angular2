@@ -1105,6 +1105,135 @@ html .print-label-container,
   font-style: italic;
 }
 
+.tinh-trang-cell {
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 2px 4px !important;
+}
+
+.tinh-trang-badge {
+  vertical-align: middle;
+}
+
+.tinh-trang-picker-modal {
+  max-width: 620px;
+  width: 94%;
+}
+
+.tinh-trang-picker-header {
+  background: #fff7ed;
+  color: #111827;
+  padding: 16px 20px;
+  border-bottom: 1px solid #fed7aa;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .close-btn {
+    background: #f3f4f6;
+    border: none;
+    color: #374151;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: #e5e7eb;
+    }
+  }
+}
+
+.tinh-trang-picker-meta {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.tinh-trang-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.tinh-trang-picker-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px;
+  background: #fff;
+  min-width: 0;
+}
+
+.tinh-trang-picker-col-id {
+  text-align: center;
+  font-weight: 700;
+  font-size: 10px;
+  color: #1565c0;
+  padding: 3px 4px;
+  background: #e3f2fd;
+  border-radius: 4px;
+  border: 1px solid #90caf9;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.tinh-trang-picker-btn {
+  width: 100%;
+  padding: 4px 3px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #111827;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    background: #fff7ed;
+    border-color: #fb923c;
+  }
+
+  &.is-current {
+    background: #111827;
+    color: #fff;
+    border-color: #111827;
+  }
+}
+
+@media (max-width: 640px) {
+  .tinh-trang-picker-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 :host ::ng-deep .status-history-tooltip {
   white-space: pre-line;
   max-width: 380px;

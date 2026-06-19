@@ -118,6 +118,8 @@ export class PrintLabelComponent implements OnInit {
   iqcEmployeeId: string = '';
   iqcEmployeeVerified: boolean = false;
   iqcStep: number = 1;
+  iqcNguoiInBulkRunning = false;
+  private readonly IQC_NGUOI_IN_BULK_STORAGE_PREFIX = 'print-label-iqc-thuy-';
 
   // Download modal properties
   showDownloadModal: boolean = false;
@@ -125,6 +127,14 @@ export class PrintLabelComponent implements OnInit {
   // Lịch sử tình trạng (click cột Thời gian)
   showStatusHistoryModal = false;
   statusHistoryModalItem: ScheduleItem | null = null;
+  showTinhTrangPickerModal = false;
+  tinhTrangPickerItem: ScheduleItem | null = null;
+  readonly STATUS_PICKER_COLUMNS: { statuses: string[] }[] = [
+    { statuses: ['Chờ in', 'Chờ bản vẽ', 'Chờ Template', 'Đã in'] },
+    { statuses: ['IQC'] },
+    { statuses: ['IQC (Chờ DMS)'] }
+  ];
+  private readonly NGUOI_IN_TRIGGER_STATUSES = ['Chờ in', 'Chờ bản vẽ', 'Chờ Template'];
 
   // More popup + danh mục Người in
   showMorePopup = false;
@@ -148,6 +158,7 @@ export class PrintLabelComponent implements OnInit {
   /** Giá trị mặc định khi Firestore chưa có cấu hình */
   private readonly DEFAULT_TINH_TRANG: string[] = [
     'IQC',
+    'IQC (Chờ DMS)',
     'Late',
     'Chờ in',
     'Chờ bản vẽ',
@@ -318,16 +329,12 @@ export class PrintLabelComponent implements OnInit {
     return String(v ?? '').trim();
   }
 
-  hasNguoiIn(item: ScheduleItem): boolean {
-    return Boolean(this.normalizePrinterName(String(item.nguoiIn ?? '')));
+  hasNguoiInRecorded(item: ScheduleItem): boolean {
+    return Boolean(String(item.nguoiIn ?? '').trim());
   }
 
-  canChangeTinhTrang(item: ScheduleItem): boolean {
-    return this.hasNguoiIn(item);
-  }
-
-  getTinhTrangRequireNguoiInTooltip(): string {
-    return 'Vui lòng chọn Người in trước khi đổi Tình trạng';
+  canOpenTinhTrangPicker(item: ScheduleItem): boolean {
+    return !this.isLockedTinhTrang(String(item.tinhTrang ?? ''));
   }
 
   async loadPrinterCatalog(): Promise<void> {
@@ -1775,7 +1782,6 @@ export class PrintLabelComponent implements OnInit {
         // Chỉ tìm kiếm theo 3 trường chính: Batch, Mã tem, Khách hàng
         return batchMatch || maTemMatch || khachHangMatch;
       });
-      console.log('🔍 After search filter (Batch/Mã tem/Khách hàng):', filtered.length);
     }
     
     if (this.currentStatusFilter) {
@@ -2186,7 +2192,7 @@ export class PrintLabelComponent implements OnInit {
   }
 
   private normalizeItemStatusFields(item: ScheduleItem): ScheduleItem {
-    item.nguoiIn = this.normalizePrinterName(String(item.nguoiIn ?? ''));
+    item.nguoiIn = String(item.nguoiIn ?? '').trim();
     item.statusUpdateTime =
       this.parseFirestoreLikeDate(item.statusUpdateTime) || item.statusUpdateTime || undefined;
 
@@ -2279,6 +2285,152 @@ export class PrintLabelComponent implements OnInit {
     return history.map(h => this.formatStatusHistoryLine(h)).join('\n');
   }
 
+  openTinhTrangPickerModal(item: ScheduleItem): void {
+    if (!this.canOpenTinhTrangPicker(item)) {
+      return;
+    }
+    this.tinhTrangPickerItem = item;
+    this.showTinhTrangPickerModal = true;
+  }
+
+  closeTinhTrangPickerModal(): void {
+    this.showTinhTrangPickerModal = false;
+    this.tinhTrangPickerItem = null;
+  }
+
+  getStatusPickerColumnEmployeeId(item: ScheduleItem | null, statuses: string[]): string {
+    if (!item) {
+      return '';
+    }
+    const history = item.statusHistory || [];
+    const normalizedSet = new Set(statuses.map((s) => this.normalizeTinhTrangName(s)));
+    for (let i = history.length - 1; i >= 0; i--) {
+      const entry = history[i];
+      if (!entry.employeeId) {
+        continue;
+      }
+      if (!normalizedSet.has(this.normalizeTinhTrangName(entry.status))) {
+        continue;
+      }
+      const id = this.formatStatusHistoryEmployeeId(entry.employeeId);
+      return id === '—' ? '' : id;
+    }
+    return '';
+  }
+
+  isTinhTrangPickerCurrent(status: string): boolean {
+    const item = this.tinhTrangPickerItem;
+    if (!item) {
+      return false;
+    }
+    return (
+      this.normalizeTinhTrangName(String(item.tinhTrang ?? '')) ===
+      this.normalizeTinhTrangName(status)
+    );
+  }
+
+  getNguoiInDisplay(item: ScheduleItem): string {
+    const v = String(item.nguoiIn ?? '').trim();
+    if (!v) {
+      return '—';
+    }
+    return this.normalizeAspEmployeeId(v) || v;
+  }
+
+  getTinhTrangBadgeStyle(status: string | undefined): Record<string, string> {
+    const s = this.normalizeTinhTrangName(String(status ?? '')).toLowerCase();
+    const base: Record<string, string> = {
+      padding: '2px 5px',
+      borderRadius: '3px',
+      fontWeight: '600',
+      fontSize: '10px',
+      display: 'inline-block',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      border: '1px solid transparent',
+      whiteSpace: 'nowrap',
+      lineHeight: '1.2',
+      maxWidth: '100%'
+    };
+    if (s === 'pass') {
+      return { ...base, background: '#4caf50', color: 'white' };
+    }
+    if (s === 'ng') {
+      return { ...base, background: '#f44336', color: 'white', cursor: 'not-allowed' };
+    }
+    if (s === 'done') {
+      return { ...base, background: '#9c27b0', color: 'white', cursor: 'default' };
+    }
+    if (s === 'iqc') {
+      return { ...base, background: '#e3f2fd', color: '#1565c0', border: '1px solid #90caf9' };
+    }
+    if (s.includes('iqc') && s.includes('dms')) {
+      return { ...base, background: '#fff3e0', color: '#e65100', border: '1px solid #ffcc80' };
+    }
+    if (s === 'đã in' || s === 'da in') {
+      return { ...base, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' };
+    }
+    if (s === 'late') {
+      return { ...base, background: '#ffebee', color: '#c62828', border: '1px solid #ef9a9a' };
+    }
+    return { ...base, background: '#f5f5f5', color: '#111', border: '1px solid #bdbdbd' };
+  }
+
+  private maybeAutoSetNguoiInOnDaIn(
+    item: ScheduleItem,
+    previousStatus: string,
+    newStatus: string
+  ): void {
+    if (this.normalizeTinhTrangName(newStatus) !== 'Đã in') {
+      return;
+    }
+    if (this.hasNguoiInRecorded(item)) {
+      return;
+    }
+    const prev = this.normalizeTinhTrangName(previousStatus);
+    const shouldRecord = this.NGUOI_IN_TRIGGER_STATUSES.some(
+      (s) => this.normalizeTinhTrangName(s) === prev
+    );
+    if (!shouldRecord) {
+      return;
+    }
+    const empId = this.loggedInEmployeeId;
+    if (!empId) {
+      alert('⚠️ Không xác định được mã ASP đăng nhập — chưa ghi Người in.');
+      return;
+    }
+    item.nguoiIn = empId;
+  }
+
+  async selectTinhTrangFromPicker(status: string): Promise<void> {
+    const item = this.tinhTrangPickerItem;
+    if (!item) {
+      return;
+    }
+    const newStatus = this.normalizeTinhTrangName(status);
+    const prevStatus = this.normalizeTinhTrangName(String(item.tinhTrang ?? ''));
+    if (!newStatus || newStatus === prevStatus) {
+      this.closeTinhTrangPickerModal();
+      return;
+    }
+
+    item.tinhTrang = newStatus;
+    this.recordStatusChange(item, newStatus);
+    this.maybeAutoSetNguoiInOnDaIn(item, prevStatus, newStatus);
+    this.closeTinhTrangPickerModal();
+
+    this.enqueueFieldSave(async () => {
+      try {
+        await this.persistScheduleItemUpdate(item);
+        this.refreshDisplayedScheduleItems();
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        alert(`❌ Không lưu được tình trạng: ${msg}`);
+        this.loadDataFromFirebase();
+      }
+    });
+  }
+
   openStatusHistoryModal(item: ScheduleItem): void {
     this.statusHistoryModalItem = item;
     this.showStatusHistoryModal = true;
@@ -2320,9 +2472,245 @@ export class PrintLabelComponent implements OnInit {
     return `${String(item.maTem ?? '').trim()}|${String(item.lenhSanXuat ?? '').trim()}`;
   }
 
+  private getScheduleItemRichKey(item: ScheduleItem): string {
+    return [
+      item.maTem,
+      item.lenhSanXuat,
+      item.maHang,
+      item.ngayNhanKeHoach,
+      item.stt,
+      item.batch
+    ]
+      .map((x) => String(x ?? '').trim())
+      .join('|');
+  }
+
   private findScheduleItemIndex(dataArray: ScheduleItem[], item: ScheduleItem): number {
+    const direct = dataArray.indexOf(item);
+    if (direct !== -1) {
+      return direct;
+    }
+
     const key = this.getScheduleItemMatchKey(item);
-    return dataArray.findIndex(row => this.getScheduleItemMatchKey(row) === key);
+    let idx = dataArray.findIndex((row) => this.getScheduleItemMatchKey(row) === key);
+    if (idx !== -1) {
+      return idx;
+    }
+
+    const richKey = this.getScheduleItemRichKey(item);
+    return dataArray.findIndex((row) => this.getScheduleItemRichKey(row) === richKey);
+  }
+
+  private async readLatestPrintScheduleDoc(): Promise<{
+    docRef: { update: (data: object) => Promise<unknown> };
+    dataArray: ScheduleItem[];
+  }> {
+    const snapshot = await this.firestore.collection('print-schedules', (ref) =>
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise();
+
+    if (!snapshot || snapshot.empty) {
+      throw new Error('Không tìm thấy dữ liệu trên Firebase.');
+    }
+
+    const docRef = snapshot.docs[0].ref;
+    const docData = snapshot.docs[0].data() as { data?: ScheduleItem[] };
+    if (!docData.data || !Array.isArray(docData.data)) {
+      throw new Error('Dữ liệu Firebase không hợp lệ.');
+    }
+
+    return {
+      docRef,
+      dataArray: [...docData.data] as ScheduleItem[]
+    };
+  }
+
+  private applyNguoiInToLocalRows(item: ScheduleItem, nguoiIn: string): void {
+    item.nguoiIn = nguoiIn;
+
+    const localIndex = this.findScheduleItemIndex(this.scheduleData, item);
+    if (localIndex !== -1) {
+      this.scheduleData[localIndex].nguoiIn = nguoiIn;
+    }
+
+    const displayedIndex = this.findScheduleItemIndex(this.displayedScheduleItems, item);
+    if (displayedIndex !== -1) {
+      this.displayedScheduleItems[displayedIndex].nguoiIn = nguoiIn;
+    }
+  }
+
+  /** Lưu đúng giá trị Người in vừa chọn lên Firebase */
+  private async persistNguoiInField(item: ScheduleItem, nguoiIn: string): Promise<void> {
+    const valueToSave = this.normalizePrinterName(nguoiIn);
+    const { docRef, dataArray } = await this.readLatestPrintScheduleDoc();
+
+    const remoteIndex = this.findScheduleItemIndex(dataArray, item);
+    if (remoteIndex === -1) {
+      throw new Error(`Không tìm thấy tem ${item.maTem || ''} trên Firebase.`);
+    }
+
+    dataArray[remoteIndex] = {
+      ...dataArray[remoteIndex],
+      nguoiIn: valueToSave
+    };
+
+    const sanitizedArray = dataArray.map((row) =>
+      this.sanitizeForFirestore(row) as ScheduleItem
+    );
+
+    await docRef.update({
+      data: sanitizedArray,
+      lastUpdated: new Date()
+    });
+
+    this.applyNguoiInToLocalRows(item, valueToSave);
+    this.firebaseSaved = true;
+  }
+
+  /** Đổi Người in — lưu Firebase đúng giá trị dropdown */
+  onNguoiInChange(item: ScheduleItem, value: string): void {
+    const nguoiIn = this.normalizePrinterName(value);
+    this.applyNguoiInToLocalRows(item, nguoiIn);
+
+    this.enqueueFieldSave(async () => {
+      try {
+        await this.persistNguoiInField(item, nguoiIn);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('❌ Error saving nguoiIn:', error);
+        alert(`❌ Không lưu được Người in: ${msg}`);
+        this.loadDataFromFirebase();
+      }
+    });
+  }
+
+  private getTodayVnDateKey(): string {
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    return `${y}-${m}-${d}`;
+  }
+
+  private hasRunIqcThuyBulkToday(): boolean {
+    return localStorage.getItem(`${this.IQC_NGUOI_IN_BULK_STORAGE_PREFIX}${this.getTodayVnDateKey()}`) === '1';
+  }
+
+  private markIqcThuyBulkRanToday(): void {
+    localStorage.setItem(`${this.IQC_NGUOI_IN_BULK_STORAGE_PREFIX}${this.getTodayVnDateKey()}`, '1');
+  }
+
+  private isTodayInVietnam(date: Date | null | undefined): boolean {
+    const d = this.parseFirestoreLikeDate(date);
+    if (!d) {
+      return false;
+    }
+    const now = new Date();
+    return (
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear()
+    );
+  }
+
+  /** Mã IQC được chuyển / cập nhật tình trạng trong ngày hôm nay */
+  private shouldBulkAssignIqcNguoiInToday(item: ScheduleItem): boolean {
+    if (this.normalizeTinhTrangName(String(item.tinhTrang ?? '')) !== 'IQC') {
+      return false;
+    }
+
+    const history = item.statusHistory || [];
+    if (history.some((h) => this.normalizeTinhTrangName(h.status) === 'IQC' && this.isTodayInVietnam(h.at))) {
+      return true;
+    }
+
+    return this.isTodayInVietnam(item.statusUpdateTime);
+  }
+
+  /** Gán Người in cho các mã IQC được cập nhật hôm nay */
+  async bulkAssignNguoiInForIqcToday(nguoiIn = 'Thủy'): Promise<number> {
+    const printer = this.normalizePrinterName(nguoiIn);
+    if (!printer) {
+      return 0;
+    }
+
+    const { docRef, dataArray } = await this.readLatestPrintScheduleDoc();
+    let count = 0;
+
+    const updated = dataArray.map((row) => {
+      const normalizedRow = this.normalizeItemStatusFields({ ...row } as ScheduleItem);
+      if (!this.shouldBulkAssignIqcNguoiInToday(normalizedRow)) {
+        return row;
+      }
+      if (this.normalizePrinterName(String(row.nguoiIn ?? '')) === printer) {
+        return row;
+      }
+      count++;
+      return { ...row, nguoiIn: printer };
+    });
+
+    if (count === 0) {
+      return 0;
+    }
+
+    await docRef.update({
+      data: updated.map((row) => this.sanitizeForFirestore(row) as ScheduleItem),
+      lastUpdated: new Date()
+    });
+
+    this.scheduleData.forEach((item) => {
+      const normalized = this.normalizeItemStatusFields({ ...item });
+      if (this.shouldBulkAssignIqcNguoiInToday(normalized)) {
+        item.nguoiIn = printer;
+      }
+    });
+    this.refreshDisplayedScheduleItems();
+    this.firebaseSaved = true;
+    return count;
+  }
+
+  private async applyIqcNguoiInThuyTodayIfNeeded(): Promise<void> {
+    if (this.hasRunIqcThuyBulkToday()) {
+      return;
+    }
+
+    try {
+      const count = await this.bulkAssignNguoiInForIqcToday('Thủy');
+      this.markIqcThuyBulkRanToday();
+      if (count > 0) {
+        console.log(`✅ Đã gán Người in Thủy cho ${count} mã IQC hôm nay`);
+      }
+    } catch (error) {
+      console.error('❌ bulkAssignNguoiInForIqcToday:', error);
+    }
+  }
+
+  async runBulkIqcNguoiInThuyToday(): Promise<void> {
+    if (this.iqcNguoiInBulkRunning) {
+      return;
+    }
+    if (
+      !confirm(
+        'Gán Người in "Thủy" cho tất cả mã có tình trạng IQC được cập nhật HÔM NAY?\n\n(Mã IQC ngày cũ sẽ không bị đổi.)'
+      )
+    ) {
+      return;
+    }
+
+    this.iqcNguoiInBulkRunning = true;
+    try {
+      const count = await this.bulkAssignNguoiInForIqcToday('Thủy');
+      this.markIqcThuyBulkRanToday();
+      alert(`Đã gán Người in "Thủy" cho ${count} mã IQC hôm nay.`);
+      if (count > 0) {
+        this.loadDataFromFirebase();
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      alert(`❌ Không gán được Người in: ${msg}`);
+    } finally {
+      this.iqcNguoiInBulkRunning = false;
+    }
   }
 
   private enqueueFieldSave(task: () => Promise<void>): void {
@@ -2354,23 +2742,9 @@ export class PrintLabelComponent implements OnInit {
     return out;
   }
 
-  /** Lưu thay đổi 1 dòng (Người in, Tình trạng, …) — không reload cả bảng */
+  /** Lưu thay đổi 1 dòng (Tình trạng, Ghi chú, …) — không reload cả bảng */
   private async persistScheduleItemUpdate(item: ScheduleItem): Promise<void> {
-    const snapshot = await this.firestore.collection('print-schedules', ref =>
-      ref.orderBy('importedAt', 'desc').limit(1)
-    ).get().toPromise();
-
-    if (!snapshot || snapshot.empty) {
-      throw new Error('Không tìm thấy dữ liệu trên Firebase.');
-    }
-
-    const docRef = snapshot.docs[0].ref;
-    const docData = snapshot.docs[0].data() as { data?: ScheduleItem[] };
-    if (!docData.data || !Array.isArray(docData.data)) {
-      throw new Error('Dữ liệu Firebase không hợp lệ.');
-    }
-
-    const dataArray = [...docData.data] as ScheduleItem[];
+    const { docRef, dataArray } = await this.readLatestPrintScheduleDoc();
     const remoteIndex = this.findScheduleItemIndex(dataArray, item);
     if (remoteIndex === -1) {
       throw new Error(`Không tìm thấy tem ${item.maTem || ''} trên Firebase.`);
@@ -2380,7 +2754,7 @@ export class PrintLabelComponent implements OnInit {
     const remoteItem = dataArray[remoteIndex];
     const mergedItem = this.normalizeItemStatusFields({
       ...remoteItem,
-      nguoiIn: this.normalizePrinterName(String(item.nguoiIn ?? remoteItem.nguoiIn ?? '')),
+      nguoiIn: String(item.nguoiIn ?? remoteItem.nguoiIn ?? '').trim(),
       tinhTrang: item.tinhTrang ?? remoteItem.tinhTrang,
       ghiChu: item.ghiChu ?? remoteItem.ghiChu ?? '',
       statusUpdateTime: item.statusUpdateTime ?? remoteItem.statusUpdateTime,
@@ -2422,23 +2796,14 @@ export class PrintLabelComponent implements OnInit {
   onFieldChange(item: ScheduleItem, fieldName: string): void {
     console.log(`Field ${fieldName} changed for item:`, item.maTem);
 
-    if (fieldName === 'tinhTrang' && !this.canChangeTinhTrang(item)) {
-      alert('⚠️ Vui lòng chọn Người in trước khi đổi Tình trạng!');
-      const prev = item.statusHistory?.length
-        ? item.statusHistory[item.statusHistory.length - 1].status
-        : 'Chờ in';
-      item.tinhTrang = prev;
-      return;
-    }
-    
-    // Cập nhật thời gian khi thay đổi tình trạng
     if (fieldName === 'tinhTrang') {
-      this.recordStatusChange(item, item.tinhTrang || '');
+      const prevStatus = item.statusHistory?.length
+        ? item.statusHistory[item.statusHistory.length - 1].status
+        : '';
+      const newStatus = String(item.tinhTrang ?? '');
+      this.recordStatusChange(item, newStatus);
+      this.maybeAutoSetNguoiInOnDaIn(item, prevStatus, newStatus);
       console.log('Status update time set to:', item.statusUpdateTime);
-    }
-
-    if (fieldName === 'nguoiIn') {
-      item.nguoiIn = this.normalizePrinterName(String(item.nguoiIn ?? ''));
     }
 
     this.enqueueFieldSave(async () => {
@@ -3516,11 +3881,6 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
    * Update status from Pass to Done
    */
   async updateStatusToDone(item: ScheduleItem): Promise<void> {
-    if (!this.canChangeTinhTrang(item)) {
-      alert('⚠️ Vui lòng chọn Người in trước khi đổi Tình trạng!');
-      return;
-    }
-
     if (item.tinhTrang !== 'Pass') {
       alert('⚠️ Chỉ có thể chuyển từ Pass sang Done!');
       return;
