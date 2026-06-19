@@ -999,10 +999,110 @@ html .print-label-container,
   }
 }
 
+.status-time-cell {
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: #fff7ed;
+  }
+}
+
 .status-time {
-  cursor: help;
   text-decoration: underline dotted;
   text-underline-offset: 2px;
+}
+
+.status-history-modal {
+  max-width: 640px;
+  width: 92%;
+}
+
+.status-history-modal-header {
+  background: #fff7ed;
+  color: #111827;
+  padding: 16px 20px;
+  border-bottom: 1px solid #fed7aa;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .close-btn {
+    background: #f3f4f6;
+    border: none;
+    color: #374151;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: #e5e7eb;
+    }
+  }
+}
+
+.status-history-meta {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.status-history-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.status-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th,
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+  }
+
+  th {
+    background: #fff7ed;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr:hover {
+    background: #fafafa;
+  }
+}
+
+.status-history-empty {
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
 }
 
 :host ::ng-deep .status-history-tooltip {

@@ -107,6 +107,7 @@ export class PrintLabelComponent implements OnInit {
   // Cleanup properties
   private subscriptions: any[] = [];
   private timers: any[] = [];
+  private fieldSaveQueue: Promise<void> = Promise.resolve();
 
   // IQC properties
   showIQCModal: boolean = false;
@@ -118,6 +119,10 @@ export class PrintLabelComponent implements OnInit {
 
   // Download modal properties
   showDownloadModal: boolean = false;
+
+  // Lịch sử tình trạng (click cột Thời gian)
+  showStatusHistoryModal = false;
+  statusHistoryModalItem: ScheduleItem | null = null;
 
   // More popup + danh mục Người in
   showMorePopup = false;
@@ -164,6 +169,9 @@ export class PrintLabelComponent implements OnInit {
   ngOnInit(): void {
     console.log('🚀 PrintLabelComponent initialized');
     void this.loadLoggedInEmployeeId();
+    this.auth.authState.subscribe(() => {
+      void this.loadLoggedInEmployeeId();
+    });
 
     // Auto-select print function
     this.selectedFunction = 'print';
@@ -778,7 +786,9 @@ export class PrintLabelComponent implements OnInit {
       }
       
       // Chỉ lưu mã chưa Done vào collection chính (sắp xếp: ngày nhận KH → mã tem)
-      const dataToSave = this.sortScheduleItems(notDoneItems);
+      const dataToSave = this.sortScheduleItems(notDoneItems).map(
+        (row) => this.sanitizeForFirestore(row) as ScheduleItem
+      );
       
       // Get batch number from the first new item
       const batchNumber = data.length > 0 && data[0].batch ? parseInt(data[0].batch) : 1;
@@ -844,7 +854,7 @@ export class PrintLabelComponent implements OnInit {
   }
 
   // Save to Firebase with REPLACE mode (for delete operations)
-  async saveToFirebaseReplace(data: ScheduleItem[]): Promise<void> {
+  async saveToFirebaseReplace(data: ScheduleItem[], options?: { reload?: boolean }): Promise<void> {
     console.log('🔥 Saving label data to Firebase (REPLACE mode)...');
     
     if (data.length === 0) {
@@ -872,7 +882,9 @@ export class PrintLabelComponent implements OnInit {
       }
       
       // Chỉ lưu mã chưa Done vào collection chính (sắp xếp: ngày nhận KH → mã tem)
-      const dataToSave = this.sortScheduleItems(notDoneItems);
+      const dataToSave = this.sortScheduleItems(notDoneItems).map(
+        (row) => this.sanitizeForFirestore(row) as ScheduleItem
+      );
       
       // Get the latest document ID to update
       const snapshot = await this.firestore.collection('print-schedules', ref => 
@@ -918,8 +930,10 @@ export class PrintLabelComponent implements OnInit {
         this.firebaseSaved = true;
         console.log(`✅ Saved ${dataToSave.length} records to Firebase (REPLACE mode) - Batch: ${String(batchNumber).padStart(3, '0')}`);
         
-        // Reload data from Firebase
-        this.loadDataFromFirebase();
+        if (options?.reload !== false) {
+          // Reload data from Firebase
+          this.loadDataFromFirebase();
+        }
       } else {
         console.log('No existing document found to update');
       }
@@ -1314,7 +1328,7 @@ export class PrintLabelComponent implements OnInit {
         
         // Create the document with direct data (no Done separation)
         const labelScheduleDoc = {
-          data: data,
+          data: data.map((row) => this.sanitizeForFirestore(row) as ScheduleItem),
           batchNumber: batchNumber,
           importedAt: new Date(),
           month: this.getCurrentMonth(),
@@ -1846,6 +1860,11 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
+  /** Hiển thị mã ASP đăng nhập trên header */
+  getLoggedInEmployeeIdDisplay(): string {
+    return this.loggedInEmployeeId || '—';
+  }
+
   /** Mã NV ghi vào lịch sử: ưu tiên IQC scanner, sau đó phiên đăng nhập */
   private getEmployeeIdForStatusChange(override?: string): string {
     const custom = this.normalizeAspEmployeeId(override);
@@ -2145,11 +2164,17 @@ export class PrintLabelComponent implements OnInit {
 
     if (Array.isArray(item.statusHistory)) {
       item.statusHistory = item.statusHistory
-        .map(h => ({
-          status: String(h?.status || '').trim(),
-          at: this.parseFirestoreLikeDate(h?.at) || new Date(0),
-          employeeId: this.normalizeAspEmployeeId(h?.employeeId) || String(h?.employeeId || '').trim() || undefined
-        }))
+        .map(h => {
+          const entry: StatusHistoryEntry = {
+            status: String(h?.status || '').trim(),
+            at: this.parseFirestoreLikeDate(h?.at) || new Date(0)
+          };
+          const emp = this.normalizeAspEmployeeId(h?.employeeId) || String(h?.employeeId || '').trim();
+          if (emp) {
+            entry.employeeId = emp;
+          }
+          return entry;
+        })
         .filter(h => h.status && h.at.getTime() > 0);
     } else {
       item.statusHistory = [];
@@ -2159,8 +2184,7 @@ export class PrintLabelComponent implements OnInit {
       item.statusHistory = [
         {
           status: item.tinhTrang,
-          at: item.statusUpdateTime || new Date(),
-          employeeId: undefined
+          at: item.statusUpdateTime || new Date()
         }
       ];
     }
@@ -2188,10 +2212,14 @@ export class PrintLabelComponent implements OnInit {
       return;
     }
 
-    item.statusHistory.push({ status: s, at: now, employeeId });
+    const entry: StatusHistoryEntry = { status: s, at: now };
+    if (employeeId && employeeId !== '—') {
+      entry.employeeId = employeeId;
+    }
+    item.statusHistory.push(entry);
   }
 
-  private formatStatusHistoryDate(d: Date | null | undefined): string {
+  formatStatusHistoryDate(d: Date | null | undefined): string {
     if (!d || Number.isNaN(d.getTime())) return '—';
     return d.toLocaleString('vi-VN', {
       day: '2-digit',
@@ -2223,6 +2251,137 @@ export class PrintLabelComponent implements OnInit {
     return history.map(h => this.formatStatusHistoryLine(h)).join('\n');
   }
 
+  openStatusHistoryModal(item: ScheduleItem): void {
+    this.statusHistoryModalItem = item;
+    this.showStatusHistoryModal = true;
+  }
+
+  closeStatusHistoryModal(): void {
+    this.showStatusHistoryModal = false;
+    this.statusHistoryModalItem = null;
+  }
+
+  getStatusHistoryRows(item: ScheduleItem | null): StatusHistoryEntry[] {
+    if (!item) {
+      return [];
+    }
+    const history = item.statusHistory || [];
+    if (history.length) {
+      return [...history];
+    }
+    if (item.tinhTrang) {
+      return [
+        {
+          status: item.tinhTrang,
+          at: item.statusUpdateTime || new Date(),
+          employeeId: undefined
+        }
+      ];
+    }
+    return [];
+  }
+
+  formatStatusHistoryEmployeeId(employeeId?: string): string {
+    if (!employeeId) {
+      return '—';
+    }
+    return this.normalizeAspEmployeeId(employeeId) || employeeId;
+  }
+
+  private getScheduleItemMatchKey(item: ScheduleItem): string {
+    return `${String(item.maTem ?? '').trim()}|${String(item.lenhSanXuat ?? '').trim()}`;
+  }
+
+  private findScheduleItemIndex(dataArray: ScheduleItem[], item: ScheduleItem): number {
+    const key = this.getScheduleItemMatchKey(item);
+    return dataArray.findIndex(row => this.getScheduleItemMatchKey(row) === key);
+  }
+
+  private enqueueFieldSave(task: () => Promise<void>): void {
+    this.fieldSaveQueue = this.fieldSaveQueue
+      .then(task)
+      .catch((error) => {
+        console.error('❌ Field save queue error:', error);
+      });
+  }
+
+  /** Firestore không chấp nhận giá trị undefined — loại bỏ trước khi update */
+  private sanitizeForFirestore(value: unknown): unknown {
+    if (value === undefined) {
+      return null;
+    }
+    if (value === null || value instanceof Date || typeof value !== 'object') {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.sanitizeForFirestore(entry));
+    }
+    const out: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+      if (entry === undefined) {
+        return;
+      }
+      out[key] = this.sanitizeForFirestore(entry);
+    });
+    return out;
+  }
+
+  /** Lưu thay đổi 1 dòng (Người in, Tình trạng, …) — không reload cả bảng */
+  private async persistScheduleItemUpdate(item: ScheduleItem): Promise<void> {
+    const snapshot = await this.firestore.collection('print-schedules', ref =>
+      ref.orderBy('importedAt', 'desc').limit(1)
+    ).get().toPromise();
+
+    if (!snapshot || snapshot.empty) {
+      throw new Error('Không tìm thấy dữ liệu trên Firebase.');
+    }
+
+    const docRef = snapshot.docs[0].ref;
+    const docData = snapshot.docs[0].data() as { data?: ScheduleItem[] };
+    if (!docData.data || !Array.isArray(docData.data)) {
+      throw new Error('Dữ liệu Firebase không hợp lệ.');
+    }
+
+    const dataArray = [...docData.data] as ScheduleItem[];
+    const remoteIndex = this.findScheduleItemIndex(dataArray, item);
+    if (remoteIndex === -1) {
+      throw new Error(`Không tìm thấy tem ${item.maTem || ''} trên Firebase.`);
+    }
+
+    const localIndex = this.findScheduleItemIndex(this.scheduleData, item);
+    const remoteItem = dataArray[remoteIndex];
+    const mergedItem: ScheduleItem = {
+      ...remoteItem,
+      nguoiIn: this.normalizePrinterName(String(item.nguoiIn ?? remoteItem.nguoiIn ?? '')),
+      tinhTrang: item.tinhTrang ?? remoteItem.tinhTrang,
+      ghiChu: item.ghiChu ?? remoteItem.ghiChu ?? '',
+      statusUpdateTime: item.statusUpdateTime ?? remoteItem.statusUpdateTime,
+      statusHistory: item.statusHistory ?? remoteItem.statusHistory
+    };
+
+    dataArray[remoteIndex] = mergedItem;
+    const sanitizedArray = dataArray.map((row) => this.sanitizeForFirestore(row) as ScheduleItem);
+
+    await docRef.update({
+      data: sanitizedArray,
+      lastUpdated: new Date()
+    });
+
+    const cleanMergedItem = this.sanitizeForFirestore(mergedItem) as ScheduleItem;
+
+    if (localIndex !== -1) {
+      this.scheduleData[localIndex] = { ...cleanMergedItem };
+    } else {
+      const fallbackIndex = this.scheduleData.indexOf(item);
+      if (fallbackIndex !== -1) {
+        this.scheduleData[fallbackIndex] = { ...cleanMergedItem };
+      }
+    }
+
+    this.scheduleData = [...this.scheduleData];
+    this.firebaseSaved = true;
+  }
+
   onFieldChange(item: ScheduleItem, fieldName: string): void {
     console.log(`Field ${fieldName} changed for item:`, item.maTem);
 
@@ -2240,13 +2399,24 @@ export class PrintLabelComponent implements OnInit {
     if (fieldName === 'tinhTrang') {
       this.recordStatusChange(item, item.tinhTrang || '');
       console.log('Status update time set to:', item.statusUpdateTime);
-      
-      // Trigger change detection
-      this.scheduleData = [...this.scheduleData];
     }
-    
-    // Save to Firebase
-    this.saveToFirebaseReplace(this.scheduleData);
+
+    if (fieldName === 'nguoiIn') {
+      item.nguoiIn = this.normalizePrinterName(String(item.nguoiIn ?? ''));
+    }
+
+    this.scheduleData = [...this.scheduleData];
+
+    this.enqueueFieldSave(async () => {
+      try {
+        await this.persistScheduleItemUpdate(item);
+        console.log(`✅ Saved field "${fieldName}" for ${item.maTem}`);
+      } catch (error: any) {
+        console.error(`❌ Error saving field "${fieldName}":`, error);
+        alert(`❌ Không lưu được thay đổi (${fieldName}): ${error?.message || error}`);
+        this.loadDataFromFirebase();
+      }
+    });
   }
 
   deleteItem(item: ScheduleItem): void {
@@ -2264,16 +2434,30 @@ export class PrintLabelComponent implements OnInit {
   onNoteBlur(item: ScheduleItem, event: any): void {
     console.log('Note blur for item:', item.maTem);
     item.statusUpdateTime = new Date();
-    // Sử dụng saveToFirebaseReplace để cập nhật thật vào Firebase
-    this.saveToFirebaseReplace(this.scheduleData);
+    this.scheduleData = [...this.scheduleData];
+    this.enqueueFieldSave(async () => {
+      try {
+        await this.persistScheduleItemUpdate(item);
+      } catch (error: any) {
+        alert(`❌ Không lưu được ghi chú: ${error?.message || error}`);
+        this.loadDataFromFirebase();
+      }
+    });
   }
 
   onNoteKeyPress(event: KeyboardEvent, item: ScheduleItem): void {
     if (event.key === 'Enter') {
       console.log('Note saved on Enter for item:', item.maTem);
       item.statusUpdateTime = new Date();
-      // Sử dụng saveToFirebaseReplace để cập nhật thật vào Firebase
-      this.saveToFirebaseReplace(this.scheduleData);
+      this.scheduleData = [...this.scheduleData];
+      this.enqueueFieldSave(async () => {
+        try {
+          await this.persistScheduleItemUpdate(item);
+        } catch (error: any) {
+          alert(`❌ Không lưu được ghi chú: ${error?.message || error}`);
+          this.loadDataFromFirebase();
+        }
+      });
       (event.target as HTMLInputElement).blur();
     }
   }
@@ -3163,7 +3347,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
               
               // Update document trong Firebase
               await this.firestore.collection('print-schedules').doc(docId).update({
-                data: dataArray,
+                data: dataArray.map((row) => this.sanitizeForFirestore(row) as ScheduleItem),
                 lastUpdated: new Date()
           });
               

@@ -14,6 +14,15 @@
           </div>
         </div>
         <div class="page-header-stats">
+          <div class="logged-in-user-card" title="Tài khoản đang đăng nhập">
+            <div class="stat-icon logged-in-user-icon">
+              <i class="material-icons">badge</i>
+            </div>
+            <div class="stat-meta">
+              <div class="stat-label">ĐANG NHẬP</div>
+              <div class="stat-value">{{ getLoggedInEmployeeIdDisplay() }}</div>
+            </div>
+          </div>
           <button
             type="button"
             class="stat-card"
@@ -320,12 +329,12 @@
                   </select>
                   </span>
               </td>
-              <td style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000;">
-                  <span
-                    class="status-time"
-                    [matTooltip]="getStatusHistoryTooltip(item)"
-                    matTooltipClass="status-history-tooltip"
-                    matTooltipPosition="above">
+              <td
+                class="status-time-cell"
+                style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000; cursor: pointer;"
+                (click)="openStatusHistoryModal(item)"
+                title="Click xem lịch sử thay đổi Tình trạng">
+                  <span class="status-time">
                       {{ item.statusUpdateTime ? (item.statusUpdateTime | date:'dd/MM/yyyy HH:mm') : '-' }}
                   </span>
               </td>
@@ -992,6 +1001,29 @@
       pointer-events: auto;
     }
 
+    .logged-in-user-card {
+      background: #ffffff;
+      border: 1px solid #fed7aa;
+      color: #111827;
+      padding: 6px 8px;
+      border-radius: 9px;
+      box-shadow: none;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 96px;
+      justify-content: flex-start;
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 12;
+      pointer-events: auto;
+    }
+
+    .logged-in-user-icon {
+      background: #ffedd5;
+      color: #c2410c;
+    }
+
     .stat-card:hover {
       background: #f9fafb;
       border-color: #d1d5db;
@@ -1207,6 +1239,52 @@
   </style>
 
   <!-- IQC Modal -->
+  <div class="modal-overlay" *ngIf="showStatusHistoryModal" (click)="closeStatusHistoryModal()">
+    <div class="modal-content status-history-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header status-history-modal-header">
+        <h3>
+          <i class="material-icons">history</i>
+          Lịch sử thay đổi Tình trạng
+        </h3>
+        <button type="button" class="close-btn" (click)="closeStatusHistoryModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+
+      <div class="modal-body" *ngIf="statusHistoryModalItem as rowItem">
+        <div class="status-history-meta">
+          <div><strong>Mã tem:</strong> {{ rowItem.maTem || '—' }}</div>
+          <div><strong>Lệnh SX:</strong> {{ rowItem.lenhSanXuat || '—' }}</div>
+          <div><strong>Tình trạng hiện tại:</strong> {{ rowItem.tinhTrang || '—' }}</div>
+        </div>
+
+        <div class="status-history-table-wrap">
+          <table class="status-history-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Tình trạng</th>
+                <th>Thời gian</th>
+                <th>Tài khoản</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of getStatusHistoryRows(rowItem); let i = index">
+                <td>{{ i + 1 }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ formatStatusHistoryDate(row.at) }}</td>
+                <td>{{ formatStatusHistoryEmployeeId(row.employeeId) }}</td>
+              </tr>
+              <tr *ngIf="getStatusHistoryRows(rowItem).length === 0">
+                <td colspan="4" class="status-history-empty">Chưa có lịch sử tình trạng</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" *ngIf="showIQCModal" (click)="closeIQCModal()">
     <div class="modal-content iqc-modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
