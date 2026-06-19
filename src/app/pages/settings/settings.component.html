@@ -31,7 +31,16 @@
         </div>
       </div>
       <div class="settings-topbar__actions">
-        <button type="button" class="btn-outline btn-settings-gear" (click)="showSettingsTools = !showSettingsTools" [class.active]="showSettingsTools" title="Công cụ nâng cao">
+        <button
+          type="button"
+          class="btn-outline btn-reload-all"
+          (click)="requestGlobalClientReload()"
+          [disabled]="isRequestingClientReload"
+          title="F5 mọi máy đang mở web">
+          <i class="material-icons">sync</i>
+          <span>{{ isRequestingClientReload ? 'Đang F5…' : 'F5 tất cả' }}</span>
+        </button>
+        <button type="button" class="btn-outline btn-settings-gear" (click)="toggleSettingsTools()" [class.active]="showSettingsTools" title="Công cụ nâng cao">
           <i class="material-icons">settings</i>
           <span>Settings</span>
         </button>
@@ -45,6 +54,88 @@
         </button>
       </div>
     </header>
+
+    <div *ngIf="showSettingsTools" id="settings-tools-panel" class="settings-tools-panel">
+      <div class="settings-tools-panel__row">
+        <button type="button" class="btn-outline btn-tool-row" (click)="refreshFirebaseUsers()">
+          <i class="material-icons">refresh</i>
+          Làm mới
+        </button>
+        <button
+          type="button"
+          class="btn-outline btn-tool-row"
+          (click)="requestGlobalClientReload()"
+          [disabled]="isRequestingClientReload"
+          title="Mọi máy đang mở web sẽ F5">
+          <i class="material-icons">sync</i>
+          {{ isRequestingClientReload ? 'Đang gửi…' : 'F5 tất cả máy đang mở web' }}
+        </button>
+        <button
+          type="button"
+          class="btn-outline-danger btn-tool-row"
+          (click)="cleanupAuthUsersNotInSettings()"
+          [disabled]="isCleaningAuthUsers">
+          {{ isCleaningAuthUsers ? 'Đang xóa…' : 'Xóa tài khoản Auth ngoài Settings' }}
+        </button>
+      </div>
+
+      <div class="cleanup-section">
+    <div class="section-header">
+      <h3>Dọn dẹp mã nhân viên</h3>
+      <div class="actions">
+        <button (click)="compareEmployees()" [disabled]="isComparingEmployees">
+          {{ isComparingEmployees ? 'Đang so sánh...' : 'So sánh' }}
+        </button>
+        <button (click)="exportComparisonReport()" [disabled]="!employeeComparisonResult">Xuất báo cáo</button>
+      </div>
+    </div>
+
+    <div *ngIf="employeeComparisonResult" class="comparison-results">
+      <div class="summary">
+        <div>Settings: {{ employeeComparisonResult.totalSettings }}</div>
+        <div>Firebase: {{ employeeComparisonResult.totalFirebase }}</div>
+        <div>Hợp lệ: {{ employeeComparisonResult.validEmployees }}</div>
+        <div>Dư thừa: {{ employeeComparisonResult.redundantEmployees.length }}</div>
+        <div>Thiếu: {{ employeeComparisonResult.missingEmployees.length }}</div>
+      </div>
+
+      <div *ngIf="employeeComparisonResult.redundantEmployees.length > 0" class="redundant-list">
+        <h4>Mã dư thừa ({{ employeeComparisonResult.redundantEmployees.length }})</h4>
+        <div class="actions">
+          <button (click)="selectAllRedundantEmployees()">Chọn tất cả</button>
+          <button (click)="deselectAllRedundantEmployees()">Bỏ chọn</button>
+          <button (click)="cleanupSelectedEmployees()"
+                    [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
+            Xóa đã chọn ({{ selectedRedundantEmployees.length }})
+          </button>
+          <button (click)="cleanupAllRedundantEmployees()" [disabled]="isCleaningUp">Xóa tất cả</button>
+        </div>
+        <table class="cleanup-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox"
+                         [checked]="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length"
+                         (change)="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length ? deselectAllRedundantEmployees() : selectAllRedundantEmployees()"></th>
+              <th>Mã nhân viên</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees; trackBy: trackByIndex">
+              <td>
+                <input type="checkbox"
+                       [checked]="isRedundantEmployeeSelected(emp.employeeId)"
+                       (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
+              </td>
+              <td><strong>{{ emp.employeeId }}</strong></td>
+              <td>Dư thừa</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+      </div>
+    </div>
 
     <div class="settings-stat-row">
       <div class="stat-card stat-card--users">
@@ -438,88 +529,6 @@
           <button class="btn-cancel" (click)="closePermissionModal()">Hủy</button>
           <button class="btn-save" (click)="saveUserPermissions()" [disabled]="isLoadingPermissionModal">Lưu</button>
         </div>
-      </div>
-    </div>
-
-    <div *ngIf="showSettingsTools" class="settings-tools-panel">
-      <div class="settings-tools-panel__row">
-        <button type="button" class="btn-outline btn-tool-row" (click)="refreshFirebaseUsers()">
-          <i class="material-icons">refresh</i>
-          Làm mới
-        </button>
-        <button
-          type="button"
-          class="btn-outline btn-tool-row"
-          (click)="requestGlobalClientReload()"
-          [disabled]="isRequestingClientReload"
-          title="Mọi máy đang mở web sẽ F5">
-          <i class="material-icons">sync</i>
-          {{ isRequestingClientReload ? 'Đang gửi…' : 'F5 tất cả máy đang mở web' }}
-        </button>
-        <button
-          type="button"
-          class="btn-outline-danger btn-tool-row"
-          (click)="cleanupAuthUsersNotInSettings()"
-          [disabled]="isCleaningAuthUsers">
-          {{ isCleaningAuthUsers ? 'Đang xóa…' : 'Xóa tài khoản Auth ngoài Settings' }}
-        </button>
-      </div>
-
-      <div class="cleanup-section">
-    <div class="section-header">
-      <h3>Dọn dẹp mã nhân viên</h3>
-      <div class="actions">
-        <button (click)="compareEmployees()" [disabled]="isComparingEmployees">
-          {{ isComparingEmployees ? 'Đang so sánh...' : 'So sánh' }}
-        </button>
-        <button (click)="exportComparisonReport()" [disabled]="!employeeComparisonResult">Xuất báo cáo</button>
-      </div>
-    </div>
-
-    <div *ngIf="employeeComparisonResult" class="comparison-results">
-      <div class="summary">
-        <div>Settings: {{ employeeComparisonResult.totalSettings }}</div>
-        <div>Firebase: {{ employeeComparisonResult.totalFirebase }}</div>
-        <div>Hợp lệ: {{ employeeComparisonResult.validEmployees }}</div>
-        <div>Dư thừa: {{ employeeComparisonResult.redundantEmployees.length }}</div>
-        <div>Thiếu: {{ employeeComparisonResult.missingEmployees.length }}</div>
-      </div>
-
-      <div *ngIf="employeeComparisonResult.redundantEmployees.length > 0" class="redundant-list">
-        <h4>Mã dư thừa ({{ employeeComparisonResult.redundantEmployees.length }})</h4>
-        <div class="actions">
-          <button (click)="selectAllRedundantEmployees()">Chọn tất cả</button>
-          <button (click)="deselectAllRedundantEmployees()">Bỏ chọn</button>
-          <button (click)="cleanupSelectedEmployees()"
-                    [disabled]="selectedRedundantEmployees.length === 0 || isCleaningUp">
-            Xóa đã chọn ({{ selectedRedundantEmployees.length }})
-          </button>
-          <button (click)="cleanupAllRedundantEmployees()" [disabled]="isCleaningUp">Xóa tất cả</button>
-        </div>
-        <table class="cleanup-table">
-          <thead>
-            <tr>
-              <th><input type="checkbox"
-                         [checked]="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length"
-                         (change)="selectedRedundantEmployees.length === employeeComparisonResult.redundantEmployees.length ? deselectAllRedundantEmployees() : selectAllRedundantEmployees()"></th>
-              <th>Mã nhân viên</th>
-              <th>Trạng thái</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let emp of employeeComparisonResult.redundantEmployees; trackBy: trackByIndex">
-              <td>
-                <input type="checkbox"
-                       [checked]="isRedundantEmployeeSelected(emp.employeeId)"
-                       (change)="toggleRedundantEmployeeSelection(emp.employeeId)">
-              </td>
-              <td><strong>{{ emp.employeeId }}</strong></td>
-              <td>Dư thừa</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
       </div>
     </div>
   </div>

@@ -188,6 +188,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.router.navigate(['/menu']);
   }
 
+  toggleSettingsTools(): void {
+    this.showSettingsTools = !this.showSettingsTools;
+    this.cdr.markForCheck();
+    if (this.showSettingsTools) {
+      setTimeout(() => {
+        document.getElementById('settings-tools-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 0);
+    }
+  }
+
   /** Gửi lệnh F5 cho mọi máy/tabs đang mở web (Firestore realtime) */
   async requestGlobalClientReload(): Promise<void> {
     if (this.isRequestingClientReload) {
