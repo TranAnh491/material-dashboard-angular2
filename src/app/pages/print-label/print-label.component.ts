@@ -68,12 +68,14 @@ export class PrintLabelComponent implements OnInit {
   isAuthenticated: boolean = false;
   currentEmployeeId: string = '';
   currentPassword: string = '';
-  loginError: string = '';
-  /** Mã ASP đăng nhập hiện tại — dùng khi ghi lịch sử đổi tình trạng */
+  /** Mã ASP nhập khi mở tab Label — mỗi lần vào trang phải nhập lại */
   loggedInEmployeeId: string = '';
+  labelSessionVerified = false;
+  showLabelEmployeeGate = true;
+  labelEmployeeInput = '';
+  labelEmployeeError = '';
 
   // Additional properties for HTML template
-  showLoginDialog: boolean = false;
   currentUserDepartment: string = '';
   currentUserId: string = '';
 
@@ -181,19 +183,48 @@ export class PrintLabelComponent implements OnInit {
 
   ngOnInit(): void {
     console.log('🚀 PrintLabelComponent initialized');
-    void this.loadLoggedInEmployeeId();
-    this.auth.authState.subscribe(() => {
-      void this.loadLoggedInEmployeeId();
-    });
-
-    // Auto-select print function
+    this.resetLabelEmployeeSession();
     this.selectedFunction = 'print';
-    
-    // Check if mobile device
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
+  }
+
+  private resetLabelEmployeeSession(): void {
+    this.labelSessionVerified = false;
+    this.showLabelEmployeeGate = true;
+    this.labelEmployeeInput = '';
+    this.labelEmployeeError = '';
+    this.loggedInEmployeeId = '';
+  }
+
+  submitLabelEmployeeGate(): void {
+    let normalizedInput = String(this.labelEmployeeInput ?? '')
+      .trim()
+      .replace(/ÁP/gi, 'ASP');
+    if (normalizedInput.length > 7) {
+      normalizedInput = normalizedInput.substring(0, 7);
+    }
+    const employeeId = this.normalizeAspEmployeeId(normalizedInput.toUpperCase());
+    if (!employeeId) {
+      this.labelEmployeeError = 'Mã nhân viên phải đúng định dạng ASP + 4 số (vd: ASP1234).';
+      return;
+    }
+
+    this.loggedInEmployeeId = employeeId;
+    this.labelEmployeeError = '';
+    this.labelSessionVerified = true;
+    this.showLabelEmployeeGate = false;
+    this.initLabelPageData();
+  }
+
+  cancelLabelEmployeeGate(): void {
+    void this.router.navigateByUrl('/menu');
+  }
+
+  private initLabelPageData(): void {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+
     if (isMobile) {
-      // Mobile loading with delay
       setTimeout(() => {
         this.loadDataFromFirebase();
         this.refreshStorageInfo();
@@ -202,7 +233,6 @@ export class PrintLabelComponent implements OnInit {
         void this.loadTinhTrangCatalog();
       }, 1000);
     } else {
-      // Desktop loading
       this.loadDataFromFirebase();
       this.refreshStorageInfo();
       this.autoHandleDocumentSizeLimit();
@@ -1893,12 +1923,12 @@ export class PrintLabelComponent implements OnInit {
     }
   }
 
-  /** Hiển thị mã ASP đăng nhập trên header */
+  /** Hiển thị mã ASP đã nhập khi mở tab Label */
   getLoggedInEmployeeIdDisplay(): string {
     return this.loggedInEmployeeId || '—';
   }
 
-  /** Mã NV ghi vào lịch sử: ưu tiên IQC scanner, sau đó phiên đăng nhập */
+  /** Mã NV ghi vào lịch sử: ưu tiên IQC scanner, sau đó mã đã nhập ở cổng Label */
   private getEmployeeIdForStatusChange(override?: string): string {
     const custom = this.normalizeAspEmployeeId(override);
     if (custom) {
@@ -2881,14 +2911,11 @@ export class PrintLabelComponent implements OnInit {
   }
 
   cancelLogin(): void {
-    console.log('Cancel login');
-    this.showLoginDialog = false;
+    this.cancelLabelEmployeeGate();
   }
 
   authenticateUser(): void {
-    console.log('Authenticate user');
-    // Authentication logic
-    this.showLoginDialog = false;
+    this.submitLabelEmployeeGate();
   }
 
 

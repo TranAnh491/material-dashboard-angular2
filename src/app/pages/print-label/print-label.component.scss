@@ -1240,3 +1240,112 @@ html .print-label-container,
   font-size: 12px;
   line-height: 1.5;
 }
+
+.label-employee-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.label-employee-gate-dialog {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #fed7aa;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.label-employee-gate-header {
+  background: #fff7ed;
+  padding: 20px 22px 14px;
+  text-align: center;
+  border-bottom: 1px solid #fed7aa;
+
+  .material-icons {
+    font-size: 36px;
+    color: #ea580c;
+    margin-bottom: 6px;
+  }
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    color: #4b5563;
+    line-height: 1.45;
+  }
+}
+
+.label-employee-gate-form {
+  padding: 18px 22px 22px;
+}
+
+.label-employee-gate-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 2px solid #111827;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+
+  &:focus {
+    border-color: #ea580c;
+    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+  }
+}
+
+.label-employee-gate-error {
+  margin-top: 10px;
+  color: #b91c1c;
+  font-size: 13px;
+  text-align: center;
+}
+
+.label-employee-gate-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.label-employee-gate-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #111827;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #f9fafb;
+  }
+
+  &--primary {
+    background: #111827;
+    color: #fff;
+
+    &:hover {
+      background: #374151;
+    }
+  }
+}

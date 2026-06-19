@@ -1,4 +1,37 @@
-<div class="main-content">
+<!-- Cổng nhập mã nhân viên — mỗi lần mở tab Label -->
+<div class="label-employee-gate-overlay" *ngIf="showLabelEmployeeGate">
+  <div class="label-employee-gate-dialog" (click)="$event.stopPropagation()">
+    <div class="label-employee-gate-header">
+      <i class="material-icons">badge</i>
+      <h3>Nhập mã nhân viên</h3>
+      <p>Quét hoặc nhập mã <strong>ASP + 4 số</strong> để sử dụng tab Label</p>
+    </div>
+
+    <div class="label-employee-gate-form">
+      <input
+        type="text"
+        class="label-employee-gate-input"
+        [(ngModel)]="labelEmployeeInput"
+        placeholder="VD: ASP1234"
+        maxlength="7"
+        autocomplete="off"
+        autofocus
+        (keyup.enter)="submitLabelEmployeeGate()"
+      />
+      <div class="label-employee-gate-error" *ngIf="labelEmployeeError">{{ labelEmployeeError }}</div>
+      <div class="label-employee-gate-actions">
+        <button type="button" class="label-employee-gate-btn label-employee-gate-btn--primary" (click)="submitLabelEmployeeGate()">
+          Xác nhận
+        </button>
+        <button type="button" class="label-employee-gate-btn" (click)="cancelLabelEmployeeGate()">
+          Về Menu
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main-content" *ngIf="labelSessionVerified">
   <!-- Excel-like Container -->
   <div class="excel-container">
     <!-- Excel-like Header: tiêu đề + box đếm cùng một hàng -->
@@ -429,53 +462,6 @@
   
   <!-- Hidden file input for import -->
   <input #fileInput type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display: none;">
-
-  <!-- Login Dialog -->
-  <div *ngIf="showLoginDialog" class="login-dialog-overlay" (click)="cancelLogin()">
-    <div class="login-dialog" (click)="$event.stopPropagation()">
-      <div class="login-header">
-        <h3>🔐 Đăng nhập</h3>
-        <p>Vui lòng đăng nhập để thực hiện hành động này</p>
-      </div>
-      
-      <div class="login-form">
-        <div class="form-group">
-          <label for="employeeId">Mã nhân viên:</label>
-          <input 
-            type="text" 
-            id="employeeId"
-            [(ngModel)]="currentEmployeeId"
-            placeholder="Nhập mã nhân viên"
-            class="form-input">
-        </div>
-        
-        <div class="form-group">
-          <label for="password">Mật khẩu:</label>
-          <input 
-            type="password" 
-            id="password"
-            [(ngModel)]="currentPassword"
-            placeholder="Nhập mật khẩu"
-            class="form-input">
-        </div>
-        
-        <div *ngIf="loginError" class="error-message">
-          {{ loginError }}
-        </div>
-        
-        <div class="login-buttons">
-          <button type="button" (click)="authenticateUser()" class="login-btn">
-            Đăng nhập
-          </button>
-          <button type="button" (click)="cancelLogin()" class="cancel-btn">
-            Hủy
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
 
   <style>
     /* Excel-like styles */
