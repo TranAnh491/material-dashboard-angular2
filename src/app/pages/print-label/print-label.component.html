@@ -186,7 +186,7 @@
               </tr>
             </thead>
             <tbody>
-              <ng-container *ngFor="let item of getPagedDisplayScheduleData(); let i = index">
+              <ng-container *ngFor="let item of displayedScheduleItems; trackBy: trackScheduleRow; let i = index">
               <tr *ngIf="!showCompletedItems"
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
@@ -240,6 +240,7 @@
                           onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='transparent'" onfocus="this.style.background='#e6f3ff'" onblur="this.style.background='transparent'">
                     <option value="">Chọn người in</option>
                     <option *ngFor="let p of printerCatalog" [value]="p">{{ p }}</option>
+                    <option *ngIf="shouldShowOrphanPrinterOption(item)" [value]="item.nguoiIn">{{ item.nguoiIn }} (hiện tại)</option>
                   </select>
                   <span *ngIf="!canEditField('nguoiIn')" style="font-size: 10px; color: #000;">{{item.nguoiIn || 'Chưa có'}}</span>
               </td>
@@ -335,7 +336,7 @@
                 (click)="openStatusHistoryModal(item)"
                 title="Click xem lịch sử thay đổi Tình trạng">
                   <span class="status-time">
-                      {{ item.statusUpdateTime ? (item.statusUpdateTime | date:'dd/MM/yyyy HH:mm') : '-' }}
+                      {{ formatStatusUpdateTimeDisplay(item) }}
                   </span>
               </td>
               <td style="border: 1px solid #000000;">

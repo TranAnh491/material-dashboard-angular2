@@ -92,6 +92,8 @@ export class PrintLabelComponent implements OnInit {
   pageIndex: number = 1; // 1-based
   pageSize: number = 10;
   readonly pageSizeOptions: number[] = [10];
+  /** Dòng đang hiển thị — cache để ngModel không bị reset mỗi lần change detection */
+  displayedScheduleItems: ScheduleItem[] = [];
   
   // Done items properties
   doneItems: ScheduleItem[] = [];
@@ -1187,12 +1189,8 @@ export class PrintLabelComponent implements OnInit {
       
       this.scheduleData = this.sortScheduleItems(allData);
       this.firebaseSaved = this.scheduleData.length > 0;
+      this.refreshDisplayedScheduleItems();
       console.log(`🔥 Loaded ${this.scheduleData.length} records from Firebase (Done items excluded)`);
-      
-      // Log status update times for debugging
-      this.scheduleData.forEach((item, index) => {
-        console.log(`Item ${index + 1} (${item.maTem}): statusUpdateTime =`, item.statusUpdateTime);
-      });
     }, error => {
       console.error('❌ Error loading from Firebase:', error);
     });
@@ -1759,7 +1757,6 @@ export class PrintLabelComponent implements OnInit {
 
   getFilteredData(): ScheduleItem[] {
     let filtered = [...this.scheduleData];
-    console.log('🔍 Initial data count:', this.scheduleData.length);
     
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase().trim();
@@ -1786,13 +1783,43 @@ export class PrintLabelComponent implements OnInit {
       filtered = filtered.filter(
         item => this.normalizeTinhTrangName(String(item.tinhTrang ?? '')) === f
       );
-      console.log('🔍 After status filter:', filtered.length);
     }
-    
-    // Note: Done items are already filtered out at Firebase level
-    // No need to filter again here
 
     return this.sortScheduleItems(filtered);
+  }
+
+  /** Cập nhật danh sách trang hiện tại (tránh gọi hàm trong *ngFor) */
+  refreshDisplayedScheduleItems(): void {
+    const all = this.getDisplayScheduleData();
+    const totalPages = Math.max(1, Math.ceil(all.length / this.pageSize));
+    if (this.pageIndex > totalPages) {
+      this.pageIndex = totalPages;
+    }
+    if (this.pageIndex < 1) {
+      this.pageIndex = 1;
+    }
+    const start = (this.pageIndex - 1) * this.pageSize;
+    this.displayedScheduleItems = all.slice(start, start + this.pageSize);
+  }
+
+  trackScheduleRow = (_index: number, item: ScheduleItem): string => {
+    return `${String(item?.maTem ?? '').trim()}|${String(item?.lenhSanXuat ?? '').trim()}`;
+  };
+
+  formatStatusUpdateTimeDisplay(item: ScheduleItem): string {
+    const d = this.parseFirestoreLikeDate(item.statusUpdateTime);
+    if (!d) {
+      return '-';
+    }
+    return this.formatStatusHistoryDate(d);
+  }
+
+  shouldShowOrphanPrinterOption(item: ScheduleItem): boolean {
+    const v = this.normalizePrinterName(String(item.nguoiIn ?? ''));
+    if (!v) {
+      return false;
+    }
+    return !this.printerCatalog.includes(v);
   }
 
   getDisplayScheduleData(): ScheduleItem[] {
@@ -1909,17 +1936,13 @@ export class PrintLabelComponent implements OnInit {
   }
 
   getPagedDisplayScheduleData(): ScheduleItem[] {
-    const all = this.getDisplayScheduleData();
-    const totalPages = Math.max(1, Math.ceil(all.length / this.pageSize));
-    if (this.pageIndex > totalPages) this.pageIndex = totalPages;
-    if (this.pageIndex < 1) this.pageIndex = 1;
-    const start = (this.pageIndex - 1) * this.pageSize;
-    return all.slice(start, start + this.pageSize);
+    return this.displayedScheduleItems;
   }
 
   goToPage(page: number): void {
     const total = this.getTotalPages();
     this.pageIndex = Math.min(Math.max(1, page), total);
+    this.refreshDisplayedScheduleItems();
   }
 
   prevPage(): void {
@@ -1935,6 +1958,7 @@ export class PrintLabelComponent implements OnInit {
     if (!Number.isFinite(v) || v <= 0) return;
     this.pageSize = Math.min(10, v);
     this.pageIndex = 1;
+    this.refreshDisplayedScheduleItems();
   }
 
   formatNumberForDisplay(value: any): string {
@@ -1983,16 +2007,19 @@ export class PrintLabelComponent implements OnInit {
   filterByStatus(status: string): void {
     this.currentStatusFilter = this.currentStatusFilter === status ? '' : status;
     this.pageIndex = 1;
+    this.refreshDisplayedScheduleItems();
   }
 
   clearStatusFilter(): void {
     this.currentStatusFilter = '';
     this.pageIndex = 1;
+    this.refreshDisplayedScheduleItems();
   }
 
   onSearchChange(event: any): void {
     this.searchTerm = event.target.value;
     this.pageIndex = 1;
+    this.refreshDisplayedScheduleItems();
   }
 
   async toggleShowCompletedItems(): Promise<void> {
@@ -2159,6 +2186,7 @@ export class PrintLabelComponent implements OnInit {
   }
 
   private normalizeItemStatusFields(item: ScheduleItem): ScheduleItem {
+    item.nguoiIn = this.normalizePrinterName(String(item.nguoiIn ?? ''));
     item.statusUpdateTime =
       this.parseFirestoreLikeDate(item.statusUpdateTime) || item.statusUpdateTime || undefined;
 
@@ -2350,35 +2378,44 @@ export class PrintLabelComponent implements OnInit {
 
     const localIndex = this.findScheduleItemIndex(this.scheduleData, item);
     const remoteItem = dataArray[remoteIndex];
-    const mergedItem: ScheduleItem = {
+    const mergedItem = this.normalizeItemStatusFields({
       ...remoteItem,
       nguoiIn: this.normalizePrinterName(String(item.nguoiIn ?? remoteItem.nguoiIn ?? '')),
       tinhTrang: item.tinhTrang ?? remoteItem.tinhTrang,
       ghiChu: item.ghiChu ?? remoteItem.ghiChu ?? '',
       statusUpdateTime: item.statusUpdateTime ?? remoteItem.statusUpdateTime,
       statusHistory: item.statusHistory ?? remoteItem.statusHistory
-    };
+    } as ScheduleItem);
 
     dataArray[remoteIndex] = mergedItem;
-    const sanitizedArray = dataArray.map((row) => this.sanitizeForFirestore(row) as ScheduleItem);
+    const sanitizedArray = dataArray.map((row) =>
+      this.normalizeItemStatusFields(this.sanitizeForFirestore(row) as ScheduleItem)
+    );
 
     await docRef.update({
       data: sanitizedArray,
       lastUpdated: new Date()
     });
 
-    const cleanMergedItem = this.sanitizeForFirestore(mergedItem) as ScheduleItem;
-
-    if (localIndex !== -1) {
-      this.scheduleData[localIndex] = { ...cleanMergedItem };
-    } else {
-      const fallbackIndex = this.scheduleData.indexOf(item);
-      if (fallbackIndex !== -1) {
-        this.scheduleData[fallbackIndex] = { ...cleanMergedItem };
+    const applyTo = (target: ScheduleItem | undefined): void => {
+      if (!target) {
+        return;
       }
+      target.nguoiIn = mergedItem.nguoiIn;
+      target.tinhTrang = mergedItem.tinhTrang;
+      target.ghiChu = mergedItem.ghiChu;
+      target.statusUpdateTime = mergedItem.statusUpdateTime;
+      target.statusHistory = mergedItem.statusHistory
+        ? mergedItem.statusHistory.map((h) => ({ ...h }))
+        : mergedItem.statusHistory;
+    };
+
+    applyTo(this.scheduleData[localIndex]);
+    applyTo(item);
+    if (localIndex === -1) {
+      applyTo(this.scheduleData[this.scheduleData.indexOf(item)]);
     }
 
-    this.scheduleData = [...this.scheduleData];
     this.firebaseSaved = true;
   }
 
@@ -2391,7 +2428,6 @@ export class PrintLabelComponent implements OnInit {
         ? item.statusHistory[item.statusHistory.length - 1].status
         : 'Chờ in';
       item.tinhTrang = prev;
-      this.scheduleData = [...this.scheduleData];
       return;
     }
     
@@ -2404,8 +2440,6 @@ export class PrintLabelComponent implements OnInit {
     if (fieldName === 'nguoiIn') {
       item.nguoiIn = this.normalizePrinterName(String(item.nguoiIn ?? ''));
     }
-
-    this.scheduleData = [...this.scheduleData];
 
     this.enqueueFieldSave(async () => {
       try {
@@ -2434,7 +2468,6 @@ export class PrintLabelComponent implements OnInit {
   onNoteBlur(item: ScheduleItem, event: any): void {
     console.log('Note blur for item:', item.maTem);
     item.statusUpdateTime = new Date();
-    this.scheduleData = [...this.scheduleData];
     this.enqueueFieldSave(async () => {
       try {
         await this.persistScheduleItemUpdate(item);
@@ -2449,7 +2482,6 @@ export class PrintLabelComponent implements OnInit {
     if (event.key === 'Enter') {
       console.log('Note saved on Enter for item:', item.maTem);
       item.statusUpdateTime = new Date();
-      this.scheduleData = [...this.scheduleData];
       this.enqueueFieldSave(async () => {
         try {
           await this.persistScheduleItemUpdate(item);
