@@ -449,6 +449,15 @@
         </button>
         <button
           type="button"
+          class="btn-outline btn-tool-row"
+          (click)="requestGlobalClientReload()"
+          [disabled]="isRequestingClientReload"
+          title="Mọi máy đang mở web sẽ F5">
+          <i class="material-icons">sync</i>
+          {{ isRequestingClientReload ? 'Đang gửi…' : 'F5 tất cả máy đang mở web' }}
+        </button>
+        <button
+          type="button"
           class="btn-outline-danger btn-tool-row"
           (click)="cleanupAuthUsersNotInSettings()"
           [disabled]="isCleaningAuthUsers">

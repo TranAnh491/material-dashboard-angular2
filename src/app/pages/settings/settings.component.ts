@@ -9,6 +9,7 @@ import 'firebase/compat/auth';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { NotificationService } from '../../services/notification.service';
 import { EmployeeCleanupService, CleanupResult, EmployeeComparison } from '../../services/employee-cleanup.service';
+import { ClientReloadService } from '../../services/client-reload.service';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { Subscription, firstValueFrom } from 'rxjs';
 
@@ -151,6 +152,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   /** Panel công cụ (Làm mới, xóa Auth ngoài Settings, dọn dẹp mã NV) — nút Settings trên header */
   showSettingsTools = false;
+  isRequestingClientReload = false;
 
   /** Danh sách người dùng — toolbar / bảng / phân trang */
   userListSearchQuery = '';
@@ -176,6 +178,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private userPermissionService: UserPermissionService,
     private notificationService: NotificationService,
     private employeeCleanupService: EmployeeCleanupService,
+    private clientReloadService: ClientReloadService,
     private fns: AngularFireFunctions,
     private router: Router,
     private cdr: ChangeDetectorRef
@@ -183,6 +186,29 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  /** Gửi lệnh F5 cho mọi máy/tabs đang mở web (Firestore realtime) */
+  async requestGlobalClientReload(): Promise<void> {
+    if (this.isRequestingClientReload) {
+      return;
+    }
+    if (!confirm('F5 toàn bộ trình duyệt đang mở web?\n\nMọi người đang dùng app sẽ được tải lại trang.')) {
+      return;
+    }
+
+    this.isRequestingClientReload = true;
+    this.cdr.markForCheck();
+    try {
+      const token = await this.clientReloadService.requestReloadAll('SETTINGS_ADMIN');
+      alert(`Đã gửi lệnh làm mới (token #${token}).\nCác tab đang mở sẽ F5 trong vài giây.`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      alert(`Không gửi được lệnh F5: ${msg}`);
+    } finally {
+      this.isRequestingClientReload = false;
+      this.cdr.markForCheck();
+    }
   }
 
   onResetAccountInput(event: Event): void {
