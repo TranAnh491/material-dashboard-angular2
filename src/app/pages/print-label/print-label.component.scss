@@ -1014,7 +1014,7 @@ html .print-label-container,
 }
 
 .status-history-modal {
-  max-width: 640px;
+  max-width: 560px;
   width: 92%;
 }
 
@@ -1103,6 +1103,70 @@ html .print-label-container,
   text-align: center;
   color: #6b7280;
   font-style: italic;
+  padding: 16px;
+}
+
+.status-history-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.status-history-group {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.status-history-group-title {
+  background: #fff7ed;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  border-bottom: 1px solid #fed7aa;
+}
+
+.status-history-group-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-history-group-row {
+  display: grid;
+  grid-template-columns: 88px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #f3f4f6;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.status-history-asp {
+  font-weight: 700;
+  color: #1565c0;
+  letter-spacing: 0.3px;
+}
+
+.status-history-source {
+  color: #374151;
+
+  &.is-iqc {
+    color: #2e7d32;
+    font-weight: 600;
+  }
+}
+
+.status-history-time {
+  color: #6b7280;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .tinh-trang-cell {

@@ -13,6 +13,13 @@ interface StatusHistoryEntry {
   at: Date;
   /** Mã nhân viên thực hiện đổi tình trạng (ASP + 4 số) */
   employeeId?: string;
+  /** iqC = IQC Scanner (Pass/NG); label = đổi qua cột Tình trạng */
+  source?: 'iqc' | 'label';
+}
+
+interface StatusHistoryGroup {
+  status: string;
+  entries: StatusHistoryEntry[];
 }
 
 interface ScheduleItem {
@@ -770,7 +777,7 @@ export class PrintLabelComponent implements OnInit {
       });
       
       item.statusUpdateTime = new Date();
-      this.recordStatusChange(item, item.tinhTrang || 'Chờ in');
+      this.recordStatusChange(item, item.tinhTrang || 'Chờ in', undefined, 'label');
       return item;
     }).filter(item => item.maTem && item.maTem.trim() !== '');
   }
@@ -1855,8 +1862,8 @@ export class PrintLabelComponent implements OnInit {
     this.displayedScheduleItems = all.slice(start, start + this.pageSize);
   }
 
-  trackScheduleRow = (_index: number, item: ScheduleItem): string => {
-    return `${String(item?.maTem ?? '').trim()}|${String(item?.lenhSanXuat ?? '').trim()}`;
+  trackScheduleRow = (index: number, item: ScheduleItem): string => {
+    return `${this.getScheduleItemRichKey(item)}#${index}`;
   };
 
   formatStatusUpdateTimeDisplay(item: ScheduleItem): string {
@@ -2257,6 +2264,11 @@ export class PrintLabelComponent implements OnInit {
           if (emp) {
             entry.employeeId = emp;
           }
+          if (h?.source === 'iqc' || h?.source === 'label') {
+            entry.source = h.source;
+          } else {
+            entry.source = this.inferStatusHistorySource(entry.status);
+          }
           return entry;
         })
         .filter(h => h.status && h.at.getTime() > 0);
@@ -2280,12 +2292,23 @@ export class PrintLabelComponent implements OnInit {
     return item;
   }
 
-  private recordStatusChange(item: ScheduleItem, status: string, employeeIdOverride?: string): void {
+  private inferStatusHistorySource(status: string): 'iqc' | 'label' {
+    const s = this.normalizeTinhTrangName(status);
+    return s === 'Pass' || s === 'NG' ? 'iqc' : 'label';
+  }
+
+  private recordStatusChange(
+    item: ScheduleItem,
+    status: string,
+    employeeIdOverride?: string,
+    source?: 'iqc' | 'label'
+  ): void {
     const s = String(status || '').trim();
     if (!s) return;
 
     const now = new Date();
     const employeeId = this.getEmployeeIdForStatusChange(employeeIdOverride);
+    const entrySource = source ?? this.inferStatusHistorySource(s);
     item.statusUpdateTime = now;
     if (!item.statusHistory) {
       item.statusHistory = [];
@@ -2296,16 +2319,19 @@ export class PrintLabelComponent implements OnInit {
       return;
     }
 
-    const entry: StatusHistoryEntry = { status: s, at: now };
+    const entry: StatusHistoryEntry = { status: s, at: now, source: entrySource };
     if (employeeId && employeeId !== '—') {
       entry.employeeId = employeeId;
     }
     item.statusHistory.push(entry);
   }
 
-  formatStatusHistoryDate(d: Date | null | undefined): string {
-    if (!d || Number.isNaN(d.getTime())) return '—';
-    return d.toLocaleString('vi-VN', {
+  formatStatusHistoryDate(d: unknown): string {
+    const parsed = this.parseFirestoreLikeDate(d);
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return '—';
+    }
+    return parsed.toLocaleString('vi-VN', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -2314,25 +2340,49 @@ export class PrintLabelComponent implements OnInit {
     });
   }
 
+  private normalizeStatusHistoryEntry(entry: StatusHistoryEntry): StatusHistoryEntry {
+    const status = this.resolveTinhTrangName(String(entry?.status ?? ''));
+    const at = this.parseFirestoreLikeDate(entry?.at) || new Date(0);
+    const normalized: StatusHistoryEntry = { status, at };
+    const emp = this.normalizeAspEmployeeId(entry?.employeeId) || String(entry?.employeeId ?? '').trim();
+    if (emp) {
+      normalized.employeeId = emp;
+    }
+    if (entry?.source === 'iqc' || entry?.source === 'label') {
+      normalized.source = entry.source;
+    } else {
+      normalized.source = this.inferStatusHistorySource(status);
+    }
+    return normalized;
+  }
+
+  private getStatusHistoryEntryTime(entry: StatusHistoryEntry): number {
+    const at = this.parseFirestoreLikeDate(entry.at);
+    return at && !Number.isNaN(at.getTime()) ? at.getTime() : 0;
+  }
+
   private formatStatusHistoryLine(entry: StatusHistoryEntry): string {
     const emp = entry.employeeId
       ? (this.normalizeAspEmployeeId(entry.employeeId) || entry.employeeId)
       : '—';
-    return `${entry.status} — ${this.formatStatusHistoryDate(entry.at)} — ${emp}`;
+    return `${entry.status} → ${emp} (${this.getStatusHistorySourceLabel(entry)}) — ${this.formatStatusHistoryDate(entry.at)}`;
   }
 
   getStatusHistoryTooltip(item: ScheduleItem): string {
-    const history = item.statusHistory || [];
-    if (!history.length) {
-      if (item.tinhTrang) {
-        return this.formatStatusHistoryLine({
-          status: item.tinhTrang,
-          at: item.statusUpdateTime || new Date()
-        });
+    try {
+      const groups = this.getStatusHistoryGroups(item);
+      if (!groups.length) {
+        return 'Chưa có lịch sử tình trạng';
       }
+      return groups
+        .map((group) => {
+          const lines = group.entries.map((e) => this.formatStatusHistoryLine(e));
+          return `${group.status}:\n${lines.map((l) => `  ${l}`).join('\n')}`;
+        })
+        .join('\n');
+    } catch {
       return 'Chưa có lịch sử tình trạng';
     }
-    return history.map(h => this.formatStatusHistoryLine(h)).join('\n');
   }
 
   openTinhTrangPickerModal(item: ScheduleItem): void {
@@ -2481,7 +2531,7 @@ export class PrintLabelComponent implements OnInit {
     }
 
     item.tinhTrang = newStatus;
-    this.recordStatusChange(item, newStatus);
+    this.recordStatusChange(item, newStatus, undefined, 'label');
     this.maybeAutoSetNguoiInOnDaIn(item, prevStatus, newStatus);
     this.closeTinhTrangPickerModal();
 
@@ -2507,21 +2557,73 @@ export class PrintLabelComponent implements OnInit {
     this.statusHistoryModalItem = null;
   }
 
+  getStatusHistorySourceLabel(entry: StatusHistoryEntry): string {
+    const src = entry.source ?? this.inferStatusHistorySource(entry.status);
+    if (src === 'iqc') {
+      const s = this.normalizeTinhTrangName(entry.status);
+      if (s === 'Pass') {
+        return 'IQC Pass';
+      }
+      if (s === 'NG') {
+        return 'IQC NG';
+      }
+      return 'IQC Scan';
+    }
+    return 'Cột Tình trạng';
+  }
+
+  private getStatusSortOrder(status: string, item: ScheduleItem | null): number {
+    const normalized = this.normalizeTinhTrangName(status);
+    const catalog = this.getTinhTrangPickerOptions(item);
+    const orderList = [...catalog, 'Pass', 'NG', 'Done'];
+    const index = orderList.findIndex((s) => this.normalizeTinhTrangName(s) === normalized);
+    return index >= 0 ? index : 999;
+  }
+
+  /** Nhóm lịch sử theo tình trạng — mỗi tình trạng kèm ASP tương ứng */
+  getStatusHistoryGroups(item: ScheduleItem | null): StatusHistoryGroup[] {
+    if (!item) {
+      return [];
+    }
+    const rows = this.getStatusHistoryRows(item);
+    const groupMap = new Map<string, StatusHistoryGroup>();
+
+    rows.forEach((entry) => {
+      const key = this.normalizeTinhTrangName(entry.status);
+      if (!groupMap.has(key)) {
+        groupMap.set(key, { status: entry.status, entries: [] });
+      }
+      groupMap.get(key)!.entries.push(entry);
+    });
+
+    return Array.from(groupMap.values())
+      .map((group) => ({
+        ...group,
+        entries: [...group.entries].sort(
+          (a, b) => this.getStatusHistoryEntryTime(a) - this.getStatusHistoryEntryTime(b)
+        )
+      }))
+      .sort((a, b) => this.getStatusSortOrder(a.status, item) - this.getStatusSortOrder(b.status, item));
+  }
+
   getStatusHistoryRows(item: ScheduleItem | null): StatusHistoryEntry[] {
     if (!item) {
       return [];
     }
     const history = item.statusHistory || [];
     if (history.length) {
-      return [...history];
+      return history
+        .map((h) => this.normalizeStatusHistoryEntry(h))
+        .filter((h) => h.status && this.getStatusHistoryEntryTime(h) > 0);
     }
     if (item.tinhTrang) {
       return [
-        {
+        this.normalizeStatusHistoryEntry({
           status: item.tinhTrang,
           at: item.statusUpdateTime || new Date(),
-          employeeId: undefined
-        }
+          employeeId: undefined,
+          source: this.inferStatusHistorySource(item.tinhTrang)
+        })
       ];
     }
     return [];
@@ -2867,7 +2969,7 @@ export class PrintLabelComponent implements OnInit {
         ? item.statusHistory[item.statusHistory.length - 1].status
         : '';
       const newStatus = String(item.tinhTrang ?? '');
-      this.recordStatusChange(item, newStatus);
+      this.recordStatusChange(item, newStatus, undefined, 'label');
       this.maybeAutoSetNguoiInOnDaIn(item, prevStatus, newStatus);
       console.log('Status update time set to:', item.statusUpdateTime);
     }
@@ -3778,7 +3880,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
 
       if (labelIndex !== -1) {
         this.scheduleData[labelIndex].tinhTrang = status;
-        this.recordStatusChange(this.scheduleData[labelIndex], status, this.iqcEmployeeId);
+        this.recordStatusChange(this.scheduleData[labelIndex], status, this.iqcEmployeeId, 'iqc');
 
         // 🔧 FIX: Update in Firebase collection 'print-schedules' (not 'schedule')
         const snapshot = await this.firestore.collection('print-schedules', ref => 
@@ -3956,7 +4058,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     try {
       // Update local data
       item.tinhTrang = 'Done';
-      this.recordStatusChange(item, 'Done');
+      this.recordStatusChange(item, 'Done', undefined, 'label');
 
       // Update in Firebase
       const querySnapshot = await this.firestore.collection('schedule')

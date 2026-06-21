@@ -313,7 +313,7 @@
                 class="status-time-cell"
                 style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000; cursor: pointer;"
                 (click)="openStatusHistoryModal(item)"
-                title="Click xem lịch sử thay đổi Tình trạng">
+                title="Click xem lịch sử ASP theo từng Tình trạng">
                   <span class="status-time">
                       {{ formatStatusUpdateTimeDisplay(item) }}
                   </span>
@@ -805,21 +805,21 @@
     .excel-body {
       padding: 16px;
       text-align: center;
-      /* Chừa khoảng trống để pagination fixed không che nội dung */
-      padding-bottom: 58px;
+      padding-bottom: 16px;
       flex: 1 1 auto;
       min-height: 0;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow: auto;
     }
 
     .print-label-data-pane {
-      flex: 1 1 auto;
+      flex: 0 0 auto;
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: visible;
+      align-items: stretch;
     }
     
     .table-container {
@@ -1185,7 +1185,7 @@
       <div class="modal-header status-history-modal-header">
         <h3>
           <i class="material-icons">history</i>
-          Lịch sử thay đổi Tình trạng
+          Lịch sử ASP theo Tình trạng
         </h3>
         <button type="button" class="close-btn" (click)="closeStatusHistoryModal()">
           <i class="material-icons">close</i>
@@ -1199,28 +1199,24 @@
           <div><strong>Tình trạng hiện tại:</strong> {{ rowItem.tinhTrang || '—' }}</div>
         </div>
 
-        <div class="status-history-table-wrap">
-          <table class="status-history-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Tình trạng</th>
-                <th>Thời gian</th>
-                <th>Tài khoản</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of getStatusHistoryRows(rowItem); let i = index">
-                <td>{{ i + 1 }}</td>
-                <td>{{ row.status }}</td>
-                <td>{{ formatStatusHistoryDate(row.at) }}</td>
-                <td>{{ formatStatusHistoryEmployeeId(row.employeeId) }}</td>
-              </tr>
-              <tr *ngIf="getStatusHistoryRows(rowItem).length === 0">
-                <td colspan="4" class="status-history-empty">Chưa có lịch sử tình trạng</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="status-history-groups" *ngIf="getStatusHistoryGroups(rowItem).length > 0">
+          <div class="status-history-group" *ngFor="let group of getStatusHistoryGroups(rowItem)">
+            <div class="status-history-group-title">{{ group.status }}</div>
+            <div class="status-history-group-rows">
+              <div class="status-history-group-row" *ngFor="let entry of group.entries">
+                <span class="status-history-asp">{{ formatStatusHistoryEmployeeId(entry.employeeId) }}</span>
+                <span
+                  class="status-history-source"
+                  [class.is-iqc]="getStatusHistorySourceLabel(entry).startsWith('IQC')">
+                  {{ getStatusHistorySourceLabel(entry) }}
+                </span>
+                <span class="status-history-time">{{ formatStatusHistoryDate(entry.at) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="status-history-empty" *ngIf="getStatusHistoryGroups(rowItem).length === 0">
+          Chưa có lịch sử tình trạng
         </div>
       </div>
     </div>
