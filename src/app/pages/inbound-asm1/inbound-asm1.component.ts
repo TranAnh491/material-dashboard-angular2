@@ -8,7 +8,7 @@ import 'firebase/compat/firestore';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
-import { RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { RmBagHistoryService, InboundBagScanSummary } from '../../services/rm-bag-history.service';
 
 
 export interface InboundMaterial {
@@ -274,6 +274,22 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   trackByIndex(index: number, _: any): number { return index; }
   trackByBatchNumber(index: number, item: any): string { return item?.batchNumber || String(index); }
   trackByMaterialCode(index: number, item: any): string { return item?.materialCode || String(index); }
+
+  getInboundBagScanSummary(material: InboundMaterial): InboundBagScanSummary {
+    return this.rmBagHistory.getInboundBagScanSummary(material);
+  }
+
+  getInboundBagScanTooltip(material: InboundMaterial): string {
+    return this.rmBagHistory.getInboundBagScanPendingTooltip(this.getInboundBagScanSummary(material));
+  }
+
+  private formatInboundBagScanMessageSuffix(material: InboundMaterial): string {
+    const bag = this.getInboundBagScanSummary(material);
+    if (!bag.hasBagTracking) {
+      return '';
+    }
+    return ` · Bịch ${bag.scannedBags}/${bag.totalBags}`;
+  }
   trackByNoteId(index: number, item: any): string { return item?.id || item?.materialCode || String(index); }
 
   /** Tải DMVT từ Firestore (subcollection dmvt/ASM1/items). */
@@ -5505,7 +5521,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             // 🚀 OPTIMIZE: Update UI ngay
             this.inspectionScanResult = {
               success: true,
-              message: `✅ Đã nhận hàng thành công (${newScannedQty}/${totalQuantity})!`,
+              message: `✅ Đã nhận hàng thành công (${newScannedQty}/${totalQuantity})!${this.formatInboundBagScanMessageSuffix(foundMaterial)}`,
               material: foundMaterial
             };
             
@@ -5552,7 +5568,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
             // Chưa đủ - chỉ cập nhật số lượng đã scan
             this.inspectionScanResult = {
               success: true,
-              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(2)}`,
+              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(2)}${this.formatInboundBagScanMessageSuffix(foundMaterial)}`,
               material: foundMaterial
             };
             

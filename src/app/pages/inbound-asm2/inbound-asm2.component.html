@@ -1130,18 +1130,28 @@
                 <span>Đã duyệt</span>
               </div>
             </div>
-            <div class="material-quantity-info">
-              <div class="quantity-row">
-                <span class="label">Số lượng nhập:</span>
-                <span class="value">{{ item.totalQuantity | number:'1.0-4' }}</span>
+            <div
+              class="material-quantity-info"
+              [matTooltip]="getInboundBagScanTooltip(item.material)"
+              matTooltipClass="inbound-bag-pending-tooltip"
+              matTooltipPosition="above">
+              <div class="scan-progress-box">
+                <div class="scan-progress-line">
+                  <span class="label">Lượng đã scan:</span>
+                  <span class="value scanned">
+                    {{ item.scannedQuantity | number:'1.0-4' }} / {{ item.totalQuantity | number:'1.0-4' }}
+                  </span>
+                </div>
+                <div class="scan-progress-line" *ngIf="getInboundBagScanSummary(item.material).hasBagTracking">
+                  <span class="label">Bịch đã scan:</span>
+                  <span class="value bag">
+                    {{ getInboundBagScanSummary(item.material).scannedBags }} / {{ getInboundBagScanSummary(item.material).totalBags }}
+                  </span>
+                </div>
               </div>
-              <div class="quantity-row">
-                <span class="label">Đã scan:</span>
-                <span class="value scanned">{{ item.scannedQuantity | number:'1.0-4' }}</span>
-              </div>
-              <div class="quantity-row">
+              <div class="quantity-row" *ngIf="item.remainingQuantity > 0">
                 <span class="label">Còn lại:</span>
-                <span class="value remaining" [ngClass]="{ 'zero': item.remainingQuantity === 0 }">
+                <span class="value remaining">
                   {{ item.remainingQuantity | number:'1.0-4' }}
                 </span>
               </div>

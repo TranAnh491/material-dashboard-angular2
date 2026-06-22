@@ -55,6 +55,14 @@ export interface SnapshotTonOptions {
   onProgress?: (writtenSoFar: number, totalToWrite: number) => void;
 }
 
+/** Tiến độ quét bịch khi nhập kho (inbound scan) */
+export interface InboundBagScanSummary {
+  totalBags: number;
+  scannedBags: number;
+  pendingBagNumbers: number[];
+  hasBagTracking: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RmBagHistoryService {
   private readonly collectionName = 'rm-bag-history';
@@ -127,6 +135,62 @@ export class RmBagHistoryService {
    */
   extractBagLabelFromQrPart4(part4: string | null | undefined): string {
     return this.parseQrPart4(part4).bagFractionLabel;
+  }
+
+  /** Lấy số thứ tự bịch (i) từ khóa đã quét: `docId::DDMMYYYY-i/tổng` */
+  parseBagIndexFromInboundScannedKey(bagKey: string | null | undefined): number | null {
+    const raw = String(bagKey ?? '').trim();
+    if (!raw) {
+      return null;
+    }
+    const sep = raw.indexOf('::');
+    const part4 = sep >= 0 ? raw.slice(sep + 2) : raw;
+    const label = this.parseQrPart4(part4).bagFractionLabel;
+    const m = /^(\d+)\/\d+$/.exec(label);
+    if (!m) {
+      return null;
+    }
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  }
+
+  /** Tiến độ quét bịch inbound — từ gwLdv (tổng) và scannedBagKeys */
+  getInboundBagScanSummary(material: {
+    gwLdv?: number;
+    scannedBagKeys?: string[];
+  }): InboundBagScanSummary {
+    const totalBags = Math.max(0, Math.floor(Number(material?.gwLdv ?? 0)));
+    const scannedIndices = new Set<number>();
+    for (const key of material?.scannedBagKeys || []) {
+      const idx = this.parseBagIndexFromInboundScannedKey(key);
+      if (idx != null) {
+        scannedIndices.add(idx);
+      }
+    }
+    const pendingBagNumbers: number[] = [];
+    if (totalBags > 0) {
+      for (let i = 1; i <= totalBags; i++) {
+        if (!scannedIndices.has(i)) {
+          pendingBagNumbers.push(i);
+        }
+      }
+    }
+    return {
+      totalBags,
+      scannedBags: scannedIndices.size,
+      pendingBagNumbers,
+      hasBagTracking: totalBags > 0
+    };
+  }
+
+  getInboundBagScanPendingTooltip(summary: InboundBagScanSummary): string {
+    if (!summary.hasBagTracking) {
+      return 'Chưa có tổng số bịch trên dòng nhập';
+    }
+    if (summary.pendingBagNumbers.length === 0) {
+      return 'Đã quét đủ tất cả bịch';
+    }
+    return `Bịch chưa quét: ${summary.pendingBagNumbers.join(', ')}`;
   }
 
   /** Ngoặc fullwidth → ASCII — tránh mất nhánh `(T…)` khi đọc tem. */

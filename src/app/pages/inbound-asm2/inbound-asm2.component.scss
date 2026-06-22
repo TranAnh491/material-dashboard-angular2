@@ -3903,6 +3903,45 @@ iframe {
           display: flex;
           flex-direction: column;
           gap: 6px;
+          cursor: help;
+
+          .scan-progress-box {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 6px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          }
+
+          .scan-progress-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            gap: 8px;
+
+            .label {
+              color: #666;
+              font-weight: 500;
+              white-space: nowrap;
+            }
+
+            .value {
+              font-weight: 700;
+              color: #000;
+              text-align: right;
+
+              &.scanned {
+                color: #e65100;
+              }
+
+              &.bag {
+                color: #1565c0;
+              }
+            }
+          }
           
           .quantity-row {
             display: flex;
@@ -4637,3 +4676,10 @@ iframe {
 // FLAT BUTTON OVERRIDE – chữ đen, nền trắng, viền đen
 // ============================================================
 // (disabled) Legacy override removed by premium redesign.
+
+:host ::ng-deep .inbound-bag-pending-tooltip {
+  white-space: pre-line;
+  max-width: 300px;
+  font-size: 12px;
+  line-height: 1.45;
+}
