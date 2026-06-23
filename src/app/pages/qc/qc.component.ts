@@ -1667,6 +1667,14 @@ export class QCComponent implements OnInit, OnDestroy {
         employeeIdToSave
       );
 
+      this.createQcNgStorageReminderIfNeeded(
+        materialToUpdate,
+        oldIqcStatus,
+        statusToUpdate,
+        employeeIdToSave,
+        (this.ngErrorText || '').trim()
+      );
+
       // Refresh counts và recent materials sau khi update thành công (chạy background)
       setTimeout(() => {
         this.loadPendingQCCount();
@@ -1760,6 +1768,42 @@ export class QCComponent implements OnInit, OnDestroy {
     firstValueFrom(callable(payload))
       .then(() => console.log('💬 QC ưu tiên: đã gửi thông báo Zalo'))
       .catch((e) => console.warn('💬 QC ưu tiên: gửi Zalo thất bại', e));
+  }
+
+  /** Ghi nhắc cất NG → Zalo bot gửi nhóm kho (ASP0119) — không chặn UI. */
+  private createQcNgStorageReminderIfNeeded(
+    material: InventoryMaterial,
+    oldStatus: string,
+    newStatus: string,
+    checkedBy: string,
+    ngError: string
+  ): void {
+    if (newStatus !== 'NG' || oldStatus === 'NG') {
+      return;
+    }
+    const materialId = String(material.id || '').trim();
+    if (!materialId) {
+      return;
+    }
+    this.firestore
+      .collection('qc-ng-storage-reminders')
+      .add({
+        materialId,
+        factory: String(material.factory || this.selectedFactory).trim().toUpperCase(),
+        materialCode: String(material.materialCode || '').trim(),
+        poNumber: String(material.poNumber || '').trim(),
+        batchNumber: String(material.batchNumber || '').trim(),
+        imd: String(this.getDisplayIMD(material) || '').trim(),
+        location: String(material.location || '').trim(),
+        iqcNgError: String(ngError || '').trim(),
+        qcCheckedBy: String(checkedBy || '').trim(),
+        assigneeId: 'ASP0119',
+        detectedAt: new Date(),
+        lastNotifiedAt: null,
+        resolved: false
+      })
+      .then(() => console.log('📦 QC NG: đã tạo nhắc cất kho'))
+      .catch((e) => console.warn('📦 QC NG: tạo nhắc cất kho thất bại', e));
   }
 
   // Update local counts immediately (optimistic update)

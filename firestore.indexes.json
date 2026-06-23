@@ -48,6 +48,14 @@
         { "fieldPath": "factory",       "order": "ASCENDING" },
         { "fieldPath": "materialCode",  "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "qc-ng-storage-reminders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "resolved",     "order": "ASCENDING" },
+        { "fieldPath": "detectedAt",   "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
