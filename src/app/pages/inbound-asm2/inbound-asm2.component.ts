@@ -8,6 +8,15 @@ import 'firebase/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService, InboundBagScanSummary } from '../../services/rm-bag-history.service';
+import { InboundTbhdCheckService, INBOUND_TBHD_CHECK_FROM_DATE } from '../../services/inbound-tbhd-check.service';
+
+type TbhdCheckBatchRow = {
+  batchNumber: string;
+  count: number;
+  receivedCount: number;
+  importDate: Date;
+  supplier: string;
+};
 import { Chart, registerables, ChartConfiguration } from 'chart.js';
 
 
@@ -283,6 +292,11 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   selectedBatchView: string | null = null;
   batchMaterialCodeSearch = '';
 
+  showTbhdCheckModal = false;
+  tbhdCheckLoading = false;
+  tbhdAcknowledgedBatches = new Set<string>();
+  readonly tbhdCheckFromDateLabel = '15/06/2026';
+
   // Chart state
   chartMaterialHistory: Chart | null = null;
   chartAlertMessage: string = '';
@@ -293,6 +307,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
     private factoryAccessService: FactoryAccessService,
     private ngZone: NgZone,
     private rmBagHistory: RmBagHistoryService,
+    private inboundTbhdCheck: InboundTbhdCheckService,
     private router: Router
   ) {}
 
@@ -508,6 +523,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       })
       .finally(() => {
         this.isLoading = false;
+        void this.refreshTbhdAcknowledgedBatches();
       });
   }
   
@@ -1577,6 +1593,77 @@ export class InboundASM2Component implements OnInit, OnDestroy {
       alert(`❌ Lỗi nhập chưa scan: ${e?.message || e}`);
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  get tbhdCheckBatchRows(): TbhdCheckBatchRow[] {
+    const fromMs = INBOUND_TBHD_CHECK_FROM_DATE.getTime();
+    const preScanKeys = this.getPreScanBatchKeys();
+    const map = new Map<string, TbhdCheckBatchRow>();
+
+    for (const m of this.materials) {
+      if (m.factory !== this.selectedFactory) continue;
+      const batchNumber = (m.batchNumber || '').trim();
+      if (!batchNumber || batchNumber.toUpperCase().startsWith('TRA')) continue;
+      if (preScanKeys.has(batchNumber)) continue;
+
+      const importDate = new Date(m.importDate);
+      if (Number.isNaN(importDate.getTime()) || importDate.getTime() < fromMs) continue;
+
+      if (!map.has(batchNumber)) {
+        map.set(batchNumber, {
+          batchNumber,
+          count: 0,
+          receivedCount: 0,
+          importDate: new Date(importDate),
+          supplier: m.supplier || ''
+        });
+      }
+      const g = map.get(batchNumber)!;
+      g.count++;
+      if (m.isReceived) g.receivedCount++;
+      if (importDate.getTime() < g.importDate.getTime()) {
+        g.importDate = new Date(importDate);
+      }
+    }
+
+    return Array.from(map.values())
+      .filter(b => b.receivedCount === b.count && b.count > 0)
+      .filter(b => !this.tbhdAcknowledgedBatches.has(b.batchNumber))
+      .sort((a, b) => b.importDate.getTime() - a.importDate.getTime());
+  }
+
+  get tbhdCheckPendingCount(): number {
+    return this.tbhdCheckBatchRows.length;
+  }
+
+  async refreshTbhdAcknowledgedBatches(): Promise<void> {
+    try {
+      this.tbhdAcknowledgedBatches = await this.inboundTbhdCheck.loadAcknowledgedSet(this.selectedFactory);
+    } catch {
+      this.tbhdAcknowledgedBatches = new Set();
+    }
+  }
+
+  async openTbhdCheckModal(): Promise<void> {
+    this.showTbhdCheckModal = true;
+    this.tbhdCheckLoading = true;
+    await this.refreshTbhdAcknowledgedBatches();
+    this.tbhdCheckLoading = false;
+  }
+
+  closeTbhdCheckModal(): void {
+    this.showTbhdCheckModal = false;
+  }
+
+  async onTbhdCheckYes(batchNumber: string, checked: boolean): Promise<void> {
+    if (!checked) return;
+    try {
+      await this.inboundTbhdCheck.setAcknowledged(this.selectedFactory, batchNumber, true);
+      this.tbhdAcknowledgedBatches.add(batchNumber);
+    } catch (e) {
+      console.error('❌ Lưu xác nhận TBHD thất bại:', e);
+      alert('Không lưu được xác nhận TBHD. Thử lại.');
     }
   }
 

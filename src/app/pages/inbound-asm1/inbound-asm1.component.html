@@ -92,6 +92,15 @@
           </button>
 
           <button type="button"
+                  class="btn btn--ghost mobile-hide toolbar-tbhd-check-btn"
+                  (click)="openTbhdCheckModal()"
+                  title="Lô đã nhập kho — xác nhận văn phòng đã nhận giấy TBHD">
+            <i class="material-icons">fact_check</i>
+            Kiểm Tra TBHD
+            <span class="toolbar-tbhd-check-badge" *ngIf="tbhdCheckPendingCount > 0">{{ tbhdCheckPendingCount }}</span>
+          </button>
+
+          <button type="button"
                   class="btn btn--ghost mobile-hide toolbar-back-menu-btn"
                   (click)="goToMenu()"
                   title="Về Menu">
@@ -1212,6 +1221,45 @@
         <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
         <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
         <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng {{ inspectionBatchNumber }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Kiểm Tra TBHD — xác nhận văn phòng đã nhận giấy -->
+<div class="modal-overlay" *ngIf="showTbhdCheckModal" (click)="closeTbhdCheckModal()">
+  <div class="modal-content tbhd-check-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">fact_check</i> Kiểm Tra TBHD</h3>
+      <button type="button" class="close-btn" (click)="closeTbhdCheckModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body tbhd-check-body">
+      <p class="tbhd-check-intro">
+        Lô đã nhập kho từ <strong>{{ tbhdCheckFromDateLabel }}</strong>.
+        Tick <strong>Yes</strong> khi nhân viên văn phòng đã nhận giấy TBHD — lô đó sẽ ẩn khỏi danh sách.
+      </p>
+      <div class="tbhd-check-loading" *ngIf="tbhdCheckLoading">
+        <i class="material-icons">hourglass_empty</i>
+        Đang tải…
+      </div>
+      <div class="tbhd-check-grid" *ngIf="!tbhdCheckLoading">
+        <article class="tbhd-check-box" *ngFor="let row of tbhdCheckBatchRows; trackBy: trackByBatchNumber">
+          <div class="tbhd-check-box__code">{{ row.batchNumber }}</div>
+          <div class="tbhd-check-box__meta">
+            <span>Ngày nhập: {{ formatDate(row.importDate) }}</span>
+            <span>Đã nhập: {{ row.receivedCount }}/{{ row.count }}</span>
+            <span *ngIf="row.supplier">NCC: {{ row.supplier }}</span>
+          </div>
+          <label class="tbhd-check-yes">
+            <input type="checkbox" (change)="onTbhdCheckYes(row.batchNumber, $any($event.target).checked)">
+            <span>Yes</span>
+          </label>
+        </article>
+        <p class="tbhd-check-empty" *ngIf="tbhdCheckBatchRows.length === 0">
+          Không còn lô chờ xác nhận TBHD (từ {{ tbhdCheckFromDateLabel }}).
+        </p>
       </div>
     </div>
   </div>

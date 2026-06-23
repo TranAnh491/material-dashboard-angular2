@@ -1038,6 +1038,18 @@ $trace-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.0
   user-select: none;
 }
 
+.trace-meta-strip-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #9ca3af;
+  font-size: 0.75rem;
+
+  .material-icons {
+    font-size: 14px;
+  }
+}
+
 .trace-flow-section {
   margin-bottom: 22px;
 }

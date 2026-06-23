@@ -5,7 +5,10 @@ import { Router } from '@angular/router';
 export interface TraceabilitySummary {
   itemCode: string;
   itemName: string;
+  /** IMD / mã lô tồn kho */
   batchLabel: string;
+  /** Lô hàng nhập kho (inbound-materials.batchNumber) */
+  shipmentBatchLabel: string;
   poNumber: string;
   stockDisplay: string;
   location: string;
@@ -41,6 +44,7 @@ export interface TracePoImdOption {
   unit: string;
   location: string;
   label: string;
+  shipmentBatchLabel?: string;
   /** Dòng tra cứu (tồn kho hoặc suy ra từ outbound khi không còn tồn). */
   sourceRow?: InventoryRow;
 }
@@ -451,6 +455,7 @@ export class QcTraceabilityComponent implements AfterViewInit {
         unit: (r.unit || '').trim() || 'PCS',
         location: r.location || '—',
         label: `PO: ${po} · IMD: ${imd}`,
+        shipmentBatchLabel: '',
         sourceRow: r
       });
     }
@@ -602,15 +607,18 @@ export class QcTraceabilityComponent implements AfterViewInit {
     }
   }
 
-  private async applyInventoryTrace(inv: InventoryRow): Promise<void> {
+  /** Gán summary / KPI ngay khi có dòng tồn kho — không chờ tải lịch sử. */
+  private setTraceSummaryFromInventory(inv: InventoryRow): void {
     const status = this.mapOverallStatus(inv.iqcStatus || '');
     const cond = this.mapConditionBadge(inv.iqcStatus || '');
     const qcTime = inv.qcCheckedAt || this.parseFirestoreDate(inv.importDate as unknown);
 
+    this.lastInventory = inv;
     this.summary = {
       itemCode: inv.materialCode,
       itemName: inv.materialName || '—',
       batchLabel: inv.batchNumber || this.inventoryImdKey(inv) || '—',
+      shipmentBatchLabel: '',
       poNumber: inv.poNumber || '—',
       stockDisplay: this.stockDisplay(inv),
       location: inv.location || '—',
@@ -625,12 +633,23 @@ export class QcTraceabilityComponent implements AfterViewInit {
       conditionLabel: cond.label,
       conditionVariant: cond.variant
     };
+  }
 
-    this.lastInventory = inv;
-    const [issues] = await Promise.all([this.loadOutboundIssues(inv), this.loadLatestLocationChange(inv)]);
+  private async applyInventoryTrace(inv: InventoryRow): Promise<void> {
+    this.setTraceSummaryFromInventory(inv);
+
+    const [issues, shipmentBatch] = await Promise.all([
+      this.loadOutboundIssues(inv),
+      Promise.all([this.loadInboundShipmentBatch(inv), this.loadLatestLocationChange(inv)]).then(([batch]) => batch)
+    ]);
+
+    if (shipmentBatch && this.summary) {
+      this.summary = { ...this.summary, shipmentBatchLabel: shipmentBatch };
+    }
+
     this.issues = issues;
-    this.treeRoot = this.buildIssuedTree(this.summary, this.issues);
-    this.rebuildDashboard(inv, this.summary, this.qcNode, this.issues);
+    this.treeRoot = this.buildIssuedTree(this.summary!, this.issues);
+    this.rebuildDashboard(inv, this.summary!, this.qcNode!, this.issues);
     this.touchUpdatedAt();
   }
 
@@ -651,7 +670,9 @@ export class QcTraceabilityComponent implements AfterViewInit {
     }));
     return {
       title: summary.itemCode || '—',
-      subTitle: `Lô: ${summary.batchLabel || '—'} · PO: ${summary.poNumber || '—'}`,
+      subTitle: summary.shipmentBatchLabel
+        ? `Lô hàng: ${summary.shipmentBatchLabel} · IMD: ${summary.batchLabel || '—'} · PO: ${summary.poNumber || '—'}`
+        : `IMD: ${summary.batchLabel || '—'} · PO: ${summary.poNumber || '—'}`,
       issuedCount: leaves.length,
       leaves
     };
@@ -746,7 +767,10 @@ export class QcTraceabilityComponent implements AfterViewInit {
           { label: 'Số lượng', value: this.qtyOriginal(inv) }
         ],
         subTitle: 'LÔ NHẬP',
-        subLines: [{ label: 'Mã lô', value: inv.batchNumber || this.inventoryImdKey(inv) || '—' }]
+        subLines: [
+          { label: 'Lô hàng', value: summary.shipmentBatchLabel || '—' },
+          { label: 'IMD', value: inv.batchNumber || this.inventoryImdKey(inv) || '—' }
+        ]
       },
       {
         title: 'KIỂM HÀNG',
@@ -840,7 +864,8 @@ export class QcTraceabilityComponent implements AfterViewInit {
     ];
 
     this.overviewRows = [
-      { label: 'Mã lô', value: summary.batchLabel || '—' },
+      { label: 'Lô hàng', value: summary.shipmentBatchLabel || '—' },
+      { label: 'IMD', value: summary.batchLabel || '—' },
       { label: 'Material', value: summary.itemCode || '—' },
       { label: 'Mô tả', value: summary.itemName || '—' },
       { label: 'PO', value: summary.poNumber || '—' },
@@ -869,6 +894,158 @@ export class QcTraceabilityComponent implements AfterViewInit {
       { label: 'Tồn / nhập', valueLabel: `${stockPct}%`, pct: stockPct },
       { label: 'Đã xuất / nhập', valueLabel: `${exportPct}%`, pct: exportPct }
     ];
+  }
+
+  private importDateToImdKey(importDate: unknown): string {
+    const d = this.parseFirestoreDate(importDate);
+    if (d) {
+      return d.toLocaleDateString('en-GB').split('/').join('');
+    }
+    const s = this.coerceText(importDate);
+    const m = /^(\d{8})/.exec(s);
+    return m ? m[1] : '';
+  }
+
+  /** Lô hàng nhập kho (inbound-materials.batchNumber) gắn với dòng tồn kho. */
+  private async loadInboundShipmentBatch(inv: InventoryRow): Promise<string> {
+    const factories = [inv.factory, 'ASM1', 'ASM2'].filter((v, i, a): v is string => !!v && a.indexOf(v) === i);
+    const imdKey = this.inventoryImdKey(inv) || (inv.batchNumber || '').trim();
+
+    if (inv.id) {
+      for (const factory of factories) {
+        try {
+          const snap = await this.firestore
+            .collection('inbound-materials', ref =>
+              ref.where('factory', '==', factory).where('linkedInventoryDocId', '==', inv.id).limit(1)
+            )
+            .get()
+            .toPromise();
+          if (snap && !snap.empty) {
+            const bn = this.coerceText(snap.docs[0].data()['batchNumber']);
+            if (bn) {
+              return bn;
+            }
+          }
+        } catch {
+          /* composite index có thể chưa có */
+        }
+      }
+    }
+
+    if (!inv.materialCode || !inv.poNumber) {
+      return '';
+    }
+
+    for (const factory of factories) {
+      try {
+        const snap = await this.firestore
+          .collection('inbound-materials', ref =>
+            ref.where('factory', '==', factory).where('materialCode', '==', inv.materialCode).where('poNumber', '==', inv.poNumber).limit(40)
+          )
+          .get()
+          .toPromise();
+        if (!snap || snap.empty) {
+          continue;
+        }
+
+        let matched = '';
+        snap.forEach(doc => {
+          const data = doc.data() as Record<string, unknown>;
+          const inboundImd = this.importDateToImdKey(data.importDate);
+          const linked = this.coerceText(data.linkedInventoryDocId);
+          const lot = this.coerceText(data.batchNumber);
+          if (!lot) {
+            return;
+          }
+          if (inv.id && linked === inv.id) {
+            matched = lot;
+            return;
+          }
+          if (
+            !matched &&
+            imdKey &&
+            inboundImd &&
+            (inboundImd === imdKey || imdKey.startsWith(inboundImd) || inboundImd.startsWith(imdKey))
+          ) {
+            matched = lot;
+          }
+        });
+        if (matched) {
+          return matched;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return '';
+  }
+
+  private async enrichPoImdCandidatesWithShipmentBatch(): Promise<void> {
+    const options = this.poImdCandidates;
+    if (!options.length) {
+      return;
+    }
+
+    await Promise.all(
+      options.map(async opt => {
+        const row = opt.sourceRow;
+        if (!row) {
+          return;
+        }
+        const lot = await this.loadInboundShipmentBatch(row);
+        if (!lot) {
+          return;
+        }
+        opt.shipmentBatchLabel = lot;
+        opt.label = `Lô hàng: ${lot} · PO: ${opt.poNumber} · IMD: ${opt.imdKey}`;
+      })
+    );
+
+    if (this.showPoImdPicker) {
+      this.poImdCandidates = [...options];
+    }
+  }
+
+  /** Tra cứu theo mã lô hàng nhập kho (inbound-materials.batchNumber). */
+  private async queryByInboundShipmentBatch(lotCode: string): Promise<InventoryRow | null> {
+    const lot = lotCode.trim();
+    if (!lot) {
+      return null;
+    }
+
+    for (const factory of ['ASM1', 'ASM2']) {
+      const snap = await this.firestore
+        .collection('inbound-materials', ref => ref.where('factory', '==', factory).where('batchNumber', '==', lot).limit(15))
+        .get()
+        .toPromise();
+      if (!snap || snap.empty) {
+        continue;
+      }
+
+      for (const doc of snap.docs) {
+        const data = doc.data() as Record<string, unknown>;
+        const linkedId = this.coerceText(data.linkedInventoryDocId);
+        if (linkedId) {
+          const inv = await this.loadInventoryById(linkedId, factory);
+          if (inv) {
+            return inv;
+          }
+        }
+
+        const materialCode = this.coerceText(data.materialCode);
+        const poNumber = this.coerceText(data.poNumber);
+        const imd = this.importDateToImdKey(data.importDate);
+        if (materialCode && poNumber && imd) {
+          const inv = await this.queryByMaterialPoImd(materialCode, poNumber, imd);
+          if (inv) {
+            return inv;
+          }
+        }
+      }
+    }
+
+    return null;
   }
 
   private inventoryImdKey(row: InventoryRow): string {
@@ -1263,29 +1440,39 @@ export class QcTraceabilityComponent implements AfterViewInit {
       } else {
         const all = await this.queryAllByMaterialCode(parsed.material);
         if (!all.length) {
-          this.errorMessage = `Không tìm thấy mã hàng ${parsed.material} trên tồn kho hoặc lịch sử xuất ASM1/ASM2.`;
-          return;
+          inv = await this.queryByInboundShipmentBatch(code);
+          if (!inv) {
+            this.errorMessage = `Không tìm thấy mã hàng / lô hàng ${parsed.material} trên tồn kho, nhập kho hoặc lịch sử xuất ASM1/ASM2.`;
+            return;
+          }
+        } else {
+          const options = this.buildPoImdOptions(all);
+          if (options.length > 1) {
+            this.poImdCandidates = options;
+            this.pendingLookupMaterial = parsed.material;
+            this.showPoImdPicker = true;
+            void this.enrichPoImdCandidatesWithShipmentBatch();
+            return;
+          }
+          inv =
+            (options[0].inventoryId
+              ? await this.loadInventoryById(options[0].inventoryId, options[0].factory)
+              : null) ||
+            options[0].sourceRow ||
+            all[0];
         }
-        const options = this.buildPoImdOptions(all);
-        if (options.length > 1) {
-          this.poImdCandidates = options;
-          this.pendingLookupMaterial = parsed.material;
-          this.showPoImdPicker = true;
-          return;
-        }
-        inv =
-          (options[0].inventoryId
-            ? await this.loadInventoryById(options[0].inventoryId, options[0].factory)
-            : null) ||
-          options[0].sourceRow ||
-          all[0];
       }
 
       if (!inv) {
-        this.errorMessage = 'Không tìm thấy tồn kho khớp mã quét. Thử QR đầy đủ (Material|PO|SL|IMD) hoặc chọn PO/IMD.';
+        inv = await this.queryByInboundShipmentBatch(code);
+      }
+
+      if (!inv) {
+        this.errorMessage = 'Không tìm thấy tồn kho khớp mã quét. Thử QR đầy đủ (Material|PO|SL|IMD), mã lô hàng hoặc chọn PO/IMD.';
         return;
       }
 
+      this.setTraceSummaryFromInventory(inv);
       await this.applyInventoryTrace(inv);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

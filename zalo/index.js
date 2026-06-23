@@ -135,7 +135,27 @@ exports.zaloWebhook = onRequest(
 
     const eventName = result.event_name || root.event_name;
     const chatId = message?.chat?.id;
-    const text = message?.text;
+    const chatType = String(message?.chat?.chat_type || message?.chat?.chatType || "").trim().toUpperCase();
+    const senderName = String(message?.from?.display_name || "").trim();
+    const rawText = message?.text;
+    /** Trong nhóm: bỏ @tên_bot ở đầu tin (vd: "@Bot dangky quanly"). */
+    const text =
+      typeof rawText === "string"
+        ? rawText
+            .trim()
+            .replace(/^@[^\s]+\s+/u, "")
+            .trim()
+        : rawText;
+
+    if (eventName === "message.text.received" && chatId) {
+      logger.info("Zalo inbound", {
+        chatId,
+        chatType: chatType || "—",
+        senderName: senderName || "—",
+        text: typeof text === "string" ? text.slice(0, 120) : text,
+        rawText: typeof rawText === "string" ? rawText.slice(0, 120) : rawText,
+      });
+    }
 
     const botToken = ZALO_BOT_TOKEN.value();
 
@@ -145,6 +165,130 @@ exports.zaloWebhook = onRequest(
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({chat_id: toChatId, text: replyText}),
       });
+    };
+
+    const stripAccentsTbhd = (s) =>
+      String(s || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/gi, "d");
+
+    const normalizeCommandText = (raw) =>
+      stripAccentsTbhd(String(raw || "").trim())
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+
+    const isDangkyQuanlyCommand = (raw) => {
+      const t = normalizeCommandText(raw);
+      return (
+        t === "dangky quanly" ||
+        t === "/dangky quanly" ||
+        t === "dangky_quanly" ||
+        t === "/dangky_quanly"
+      );
+    };
+
+    const isDangkyTbhdCommand = (raw) => {
+      const t = normalizeCommandText(raw);
+      return (
+        t === "dangky tbhd" ||
+        t === "/dangky tbhd" ||
+        t === "dangky_tbhd" ||
+        t === "/dangky_tbhd"
+      );
+    };
+
+      String(s || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/gi, "d");
+
+    /** Lô <số lô> ok  |  /<số lô> ok */
+    const parseTbhdBatchAck = (raw) => {
+      const t = String(raw || "").trim();
+      if (!t) return "";
+      const loMatch = stripAccentsTbhd(t)
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .match(/^lo\s+(.+?)\s+ok$/);
+      if (loMatch?.[1]) return loMatch[1].trim();
+      const slashMatch = t.match(/^\/(.+?)\s+ok\s*$/i);
+      if (slashMatch?.[1]) return slashMatch[1].trim();
+      return "";
+    };
+
+    const tbhdAckDocId = (factory, batchNumber) => {
+      const f = String(factory || "").trim().toUpperCase();
+      const b = String(batchNumber || "").trim();
+      return `${f}__${encodeURIComponent(b)}`;
+    };
+
+    const TBHD_GROUP_CONFIG_DOC = "tbhd_ack_nvl";
+    const QUANLY_KHO_GROUP_CONFIG_DOC = "quanly_kho";
+
+    const isTbhdGroupRegistered = async (id) => {
+      const cid = String(id || "").trim();
+      if (!cid) return false;
+      try {
+        const doc = await db.collection("zalo_group_config").doc(TBHD_GROUP_CONFIG_DOC).get();
+        if (!doc.exists) return false;
+        const d = doc.data() || {};
+        return String(d.chatId || "").trim() === cid && d.purpose === "tbhd_ack";
+      } catch (e) {
+        logger.error("isTbhdGroupRegistered failed", e);
+        return false;
+      }
+    };
+
+    const findInboundBatchFactories = async (batchNumber) => {
+      const bn = String(batchNumber || "").trim();
+      if (!bn) return [];
+      const factories = [];
+      for (const factory of ["ASM1", "ASM2"]) {
+        try {
+          const snap = await db
+            .collection("inbound-materials")
+            .where("factory", "==", factory)
+            .where("batchNumber", "==", bn)
+            .limit(1)
+            .get();
+          if (!snap.empty) factories.push(factory);
+        } catch (e) {
+          logger.warn("findInboundBatchFactories query failed", {factory, batchNumber: bn, e});
+        }
+      }
+      return factories;
+    };
+
+    const isTbhdAckedOnWeb = async (factory, batchNumber) => {
+      try {
+        const doc = await db.collection("inbound-tbhd-ack").doc(tbhdAckDocId(factory, batchNumber)).get();
+        if (!doc.exists) return false;
+        return (doc.data() || {}).acknowledged === true;
+      } catch {
+        return false;
+      }
+    };
+
+    const saveTbhdAckFromZalo = async (factory, batchNumber, meta) => {
+      const f = String(factory || "ASM1").trim().toUpperCase();
+      const bn = String(batchNumber || "").trim();
+      if (!bn) return false;
+      await db
+        .collection("inbound-tbhd-ack")
+        .doc(tbhdAckDocId(f, bn))
+        .set(
+          {
+            factory: f,
+            batchNumber: bn,
+            acknowledged: true,
+            acknowledgedAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "zalo_group",
+            ...meta,
+          },
+          {merge: true}
+        );
+      return true;
     };
 
     const normalize = (s) => String(s || "").trim();
@@ -245,7 +389,11 @@ exports.zaloWebhook = onRequest(
       "- /scrap  (tra cứu kho scrap, có password)\n" +
       "- Sau khi có hàng: Xuất <số pcs> (vd: Xuất 100 pcs) → giao việc qua ASP0106\n" +
       "- /link   (liên kết mã nhân viên để nhận thông báo)\n" +
-      "- /id     (xem mã nhân viên đã liên kết)";
+      "- /id     (xem mã nhân viên đã liên kết)\n" +
+      "- /groupid (xem chat_id nhóm/cá nhân — dùng khi cấu hình bot)\n" +
+      "- @bot dangky tbhd (nhóm Nhập NVL — ASM1+ASM2 chung)\n" +
+      "- @bot dangky quanly (đăng ký nhóm Quản lý kho)\n" +
+      "- Nhóm TBHD: @bot Lô <số lô> ok";
 
     // Greetings:
     // - Always show intro + guidance
@@ -952,6 +1100,156 @@ exports.zaloWebhook = onRequest(
         }
 
         await handleTonkho(code, factories);
+        res.status(200).json({ok: true});
+        return;
+      }
+    }
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && text.trim().toLowerCase() === "/groupid") {
+      try {
+        await sendText(
+          chatId,
+          `Chat ID: ${chatId}\n` +
+            `Loại: ${chatType || "—"} (GROUP = nhóm Zalo)\n\n` +
+            `Đăng ký nhóm TBHD (ASM1 + ASM2 chung):\n` +
+            `Đăng ký nhóm (gõ @tên_bot + lệnh):\n` +
+            `• dangky tbhd — nhóm Nhập NVL\n` +
+            `• dangky quanly — nhóm Quản lý kho`
+        );
+      } catch (err) {
+        logger.error("groupid command failed", err);
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      if (isDangkyQuanlyCommand(text)) {
+        try {
+          await db
+            .collection("zalo_group_config")
+            .doc(QUANLY_KHO_GROUP_CONFIG_DOC)
+            .set(
+              {
+                chatId,
+                chatType: chatType || "",
+                label: "Quản lý kho",
+                purpose: "quanly_kho",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              {merge: true}
+            );
+          await sendText(
+            chatId,
+            `✅ Đã xác nhận: đây là nhóm Quản lý kho.\n\n` +
+              `Chat ID nhóm: ${chatId}\n` +
+              `Loại: ${chatType || "—"}\n\n` +
+              `ID đã lưu — dùng cho các nhiệm vụ bot sau này.\n\n` +
+              `Lưu ý nhóm Zalo: gõ @tên bot + lệnh (vd: @bot dangky quanly).`
+          );
+          logger.info("quanly_kho group registered", {chatId, chatType});
+        } catch (e) {
+          logger.error("dangky_quanly failed", e);
+          await sendText(chatId, "Lỗi đăng ký nhóm Quản lý kho.");
+        }
+        res.status(200).json({ok: true});
+        return;
+      }
+    }
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      if (isDangkyTbhdCommand(text)) {
+        try {
+          await db
+            .collection("zalo_group_config")
+            .doc(TBHD_GROUP_CONFIG_DOC)
+            .set(
+              {
+                chatId,
+                chatType: chatType || "",
+                label: "Nhập NVL",
+                factories: ["ASM1", "ASM2"],
+                purpose: "tbhd_ack",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+              {merge: true}
+            );
+          await sendText(
+            chatId,
+            `✅ Đã đăng ký nhóm này đọc TBHD (ASM1 + ASM2 chung).\n\n` +
+              `Cú pháp:\n` +
+              `• @bot Lô <số lô> ok\n` +
+              `• @bot /<số lô> ok\n\n` +
+              `Ví dụ: @bot Lô 3835 ok`
+          );
+        } catch (e) {
+          logger.error("dangky_tbhd failed", e);
+          await sendText(chatId, "Lỗi đăng ký nhóm TBHD.");
+        }
+        res.status(200).json({ok: true});
+        return;
+      }
+    }
+
+    // Nhóm Nhập NVL (ASM1+ASM2): Lô <số lô> ok
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      const batchNumber = parseTbhdBatchAck(text);
+      if (batchNumber) {
+        try {
+          const registered = await isTbhdGroupRegistered(chatId);
+          if (!registered) {
+            logger.info("TBHD ack ignored — chat not registered", {chatId, chatType, batchNumber});
+            res.status(200).json({ok: true});
+            return;
+          }
+
+          const meta = {
+            zaloChatId: chatId,
+            zaloChatType: chatType || "",
+            zaloSenderName: senderName,
+            zaloMessage: String(text || "").trim(),
+          };
+
+          const factories = await findInboundBatchFactories(batchNumber);
+          if (!factories.length) {
+            await sendText(chatId, `Không tìm thấy lô ${batchNumber} trên inbound ASM1/ASM2.`);
+            res.status(200).json({ok: true});
+            return;
+          }
+
+          const alreadyOnWeb = [];
+          for (const factory of factories) {
+            if (await isTbhdAckedOnWeb(factory, batchNumber)) {
+              alreadyOnWeb.push(factory);
+            }
+          }
+
+          if (alreadyOnWeb.length > 0) {
+            const facLabel = alreadyOnWeb.join(" + ");
+            await sendText(
+              chatId,
+              `Lô ${batchNumber} đã được nhập trên web (${facLabel}), cần nhập ở LinkQ.`
+            );
+            logger.info("TBHD already on web — LinkQ reminder", {batchNumber, factories: alreadyOnWeb, chatId});
+            res.status(200).json({ok: true});
+            return;
+          }
+
+          const pendingFactories = factories.filter((f) => !alreadyOnWeb.includes(f));
+          for (const factory of pendingFactories) {
+            await saveTbhdAckFromZalo(factory, batchNumber, meta);
+          }
+
+          await sendText(
+            chatId,
+            `✅ Đã ghi nhận TBHD lô ${batchNumber} (${pendingFactories.join(", ")}).\n` +
+              `Văn phòng đã nhận giấy — lô sẽ ẩn trên màn Kiểm Tra TBHD Inbound.`
+          );
+          logger.info("TBHD ack saved", {batchNumber, factories: pendingFactories, chatId, senderName});
+        } catch (e) {
+          logger.error("TBHD ack handler failed", e);
+          await sendText(chatId, "Lỗi khi ghi nhận TBHD. Thử lại sau.");
+        }
         res.status(200).json({ok: true});
         return;
       }

@@ -51,7 +51,7 @@ export interface InventoryMaterial {
   source?: 'inbound' | 'manual' | 'import'; // Nguồn gốc của dòng dữ liệu
   iqcStatus?: string; // IQC Status: PASS, NG, ĐẶC CÁCH, CHỜ XÁC NHẬN
   lastStatusAt?: Date | null;
-  lastStatusKind?: 'Outbound' | 'Change location' | '';
+  lastStatusKind?: 'Outbound' | 'Change location' | 'Inbound' | '';
   lastStatusBy?: string;
   lastStatusLoading?: boolean;
   totalBags?: number;
@@ -3140,6 +3140,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     const who = material.lastStatusBy && material.lastStatusBy !== '—' ? ` — ID: ${material.lastStatusBy}` : '';
     if (material.lastStatusKind === 'Outbound') return `Outbound (Xuất kho) gần nhất${who}`;
     if (material.lastStatusKind === 'Change location') return `Change location (Đổi vị trí) gần nhất${who}`;
+    if (material.lastStatusKind === 'Inbound') return `Inbound (Nhập kho / scan inbound) gần nhất${who}`;
     return `Hoạt động gần nhất${who}`;
   }
 

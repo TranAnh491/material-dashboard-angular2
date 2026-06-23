@@ -40,10 +40,10 @@ export type RecentActionMaterialRow = LocationInventoryDetailLine & {
   lastActionAt: Date | null;
 };
 
-/** Outbound hoặc đổi vị trí gần nhất của một dòng inventory. */
+/** Outbound, đổi vị trí, hoặc nhập kho (inbound) gần nhất của một dòng inventory. */
 export type InventoryLastStatus = {
   at: Date | null;
-  kind: 'Outbound' | 'Change location' | '';
+  kind: 'Outbound' | 'Change location' | 'Inbound' | '';
   performedBy: string;
 };
 
@@ -828,7 +828,179 @@ export class MaterialsDashboardService {
     return best;
   }
 
-  /** Ngày giờ + ID người thực hiện — outbound hoặc đổi vị trí gần nhất (khớp Mã + PO + IMD). */
+  private pickInboundEmployeeId(d: Record<string, unknown>): string {
+    const ids = d['employeeIds'];
+    if (Array.isArray(ids) && ids.length) {
+      return this.formatPerformerId(String(ids[ids.length - 1] ?? ids[0] ?? ''));
+    }
+    return '';
+  }
+
+  private inboundMatchesInventoryLine(
+    invCode: string,
+    invPo: string,
+    invImdBase: string,
+    invId: string,
+    docData: Record<string, unknown>
+  ): boolean {
+    const docCode = String(docData['materialCode'] ?? '').trim().toUpperCase();
+    if (invCode && docCode && docCode !== invCode) return false;
+    const docPo = String(docData['poNumber'] ?? '').trim().toUpperCase();
+    if (invPo && docPo && docPo !== invPo) return false;
+    const linked = String(docData['linkedInventoryDocId'] ?? '').trim();
+    if (invId && linked && linked === invId) return true;
+    if (!invImdBase) return true;
+    const inboundImd = this.normalizeOutboundImdToKey(docData);
+    return (
+      !!inboundImd &&
+      (inboundImd === invImdBase || invImdBase.startsWith(inboundImd) || inboundImd.startsWith(invImdBase))
+    );
+  }
+
+  private pickLatestInboundReceiveFromDocs(
+    docs: firebase.firestore.QueryDocumentSnapshot[]
+  ): { at: Date; by: string } | null {
+    let best: { at: Date; by: string } | null = null;
+    for (const doc of docs) {
+      const d = doc.data() as Record<string, unknown>;
+      const received = d['isReceived'] === true;
+      const at =
+        this.toDateUnsafe(d['batchEndTime']) ||
+        (received ? this.toDateUnsafe(d['updatedAt']) : null) ||
+        this.toDateUnsafe(d['batchStartTime']) ||
+        this.toDateUnsafe(d['createdAt']);
+      if (!at) continue;
+      const by = this.pickInboundEmployeeId(d);
+      if (!best || at.getTime() > best.at.getTime()) {
+        best = { at, by };
+      }
+    }
+    return best;
+  }
+
+  /** Scan nhập kho inbound — khi chưa có outbound / đổi vị trí. */
+  private async loadInboundReceiveStatus(params: {
+    inventoryDocId?: string;
+    materialCode: string;
+    poNumber: string;
+    imdKey?: string;
+    batchNumber?: string;
+    factory: FactoryCode;
+  }): Promise<{ at: Date; by: string } | null> {
+    const code = String(params.materialCode || '').trim().toUpperCase();
+    const po = String(params.poNumber || '').trim().toUpperCase();
+    const invId = String(params.inventoryDocId || '').trim();
+    const invImdBase = this.resolveInventoryImdBaseKey(params.imdKey, params.batchNumber);
+
+    let inboundBest: { at: Date; by: string } | null = null;
+    const inboundMatches: firebase.firestore.QueryDocumentSnapshot[] = [];
+    const collectInbound = (snap: firebase.firestore.QuerySnapshot | null | undefined) => {
+      if (!snap) return;
+      for (const doc of snap.docs) {
+        const d = doc.data() as Record<string, unknown>;
+        if (this.inboundMatchesInventoryLine(code, po, invImdBase, invId, d)) {
+          inboundMatches.push(doc);
+        }
+      }
+    };
+
+    try {
+      if (invId) {
+        try {
+          const snapId = await this.db
+            .collection('inbound-materials')
+            .where('factory', '==', params.factory)
+            .where('linkedInventoryDocId', '==', invId)
+            .limit(5)
+            .get();
+          collectInbound(snapId);
+        } catch {
+          /* index có thể chưa có */
+        }
+      }
+
+      if (!inboundMatches.length && code && po) {
+        try {
+          const snapPo = await this.db
+            .collection('inbound-materials')
+            .where('factory', '==', params.factory)
+            .where('materialCode', '==', code)
+            .where('poNumber', '==', po)
+            .limit(25)
+            .get();
+          collectInbound(snapPo);
+        } catch {
+          const snapCode = await this.db
+            .collection('inbound-materials')
+            .where('factory', '==', params.factory)
+            .where('materialCode', '==', code)
+            .limit(50)
+            .get();
+          collectInbound(snapCode);
+        }
+      }
+
+      inboundBest = this.pickLatestInboundReceiveFromDocs(inboundMatches);
+    } catch (e) {
+      console.warn('[MaterialsDashboard] inbound last status failed', e);
+    }
+
+    let bagBest: { at: Date; by: string } | null = null;
+    if (invId) {
+      try {
+        const bagSnap = await this.db.collection('rm-bag-history').where('inventoryDocId', '==', invId).limit(30).get();
+        for (const doc of bagSnap.docs) {
+          const d = doc.data() as Record<string, unknown>;
+          const ev = String(d['event'] ?? '')
+            .trim()
+            .toUpperCase();
+          if (ev !== 'NHẬP' && ev !== 'NHAP') continue;
+          const at = this.toDateUnsafe(d['createdAt']);
+          if (!at) continue;
+          const by = this.formatPerformerId(String(d['performedBy'] ?? d['employeeId'] ?? ''));
+          if (!bagBest || at.getTime() > bagBest.at.getTime()) {
+            bagBest = { at, by };
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    let invBest: { at: Date; by: string } | null = null;
+    if (invId) {
+      try {
+        const invSnap = await this.db.collection('inventory-materials').doc(invId).get();
+        const inv = (invSnap.data() || {}) as Record<string, unknown>;
+        const at = this.toDateUnsafe(inv['receivedDate']) || this.toDateUnsafe(inv['createdAt']);
+        if (at) {
+          invBest = { at, by: '' };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const candidates: Array<{ at: Date; by: string }> = [];
+    if (inboundBest) candidates.push(inboundBest);
+    if (bagBest) {
+      candidates.push({
+        at: bagBest.at,
+        by: bagBest.by || inboundBest?.by || ''
+      });
+    }
+    if (invBest) {
+      candidates.push({
+        at: invBest.at,
+        by: inboundBest?.by || bagBest?.by || ''
+      });
+    }
+
+    if (!candidates.length) return null;
+    return candidates.reduce((best, cur) => (!best || cur.at.getTime() > best.at.getTime() ? cur : best));
+  }
+
+  /** Ngày giờ + ID người thực hiện — outbound, đổi vị trí, hoặc scan nhập kho inbound. */
   async loadLastOutboundOrLocationStatus(params: {
     inventoryDocId?: string;
     materialCode: string;
@@ -937,7 +1109,13 @@ export class MaterialsDashboardService {
 
     const outMs = outboundBest?.at.getTime() ?? -1;
     const locMs = locationBest?.at.getTime() ?? -1;
-    if (outMs < 0 && locMs < 0) return { at: null, kind: '', performedBy: '' };
+    if (outMs < 0 && locMs < 0) {
+      const inboundBest = await this.loadInboundReceiveStatus(params);
+      if (inboundBest) {
+        return { at: inboundBest.at, kind: 'Inbound', performedBy: inboundBest.by || '—' };
+      }
+      return { at: null, kind: '', performedBy: '' };
+    }
     if (outMs >= locMs) {
       return { at: outboundBest!.at, kind: 'Outbound', performedBy: outboundBest!.by || '—' };
     }

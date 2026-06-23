@@ -58,6 +58,33 @@
     <button type="button" class="trace-alert-dismiss" (click)="errorMessage = ''" title="Đóng">×</button>
   </div>
 
+  <!-- Thông tin lô hàng hiển thị ngay sau tra cứu -->
+  <div class="trace-context-after-search" *ngIf="summary">
+    <div class="trace-meta-strip">
+      <span *ngIf="summary.shipmentBatchLabel">
+        Lô hàng: <strong>{{ summary.shipmentBatchLabel }}</strong>
+      </span>
+      <span class="trace-meta-strip-sep" *ngIf="summary.shipmentBatchLabel" aria-hidden="true">·</span>
+      <span>IMD: <strong>{{ summary.batchLabel }}</strong></span>
+      <span class="trace-meta-strip-sep" aria-hidden="true">·</span>
+      <span>PO: <strong>{{ summary.poNumber }}</strong></span>
+      <span class="trace-meta-strip-sep" aria-hidden="true">·</span>
+      <span>Mã: <strong>{{ summary.itemCode }}</strong></span>
+      <ng-container *ngIf="summary.itemName && summary.itemName !== '—'">
+        <span class="trace-meta-strip-sep" aria-hidden="true">·</span>
+        <span>{{ summary.itemName }}</span>
+      </ng-container>
+      <ng-container *ngIf="lastInventory?.factory">
+        <span class="trace-meta-strip-sep" aria-hidden="true">·</span>
+        <span>Xưởng: <strong>{{ lastInventory?.factory }}</strong></span>
+      </ng-container>
+      <span class="trace-meta-strip-loading" *ngIf="isLoading && !summary.shipmentBatchLabel">
+        <i class="material-icons trace-spin">sync</i>
+        Đang tải lô hàng...
+      </span>
+    </div>
+  </div>
+
   <section class="trace-po-imd-picker" *ngIf="showPoImdPicker && poImdCandidates.length">
     <div class="trace-po-imd-picker-head">
       <h3 class="trace-po-imd-picker-title">
@@ -77,6 +104,7 @@
         [disabled]="isLoading">
         <span class="trace-po-imd-option-main">{{ opt.label }}</span>
         <span class="trace-po-imd-option-meta">
+          <ng-container *ngIf="opt.shipmentBatchLabel">Lô hàng: {{ opt.shipmentBatchLabel }} · </ng-container>
           {{ opt.factory }} · {{ opt.materialName || opt.materialCode }} · {{ opt.quantity }}
           <ng-container *ngIf="!opt.inventoryId"> · Lịch sử xuất</ng-container>
           <ng-container *ngIf="opt.location && opt.location !== '—'"> · {{ opt.location }}</ng-container>
@@ -127,19 +155,6 @@
         </div>
       </div>
     </section>
-
-    <!-- Sau khi tra cứu: thanh meta + luồng (layout giống mock) -->
-    <div class="trace-context-after-search" *ngIf="summary && qcNode">
-      <div class="trace-meta-strip">
-        <span>Lô: <strong>{{ summary.batchLabel }}</strong></span>
-        <span class="trace-meta-strip-sep" aria-hidden="true">·</span>
-        <span>PO: <strong>{{ summary.poNumber }}</strong></span>
-        <ng-container *ngIf="lastInventory?.factory">
-          <span class="trace-meta-strip-sep" aria-hidden="true">·</span>
-          <span>Xưởng: <strong>{{ lastInventory?.factory }}</strong></span>
-        </ng-container>
-      </div>
-    </div>
 
     <section class="trace-flow-section" *ngIf="summary && qcNode && flowStages.length">
       <h3 class="trace-section-title trace-section-title--flow">Luồng truy xuất (theo thời gian)</h3>
