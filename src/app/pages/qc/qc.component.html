@@ -410,14 +410,19 @@
     </div>
 
     <div class="recent-materials-container" *ngIf="!isSearchingIqcHistory && !iqcHistoryError">
-      <table class="recent-materials-table" *ngIf="iqcHistoryResults.length > 0">
+      <table class="recent-materials-table" [class.recent-materials-table--center]="iqcHistoryContext === 'pendingQC'" *ngIf="iqcHistoryResults.length > 0">
         <thead>
           <tr>
             <th>STT</th>
             <th>Mã hàng</th>
             <th>Số P.O</th>
             <th>Lô hàng</th>
+            <ng-container *ngIf="iqcHistoryContext === 'pendingQC'">
+              <th>NCC</th>
+              <th>Số lượng</th>
+            </ng-container>
             <th>Vị trí</th>
+            <th *ngIf="iqcHistoryContext === 'pendingQC'">Loại hình</th>
             <th>Trạng thái</th>
             <th class="iqc-priority-th"><div class="iqc-priority-center">Ưu tiên</div></th>
             <th>Người kiểm</th>
@@ -433,7 +438,12 @@
             </td>
             <td>{{ item.poNumber }}</td>
             <td>{{ item.batchNumber }}</td>
+            <ng-container *ngIf="iqcHistoryContext === 'pendingQC'">
+              <td>{{ item.supplier || '—' }}</td>
+              <td>{{ formatPendingQcQuantity(item) }}</td>
+            </ng-container>
             <td>{{ item.location || '—' }}</td>
+            <td *ngIf="iqcHistoryContext === 'pendingQC'">{{ item.type || '—' }}</td>
             <td>
               <span class="status-badge" [ngClass]="getIQCStatusClass(item.iqcStatus)">
                 {{ item.iqcStatus || 'N/A' }}

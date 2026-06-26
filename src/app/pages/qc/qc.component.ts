@@ -87,6 +87,10 @@ export class QCComponent implements OnInit, OnDestroy {
     materialName?: string;
     poNumber?: string;
     batchNumber?: string;
+    supplier?: string;
+    quantity?: number;
+    unit?: string;
+    type?: string;
     iqcStatus?: string;
     location?: string;
     qcCheckedBy?: string;
@@ -3547,6 +3551,39 @@ export class QCComponent implements OnInit, OnDestroy {
   }
 
   // Show pending QC materials modal
+  private buildInboundSupplierMap(snapshot: firebase.firestore.QuerySnapshot): Map<string, string> {
+    const map = new Map<string, string>();
+    snapshot.docs.forEach(doc => {
+      const d = doc.data() as any;
+      const sup = String(d.supplier || '').trim();
+      if (!sup) return;
+      const code = String(d.materialCode || '').trim();
+      const po = String(d.poNumber || '').trim();
+      const lot = String(d.batchNumber || '').trim();
+      if (!code || !po) return;
+      map.set(`${code}|${po}`, sup);
+      if (lot) map.set(`${code}|${po}|${lot}`, sup);
+    });
+    return map;
+  }
+
+  private resolveSupplierForPendingQc(material: any, inboundMap: Map<string, string>): string {
+    const fromInventory = String(material?.supplier || '').trim();
+    if (fromInventory) return fromInventory;
+    const code = String(material?.materialCode || '').trim();
+    const po = String(material?.poNumber || '').trim();
+    const lot = String(material?.batchNumber || '').trim();
+    return inboundMap.get(`${code}|${po}|${lot}`) || inboundMap.get(`${code}|${po}`) || '';
+  }
+
+  formatPendingQcQuantity(item: { quantity?: number; unit?: string }): string {
+    const qty = Number(item?.quantity);
+    if (!Number.isFinite(qty)) return '—';
+    const unit = String(item?.unit || '').trim();
+    const formatted = qty.toLocaleString('vi-VN');
+    return unit ? `${formatted} ${unit}` : formatted;
+  }
+
   async showPendingQCMaterials(showPopup: boolean = true): Promise<void> {
     if (showPopup) {
       this.showPendingQCModal = true;
@@ -3606,6 +3643,8 @@ export class QCComponent implements OnInit, OnDestroy {
               batchNumber: data.batchNumber || '',
               quantity: data.quantity || 0,
               unit: data.unit || '',
+              supplier: data.supplier || '',
+              type: data.type || '',
               location: location,
               importDate: data.importDate?.toDate ? data.importDate.toDate() : null,
               receivedDate: data.receivedDate?.toDate ? data.receivedDate.toDate() : null,
@@ -3622,6 +3661,24 @@ export class QCComponent implements OnInit, OnDestroy {
           return dateB.getTime() - dateA.getTime();
         });
       
+      let inboundSupplierMap = new Map<string, string>();
+      try {
+        const inboundSnap = await this.firestore
+          .collection('inbound-materials', ref => ref.where('factory', '==', this.selectedFactory))
+          .get()
+          .toPromise();
+        if (inboundSnap) {
+          inboundSupplierMap = this.buildInboundSupplierMap(inboundSnap);
+        }
+      } catch (e) {
+        console.warn('⚠️ Không tải được NCC từ inbound:', e);
+      }
+
+      this.pendingQCMaterials = (this.pendingQCMaterials || []).map(m => ({
+        ...m,
+        supplier: this.resolveSupplierForPendingQc(m, inboundSupplierMap),
+      }));
+
       // Sync priority ids with backend (used by cột "Ưu tiên" và stats)
       this.priorityPendingQcIds = Array.from(pendingQcPrioritySet);
       console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC materials`);
@@ -3633,6 +3690,10 @@ export class QCComponent implements OnInit, OnDestroy {
           materialCode: m.materialCode,
           poNumber: m.poNumber,
           batchNumber: m.batchNumber,
+          supplier: m.supplier || '',
+          quantity: m.quantity || 0,
+          unit: m.unit || '',
+          type: m.type || '',
           location: m.location || '',
           iqcStatus: m.iqcStatus,
           qcCheckedBy: '—',
@@ -3677,6 +3738,13 @@ export class QCComponent implements OnInit, OnDestroy {
         .replace(/"/g, '&quot;');
 
     const prioritySet = new Set(this.priorityPendingQcIds || []);
+    const formatQty = (item: typeof items[number]) => {
+      const qty = Number(item.quantity);
+      if (!Number.isFinite(qty)) return '—';
+      const unit = String(item.unit || '').trim();
+      const formatted = qty.toLocaleString('vi-VN');
+      return unit ? `${formatted} ${unit}` : formatted;
+    };
     const tableRows = items
       .map((item, index) => {
         const isPriority = !!(item.id && prioritySet.has(item.id));
@@ -3685,7 +3753,10 @@ export class QCComponent implements OnInit, OnDestroy {
           <td>${esc(item.materialCode)}</td>
           <td>${esc(item.poNumber)}</td>
           <td>${esc(item.batchNumber)}</td>
+          <td>${esc(item.supplier || '—')}</td>
+          <td>${esc(formatQty(item))}</td>
           <td>${esc(item.location || '—')}</td>
+          <td>${esc(item.type || '—')}</td>
           <td>${esc(item.iqcStatus || '—')}</td>
           <td>${isPriority ? 'Có' : '—'}</td>
         </tr>`;
@@ -3737,19 +3808,18 @@ export class QCComponent implements OnInit, OnDestroy {
     th, td {
       border: 1px solid #000;
       padding: 6px 8px;
-      text-align: left;
+      text-align: center;
       vertical-align: middle;
       word-wrap: break-word;
     }
     th {
       font-weight: bold;
-      text-align: center;
       background: #fff;
     }
-    td:first-child,
-    th:first-child { width: 40px; text-align: center; }
-    td:last-child,
-    th:last-child { width: 70px; text-align: center; }
+    th:first-child,
+    td:first-child { width: 40px; }
+    th:last-child,
+    td:last-child { width: 70px; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -3765,7 +3835,10 @@ export class QCComponent implements OnInit, OnDestroy {
         <th>Mã hàng</th>
         <th>Số P.O</th>
         <th>Lô hàng</th>
+        <th>NCC</th>
+        <th>Số lượng</th>
         <th>Vị trí</th>
+        <th>Loại hình</th>
         <th>Trạng thái</th>
         <th>Ưu tiên</th>
       </tr>

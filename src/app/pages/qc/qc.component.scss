@@ -797,6 +797,18 @@ $gray:    #9ca3af;
 
   tbody tr:hover { background: $bg; }
   tbody tr:last-child td { border-bottom: none; }
+
+  &--center {
+    th, td { text-align: center; }
+
+    .iqc-history-code {
+      text-align: center;
+    }
+
+    .iqc-priority-center {
+      margin: 0 auto;
+    }
+  }
 }
 
 // ── Status badges ───────────────────────────────────
