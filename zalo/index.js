@@ -2056,28 +2056,16 @@ async function sendZaloTextMessage(botToken, chatId, text) {
   });
 }
 
-function buildQcNgStorageMessage(data, {isReminder = false} = {}) {
-  const title = isReminder ? "🔔 NHẮC LẠI — NG CẦN CẤT KHO" : "⚠️ NG — CẦN CẤT KHO";
+function buildQcNgStorageMessage(data) {
   const materialCode = String(data.materialCode || "").trim();
   const poNumber = String(data.poNumber || "").trim();
-  const factory = String(data.factory || "").trim();
+  const factory = String(data.factory || "").trim().toUpperCase();
   const location = String(data.location || "").trim();
-  const imd = String(data.imd || "").trim();
-  const ngError = String(data.iqcNgError || "").trim();
-  const lines = [
-    title,
+  return [
+    `⚠️ HÀNG NG CẦN ĐƯA VỀ VỊ TRÍ NG — ${factory}`,
     "",
-    `Mã hàng: ${materialCode}`,
-    `PO: ${poNumber || "—"}`,
-  ];
-  if (imd) lines.push(`IMD: ${imd}`);
-  lines.push(
-    `Xưởng: ${factory}`,
-    `Vị trí hiện tại: ${location || "—"}`
-  );
-  if (ngError) lines.push(`Lỗi QC: ${ngError}`);
-  lines.push("", `@${QC_NG_ASSIGNEE} đem cất nguyên liệu NG vào vị trí NG.`);
-  return lines.join("\n");
+    `• ${materialCode} | PO: ${poNumber || "—"} | Vị trí: ${location || "—"}`,
+  ].join("\n");
 }
 
 async function checkMaterialStillNeedsNgStorage(data) {
@@ -2106,14 +2094,161 @@ async function checkMaterialStillNeedsNgStorage(data) {
   }
 }
 
-async function notifyQcNgStorageToKhoGroup(botToken, data, {isReminder = false} = {}) {
+async function listNgNotAtNgLocation(factory) {
+  const f = String(factory || "").trim().toUpperCase();
+  try {
+    const snap = await db
+      .collection("inventory-materials")
+      .where("factory", "==", f)
+      .where("iqcStatus", "==", "NG")
+      .get();
+    const items = [];
+    for (const doc of snap.docs) {
+      const d = doc.data() || {};
+      const loc = String(d.location || "").trim();
+      if (isAtNgLocation(loc)) continue;
+      items.push({
+        materialId: doc.id,
+        materialCode: String(d.materialCode || "").trim(),
+        poNumber: String(d.poNumber || "").trim(),
+        batchNumber: String(d.batchNumber || "").trim(),
+        location: loc,
+        factory: f,
+        iqcNgError: String(d.iqcNgError || "").trim(),
+      });
+    }
+    items.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    return items;
+  } catch (e) {
+    logger.error("qc-ng: listNgNotAtNgLocation failed", {factory: f, e});
+    return [];
+  }
+}
+
+function buildNgPendingKey(items) {
+  return items.map((i) => i.materialId).sort().join("|");
+}
+
+function buildQcNgSummaryMessage(factory, items) {
+  const f = String(factory || "").trim().toUpperCase();
+  const lines = [`⚠️ HÀNG NG CẦN ĐƯA VỀ VỊ TRÍ NG — ${f}`, ""];
+  const maxLines = 25;
+  for (const it of items.slice(0, maxLines)) {
+    lines.push(`• ${it.materialCode} | PO: ${it.poNumber || "—"} | Vị trí: ${it.location || "—"}`);
+  }
+  if (items.length > maxLines) {
+    lines.push(`… và ${items.length - maxLines} mã khác`);
+  }
+  return lines.join("\n");
+}
+
+async function ensureRemindersForNgItems(items, factory) {
+  for (const it of items) {
+    const existing = await db
+      .collection("qc-ng-storage-reminders")
+      .where("materialId", "==", it.materialId)
+      .where("resolved", "==", false)
+      .limit(1)
+      .get()
+      .catch(() => null);
+    if (!existing || !existing.empty) continue;
+    await db.collection("qc-ng-storage-reminders").add({
+      materialId: it.materialId,
+      factory,
+      materialCode: it.materialCode,
+      poNumber: it.poNumber,
+      batchNumber: it.batchNumber,
+      imd: "",
+      location: it.location,
+      iqcNgError: it.iqcNgError,
+      qcCheckedBy: "",
+      assigneeId: QC_NG_ASSIGNEE,
+      detectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastNotifiedAt: null,
+      resolved: false,
+      source: "inventory_scan",
+    });
+  }
+}
+
+async function runQcNgKhoWarehouseAlerts(botToken) {
+  for (const factory of ["ASM1", "ASM2", "ASM3"]) {
+    const items = await listNgNotAtNgLocation(factory);
+    const stateRef = db.collection("zalo_alert_state").doc(`qc_ng_kho_${factory}`);
+
+    if (items.length === 0) {
+      await stateRef.set(
+        {
+          pendingKey: "",
+          pendingCount: 0,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        {merge: true}
+      );
+      continue;
+    }
+
+    await ensureRemindersForNgItems(items, factory);
+
+    const pendingKey = buildNgPendingKey(items);
+    const stateDoc = await stateRef.get();
+    const state = stateDoc.exists ? stateDoc.data() || {} : {};
+    const lastKey = String(state.pendingKey || "");
+    const lastSummaryAt = state.lastSummaryAt?.toDate?.() || null;
+    const nowMs = Date.now();
+    const shouldSendSummary =
+      pendingKey !== lastKey || !lastSummaryAt || nowMs - lastSummaryAt.getTime() >= QC_NG_REMINDER_MS;
+
+    if (!shouldSendSummary) continue;
+
+    const chatId = await getKhoGroupChatId(factory);
+    if (!chatId) {
+      logger.warn("qc-ng-summary: no kho group chatId", {factory});
+      continue;
+    }
+
+    const msg = buildQcNgSummaryMessage(factory, items);
+    try {
+      await sendZaloTextMessage(botToken, chatId, msg);
+      await stateRef.set(
+        {
+          pendingKey,
+          pendingCount: items.length,
+          lastSummaryAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        {merge: true}
+      );
+
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      for (const it of items) {
+        const openSnap = await db
+          .collection("qc-ng-storage-reminders")
+          .where("materialId", "==", it.materialId)
+          .where("resolved", "==", false)
+          .limit(1)
+          .get()
+          .catch(() => null);
+        if (openSnap && !openSnap.empty) {
+          await openSnap.docs[0].ref.update({lastNotifiedAt: now, location: it.location}).catch(() => {});
+        }
+      }
+
+      logger.info("qc-ng-summary: sent", {factory, count: items.length});
+    } catch (e) {
+      logger.error("qc-ng-summary: send failed", {factory, e});
+    }
+  }
+}
+
+async function notifyQcNgStorageToKhoGroup(botToken, data) {
   const factory = String(data.factory || "").trim().toUpperCase();
   const chatId = await getKhoGroupChatId(factory);
   if (!chatId) {
     logger.warn("qc-ng: no kho group chatId", {factory});
     return false;
   }
-  const msg = buildQcNgStorageMessage(data, {isReminder});
+  const msg = buildQcNgStorageMessage(data);
   await sendZaloTextMessage(botToken, chatId, msg).catch((e) => {
     logger.error("qc-ng: sendMessage failed", {factory, chatId, e});
     throw e;
@@ -2132,6 +2267,10 @@ exports.notifyQcNgStorage = onDocumentCreated(
     if (!snap) return;
     const data = snap.data() || {};
     if (data.resolved === true) return;
+    if (data.source === "inventory_scan") {
+      logger.info("qc-ng: skip instant notify for inventory_scan", {materialId: data.materialId});
+      return;
+    }
 
     const botToken = ZALO_BOT_TOKEN.value();
     const check = await checkMaterialStillNeedsNgStorage(data);
@@ -2146,7 +2285,7 @@ exports.notifyQcNgStorage = onDocumentCreated(
     }
 
     const payload = {...data, location: check.currentLocation || data.location || ""};
-    const sent = await notifyQcNgStorageToKhoGroup(botToken, payload, {isReminder: false});
+    const sent = await notifyQcNgStorageToKhoGroup(botToken, payload);
     if (!sent) return;
 
     await snap.ref.update({
@@ -2164,11 +2303,6 @@ exports.notifyQcNgStorage = onDocumentCreated(
 );
 
 async function runQcNgStorageReminders(botToken) {
-  if (!isNgReminderBusinessHours()) {
-    logger.info("qc-ng-reminder: outside business hours, skip");
-    return;
-  }
-
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const snap = await db
     .collection("qc-ng-storage-reminders")
@@ -2209,7 +2343,7 @@ async function runQcNgStorageReminders(botToken) {
 
     const payload = {...data, location: check.currentLocation || data.location || ""};
     try {
-      const sent = await notifyQcNgStorageToKhoGroup(botToken, payload, {isReminder: true});
+      const sent = await notifyQcNgStorageToKhoGroup(botToken, payload);
       if (!sent) continue;
       await doc.ref.update({
         lastNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -2234,6 +2368,12 @@ exports.qcNgStorageReminder = onSchedule(
     region: "us-central1",
   },
   async () => {
-    await runQcNgStorageReminders(ZALO_BOT_TOKEN.value());
+    const botToken = ZALO_BOT_TOKEN.value();
+    if (!isNgReminderBusinessHours()) {
+      logger.info("qc-ng-reminder: outside business hours, skip");
+      return;
+    }
+    await runQcNgKhoWarehouseAlerts(botToken);
+    await runQcNgStorageReminders(botToken);
   }
 );

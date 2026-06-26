@@ -2970,6 +2970,74 @@ export class QCComponent implements OnInit, OnDestroy {
     );
   }
 
+  private getIqcHistoryGroupKey(item: {
+    materialCode?: string;
+    poNumber?: string;
+    batchNumber?: string;
+  }): string {
+    const mc = String(item.materialCode || '').trim().toUpperCase();
+    const po = String(item.poNumber || '').trim();
+    const bn = String(item.batchNumber || '').trim();
+    return `${mc}|${po}|${bn}`;
+  }
+
+  private isQcPassStatus(status: string | undefined | null): boolean {
+    return String(status || '').trim().toUpperCase() === 'PASS';
+  }
+
+  /** Cùng mã + PO + lô: nếu đã PASS thì hiển thị PASS cho tất cả dòng. */
+  private propagateIqcPassAcrossSameLot<T extends {
+    materialCode?: string;
+    poNumber?: string;
+    batchNumber?: string;
+    iqcStatus?: string;
+    qcCheckedBy?: string;
+    qcCheckedAt?: Date | null;
+    eventTime?: Date | null;
+  }>(results: T[]): T[] {
+    if (!results?.length) return results;
+
+    const passByGroup = new Map<
+      string,
+      { iqcStatus: string; qcCheckedBy?: string; qcCheckedAt?: Date | null; eventTime?: Date | null }
+    >();
+
+    for (const item of results) {
+      if (!this.isQcPassStatus(item.iqcStatus)) continue;
+      const key = this.getIqcHistoryGroupKey(item);
+      const time =
+        item.eventTime?.getTime?.() ||
+        item.qcCheckedAt?.getTime?.() ||
+        0;
+      const existing = passByGroup.get(key);
+      const existingTime =
+        existing?.eventTime?.getTime?.() ||
+        existing?.qcCheckedAt?.getTime?.() ||
+        0;
+      if (!existing || time >= existingTime) {
+        passByGroup.set(key, {
+          iqcStatus: String(item.iqcStatus || 'PASS').trim(),
+          qcCheckedBy: item.qcCheckedBy,
+          qcCheckedAt: item.qcCheckedAt,
+          eventTime: item.eventTime,
+        });
+      }
+    }
+
+    if (passByGroup.size === 0) return results;
+
+    return results.map(item => {
+      const pass = passByGroup.get(this.getIqcHistoryGroupKey(item));
+      if (!pass) return item;
+      return {
+        ...item,
+        iqcStatus: pass.iqcStatus,
+        qcCheckedBy: pass.qcCheckedBy || item.qcCheckedBy,
+        qcCheckedAt: pass.qcCheckedAt || item.qcCheckedAt,
+      };
+    });
+  }
+
   async searchIqcHistory(): Promise<void> {
     const code = (this.iqcSearchCode || '').trim();
     if (!code) {
@@ -3050,7 +3118,7 @@ export class QCComponent implements OnInit, OnDestroy {
           return tb - ta;
         });
 
-      this.iqcHistoryResults = results as any[];
+      this.iqcHistoryResults = this.propagateIqcPassAcrossSameLot(results as any[]);
 
       if (this.iqcHistoryResults.length === 0) {
         const rangeText = (fromDate || toDate)
@@ -3588,6 +3656,132 @@ export class QCComponent implements OnInit, OnDestroy {
         this.iqcHistoryError = 'Lỗi khi tải mã hàng chờ kiểm';
       }
     }
+  }
+
+  printPendingQcList(): void {
+    if (this.iqcHistoryContext !== 'pendingQC') {
+      return;
+    }
+
+    const items = this.iqcHistoryResults || [];
+    if (!items.length) {
+      alert('Không có dữ liệu để in');
+      return;
+    }
+
+    const esc = (value: unknown) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const prioritySet = new Set(this.priorityPendingQcIds || []);
+    const tableRows = items
+      .map((item, index) => {
+        const isPriority = !!(item.id && prioritySet.has(item.id));
+        return `<tr>
+          <td>${index + 1}</td>
+          <td>${esc(item.materialCode)}</td>
+          <td>${esc(item.poNumber)}</td>
+          <td>${esc(item.batchNumber)}</td>
+          <td>${esc(item.location || '—')}</td>
+          <td>${esc(item.iqcStatus || '—')}</td>
+          <td>${isPriority ? 'Có' : '—'}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const printedAt = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour12: false,
+    });
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+      return;
+    }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Danh sách NVL chờ kiểm tra</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      color: #000;
+      background: #fff;
+    }
+    .doc-title {
+      text-align: center;
+      font-size: 18px;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .doc-meta {
+      text-align: center;
+      font-size: 11px;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: middle;
+      word-wrap: break-word;
+    }
+    th {
+      font-weight: bold;
+      text-align: center;
+      background: #fff;
+    }
+    td:first-child,
+    th:first-child { width: 40px; text-align: center; }
+    td:last-child,
+    th:last-child { width: 70px; text-align: center; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc-title">Danh sách NVL chờ kiểm tra</div>
+  <div class="doc-meta">Xưởng: ${esc(this.selectedFactory)} &nbsp;|&nbsp; Tổng: ${items.length} mã &nbsp;|&nbsp; In lúc: ${esc(printedAt)}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>STT</th>
+        <th>Mã hàng</th>
+        <th>Số P.O</th>
+        <th>Lô hàng</th>
+        <th>Vị trí</th>
+        <th>Trạng thái</th>
+        <th>Ưu tiên</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 300);
   }
 
   closePendingQCModal(): void {

@@ -704,6 +704,40 @@ $gray:    #9ca3af;
     margin: 0 0 16px;
 
     .material-icons { font-size: 20px; color: $muted; }
+
+    &--with-actions {
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    &__title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+  }
+
+  .qc-print-pending-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: $text;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+
+    .material-icons { font-size: 18px; color: $text; }
+
+    &:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+    }
   }
 }
 

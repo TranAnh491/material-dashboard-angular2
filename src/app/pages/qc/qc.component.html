@@ -383,9 +383,20 @@
 
   <!-- ── IQC Search Results ── -->
   <div class="qc-card recent-checked-section" *ngIf="showIqcSearchResults">
-    <h4 class="section-header">
-      <i class="material-icons">manage_search</i>
-      {{ iqcResultsTitle }}
+    <h4 class="section-header section-header--with-actions">
+      <span class="section-header__title">
+        <i class="material-icons">manage_search</i>
+        {{ iqcResultsTitle }}
+      </span>
+      <button
+        type="button"
+        class="qc-print-pending-btn"
+        *ngIf="iqcHistoryContext === 'pendingQC' && iqcHistoryResults.length > 0 && !isSearchingIqcHistory && !iqcHistoryError"
+        (click)="printPendingQcList()"
+        title="In danh sách NVL chờ kiểm tra">
+        <i class="material-icons">print</i>
+        In
+      </button>
     </h4>
 
     <div class="loading-recent" *ngIf="isSearchingIqcHistory">

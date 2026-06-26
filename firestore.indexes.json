@@ -56,6 +56,22 @@
         { "fieldPath": "resolved",     "order": "ASCENDING" },
         { "fieldPath": "detectedAt",   "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "qc-ng-storage-reminders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "materialId",   "order": "ASCENDING" },
+        { "fieldPath": "resolved",     "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inventory-materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",      "order": "ASCENDING" },
+        { "fieldPath": "iqcStatus",    "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
