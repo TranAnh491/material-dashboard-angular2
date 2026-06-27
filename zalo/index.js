@@ -137,6 +137,7 @@ exports.zaloWebhook = onRequest(
     const chatId = message?.chat?.id;
     const chatType = String(message?.chat?.chat_type || message?.chat?.chatType || "").trim().toUpperCase();
     const senderName = String(message?.from?.display_name || "").trim();
+    const senderId = String(message?.from?.id || "").trim();
     const rawText = message?.text;
 
     /** Trong nhóm: bỏ @tên_bot (có thể nhiều từ, vd "@Bot AI Warehouse dangky quanly"). */
@@ -332,8 +333,19 @@ exports.zaloWebhook = onRequest(
       }
     };
 
-    const buildTbhdStatusReply = async (batchNumber, factories) => {
-      const lines = [`Lô ${batchNumber}:`];
+    const buildTbhdGreetingLine = (senderName) => {
+      const name = String(senderName || "").trim();
+      if (!name) return "";
+      return `Chào sếp ${name}, em đã nhận thông tin`;
+    };
+
+    const buildTbhdStatusReply = async (batchNumber, factories, senderName = "") => {
+      const lines = [];
+      const greet = buildTbhdGreetingLine(senderName);
+      if (greet) {
+        lines.push(greet, "");
+      }
+      lines.push(`Lô ${batchNumber}:`);
       for (const factory of factories) {
         const receive = await getInboundReceiveSummary(factory, batchNumber);
         const tbhdAcked = await isTbhdAckedOnWeb(factory, batchNumber);
@@ -1311,18 +1323,21 @@ exports.zaloWebhook = onRequest(
 
           const factories = await findInboundBatchFactories(batchNumber);
           if (!factories.length) {
-            await sendText(chatId, `Không tìm thấy lô ${batchNumber} trên inbound ASM1/ASM2.`);
+            const greeting = buildTbhdGreetingLine(senderName);
+            const prefix = greeting ? `${greeting}\n\n` : "";
+            await sendText(chatId, `${prefix}Không tìm thấy lô ${batchNumber} trên inbound ASM1/ASM2.`);
             res.status(200).json({ok: true});
             return;
           }
 
-          const replyText = await buildTbhdStatusReply(batchNumber, factories);
+          const replyText = await buildTbhdStatusReply(batchNumber, factories, senderName);
           await sendText(chatId, replyText);
           logger.info("TBHD status checked", {
             batchNumber,
             factories,
             chatId,
             senderName,
+            senderId,
           });
         } catch (e) {
           logger.error("TBHD status check failed", e);
