@@ -141,6 +141,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   filterByViTri = '';
   filterByCreatedBy = '';
   filterByPrintCount = '';
+  /** Kích thước tem QR vị trí: 57×32mm hoặc 130×100mm */
+  selectedQrLabelSize: '57x32' | '130x100' = '57x32';
   private searchSubject = new Subject<string>();
   
   // Total counter
@@ -2411,169 +2413,268 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-    // Print QR Code - Tem 50mm x 30mm
-  async printQRCode(item: LocationItem) {
+    // Print QR Code — tem 57×32mm hoặc 130×100mm
+  async printQRCode(item: LocationItem, labelSize?: '57x32' | '130x100'): Promise<void> {
+    const size = labelSize || this.selectedQrLabelSize;
     try {
-      // Tăng lần in và lưu vào Firestore
       const newPrintCount = (item.printCount ?? 0) + 1;
       if (item.id) {
         this.firestore.collection('locations').doc(item.id).update({ printCount: newPrintCount }).catch(err => console.error('Error updating printCount:', err));
       }
       item.printCount = newPrintCount;
 
-      // Tạo mã QR thực sự từ vị trí
       const qrImage = await QRCode.toDataURL(item.viTri, {
-        width: 200, // 200px để đảm bảo chất lượng khi in
+        width: size === '130x100' ? 600 : 280,
         margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
+        color: { dark: '#000000', light: '#FFFFFF' }
       });
 
-      // Tạo nội dung để in QR code với kích thước 50mm x 30mm
-      const printContent = `
-        <div class="qr-label" style="
-          width: 50mm; 
-          height: 30mm; 
-          border: 1px solid #000; 
-          display: flex; 
-          align-items: center; 
-          padding: 2mm;
-          box-sizing: border-box;
-          font-family: Arial, sans-serif;
-          background: white;
-        ">
-          <!-- Phía trái: Mã QR 25mm x 25mm -->
-          <div class="qr-section" style="
-            width: 25mm; 
-            height: 25mm; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            border: 1px solid #ccc;
-            background: #f8f9fa;
-            overflow: hidden;
-          ">
-            <img src="${qrImage}" 
-                 alt="QR Code for ${item.viTri}" 
-                 style="
-                   width: 100%; 
-                   height: 100%; 
-                   object-fit: contain;
-                   max-width: 23mm;
-                   max-height: 23mm;
-                 "
-                 title="QR Code: ${item.viTri}">
-          </div>
-          
-          <!-- Phía phải: Tên vị trí + Date -->
-          <div class="location-section" style="
-            width: 20mm; 
-            height: 25mm; 
-            display: flex; 
-            flex-direction: column;
-            align-items: center; 
-            justify-content: center;
-            padding-left: 2mm;
-            gap: 2mm;
-          ">
-            <div style="
-              font-size: 14px; 
-              font-weight: bold; 
-              color: #000;
-              font-family: 'Arial', sans-serif;
-              text-align: center;
-              line-height: 1.2;
-              word-break: break-word;
-            ">
-              ${((): string => {
-                const m = item.viTri.match(/^(LOCKER)\s*(\d+)$/i);
-                return m ? `${m[1].toUpperCase()}<br>${m[2]}` : item.viTri;
-              })()}
-            </div>
-            <div style="
-              font-size: 10px;
-              font-weight: normal;
-              color: #000;
-              font-family: 'Arial', sans-serif;
-              text-align: center;
-            ">
-              ${((): string => {
-                const d = item.createdAt ? new Date(item.createdAt) : new Date();
-                const dd = String(d.getDate()).padStart(2, '0');
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const yy = String(d.getFullYear()).slice(-2);
-                return `${dd}${mm}${yy}`;
-              })()}
-            </div>
-          </div>
-        </div>
-      `;
-    
-          const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Location QR Code - ${item.viTri}</title>
-              <style>
-                body { 
-                  margin: 0; 
-                  padding: 10mm; 
-                  font-family: Arial, sans-serif; 
-                  background: #f0f0f0;
-                }
-                
-                .qr-label {
-                  margin: 0 auto;
-                  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                }
-                
-                @media print {
-                  body { 
-                    margin: 0; 
-                    padding: 0; 
-                    background: white;
-                  }
-                  .no-print { display: none; }
-                  .qr-label {
-                    box-shadow: none;
-                    border: 1px solid #000 !important;
-                  }
-                }
-              </style>
-            </head>
-            <body>
-              ${printContent}
-              <div class="no-print" style="margin-top: 20px; text-align: center;">
-                <button onclick="window.print()" style="
-                  background: #007bff; 
-                  color: white; 
-                  border: none; 
-                  padding: 10px 20px; 
-                  border-radius: 5px; 
-                  cursor: pointer;
-                  margin-right: 10px;
-                ">Print QR Code</button>
-                <button onclick="window.close()" style="
-                  background: #6c757d; 
-                  color: white; 
-                  border: none; 
-                  padding: 10px 20px; 
-                  border-radius: 5px; 
-                  cursor: pointer;
-                ">Close</button>
-              </div>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
+      const locationHtml = this.formatLocationLabelHtml(item.viTri);
+      const dateStr = this.formatLocationLabelDate(item);
+      const printContent = size === '130x100'
+        ? this.buildLocationQrLabel130x100(qrImage, locationHtml, dateStr, item.viTri)
+        : this.buildLocationQrLabel57x32(qrImage, locationHtml, dateStr, item.viTri);
+
+      const pageCss = size === '130x100'
+        ? this.getLocationQrPrintPageCss130x100()
+        : this.getLocationQrPrintPageCss57x32();
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
       }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Location QR - ${item.viTri} (${size})</title>
+            <style>${pageCss}</style>
+          </head>
+          <body>
+            ${printContent}
+            <div class="no-print loc-qr-print-actions">
+              <button type="button" onclick="window.print()">In tem QR</button>
+              <button type="button" onclick="window.close()">Đóng</button>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
     } catch (error) {
       console.error('Error generating QR code:', error);
       alert('Lỗi khi tạo mã QR. Vui lòng thử lại.');
     }
+  }
+
+  setQrLabelSize(size: '57x32' | '130x100'): void {
+    this.selectedQrLabelSize = size;
+  }
+
+  private formatLocationLabelHtml(viTri: string): string {
+    const m = viTri.match(/^(LOCKER)\s*(\d+)$/i);
+    return m ? `${m[1].toUpperCase()}<br>${m[2]}` : viTri;
+  }
+
+  private formatLocationLabelDate(item: LocationItem): string {
+    const d = item.createdAt ? new Date(item.createdAt) : new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${dd}${mm}${yy}`;
+  }
+
+  private buildLocationQrLabel57x32(qrImage: string, locationHtml: string, dateStr: string, viTri: string): string {
+    return `
+      <div class="qr-label qr-label--57">
+        <div class="qr-section">
+          <img src="${qrImage}" alt="QR ${viTri}" class="qr-image" title="QR: ${viTri}">
+        </div>
+        <div class="location-section">
+          <div class="location-text">${locationHtml}</div>
+          <div class="location-date">${dateStr}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  private buildLocationQrLabel130x100(qrImage: string, locationHtml: string, dateStr: string, viTri: string): string {
+    return `
+      <div class="qr-label qr-label--130">
+        <div class="location-section">
+          <div class="location-text">${locationHtml}</div>
+          <div class="location-date">${dateStr}</div>
+        </div>
+        <div class="qr-section">
+          <img src="${qrImage}" alt="QR ${viTri}" class="qr-image" title="QR: ${viTri}">
+        </div>
+      </div>
+    `;
+  }
+
+  private getLocationQrPrintPageCss57x32(): string {
+    return `
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background: #f0f0f0;
+        width: 57mm;
+        height: 32mm;
+      }
+      .qr-label--57 {
+        width: 57mm;
+        height: 32mm;
+        border: 1px solid #000;
+        display: flex;
+        align-items: stretch;
+        background: #fff;
+        overflow: hidden;
+      }
+      .qr-label--57 .qr-section {
+        width: 30mm;
+        height: 32mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-right: 1px solid #ccc;
+        flex-shrink: 0;
+      }
+      .qr-label--57 .qr-image {
+        width: 28mm;
+        height: 28mm;
+        object-fit: contain;
+        display: block;
+      }
+      .qr-label--57 .location-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1mm 2mm;
+        gap: 1mm;
+        text-align: center;
+      }
+      .qr-label--57 .location-text {
+        font-size: 16px;
+        font-weight: bold;
+        line-height: 1.15;
+        word-break: break-word;
+        color: #000;
+      }
+      .qr-label--57 .location-date {
+        font-size: 10px;
+        color: #000;
+      }
+      .loc-qr-print-actions {
+        margin-top: 12px;
+        text-align: center;
+      }
+      .loc-qr-print-actions button {
+        margin: 0 6px;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        background: #007bff;
+        color: #fff;
+      }
+      .loc-qr-print-actions button:last-child { background: #6c757d; }
+      @media print {
+        body { margin: 0 !important; padding: 0 !important; background: #fff !important; width: 57mm !important; height: 32mm !important; }
+        @page { margin: 0; size: 57mm 32mm; }
+        .no-print { display: none !important; }
+        .qr-label--57 { box-shadow: none; border: 1px solid #000 !important; }
+      }
+    `;
+  }
+
+  private getLocationQrPrintPageCss130x100(): string {
+    return `
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 130mm;
+        height: 100mm;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background: #fff;
+      }
+      .qr-label--130 {
+        width: 130mm;
+        height: 100mm;
+        border: 1px solid #000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 5mm;
+        padding: 4mm;
+        background: #fff;
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+      .qr-label--130 .location-section {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        flex-shrink: 0;
+      }
+      .qr-label--130 .location-text {
+        font-size: 42px;
+        font-weight: bold;
+        line-height: 1.1;
+        word-break: break-word;
+        color: #000;
+      }
+      .qr-label--130 .location-date {
+        margin-top: 2mm;
+        font-size: 20px;
+        color: #000;
+      }
+      .qr-label--130 .qr-section {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .qr-label--130 .qr-image {
+        width: 62mm;
+        height: 62mm;
+        object-fit: contain;
+        display: block;
+      }
+      .loc-qr-print-actions {
+        margin-top: 12px;
+        text-align: center;
+      }
+      .loc-qr-print-actions button {
+        margin: 0 6px;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        background: #007bff;
+        color: #fff;
+      }
+      .loc-qr-print-actions button:last-child { background: #6c757d; }
+      @media print {
+        body { margin: 0 !important; padding: 0 !important; overflow: hidden; }
+        @page { margin: 0; size: 130mm 100mm; }
+        .no-print { display: none !important; }
+        .qr-label--130 {
+          width: 130mm !important;
+          height: 100mm !important;
+          page-break-inside: avoid;
+        }
+      }
+    `;
   }
 
   trackByFn(index: number, item: LocationItem): string {

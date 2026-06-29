@@ -725,7 +725,13 @@
             <th>ID Tạo</th>
             <th>Date</th>
             <th>Lần in</th>
-            <th>QR Code</th>
+            <th class="qr-header-cell">
+              <div>QR Code</div>
+              <div class="qr-size-picker">
+                <button type="button" class="qr-size-btn" [class.is-active]="selectedQrLabelSize === '57x32'" (click)="setQrLabelSize('57x32')">57×32</button>
+                <button type="button" class="qr-size-btn" [class.is-active]="selectedQrLabelSize === '130x100'" (click)="setQrLabelSize('130x100')">130×100</button>
+              </div>
+            </th>
             <th>Thao Tác</th>
             <th>Xóa</th>
           </tr>
@@ -835,9 +841,10 @@
              <td class="qr-cell">
                <button class="qr-btn" 
                        (click)="printQRCode(item)"
-                       title="Tạo QR code cho {{item.viTri}}"
+                       [title]="'In tem QR ' + selectedQrLabelSize + ' — ' + item.viTri"
                        *ngIf="editingItem?.id !== item.id">
                  <i class="material-icons">qr_code</i>
+                 <span class="qr-size-badge">{{ selectedQrLabelSize === '57x32' ? '57' : '130' }}</span>
                </button>
              </td>
             
