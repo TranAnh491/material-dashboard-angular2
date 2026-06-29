@@ -1,6 +1,122 @@
-<div class="main-content">
-  <!-- Excel-like Container -->
-  <div class="excel-container">
+<div class="main-content" [class.fg-m-page]="isMobile">
+
+  <!-- Mobile: chọn nhà máy (giống tab Location) -->
+  <div class="fg-in-factory-modal" *ngIf="showMobileFactorySelect">
+    <div class="modal-overlay" (click)="showMobileFactorySelect = false">
+      <div class="modal-content factory-select-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3><i class="material-icons">factory</i> Chọn nhà máy</h3>
+      </div>
+      <div class="modal-body factory-select-body">
+        <p class="factory-hint">Vui lòng chọn ASM1 hoặc ASM2 trước khi thao tác.</p>
+        <div class="factory-buttons">
+          <button type="button" class="factory-btn asm1" (click)="selectMobileFactory('ASM1')">ASM1</button>
+          <button type="button" class="factory-btn asm2" (click)="selectMobileFactory('ASM2')">ASM2</button>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile shell -->
+  <div class="fg-m" *ngIf="isMobile && mobileFactorySelected">
+    <header class="fg-m-header">
+      <div class="fg-m-header__left">
+        <button type="button" class="fg-m-factory" (click)="openMobileFactorySelect()" title="Đổi nhà máy">
+          {{ selectedFactory }}
+        </button>
+        <h1 class="fg-m-title">FG IN — Nhập TP</h1>
+      </div>
+      <div class="fg-m-header__right">
+        <span class="fg-m-pending-badge" *ngIf="getPendingCount() > 0">{{ getPendingCount() }} chờ</span>
+      </div>
+    </header>
+
+    <div class="fg-m-body">
+      <section class="fg-m-panel" *ngIf="mobileBottomTab === 'pending'">
+        <div class="search-box fg-m-search">
+          <input type="text"
+                 placeholder="Tìm mã TP, PO, LSX..."
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchChange($event)"
+                 class="search-input search-input-uppercase">
+          <button class="clear-search-btn" *ngIf="searchTerm" type="button" (click)="searchTerm = ''; onSearchChange($event)">
+            <i class="material-icons">clear</i>
+          </button>
+        </div>
+
+        <p class="fg-m-section-label">Phiếu chờ xử lý ({{ getPendingCount() }})</p>
+
+        <div class="fg-m-card-list">
+          <div class="fg-m-card fg-m-card--pending"
+               *ngFor="let material of getPendingMaterials()"
+               (click)="openConfirmReceiptDialog(material)">
+            <div class="fg-m-card__code">{{ material.materialCode }}</div>
+            <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
+            <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
+            <span class="fg-m-card__meta">LOT: {{ material.batchNumber || '—' }}</span>
+            <span class="fg-m-card__meta">SL: {{ material.quantity | number:'1.0-0' }}</span>
+            <div class="fg-m-card__action">
+              <i class="material-icons">touch_app</i>
+              Bấm để xác nhận
+            </div>
+          </div>
+        </div>
+
+        <div class="fg-m-empty" *ngIf="getPendingCount() === 0">
+          <i class="material-icons">check_circle</i>
+          <p>Không có phiếu chờ xử lý</p>
+        </div>
+      </section>
+
+      <section class="fg-m-panel" *ngIf="mobileBottomTab === 'location'">
+        <p class="fg-m-section-label">Đã khóa — chưa có vị trí ({{ getLockedWithoutLocationCount() }})</p>
+
+        <div class="fg-m-card-list">
+          <div class="fg-m-card fg-m-card--locked"
+               *ngFor="let material of getLockedWithoutLocationMaterials()"
+               (click)="openConfirmReceiptDialog(material)">
+            <div class="fg-m-card__code">{{ material.materialCode }}</div>
+            <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
+            <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
+            <span class="fg-m-card__meta">SL: {{ material.quantity | number:'1.0-0' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--warn">
+              Vị trí: <strong>{{ material.location || 'Temporary' }}</strong>
+            </span>
+            <div class="fg-m-card__action fg-m-card__action--scan">
+              <i class="material-icons">qr_code_scanner</i>
+              Scan vị trí mới
+            </div>
+          </div>
+        </div>
+
+        <div class="fg-m-empty" *ngIf="getLockedWithoutLocationCount() === 0">
+          <i class="material-icons">location_on</i>
+          <p>Không có phiếu Temporary</p>
+        </div>
+      </section>
+    </div>
+
+    <nav class="fg-m-bottomnav">
+      <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'pending'" (click)="setMobileBottomTab('pending')">
+        <i class="material-icons">assignment</i>
+        <span>Chờ</span>
+        <em class="fg-m-nav-badge" *ngIf="getPendingCount() > 0">{{ getPendingCount() }}</em>
+      </button>
+      <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'location'" (click)="setMobileBottomTab('location')">
+        <i class="material-icons">location_on</i>
+        <span>Vị trí</span>
+        <em class="fg-m-nav-badge fg-m-nav-badge--warn" *ngIf="getLockedWithoutLocationCount() > 0">{{ getLockedWithoutLocationCount() }}</em>
+      </button>
+      <button type="button" class="fg-m-bottomnav__btn fg-m-bottomnav__btn--menu" (click)="goMobileMenu()">
+        <i class="material-icons">home</i>
+        <span>Menu</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Excel-like Container (desktop) -->
+  <div class="excel-container" *ngIf="!isMobile">
     <!-- Excel-like Header -->
     <div class="excel-header">
       <div class="header-title">
@@ -63,90 +179,8 @@
       </div>
     </div>
 
-    <!-- Mobile chọn nhà máy (ASM1 / ASM2) trước khi hiển thị danh sách phiếu chờ -->
-    <div class="mobile-factory-modal show-on-tablet" *ngIf="!mobileFactorySelected">
-      <div class="mobile-factory-modal-content">
-        <h5>Chọn nhà máy</h5>
-        <div class="mobile-factory-buttons">
-          <button type="button" (click)="setFactoryFilter('ASM1')">ASM1</button>
-          <button type="button" (click)="setFactoryFilter('ASM2')">ASM2</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Mobile/Tablet Card View for Pending Items -->
-    <div class="mobile-card-view show-on-tablet" *ngIf="mobileFactorySelected">
-      <!-- Top: chưa tick khóa -->
-      <div class="mobile-section">
-        <div class="mobile-header">
-          <h5>Phiếu chờ xử lý ({{ getPendingCount() }})</h5>
-        </div>
-        <div class="pending-cards-container">
-          <div class="pending-card"
-               *ngFor="let material of getPendingMaterials()"
-               (click)="openConfirmReceiptDialog(material)">
-            <div class="card-material-code">{{ material.materialCode }}</div>
-            <div class="card-details">
-              <span class="card-qty-row" (click)="$event.stopPropagation()">
-                <span class="card-qty-label">SL:</span>
-                <input *ngIf="canEditMaterial(material)"
-                       type="number"
-                       class="card-qty-input"
-                       [(ngModel)]="material.quantity"
-                       (blur)="updateQuantity(material)"
-                       (change)="updateQuantity(material)"
-                       min="0"
-                       step="1">
-                <span *ngIf="!canEditMaterial(material)" class="card-qty">{{ material.quantity | number:'1.0-0' }}</span>
-              </span>
-              <span class="card-batch">{{ material.batchNumber }}</span>
-            </div>
-            <div class="card-lsx">{{ material.lsx }}</div>
-            <div class="card-status">
-              <i class="material-icons">touch_app</i>
-              Bấm để xác nhận
-            </div>
-          </div>
-          <div class="no-pending-message" *ngIf="getPendingCount() === 0">
-            <i class="material-icons">check_circle</i>
-            <span>Không có phiếu chờ xử lý</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bottom: đã tick khóa nhưng vẫn ở trạng thái Temporary (chưa có vị trí) -->
-      <div class="mobile-section mobile-section-bottom">
-        <div class="mobile-header mobile-header-bottom">
-          <h5>Đã khóa nhưng chưa có vị trí ({{ getLockedWithoutLocationCount() }})</h5>
-        </div>
-        <div class="pending-cards-container locked-cards-container">
-          <div class="pending-card locked-temp-card"
-               *ngFor="let material of getLockedWithoutLocationMaterials()"
-               (click)="openConfirmReceiptDialog(material)">
-            <div class="card-material-code">{{ material.materialCode }}</div>
-            <div class="card-details">
-              <span class="card-qty">SL: {{ material.quantity | number:'1.0-0' }}</span>
-              <span class="card-batch">{{ material.batchNumber }}</span>
-            </div>
-            <div class="card-lsx">{{ material.lsx }}</div>
-            <div class="card-location">
-              Vị trí: <strong class="temp-location-text">{{ material.location || 'Temporary' }}</strong>
-            </div>
-            <div class="card-status">
-              <i class="material-icons">qr_code_scanner</i>
-              Bấm để scan vị trí mới
-            </div>
-          </div>
-          <div class="no-pending-message" *ngIf="getLockedWithoutLocationCount() === 0">
-            <i class="material-icons">location_on</i>
-            <span>Không có phiếu Temporary</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Excel-like Body (Hidden on tablet/mobile) -->
-    <div class="excel-body hide-on-tablet">
+    <!-- Excel-like Body -->
+    <div class="excel-body">
       <table class="excel-table">
         <thead>
           <tr>
@@ -703,7 +737,7 @@
       </button>
     </div>
     <div class="modal-body" *ngIf="selectedReceiptMaterial">
-      <p class="confirm-instruction">Bấm vào từng ô để xác nhận thông tin đã đúng:</p>
+      <p class="confirm-instruction" *ngIf="!isMobile">Bấm vào từng ô để xác nhận thông tin đã đúng:</p>
       
       <div class="confirm-fields">
         <!-- Row 1: Mã TP + PO -->
@@ -818,7 +852,14 @@
 
       <!-- Location Section -->
       <div class="location-section">
-        <h6>Vị trí lưu kho:</h6>
+        <div class="location-section__head">
+          <h6>Vị trí lưu kho:</h6>
+          <label class="fg-asm3-checkbox" (click)="$event.stopPropagation()">
+            <input type="checkbox" [(ngModel)]="fgInUseAsm3" (ngModelChange)="onFgInAsm3Change()">
+            <span>ASM3</span>
+          </label>
+        </div>
+        <p class="fg-asm3-hint" *ngIf="fgInUseAsm3">Vị trí lưu: <strong>ASM3+</strong> + mã scan</p>
         <div class="scanner-input-container">
           <i class="material-icons scanner-icon">qr_code_scanner</i>
           <input 

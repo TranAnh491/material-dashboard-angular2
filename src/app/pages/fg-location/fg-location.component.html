@@ -1,231 +1,336 @@
-<div class="fg-location-container">
-  <!-- Header -->
-  <div class="header">
-    <h2>FG Location</h2>
-    <p class="subtitle">Đổi vị trí thành phẩm</p>
-  </div>
+<div class="main-content" [class.fg-m-page]="isMobile">
 
-  <!-- Step 1: Select Factory -->
-  <div class="step-container" *ngIf="currentStep === 'select-factory'">
-    <div class="step-header">
-      <span class="step-number">1</span>
-      <span class="step-title">Chọn nhà máy</span>
-    </div>
-    
-    <div class="factory-buttons">
-      <button 
-        *ngFor="let factory of availableFactories"
-        class="factory-btn"
-        [class.selected]="selectedFactory === factory"
-        (click)="selectFactory(factory)">
-        <span class="factory-icon">🏭</span>
-        <span class="factory-name">{{ factory }}</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Step 2: Scan Location -->
-  <div class="step-container" *ngIf="currentStep === 'scan-location'">
-    <div class="step-header">
-      <span class="step-number">2</span>
-      <span class="step-title">Scan vị trí hiện tại</span>
-    </div>
-    
-    <div class="factory-badge">
-      Nhà máy: <strong>{{ selectedFactory }}</strong>
-    </div>
-    
-    <p class="scan-hint">Scan vị trí (VD: B6.2-F1-0025) hoặc chỉ Pallet ID (VD: F1-0025)</p>
-    
-    <div class="scan-input-container">
-      <input 
-        #locationInput
-        type="text" 
-        class="scan-input"
-        [(ngModel)]="locationScanInput"
-        (ngModelChange)="onLocationInputChange()"
-        (keypress)="onLocationScanKeyPress($event)"
-        placeholder="Scan vị trí..."
-        autocomplete="off"
-        autocapitalize="characters">
-      
-      <button 
-        class="scan-btn primary"
-        [disabled]="isLoading || !locationScanInput"
-        (click)="scanLocation()">
-        <span *ngIf="!isLoading">🔍 Tìm hàng tại vị trí</span>
-        <span *ngIf="isLoading">⏳ Đang tìm...</span>
-      </button>
-    </div>
-    
-    <button class="back-btn" (click)="backToFactorySelection()">
-      ← Đổi nhà máy
-    </button>
-  </div>
-
-  <!-- Step 3: Show Items at Location -->
-  <div class="step-container" *ngIf="currentStep === 'show-items'">
-    <div class="step-header">
-      <span class="step-number">3</span>
-      <span class="step-title">Chọn hàng cần di chuyển</span>
-    </div>
-    
-    <div class="location-badge">
-      📍 Vị trí: <strong>{{ currentLocation }}</strong>
-      <span class="item-count">({{ itemsAtLocation.length }} mã hàng)</span>
-    </div>
-    
-    <!-- Select All -->
-    <div class="select-all-row" (click)="toggleSelectAll()">
-      <div class="checkbox-wrapper">
-        <i class="material-icons">{{ selectAll ? 'check_box' : 'check_box_outline_blank' }}</i>
-      </div>
-      <span class="select-all-text">Chọn toàn bộ ({{ itemsAtLocation.length }})</span>
-    </div>
-    
-    <!-- Items List -->
-    <div class="items-list">
-      <div 
-        class="item-card"
-        *ngFor="let item of itemsAtLocation"
-        [class.selected]="item.selected"
-        (click)="toggleItemSelection(item)">
-        <div class="item-checkbox">
-          <i class="material-icons">{{ item.selected ? 'check_box' : 'check_box_outline_blank' }}</i>
+  <!-- Mobile: chọn nhà máy -->
+  <div class="fg-in-factory-modal" *ngIf="showMobileFactorySelect">
+    <div class="modal-overlay" (click)="showMobileFactorySelect = false">
+      <div class="modal-content factory-select-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3><i class="material-icons">factory</i> Chọn nhà máy</h3>
         </div>
-        <div class="item-info">
-          <div class="item-code">{{ item.materialCode }}</div>
-          <div class="item-details">
-            <span class="detail-item" *ngIf="item.lot">LOT: {{ item.lot }}</span>
-            <span class="detail-item" *ngIf="item.lsx">LSX: {{ item.lsx }}</span>
-          </div>
-          <div class="item-quantity">
-            SL: <strong>{{ item.ton | number }}</strong>
+        <div class="modal-body factory-select-body">
+          <p class="factory-hint">Chọn ASM1 hoặc ASM2 để thao tác.</p>
+          <div class="factory-buttons">
+            <button type="button" class="factory-btn asm1" (click)="selectMobileFactory('ASM1')">ASM1</button>
+            <button type="button" class="factory-btn asm2" (click)="selectMobileFactory('ASM2')">ASM2</button>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Selected Count -->
-    <div class="selected-summary" *ngIf="getSelectedCount() > 0">
-      ✅ Đã chọn: <strong>{{ getSelectedCount() }}</strong> / {{ itemsAtLocation.length }} mã hàng
-    </div>
-    
-    <div class="action-buttons">
-      <button 
-        class="action-btn primary" 
-        [disabled]="!hasSelectedItems()"
-        (click)="proceedToScanNewLocation()">
-        📍 Tiếp tục - Scan vị trí mới
-      </button>
-      <button class="action-btn secondary" (click)="backToLocationScan()">
-        ← Scan vị trí khác
-      </button>
-    </div>
   </div>
 
-  <!-- Step 4: Scan New Location -->
-  <div class="step-container" *ngIf="currentStep === 'scan-new-location'">
-    <div class="step-header">
-      <span class="step-number">4</span>
-      <span class="step-title">Scan vị trí mới</span>
-    </div>
-    
-    <div class="move-summary">
-      <div class="from-location">
-        <span class="label">Từ vị trí:</span>
-        <span class="location-value old">{{ currentLocation }}</span>
+  <!-- Mobile shell -->
+  <div class="fg-m" *ngIf="isMobile && mobileFactorySelected">
+    <header class="fg-m-header">
+      <div class="fg-m-header__left">
+        <button type="button" class="fg-m-factory" (click)="openMobileFactorySelect()" title="Đổi nhà máy làm việc">
+          {{ selectedFactory }}
+        </button>
+        <h1 class="fg-m-title">FG Location</h1>
       </div>
-      <div class="move-arrow">➡️</div>
-      <div class="to-location">
-        <span class="label">Đến vị trí:</span>
-        <span class="location-value new">{{ getDisplayNewLocation() }}</span>
+    </header>
+
+    <div class="fg-m-body">
+      <!-- Tab: Đổi vị trí -->
+      <section class="fg-m-panel" *ngIf="mobileBottomTab === 'move'">
+        <ng-container *ngTemplateOutlet="moveFlow"></ng-container>
+      </section>
+
+      <!-- Tab: Đổi nhà máy -->
+      <section class="fg-m-panel" *ngIf="mobileBottomTab === 'factory'">
+        <!-- Chọn Mã / Pallet -->
+        <div *ngIf="factoryChangeStep === 'mode'" class="fg-loc-mode-pick">
+          <p class="fg-m-section-label">Chọn cách đổi nhà máy</p>
+          <button type="button" class="fg-loc-mode-btn" (click)="startFactoryChangeMode('ma')">
+            <i class="material-icons">inventory_2</i>
+            <span>Mã</span>
+            <small>Scan vị trí → chọn mã → đổi nhà máy</small>
+          </button>
+          <button type="button" class="fg-loc-mode-btn fg-loc-mode-btn--pallet" (click)="startFactoryChangeMode('pallet')">
+            <i class="material-icons">pallet</i>
+            <span>Pallet</span>
+            <small>Scan một hoặc nhiều pallet → đổi nhà máy</small>
+          </button>
+        </div>
+
+        <!-- Mã: scan vị trí -->
+        <div *ngIf="factoryChangeMode === 'ma' && factoryChangeStep === 'scan-loc'" class="fg-loc-step">
+          <p class="fg-m-section-label">Scan vị trí</p>
+          <div class="fg-loc-scan-wrap">
+            <i class="material-icons">qr_code_scanner</i>
+            <input #factoryLocInput type="text" class="fg-loc-scan-input"
+                   [(ngModel)]="factoryChangeLocationInput"
+                   (ngModelChange)="onFactoryLocInputChange()"
+                   (keypress)="onFactoryLocKeyPress($event)"
+                   placeholder="Scan vị trí..."
+                   autocomplete="off" autocapitalize="characters">
+          </div>
+          <button type="button" class="fg-loc-action-btn" [disabled]="isLoading || !factoryChangeLocationInput" (click)="scanLocationForFactoryChange()">
+            Tìm mã tại vị trí
+          </button>
+          <button type="button" class="fg-loc-back-link" (click)="backFactoryChangeStep()">← Quay lại</button>
+        </div>
+
+        <!-- Mã: chọn mã -->
+        <div *ngIf="factoryChangeMode === 'ma' && factoryChangeStep === 'select-ma'" class="fg-loc-step">
+          <p class="fg-m-section-label">Chọn mã ({{ getFactoryChangeSelectedCount() }}/{{ factoryChangeItems.length }})</p>
+          <div class="fg-loc-select-all" (click)="toggleFactorySelectAll()">
+            <i class="material-icons">{{ isAllFactoryItemsSelected() ? 'check_box' : 'check_box_outline_blank' }}</i>
+            <span>Chọn toàn bộ</span>
+          </div>
+          <div class="fg-m-card-list">
+            <div class="fg-m-card fg-loc-pick-card" *ngFor="let item of factoryChangeItems"
+                 [class.fg-loc-pick-card--on]="item.selected"
+                 (click)="toggleFactoryItemSelection(item)">
+              <div class="fg-loc-pick-check">
+                <i class="material-icons">{{ item.selected ? 'check_box' : 'check_box_outline_blank' }}</i>
+              </div>
+              <div>
+                <div class="fg-m-card__code">{{ item.materialCode }}</div>
+                <span class="fg-m-card__meta">LOT: {{ item.lot || '—' }} · SL: {{ item.ton | number }}</span>
+                <span class="fg-m-card__meta">NM: {{ item.factory }} · {{ item.location }}</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="fg-loc-action-btn" [disabled]="getFactoryChangeSelectedCount() === 0" (click)="proceedToPickFactory()">
+            Tiếp tục — Chọn nhà máy
+          </button>
+          <button type="button" class="fg-loc-back-link" (click)="backFactoryChangeStep()">← Quay lại</button>
+        </div>
+
+        <!-- Pallet: scan nhiều pallet -->
+        <div *ngIf="factoryChangeMode === 'pallet' && factoryChangeStep === 'scan-pallet'" class="fg-loc-step">
+          <p class="fg-m-section-label">Scan Pallet ({{ factoryChangePalletIds.length }})</p>
+          <div class="fg-loc-scan-wrap">
+            <i class="material-icons">qr_code_scanner</i>
+            <input #factoryPalletInput type="text" class="fg-loc-scan-input"
+                   [(ngModel)]="palletScanInput"
+                   (ngModelChange)="onFactoryPalletInputChange()"
+                   (keypress)="onFactoryPalletKeyPress($event)"
+                   placeholder="Scan Pallet ID..."
+                   autocomplete="off" autocapitalize="characters">
+          </div>
+          <button type="button" class="fg-loc-action-btn" [disabled]="isLoading || !palletScanInput" (click)="scanPalletForFactoryChange()">
+            Thêm Pallet
+          </button>
+          <div class="fg-loc-pallet-chips" *ngIf="factoryChangePalletIds.length">
+            <span class="fg-loc-pallet-chip" *ngFor="let pid of factoryChangePalletIds">
+              {{ pid }}
+              <button type="button" (click)="removeScannedPallet(pid); $event.stopPropagation()">
+                <i class="material-icons">close</i>
+              </button>
+            </span>
+          </div>
+          <p class="fg-loc-summary" *ngIf="factoryChangeItems.length">
+            {{ factoryChangeItems.length }} mã hàng từ {{ factoryChangePalletIds.length }} pallet
+          </p>
+          <button type="button" class="fg-loc-action-btn" [disabled]="!factoryChangeItems.length" (click)="proceedPalletToPickFactory()">
+            Tiếp tục — Chọn nhà máy
+          </button>
+          <button type="button" class="fg-loc-back-link" (click)="backFactoryChangeStep()">← Quay lại</button>
+        </div>
+
+        <!-- Chọn nhà máy đích -->
+        <div *ngIf="factoryChangeStep === 'pick-factory'" class="fg-loc-step">
+          <p class="fg-m-section-label">Đổi nhà máy →</p>
+          <p class="fg-loc-summary">{{ getItemsForFactoryChange().length }} mã sẽ đổi sang:</p>
+          <div class="fg-loc-factory-grid">
+            <button type="button" class="fg-loc-factory-opt"
+                    *ngFor="let f of targetFactories"
+                    [class.fg-loc-factory-opt--on]="targetFactory === f"
+                    (click)="selectTargetFactory(f)">
+              {{ f }}
+            </button>
+          </div>
+          <button type="button" class="fg-loc-action-btn fg-loc-action-btn--done"
+                  [disabled]="isLoading || !canConfirmFactoryChange()"
+                  (click)="confirmFactoryChange()">
+            <i class="material-icons">done</i> Done
+          </button>
+          <button type="button" class="fg-loc-back-link" (click)="backFactoryChangeStep()">← Quay lại</button>
+        </div>
+
+        <!-- Thành công -->
+        <div *ngIf="factoryChangeStep === 'done'" class="fg-loc-success">
+          <i class="material-icons">check_circle</i>
+          <p>{{ successMessage }}</p>
+          <button type="button" class="fg-loc-action-btn" (click)="resetFactoryChangeFlow(true)">Đổi tiếp</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="fg-loc-mobile-error" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+    <nav class="fg-m-bottomnav">
+      <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'move'" (click)="setMobileBottomTab('move')">
+        <i class="material-icons">swap_horiz</i>
+        <span>Đổi vị trí</span>
+      </button>
+      <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'factory'" (click)="setMobileBottomTab('factory')">
+        <i class="material-icons">factory</i>
+        <span>Đổi nhà máy</span>
+      </button>
+      <button type="button" class="fg-m-bottomnav__btn fg-m-bottomnav__btn--menu" (click)="goMobileMenu()">
+        <i class="material-icons">home</i>
+        <span>Menu</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Desktop -->
+  <div class="fg-location-container" *ngIf="!isMobile">
+    <ng-container *ngTemplateOutlet="moveFlow"></ng-container>
+  </div>
+
+  <!-- Shared: luồng đổi vị trí -->
+  <ng-template #moveFlow>
+    <div class="header" *ngIf="!isMobile">
+      <h2>FG Location</h2>
+      <p class="subtitle">Đổi vị trí thành phẩm</p>
+    </div>
+
+    <div class="step-container" *ngIf="currentStep === 'select-factory'">
+      <div class="step-header">
+        <span class="step-number">1</span>
+        <span class="step-title">Chọn nhà máy</span>
+      </div>
+      <div class="factory-buttons">
+        <button *ngFor="let factory of availableFactories" class="factory-btn"
+                [class.selected]="selectedFactory === factory" (click)="selectFactory(factory)">
+          <span class="factory-icon">🏭</span>
+          <span class="factory-name">{{ factory }}</span>
+        </button>
       </div>
     </div>
-    
-    <div class="selected-items-summary">
-      Di chuyển <strong>{{ getSelectedCount() }}</strong> mã hàng
+
+    <div class="step-container" *ngIf="currentStep === 'scan-location'">
+      <div class="step-header">
+        <span class="step-number">2</span>
+        <span class="step-title">Scan vị trí hiện tại</span>
+      </div>
+      <div class="factory-badge">Nhà máy: <strong>{{ selectedFactory }}</strong></div>
+      <p class="scan-hint">Scan vị trí hoặc Pallet ID</p>
+      <div class="scan-input-container">
+        <input #locationInput type="text" class="scan-input"
+               [(ngModel)]="locationScanInput" (ngModelChange)="onLocationInputChange()"
+               (keypress)="onLocationScanKeyPress($event)" placeholder="Scan vị trí..."
+               autocomplete="off" autocapitalize="characters">
+        <button class="scan-btn primary" [disabled]="isLoading || !locationScanInput" (click)="scanLocation()">
+          <span *ngIf="!isLoading">🔍 Tìm hàng</span>
+          <span *ngIf="isLoading">⏳ Đang tìm...</span>
+        </button>
+      </div>
+      <button class="back-btn" (click)="backToFactorySelection()">← Đổi nhà máy</button>
     </div>
-    
-    <div class="new-location-fields">
-      <div class="field-row">
-        <label class="field-label">Vị trí mới</label>
-        <div class="field-input-wrap">
-          <input 
-            #newLocationInput
-            type="text" 
-            class="scan-input"
-            [(ngModel)]="newLocationScanInput"
-            (ngModelChange)="onNewLocationInputChange()"
-            (keypress)="onNewLocationScanKeyPress($event)"
-            placeholder="Scan vị trí mới..."
-            autocomplete="off"
-            autocapitalize="characters">
-          <div class="skip-check" (click)="skipNewLocation = !skipNewLocation">
-            <i class="material-icons">{{ skipNewLocation ? 'check_box' : 'check_box_outline_blank' }}</i>
-            <span>Bỏ qua vị trí</span>
+
+    <div class="step-container" *ngIf="currentStep === 'show-items'">
+      <div class="step-header">
+        <span class="step-number">3</span>
+        <span class="step-title">Chọn hàng cần di chuyển</span>
+      </div>
+      <div class="location-badge">
+        📍 <strong>{{ currentLocation }}</strong>
+        <span class="item-count">({{ itemsAtLocation.length }} mã)</span>
+      </div>
+      <div class="select-all-row" (click)="toggleSelectAll()">
+        <div class="checkbox-wrapper">
+          <i class="material-icons">{{ selectAll ? 'check_box' : 'check_box_outline_blank' }}</i>
+        </div>
+        <span class="select-all-text">Chọn toàn bộ</span>
+      </div>
+      <div class="items-list">
+        <div class="item-card" *ngFor="let item of itemsAtLocation" [class.selected]="item.selected"
+             (click)="toggleItemSelection(item)">
+          <div class="item-checkbox">
+            <i class="material-icons">{{ item.selected ? 'check_box' : 'check_box_outline_blank' }}</i>
+          </div>
+          <div class="item-info">
+            <div class="item-code">{{ item.materialCode }}</div>
+            <div class="item-details">
+              <span class="detail-item" *ngIf="item.lot">LOT: {{ item.lot }}</span>
+              <span class="detail-item" *ngIf="item.lsx">LSX: {{ item.lsx }}</span>
+            </div>
+            <div class="item-quantity">SL: <strong>{{ item.ton | number }}</strong></div>
           </div>
         </div>
       </div>
-      <div class="field-row">
-        <label class="field-label">Pallet ID</label>
-        <div class="field-input-wrap">
-          <input 
-            #palletIdInput
-            type="text" 
-            class="scan-input"
-            [(ngModel)]="palletIdScanInput"
-            (ngModelChange)="onPalletIdInputChange()"
-            (keypress)="onPalletIdScanKeyPress($event)"
-            placeholder="Scan Pallet ID..."
-            autocomplete="off"
-            autocapitalize="characters">
-          <div class="skip-check" (click)="skipPalletId = !skipPalletId">
-            <i class="material-icons">{{ skipPalletId ? 'check_box' : 'check_box_outline_blank' }}</i>
-            <span>Bỏ qua Pallet ID</span>
+      <div class="selected-summary" *ngIf="getSelectedCount() > 0">
+        ✅ Đã chọn: <strong>{{ getSelectedCount() }}</strong>
+      </div>
+      <div class="action-buttons">
+        <button class="action-btn primary" [disabled]="!hasSelectedItems()" (click)="proceedToScanNewLocation()">
+          📍 Scan vị trí mới
+        </button>
+        <button class="action-btn secondary" (click)="backToLocationScan()">← Scan vị trí khác</button>
+      </div>
+    </div>
+
+    <div class="step-container" *ngIf="currentStep === 'scan-new-location'">
+      <div class="step-header">
+        <span class="step-number">4</span>
+        <span class="step-title">Scan vị trí mới</span>
+      </div>
+      <div class="move-summary">
+        <div class="from-location">
+          <span class="label">Từ:</span>
+          <span class="location-value old">{{ currentLocation }}</span>
+        </div>
+        <div class="move-arrow">➡️</div>
+        <div class="to-location">
+          <span class="label">Đến:</span>
+          <span class="location-value new">{{ getDisplayNewLocation() }}</span>
+        </div>
+      </div>
+      <div class="new-location-fields">
+        <div class="field-row">
+          <label class="field-label">Vị trí mới</label>
+          <div class="field-input-wrap">
+            <input #newLocationInput type="text" class="scan-input"
+                   [(ngModel)]="newLocationScanInput" (ngModelChange)="onNewLocationInputChange()"
+                   (keypress)="onNewLocationScanKeyPress($event)" placeholder="Scan vị trí mới..."
+                   autocomplete="off" autocapitalize="characters">
+            <div class="skip-check" (click)="skipNewLocation = !skipNewLocation">
+              <i class="material-icons">{{ skipNewLocation ? 'check_box' : 'check_box_outline_blank' }}</i>
+              <span>Bỏ qua</span>
+            </div>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field-label">Pallet ID</label>
+          <div class="field-input-wrap">
+            <input #palletIdInput type="text" class="scan-input"
+                   [(ngModel)]="palletIdScanInput" (ngModelChange)="onPalletIdInputChange()"
+                   (keypress)="onPalletIdScanKeyPress($event)" placeholder="Scan Pallet ID..."
+                   autocomplete="off" autocapitalize="characters">
+            <div class="skip-check" (click)="skipPalletId = !skipPalletId">
+              <i class="material-icons">{{ skipPalletId ? 'check_box' : 'check_box_outline_blank' }}</i>
+              <span>Bỏ qua</span>
+            </div>
           </div>
         </div>
       </div>
+      <div class="scan-input-container">
+        <button class="scan-btn success btn-move" [disabled]="isLoading || !isNewLocationValid()" (click)="moveToNewLocation()">
+          <span *ngIf="!isLoading">✅ Di chuyển</span>
+          <span *ngIf="isLoading">⏳ Đang xử lý...</span>
+        </button>
+      </div>
+      <button class="back-btn" (click)="backToItemSelection()">← Quay lại</button>
     </div>
-    
-    <p class="step4-hint">Chỉ cần ít nhất một mục (vị trí mới hoặc Pallet ID), sau đó bấm Di chuyển.</p>
-    
-    <div class="scan-input-container">
-      <button 
-        class="scan-btn success btn-move"
-        [disabled]="isLoading || !isNewLocationValid()"
-        (click)="moveToNewLocation()">
-        <span *ngIf="!isLoading">✅ Di chuyển</span>
-        <span *ngIf="isLoading">⏳ Đang xử lý...</span>
-      </button>
+
+    <div class="step-container success-container" *ngIf="currentStep === 'success'">
+      <div class="success-icon">✅</div>
+      <div class="success-message">{{ successMessage }}</div>
+      <div class="action-buttons">
+        <button class="action-btn primary" (click)="scanAnotherLocation()">📍 Scan vị trí khác</button>
+        <button class="action-btn secondary" (click)="backToFactorySelection()">🏭 Đổi nhà máy</button>
+      </div>
     </div>
-    
-    <button class="back-btn" (click)="backToItemSelection()">
-      ← Quay lại chọn hàng
-    </button>
-  </div>
 
-  <!-- Step 5: Success -->
-  <div class="step-container success-container" *ngIf="currentStep === 'success'">
-    <div class="success-icon">✅</div>
-    <div class="success-message">{{ successMessage }}</div>
-    
-    <div class="action-buttons">
-      <button class="action-btn primary" (click)="scanAnotherLocation()">
-        📍 Scan vị trí khác
-      </button>
-      <button class="action-btn secondary" (click)="resetAll()">
-        🏭 Đổi nhà máy
-      </button>
+    <div class="error-message" *ngIf="errorMessage">
+      ⚠️ {{ errorMessage }}
     </div>
-  </div>
+  </ng-template>
 
-  <!-- Error Message -->
-  <div class="error-message" *ngIf="errorMessage">
-    ⚠️ {{ errorMessage }}
-  </div>
-
-  <!-- Loading Overlay -->
   <div class="loading-overlay" *ngIf="isLoading">
     <div class="spinner"></div>
     <span>Đang xử lý...</span>

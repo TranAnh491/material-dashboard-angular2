@@ -1,4 +1,5 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, HostListener } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -76,6 +77,10 @@ export class FgInComponent implements OnInit, OnDestroy {
   availableFactories: string[] = ['ASM1', 'ASM2', 'TOTAL'];
   // Mobile: đã chọn factory hay chưa (để hiện popup chọn ASM1/ASM2 trước)
   mobileFactorySelected: boolean = false;
+  isMobile = false;
+  showMobileFactorySelect = false;
+  mobileBottomTab: 'pending' | 'location' = 'pending';
+  private readonly fgInMobileBodyClass = 'fg-in-mobile-tab';
   
   // Time range filter
   showTimeRangeDialog: boolean = false;
@@ -177,6 +182,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   
   // Scanner input for location
   locationScannerValue: string = '';
+  /** Tick ASM3: ghép ASM3+ + vị trí scan */
+  fgInUseAsm3 = false;
   @ViewChild('locationScannerInput') locationScannerInput: ElementRef;
   
   // Multiple pallet (partial confirmation)
@@ -190,7 +197,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -208,11 +216,54 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
+    this.updateMobileLayout();
   }
 
   ngOnDestroy(): void {
+    document.body.classList.remove(this.fgInMobileBodyClass);
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.updateMobileLayout();
+  }
+
+  private updateMobileLayout(): void {
+    const next =
+      window.innerWidth <= 768 ||
+      /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+        (navigator.userAgent || '').toLowerCase()
+      );
+    if (next === this.isMobile) return;
+    this.isMobile = next;
+    if (this.isMobile) {
+      document.body.classList.add(this.fgInMobileBodyClass);
+      if (!this.mobileFactorySelected) {
+        this.showMobileFactorySelect = true;
+      }
+    } else {
+      document.body.classList.remove(this.fgInMobileBodyClass);
+      this.showMobileFactorySelect = false;
+    }
+  }
+
+  selectMobileFactory(factory: 'ASM1' | 'ASM2'): void {
+    this.setFactoryFilter(factory);
+    this.showMobileFactorySelect = false;
+  }
+
+  openMobileFactorySelect(): void {
+    this.showMobileFactorySelect = true;
+  }
+
+  setMobileBottomTab(tab: 'pending' | 'location'): void {
+    this.mobileBottomTab = tab;
+  }
+
+  goMobileMenu(): void {
+    this.router.navigate(['/menu']);
   }
 
   // Load materials from Firebase - One-time load for better performance
@@ -444,8 +495,10 @@ export class FgInComponent implements OnInit, OnDestroy {
   setFactoryFilter(factory: string): void {
     this.selectedFactory = factory;
     this.applyFilters();
-    // Khi user chọn factory trên mobile popup, ghi nhận đã chọn để ẩn popup
-    this.mobileFactorySelected = true;
+    if (factory === 'ASM1' || factory === 'ASM2') {
+      this.mobileFactorySelected = true;
+      this.showMobileFactorySelect = false;
+    }
   }
 
   openNhapKho(): void {
@@ -2287,8 +2340,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''  // Always empty - requires scanning
     };
     this.locationScannerValue = '';  // Clear scanner input
-    
-    // Multiple pallet - initialize
+    this.fgInUseAsm3 = false;
     this.isMultiplePallet = false;
     this.originalQuantity = material.quantity || 0;
     this.confirmQuantity = this.originalQuantity;
@@ -2313,6 +2365,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''
     };
     this.locationScannerValue = '';
+    this.fgInUseAsm3 = false;
     
     // Reset multiple pallet
     this.isMultiplePallet = false;
@@ -2376,11 +2429,37 @@ export class FgInComponent implements OnInit, OnDestroy {
   onLocationScannerInput(): void {
     if (this.locationScannerValue) {
       this.locationScannerValue = this.locationScannerValue.toUpperCase();
-      // Keep confirmation state in sync so the button can be enabled
-      this.confirmReceiptData.location = this.locationScannerValue.trim().toUpperCase();
+      this.confirmReceiptData.location = this.normalizeFgInLocationInput(this.locationScannerValue);
     } else {
       this.confirmReceiptData.location = '';
     }
+  }
+
+  onFgInAsm3Change(): void {
+    if (this.locationScannerValue) {
+      this.confirmReceiptData.location = this.normalizeFgInLocationInput(this.locationScannerValue);
+    }
+    this.focusLocationScanner();
+  }
+
+  private buildAsm3PrefixedLocation(raw: string): string {
+    const s = String(raw || '')
+      .replace(/\s/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9.\-()+]/g, '');
+    const body = s.replace(/^ASM3[+_-]?/, '');
+    return body ? `ASM3+${body}` : '';
+  }
+
+  private normalizeFgInLocationInput(raw: string): string {
+    const compact = String(raw || '')
+      .trim()
+      .replace(/\s+/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9.\-()+]/g, '');
+    if (!compact) return '';
+    if (this.fgInUseAsm3) return this.buildAsm3PrefixedLocation(compact);
+    return compact;
   }
 
   // Handle Enter key from scanner
@@ -2394,7 +2473,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Save the scanned location
   saveScannedLocation(): void {
     if (this.locationScannerValue && this.locationScannerValue.trim() !== '') {
-      this.confirmReceiptData.location = this.locationScannerValue.trim().toUpperCase();
+      this.confirmReceiptData.location = this.normalizeFgInLocationInput(this.locationScannerValue);
       console.log(`✅ Location saved: ${this.confirmReceiptData.location}`);
     }
   }

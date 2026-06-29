@@ -305,6 +305,14 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/location';
     }
 
+    isFgInPage(): boolean {
+      return this.currentAppPath() === '/fg-in';
+    }
+
+    isFgLocationPage(): boolean {
+      return this.currentAppPath() === '/fg-location';
+    }
+
     isLayoutWarehousePage(): boolean {
       return this.currentAppPath() === '/layout-warehouse';
     }
