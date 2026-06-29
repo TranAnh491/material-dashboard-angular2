@@ -117,6 +117,17 @@
   margin-right: -4px;
 }
 
+.dash-widget__pill--btn {
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-widget__pill--btn:hover {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.18);
+}
+
 .dash-widget--clickable {
   cursor: pointer;
 }

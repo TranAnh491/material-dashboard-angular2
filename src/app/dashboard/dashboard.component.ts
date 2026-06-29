@@ -118,6 +118,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrderStatus: WorkOrderStatusRow[] = [];
   /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
   woHeatmapDays: WoHeatmapDayCol[] = [];
+  /** 0 = tuần hiện tại, -1 = tuần trước */
+  woHeatmapWeekOffset = 0;
   /** Hiển thị tooltip heatmap — khớp `createdByPickerOptions` tab Work Order Status */
   private readonly woCreatedByLabels: Record<string, string> = {
     TÌNH: 'Tình',
@@ -959,12 +961,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     console.log(`Updated Work Order Status (T2–T7, 6 ngày):`, this.workOrderStatus);
 
-    this.rebuildWoHeatmap(monday);
+    this.refreshWoHeatmap();
     this.cdr.detectChanges();
   }
 
   get woHeatmapHasCells(): boolean {
     return (this.woHeatmapDays || []).some((d) => (d.cells?.length || 0) > 0);
+  }
+
+  get woWeekPillLabel(): string {
+    const monday = this.getWoHeatmapMonday();
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    const range = `${fmt(monday)}–${fmt(saturday)}`;
+    return this.woHeatmapWeekOffset === 0
+      ? `Tuần này · ${range}`
+      : `Tuần trước · ${range}`;
+  }
+
+  toggleWoHeatmapWeek(): void {
+    this.woHeatmapWeekOffset = this.woHeatmapWeekOffset === 0 ? -1 : 0;
+    this.refreshWoHeatmap();
+    this.cdr.detectChanges();
+  }
+
+  private getWoHeatmapMonday(): Date {
+    const monday = this.getMondayOfWeekContaining(new Date());
+    if (this.woHeatmapWeekOffset !== 0) {
+      monday.setDate(monday.getDate() + this.woHeatmapWeekOffset * 7);
+    }
+    return monday;
+  }
+
+  private refreshWoHeatmap(): void {
+    this.rebuildWoHeatmap(this.getWoHeatmapMonday());
   }
 
   get fgInHeatmapHasCells(): boolean {
@@ -1645,6 +1677,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Method to handle factory selection changes
   onFactoryChange(factory: string) {
     this.selectedFactory = factory;
+    this.woHeatmapWeekOffset = 0;
     this.loadDashboardData();
     this.loadIQCByWeek();
   }
