@@ -1,75 +1,58 @@
-<div class="main-content">
+<div class="main-content eq-page">
   <div class="container-fluid">
-    <!-- Language Toggle at Top Left Corner -->
-    <div class="language-toolbar">
-      <button class="btn btn-info" (click)="toggleLanguage()">
-        <i class="material-icons">language</i> {{ isEnglish ? 'Tiếng Việt' : 'English' }}
+    <header class="eq-page-header no-print">
+      <div class="eq-page-title">
+        <img [src]="logoSrc" alt="AIRSPEED" class="eq-page-logo" />
+        <div>
+          <h1>{{ isEnglish ? 'Equipment & Training' : 'Thiết bị & Đào tạo' }}</h1>
+          <p>{{ isEnglish ? 'Training management' : 'Quản lý đào tạo nhân viên kho' }}</p>
+        </div>
+      </div>
+      <button class="eq-lang-btn" type="button" (click)="toggleLanguage()">
+        <i class="material-icons">language</i>
+        {{ isEnglish ? 'Tiếng Việt' : 'English' }}
+      </button>
+    </header>
+
+    <div class="eq-summary-grid no-print">
+      <button type="button" class="eq-summary-card eq-summary-card--purple" [class.is-active]="isSectionOpen('templates')" (click)="openSection('templates')">
+        <span class="eq-summary-icon"><i class="material-icons">description</i></span>
+        <span class="eq-summary-text">
+          <strong>{{ isEnglish ? 'Training Templates' : 'Mẫu đào tạo' }}</strong>
+          <small>{{ isEnglish ? 'Forms & warehouse guide' : 'Biểu mẫu & tài liệu hướng dẫn kho' }}</small>
+        </span>
+        <i class="material-icons eq-summary-arrow">chevron_right</i>
+      </button>
+
+      <button type="button" class="eq-summary-card eq-summary-card--amber" [class.is-active]="isSectionOpen('report')" (click)="openSection('report')">
+        <span class="eq-summary-icon"><i class="material-icons">assessment</i></span>
+        <span class="eq-summary-text">
+          <strong>Training Report</strong>
+          <small>{{ isEnglish ? 'Training reports' : 'Báo cáo đào tạo' }}</small>
+        </span>
+        <i class="material-icons eq-summary-arrow">chevron_right</i>
+      </button>
+
+      <button type="button" class="eq-summary-card eq-summary-card--pink" [class.is-active]="isSectionOpen('matrix')" (click)="openSection('matrix')">
+        <span class="eq-summary-icon"><i class="material-icons">grid_view</i></span>
+        <span class="eq-summary-text">
+          <strong>Matrix Training</strong>
+          <small>{{ isEnglish ? 'Training matrix' : 'Ma trận đào tạo' }}</small>
+        </span>
+        <i class="material-icons eq-summary-arrow">chevron_right</i>
+      </button>
+
+      <button type="button" class="eq-summary-card eq-summary-card--green" [class.is-active]="isSectionOpen('test')" (click)="openSection('test')">
+        <span class="eq-summary-icon"><i class="material-icons">quiz</i></span>
+        <span class="eq-summary-text">
+          <strong>Knowledge Test</strong>
+          <small>{{ isEnglish ? 'Knowledge assessment' : 'Kiểm tra kiến thức' }}</small>
+        </span>
+        <i class="material-icons eq-summary-arrow">chevron_right</i>
       </button>
     </div>
 
-    <!-- Main Title - Hidden for more space -->
-    <!-- <div class="page-header">
-      <h1 class="page-title">
-        <i class="material-icons">precision_manufacturing</i>
-        {{ isEnglish ? 'Training & Instructions' : 'Training & Instructions' }}
-      </h1>
-      <p class="page-subtitle">{{ isEnglish ? 'Training and Work Instructions' : 'Đào tạo và Hướng dẫn Công việc' }}</p>
-    </div>
-    <div class="header-divider"></div> -->
-
-    <!-- Four Menu Cards Layout -->
-    <div class="menu-cards-layout">
-      
-
-
-      <!-- Menu Card 2: Test (Light Green) -->
-      <div class="menu-card test" (click)="toggleTest()">
-        <div class="menu-card-icon">
-          <i class="material-icons">quiz</i>
-        </div>
-        <div class="menu-card-content">
-          <h3>{{ isEnglish ? 'Knowledge Test' : 'Knowledge Test' }}</h3>
-          <p>{{ isEnglish ? 'Knowledge assessment' : 'Kiểm tra kiến thức' }}</p>
-        </div>
-        <div class="menu-card-arrow">
-          <i class="material-icons">{{ showTest ? 'expand_less' : 'expand_more' }}</i>
-        </div>
-      </div>
-
-      <!-- Menu Card 3: Report (Light Orange) -->
-      <div class="menu-card report" (click)="toggleReport()">
-        <div class="menu-card-icon">
-          <i class="material-icons">assessment</i>
-        </div>
-        <div class="menu-card-content">
-          <h3>{{ isEnglish ? 'Training Report' : 'Training Report' }}</h3>
-          <p>{{ isEnglish ? 'Training reports' : 'Báo cáo đào tạo' }}</p>
-        </div>
-        <div class="menu-card-arrow">
-          <i class="material-icons">{{ showReport ? 'expand_less' : 'expand_more' }}</i>
-        </div>
-      </div>
-
-      <!-- Menu Card 4: Matrix Training (Light Pink) -->
-      <div class="menu-card matrix-training" (click)="toggleMatrixTraining()">
-        <div class="menu-card-icon">
-          <i class="material-icons">grid_view</i>
-        </div>
-        <div class="menu-card-content">
-          <h3>{{ isEnglish ? 'Matrix Training' : 'Matrix Training' }}</h3>
-          <p>{{ isEnglish ? 'Training matrix' : 'Ma trận đào tạo' }}</p>
-        </div>
-        <div class="menu-card-arrow">
-          <i class="material-icons">{{ showMatrixTraining ? 'expand_less' : 'expand_more' }}</i>
-        </div>
-      </div>
-
-    </div>
-
-
-
-    <!-- Test Content (Expanded) -->
-    <div *ngIf="showTest" class="expanded-content test-content">
+    <div *ngIf="isSectionOpen('test')" class="eq-panel test-content">
       <div class="content-header">
         <h2>
           <i class="material-icons">quiz</i>
@@ -167,8 +150,7 @@
       </div>
     </div>
 
-    <!-- Report Content (Expanded) -->
-    <div *ngIf="showReport" class="expanded-content report-content">
+    <div *ngIf="isSectionOpen('report')" class="eq-panel report-content">
       <div class="content-header">
         <h2>
           <i class="material-icons">assessment</i>
@@ -356,8 +338,7 @@
       </div>
     </div>
 
-    <!-- Matrix Training Content (Expanded) -->
-    <div *ngIf="showMatrixTraining" class="expanded-content matrix-training-content">
+    <div *ngIf="isSectionOpen('matrix')" class="eq-panel matrix-training-content">
       <div class="content-header">
         <h2>
           <i class="material-icons">grid_view</i>
@@ -508,6 +489,156 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- Mẫu đào tạo -->
+    <div *ngIf="isSectionOpen('templates')" class="eq-panel eq-panel--templates">
+      <div class="eq-panel-head no-print">
+        <div class="eq-panel-head-left">
+          <span class="eq-panel-head-icon"><i class="material-icons">description</i></span>
+          <div>
+            <h2>Mẫu đào tạo</h2>
+            <p>Biểu mẫu đào tạo nhân viên kho mới</p>
+          </div>
+        </div>
+        <button type="button" class="eq-panel-close" (click)="closeAll()"><i class="material-icons">close</i></button>
+      </div>
+
+      <div class="eq-template-tabs no-print">
+        <button type="button" class="eq-template-tab" [class.active]="trainingTemplateTab === 'form'" (click)="setTrainingTemplateTab('form')">
+          <i class="material-icons">badge</i> Biểu mẫu đào tạo NV kho
+        </button>
+        <button type="button" class="eq-template-tab" [class.active]="trainingTemplateTab === 'manual'" (click)="setTrainingTemplateTab('manual')">
+          <i class="material-icons">menu_book</i> Tài liệu hướng dẫn kho
+        </button>
+        <button type="button" class="eq-template-tab" [class.active]="trainingTemplateTab === 'quiz'" (click)="setTrainingTemplateTab('quiz')">
+          <i class="material-icons">quiz</i> KT Đào Tạo Kho
+        </button>
+      </div>
+
+      <div class="eq-template-toolbar no-print" *ngIf="trainingTemplateTab === 'form'">
+        <button type="button" class="eq-tool-btn" (click)="resetWarehouseTrainingForm()">
+          <i class="material-icons">refresh</i> Làm mới
+        </button>
+        <button type="button" class="eq-tool-btn" (click)="previewTrainingForm()">
+          <i class="material-icons">visibility</i> Xem trước
+        </button>
+        <button type="button" class="eq-tool-btn eq-tool-btn--primary" (click)="printWarehouseTrainingForm()">
+          <i class="material-icons">print</i> In mẫu
+        </button>
+        <button type="button" class="eq-tool-btn" (click)="downloadTrainingFormPdf()">
+          <i class="material-icons">download</i> Tải xuống PDF
+        </button>
+      </div>
+
+      <div class="eq-doc-viewport">
+        <div *ngIf="trainingTemplateTab === 'form'" id="warehouseTrainingPrintArea" class="eq-doc-paper">
+          <table class="pxk-doc-header">
+            <tr>
+              <td class="logo-cell"><img [src]="logoSrc" alt="AIRSPEED" /></td>
+              <td class="title-cell">
+                <div class="title-line1">{{ manualDocMeta.companyLine1 }}</div>
+                <div class="title-line2">{{ manualDocMeta.formTitle }}</div>
+              </td>
+              <td class="meta-cell">
+                <table class="meta-table">
+                  <tr><td class="meta-label">Mã quản lý</td><td>{{ manualDocMeta.docCode }}</td></tr>
+                  <tr><td class="meta-label">Phiên bản</td><td>{{ manualDocMeta.version }}</td></tr>
+                  <tr><td class="meta-label">Ngày ban hành</td><td>{{ manualDocMeta.issueDate }}</td></tr>
+                  <tr><td class="meta-label">Số Trang</td><td>01</td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <h3 class="eq-section-label">THÔNG TIN NHÂN VIÊN</h3>
+          <table class="eq-form-table">
+            <thead><tr><th>Nội dung</th><th>Thông tin</th></tr></thead>
+            <tbody>
+              <tr><td>Họ và tên</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.fullName" /></td></tr>
+              <tr><td>Mã nhân viên</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.employeeId" /></td></tr>
+              <tr><td>Bộ phận</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.department" /></td></tr>
+              <tr><td>Người hướng dẫn</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.mentor" /></td></tr>
+              <tr>
+                <td>Thời gian đào tạo</td>
+                <td class="eq-date-row">
+                  Từ <input type="date" class="eq-line-input eq-date" [(ngModel)]="warehouseTrainingForm.trainingFrom" />
+                  Đến <input type="date" class="eq-line-input eq-date" [(ngModel)]="warehouseTrainingForm.trainingTo" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 class="eq-section-label">ĐÀO TẠO CÔNG VIỆC</h3>
+          <table class="eq-form-table">
+            <thead>
+              <tr><th class="w-stt">STT</th><th>Nội dung</th><th class="w-check">Đạt</th><th class="w-check">Chưa đạt</th></tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of warehouseTrainingForm.jobTraining; let i = index">
+                <td class="tc">{{ i + 1 }}</td>
+                <td>{{ item.label }}</td>
+                <td class="tc"><input type="checkbox" [(ngModel)]="item.pass" (ngModelChange)="onJobTrainingPassChange(i)" /></td>
+                <td class="tc"><input type="checkbox" [(ngModel)]="item.fail" (ngModelChange)="onJobTrainingFailChange(i)" /></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="eq-confirm-boxes">
+            <div class="eq-confirm-box">
+              <h4 class="eq-confirm-box-title">Box đào tạo</h4>
+              <label class="eq-confirm-option">
+                <input type="checkbox" [(ngModel)]="warehouseTrainingForm.trainingCommitment.guided" />
+                <span>1. Tôi đồng ý đã được hướng dẫn các thông tin, công việc như trên</span>
+              </label>
+              <label class="eq-confirm-option">
+                <input type="checkbox" [(ngModel)]="warehouseTrainingForm.trainingCommitment.safetyRules" />
+                <span>2. Tôi cam kết tuân thủ về nội quy, quy định an toàn tại Kho</span>
+              </label>
+            </div>
+            <div class="eq-confirm-box">
+              <h4 class="eq-confirm-box-title">Box ý kiến người lao động</h4>
+              <label class="eq-confirm-option">
+                <input type="checkbox" [(ngModel)]="warehouseTrainingForm.workerOpinion.suitable" (ngModelChange)="onWorkerOpinionSuitableChange()" />
+                <span>1. Tôi thấy công việc phù hợp và sẽ tiếp tục làm việc</span>
+              </label>
+              <label class="eq-confirm-option">
+                <input type="checkbox" [(ngModel)]="warehouseTrainingForm.workerOpinion.notSuitable" (ngModelChange)="onWorkerOpinionNotSuitableChange()" />
+                <span>2. Tôi cảm thấy công việc không phù hợp nên sẽ không tiếp tục làm việc</span>
+              </label>
+              <label class="eq-confirm-option eq-confirm-option-other">
+                <input type="checkbox" [(ngModel)]="warehouseTrainingForm.workerOpinion.other" />
+                <span>3. Ý kiến khác:</span>
+                <input type="text" class="eq-line-input eq-other-input" [(ngModel)]="warehouseTrainingForm.workerOpinion.otherText" placeholder="Nhập ý kiến khác..." />
+              </label>
+            </div>
+          </div>
+
+          <h3 class="eq-section-label">KÝ TÊN NGƯỜI LAO ĐỘNG</h3>
+          <p class="eq-sign-hint no-print">Ký tên trực tiếp trên màn hình (ký online).</p>
+          <div class="eq-worker-sign-box">
+            <canvas #workerSignCanvas class="eq-worker-sign-canvas" width="360" height="120"
+              (mousedown)="startWorkerSign($event)"
+              (mousemove)="moveWorkerSign($event)"
+              (mouseup)="endWorkerSign()"
+              (mouseleave)="endWorkerSign()"
+              (touchstart)="startWorkerSign($event)"
+              (touchmove)="moveWorkerSign($event)"
+              (touchend)="endWorkerSign()"></canvas>
+            <button type="button" class="eq-sign-clear no-print" (click)="clearWorkerSignature()">Xóa chữ ký</button>
+            <img *ngIf="workerSignature" class="eq-sign-print-img print-only" [src]="workerSignature" alt="Chữ ký NLĐ" />
+          </div>
+        </div>
+
+        <div *ngIf="trainingTemplateTab === 'manual' && manualTabLoading" class="eq-manual-loading">
+          <div class="eq-manual-spinner"></div>
+          <p>Đang tải tài liệu...</p>
+        </div>
+
+        <app-warehouse-manual *ngIf="trainingTemplateTab === 'manual' && manualTabOpened && !manualTabLoading"></app-warehouse-manual>
+
+        <app-warehouse-training-quiz *ngIf="trainingTemplateTab === 'quiz' && quizTabOpened"></app-warehouse-training-quiz>
       </div>
     </div>
   </div>

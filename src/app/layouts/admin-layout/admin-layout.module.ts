@@ -53,6 +53,8 @@ import { InboundASM2Component } from '../../pages/inbound-asm2/inbound-asm2.comp
 import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
 import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 import { EquipmentComponent } from '../../pages/equipment/equipment.component';
+import { WarehouseManualComponent } from '../../pages/equipment/warehouse-manual.component';
+import { WarehouseTrainingQuizComponent } from '../../pages/equipment/warehouse-training-quiz.component';
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
 import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
@@ -120,6 +122,8 @@ import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
     FgsDashboardComponent,
     KpiReportsComponent,
     EquipmentComponent,
+    WarehouseManualComponent,
+    WarehouseTrainingQuizComponent,
     InboundFgsComponent,
     OutboundFgsComponent,
     ShipmentComponent,

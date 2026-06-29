@@ -1,0 +1,240 @@
+<div class="warehouse-manual-wrapper">
+  <div class="manual-toolbar no-print">
+    <div class="manual-nav">
+      <button type="button" class="nav-btn" (click)="prevPage()" [disabled]="selectedPageIndex === 0">
+        <i class="material-icons">chevron_left</i>
+      </button>
+      <select class="page-select" [ngModel]="selectedPageIndex" (ngModelChange)="selectPage($event)">
+        <option *ngFor="let page of pages; let i = index" [ngValue]="i">
+          Trang {{ page.pageNum }} — {{ page.title }}
+        </option>
+      </select>
+      <button type="button" class="nav-btn" (click)="nextPage()" [disabled]="selectedPageIndex === pages.length - 1">
+        <i class="material-icons">chevron_right</i>
+      </button>
+    </div>
+    <div class="manual-actions">
+      <button type="button" class="action-btn secondary" (click)="resetAcknowledgments()">
+        <i class="material-icons">check_box_outline_blank</i> Xóa tick
+      </button>
+      <button type="button" class="action-btn secondary" (click)="printCurrent()">
+        <i class="material-icons">print</i> In trang này
+      </button>
+      <button type="button" class="action-btn primary" (click)="printAll()">
+        <i class="material-icons">print</i> In toàn bộ
+      </button>
+    </div>
+  </div>
+
+  <div id="manualPrintArea" class="manual-print-area">
+    <div class="manual-page a4-landscape screen-only" *ngIf="selectedPage as page">
+      <ng-container *ngTemplateOutlet="pageTemplate; context: { page: page }"></ng-container>
+    </div>
+
+    <ng-container *ngIf="printingAll">
+      <div class="manual-page a4-landscape print-batch-page" *ngFor="let page of pages; trackBy: trackByPageNum">
+        <ng-container *ngTemplateOutlet="pageTemplate; context: { page: page, printMode: true }"></ng-container>
+      </div>
+    </ng-container>
+  </div>
+</div>
+
+<ng-template #pageTemplate let-page="page" let-printMode="printMode">
+  <div class="manual-page-content">
+  <!-- PXK-style document header -->
+  <div class="pxk-doc-header-wrap">
+    <table class="pxk-doc-header">
+      <tr>
+        <td class="logo-cell">
+          <img [src]="logoSrc" alt="AIRSPEED" />
+        </td>
+        <td class="title-cell">
+          <table class="title-inner">
+            <tr><td class="title-line1">{{ docMeta.companyLine1 }}</td></tr>
+            <tr><td class="title-line2">{{ docMeta.manualTitle }}</td></tr>
+          </table>
+        </td>
+        <td class="meta-cell">
+          <table class="meta-table">
+            <tr><td class="meta-label">Mã quản lý</td><td>{{ docMeta.docCode }}</td></tr>
+            <tr><td class="meta-label">Phiên bản</td><td>{{ docMeta.version }}</td></tr>
+            <tr><td class="meta-label">Ngày ban hành</td><td>{{ docMeta.issueDate }}</td></tr>
+            <tr><td class="meta-label">Số Trang</td><td>{{ page.pageNum < 10 ? '0' + page.pageNum : page.pageNum }}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="page-body">
+    <div class="page-meta" *ngIf="page.partLabel || page.chapterLabel">
+      <span *ngIf="page.partLabel" class="part-label">{{ page.partLabel }}</span>
+      <span *ngIf="page.chapterLabel" class="chapter-label">{{ page.chapterLabel }}</span>
+    </div>
+
+    <h1 class="page-title">{{ page.title }}</h1>
+    <p *ngIf="page.subtitle" class="page-subtitle">{{ page.subtitle }}</p>
+
+    <!-- TOC -->
+    <div *ngIf="page.type === 'toc' && page.toc" class="toc-content">
+      <div *ngFor="let section of page.toc" class="toc-section">
+        <h2>{{ section.title }}</h2>
+        <ol>
+          <li *ngFor="let item of section.items">{{ item }}</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- Main flowchart -->
+    <div *ngIf="page.type === 'flow' && page.flowRows" class="fc-main">
+      <ng-container *ngFor="let row of page.flowRows; let rowIdx = index; let lastRow = last; trackBy: trackByIndex">
+        <div class="fc-row">
+          <ng-container *ngFor="let step of row; let i = index; let last = last; trackBy: trackByIndex">
+            <div class="fc-cell">
+              <div class="fc-index">{{ getFlowRowStartIndex(rowIdx) + i + 1 }}</div>
+              <div class="fc-box">{{ step }}</div>
+              <label class="fc-ack no-print-interactive" *ngIf="!printMode">
+                <input type="checkbox" [checked]="isFlowAck(getFlowKey(page.pageNum, getFlowRowStartIndex(rowIdx) + i))" (change)="onFlowAckChange(getFlowKey(page.pageNum, getFlowRowStartIndex(rowIdx) + i), $any($event.target).checked)" />
+                <span>Đã hiểu</span>
+              </label>
+              <span class="fc-ack-print print-only-ack">☐ Đã hiểu</span>
+            </div>
+            <div class="fc-connector-h" *ngIf="!last"><span class="fc-arrow">▶</span></div>
+          </ng-container>
+        </div>
+        <div class="fc-connector-v" *ngIf="!lastRow">
+          <span class="fc-arrow-down">▼</span>
+        </div>
+      </ng-container>
+    </div>
+
+    <!-- Chapter -->
+    <div *ngIf="page.type === 'chapter'" class="chapter-content">
+      <div *ngIf="page.goals?.length" class="bw-box goals-box">
+        <h3>Mục tiêu — Đảm bảo đúng</h3>
+        <div class="tag-row">
+          <span *ngFor="let goal of page.goals" class="bw-tag">{{ goal }}</span>
+        </div>
+      </div>
+
+      <div *ngFor="let step of page.steps; trackBy: trackByIndex" class="step-block">
+        <div class="step-header">
+          <span class="step-num">Bước {{ step.number }}</span>
+          <span class="step-title">{{ step.title }}</span>
+          <label class="step-ack no-print-interactive" *ngIf="!printMode">
+            <input type="checkbox" [checked]="isStepAck(getStepKey(page.pageNum, step.number))" (change)="onStepAckChange(getStepKey(page.pageNum, step.number), $any($event.target).checked)" />
+            <span>Đã hiểu bước này</span>
+          </label>
+          <span class="step-ack-print print-only-ack">☐ Đã hiểu</span>
+        </div>
+
+        <p *ngIf="step.performer" class="step-line"><strong>Người thực hiện:</strong> {{ step.performer }}</p>
+
+        <div *ngIf="step.tasks?.length && step.number === 5" class="step-line">
+          <strong>Kiểm</strong>
+          <ul><li *ngFor="let task of step.tasks">{{ task }}</li></ul>
+        </div>
+        <div *ngIf="step.tasks?.length && step.number === 4" class="step-line">
+          <strong>Nếu thấy</strong>
+          <ul><li *ngFor="let task of step.tasks">{{ task }}</li></ul>
+        </div>
+        <div *ngIf="step.tasks?.length && step.number !== 4 && step.number !== 5" class="step-line">
+          <strong>Công việc</strong>
+          <ul><li *ngFor="let task of step.tasks">{{ task }}</li></ul>
+        </div>
+
+        <div *ngIf="step.cases?.length" class="step-line">
+          <strong>Có 3 trường hợp</strong>
+          <div class="case-grid">
+            <div *ngFor="let c of step.cases" class="case-item">
+              <div class="case-label">{{ c.label }}</div>
+              <div class="case-detail">{{ c.detail }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="step.checks?.length && step.number === 3" class="step-two-col">
+          <div class="step-line">
+            <strong>Kiểm tra</strong>
+            <ul class="tick-list"><li *ngFor="let c of step.checks">☑ {{ c }}</li></ul>
+          </div>
+          <div class="step-line" *ngIf="step.observes?.length">
+            <strong>Quan sát</strong>
+            <ul class="tick-list"><li *ngFor="let o of step.observes">☑ {{ o }}</li></ul>
+          </div>
+        </div>
+
+        <div *ngIf="step.checks?.length && step.number !== 3 && step.number !== 8" class="step-line">
+          <strong>{{ step.number === 5 ? 'Chụp hình' : (step.number === 6 ? 'Đối chiếu' : 'Kiểm') }}</strong>
+          <div class="tag-row">
+            <span *ngFor="let c of step.checks" class="bw-tag">{{ c }}</span>
+          </div>
+        </div>
+
+        <div *ngIf="step.checks?.length && step.number === 8" class="step-line">
+          <strong>Có 4 kết quả</strong>
+          <div class="tag-row">
+            <span *ngFor="let c of step.checks" class="bw-tag">{{ c }}</span>
+          </div>
+        </div>
+
+        <div *ngIf="step.flow?.length" class="step-line">
+          <strong class="flow-label">{{ step.number === 3 ? 'Nếu phát hiện bất thường' : (step.number === 4 && step.note ? step.note : (step.number === 6 ? 'Nếu nghi thiếu' : (step.number === 7 ? 'Sau khi xác nhận' : (step.number === 9 ? 'PASS' : '')))) }}</strong>
+          <div class="fc-mini">
+            <ng-container *ngFor="let f of step.flow; let last = last">
+              <span class="fc-mini-box">{{ f }}</span>
+              <span *ngIf="!last" class="fc-mini-arrow">▼</span>
+            </ng-container>
+          </div>
+        </div>
+
+        <div *ngIf="step.why" class="bw-box note-box">
+          <strong>{{ step.why.title }}</strong>
+          <p>Để xác định trách nhiệm giữa:</p>
+          <ul><li *ngFor="let w of step.why.items">{{ w }}</li></ul>
+        </div>
+
+        <p *ngIf="step.note && step.number !== 4" class="step-warn"><strong>Lưu ý:</strong> {{ step.note }}</p>
+
+        <div *ngIf="step.rules?.length" class="step-line">
+          <strong>Quy định</strong>
+          <ul><li *ngFor="let r of step.rules">{{ r }}</li></ul>
+        </div>
+
+        <div *ngIf="step.forbidden?.length" class="step-line">
+          <strong>Không được xuất</strong>
+          <div class="tag-row">
+            <span *ngFor="let f of step.forbidden" class="bw-tag strike-tag">{{ f }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="page.rules?.length" class="bw-box rules-box">
+        <h3>Quy định</h3>
+        <ul><li *ngFor="let r of page.rules">{{ r }}</li></ul>
+      </div>
+
+      <div *ngIf="page.flowSections?.length" class="flow-sections">
+        <div *ngFor="let section of page.flowSections" class="flow-section-block">
+          <h3>{{ section.title }}</h3>
+          <div class="fc-mini fc-mini-col">
+            <ng-container *ngFor="let f of section.flow; let last = last">
+              <span class="fc-mini-box">{{ f }}</span>
+              <span *ngIf="!last" class="fc-mini-arrow">▼</span>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="page.errors?.length" class="bw-box errors-box">
+        <h3>Những lỗi thường gặp</h3>
+        <ul><li *ngFor="let e of page.errors">✕ {{ e }}</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>{{ docMeta.docCode }} · Trang {{ page.pageNum }} / {{ totalPages }}</span>
+  </div>
+  </div>
+</ng-template>

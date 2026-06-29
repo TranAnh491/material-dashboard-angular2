@@ -1,0 +1,120 @@
+<div class="warehouse-quiz-wrapper">
+  <div class="quiz-toolbar no-print">
+    <button type="button" class="qz-btn" (click)="resetQuiz()">
+      <i class="material-icons">refresh</i> Làm mới
+    </button>
+    <button type="button" class="qz-btn qz-btn-primary" (click)="printQuiz()">
+      <i class="material-icons">print</i> In
+    </button>
+    <button type="button" class="qz-btn qz-btn-primary" [disabled]="isExportingPdf" (click)="downloadPdf()">
+      <i class="material-icons">download</i> {{ isExportingPdf ? 'Đang tạo PDF...' : 'Tải PDF' }}
+    </button>
+  </div>
+
+  <div class="quiz-section-picker no-print">
+    <p class="quiz-picker-label">{{ docMeta.quizSubtitle }}</p>
+    <div class="quiz-picker-tabs">
+      <button
+        type="button"
+        *ngFor="let section of sections; let i = index"
+        class="quiz-picker-tab"
+        [class.active]="activeSectionId === section.id"
+        (click)="selectSection(section.id)">
+        <span class="quiz-picker-num">Phần {{ i + 1 }}</span>
+        <span class="quiz-picker-title">{{ section.title }}</span>
+        <span class="quiz-picker-progress">{{ sectionAnsweredCount(section.id) }}/8</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="warehouseQuizPrintArea" class="quiz-print-area">
+    <table class="pxk-doc-header">
+      <tr>
+        <td class="logo-cell"><img [src]="logoSrc" alt="AIRSPEED" /></td>
+        <td class="title-cell">
+          <div class="title-line1">{{ docMeta.companyLine1 }}</div>
+          <div class="title-line2">{{ docMeta.quizTitle }}</div>
+          <div class="title-line3">{{ docMeta.quizSubtitle }}</div>
+        </td>
+        <td class="meta-cell">
+          <table class="meta-table">
+            <tr><td class="meta-label">Mã quản lý</td><td>{{ docMeta.docCode }}</td></tr>
+            <tr><td class="meta-label">Phiên bản</td><td>{{ docMeta.version }}</td></tr>
+            <tr><td class="meta-label">Ngày ban hành</td><td>{{ docMeta.issueDate }}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h3 class="eq-section-label quiz-exam-label">PHẦN KIỂM TRA ĐÀO TẠO KHO</h3>
+
+    <div class="quiz-section-block" *ngIf="activeSection as section">
+      <h4 class="quiz-section-title">{{ section.title }} <span class="quiz-section-meta">(8 câu hỏi)</span></h4>
+      <div *ngFor="let q of section.questions" class="quiz-question">
+        <div class="quiz-q-text">Câu {{ q.number }}. {{ q.question }}</div>
+        <div class="quiz-options">
+          <label *ngFor="let opt of q.options; let oi = index" class="quiz-option">
+            <input
+              type="radio"
+              [name]="answerKey(section.id, q.number)"
+              [value]="opt"
+              [checked]="answers[answerKey(section.id, q.number)] === opt"
+              (change)="setAnswer(section.id, q.number, opt)" />
+            <span class="opt-letter">{{ ['A','B','C','D'][oi] }}.</span>
+            <span>{{ opt }}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="eq-section-label">THÔNG TIN NHÂN VIÊN</h3>
+    <p class="quiz-info-hint no-print">Điền thông tin sau khi hoàn thành phần kiểm tra.</p>
+    <table class="quiz-info-table">
+      <tr>
+        <td>Họ và tên</td>
+        <td><input type="text" class="quiz-info-input" [(ngModel)]="employeeInfo.fullName" placeholder="Nhập họ tên" /></td>
+        <td>Mã nhân viên</td>
+        <td><input type="text" class="quiz-info-input" [(ngModel)]="employeeInfo.employeeId" placeholder="Mã NV (nếu có)" /></td>
+      </tr>
+      <tr>
+        <td>Ngày vào làm</td>
+        <td colspan="3"><input type="date" class="quiz-info-input quiz-info-date" [(ngModel)]="employeeInfo.joinDate" /></td>
+      </tr>
+    </table>
+
+    <h3 class="eq-section-label">KÝ XÁC NHẬN — KÝ ONLINE</h3>
+    <p class="quiz-sign-hint no-print">Ký tên trực tiếp trên màn hình bằng chuột hoặc ngón tay.</p>
+    <div class="quiz-sign-row">
+      <div class="sig-pad-box">
+        <div class="sig-pad-title">Người được đào tạo</div>
+        <canvas #traineeCanvas class="sig-canvas" width="280" height="100"
+          (mousedown)="startSign($event, 'trainee')"
+          (mousemove)="moveSign($event, 'trainee')"
+          (mouseup)="endSign('trainee')"
+          (mouseleave)="endSign('trainee')"
+          (touchstart)="startSign($event, 'trainee')"
+          (touchmove)="moveSign($event, 'trainee')"
+          (touchend)="endSign('trainee')"></canvas>
+        <button type="button" class="sig-clear no-print" (click)="clearCanvas('trainee')">Xóa chữ ký</button>
+        <img *ngIf="traineeSignature" class="sig-print-img print-only" [src]="traineeSignature" alt="Ký NV" />
+      </div>
+      <div class="sig-pad-box">
+        <div class="sig-pad-title">Người hướng dẫn / Quản lý</div>
+        <canvas #trainerCanvas class="sig-canvas" width="280" height="100"
+          (mousedown)="startSign($event, 'trainer')"
+          (mousemove)="moveSign($event, 'trainer')"
+          (mouseup)="endSign('trainer')"
+          (mouseleave)="endSign('trainer')"
+          (touchstart)="startSign($event, 'trainer')"
+          (touchmove)="moveSign($event, 'trainer')"
+          (touchend)="endSign('trainer')"></canvas>
+        <button type="button" class="sig-clear no-print" (click)="clearCanvas('trainer')">Xóa chữ ký</button>
+        <img *ngIf="trainerSignature" class="sig-print-img print-only" [src]="trainerSignature" alt="Ký QL" />
+      </div>
+    </div>
+
+    <div class="quiz-result-row">
+      <label>Điểm / Kết quả: <input class="eq-line-input result-input" [(ngModel)]="resultScore" placeholder="Pass / Fail" /></label>
+    </div>
+  </div>
+</div>

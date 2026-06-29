@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { TrainingReportService, TrainingRecord } from '../../services/training-report.service';
 import { DeleteConfirmationService } from '../../services/delete-confirmation.service';
@@ -30,14 +30,56 @@ interface MatrixEmployee {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EquipmentComponent implements OnInit {
+  @ViewChild('workerSignCanvas') workerSignCanvas?: ElementRef<HTMLCanvasElement>;
 
   // Make Math available in template
   Math = Math;
   
   isEnglish = false;
-  showTest = false;
-  showReport = false;
-  showMatrixTraining = false;
+  activeSection: 'templates' | 'report' | 'matrix' | 'test' | null = null;
+  trainingTemplateTab: 'form' | 'manual' | 'quiz' = 'form';
+  manualTabOpened = false;
+  manualTabLoading = false;
+  quizTabOpened = false;
+  reportDataLoaded = false;
+
+  readonly manualDocMeta = {
+    companyLine1: 'AIRSPEED MANUFACTURING VIET NAM',
+    formTitle: 'BIỂU MẪU ĐÀO TẠO NHÂN VIÊN KHO ( Ngày Đầu)',
+    docCode: 'WH-WI0005/DT',
+    version: '00',
+    issueDate: '05/03/2026'
+  };
+
+  warehouseTrainingForm = {
+    fullName: '',
+    employeeId: '',
+    department: '',
+    mentor: '',
+    trainingFrom: '',
+    trainingTo: '',
+    jobTraining: [
+      { label: 'Nhận biết sơ đồ Kho', pass: false, fail: false },
+      { label: 'Phân biệt nguyên liệu và thành phẩm', pass: false, fail: false },
+      { label: 'Đọc tem nguyên liệu', pass: false, fail: false },
+      { label: 'Đọc tem thành phẩm', pass: false, fail: false },
+      { label: 'Đọc Lệnh sản xuất để giao hàng', pass: false, fail: false },
+      { label: 'Sử dụng xe đẩy, xe nâng tay', pass: false, fail: false }
+    ],
+    trainingCommitment: {
+      guided: false,
+      safetyRules: false
+    },
+    workerOpinion: {
+      suitable: false,
+      notSuitable: false,
+      other: false,
+      otherText: ''
+    }
+  };
+
+  workerSignature = '';
+  private workerSignDrawing = false;
 
   // Report properties
   reportData: TrainingRecord[] = [];
@@ -150,7 +192,22 @@ export class EquipmentComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.loadReportData();
+    // Lazy load: data chỉ tải khi mở từng mục
+  }
+
+  openSection(section: 'templates' | 'report' | 'matrix' | 'test'): void {
+    this.activeSection = this.activeSection === section ? null : section;
+    if (this.activeSection === 'report' && !this.reportDataLoaded) {
+      this.refreshReportData();
+    }
+    if (this.activeSection === 'matrix') {
+      this.cacheMatrixTrainingData();
+    }
+    this.cdr.markForCheck();
+  }
+
+  isSectionOpen(section: 'templates' | 'report' | 'matrix' | 'test'): boolean {
+    return this.activeSection === section;
   }
 
   toggleLanguage() {
@@ -217,46 +274,164 @@ export class EquipmentComponent implements OnInit {
 
 
 
-  toggleTest() {
-    this.showTest = !this.showTest;
-    if (this.showTest) {
-      this.showReport = false; // Đóng report khi mở test
-      this.showMatrixTraining = false; // Đóng matrix training khi mở test
+  toggleTest(): void { this.openSection('test'); }
+  toggleReport(): void { this.openSection('report'); }
+  toggleMatrixTraining(): void { this.openSection('matrix'); }
+  toggleTrainingTemplates(): void { this.openSection('templates'); }
+
+  setTrainingTemplateTab(tab: 'form' | 'manual' | 'quiz'): void {
+    this.trainingTemplateTab = tab;
+    if (tab === 'manual' && !this.manualTabOpened) {
+      this.manualTabLoading = true;
+      this.cdr.markForCheck();
+      requestAnimationFrame(() => {
+        this.manualTabOpened = true;
+        this.manualTabLoading = false;
+        this.cdr.markForCheck();
+      });
+      return;
     }
+    if (tab === 'quiz') {
+      this.quizTabOpened = true;
+    }
+    this.cdr.markForCheck();
   }
 
-  toggleReport() {
-    this.showReport = !this.showReport;
-    if (this.showReport) {
-      this.showTest = false; // Đóng test khi mở report
-      this.showMatrixTraining = false; // Đóng matrix training khi mở report
-      
-      // Debug Firebase data first
-      this.debugFirebaseService.debugAllCollections();
-      this.debugFirebaseService.debugASPEmployees();
-      
-      // Additional detailed debugging
-      this.trainingReportDebugService.debugCollectionDetails();
-      this.trainingReportDebugService.checkNonASPData();
-      this.trainingReportDebugService.testFirestoreAccess();
-      
-      this.refreshReportData(); // Force refresh data when opening report
-    }
+  previewTrainingForm(): void {
+    document.getElementById('warehouseTrainingPrintArea')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  toggleMatrixTraining() {
-    this.showMatrixTraining = !this.showMatrixTraining;
-    if (this.showMatrixTraining) {
-      this.showTest = false; // Đóng test khi mở matrix training
-      this.showReport = false; // Đóng report khi mở matrix training
-      this.cacheMatrixTrainingData(); // Cache data to improve performance
+  downloadTrainingFormPdf(): void {
+    this.printWarehouseTrainingForm();
+  }
+
+  logoSrc = '/assets/img/logo.png';
+
+  onJobTrainingPassChange(index: number): void {
+    const item = this.warehouseTrainingForm.jobTraining[index];
+    if (item.pass) {
+      item.fail = false;
     }
+    this.cdr.markForCheck();
+  }
+
+  onJobTrainingFailChange(index: number): void {
+    const item = this.warehouseTrainingForm.jobTraining[index];
+    if (item.fail) {
+      item.pass = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  onWorkerOpinionSuitableChange(): void {
+    if (this.warehouseTrainingForm.workerOpinion.suitable) {
+      this.warehouseTrainingForm.workerOpinion.notSuitable = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  onWorkerOpinionNotSuitableChange(): void {
+    if (this.warehouseTrainingForm.workerOpinion.notSuitable) {
+      this.warehouseTrainingForm.workerOpinion.suitable = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  resetWarehouseTrainingForm(): void {
+    this.warehouseTrainingForm = {
+      fullName: '',
+      employeeId: '',
+      department: '',
+      mentor: '',
+      trainingFrom: '',
+      trainingTo: '',
+      jobTraining: this.warehouseTrainingForm.jobTraining.map(item => ({
+        label: item.label,
+        pass: false,
+        fail: false
+      })),
+      trainingCommitment: {
+        guided: false,
+        safetyRules: false
+      },
+      workerOpinion: {
+        suitable: false,
+        notSuitable: false,
+        other: false,
+        otherText: ''
+      }
+    };
+    this.workerSignature = '';
+    this.clearWorkerSignature();
+    this.cdr.markForCheck();
+  }
+
+  private getWorkerSignCtx(): CanvasRenderingContext2D | null {
+    const canvas = this.workerSignCanvas?.nativeElement;
+    if (!canvas) return null;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    return ctx;
+  }
+
+  private workerSignPoint(event: MouseEvent | TouchEvent, canvas: HTMLCanvasElement): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  startWorkerSign(event: MouseEvent | TouchEvent): void {
+    event.preventDefault();
+    const canvas = this.workerSignCanvas?.nativeElement;
+    const ctx = this.getWorkerSignCtx();
+    if (!canvas || !ctx) return;
+    this.workerSignDrawing = true;
+    const p = this.workerSignPoint(event, canvas);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  }
+
+  moveWorkerSign(event: MouseEvent | TouchEvent): void {
+    if (!this.workerSignDrawing) return;
+    event.preventDefault();
+    const canvas = this.workerSignCanvas?.nativeElement;
+    const ctx = this.getWorkerSignCtx();
+    if (!canvas || !ctx) return;
+    const p = this.workerSignPoint(event, canvas);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+
+  endWorkerSign(): void {
+    if (!this.workerSignDrawing) return;
+    this.workerSignDrawing = false;
+    const canvas = this.workerSignCanvas?.nativeElement;
+    if (!canvas) return;
+    this.workerSignature = canvas.toDataURL('image/png');
+    this.cdr.markForCheck();
+  }
+
+  clearWorkerSignature(): void {
+    const canvas = this.workerSignCanvas?.nativeElement;
+    const ctx = this.getWorkerSignCtx();
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.workerSignature = '';
+    this.cdr.markForCheck();
+  }
+
+  printWarehouseTrainingForm(): void {
+    window.print();
   }
 
   closeAll() {
-    this.showTest = false;
-    this.showReport = false;
-    this.showMatrixTraining = false;
+    this.activeSection = null;
+    this.cdr.markForCheck();
   }
 
   // Report methods
@@ -283,26 +458,13 @@ export class EquipmentComponent implements OnInit {
       
       this.reportData = validRecords;
       this.filteredReportData = [...this.reportData];
-      console.log(`📊 Loaded ${this.reportData.length} valid ASP employee training records from Firebase`);
-      
-      // Debug: Log signature status for each record
-      this.reportData.forEach(record => {
-        console.log(`👤 ${record.employeeId} (${record.name}): Signature = ${record.signature ? 'Available' : 'Not available'}`);
-      });
-      
-      // Pre-cache matrix training data for better performance
-      this.cacheMatrixTrainingData();
-      
-      // Force change detection to update UI
-      this.cdr.detectChanges();
-      
+      this.reportDataLoaded = true;
+      this.cdr.markForCheck();
     } catch (error) {
       console.error('❌ Error loading report data:', error);
-      // Fallback to empty array if Firebase fails
       this.reportData = [];
       this.filteredReportData = [];
-      // Still cache matrix data with mock data
-      this.cacheMatrixTrainingData();
+      this.reportDataLoaded = true;
     }
     this.isLoadingReport = false;
   }
