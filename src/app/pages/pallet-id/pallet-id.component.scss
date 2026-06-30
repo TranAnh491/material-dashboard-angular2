@@ -769,18 +769,30 @@
 }
 
 .label-preview--square {
-  justify-content: flex-start;
-  padding: 14px 12px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.label-preview-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px 8px;
 }
 
 .preview-code-top {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: bold;
   color: #000;
-  margin-bottom: 10px;
   font-family: 'Courier New', monospace;
   text-align: center;
   width: 100%;
+  flex: 0 0 auto;
 }
 
 .preview-qr--square {
@@ -788,23 +800,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 0 8px;
   width: 100%;
+  min-height: 0;
 
   i {
-    font-size: 96px;
+    font-size: 110px;
     color: #333;
   }
 }
 
 .preview-footer-compact {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 8px;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+  padding: 0 4px;
+  flex: 0 0 auto;
 }
 
 .preview-date-compact {

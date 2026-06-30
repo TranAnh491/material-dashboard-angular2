@@ -245,12 +245,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       return {
         pageWidthMm: 100,
         pageHeightMm: 100,
-        innerWidthMm: 90,
-        innerHeightMm: 90,
-        qrSizeMm: 62,
-        factoryFontPt: 24,
+        innerWidthMm: 100,
+        innerHeightMm: 100,
+        qrSizeMm: 72,
+        factoryFontPt: 31,
         numberFontPt: 40,
-        footerFontPt: 9
+        footerFontPt: 7
       };
     }
     return {
@@ -349,7 +349,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (labelSize === '100x100') {
       return `
         <div class="label-container label-container--square">
-          <div class="label-inner">
+          <div class="label-main">
             <div class="pallet-code-top">${pallet.palletCode}</div>
             <div class="qr-code">
               <img src="${qrCodeDataUrl}" alt="QR Code" />
@@ -395,24 +395,38 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     } = dims;
 
     const squareLayout = labelSize === '100x100' ? `
-          .label-inner {
-            position: relative;
+          .label-container--square {
+            width: ${pageWidthMm}mm !important;
+            height: ${pageHeightMm}mm !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .label-main {
+            width: ${innerWidthMm}mm;
+            height: ${innerHeightMm}mm;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
-            padding: 4mm 3mm 5mm;
+            justify-content: space-between;
+            padding: 3mm 2mm 2mm;
+            box-sizing: border-box;
           }
           .pallet-code-top {
-            font-size: 24pt;
+            width: 100%;
+            font-size: 12mm;
             font-weight: bold;
             color: #000;
-            line-height: 1.1;
-            flex-shrink: 0;
+            line-height: 1;
+            flex: 0 0 13mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             text-align: center;
-            width: 100%;
-            margin-bottom: 3mm;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
             font-family: 'Courier New', monospace;
           }
           .qr-code {
@@ -431,23 +445,21 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
             object-fit: contain;
           }
           .label-footer-compact {
-            position: absolute;
-            left: 2mm;
-            right: 2mm;
-            bottom: 1.5mm;
+            width: 100%;
+            flex: 0 0 9mm;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            width: calc(100% - 4mm);
+            padding: 0 1.5mm;
           }
           .created-date {
-            font-size: ${footerFontPt}pt;
+            font-size: 7mm;
             color: #000;
             font-weight: 700;
             line-height: 1;
           }
           .label-number {
-            font-size: ${footerFontPt}pt;
+            font-size: 6mm;
             color: #000;
             font-weight: 600;
             line-height: 1;
@@ -525,16 +537,20 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
               margin: 0 !important;
               padding: 0 !important;
               width: ${pageWidthMm}mm !important;
-              height: ${pageHeightMm}mm !important;
+              height: auto !important;
             }
             .label-container {
               width: ${pageWidthMm}mm !important;
               height: ${pageHeightMm}mm !important;
               border: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              page-break-after: always !important;
+              break-after: page !important;
             }
-            .label-inner {
-              width: ${innerWidthMm}mm !important;
-              height: ${innerHeightMm}mm !important;
+            .label-container:last-child {
+              page-break-after: avoid !important;
+              break-after: avoid !important;
             }
           }
           * {
@@ -544,7 +560,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
           }
           html, body {
             width: ${pageWidthMm}mm;
-            height: ${pageHeightMm}mm;
+            height: auto;
             margin: 0;
             padding: 0;
           }
@@ -578,6 +594,37 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     `;
   }
 
+  private printHtmlInIframe(html: string, delayMs = 450): void {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute(
+      'style',
+      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;'
+    );
+    document.body.appendChild(iframe);
+
+    const win = iframe.contentWindow;
+    const doc = iframe.contentDocument || win?.document;
+    if (!doc || !win) {
+      document.body.removeChild(iframe);
+      alert('Không thể in. Vui lòng thử lại.');
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      win.focus();
+      win.print();
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
+    }, delayMs);
+  }
+
   // Print pallet label - 4 copies with QR code
   async printPalletLabel(): Promise<void> {
     if (!this.selectedPallet) return;
@@ -590,18 +637,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     let qrCodeDataUrl = '';
     try {
       qrCodeDataUrl = await QRCode.toDataURL(pallet.palletCode, {
-        width: 800,
-        margin: 2,
+        width: labelSize === '100x100' ? 1024 : 800,
+        margin: 1,
         errorCorrectionLevel: 'M'
       });
     } catch (err) {
       console.error('Error generating QR code:', err);
-    }
-
-    const printWindow = window.open('', '_blank', 'width=450,height=600');
-    if (!printWindow) {
-      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
-      return;
     }
 
     // Generate 4 labels for 4 sides of pallet
@@ -610,23 +651,21 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       labelsHtml += this.buildPalletLabelBodyHtml(labelSize, pallet, qrCodeDataUrl, i);
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Pallet Label - ${pallet.palletCode}</title>
-        <style>
-          ${this.buildPalletLabelPrintStyles(labelSize, dims)}
-        </style>
-      </head>
-      <body>
-        ${labelsHtml}
-      </body>
-      </html>
-    `;
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <style>
+    ${this.buildPalletLabelPrintStyles(labelSize, dims)}
+  </style>
+</head>
+<body>
+  ${labelsHtml}
+</body>
+</html>`;
 
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+    this.printHtmlInIframe(htmlContent);
     
     // Update print count in Firestore
     try {
@@ -637,10 +676,6 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     } catch (err) {
       console.error('Error updating print count:', err);
     }
-    
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
     
     this.closePrintPreview();
   }
