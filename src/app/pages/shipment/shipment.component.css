@@ -102,6 +102,10 @@
 
 .shipment-body {
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content {
@@ -111,6 +115,8 @@
   padding: 0px 6px;
   margin-top: 0px;
   overflow: hidden; /* Ẩn scroll bên ngoài */
+  flex: 1;
+  min-height: 0;
 }
 
 .container-fluid {
@@ -120,6 +126,24 @@
   margin-top: 0px;
   padding-top: 0px;
   overflow: hidden; /* Ẩn scroll bên ngoài */
+  min-height: 0;
+}
+
+.shipment-body .container-fluid > .row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.shipment-body .container-fluid > .row > .col-md-12 {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .card-body {
@@ -127,7 +151,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 4px 6px 8px 6px;
+  padding: 4px 6px 12px 6px;
+  min-height: 0;
 }
 
 .card {
@@ -135,6 +160,8 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden; /* Ẩn scroll bên ngoài */
+  min-height: 0;
+  flex: 1;
 }
 
 /* Header Section */
@@ -175,6 +202,7 @@
   padding-top: 0;
   padding-bottom: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
 }
 
 .dashboard-header {
@@ -499,7 +527,7 @@
 
 /* ===== Table re-skin to match screenshot (premium, light) ===== */
 .shipment-content .card-body {
-  padding: 0;
+  padding: 0 0 4px;
   background: transparent;
 }
 
@@ -507,7 +535,6 @@
   background: transparent;
   border: none;
   box-shadow: none;
-  padding-bottom: 8px;
 }
 
 .shipment-content .table-scroll-wrapper {
@@ -917,22 +944,45 @@
   background: #e0e0e0;
 }
 
-/* Table Section - tận dụng chiều cao màn hình (đã bỏ tiêu đề dashboard) */
+/* Table Section - flex chiều cao, thanh kéo ngang không bị parent che */
+.shipment-content.card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .shipment-content .table-responsive {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  max-height: calc(100vh - 148px);
   overflow: auto;
   background: #ffffff;
   position: relative;
   border-radius: 0;
   border: 1px solid #000000;
-  padding: 0 0 8px 0;
-  margin-bottom: 6px;
+  padding: 0;
+  margin-bottom: 0;
   scrollbar-width: thin;
+  scrollbar-gutter: stable both-edges;
   overscroll-behavior: contain;
-  contain: paint;
+  -webkit-overflow-scrolling: touch;
+}
+
+.shipment-content .table-responsive::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.shipment-content .table-responsive::-webkit-scrollbar-thumb {
+  background: #b0bec5;
+  border-radius: 6px;
+  border: 2px solid #ffffff;
+}
+
+.shipment-content .table-responsive::-webkit-scrollbar-track {
+  background: #eceff1;
 }
 
 .shipment-content .table-scroll-wrapper,

@@ -5,7 +5,8 @@
      [class.navbar--qc-trace-pass-through]="isQcTraceabilityPage()"
      [class.navbar--nhiet-do-pass-through]="isNhietDoPage()"
      [class.navbar--report-pass-through]="isReportPage()"
-     [class.navbar--print-label-pass-through]="isPrintLabelPage()">
+     [class.navbar--print-label-pass-through]="isPrintLabelPage()"
+     [class.navbar--equipment-pass-through]="isEquipmentPage()">
     <div class="container-fluid">
         <div class="navbar-wrapper">
           <a class="navbar-brand" href="javascript:void(0)">{{getTitle()}}</a>
@@ -64,7 +65,7 @@
           type="button"
           class="btn-home ms-2"
           (click)="goToMenu()"
-          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage() && !isOutboundAsmPage() && !isPdControlPage() && !isShortedMaterialsPage() && !isNhietDoPage() && !isLocationPage() && !isFgInPage() && !isFgLocationPage() && !isLayoutWarehousePage() && !isReportPage() && !isPrintLabelPage()"
+          *ngIf="!isDashboard() && !isMenuPage() && !isShipmentPage() && !isQCPage() && !isSettingsPage() && !isRm1DeliveryPage() && !isInboundAsmPage() && !isOutboundAsmPage() && !isPdControlPage() && !isShortedMaterialsPage() && !isNhietDoPage() && !isLocationPage() && !isFgInPage() && !isFgLocationPage() && !isLayoutWarehousePage() && !isReportPage() && !isPrintLabelPage() && !isEquipmentPage()"
           title="Về Menu"
         >
           <i class="material-icons">home</i>

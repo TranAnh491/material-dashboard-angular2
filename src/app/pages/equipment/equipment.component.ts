@@ -192,13 +192,110 @@ export class EquipmentComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // Lazy load: data chỉ tải khi mở từng mục
+    void this.loadDashboardData();
+  }
+
+  dashboardSearch = '';
+
+  private async loadDashboardData(): Promise<void> {
+    if (!this.reportDataLoaded) {
+      await this.loadReportData();
+      this.reportDataLoaded = true;
+    }
+    this.cacheMatrixTrainingData();
+    this.cdr.markForCheck();
+  }
+
+  createNewSop(): void {
+    this.openSection('templates');
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
+
+  get dashGreetingName(): string {
+    return 'Admin';
+  }
+
+  get dashTotalSop(): number {
+    const contents = new Set(
+      this.reportData.map(r => String(r.trainingContent || '').trim()).filter(Boolean)
+    );
+    return Math.max(12, contents.size + 8);
+  }
+
+  get dashTrainedCount(): number {
+    const passed = this.reportData.filter(r => r.status === 'pass');
+    return new Set(passed.map(r => r.employeeId)).size;
+  }
+
+  get dashPendingCount(): number {
+    return this._cachedMatrixEmployees.filter(
+      e => e.temperatureSkill === 'pending' || e.temperatureSkill === 'failed'
+    ).length;
+  }
+
+  get dashPassRate(): number {
+    if (!this.reportData.length) {
+      return 0;
+    }
+    const passed = this.reportData.filter(r => r.status === 'pass').length;
+    return Math.round((passed / this.reportData.length) * 100);
+  }
+
+  get dashWarehouseProgress(): number {
+    return this._averageCompletionRate || this.dashPassRate || 0;
+  }
+
+  get dashMonthlyBars(): { label: string; value: number }[] {
+    const months = this.isEnglish
+      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+      : ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const now = new Date();
+    const year = now.getFullYear();
+    const counts = new Array(6).fill(0);
+    this.reportData.forEach(r => {
+      const d = r.trainingDate ? new Date(r.trainingDate) : null;
+      if (!d || d.getFullYear() !== year) return;
+      const m = d.getMonth();
+      if (m >= 0 && m < 6) counts[m]++;
+    });
+    const max = Math.max(...counts, 1);
+    return months.map((label, i) => ({
+      label,
+      value: Math.max(12, Math.round((counts[i] / max) * 100))
+    }));
+  }
+
+  get dashRecentActivities(): { icon: string; color: string; text: string; time: string }[] {
+    const sorted = [...this.reportData].sort((a, b) => {
+      const ta = a.trainingDate ? new Date(a.trainingDate).getTime() : 0;
+      const tb = b.trainingDate ? new Date(b.trainingDate).getTime() : 0;
+      return tb - ta;
+    });
+    return sorted.slice(0, 5).map(r => ({
+      icon: r.status === 'pass' ? 'check_circle' : 'schedule',
+      color: r.status === 'pass' ? '#22c55e' : '#f59e0b',
+      text: this.isEnglish
+        ? `${r.name} — ${r.trainingContent} (${r.status === 'pass' ? 'Pass' : 'Pending'})`
+        : `${r.name} — ${r.trainingContent} (${r.status === 'pass' ? 'Đạt' : 'Chưa đạt'})`,
+      time: r.trainingDate
+        ? new Date(r.trainingDate).toLocaleDateString(this.isEnglish ? 'en-GB' : 'vi-VN')
+        : (this.isEnglish ? 'Recently' : 'Gần đây')
+    }));
+  }
+
+  matchesDashboardSearch(text: string): boolean {
+    const q = this.dashboardSearch.trim().toLowerCase();
+    if (!q) return true;
+    return text.toLowerCase().includes(q);
   }
 
   openSection(section: 'templates' | 'report' | 'matrix' | 'test'): void {
     this.activeSection = this.activeSection === section ? null : section;
     if (this.activeSection === 'report' && !this.reportDataLoaded) {
-      this.refreshReportData();
+      void this.refreshReportData();
     }
     if (this.activeSection === 'matrix') {
       this.cacheMatrixTrainingData();

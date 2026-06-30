@@ -132,12 +132,19 @@
 .navbar.navbar--report-pass-through,
 .navbar.navbar--report-pass-through .container-fluid,
 .navbar.navbar--print-label-pass-through,
-.navbar.navbar--print-label-pass-through .container-fluid {
+.navbar.navbar--print-label-pass-through .container-fluid,
+.navbar.navbar--equipment-pass-through,
+.navbar.navbar--equipment-pass-through .container-fluid {
   pointer-events: none;
 }
 
 .navbar.navbar--inbound-pass-through .navbar-wrapper,
 .navbar.navbar--inbound-pass-through .navbar-wrapper .navbar-brand {
+  pointer-events: auto;
+}
+
+.navbar.navbar--equipment-pass-through .navbar-wrapper,
+.navbar.navbar--equipment-pass-through .navbar-wrapper .navbar-brand {
   pointer-events: auto;
 }
 
