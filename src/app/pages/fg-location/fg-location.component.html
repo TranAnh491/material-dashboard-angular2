@@ -35,6 +35,11 @@
         <ng-container *ngTemplateOutlet="moveFlow"></ng-container>
       </section>
 
+      <!-- Tab: Kiểm kê -->
+      <section class="fg-m-panel" *ngIf="mobileBottomTab === 'kk'">
+        <ng-container *ngTemplateOutlet="kkFlow"></ng-container>
+      </section>
+
       <!-- Tab: Đổi nhà máy -->
       <section class="fg-m-panel" *ngIf="mobileBottomTab === 'factory'">
         <!-- Chọn Mã / Pallet -->
@@ -165,6 +170,10 @@
         <i class="material-icons">swap_horiz</i>
         <span>Đổi vị trí</span>
       </button>
+      <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'kk'" (click)="setMobileBottomTab('kk')">
+        <i class="material-icons">fact_check</i>
+        <span>Kiểm kê</span>
+      </button>
       <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'factory'" (click)="setMobileBottomTab('factory')">
         <i class="material-icons">factory</i>
         <span>Đổi nhà máy</span>
@@ -178,7 +187,12 @@
 
   <!-- Desktop -->
   <div class="fg-location-container" *ngIf="!isMobile">
-    <ng-container *ngTemplateOutlet="moveFlow"></ng-container>
+    <ng-container *ngIf="kkPanelActive">
+      <ng-container *ngTemplateOutlet="kkFlow"></ng-container>
+    </ng-container>
+    <ng-container *ngIf="!kkPanelActive">
+      <ng-container *ngTemplateOutlet="moveFlow"></ng-container>
+    </ng-container>
   </div>
 
   <!-- Shared: luồng đổi vị trí -->
@@ -202,6 +216,28 @@
       </div>
     </div>
 
+    <div class="step-container fg-hub" *ngIf="currentStep === 'hub'">
+      <div class="step-header">
+        <span class="step-number">2</span>
+        <span class="step-title">Chọn thao tác — {{ selectedFactory }}</span>
+      </div>
+      <div class="fg-hub-actions">
+        <button type="button" class="fg-hub-btn" (click)="startMoveFlow()">
+          <i class="material-icons">swap_horiz</i>
+          <span>Đổi vị trí</span>
+        </button>
+        <button type="button" class="fg-hub-btn fg-hub-btn--kk" (click)="startKkFlow()">
+          <i class="material-icons">fact_check</i>
+          <span>Kiểm kê (scan vị trí + mã)</span>
+        </button>
+        <button type="button" class="fg-hub-btn fg-hub-btn--print" (click)="printTpCodeSheet()" [disabled]="isLoading">
+          <i class="material-icons">print</i>
+          <span>In danh sách mã TP</span>
+        </button>
+      </div>
+      <button class="back-btn" (click)="backToFactorySelection()">← Đổi nhà máy</button>
+    </div>
+
     <div class="step-container" *ngIf="currentStep === 'scan-location'">
       <div class="step-header">
         <span class="step-number">2</span>
@@ -219,7 +255,7 @@
           <span *ngIf="isLoading">⏳ Đang tìm...</span>
         </button>
       </div>
-      <button class="back-btn" (click)="backToFactorySelection()">← Đổi nhà máy</button>
+      <button class="back-btn" (click)="backToHub()">← Menu thao tác</button>
     </div>
 
     <div class="step-container" *ngIf="currentStep === 'show-items'">
@@ -329,6 +365,85 @@
     <div class="error-message" *ngIf="errorMessage">
       ⚠️ {{ errorMessage }}
     </div>
+  </ng-template>
+
+  <!-- Kiểm kê: scan vị trí kệ → scan mã TP → cập nhật Vị trí KK -->
+  <ng-template #kkFlow>
+    <div class="header" *ngIf="!isMobile">
+      <h2>Kiểm kê vị trí TP</h2>
+      <p class="subtitle">Scan vị trí trên kệ → scan mã TP (P + 6 số) → Hoàn tất</p>
+    </div>
+
+    <div class="fg-kk-factory-pick" *ngIf="!selectedFactory">
+      <p>Chọn nhà máy trước khi kiểm kê.</p>
+      <button type="button" class="fg-loc-action-btn" (click)="isMobile ? openMobileFactorySelect() : backToFactorySelection()">
+        Chọn ASM1 / ASM2
+      </button>
+    </div>
+
+    <ng-container *ngIf="selectedFactory">
+      <div class="factory-badge">Nhà máy: <strong>{{ selectedFactory }}</strong></div>
+
+      <div class="fg-kk-toolbar" *ngIf="kkStep !== 'done'">
+        <button type="button" class="fg-kk-tool-btn" (click)="printTpCodeSheet()" [disabled]="isLoading">
+          <i class="material-icons">print</i> In mã TP
+        </button>
+      </div>
+
+      <div class="step-container" *ngIf="kkStep === 'scan-location'">
+        <div class="step-header">
+          <span class="step-number">1</span>
+          <span class="step-title">Scan vị trí trên kệ</span>
+        </div>
+        <p class="scan-hint">Dùng tem QR vị trí sẵn có (VD: A1.3)</p>
+        <div class="scan-input-container">
+          <input #kkLocationInputRef type="text" class="scan-input"
+                 [(ngModel)]="kkLocationInput" (ngModelChange)="onKkLocationInputChange()"
+                 (keypress)="onKkLocationKeyPress($event)" placeholder="Scan vị trí..."
+                 autocomplete="off" autocapitalize="characters">
+          <button class="scan-btn primary" [disabled]="isLoading || !kkLocationInput" (click)="confirmKkLocation()">
+            Tiếp tục
+          </button>
+        </div>
+        <button class="back-btn" (click)="backKkStep()">← Quay lại</button>
+      </div>
+
+      <div class="step-container" *ngIf="kkStep === 'scan-codes'">
+        <div class="step-header">
+          <span class="step-number">2</span>
+          <span class="step-title">Scan mã TP đang có tại {{ kkLocation }}</span>
+        </div>
+        <p class="scan-hint">Mã dạng P + 6 số · Đã scan: {{ kkScannedCodes.length }}</p>
+        <div class="scan-input-container">
+          <input #kkCodeInputRef type="text" class="scan-input"
+                 [(ngModel)]="kkCodeInput" (ngModelChange)="onKkCodeInputChange()"
+                 (keypress)="onKkCodeKeyPress($event)" placeholder="Scan mã TP..."
+                 autocomplete="off" autocapitalize="characters">
+          <button class="scan-btn primary" type="button" (click)="addKkScannedCode()">Thêm</button>
+        </div>
+        <div class="fg-kk-code-list" *ngIf="kkScannedCodes.length">
+          <span class="fg-kk-code-chip" *ngFor="let c of kkScannedCodes">
+            {{ c }}
+            <button type="button" (click)="removeKkCode(c)"><i class="material-icons">close</i></button>
+          </span>
+        </div>
+        <div class="scan-input-container fg-kk-done-row">
+          <button class="scan-btn success btn-move" [disabled]="isLoading" (click)="completeKkSession()">
+            Hoàn tất kiểm kê
+          </button>
+        </div>
+        <button class="back-btn" (click)="backKkStep()">← Scan vị trí khác</button>
+      </div>
+
+      <div class="step-container success-container" *ngIf="kkStep === 'done'">
+        <div class="success-icon">✅</div>
+        <div class="success-message">{{ successMessage }}</div>
+        <button class="action-btn primary" (click)="resetKkAfterDone()">Kiểm kê vị trí khác</button>
+        <button class="back-btn" *ngIf="!isMobile" (click)="backToHub()">← Menu thao tác</button>
+      </div>
+    </ng-container>
+
+    <div class="error-message" *ngIf="errorMessage">⚠️ {{ errorMessage }}</div>
   </ng-template>
 
   <div class="loading-overlay" *ngIf="isLoading">

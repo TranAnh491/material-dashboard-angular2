@@ -1147,3 +1147,97 @@ body.fg-loc-mobile-tab {
     margin-bottom: 10px;
   }
 }
+
+// Hub + Kiểm kê
+.fg-hub-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.fg-hub-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+
+  .material-icons {
+    font-size: 32px;
+    color: #1976d2;
+  }
+
+  &--kk .material-icons {
+    color: #2e7d32;
+  }
+
+  &--print .material-icons {
+    color: #6a1b9a;
+  }
+
+  &:hover {
+    border-color: #1976d2;
+    background: #f5f9ff;
+  }
+}
+
+.fg-kk-toolbar {
+  margin-bottom: 12px;
+}
+
+.fg-kk-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fg-kk-code-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.fg-kk-code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #e3f2fd;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 13px;
+
+  button {
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+
+    .material-icons {
+      font-size: 16px;
+    }
+  }
+}
+
+.fg-kk-done-row {
+  margin-top: 16px;
+}
+
+.fg-kk-factory-pick {
+  text-align: center;
+  padding: 24px;
+}

@@ -98,6 +98,7 @@
             <th>Carton</th>
             <th>ODD</th>
             <th>Vị trí</th>
+            <th>Vị trí KK</th>
             <th>Scan</th>
             <th>Ghi chú</th>
             <th>Khách</th>
@@ -108,7 +109,7 @@
         <tbody>
           <!-- Show message when no results found -->
           <tr *ngIf="filteredMaterials.length === 0">
-            <td colspan="19" class="text-center" style="padding: 20px; color: #666;">
+            <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
               Không có dữ liệu
@@ -153,6 +154,7 @@
                 {{material.location || 'Temporary'}}
               </div>
             </td>
+            <td class="kk-location-cell">{{ material.viTriKK || '' }}</td>
             <td class="status-cell">
               <button mat-icon-button color="primary" (click)="scanLocation(material)" 
                       matTooltip="Scan QR code để đổi vị trí">

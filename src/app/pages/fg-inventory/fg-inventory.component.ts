@@ -28,6 +28,8 @@ export interface FGInventoryItem {
   xuat: number;   // Xuất
   ton: number;    // Tồn kho hiện tại
   location: string;
+  /** Vị trí kiểm kê (scan từ FG Location), không đè cột Vị trí gốc */
+  viTriKK?: string;
   notes: string;
   customer: string;
   poNumber?: string; // Số PO từ FG In
@@ -235,6 +237,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
             xuat,
             ton,
             location:     data.location     || data.viTri || 'Temporary',
+            viTriKK:      data.viTriKK      || data.locationKK || '',
             notes:        data.notes        || data.ghiChu || '',
             customer:     data.customer     || data.khach  || '',
             isReceived:   data.isReceived   || false,
@@ -1448,6 +1451,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       'Carton': m.carton,
       'ODD': m.odd,
       'Vị trí': m.location || 'Temporary',
+      'Vị trí KK': m.viTriKK || '',
       'Ghi chú': m.notes || '',
       'Khách': this.getCustomerNameFromMapping(m.materialCode)
     }));

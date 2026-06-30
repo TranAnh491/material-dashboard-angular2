@@ -864,7 +864,13 @@ export class QCComponent implements OnInit, OnDestroy {
    */
   private resolveImdBatchNumber(data: any): string {
     const bn = String(data.batchNumber || '').trim();
-    const rawDate = String(data.importDate || '').trim();
+    let rawDate = '';
+    const parsedDate = this.parseFirestoreDate(data?.importDate);
+    if (parsedDate) {
+      rawDate = parsedDate.toLocaleDateString('en-GB').split('/').join('');
+    } else {
+      rawDate = String(data.importDate || '').trim();
+    }
     // batchNumber đã là 10 chữ số → dùng luôn
     if (/^\d{10}$/.test(bn)) return bn;
     // importDate là 10 chữ số → dùng làm IMD key
@@ -873,8 +879,16 @@ export class QCComponent implements OnInit, OnDestroy {
     if (/^\d{8}$/.test(bn)) return bn;
     // importDate là 8 chữ số → dùng
     if (/^\d{8}$/.test(rawDate)) return rawDate;
-    // Fallback: trả về batchNumber gốc
-    return bn;
+    // Fallback: trả về batchNumber gốc hoặc rawDate
+    return bn || rawDate;
+  }
+
+  /** Khóa nhóm lô: mã TP + PO + IMD (chuẩn hóa). */
+  private getInventoryLotKey(data: any): string {
+    const mc = String(data?.materialCode || '').trim().toUpperCase();
+    const po = String(data?.poNumber || '').trim();
+    const imd = this.resolveImdBatchNumber(data);
+    return `${mc}|${po}|${imd}`;
   }
 
   // Get display IMD (importDate + sequence if any)
@@ -1653,8 +1667,20 @@ export class QCComponent implements OnInit, OnDestroy {
 
     this.resetIqcPassLeUi();
 
-    this.firestore.collection('inventory-materials').doc(materialId).update(updatePayload).then(() => {
+    this.firestore.collection('inventory-materials').doc(materialId).update(updatePayload).then(async () => {
       console.log(`✅ Updated IQC status in Firestore: ${materialId} -> ${statusToUpdate} by ${employeeIdToSave} at ${now.toISOString()}`);
+
+      if (this.isQcPassStatus(statusToUpdate)) {
+        try {
+          await this.propagatePassToSiblingLots(materialToUpdate, {
+            qcCheckedBy: employeeIdToSave,
+            qcCheckedAt: now
+          });
+        } catch (e) {
+          console.warn('⚠️ Propagate PASS to sibling lots:', e);
+        }
+      }
+
       this.notifyQcPriorityResolvedIfNeeded(
         shouldNotifyPriorityResolved,
         materialToUpdate,
@@ -2177,23 +2203,41 @@ export class QCComponent implements OnInit, OnDestroy {
     const range = this.boxDateRanges['pendingQC'];
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', this.selectedFactory)
-         .where('iqcStatus', '==', 'CHỜ KIỂM')
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
-      next: (snapshot) => {
-        this.pendingQCCount = snapshot.docs.filter(doc => {
-          const data = doc.data() as any;
-          if (!this.isPendingQcAtIqc(data)) return false;
-          if (range?.from || range?.to) {
-            const dt = this.parseFirestoreDate(data.importDate) || this.parseFirestoreDate(data.createdAt);
-            if (dt) {
-              if (range.from && dt < range.from) return false;
-              if (range.to   && dt > range.to)   return false;
+      next: async (snapshot) => {
+        try {
+          let docs = snapshot.docs;
+          if (docs.length) {
+            const syncedCount = await this.syncAutoPassPendingDuplicates(docs);
+            if (syncedCount > 0) {
+              const refreshed = await this.firestore
+                .collection('inventory-materials', ref => ref.where('factory', '==', this.selectedFactory))
+                .get()
+                .toPromise();
+              if (refreshed) docs = refreshed.docs;
             }
           }
-          return true;
-        }).length;
+          this.pendingQCCount = docs.filter(doc => {
+            const data = doc.data() as any;
+            if (!this.isPendingQcAtIqc(data)) return false;
+            if (range?.from || range?.to) {
+              const dt = this.parseFirestoreDate(data.importDate) || this.parseFirestoreDate(data.createdAt);
+              if (dt) {
+                if (range.from && dt < range.from) return false;
+                if (range.to   && dt > range.to)   return false;
+              }
+            }
+            return true;
+          }).length;
+        } catch (e) {
+          console.warn('⚠️ Auto-pass pending duplicates:', e);
+          this.pendingQCCount = snapshot.docs.filter(doc => {
+            const data = doc.data() as any;
+            return this.isPendingQcAtIqc(data);
+          }).length;
+        }
       },
       error: (error) => {
         console.error('❌ Error loading pending QC count:', error);
@@ -2978,15 +3022,118 @@ export class QCComponent implements OnInit, OnDestroy {
     materialCode?: string;
     poNumber?: string;
     batchNumber?: string;
+    importDate?: any;
   }): string {
-    const mc = String(item.materialCode || '').trim().toUpperCase();
-    const po = String(item.poNumber || '').trim();
-    const bn = String(item.batchNumber || '').trim();
-    return `${mc}|${po}|${bn}`;
+    return this.getInventoryLotKey(item);
   }
 
   private isQcPassStatus(status: string | undefined | null): boolean {
     return String(status || '').trim().toUpperCase() === 'PASS';
+  }
+
+  /** Lô đã PASS ở ít nhất một dòng inventory (mã + PO + IMD). */
+  private buildPassedLotMap(
+    docs: firebase.firestore.QueryDocumentSnapshot[]
+  ): Map<string, { iqcStatus: string; qcCheckedBy: string; qcCheckedAt: Date }> {
+    const map = new Map<string, { iqcStatus: string; qcCheckedBy: string; qcCheckedAt: Date }>();
+    for (const doc of docs) {
+      const data = doc.data() as any;
+      if (!this.isQcPassStatus(data?.iqcStatus)) continue;
+      const key = this.getInventoryLotKey(data);
+      const parts = key.split('|');
+      if (!parts[0] || !parts[2]) continue;
+
+      const qcCheckedAt =
+        this.parseFirestoreDate(data?.qcCheckedAt) ||
+        this.parseFirestoreDate(data?.updatedAt) ||
+        new Date();
+      const time = qcCheckedAt.getTime();
+      const existing = map.get(key);
+      if (!existing || time >= existing.qcCheckedAt.getTime()) {
+        map.set(key, {
+          iqcStatus: 'PASS',
+          qcCheckedBy: String(data?.qcCheckedBy || '').trim() || 'INVENTORY-SYNC',
+          qcCheckedAt
+        });
+      }
+    }
+    return map;
+  }
+
+  /**
+   * CHỜ KIỂM@IQC nhưng cùng mã+PO+IMD đã PASS ở dòng khác → tự PASS (đồng bộ Firestore).
+   */
+  private async syncAutoPassPendingDuplicates(
+    docs: firebase.firestore.QueryDocumentSnapshot[]
+  ): Promise<number> {
+    const passByLot = this.buildPassedLotMap(docs);
+    if (passByLot.size === 0) return 0;
+
+    const batch = firebase.firestore().batch();
+    const now = new Date();
+    let count = 0;
+
+    for (const doc of docs) {
+      const data = doc.data() as any;
+      if (!this.isPendingQcAtIqc(data)) continue;
+      const pass = passByLot.get(this.getInventoryLotKey(data));
+      if (!pass) continue;
+
+      const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+      batch.update(docRef, {
+        iqcStatus: pass.iqcStatus,
+        qcCheckedBy: pass.qcCheckedBy,
+        qcCheckedAt: pass.qcCheckedAt,
+        updatedAt: now
+      });
+      count++;
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`✅ Auto-pass ${count} dòng chờ kiểm trùng lô đã PASS ở inventory`);
+    }
+    return count;
+  }
+
+  /** Sau khi PASS một dòng, áp dụng PASS cho các dòng CHỜ KIỂM@IQC cùng mã+PO+IMD. */
+  private async propagatePassToSiblingLots(
+    source: { id?: string; materialCode?: string; poNumber?: string; batchNumber?: string; importDate?: any },
+    passMeta: { qcCheckedBy: string; qcCheckedAt: Date }
+  ): Promise<void> {
+    const lotKey = this.getInventoryLotKey(source);
+    if (!lotKey.split('|')[0]) return;
+
+    const snapshot = await this.firestore
+      .collection('inventory-materials', ref => ref.where('factory', '==', this.selectedFactory))
+      .get()
+      .toPromise();
+    if (!snapshot) return;
+
+    const batch = firebase.firestore().batch();
+    const now = new Date();
+    let count = 0;
+
+    for (const doc of snapshot.docs) {
+      if (doc.id === source.id) continue;
+      const data = doc.data() as any;
+      if (!this.isPendingQcAtIqc(data)) continue;
+      if (this.getInventoryLotKey(data) !== lotKey) continue;
+
+      const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+      batch.update(docRef, {
+        iqcStatus: 'PASS',
+        qcCheckedBy: passMeta.qcCheckedBy,
+        qcCheckedAt: passMeta.qcCheckedAt,
+        updatedAt: now
+      });
+      count++;
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`✅ Propagated PASS to ${count} sibling lot row(s) for ${lotKey}`);
+    }
   }
 
   /** Cùng mã + PO + lô: nếu đã PASS thì hiển thị PASS cho tất cả dòng. */
@@ -3621,9 +3768,19 @@ export class QCComponent implements OnInit, OnDestroy {
         }
         return;
       }
+
+      const syncedCount = await this.syncAutoPassPendingDuplicates(snapshot.docs);
+      let docs = snapshot.docs;
+      if (syncedCount > 0) {
+        const refreshed = await this.firestore
+          .collection('inventory-materials', ref => ref.where('factory', '==', this.selectedFactory))
+          .get()
+          .toPromise();
+        if (refreshed) docs = refreshed.docs;
+      }
       
       const pendingQcPrioritySet = new Set<string>();
-      this.pendingQCMaterials = snapshot.docs
+      this.pendingQCMaterials = docs
         .map(doc => {
           const data = doc.data() as any;
           const iqcStatus = data.iqcStatus;
