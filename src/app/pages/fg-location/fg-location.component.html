@@ -23,9 +23,15 @@
     <header class="fg-m-header">
       <div class="fg-m-header__left">
         <button type="button" class="fg-m-factory" (click)="openMobileFactorySelect()" title="Đổi nhà máy làm việc">
-          {{ selectedFactory }}
+          {{ selectedFactory || 'ASM' }}
         </button>
-        <h1 class="fg-m-title">FG Location</h1>
+        <h1 class="fg-m-title">Vị trí TP</h1>
+      </div>
+      <div class="fg-m-header__right">
+        <button type="button" class="fg-loc-menu-btn-mobile" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+          <span>Menu</span>
+        </button>
       </div>
     </header>
 
@@ -167,7 +173,7 @@
 
     <nav class="fg-m-bottomnav">
       <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'move'" (click)="setMobileBottomTab('move')">
-        <i class="material-icons">swap_horiz</i>
+        <i class="material-icons">location_on</i>
         <span>Đổi vị trí</span>
       </button>
       <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'kk'" (click)="setMobileBottomTab('kk')">
@@ -178,7 +184,7 @@
         <i class="material-icons">factory</i>
         <span>Đổi nhà máy</span>
       </button>
-      <button type="button" class="fg-m-bottomnav__btn fg-m-bottomnav__btn--menu" (click)="goMobileMenu()">
+      <button type="button" class="fg-m-bottomnav__btn fg-m-bottomnav__btn--menu" (click)="goToMenu()">
         <i class="material-icons">home</i>
         <span>Menu</span>
       </button>
@@ -186,22 +192,45 @@
   </div>
 
   <!-- Desktop -->
-  <div class="fg-location-container" *ngIf="!isMobile">
+  <div class="excel-container fg-loc-excel"
+       [class.fg-loc-excel--summary]="!kkPanelActive && currentStep === 'location-summary'"
+       *ngIf="!isMobile">
+    <header class="fg-loc-page-header" *ngIf="kkPanelActive || currentStep !== 'location-summary'">
+      <div class="fg-loc-page-header__brand">
+        <div class="fg-loc-page-header__icon-wrap">
+          <i class="material-icons">inventory_2</i>
+        </div>
+        <div>
+          <h1 class="fg-loc-page-header__title">FG LOCATION</h1>
+          <p class="fg-loc-page-header__subtitle" *ngIf="kkPanelActive">Kiểm kê vị trí thành phẩm</p>
+          <p class="fg-loc-page-header__subtitle" *ngIf="!kkPanelActive">Đổi vị trí · Quản lý kho TP</p>
+        </div>
+      </div>
+      <button type="button" class="fg-loc-page-header__menu" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        Về Menu
+      </button>
+    </header>
+
+    <nav class="fg-loc-subnav" *ngIf="selectedFactory && (kkPanelActive || currentStep !== 'location-summary')">
+      <button type="button" class="fg-loc-subnav__home" (click)="subnavHome()" title="Menu thao tác">
+        <i class="material-icons">home</i>
+      </button>
+      <span class="fg-loc-subnav__factory">{{ selectedFactory }}</span>
+    </nav>
+
+    <div class="fg-location-container" [class.fg-location-container--summary]="!kkPanelActive && currentStep === 'location-summary'">
     <ng-container *ngIf="kkPanelActive">
       <ng-container *ngTemplateOutlet="kkFlow"></ng-container>
     </ng-container>
     <ng-container *ngIf="!kkPanelActive">
       <ng-container *ngTemplateOutlet="moveFlow"></ng-container>
     </ng-container>
+    </div>
   </div>
 
   <!-- Shared: luồng đổi vị trí -->
   <ng-template #moveFlow>
-    <div class="header" *ngIf="!isMobile">
-      <h2>FG Location</h2>
-      <p class="subtitle">Đổi vị trí thành phẩm</p>
-    </div>
-
     <div class="step-container" *ngIf="currentStep === 'select-factory'">
       <div class="step-header">
         <span class="step-number">1</span>
@@ -209,8 +238,9 @@
       </div>
       <div class="factory-buttons">
         <button *ngFor="let factory of availableFactories" class="factory-btn"
-                [class.selected]="selectedFactory === factory" (click)="selectFactory(factory)">
-          <span class="factory-icon">🏭</span>
+                [class.selected]="selectedFactory === factory" [class.asm1]="factory === 'ASM1'" [class.asm2]="factory === 'ASM2'"
+                (click)="selectFactory(factory)">
+          <i class="material-icons factory-icon">factory</i>
           <span class="factory-name">{{ factory }}</span>
         </button>
       </div>
@@ -223,7 +253,7 @@
       </div>
       <div class="fg-hub-actions">
         <button type="button" class="fg-hub-btn" (click)="startMoveFlow()">
-          <i class="material-icons">swap_horiz</i>
+          <i class="material-icons">location_on</i>
           <span>Đổi vị trí</span>
         </button>
         <button type="button" class="fg-hub-btn fg-hub-btn--kk" (click)="startKkFlow()">
@@ -234,8 +264,277 @@
           <i class="material-icons">print</i>
           <span>In danh sách mã TP</span>
         </button>
+        <button type="button" class="fg-hub-btn fg-hub-btn--summary" (click)="openLocationSummary()" [disabled]="isLoading">
+          <i class="material-icons">summarize</i>
+          <span>Tổng hợp vị trí</span>
+        </button>
       </div>
       <button class="back-btn" (click)="backToFactorySelection()">← Đổi nhà máy</button>
+    </div>
+
+    <div class="fg-loc-summary-panel" *ngIf="currentStep === 'location-summary'">
+      <div class="fg-loc-summary-shell card">
+        <div class="fg-loc-summary-topbar">
+          <div class="fg-loc-summary-topbar__brand">
+            <div class="fg-loc-summary-topbar__icon">
+              <i class="material-icons">inventory_2</i>
+            </div>
+            <div class="fg-loc-summary-topbar__text">
+              <h1 class="fg-loc-summary-topbar__title">FG LOCATION</h1>
+              <p class="fg-loc-summary-topbar__subtitle">Đổi vị trí · Quản lý kho TP</p>
+            </div>
+          </div>
+          <div class="fg-loc-summary-topbar__actions">
+            <button type="button" class="fg-loc-topbar-btn" (click)="goToMenu()" title="Về Menu">
+              <i class="material-icons">home</i>
+              Về Menu
+            </button>
+            <button type="button" class="fg-loc-topbar-btn fg-loc-topbar-btn--icon" (click)="subnavHome()" title="Menu thao tác">
+              <i class="material-icons">arrow_back</i>
+            </button>
+            <div class="fg-loc-factory-switch" role="group" aria-label="Chọn nhà máy">
+              <button
+                type="button"
+                class="fg-loc-factory-pill"
+                *ngFor="let factory of availableFactories"
+                [class.is-active]="selectedFactory === factory"
+                [disabled]="isLoading"
+                (click)="switchSummaryFactory(factory)">
+                {{ factory }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="fg-loc-summary-empty-inner" *ngIf="!isLoading && locationSummaryRows.length === 0">
+          <i class="material-icons">inventory_2</i>
+          <p>Không có mã TP tồn &gt; 0 tại {{ selectedFactory }}.</p>
+          <button type="button" class="fg-loc-btn fg-loc-btn--outline" (click)="backFromLocationSummary()">← Quay lại menu</button>
+        </div>
+
+        <ng-container *ngIf="locationSummaryRows.length > 0">
+        <div class="fg-loc-summary-hero">
+          <div class="fg-loc-summary-hero__left">
+            <div class="fg-loc-summary-hero__icon">
+              <i class="material-icons">description</i>
+            </div>
+            <div>
+              <h2 class="fg-loc-summary-hero__title">Tổng hợp vị trí — {{ selectedFactory }}</h2>
+              <p class="fg-loc-summary-hero__desc">
+                Tìm theo Mã TP, LOT, LSX, vị trí. Bấm ô <strong>Vị trí</strong> để sửa — cập nhật đồng bộ FG Inventory.
+              </p>
+            </div>
+          </div>
+          <div class="fg-loc-summary-hero__right">
+            <div class="fg-loc-summary-stats">
+              <div class="fg-loc-stat-card fg-loc-stat-card--blue">
+                <div class="fg-loc-stat-card__icon"><i class="material-icons">warehouse</i></div>
+                <div>
+                  <span class="fg-loc-stat-card__label">Tổng vị trí</span>
+                  <strong class="fg-loc-stat-card__value">{{ locationSummaryStatsLines | number }}</strong>
+                </div>
+              </div>
+              <div class="fg-loc-stat-card fg-loc-stat-card--green">
+                <div class="fg-loc-stat-card__icon"><i class="material-icons">inventory_2</i></div>
+                <div>
+                  <span class="fg-loc-stat-card__label">Tổng tồn kho</span>
+                  <strong class="fg-loc-stat-card__value">{{ locationSummaryStatsTon | number:'1.0-0' }}</strong>
+                </div>
+              </div>
+              <div class="fg-loc-stat-card fg-loc-stat-card--purple">
+                <div class="fg-loc-stat-card__icon"><i class="material-icons">place</i></div>
+                <div>
+                  <span class="fg-loc-stat-card__label">Vị trí</span>
+                  <strong class="fg-loc-stat-card__value">{{ locationSummaryStatsUniqueLocations | number }}</strong>
+                </div>
+              </div>
+            </div>
+            <div class="fg-loc-summary-meta" *ngIf="locationSummaryLastUpdated">
+              <span>{{ filteredLocationSummaryRows.length | number }} dòng</span>
+              <span class="fg-loc-summary-meta__dot">·</span>
+              <span>Cập nhật: {{ locationSummaryLastUpdated | date:'HH:mm dd/MM/yyyy' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="fg-loc-summary-filters-bar">
+          <div class="fg-loc-filter-spacer" aria-hidden="true"></div>
+          <div class="fg-loc-filter-field">
+            <label>Mã TP</label>
+            <div class="fg-loc-filter-input-wrap">
+              <i class="material-icons">search</i>
+              <input
+                type="text"
+                [ngModel]="locationSummaryFilterCode"
+                (ngModelChange)="onSummaryFilterCodeInput($event)"
+                placeholder="Nhập mã TP"
+                autocomplete="off"
+                autocapitalize="characters"
+                class="fg-loc-filter-upper">
+            </div>
+          </div>
+          <div class="fg-loc-filter-field">
+            <label>LOT</label>
+            <input
+              type="text"
+              class="fg-loc-filter-input fg-loc-filter-upper"
+              [ngModel]="locationSummaryFilterLot"
+              (ngModelChange)="onSummaryFilterLotInput($event)"
+              placeholder="LOT"
+              autocomplete="off">
+          </div>
+          <div class="fg-loc-filter-field">
+            <label>LSX</label>
+            <input
+              type="text"
+              class="fg-loc-filter-input fg-loc-filter-upper"
+              [ngModel]="locationSummaryFilterLsx"
+              (ngModelChange)="onSummaryFilterLsxInput($event)"
+              placeholder="LSX"
+              autocomplete="off">
+          </div>
+          <div class="fg-loc-filter-spacer fg-loc-filter-spacer--ton" aria-hidden="true"></div>
+          <div class="fg-loc-filter-field fg-loc-filter-field--loc">
+            <label>Vị trí</label>
+            <input
+              type="text"
+              class="fg-loc-filter-input fg-loc-filter-upper"
+              [ngModel]="locationSummaryFilterLoc"
+              (ngModelChange)="onSummaryFilterLocInput($event)"
+              placeholder="Vị trí"
+              autocomplete="off"
+              autocapitalize="characters">
+          </div>
+          <div class="fg-loc-filter-actions">
+            <button type="button" class="fg-loc-btn fg-loc-btn--primary" (click)="applySummarySearch()">
+              <i class="material-icons">search</i>
+              Tìm kiếm
+            </button>
+            <button type="button" class="fg-loc-btn fg-loc-btn--outline" (click)="refreshLocationSummary()" [disabled]="isLoading">
+              <i class="material-icons">refresh</i>
+              Làm mới
+            </button>
+            <button
+              type="button"
+              class="fg-loc-btn fg-loc-btn--ghost"
+              *ngIf="hasSummaryFilters"
+              (click)="clearSummaryFilters()">
+              Xóa lọc
+            </button>
+          </div>
+        </div>
+
+        <div class="fg-loc-summary-table-wrap">
+          <table class="fg-loc-summary-table fg-table">
+            <thead>
+              <tr>
+                <th class="col-stt">STT</th>
+                <th class="col-code sortable" (click)="toggleSummarySort('materialCode')">
+                  Mã TP
+                  <i class="material-icons fg-loc-sort-icon" [class.is-active]="isSummarySortActive('materialCode')">
+                    {{ isSummarySortActive('materialCode') && locationSummarySortDir === 'desc' ? 'arrow_downward' : 'arrow_upward' }}
+                  </i>
+                </th>
+                <th class="col-lot sortable" (click)="toggleSummarySort('lot')">
+                  LOT
+                  <i class="material-icons fg-loc-sort-icon" [class.is-active]="isSummarySortActive('lot')">
+                    {{ isSummarySortActive('lot') && locationSummarySortDir === 'desc' ? 'arrow_downward' : 'arrow_upward' }}
+                  </i>
+                </th>
+                <th class="col-lsx sortable" (click)="toggleSummarySort('lsx')">
+                  LSX
+                  <i class="material-icons fg-loc-sort-icon" [class.is-active]="isSummarySortActive('lsx')">
+                    {{ isSummarySortActive('lsx') && locationSummarySortDir === 'desc' ? 'arrow_downward' : 'arrow_upward' }}
+                  </i>
+                </th>
+                <th class="col-ton sortable" (click)="toggleSummarySort('ton')">
+                  Tồn kho
+                  <i class="material-icons fg-loc-sort-icon" [class.is-active]="isSummarySortActive('ton')">
+                    {{ isSummarySortActive('ton') && locationSummarySortDir === 'desc' ? 'arrow_downward' : 'arrow_upward' }}
+                  </i>
+                </th>
+                <th class="col-loc sortable" (click)="toggleSummarySort('location')">
+                  Vị trí <span class="fg-loc-summary-edit-hint">(bấm sửa)</span>
+                  <i class="material-icons fg-loc-sort-icon" [class.is-active]="isSummarySortActive('location')">
+                    {{ isSummarySortActive('location') && locationSummarySortDir === 'desc' ? 'arrow_downward' : 'arrow_upward' }}
+                  </i>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngIf="filteredLocationSummaryRows.length === 0">
+                <td class="fg-loc-summary-no-match" colspan="6">Không khớp bộ lọc.</td>
+              </tr>
+              <tr *ngFor="let row of paginatedLocationSummaryRows; trackBy: trackLocationSummaryRow; let i = index">
+                <td class="col-stt">{{ getSummaryRowStt(i) }}</td>
+                <td class="col-code">{{ row.materialCode }}</td>
+                <td class="col-lot">{{ row.lot || '—' }}</td>
+                <td class="col-lsx">{{ row.lsx || '—' }}</td>
+                <td class="col-ton">{{ row.ton | number:'1.0-0' }}</td>
+                <td class="col-loc">
+                  <input
+                    *ngIf="isEditingSummaryRow(row)"
+                    [id]="'summary-loc-' + row.id"
+                    type="text"
+                    class="fg-loc-summary-loc-input"
+                    [(ngModel)]="editingSummaryLocationValue"
+                    (ngModelChange)="onSummaryLocationInputChange()"
+                    (keydown)="onSummaryLocationKeydown($event, row)"
+                    (blur)="saveSummaryLocation(row)"
+                    [disabled]="isSavingSummaryRow(row)"
+                    autocomplete="off"
+                    autocapitalize="characters">
+                  <button
+                    *ngIf="!isEditingSummaryRow(row)"
+                    type="button"
+                    class="fg-loc-summary-loc-btn"
+                    (click)="startEditSummaryLocation(row)"
+                    [title]="'Sửa vị trí — ' + row.materialCode">
+                    <span>{{ row.location || '—' }}</span>
+                    <i class="material-icons">edit</i>
+                  </button>
+                  <i class="material-icons fg-loc-summary-saving" *ngIf="isSavingSummaryRow(row)">sync</i>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <footer class="fg-loc-pagination" *ngIf="filteredLocationSummaryRows.length > 0">
+          <div class="fg-loc-pagination__left">
+            <span>Hiển thị</span>
+            <select
+              class="fg-loc-page-size"
+              [(ngModel)]="locationSummaryPageSize"
+              (ngModelChange)="onSummaryPageSizeChange()">
+              <option *ngFor="let n of summaryPageSizeOptions" [ngValue]="n">{{ n }}</option>
+            </select>
+            <span>trên {{ filteredLocationSummaryRows.length | number }} bản ghi</span>
+          </div>
+          <div class="fg-loc-pagination__right">
+            <button type="button" class="fg-loc-page-btn" (click)="goSummaryPrevPage()" [disabled]="locationSummaryPageIndex === 0" title="Trang trước">
+              <i class="material-icons">chevron_left</i>
+            </button>
+            <button
+              type="button"
+              class="fg-loc-page-btn"
+              *ngFor="let p of locationSummaryPageNumbers"
+              [class.is-active]="p === locationSummaryPageIndex + 1"
+              (click)="goSummaryPage(p)">
+              {{ p }}
+            </button>
+            <button
+              type="button"
+              class="fg-loc-page-btn"
+              (click)="goSummaryNextPage()"
+              [disabled]="locationSummaryPageIndex >= locationSummaryTotalPages - 1"
+              title="Trang sau">
+              <i class="material-icons">chevron_right</i>
+            </button>
+          </div>
+        </footer>
+        </ng-container>
+      </div>
     </div>
 
     <div class="step-container" *ngIf="currentStep === 'scan-location'">
@@ -251,8 +550,8 @@
                (keypress)="onLocationScanKeyPress($event)" placeholder="Scan vị trí..."
                autocomplete="off" autocapitalize="characters">
         <button class="scan-btn primary" [disabled]="isLoading || !locationScanInput" (click)="scanLocation()">
-          <span *ngIf="!isLoading">🔍 Tìm hàng</span>
-          <span *ngIf="isLoading">⏳ Đang tìm...</span>
+          <i class="material-icons">{{ isLoading ? 'hourglass_empty' : 'search' }}</i>
+          <span>{{ isLoading ? 'Đang tìm...' : 'Tìm hàng' }}</span>
         </button>
       </div>
       <button class="back-btn" (click)="backToHub()">← Menu thao tác</button>
@@ -264,7 +563,8 @@
         <span class="step-title">Chọn hàng cần di chuyển</span>
       </div>
       <div class="location-badge">
-        📍 <strong>{{ currentLocation }}</strong>
+        <i class="material-icons">place</i>
+        <strong>{{ currentLocation }}</strong>
         <span class="item-count">({{ itemsAtLocation.length }} mã)</span>
       </div>
       <div class="select-all-row" (click)="toggleSelectAll()">
@@ -290,13 +590,18 @@
         </div>
       </div>
       <div class="selected-summary" *ngIf="getSelectedCount() > 0">
-        ✅ Đã chọn: <strong>{{ getSelectedCount() }}</strong>
+        <i class="material-icons">check_circle</i>
+        Đã chọn: <strong>{{ getSelectedCount() }}</strong>
       </div>
       <div class="action-buttons">
         <button class="action-btn primary" [disabled]="!hasSelectedItems()" (click)="proceedToScanNewLocation()">
-          📍 Scan vị trí mới
+          <i class="material-icons">location_on</i>
+          Scan vị trí mới
         </button>
-        <button class="action-btn secondary" (click)="backToLocationScan()">← Scan vị trí khác</button>
+        <button class="action-btn secondary" (click)="backToLocationScan()">
+          <i class="material-icons">arrow_back</i>
+          Scan vị trí khác
+        </button>
       </div>
     </div>
 
@@ -310,7 +615,7 @@
           <span class="label">Từ:</span>
           <span class="location-value old">{{ currentLocation }}</span>
         </div>
-        <div class="move-arrow">➡️</div>
+        <div class="move-arrow"><i class="material-icons">arrow_forward</i></div>
         <div class="to-location">
           <span class="label">Đến:</span>
           <span class="location-value new">{{ getDisplayNewLocation() }}</span>
@@ -346,34 +651,36 @@
       </div>
       <div class="scan-input-container">
         <button class="scan-btn success btn-move" [disabled]="isLoading || !isNewLocationValid()" (click)="moveToNewLocation()">
-          <span *ngIf="!isLoading">✅ Di chuyển</span>
-          <span *ngIf="isLoading">⏳ Đang xử lý...</span>
+          <i class="material-icons">{{ isLoading ? 'hourglass_empty' : 'check_circle' }}</i>
+          <span>{{ isLoading ? 'Đang xử lý...' : 'Di chuyển' }}</span>
         </button>
       </div>
       <button class="back-btn" (click)="backToItemSelection()">← Quay lại</button>
     </div>
 
     <div class="step-container success-container" *ngIf="currentStep === 'success'">
-      <div class="success-icon">✅</div>
+      <div class="success-icon"><i class="material-icons">check_circle</i></div>
       <div class="success-message">{{ successMessage }}</div>
       <div class="action-buttons">
-        <button class="action-btn primary" (click)="scanAnotherLocation()">📍 Scan vị trí khác</button>
-        <button class="action-btn secondary" (click)="backToFactorySelection()">🏭 Đổi nhà máy</button>
+        <button class="action-btn primary" (click)="scanAnotherLocation()">
+          <i class="material-icons">location_on</i>
+          Scan vị trí khác
+        </button>
+        <button class="action-btn secondary" (click)="backToFactorySelection()">
+          <i class="material-icons">factory</i>
+          Đổi nhà máy
+        </button>
       </div>
     </div>
 
     <div class="error-message" *ngIf="errorMessage">
-      ⚠️ {{ errorMessage }}
+      <i class="material-icons">warning</i>
+      {{ errorMessage }}
     </div>
   </ng-template>
 
   <!-- Kiểm kê: scan vị trí kệ → scan mã TP → cập nhật Vị trí KK -->
   <ng-template #kkFlow>
-    <div class="header" *ngIf="!isMobile">
-      <h2>Kiểm kê vị trí TP</h2>
-      <p class="subtitle">Scan vị trí trên kệ → scan mã TP (P + 6 số) → Hoàn tất</p>
-    </div>
-
     <div class="fg-kk-factory-pick" *ngIf="!selectedFactory">
       <p>Chọn nhà máy trước khi kiểm kê.</p>
       <button type="button" class="fg-loc-action-btn" (click)="isMobile ? openMobileFactorySelect() : backToFactorySelection()">
@@ -436,14 +743,17 @@
       </div>
 
       <div class="step-container success-container" *ngIf="kkStep === 'done'">
-        <div class="success-icon">✅</div>
+        <div class="success-icon"><i class="material-icons">check_circle</i></div>
         <div class="success-message">{{ successMessage }}</div>
         <button class="action-btn primary" (click)="resetKkAfterDone()">Kiểm kê vị trí khác</button>
         <button class="back-btn" *ngIf="!isMobile" (click)="backToHub()">← Menu thao tác</button>
       </div>
     </ng-container>
 
-    <div class="error-message" *ngIf="errorMessage">⚠️ {{ errorMessage }}</div>
+    <div class="error-message" *ngIf="errorMessage">
+      <i class="material-icons">warning</i>
+      {{ errorMessage }}
+    </div>
   </ng-template>
 
   <div class="loading-overlay" *ngIf="isLoading">

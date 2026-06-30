@@ -22,6 +22,15 @@ interface LocationItem {
   palletId?: string;
 }
 
+interface TpLocationSummaryRow {
+  id: string;
+  materialCode: string;
+  lot: string;
+  lsx: string;
+  ton: number;
+  location: string;
+}
+
 type MobileBottomTab = 'move' | 'factory' | 'kk';
 type FactoryChangeMode = 'ma' | 'pallet';
 type FactoryChangeStep = 'mode' | 'scan-loc' | 'select-ma' | 'scan-pallet' | 'pick-factory' | 'done';
@@ -74,6 +83,22 @@ export class FgLocationComponent implements OnInit, OnDestroy {
   kkScannedCodes: string[] = [];
   /** Đang ở luồng kiểm kê (desktop) hoặc tab Kiểm kê (mobile) */
   kkPanelActive = false;
+
+  // Tổng hợp vị trí (mã TP đầy đủ)
+  locationSummaryRows: TpLocationSummaryRow[] = [];
+  locationSummaryFilterCode = '';
+  locationSummaryFilterLot = '';
+  locationSummaryFilterLsx = '';
+  locationSummaryFilterLoc = '';
+  editingSummaryRowId: string | null = null;
+  editingSummaryLocationValue = '';
+  savingSummaryRowId: string | null = null;
+  locationSummaryPageSize = 20;
+  locationSummaryPageIndex = 0;
+  locationSummaryLastUpdated: Date | null = null;
+  locationSummarySortField: 'materialCode' | 'lot' | 'lsx' | 'ton' | 'location' = 'materialCode';
+  locationSummarySortDir: 'asc' | 'desc' = 'asc';
+  readonly summaryPageSizeOptions = [20, 50, 100, 200];
 
   isLoading = false;
   errorMessage = '';
@@ -158,6 +183,10 @@ export class FgLocationComponent implements OnInit, OnDestroy {
   }
 
   goMobileMenu(): void {
+    this.goToMenu();
+  }
+
+  goToMenu(): void {
     this.router.navigate(['/menu']);
   }
 
@@ -188,6 +217,322 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     this.currentStep = 'hub';
     this.errorMessage = '';
     this.successMessage = '';
+    this.locationSummaryRows = [];
+    this.clearSummaryFilters();
+    this.cancelEditSummaryLocation();
+  }
+
+  async openLocationSummary(): Promise<void> {
+    if (!this.selectedFactory) {
+      this.errorMessage = 'Vui lòng chọn nhà máy trước';
+      return;
+    }
+    this.isLoading = true;
+    this.errorMessage = '';
+    try {
+      this.locationSummaryRows = await this.loadTpLocationSummary(this.selectedFactory);
+      this.locationSummaryLastUpdated = new Date();
+      this.clearSummaryFilters();
+      this.cancelEditSummaryLocation();
+      this.locationSummaryPageIndex = 0;
+      this.kkPanelActive = false;
+      this.currentStep = 'location-summary';
+    } catch (error: any) {
+      this.errorMessage = `Lỗi tải tổng hợp: ${error?.message || error}`;
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  backFromLocationSummary(): void {
+    this.locationSummaryRows = [];
+    this.clearSummaryFilters();
+    this.cancelEditSummaryLocation();
+    this.currentStep = 'hub';
+    this.errorMessage = '';
+  }
+
+  clearSummaryFilters(): void {
+    this.locationSummaryFilterCode = '';
+    this.locationSummaryFilterLot = '';
+    this.locationSummaryFilterLsx = '';
+    this.locationSummaryFilterLoc = '';
+    this.locationSummaryPageIndex = 0;
+  }
+
+  get hasSummaryFilters(): boolean {
+    return !!(
+      this.locationSummaryFilterCode.trim() ||
+      this.locationSummaryFilterLot.trim() ||
+      this.locationSummaryFilterLsx.trim() ||
+      this.locationSummaryFilterLoc.trim()
+    );
+  }
+
+  get filteredLocationSummaryRows(): TpLocationSummaryRow[] {
+    const code = this.locationSummaryFilterCode.trim().toUpperCase();
+    const lot = this.locationSummaryFilterLot.trim().toUpperCase();
+    const lsx = this.locationSummaryFilterLsx.trim().toUpperCase();
+    const loc = this.locationSummaryFilterLoc.trim().toUpperCase();
+
+    const filtered = this.locationSummaryRows.filter(row => {
+      if (code && !row.materialCode.toUpperCase().includes(code)) return false;
+      if (lot && !(row.lot || '').toUpperCase().includes(lot)) return false;
+      if (lsx && !(row.lsx || '').toUpperCase().includes(lsx)) return false;
+      if (loc && !(row.location || '').toUpperCase().includes(loc)) return false;
+      return true;
+    });
+
+    const field = this.locationSummarySortField;
+    const dir = this.locationSummarySortDir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let av: string | number = '';
+      let bv: string | number = '';
+      if (field === 'ton') {
+        av = a.ton;
+        bv = b.ton;
+        return (av - bv) * dir;
+      }
+      av = String(field === 'materialCode' ? a.materialCode : field === 'lot' ? (a.lot || '') : field === 'lsx' ? (a.lsx || '') : (a.location || '')).toUpperCase();
+      bv = String(field === 'materialCode' ? b.materialCode : field === 'lot' ? (b.lot || '') : field === 'lsx' ? (b.lsx || '') : (b.location || '')).toUpperCase();
+      return av.localeCompare(bv) * dir;
+    });
+  }
+
+  toggleSummarySort(field: 'materialCode' | 'lot' | 'lsx' | 'ton' | 'location'): void {
+    if (this.locationSummarySortField === field) {
+      this.locationSummarySortDir = this.locationSummarySortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.locationSummarySortField = field;
+      this.locationSummarySortDir = 'asc';
+    }
+    this.locationSummaryPageIndex = 0;
+  }
+
+  isSummarySortActive(field: string): boolean {
+    return this.locationSummarySortField === field;
+  }
+
+  get locationSummaryTotalTon(): number {
+    return this.filteredLocationSummaryRows.reduce((sum, row) => sum + row.ton, 0);
+  }
+
+  get locationSummaryStatsLines(): number {
+    return this.locationSummaryRows.length;
+  }
+
+  get locationSummaryStatsTon(): number {
+    return this.locationSummaryRows.reduce((sum, row) => sum + row.ton, 0);
+  }
+
+  get locationSummaryStatsUniqueLocations(): number {
+    const set = new Set<string>();
+    this.locationSummaryRows.forEach(row => {
+      const loc = (row.location || '').trim();
+      if (loc) set.add(loc.toUpperCase());
+    });
+    return set.size;
+  }
+
+  get paginatedLocationSummaryRows(): TpLocationSummaryRow[] {
+    const start = this.locationSummaryPageIndex * this.locationSummaryPageSize;
+    return this.filteredLocationSummaryRows.slice(start, start + this.locationSummaryPageSize);
+  }
+
+  get locationSummaryTotalPages(): number {
+    const total = this.filteredLocationSummaryRows.length;
+    if (total === 0) return 1;
+    return Math.ceil(total / this.locationSummaryPageSize);
+  }
+
+  get locationSummaryPageNumbers(): number[] {
+    const pages = this.locationSummaryTotalPages;
+    const maxShow = 8;
+    if (pages <= maxShow) {
+      return Array.from({ length: pages }, (_, i) => i + 1);
+    }
+    const current = this.locationSummaryPageIndex + 1;
+    let end = Math.min(pages, current + 3);
+    let start = Math.max(1, end - maxShow + 1);
+    end = Math.min(pages, start + maxShow - 1);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }
+
+  getSummaryRowStt(index: number): number {
+    return this.locationSummaryPageIndex * this.locationSummaryPageSize + index + 1;
+  }
+
+  onSummaryFilterChange(): void {
+    this.locationSummaryPageIndex = 0;
+  }
+
+  onSummaryFilterCodeInput(value: string): void {
+    this.locationSummaryFilterCode = (value || '').toUpperCase();
+    this.onSummaryFilterChange();
+  }
+
+  onSummaryFilterLotInput(value: string): void {
+    this.locationSummaryFilterLot = (value || '').toUpperCase();
+    this.onSummaryFilterChange();
+  }
+
+  onSummaryFilterLsxInput(value: string): void {
+    this.locationSummaryFilterLsx = (value || '').toUpperCase();
+    this.onSummaryFilterChange();
+  }
+
+  onSummaryFilterLocInput(value: string): void {
+    this.locationSummaryFilterLoc = (value || '').toUpperCase();
+    this.onSummaryFilterChange();
+  }
+
+  applySummarySearch(): void {
+    this.locationSummaryPageIndex = 0;
+  }
+
+  onSummaryPageSizeChange(): void {
+    this.locationSummaryPageIndex = 0;
+  }
+
+  goSummaryPage(page: number): void {
+    const idx = page - 1;
+    if (idx >= 0 && idx < this.locationSummaryTotalPages) {
+      this.locationSummaryPageIndex = idx;
+    }
+  }
+
+  goSummaryPrevPage(): void {
+    if (this.locationSummaryPageIndex > 0) {
+      this.locationSummaryPageIndex--;
+    }
+  }
+
+  goSummaryNextPage(): void {
+    if (this.locationSummaryPageIndex < this.locationSummaryTotalPages - 1) {
+      this.locationSummaryPageIndex++;
+    }
+  }
+
+  async refreshLocationSummary(): Promise<void> {
+    if (!this.selectedFactory) return;
+    this.isLoading = true;
+    this.errorMessage = '';
+    try {
+      this.locationSummaryRows = await this.loadTpLocationSummary(this.selectedFactory);
+      this.locationSummaryLastUpdated = new Date();
+      this.locationSummaryPageIndex = 0;
+      this.cancelEditSummaryLocation();
+    } catch (error: any) {
+      this.errorMessage = `Lỗi tải lại: ${error?.message || error}`;
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async switchSummaryFactory(factory: string): Promise<void> {
+    if (!factory || factory === this.selectedFactory) return;
+    this.selectedFactory = factory;
+    this.clearSummaryFilters();
+    this.cancelEditSummaryLocation();
+    this.errorMessage = '';
+    if (this.currentStep !== 'location-summary') return;
+    this.isLoading = true;
+    try {
+      this.locationSummaryRows = await this.loadTpLocationSummary(factory);
+      this.locationSummaryLastUpdated = new Date();
+      this.locationSummaryPageIndex = 0;
+    } catch (error: any) {
+      this.errorMessage = `Lỗi tải tổng hợp: ${error?.message || error}`;
+      this.locationSummaryRows = [];
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  subnavHome(): void {
+    if (this.currentStep === 'location-summary') {
+      this.backFromLocationSummary();
+    } else if (this.selectedFactory && this.currentStep !== 'hub' && this.currentStep !== 'select-factory') {
+      this.backToHub();
+    } else if (this.selectedFactory) {
+      this.backToFactorySelection();
+    }
+  }
+
+  trackLocationSummaryRow(_index: number, row: TpLocationSummaryRow): string {
+    return row.id;
+  }
+
+  startEditSummaryLocation(row: TpLocationSummaryRow): void {
+    this.editingSummaryRowId = row.id;
+    this.editingSummaryLocationValue = row.location || '';
+    setTimeout(() => {
+      const el = document.getElementById(`summary-loc-${row.id}`) as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 0);
+  }
+
+  cancelEditSummaryLocation(): void {
+    this.editingSummaryRowId = null;
+    this.editingSummaryLocationValue = '';
+  }
+
+  onSummaryLocationInputChange(): void {
+    if (this.editingSummaryLocationValue) {
+      this.editingSummaryLocationValue = this.editingSummaryLocationValue.toUpperCase();
+    }
+  }
+
+  onSummaryLocationKeydown(event: KeyboardEvent, row: TpLocationSummaryRow): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.saveSummaryLocation(row);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.cancelEditSummaryLocation();
+    }
+  }
+
+  async saveSummaryLocation(row: TpLocationSummaryRow): Promise<void> {
+    if (this.editingSummaryRowId !== row.id) return;
+
+    const newLocation = (this.editingSummaryLocationValue || '').trim().toUpperCase();
+    if (!newLocation) {
+      this.errorMessage = 'Vị trí không được để trống';
+      return;
+    }
+    if (newLocation === (row.location || '').toUpperCase()) {
+      this.cancelEditSummaryLocation();
+      return;
+    }
+
+    this.savingSummaryRowId = row.id;
+    this.errorMessage = '';
+    try {
+      await this.firestore.collection('fg-inventory').doc(row.id).update({
+        location: newLocation,
+        updatedAt: new Date(),
+        lastModified: new Date(),
+        modifiedBy: 'fg-location-summary'
+      });
+      row.location = newLocation;
+      const master = this.locationSummaryRows.find(r => r.id === row.id);
+      if (master) master.location = newLocation;
+      this.cancelEditSummaryLocation();
+    } catch (error: any) {
+      this.errorMessage = `Lỗi cập nhật vị trí: ${error?.message || error}`;
+    } finally {
+      this.savingSummaryRowId = null;
+    }
+  }
+
+  isEditingSummaryRow(row: TpLocationSummaryRow): boolean {
+    return this.editingSummaryRowId === row.id;
+  }
+
+  isSavingSummaryRow(row: TpLocationSummaryRow): boolean {
+    return this.savingSummaryRowId === row.id;
   }
 
   backToFactorySelection(): void {
@@ -390,6 +735,9 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.successMessage = '';
     this.movedCount = 0;
+    this.locationSummaryRows = [];
+    this.clearSummaryFilters();
+    this.cancelEditSummaryLocation();
     this.resetKkFlow(false);
   }
 
@@ -736,6 +1084,32 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  private async loadTpLocationSummary(factory: string): Promise<TpLocationSummaryRow[]> {
+    const snapshot = await this.firestore
+      .collection('fg-inventory', ref => ref.where('factory', '==', factory))
+      .get()
+      .toPromise();
+
+    return (snapshot?.docs || [])
+      .map(doc => {
+        const data = doc.data() as any;
+        const tonDau = data.tonDau || 0;
+        const nhap = data.nhap || data.quantity || 0;
+        const xuat = data.xuat || data.exported || 0;
+        const ton = data.ton != null ? data.ton : tonDau + nhap - xuat;
+        return {
+          id: doc.id,
+          materialCode: String(data.materialCode || '').trim().toUpperCase(),
+          lot: String(data.lot || '').trim().toUpperCase(),
+          lsx: String(data.lsx || '').trim().toUpperCase(),
+          ton,
+          location: String(data.location || '').trim().toUpperCase()
+        };
+      })
+      .filter(row => row.ton > 0 && row.materialCode)
+      .sort((a, b) => a.materialCode.localeCompare(b.materialCode, 'en', { sensitivity: 'base', numeric: true }));
   }
 
   private async loadDistinctTpCodesInStock(factory: string): Promise<string[]> {
