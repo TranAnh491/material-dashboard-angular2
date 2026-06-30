@@ -278,8 +278,66 @@
 }
 
 .col-actions {
-  width: 120px;
+  width: 220px;
   text-align: center !important;
+}
+
+.pallet-action-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.pallet-size-group {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pallet-size-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pallet-size-row--modal {
+  margin-bottom: 14px;
+}
+
+.pallet-size-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.pallet-size-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.pallet-size-btn:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.pallet-size-btn.is-active {
+  border-color: #1976d2;
+  background: #e3f2fd;
+  color: #1565c0;
 }
 
 // Print count badge
@@ -697,10 +755,9 @@
   min-height: 20px;
 }
 
-// Print preview - 100mm x 130mm ratio (scaled down)
+// Print preview - tỉ lệ theo kích cỡ tem đã chọn
 .label-preview {
-  width: 200px;
-  height: 260px;
+  position: relative;
   margin: 0 auto 20px;
   border: 2px solid #333;
   border-radius: 8px;
@@ -709,6 +766,56 @@
   align-items: center;
   justify-content: center;
   background: #fff;
+}
+
+.label-preview--square {
+  justify-content: flex-start;
+  padding: 14px 12px 10px;
+}
+
+.preview-code-top {
+  font-size: 18px;
+  font-weight: bold;
+  color: #000;
+  margin-bottom: 10px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  width: 100%;
+}
+
+.preview-qr--square {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 8px;
+  width: 100%;
+
+  i {
+    font-size: 96px;
+    color: #333;
+  }
+}
+
+.preview-footer-compact {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.preview-date-compact {
+  font-size: 12px;
+  font-weight: 700;
+  color: #000;
+}
+
+.preview-copy {
+  font-size: 11px;
+  color: #666;
 }
 
 .preview-factory {
@@ -837,8 +944,7 @@
   }
   
   .label-preview {
-    width: 240px;
-    height: 170px;
+    max-width: 100%;
   }
   
   .preview-code {

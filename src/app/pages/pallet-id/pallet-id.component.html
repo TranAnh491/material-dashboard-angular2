@@ -263,9 +263,27 @@
             </span>
           </td>
           <td class="col-actions">
-            <button class="btn-action btn-print" (click)="openPrintPreview(pallet)" title="In tem">
-              <i class="material-icons">print</i>
-            </button>
+            <div class="pallet-action-cell">
+              <div class="pallet-size-group" role="group" aria-label="Chọn kích cỡ tem">
+                <button type="button"
+                        class="pallet-size-btn"
+                        [class.is-active]="getPalletLabelSize(pallet) === '100x100'"
+                        (click)="setPalletLabelSize(pallet, '100x100')"
+                        title="Tem 100mm × 100mm">
+                  100×100
+                </button>
+                <button type="button"
+                        class="pallet-size-btn"
+                        [class.is-active]="getPalletLabelSize(pallet) === '130x100'"
+                        (click)="setPalletLabelSize(pallet, '130x100')"
+                        title="Tem 130mm × 100mm">
+                  130×100
+                </button>
+              </div>
+              <button class="btn-action btn-print" (click)="openPrintPreview(pallet)" title="In tem">
+                <i class="material-icons">print</i>
+              </button>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -288,18 +306,48 @@
       </div>
       
       <div class="modal-body" *ngIf="selectedPallet">
-        <div class="label-preview">
-          <div class="preview-factory">{{ getPalletFactoryPrefix(selectedPallet.factory, selectedPallet.palletCode) }}</div>
-          <div class="preview-qr">
-            <i class="material-icons">qr_code_2</i>
-          </div>
-          <div class="preview-code">{{ getPalletNumberLine(selectedPallet.palletCode) }}</div>
-          <div class="preview-sub text-muted">{{ selectedPallet.palletCode }}</div>
-          <div class="preview-date">Ngày tạo: {{ formatDate(selectedPallet.createdAt) }}</div>
+        <div class="pallet-size-row pallet-size-row--modal">
+          <span class="pallet-size-label">Kích cỡ tem:</span>
+          <button type="button"
+                  class="pallet-size-btn"
+                  [class.is-active]="selectedPalletLabelSize === '100x100'"
+                  (click)="setPalletLabelSize(selectedPallet, '100x100')">
+            100mm × 100mm
+          </button>
+          <button type="button"
+                  class="pallet-size-btn"
+                  [class.is-active]="selectedPalletLabelSize === '130x100'"
+                  (click)="setPalletLabelSize(selectedPallet, '130x100')">
+            130mm × 100mm
+          </button>
+        </div>
+
+        <div class="label-preview"
+             [class.label-preview--square]="selectedPalletLabelSize === '100x100'"
+             [ngStyle]="previewLabelStyle">
+          <ng-container *ngIf="selectedPalletLabelSize === '100x100'; else widePreview">
+            <div class="preview-code-top">{{ selectedPallet.palletCode }}</div>
+            <div class="preview-qr preview-qr--square">
+              <i class="material-icons">qr_code_2</i>
+            </div>
+            <div class="preview-footer-compact">
+              <span class="preview-date-compact">{{ formatDateDdMmYy(selectedPallet.createdAt) }}</span>
+              <span class="preview-copy">1/4</span>
+            </div>
+          </ng-container>
+          <ng-template #widePreview>
+            <div class="preview-factory">{{ getPalletFactoryPrefix(selectedPallet.factory, selectedPallet.palletCode) }}</div>
+            <div class="preview-qr">
+              <i class="material-icons">qr_code_2</i>
+            </div>
+            <div class="preview-code">{{ getPalletNumberLine(selectedPallet.palletCode) }}</div>
+            <div class="preview-sub text-muted">{{ selectedPallet.palletCode }}</div>
+            <div class="preview-date">Ngày tạo: {{ formatDate(selectedPallet.createdAt) }}</div>
+          </ng-template>
         </div>
         
         <div class="print-info">
-          <p>Kích thước tem: <strong>100mm × 130mm</strong> — vùng in <strong>90mm × 120mm</strong> (căn giữa)</p>
+          <p>Kích thước tem: <strong>{{ getPalletLabelSizeDisplay(selectedPalletLabelSize) }}</strong> — vùng in <strong>{{ selectedPalletInnerSizeDisplay }}</strong> (căn giữa)</p>
           <p>Số lượng: <strong>4 tem</strong> (dán 4 mặt pallet)</p>
           <p>Đã in: <strong>{{ selectedPallet.printCount || 0 }}</strong> lần</p>
         </div>
