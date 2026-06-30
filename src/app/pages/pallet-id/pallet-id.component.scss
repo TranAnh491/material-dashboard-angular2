@@ -770,52 +770,51 @@
 
 .label-preview--square {
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 0;
 }
 
-.label-preview-inner {
+.label-preview-sheet {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 8px 8px;
+  padding: 10px 12px 8px;
+  box-sizing: border-box;
 }
 
-.preview-code-top {
-  font-size: 20px;
-  font-weight: bold;
-  color: #000;
-  font-family: 'Courier New', monospace;
-  text-align: center;
+.label-preview-code {
   width: 100%;
-  flex: 0 0 auto;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  flex-shrink: 0;
 }
 
-.preview-qr--square {
-  flex: 1;
+.label-preview-qr {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  min-height: 0;
 
   i {
-    font-size: 110px;
+    font-size: 108px;
     color: #333;
   }
 }
 
-.preview-footer-compact {
+.label-preview-footer {
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: 0 4px;
-  flex: 0 0 auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .preview-date-compact {

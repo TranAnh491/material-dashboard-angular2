@@ -326,14 +326,14 @@
              [class.label-preview--square]="selectedPalletLabelSize === '100x100'"
              [ngStyle]="previewLabelStyle">
           <ng-container *ngIf="selectedPalletLabelSize === '100x100'; else widePreview">
-            <div class="label-preview-inner">
-              <div class="preview-code-top">{{ selectedPallet.palletCode }}</div>
-              <div class="preview-qr preview-qr--square">
+            <div class="label-preview-sheet">
+              <div class="label-preview-code">{{ selectedPallet.palletCode }}</div>
+              <div class="label-preview-qr">
                 <i class="material-icons">qr_code_2</i>
               </div>
-              <div class="preview-footer-compact">
-                <span class="preview-date-compact">{{ formatDateDdMmYy(selectedPallet.createdAt) }}</span>
-                <span class="preview-copy">1/4</span>
+              <div class="label-preview-footer">
+                <span>{{ formatDateDdMmYy(selectedPallet.createdAt) }}</span>
+                <span>1/4</span>
               </div>
             </div>
           </ng-container>
@@ -349,7 +349,8 @@
         </div>
         
         <div class="print-info">
-          <p>Kích thước tem: <strong>{{ getPalletLabelSizeDisplay(selectedPalletLabelSize) }}</strong> — in full khổ giấy, không viền</p>
+          <p *ngIf="selectedPalletLabelSize === '100x100'">Kích thước tem: <strong>100mm × 100mm</strong> — layout giống tem 57×32 (flex, không chồng lớp)</p>
+          <p *ngIf="selectedPalletLabelSize !== '100x100'">Kích thước tem: <strong>{{ getPalletLabelSizeDisplay(selectedPalletLabelSize) }}</strong></p>
           <p>Số lượng: <strong>4 tem</strong> (dán 4 mặt pallet)</p>
           <p>Đã in: <strong>{{ selectedPallet.printCount || 0 }}</strong> lần</p>
         </div>
