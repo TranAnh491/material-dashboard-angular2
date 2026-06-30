@@ -2071,6 +2071,80 @@ async function sendZaloTextMessage(botToken, chatId, text) {
   });
 }
 
+const QUANLY_KHO_GROUP_CONFIG_DOC = "quanly_kho";
+
+async function getQuanlyKhoGroupChatId() {
+  try {
+    const doc = await db.collection("zalo_group_config").doc(QUANLY_KHO_GROUP_CONFIG_DOC).get();
+    if (!doc.exists) return null;
+    return String((doc.data() || {}).chatId || "").trim() || null;
+  } catch (e) {
+    logger.warn("getQuanlyKhoGroupChatId failed", e);
+    return null;
+  }
+}
+
+function buildFgInCartonMismatchMessage(data) {
+  const materialCode = String(data.materialCode || "").trim();
+  const factory = String(data.factory || "").trim().toUpperCase();
+  const poNumber = String(data.poNumber || "").trim();
+  const lsx = String(data.lsx || "").trim();
+  const lot = String(data.lot || "").trim();
+  const quantity = data.quantity != null ? String(data.quantity) : "";
+  const systemCarton = data.systemCarton != null ? String(data.systemCarton) : "";
+  const reportedCarton = data.reportedCarton != null ? String(data.reportedCarton) : "";
+  const employeeId = String(data.employeeId || "").trim();
+  const timeStr = new Date().toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour12: false,
+  });
+  return [
+    "⚠️ FG IN — SAI SỐ CARTON",
+    "",
+    `Mã TP: ${materialCode}`,
+    `Nhà máy: ${factory || "—"}`,
+    `PO: ${poNumber || "—"}`,
+    `LSX: ${lsx || "—"}`,
+    `LOT: ${lot || "—"}`,
+    `Số lượng: ${quantity || "—"}`,
+    `Carton hệ thống: ${systemCarton || "—"}`,
+    `Carton thực tế: ${reportedCarton || "—"}`,
+    employeeId ? `NV báo: ${employeeId}` : "",
+    `Thời gian: ${timeStr}`,
+  ].filter(Boolean).join("\n");
+}
+
+/** FG IN: báo nhóm Quản lý kho khi NV xác nhận sai số carton */
+exports.notifyFgInCartonMismatch = onDocumentCreated(
+  {
+    document: "fg-in-carton-mismatch/{docId}",
+    secrets: [ZALO_BOT_TOKEN],
+    region: "us-central1",
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const data = snap.data() || {};
+    const materialCode = String(data.materialCode || "").trim();
+    if (!materialCode) return;
+
+    const botToken = ZALO_BOT_TOKEN.value();
+    const chatId = await getQuanlyKhoGroupChatId();
+    if (!chatId) {
+      logger.warn("fg-in-carton: no quanly_kho group chatId");
+      return;
+    }
+
+    const msg = buildFgInCartonMismatchMessage(data);
+    try {
+      await sendZaloTextMessage(botToken, chatId, msg);
+      logger.info("fg-in-carton: sent to quanly_kho", {materialCode, docId: snap.id});
+    } catch (e) {
+      logger.error("fg-in-carton: sendMessage failed", {materialCode, e});
+    }
+  }
+);
+
 function buildQcNgStorageMessage(data) {
   const materialCode = String(data.materialCode || "").trim();
   const poNumber = String(data.poNumber || "").trim();

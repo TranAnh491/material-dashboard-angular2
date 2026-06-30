@@ -45,22 +45,47 @@
           </button>
         </div>
 
-        <p class="fg-m-section-label">Phiếu chờ xử lý ({{ getPendingCount() }})</p>
+        <div class="fg-m-section-head">
+          <p class="fg-m-section-label">
+            Phiếu chờ xử lý
+            <ng-container *ngIf="mobilePendingZoneFilter; else pendingCountAll">
+              ({{ getMobilePendingMaterials().length }}/{{ getPendingCount() }})
+            </ng-container>
+            <ng-template #pendingCountAll>({{ getPendingCount() }})</ng-template>
+          </p>
+          <div class="fg-m-zone-filters">
+            <button type="button" class="fg-m-zone-filter"
+                    [class.is-active]="mobilePendingZoneFilter === '1'"
+                    (click)="togglePendingZoneFilter('1')">1</button>
+            <button type="button" class="fg-m-zone-filter"
+                    [class.is-active]="mobilePendingZoneFilter === '3'"
+                    (click)="togglePendingZoneFilter('3')">3</button>
+          </div>
+        </div>
 
         <div class="fg-m-card-list">
           <div class="fg-m-card fg-m-card--pending"
-               *ngFor="let material of getPendingMaterials()"
+               *ngFor="let material of getMobilePendingMaterials()"
                (click)="openConfirmReceiptDialog(material)">
+            <span class="fg-m-zone-badge" *ngIf="getTempZoneBadge(material.location) as zone">{{ zone }}</span>
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
             <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
             <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
             <span class="fg-m-card__meta">LOT: {{ material.batchNumber || '—' }}</span>
             <span class="fg-m-card__meta">SL: {{ material.quantity | number:'1.0-0' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--loc">
+              Vị trí: <strong>{{ getPendingLocationLabel(material) }}</strong>
+            </span>
             <div class="fg-m-card__action">
               <i class="material-icons">touch_app</i>
               Bấm để xác nhận
             </div>
           </div>
+        </div>
+
+        <div class="fg-m-empty" *ngIf="getMobilePendingMaterials().length === 0 && getPendingCount() > 0">
+          <i class="material-icons">filter_alt</i>
+          <p>Không có phiếu vùng {{ mobilePendingZoneFilter }}</p>
         </div>
 
         <div class="fg-m-empty" *ngIf="getPendingCount() === 0">
@@ -781,13 +806,15 @@
             </div>
           </div>
 
-          <div class="confirm-field info-only">
+          <div class="confirm-field"
+               [class.confirmed]="confirmReceiptData.cartonConfirmed"
+               (click)="openCartonVerifyDialog($event)">
             <div class="field-check square-check">
-              <i class="material-icons">inventory_2</i>
+              <i class="material-icons">{{ confirmReceiptData.cartonConfirmed ? 'check_box' : 'check_box_outline_blank' }}</i>
             </div>
             <div class="field-content">
               <span class="field-label">Carton</span>
-              <span class="field-value">{{ calculateCartonAndOdd(selectedReceiptMaterial).carton }}</span>
+              <span class="field-value">{{ displayCartonCount }}</span>
             </div>
           </div>
         </div>
@@ -917,6 +944,38 @@
         <i class="material-icons">lock</i>
         Done - Khóa phiếu
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Carton verify popup -->
+<div class="custom-modal carton-verify-modal" [class.show]="showCartonVerifyDialog" [style.display]="showCartonVerifyDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeCartonVerifyDialog()"></div>
+  <div class="modal-container carton-verify-container" (click)="$event.stopPropagation()">
+    <div class="modal-body">
+      <h6 class="carton-verify-title" *ngIf="!cartonWrongMode">Số thùng đang đúng hay sai?</h6>
+      <p class="carton-verify-hint" *ngIf="!cartonWrongMode">Hệ thống tính: <strong>{{ displayCartonCount }}</strong> thùng</p>
+
+      <div class="carton-verify-actions" *ngIf="!cartonWrongMode">
+        <button type="button" class="carton-verify-btn carton-verify-btn--ok" (click)="onCartonVerifyCorrect()">
+          <i class="material-icons">check_circle</i> Đúng
+        </button>
+        <button type="button" class="carton-verify-btn carton-verify-btn--wrong" (click)="onCartonVerifyWrong()">
+          <i class="material-icons">error_outline</i> Sai
+        </button>
+      </div>
+
+      <div class="carton-wrong-form" *ngIf="cartonWrongMode">
+        <label class="carton-wrong-label">Nhập số thùng đúng</label>
+        <input type="number" class="carton-wrong-input" min="1" step="1"
+               [(ngModel)]="cartonCorrectInput"
+               (keypress)="onCartonCorrectInputKeyPress($event)"
+               placeholder="Số thùng...">
+        <button type="button" class="carton-verify-btn carton-verify-btn--ok carton-verify-btn--full"
+                (click)="submitCartonCorrection()">
+          Xác nhận
+        </button>
+      </div>
     </div>
   </div>
 </div>

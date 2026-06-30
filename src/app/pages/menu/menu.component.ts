@@ -240,20 +240,67 @@ export class MenuComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  private readonly subtitleByPath: Record<string, string> = {
+    '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
+    '/task': 'Quản lý công việc',
+    '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
+    '/shipment': 'Kế hoạch và theo dõi giao hàng',
+    '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
+    '/layout-warehouse': 'Sơ đồ kho D — LayoutD',
+    '/report': 'Báo cáo và phân tích',
+    '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
+    '/pd-control': 'Giám sát điều khiển sản xuất',
+    '/inbound-asm1': 'Nhập kho nguyên liệu ASM1',
+    '/outbound-asm1': 'Xuất kho nguyên liệu ASM1',
+    '/materials-asm1': 'Quản lý tồn kho nguyên liệu ASM1',
+    '/inventory-overview-asm1': 'Xem tổng quan tồn kho RM1',
+    '/bag-history': 'Kiểm soát batch và bịch xuất',
+    '/label': 'In tem nhãn nguyên liệu',
+    '/qc': 'Kiểm tra chất lượng nguyên liệu',
+    '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
+    '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
+    '/inbound-asm2': 'Nhập kho nguyên liệu ASM2',
+    '/outbound-asm2': 'Xuất kho nguyên liệu ASM2',
+    '/materials-asm2': 'Quản lý tồn kho nguyên liệu ASM2',
+    '/inventory-overview-asm2': 'Xem tổng quan tồn kho RM2',
+    '/fg-in': 'Nhập thành phẩm vào kho',
+    '/fg-out': 'Xuất thành phẩm',
+    '/fg-check': 'Kiểm tra thành phẩm trước khi xuất',
+    '/fg-inventory': 'Quản lý tồn kho thành phẩm',
+    '/fg-overview': 'Tổng quan tồn kho thành phẩm',
+    '/fg-location': 'Đổi vị trí và nhà máy thành phẩm',
+    '/pallet-id': 'Quản lý mã pallet',
+    '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
+    '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
+    '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
+    '/stock-check': 'Kiểm kê và đối chiếu tồn kho',
+    '/sxxk': 'Quản lý sản xuất xuất khẩu',
+    '/scrap': 'Quản lý phế liệu',
+    '/checklist': 'An toàn và chất lượng',
+    '/equipment': 'Đào tạo nhân viên kho',
+    '/manage': 'Cấu hình và quản trị hệ thống',
+    '/settings': 'Cài đặt tài khoản và phân quyền',
+    '/zalo': 'Tích hợp thông báo Zalo',
+  };
+
   getMenuCardSubtitle(tab: MenuTabView): string {
     if (tab.subtitle) {
       return tab.subtitle;
     }
+    const byPath = this.subtitleByPath[tab.path];
+    if (byPath) {
+      return byPath;
+    }
     const byCategory: Record<string, string> = {
-      Main: 'Manage all shipments and deliveries',
-      Production: 'Production control and monitoring',
-      'ASM1 RM': 'Manage inbound/outbound RM1',
-      Quality: 'Quality control and traceability',
-      'ASM2 RM': 'Manage inbound/outbound RM2',
-      'ASM FG': 'FG inventory management',
-      Report: 'Reports and analytics',
-      Tools: 'Tools and operations',
-      Admin: 'Admin and reports',
+      Main: 'Quản lý vận hành và giao hàng',
+      Production: 'Giám sát sản xuất',
+      'ASM1 RM': 'Nhập — xuất — tồn RM1',
+      Quality: 'Kiểm soát chất lượng',
+      'ASM2 RM': 'Nhập — xuất — tồn RM2',
+      'ASM FG': 'Quản lý thành phẩm',
+      Report: 'Báo cáo và phân tích',
+      Tools: 'Công cụ hỗ trợ vận hành',
+      Admin: 'Quản trị hệ thống',
     };
     return byCategory[tab.category] || '';
   }

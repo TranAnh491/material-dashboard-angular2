@@ -80,6 +80,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   isMobile = false;
   showMobileFactorySelect = false;
   mobileBottomTab: 'pending' | 'location' = 'pending';
+  /** Lọc phiếu chờ theo vùng Temporary 1 / 3 (mobile) */
+  mobilePendingZoneFilter: '1' | '3' | null = null;
   private readonly fgInMobileBodyClass = 'fg-in-mobile-tab';
   
   // Time range filter
@@ -177,8 +179,16 @@ export class FgInComponent implements OnInit, OnDestroy {
     lsxConfirmed: false,
     lotConfirmed: false,
     quantityConfirmed: false,
+    cartonConfirmed: false,
     location: ''
   };
+
+  // Carton verify popup
+  showCartonVerifyDialog = false;
+  cartonWrongMode = false;
+  displayCartonCount = 0;
+  systemCartonCount = 0;
+  cartonCorrectInput: number | null = null;
   
   // Scanner input for location
   locationScannerValue: string = '';
@@ -2337,14 +2347,21 @@ export class FgInComponent implements OnInit, OnDestroy {
       lsxConfirmed: false,
       lotConfirmed: false,
       quantityConfirmed: false,
-      location: ''  // Always empty - requires scanning
+      cartonConfirmed: false,
+      location: ''
     };
-    this.locationScannerValue = '';  // Clear scanner input
+    this.locationScannerValue = '';
     this.fgInUseAsm3 = false;
     this.isMultiplePallet = false;
     this.originalQuantity = material.quantity || 0;
     this.confirmQuantity = this.originalQuantity;
-    
+    const cartonCalc = this.calculateCartonAndOdd(material);
+    this.displayCartonCount = cartonCalc.carton;
+    this.systemCartonCount = cartonCalc.carton;
+    this.showCartonVerifyDialog = false;
+    this.cartonWrongMode = false;
+    this.cartonCorrectInput = null;
+
     this.showConfirmReceiptDialog = true;
     
     // Auto focus scanner input
@@ -2362,10 +2379,14 @@ export class FgInComponent implements OnInit, OnDestroy {
       lsxConfirmed: false,
       lotConfirmed: false,
       quantityConfirmed: false,
+      cartonConfirmed: false,
       location: ''
     };
     this.locationScannerValue = '';
     this.fgInUseAsm3 = false;
+    this.showCartonVerifyDialog = false;
+    this.cartonWrongMode = false;
+    this.cartonCorrectInput = null;
     
     // Reset multiple pallet
     this.isMultiplePallet = false;
@@ -2386,7 +2407,8 @@ export class FgInComponent implements OnInit, OnDestroy {
            this.confirmReceiptData.poConfirmed &&
            this.confirmReceiptData.lsxConfirmed &&
            this.confirmReceiptData.lotConfirmed &&
-           this.confirmReceiptData.quantityConfirmed;
+           this.confirmReceiptData.quantityConfirmed &&
+           this.confirmReceiptData.cartonConfirmed;
   }
 
   // Get count of remaining unconfirmed fields
@@ -2397,12 +2419,129 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (!this.confirmReceiptData.lsxConfirmed) count++;
     if (!this.confirmReceiptData.lotConfirmed) count++;
     if (!this.confirmReceiptData.quantityConfirmed) count++;
+    if (!this.confirmReceiptData.cartonConfirmed) count++;
     return count;
+  }
+
+  openCartonVerifyDialog(event: Event): void {
+    event.stopPropagation();
+    this.cartonWrongMode = false;
+    this.cartonCorrectInput = null;
+    this.showCartonVerifyDialog = true;
+  }
+
+  closeCartonVerifyDialog(): void {
+    this.showCartonVerifyDialog = false;
+    this.cartonWrongMode = false;
+  }
+
+  onCartonVerifyCorrect(): void {
+    this.confirmReceiptData.cartonConfirmed = true;
+    this.closeCartonVerifyDialog();
+  }
+
+  onCartonVerifyWrong(): void {
+    this.cartonWrongMode = true;
+    this.cartonCorrectInput = this.displayCartonCount > 0 ? this.displayCartonCount : 1;
+  }
+
+  onCartonCorrectInputKeyPress(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.submitCartonCorrection();
+    }
+  }
+
+  submitCartonCorrection(): void {
+    const n = Number(this.cartonCorrectInput);
+    if (!Number.isFinite(n) || n < 1) {
+      return;
+    }
+    this.displayCartonCount = Math.round(n);
+    this.confirmReceiptData.cartonConfirmed = true;
+    this.closeCartonVerifyDialog();
+    if (this.displayCartonCount !== this.systemCartonCount) {
+      void this.notifyCartonMismatchToZalo();
+    }
+  }
+
+  private async notifyCartonMismatchToZalo(): Promise<void> {
+    const material = this.selectedReceiptMaterial;
+    if (!material) return;
+    try {
+      const user = await this.afAuth.currentUser;
+      const employeeId = user
+        ? (user.email || user.uid || '').split('@')[0].toUpperCase()
+        : '';
+      await this.firestore.collection('fg-in-carton-mismatch').add({
+        factory: material.factory || this.selectedFactory || '',
+        materialCode: material.materialCode || '',
+        poNumber: material.poNumber || '',
+        lsx: material.lsx || '',
+        lot: material.lot || material.batchNumber || '',
+        quantity: material.quantity || 0,
+        systemCarton: this.systemCartonCount,
+        reportedCarton: this.displayCartonCount,
+        employeeId,
+        detectedAt: new Date()
+      });
+    } catch (e) {
+      console.error('fg-in carton mismatch notify failed:', e);
+    }
   }
 
   // Get pending materials (not yet locked)
   getPendingMaterials(): FgInItem[] {
     return this.filteredMaterials.filter(m => !m.isReceived);
+  }
+
+  getMobilePendingMaterials(): FgInItem[] {
+    const list = this.getPendingMaterials();
+    if (!this.mobilePendingZoneFilter) {
+      return list;
+    }
+    return list.filter(m => this.getTempZoneBadge(m.location) === this.mobilePendingZoneFilter);
+  }
+
+  togglePendingZoneFilter(zone: '1' | '3'): void {
+    this.mobilePendingZoneFilter = this.mobilePendingZoneFilter === zone ? null : zone;
+  }
+
+  /** Nhận diện vùng Temporary 1 / 3 từ vị trí (Tem-1, TEMPORARY 3, …) */
+  getTempZoneBadge(location: string | undefined | null): '1' | '3' | null {
+    const raw = String(location ?? '').trim();
+    if (!raw) {
+      return null;
+    }
+    const upper = raw.toUpperCase();
+    const compact = upper.replace(/[\s_-]+/g, '');
+
+    if (
+      compact === 'TEMPORARY3' ||
+      compact === 'TEM3' ||
+      compact.endsWith('TEMPORARY3') ||
+      /(?:^|TEMPORARY|TEM)3$/.test(compact)
+    ) {
+      return '3';
+    }
+    if (
+      compact === 'TEMPORARY1' ||
+      compact === 'TEM1' ||
+      compact.endsWith('TEMPORARY1') ||
+      /(?:^|TEMPORARY|TEM)1$/.test(compact)
+    ) {
+      return '1';
+    }
+
+    const zoneMatch = upper.match(/(?:TEMPORARY|TEM)[\s_-]*([13])\s*$/);
+    if (zoneMatch) {
+      return zoneMatch[1] as '1' | '3';
+    }
+    return null;
+  }
+
+  getPendingLocationLabel(material: FgInItem): string {
+    const loc = String(material?.location ?? '').trim();
+    return loc || 'Temporary';
   }
 
   // Get pending count
