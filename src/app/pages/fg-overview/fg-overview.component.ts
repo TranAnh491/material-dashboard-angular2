@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { Subject } from 'rxjs';
+import { Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
@@ -118,23 +118,49 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
   loadFgInventory(): void {
     this.isLoadingFg = true;
     this.fgError = null;
-    this.firestore
-      .collection('fg-inventory', ref => ref.where('factory', '==', this.selectedFactory))
-      .get()
+    const factory = this.selectedFactory;
+    forkJoin({
+      inventory: this.firestore
+        .collection('fg-inventory', ref => ref.where('factory', '==', factory))
+        .get(),
+      fgIn: this.firestore.collection('fg-in').get()
+    })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: snap => {
+        next: ({ inventory, fgIn }) => {
+          const fgInQtyByBatchKey = new Map<string, number>();
+          fgIn.docs.forEach(doc => {
+            const d = doc.data() as { batchNumber?: string; quantity?: number };
+            const bk = String(d.batchNumber || '').trim().toUpperCase();
+            if (!bk) return;
+            const q = Number(d.quantity) || 0;
+            fgInQtyByBatchKey.set(bk, (fgInQtyByBatchKey.get(bk) || 0) + q);
+          });
+
           this.tonByCode.clear();
           this.locationsByCode.clear();
           const locationSetByNorm = new Map<string, Set<string>>();
-          snap.docs.forEach(doc => {
-            const d = doc.data() as { materialCode?: string; ton?: number; location?: string };
-            const code = String(d.materialCode || '').trim();
+          inventory.docs.forEach(doc => {
+            const d = doc.data() as {
+              materialCode?: string;
+              maTP?: string;
+              tonDau?: number;
+              nhap?: number;
+              quantity?: number;
+              xuat?: number;
+              exported?: number;
+              batchNumber?: string;
+              location?: string;
+              viTri?: string;
+            };
+            const code = String(d.materialCode || d.maTP || '').trim();
             if (!code) return;
-            const ton = typeof d.ton === 'number' && !isNaN(d.ton) ? d.ton : 0;
+
+            const ton = this.resolveInventoryTon(d, fgInQtyByBatchKey);
             this.tonByCode.set(code, (this.tonByCode.get(code) || 0) + ton);
+
             const norm = this.normalizeCode(code);
-            const loc = String(d.location || '').trim();
+            const loc = String(d.location || d.viTri || '').trim();
             if (loc) {
               const set = locationSetByNorm.get(norm) || new Set<string>();
               set.add(loc);
@@ -155,6 +181,31 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
           this.rebuildRows();
         }
       });
+  }
+
+  /**
+   * Cùng công thức với tab FG Inventory: ton = tonDau + nhap - xuat,
+   * nhập lấy từ tổng fg-in theo số batch (nếu có).
+   */
+  private resolveInventoryTon(
+    d: {
+      tonDau?: number;
+      nhap?: number;
+      quantity?: number;
+      xuat?: number;
+      exported?: number;
+      batchNumber?: string;
+    },
+    fgInQtyByBatchKey: Map<string, number>
+  ): number {
+    const tonDau = Number(d.tonDau) || 0;
+    let nhap = Number(d.nhap ?? d.quantity) || 0;
+    const xuat = Number(d.xuat ?? d.exported) || 0;
+    const bk = String(d.batchNumber || '').trim().toUpperCase();
+    if (bk && fgInQtyByBatchKey.has(bk)) {
+      nhap = fgInQtyByBatchKey.get(bk)!;
+    }
+    return tonDau + nhap - xuat;
   }
 
   openImportDialog(): void {
@@ -291,9 +342,12 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
           if (!d.lines || !Array.isArray(d.lines) || d.lines.length === 0) return;
           const lines: { norm: string; display: string; ton: number }[] = [];
           for (const row of d.lines) {
-            if (!row || typeof row.display !== 'string' || typeof row.norm !== 'string') continue;
+            if (!row || typeof row.display !== 'string') continue;
+            const display = row.display.trim();
+            const norm = this.normalizeCode(display || row.norm);
+            if (!norm) continue;
             const ton = typeof row.ton === 'number' && isFinite(row.ton) ? row.ton : 0;
-            lines.push({ norm: row.norm, display: row.display.trim(), ton });
+            lines.push({ norm, display: norm, ton });
           }
           if (!lines.length) return;
           this.importFileName = typeof d.fileName === 'string' && d.fileName ? d.fileName : 'Đã lưu trên Firebase';
@@ -478,8 +532,11 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     this.closeMoreMenu();
   }
 
+  /** Khóa so sánh: 7 ký tự đầu của mã TP (không phân biệt hoa thường). */
   private normalizeCode(code: string): string {
-    return String(code || '').trim().toUpperCase();
+    const s = String(code || '').trim().toUpperCase();
+    if (!s) return '';
+    return s.slice(0, 7);
   }
 
   /**
@@ -529,7 +586,8 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       }
       // Không hiển thị mã TP từ file import nếu lượng tồn <= 0
       if (!(qty > 0)) continue;
-      lines.push({ norm, display: codeCell, ton: qty });
+      const displayKey = norm;
+      lines.push({ norm, display: displayKey, ton: qty });
     }
 
     return { lines };
@@ -590,26 +648,23 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       });
     });
 
-    // Mã chỉ có trong FG, không có dòng nào trong file (chỉ mã đúng định dạng 7 ký tự đầu)
+    // Mã chỉ có trong FG, không có trong file (theo 7 ký tự đầu)
     codesFg.forEach(norm => {
       if (codesImport.has(norm)) return;
-      let materialCode = norm;
-      this.tonByCode.forEach((_, code) => {
-        if (this.normalizeCode(code) === norm) {
-          materialCode = code;
-        }
-      });
-      if (!this.isValidMaTpFormat(materialCode)) return;
+      if (!this.isValidMaTpFormat(norm)) return;
       const tonFg = tonFgForNorm(norm);
+      // Tồn FG = 0 và file không có mã → hết stock, coi là khớp
+      const compare: FgOverviewRow['compare'] =
+        tonFg <= 0 ? 'Khớp' : 'Thiếu ở file import';
       list.push({
-        materialCode,
+        materialCode: norm,
         tonFg,
         tonImport: 0,
         location: this.locationsByCode.get(norm) || '',
         qtyDelta: null,
         normQtyMismatch: false,
         inImport: false,
-        compare: 'Thiếu ở file import'
+        compare
       });
     });
 

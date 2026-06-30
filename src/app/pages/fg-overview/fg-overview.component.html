@@ -217,10 +217,11 @@
           <li><strong>Cột A</strong> — mã TP. Chỉ nhận dòng có <strong>7 ký tự đầu</strong> đúng mẫu: <strong>P, T, M hoặc L</strong> + <strong>6 chữ số</strong> (ví dụ <code>P102030</code>, <code>m123456</code>). Phần sau ký tự thứ 7 có thể tùy ý. Các dòng khác bị bỏ qua.</li>
           <li><strong>Cột F</strong> — số lượng tồn kho</li>
           <li>Dữ liệu bắt đầu từ <strong>dòng 7</strong> (các dòng 1–6 bỏ qua).</li>
-          <li>Mỗi dòng Excel (cột A có mã) = <strong>một dòng trên lưới</strong>. Cùng mã nhiều dòng: cột <strong>Tồn file</strong> là SL từng dòng; cột <strong>So sánh lượng</strong> (tổng file − tồn FG) chỉ hiện ở <strong>dòng cuối</strong> của nhóm mã đó.</li>
-          <li>So với FG Inventory: khớp theo mã (không phân biệt hoa thường). Cột <strong>Mã TP</strong> hiển thị <strong>chữ gốc cột A</strong> khi mã có trong import.</li>
-          <li><strong>Tồn FG Inventory</strong> chỉ cộng bản ghi <strong>ASM1</strong> hoặc <strong>ASM2</strong> đang chọn.</li>
-          <li><strong>So sánh lượng</strong> = tổng tồn file theo mã − tồn FG; âm = file ít hơn kho. Hiển thị một lần ở dòng cuối cùng của mã trong file.</li>
+          <li>Mỗi dòng Excel (cột A có mã) = <strong>một dòng trên lưới</strong>. Cùng <strong>7 ký tự đầu</strong> nhiều dòng: cột <strong>Tồn file</strong> là SL từng dòng; cột <strong>So sánh lượng</strong> (tổng file − tồn FG) chỉ hiện ở <strong>dòng cuối</strong> của nhóm 7 ký tự đó.</li>
+          <li>So với FG Inventory: chỉ lấy <strong>7 ký tự đầu</strong> của mã kho và mã file để gộp, rồi <strong>so sánh tổng số lượng</strong>. Cột <strong>Mã TP</strong> hiển thị 7 ký tự đầu.</li>
+          <li><strong>Tồn FG Inventory</strong> cộng mọi mã kho có cùng 7 ký tự đầu (nhà máy <strong>ASM1</strong> hoặc <strong>ASM2</strong> đang chọn), tính <strong>ton = Tồn đầu + Nhập − Xuất</strong> giống tab FG Inventory.</li>
+          <li><strong>So sánh lượng</strong> = tổng tồn file (theo 7 ký tự) − tổng tồn FG (theo 7 ký tự); âm = file ít hơn kho. Hiển thị một lần ở dòng cuối cùng của nhóm trong file.</li>
+          <li>Mã chỉ có trong FG, không có trong file: tồn FG &gt; 0 → <strong>Thiếu ở file import</strong>; tồn FG = 0 → <strong>Khớp</strong> (hết stock).</li>
           <li>Dữ liệu import được <strong>lưu trên Firebase theo từng nhà máy</strong> (ASM1/ASM2 tách riêng). Chọn ASM nào sẽ mở bản import của ASM đó; import mới ghi đè bản của đúng ASM đang chọn.</li>
         </ul>
       </div>
