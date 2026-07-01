@@ -566,11 +566,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       const lsx = (material.lsx || '').trim();
       const lot = (material.lot || '').trim();
       const qty = material.quantity ?? 0;
-      const importDateStr = material.importDate
-        ? (material.importDate instanceof Date
-          ? material.importDate.toLocaleDateString('vi-VN')
-          : new Date((material.importDate as any)?.seconds * 1000).toLocaleDateString('vi-VN'))
-        : new Date().toLocaleDateString('vi-VN');
+      const importDateStr = this.formatFgInImportDate(material.importDate);
 
       const qrData = `${mc}|${batch}|${lsx}|${lot}|${qty}`;
 
@@ -650,6 +646,141 @@ export class FgInComponent implements OnInit, OnDestroy {
       console.error('Error printing tem:', e);
       alert('Có lỗi khi in tem. Vui lòng thử lại.');
     }
+  }
+
+  /** In LOT label 100mm ngang × 130mm cao — nội dung chiếm 90% diện tích tem */
+  printLotLabel(material: FgInItem): void {
+    try {
+      const fields: Array<{ label: string; value: string; emphasize?: boolean }> = [
+        { label: 'Mã TP', value: (material.materialCode || '').trim().toUpperCase(), emphasize: true },
+        { label: 'PO', value: (material.poNumber || '').trim() },
+        { label: 'LSX', value: (material.lsx || '').trim() },
+        { label: 'LOT', value: (material.lot || '').trim() },
+        { label: 'Lượng', value: String(material.quantity ?? 0) },
+        { label: 'Ngày Nhập', value: this.formatFgInImportDate(material.importDate) },
+        { label: 'Vị Trí', value: (material.location || 'Temporary').trim() }
+      ];
+
+      const rowsHtml = fields
+        .map(f => {
+          const val = this.escapePrintHtml(f.value || '—');
+          const lbl = this.escapePrintHtml(f.label);
+          const cls = f.emphasize ? ' label-row--code' : '';
+          return `<div class="label-row${cls}"><div class="label-key">${lbl}</div><div class="label-val">${val}</div></div>`;
+        })
+        .join('');
+
+      const html = `
+        <html>
+          <head><title></title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body {
+              width: 100mm;
+              height: 130mm;
+              font-family: Arial, sans-serif;
+              background: #fff;
+              overflow: hidden;
+            }
+            .label-page {
+              width: 100mm;
+              height: 130mm;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              page-break-inside: avoid;
+              background: #fff;
+            }
+            .label-content {
+              width: 90mm;
+              height: 117mm;
+              border: 1px solid #000;
+              padding: 3mm 4mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              overflow: hidden;
+            }
+            .label-row {
+              flex: 1 1 0;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              min-height: 0;
+              padding: 1.2mm 0;
+              border-bottom: 1px dashed #bbb;
+            }
+            .label-row:last-child { border-bottom: none; }
+            .label-key {
+              font-size: 9pt;
+              font-weight: 600;
+              color: #333;
+              line-height: 1.1;
+              margin-bottom: 0.8mm;
+            }
+            .label-val {
+              font-size: 13pt;
+              font-weight: 800;
+              color: #000;
+              line-height: 1.15;
+              word-break: break-word;
+              overflow: hidden;
+            }
+            .label-row--code .label-val {
+              font-size: 17pt;
+            }
+            @media print {
+              html, body { width: 100mm !important; height: 130mm !important; margin: 0 !important; padding: 0 !important; }
+              @page { size: 100mm 130mm; margin: 0; }
+              .label-page { width: 100mm !important; height: 130mm !important; }
+              .label-content { width: 90mm !important; height: 117mm !important; }
+            }
+          </style>
+          </head>
+          <body>
+            <div class="label-page">
+              <div class="label-content">${rowsHtml}</div>
+            </div>
+            <script>
+              window.onload = function() {
+                document.title = '';
+                setTimeout(function() { window.print(); }, 300);
+              };
+            </script>
+          </body>
+        </html>`;
+
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+      }
+    } catch (e) {
+      console.error('Error printing LOT label:', e);
+      alert('Có lỗi khi in LOT Label. Vui lòng thử lại.');
+    }
+  }
+
+  private formatFgInImportDate(importDate: Date | any): string {
+    if (!importDate) {
+      return new Date().toLocaleDateString('vi-VN');
+    }
+    if (importDate instanceof Date) {
+      return importDate.toLocaleDateString('vi-VN');
+    }
+    if (importDate?.seconds) {
+      return new Date(importDate.seconds * 1000).toLocaleDateString('vi-VN');
+    }
+    const d = new Date(importDate);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('vi-VN');
+  }
+
+  private escapePrintHtml(value: string): string {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   /** ASM1 → KZLSX, ASM2 → LHLSX. Chỉ thêm prefix nếu user chưa nhập sẵn. */

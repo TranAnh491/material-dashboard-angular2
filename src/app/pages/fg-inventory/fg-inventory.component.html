@@ -354,7 +354,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons spinning">sync</i>
-        Đang import tồn đầu...
+        Đang import {{ importMode === 'addMaTp' ? 'Add mã TP' : 'tồn đầu' }}...
       </h5>
     </div>
     <div class="modal-body">
@@ -382,7 +382,7 @@
     <div class="modal-header success-header">
       <h5 class="modal-title">
         <i class="material-icons">check_circle</i>
-        Import tồn đầu thành công
+        {{ importMode === 'addMaTp' ? 'Add mã TP thành công' : 'Import tồn đầu thành công' }}
       </h5>
       <button type="button" class="close-btn" (click)="closeImportSuccessDialog()">
         <i class="material-icons">close</i>
@@ -391,9 +391,20 @@
     <div class="modal-body">
       <div class="import-success-content">
         <i class="material-icons success-icon">done_all</i>
-        <p class="success-message">Đã import thành công <strong>{{ importSuccessCount | number }}</strong> dòng tồn đầu.</p>
-        <p class="success-skipped" *ngIf="importSkippedCount > 0">
+        <p class="success-message" *ngIf="importMode === 'tonDau'">
+          Đã import thành công <strong>{{ importSuccessCount | number }}</strong> dòng tồn đầu.
+        </p>
+        <p class="success-message" *ngIf="importMode === 'addMaTp'">
+          Đã thêm thành công <strong>{{ importSuccessCount | number }}</strong> mã TP vào FG Inventory.
+        </p>
+        <p class="success-skipped" *ngIf="importSkippedCount > 0 && importMode === 'tonDau'">
           Bỏ qua <strong>{{ importSkippedCount | number }}</strong> dòng trùng (Mã TP + LOT + LSX + Tồn đầu + Vị trí).
+        </p>
+        <p class="success-skipped" *ngIf="importSkippedCount > 0 && importMode === 'addMaTp'">
+          Bỏ qua <strong>{{ importSkippedCount | number }}</strong> dòng trùng (Mã TP + LOT + LSX + Lượng + Vị trí).
+        </p>
+        <p class="success-skipped" *ngIf="importSkippedFactoryCount > 0 && importMode === 'addMaTp'">
+          Bỏ qua <strong>{{ importSkippedFactoryCount | number }}</strong> dòng khác nhà máy đang xem ({{ selectedFactory }}).
         </p>
         <p class="success-note">Batch tự sinh: ASM1 → TDAU1-000001...; ASM2 → TDAU2-000001...</p>
       </div>
@@ -509,6 +520,10 @@
           <i class="material-icons">file_upload</i>
           <span>Import tồn đầu</span>
         </button>
+        <button class="more-menu-item" (click)="openAddMaTpDialog(); showMoreMenu = false">
+          <i class="material-icons">add_box</i>
+          <span>Add mã TP</span>
+        </button>
         <button class="more-menu-item" (click)="downloadTemplate(); showMoreMenu = false">
           <i class="material-icons">download</i>
           <span>Tải Template</span>
@@ -536,6 +551,55 @@
         <button class="more-menu-item" (click)="openRecalcXuatDialog(); showMoreMenu = false">
           <i class="material-icons">undo</i>
           <span>Hoàn lượng xuất</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add mã TP Dialog -->
+<div class="custom-modal" [class.show]="showAddMaTpDialog" [style.display]="showAddMaTpDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeAddMaTpDialog()"></div>
+  <div class="modal-container add-ma-tp-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">add_box</i>
+        Add mã TP — Import Excel
+      </h5>
+      <button type="button" class="close-btn" (click)="closeAddMaTpDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="add-ma-tp-lead">
+        Thêm mã thành phẩm trực tiếp vào <strong>FG Inventory</strong>.
+        <ng-container *ngIf="selectedFactory !== 'TOTAL'"> Chỉ import dòng nhà máy <strong>{{ selectedFactory }}</strong>.</ng-container>
+        <ng-container *ngIf="selectedFactory === 'TOTAL'"> Import cả ASM1 và ASM2 theo cột Nhà máy.</ng-container>
+      </p>
+      <div class="add-ma-tp-notes">
+        <p class="add-ma-tp-notes__title">Cấu trúc file Excel (dòng 1 = tiêu đề, dữ liệu từ dòng 2):</p>
+        <ul>
+          <li><strong>Cột A — Nhà máy:</strong> ASM1 hoặc ASM2</li>
+          <li><strong>Cột B — Mã TP:</strong> mã thành phẩm đầy đủ</li>
+          <li><strong>Cột C — LOT</strong></li>
+          <li><strong>Cột D — LSX</strong></li>
+          <li><strong>Cột E — PO:</strong> có thể để trống</li>
+          <li><strong>Cột F — Lượng:</strong> số lượng tồn (số nguyên &gt; 0)</li>
+          <li><strong>Cột G — Vị trí:</strong> vị trí kho (để trống → Temporary)</li>
+        </ul>
+        <p class="add-ma-tp-notes__hint">
+          Batch tự sinh dạng <strong>ADDMA1-000001</strong> / <strong>ADDMA2-000001</strong>.
+          Dòng trùng (Nhà máy + Mã TP + LOT + LSX + Lượng + Vị trí) sẽ bỏ qua.
+        </p>
+      </div>
+      <div class="add-ma-tp-actions">
+        <button type="button" class="custom-btn" (click)="downloadAddMaTpTemplate()">
+          <i class="material-icons">download</i>
+          Tải file mẫu
+        </button>
+        <button type="button" class="custom-btn primary-btn" (click)="importAddMaTpFile()">
+          <i class="material-icons">file_upload</i>
+          Chọn file Excel import
         </button>
       </div>
     </div>

@@ -1301,3 +1301,71 @@ mat-checkbox {
     color: white !important;
   }
 }
+
+.add-ma-tp-modal {
+  max-width: 560px;
+  width: 94%;
+}
+
+.add-ma-tp-lead {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.add-ma-tp-notes {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #334155;
+
+  &__title {
+    margin: 0 0 8px;
+    font-weight: 700;
+  }
+
+  ul {
+    margin: 0 0 10px;
+    padding-left: 1.2rem;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  &__hint {
+    margin: 0;
+    font-size: 12px;
+    color: #64748b;
+  }
+}
+
+.add-ma-tp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  .custom-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .primary-btn {
+    background: #1976d2;
+    color: #fff;
+    border-color: #1976d2;
+
+    &:hover {
+      background: #1565c0;
+    }
+
+    .material-icons {
+      color: #fff;
+    }
+  }
+}

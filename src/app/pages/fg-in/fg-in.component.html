@@ -225,6 +225,7 @@
             <th class="th-two-line"><span class="th-vi">Khách</span><span class="th-en">CUSTOMER</span></th>
             <th class="th-two-line"><span class="th-vi">Khóa</span><span class="th-en">LOCK</span></th>
             <th class="th-two-line"><span class="th-vi">Print</span><span class="th-en">PRINT</span></th>
+            <th class="th-two-line"><span class="th-vi">LOT Label</span><span class="th-en">LOT LABEL</span></th>
             <th class="th-two-line"><span class="th-vi">Xóa</span><span class="th-en">DELETE</span></th>
           </tr>
         </thead>
@@ -281,6 +282,11 @@
             <td class="status-cell" (click)="$event.stopPropagation()">
               <button mat-icon-button color="primary" (click)="printTem(material)" matTooltip="In tem QR">
                 <mat-icon>print</mat-icon>
+              </button>
+            </td>
+            <td class="status-cell" (click)="$event.stopPropagation()">
+              <button mat-icon-button color="accent" (click)="printLotLabel(material)" matTooltip="In LOT Label (100×130mm)">
+                <mat-icon>label</mat-icon>
               </button>
             </td>
             <td class="status-cell" (click)="$event.stopPropagation()">

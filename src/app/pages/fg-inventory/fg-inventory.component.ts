@@ -119,6 +119,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Import progress dialog (hiển thị trong quá trình import)
   showImportProgressDialog: boolean = false;
+  importMode: 'tonDau' | 'addMaTp' = 'tonDau';
   importProgressCurrentBatch: number = 0;
   importProgressTotalBatches: number = 0;
   importProgressImportedCount: number = 0;
@@ -128,6 +129,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   showImportSuccessDialog: boolean = false;
   importSuccessCount: number = 0;
   importSkippedCount: number = 0;  // Số dòng bỏ qua do trùng
+  importSkippedFactoryCount: number = 0; // Add mã TP: bỏ qua do khác nhà máy đang xem
+
+  // Add mã TP dialog
+  showAddMaTpDialog: boolean = false;
 
   // Duplicate batch dialog
   showDuplicateBatchDialog: boolean = false;
@@ -240,6 +245,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
             viTriKK:      data.viTriKK      || data.locationKK || '',
             notes:        data.notes        || data.ghiChu || '',
             customer:     data.customer     || data.khach  || '',
+            poNumber:     data.poNumber     || data.soPO    || '',
             isReceived:   data.isReceived   || false,
             isCompleted:  data.isCompleted  || false,
             isDuplicate:  data.isDuplicate  || false,
@@ -842,35 +848,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       this.isLoading = true;
       const rawData = await this.readExcelFile(file);
       const materials = this.parseExcelData(rawData);
-      
-      // Tính Carton, ODD từ catalog (nếu có)
-      materials.forEach(m => {
-        const catalogItem = this.catalogItems.find(c => c.materialCode === m.materialCode);
-        const standard = catalogItem?.standard ? parseFloat(String(catalogItem.standard)) : 0;
-        if (standard > 0) {
-          m.carton = Math.ceil(m.tonDau / standard);
-          m.odd = m.tonDau % standard;
-        }
-      });
-      
-      // Hiển thị popup tiến trình import
-      const totalBatches = Math.ceil(materials.length / this.IMPORT_CHUNK_SIZE);
-      this.importProgressTotalBatches = totalBatches;
-      this.importProgressTotalCount = materials.length;
-      this.importProgressCurrentBatch = 0;
-      this.importProgressImportedCount = 0;
-      this.showImportProgressDialog = true;
-      this.cdr.detectChanges();
-      
-      // Save to Firebase - chia nhỏ từng phần
-      await this.saveMaterialsToFirebase(materials);
-      
-      // Đóng popup tiến trình, hiển thị popup thành công
-      this.showImportProgressDialog = false;
-      this.isLoading = false;
-      this.importSuccessCount = materials.length - this.importSkippedCount;  // Số dòng thực sự đã thêm
-      this.showImportSuccessDialog = true;
-      this.cdr.detectChanges();
+      await this.runInventoryImport(materials, 'tonDau');
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
@@ -880,9 +858,89 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
+  openAddMaTpDialog(): void {
+    this.showAddMaTpDialog = true;
+  }
+
+  closeAddMaTpDialog(): void {
+    this.showAddMaTpDialog = false;
+  }
+
+  importAddMaTpFile(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.style.display = 'none';
+
+    fileInput.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.closeAddMaTpDialog();
+        this.processAddMaTpExcelFile(file);
+      }
+    };
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
+  }
+
+  private async processAddMaTpExcelFile(file: File): Promise<void> {
+    try {
+      this.isLoading = true;
+      this.importSkippedFactoryCount = 0;
+      const rawData = await this.readExcelFile(file);
+      const materials = this.parseAddMaTpExcelData(rawData);
+
+      if (materials.length === 0) {
+        this.isLoading = false;
+        alert('⚠️ Không có dòng hợp lệ để import. Kiểm tra lại file Excel và nhà máy đang chọn.');
+        return;
+      }
+
+      await this.runInventoryImport(materials, 'addMaTp');
+    } catch (error: any) {
+      console.error('Error processing Add mã TP file:', error);
+      this.isLoading = false;
+      this.showImportProgressDialog = false;
+      alert(`❌ Lỗi khi import Add mã TP: ${error?.message || error}`);
+    }
+  }
+
+  private async runInventoryImport(materials: FGInventoryItem[], mode: 'tonDau' | 'addMaTp'): Promise<void> {
+    materials.forEach(m => {
+      const catalogItem = this.catalogItems.find(c => c.materialCode === m.materialCode);
+      const standard = catalogItem?.standard ? parseFloat(String(catalogItem.standard)) : 0;
+      m.standard = standard;
+      const qtyBase = mode === 'tonDau' ? m.tonDau : m.nhap;
+      if (standard > 0 && qtyBase > 0) {
+        m.carton = Math.floor(qtyBase / standard);
+        m.odd = qtyBase % standard;
+      }
+    });
+
+    this.importMode = mode;
+    const totalBatches = Math.ceil(materials.length / this.IMPORT_CHUNK_SIZE);
+    this.importProgressTotalBatches = totalBatches;
+    this.importProgressTotalCount = materials.length;
+    this.importProgressCurrentBatch = 0;
+    this.importProgressImportedCount = 0;
+    this.showImportProgressDialog = true;
+    this.cdr.detectChanges();
+
+    await this.saveMaterialsToFirebase(materials, mode);
+
+    this.showImportProgressDialog = false;
+    this.isLoading = false;
+    this.importSuccessCount = materials.length - this.importSkippedCount;
+    this.showImportSuccessDialog = true;
+    this.cdr.detectChanges();
+  }
+
   closeImportSuccessDialog(): void {
     this.showImportSuccessDialog = false;
     this.importSuccessCount = 0;
+    this.importSkippedFactoryCount = 0;
   }
 
   private async readExcelFile(file: File): Promise<any[][]> {
@@ -998,6 +1056,126 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return materials;
   }
 
+  // Add mã TP — A=Nhà máy, B=Mã TP, C=LOT, D=LSX, E=PO, F=Lượng, G=Vị trí
+  private parseAddMaTpExcelData(rawData: any[][]): FGInventoryItem[] {
+    const rows = rawData.filter(r => r && r.length > 0);
+    let startIndex = 0;
+    if (rows.length > 0 && this.isAddMaTpHeaderRow(rows[0])) {
+      startIndex = 1;
+    }
+
+    const mergedMap = new Map<string, {
+      factory: string;
+      materialCode: string;
+      lot: string;
+      lsx: string;
+      poNumber: string;
+      location: string;
+      quantity: number;
+    }>();
+
+    for (let i = startIndex; i < rows.length; i++) {
+      const row = rows[i];
+      const factory = this.normalizeImportFactory(String(row[0] || '').trim());
+      const materialCode = String(row[1] || '').trim().toUpperCase();
+      const lot = String(row[2] || '').trim().toUpperCase();
+      const lsx = String(row[3] || '').trim().toUpperCase();
+      const poNumber = String(row[4] || '').trim();
+      const quantity = this.parseImportQuantity(row[5]);
+      const location = String(row[6] || '').trim().toUpperCase() || 'TEMPORARY';
+
+      if (!materialCode || quantity <= 0) continue;
+
+      if (this.selectedFactory !== 'TOTAL' && factory !== this.selectedFactory) {
+        this.importSkippedFactoryCount++;
+        continue;
+      }
+
+      const key = `${factory}|${materialCode}|${lot}|${lsx}|${location}|${poNumber}`.toUpperCase();
+      const existing = mergedMap.get(key);
+      if (existing) {
+        existing.quantity += quantity;
+      } else {
+        mergedMap.set(key, { factory, materialCode, lot, lsx, poNumber, location, quantity });
+      }
+    }
+
+    const seqByFactory: Record<string, number> = {
+      ASM1: this.getNextAddMaTpBatchSeq('ASM1'),
+      ASM2: this.getNextAddMaTpBatchSeq('ASM2')
+    };
+
+    const materials: FGInventoryItem[] = [];
+    mergedMap.forEach(item => {
+      const factory = item.factory || 'ASM1';
+      const prefix = factory === 'ASM2' ? 'ADDMA2-' : 'ADDMA1-';
+      const seq = seqByFactory[factory] || 1;
+      seqByFactory[factory] = seq + 1;
+
+      materials.push({
+        factory,
+        importDate: new Date(),
+        receivedDate: new Date(),
+        batchNumber: `${prefix}${seq.toString().padStart(6, '0')}`,
+        materialCode: item.materialCode,
+        lot: item.lot,
+        lsx: item.lsx,
+        poNumber: item.poNumber,
+        quantity: item.quantity,
+        standard: 0,
+        carton: 0,
+        odd: 0,
+        tonDau: 0,
+        nhap: item.quantity,
+        xuat: 0,
+        ton: item.quantity,
+        location: item.location,
+        notes: 'Import Add mã TP',
+        customer: this.getCustomerNameFromMapping(item.materialCode),
+        isReceived: true,
+        isCompleted: false,
+        isDuplicate: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    });
+
+    return materials;
+  }
+
+  private isAddMaTpHeaderRow(row: any[]): boolean {
+    if (!row || row.length === 0) return true;
+    const colA = String(row[0] || '').toLowerCase();
+    const colB = String(row[1] || '').toLowerCase();
+    return colA.includes('nhà máy') || colA.includes('factory') ||
+      colB.includes('mã') || colB.includes('ma tp') || colB.includes('material');
+  }
+
+  private normalizeImportFactory(factory: string): string {
+    const f = (factory || 'ASM1').toUpperCase();
+    if (f === 'ASM2') return 'ASM2';
+    return 'ASM1';
+  }
+
+  private parseImportQuantity(value: any): number {
+    if (typeof value === 'number' && !isNaN(value)) return Math.max(0, Math.floor(value));
+    const s = String(value ?? '').trim().replace(/\s/g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return !isNaN(n) && n > 0 ? Math.floor(n) : 0;
+  }
+
+  private getNextAddMaTpBatchSeq(factory: string): number {
+    const prefix = (factory === 'ASM2' ? 'ADDMA2-' : 'ADDMA1-').toUpperCase();
+    let max = 0;
+    this.materials.forEach(m => {
+      const b = String(m.batchNumber || '').trim().toUpperCase();
+      if (!b.startsWith(prefix)) return;
+      const n = parseInt(b.slice(prefix.length), 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return max + 1;
+  }
+
   private parseDate(dateStr: string): Date | null {
     if (!dateStr || dateStr.trim() === '') return null;
     
@@ -1014,7 +1192,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Save materials to Firebase - chia nhỏ từng phần (chunk), ghi tuần tự từng dòng tránh lỗi "Document already exists"
   private readonly IMPORT_CHUNK_SIZE = 50;
 
-  async saveMaterialsToFirebase(materials: FGInventoryItem[]): Promise<void> {
+  async saveMaterialsToFirebase(materials: FGInventoryItem[], mode: 'tonDau' | 'addMaTp' = 'tonDau'): Promise<void> {
     let batchIndex = 0;
     let savedCount = 0;
     this.importSkippedCount = 0;
@@ -1024,8 +1202,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       batchIndex++;
       
       for (const material of chunk) {
-        // Kiểm tra trùng: Mã TP + LOT + LSX + Tồn đầu + Vị trí
-        const exists = await this.checkDuplicateExists(material);
+        const exists = mode === 'addMaTp'
+          ? await this.checkDuplicateAddMaTpExists(material)
+          : await this.checkDuplicateExists(material);
         if (exists) {
           this.importSkippedCount++;
           continue;
@@ -1056,6 +1235,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
           createdAt: new Date(),
           updatedAt: new Date()
         };
+        if (material.poNumber) {
+          materialData.poNumber = material.poNumber;
+        }
 
         await this.firestore.collection('fg-inventory').add(materialData);
         savedCount++;
@@ -1086,6 +1268,21 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return snapshot && !snapshot.empty;
   }
 
+  /** Trùng Add mã TP: Nhà máy + Mã TP + LOT + LSX + Lượng + Vị trí */
+  private async checkDuplicateAddMaTpExists(material: FGInventoryItem): Promise<boolean> {
+    const snapshot = await this.firestore.collection('fg-inventory', ref =>
+      ref.where('materialCode', '==', material.materialCode || '')
+         .where('lot', '==', material.lot || '')
+         .where('lsx', '==', material.lsx || '')
+         .where('nhap', '==', material.nhap)
+         .where('location', '==', material.location || '')
+         .where('factory', '==', material.factory || 'ASM1')
+         .limit(1)
+    ).get().toPromise();
+
+    return snapshot && !snapshot.empty;
+  }
+
   // Download template - Import tồn đầu: A=Nhà máy, C=Mã TP, D=LOT, E=LSX, F=Tồn đầu, G=Vị trí, H=Ghi chú
   // Batch tự sinh (TDAU000001...) khi import
   downloadTemplate(): void {
@@ -1113,6 +1310,29 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     
     XLSX.utils.book_append_sheet(wb, ws, 'Tồn đầu');
     XLSX.writeFile(wb, 'FG_Inventory_TonDau_Template.xlsx');
+  }
+
+  downloadAddMaTpTemplate(): void {
+    const templateData = [
+      ['Nhà máy', 'Mã TP', 'LOT', 'LSX', 'PO', 'Lượng', 'Vị trí'],
+      ['ASM1', 'P001001_K001', 'LOT001', 'KZLSX0126/0001', 'PO12345', 100, 'A1-01'],
+      ['ASM1', 'P002002_K002', 'LOT002', 'KZLSX0126/0002', '', 200, 'A1-02'],
+      ['ASM2', 'P003003_K003', 'LOT003', 'LHLSX0226/0001', 'PO67890', 150, 'B1-01']
+    ];
+
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+    const ws: XLSX.WorkSheet = XLSX.utils.aoa_to_sheet(templateData);
+    ws['!cols'] = [
+      { wch: 10 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Add ma TP');
+    XLSX.writeFile(wb, 'FG_Inventory_AddMaTP_Template.xlsx');
   }
 
   // Additional methods needed for the component
