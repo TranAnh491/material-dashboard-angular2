@@ -192,6 +192,8 @@ export class QCComponent implements OnInit, OnDestroy {
   qcReports: any[] = [];
   todayCheckedMaterials: any[] = [];
   pendingQCMaterials: any[] = [];
+  /** Mã hàng xuất hiện ≥2 P.O khác nhau trong danh sách chờ kiểm — gạch chân xanh. */
+  pendingQcDuplicateMaterialCodes = new Set<string>();
   pendingConfirmMaterials: any[] = [];
   isLoadingReport: boolean = false;
 
@@ -483,6 +485,92 @@ export class QCComponent implements OnInit, OnDestroy {
 
   private normalizeMaterialCodeKey(code: string): string {
     return (code || '').replace(/\s/g, '').toUpperCase().trim();
+  }
+
+  private rebuildPendingQcDuplicateMaterialCodes(
+    items?: Array<{ materialCode?: string; poNumber?: string }>
+  ): void {
+    const list = items ?? [];
+    const posByCode = new Map<string, Set<string>>();
+    for (const item of list) {
+      const code = this.normalizeMaterialCodeKey(item.materialCode || '');
+      if (!code) continue;
+      const po = String(item.poNumber || '').trim().toUpperCase();
+      const set = posByCode.get(code) || new Set<string>();
+      set.add(po);
+      posByCode.set(code, set);
+    }
+    this.pendingQcDuplicateMaterialCodes = new Set(
+      Array.from(posByCode.entries())
+        .filter(([, pos]) => pos.size > 1)
+        .map(([code]) => code)
+    );
+  }
+
+  /** Mã hàng có nhiều P.O khác nhau trong danh sách chờ kiểm hiện tại. */
+  isPendingQcDuplicateMaterialCode(materialCode: string | undefined | null): boolean {
+    const key = this.normalizeMaterialCodeKey(materialCode || '');
+    return !!key && this.pendingQcDuplicateMaterialCodes.has(key);
+  }
+
+  private getPendingQcRowTime(item: {
+    eventTime?: Date | null;
+    importDate?: any;
+    receivedDate?: any;
+  }): number {
+    const t = item.eventTime || item.importDate || item.receivedDate;
+    if (t instanceof Date) return t.getTime();
+    if (t?.toDate) return t.toDate().getTime();
+    return 0;
+  }
+
+  /** Ưu tiên giữ trên cùng; mã trùng nhau (không ưu tiên) xếp sát nhau theo thứ tự ngày nhập. */
+  private sortPendingQcListByPriorityAndMaterialCode<T extends {
+    id?: string;
+    materialCode?: string;
+    eventTime?: Date | null;
+    importDate?: any;
+    receivedDate?: any;
+  }>(items: T[]): T[] {
+    const pset = new Set(this.priorityPendingQcIds || []);
+    const priority = items
+      .filter(x => x?.id && pset.has(x.id))
+      .sort((a, b) => this.getPendingQcRowTime(b) - this.getPendingQcRowTime(a));
+    const nonPriority = items.filter(x => !x?.id || !pset.has(x.id));
+    return [...priority, ...this.groupPendingQcDuplicateMaterialCodes(nonPriority)];
+  }
+
+  private groupPendingQcDuplicateMaterialCodes<T extends {
+    materialCode?: string;
+    eventTime?: Date | null;
+    importDate?: any;
+    receivedDate?: any;
+  }>(items: T[]): T[] {
+    const byEvent = [...items].sort(
+      (a, b) => this.getPendingQcRowTime(b) - this.getPendingQcRowTime(a)
+    );
+    const codeCount = new Map<string, number>();
+    for (const item of byEvent) {
+      const key = this.normalizeMaterialCodeKey(item.materialCode || '');
+      codeCount.set(key, (codeCount.get(key) || 0) + 1);
+    }
+
+    const result: T[] = [];
+    const inserted = new Set<string>();
+    for (const item of byEvent) {
+      const key = this.normalizeMaterialCodeKey(item.materialCode || '');
+      if ((codeCount.get(key) || 0) <= 1) {
+        result.push(item);
+        continue;
+      }
+      if (inserted.has(key)) continue;
+      inserted.add(key);
+      const group = byEvent
+        .filter(x => this.normalizeMaterialCodeKey(x.materialCode || '') === key)
+        .sort((a, b) => this.getPendingQcRowTime(b) - this.getPendingQcRowTime(a));
+      result.push(...group);
+    }
+    return result;
   }
 
   private resolveWorkOrderFactory(wo: WorkOrder): 'ASM1' | 'ASM2' {
@@ -1862,9 +1950,13 @@ export class QCComponent implements OnInit, OnDestroy {
         m => this.getInventoryLotKey(m) !== lotKey
       );
       if (this.iqcHistoryContext === 'pendingQC') {
-        this.iqcHistoryResults = (this.iqcHistoryResults || []).filter(
-          m => this.getInventoryLotKey(m) !== lotKey
+        this.iqcHistoryResults = this.sortPendingQcListByPriorityAndMaterialCode(
+          (this.iqcHistoryResults || []).filter(m => this.getInventoryLotKey(m) !== lotKey)
         );
+        this.pendingQCMaterials = this.sortPendingQcListByPriorityAndMaterialCode(
+          (this.pendingQCMaterials || []).filter(m => this.getInventoryLotKey(m) !== lotKey)
+        );
+        this.rebuildPendingQcDuplicateMaterialCodes(this.iqcHistoryResults);
       }
     }
     
@@ -3502,17 +3594,9 @@ export class QCComponent implements OnInit, OnDestroy {
     const pid = this.priorityMaterialId;
     const list = [...this.iqcHistoryResults];
 
-    // Pending QC: prioritize multiple ids, then keep latest eventTime first
+    // Pending QC: ưu tiên trước, còn lại gom mã trùng nhau sát nhau
     if (this.iqcHistoryContext === 'pendingQC') {
-      const pset = new Set(this.priorityPendingQcIds || []);
-      this.iqcHistoryResults = list.sort((a: any, b: any) => {
-        const ap = a?.id && pset.has(a.id) ? 1 : 0;
-        const bp = b?.id && pset.has(b.id) ? 1 : 0;
-        if (bp !== ap) return bp - ap;
-        const ta = a?.eventTime ? a.eventTime.getTime?.() ?? 0 : 0;
-        const tb = b?.eventTime ? b.eventTime.getTime?.() ?? 0 : 0;
-        return tb - ta;
-      });
+      this.iqcHistoryResults = this.sortPendingQcListByPriorityAndMaterialCode(list);
       return;
     }
 
@@ -3861,6 +3945,7 @@ export class QCComponent implements OnInit, OnDestroy {
       if (!snapshot || snapshot.empty) {
         this.pendingQCMaterials = [];
         this.pendingQCCount = 0;
+        this.pendingQcDuplicateMaterialCodes = new Set();
         if (showPopup) {
           this.isLoadingReport = false;
         } else {
@@ -3944,7 +4029,9 @@ export class QCComponent implements OnInit, OnDestroy {
         this.pendingQCMaterials || [],
         pendingQcPrioritySet
       );
+      this.pendingQCMaterials = this.sortPendingQcListByPriorityAndMaterialCode(this.pendingQCMaterials);
       this.pendingQCCount = this.pendingQCMaterials.length;
+      this.rebuildPendingQcDuplicateMaterialCodes(this.pendingQCMaterials);
 
       console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC lot group(s)`);
       if (showPopup) {

@@ -748,6 +748,14 @@ $gray:    #9ca3af;
   &:hover { background: rgba(59, 130, 246, 0.06); }
 }
 
+.qc-pending-dup-material-code {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-color: #2563eb;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+
 .iqc-priority-col, .iqc-priority-th { text-align: center; vertical-align: middle; }
 
 .iqc-priority-center {
@@ -801,7 +809,8 @@ $gray:    #9ca3af;
   &--center {
     th, td { text-align: center; }
 
-    .iqc-history-code {
+    .iqc-history-code,
+    .qc-pending-dup-material-code {
       text-align: center;
     }
 

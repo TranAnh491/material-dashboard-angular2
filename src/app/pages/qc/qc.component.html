@@ -432,7 +432,9 @@
         <tbody>
           <tr *ngFor="let item of iqcHistoryResults; let i = index">
             <td>{{ i + 1 }}</td>
-            <td class="iqc-history-code"
+            <td
+              [class.iqc-history-code]="iqcHistoryContext === 'pendingConfirm'"
+              [class.qc-pending-dup-material-code]="iqcHistoryContext === 'pendingQC' && isPendingQcDuplicateMaterialCode(item.materialCode)"
               (click)="iqcHistoryContext === 'pendingConfirm' ? openIQCFromHistory(item) : null">
               {{ item.materialCode }}
             </td>
@@ -757,7 +759,9 @@
           </thead>
           <tbody>
             <tr *ngFor="let material of pendingQCMaterials; let i = index">
-              <td>{{ i + 1 }}</td><td>{{ material.materialCode }}</td><td>{{ material.materialName }}</td>
+              <td>{{ i + 1 }}</td>
+              <td [class.qc-pending-dup-material-code]="isPendingQcDuplicateMaterialCode(material.materialCode)">{{ material.materialCode }}</td>
+              <td>{{ material.materialName }}</td>
               <td>{{ material.poNumber }}</td><td>{{ getDisplayLotBatch(material.batchNumber) }}</td>
               <td>{{ material.quantity | number:'1.2-2' }} {{ material.unit }}</td>
               <td>{{ material.location }}</td>
