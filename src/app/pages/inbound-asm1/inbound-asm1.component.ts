@@ -2030,7 +2030,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         console.log('📋 Headers found:', headers);
         
         // Process data rows (skip header row)
-        const materialsToAdd: InboundMaterial[] = [];
+        let materialsToAdd: InboundMaterial[] = [];
         const skippedRows: {row: number, reason: string}[] = [];
         
         for (let i = 1; i < jsonData.length; i++) {
@@ -2076,11 +2076,15 @@ export class InboundASM1Component implements OnInit, OnDestroy {
           this.errorMessage = '';
           return;
         }
+
+        const parsedRowCount = materialsToAdd.length;
+        materialsToAdd = this.mergeInboundImportByMaterialPo(materialsToAdd);
+        const duplicateMergedCount = parsedRowCount - materialsToAdd.length;
         
     // Reset batch counter cho lần import mới
     this.batchCounter = 1;
     
-    console.log(`📦 Found ${materialsToAdd.length} materials to import`);
+    console.log(`📦 Found ${materialsToAdd.length} materials to import (${parsedRowCount} dòng parse, gom ${duplicateMergedCount} dòng trùng mã+PO)`);
     console.log(`⚠️ Skipped ${skippedRows.length} rows:`, skippedRows);
         console.log(`📊 Tổng dòng trong file: ${jsonData.length - 1} (trừ header)`);
         console.log(`📊 Dòng được xử lý: ${materialsToAdd.length + skippedRows.length}`);
@@ -2089,7 +2093,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         // Show detailed import results
         let message = `📊 Kết quả import:\n`;
         message += `📂 File có: ${jsonData.length - 1} dòng (trừ header)\n`;
-        message += `✅ Parse thành công: ${materialsToAdd.length} materials\n`;
+        message += `✅ Parse thành công: ${parsedRowCount} dòng\n`;
+        if (duplicateMergedCount > 0) {
+          message += `🔗 Gom trùng (mã hàng + P.O): ${parsedRowCount} → ${materialsToAdd.length} dòng (cộng dồn số lượng)\n`;
+        }
+        message += `📥 Import: ${materialsToAdd.length} mã hàng\n`;
         
         // Log chi tiết materials được import
         console.log(`📋 Materials được import:`, materialsToAdd.map(m => `${m.materialCode} (batch: ${m.internalBatch})`));
@@ -2147,6 +2155,25 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     };
     
     reader.readAsArrayBuffer(file);
+  }
+
+  /** Gom dòng trùng mã hàng + P.O trong cùng file import; cộng dồn lượng nhập / lượng đơn vị. */
+  private mergeInboundImportByMaterialPo(materials: InboundMaterial[]): InboundMaterial[] {
+    const map = new Map<string, InboundMaterial>();
+    for (const row of materials) {
+      const key = `${String(row.materialCode || '').trim().toUpperCase()}|${String(row.poNumber || '').trim().toUpperCase()}`;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { ...row });
+        continue;
+      }
+      existing.quantity = (Number(existing.quantity) || 0) + (Number(row.quantity) || 0);
+      existing.rollsOrBags = (Number(existing.rollsOrBags) || 0) + (Number(row.rollsOrBags) || 0);
+      if (String(existing.batchNumber || '').toUpperCase().startsWith('TRA')) {
+        existing.rollsOrBags = existing.quantity;
+      }
+    }
+    return Array.from(map.values());
   }
   
   private parseExcelRow(row: any[], headers: string[]): InboundMaterial | null {

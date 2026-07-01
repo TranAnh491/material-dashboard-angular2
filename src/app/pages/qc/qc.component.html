@@ -437,7 +437,7 @@
               {{ item.materialCode }}
             </td>
             <td>{{ item.poNumber }}</td>
-            <td>{{ item.batchNumber }}</td>
+            <td>{{ getDisplayLotBatch(item.batchNumber) }}</td>
             <ng-container *ngIf="iqcHistoryContext === 'pendingQC'">
               <td>{{ item.supplier || '—' }}</td>
               <td>{{ formatPendingQcQuantity(item) }}</td>
@@ -758,7 +758,7 @@
           <tbody>
             <tr *ngFor="let material of pendingQCMaterials; let i = index">
               <td>{{ i + 1 }}</td><td>{{ material.materialCode }}</td><td>{{ material.materialName }}</td>
-              <td>{{ material.poNumber }}</td><td>{{ material.batchNumber }}</td>
+              <td>{{ material.poNumber }}</td><td>{{ getDisplayLotBatch(material.batchNumber) }}</td>
               <td>{{ material.quantity | number:'1.2-2' }} {{ material.unit }}</td>
               <td>{{ material.location }}</td>
               <td>{{ (material.importDate || material.receivedDate) | date:'dd/MM/yyyy HH:mm' }}</td>

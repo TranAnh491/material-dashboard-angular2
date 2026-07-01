@@ -883,12 +883,24 @@ export class QCComponent implements OnInit, OnDestroy {
     return bn || rawDate;
   }
 
-  /** Khóa nhóm lô: mã TP + PO + IMD (chuẩn hóa). */
+  /** Khóa nhóm lô: mã hàng + PO + 8 ký tự đầu của lô hàng (lô 10 ký tự = mở rộng cùng ngày). */
+  getLotPrefix8(batchNumber: any): string {
+    const lot = String(batchNumber || '').trim().toUpperCase();
+    if (!lot) return '';
+    return lot.length <= 8 ? lot : lot.substring(0, 8);
+  }
+
+  /** Hiển thị lô gốc (8 ký tự) trên bảng QC. */
+  getDisplayLotBatch(batchNumber: any): string {
+    const prefix = this.getLotPrefix8(batchNumber);
+    return prefix || String(batchNumber || '').trim();
+  }
+
   private getInventoryLotKey(data: any): string {
     const mc = String(data?.materialCode || '').trim().toUpperCase();
-    const po = String(data?.poNumber || '').trim();
-    const imd = this.resolveImdBatchNumber(data);
-    return `${mc}|${po}|${imd}`;
+    const po = String(data?.poNumber || '').trim().toUpperCase();
+    const lotPrefix = this.getLotPrefix8(data?.batchNumber);
+    return `${mc}|${po}|${lotPrefix}`;
   }
 
   // Get display IMD (importDate + sequence if any)
@@ -1842,9 +1854,17 @@ export class QCComponent implements OnInit, OnDestroy {
     
     // Update pending QC count
     if (oldStatus === 'CHỜ KIỂM' && newStatus !== 'CHỜ KIỂM') {
-      // Material is no longer pending, decrease count
       if (this.pendingQCCount > 0) {
         this.pendingQCCount--;
+      }
+      const lotKey = this.getInventoryLotKey(material);
+      this.pendingQCMaterials = (this.pendingQCMaterials || []).filter(
+        m => this.getInventoryLotKey(m) !== lotKey
+      );
+      if (this.iqcHistoryContext === 'pendingQC') {
+        this.iqcHistoryResults = (this.iqcHistoryResults || []).filter(
+          m => this.getInventoryLotKey(m) !== lotKey
+        );
       }
     }
     
@@ -2219,24 +2239,10 @@ export class QCComponent implements OnInit, OnDestroy {
               if (refreshed) docs = refreshed.docs;
             }
           }
-          this.pendingQCCount = docs.filter(doc => {
-            const data = doc.data() as any;
-            if (!this.isPendingQcAtIqc(data)) return false;
-            if (range?.from || range?.to) {
-              const dt = this.parseFirestoreDate(data.importDate) || this.parseFirestoreDate(data.createdAt);
-              if (dt) {
-                if (range.from && dt < range.from) return false;
-                if (range.to   && dt > range.to)   return false;
-              }
-            }
-            return true;
-          }).length;
+          this.pendingQCCount = this.countPendingQcLotGroups(docs, range);
         } catch (e) {
           console.warn('⚠️ Auto-pass pending duplicates:', e);
-          this.pendingQCCount = snapshot.docs.filter(doc => {
-            const data = doc.data() as any;
-            return this.isPendingQcAtIqc(data);
-          }).length;
+          this.pendingQCCount = this.countPendingQcLotGroups(snapshot.docs, range);
         }
       },
       error: (error) => {
@@ -2643,10 +2649,10 @@ export class QCComponent implements OnInit, OnDestroy {
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.pendingQCCount = snapshot.filter(doc => {
-          const data = doc.payload.doc.data() as any;
-          return this.isPendingQcAtIqc(data);
-        }).length;
+        this.pendingQCCount = this.countPendingQcLotGroups(
+          snapshot.map(doc => doc.payload.doc.data()),
+          this.boxDateRanges['pendingQC']
+        );
         console.log(`📊 Pending QC count (fallback, location = IQC): ${this.pendingQCCount}`);
       },
       error: (error) => {
@@ -3027,6 +3033,99 @@ export class QCComponent implements OnInit, OnDestroy {
     return this.getInventoryLotKey(item);
   }
 
+  /** Đếm nhóm chờ kiểm (mã + PO + 8 ký tự lô) — khớp số dòng hiển thị. */
+  private countPendingQcLotGroups(
+    docs: Array<{ data?: () => any } | any>,
+    dateRange?: { from?: Date | null; to?: Date | null }
+  ): number {
+    const keys = new Set<string>();
+    for (const doc of docs) {
+      const data = typeof (doc as any)?.data === 'function' ? (doc as any).data() : doc;
+      if (!this.isPendingQcAtIqc(data)) continue;
+      if (dateRange?.from || dateRange?.to) {
+        const dt = this.parseFirestoreDate(data.importDate) || this.parseFirestoreDate(data.createdAt);
+        if (dt) {
+          if (dateRange.from && dt < dateRange.from) continue;
+          if (dateRange.to && dt > dateRange.to) continue;
+        }
+      }
+      const key = this.getInventoryLotKey(data);
+      if (!key.split('|')[0]) continue;
+      keys.add(key);
+    }
+    return keys.size;
+  }
+
+  private pickRepresentativeLotRow<T extends {
+    id?: string;
+    batchNumber?: string;
+    importDate?: any;
+    receivedDate?: any;
+    quantity?: number;
+  }>(group: T[], priorityIds?: Set<string>): T {
+    let pool = [...group];
+    if (priorityIds?.size) {
+      const prioRows = pool.filter(x => x.id && priorityIds.has(x.id));
+      if (prioRows.length) pool = prioRows;
+    }
+    pool.sort((a, b) => {
+      const lenA = String(a.batchNumber || '').trim().length;
+      const lenB = String(b.batchNumber || '').trim().length;
+      if (lenA !== lenB) return lenA - lenB;
+      const dateA = this.parseFirestoreDate(a.importDate) || this.parseFirestoreDate(a.receivedDate) || new Date(0);
+      const dateB = this.parseFirestoreDate(b.importDate) || this.parseFirestoreDate(b.receivedDate) || new Date(0);
+      return dateB.getTime() - dateA.getTime();
+    });
+    const rep = { ...pool[0] };
+    rep.batchNumber = this.getDisplayLotBatch(rep.batchNumber);
+    if (group.length > 1) {
+      const totalQty = group.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
+      if (totalQty > 0) {
+        rep.quantity = totalQty;
+      }
+    }
+    return rep;
+  }
+
+  /** Gộp hiển thị: 1 dòng / mã + PO + lô 8 ký tự (ưu tiên lô gốc 8 ký tự). */
+  private deduplicateIqcLotDisplayRows<T extends {
+    id?: string;
+    materialCode?: string;
+    poNumber?: string;
+    batchNumber?: string;
+    importDate?: any;
+    receivedDate?: any;
+    quantity?: number;
+  }>(items: T[], priorityIds?: Set<string>): T[] {
+    if (!items?.length) return items;
+    const groups = new Map<string, T[]>();
+    for (const item of items) {
+      const key = this.getInventoryLotKey(item);
+      const list = groups.get(key) || [];
+      list.push(item);
+      groups.set(key, list);
+    }
+    const result: T[] = [];
+    groups.forEach(group => result.push(this.pickRepresentativeLotRow(group, priorityIds)));
+    return result;
+  }
+
+  private applyLotGroupDisplayRules<T extends {
+    materialCode?: string;
+    poNumber?: string;
+    batchNumber?: string;
+    iqcStatus?: string;
+    qcCheckedBy?: string;
+    qcCheckedAt?: Date | null;
+    eventTime?: Date | null;
+    id?: string;
+    importDate?: any;
+    receivedDate?: any;
+    quantity?: number;
+  }>(items: T[], priorityIds?: Set<string>): T[] {
+    return this.deduplicateIqcLotDisplayRows(this.propagateIqcPassAcrossSameLot(items), priorityIds);
+  }
+
   private isQcPassStatus(status: string | undefined | null): boolean {
     return String(status || '').trim().toUpperCase() === 'PASS';
   }
@@ -3117,7 +3216,8 @@ export class QCComponent implements OnInit, OnDestroy {
     for (const doc of snapshot.docs) {
       if (doc.id === source.id) continue;
       const data = doc.data() as any;
-      if (!this.isPendingQcAtIqc(data)) continue;
+      const status = String(data?.iqcStatus || '').trim();
+      if (status !== 'CHỜ KIỂM') continue;
       if (this.getInventoryLotKey(data) !== lotKey) continue;
 
       const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
@@ -3269,7 +3369,7 @@ export class QCComponent implements OnInit, OnDestroy {
           return tb - ta;
         });
 
-      this.iqcHistoryResults = this.propagateIqcPassAcrossSameLot(results as any[]);
+      this.iqcHistoryResults = this.applyLotGroupDisplayRules(results as any[]);
 
       if (this.iqcHistoryResults.length === 0) {
         const rangeText = (fromDate || toDate)
@@ -3760,9 +3860,11 @@ export class QCComponent implements OnInit, OnDestroy {
       
       if (!snapshot || snapshot.empty) {
         this.pendingQCMaterials = [];
+        this.pendingQCCount = 0;
         if (showPopup) {
           this.isLoadingReport = false;
         } else {
+          this.iqcHistoryResults = [];
           this.isSearchingIqcHistory = false;
           this.iqcHistoryError = '';
         }
@@ -3838,24 +3940,35 @@ export class QCComponent implements OnInit, OnDestroy {
 
       // Sync priority ids with backend (used by cột "Ưu tiên" và stats)
       this.priorityPendingQcIds = Array.from(pendingQcPrioritySet);
-      console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC materials`);
+      this.pendingQCMaterials = this.deduplicateIqcLotDisplayRows(
+        this.pendingQCMaterials || [],
+        pendingQcPrioritySet
+      );
+      this.pendingQCCount = this.pendingQCMaterials.length;
+
+      console.log(`✅ Loaded ${this.pendingQCMaterials.length} pending QC lot group(s)`);
       if (showPopup) {
         this.isLoadingReport = false;
       } else {
-        this.iqcHistoryResults = (this.pendingQCMaterials || []).map(m => ({
-          id: m.id,
-          materialCode: m.materialCode,
-          poNumber: m.poNumber,
-          batchNumber: m.batchNumber,
-          supplier: m.supplier || '',
-          quantity: m.quantity || 0,
-          unit: m.unit || '',
-          type: m.type || '',
-          location: m.location || '',
-          iqcStatus: m.iqcStatus,
-          qcCheckedBy: '—',
-          eventTime: m.importDate || m.receivedDate || null
-        }));
+        this.iqcHistoryResults = this.applyLotGroupDisplayRules(
+          (this.pendingQCMaterials || []).map(m => ({
+            id: m.id,
+            materialCode: m.materialCode,
+            poNumber: m.poNumber,
+            batchNumber: m.batchNumber,
+            supplier: m.supplier || '',
+            quantity: m.quantity || 0,
+            unit: m.unit || '',
+            type: m.type || '',
+            location: m.location || '',
+            iqcStatus: m.iqcStatus,
+            qcCheckedBy: '—',
+            eventTime: m.importDate || m.receivedDate || null,
+            importDate: m.importDate,
+            receivedDate: m.receivedDate
+          })),
+          pendingQcPrioritySet
+        );
         this.isSearchingIqcHistory = false;
         this.iqcHistoryError = '';
 
@@ -3909,7 +4022,7 @@ export class QCComponent implements OnInit, OnDestroy {
           <td>${index + 1}</td>
           <td>${esc(item.materialCode)}</td>
           <td>${esc(item.poNumber)}</td>
-          <td>${esc(item.batchNumber)}</td>
+          <td>${esc(this.getDisplayLotBatch(item.batchNumber))}</td>
           <td>${esc(item.supplier || '—')}</td>
           <td>${esc(formatQty(item))}</td>
           <td>${esc(item.location || '—')}</td>
