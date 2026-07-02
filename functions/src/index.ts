@@ -382,6 +382,36 @@ export const sendQcPriorityStatusChangedZaloFn = functions
     }
   });
 
+/** Equipment: hoàn thành bài kiểm tra kho → upload PDF + nhắn Zalo quản lý kho (ASP0119). */
+export const sendWarehouseTrainingQuizPdfZaloFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: any, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const pdfDataUrl = typeof data?.pdfDataUrl === 'string' ? data.pdfDataUrl : '';
+    if (!pdfDataUrl) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu pdfDataUrl.');
+    }
+    try {
+      const { sendWarehouseTrainingQuizPdfZalo } = await import('./warehouse-training-quiz-zalo');
+      const result = await sendWarehouseTrainingQuizPdfZalo(admin.firestore(), {
+        employeeId: typeof data?.employeeId === 'string' ? data.employeeId : '',
+        fullName: typeof data?.fullName === 'string' ? data.fullName : '',
+        joinDate: typeof data?.joinDate === 'string' ? data.joinDate : '',
+        resultText: typeof data?.resultText === 'string' ? data.resultText : '',
+        pdfDataUrl
+      });
+      return result;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 /**
  * QC Monthly Report:
  * - Schedule: 08:00 ngày 1 hằng tháng (VN) → gửi report tháng vừa rồi

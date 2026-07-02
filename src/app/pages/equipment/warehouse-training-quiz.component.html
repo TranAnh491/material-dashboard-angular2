@@ -6,6 +6,9 @@
     <button type="button" class="qz-btn qz-btn-primary" (click)="printQuiz()">
       <i class="material-icons">print</i> In
     </button>
+    <button type="button" class="qz-btn qz-btn-primary" [disabled]="isExportingPdf" (click)="completeQuiz()">
+      <i class="material-icons">task_alt</i> Hoàn thành
+    </button>
     <button type="button" class="qz-btn qz-btn-primary" [disabled]="isExportingPdf" (click)="downloadPdf()">
       <i class="material-icons">download</i> {{ isExportingPdf ? 'Đang tạo PDF...' : 'Tải PDF' }}
     </button>
@@ -41,6 +44,7 @@
             <tr><td class="meta-label">Mã quản lý</td><td>{{ docMeta.docCode }}</td></tr>
             <tr><td class="meta-label">Phiên bản</td><td>{{ docMeta.version }}</td></tr>
             <tr><td class="meta-label">Ngày ban hành</td><td>{{ docMeta.issueDate }}</td></tr>
+            <tr><td class="meta-label">Số Trang</td><td>1/1</td></tr>
           </table>
         </td>
       </tr>
@@ -114,7 +118,9 @@
     </div>
 
     <div class="quiz-result-row">
-      <label>Điểm / Kết quả: <input class="eq-line-input result-input" [(ngModel)]="resultScore" placeholder="Pass / Fail" /></label>
+      <label>Điểm / Kết quả:
+        <input class="eq-line-input result-input" [(ngModel)]="resultScore" [readonly]="true" />
+      </label>
     </div>
   </div>
 </div>

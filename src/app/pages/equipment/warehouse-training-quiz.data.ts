@@ -201,6 +201,9 @@ export const WAREHOUSE_QUIZ_SECTIONS: QuizSection[] = [
 
 export const QUIZ_DOC_META = {
   ...MANUAL_DOC_META,
+  docCode: 'WH-WI0034/F03',
+  version: '03',
+  issueDate: '02/07/2026',
   quizTitle: 'KIỂM TRA ĐÀO TẠO KHO',
   quizSubtitle: 'Biểu mẫu câu hỏi đào tạo — 4 phần'
 };

@@ -46,9 +46,9 @@ export class EquipmentComponent implements OnInit {
   readonly manualDocMeta = {
     companyLine1: 'AIRSPEED MANUFACTURING VIET NAM',
     formTitle: 'BIỂU MẪU ĐÀO TẠO NHÂN VIÊN KHO ( Ngày Đầu)',
-    docCode: 'WH-WI0005/DT',
-    version: '00',
-    issueDate: '05/03/2026'
+    docCode: 'WH-WI0034/F02',
+    version: '02',
+    issueDate: '02/07/2026'
   };
 
   warehouseTrainingForm = {
