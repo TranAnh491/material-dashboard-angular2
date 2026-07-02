@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfZaloFn = exports.sendQcPriorityStatusChangedZaloFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.sendWarehouseTrainingQuizPdfZaloFn = exports.sendQcPriorityStatusChangedZaloFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -391,6 +391,7 @@ exports.sendWarehouseTrainingQuizPdfZaloFn = functions
             fullName: typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName : '',
             joinDate: typeof (data === null || data === void 0 ? void 0 : data.joinDate) === 'string' ? data.joinDate : '',
             resultText: typeof (data === null || data === void 0 ? void 0 : data.resultText) === 'string' ? data.resultText : '',
+            sectionId: typeof (data === null || data === void 0 ? void 0 : data.sectionId) === 'string' ? data.sectionId : '',
             pdfDataUrl
         });
         return result;
@@ -398,6 +399,61 @@ exports.sendWarehouseTrainingQuizPdfZaloFn = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** Equipment: hoàn thành bài kiểm tra kho → lưu file hình lên Storage + Firestore. */
+exports.saveWarehouseTrainingQuizImageFn = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const imageDataUrl = typeof (data === null || data === void 0 ? void 0 : data.imageDataUrl) === 'string' ? data.imageDataUrl : '';
+    if (!imageDataUrl) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu imageDataUrl.');
+    }
+    try {
+        const { saveWarehouseTrainingQuizImage } = await Promise.resolve().then(() => __importStar(require('./warehouse-training-quiz-storage')));
+        const result = await saveWarehouseTrainingQuizImage(admin.firestore(), {
+            employeeId: typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId : '',
+            fullName: typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName : '',
+            joinDate: typeof (data === null || data === void 0 ? void 0 : data.joinDate) === 'string' ? data.joinDate : '',
+            sectionId: typeof (data === null || data === void 0 ? void 0 : data.sectionId) === 'string' ? data.sectionId : '',
+            sectionTitle: typeof (data === null || data === void 0 ? void 0 : data.sectionTitle) === 'string' ? data.sectionTitle : '',
+            resultText: typeof (data === null || data === void 0 ? void 0 : data.resultText) === 'string' ? data.resultText : '',
+            imageDataUrl
+        });
+        return result;
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError('internal', msg);
+    }
+});
+/** Equipment: hoàn thành bài kiểm tra kho → gửi mail WH1–WH4 đính kèm PDF. */
+exports.sendWarehouseTrainingQuizPdfEmailFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const pdfDataUrl = typeof (data === null || data === void 0 ? void 0 : data.pdfDataUrl) === 'string' ? data.pdfDataUrl : '';
+    if (!pdfDataUrl) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu pdfDataUrl.');
+    }
+    try {
+        const { sendWarehouseTrainingQuizPdfEmail } = await Promise.resolve().then(() => __importStar(require('./warehouse-training-quiz-email')));
+        const result = await sendWarehouseTrainingQuizPdfEmail({
+            employeeId: typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId : '',
+            fullName: typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName : '',
+            joinDate: typeof (data === null || data === void 0 ? void 0 : data.joinDate) === 'string' ? data.joinDate : '',
+            resultText: typeof (data === null || data === void 0 ? void 0 : data.resultText) === 'string' ? data.resultText : '',
+            sectionId: typeof (data === null || data === void 0 ? void 0 : data.sectionId) === 'string' ? data.sectionId : '',
+            pdfDataUrl
+        });
+        return result;
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu SMTP') ? 'failed-precondition' : 'internal', msg);
     }
 });
 /**

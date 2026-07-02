@@ -6,11 +6,8 @@
     <button type="button" class="qz-btn qz-btn-primary" (click)="printQuiz()">
       <i class="material-icons">print</i> In
     </button>
-    <button type="button" class="qz-btn qz-btn-primary" [disabled]="isExportingPdf" (click)="completeQuiz()">
-      <i class="material-icons">task_alt</i> Hoàn thành
-    </button>
-    <button type="button" class="qz-btn qz-btn-primary" [disabled]="isExportingPdf" (click)="downloadPdf()">
-      <i class="material-icons">download</i> {{ isExportingPdf ? 'Đang tạo PDF...' : 'Tải PDF' }}
+    <button type="button" class="qz-btn qz-btn-primary" [disabled]="isExporting" (click)="downloadImage()">
+      <i class="material-icons">download</i> {{ isExporting ? 'Đang tạo hình...' : 'Tải hình' }}
     </button>
   </div>
 
@@ -30,7 +27,7 @@
     </div>
   </div>
 
-  <div id="warehouseQuizPrintArea" class="quiz-print-area">
+  <div id="warehouseQuizPrintArea" class="quiz-print-area" [class.quiz-capture-mode]="isCapturingForSave">
     <table class="pxk-doc-header">
       <tr>
         <td class="logo-cell"><img [src]="logoSrc" alt="AIRSPEED" /></td>
@@ -52,7 +49,7 @@
 
     <h3 class="eq-section-label quiz-exam-label">PHẦN KIỂM TRA ĐÀO TẠO KHO</h3>
 
-    <div class="quiz-section-block" *ngIf="activeSection as section">
+    <div class="quiz-section-block" *ngIf="activeDisplaySection as section">
       <h4 class="quiz-section-title">{{ section.title }} <span class="quiz-section-meta">(8 câu hỏi)</span></h4>
       <div *ngFor="let q of section.questions" class="quiz-question">
         <div class="quiz-q-text">Câu {{ q.number }}. {{ q.question }}</div>
@@ -72,11 +69,22 @@
     </div>
 
     <h3 class="eq-section-label">THÔNG TIN NHÂN VIÊN</h3>
-    <p class="quiz-info-hint no-print">Điền thông tin sau khi hoàn thành phần kiểm tra.</p>
+    <p class="quiz-info-hint no-print capture-hide-on-save">Điền thông tin sau khi hoàn thành phần kiểm tra.</p>
     <table class="quiz-info-table">
       <tr>
         <td>Họ và tên</td>
-        <td><input type="text" class="quiz-info-input" [(ngModel)]="employeeInfo.fullName" placeholder="Nhập họ tên" /></td>
+        <td class="quiz-name-cell">
+          <div class="quiz-name-with-stamp">
+            <input type="text" class="quiz-info-input" [(ngModel)]="employeeInfo.fullName" placeholder="Nhập họ tên" />
+            <div
+              *ngIf="captureStampLabel"
+              class="quiz-pass-stamp"
+              [class.quiz-pass-stamp--pass]="captureStampPass"
+              [class.quiz-pass-stamp--fail]="!captureStampPass">
+              {{ captureStampLabel }}
+            </div>
+          </div>
+        </td>
         <td>Mã nhân viên</td>
         <td><input type="text" class="quiz-info-input" [(ngModel)]="employeeInfo.employeeId" placeholder="Mã NV (nếu có)" /></td>
       </tr>
@@ -87,8 +95,8 @@
     </table>
 
     <h3 class="eq-section-label">KÝ XÁC NHẬN — KÝ ONLINE</h3>
-    <p class="quiz-sign-hint no-print">Ký tên trực tiếp trên màn hình bằng chuột hoặc ngón tay.</p>
-    <div class="quiz-sign-row">
+    <p class="quiz-sign-hint no-print capture-hide-on-save">Ký tên Người được đào tạo trực tiếp trên màn hình bằng chuột hoặc ngón tay.</p>
+    <div class="quiz-sign-row quiz-sign-row--single">
       <div class="sig-pad-box">
         <div class="sig-pad-title">Người được đào tạo</div>
         <canvas #traineeCanvas class="sig-canvas" width="280" height="100"
@@ -99,28 +107,63 @@
           (touchstart)="startSign($event, 'trainee')"
           (touchmove)="moveSign($event, 'trainee')"
           (touchend)="endSign('trainee')"></canvas>
-        <button type="button" class="sig-clear no-print" (click)="clearCanvas('trainee')">Xóa chữ ký</button>
+        <button type="button" class="sig-clear no-print capture-hide-on-save" (click)="clearCanvas('trainee')">Xóa chữ ký</button>
         <img *ngIf="traineeSignature" class="sig-print-img print-only" [src]="traineeSignature" alt="Ký NV" />
-      </div>
-      <div class="sig-pad-box">
-        <div class="sig-pad-title">Người hướng dẫn / Quản lý</div>
-        <canvas #trainerCanvas class="sig-canvas" width="280" height="100"
-          (mousedown)="startSign($event, 'trainer')"
-          (mousemove)="moveSign($event, 'trainer')"
-          (mouseup)="endSign('trainer')"
-          (mouseleave)="endSign('trainer')"
-          (touchstart)="startSign($event, 'trainer')"
-          (touchmove)="moveSign($event, 'trainer')"
-          (touchend)="endSign('trainer')"></canvas>
-        <button type="button" class="sig-clear no-print" (click)="clearCanvas('trainer')">Xóa chữ ký</button>
-        <img *ngIf="trainerSignature" class="sig-print-img print-only" [src]="trainerSignature" alt="Ký QL" />
       </div>
     </div>
 
-    <div class="quiz-result-row">
+    <div class="quiz-complete-row no-print capture-hide-on-save">
+      <button type="button" class="qz-btn qz-btn-primary qz-btn-complete" [disabled]="isExporting" (click)="completeQuiz()">
+        <i class="material-icons">task_alt</i> Hoàn thành
+      </button>
+      <p class="quiz-complete-hint">Ký tên xong → bấm Hoàn thành để lưu lên Firebase.</p>
+    </div>
+
+    <div class="quiz-result-row capture-hide-on-save">
       <label>Điểm / Kết quả:
         <input class="eq-line-input result-input" [(ngModel)]="resultScore" [readonly]="true" />
       </label>
     </div>
+  </div>
+
+  <div class="quiz-saved-panel no-print">
+    <div class="quiz-saved-header">
+      <h3>Bài kiểm tra đã lưu trên Firebase</h3>
+      <button type="button" class="qz-btn" [disabled]="isLoadingSaved" (click)="loadSavedRecords()">
+        <i class="material-icons">refresh</i> {{ isLoadingSaved ? 'Đang tải...' : 'Làm mới danh sách' }}
+      </button>
+    </div>
+    <p class="quiz-saved-hint">Sau khi bấm Hoàn thành, file hình được lưu tại đây — tải về khi cần.</p>
+    <div *ngIf="isLoadingSaved && !savedRecords.length" class="quiz-saved-empty">Đang tải danh sách...</div>
+    <div *ngIf="!isLoadingSaved && !savedRecords.length" class="quiz-saved-empty">Chưa có file hình nào được lưu.</div>
+    <table *ngIf="savedRecords.length" class="quiz-saved-table">
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Họ tên</th>
+          <th>Mã NV</th>
+          <th>Phần</th>
+          <th>Kết quả</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of savedRecords">
+          <td>{{ formatSavedAt(row) }}</td>
+          <td>{{ row.fullName || '—' }}</td>
+          <td>{{ row.employeeId || '—' }}</td>
+          <td>{{ row.sectionTitle || row.sectionId }}</td>
+          <td class="quiz-saved-result">{{ row.resultText }}</td>
+          <td class="quiz-saved-actions">
+            <button type="button" class="qz-btn qz-btn-primary qz-btn-sm" (click)="downloadSavedRecord(row)">
+              <i class="material-icons">download</i> Tải
+            </button>
+            <button type="button" class="qz-btn qz-btn-danger qz-btn-sm" [disabled]="deletingRecordId === row.id" (click)="deleteSavedRecord(row)">
+              <i class="material-icons">delete</i> {{ deletingRecordId === row.id ? '...' : 'Xóa' }}
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>

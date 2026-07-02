@@ -34,14 +34,14 @@ export class TrainingReportService {
       let aspCount = 0;
       let signatureCount = 0;
 
-      // Query all test collections
-      const collections = [
-        'temperature-test-results',
-        'materials-test-results', 
-        'finished-goods-test-results'
+      const collections: { name: string; content: string }[] = [
+        { name: 'temperature-test-results', content: 'Kiểm tra kiến thức nhiệt độ và độ ẩm' },
+        { name: 'materials-test-results', content: 'HƯỚNG DẪN XUẤT NHẬP KHO NGUYÊN VẬT LIỆU' },
+        { name: 'finished-goods-test-results', content: 'HƯỚNG DẪN XUẤT NHẬP KHO THÀNH PHẨM' },
+        { name: 'warehouse-training-quiz-results', content: 'KIỂM TRA ĐÀO TẠO KHO' }
       ];
 
-      for (const collectionName of collections) {
+      for (const { name: collectionName, content: defaultContent } of collections) {
         console.log(`📄 Querying collection: ${collectionName}`);
         
         const snapshot = await this.firestore
@@ -59,41 +59,39 @@ export class TrainingReportService {
           // Filter only employees with ASP prefix
           if (data.employeeId && data.employeeId.startsWith('ASP')) {
             aspCount++;
-            const trainingDate = data.completedAt.toDate();
-            const expiryDate = new Date(trainingDate);
-            expiryDate.setFullYear(expiryDate.getFullYear() + 1); // Add 1 year
+            const trainingDate = data.completedAt?.toDate?.() || data.createdAt?.toDate?.();
+            if (!trainingDate) return;
 
-            const hasSignature = !!(data.signature && data.signature.length > 0);
+            const expiryDate = new Date(trainingDate);
+            expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+            const sig = data.signature || data.imageDataUrl;
+            const hasSignature = !!(sig && String(sig).length > 0);
             if (hasSignature) signatureCount++;
 
-            // Determine training content based on collection
-            let trainingContent = 'Kiểm tra kiến thức nhiệt độ và độ ẩm';
-            if (collectionName === 'materials-test-results') {
-              trainingContent = 'HƯỚNG DẪN XUẤT NHẬP KHO NGUYÊN VẬT LIỆU';
-            } else if (collectionName === 'finished-goods-test-results') {
-              trainingContent = 'HƯỚNG DẪN XUẤT NHẬP KHO THÀNH PHẨM';
-            }
+            const trainingContent =
+              collectionName === 'warehouse-training-quiz-results' && data.sectionTitle
+                ? `${defaultContent} — ${data.sectionTitle}`
+                : defaultContent;
 
-            // Create unique key to avoid duplicates: employeeId + trainingContent
             const uniqueKey = `${data.employeeId}_${trainingContent}`;
             
-            // Only add if not already exists, or if this record is newer
             const existingRecord = recordsMap.get(uniqueKey);
             if (!existingRecord || trainingDate > existingRecord.trainingDate) {
-              console.log(`✅ ASP Employee: ${data.employeeId} - ${data.employeeName} - ${trainingContent} - Signature: ${hasSignature ? 'Yes' : 'No'}`);
+              console.log(`✅ ASP Employee: ${data.employeeId} - ${data.employeeName || data.fullName} - ${trainingContent} - Signature: ${hasSignature ? 'Yes' : 'No'}`);
 
               recordsMap.set(uniqueKey, {
-                id: doc.id, // Store document ID for deletion
+                id: doc.id,
                 employeeId: data.employeeId,
-                name: data.employeeName,
-                trainingContent: trainingContent,
-                status: data.passed ? 'pass' : 'fail',
-                trainingDate: trainingDate,
-                expiryDate: expiryDate,
+                name: data.employeeName || data.fullName || '',
+                trainingContent,
+                status: data.passed === false ? 'fail' : 'pass',
+                trainingDate,
+                expiryDate,
                 score: data.score,
                 percentage: data.percentage,
                 totalQuestions: data.totalQuestions,
-                signature: data.signature
+                signature: sig
               });
             } else {
               console.log(`⏭️ Skipping duplicate/older record for ${data.employeeId} - ${trainingContent}`);
@@ -130,7 +128,8 @@ export class TrainingReportService {
       const collections = [
         'temperature-test-results',
         'materials-test-results', 
-        'finished-goods-test-results'
+        'finished-goods-test-results',
+        'warehouse-training-quiz-results'
       ];
 
       const records: TrainingRecord[] = [];
@@ -146,30 +145,35 @@ export class TrainingReportService {
 
           snapshot.forEach((doc) => {
             const data = doc.data() as any;
-            const trainingDate = data.completedAt.toDate();
-            const expiryDate = new Date(trainingDate);
-            expiryDate.setFullYear(expiryDate.getFullYear() + 1); // Add 1 year
+            const trainingDate = data.completedAt?.toDate?.() || data.createdAt?.toDate?.();
+            if (!trainingDate) return;
 
-            // Determine training content based on collection
+            const expiryDate = new Date(trainingDate);
+            expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
             let trainingContent = 'Kiểm tra kiến thức nhiệt độ và độ ẩm';
             if (collectionName === 'materials-test-results') {
               trainingContent = 'HƯỚNG DẪN XUẤT NHẬP KHO NGUYÊN VẬT LIỆU';
             } else if (collectionName === 'finished-goods-test-results') {
               trainingContent = 'HƯỚNG DẪN XUẤT NHẬP KHO THÀNH PHẨM';
+            } else if (collectionName === 'warehouse-training-quiz-results') {
+              trainingContent = data.sectionTitle
+                ? `KIỂM TRA ĐÀO TẠO KHO — ${data.sectionTitle}`
+                : 'KIỂM TRA ĐÀO TẠO KHO';
             }
 
             records.push({
-              id: doc.id, // Store document ID for deletion
+              id: doc.id,
               employeeId: data.employeeId,
-              name: data.employeeName,
-              trainingContent: trainingContent,
-              status: data.passed ? 'pass' : 'fail',
-              trainingDate: trainingDate,
-              expiryDate: expiryDate,
+              name: data.employeeName || data.fullName || '',
+              trainingContent,
+              status: data.passed === false ? 'fail' : 'pass',
+              trainingDate,
+              expiryDate,
               score: data.score,
               percentage: data.percentage,
               totalQuestions: data.totalQuestions,
-              signature: data.signature
+              signature: data.signature || data.imageDataUrl
             });
           });
         } catch (error) {
@@ -191,7 +195,8 @@ export class TrainingReportService {
       const collections = [
         'temperature-test-results',
         'materials-test-results', 
-        'finished-goods-test-results'
+        'finished-goods-test-results',
+        'warehouse-training-quiz-results'
       ];
 
       let deletedCount = 0;
@@ -225,7 +230,8 @@ export class TrainingReportService {
       const collections = [
         'temperature-test-results',
         'materials-test-results', 
-        'finished-goods-test-results'
+        'finished-goods-test-results',
+        'warehouse-training-quiz-results'
       ];
 
       for (const collectionName of collections) {
@@ -253,7 +259,8 @@ export class TrainingReportService {
       const collections = [
         'temperature-test-results',
         'materials-test-results', 
-        'finished-goods-test-results'
+        'finished-goods-test-results',
+        'warehouse-training-quiz-results'
       ];
 
       for (const collectionName of collections) {

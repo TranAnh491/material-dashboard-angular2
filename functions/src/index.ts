@@ -400,6 +400,7 @@ export const sendWarehouseTrainingQuizPdfZaloFn = functions
         fullName: typeof data?.fullName === 'string' ? data.fullName : '',
         joinDate: typeof data?.joinDate === 'string' ? data.joinDate : '',
         resultText: typeof data?.resultText === 'string' ? data.resultText : '',
+        sectionId: typeof data?.sectionId === 'string' ? data.sectionId : '',
         pdfDataUrl
       });
       return result;
@@ -407,6 +408,64 @@ export const sendWarehouseTrainingQuizPdfZaloFn = functions
       const msg = e instanceof Error ? e.message : String(e);
       throw new functions.https.HttpsError(
         msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Equipment: hoàn thành bài kiểm tra kho → lưu file hình lên Storage + Firestore. */
+export const saveWarehouseTrainingQuizImageFn = functions.https.onCall(async (data: any, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+  }
+  const imageDataUrl = typeof data?.imageDataUrl === 'string' ? data.imageDataUrl : '';
+  if (!imageDataUrl) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu imageDataUrl.');
+  }
+  try {
+    const { saveWarehouseTrainingQuizImage } = await import('./warehouse-training-quiz-storage');
+    const result = await saveWarehouseTrainingQuizImage(admin.firestore(), {
+      employeeId: typeof data?.employeeId === 'string' ? data.employeeId : '',
+      fullName: typeof data?.fullName === 'string' ? data.fullName : '',
+      joinDate: typeof data?.joinDate === 'string' ? data.joinDate : '',
+      sectionId: typeof data?.sectionId === 'string' ? data.sectionId : '',
+      sectionTitle: typeof data?.sectionTitle === 'string' ? data.sectionTitle : '',
+      resultText: typeof data?.resultText === 'string' ? data.resultText : '',
+      imageDataUrl
+    });
+    return result;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Equipment: hoàn thành bài kiểm tra kho → gửi mail WH1–WH4 đính kèm PDF. */
+export const sendWarehouseTrainingQuizPdfEmailFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: any, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const pdfDataUrl = typeof data?.pdfDataUrl === 'string' ? data.pdfDataUrl : '';
+    if (!pdfDataUrl) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu pdfDataUrl.');
+    }
+    try {
+      const { sendWarehouseTrainingQuizPdfEmail } = await import('./warehouse-training-quiz-email');
+      const result = await sendWarehouseTrainingQuizPdfEmail({
+        employeeId: typeof data?.employeeId === 'string' ? data.employeeId : '',
+        fullName: typeof data?.fullName === 'string' ? data.fullName : '',
+        joinDate: typeof data?.joinDate === 'string' ? data.joinDate : '',
+        resultText: typeof data?.resultText === 'string' ? data.resultText : '',
+        sectionId: typeof data?.sectionId === 'string' ? data.sectionId : '',
+        pdfDataUrl
+      });
+      return result;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu SMTP') ? 'failed-precondition' : 'internal',
         msg
       );
     }

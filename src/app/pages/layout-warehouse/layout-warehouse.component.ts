@@ -438,6 +438,19 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
 
 
+      const aisle = this.parseBetweenRacksAisle(term);
+      if (aisle) {
+        this.searchResult = {
+          location: aisle.raw,
+          shelf: aisle.label,
+          slot: null,
+          searchKind: 'location'
+        };
+        this.selectedLoc = this.formatLocationLabel(aisle.raw);
+        this.cdr.markForCheck();
+        return;
+      }
+
       const parsedDirect = parseWarehouseLocation(term, this.knownShelves);
 
       if (parsedDirect) {
@@ -1867,6 +1880,33 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
 
   private isIqcLocation(loc: string): boolean {
     return isIqcPrefixLocation(loc);
+  }
+
+  private getKnownRackLetters(): Set<string> {
+    const set = new Set<string>();
+    for (const shelf of this.knownShelves || []) {
+      const m = /^([A-Z]+)/.exec(String(shelf || '').trim().toUpperCase());
+      if (m?.[1]) set.add(m[1]);
+    }
+    return set;
+  }
+
+  private parseBetweenRacksAisle(loc: string): { raw: string; rackA: string; rackB: string; label: string } | null {
+    const raw = String(loc || '').trim().toUpperCase().replace(/\s/g, '');
+    if (raw.length < 2) return null;
+    const a = raw.charAt(0);
+    const b = raw.charAt(1);
+    if (!/^[A-Z]$/.test(a) || !/^[A-Z]$/.test(b) || a === b) return null;
+
+    const racks = this.getKnownRackLetters();
+    if (!racks.has(a) || !racks.has(b)) return null;
+
+    return { raw, rackA: a, rackB: b, label: `Lối đi giữa kệ ${a}-${b}` };
+  }
+
+  formatLocationLabel(loc: string): string {
+    const aisle = this.parseBetweenRacksAisle(loc);
+    return aisle ? `${aisle.raw} (${aisle.label})` : String(loc || '').trim();
   }
 
   private normalizeLiveLocKey(loc: string): string {

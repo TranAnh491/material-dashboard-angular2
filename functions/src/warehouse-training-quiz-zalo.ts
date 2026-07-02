@@ -61,6 +61,7 @@ export async function sendWarehouseTrainingQuizPdfZalo(
     fullName?: string;
     joinDate?: string;
     resultText?: string;
+    sectionId?: string;
     pdfDataUrl: string;
   }
 ): Promise<{ ok: true; url: string }> {
@@ -76,6 +77,7 @@ export async function sendWarehouseTrainingQuizPdfZalo(
   const fullName = safeText(payload.fullName, 120);
   const joinDate = safeText(payload.joinDate, 40);
   const resultText = safeText(payload.resultText, 600);
+  const sectionId = safeText(payload.sectionId, 40);
 
   const baseName = `${employeeId || 'NV'}_${fullName || 'nhan-vien'}`.replace(/\s+/g, '_');
   const signedUrl = await uploadPdfAndGetSignedUrl(buf, `${baseName}.pdf`);
@@ -86,6 +88,7 @@ export async function sendWarehouseTrainingQuizPdfZalo(
   const msg =
     `✅ KT đào tạo kho — Hoàn thành\n` +
     `Thời điểm: ${atStr}\n` +
+    (sectionId ? `Bài: ${sectionId}\n` : '') +
     (fullName ? `Họ tên: ${fullName}\n` : '') +
     (employeeId ? `Mã NV: ${employeeId}\n` : '') +
     (joinDate ? `Ngày vào làm: ${joinDate}\n` : '') +

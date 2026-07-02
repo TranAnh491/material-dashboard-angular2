@@ -4,6 +4,8 @@ export interface QuizQuestion {
   number: number;
   question: string;
   options: string[];
+  /** Index đáp án đúng (0=A, 1=B, …). Mặc định 1 (B). */
+  correctIndex?: number;
 }
 
 export interface QuizSection {
@@ -39,13 +41,20 @@ export const WAREHOUSE_QUIZ_SECTIONS: QuizSection[] = [
       },
       {
         number: 5,
-        question: 'Hàng nghi ngờ (có mùi, nước rỉ, bao bì bất thường) cần xử lý thế nào?',
-        options: ['Mở kiểm tra ngay', 'Không mở, đưa Isolation và báo quản lý', 'Nhập kho vị trí tạm', 'Trả nhà cung cấp ngay']
+        question: 'Nếu có người lạ , không mang đồng phục, thẻ nhân viên vào Kho lấy hàng, bạn cần làm gì',
+        options: ['Không quan tâm', 'Báo quản lý hoặc bảo vệ', 'Chỉ nhìn', 'Tươi cười nói chuyện'],
+        correctIndex: 1
       },
       {
         number: 6,
         question: 'Khi xe hàng đến cổng, công nhân kho cần làm gì trước khi dỡ hàng?',
-        options: ['Dỡ hàng ngay', 'Kiểm tra ngoại quan, chụp hình, báo quản lý', 'Ký nhận trước rồi dỡ', 'Chỉ kiểm số lượng']
+        options: [
+          'Kiểm tra phiếu giao hàng xem có Mã hàng , PO, Số lượng không ?',
+          'Kiểm tra ngoại quan, chụp hình, báo quản lý',
+          'Ký nhận trước rồi dỡ',
+          'Chỉ kiểm số lượng'
+        ],
+        correctIndex: 0
       },
       {
         number: 7,

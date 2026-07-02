@@ -258,7 +258,7 @@
           *ngFor="let row of liveShelfRows"
           (click)="jumpToLiveShelf(row)">
           <div class="lw-live-item__top">
-            <span class="lw-live-item__loc">{{ row.toLocation }}</span>
+            <span class="lw-live-item__loc">{{ formatLocationLabel(row.toLocation) }}</span>
             <span class="lw-live-item__badge">×{{ row.count }}</span>
           </div>
           <div class="lw-live-item__codes">{{ row.materialCodes.join(', ') }}</div>
