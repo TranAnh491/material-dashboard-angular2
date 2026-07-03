@@ -3,9 +3,12 @@
     <div class="su-modal__header">
       <div>
         <h3>Chọn DV Lưu trữ</h3>
-        <p class="su-modal__subtitle" *ngIf="batchNumber">
-          Lô hàng: <strong>{{ batchNumber }}</strong>
+        <p class="su-modal__subtitle" *ngIf="materialCode">
+          Mã NVL: <strong>{{ materialCode }}</strong>
           <span *ngIf="factory"> · {{ factory }}</span>
+        </p>
+        <p class="su-modal__subtitle su-modal__hint" *ngIf="materialCode">
+          Áp dụng cho toàn bộ mã này — không phân biệt PO, IMD
         </p>
       </div>
       <button type="button" class="su-modal__close" (click)="close()" [disabled]="saving">

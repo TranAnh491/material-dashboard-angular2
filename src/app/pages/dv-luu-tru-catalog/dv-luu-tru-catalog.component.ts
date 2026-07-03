@@ -1,6 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import {
   DvLuuTruCatalogEntry,
@@ -26,7 +25,6 @@ export class DvLuuTruCatalogComponent implements OnInit {
 
   constructor(
     private catalogService: DvLuuTruCatalogService,
-    private firestore: AngularFirestore,
     private route: ActivatedRoute,
     private router: Router
   ) {}
@@ -57,7 +55,11 @@ export class DvLuuTruCatalogComponent implements OnInit {
     this.filteredEntries = this.entries.filter(entry => {
       if (this.factoryFilter !== 'ALL' && entry.factory !== this.factoryFilter) return false;
       if (!q) return true;
-      return entry.batchNumber.toLowerCase().includes(q) || entry.size.toLowerCase().includes(q);
+      return (
+        entry.materialCode.toLowerCase().includes(q) ||
+        (entry.batchNumber || '').toLowerCase().includes(q) ||
+        entry.size.toLowerCase().includes(q)
+      );
     });
   }
 
@@ -93,17 +95,8 @@ export class DvLuuTruCatalogComponent implements OnInit {
     if (!this.editingEntry) return;
     this.isSaving = true;
     try {
-      const factory = this.editingEntry.factory;
-      const batchNumber = this.editingEntry.batchNumber;
-      await this.catalogService.saveEntry(factory, batchNumber, size);
-      const snap = await this.firestore
-        .collection('inbound-materials', ref =>
-          ref.where('factory', '==', factory).where('batchNumber', '==', batchNumber).limit(500)
-        )
-        .get()
-        .toPromise();
-      const materialIds = (snap?.docs || []).map(doc => doc.id);
-      await this.catalogService.syncInboundMaterials(factory, batchNumber, size, materialIds);
+      const materialCode = this.editingEntry.materialCode;
+      await this.catalogService.assignStorageUnit(materialCode, size, this.editingEntry.factory);
       await this.loadEntries();
       this.closePicker();
     } catch (e) {
@@ -115,7 +108,7 @@ export class DvLuuTruCatalogComponent implements OnInit {
   }
 
   async deleteEntry(entry: DvLuuTruCatalogEntry): Promise<void> {
-    if (!confirm(`Xóa DV Lưu trữ của lô ${entry.batchNumber}?`)) return;
+    if (!confirm(`Xóa DV Lưu trữ của mã NVL ${entry.materialCode}?`)) return;
     try {
       await this.catalogService.deleteEntry(entry.id);
       this.entries = this.entries.filter(e => e.id !== entry.id);

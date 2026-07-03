@@ -63,20 +63,21 @@
           </div>
         </div>
 
-        <div class="fg-m-card-list">
+        <div class="fg-m-card-list fg-m-card-list--pending">
           <div class="fg-m-card fg-m-card--pending"
                *ngFor="let material of getMobilePendingMaterials()"
-               (click)="openConfirmReceiptDialog(material)">
+               (click)="openConfirmReceiptDialog(material)"
+               [title]="material.materialCode + (material.poNumber ? ' · PO: ' + material.poNumber : '')">
             <span class="fg-m-zone-badge" *ngIf="getTempZoneBadge(material.location) as zone">{{ zone }}</span>
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
-            <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
-            <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
-            <span class="fg-m-card__meta">LOT: {{ material.batchNumber || '—' }}</span>
-            <span class="fg-m-card__meta">SL: {{ material.quantity | number:'1.0-0' }}</span>
-            <span class="fg-m-card__meta fg-m-card__meta--loc">
+            <span class="fg-m-card__meta fg-m-card__meta--detail">PO: {{ material.poNumber || '—' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--detail">LSX: {{ material.lsx || '—' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--detail">LOT: {{ material.batchNumber || '—' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--detail">SL: {{ material.quantity | number:'1.0-0' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--detail fg-m-card__meta--loc">
               Vị trí: <strong>{{ getPendingLocationLabel(material) }}</strong>
             </span>
-            <div class="fg-m-card__action">
+            <div class="fg-m-card__action fg-m-card__action--detail">
               <i class="material-icons">touch_app</i>
               Bấm để xác nhận
             </div>

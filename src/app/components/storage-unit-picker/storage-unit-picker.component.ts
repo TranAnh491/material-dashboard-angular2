@@ -30,6 +30,7 @@ const CUBE = {
 })
 export class StorageUnitPickerComponent implements OnChanges {
   @Input() visible = false;
+  @Input() materialCode = '';
   @Input() batchNumber = '';
   @Input() factory = '';
   @Input() saving = false;

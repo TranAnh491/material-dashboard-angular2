@@ -302,7 +302,7 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   readonly tbhdCheckFromDateLabel = '15/06/2026';
 
   showStorageUnitPicker = false;
-  storageUnitPickerBatch = '';
+  storageUnitPickerMaterialCode = '';
   isSavingStorageUnit = false;
   private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
 
@@ -1282,7 +1282,8 @@ export class InboundASM2Component implements OnInit, OnDestroy {
   }
 
   getStorageUnitLabel(material: InboundMaterial): string {
-    return material.storageUnitSize || this.storageUnitCatalogMap.get(material.batchNumber) || '';
+    const code = this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
+    return material.storageUnitSize || this.storageUnitCatalogMap.get(code) || '';
   }
 
   hasStorageUnit(material: InboundMaterial): boolean {
@@ -1291,35 +1292,32 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
   onStorageUnitCellClick(material: InboundMaterial): void {
     if (this.hasStorageUnit(material)) return;
-    const batch = String(material.batchNumber || '').trim();
-    if (!batch) {
-      alert('Vui lòng nhập lô hàng trước khi chọn DV Lưu trữ.');
+    const code = this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
+    if (!code) {
+      alert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
       return;
     }
-    this.storageUnitPickerBatch = batch;
+    this.storageUnitPickerMaterialCode = code;
     this.showStorageUnitPicker = true;
   }
 
   closeStorageUnitPicker(): void {
     if (this.isSavingStorageUnit) return;
     this.showStorageUnitPicker = false;
-    this.storageUnitPickerBatch = '';
+    this.storageUnitPickerMaterialCode = '';
   }
 
   async onStorageUnitConfirmed(size: StorageUnitSize): Promise<void> {
-    const batchNumber = this.storageUnitPickerBatch;
-    if (!batchNumber) return;
+    const materialCode = this.storageUnitPickerMaterialCode;
+    if (!materialCode) return;
     this.isSavingStorageUnit = true;
     try {
-      await this.dvLuuTruCatalog.saveEntry(this.selectedFactory, batchNumber, size);
-      const related = this.materials.filter(
-        m => m.batchNumber === batchNumber && m.factory === this.selectedFactory
-      );
-      const materialIds = related.map(m => m.id!).filter(Boolean);
-      await this.dvLuuTruCatalog.syncInboundMaterials(this.selectedFactory, batchNumber, size, materialIds);
-      this.storageUnitCatalogMap.set(batchNumber, size);
-      related.forEach(m => {
-        m.storageUnitSize = size;
+      await this.dvLuuTruCatalog.assignStorageUnit(materialCode, size, this.selectedFactory);
+      this.storageUnitCatalogMap.set(materialCode, size);
+      this.materials.forEach(m => {
+        if (this.dvLuuTruCatalog.normalizeMaterialCode(m.materialCode) === materialCode) {
+          m.storageUnitSize = size;
+        }
       });
       this.applyFilters();
       this.closeStorageUnitPicker();
@@ -1333,12 +1331,19 @@ export class InboundASM2Component implements OnInit, OnDestroy {
 
   private async applyStorageUnitsFromCatalog(): Promise<void> {
     try {
-      const batches = [...new Set(this.materials.map(m => m.batchNumber).filter(Boolean))];
-      const map = await this.dvLuuTruCatalog.loadMapForBatches(this.selectedFactory, batches);
+      const codes = [
+        ...new Set(
+          this.materials
+            .map(m => this.dvLuuTruCatalog.normalizeMaterialCode(m.materialCode))
+            .filter(Boolean)
+        )
+      ];
+      const map = await this.dvLuuTruCatalog.loadMapForMaterialCodes(codes);
       this.storageUnitCatalogMap = map;
       let changed = false;
       this.materials.forEach(m => {
-        const fromCatalog = map.get(m.batchNumber);
+        const code = this.dvLuuTruCatalog.normalizeMaterialCode(m.materialCode);
+        const fromCatalog = map.get(code);
         if (fromCatalog && m.storageUnitSize !== fromCatalog) {
           m.storageUnitSize = fromCatalog;
           changed = true;

@@ -491,7 +491,7 @@
                 [class.storage-unit-cell--empty]="!hasStorageUnit(material)"
                 [disabled]="hasStorageUnit(material)"
                 (click)="onStorageUnitCellClick(material)"
-                [title]="hasStorageUnit(material) ? 'Lô đã có DV Lưu trữ — sửa tại Danh mục DV Lưu trữ' : 'Chọn size pallet DV Lưu trữ'">
+                [title]="hasStorageUnit(material) ? 'Mã NVL đã có DV Lưu trữ — sửa tại Danh mục DV Lưu trữ' : 'Chọn size pallet theo mã NVL (mọi PO, IMD)'">
                 {{ hasStorageUnit(material) ? getStorageUnitLabel(material) : 'Chọn' }}
               </button>
             </td>
@@ -1410,7 +1410,7 @@
 
 <app-storage-unit-picker
   [visible]="showStorageUnitPicker"
-  [batchNumber]="storageUnitPickerBatch"
+  [materialCode]="storageUnitPickerMaterialCode"
   [factory]="selectedFactory"
   [saving]="isSavingStorageUnit"
   (closed)="closeStorageUnitPicker()"

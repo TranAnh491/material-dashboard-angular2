@@ -15,6 +15,8 @@ import { LabelReprintFlagService } from '../../services/label-reprint-flag.servi
 import { MaterialsDashboardService } from '../../services/materials-dashboard.service';
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
+import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
+import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import * as firebase from 'firebase/compat/app';
@@ -54,6 +56,7 @@ export interface InventoryMaterial {
   lastStatusKind?: 'Outbound' | 'Change location' | 'Inbound' | '';
   lastStatusBy?: string;
   lastStatusLoading?: boolean;
+  storageUnitSize?: StorageUnitSize | '';
   totalBags?: number;
   /** Số bag tồn đầu (lấy từ Inbound "số bịch") */
   openingBagsAtInit?: number;
@@ -110,6 +113,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   
   // Loading state
   isLoading = false;
+  showStorageUnitPicker = false;
+  storageUnitPickerMaterialCode = '';
+  isSavingStorageUnit = false;
+  private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
   isCatalogLoading = false;
   isResetting = false;
   isDownloadingSearch = false;
@@ -283,8 +290,92 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     private temXuatKho: TemXuatKhoService,
     private labelReprintFlags: LabelReprintFlagService,
     private materialsDashboard: MaterialsDashboardService,
-    private locationUnlock: LocationUnlockService
+    private locationUnlock: LocationUnlockService,
+    private dvLuuTruCatalog: DvLuuTruCatalogService
   ) {}
+
+  getStorageUnitLabel(material: InventoryMaterial): string {
+    const code = this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
+    return material.storageUnitSize || this.storageUnitCatalogMap.get(code) || '';
+  }
+
+  hasStorageUnit(material: InventoryMaterial): boolean {
+    return !!this.getStorageUnitLabel(material);
+  }
+
+  private getStorageMaterialKey(material: InventoryMaterial): string {
+    return this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
+  }
+
+  onStorageUnitCellClick(material: InventoryMaterial): void {
+    if (this.hasStorageUnit(material)) return;
+    const code = this.getStorageMaterialKey(material);
+    if (!code) {
+      alert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
+      return;
+    }
+    this.storageUnitPickerMaterialCode = code;
+    this.showStorageUnitPicker = true;
+  }
+
+  closeStorageUnitPicker(): void {
+    if (this.isSavingStorageUnit) return;
+    this.showStorageUnitPicker = false;
+    this.storageUnitPickerMaterialCode = '';
+  }
+
+  async onStorageUnitConfirmed(size: StorageUnitSize): Promise<void> {
+    const materialCode = this.storageUnitPickerMaterialCode;
+    if (!materialCode) return;
+    this.isSavingStorageUnit = true;
+    try {
+      await this.dvLuuTruCatalog.assignStorageUnit(materialCode, size, this.FACTORY);
+      this.storageUnitCatalogMap.set(materialCode, size);
+      const applySize = (list: InventoryMaterial[]) => {
+        list.forEach(m => {
+          if (this.getStorageMaterialKey(m) === materialCode) {
+            m.storageUnitSize = size;
+          }
+        });
+      };
+      applySize(this.inventoryMaterials);
+      applySize(this.filteredInventory);
+      applySize(this.displayedInventory);
+      this.cdr.markForCheck();
+      this.closeStorageUnitPicker();
+    } catch (e) {
+      console.error(e);
+      alert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
+    } finally {
+      this.isSavingStorageUnit = false;
+    }
+  }
+
+  private async applyStorageUnitsFromCatalog(): Promise<void> {
+    try {
+      const codes = [
+        ...new Set(this.inventoryMaterials.map(m => this.getStorageMaterialKey(m)).filter(Boolean))
+      ];
+      const map = await this.dvLuuTruCatalog.loadMapForMaterialCodes(codes);
+      this.storageUnitCatalogMap = map;
+      let changed = false;
+      this.inventoryMaterials.forEach(m => {
+        const code = this.getStorageMaterialKey(m);
+        const fromCatalog = map.get(code);
+        if (fromCatalog && m.storageUnitSize !== fromCatalog) {
+          m.storageUnitSize = fromCatalog;
+          changed = true;
+        }
+      });
+      if (changed) {
+        this.filteredInventory = [...this.inventoryMaterials];
+        this.updateDisplayedInventory();
+        this.cdr.markForCheck();
+      }
+    } catch (e) {
+      console.error('Load DV Lưu trữ catalog error:', e);
+    }
+  }
 
   private getImdKeyFromImportDate(d: Date | null | undefined): string {
     return d ? d.toLocaleDateString('en-GB').split('/').join('') : new Date().toLocaleDateString('en-GB').split('/').join('');
@@ -1807,6 +1898,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
       // Set filteredInventory to show all loaded items
       this.filteredInventory = [...this.inventoryMaterials];
+      void this.applyStorageUnitsFromCatalog();
       
       // 🔧 FIX: Chỉ consolidate LOCAL, KHÔNG save lại Firebase để tránh vòng lặp
       console.log('🔄 Consolidating duplicate materials (LOCAL ONLY)...');
@@ -2953,6 +3045,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
+        void this.applyStorageUnitsFromCatalog();
         
         // KHÔNG gộp dòng khi search - chỉ gộp khi bấm nút "Gộp dòng trùng lặp"
         // this.consolidateInventoryData();

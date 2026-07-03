@@ -466,6 +466,7 @@
             <th>Trạng thái</th>
             <th>IQC Status</th>
             <th>Last status</th>
+            <th class="storage-unit-col">DV Lưu trữ</th>
             <th>Xóa</th>
             <th>Factory</th>
           </tr>
@@ -671,6 +672,18 @@
                 </span>
               </div>
               <span *ngIf="!material.lastStatusLoading && !material.lastStatusAt" class="no-last-status">—</span>
+            </td>
+            <td class="storage-unit-col">
+              <button
+                type="button"
+                class="storage-unit-cell"
+                [class.storage-unit-cell--filled]="hasStorageUnit(material)"
+                [class.storage-unit-cell--empty]="!hasStorageUnit(material)"
+                [disabled]="hasStorageUnit(material)"
+                (click)="onStorageUnitCellClick(material)"
+                [title]="hasStorageUnit(material) ? 'Mã NVL đã có DV Lưu trữ — sửa tại Danh mục DV Lưu trữ' : 'Chọn size pallet theo mã NVL (mọi PO, IMD)'">
+                {{ hasStorageUnit(material) ? getStorageUnitLabel(material) : 'Chọn' }}
+              </button>
             </td>
             <td class="delete-cell">
               <button class="delete-btn" 
@@ -1470,3 +1483,12 @@
     </div>
   </div>
 </div>
+
+<app-storage-unit-picker
+  [visible]="showStorageUnitPicker"
+  [materialCode]="storageUnitPickerMaterialCode"
+  [factory]="FACTORY"
+  [saving]="isSavingStorageUnit"
+  (closed)="closeStorageUnitPicker()"
+  (confirmed)="onStorageUnitConfirmed($event)">
+</app-storage-unit-picker>

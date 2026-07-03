@@ -21,10 +21,17 @@ export const STORAGE_UNIT_SIZE_OPTIONS: StorageUnitSizeOption[] = [
 export interface DvLuuTruCatalogEntry {
   id: string;
   factory: string;
-  batchNumber: string;
+  /** Mã NVL — khóa danh mục (vd. Bxxxxxx), không phân biệt PO / IMD */
+  materialCode: string;
+  /** @deprecated Dữ liệu cũ theo lô hàng */
+  batchNumber?: string;
   size: StorageUnitSize;
   fraction: number;
   updatedAt?: Date;
+}
+
+export function normalizeStorageMaterialCode(code: string | null | undefined): string {
+  return String(code || '').trim().toUpperCase();
 }
 
 export function getStorageUnitOption(size: StorageUnitSize | string | null | undefined): StorageUnitSizeOption | null {
