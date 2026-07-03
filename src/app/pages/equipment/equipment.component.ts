@@ -4,8 +4,21 @@ import { TrainingReportService, TrainingRecord } from '../../services/training-r
 import { DeleteConfirmationService } from '../../services/delete-confirmation.service';
 import { DebugFirebaseService } from '../../services/debug-firebase.service';
 import { TrainingReportDebugService } from '../../services/training-report-debug.service';
+import { AngularFirestore } from '@angular/fire/compat/firestore';
+import firebase from 'firebase/compat/app';
+import { firstValueFrom } from 'rxjs';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+
+interface WarehouseTrainingFormSavedRecord {
+  id: string;
+  fullName: string;
+  employeeId: string;
+  resultText: string;
+  imageDataUrl?: string;
+  completedAt?: firebase.firestore.Timestamp;
+  createdAt?: firebase.firestore.Timestamp;
+}
 
 
 
@@ -80,6 +93,18 @@ export class EquipmentComponent implements OnInit {
 
   workerSignature = '';
   private workerSignDrawing = false;
+
+  private readonly TRAINING_FORM_RESULTS_COLLECTION = 'warehouse-training-form-results';
+  private readonly FIRESTORE_IMAGE_MAX_CHARS = 900_000;
+  private readonly minPassJobItems = 5;
+
+  isExportingTrainingForm = false;
+  isLoadingTrainingFormSaved = false;
+  deletingTrainingFormRecordId = '';
+  isCapturingTrainingForm = false;
+  captureTrainingFormStampLabel = '';
+  captureTrainingFormStampPass = false;
+  trainingFormSavedRecords: WarehouseTrainingFormSavedRecord[] = [];
 
   // Report properties
   reportData: TrainingRecord[] = [];
@@ -185,6 +210,7 @@ export class EquipmentComponent implements OnInit {
     private deleteConfirmationService: DeleteConfirmationService,
     private debugFirebaseService: DebugFirebaseService,
     private trainingReportDebugService: TrainingReportDebugService,
+    private firestore: AngularFirestore,
     private cdr: ChangeDetectorRef
   ) {
     // Pre-calculate circumference once
@@ -391,6 +417,9 @@ export class EquipmentComponent implements OnInit {
     if (tab === 'quiz') {
       this.quizTabOpened = true;
     }
+    if (tab === 'form') {
+      void this.loadTrainingFormSavedRecords();
+    }
     this.cdr.markForCheck();
   }
 
@@ -398,8 +427,239 @@ export class EquipmentComponent implements OnInit {
     document.getElementById('warehouseTrainingPrintArea')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  downloadTrainingFormPdf(): void {
-    this.printWarehouseTrainingForm();
+  async downloadTrainingFormImage(): Promise<void> {
+    const el = document.getElementById('warehouseTrainingPrintArea');
+    if (!el) return;
+    this.isExportingTrainingForm = true;
+    this.cdr.markForCheck();
+    try {
+      const result = this.evaluateTrainingForm();
+      const blob = await this.buildTrainingFormImageBlob(el, result.pass);
+      const safeName = (this.warehouseTrainingForm.fullName || 'nhan-vien').replace(/\s+/g, '_');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bieu_Mau_Dao_Tao_Kho_${safeName}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Không tạo được file hình. Vui lòng thử lại.');
+    } finally {
+      this.isExportingTrainingForm = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private getJobTrainingPassCount(): number {
+    return this.warehouseTrainingForm.jobTraining.filter(i => i.pass).length;
+  }
+
+  private isJobTrainingComplete(): boolean {
+    return this.warehouseTrainingForm.jobTraining.every(i => i.pass || i.fail);
+  }
+
+  private evaluateTrainingForm(): { pass: boolean; text: string } {
+    const passCount = this.getJobTrainingPassCount();
+    const total = this.warehouseTrainingForm.jobTraining.length;
+    const commitmentsOk =
+      this.warehouseTrainingForm.trainingCommitment.guided &&
+      this.warehouseTrainingForm.trainingCommitment.safetyRules;
+    const pass = passCount >= this.minPassJobItems && commitmentsOk;
+    const text = `Đào tạo công việc: ${passCount}/${total} đạt — Cam kết: ${commitmentsOk ? 'Đủ' : 'Thiếu'} — ${pass ? 'Đạt' : 'Không đạt'}`;
+    return { pass, text };
+  }
+
+  private async withTrainingFormCaptureLayout<T>(pass: boolean, action: () => Promise<T>): Promise<T> {
+    this.captureTrainingFormStampLabel = pass ? 'ĐẠT' : 'KHÔNG ĐẠT';
+    this.captureTrainingFormStampPass = pass;
+    this.isCapturingTrainingForm = true;
+    this.cdr.detectChanges();
+    await new Promise(resolve => setTimeout(resolve, 80));
+    try {
+      return await action();
+    } finally {
+      this.isCapturingTrainingForm = false;
+      this.captureTrainingFormStampLabel = '';
+      this.captureTrainingFormStampPass = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async buildTrainingFormImageBlob(el: HTMLElement, pass: boolean): Promise<Blob> {
+    return await this.withTrainingFormCaptureLayout(pass, async () => {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+      return await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          blob => (blob ? resolve(blob) : reject(new Error('Không tạo được file hình'))),
+          'image/png'
+        );
+      });
+    });
+  }
+
+  private async buildTrainingFormImageDataUrlForSave(el: HTMLElement, pass: boolean): Promise<string> {
+    return await this.withTrainingFormCaptureLayout(pass, async () => {
+      const canvas = await html2canvas(el, {
+        scale: 1.25,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+      for (let quality = 0.85; quality >= 0.45; quality -= 0.05) {
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (dataUrl.length <= this.FIRESTORE_IMAGE_MAX_CHARS) return dataUrl;
+      }
+      throw new Error('Ảnh quá lớn để lưu Firebase. Vui lòng thử lại.');
+    });
+  }
+
+  private mapTrainingFormSavedDoc(id: string, data: any): WarehouseTrainingFormSavedRecord {
+    return {
+      id,
+      fullName: String(data.fullName || data.employeeName || ''),
+      employeeId: String(data.employeeId || ''),
+      resultText: String(data.resultText || ''),
+      imageDataUrl: data.imageDataUrl ? String(data.imageDataUrl) : undefined,
+      completedAt: data.completedAt || data.createdAt,
+      createdAt: data.createdAt
+    };
+  }
+
+  async loadTrainingFormSavedRecords(): Promise<void> {
+    this.isLoadingTrainingFormSaved = true;
+    this.cdr.markForCheck();
+    try {
+      const snap = await firstValueFrom(
+        this.firestore
+          .collection(this.TRAINING_FORM_RESULTS_COLLECTION, ref =>
+            ref.orderBy('completedAt', 'desc').limit(50)
+          )
+          .get()
+      );
+      this.trainingFormSavedRecords = snap.docs.map(doc =>
+        this.mapTrainingFormSavedDoc(doc.id, doc.data())
+      );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      this.isLoadingTrainingFormSaved = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  downloadTrainingFormSavedRecord(record: WarehouseTrainingFormSavedRecord): void {
+    try {
+      if (!record.imageDataUrl) {
+        alert('Không tìm thấy file hình trong bản ghi này.');
+        return;
+      }
+      const ext = record.imageDataUrl.startsWith('data:image/jpeg') ? 'jpg' : 'png';
+      const safeName = (record.fullName || 'nhan-vien').replace(/\s+/g, '_');
+      const a = document.createElement('a');
+      a.href = record.imageDataUrl;
+      a.download = `Bieu_Mau_Dao_Tao_Kho_${safeName}.${ext}`;
+      a.click();
+    } catch (e) {
+      console.error(e);
+      alert('Không tải được file hình. Vui lòng thử lại.');
+    }
+  }
+
+  async deleteTrainingFormSavedRecord(record: WarehouseTrainingFormSavedRecord): Promise<void> {
+    if (!record.id) return;
+    const label = record.fullName || record.employeeId || record.id;
+    if (!confirm(`Xóa biểu mẫu đã lưu?\n\n${label}`)) return;
+
+    this.deletingTrainingFormRecordId = record.id;
+    this.cdr.markForCheck();
+    try {
+      await this.firestore.collection(this.TRAINING_FORM_RESULTS_COLLECTION).doc(record.id).delete();
+      this.trainingFormSavedRecords = this.trainingFormSavedRecords.filter(r => r.id !== record.id);
+    } catch (e) {
+      console.error(e);
+      alert('Không xóa được bản ghi. Vui lòng thử lại.');
+    } finally {
+      this.deletingTrainingFormRecordId = '';
+      this.cdr.markForCheck();
+    }
+  }
+
+  formatTrainingFormSavedAt(record: WarehouseTrainingFormSavedRecord): string {
+    const ts = record.completedAt || record.createdAt;
+    if (!ts?.toDate) return '—';
+    return ts.toDate().toLocaleString('vi-VN', { hour12: false });
+  }
+
+  async completeTrainingForm(): Promise<void> {
+    const el = document.getElementById('warehouseTrainingPrintArea');
+    if (!el) return;
+
+    if (!this.isJobTrainingComplete()) {
+      alert('Vui lòng đánh dấu Đạt/Chưa đạt cho tất cả mục đào tạo công việc.');
+      return;
+    }
+    if (
+      !this.warehouseTrainingForm.trainingCommitment.guided ||
+      !this.warehouseTrainingForm.trainingCommitment.safetyRules
+    ) {
+      alert('Vui lòng tick đủ 2 cam kết trong Box đào tạo.');
+      return;
+    }
+    if (!this.workerSignature) {
+      alert('Vui lòng ký tên Người lao động trước khi hoàn thành.');
+      return;
+    }
+
+    this.isExportingTrainingForm = true;
+    this.cdr.markForCheck();
+    try {
+      const result = this.evaluateTrainingForm();
+      const imageDataUrl = await this.buildTrainingFormImageDataUrlForSave(el, result.pass);
+
+      const employeeId = String(this.warehouseTrainingForm.employeeId || '').trim().slice(0, 40);
+      const fullName = String(this.warehouseTrainingForm.fullName || '').trim().slice(0, 120);
+      const resultText = String(result.text || '').trim().slice(0, 600);
+
+      const docRef = await this.firestore.collection(this.TRAINING_FORM_RESULTS_COLLECTION).add({
+        employeeId,
+        employeeName: fullName,
+        fullName,
+        department: String(this.warehouseTrainingForm.department || '').trim().slice(0, 80),
+        mentor: String(this.warehouseTrainingForm.mentor || '').trim().slice(0, 80),
+        trainingFrom: String(this.warehouseTrainingForm.trainingFrom || '').trim().slice(0, 40),
+        trainingTo: String(this.warehouseTrainingForm.trainingTo || '').trim().slice(0, 40),
+        resultText,
+        passed: result.pass,
+        signature: this.workerSignature,
+        imageDataUrl,
+        completedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      this.trainingFormSavedRecords = [
+        {
+          id: docRef.id,
+          fullName,
+          employeeId,
+          resultText,
+          imageDataUrl
+        },
+        ...this.trainingFormSavedRecords
+      ].slice(0, 50);
+
+      alert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
+    } catch (e: any) {
+      console.error(e);
+      alert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
+    } finally {
+      this.isExportingTrainingForm = false;
+      this.cdr.markForCheck();
+    }
   }
 
   logoSrc = '/assets/img/logo.png';

@@ -648,13 +648,14 @@
         <button type="button" class="eq-tool-btn eq-tool-btn--primary" (click)="printWarehouseTrainingForm()">
           <i class="material-icons">print</i> In mẫu
         </button>
-        <button type="button" class="eq-tool-btn" (click)="downloadTrainingFormPdf()">
-          <i class="material-icons">download</i> Tải xuống PDF
+        <button type="button" class="eq-tool-btn" [disabled]="isExportingTrainingForm" (click)="downloadTrainingFormImage()">
+          <i class="material-icons">download</i> {{ isExportingTrainingForm ? 'Đang tạo hình...' : 'Tải hình' }}
         </button>
       </div>
 
       <div class="eq-doc-viewport">
-        <div *ngIf="trainingTemplateTab === 'form'" id="warehouseTrainingPrintArea" class="eq-doc-paper">
+        <div *ngIf="trainingTemplateTab === 'form'">
+        <div id="warehouseTrainingPrintArea" class="eq-doc-paper" [class.eq-form-capture-mode]="isCapturingTrainingForm">
           <table class="pxk-doc-header">
             <tr>
               <td class="logo-cell"><img [src]="logoSrc" alt="AIRSPEED" /></td>
@@ -677,7 +678,20 @@
           <table class="eq-form-table">
             <thead><tr><th>Nội dung</th><th>Thông tin</th></tr></thead>
             <tbody>
-              <tr><td>Họ và tên</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.fullName" /></td></tr>
+              <tr><td>Họ và tên</td>
+                <td class="eq-name-cell">
+                  <div class="eq-name-with-stamp">
+                    <input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.fullName" />
+                    <div
+                      *ngIf="captureTrainingFormStampLabel"
+                      class="eq-pass-stamp"
+                      [class.eq-pass-stamp--pass]="captureTrainingFormStampPass"
+                      [class.eq-pass-stamp--fail]="!captureTrainingFormStampPass">
+                      {{ captureTrainingFormStampLabel }}
+                    </div>
+                  </div>
+                </td>
+              </tr>
               <tr><td>Mã nhân viên</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.employeeId" /></td></tr>
               <tr><td>Bộ phận</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.department" /></td></tr>
               <tr><td>Người hướng dẫn</td><td><input class="eq-line-input" [(ngModel)]="warehouseTrainingForm.mentor" /></td></tr>
@@ -737,7 +751,7 @@
           </div>
 
           <h3 class="eq-section-label">KÝ TÊN NGƯỜI LAO ĐỘNG</h3>
-          <p class="eq-sign-hint no-print">Ký tên trực tiếp trên màn hình (ký online).</p>
+          <p class="eq-sign-hint no-print eq-capture-hide-on-save">Ký tên trực tiếp trên màn hình (ký online).</p>
           <div class="eq-worker-sign-box">
             <canvas #workerSignCanvas class="eq-worker-sign-canvas" width="360" height="120"
               (mousedown)="startWorkerSign($event)"
@@ -747,9 +761,56 @@
               (touchstart)="startWorkerSign($event)"
               (touchmove)="moveWorkerSign($event)"
               (touchend)="endWorkerSign()"></canvas>
-            <button type="button" class="eq-sign-clear no-print" (click)="clearWorkerSignature()">Xóa chữ ký</button>
+            <button type="button" class="eq-sign-clear no-print eq-capture-hide-on-save" (click)="clearWorkerSignature()">Xóa chữ ký</button>
             <img *ngIf="workerSignature" class="eq-sign-print-img print-only" [src]="workerSignature" alt="Chữ ký NLĐ" />
           </div>
+
+          <div class="eq-form-complete-row no-print eq-capture-hide-on-save">
+            <button type="button" class="eq-tool-btn eq-tool-btn--primary eq-form-complete-btn" [disabled]="isExportingTrainingForm" (click)="completeTrainingForm()">
+              <i class="material-icons">task_alt</i> Hoàn thành
+            </button>
+            <p class="eq-form-complete-hint">Ký tên xong → bấm Hoàn thành để lưu lên Firebase.</p>
+          </div>
+        </div>
+
+        <div *ngIf="trainingTemplateTab === 'form'" class="eq-form-saved-panel no-print">
+          <div class="eq-form-saved-header">
+            <h3>Biểu mẫu đã lưu trên Firebase</h3>
+            <button type="button" class="eq-tool-btn" [disabled]="isLoadingTrainingFormSaved" (click)="loadTrainingFormSavedRecords()">
+              <i class="material-icons">refresh</i> {{ isLoadingTrainingFormSaved ? 'Đang tải...' : 'Làm mới danh sách' }}
+            </button>
+          </div>
+          <p class="eq-form-saved-hint">Sau khi bấm Hoàn thành, file hình được lưu tại đây — tải về khi cần.</p>
+          <div *ngIf="isLoadingTrainingFormSaved && !trainingFormSavedRecords.length" class="eq-form-saved-empty">Đang tải danh sách...</div>
+          <div *ngIf="!isLoadingTrainingFormSaved && !trainingFormSavedRecords.length" class="eq-form-saved-empty">Chưa có biểu mẫu nào được lưu.</div>
+          <table *ngIf="trainingFormSavedRecords.length" class="eq-form-saved-table">
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Họ tên</th>
+                <th>Mã NV</th>
+                <th>Kết quả</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of trainingFormSavedRecords">
+                <td>{{ formatTrainingFormSavedAt(row) }}</td>
+                <td>{{ row.fullName || '—' }}</td>
+                <td>{{ row.employeeId || '—' }}</td>
+                <td class="eq-form-saved-result">{{ row.resultText }}</td>
+                <td class="eq-form-saved-actions">
+                  <button type="button" class="eq-tool-btn eq-tool-btn--primary eq-tool-btn-sm" (click)="downloadTrainingFormSavedRecord(row)">
+                    <i class="material-icons">download</i> Tải
+                  </button>
+                  <button type="button" class="eq-tool-btn eq-tool-btn-danger eq-tool-btn-sm" [disabled]="deletingTrainingFormRecordId === row.id" (click)="deleteTrainingFormSavedRecord(row)">
+                    <i class="material-icons">delete</i> {{ deletingTrainingFormRecordId === row.id ? '...' : 'Xóa' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         </div>
 
         <div *ngIf="trainingTemplateTab === 'manual' && manualTabLoading" class="eq-manual-loading">

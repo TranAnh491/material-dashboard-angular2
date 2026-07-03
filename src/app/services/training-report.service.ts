@@ -38,7 +38,8 @@ export class TrainingReportService {
         { name: 'temperature-test-results', content: 'Kiểm tra kiến thức nhiệt độ và độ ẩm' },
         { name: 'materials-test-results', content: 'HƯỚNG DẪN XUẤT NHẬP KHO NGUYÊN VẬT LIỆU' },
         { name: 'finished-goods-test-results', content: 'HƯỚNG DẪN XUẤT NHẬP KHO THÀNH PHẨM' },
-        { name: 'warehouse-training-quiz-results', content: 'KIỂM TRA ĐÀO TẠO KHO' }
+        { name: 'warehouse-training-quiz-results', content: 'KIỂM TRA ĐÀO TẠO KHO' },
+        { name: 'warehouse-training-form-results', content: 'BIỂU MẪU ĐÀO TẠO NHÂN VIÊN KHO (Ngày Đầu)' }
       ];
 
       for (const { name: collectionName, content: defaultContent } of collections) {
@@ -129,7 +130,8 @@ export class TrainingReportService {
         'temperature-test-results',
         'materials-test-results', 
         'finished-goods-test-results',
-        'warehouse-training-quiz-results'
+        'warehouse-training-quiz-results',
+        'warehouse-training-form-results'
       ];
 
       const records: TrainingRecord[] = [];
@@ -160,6 +162,8 @@ export class TrainingReportService {
               trainingContent = data.sectionTitle
                 ? `KIỂM TRA ĐÀO TẠO KHO — ${data.sectionTitle}`
                 : 'KIỂM TRA ĐÀO TẠO KHO';
+            } else if (collectionName === 'warehouse-training-form-results') {
+              trainingContent = 'BIỂU MẪU ĐÀO TẠO NHÂN VIÊN KHO (Ngày Đầu)';
             }
 
             records.push({
@@ -196,7 +200,8 @@ export class TrainingReportService {
         'temperature-test-results',
         'materials-test-results', 
         'finished-goods-test-results',
-        'warehouse-training-quiz-results'
+        'warehouse-training-quiz-results',
+        'warehouse-training-form-results'
       ];
 
       let deletedCount = 0;
@@ -231,7 +236,8 @@ export class TrainingReportService {
         'temperature-test-results',
         'materials-test-results', 
         'finished-goods-test-results',
-        'warehouse-training-quiz-results'
+        'warehouse-training-quiz-results',
+        'warehouse-training-form-results'
       ];
 
       for (const collectionName of collections) {
@@ -260,7 +266,8 @@ export class TrainingReportService {
         'temperature-test-results',
         'materials-test-results', 
         'finished-goods-test-results',
-        'warehouse-training-quiz-results'
+        'warehouse-training-quiz-results',
+        'warehouse-training-form-results'
       ];
 
       for (const collectionName of collections) {
