@@ -359,6 +359,7 @@
             <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
             <th class="number-cell">Số Bịch</th>
             <th class="number-cell carton-col" title="Số thùng — In QR sẽ in thêm tem thùng (QTY = 0)">SỐ THÙNG</th>
+            <th class="storage-unit-col" title="Đơn vị lưu trữ pallet">DV LƯU TRỮ</th>
             <th class="number-cell">Bịch (QR)</th>
             <th class="supplier-cell">NHÀ CUNG CẤP</th>
             <th class="unitweight-cell">Số Bịch / Cuộn</th>
@@ -502,6 +503,18 @@
                      placeholder="0"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Đã nhận' : 'Số thùng — In QR: mỗi thùng một tem 57×32mm (QTY = 0, dán ngoài thùng)'">
+            </td>
+            <td class="storage-unit-col">
+              <button
+                type="button"
+                class="storage-unit-cell"
+                [class.storage-unit-cell--filled]="hasStorageUnit(material)"
+                [class.storage-unit-cell--empty]="!hasStorageUnit(material)"
+                [disabled]="hasStorageUnit(material)"
+                (click)="onStorageUnitCellClick(material)"
+                [title]="hasStorageUnit(material) ? 'Lô đã có DV Lưu trữ — sửa tại Danh mục DV Lưu trữ' : 'Chọn size pallet DV Lưu trữ'">
+                {{ hasStorageUnit(material) ? getStorageUnitLabel(material) : 'Chọn' }}
+              </button>
             </td>
             <td class="number-cell">
               <input type="text"
@@ -1296,6 +1309,10 @@
             <i class="material-icons">inventory</i>
             <span>Import DMVT</span>
           </button>
+          <button class="popup-action-btn" (click)="openDvLuuTruCatalog(); closeMorePopup()">
+            <i class="material-icons">inventory_2</i>
+            <span>Danh mục DV Lưu trữ</span>
+          </button>
           <button class="popup-action-btn" (click)="downloadInboundReport(); closeMorePopup()">
             <i class="material-icons">assessment</i>
             <span>Download Report</span>
@@ -1441,3 +1458,12 @@
     </div>
   </div>
 </div>
+
+<app-storage-unit-picker
+  [visible]="showStorageUnitPicker"
+  [batchNumber]="storageUnitPickerBatch"
+  [factory]="selectedFactory"
+  [saving]="isSavingStorageUnit"
+  (closed)="closeStorageUnitPicker()"
+  (confirmed)="onStorageUnitConfirmed($event)">
+</app-storage-unit-picker>

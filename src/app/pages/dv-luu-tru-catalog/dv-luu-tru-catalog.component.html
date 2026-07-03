@@ -1,0 +1,69 @@
+<div class="dv-catalog-page">
+  <div class="dv-catalog-header">
+    <div>
+      <h2>Danh mục DV Lưu trữ</h2>
+      <p>Quản lý size pallet theo lô hàng. Sửa tại đây — inbound chỉ hiển thị, không hỏi lại nếu lô đã có size.</p>
+    </div>
+    <div class="dv-catalog-header__actions">
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="goBackInbound()">
+        <i class="material-icons">arrow_back</i> Về Inbound
+      </button>
+      <button type="button" class="dv-btn dv-btn--primary" (click)="loadEntries()" [disabled]="isLoading">
+        <i class="material-icons">refresh</i> {{ isLoading ? 'Đang tải...' : 'Làm mới' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="dv-catalog-filters">
+    <label>
+      Factory
+      <select [(ngModel)]="factoryFilter" (change)="onFactoryFilterChange()">
+        <option value="ALL">Tất cả</option>
+        <option value="ASM1">ASM1</option>
+        <option value="ASM2">ASM2</option>
+      </select>
+    </label>
+    <label class="dv-search">
+      Tìm lô hàng
+      <input type="search" [(ngModel)]="searchText" (input)="onSearchChange()" placeholder="Nhập lô hàng hoặc size...">
+    </label>
+  </div>
+
+  <div class="dv-catalog-empty" *ngIf="!isLoading && !filteredEntries.length">Chưa có DV Lưu trữ nào.</div>
+  <div class="dv-catalog-loading" *ngIf="isLoading">Đang tải danh mục...</div>
+
+  <table class="dv-catalog-table" *ngIf="!isLoading && filteredEntries.length">
+    <thead>
+      <tr>
+        <th>Factory</th>
+        <th>Lô hàng</th>
+        <th>DV Lưu trữ</th>
+        <th>Tỷ lệ pallet</th>
+        <th>Cập nhật</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of filteredEntries">
+        <td>{{ row.factory }}</td>
+        <td>{{ row.batchNumber }}</td>
+        <td><span class="dv-size-badge">{{ row.size }}</span></td>
+        <td>{{ getSizeLabel(row.size) }}</td>
+        <td>{{ formatUpdatedAt(row) }}</td>
+        <td class="dv-actions">
+          <button type="button" class="dv-btn dv-btn--sm" (click)="openEdit(row)">Sửa size</button>
+          <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteEntry(row)">Xóa</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<app-storage-unit-picker
+  [visible]="showPicker"
+  [batchNumber]="editingEntry?.batchNumber || ''"
+  [factory]="editingEntry?.factory || ''"
+  [saving]="isSaving"
+  (closed)="closePicker()"
+  (confirmed)="onPickerConfirmed($event)">
+</app-storage-unit-picker>

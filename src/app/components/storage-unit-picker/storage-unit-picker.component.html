@@ -1,0 +1,113 @@
+<div class="su-modal-overlay" *ngIf="visible" (click)="close()">
+  <div class="su-modal" (click)="$event.stopPropagation()">
+    <div class="su-modal__header">
+      <div>
+        <h3>Chọn DV Lưu trữ</h3>
+        <p class="su-modal__subtitle" *ngIf="batchNumber">
+          Lô hàng: <strong>{{ batchNumber }}</strong>
+          <span *ngIf="factory"> · {{ factory }}</span>
+        </p>
+      </div>
+      <button type="button" class="su-modal__close" (click)="close()" [disabled]="saving">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="su-modal__body">
+      <div class="su-preview">
+        <div class="su-pallet-wrap" aria-label="Pallet 1m x 1m x 1m">
+          <svg class="su-pallet-svg" viewBox="0 0 160 156" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="suFillGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#7dd3fc"/>
+                <stop offset="100%" stop-color="#2563eb"/>
+              </linearGradient>
+              <linearGradient id="suFillCapGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#93c5fd"/>
+                <stop offset="100%" stop-color="#3b82f6"/>
+              </linearGradient>
+              <linearGradient id="suEmptyGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="100%" stop-color="#f1f5f9"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Chân pallet -->
+            <g class="su-pallet-base">
+              <rect x="30" y="136" width="96" height="5" rx="1" fill="#d4a574" stroke="#a16207" stroke-width="1"/>
+              <line x1="38" y1="136" x2="38" y2="146" stroke="#a16207" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="58" y1="136" x2="58" y2="146" stroke="#a16207" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="78" y1="136" x2="78" y2="146" stroke="#a16207" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="98" y1="136" x2="98" y2="146" stroke="#a16207" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="118" y1="136" x2="118" y2="146" stroke="#a16207" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="30" y1="146" x2="126" y2="146" stroke="#a16207" stroke-width="2.5" stroke-linecap="round"/>
+            </g>
+
+            <!-- Khối rỗng 1m³ (luôn hiển thị đủ) -->
+            <polygon class="su-empty su-empty--right"
+              [attr.points]="pointsToAttr([cubeBottom.sw, cubeBottom.se, cubeTop.se, cubeTop.sw])"
+              fill="url(#suEmptyGrad)" stroke="#94a3b8" stroke-width="1.5" stroke-linejoin="round"/>
+            <polygon class="su-empty su-empty--left"
+              [attr.points]="pointsToAttr([cubeTop.nw, cubeTop.sw, cubeBottom.sw, cubeBottom.nw])"
+              fill="url(#suEmptyGrad)" stroke="#94a3b8" stroke-width="1.5" stroke-linejoin="round"/>
+            <polygon class="su-empty su-empty--top"
+              [attr.points]="pointsToAttr([cubeTop.nw, cubeTop.ne, cubeTop.se, cubeTop.sw])"
+              fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-linejoin="round"/>
+
+            <!-- Hàng lấp từ đáy lên theo size -->
+            <polygon class="su-fill su-fill--right"
+              *ngIf="preview.fraction > 0"
+              [attr.points]="getRightFillPoints(preview.fraction)"
+              fill="url(#suFillGrad)"/>
+            <polygon class="su-fill su-fill--left"
+              *ngIf="preview.fraction > 0"
+              [attr.points]="getLeftFillPoints(preview.fraction)"
+              fill="url(#suFillGrad)"/>
+            <polygon class="su-fill su-fill--cap"
+              *ngIf="showFillCap(preview.fraction)"
+              [attr.points]="getFillCapPoints(preview.fraction)"
+              fill="url(#suFillCapGrad)" stroke="#1d4ed8" stroke-width="0.5" opacity="0.95"/>
+
+            <!-- Viền khối -->
+            <g class="su-wireframe" fill="none" stroke="#475569" stroke-width="1.8" stroke-linejoin="round">
+              <polygon [attr.points]="pointsToAttr([cubeTop.nw, cubeTop.ne, cubeTop.se, cubeTop.sw])"/>
+              <line [attr.x1]="cubeBottom.nw.x" [attr.y1]="cubeBottom.nw.y" [attr.x2]="cubeTop.nw.x" [attr.y2]="cubeTop.nw.y"/>
+              <line [attr.x1]="cubeBottom.sw.x" [attr.y1]="cubeBottom.sw.y" [attr.x2]="cubeTop.sw.x" [attr.y2]="cubeTop.sw.y"/>
+              <line [attr.x1]="cubeBottom.se.x" [attr.y1]="cubeBottom.se.y" [attr.x2]="cubeTop.se.x" [attr.y2]="cubeTop.se.y"/>
+              <line [attr.x1]="cubeBottom.ne.x" [attr.y1]="cubeBottom.ne.y" [attr.x2]="cubeTop.ne.x" [attr.y2]="cubeTop.ne.y"/>
+              <polyline [attr.points]="pointsToAttr([cubeBottom.nw, cubeBottom.sw, cubeBottom.se])"/>
+            </g>
+          </svg>
+          <div class="su-pallet__label">1m × 1m × 1m</div>
+        </div>
+
+        <div class="su-preview__info">
+          <div class="su-preview__size">{{ preview.label }}</div>
+          <div class="su-preview__fraction">{{ preview.fractionLabel }} pallet</div>
+          <div class="su-preview__desc">{{ preview.description }}</div>
+        </div>
+      </div>
+
+      <div class="su-size-grid">
+        <button
+          type="button"
+          class="su-size-btn"
+          *ngFor="let option of options"
+          [class.is-active]="selected === option.size"
+          (mouseenter)="onHover(option)"
+          (focus)="onHover(option)"
+          (click)="onSelect(option)">
+          <span class="su-size-btn__label">{{ option.label }}</span>
+          <span class="su-size-btn__fraction">{{ option.fractionLabel }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="su-modal__footer">
+      <button type="button" class="su-btn su-btn--ghost" (click)="close()" [disabled]="saving">Hủy</button>
+      <button type="button" class="su-btn su-btn--primary" (click)="confirm()" [disabled]="!selected || saving">
+        {{ saving ? 'Đang lưu...' : 'Xác nhận' }}
+      </button>
+    </div>
+  </div>
+</div>

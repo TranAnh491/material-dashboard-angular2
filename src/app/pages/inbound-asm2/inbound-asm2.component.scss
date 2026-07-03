@@ -1417,6 +1417,40 @@ iframe {
       text-align: center;
     }
   }
+
+  .storage-unit-col {
+    min-width: 78px;
+    width: 82px;
+    text-align: center;
+  }
+
+  .storage-unit-cell {
+    width: 100%;
+    min-height: 30px;
+    border-radius: 6px;
+    border: 1px dashed #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 700;
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+
+  .storage-unit-cell--filled {
+    border-style: solid;
+    border-color: #bfdbfe;
+    background: #dbeafe;
+    cursor: default;
+  }
+
+  .storage-unit-cell--empty:hover:not(:disabled) {
+    background: #dbeafe;
+  }
+
+  .storage-unit-cell:disabled {
+    opacity: 1;
+  }
   
   .action-cell {
     min-width: 60px;

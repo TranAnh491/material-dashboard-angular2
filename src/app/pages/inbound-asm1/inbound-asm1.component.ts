@@ -10,6 +10,8 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService, InboundBagScanSummary } from '../../services/rm-bag-history.service';
 import { InboundTbhdCheckService, INBOUND_TBHD_CHECK_FROM_DATE } from '../../services/inbound-tbhd-check.service';
+import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
+import { StorageUnitSize } from '../../models/storage-unit.model';
 
 type TbhdCheckBatchRow = {
   batchNumber: string;
@@ -54,6 +56,8 @@ export interface InboundMaterial {
   linkedInventoryDocId?: string;
   /** Số thùng — In QR in thêm N tem 57×32mm (QTY=0, Mã/PO/IMD/THÙNG i/N) */
   cartonCount?: number;
+  /** DV Lưu trữ: XS | S | M | L | XL */
+  storageUnitSize?: StorageUnitSize | '';
   createdAt?: Date;
   updatedAt?: Date;
   
@@ -229,6 +233,11 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   tbhdAcknowledgedBatches = new Set<string>();
   readonly tbhdCheckFromDateLabel = '15/06/2026';
 
+  showStorageUnitPicker = false;
+  storageUnitPickerBatch = '';
+  isSavingStorageUnit = false;
+  private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -236,6 +245,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     private ngZone: NgZone,
     private rmBagHistory: RmBagHistoryService,
     private inboundTbhdCheck: InboundTbhdCheckService,
+    private dvLuuTruCatalog: DvLuuTruCatalogService,
     private router: Router
   ) {}
 
@@ -544,6 +554,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
               ? data.scannedBagKeys.map((x: unknown) => String(x))
               : [],
             cartonCount: Math.max(0, Math.floor(Number(data.cartonCount ?? 0))),
+            storageUnitSize: (data.storageUnitSize || '') as StorageUnitSize | '',
             preScanInventoryPending: !!data.preScanInventoryPending,
             linkedInventoryDocId: data.linkedInventoryDocId || undefined,
             createdAt: data.createdAt?.toDate?.() || data.createdDate?.toDate?.() || new Date(),
@@ -602,6 +613,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
         
         this.applyFilters();
         this.isLoading = false;
+        void this.applyStorageUnitsFromCatalog();
         
         console.log(`✅ Final filtered materials: ${this.filteredMaterials.length}`);
       })
@@ -1384,6 +1396,79 @@ export class InboundASM1Component implements OnInit, OnDestroy {
 
   openMorePopup(): void {
     this.showMorePopup = true;
+  }
+
+  openDvLuuTruCatalog(): void {
+    this.router.navigate(['/dv-luu-tru-catalog'], { queryParams: { factory: this.selectedFactory } });
+  }
+
+  getStorageUnitLabel(material: InboundMaterial): string {
+    return material.storageUnitSize || this.storageUnitCatalogMap.get(material.batchNumber) || '';
+  }
+
+  hasStorageUnit(material: InboundMaterial): boolean {
+    return !!this.getStorageUnitLabel(material);
+  }
+
+  onStorageUnitCellClick(material: InboundMaterial): void {
+    if (this.hasStorageUnit(material)) return;
+    const batch = String(material.batchNumber || '').trim();
+    if (!batch) {
+      alert('Vui lòng nhập lô hàng trước khi chọn DV Lưu trữ.');
+      return;
+    }
+    this.storageUnitPickerBatch = batch;
+    this.showStorageUnitPicker = true;
+  }
+
+  closeStorageUnitPicker(): void {
+    if (this.isSavingStorageUnit) return;
+    this.showStorageUnitPicker = false;
+    this.storageUnitPickerBatch = '';
+  }
+
+  async onStorageUnitConfirmed(size: StorageUnitSize): Promise<void> {
+    const batchNumber = this.storageUnitPickerBatch;
+    if (!batchNumber) return;
+    this.isSavingStorageUnit = true;
+    try {
+      await this.dvLuuTruCatalog.saveEntry(this.selectedFactory, batchNumber, size);
+      const related = this.materials.filter(
+        m => m.batchNumber === batchNumber && m.factory === this.selectedFactory
+      );
+      const materialIds = related.map(m => m.id!).filter(Boolean);
+      await this.dvLuuTruCatalog.syncInboundMaterials(this.selectedFactory, batchNumber, size, materialIds);
+      this.storageUnitCatalogMap.set(batchNumber, size);
+      related.forEach(m => {
+        m.storageUnitSize = size;
+      });
+      this.applyFilters();
+      this.closeStorageUnitPicker();
+    } catch (e) {
+      console.error(e);
+      alert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
+    } finally {
+      this.isSavingStorageUnit = false;
+    }
+  }
+
+  private async applyStorageUnitsFromCatalog(): Promise<void> {
+    try {
+      const batches = [...new Set(this.materials.map(m => m.batchNumber).filter(Boolean))];
+      const map = await this.dvLuuTruCatalog.loadMapForBatches(this.selectedFactory, batches);
+      this.storageUnitCatalogMap = map;
+      let changed = false;
+      this.materials.forEach(m => {
+        const fromCatalog = map.get(m.batchNumber);
+        if (fromCatalog && m.storageUnitSize !== fromCatalog) {
+          m.storageUnitSize = fromCatalog;
+          changed = true;
+        }
+      });
+      if (changed) this.applyFilters();
+    } catch (e) {
+      console.error('Load DV Lưu trữ catalog error:', e);
+    }
   }
   
   closeMorePopup(): void {
@@ -2455,6 +2540,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
       remarks: material.remarks,
       bagBatch: material.bagBatch || '',
       cartonCount: Math.max(0, Math.floor(Number(material.cartonCount ?? 0))),
+      storageUnitSize: material.storageUnitSize || null,
       preScanInventoryPending: !!material.preScanInventoryPending,
       linkedInventoryDocId: material.linkedInventoryDocId || null,
       updatedAt: material.updatedAt

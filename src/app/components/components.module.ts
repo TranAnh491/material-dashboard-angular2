@@ -20,6 +20,7 @@ import { QRScannerModalComponent } from './qr-scanner-modal/qr-scanner-modal.com
 import { ScannerInputModalComponent } from './scanner-input-modal/scanner-input-modal.component';
 import { DeliveryScanFlowModalComponent } from './delivery-scan-flow-modal/delivery-scan-flow-modal.component';
 import { FactorySelectDialogComponent } from './factory-select-dialog/factory-select-dialog.component';
+import { StorageUnitPickerComponent } from './storage-unit-picker/storage-unit-picker.component';
 
 @NgModule({
   imports: [
@@ -44,7 +45,8 @@ import { FactorySelectDialogComponent } from './factory-select-dialog/factory-se
     QRScannerModalComponent,
     ScannerInputModalComponent,
     DeliveryScanFlowModalComponent,
-    FactorySelectDialogComponent
+    FactorySelectDialogComponent,
+    StorageUnitPickerComponent
   ],
   exports: [
     FooterComponent,
@@ -56,7 +58,8 @@ import { FactorySelectDialogComponent } from './factory-select-dialog/factory-se
     QRScannerModalComponent,
     ScannerInputModalComponent,
     DeliveryScanFlowModalComponent,
-    FactorySelectDialogComponent
+    FactorySelectDialogComponent,
+    StorageUnitPickerComponent
   ]
 })
 export class ComponentsModule { }
