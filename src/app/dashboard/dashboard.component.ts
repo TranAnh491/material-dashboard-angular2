@@ -824,52 +824,59 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Chỉ tải work order tạo trong N ngày gần nhất — Dashboard chỉ cần tuần/tháng hiện tại. */
+  private readonly DASHBOARD_WO_RECENT_DAYS = 50;
+
+  /**
+   * 🔧 FIX: Trước đây dùng .snapshotChanges() KHÔNG giới hạn trên toàn bộ collection work-orders,
+   * và hàm này được setInterval gọi lại mỗi 5 phút (this.refreshInterval) mà KHÔNG hủy listener cũ
+   * trước khi tạo listener mới → mỗi 5 phút chồng thêm 1 listener đọc toàn bộ work-orders, để lâu
+   * (màn hình luôn mở tab Dashboard) là hàng trăm listener chồng nhau. Đổi sang .get() (đọc 1 lần,
+   * tự kết thúc — không thể chồng) + giới hạn 50 ngày gần nhất theo createdDate.
+   */
   private async loadWorkOrdersFromFirebase() {
     try {
       // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
       const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
-      
+
       console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} (count by deliveryDate - Ngày Giao NVL)`);
-      
-      // Load work orders from database
-      this.firestore.collection('work-orders').snapshotChanges().subscribe((actions) => {
-        const workOrders = actions.map(a => {
-          const data = a.payload.doc.data() as any;
-          const id = a.payload.doc.id;
-          
-          const deliveryDate = this.parseFirestoreDate(data.deliveryDate);
-          const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
-          const createdDate = this.parseFirestoreDate(data.createdDate);
-          const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
-          
-          return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt };
-        });
-        
-        // Filter by factory only.
-        // Date counting (WO: Thứ 2–Thứ 7 tuần hiện tại / yesterday overdue) theo deliveryDate (Ngày Giao NVL).
-        this.workOrders = workOrders.filter(wo => {
-          const woFactory = wo.factory || 'ASM1';
-          const normalizedFactory = (woFactory || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
-          const normalizedTargets = factoryFilter.map(f => (f || '').toString().trim().toLowerCase().replace(/\s+/g, ' '));
-          return normalizedTargets.includes(normalizedFactory);
-        });
-        
-        this.filteredWorkOrders = [...this.workOrders];
-        
-        console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (all delivery dates)`);
-        console.log('Sample work orders:', this.workOrders.slice(0, 5).map(wo => ({
-          id: wo.id,
-          productCode: wo.productCode,
-          factory: wo.factory,
-          status: wo.status,
-          deliveryDate: wo.deliveryDate
-        })));
-        
-        // Update summaries after loading data
-        this.updateWorkOrderSummary();
-        this.updateWorkOrderStatus();
+
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - this.DASHBOARD_WO_RECENT_DAYS);
+
+      const snapshot = await this.firestore
+        .collection('work-orders', ref => ref.where('createdDate', '>=', cutoff).limit(3000))
+        .get()
+        .toPromise();
+
+      const workOrders = (snapshot?.docs || []).map(d => {
+        const data = d.data() as any;
+        const id = d.id;
+
+        const deliveryDate = this.parseFirestoreDate(data.deliveryDate);
+        const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
+        const createdDate = this.parseFirestoreDate(data.createdDate);
+        const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
+
+        return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt };
       });
-      
+
+      // Filter by factory only.
+      // Date counting (WO: Thứ 2–Thứ 7 tuần hiện tại / yesterday overdue) theo deliveryDate (Ngày Giao NVL).
+      this.workOrders = workOrders.filter(wo => {
+        const woFactory = wo.factory || 'ASM1';
+        const normalizedFactory = (woFactory || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+        const normalizedTargets = factoryFilter.map(f => (f || '').toString().trim().toLowerCase().replace(/\s+/g, ' '));
+        return normalizedTargets.includes(normalizedFactory);
+      });
+
+      this.filteredWorkOrders = [...this.workOrders];
+
+      console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (last ${this.DASHBOARD_WO_RECENT_DAYS} days)`);
+
+      // Update summaries after loading data
+      this.updateWorkOrderSummary();
+      this.updateWorkOrderStatus();
     } catch (error) {
       console.error('Error loading work orders from Firebase:', error);
     }
