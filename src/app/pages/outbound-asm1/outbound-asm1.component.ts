@@ -1350,27 +1350,36 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       this.errorMessage = '';
       console.log('📦 Loading all ASM1 outbound materials for TODAY (no LSX filter)...');
 
+      const start = this.startDate || todayIso;
+      const end = this.endDate || todayIso;
+      const startOfDay = new Date(`${start}T00:00:00`);
+      const endOfDay = new Date(`${end}T23:59:59.999`);
+
+      // 🔧 FIX: .get() (đọc 1 lần) thay vì .snapshotChanges() (listener sống) — tránh chồng
+      // listener mỗi lần loadMaterials() được gọi lại (sau mỗi lần scan/đổi filter/refresh).
+      // Lọc theo exportDate ngay trên Firestore thay vì tải hết rồi lọc ở client.
       this.firestore
         .collection('outbound-materials', (ref) =>
-          ref.where('factory', '==', 'ASM1').limit(10000)
+          ref.where('factory', '==', 'ASM1')
+             .where('exportDate', '>=', startOfDay)
+             .where('exportDate', '<=', endOfDay)
+             .limit(3000)
         )
-        .snapshotChanges()
+        .get()
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (snapshot) => {
-            const materialsAll = snapshot.map((doc) => this.mapOutboundDocToMaterial(doc));
-            const start = this.startDate || todayIso;
-            const end = this.endDate || todayIso;
+            const materialsAll = snapshot.docs.map((d: any) =>
+              this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })
+            );
 
-            this.materials = materialsAll
-              .filter((m) => m.exportDate && this.isDateWithinRange(m.exportDate, start, end))
-              .sort((a, b) => {
-                const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
-                if (updatedCompare !== 0) return updatedCompare;
-                const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
-                if (dateCompare !== 0) return dateCompare;
-                return b.createdAt.getTime() - a.createdAt.getTime();
-              });
+            this.materials = materialsAll.sort((a, b) => {
+              const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
+              if (updatedCompare !== 0) return updatedCompare;
+              const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
+              if (dateCompare !== 0) return dateCompare;
+              return b.createdAt.getTime() - a.createdAt.getTime();
+            });
 
             this.filteredMaterials = [...this.materials];
             this.updatePagination();
@@ -1401,16 +1410,20 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     
     // 🔧 MOBILE OPTIMIZATION: Chỉ load records của LSX được chọn
     // Bỏ orderBy để tránh cần composite index, sẽ sort ở client-side
-    this.firestore.collection('outbound-materials', ref => 
+    // 🔧 FIX: .get() thay vì .snapshotChanges() — tránh chồng listener khi loadMaterials()
+    // được gọi lại (sau mỗi lần scan/đổi filter/refresh không hủy subscription cũ).
+    this.firestore.collection('outbound-materials', ref =>
       ref.where('factory', '==', 'ASM1')
          .where('productionOrder', '==', this.selectedProductionOrder)
          .limit(100)
-    ).snapshotChanges()
+    ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
         // 🔧 TỐI ƯU HÓA: Xử lý batch thay vì từng record để tăng tốc độ
-        const materials = snapshot.map((doc) => this.mapOutboundDocToMaterial(doc));
+        const materials = snapshot.docs.map((d: any) =>
+          this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })
+        );
         
         console.log(`📦 Loaded ${materials.length} total materials from outbound-materials collection`);
         
@@ -1519,31 +1532,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     });
   }
   
-  // Load inventory materials để lấy số tồn kho chính xác
-  loadInventoryMaterials(): void {
-    console.log('📦 Loading ASM1 inventory materials for stock calculation with real-time listener...');
-    console.log(`🔍 Query: factory == '${this.selectedFactory}', limit: 5000`);
-    
-    this.firestore.collection('inventory-materials', ref => 
-      ref.where('factory', '==', this.selectedFactory)
-         .limit(5000) // Tăng limit để lấy nhiều dữ liệu hơn
-    ).snapshotChanges()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (snapshot) => {
-        console.log(`📦 Raw snapshot from Firebase: ${snapshot.length} documents`);
-        
-        // REMOVED: inventoryMaterials loading - Không cần tính stock để scan nhanh
-      },
-      error: (error) => {
-        console.error('❌ Error loading inventory materials:', error);
-        console.log('⚠️ Will use fallback calculation method');
-      }
-    });
-  }
-  
 
-  
+
   updatePagination(): void {
     this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
     if (this.currentPage > this.totalPages) { this.currentPage = 1; }
