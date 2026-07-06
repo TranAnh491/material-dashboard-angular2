@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Subject, combineLatest } from 'rxjs';
-import { takeUntil, debounceTime } from 'rxjs/operators';
+import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import Chart from 'chart.js/auto';
@@ -301,12 +301,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const now = new Date();
     this.setDateRangeToMonth(now.getFullYear(), now.getMonth());
 
-    // Load dữ liệu - shipments + FG Check dùng realtime để luôn khớp (vd: shipment 5176)
+    // Load dữ liệu - FG Check dùng realtime để luôn khớp (vd: shipment 5176)
     this.loadShipmentsFromFirebase();
     this.loadCustomerMapping();
     this.loadFGInventoryCacheOnce();
     this.loadFGCheckStatus(); // Realtime: load và lắng nghe thay đổi từ fg-check
-    this.loadFgOutCartonCheckListener();
+    // fg-out carton check cache đã tự refresh sau mỗi lần applyFilters() (refreshFgOutCartonCheckCache)
     // applyFilters() sẽ được gọi tự động trong loadShipmentsFromFirebase
   }
 
@@ -316,38 +316,50 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.isPushing.clear();
   }
 
-  // Load shipments from Firebase
+  /** Chỉ tải shipment trong N ngày gần nhất — giảm số lượng đọc Firestore mỗi lần mở tab. */
+  private readonly SHIPMENT_RECENT_DAYS = 30;
+
+  private shipmentRecentCutoffDate(): Date {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - this.SHIPMENT_RECENT_DAYS);
+    return cutoff;
+  }
+
+  /** Map 1 document Firestore 'shipments' sang ShipmentItem — dùng chung cho load thường + export toàn bộ lịch sử. */
+  private mapShipmentDoc(id: string, data: any): ShipmentItem {
+    return {
+      id,
+      ...data,
+      push: data.push === 'true' || data.push === true || data.push === 1,
+      pushNo: data.pushNo || '000', // Default PushNo if not exists
+      inventory: data.inventory || 0, // Default inventory if not exists
+      packing: data.packing || 'Pallet', // Default packing if not exists
+      qtyPallet: data.qtyPallet || 0, // Default qtyPallet if not exists
+      hidden: data.hidden === true, // Load hidden status
+      importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : null,
+      vehicleNumber: data.vehicleNumber ? String(data.vehicleNumber).toUpperCase().trim() : '',
+      factory: data.factory || 'ASM1',
+      document: data.document || 'Đã có PX',
+      requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : null,
+      fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : null,
+      actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : null
+    };
+  }
+
+  // Load shipments from Firebase — chỉ 30 ngày gần nhất, đọc 1 lần (không dùng listener sống)
   loadShipmentsFromFirebase(): void {
-    this.firestore.collection('shipments')
-      .snapshotChanges()
+    this.firestore.collection('shipments', ref =>
+        ref.where('requestDate', '>=', this.shipmentRecentCutoffDate()).limit(5000)
+      )
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        const firebaseShipments = actions.map(action => {
-          const data = action.payload.doc.data() as any;
-          const id = action.payload.doc.id;
-          return {
-            id: id,
-            ...data,
-            push: data.push === 'true' || data.push === true || data.push === 1,
-            pushNo: data.pushNo || '000', // Default PushNo if not exists
-            inventory: data.inventory || 0, // Default inventory if not exists
-            packing: data.packing || 'Pallet', // Default packing if not exists
-            qtyPallet: data.qtyPallet || 0, // Default qtyPallet if not exists
-            hidden: data.hidden === true, // Load hidden status
-            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : null,
-            vehicleNumber: data.vehicleNumber ? String(data.vehicleNumber).toUpperCase().trim() : '',
-            factory: data.factory || 'ASM1',
-            document: data.document || 'Đã có PX',
-            requestDate: data.requestDate ? new Date(data.requestDate.seconds * 1000) : null,
-            fullDate: data.fullDate ? new Date(data.fullDate.seconds * 1000) : null,
-            actualShipDate: data.actualShipDate ? new Date(data.actualShipDate.seconds * 1000) : null
-          };
-        });
-        
+      .subscribe((snapshot) => {
+        const firebaseShipments = snapshot.docs.map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
+
         this.shipments = firebaseShipments;
         this.autoHideShippedOlderThanOneDay(firebaseShipments);
         this.applyFilters();
-        
+
         // Restore scroll position if needed
         if (this.shouldRestoreScroll) {
           this.ngZone.runOutsideAngular(() => {
@@ -384,16 +396,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Load danh mục mã khách (fg-customer-mapping) cho Shipment Order
+  // Load danh mục mã khách (fg-customer-mapping) cho Shipment Order — đọc 1 lần, danh mục ít đổi
   loadCustomerMapping(): void {
     this.firestore.collection('fg-customer-mapping')
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.customerMappingItems = actions.map(action => {
-          const data = action.payload.doc.data() as any;
+      .subscribe(snapshot => {
+        this.customerMappingItems = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: action.payload.doc.id,
+            id: doc.id,
             customerCode: (data.customerCode || '').toString().trim(),
             materialCode: (data.materialCode || '').toString().trim(),
             description: (data.description || '').toString().trim()
@@ -605,6 +617,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.importKhSaved = saved;
       this.importKhProgressPct = 100;
       this.importingKhCatalog = false;
+      // Không còn listener sống trên fg-customer-mapping nên load lại sau khi import xong.
+      this.loadCustomerMapping();
       this.cdr.detectChanges();
       alert(
         `✅ Đã lưu danh mục KH lên Firebase.\n` +
@@ -796,6 +810,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
 
     this.refreshFgOutCartonCheckCache();
+    void this.refreshFgCheckStatusForVisibleShipments();
   }
 
   /** Mã shipment đang hiển thị (giữ nguyên chuỗi gốc để query Firestore). */
@@ -806,17 +821,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       if (c) set.add(c);
     }
     return Array.from(set);
-  }
-
-  private loadFgOutCartonCheckListener(): void {
-    this.firestore.collection('fg-out')
-      .snapshotChanges()
-      .pipe(debounceTime(1200), takeUntil(this.destroy$))
-      .subscribe(() => {
-        if (this.filteredShipments.length) {
-          this.refreshFgOutCartonCheckCache();
-        }
-      });
   }
 
   private async refreshFgOutCartonCheckCache(): Promise<void> {
@@ -1110,14 +1114,21 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }));
   }
 
-  /** Tải Excel toàn bộ shipment đã load (mọi tháng, kể cả đã ẩn). */
-  downloadFullShipmentHistoryExcel(): void {
+  /**
+   * Tải Excel toàn bộ lịch sử shipment (mọi tháng, kể cả đã ẩn).
+   * Tab chỉ giữ 30 ngày gần nhất trong bộ nhớ (this.shipments) để giảm đọc Firestore,
+   * nên nút này tự query riêng toàn bộ collection khi bấm — không dùng this.shipments.
+   */
+  async downloadFullShipmentHistoryExcel(): Promise<void> {
     try {
-      if (!this.shipments.length) {
+      const snapshot = await this.firestore.collection('shipments').get().toPromise();
+      const all = (snapshot?.docs || []).map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
+
+      if (!all.length) {
         alert('Không có dữ liệu shipment.');
         return;
       }
-      const sorted = [...this.shipments].sort((a, b) => {
+      const sorted = all.sort((a, b) => {
         const ta = a.requestDate ? new Date(a.requestDate).getTime() : 0;
         const tb = b.requestDate ? new Date(b.requestDate).getTime() : 0;
         if (ta !== tb) return ta - tb;
@@ -1176,6 +1187,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     this.firestore.collection('shipments').add(shipmentData)
       .then((docRef) => {
+        // Không còn listener sống nên thêm ngay vào danh sách local (đã đọc 1 lần khi load).
+        this.shipments = [...this.shipments, { ...shipmentData, id: docRef.id } as ShipmentItem];
+        this.applyFilters();
         this.resetNewShipment();
         this.showAddShipmentDialog = false;
         alert('✅ Đã thêm shipment thành công!');
@@ -1187,29 +1201,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Load FG Check: cộng dồn số lượng + số thùng đã check theo shipmentCode + materialCode
-  /** Load một lần (dùng khi refresh). */
+  /** Load một lần (dùng khi refresh) — chỉ theo các shipment đang hiển thị. */
   loadFGCheckStatusOnce(): void {
-    this.firestore.collection('fg-check')
-      .get()
-      .toPromise()
-      .then((snapshot) => {
-        this.fgCheckScannedQty.clear();
-        this.fgCheckScannedCarton.clear();
-        if (snapshot) {
-          snapshot.forEach(doc => {
-            const data = doc.data() as any;
-            this.accumulateFGCheckDoc(data);
-          });
-        }
-        this.cdr.markForCheck();
-      })
-      .catch(error => {
-        console.error('Error loading FG Check status:', error);
-      });
+    void this.refreshFgCheckStatusForVisibleShipments();
   }
 
   /** Cộng dồn 1 doc fg-check vào Map; lưu loại check: nếu có bất kỳ doc nào là 'pn' (Thùng) thì key đó dùng Thùng. */
-  private accumulateFGCheckDoc(data: any): void {
+  private accumulateFGCheckDocInto(
+    data: any,
+    qtyMap: Map<string, number>,
+    cartonMap: Map<string, number>,
+    modeMap: Map<string, 'pn' | 'pn-qty'>
+  ): void {
     const shipmentCode = String(data.shipment ?? '').trim().toUpperCase();
     const materialCode = String(data.materialCode ?? '').trim().toUpperCase();
     const quantity = Number(data.quantity) || 0;
@@ -1217,39 +1220,62 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const docMode: 'pn' | 'pn-qty' = (data.checkMode === 'pn' || data.checkMode === 'pn-qty') ? data.checkMode : 'pn';
     if (!shipmentCode || !materialCode) return;
     const key = `${shipmentCode}|${materialCode}`;
-    this.fgCheckScannedQty.set(key, (this.fgCheckScannedQty.get(key) || 0) + quantity);
-    this.fgCheckScannedCarton.set(key, (this.fgCheckScannedCarton.get(key) || 0) + carton);
-    if (docMode === 'pn' || this.fgCheckModeByKey.get(key) === 'pn') {
-      this.fgCheckModeByKey.set(key, 'pn');
+    qtyMap.set(key, (qtyMap.get(key) || 0) + quantity);
+    cartonMap.set(key, (cartonMap.get(key) || 0) + carton);
+    if (docMode === 'pn' || modeMap.get(key) === 'pn') {
+      modeMap.set(key, 'pn');
     } else {
-      this.fgCheckModeByKey.set(key, 'pn-qty');
+      modeMap.set(key, 'pn-qty');
     }
   }
 
-  /** Realtime: mỗi lần fg-check thay đổi thì load lại toàn bộ và build map (đảm bảo đủ dữ liệu cho Lượng Ktra). */
+  /**
+   * 🔧 FIX: Trước đây dùng listener trên TOÀN BỘ collection fg-check — mỗi lần bất kỳ ai
+   * scan check (viết vào fg-check) là đọc lại cả collection để rebuild map, dù chỉ cần dữ liệu
+   * của các shipment đang hiển thị. Giờ chỉ load lần đầu (đảm bảo có dữ liệu ngay khi mở tab);
+   * các lần sau tự refresh theo shipment đang hiển thị (xem refreshFgCheckStatusForVisibleShipments,
+   * được gọi lại mỗi khi applyFilters() chạy — cùng lúc với refreshFgOutCartonCheckCache).
+   */
   loadFGCheckStatus(): void {
-    const rebuildMaps = () => {
-      this.firestore.collection('fg-check')
-        .get()
-        .toPromise()
-        .then((snapshot) => {
-          this.fgCheckScannedQty.clear();
-          this.fgCheckScannedCarton.clear();
-          this.fgCheckModeByKey.clear();
-          if (snapshot) {
-            snapshot.forEach(doc => {
-              this.accumulateFGCheckDoc(doc.data() as any);
-            });
-          }
-          this.cdr.detectChanges();
-        })
-        .catch(err => console.error('Error loading FG Check:', err));
-    };
-    rebuildMaps();
-    this.firestore.collection('fg-check')
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => rebuildMaps());
+    void this.refreshFgCheckStatusForVisibleShipments();
+  }
+
+  private fgCheckStatusRequestId = 0;
+
+  /** Load fg-check chỉ theo các shipment đang hiển thị (batch where('shipment','in',...) từng nhóm 10). */
+  private async refreshFgCheckStatusForVisibleShipments(): Promise<void> {
+    const requestId = ++this.fgCheckStatusRequestId;
+    const codes = this.getVisibleShipmentCodesForFgOutQuery();
+
+    const nextQty = new Map<string, number>();
+    const nextCarton = new Map<string, number>();
+    const nextMode = new Map<string, 'pn' | 'pn-qty'>();
+
+    if (codes.length) {
+      try {
+        for (let i = 0; i < codes.length; i += 10) {
+          const batch = codes.slice(i, i + 10);
+          const snap = await this.firestore.collection('fg-check', ref =>
+            ref.where('shipment', 'in', batch)
+          ).get().toPromise();
+
+          if (requestId !== this.fgCheckStatusRequestId) return;
+
+          snap?.docs.forEach(doc => {
+            this.accumulateFGCheckDocInto(doc.data() as any, nextQty, nextCarton, nextMode);
+          });
+        }
+      } catch (err) {
+        console.error('Error loading FG Check:', err);
+        return;
+      }
+    }
+
+    if (requestId !== this.fgCheckStatusRequestId) return;
+    this.fgCheckScannedQty = nextQty;
+    this.fgCheckScannedCarton = nextCarton;
+    this.fgCheckModeByKey = nextMode;
+    this.cdr.detectChanges();
   }
 
   // Coi là đã check khi tổng lượng scan đủ (không so sánh đúng/sai nữa)
