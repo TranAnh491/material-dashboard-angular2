@@ -430,23 +430,6 @@
         </ng-container>
       </section>
 
-      <section class="loc-m-panel" *ngIf="mobileBottomTab === 'alert'">
-        <div class="loc-m-empty" *ngIf="!hasScannedMaterialForMobile">
-          <i class="material-icons">warning_amber</i>
-          <p>Scan mã hàng ở <strong>Theo mã hàng</strong> trước khi gửi cảnh báo.</p>
-        </div>
-        <ng-container *ngIf="hasScannedMaterialForMobile">
-          <div class="loc-m-material-card">
-            <div class="loc-m-material-code">{{ lastScannedMaterialForMobile?.materialCode }}</div>
-            <span class="loc-m-material-meta">PO: {{ lastScannedMaterialForMobile?.poNumber || '—' }}</span>
-          </div>
-          <button type="button" class="loc-m-alert-btn" (click)="submitWrongLocationAlert()" [disabled]="isSubmittingLocationAlert">
-            <i class="material-icons">report_problem</i>
-            {{ isSubmittingLocationAlert ? 'Đang gửi...' : 'Cảnh báo sai vị trí' }}
-          </button>
-          <p class="loc-m-alert-hint">Gửi thông báo Zalo tới <strong>ASP0106</strong>.</p>
-        </ng-container>
-      </section>
     </div>
 
     <nav class="loc-m-bottomnav">
@@ -455,9 +438,6 @@
       </button>
       <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'history'" (click)="setMobileBottomTab('history')">
         <i class="material-icons">history</i><span>History</span>
-      </button>
-      <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'alert'" (click)="setMobileBottomTab('alert')">
-        <i class="material-icons">warning_amber</i><span>Alert</span>
       </button>
       <button type="button" class="loc-m-bottomnav__btn loc-m-bottomnav__btn--menu" (click)="goMobileMenu()">
         <i class="material-icons">home</i><span>Menu</span>

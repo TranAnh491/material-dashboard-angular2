@@ -13,7 +13,7 @@ import { QRScannerService, QRScanResult } from '../../services/qr-scanner.servic
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, where, limit, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, where, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
@@ -126,8 +126,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   searchTerm: string = '';
   statusFilter: WorkOrderStatus | 'all' = 'all';
   doneFilter: 'notCompleted' | 'completed' = 'notCompleted'; // Default: show not completed
-  yearFilter: number = new Date().getFullYear();
-  monthFilter: number = new Date().getMonth() + 1;
 
   currentPage = 1;
   totalPages = 1;
@@ -319,8 +317,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     console.log('🚀 WorkOrderStatusComponent initialized');
     console.log('📅 Initial filters:', {
-      year: this.yearFilter,
-      month: this.monthFilter,
       status: this.statusFilter
     });
     
@@ -630,15 +626,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
-    
-    
-    // Auto-adjust filters if no data is shown but data exists
-    if (this.filteredWorkOrders.length === 0 && this.workOrders.length > 0) {
-      console.log('⚠️ No work orders match current filters, but data exists. Checking if we should adjust filters...');
-      this.handleEmptyFilterResults();
-    }
   }
-  
+
   private async fetchWorkOrdersForCurrentFilters(): Promise<WorkOrder[]> {
     try {
       return await this.fetchWorkOrdersWithFirebaseV9();
@@ -648,19 +637,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Tải theo Năm/Tháng; lọc nhà máy ở client (tránh lệch SAMPLE 2 vs Sample 2 trên Firestore). */
-  private readonly woFetchLimit = 3500;
+  /** Chỉ tải work order tạo trong N ngày gần nhất — giảm số lượng đọc Firestore mỗi lần mở tab. */
+  private readonly WO_RECENT_DAYS = 50;
 
-  private woYearMonthValue(v: unknown): number {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  private woMatchesYearMonth(wo: WorkOrder): boolean {
-    return (
-      this.woYearMonthValue(wo.year) === this.woYearMonthValue(this.yearFilter) &&
-      this.woYearMonthValue(wo.month) === this.woYearMonthValue(this.monthFilter)
-    );
+  private woRecentCutoffDate(): Date {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - this.WO_RECENT_DAYS);
+    return cutoff;
   }
 
   private async fetchWorkOrdersWithFirebaseV9(): Promise<WorkOrder[]> {
@@ -668,9 +651,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const db = getFirestore(app);
     const q = query(
       collection(db, 'work-orders'),
-      where('year', '==', this.yearFilter),
-      where('month', '==', this.monthFilter),
-      limit(this.woFetchLimit)
+      where('createdDate', '>=', this.woRecentCutoffDate())
     );
     const querySnapshot = await getDocs(q);
     const workOrders: WorkOrder[] = [];
@@ -683,10 +664,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private async fetchWorkOrdersWithCompatGet(): Promise<WorkOrder[]> {
     const snap = await firstValueFrom(
       this.firestore.collection('work-orders', (ref) =>
-        ref
-          .where('year', '==', this.yearFilter)
-          .where('month', '==', this.monthFilter)
-          .limit(this.woFetchLimit)
+        ref.where('createdDate', '>=', this.woRecentCutoffDate())
       ).get()
     );
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as WorkOrder) }));
@@ -814,12 +792,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         wo.productionOrder.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         wo.customer.toLowerCase().includes(this.searchTerm.toLowerCase());
       
-      const matchesYear = this.woYearMonthValue(wo.year) === this.woYearMonthValue(this.yearFilter);
-      const matchesMonth = this.woYearMonthValue(wo.month) === this.woYearMonthValue(this.monthFilter);
       const matchesStatus = this.statusFilter === 'all' || wo.status === this.statusFilter;
-      
+
       const matchesFactory = this.woMatchesSelectedFactory(wo);
-      
+
       // Apply done filter
       let matchesDoneFilter = true;
       if (this.doneFilter === 'notCompleted') {
@@ -827,8 +803,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       } else if (this.doneFilter === 'completed') {
         matchesDoneFilter = wo.isCompleted;
       }
-      
-      return matchesSearch && matchesStatus && matchesYear && matchesMonth && matchesFactory && matchesDoneFilter;
+
+      return matchesSearch && matchesStatus && matchesFactory && matchesDoneFilter;
     });
     
     
@@ -1053,7 +1029,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
 
       const woFallbackSnap = await firstValueFrom(
-        this.firestore.collection('work-orders', (ref) => ref.limit(5000)).get()
+        this.firestore
+          .collection('work-orders', (ref) => ref.where('createdDate', '>=', this.woRecentCutoffDate()))
+          .get()
       );
       woFallbackSnap.docs.forEach((docSnap: any) => {
         const d = docSnap.data() as WorkOrder;
@@ -1173,16 +1151,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
-  }
-
-  onYearFilterChange(): void {
-    this.clearSelection();
-    this.loadWorkOrders(); // Reload từ Firebase theo Năm+Tháng mới
-  }
-
-  onMonthFilterChange(): void {
-    this.clearSelection();
-    this.loadWorkOrders(); // Reload từ Firebase theo Năm+Tháng mới
   }
 
 
@@ -1628,15 +1596,13 @@ Please check the console for error details.`);
   }
 
   exportToCSV(): void {
-    // Filter by selected factory and current month/year
+    // Filter by selected factory (dữ liệu đã tải sẵn chỉ gồm ${this.WO_RECENT_DAYS} ngày gần nhất)
     const filteredData = this.workOrders.filter(
-      (wo) =>
-        this.woMatchesSelectedFactory(wo) &&
-        this.woMatchesYearMonth(wo)
+      (wo) => this.woMatchesSelectedFactory(wo)
     );
 
     if (filteredData.length === 0) {
-      alert(`❌ Không có dữ liệu nào cho nhà máy ${this.selectedFactory} trong tháng ${this.monthFilter}/${this.yearFilter}`);
+      alert(`❌ Không có dữ liệu nào cho nhà máy ${this.selectedFactory} trong ${this.WO_RECENT_DAYS} ngày gần nhất`);
       return;
     }
 
@@ -1671,11 +1637,12 @@ Please check the console for error details.`);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `work-orders-${this.selectedFactory}-${this.yearFilter}-${this.monthFilter}.csv`;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    a.download = `work-orders-${this.selectedFactory}-last${this.WO_RECENT_DAYS}days-${todayStr}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
 
-    console.log(`📊 Xuất ${filteredData.length} work orders của nhà máy ${this.selectedFactory} tháng ${this.monthFilter}/${this.yearFilter}`);
+    console.log(`📊 Xuất ${filteredData.length} work orders của nhà máy ${this.selectedFactory} (${this.WO_RECENT_DAYS} ngày gần nhất)`);
   }
 
   // Excel Import Functionality
@@ -2686,10 +2653,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       // Check for duplicates within the import batch itself
       const batchDuplicates: string[] = [];
       const seenInBatch = new Set<string>();
-      
+
       const duplicates: string[] = [];
       const invalidLsxFactory: string[] = []; // ASM2 dùng KZLSX (sai format)
       const validWorkOrders: WorkOrder[] = [];
+
+      // Tải 1 lần để tra chi tiết các LSX trùng (nếu có) — tránh gọi lại Firestore trong loop bên dưới.
+      const workOrdersForDupDetails = lsxCheck.existing.length > 0
+        ? await this.loadAllWorkOrdersFromFirebase()
+        : [];
 
       for (const workOrder of newWorkOrderData) {
         const lsx = workOrder.productionOrder?.trim();
@@ -2732,10 +2704,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         
         if (isExisting) {
           duplicates.push(lsx);
-          
+
           // Find the matching work order to show details
-          const allWorkOrders = await this.loadAllWorkOrdersFromFirebase();
-          const matchingWO = allWorkOrders.find(wo => 
+          const matchingWO = workOrdersForDupDetails.find(wo =>
             wo.productionOrder?.trim().toUpperCase() === normalizedLsx
           );
           
@@ -3150,53 +3121,6 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
-  private handleEmptyFilterResults(): void {
-    console.log('🔧 Analyzing filter mismatch...');
-    
-    // Find unique years and months in the data
-    const availableYears = [...new Set(this.workOrders.map(wo => wo.year))].sort();
-    const availableMonths = [...new Set(this.workOrders.map(wo => wo.month))].sort();
-    
-    console.log('📊 Available data:', {
-      years: availableYears,
-      months: availableMonths,
-      currentFilters: { year: this.yearFilter, month: this.monthFilter }
-    });
-    
-    // Check if current year exists in data
-    const yf = this.woYearMonthValue(this.yearFilter);
-    const mf = this.woYearMonthValue(this.monthFilter);
-    const hasCurrentYear = availableYears.some((y) => this.woYearMonthValue(y) === yf);
-    const hasCurrentMonth = this.workOrders.some(
-      (wo) => this.woYearMonthValue(wo.year) === yf && this.woYearMonthValue(wo.month) === mf
-    );
-    
-    if (!hasCurrentYear && availableYears.length > 0) {
-      console.log(`⚡ Auto-adjusting year filter from ${this.yearFilter} to ${availableYears[availableYears.length - 1]}`);
-      this.yearFilter = availableYears[availableYears.length - 1]; // Use most recent year
-    }
-    
-    if (!hasCurrentMonth && availableYears.includes(this.yearFilter)) {
-      const monthsInYear = [...new Set(this.workOrders.filter(wo => wo.year === this.yearFilter).map(wo => wo.month))].sort();
-      if (monthsInYear.length > 0) {
-        console.log(`⚡ Auto-adjusting month filter from ${this.monthFilter} to ${monthsInYear[monthsInYear.length - 1]}`);
-        this.monthFilter = monthsInYear[monthsInYear.length - 1]; // Use most recent month in year
-      }
-    }
-    
-    // Re-apply filters after adjustment
-    this.currentPage = 1;
-    this.applyFilters();
-    this.calculateSummary();
-    
-    if (this.filteredWorkOrders.length > 0) {
-      console.log('✅ Filters auto-adjusted successfully');
-      alert(`📅 Filters đã được tự động điều chỉnh để hiển thị dữ liệu:\n• Năm: ${this.yearFilter}\n• Tháng: ${this.monthFilter}\n\nHiển thị ${this.filteredWorkOrders.length} work orders.`);
-    } else {
-      console.log('❌ Still no data after filter adjustment');
-    }
-  }
-
   editWorkOrder(workOrder: WorkOrder): void {
     console.log('✏️ Editing work order:', workOrder);
     // For now, just log the action. You can implement edit functionality later
@@ -3510,21 +3434,26 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  /** Chỉ kiểm tra trùng LSX trong WO_RECENT_DAYS ngày gần nhất (giảm đọc Firestore). */
   private async loadAllWorkOrdersFromFirebase(): Promise<WorkOrder[]> {
-    console.log('🔄 Loading all work orders from Firebase for LSX check...');
-    
+    console.log(`🔄 Loading work orders (${this.WO_RECENT_DAYS} ngày gần nhất) from Firebase for LSX check...`);
+
     try {
       // Try Firebase v9 SDK first
       const app = this.getFirebaseV9App();
       const db = getFirestore(app);
-      const querySnapshot = await getDocs(collection(db, 'work-orders'));
-      
+      const q = query(
+        collection(db, 'work-orders'),
+        where('createdDate', '>=', this.woRecentCutoffDate())
+      );
+      const querySnapshot = await getDocs(q);
+
       const workOrders: WorkOrder[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data() as WorkOrder;
         workOrders.push({ id: doc.id, ...data });
       });
-      
+
       console.log(`✅ Loaded ${workOrders.length} work orders from Firebase for LSX check`);
       return workOrders;
     } catch (error) {

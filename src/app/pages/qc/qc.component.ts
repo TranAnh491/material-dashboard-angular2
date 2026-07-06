@@ -746,11 +746,13 @@ export class QCComponent implements OnInit, OnDestroy {
     
     console.log(`📦 Loading ${this.selectedFactory} inventory materials for QC...`);
     
-    // Thử query với orderBy trước, nếu lỗi thì query không có orderBy
+    // Chỉ load các mã CHƯA pass (giảm số doc tải + số lần update realtime).
+    // Không dùng orderBy('importDate') vì Firestore không cho kết hợp orderBy field khác
+    // với inequality filter (iqcStatus != 'PASS') — sắp xếp lại ở client sau khi map.
     try {
-      this.firestore.collection('inventory-materials', ref => 
+      this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
-           .orderBy('importDate', 'desc')
+           .where('iqcStatus', '!=', 'PASS')
            .limit(1000)
       ).snapshotChanges()
       .pipe(takeUntil(this.destroy$))
@@ -789,15 +791,17 @@ export class QCComponent implements OnInit, OnDestroy {
               updatedAt: data.updatedAt?.toDate() || new Date()
             } as InventoryMaterial;
           });
-          
+          // Sắp xếp ở client (không dùng orderBy Firestore do đã có inequality filter khác field)
+          this.materials.sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+
           console.log(`✅ Loaded ${this.materials.length} materials`);
           this.applyFilters();
           this.isLoading = false;
         },
         error: (error) => {
-          console.error('❌ Error loading materials with orderBy:', error);
-          // Thử query không có orderBy
-          console.log('⚠️ Retrying without orderBy...');
+          console.error('❌ Error loading materials with iqcStatus filter:', error);
+          // Thử query không có filter iqcStatus (fallback nếu thiếu index)
+          console.log('⚠️ Retrying without iqcStatus filter...');
           this.loadMaterialsWithoutOrderBy();
         }
       });
@@ -847,8 +851,8 @@ export class QCComponent implements OnInit, OnDestroy {
               createdAt: data.createdAt?.toDate() || new Date(),
               updatedAt: data.updatedAt?.toDate() || new Date()
           } as InventoryMaterial;
-        });
-        
+        }).filter(m => String(m.iqcStatus || '').trim().toUpperCase() !== 'PASS');
+
         // Sort manually by importDate
         this.materials.sort((a, b) => {
           const dateA = a.importDate?.getTime() || 0;
@@ -1676,12 +1680,6 @@ export class QCComponent implements OnInit, OnDestroy {
       oldIqcStatus === 'CHỜ KIỂM' &&
       this.isQcPriorityTerminalStatus(statusToUpdate);
 
-    // Zalo (ASM1): nếu mã đang bật ưu tiên (Pending QC hoặc Pending Confirm) và bị đổi trạng thái
-    const shouldNotifyPriorityStatusChangedZalo =
-      String(materialToUpdate.factory || this.selectedFactory).trim().toUpperCase() === 'ASM1' &&
-      (wasPendingQcPriority || wasPendingConfirmPriority) &&
-      oldIqcStatus !== String(statusToUpdate || '').trim();
-
     const shouldClearPendingConfirmPriority =
       wasPendingConfirmPriority && this.isQcPriorityTerminalStatus(statusToUpdate);
     const shouldClearPendingQcPriority =
@@ -1789,22 +1787,6 @@ export class QCComponent implements OnInit, OnDestroy {
         employeeIdToSave
       );
 
-      this.notifyQcPriorityStatusChangedZaloIfNeeded(
-        shouldNotifyPriorityStatusChangedZalo,
-        materialToUpdate,
-        oldIqcStatus,
-        statusToUpdate,
-        employeeIdToSave
-      );
-
-      this.createQcNgStorageReminderIfNeeded(
-        materialToUpdate,
-        oldIqcStatus,
-        statusToUpdate,
-        employeeIdToSave,
-        (this.ngErrorText || '').trim()
-      );
-
       // Refresh counts và recent materials sau khi update thành công (chạy background)
       setTimeout(() => {
         this.loadPendingQCCount();
@@ -1871,69 +1853,6 @@ export class QCComponent implements OnInit, OnDestroy {
     firstValueFrom(callable(payload))
       .then(() => console.log('📧 QC ưu tiên: đã gửi thông báo email'))
       .catch((e) => console.warn('📧 QC ưu tiên: gửi email thất bại', e));
-  }
-
-  /** Zalo cho ASP0609 khi mã ưu tiên (ASM1) đổi trạng thái — không chặn UI. */
-  private notifyQcPriorityStatusChangedZaloIfNeeded(
-    shouldNotify: boolean,
-    material: InventoryMaterial,
-    oldStatus: string,
-    newStatus: string,
-    checkedBy: string
-  ): void {
-    if (!shouldNotify) {
-      return;
-    }
-    const payload = {
-      materialCode: String(material.materialCode || '').slice(0, 120),
-      poNumber: String(material.poNumber || '').slice(0, 120),
-      imd: String(this.getDisplayIMD(material) || '').slice(0, 120),
-      location: String(material.location || '').slice(0, 120),
-      factory: String(material.factory || this.selectedFactory).slice(0, 40),
-      oldStatus: String(oldStatus || '').slice(0, 80),
-      newStatus: String(newStatus || '').slice(0, 80),
-      checkedBy: String(checkedBy || '').slice(0, 80)
-    };
-    const callable = this.fns.httpsCallable('sendQcPriorityStatusChangedZaloFn');
-    firstValueFrom(callable(payload))
-      .then(() => console.log('💬 QC ưu tiên: đã gửi thông báo Zalo'))
-      .catch((e) => console.warn('💬 QC ưu tiên: gửi Zalo thất bại', e));
-  }
-
-  /** Ghi nhắc cất NG → Zalo bot gửi nhóm kho (ASP0119) — không chặn UI. */
-  private createQcNgStorageReminderIfNeeded(
-    material: InventoryMaterial,
-    oldStatus: string,
-    newStatus: string,
-    checkedBy: string,
-    ngError: string
-  ): void {
-    if (newStatus !== 'NG' || oldStatus === 'NG') {
-      return;
-    }
-    const materialId = String(material.id || '').trim();
-    if (!materialId) {
-      return;
-    }
-    this.firestore
-      .collection('qc-ng-storage-reminders')
-      .add({
-        materialId,
-        factory: String(material.factory || this.selectedFactory).trim().toUpperCase(),
-        materialCode: String(material.materialCode || '').trim(),
-        poNumber: String(material.poNumber || '').trim(),
-        batchNumber: String(material.batchNumber || '').trim(),
-        imd: String(this.getDisplayIMD(material) || '').trim(),
-        location: String(material.location || '').trim(),
-        iqcNgError: String(ngError || '').trim(),
-        qcCheckedBy: String(checkedBy || '').trim(),
-        assigneeId: 'ASP0119',
-        detectedAt: new Date(),
-        lastNotifiedAt: null,
-        resolved: false
-      })
-      .then(() => console.log('📦 QC NG: đã tạo nhắc cất kho'))
-      .catch((e) => console.warn('📦 QC NG: tạo nhắc cất kho thất bại', e));
   }
 
   // Update local counts immediately (optimistic update)

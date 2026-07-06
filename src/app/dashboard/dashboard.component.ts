@@ -109,10 +109,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Putaway widget: tối đa 18 hàng/cột; vượt thì thêm cột ngang. */
   private readonly putawayMaxRowsPerColumn = 18;
 
-  /**
-   * Tóm tắt tháng hiện tại (Done/Tổng) — cùng nguồn với Cloud Function `notifyDashboardZaloWeekdays1130`
-   * (codebase `zalo`: `zalo/dashboard-digest.js` + `zalo/index.js`, 11:30 thứ 2–6 VN).
-   */
+  /** Tóm tắt tháng hiện tại (Done/Tổng). */
   workOrder = "...";
   shipment = "...";
   workOrderStatus: WorkOrderStatusRow[] = [];
@@ -215,24 +212,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.putawaySortByDay = 'desc';
     }
   }
-
-  // ── Cất NVL dialog ─────────────────────────────────────────────────────
-  showCatNvlDialog = false;
-  catNvlEmployees: { memberId: string; name: string; selected: boolean }[] = [];
-  catNvlEmployeesLoading = false;
-  catNvlSelectedMaterials: Set<string> = new Set();
-  /** true = user đã chọn mã tay, không auto-assign khi toggle nhân viên */
-  catNvlManualMode = false;
-  /** memberId → danh sách mã được phân công */
-  catNvlAssignments: Map<string, string[]> = new Map();
-  /** Mã hàng đã được gửi (load từ Firestore + cập nhật sau khi gửi) */
-  catNvlSentMaterials: Map<string, { sentAt: Date; sentTo: string[] }> = new Map();
-  catNvlSentLoading = false;
-  catNvlSubmitting = false;
-  catNvlSuccess = false;
-  catNvlError = '';
-  private readonly MATS_PER_EMPLOYEE = 5;
-  private readonly CAT_NVL_EXCLUDED_IDS = new Set(['ASP0121', 'ASP0609', 'ASP0054', 'ASP0061']);
 
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
@@ -2512,7 +2491,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.putawayTraMaterialsBySku = [];
     this.putawayFilterMode = 'all';
     this.putawaySortByDay = 'none';
-    this.showCatNvlDialog = false;
   }
 
   private parsePutawayInventoryDate(data: any): Date | null {
@@ -2788,224 +2766,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // lightness: ratio=1 → 78%, ratio→0 → 94%
     const l = Math.round(94 - ratio * 16);
     return `hsl(142, 72%, ${l}%)`;
-  }
-
-  // ── Cất NVL ──────────────────────────────────────────────────────────────
-
-  async openCatNvlDialog(): Promise<void> {
-    this.showCatNvlDialog = true;
-    this.catNvlSelectedMaterials = new Set();
-    this.catNvlAssignments = new Map();
-    this.catNvlManualMode = false;
-    this.catNvlSuccess = false;
-    this.catNvlError = '';
-    await Promise.all([this.loadCatNvlEmployees(), this.loadCatNvlSentStatus()]);
-  }
-
-  closeCatNvlDialog(): void {
-    this.showCatNvlDialog = false;
-    this.catNvlAssignments = new Map();
-    this.catNvlManualMode = false;
-    this.catNvlSuccess = false;
-    this.catNvlError = '';
-  }
-
-  private async loadCatNvlEmployees(): Promise<void> {
-    this.catNvlEmployeesLoading = true;
-    try {
-      const snap = await this.firestore.collection('zalo_links').get().toPromise();
-      const seen = new Set<string>();
-      this.catNvlEmployees = (snap?.docs || [])
-        .map(d => d.data() as any)
-        .filter(d => d.memberId
-          && !seen.has(d.memberId) && seen.add(d.memberId)
-          && !this.CAT_NVL_EXCLUDED_IDS.has(d.memberId))
-        .map(d => ({ memberId: d.memberId, name: d.name || d.memberId, selected: false }))
-        .sort((a, b) => a.memberId.localeCompare(b.memberId));
-    } catch (e) {
-      this.catNvlError = 'Không tải được danh sách nhân viên';
-    } finally {
-      this.catNvlEmployeesLoading = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  private async loadCatNvlSentStatus(): Promise<void> {
-    this.catNvlSentLoading = true;
-    try {
-      const factory = this.selectedFactory || 'ASM1';
-      const snap = await this.firestore.doc(`putaway-sent-status/${factory}`).get().toPromise();
-      const data: any = snap?.data() || {};
-      const sentMap = new Map<string, { sentAt: Date; sentTo: string[] }>();
-      for (const [code, val] of Object.entries(data.sent || {})) {
-        const v: any = val;
-        sentMap.set(code, {
-          sentAt: v.sentAt?.toDate ? v.sentAt.toDate() : new Date(v.sentAt || 0),
-          sentTo: Array.isArray(v.sentTo) ? v.sentTo : []
-        });
-      }
-      this.catNvlSentMaterials = sentMap;
-    } catch {
-      this.catNvlSentMaterials = new Map();
-    } finally {
-      this.catNvlSentLoading = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  toggleCatNvlEmployee(emp: { memberId: string; selected: boolean }): void {
-    emp.selected = !emp.selected;
-    if (this.catNvlManualMode) {
-      this.distributeManualMaterials();
-    } else {
-      this.autoAssignMaterials();
-    }
-    this.cdr.markForCheck();
-  }
-
-  /**
-   * Manual mode: phân bổ đều các mã đã chọn tay cho các nhân viên đang được chọn.
-   * Nếu không có nhân viên nào được chọn thì xóa assignments.
-   */
-  distributeManualMaterials(): void {
-    const selected = this.catNvlSelectedEmployees;
-    if (!selected.length || !this.catNvlSelectedMaterials.size) {
-      this.catNvlAssignments = new Map();
-      return;
-    }
-    const mats = Array.from(this.catNvlSelectedMaterials);
-    const assignments = new Map<string, string[]>();
-    selected.forEach(emp => assignments.set(emp.memberId, []));
-    mats.forEach((code, i) => {
-      const emp = selected[i % selected.length];
-      assignments.get(emp.memberId)!.push(code);
-    });
-    this.catNvlAssignments = assignments;
-  }
-
-  autoAssignMaterials(): void {
-    const selected = this.catNvlSelectedEmployees;
-    if (!selected.length) {
-      this.catNvlAssignments = new Map();
-      this.catNvlSelectedMaterials = new Set();
-      return;
-    }
-    const available = this.catNvlSortedRows
-      .filter(r => r.passCount > 0 && !this.catNvlSentMaterials.has(r.materialCode))
-      .map(r => r.materialCode)
-      .sort(() => Math.random() - 0.5);
-
-    const assignments = new Map<string, string[]>();
-    selected.forEach((emp, idx) => {
-      assignments.set(emp.memberId,
-        available.slice(idx * this.MATS_PER_EMPLOYEE, (idx + 1) * this.MATS_PER_EMPLOYEE));
-    });
-    this.catNvlAssignments = assignments;
-
-    const allAssigned = new Set<string>();
-    assignments.forEach(mats => mats.forEach(m => allAssigned.add(m)));
-    this.catNvlSelectedMaterials = allAssigned;
-  }
-
-  getMaterialAssignee(code: string): string | null {
-    for (const [empId, mats] of this.catNvlAssignments) {
-      if (mats.includes(code)) return empId;
-    }
-    return null;
-  }
-
-  toggleCatNvlMaterial(code: string): void {
-    if (this.catNvlSentMaterials.has(code)) return;
-    this.catNvlManualMode = true; // user chọn tay
-    if (this.catNvlSelectedMaterials.has(code)) {
-      this.catNvlSelectedMaterials.delete(code);
-    } else {
-      this.catNvlSelectedMaterials.add(code);
-    }
-    // Phân bổ lại mã đã chọn cho các nhân viên hiện tại
-    this.distributeManualMaterials();
-    this.cdr.markForCheck();
-  }
-
-  /** Danh sách mã hàng cho dialog Cất NVL: pass trước, chưa pass sau */
-  get catNvlSortedRows(): PutawayModalSkuRow[] {
-    return [...this.putawayModalDisplayRows].sort((a, b) => {
-      const aPass = a.passCount > 0 ? 0 : 1;
-      const bPass = b.passCount > 0 ? 0 : 1;
-      if (aPass !== bPass) return aPass - bPass;
-      if (b.passCount !== a.passCount) return b.passCount - a.passCount;
-      return a.materialCode.localeCompare(b.materialCode);
-    });
-  }
-
-  selectAllPassMaterials(): void {
-    this.catNvlManualMode = true;
-    this.putawayModalDisplayRows
-      .filter(r => r.passCount > 0 && !this.catNvlSentMaterials.has(r.materialCode))
-      .forEach(r => this.catNvlSelectedMaterials.add(r.materialCode));
-    this.distributeManualMaterials();
-  }
-
-  clearMaterialSelection(): void {
-    this.catNvlSelectedMaterials.clear();
-    this.catNvlAssignments = new Map();
-    this.catNvlManualMode = false;
-    // Nếu đang có nhân viên được chọn thì auto-assign lại
-    if (this.catNvlSelectedEmployees.length) {
-      this.autoAssignMaterials();
-    }
-  }
-
-  get catNvlSelectedEmployees() {
-    return this.catNvlEmployees.filter(e => e.selected);
-  }
-
-  async submitCatNvl(): Promise<void> {
-    if (!this.catNvlSelectedMaterials.size) return;
-    const factory = this.selectedFactory || 'ASM1';
-
-    this.catNvlSubmitting = true;
-    this.catNvlError = '';
-    try {
-      const nowDate = new Date();
-      const batch = this.firestore.firestore.batch();
-
-      // 1 doc per employee với mã của riêng họ
-      if (this.catNvlAssignments.size > 0) {
-        for (const [memberId, materials] of this.catNvlAssignments) {
-          if (!materials.length) continue;
-          const ref = this.firestore.collection('putaway-assignments').doc().ref;
-          batch.set(ref, { factory, memberIds: [memberId], materials, createdAt: nowDate });
-        }
-      } else {
-        const ref = this.firestore.collection('putaway-assignments').doc().ref;
-        batch.set(ref, {
-          factory,
-          memberIds: this.catNvlSelectedEmployees.map(e => e.memberId),
-          materials: Array.from(this.catNvlSelectedMaterials),
-          createdAt: nowDate
-        });
-      }
-      await batch.commit();
-
-      // Cập nhật sent-status
-      const sentUpdate: any = {};
-      const sentEmployees = this.catNvlSelectedEmployees.map(e => e.memberId);
-      for (const code of this.catNvlSelectedMaterials) {
-        sentUpdate[`sent.${code}`] = { sentAt: nowDate, sentTo: sentEmployees };
-        this.catNvlSentMaterials.set(code, { sentAt: nowDate, sentTo: sentEmployees });
-      }
-      await this.firestore
-        .doc(`putaway-sent-status/${factory}`)
-        .set(sentUpdate, { merge: true });
-
-      this.catNvlSuccess = true;
-    } catch (e: any) {
-      this.catNvlError = 'Lỗi gửi thông báo: ' + (e?.message || String(e));
-    } finally {
-      this.catNvlSubmitting = false;
-      this.cdr.markForCheck();
-    }
   }
 
   // Download IQC Materials Report

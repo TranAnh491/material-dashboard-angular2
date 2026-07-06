@@ -1,4 +1,13 @@
 <div class="stock-check-wrapper">
+  <!-- Tạm tắt tính năng Kiểm Kê — sẽ chỉnh sửa lại cách làm sau -->
+  <div class="stock-check-disabled-notice" *ngIf="stockCheckDisabled">
+    <i class="material-icons" style="font-size:48px;color:#9ca3af;">build_circle</i>
+    <h3>Kiểm Kê đang tạm ngưng</h3>
+    <p>Tính năng này đang được chỉnh sửa lại cách hoạt động. Vui lòng quay lại sau.</p>
+    <button type="button" class="btn-back-menu" (click)="goToMenu()">Về Menu</button>
+  </div>
+
+  <ng-container *ngIf="!stockCheckDisabled">
   <!-- Stock Check Interface -->
   <div class="stock-check-container" *ngIf="showEmployeeScanModal || currentEmployeeId || selectedFactory || showMobileFactoryModal">
     <!-- Top Bar — 3 dòng sticky, tối ưu nhà kho -->
@@ -1525,9 +1534,10 @@
     </div>
   </div>
 </div>
+</ng-container>
 
-<!-- Rack Modal — đặt ngoài stock-check-container -->
-<div class="rack-modal-global" *ngIf="showRackModal">
+<!-- Rack Modal — đặt ngoài stock-check-container (tạm tắt cùng Kiểm Kê) -->
+<div class="rack-modal-global" *ngIf="showRackModal && !stockCheckDisabled">
   <div class="rack-modal-content">
     <div class="rack-modal-header">
       <div class="header-left">
@@ -1593,7 +1603,7 @@
 </div>
 
 <!-- Rack Detail Modal -->
-<div class="rack-detail-modal-global" *ngIf="showRackDetailModal">
+<div class="rack-detail-modal-global" *ngIf="showRackDetailModal && !stockCheckDisabled">
   <div class="rack-detail-content">
     <div class="rack-detail-header">
       <div class="left">
@@ -1617,7 +1627,7 @@
 </div>
 
 <!-- Reset Modal — đặt ngoài stock-check-container để tránh transform/stacking context -->
-<div class="reset-modal-global" *ngIf="showResetModal">
+<div class="reset-modal-global" *ngIf="showResetModal && !stockCheckDisabled">
   <div class="modal-content">
     <div class="modal-header">
       <h3>
@@ -1665,7 +1675,7 @@
 </div>
 
 <!-- KHSX Dialog — đặt ngoài stock-check-container để tránh transform stacking context -->
-<div class="khsx-modal" *ngIf="showKhsxDialog && selectedFactory">
+<div class="khsx-modal" *ngIf="showKhsxDialog && selectedFactory && !stockCheckDisabled">
   <div class="modal-overlay" (click)="closeKhsxDialog()"></div>
   <div class="modal-content khsx-modal-content">
     <div class="modal-header">
@@ -1718,7 +1728,7 @@
 </div>
 
 <!-- Import backup lịch sử — tiến trình (trên modal Report) -->
-<div class="import-history-backup-overlay" *ngIf="showImportHistoryBackupProgressModal">
+<div class="import-history-backup-overlay" *ngIf="showImportHistoryBackupProgressModal && !stockCheckDisabled">
   <div class="import-history-backup-card">
     <h4>
       <i class="material-icons">cloud_upload</i>

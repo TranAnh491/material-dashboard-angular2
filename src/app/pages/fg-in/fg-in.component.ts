@@ -2590,34 +2590,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.displayCartonCount = Math.round(n);
     this.confirmReceiptData.cartonConfirmed = true;
     this.closeCartonVerifyDialog();
-    if (this.displayCartonCount !== this.systemCartonCount) {
-      void this.notifyCartonMismatchToZalo();
-    }
-  }
-
-  private async notifyCartonMismatchToZalo(): Promise<void> {
-    const material = this.selectedReceiptMaterial;
-    if (!material) return;
-    try {
-      const user = await this.afAuth.currentUser;
-      const employeeId = user
-        ? (user.email || user.uid || '').split('@')[0].toUpperCase()
-        : '';
-      await this.firestore.collection('fg-in-carton-mismatch').add({
-        factory: material.factory || this.selectedFactory || '',
-        materialCode: material.materialCode || '',
-        poNumber: material.poNumber || '',
-        lsx: material.lsx || '',
-        lot: material.lot || material.batchNumber || '',
-        quantity: material.quantity || 0,
-        systemCarton: this.systemCartonCount,
-        reportedCarton: this.displayCartonCount,
-        employeeId,
-        detectedAt: new Date()
-      });
-    } catch (e) {
-      console.error('fg-in carton mismatch notify failed:', e);
-    }
   }
 
   // Get pending materials (not yet locked)

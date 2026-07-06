@@ -2977,18 +2977,6 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         return;
       }
 
-      await this.firestore.collection('outbound-iqc-warnings').add({
-        factory,
-        materialCode,
-        poNumber,
-        importDate: importDate || '',
-        location,
-        employeeId: this.batchEmployeeId || '',
-        productionOrder: this.batchProductionOrder || '',
-        detectedAt: new Date(),
-        resolved: false
-      });
-
       const imdLabel = String(importDate || '').trim();
       this.showScanError(
         `⚠️ ${materialCode} (PO: ${poNumber}${imdLabel ? `, IMD: ${imdLabel}` : ''}) đang ở vị trí ${location} (IQC)!\nVui lòng đưa về vị trí kho trước khi xuất.`

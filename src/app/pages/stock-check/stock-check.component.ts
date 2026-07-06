@@ -136,6 +136,9 @@ interface ReportMonthOption {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StockCheckComponent implements OnInit, OnDestroy {
+  /** Tạm tắt tính năng Kiểm Kê — đang chỉnh sửa lại cách tải dữ liệu (giảm chi phí Firebase). */
+  readonly stockCheckDisabled = true;
+
   private destroy$ = new Subject<void>();
   private dataSubscription: any = null; // Track subscription để có thể unsubscribe
   private snapshotSubscription: any = null; // Track snapshot subscription để reload khi có thay đổi
@@ -2695,6 +2698,10 @@ export class StockCheckComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    if (this.stockCheckDisabled) {
+      // Tạm tắt: không load dữ liệu / mở listener Firestore nào.
+      return;
+    }
     this.lockKiemKe = localStorage.getItem('stockcheck_lockKiemKe') === '1';
     this.checkMobile();
     // Reset factory selection to show selection screen

@@ -5,8 +5,6 @@ import { Subject, BehaviorSubject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import { AngularFireFunctions } from '@angular/fire/compat/functions';
-import { firstValueFrom } from 'rxjs';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
@@ -1316,10 +1314,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Mobile shell (≤768px) */
   isMobile = false;
-  mobileBottomTab: 'location' | 'history' | 'alert' = 'location';
+  mobileBottomTab: 'location' | 'history' = 'location';
   private readonly locationMobileBodyClass = 'location-mobile-tab';
 
-  /** Mã hàng vừa scan (Theo mã hàng) — dùng cho tab History / Alert */
+  /** Mã hàng vừa scan (Theo mã hàng) — dùng cho tab History */
   lastScannedMaterialForMobile: {
     id: string;
     materialCode: string;
@@ -1330,17 +1328,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   locationHistoryRows: MaterialLocationHistoryRow[] = [];
   isLoadingLocationHistory = false;
-  isSubmittingLocationAlert = false;
 
   private readonly materialLocationHistoryCol = 'material-location-history';
-  private readonly materialLocationAlertsCol = 'material-location-alerts';
-  
+
   private destroy$ = new Subject<void>();
 
   constructor(
     private firestore: AngularFirestore,
     private auth: AngularFireAuth,
-    private fns: AngularFireFunctions,
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
     private locationAddUnlock: LocationAddUnlockService,
@@ -1434,7 +1429,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.router.navigate(['/menu']);
   }
 
-  setMobileBottomTab(tab: 'location' | 'history' | 'alert'): void {
+  setMobileBottomTab(tab: 'location' | 'history'): void {
     this.mobileBottomTab = tab;
     if (tab === 'history') {
       this.loadLocationHistoryForScannedMaterial();
@@ -1537,67 +1532,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!d || Number.isNaN(d.getTime())) return '—';
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
-  /** Zalo ASP0106 khi gửi cảnh báo sai vị trí — không chặn UI nếu Zalo lỗi. */
-  private notifyMaterialLocationAlertZalo(payload: {
-    factory: string;
-    materialCode: string;
-    poNumber: string;
-    reportedLocation: string;
-    reportedBy: string;
-    message: string;
-  }): void {
-    const callable = this.fns.httpsCallable('sendMaterialLocationAlertZaloFn');
-    firstValueFrom(callable(payload))
-      .then(() => console.log('💬 Location alert: đã gửi Zalo ASP0106'))
-      .catch((e) => console.warn('💬 Location alert: gửi Zalo thất bại', e));
-  }
-
-  async submitWrongLocationAlert(): Promise<void> {
-    const m = this.lastScannedMaterialForMobile;
-    if (!m) {
-      alert('⚠️ Vui lòng scan mã hàng (Theo mã hàng) trước khi gửi cảnh báo.');
-      return;
-    }
-    if (!this.selectedFactory) {
-      this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
-      return;
-    }
-    if (!confirm(`Gửi cảnh báo sai vị trí cho mã ${m.materialCode}?`)) {
-      return;
-    }
-    this.isSubmittingLocationAlert = true;
-    try {
-      const reportedBy = await this.resolveOperatorId();
-      await this.firestore.collection(this.materialLocationAlertsCol).add({
-        factory: this.selectedFactory,
-        materialId: m.id,
-        materialCode: m.materialCode,
-        poNumber: m.poNumber || '',
-        reportedLocation: m.location || '',
-        status: 'open',
-        message: 'Sai vị trí',
-        reportedBy,
-        reportedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      this.notifyMaterialLocationAlertZalo({
-        factory: this.selectedFactory,
-        materialCode: m.materialCode,
-        poNumber: m.poNumber || '',
-        reportedLocation: m.location || '',
-        reportedBy,
-        message: 'Sai vị trí'
-      });
-      alert('✅ Đã gửi cảnh báo. Thông báo Zalo đã gửi tới ASP0106.');
-    } catch (e) {
-      console.error('submitWrongLocationAlert', e);
-      alert('❌ Không gửi được cảnh báo. Vui lòng thử lại.');
-    } finally {
-      this.isSubmittingLocationAlert = false;
-      this.cdr.markForCheck();
-    }
   }
 
   private async checkPermissions() {

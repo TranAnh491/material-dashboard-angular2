@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.sendPutawayNotifyFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.sendWarehouseTrainingQuizPdfZaloFn = exports.sendQcPriorityStatusChangedZaloFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendMaterialLocationAlertZaloFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt20 = exports.notifyOutboundDuplicatesEvery5MinAfternoon = exports.notifyOutboundDuplicatesEvery5MinNoon = exports.notifyOutboundDuplicatesEvery5MinMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -58,36 +58,6 @@ exports.notifyOutboundDuplicatesAt17 = functions
     const { runOutboundDupNotifyForSlot } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
     await runOutboundDupNotifyForSlot(admin.firestore(), '17');
 });
-/**
- * Control Batch: chạy mỗi 5 phút theo khung giờ (T2–T7):
- * - 08:00–12:15
- * - 13:15–20:00
- * Nhóm đã gửi sẽ không gửi lại.
- */
-const runOutboundDupNotify5m = async () => {
-    const { runOutboundDupNotifyEvery30Min } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
-    await runOutboundDupNotifyEvery30Min(admin.firestore());
-};
-exports.notifyOutboundDuplicatesEvery5MinMorning = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .pubsub.schedule('*/5 8-11 * * 1-6')
-    .timeZone('Asia/Ho_Chi_Minh')
-    .onRun(runOutboundDupNotify5m);
-exports.notifyOutboundDuplicatesEvery5MinNoon = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .pubsub.schedule('0-15/5 12 * * 1-6')
-    .timeZone('Asia/Ho_Chi_Minh')
-    .onRun(runOutboundDupNotify5m);
-exports.notifyOutboundDuplicatesEvery5MinAfternoon = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .pubsub.schedule('*/5 13-19 * * 1-6')
-    .timeZone('Asia/Ho_Chi_Minh')
-    .onRun(runOutboundDupNotify5m);
-exports.notifyOutboundDuplicatesAt20 = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .pubsub.schedule('0 20 * * 1-6')
-    .timeZone('Asia/Ho_Chi_Minh')
-    .onRun(runOutboundDupNotify5m);
 /**
  * Nhiệt Độ: nhắc cập nhật biểu mẫu qua Zalo (T2–T7, không nhắc CN).
  * 8:55 / 9:25 / 9:55 và 14:55 / 15:25 / 15:55 — sau 2 lần nhắc → ASP0119, ASP1761, ASP0538.
@@ -188,39 +158,6 @@ exports.sendQcPriorityResolvedEmailFn = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
-    }
-});
-/** Location: cảnh báo sai vị trí NVL → nhắn Zalo cho ASP0106. */
-exports.sendMaterialLocationAlertZaloFn = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
-    }
-    const factory = typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 40) : '';
-    const materialCode = typeof (data === null || data === void 0 ? void 0 : data.materialCode) === 'string' ? data.materialCode.trim().slice(0, 120) : '';
-    const poNumber = typeof (data === null || data === void 0 ? void 0 : data.poNumber) === 'string' ? data.poNumber.trim().slice(0, 120) : '';
-    const reportedLocation = typeof (data === null || data === void 0 ? void 0 : data.reportedLocation) === 'string' ? data.reportedLocation.trim().slice(0, 120) : '';
-    const reportedBy = typeof (data === null || data === void 0 ? void 0 : data.reportedBy) === 'string' ? data.reportedBy.trim().slice(0, 80) : '';
-    const message = typeof (data === null || data === void 0 ? void 0 : data.message) === 'string' ? data.message.trim().slice(0, 200) : 'Sai vị trí';
-    if (!materialCode) {
-        throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode.');
-    }
-    try {
-        const { sendMaterialLocationAlertZalo } = await Promise.resolve().then(() => __importStar(require('./material-location-alert-zalo')));
-        await sendMaterialLocationAlertZalo(admin.firestore(), {
-            factory,
-            materialCode,
-            poNumber,
-            reportedLocation,
-            reportedBy,
-            message
-        });
-        return { ok: true };
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
     }
 });
 /** Materials ASM1/ASM2: gửi mã OTP 4 số qua Zalo để mở khóa cột Vị trí.
@@ -330,75 +267,6 @@ exports.verifyLocationAddOtpFn = functions
         throw new functions.https.HttpsError(msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có')
             ? 'failed-precondition'
             : 'internal', msg);
-    }
-});
-/** QC (ASM1): nếu mã đang bật ưu tiên và bị đổi trạng thái → nhắn Zalo cho ASP0609. */
-exports.sendQcPriorityStatusChangedZaloFn = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
-    }
-    const materialCode = typeof (data === null || data === void 0 ? void 0 : data.materialCode) === 'string' ? data.materialCode.trim().slice(0, 120) : '';
-    const poNumber = typeof (data === null || data === void 0 ? void 0 : data.poNumber) === 'string' ? data.poNumber.trim().slice(0, 120) : '';
-    const imd = typeof (data === null || data === void 0 ? void 0 : data.imd) === 'string' ? data.imd.trim().slice(0, 120) : '';
-    const location = typeof (data === null || data === void 0 ? void 0 : data.location) === 'string' ? data.location.trim().slice(0, 120) : '';
-    const factory = typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 40) : 'ASM1';
-    const oldStatus = typeof (data === null || data === void 0 ? void 0 : data.oldStatus) === 'string' ? data.oldStatus.trim().slice(0, 80) : '';
-    const newStatus = typeof (data === null || data === void 0 ? void 0 : data.newStatus) === 'string' ? data.newStatus.trim().slice(0, 80) : '';
-    const checkedBy = typeof (data === null || data === void 0 ? void 0 : data.checkedBy) === 'string' ? data.checkedBy.trim().slice(0, 80) : '';
-    if (!materialCode || !newStatus) {
-        throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode hoặc newStatus.');
-    }
-    if (factory.toUpperCase() !== 'ASM1') {
-        throw new functions.https.HttpsError('invalid-argument', 'Chỉ hỗ trợ factory ASM1.');
-    }
-    const payload = {
-        materialCode,
-        poNumber,
-        imd,
-        location,
-        factory,
-        oldStatus,
-        newStatus,
-        checkedBy
-    };
-    try {
-        const { sendQcPriorityStatusChangedZalo } = await Promise.resolve().then(() => __importStar(require('./qc-priority-zalo')));
-        await sendQcPriorityStatusChangedZalo(admin.firestore(), payload);
-        return { ok: true };
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
-    }
-});
-/** Equipment: hoàn thành bài kiểm tra kho → upload PDF + nhắn Zalo quản lý kho (ASP0119). */
-exports.sendWarehouseTrainingQuizPdfZaloFn = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
-    }
-    const pdfDataUrl = typeof (data === null || data === void 0 ? void 0 : data.pdfDataUrl) === 'string' ? data.pdfDataUrl : '';
-    if (!pdfDataUrl) {
-        throw new functions.https.HttpsError('invalid-argument', 'Thiếu pdfDataUrl.');
-    }
-    try {
-        const { sendWarehouseTrainingQuizPdfZalo } = await Promise.resolve().then(() => __importStar(require('./warehouse-training-quiz-zalo')));
-        const result = await sendWarehouseTrainingQuizPdfZalo(admin.firestore(), {
-            employeeId: typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId : '',
-            fullName: typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName : '',
-            joinDate: typeof (data === null || data === void 0 ? void 0 : data.joinDate) === 'string' ? data.joinDate : '',
-            resultText: typeof (data === null || data === void 0 ? void 0 : data.resultText) === 'string' ? data.resultText : '',
-            sectionId: typeof (data === null || data === void 0 ? void 0 : data.sectionId) === 'string' ? data.sectionId : '',
-            pdfDataUrl
-        });
-        return result;
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
     }
 });
 /** Equipment: hoàn thành bài kiểm tra kho → lưu file hình lên Storage + Firestore. */
@@ -842,42 +710,6 @@ exports.adminDeleteAuthUsersNotInSettingsFn = functions
             throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới được phép xóa.');
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
-    }
-});
-/** Putaway Staging Area: gửi thông báo Zalo cho danh sách nhân viên + mã hàng cần cất. */
-exports.sendPutawayNotifyFn = functions
-    .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
-    }
-    const factory = typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 40) : '';
-    const memberIds = Array.isArray(data === null || data === void 0 ? void 0 : data.memberIds)
-        ? data.memberIds
-            .map(m => (typeof m === 'string' ? m.trim().toUpperCase() : ''))
-            .filter(Boolean)
-            .slice(0, 20)
-        : [];
-    const materials = Array.isArray(data === null || data === void 0 ? void 0 : data.materials)
-        ? data.materials
-            .map(m => (typeof m === 'string' ? m.trim() : ''))
-            .filter(Boolean)
-            .slice(0, 100)
-        : [];
-    if (!memberIds.length) {
-        throw new functions.https.HttpsError('invalid-argument', 'Thiếu danh sách nhân viên.');
-    }
-    if (!materials.length) {
-        throw new functions.https.HttpsError('invalid-argument', 'Thiếu danh sách mã hàng.');
-    }
-    try {
-        const { sendPutawayNotifyZalo } = await Promise.resolve().then(() => __importStar(require('./putaway-notify-zalo')));
-        const r = await sendPutawayNotifyZalo(admin.firestore(), { factory, memberIds, materials });
-        return r;
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError('internal', msg);
     }
 });
 /**

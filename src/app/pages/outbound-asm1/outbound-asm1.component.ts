@@ -3501,8 +3501,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
   }
 
   /**
-   * Kiểm tra mã hàng đang ở vị trí IQC khi xuất kho.
-   * Nếu có → ghi vào outbound-iqc-warnings để Zalo bot nhắc nhở.
+   * Kiểm tra mã hàng đang ở vị trí IQC khi xuất kho — cảnh báo ngay cho nhân viên đang scan.
    */
   private async checkAndWarnIqcLocation(
     materialCode: string,
@@ -3520,18 +3519,6 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
       if (!location || !location.toUpperCase().startsWith('IQC')) {
         return;
       }
-
-      await this.firestore.collection('outbound-iqc-warnings').add({
-        factory,
-        materialCode,
-        poNumber,
-        importDate: importDate || '',
-        location,
-        employeeId: this.batchEmployeeId || '',
-        productionOrder: this.batchProductionOrder || '',
-        detectedAt: new Date(),
-        resolved: false
-      });
 
       const imdLabel = String(importDate || '').trim();
       this.showScanError(
