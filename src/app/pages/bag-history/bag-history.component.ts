@@ -774,18 +774,26 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * 🔧 FIX: Trước đây tải TOÀN BỘ outbound-materials (không giới hạn ngày) rồi mới lọc theo
+   * outboundDupSinceMs ở client — và hàm này bị gọi lại tự động mỗi 30 phút (this.outboundDupTimer)
+   * miễn tab còn mở. Giờ lọc theo exportDate ngay trên Firestore (đúng mốc outboundDupSinceMs đã
+   * cấu hình) — không đổi kết quả, chỉ giảm số doc phải đọc.
+   */
   private async fetchAllOutboundDocsForFactory(
     factory: 'ASM1' | 'ASM2',
-    batchSize: number
+    batchSize: number,
+    sinceMs: number
   ): Promise<firebase.firestore.QueryDocumentSnapshot[]> {
     const ref = this.firestore.collection('outbound-materials').ref;
-    const idPath = firebase.firestore.FieldPath.documentId();
+    const sinceTs = firebase.firestore.Timestamp.fromMillis(sinceMs);
     const out: firebase.firestore.QueryDocumentSnapshot[] = [];
     let last: firebase.firestore.QueryDocumentSnapshot | null = null;
     for (;;) {
       let q: firebase.firestore.Query = ref
         .where('factory', '==', factory)
-        .orderBy(idPath)
+        .where('exportDate', '>=', sinceTs)
+        .orderBy('exportDate')
         .limit(batchSize);
       if (last) {
         q = q.startAfter(last);
@@ -803,7 +811,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     return out;
   }
 
-  /** Đọc toàn bộ outbound-materials (ASM1 + ASM2), gom theo mã+PO+IMD+Bịch+Bag; chỉ giữ nhóm count > 1. */
+  /** Đọc outbound-materials (ASM1 + ASM2) từ mốc outboundDupSinceMs, gom theo mã+PO+IMD+Bịch+Bag; chỉ giữ nhóm count > 1. */
   async loadOutboundExportDuplicates(): Promise<void> {
     this.outboundDupLoading = true;
     this.outboundDupError = '';
@@ -812,8 +820,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     this.outboundDupEligibleCount = 0;
     try {
       const [docs1, docs2] = await Promise.all([
-        this.fetchAllOutboundDocsForFactory('ASM1', 500),
-        this.fetchAllOutboundDocsForFactory('ASM2', 500)
+        this.fetchAllOutboundDocsForFactory('ASM1', 500, this.outboundDupSinceMs),
+        this.fetchAllOutboundDocsForFactory('ASM2', 500, this.outboundDupSinceMs)
       ]);
       const all = [...docs1, ...docs2];
       this.outboundDupTotalScanned = 0;

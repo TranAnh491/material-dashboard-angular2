@@ -42,6 +42,14 @@
       ]
     },
     {
+      "collectionGroup": "outbound-materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",     "order": "ASCENDING" },
+        { "fieldPath": "exportDate",  "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "fg-inventory",
       "queryScope": "COLLECTION",
       "fields": [

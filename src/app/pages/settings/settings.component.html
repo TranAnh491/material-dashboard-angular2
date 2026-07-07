@@ -187,8 +187,9 @@
         <div>
           <h2 class="register-card__title">Đăng ký tài khoản</h2>
           <p class="register-card__desc">
-            <strong>ID đăng nhập</strong> (ASP + 4 số) khác <strong>họ tên</strong>. Nhập ID, họ tên, chọn <strong>bộ phận</strong>, <strong>email</strong> nhận mật khẩu.
-            Hệ thống gửi mật khẩu 6 số tới email; đăng nhập app bằng <strong>mã ASP + mật khẩu</strong> (không nhập email ở màn đăng nhập).
+            <strong>ID đăng nhập</strong> (ASP + 4 số) khác <strong>họ tên</strong>. Nhập ID, họ tên, chọn <strong>bộ phận</strong>.
+            <strong>Email tùy chọn</strong> — nếu bỏ trống, hệ thống tạo tài khoản và hiển thị <strong>mật khẩu 6 số</strong> cho admin;
+            nếu có email, mật khẩu được gửi qua thư. Đăng nhập app bằng <strong>mã ASP + mật khẩu</strong>.
           </p>
         </div>
       </div>
@@ -220,14 +221,14 @@
           type="email"
           name="createAccountEmail"
           [(ngModel)]="createAccountEmail"
-          placeholder="Email nhận mật khẩu"
+          placeholder="Email nhận mật khẩu (tùy chọn)"
           autocomplete="email"
           [disabled]="isRegisteringUser">
         <button
           type="button"
           class="btn-register-green"
           (click)="registerAspUserWithEmailFromSettings()"
-          [disabled]="isRegisteringUser || !createAccountEmployeeId?.trim() || !createAccountFullName?.trim() || !createAccountDepartment || !createAccountEmail?.trim()">
+          [disabled]="isRegisteringUser || !createAccountEmployeeId?.trim() || !createAccountFullName?.trim() || !createAccountDepartment">
           <i class="material-icons">person_add</i>
           {{ isRegisteringUser ? 'Đang xử lý…' : 'Đăng ký' }}
         </button>
@@ -453,9 +454,18 @@
         </div>
         <div class="modal-body">
           <div class="user-detail">
-            <div class="detail-row">
-              <strong>ID đăng nhập (ASP + 4 số):</strong> {{ getEmployeeIdOnly(selectedUser) }}
-              <span class="detail-hint"> — không phải họ tên</span>
+            <div class="detail-row detail-row-edit">
+              <strong>ID đăng nhập (ASP + 4 số):</strong>
+              <input
+                type="text"
+                class="profile-input"
+                name="tempEmployeeId"
+                [(ngModel)]="tempEmployeeId"
+                (input)="onPermissionModalEmployeeInput($event)"
+                placeholder="ASP0054 hoặc 0054"
+                autocomplete="off"
+                [disabled]="selectedUser.email === 'admin@asp.com'">
+              <span class="detail-hint">không phải họ tên — dùng để đăng nhập app</span>
             </div>
             <div class="detail-row detail-row-edit">
               <strong>Họ tên:</strong>

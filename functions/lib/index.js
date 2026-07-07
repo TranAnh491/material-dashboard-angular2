@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -597,9 +597,10 @@ exports.adminUpdateUserProfileFn = functions.https.onCall(async (data, context) 
         const r = await adminUpdateUserProfile(context.auth.uid, uid, {
             displayName: data.displayName,
             department: data.department,
-            email: data.email
+            email: data.email,
+            employeeId: data.employeeId
         });
-        return { ok: true, email: r.email };
+        return { ok: true, email: r.email, employeeId: r.employeeId };
     }
     catch (e) {
         const anyErr = e;
@@ -611,7 +612,7 @@ exports.adminUpdateUserProfileFn = functions.https.onCall(async (data, context) 
         if (msg.includes('đã được dùng')) {
             throw new functions.https.HttpsError('already-exists', msg);
         }
-        if (msg.includes('không hợp lệ')) {
+        if (msg.includes('không đúng định dạng') || msg.includes('không hợp lệ')) {
             throw new functions.https.HttpsError('invalid-argument', msg);
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
@@ -650,6 +651,38 @@ exports.registerAspUserWithEmailFn = functions
             msg.includes('không hợp lệ') ||
             msg.includes('Thiếu') ||
             msg.includes('phải có đuôi')) {
+            throw new functions.https.HttpsError('invalid-argument', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: đăng ký user không cần email — mật khẩu trả về cho admin (Auth + Firestore). */
+exports.registerAspUserWithoutEmailFn = functions.https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const employeeId = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';
+    const department = typeof (data === null || data === void 0 ? void 0 : data.department) === 'string' ? data.department : '';
+    const fullName = typeof (data === null || data === void 0 ? void 0 : data.fullName) === 'string' ? data.fullName.trim() : '';
+    if (!employeeId || !fullName) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu employeeId hoặc họ tên.');
+    }
+    try {
+        const { registerAspUserWithoutEmail } = await Promise.resolve().then(() => __importStar(require('./admin-register-user')));
+        return await registerAspUserWithoutEmail(context.auth.uid, employeeId, department, fullName);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+        }
+        if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
+            throw new functions.https.HttpsError('already-exists', msg);
+        }
+        if (msg.includes('không đúng') || msg.includes('không hợp lệ') || msg.includes('Thiếu')) {
             throw new functions.https.HttpsError('invalid-argument', msg);
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');

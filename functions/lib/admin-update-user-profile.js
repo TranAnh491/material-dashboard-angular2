@@ -48,11 +48,23 @@ function isAdminOrManager(role) {
 function isValidEmail(s) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
+function normalizeAspEmployeeId(input) {
+    const t = (input || '').trim().toUpperCase();
+    if (!t)
+        return null;
+    const m1 = t.match(/^ASP(\d{4})$/);
+    if (m1)
+        return `ASP${m1[1]}`;
+    const m2 = t.match(/^(\d{4})$/);
+    if (m2)
+        return `ASP${m2[1]}`;
+    return null;
+}
 /**
- * Admin: cập nhật tên, bộ phận, email đăng nhập (Firebase Auth + Firestore).
+ * Admin: cập nhật tên, bộ phận, email đăng nhập, mã ASP (Firebase Auth + Firestore).
  */
 async function adminUpdateUserProfile(callerUid, targetUid, patch) {
-    var _a;
+    var _a, _b;
     if (!callerUid || !targetUid) {
         throw new Error('Thiếu callerUid hoặc targetUid.');
     }
@@ -92,6 +104,25 @@ async function adminUpdateUserProfile(callerUid, targetUid, patch) {
     if (emailRaw) {
         usersMerge.email = emailRaw;
     }
+    if (typeof patch.employeeId === 'string') {
+        const raw = patch.employeeId.trim();
+        if (raw) {
+            const employeeId = normalizeAspEmployeeId(raw);
+            if (!employeeId) {
+                throw new Error('ID ASP không đúng định dạng (ASPxxxx hoặc xxxx).');
+            }
+            const dupSnap = await admin
+                .firestore()
+                .collection('users')
+                .where('employeeId', '==', employeeId)
+                .limit(1)
+                .get();
+            if (!dupSnap.empty && dupSnap.docs[0].id !== targetUid) {
+                throw new Error(`Mã ${employeeId} đã được dùng cho tài khoản khác.`);
+            }
+            usersMerge.employeeId = employeeId;
+        }
+    }
     await admin.firestore().collection('users').doc(targetUid).set(usersMerge, { merge: true });
     const permMerge = { updatedAt: new Date() };
     if (typeof patch.displayName === 'string') {
@@ -110,6 +141,8 @@ async function adminUpdateUserProfile(callerUid, targetUid, patch) {
     }
     await admin.firestore().collection('user-tab-permissions').doc(targetUid).set(tabMerge, { merge: true });
     const after = await admin.auth().getUser(targetUid);
-    return { email: (after.email || emailRaw || '').toLowerCase() };
+    const userDoc = await admin.firestore().collection('users').doc(targetUid).get();
+    const savedEmployeeId = ((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.employeeId) || undefined;
+    return { email: (after.email || emailRaw || '').toLowerCase(), employeeId: savedEmployeeId };
 }
 //# sourceMappingURL=admin-update-user-profile.js.map

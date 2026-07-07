@@ -143,6 +143,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   readonly departmentOptions = ['WH', 'QA', 'ENG', 'PLAN', 'PD', 'CS', 'ACC'];
 
   /** Popup user: chỉnh sửa trước khi Lưu */
+  tempEmployeeId = '';
   tempDisplayName = '';
   tempDepartment = '';
   tempProfileEmail = '';
@@ -230,6 +231,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
+  onPermissionModalEmployeeInput(event: Event): void {
+    const inputEl = event.target as HTMLInputElement;
+    const upper = (inputEl.value || '').toUpperCase();
+    if (inputEl.value !== upper) {
+      inputEl.value = upper;
+      this.tempEmployeeId = upper;
+    }
+  }
+
   onCreateAccountEmployeeInput(event: Event): void {
     const inputEl = event.target as HTMLInputElement;
     const upper = (inputEl.value || '').toUpperCase();
@@ -240,8 +250,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Đăng ký: mã nhân viên + bộ phận + email → Cloud Function tạo Auth + Firestore,
-   * mật khẩu 6 số ngẫu nhiên gửi qua email.
+   * Đăng ký: mã nhân viên + bộ phận (+ email tùy chọn).
+   * Không email → tạo tài khoản asp####@asp.com, hiển thị mật khẩu cho admin.
+   * Có email → gửi mật khẩu 6 số qua email.
    */
   async registerAspUserWithEmailFromSettings(): Promise<void> {
     if (this.isRegisteringUser) return;
@@ -250,6 +261,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const fullName = (this.createAccountFullName || '').trim();
     const department = (this.createAccountDepartment || '').trim();
     const email = (this.createAccountEmail || '').trim().toLowerCase();
+    const useEmail = !!email;
 
     if (!employeeId) {
       alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
@@ -263,13 +275,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
       alert('Vui lòng chọn bộ phận.');
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      alert('Email không hợp lệ.');
-      return;
-    }
-    if (!this.isAllowedRegistrationEmail(email)) {
-      alert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
-      return;
+    if (useEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        alert('Email không hợp lệ.');
+        return;
+      }
+      if (!this.isAllowedRegistrationEmail(email)) {
+        alert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
+        return;
+      }
     }
 
     const dup = this.firebaseUsers.some((u) => this.getEmployeeIdOnly(u) === employeeId);
@@ -281,16 +295,23 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.isRegisteringUser = true;
     try {
       const result: any = await firstValueFrom(
-        this.fns.httpsCallable('registerAspUserWithEmailFn')({
-          employeeId,
-          fullName,
-          department,
-          email
-        })
+        useEmail
+          ? this.fns.httpsCallable('registerAspUserWithEmailFn')({
+              employeeId,
+              fullName,
+              department,
+              email
+            })
+          : this.fns.httpsCallable('registerAspUserWithoutEmailFn')({
+              employeeId,
+              fullName,
+              department
+            })
       );
 
       const payload = result?.data !== undefined ? result.data : result;
       const uid: string | undefined = payload?.uid;
+      const password: string | undefined = payload?.password;
       this.createAccountEmployeeId = '';
       this.createAccountFullName = '';
       this.createAccountDepartment = '';
@@ -298,10 +319,18 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
       await this.refreshFirebaseUsers();
 
-      alert(
-        `✅ Đã tạo tài khoản và gửi mật khẩu 6 số tới email:\n${email}\n\n` +
-          `Người dùng đăng nhập app bằng ID ${employeeId} và mật khẩu trong thư (không nhập email ở màn đăng nhập).`
-      );
+      if (useEmail) {
+        alert(
+          `✅ Đã tạo tài khoản và gửi mật khẩu 6 số tới email:\n${email}\n\n` +
+            `Người dùng đăng nhập app bằng ID ${employeeId} và mật khẩu trong thư (không nhập email ở màn đăng nhập).`
+        );
+      } else {
+        alert(
+          `✅ Đã tạo tài khoản ${employeeId}.\n\n` +
+            `Mật khẩu (6 số): ${password || '(xem trong Settings)'}\n\n` +
+            `Người dùng đăng nhập bằng mã ASP + mật khẩu trên (không cần email).`
+        );
+      }
 
       if (uid) {
         const created = this.firebaseUsers.find((u) => u.uid === uid);
@@ -929,6 +958,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         const data = doc.data() as any;
         firestoreUsers.push({
           uid: doc.id,
+          employeeId: data.employeeId || '',
           email: data.email || '',
           displayName: data.displayName || '',
           department: data.department || '',
@@ -948,6 +978,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
           if (data.email) {
             firestoreUsers.push({
               uid: doc.id,
+              employeeId: data.employeeId || '',
               email: data.email || '',
               displayName: data.displayName || '',
               department: data.department || '',
@@ -1957,6 +1988,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Mở popup quản lý permissions cho user (đọc mới từ Firestore)
   async openPermissionModal(user: User): Promise<void> {
     this.selectedUser = user;
+    this.tempEmployeeId = this.extractAspEmployeeId(user) || '';
     this.tempDisplayName = (user.displayName || '').trim();
     this.tempDepartment = (user.department || '').trim();
     this.tempProfileEmail = (user.email || '').trim();
@@ -1992,6 +2024,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.tempReadOnlyPermission = false;
     this.changePasswordValue = '';
     this.showChangePasswordForm = false;
+    this.tempEmployeeId = '';
     this.tempDisplayName = '';
     this.tempDepartment = '';
     this.tempProfileEmail = '';
@@ -2005,6 +2038,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const email = (this.tempProfileEmail || '').trim().toLowerCase();
     const displayName = (this.tempDisplayName || '').trim();
     const department = (this.tempDepartment || '').trim();
+    const employeeId = this.parseAspEmployeeIdFromResetInput(this.tempEmployeeId);
+    const isAdminAccount = (this.selectedUser.email || '').toLowerCase() === 'admin@asp.com';
+
+    if (!isAdminAccount && !employeeId) {
+      alert('Vui lòng nhập ID đăng nhập ASP (VD: ASP0054 hoặc 0054).');
+      return;
+    }
 
     if (!email) {
       alert('Email tài khoản (Firebase) không được để trống.');
@@ -2012,10 +2052,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
 
     const prev = this.selectedUser;
+    const prevEmployeeId = this.extractAspEmployeeId(prev) || '';
     const profileChanged =
       email !== (prev.email || '').toLowerCase().trim() ||
       displayName !== (prev.displayName || '').trim() ||
-      department !== (prev.department || '').trim();
+      department !== (prev.department || '').trim() ||
+      (employeeId || '') !== prevEmployeeId;
 
     const tabPermissionsToSave: { [key: string]: boolean } = {};
     this.availableTabs.forEach(tab => {
@@ -2046,11 +2088,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
         email,
         displayName: displayName || prev.displayName || '',
         department,
+        ...(employeeId ? { employeeId } : {}),
         updatedAt: new Date()
       }, { merge: true });
 
       this.firebaseUserTabPermissions[uid] = { ...tabPermissionsToSave };
       this.firebaseUserReadOnlyPermissions[uid] = this.tempReadOnlyPermission;
+      if (employeeId) {
+        prev.employeeId = employeeId;
+        this._empIdCache.set(uid, employeeId);
+      }
       this._rebuildUserCache();
 
       // 2) Cập nhật profile Auth (có thể lỗi — không làm mất quyền đã lưu)
@@ -2062,7 +2109,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
               uid,
               email,
               displayName,
-              department
+              department,
+              employeeId: employeeId || ''
             })
           );
           prev.email = email;
@@ -2082,8 +2130,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this._rebuildUserCache();
 
       const granted = this.availableTabs.filter(t => tabPermissionsToSave[t.key]).map(t => t.name);
+      const idLabel = employeeId || this.getEmployeeIdOnly(prev) || email;
       alert(
-        `✅ Đã lưu quyền cho ${email}.` +
+        `✅ Đã lưu quyền cho ${idLabel}.` +
           (granted.length ? `\nTab được phép: ${granted.join(', ')}` : '\nChưa cấp tab nào (chờ duyệt).') +
           profileWarning
       );

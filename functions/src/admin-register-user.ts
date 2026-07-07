@@ -16,7 +16,7 @@ function isAdminOrManager(role: string | undefined | null): boolean {
   );
 }
 
-function normalizeAspEmployeeId(input: string): string | null {
+export function normalizeAspEmployeeId(input: string): string | null {
   const t = (input || '').trim().toUpperCase();
   if (!t) return null;
 
@@ -27,6 +27,16 @@ function normalizeAspEmployeeId(input: string): string | null {
   if (m2) return `ASP${m2[1]}`;
 
   return null;
+}
+
+/** Email nội bộ Firebase Auth khi admin tạo tài khoản không cần email thật. */
+export function buildInternalAspAuthEmail(employeeId: string): string {
+  const normalized = normalizeAspEmployeeId(employeeId);
+  if (!normalized) {
+    throw new Error('Mã nhân viên không đúng định dạng (ASPxxxx hoặc xxxx).');
+  }
+  const digits = normalized.replace(/^ASP/, '');
+  return `asp${digits}@asp.com`;
 }
 
 function generateSixDigitPassword(): string {
@@ -200,6 +210,40 @@ export async function createAspUserAndSendEmail(
     throw new Error('Vui lòng chọn bộ phận.');
   }
 
+  const password = generateSixDigitPassword();
+  const uid = await createAspUserCore({ employeeId, fullName, department, email, password });
+
+  await sendRegistrationEmail({
+    to: email,
+    employeeId,
+    password,
+    department,
+    fullName
+  });
+
+  try {
+    await sendNewRegistrationWarehouseNotify({
+      employeeId,
+      department,
+      registrantEmail: email,
+      fullName
+    });
+  } catch (e) {
+    console.error('sendNewRegistrationWarehouseNotify failed', e);
+  }
+
+  return { uid, email, employeeId };
+}
+
+async function createAspUserCore(params: {
+  employeeId: string;
+  fullName: string;
+  department: string;
+  email: string;
+  password: string;
+}): Promise<string> {
+  const { employeeId, fullName, department, email, password } = params;
+
   const dupEmp = await admin
     .firestore()
     .collection('users')
@@ -221,7 +265,6 @@ export async function createAspUserAndSendEmail(
     }
   }
 
-  const password = generateSixDigitPassword();
   const userRecord = await admin.auth().createUser({
     email,
     password,
@@ -287,26 +330,48 @@ export async function createAspUserAndSendEmail(
       { merge: true }
     );
 
-  await sendRegistrationEmail({
-    to: email,
-    employeeId,
-    password,
-    department,
-    fullName
-  });
+  return uid;
+}
+
+/**
+ * Admin tạo tài khoản không cần email thật — dùng asp####@asp.com, trả mật khẩu cho admin.
+ */
+export async function createAspUserWithoutEmail(
+  employeeIdRaw: string,
+  departmentRaw: string,
+  fullNameRaw: string
+): Promise<{ uid: string; email: string; employeeId: string; password: string }> {
+  const employeeId = normalizeAspEmployeeId(employeeIdRaw);
+  if (!employeeId) {
+    throw new Error('Mã nhân viên không đúng định dạng (ASPxxxx hoặc xxxx).');
+  }
+
+  const fullName = (fullNameRaw || '').trim();
+  if (!fullName) {
+    throw new Error('Vui lòng nhập họ tên (khác ID đăng nhập ASP).');
+  }
+
+  const department = (departmentRaw || '').trim();
+  if (!department) {
+    throw new Error('Vui lòng chọn bộ phận.');
+  }
+
+  const email = buildInternalAspAuthEmail(employeeId);
+  const password = generateSixDigitPassword();
+  const uid = await createAspUserCore({ employeeId, fullName, department, email, password });
 
   try {
     await sendNewRegistrationWarehouseNotify({
       employeeId,
       department,
-      registrantEmail: email,
+      registrantEmail: '(không có — admin tạo trực tiếp)',
       fullName
     });
   } catch (e) {
     console.error('sendNewRegistrationWarehouseNotify failed', e);
   }
 
-  return { uid, email, employeeId };
+  return { uid, email, employeeId, password };
 }
 
 /**
@@ -330,6 +395,28 @@ export async function registerAspUserWithEmail(
   }
 
   return createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw);
+}
+
+/**
+ * Admin: đăng ký user không cần email (caller phải là Admin/Quản lý).
+ */
+export async function registerAspUserWithoutEmail(
+  callerUid: string,
+  employeeIdRaw: string,
+  departmentRaw: string,
+  fullNameRaw: string
+): Promise<{ uid: string; email: string; employeeId: string; password: string }> {
+  if (!callerUid) {
+    throw new Error('Thiếu callerUid.');
+  }
+
+  const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
+  const callerRole = callerDoc.data()?.role;
+  if (!isAdminOrManager(callerRole)) {
+    throw new Error('permission-denied');
+  }
+
+  return createAspUserWithoutEmail(employeeIdRaw, departmentRaw, fullNameRaw);
 }
 
 /**
