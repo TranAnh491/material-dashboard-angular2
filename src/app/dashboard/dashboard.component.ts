@@ -295,7 +295,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     '/pallet-id',
     '/checklist',
     '/equipment',
-    '/manage',
     '/sxxk',
     '/settings',
     '/zalo',
@@ -367,7 +366,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/index', title: 'Bonded Report', icon: 'analytics', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'integration_instructions', category: 'Admin' },
-    { path: '/manage', title: 'Manage', icon: 'manage_search', category: 'Admin' },
     { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', category: 'Admin' },
     { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', category: 'Admin' },
     { path: '/zalo', title: 'Zalo', icon: 'chat', category: 'Admin' },
@@ -463,7 +461,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     const byPath: Record<string, string> = {
       '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
-      '/task': 'Quản lý công việc',
       '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
       '/shipment': 'Kế hoạch và theo dõi giao hàng',
       '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
@@ -500,7 +497,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/scrap': 'Quản lý phế liệu',
       '/checklist': 'An toàn và chất lượng',
       '/equipment': 'Đào tạo nhân viên kho',
-      '/manage': 'Cấu hình và quản trị hệ thống',
       '/settings': 'Cài đặt tài khoản và phân quyền',
       '/zalo': 'Tích hợp thông báo Zalo',
     };

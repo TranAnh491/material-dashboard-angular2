@@ -185,6 +185,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.fgInCacheRefreshTimer) {
+      clearInterval(this.fgInCacheRefreshTimer);
+      this.fgInCacheRefreshTimer = undefined;
+    }
   }
 
   // Setup debounced search for better performance
@@ -281,18 +285,28 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return String(batchNumber || '').trim().toUpperCase();
   }
 
-  /** Subscribe 1 lần để lấy tổng Nhập/Xuất từ fg-in và fg-out (đúng theo tab FG Out). */
+  /** 🔧 FIX: đổi từ listener sống sang làm mới định kỳ mỗi 5 phút. */
+  private readonly FG_IN_CACHE_REFRESH_MS = 5 * 60 * 1000;
+  private fgInCacheRefreshTimer?: ReturnType<typeof setInterval>;
+
+  /**
+   * Lấy tổng Nhập từ fg-in (theo key + PO theo batch).
+   *
+   * 🔧 FIX: Trước đây dùng .snapshotChanges() (listener sống, KHÔNG giới hạn) trên toàn bộ
+   * collection fg-in — nghĩa là BẤT KỲ ai ghi vào fg-in ở bất kỳ đâu (kể cả tab FG In) đều
+   * khiến tab này đọc lại toàn bộ collection ngay lập tức. Đây chỉ là cache tổng hợp phụ trợ
+   * (không phải view chính), nên đổi sang làm mới định kỳ mỗi 5 phút — đủ mới, không còn phụ
+   * thuộc hoạt động ghi ở tab khác.
+   */
   private subscribeFGInOutCaches(): void {
-    // FG In: tổng nhập theo key + PO theo batch
-    this.firestore.collection('fg-in')
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
+    const refresh = async () => {
+      try {
+        const snap = await this.firestore.collection('fg-in').get().toPromise();
         this.fgInQtyByKey.clear();
         this.fgInQtyByBatchKey.clear();
         this.fgInPoByBatchKey.clear();
-        actions.forEach(a => {
-          const d = a.payload.doc.data() as any;
+        (snap?.docs || []).forEach(doc => {
+          const d = doc.data() as any;
           const k = this.fgKey(d.materialCode, d.batchNumber, d.lsx, d.lot);
           const bk = this.fgBatchKey(d.batchNumber);
           const q = Number(d.quantity) || 0;
@@ -314,7 +328,13 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         this.applyFGInOutCachesToMaterials();
         this.applyFilters();
         this.cdr.detectChanges();
-      });
+      } catch (e) {
+        console.error('subscribeFGInOutCaches refresh failed', e);
+      }
+    };
+
+    void refresh();
+    this.fgInCacheRefreshTimer = setInterval(() => void refresh(), this.FG_IN_CACHE_REFRESH_MS);
   }
 
   /**
@@ -1411,15 +1431,17 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   }
 
   // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
+  // 🔧 FIX: .get() thay vì .snapshotChanges() — đây là danh mục, ít đổi, không cần listener sống
+  // (trước đây bất kỳ ai sửa danh mục KH ở tab khác cũng khiến tab này đọc lại toàn bộ).
   loadMappingFromFirebase(): void {
     this.firestore.collection('fg-customer-mapping')
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        const firebaseMapping = actions.map(action => {
-          const data = action.payload.doc.data() as any;
+      .subscribe(snapshot => {
+        const firebaseMapping = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: action.payload.doc.id,
+            id: doc.id,
             customerCode: data.customerCode || '',
             materialCode: data.materialCode || '',
             description: data.description || ''

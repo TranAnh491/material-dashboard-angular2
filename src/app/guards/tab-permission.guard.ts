@@ -64,40 +64,6 @@ export class TabPermissionGuard implements CanActivate {
       );
     }
 
-    // Task - cho phép tất cả user đã đăng nhập
-    if (tabKey === 'task') {
-      return of(true);
-    }
-
-    // Đặc biệt cho Manage - chỉ Admin mới có quyền
-    if (tabKey === 'manage') {
-      return this.rolePermissionService.isAdmin().pipe(
-        switchMap(isAdmin => {
-          if (!isAdmin) {
-            console.log(`❌ Access denied to Manage - User không có quyền Admin`);
-            this.router.navigate(['/dashboard']);
-            return of(false);
-          }
-          // Kiểm tra tab permission sau khi đã có role access
-          return this.tabPermissionService.canAccessTab(tabKey).pipe(
-            map(hasAccess => {
-              if (!hasAccess) {
-                console.log(`❌ Access denied to Manage - User không có tab permission`);
-                this.router.navigate(['/dashboard']);
-                return false;
-              }
-              return true;
-            })
-          );
-        }),
-        catchError(error => {
-          console.error('❌ Error checking Manage permission:', error);
-          this.router.navigate(['/dashboard']);
-          return of(false);
-        })
-      );
-    }
-
     // DV Lưu trữ catalog — user có quyền inbound ASM1 hoặc ASM2
     if (tabKey === 'dv-luu-tru-catalog') {
       return forkJoin([
@@ -177,7 +143,6 @@ export class TabPermissionGuard implements CanActivate {
       // Other routes
       '/location': 'location',
       '/layout-warehouse': 'layout-warehouse',
-      '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',
       '/index': 'index',
@@ -193,8 +158,7 @@ export class TabPermissionGuard implements CanActivate {
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',
       '/zalo': 'zalo',
-      '/task': 'task',
-      
+
       // Menu route - cho phép truy cập (không cần permission)
       '/menu': 'dashboard'
     };

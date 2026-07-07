@@ -83,11 +83,6 @@ export class FilteredRoutesService {
       return userRole === 'Admin' || userRole === 'Quản lý';
     }
 
-    // Đặc biệt cho Manage - chỉ Admin mới có quyền
-    if (tabKey === 'manage') {
-      return userRole === 'Admin';
-    }
-
     // Kiểm tra permission - CHỈ cho phép nếu có permission rõ ràng là true
     // Nếu false hoặc undefined → KHÔNG cho phép (user mới đăng ký phải chờ duyệt)
     return permissions[tabKey] === true;
@@ -129,7 +124,6 @@ export class FilteredRoutesService {
       // Other routes
       '/location': 'location',
       '/layout-warehouse': 'layout-warehouse',
-      '/manage': 'manage',
       '/stock-check': 'stock-check',
       '/label': 'label',
       '/index': 'index',

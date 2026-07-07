@@ -328,6 +328,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.fgOutDataSub?.unsubscribe();
     this.fgOutDataSub = null;
+    if (this.fgInventoryCacheRefreshTimer) {
+      clearInterval(this.fgInventoryCacheRefreshTimer);
+      this.fgInventoryCacheRefreshTimer = undefined;
+    }
     this.destroy$.next();
     this.destroy$.complete();
     this.loadLocationsSubject.complete();
@@ -382,58 +386,77 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** 🔧 FIX: đổi từ listener sống sang làm mới định kỳ mỗi 5 phút. */
+  private readonly FG_INVENTORY_CACHE_REFRESH_MS = 5 * 60 * 1000;
+  private fgInventoryCacheRefreshTimer?: ReturnType<typeof setInterval>;
+
   /**
-   * Một luồng duy nhất cho fg-inventory: giảm 3 subscription → 1, debounce để giao diện mượt hơn.
+   * Một luồng duy nhất cho fg-inventory: giảm 3 subscription → 1.
    * Cập nhật cache tồn theo batch + theo mã TP, và dữ liệu popup chọn batch.
+   *
+   * 🔧 FIX: Trước đây dùng .valueChanges() (listener sống KHÔNG giới hạn factory) — nghĩa là
+   * BẤT KỲ ai ghi vào fg-inventory ở BẤT KỲ tab nào (FG Inventory, FG In...) đều khiến tab này
+   * đọc lại toàn bộ collection ngay lập tức. Cần dữ liệu cả 2 nhà máy (chế độ xem "TOTAL"
+   * gộp ASM1+ASM2 — xem setFactoryFilter) nên không thể lọc theo 1 factory. Thay bằng làm mới
+   * định kỳ mỗi 5 phút (đủ mới cho số liệu tồn kho, không còn phụ thuộc hoạt động ghi ở tab khác).
    */
   private subscribeFgInventoryUnified(): void {
-    this.firestore
-      .collection('fg-inventory')
-      .valueChanges({ idField: 'id' })
-      .pipe(debounceTime(100), takeUntil(this.destroy$))
-      .subscribe((docs: any[]) => {
-        const arr = Array.isArray(docs) ? docs : [];
-        this.fgInventoryRealtimeDocs = arr;
+    const refresh = async () => {
+      try {
+        const snap = await this.firestore.collection('fg-inventory').get().toPromise();
+        const arr = (snap?.docs || []).map(d => ({ id: d.id, ...(d.data() as any) }));
+        this.applyFgInventoryDocs(arr);
+      } catch (e) {
+        console.error('subscribeFgInventoryUnified refresh failed', e);
+      }
+    };
 
-        this.inventoryStockByBatchCache.clear();
-        this.inventoryStockByBatchMaterialCache.clear();
-        this.inventoryStockCache.clear();
+    void refresh();
+    this.fgInventoryCacheRefreshTimer = setInterval(() => void refresh(), this.FG_INVENTORY_CACHE_REFRESH_MS);
+  }
 
-        arr.forEach(d => {
-          const materialCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
-          const tonDau = Number(d.tonDau ?? 0) || 0;
-          const nhap = Number(d.nhap ?? d.quantity ?? 0) || 0;
-          const xuat = Number(d.xuat ?? d.exported ?? 0) || 0;
-          const ton = (d.ton != null)
-            ? Number(d.ton)
-            : (d.stock != null ? Number(d.stock) : (tonDau + nhap - xuat));
-          const safeTon = isNaN(ton) ? 0 : ton;
+  private applyFgInventoryDocs(docs: any[]): void {
+    const arr = Array.isArray(docs) ? docs : [];
+    this.fgInventoryRealtimeDocs = arr;
 
-          const key = this.batchKey(d.factory, d.batchNumber);
-          if (key) {
-            this.inventoryStockByBatchCache.set(
-              key,
-              (this.inventoryStockByBatchCache.get(key) || 0) + safeTon
-            );
-            const rowKey = this.batchMaterialKey(d.factory, d.batchNumber, materialCode);
-            if (rowKey) {
-              this.inventoryStockByBatchMaterialCache.set(
-                rowKey,
-                (this.inventoryStockByBatchMaterialCache.get(rowKey) || 0) + safeTon
-              );
-            }
-          }
-          if (materialCode) {
-            const currentStock = this.inventoryStockCache.get(materialCode) || 0;
-            this.inventoryStockCache.set(materialCode, currentStock + safeTon);
-          }
-        });
+    this.inventoryStockByBatchCache.clear();
+    this.inventoryStockByBatchMaterialCache.clear();
+    this.inventoryStockCache.clear();
 
-        if (this.showBatchInventoryPopup) {
-          this.loadBatchInventoryPopupRows();
+    arr.forEach(d => {
+      const materialCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
+      const tonDau = Number(d.tonDau ?? 0) || 0;
+      const nhap = Number(d.nhap ?? d.quantity ?? 0) || 0;
+      const xuat = Number(d.xuat ?? d.exported ?? 0) || 0;
+      const ton = (d.ton != null)
+        ? Number(d.ton)
+        : (d.stock != null ? Number(d.stock) : (tonDau + nhap - xuat));
+      const safeTon = isNaN(ton) ? 0 : ton;
+
+      const key = this.batchKey(d.factory, d.batchNumber);
+      if (key) {
+        this.inventoryStockByBatchCache.set(
+          key,
+          (this.inventoryStockByBatchCache.get(key) || 0) + safeTon
+        );
+        const rowKey = this.batchMaterialKey(d.factory, d.batchNumber, materialCode);
+        if (rowKey) {
+          this.inventoryStockByBatchMaterialCache.set(
+            rowKey,
+            (this.inventoryStockByBatchMaterialCache.get(rowKey) || 0) + safeTon
+          );
         }
-        this.cdr.markForCheck();
-      });
+      }
+      if (materialCode) {
+        const currentStock = this.inventoryStockCache.get(materialCode) || 0;
+        this.inventoryStockCache.set(materialCode, currentStock + safeTon);
+      }
+    });
+
+    if (this.showBatchInventoryPopup) {
+      this.loadBatchInventoryPopupRows();
+    }
+    this.cdr.markForCheck();
   }
 
   private normalizeMergeCarton(value: any): string {
@@ -541,15 +564,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
+  // 🔧 FIX: .get() thay vì .snapshotChanges() — đây là danh mục, ít đổi, không cần listener sống.
   loadMappingFromFirebase(): void {
     this.firestore.collection('fg-customer-mapping')
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        const firebaseMapping = actions.map(action => {
-          const data = action.payload.doc.data() as any;
+      .subscribe(snapshot => {
+        const firebaseMapping = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
           return {
-            id: action.payload.doc.id,
+            id: doc.id,
             customerCode: data.customerCode || '',
             materialCode: data.materialCode || '',
             description: data.description || ''

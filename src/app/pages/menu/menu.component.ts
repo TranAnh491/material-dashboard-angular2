@@ -47,7 +47,6 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/pallet-id',
     '/checklist',
     '/equipment',
-    '/manage',
     '/sxxk',
     '/settings',
     '/zalo',
@@ -58,7 +57,6 @@ export class MenuComponent implements OnInit, OnDestroy {
     // Dashboard - First
     { path: '/dashboard', title: 'Dashboard', icon: 'speed', iconImage: 'assets/img/dasboard.png', category: 'Main' },
     // Main - Additional tools
-    { path: '/task', title: 'Task', icon: 'task_alt', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/work-order-status', title: 'Work Order', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Main' },
     {
@@ -123,7 +121,6 @@ export class MenuComponent implements OnInit, OnDestroy {
     { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', iconImage: 'assets/img/scrap.png', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', iconImage: 'assets/img/safety.png', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'school', iconImage: 'assets/img/training.png', category: 'Admin' },
-    { path: '/manage', title: 'Manage', icon: 'tune', iconImage: 'assets/img/manage.png', category: 'Admin' },
     { path: '/settings', title: 'Settings', icon: 'settings', iconImage: 'assets/img/setting.png', category: 'Admin' },
     { path: '/zalo', title: 'Zalo', icon: 'chat', iconImage: 'assets/img/setting.png', category: 'Admin' }
   ];
@@ -242,7 +239,6 @@ export class MenuComponent implements OnInit, OnDestroy {
 
   private readonly subtitleByPath: Record<string, string> = {
     '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
-    '/task': 'Quản lý công việc',
     '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
     '/shipment': 'Kế hoạch và theo dõi giao hàng',
     '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
@@ -278,7 +274,6 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/scrap': 'Quản lý phế liệu',
     '/checklist': 'An toàn và chất lượng',
     '/equipment': 'Đào tạo nhân viên kho',
-    '/manage': 'Cấu hình và quản trị hệ thống',
     '/settings': 'Cài đặt tài khoản và phân quyền',
     '/zalo': 'Tích hợp thông báo Zalo',
   };

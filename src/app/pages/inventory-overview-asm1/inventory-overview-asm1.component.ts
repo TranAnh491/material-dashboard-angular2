@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { TabPermissionService } from '../../services/tab-permission.service';
@@ -47,6 +47,9 @@ interface LinkQFileInfo {
 })
 export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
+  /** 🔧 FIX: hủy listener cũ trước khi tạo mới — tránh chồng listener khi loadInventoryOverview()
+   *  bị gọi lại (permission check, timeout fallback, refresh thủ công). */
+  private inventorySub?: Subscription;
   
   // Data
   inventoryItems: InventoryOverviewItem[] = [];
@@ -172,7 +175,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       
       // Sử dụng snapshotChanges() để có real-time updates
       // 🔧 SỬA LỖI: Bỏ orderBy để tránh cần index
-      this.firestore.collection('inventory-materials', ref => 
+      // 🔧 FIX: hủy listener cũ trước khi tạo mới — loadInventoryOverview() có thể bị gọi lại
+      // (permission check, timeout fallback, refresh thủ công) và trước đây không hủy listener
+      // cũ, khiến nhiều listener chồng lên nhau, mỗi cái đọc lại toàn bộ inventory-materials.
+      this.inventorySub?.unsubscribe();
+      this.inventorySub = this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', 'ASM1')
       )
       .snapshotChanges()

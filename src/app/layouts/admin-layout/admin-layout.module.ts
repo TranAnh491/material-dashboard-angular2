@@ -78,7 +78,6 @@ import { LocationUnlockDialogComponent } from '../../components/location-unlock-
 
 import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
-import { TaskComponent } from '../../pages/task/task.component';
 import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 import { DvLuuTruCatalogComponent } from '../../pages/dv-luu-tru-catalog/dv-luu-tru-catalog.component';
 
@@ -154,7 +153,6 @@ import { DvLuuTruCatalogComponent } from '../../pages/dv-luu-tru-catalog/dv-luu-
 
     ChartComponent,
     ZaloComponent,
-    TaskComponent,
     NhietDoComponent,
     DvLuuTruCatalogComponent
   ],

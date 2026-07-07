@@ -26,7 +26,6 @@ import { StockCheckComponent } from '../../pages/stock-check/stock-check.compone
 import { SettingsComponent } from '../../pages/settings/settings.component';
 import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
-import { ManageComponent } from '../../pages/manage/manage.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
 import { QCComponent } from '../../pages/qc/qc.component';
@@ -39,7 +38,6 @@ import { BagHistoryComponent } from '../../pages/bag-history/bag-history.compone
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
-import { TaskComponent } from '../../pages/task/task.component';
 import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
@@ -88,7 +86,6 @@ export const AdminLayoutRoutes: Routes = [
 
 
   { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'manage',               component: ManageComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'sxxk',                component: SxxkComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'scrap',               component: ScrapComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'qc',                   component: QCComponent, canActivate: [AuthGuard, TabPermissionGuard] },
@@ -100,6 +97,5 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },
-  { path: 'task',                 component: TaskComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'nhiet-do',             component: NhietDoComponent, canActivate: [AuthGuard, TabPermissionGuard] }
 ];

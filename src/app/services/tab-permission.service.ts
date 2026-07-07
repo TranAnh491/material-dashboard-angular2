@@ -181,10 +181,7 @@ export class TabPermissionService {
     // Location tab
     { key: 'location', name: 'Materials' },
     { key: 'layout-warehouse', name: 'Layout Warehouse' },
-    
-    // Manage tab
-    { key: 'manage', name: 'Manage' },
-    
+
     // Other tabs
     { key: 'stock-check', name: 'Stock Check' },
     { key: 'label', name: 'Label' },

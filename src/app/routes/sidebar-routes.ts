@@ -75,7 +75,6 @@ export const ROUTES: RouteInfo[] = [
     ]
   },
   { path: '/location', title: 'Materials', icon: 'inventory_2', class: '' },
-  { path: '/manage', title: 'Manage', icon: 'manage_search', class: '' },
   { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },
   { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', class: '' },
   { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
