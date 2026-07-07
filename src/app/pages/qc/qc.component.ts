@@ -236,10 +236,17 @@ export class QCComponent implements OnInit, OnDestroy {
     return `${String(materialCode || '').trim().toUpperCase()}|${String(poNumber || '').trim()}|${String(imd || '').trim()}`;
   }
 
-  isSampleTakenInPendingQcRow(item: any): boolean {
-    if (this.iqcHistoryContext !== 'pendingQC') return false;
+  isSampleTakenRow(item: any): boolean {
     const key = this.buildSampleKey(item?.materialCode, item?.poNumber, item?.batchNumber);
     return !!key && this.sampleTakenKeySet.has(key);
+  }
+
+  isSampleTakeEnabledForCurrentList(): boolean {
+    return (
+      this.iqcHistoryContext === 'pendingQC' ||
+      this.iqcHistoryContext === 'pendingConfirm' ||
+      this.iqcHistoryContext === 'monthlyNg'
+    );
   }
 
   // IQC button permission (separate from QC tab access)
@@ -2553,6 +2560,10 @@ export class QCComponent implements OnInit, OnDestroy {
       this.iqcHistoryResults = results;
       this.isSearchingIqcHistory = false;
       this.iqcHistoryError = results.length === 0 ? `Không có dữ liệu ${status} trong tháng hiện tại` : '';
+
+      if (this.isSampleTakeEnabledForCurrentList()) {
+        void this.refreshSampleTakenMarkersForPendingQc(this.iqcHistoryResults);
+      }
     } catch (error) {
       console.error(`❌ Error loading monthly ${status} list:`, error);
       this.isSearchingIqcHistory = false;
@@ -4218,9 +4229,9 @@ export class QCComponent implements OnInit, OnDestroy {
     }, 300);
   }
 
-  // ===== Lấy mẫu (chuột phải ở danh sách chờ kiểm) =====
-  onPendingQcMaterialRightClick(event: MouseEvent, item: any): void {
-    if (this.iqcHistoryContext !== 'pendingQC') return;
+  // ===== Lấy mẫu (chuột phải ở danh sách chờ kiểm / chờ xác nhận / NG) =====
+  onSampleTakeRightClick(event: MouseEvent, item: any): void {
+    if (!this.isSampleTakeEnabledForCurrentList()) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -4322,7 +4333,10 @@ export class QCComponent implements OnInit, OnDestroy {
         iqcTestRosh: this.sampleTakeIqcTestRosh,
         layMauHangVe: this.sampleTakeLayMauHangVe,
         engLuuMau: this.sampleTakeEngLuuMau,
-        totalQuantity: this.sampleTakeTotalQty,
+        // Theo yêu cầu: Tổng Số Lượng = số lượng nhập popup (pcs)
+        totalQuantity: pcs,
+        // Lưu thêm để tham chiếu (tồn kho/inventory qty)
+        inventoryTotalQuantity: this.sampleTakeTotalQty,
         poNumber: this.sampleTakeSelected.poNumber,
         maKho: this.sampleTakeMaKho,
         loaiHinh: this.sampleTakeLoaiHinh,
@@ -4383,7 +4397,10 @@ export class QCComponent implements OnInit, OnDestroy {
         iqcTestRosh: this.sampleTakeIqcTestRosh,
         layMauHangVe: this.sampleTakeLayMauHangVe,
         engLuuMau: this.sampleTakeEngLuuMau,
-        totalQuantity: this.sampleTakeTotalQty,
+        // Theo yêu cầu: Tổng Số Lượng = số lượng nhập popup (pcs)
+        totalQuantity: pcs,
+        // Lưu thêm để tham chiếu (tồn kho/inventory qty)
+        inventoryTotalQuantity: this.sampleTakeTotalQty,
         poNumber: po,
         maKho: this.sampleTakeMaKho,
         loaiHinh: this.sampleTakeLoaiHinh,
@@ -4444,7 +4461,7 @@ export class QCComponent implements OnInit, OnDestroy {
       <html>
         <head>
           <meta charset="utf-8">
-          <title>QR Lấy Mẫu - ${esc(payload.materialCode)}</title>
+          <title></title>
           <style>
             * { margin:0 !important; padding:0 !important; box-sizing:border-box !important; }
             body { font-family: Arial, sans-serif; background:#fff; overflow:hidden; width:57mm !important; height:32mm !important; }
@@ -4485,7 +4502,12 @@ export class QCComponent implements OnInit, OnDestroy {
         </head>
         <body>
           ${labelHtml}
-          <script>window.onload=function(){setTimeout(function(){window.print();},500);};</script>
+          <script>
+            document.title = '';
+            window.onload = function() {
+              setTimeout(function(){ window.print(); }, 500);
+            };
+          </script>
         </body>
       </html>
     `);
@@ -4595,7 +4617,8 @@ export class QCComponent implements OnInit, OnDestroy {
             'Số PO',
             'Mã Kho (LINKQ)',
             'Loại Hình (LINKQ)',
-            'Mã ngành nghề'
+            'Mã ngành nghề',
+            'PXK'
           ]
         ];
 
@@ -4608,11 +4631,13 @@ export class QCComponent implements OnInit, OnDestroy {
             r.iqcTestRosh ? '✔' : '',
             r.layMauHangVe ? '✔' : '',
             r.engLuuMau ? '✔' : '',
-            r.totalQuantity ?? '',
+            // Tổng Số Lượng = số lượng nhập popup
+            (r.pcs ?? r.totalQuantity ?? ''),
             r.poNumber || '',
             r.maKho || '',
             r.loaiHinh || '',
-            r.nganhNghe || ''
+            r.nganhNghe || '',
+            r.pxk || ''
           ]);
         });
 
@@ -4626,6 +4651,24 @@ export class QCComponent implements OnInit, OnDestroy {
         console.error('downloadSampleCatalogExcel error', e);
         alert('Lỗi khi xuất Excel.');
       });
+  }
+
+  async saveSampleCatalogPxk(row: any): Promise<void> {
+    const id = String(row?.id || '').trim();
+    if (!id) return;
+    const pxk = String(row?.pxk || '').trim();
+    try {
+      await this.firestore.collection(this.QC_SAMPLE_COLLECTION).doc(id).set(
+        {
+          pxk,
+          pxkUpdatedAt: new Date()
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.error('saveSampleCatalogPxk error', e);
+      alert('Không lưu được PXK. Vui lòng thử lại.');
+    }
   }
 
   closePendingQCModal(): void {
@@ -4740,6 +4783,10 @@ export class QCComponent implements OnInit, OnDestroy {
         }));
         this.isSearchingIqcHistory = false;
         this.iqcHistoryError = '';
+
+        if (this.isSampleTakeEnabledForCurrentList()) {
+          void this.refreshSampleTakenMarkersForPendingQc(this.iqcHistoryResults);
+        }
 
         // If current priority is not in the list anymore, drop it
         if (this.priorityMaterialId && !this.iqcHistoryResults.some(r => r.id === this.priorityMaterialId)) {

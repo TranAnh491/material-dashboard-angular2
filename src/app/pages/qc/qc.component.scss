@@ -1372,13 +1372,9 @@ $gray:    #9ca3af;
   border-radius: 10px;
 }
 
-// "Yes" badge for taken samples (pending QC list)
-.qc-code-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.qc-sample-yes {
+// "Done" badge for taken samples (list tables)
+.qc-sample-col { text-align: center; }
+.qc-sample-done {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1391,6 +1387,14 @@ $gray:    #9ca3af;
   border: 1px solid #a7f3d0;
   line-height: 1;
   user-select: none;
+}
+
+.pxk-input {
+  width: 120px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
 // ── Download section ────────────────────────────────

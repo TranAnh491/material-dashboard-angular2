@@ -426,6 +426,7 @@
             <th>Trạng thái</th>
             <th class="iqc-priority-th"><div class="iqc-priority-center">Ưu tiên</div></th>
             <th>Người kiểm</th>
+            <th>Lấy mẫu</th>
             <th>Thời gian</th>
           </tr>
         </thead>
@@ -435,12 +436,9 @@
             <td
               [class.iqc-history-code]="iqcHistoryContext === 'pendingConfirm'"
               [class.qc-pending-dup-material-code]="iqcHistoryContext === 'pendingQC' && isPendingQcDuplicateMaterialCode(item.materialCode)"
-              (contextmenu)="iqcHistoryContext === 'pendingQC' ? onPendingQcMaterialRightClick($event, item) : null"
+              (contextmenu)="isSampleTakeEnabledForCurrentList() ? onSampleTakeRightClick($event, item) : null"
               (click)="iqcHistoryContext === 'pendingConfirm' ? openIQCFromHistory(item) : null">
-              <span class="qc-code-cell">
-                <span class="qc-code-text">{{ item.materialCode }}</span>
-                <span class="qc-sample-yes" *ngIf="isSampleTakenInPendingQcRow(item)" title="Đã lấy mẫu">Yes</span>
-              </span>
+              {{ item.materialCode }}
             </td>
             <td>{{ item.poNumber }}</td>
             <td>{{ getDisplayLotBatch(item.batchNumber) }}</td>
@@ -475,6 +473,10 @@
               <ng-template #noPriority>—</ng-template>
             </td>
             <td>{{ item.qcCheckedBy || '—' }}</td>
+            <td class="qc-sample-col">
+              <span class="qc-sample-done" *ngIf="isSampleTakenRow(item)" title="Đã lấy mẫu">Done</span>
+              <span *ngIf="!isSampleTakenRow(item)">—</span>
+            </td>
             <td>{{ item.eventTime ? (item.eventTime | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
           </tr>
         </tbody>
@@ -960,6 +962,7 @@
               <th>Mã kho</th>
               <th>Loại hình</th>
               <th>Ngành nghề</th>
+              <th>PXK</th>
             </tr>
           </thead>
           <tbody>
@@ -974,6 +977,15 @@
               <td>{{ r.maKho }}</td>
               <td>{{ r.loaiHinh || '—' }}</td>
               <td>{{ r.nganhNghe }}</td>
+              <td>
+                <input
+                  type="text"
+                  class="pxk-input"
+                  [(ngModel)]="r.pxk"
+                  placeholder="Nhập PXK"
+                  (blur)="saveSampleCatalogPxk(r)"
+                  [disabled]="isLoadingSampleCatalog">
+              </td>
             </tr>
           </tbody>
         </table>
