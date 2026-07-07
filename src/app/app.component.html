@@ -1,2 +1,12 @@
 
 <router-outlet></router-outlet>
+
+<!-- Popup bắt buộc tải lại khi có bản cập nhật mới — không có nút đóng/bỏ qua. -->
+<div class="app-update-overlay" *ngIf="updateAvailable">
+  <div class="app-update-card">
+    <i class="material-icons app-update-icon">system_update_alt</i>
+    <h3>Đã có bản cập nhật mới</h3>
+    <p>Vui lòng tải lại trang để tiếp tục sử dụng.</p>
+    <button type="button" class="app-update-btn" (click)="reloadNow()">Tải lại ngay</button>
+  </div>
+</div>

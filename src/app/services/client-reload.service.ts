@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { Subscription } from 'rxjs';
+import { BehaviorSubject, Subscription } from 'rxjs';
 
 interface ClientReloadDoc {
   reloadToken?: number;
@@ -18,6 +18,15 @@ export class ClientReloadService implements OnDestroy {
   private subscription: Subscription | null = null;
   private listening = false;
 
+  /**
+   * true khi có bản mới cần tải lại. KHÔNG tự động reload() ngay — để không cắt ngang thao tác
+   * đang dở (gõ form, quét mã...). UI (app.component) hiển thị popup toàn màn hình, bắt buộc bấm
+   * "Tải lại" mới dùng tiếp được — người dùng tự nhiên chỉ gặp popup sau khi thao tác hiện tại
+   * xong (thao tác tiếp theo sẽ chạm ngay popup).
+   */
+  private readonly updateAvailableSubject = new BehaviorSubject<boolean>(false);
+  readonly updateAvailable$ = this.updateAvailableSubject.asObservable();
+
   constructor(private firestore: AngularFirestore) {}
 
   /** Lắng nghe realtime — gọi 1 lần khi app khởi động */
@@ -30,24 +39,36 @@ export class ClientReloadService implements OnDestroy {
     this.subscription = this.firestore
       .doc<ClientReloadDoc>(ClientReloadService.DOC_PATH)
       .valueChanges()
-      .subscribe((data) => {
-        const token = Number(data?.reloadToken ?? 0);
-        if (!Number.isFinite(token) || token <= 0) {
-          return;
-        }
+      .subscribe({
+        next: (data) => {
+          const rawToken = Number(data?.reloadToken ?? 0);
+          const token = Number.isFinite(rawToken) ? rawToken : 0;
 
-        const stored = sessionStorage.getItem(ClientReloadService.STORAGE_KEY);
-        if (stored === null) {
-          sessionStorage.setItem(ClientReloadService.STORAGE_KEY, String(token));
-          return;
-        }
+          // 🔧 FIX: Lưu baseline ngay từ lần nhận dữ liệu ĐẦU TIÊN — kể cả khi token = 0
+          // (document chưa từng tồn tại). Trước đây token<=0 bị return sớm, không lưu baseline,
+          // nên lần bấm "F5 tất cả" ĐẦU TIÊN (0 -> 1) luôn bị hiểu nhầm là "lần đầu thấy dữ liệu"
+          // và bỏ qua, không báo — phải bấm lần 2 mới có tác dụng.
+          const stored = sessionStorage.getItem(ClientReloadService.STORAGE_KEY);
+          if (stored === null) {
+            sessionStorage.setItem(ClientReloadService.STORAGE_KEY, String(token));
+            return;
+          }
 
-        const lastToken = Number(stored);
-        if (token !== lastToken) {
-          sessionStorage.setItem(ClientReloadService.STORAGE_KEY, String(token));
-          window.location.reload();
+          const lastToken = Number(stored);
+          if (token > 0 && token !== lastToken) {
+            sessionStorage.setItem(ClientReloadService.STORAGE_KEY, String(token));
+            this.updateAvailableSubject.next(true);
+          }
+        },
+        error: (err) => {
+          console.error('ClientReloadService: listen failed', err);
         }
       });
+  }
+
+  /** Gọi từ nút "Tải lại ngay" trên popup bắt buộc. */
+  reloadNow(): void {
+    window.location.reload();
   }
 
   /** Admin bấm → tăng token → mọi tab đang mở web sẽ F5 */

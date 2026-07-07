@@ -11,7 +11,9 @@
     "test": "ng test",
     "lint": "ng lint",
     "e2e": "ng e2e",
-    "install:clean": "rm -rf node_modules/ && rm -rf package-lock.json && npm install && ng serve -o"
+    "install:clean": "rm -rf node_modules/ && rm -rf package-lock.json && npm install && ng serve -o",
+    "notify:reload": "node scripts/notify-clients-reload.js",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting && npm run notify:reload"
   },
   "engines": {
     "node": ">=16.0.0",
