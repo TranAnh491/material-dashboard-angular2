@@ -682,34 +682,47 @@ export class PrintLabelComponent implements OnInit {
     return `${day}/${month}/${year}`;
   }
 
-  // Generate import date ID dựa trên số lần import (tăng dần mỗi lần bấm import)
+  private static readonly BATCH_COUNTER_DOC = 'app-settings/print-label-batch-counter';
+
+  /**
+   * Generate import date ID dựa trên số lần import (tăng dần mỗi lần bấm import).
+   * 🔧 FIX: Trước đây đọc TOÀN BỘ collection print-schedules mỗi lần import chỉ để tìm
+   * batchNumber lớn nhất. Giờ dùng 1 document đếm riêng (app-settings/print-label-batch-counter),
+   * chỉ cần 1 read + transaction tăng dần. Nếu doc đếm chưa tồn tại, quét 1 lần duy nhất để khởi tạo.
+   */
   private async generateBatchId(fileContent: any[]): Promise<string> {
     try {
-      // Lấy batch number cao nhất từ tất cả documents
-      const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
-      
-      let maxBatchNumber = 0;
-      
-      if (snapshot && !snapshot.empty) {
-        snapshot.docs.forEach(doc => {
-          const data = doc.data();
-          const batchNumber = data['batchNumber'] || 0;
-          if (batchNumber > maxBatchNumber) {
-            maxBatchNumber = batchNumber;
-          }
-        });
+      const counterRef = this.firestore.firestore.doc(PrintLabelComponent.BATCH_COUNTER_DOC);
+      const counterSnap = await counterRef.get();
+
+      if (!counterSnap.exists) {
+        // Khởi tạo lần đầu: quét 1 lần để lấy batch number lớn nhất hiện có
+        const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
+        let maxBatchNumber = 0;
+        if (snapshot && !snapshot.empty) {
+          snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            const batchNumber = data['batchNumber'] || 0;
+            if (batchNumber > maxBatchNumber) {
+              maxBatchNumber = batchNumber;
+            }
+          });
+        }
+        await counterRef.set({ lastBatchNumber: maxBatchNumber }, { merge: true });
       }
-      
-      // Tăng lên 1 cho lần import mới
-      const nextBatchNumber = maxBatchNumber + 1;
-      
-      // Reset to 1 if we reach 999
-      const finalBatchNumber = nextBatchNumber > 999 ? 1 : nextBatchNumber;
-      
-      const batchId = String(finalBatchNumber).padStart(3, '0');
-      console.log(`🆔 Generated batch ID: ${batchId} (import #${finalBatchNumber})`);
+
+      const nextBatchNumber = await this.firestore.firestore.runTransaction(async (tx) => {
+        const snap = await tx.get(counterRef);
+        const current = snap.exists ? (snap.data()?.['lastBatchNumber'] || 0) : 0;
+        const next = current >= 999 ? 1 : current + 1;
+        tx.set(counterRef, { lastBatchNumber: next }, { merge: true });
+        return next;
+      });
+
+      const batchId = String(nextBatchNumber).padStart(3, '0');
+      console.log(`🆔 Generated batch ID: ${batchId} (import #${nextBatchNumber})`);
       return batchId;
-      
+
     } catch (error) {
       console.error('❌ Error generating batch ID:', error);
       return '001'; // Fallback

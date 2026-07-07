@@ -16,6 +16,7 @@ import { MaterialsDashboardService } from '../../services/materials-dashboard.se
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
@@ -291,7 +292,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     private labelReprintFlags: LabelReprintFlagService,
     private materialsDashboard: MaterialsDashboardService,
     private locationUnlock: LocationUnlockService,
-    private dvLuuTruCatalog: DvLuuTruCatalogService
+    private dvLuuTruCatalog: DvLuuTruCatalogService,
+    private readTracker: ReadTrackerService
   ) {}
 
   getStorageUnitLabel(material: InventoryMaterial): string {
@@ -2497,19 +2499,63 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  private static readonly CATALOG_LOCALSTORAGE_KEY = 'materials-asm2-catalog-cache-v1';
+  private static readonly CATALOG_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 tiếng
+
+  /** Đọc catalog từ localStorage (nếu còn hạn) — tránh đọc lại ~8-9 nghìn doc mỗi lần mở tab/reload. */
+  private tryLoadCatalogFromLocalStorage(): boolean {
+    try {
+      const raw = localStorage.getItem(MaterialsASM2Component.CATALOG_LOCALSTORAGE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { items?: any[]; timestamp?: number };
+      if (!parsed?.items?.length || !parsed.timestamp) return false;
+      if (Date.now() - parsed.timestamp >= MaterialsASM2Component.CATALOG_CACHE_TTL_MS) return false;
+
+      this.catalogCache.clear();
+      parsed.items.forEach(item => {
+        if (item?.materialCode) this.catalogCache.set(item.materialCode, item);
+      });
+      console.log(`📱 Loaded ${this.catalogCache.size} catalog items from localStorage`);
+      return this.catalogCache.size > 0;
+    } catch (e) {
+      console.warn('⚠️ Could not read catalog cache from localStorage:', e);
+      return false;
+    }
+  }
+
+  private saveCatalogToLocalStorage(): void {
+    try {
+      const items = Array.from(this.catalogCache.values());
+      localStorage.setItem(
+        MaterialsASM2Component.CATALOG_LOCALSTORAGE_KEY,
+        JSON.stringify({ items, timestamp: Date.now() })
+      );
+    } catch (e) {
+      console.warn('⚠️ Could not save catalog cache to localStorage:', e);
+    }
+  }
+
   // Load catalog from Firebase
   private async loadCatalogFromFirebase(): Promise<void> {
     this.isCatalogLoading = true;
     console.log('📋 Loading catalog from Firebase...');
-    
-    // 🚀 OPTIMIZATION: Check cache first
+
+    // 🚀 OPTIMIZATION: Check in-memory cache first
     if (this.catalogCache.size > 0) {
       console.log('📚 Using cached catalog data');
       this.isCatalogLoading = false;
       this.catalogLoaded = true;
       return;
     }
-    
+
+    // 🔧 FIX: Trước khi đọc lại toàn bộ ~8-9 nghìn doc từ Firestore, thử localStorage trước
+    // (dữ liệu catalog ít thay đổi, cache 12 tiếng là an toàn).
+    if (this.tryLoadCatalogFromLocalStorage()) {
+      this.isCatalogLoading = false;
+      this.catalogLoaded = true;
+      return;
+    }
+
     try {
       // THỬ NHIỀU COLLECTION NAMES - KIỂM TRA THỰC TẾ SỐ LƯỢNG DOCUMENTS
       let snapshot = null;
@@ -2633,8 +2679,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         });
         
         console.log(`📊 Duplicate handling: ${duplicateCount} duplicates skipped, ${processedCount} unique items processed`);
-        
+
         this.catalogLoaded = true;
+        this.readTracker.track('materials-asm2', collectionName, snapshot.size);
+        this.saveCatalogToLocalStorage();
         console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Firebase collection: ${collectionName}`);
         console.log(`📋 Catalog cache keys:`, Array.from(this.catalogCache.keys()));
         console.log(`📊 Processed ${processedCount} documents`);

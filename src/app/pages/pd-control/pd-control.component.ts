@@ -13,6 +13,7 @@ import { Router } from '@angular/router';
 import firebase from 'firebase/compat/app';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 
 type PdBatchStep = 'employee' | 'lsx' | 'material';
 
@@ -121,10 +122,15 @@ export class PdControlComponent implements OnInit, OnDestroy {
 
   private todayScans: PdReturnScanDoc[] = [];
 
+  /** Cache kết quả outbound theo LSX — tránh query lặp lại mỗi lần refresh cây tìm kiếm. */
+  private readonly outboundPlanCodesCacheByLsx = new Map<string, { planSet: Set<string>; loadedAt: number }>();
+  private static readonly OUTBOUND_PLAN_CACHE_TTL_MS = 5 * 60 * 1000;
+
   constructor(
     private firestore: AngularFirestore,
     private cdr: ChangeDetectorRef,
-    private router: Router
+    private router: Router,
+    private readTracker: ReadTrackerService
   ) {}
 
   goToMenu(): void {
@@ -184,12 +190,23 @@ export class PdControlComponent implements OnInit, OnDestroy {
     void this.loadPdReturnScans();
   }
 
+  /**
+   * 🔧 FIX: Trước đây đọc tới 4000 doc chỉ lọc theo factory (không giới hạn ngày ngay trên
+   * Firestore), rồi mới lọc "hôm nay" ở client — nghĩa là luôn đọc gần hết collection dù chỉ
+   * cần dữ liệu trong ngày. Đẩy filter theo ngày (createdAt >= 00:00 hôm nay) xuống Firestore.
+   */
   private async loadPdReturnScans(): Promise<void> {
     try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
       const snapshot = await this.firestore
-        .collection(this.PD_COLLECTION, ref => ref.where('factory', '==', this.PD_FACTORY).limit(4000))
+        .collection(this.PD_COLLECTION, ref =>
+          ref.where('factory', '==', this.PD_FACTORY).where('createdAt', '>=', startOfToday).limit(4000)
+        )
         .get()
         .toPromise();
+      this.readTracker.track('pd-control', 'pd-return-scans', snapshot?.docs.length || 0);
       const rows: PdReturnScanDoc[] = (snapshot?.docs || [])
         .map(doc => {
           const d = doc.data() as any;
@@ -310,6 +327,11 @@ export class PdControlComponent implements OnInit, OnDestroy {
   }
 
   private async fetchOutboundPlanCodesForLsx(lsx: string): Promise<Set<string>> {
+    const now = Date.now();
+    const cached = this.outboundPlanCodesCacheByLsx.get(lsx);
+    if (cached && now - cached.loadedAt < PdControlComponent.OUTBOUND_PLAN_CACHE_TTL_MS) {
+      return cached.planSet;
+    }
     try {
       const snap = await this.firestore
         .collection('outbound-materials', ref =>
@@ -317,6 +339,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
         )
         .get()
         .toPromise();
+      this.readTracker.track('pd-control', 'outbound-materials', snap?.docs.length || 0);
       const set = new Set<string>();
       const docs = (snap as any)?.docs ?? [];
       for (const doc of docs) {
@@ -327,6 +350,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
         const hit = mc.match(/B\d{6}/);
         if (hit) set.add(hit[0]);
       }
+      this.outboundPlanCodesCacheByLsx.set(lsx, { planSet: set, loadedAt: now });
       return set;
     } catch (e) {
       console.warn('[PD Control] outbound plan:', e);

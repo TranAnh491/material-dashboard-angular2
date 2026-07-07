@@ -19,6 +19,7 @@ import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
+import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
 interface ScannedItem {
@@ -161,6 +162,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   doneOrders: number = 0;
   delayOrders: number = 0;
   checkCount: number = 0; // Số LSX đã import PXK nhưng còn Thiếu (So sánh)
+  isCheckingThieu = false;
   lsxWithThieuSet = new Set<string>();
   workOrderIdsWithThieu = new Set<string>(); // wo.id có Thiếu - dùng để tô đỏ LSX
   
@@ -224,6 +226,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       byLsx: Map<string, Map<string, number>>;
       /** LSX norm → mã NV scan xuất kho gần nhất */
       lsxToMemberId: Map<string, string>;
+      lsxMemberIdAt: Map<string, number>;
+      loadedLsxNorms: Set<string>;
       loadedAt: number;
     }
   >();
@@ -254,6 +258,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   // PXK Import
   pxkDataByLsx: PxkDataByLsx = {};
   private _pxkLinesCache = new Map<string, PxkLine[]>();  // cache kết quả lookup
+  /** LSX norm đã query pxk-import-data (tránh query lặp khi không có PXK) */
+  private pxkLoadAttemptedNorms = new Set<string>();
+  /** Danh sách LSX đã import PXK — đọc 1 doc index, không cần tải lines */
+  private pxkIndexLsxKeys: string[] = [];
+  private readonly PXK_INDEX_DOC = 'app-settings/pxk-import-lsx-index';
   isImportingPxk: boolean = false;
   isClearingPxk: boolean = false;
   showPxkDownloadDialog: boolean = false;
@@ -412,11 +421,19 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     console.log('🔄 Loading work orders from database...');
     this.isLoading = true;
     try {
-      // PXK phụ thuộc danh sách WO: chỉ load LSX chưa Done → phải có work orders trước
       const workOrders = await this.fetchWorkOrdersForCurrentFilters();
-      await this.loadPxkFromFirebase(workOrders);
+      this.pxkDataByLsx = {};
+      this.pxkLoadAttemptedNorms.clear();
+      this.pxkIndexLsxKeys = [];
+      this.invalidatePxkCache();
+      this.lsxWithThieuSet.clear();
+      this.workOrderIdsWithThieu.clear();
+      this.checkCount = 0;
       this.processLoadedWorkOrders(workOrders);
-      await this.applyOutboundCreatedByOverrides();
+      await Promise.all([
+        this.loadPxkPresenceFromIndex(),
+        this.applyOutboundCreatedByOverrides()
+      ]);
     } catch (e) {
       console.error('❌ loadWorkOrders failed:', e);
       alert(`⚠️ Lỗi tải dữ liệu Work Order: ${(e as Error)?.message || e}`);
@@ -431,38 +448,216 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
   }
 
-  /** LSX cần PXK: WO chưa Done (Done không cần Box Check / chặn Done theo PXK). */
-  private collectLsxNeedingPxk(workOrders: WorkOrder[]): string[] {
+  /** Biến thể LSX để query Firestore `in` (gốc + IN HOA). */
+  private collectLsxQueryVariants(raw: string): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const add = (t: string) => {
+      if (!t || seen.has(t)) return;
+      seen.add(t);
+      out.push(t);
+    };
+    const t = String(raw || '').trim();
+    if (!t) return out;
+    add(t);
+    const u = t.toUpperCase();
+    if (u !== t) add(u);
+    return out;
+  }
+
+  private collectLsxQueryVariantsFromList(rawList: string[]): string[] {
     const seen = new Set<string>();
     const out: string[] = [];
-    const addVariants = (raw: string) => {
-      const t = String(raw || '').trim();
-      if (!t) return;
-      if (!seen.has(t)) {
-        seen.add(t);
-        out.push(t);
+    for (const raw of rawList) {
+      for (const v of this.collectLsxQueryVariants(raw)) {
+        if (!seen.has(v)) {
+          seen.add(v);
+          out.push(v);
+        }
       }
-      const u = t.toUpperCase();
-      if (u !== t && !seen.has(u)) {
-        seen.add(u);
-        out.push(u);
-      }
-    };
-    for (const wo of workOrders) {
-      if (wo.status === WorkOrderStatus.DONE) continue;
-      addVariants(wo.productionOrder || '');
     }
     return out;
   }
 
-  /** Load PXK chỉ cho LSX WO chưa Done (query `lsx in`, batch 30 — giới hạn Firestore). */
+  /** LSX cần PXK: WO chưa Done (Done không cần Box Check / chặn Done theo PXK). */
+  private collectLsxNeedingPxk(workOrders: WorkOrder[]): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const wo of workOrders) {
+      if (wo.status === WorkOrderStatus.DONE) continue;
+      for (const v of this.collectLsxQueryVariants(wo.productionOrder || '')) {
+        if (!seen.has(v)) {
+          seen.add(v);
+          out.push(v);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Đọc index PXK (1 read) để biết LSX nào đã import — viền xanh nút In. */
+  async loadPxkPresenceFromIndex(): Promise<void> {
+    try {
+      const snap = await firstValueFrom(this.firestore.doc(this.PXK_INDEX_DOC).get());
+      if (!snap.exists) {
+        await this.rebuildPxkIndexFromFirestoreOnce();
+        this.cdr.markForCheck();
+        return;
+      }
+      const data = snap.data() as { lsxKeys?: unknown } | undefined;
+      const keys = data?.lsxKeys;
+      if (Array.isArray(keys) && keys.length > 0) {
+        this.pxkIndexLsxKeys = keys.map(k => String(k || '').trim()).filter(Boolean);
+        console.log(`[PXK Index] ✅ ${this.pxkIndexLsxKeys.length} LSX từ index (1 read)`);
+        return;
+      }
+      await this.bootstrapPxkIndexFromWorkOrders();
+    } catch (e) {
+      console.warn('[PXK Index] Lỗi đọc index, fallback query theo LSX tab:', e);
+      await this.loadPxkPresenceFromFirebase(this.workOrders);
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Một lần duy nhất khi chưa có doc index — sau đó mỗi lần mở tab chỉ 1 read. */
+  private async rebuildPxkIndexFromFirestoreOnce(): Promise<void> {
+    console.log('[PXK Index] Tạo index lần đầu từ pxk-import-data...');
+    const snapshot = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
+    const keys: string[] = [];
+    snapshot.docs.forEach((docSnap: any) => {
+      const d = docSnap.data();
+      const lsx = String(d?.lsx || '').trim();
+      const lines = Array.isArray(d?.lines) ? d.lines : [];
+      if (lsx && lines.length > 0) keys.push(lsx);
+    });
+    this.pxkIndexLsxKeys = [...new Set(keys)];
+    await this.savePxkIndexKeys(this.pxkIndexLsxKeys, true);
+    console.log(`[PXK Index] ✅ Đã tạo index: ${this.pxkIndexLsxKeys.length} LSX (${snapshot.docs.length} reads, chỉ 1 lần)`);
+  }
+
+  /** Lần đầu chưa có index: query `lsx in` theo LSX trên tab rồi ghi index. */
+  private async bootstrapPxkIndexFromWorkOrders(): Promise<void> {
+    const rawList = this.workOrders.map(wo => wo.productionOrder || '').filter(Boolean);
+    const found = await this.queryPxkLsxKeysFromFirestore(rawList);
+    this.pxkIndexLsxKeys = found;
+    if (found.length > 0) {
+      await this.savePxkIndexKeys(found, true);
+      console.log(`[PXK Index] Bootstrap: ${found.length} LSX → đã ghi index`);
+    } else {
+      console.log('[PXK Index] Bootstrap: không có PXK cho LSX trên tab');
+    }
+  }
+
+  /** Query pxk-import-data theo LSX — chỉ lấy key, không lưu lines (reads = số doc trả về). */
+  private async queryPxkLsxKeysFromFirestore(rawList: string[]): Promise<string[]> {
+    const FIRESTORE_IN_MAX = 30;
+    const lsxList = this.collectLsxQueryVariantsFromList(rawList);
+    if (lsxList.length === 0) return [];
+
+    const found = new Set<string>();
+    for (let i = 0; i < lsxList.length; i += FIRESTORE_IN_MAX) {
+      const chunk = lsxList.slice(i, i + FIRESTORE_IN_MAX);
+      const snapshot = await firstValueFrom(
+        this.firestore.collection('pxk-import-data', (ref) => ref.where('lsx', 'in', chunk)).get()
+      );
+      snapshot.docs.forEach((docSnap: any) => {
+        const d = docSnap.data();
+        const lsx = String(d?.lsx || '').trim();
+        const lines = Array.isArray(d?.lines) ? d.lines : [];
+        if (lsx && lines.length > 0) found.add(lsx);
+      });
+    }
+    return [...found];
+  }
+
+  /** Chỉ cập nhật danh sách key trong index (arrayUnion / ghi mới). */
+  private async savePxkIndexKeys(lsxKeys: string[], replaceAll = false): Promise<void> {
+    const keys = [...new Set(lsxKeys.map(k => String(k || '').trim()).filter(Boolean))];
+    if (keys.length === 0) return;
+    try {
+      if (replaceAll) {
+        await this.firestore.doc(this.PXK_INDEX_DOC).set({
+          lsxKeys: keys,
+          updatedAt: new Date()
+        }, { merge: true });
+        return;
+      }
+      const BATCH = 10;
+      for (let i = 0; i < keys.length; i += BATCH) {
+        const chunk = keys.slice(i, i + BATCH);
+        await this.firestore.doc(this.PXK_INDEX_DOC).set({
+          lsxKeys: firebase.firestore.FieldValue.arrayUnion(...chunk),
+          updatedAt: new Date()
+        }, { merge: true });
+      }
+    } catch (e) {
+      console.warn('[PXK Index] Không ghi được index:', e);
+    }
+  }
+
+  private async removeLsxKeysFromPxkIndex(lsxKeys: string[]): Promise<void> {
+    const keys = [...new Set(lsxKeys.map(k => String(k || '').trim()).filter(Boolean))];
+    if (keys.length === 0) return;
+    try {
+      await this.firestore.doc(this.PXK_INDEX_DOC).set({
+        lsxKeys: firebase.firestore.FieldValue.arrayRemove(...keys),
+        updatedAt: new Date()
+      }, { merge: true });
+      this.pxkIndexLsxKeys = this.pxkIndexLsxKeys.filter(k => !keys.includes(k));
+    } catch (e) {
+      console.warn('[PXK Index] Không xóa được khỏi index:', e);
+    }
+  }
+
+  /** Fallback khi index lỗi: query theo LSX, không lưu lines. */
+  async loadPxkPresenceFromFirebase(workOrders: WorkOrder[]): Promise<void> {
+    const rawList = workOrders.map(wo => wo.productionOrder || '').filter(Boolean);
+    const found = await this.queryPxkLsxKeysFromFirestore(rawList);
+    const merged = new Set([...this.pxkIndexLsxKeys, ...found]);
+    this.pxkIndexLsxKeys = [...merged];
+    if (found.length > 0) {
+      await this.savePxkIndexKeys(found, false);
+    }
+    console.log(`[PXK Presence] Fallback: ${found.length} LSX có PXK (query theo tab)`);
+  }
+
+  /** Khớp LSX WO với key trong index (cùng logic getPxkLinesForLsx). */
+  private pxkLsxKeysMatch(woLsx: string, indexKey: string): boolean {
+    const woLsxTrim = String(woLsx || '').trim();
+    if (!woLsxTrim || !indexKey) return false;
+    const woUpper = woLsxTrim.toUpperCase();
+    const keyUpper = String(indexKey).trim().toUpperCase();
+    if (keyUpper === woUpper) return true;
+
+    const normalizeLsx = (s: string): string => {
+      const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
+      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      return m ? m[1].replace(/[-.]/g, '/') : t;
+    };
+    const samePrefix = (a: string, b: string): boolean => {
+      const ua = (a || '').toUpperCase();
+      const ub = (b || '').toUpperCase();
+      const aKz = ua.startsWith('KZLSX') || ua.startsWith('KZ');
+      const bKz = ub.startsWith('KZLSX') || ub.startsWith('KZ');
+      const aLh = ua.startsWith('LHLSX') || ua.startsWith('LH');
+      const bLh = ub.startsWith('LHLSX') || ub.startsWith('LH');
+      return (aKz && bKz) || (aLh && bLh);
+    };
+    const woNorm = normalizeLsx(woLsxTrim);
+    return samePrefix(woLsxTrim, indexKey) && (
+      woUpper.includes(keyUpper) ||
+      keyUpper.includes(woUpper) ||
+      (!!woNorm && woNorm === normalizeLsx(indexKey))
+    );
+  }
+
+  /** Load PXK theo danh sách LSX (query `lsx in`, batch 30). Chỉ gọi khi user thao tác. */
   async loadPxkFromFirebase(workOrders: WorkOrder[]): Promise<void> {
     const FIRESTORE_IN_MAX = 30;
-    const lsxList = this.collectLsxNeedingPxk(workOrders);
-    this.pxkDataByLsx = {};
+    const candidates = workOrders.filter(wo => this.hasPxkForWorkOrder(wo));
+    const lsxList = this.collectLsxNeedingPxk(candidates);
     try {
       if (lsxList.length === 0) {
-        this.invalidatePxkCache();
         console.log('[PXK Load] Không có LSX chưa Done — bỏ qua tải PXK');
         return;
       }
@@ -492,6 +687,65 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       );
     } catch (e) {
       console.error('[PXK Load] ❌ Lỗi khi load:', e);
+    }
+  }
+
+  /** Lazy-load PXK lines cho một LSX — khi in / Check / Done. */
+  async ensurePxkLoadedForLsx(lsx: string): Promise<boolean> {
+    const raw = String(lsx || '').trim();
+    if (!raw) return false;
+    if (this.getPxkLinesForLsx(raw).length > 0) return true;
+
+    const norm = this.normLsxForMatch(raw);
+    if (this.pxkLoadAttemptedNorms.has(norm)) return false;
+    if (!this.pxkLsxHasImportedPresence(raw)) {
+      this.pxkLoadAttemptedNorms.add(norm);
+      return false;
+    }
+
+    const variants = this.collectLsxQueryVariants(raw);
+    if (variants.length === 0) {
+      this.pxkLoadAttemptedNorms.add(norm);
+      return false;
+    }
+
+    try {
+      const snapshot = await firstValueFrom(
+        this.firestore.collection('pxk-import-data', (ref) => ref.where('lsx', 'in', variants)).get()
+      );
+      snapshot.docs.forEach((docSnap: any) => {
+        const d = docSnap.data();
+        const key = String(d?.lsx || '').trim();
+        const lines = Array.isArray(d?.lines) ? d.lines : [];
+        if (key && lines.length > 0) {
+          this.pxkDataByLsx[key] = lines;
+        }
+      });
+      this.invalidatePxkCache();
+    } catch (e) {
+      console.warn('[PXK Load] ensurePxkLoadedForLsx failed:', raw, e);
+    }
+
+    this.pxkLoadAttemptedNorms.add(norm);
+    return this.getPxkLinesForLsx(raw).length > 0;
+  }
+
+  /** Bấm thẻ Check — tải PXK + outbound theo LSX đang lọc, đếm Thiếu. */
+  async runThieuCheck(): Promise<void> {
+    if (this.isCheckingThieu) return;
+    if (!this.isRuleEffectiveDate()) {
+      this.checkCount = 0;
+      return;
+    }
+    this.isCheckingThieu = true;
+    this.cdr.markForCheck();
+    try {
+      const candidates = this.filteredWorkOrders.filter(wo => wo.status !== WorkOrderStatus.DONE);
+      await this.loadPxkFromFirebase(candidates);
+      await this.calculateCheckCount();
+    } finally {
+      this.isCheckingThieu = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -546,8 +800,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         alert(`Không tìm thấy dữ liệu PXK cho LSX: ${lsxToDelete}`);
         return;
       }
-      for (const { id } of toDelete) {
+      for (const { id, lsx } of toDelete) {
         await this.firestore.collection('pxk-import-data').doc(id).delete();
+        await this.removeLsxKeysFromPxkIndex([lsx]);
       }
       Object.keys(this.pxkDataByLsx).forEach(k => {
         if (normLsx(k) === targetNorm) delete this.pxkDataByLsx[k];
@@ -853,15 +1108,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.transferOrders = filtered.filter(wo => wo.status === WorkOrderStatus.TRANSFER).length;
     this.doneOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DONE).length;
     this.delayOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DELAY).length;
-    // Trì hoãn query outbound nặng để không chặn paint / tương tác ngay sau load
-    if (typeof requestAnimationFrame !== 'undefined') {
-      requestAnimationFrame(() => void this.calculateCheckCount());
-    } else {
-      setTimeout(() => void this.calculateCheckCount(), 0);
-    }
   }
 
-  /** Đếm số LSX (đã import PXK) có So sánh Thiếu - load outbound 1 lần/factory để tránh lag */
+  /** Đếm số LSX (đã import PXK) có So sánh Thiếu — chỉ chạy khi bấm thẻ Check. */
   async calculateCheckCount(): Promise<void> {
     this.lsxWithThieuSet.clear();
     this.workOrderIdsWithThieu.clear();
@@ -891,8 +1140,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     for (const fac of factories) {
       try {
         const factoryFilter = fac === 'ASM2' ? 'ASM2' : 'ASM1';
-        const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter);
-        factoryToLsxScanMap.set(fac, byLsx);
+        const lsxList = [...lsxMap.values()].filter(e => e.factory === fac).map(e => e.lsx);
+        await this.ensureOutboundMetaForLsxList(factoryFilter, lsxList);
+        const cached = this.outboundLsxScanMapCacheByFactory.get(factoryFilter);
+        factoryToLsxScanMap.set(fac, cached?.byLsx ?? new Map());
       } catch (_) {}
     }
     const getSoSanhForCheck = (xuất: number, scan: number): string => {
@@ -3463,6 +3714,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   openPrintOptionDialog(workOrder: WorkOrder): void {
+    void this.ensurePxkLoadedForLsx(workOrder.productionOrder || '').then(() => this.cdr.markForCheck());
     const dialogRef = this.dialog.open(PrintOptionDialogComponent, {
       width: '400px',
       data: { workOrder }
@@ -4121,6 +4373,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const lsxDisplay = lsxList.length <= maxShow
           ? lsxList.join(', ')
           : lsxList.slice(0, maxShow).join(', ') + ` và ${lsxList.length - maxShow} LSX khác`;
+        if (!this.isBsImport && lsxList.length > 0) {
+          this.pxkIndexLsxKeys = [...new Set([...this.pxkIndexLsxKeys, ...lsxList])];
+          await this.savePxkIndexKeys(lsxList, false);
+        }
         alert(`Đã import PXK: ${total} dòng, ${lsxList.length} LSX.\n\nLSX đã import:\n${lsxDisplay}`);
         this.calculateSummary();
       }
@@ -4174,7 +4430,16 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   hasPxkForWorkOrder(wo: WorkOrder): boolean {
-    return this.getPxkLinesForLsx(wo.productionOrder || '').length > 0;
+    const lsx = wo.productionOrder || '';
+    if (!lsx) return false;
+    if (this.getPxkLinesForLsx(lsx).length > 0) return true;
+    return this.pxkLsxHasImportedPresence(lsx);
+  }
+
+  /** Có PXK theo index (1 read khi mở tab) — không cần tải lines. */
+  private pxkLsxHasImportedPresence(lsx: string): boolean {
+    if (!lsx || this.pxkIndexLsxKeys.length === 0) return false;
+    return this.pxkIndexLsxKeys.some(key => this.pxkLsxKeysMatch(lsx, key));
   }
 
   private isRuleEffectiveDate(): boolean {
@@ -4182,67 +4447,123 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   private async getOutboundLsxScanMapForFactoryFilter(
-    factoryFilter: string
+    factoryFilter: string,
+    lsxRawList: string[]
   ): Promise<Map<string, Map<string, number>>> {
-    const meta = await this.loadOutboundLsxMetaForFactory(factoryFilter);
+    const meta = await this.ensureOutboundMetaForLsxList(factoryFilter, lsxRawList);
     return meta.byLsx;
   }
 
-  private async loadOutboundLsxMetaForFactory(factoryFilter: string): Promise<{
+  private applyOutboundDocToMeta(
+    d: Record<string, unknown>,
+    byLsx: Map<string, Map<string, number>>,
+    lsxToMemberId: Map<string, string>,
+    lsxMemberIdAt: Map<string, number>
+  ): void {
+    const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
+    if (!poLsxNorm) return;
+
+    const memberId = this.woOutboundCreatedBy.normalizeMemberId(
+      String(d.employeeId || d.exportedBy || '')
+    );
+    if (memberId) {
+      const exportMs = this.parseOutboundExportDateMs(d.exportDate || d.createdAt);
+      const prevMs = lsxMemberIdAt.get(poLsxNorm) || 0;
+      if (exportMs >= prevMs) {
+        lsxToMemberId.set(poLsxNorm, memberId);
+        lsxMemberIdAt.set(poLsxNorm, exportMs);
+      }
+    }
+
+    const mat = String(d.materialCode || '').trim().toUpperCase();
+    if (mat.charAt(0) !== 'B') return;
+
+    const po = String(d.poNumber ?? d.po ?? '').trim();
+    const qty = Number(d.exportQuantity || 0) || 0;
+
+    if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
+    const scanMap = byLsx.get(poLsxNorm)!;
+    const key = `${mat}|${po}`;
+    scanMap.set(key, (scanMap.get(key) || 0) + qty);
+  }
+
+  /** Chỉ query outbound của LSX liên quan (batch `productionOrder in`). */
+  private async ensureOutboundMetaForLsxList(
+    factoryFilter: string,
+    lsxRawList: string[]
+  ): Promise<{
     byLsx: Map<string, Map<string, number>>;
     lsxToMemberId: Map<string, string>;
   }> {
     const now = Date.now();
-    const cached = this.outboundLsxScanMapCacheByFactory.get(factoryFilter);
-    if (cached && now - cached.loadedAt < this.OUTBOUND_LSX_SCAN_MAP_CACHE_TTL_MS) {
-      return { byLsx: cached.byLsx, lsxToMemberId: cached.lsxToMemberId };
-    }
-
-    const byLsx = new Map<string, Map<string, number>>();
-    const lsxToMemberId = new Map<string, string>();
-    const lsxMemberIdAt = new Map<string, number>();
-
-    try {
-      const outboundSnapshot = await firstValueFrom(
-        this.firestore.collection('outbound-materials', ref =>
-          ref.where('factory', '==', factoryFilter)
-        ).get()
-      );
-
-      outboundSnapshot.docs.forEach((doc: any) => {
-        const d = doc.data() as any;
-        const poLsxNorm = this.normLsxForMatch(d.productionOrder || '');
-        if (!poLsxNorm) return;
-
-        const memberId = this.woOutboundCreatedBy.normalizeMemberId(
-          d.employeeId || d.exportedBy || ''
-        );
-        if (memberId) {
-          const exportMs = this.parseOutboundExportDateMs(d.exportDate || d.createdAt);
-          const prevMs = lsxMemberIdAt.get(poLsxNorm) || 0;
-          if (exportMs >= prevMs) {
-            lsxToMemberId.set(poLsxNorm, memberId);
-            lsxMemberIdAt.set(poLsxNorm, exportMs);
-          }
-        }
-
-        const mat = String(d.materialCode || '').trim().toUpperCase();
-        if (mat.charAt(0) !== 'B') return;
-
-        const po = String(d.poNumber ?? d.po ?? '').trim();
-        const qty = Number(d.exportQuantity || 0) || 0;
-
-        if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
-        const scanMap = byLsx.get(poLsxNorm)!;
-        const key = `${mat}|${po}`;
-        scanMap.set(key, (scanMap.get(key) || 0) + qty);
-      });
-    } catch (e) {
+    const uniqueRaw = [...new Set(lsxRawList.map(s => String(s || '').trim()).filter(Boolean))];
+    if (uniqueRaw.length === 0) {
       return { byLsx: new Map(), lsxToMemberId: new Map() };
     }
 
-    this.outboundLsxScanMapCacheByFactory.set(factoryFilter, { byLsx, lsxToMemberId, loadedAt: now });
-    return { byLsx, lsxToMemberId };
+    const normTargets = new Set(uniqueRaw.map(s => this.normLsxForMatch(s)).filter(Boolean));
+
+    let cache = this.outboundLsxScanMapCacheByFactory.get(factoryFilter);
+    if (cache && now - cache.loadedAt >= this.OUTBOUND_LSX_SCAN_MAP_CACHE_TTL_MS) {
+      this.outboundLsxScanMapCacheByFactory.delete(factoryFilter);
+      cache = undefined;
+    }
+    if (!cache) {
+      cache = {
+        byLsx: new Map(),
+        lsxToMemberId: new Map(),
+        lsxMemberIdAt: new Map(),
+        loadedLsxNorms: new Set(),
+        loadedAt: now
+      };
+      this.outboundLsxScanMapCacheByFactory.set(factoryFilter, cache);
+    }
+
+    const missingNorms = [...normTargets].filter(n => !cache!.loadedLsxNorms.has(n));
+    if (missingNorms.length === 0) {
+      return { byLsx: cache.byLsx, lsxToMemberId: cache.lsxToMemberId };
+    }
+
+    const queryVariants: string[] = [];
+    const variantSeen = new Set<string>();
+    for (const raw of uniqueRaw) {
+      const norm = this.normLsxForMatch(raw);
+      if (!missingNorms.includes(norm)) continue;
+      for (const v of this.collectLsxQueryVariants(raw)) {
+        if (!variantSeen.has(v)) {
+          variantSeen.add(v);
+          queryVariants.push(v);
+        }
+      }
+    }
+
+    const FIRESTORE_IN_MAX = 30;
+    try {
+      for (let i = 0; i < queryVariants.length; i += FIRESTORE_IN_MAX) {
+        const chunk = queryVariants.slice(i, i + FIRESTORE_IN_MAX);
+        const outboundSnapshot = await firstValueFrom(
+          this.firestore.collection('outbound-materials', ref =>
+            ref.where('factory', '==', factoryFilter).where('productionOrder', 'in', chunk)
+          ).get()
+        );
+        outboundSnapshot.docs.forEach((doc: any) => {
+          this.applyOutboundDocToMeta(
+            doc.data() as Record<string, unknown>,
+            cache!.byLsx,
+            cache!.lsxToMemberId,
+            cache!.lsxMemberIdAt
+          );
+        });
+      }
+      for (const norm of missingNorms) {
+        cache!.loadedLsxNorms.add(norm);
+      }
+      cache!.loadedAt = now;
+    } catch (e) {
+      console.warn('[WO] ensureOutboundMetaForLsxList failed:', factoryFilter, e);
+    }
+
+    return { byLsx: cache.byLsx, lsxToMemberId: cache.lsxToMemberId };
   }
 
   private parseOutboundExportDateMs(v: unknown): number {
@@ -4262,11 +4583,22 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return Number.isFinite(d.getTime()) ? d.getTime() : 0;
   }
 
-  /** Ghi đè Người soạn theo người scan xuất kho + tên zalo_links. */
+  /** Ghi đè Người soạn theo người scan xuất kho + tên zalo_links (chỉ outbound LSX trên tab). */
   private async applyOutboundCreatedByOverrides(): Promise<void> {
     const zalo = await this.woOutboundCreatedBy.getZaloNameMap();
-    const metaAsm1 = await this.loadOutboundLsxMetaForFactory('ASM1');
-    const metaAsm2 = await this.loadOutboundLsxMetaForFactory('ASM2');
+    const asm1Lsx: string[] = [];
+    const asm2Lsx: string[] = [];
+    for (const wo of this.workOrders) {
+      const lsx = String(wo.productionOrder || '').trim();
+      if (!lsx) continue;
+      const fac = this.resolveOutboundFactoryFilterForPxk(wo);
+      (fac === 'ASM2' ? asm2Lsx : asm1Lsx).push(lsx);
+    }
+
+    const [metaAsm1, metaAsm2] = await Promise.all([
+      this.ensureOutboundMetaForLsxList('ASM1', asm1Lsx),
+      this.ensureOutboundMetaForLsxList('ASM2', asm2Lsx)
+    ]);
 
     for (const wo of this.workOrders) {
       const fac = this.resolveOutboundFactoryFilterForPxk(wo);
@@ -4302,7 +4634,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     if (lines.length === 0) return false;
 
     const woLsxNorm = this.normLsxForMatch(lsx);
-    const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter);
+    const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter, [lsx]);
     const scanMap = byLsx.get(woLsxNorm) || new Map<string, number>();
 
     const getScanQty = (materialCode: string, po: string): number =>
@@ -4341,9 +4673,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   /** Nếu LSX có PXK và So sánh có Thiếu thì không cho chọn Done hoặc Transfer */
   async isThieuBlockedForWorkOrder(wo: WorkOrder): Promise<boolean> {
     if (!this.isRuleEffectiveDate()) return false;
+    const lsx = String(wo.productionOrder || '').trim();
+    if (!lsx) return false;
+    await this.ensurePxkLoadedForLsx(lsx);
     if (!this.hasPxkForWorkOrder(wo)) return false;
     const factoryFilter = this.resolveOutboundFactoryFilterForPxk(wo);
-    return this.hasPxkThieuForLsx(wo.productionOrder || '', factoryFilter);
+    return this.hasPxkThieuForLsx(lsx, factoryFilter);
   }
 
   /** @deprecated Dùng isThieuBlockedForWorkOrder */
@@ -5123,12 +5458,13 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 
   async printPxk(workOrder: WorkOrder): Promise<void> {
     try {
-    const lines = this.getPxkLinesForLsx(workOrder.productionOrder || '');
-    if (lines.length === 0) {
-      alert('Chưa có dữ liệu PXK cho LSX ' + workOrder.productionOrder + '. Vui lòng import file PXK trước.');
+    const lsx = workOrder.productionOrder || '';
+    const hasPxk = await this.ensurePxkLoadedForLsx(lsx);
+    const lines = this.getPxkLinesForLsx(lsx);
+    if (!hasPxk || lines.length === 0) {
+      alert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
       return;
     }
-    const lsx = workOrder.productionOrder || '';
     const factoryFilter = this.resolveOutboundFactoryFilterForPxk(workOrder);
     const isAsm1 = factoryFilter === 'ASM1';
     let qrImage = '';
@@ -5175,18 +5511,16 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const scanQtyMap = new Map<string, number>();
     const employeeIds = new Set<string>();
     try {
-      const normLsx = (s: string) => {
-        const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-        const m = t.match(/(\d{4}[\/\-\.]\d+)/);
-        return m ? m[1].replace(/[-.]/g, '/') : t;
-      };
-      const woLsxNorm = normLsx(lsx);
-      const outboundSnapshot = await firstValueFrom(this.firestore.collection('outbound-materials', ref =>
-        ref.where('factory', '==', factoryFilter)
-      ).get());
+      const woLsxNorm = this.normLsxForMatch(lsx);
+      const variants = this.collectLsxQueryVariants(lsx);
+      const outboundSnapshot = await firstValueFrom(
+        this.firestore.collection('outbound-materials', ref =>
+          ref.where('factory', '==', factoryFilter).where('productionOrder', 'in', variants)
+        ).get()
+      );
       outboundSnapshot.docs.forEach((doc: any) => {
         const d = doc.data() as any;
-        const poLsxNorm = normLsx(d.productionOrder || '');
+        const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
         if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
         const empId = String(d.employeeId || d.exportedBy || '').trim();
         if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);

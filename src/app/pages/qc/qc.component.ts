@@ -1458,11 +1458,14 @@ export class QCComponent implements OnInit, OnDestroy {
                .where('materialCode', '==', materialCode)
                .limit(200)
           ).get().toPromise();
-        } catch {
-          snapshot = await this.firestore.collection('inventory-materials', ref =>
-            ref.where('factory', '==', this.selectedFactory)
-               .limit(2000)
-          ).get().toPromise();
+        } catch (e) {
+          // 🔧 FIX: Trước đây fallback đọc TOÀN BỘ inventory-materials của factory (2000 doc)
+          // khi query lỗi — quá tốn kém cho 1 lỗi (thường là mạng tạm thời), và query trên chỉ
+          // dùng 2 điều kiện == nên không cần composite index. Báo lỗi để user thử lại thay vì quét cả factory.
+          console.error('[QC] materialCheckScan query failed:', e);
+          this.materialCheckError = `Lỗi tải dữ liệu kho, vui lòng thử lại. (${materialCode})`;
+          this.materialCheckScanInput = '';
+          return;
         }
 
         if (!snapshot || snapshot.empty) {
