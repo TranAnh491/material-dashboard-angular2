@@ -333,12 +333,12 @@ export class ZaloComponent implements OnInit, OnDestroy {
   private subscribeWebhookLinks(): void {
     this.afs
       .collection('zalo_links')
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (snap) => {
-          this.webhookLinks = snap.map((d) =>
-            this.mapZaloLinksDoc(d.payload.doc.id, d.payload.doc.data() as Record<string, unknown>)
+          this.webhookLinks = snap.docs.map((d) =>
+            this.mapZaloLinksDoc(d.id, d.data() as Record<string, unknown>)
           );
           this.mergeUserLinks();
           this.linksLoading = false;
@@ -355,13 +355,13 @@ export class ZaloComponent implements OnInit, OnDestroy {
   private subscribeManualUserLinks(): void {
     this.afs
       .collection('zalo-user-links', (ref) => ref.orderBy('employeeId'))
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (snap) => {
-          this.manualLinks = snap.map((d) => {
-            const id = d.payload.doc.id;
-            const v = d.payload.doc.data() as any;
+          this.manualLinks = snap.docs.map((d) => {
+            const id = d.id;
+            const v = d.data() as any;
             return {
               id,
               chatId: String(v.chatId ?? v.zaloUserId ?? id).trim(),
@@ -462,13 +462,13 @@ export class ZaloComponent implements OnInit, OnDestroy {
   private subscribeOrderRules(): void {
     this.afs
       .collection('zalo-order-rules', (ref) => ref.orderBy('updatedAt', 'desc'))
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (snap) => {
-          this.orderRules = snap.map((d) => {
-            const id = d.payload.doc.id;
-            const v = d.payload.doc.data() as any;
+          this.orderRules = snap.docs.map((d) => {
+            const id = d.id;
+            const v = d.data() as any;
             const membersRaw = Array.isArray(v.memberEmployeeIds) ? v.memberEmployeeIds : [];
             const memberEmployeeIds = membersRaw
               .map((x: unknown) => String(x ?? '').trim().toUpperCase())

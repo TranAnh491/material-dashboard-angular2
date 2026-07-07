@@ -117,12 +117,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.firestore.collection('pallets', ref =>
       ref.where('factory', '==', this.selectedFactory)
          .limit(500)
-    ).snapshotChanges()
+    ).get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.pallets = actions.map(a => {
-          const data = a.payload.doc.data() as any;
-          const id = a.payload.doc.id;
+      .subscribe(snapshot => {
+        this.pallets = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          const id = doc.id;
           return {
             id,
             palletCode: data.palletCode || '',
@@ -196,7 +196,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       });
 
       console.log(`✅ Created new pallet: ${palletCode}`);
-      // Data will auto-refresh via snapshotChanges
+      this.loadPallets();
     } catch (error) {
       console.error('Error creating pallet:', error);
       alert('Lỗi khi tạo pallet mới!');

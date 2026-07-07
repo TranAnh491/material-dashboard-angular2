@@ -187,10 +187,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    if (this.fgInCacheRefreshTimer) {
-      clearInterval(this.fgInCacheRefreshTimer);
-      this.fgInCacheRefreshTimer = undefined;
-    }
   }
 
   // Setup debounced search for better performance
@@ -204,18 +200,18 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Load materials from Firebase - Real-time listener để tự động cập nhật khi FG In thêm mới
-  loadMaterialsFromFirebase(): void {
+  // Load materials from Firebase — .get() khi mở tab / Refresh (không listener sống)
+  async loadMaterialsFromFirebase(): Promise<void> {
     this.isLoading = true;
 
-    this.firestore.collection('fg-inventory')
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        this.readTracker.track('fg-inventory', 'fg-inventory', actions.length);
-        const firebaseMaterials = actions.map(action => {
-          const data = action.payload.doc.data() as any;
-          const id = action.payload.doc.id;
+    try {
+      const snapshot = await this.firestore.collection('fg-inventory').get().toPromise();
+      const docs = snapshot?.docs || [];
+      this.readTracker.track('fg-inventory', 'fg-inventory', docs.length);
+
+      const firebaseMaterials = docs.map(doc => {
+          const data = doc.data() as any;
+          const id = doc.id;
 
           // Tồn kho = tonDau + nhap - xuat (ưu tiên đọc trực tiếp từ Firebase nếu đã tính sẵn)
           const tonDau = data.tonDau || 0;
@@ -270,7 +266,17 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         this.applyFilters();
         this.isLoading = false;
         this.cdr.detectChanges();
-      });
+    } catch (e) {
+      console.error('loadMaterialsFromFirebase failed', e);
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Làm mới tồn FG + cache fg-in (sau nhập/xuất hoặc bấm Refresh). */
+  async refreshInventoryData(): Promise<void> {
+    await this.refreshFgInOutCaches();
+    await this.loadMaterialsFromFirebase();
   }
 
   /** Key chuẩn hoá để map Nhập/Xuất theo đúng dòng (Mã TP|Batch|LSX|LOT). */
@@ -288,21 +294,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return String(batchNumber || '').trim().toUpperCase();
   }
 
-  /** 🔧 FIX: đổi từ listener sống sang làm mới định kỳ mỗi 5 phút. */
-  private readonly FG_IN_CACHE_REFRESH_MS = 5 * 60 * 1000;
-  private fgInCacheRefreshTimer?: ReturnType<typeof setInterval>;
-
-  /**
-   * Lấy tổng Nhập từ fg-in (theo key + PO theo batch).
-   *
-   * 🔧 FIX: Trước đây dùng .snapshotChanges() (listener sống, KHÔNG giới hạn) trên toàn bộ
-   * collection fg-in — nghĩa là BẤT KỲ ai ghi vào fg-in ở bất kỳ đâu (kể cả tab FG In) đều
-   * khiến tab này đọc lại toàn bộ collection ngay lập tức. Đây chỉ là cache tổng hợp phụ trợ
-   * (không phải view chính), nên đổi sang làm mới định kỳ mỗi 5 phút — đủ mới, không còn phụ
-   * thuộc hoạt động ghi ở tab khác.
-   */
+  /** 🔧 FIX: chỉ .get() khi mở tab / refresh thủ công — bỏ interval 5 phút. */
   private subscribeFGInOutCaches(): void {
-    const refresh = async () => {
+    void this.refreshFgInOutCaches();
+  }
+
+  async refreshFgInOutCaches(): Promise<void> {
       try {
         const snap = await this.firestore.collection('fg-in').get().toPromise();
         this.readTracker.track('fg-inventory', 'fg-in', snap?.docs.length || 0);
@@ -333,12 +330,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         this.applyFilters();
         this.cdr.detectChanges();
       } catch (e) {
-        console.error('subscribeFGInOutCaches refresh failed', e);
+        console.error('refreshFgInOutCaches failed', e);
       }
-    };
-
-    void refresh();
-    this.fgInCacheRefreshTimer = setInterval(() => void refresh(), this.FG_IN_CACHE_REFRESH_MS);
   }
 
   /**

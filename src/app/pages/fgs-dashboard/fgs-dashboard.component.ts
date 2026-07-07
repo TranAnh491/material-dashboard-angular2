@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { firstValueFrom, Subject } from 'rxjs';
+import { firstValueFrom, Subject, Subscription } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import * as XLSX from 'xlsx';
@@ -113,6 +113,8 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   groupByAaa = true;
   sortMode: 'activity_desc' | 'activity_asc' | 'sku_asc' | 'aging_asc' | 'aging_desc' = 'activity_desc';
   lastUpdatedText = '';
+  /** Chỉ tải Firestore khi bấm Start (hoặc Refresh sau khi đã Start). */
+  dashboardStarted = false;
 
   // Filters / controls
   startDate = '';
@@ -195,6 +197,7 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   /** Cùng collection `fg-customer-mapping` với tab Shipment — map mã TP (7 ký tự) → tên KH. */
   private customerMappingItems: Array<{ customerCode: string; materialCode: string; description: string }> = [];
   private khNameByMaterial7 = new Map<string, string>();
+  private fgCustomerMappingSub?: Subscription;
   private readonly destroy$ = new Subject<void>();
 
   // KPIs
@@ -223,11 +226,17 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     this.startDate = '2020-01-01';
     this.endDate = today.toISOString().slice(0, 10);
     this.selectedYear = today.getFullYear() >= 2020 && today.getFullYear() <= 2026 ? today.getFullYear() : 2026;
-    this.subscribeFgCustomerMapping();
-    void this.reload();
+  }
+
+  /** Bấm Start — tải dữ liệu theo lựa chọn hiện tại. */
+  async startDashboard(): Promise<void> {
+    this.dashboardStarted = true;
+    this.ensureFgCustomerMappingSubscribed();
+    await this.reload(true);
   }
 
   ngOnDestroy(): void {
+    this.fgCustomerMappingSub?.unsubscribe();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -257,8 +266,11 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     return (this.khNameByMaterial7.get(mat) || '').trim();
   }
 
-  private subscribeFgCustomerMapping(): void {
-    this.firestore
+  private ensureFgCustomerMappingSubscribed(): void {
+    if (this.fgCustomerMappingSub) {
+      return;
+    }
+    this.fgCustomerMappingSub = this.firestore
       .collection('fg-customer-mapping')
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
@@ -272,6 +284,9 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
           };
         });
         this.rebuildKhMaterialIndex();
+        if (!this.dashboardStarted) {
+          return;
+        }
         if (this.showLocationClusterView || this.showPalletClusterView) {
           this.recomputeView();
         } else {
@@ -309,7 +324,9 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     } catch {
       /* ignore quota */
     }
-    this.recomputeView();
+    if (this.dashboardStarted) {
+      this.recomputeView();
+    }
     this.closeColorSettings();
   }
 
@@ -381,7 +398,6 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     if (this.selectedYear === 'All') {
       this.startDate = '2020-01-01';
       this.endDate = new Date().toISOString().slice(0, 10);
-      void this.reload();
       return;
     }
 
@@ -390,10 +406,12 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     const end = y === new Date().getFullYear() ? new Date() : new Date(y, 11, 31);
     this.startDate = start.toISOString().slice(0, 10);
     this.endDate = end.toISOString().slice(0, 10);
-    void this.reload();
   }
 
   async onStockCheckCompareChange(): Promise<void> {
+    if (!this.dashboardStarted) {
+      return;
+    }
     if (this.stockCheckCompareEnabled) {
       await this.refreshStockCheckCheckedSkus();
     } else {
@@ -447,7 +465,9 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     this.fillByGroup = false;
     if (mode === 'Location') {
       this.fillFunction = 'Location';
-      await this.ensureLocationsLoaded();
+      if (this.dashboardStarted) {
+        await this.ensureLocationsLoaded();
+      }
     } else {
       this.fillFunction = 'Activities';
     }
@@ -459,10 +479,14 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
     this.fillByGroup = false;
     if (mode === 'Location') {
       this.fillFunction = 'Location';
-      await this.ensureLocationsLoaded();
+      if (this.dashboardStarted) {
+        await this.ensureLocationsLoaded();
+      }
     } else if (mode === 'Pallet') {
       this.fillFunction = 'Activities';
-      await this.ensurePalletLinesLoaded();
+      if (this.dashboardStarted) {
+        await this.ensurePalletLinesLoaded();
+      }
     } else {
       this.fillFunction = 'Activities';
     }
@@ -481,13 +505,16 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
 
   async setFillFunction(fn: 'Activities' | 'Location'): Promise<void> {
     this.fillFunction = fn;
-    if (!this.fillByGroup && fn === 'Location') {
+    if (this.dashboardStarted && !this.fillByGroup && fn === 'Location') {
       await this.ensureLocationsLoaded();
     }
     this.onFiltersChanged();
   }
 
   async reload(forceMaster = false): Promise<void> {
+    if (!this.dashboardStarted) {
+      return;
+    }
     this.isLoading = true;
     this.error = '';
     this.cdr.markForCheck();
@@ -538,6 +565,9 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
   }
 
   onFiltersChanged(): void {
+    if (!this.dashboardStarted) {
+      return;
+    }
     // Debounce to avoid recompute on every keystroke/change burst.
     if (this.filtersTimer) window.clearTimeout(this.filtersTimer);
     this.filtersTimer = window.setTimeout(() => {
@@ -548,7 +578,9 @@ export class FgsDashboardComponent implements OnInit, OnDestroy {
 
   clearSearch(): void {
     this.searchSku = '';
-    this.recomputeView();
+    if (this.dashboardStarted) {
+      this.recomputeView();
+    }
     this.cdr.markForCheck();
   }
 

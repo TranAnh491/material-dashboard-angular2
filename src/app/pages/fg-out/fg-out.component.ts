@@ -330,10 +330,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.fgOutDataSub?.unsubscribe();
     this.fgOutDataSub = null;
-    if (this.fgInventoryCacheRefreshTimer) {
-      clearInterval(this.fgInventoryCacheRefreshTimer);
-      this.fgInventoryCacheRefreshTimer = undefined;
-    }
     this.destroy$.next();
     this.destroy$.complete();
     this.loadLocationsSubject.complete();
@@ -388,34 +384,20 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** 🔧 FIX: đổi từ listener sống sang làm mới định kỳ mỗi 5 phút. */
-  private readonly FG_INVENTORY_CACHE_REFRESH_MS = 5 * 60 * 1000;
-  private fgInventoryCacheRefreshTimer?: ReturnType<typeof setInterval>;
-
-  /**
-   * Một luồng duy nhất cho fg-inventory: giảm 3 subscription → 1.
-   * Cập nhật cache tồn theo batch + theo mã TP, và dữ liệu popup chọn batch.
-   *
-   * 🔧 FIX: Trước đây dùng .valueChanges() (listener sống KHÔNG giới hạn factory) — nghĩa là
-   * BẤT KỲ ai ghi vào fg-inventory ở BẤT KỲ tab nào (FG Inventory, FG In...) đều khiến tab này
-   * đọc lại toàn bộ collection ngay lập tức. Cần dữ liệu cả 2 nhà máy (chế độ xem "TOTAL"
-   * gộp ASM1+ASM2 — xem setFactoryFilter) nên không thể lọc theo 1 factory. Thay bằng làm mới
-   * định kỳ mỗi 5 phút (đủ mới cho số liệu tồn kho, không còn phụ thuộc hoạt động ghi ở tab khác).
-   */
+  /** Cache tồn fg-inventory — .get() khi mở tab / sau xuất / Refresh (không interval). */
   private subscribeFgInventoryUnified(): void {
-    const refresh = async () => {
-      try {
-        const snap = await this.firestore.collection('fg-inventory').get().toPromise();
-        this.readTracker.track('fg-out', 'fg-inventory', snap?.docs.length || 0);
-        const arr = (snap?.docs || []).map(d => ({ id: d.id, ...(d.data() as any) }));
-        this.applyFgInventoryDocs(arr);
-      } catch (e) {
-        console.error('subscribeFgInventoryUnified refresh failed', e);
-      }
-    };
+    void this.refreshFgInventoryCache();
+  }
 
-    void refresh();
-    this.fgInventoryCacheRefreshTimer = setInterval(() => void refresh(), this.FG_INVENTORY_CACHE_REFRESH_MS);
+  async refreshFgInventoryCache(): Promise<void> {
+    try {
+      const snap = await this.firestore.collection('fg-inventory').get().toPromise();
+      this.readTracker.track('fg-out', 'fg-inventory', snap?.docs.length || 0);
+      const arr = (snap?.docs || []).map(d => ({ id: d.id, ...(d.data() as any) }));
+      this.applyFgInventoryDocs(arr);
+    } catch (e) {
+      console.error('refreshFgInventoryCache failed', e);
+    }
   }
 
   private applyFgInventoryDocs(docs: any[]): void {
@@ -525,14 +507,15 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return this.inventoryStockByBatchCache.get(batchKey) || 0;
   }
 
-  // Load materials from Firebase — chỉ 30 ngày gần nhất (xem cũ hơn: More → FG-OUT Report)
+  // Load materials from Firebase — chỉ 30 ngày gần nhất; .get() khi mở tab / sau xuất / Refresh
   loadMaterialsFromFirebase(): void {
     const from = this.getFgOutRollingWindowStart();
     const sub = this.firestore
       .collection<any>('fg-out', ref => ref.where('exportDate', '>=', from).orderBy('exportDate', 'desc'))
-      .valueChanges({ idField: 'id' })
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((docs) => {
+      .subscribe((snapshot) => {
+        const docs = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
         this.readTracker.track('fg-out', 'fg-out', docs.length);
         this.materials = docs.map(data => ({
           ...data,
@@ -3878,7 +3861,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         if (savedCount === selectedItems.length) {
           alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
           this.closeXuatKhoDialog();
-          this.loadMaterialsFromFirebase(); // Refresh data
+          this.loadMaterialsFromFirebase();
+          void this.refreshFgInventoryCache();
         }
       }).catch(error => {
         console.error('❌ Error creating FG Out record:', error);

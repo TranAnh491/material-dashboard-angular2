@@ -475,12 +475,12 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
     this.isLoadingHistory = true;
     this.firestore.collection('rm1-delivery-records', ref =>
       ref.where('mode', '==', 'giao-hang').limit(100)
-    ).snapshotChanges()
+    ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
-        this.deliveryHistory = snapshot
-          .map(doc => this.mapRecord(doc.payload.doc.id, doc.payload.doc.data() as any))
+        this.deliveryHistory = snapshot.docs
+          .map(doc => this.mapRecord(doc.id, doc.data() as any))
           .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         this.isLoadingHistory = false;
       },

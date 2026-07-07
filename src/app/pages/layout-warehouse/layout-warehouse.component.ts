@@ -747,7 +747,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.stopHeatmapMode();
     this.liveModeActive = true;
     await this.refreshLiveMoves();
-    this.liveRefreshTimer = setInterval(() => void this.refreshLiveMoves(), 120_000);
+    this.liveRefreshTimer = setInterval(() => void this.refreshLiveMoves(), 300_000);
   }
 
   stopLiveMode(): void {

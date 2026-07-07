@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { WorkOrder, WorkOrderStatus } from '../models/material-lifecycle.model';
 import { SafetyService } from '../services/safety.service';
 import { FirebaseAuthService } from '../services/firebase-auth.service';
@@ -180,6 +180,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   rackWarningsLoading = false;
   criticalCount = 0;
   warningCount = 0;
+  /** Đã chạy rack warning ít nhất một lần (tự động 8h hoặc bấm nút). */
+  rackWarningsLoaded = false;
+  private readonly RACK_WARNINGS_LAST_RUN_KEY = 'dashboard-rack-warnings-last-run-date';
+  private rackWarningsDailyTimer?: ReturnType<typeof setTimeout>;
 
   // IQC Materials by Week
   iqcWeekData: Array<{
@@ -216,8 +220,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   refreshInterval: any;
   refreshTime = 300000; // 5 phút
-  rackWarningsRefreshInterval: any;
-  rackWarningsRefreshTime = 14400000; // 4 tiếng
 
   // Charts for widgets
   private fgTurnoverChart: Chart | null = null;
@@ -584,19 +586,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     this.initializeCurrentWeek();
     this.loadDashboardData();
-    this.refreshInterval = setInterval(() => this.loadDashboardData(), this.refreshTime);
+    this.refreshInterval = setInterval(() => this.refreshNonFirestoreDashboardData(), this.refreshTime);
     
     // Load Safety data for weekday colors - Copied from Chart tab
     this.loadSafetyData();
     
-    // Load Rack Utilization Warnings
-    this.loadRackWarnings();
+    // Rack warnings: không đọc Firestore khi mở tab — chỉ 1 lần/ngày lúc 8:00 (nếu tab đang mở)
+    // hoặc khi bấm nút Chạy trên khung Rack Warnings (runRackWarningsManual).
+    this.scheduleRackWarningsDailyRun();
 
-    this.rackWarningsRefreshInterval = setInterval(
-      () => this.loadRackWarnings(),
-      this.rackWarningsRefreshTime
-    );
-    
     // Load IQC materials by week
     this.loadIQCByWeek();
     
@@ -623,7 +621,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       document.body.classList.remove(this.dashboardMobileBodyClass);
     }
     if (this.refreshInterval) clearInterval(this.refreshInterval);
-    if (this.rackWarningsRefreshInterval) clearInterval(this.rackWarningsRefreshInterval);
+    if (this.rackWarningsDailyTimer) clearTimeout(this.rackWarningsDailyTimer);
+    this.workOrdersSub?.unsubscribe();
     if (this.fgTurnoverChart) {
       try {
         this.fgTurnoverChart.destroy();
@@ -806,79 +805,103 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Load đầy đủ (khởi tạo listener work-orders + Google Sheets + charts). Chỉ nên gọi khi thật sự
+   *  cần re-query Firestore (khởi tạo, đổi nhà máy) — KHÔNG gọi từ timer định kỳ. */
   async loadDashboardData() {
     try {
-      // Load work orders from Firebase (this will also update summaries)
-      await this.loadWorkOrdersFromFirebase();
-      
+      // Load work orders from Firebase (this will also update summaries) — thiết lập listener 1 lần
+      this.loadWorkOrdersFromFirebase();
+
       // Load shipment data from Google Sheets (keep existing)
       this.loadShipmentDataFromGoogleSheets();
-      
+
       // Create charts (keep existing)
       this.createCharts();
-      
+
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
   }
 
+  /**
+   * 🔧 FIX: Refresh định kỳ (mỗi 5 phút) KHÔNG gọi lại loadWorkOrdersFromFirebase() nữa — listener
+   * work-orders đã tự cập nhật realtime, việc dựng lại full read mỗi 5 phút (dù dùng .get()) vẫn
+   * tốn tới hàng nghìn read mỗi lần dù dữ liệu không đổi. Timer chỉ còn làm mới phần không phải
+   * Firestore (Google Sheets) + vẽ lại chart từ dữ liệu work-orders đã có sẵn (do listener cập nhật).
+   */
+  private refreshNonFirestoreDashboardData(): void {
+    this.loadShipmentDataFromGoogleSheets();
+    this.createCharts();
+  }
+
   /** Chỉ tải work order tạo trong N ngày gần nhất — Dashboard chỉ cần tuần/tháng hiện tại. */
-  private readonly DASHBOARD_WO_RECENT_DAYS = 50;
+  private readonly DASHBOARD_WO_RECENT_DAYS = 35;
+  private workOrdersSub?: Subscription;
 
   /**
    * 🔧 FIX: Trước đây dùng .snapshotChanges() KHÔNG giới hạn trên toàn bộ collection work-orders,
    * và hàm này được setInterval gọi lại mỗi 5 phút (this.refreshInterval) mà KHÔNG hủy listener cũ
    * trước khi tạo listener mới → mỗi 5 phút chồng thêm 1 listener đọc toàn bộ work-orders, để lâu
-   * (màn hình luôn mở tab Dashboard) là hàng trăm listener chồng nhau. Đổi sang .get() (đọc 1 lần,
-   * tự kết thúc — không thể chồng) + giới hạn 50 ngày gần nhất theo createdDate.
+   * (màn hình luôn mở tab Dashboard) là hàng trăm listener chồng nhau.
+   *
+   * 🔧 FIX #2: Đổi tạm sang .get() lặp mỗi 5 phút đã giảm rủi ro chồng listener, nhưng vẫn đọc lại
+   * toàn bộ (tới 3000 doc) MỖI LẦN dù dữ liệu không đổi — vẫn tốn hàng nghìn read/ngày cho 1 tab.
+   * Quay lại dùng listener sống (chỉ tính phí cho phần THẬT SỰ thay đổi), có hủy listener cũ trước
+   * khi tạo mới (như Inventory Overview) để không còn chồng lặp, và KHÔNG còn bị gọi lại mỗi 5 phút
+   * từ timer (xem refreshNonFirestoreDashboardData) — chỉ gọi khi khởi tạo hoặc đổi nhà máy.
    */
-  private async loadWorkOrdersFromFirebase() {
-    try {
-      // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
-      const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
+  private loadWorkOrdersFromFirebase(): void {
+    // Get work orders for selected factory (ASM1 or ASM2) and Sample factories
+    const factoryFilter = this.selectedFactory === 'ASM1' ? ['ASM1', 'Sample 1'] : ['ASM2', 'Sample 2'];
 
-      console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} (count by deliveryDate - Ngày Giao NVL)`);
+    console.log(`Loading work orders for factories: ${factoryFilter.join(', ')} (count by deliveryDate - Ngày Giao NVL)`);
 
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - this.DASHBOARD_WO_RECENT_DAYS);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - this.DASHBOARD_WO_RECENT_DAYS);
 
-      const snapshot = await this.firestore
-        .collection('work-orders', ref => ref.where('createdDate', '>=', cutoff).limit(3000))
-        .get()
-        .toPromise();
-      this.readTracker.track('dashboard', 'work-orders', snapshot?.docs.length || 0);
+    this.workOrdersSub?.unsubscribe();
+    this.workOrdersSub = this.firestore
+      .collection('work-orders', ref => ref.where('createdDate', '>=', cutoff).limit(2000))
+      .get()
+      .subscribe({
+        next: (snapshot) => {
+          this.readTracker.track('dashboard', 'work-orders', snapshot.docs.length);
 
-      const workOrders = (snapshot?.docs || []).map(d => {
-        const data = d.data() as any;
-        const id = d.id;
+          const workOrders = snapshot.docs.map(doc => {
+            const data = doc.data() as any;
+            const id = doc.id;
 
-        const deliveryDate = this.parseFirestoreDate(data.deliveryDate);
-        const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
-        const createdDate = this.parseFirestoreDate(data.createdDate);
-        const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
+            const deliveryDate = this.parseFirestoreDate(data.deliveryDate);
+            const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
+            const createdDate = this.parseFirestoreDate(data.createdDate);
+            const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
 
-        return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt };
+            return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt };
+          });
+
+          // Filter by factory only.
+          // Date counting (WO: Thứ 2–Thứ 7 tuần hiện tại / yesterday overdue) theo deliveryDate (Ngày Giao NVL).
+          this.workOrders = workOrders.filter(wo => {
+            const woFactory = wo.factory || 'ASM1';
+            const normalizedFactory = (woFactory || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            const normalizedTargets = factoryFilter.map(f => (f || '').toString().trim().toLowerCase().replace(/\s+/g, ' '));
+            return normalizedTargets.includes(normalizedFactory);
+          });
+
+          this.filteredWorkOrders = [...this.workOrders];
+
+          console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (last ${this.DASHBOARD_WO_RECENT_DAYS} days)`);
+
+          // Update summaries after loading data
+          this.updateWorkOrderSummary();
+          this.updateWorkOrderStatus();
+          this.createCharts();
+          this.cdr.markForCheck();
+        },
+        error: (error) => {
+          console.error('Error loading work orders from Firebase:', error);
+        }
       });
-
-      // Filter by factory only.
-      // Date counting (WO: Thứ 2–Thứ 7 tuần hiện tại / yesterday overdue) theo deliveryDate (Ngày Giao NVL).
-      this.workOrders = workOrders.filter(wo => {
-        const woFactory = wo.factory || 'ASM1';
-        const normalizedFactory = (woFactory || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
-        const normalizedTargets = factoryFilter.map(f => (f || '').toString().trim().toLowerCase().replace(/\s+/g, ' '));
-        return normalizedTargets.includes(normalizedFactory);
-      });
-
-      this.filteredWorkOrders = [...this.workOrders];
-
-      console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (last ${this.DASHBOARD_WO_RECENT_DAYS} days)`);
-
-      // Update summaries after loading data
-      this.updateWorkOrderSummary();
-      this.updateWorkOrderStatus();
-    } catch (error) {
-      console.error('Error loading work orders from Firebase:', error);
-    }
   }
 
   /** LSX thuộc tháng hiện tại: ưu tiên year/month trên doc; không có thì theo Ngày Giao NVL. */
@@ -1346,11 +1369,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
     console.log(`Shipment chi tiết — 7 ngày sắp tới (${this.selectedFactory}): ${this.shipmentWeeklyDetailRows.length} dòng (đã gộp carton theo shipment + trạng thái)`);
   }
 
+  /**
+   * 🔧 FIX: Tên hàm gây hiểu lầm (Google Sheets) nhưng thực chất đọc thẳng Firestore collection
+   * `shipments` — và trước đây đọc TOÀN BỘ collection (không where/limit) mỗi lần gọi (kể cả mỗi
+   * 5 phút qua timer). Cần dữ liệu tháng hiện tại (isShipmentInCurrentMonth) + 7 ngày sắp tới
+   * (rebuildShipmentWeeklyDetailRows), nên giới hạn theo requestDate: từ đầu tháng hiện tại
+   * đến +14 ngày (đủ dư cho phần "7 ngày sắp tới").
+   */
   private loadShipmentDataFromGoogleSheets() {
-    // Load shipment data from Firebase collection 'shipments'
     console.log(`Loading shipment data from Firebase (tháng hiện tại)`);
 
-    this.firestore.collection('shipments').get().subscribe(snapshot => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const rangeEnd = new Date();
+    rangeEnd.setDate(rangeEnd.getDate() + 14);
+
+    this.firestore
+      .collection('shipments', ref =>
+        ref.where('requestDate', '>=', startOfMonth).where('requestDate', '<=', rangeEnd)
+      )
+      .get()
+      .subscribe(snapshot => {
+      this.readTracker.track('dashboard', 'shipments', snapshot.docs.length);
       const allShipments = snapshot.docs.map(doc => {
         const data = doc.data() as any;
         const toD = (v: any): Date | null => {
@@ -1880,7 +1920,59 @@ export class DashboardComponent implements OnInit, OnDestroy {
   refreshData() {
     this.initializeCurrentWeek();
     this.loadSafetyData();
-    this.loadRackWarnings();
+  }
+
+  /** Bấm nút Chạy trên khung Rack Utilization Warnings — luôn đọc Firestore. */
+  runRackWarningsManual(): void {
+    void this.loadRackWarnings();
+  }
+
+  private getLocalDateKey(d = new Date()): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private hasRackWarningsRunToday(): boolean {
+    try {
+      return localStorage.getItem(this.RACK_WARNINGS_LAST_RUN_KEY) === this.getLocalDateKey();
+    } catch {
+      return false;
+    }
+  }
+
+  private markRackWarningsRunToday(): void {
+    try {
+      localStorage.setItem(this.RACK_WARNINGS_LAST_RUN_KEY, this.getLocalDateKey());
+    } catch {
+      /* ignore quota */
+    }
+  }
+
+  /** Tự chạy 1 lần/ngày lúc 8:00 sáng nếu tab Dashboard đang mở (hoặc ngay khi mở tab sau 8h). */
+  private scheduleRackWarningsDailyRun(): void {
+    if (this.hasRackWarningsRunToday()) {
+      return;
+    }
+
+    const now = new Date();
+    const runAt = new Date(now);
+    runAt.setHours(8, 0, 0, 0);
+
+    const runOnce = () => {
+      if (this.hasRackWarningsRunToday()) {
+        return;
+      }
+      void this.loadRackWarnings().then(() => this.markRackWarningsRunToday());
+    };
+
+    if (now.getTime() >= runAt.getTime()) {
+      runOnce();
+      return;
+    }
+
+    this.rackWarningsDailyTimer = setTimeout(runOnce, runAt.getTime() - now.getTime());
   }
   
   // Load Rack Utilization Warnings
@@ -1892,11 +1984,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const inventorySnapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', 'ASM1')
       ).get().toPromise();
-      
+      this.readTracker.track('dashboard', 'inventory-materials', inventorySnapshot?.docs.length || 0);
+
       const materials = inventorySnapshot.docs.map(doc => doc.data() as any);
 
       // Load catalog for unit weights
       const catalogSnapshot = await this.firestore.collection('materials').get().toPromise();
+      this.readTracker.track('dashboard', 'materials', catalogSnapshot?.docs.length || 0);
       const catalogCache = new Map<string, any>();
       
       catalogSnapshot.docs.forEach(doc => {
@@ -1967,6 +2061,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       warnings.sort((a, b) => b.usage - a.usage);
       
       this.rackWarnings = warnings;
+      this.rackWarningsLoaded = true;
       
       // Count critical and warning
       this.criticalCount = warnings.filter(w => w.status === 'critical').length;

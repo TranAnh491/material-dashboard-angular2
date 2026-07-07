@@ -511,15 +511,28 @@
             <i class="material-icons">warning</i>
             Rack Utilization Warnings
           </h5>
+          <button
+            class="refresh-btn"
+            (click)="runRackWarningsManual()"
+            [disabled]="rackWarningsLoading"
+            aria-label="Chạy rack warnings"
+            title="Chạy kiểm tra rack (đọc Firestore)">
+            <i class="material-icons">play_arrow</i>
+          </button>
         </div>
 
         <div class="warnings-summary" *ngIf="!rackWarningsLoading">
-          <div *ngIf="rackWarnings.length === 0" class="all-clear">
+          <div *ngIf="!rackWarningsLoaded" class="all-clear rack-warn-idle">
+            <i class="material-icons">schedule</i>
+            <span>Chưa chạy hôm nay — tự chạy lúc 8:00 hoặc bấm nút ▶</span>
+          </div>
+
+          <div *ngIf="rackWarningsLoaded && rackWarnings.length === 0" class="all-clear">
             <i class="material-icons">check_circle</i>
             <span>All Clear</span>
           </div>
 
-          <div *ngIf="rackWarnings.length > 0" class="rack-warn-body">
+          <div *ngIf="rackWarningsLoaded && rackWarnings.length > 0" class="rack-warn-body">
             <!-- Big counter -->
             <div class="rack-warn-counter" [class.rack-warn-counter--critical]="criticalCount > 0">
               <div class="rack-warn-num">{{ criticalCount + warningCount }}</div>

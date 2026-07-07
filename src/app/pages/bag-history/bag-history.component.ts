@@ -87,9 +87,8 @@ export interface OutboundDuplicateGroupRow {
 })
 export class BagHistoryComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
-  private outboundDupTimer: any | null = null;
 
-  /** 800 bản ghi mới nhất (luồng realtime). */
+  /** 800 bản ghi mới nhất (tải bằng .get()). */
   rows: BagHistoryRow[] = [];
   /** Kết quả tìm theo mã (Enter) — thay thế nguồn hiển thị khi khác null. */
   queryResultRows: BagHistoryRow[] | null = null;
@@ -166,54 +165,50 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.firestore
-      .collection('rm-bag-history', ref => ref.orderBy('createdAt', 'desc').limit(800))
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.readTracker.track('bag-history', 'rm-bag-history', actions.length);
-        this.rows = actions.map(a =>
-          this.toRow(a.payload.doc.id, a.payload.doc.data() as any)
-        );
-        if (this.queryResultRows !== null) {
-          this.applyFilters();
-        }
-        this.rebuildInventorySummary();
-        this.isLoading = false;
-      }, () => {
-        this.isLoading = false;
-      });
+    void this.loadBagHistoryFromFirebase();
+    void this.loadControlBatchExclusionOnce();
+  }
 
-    this.firestore
-      .doc('control-batch-exclusion/settings')
-      .valueChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(
-        data => {
-          this.applyControlBatchExclusionDoc(data);
-          void this.loadOutboundExportDuplicates();
+  private async loadBagHistoryFromFirebase(): Promise<void> {
+    this.isLoading = true;
+    try {
+      const snap = await this.firestore
+        .collection('rm-bag-history', ref => ref.orderBy('createdAt', 'desc').limit(800))
+        .get()
+        .toPromise();
+      const docs = snap?.docs || [];
+      this.readTracker.track('bag-history', 'rm-bag-history', docs.length);
+      this.rows = docs.map(d => this.toRow(d.id, d.data() as any));
+      if (this.queryResultRows !== null) {
+        this.applyFilters();
+      }
+      this.rebuildInventorySummary();
+    } catch {
+      /* ignore */
+    } finally {
+      this.isLoading = false;
+    }
+  }
 
-          // Auto refresh duplicate scan every 30 minutes while tab is open.
-          if (!this.outboundDupTimer) {
-            this.outboundDupTimer = setInterval(() => {
-              void this.loadOutboundExportDuplicates();
-            }, 30 * 60 * 1000);
-          }
-        },
-        err => {
-          console.error('control-batch-exclusion subscribe', err);
-          this.outboundDupError =
-            'Không đọc được cấu hình loại trừ (control-batch-exclusion).';
-          this.outboundDupLoading = false;
-        }
-      );
+  private async loadControlBatchExclusionOnce(): Promise<void> {
+    try {
+      const snap = await this.firestore.doc('control-batch-exclusion/settings').get().toPromise();
+      this.applyControlBatchExclusionDoc(snap?.data());
+      await this.loadOutboundExportDuplicates();
+    } catch (err) {
+      console.error('control-batch-exclusion read', err);
+      this.outboundDupError =
+        'Không đọc được cấu hình loại trừ (control-batch-exclusion).';
+      this.outboundDupLoading = false;
+    }
+  }
+
+  /** Làm mới danh sách bag history (sau thao tác ghi). */
+  refreshBagHistory(): void {
+    void this.loadBagHistoryFromFirebase();
   }
 
   ngOnDestroy(): void {
-    if (this.outboundDupTimer) {
-      clearInterval(this.outboundDupTimer);
-      this.outboundDupTimer = null;
-    }
     this.destroy$.next();
     this.destroy$.complete();
   }

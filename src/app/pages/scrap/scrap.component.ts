@@ -188,13 +188,13 @@ export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
       .collection<ScrapSession>('scrap-data', ref =>
         ref.orderBy('createdAt', 'desc').limit(ScrapComponent.LIST_PAGE_SIZE)
       )
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
       .subscribe(
-        actions => {
-          this.sessions = actions.map(action => ({
-            id: action.payload.doc.id,
-            ...(action.payload.doc.data() as ScrapSession)
+        snapshot => {
+          this.sessions = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...(doc.data() as ScrapSession)
           }));
           this.applySessionsToView();
         },

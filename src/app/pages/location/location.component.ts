@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, HostLis
 import { Router } from '@angular/router';
 import firebase from 'firebase/compat/app';
 import { Subject, BehaviorSubject, Subscription } from 'rxjs';
-import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { takeUntil, debounceTime, distinctUntilChanged, take } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import * as XLSX from 'xlsx';
@@ -3256,14 +3256,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Load customer codes from database
   loadCustomerCodes() {
     this.firestore.collection('customer-codes', ref => ref.orderBy('no', 'asc'))
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.customerCodes = actions.map(action => ({
-          id: action.payload.doc.id,
-          ...action.payload.doc.data() as CustomerCode
+      .get()
+      .pipe(take(1), takeUntil(this.destroy$))
+      .subscribe(snapshot => {
+        this.customerCodes = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data() as CustomerCode
         }));
-        // Cập nhật filteredCustomerCodes ngay sau khi load
         this.filteredCustomerCodes = [...this.customerCodes];
       });
   }
@@ -3310,12 +3309,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Load FG Locations from database
   loadFGLocations() {
     this.firestore.collection('fg-locations', ref => ref.orderBy('stt', 'asc'))
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.fgLocations = actions.map(action => ({
-          id: action.payload.doc.id,
-          ...action.payload.doc.data() as FGLocation
+      .get()
+      .pipe(take(1), takeUntil(this.destroy$))
+      .subscribe(snapshot => {
+        this.fgLocations = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data() as FGLocation
         }));
         this.filteredFGLocations = [...this.fgLocations];
       });

@@ -2234,27 +2234,27 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     console.log('📦 Loading ASM1 inventory from Firebase...');
     this.isLoading = true;
     
-    // 🚀 OPTIMIZATION: Add limit and orderBy for faster loading
-    console.log('🔍 Setting up Firebase subscription for inventory-materials...');
-    this.firestore.collection('inventory-materials', ref => 
-      ref.where('factory', '==', this.FACTORY)
-         .orderBy('importDate', 'desc')
-         .limit(1000) // Limit to 1000 items for faster initial load
-    )
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        console.log(`🔍 Firebase subscription received ${actions.length} actions`);
+    // 🔧 FIX: .get() một lần (Refresh / sau thao tác) — không dùng snapshotChanges để tránh
+    // đọc lại toàn bộ mỗi khi doc đổi ở tab QC/Overview và vòng lặp ghi auto-location.
+    try {
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.FACTORY)
+           .orderBy('importDate', 'desc')
+           .limit(1000)
+      ).get().toPromise();
+
+      const docs = snapshot?.docs || [];
+      console.log(`📦 Loaded ${docs.length} materials from Firebase`);
 
         // Auto-set location: E7 for R* + IQC PASS; F7 for B011/B013/B014* + IQC PASS
         const autoLocationBatch = this.firestore.firestore.batch();
         let autoLocationCount = 0;
         const MAX_BATCH_WRITES = 450; // safety margin under 500
 
-        this.inventoryMaterials = actions
-          .map(action => {
-            const data = action.payload.doc.data() as any;
-            const id = action.payload.doc.id;
+        this.inventoryMaterials = docs
+          .map(doc => {
+            const data = doc.data() as any;
+            const id = doc.id;
             const material = {
               id: id,
               ...data,
@@ -2274,7 +2274,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
             const newLoc = this.applyPassIqcAutoLocation(material);
             if (newLoc && autoLocationCount < MAX_BATCH_WRITES) {
-              autoLocationBatch.update(action.payload.doc.ref, {
+              autoLocationBatch.update(doc.ref, {
                 location: newLoc,
                 lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
                 modifiedBy: 'materials-asm1-auto-location'
@@ -2372,11 +2372,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           // Tiếp tục xử lý
           this.continueAfterConsolidation();
         }
-      }, error => {
-        console.error('❌ Error loading ASM1 inventory:', error);
-        console.error('❌ Error details:', error.message);
-        this.isLoading = false;
-      });
+    } catch (error: any) {
+      console.error('❌ Error loading ASM1 inventory:', error);
+      console.error('❌ Error details:', error?.message);
+      this.isLoading = false;
+    }
   }
 
   /** More → mở popup nhập mã rồi ghi snapshot TỒN */

@@ -171,40 +171,31 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       // Load LinkQ file history first
       await this.loadLinkQFileHistory();
       
-      // 🔧 SỬA LỖI: Sử dụng real-time listener thay vì one-time snapshot
-      // Để đảm bảo RM1 Overview cập nhật ngay lập tức khi có thay đổi từ RM1 Inventory
+      // 🔧 FIX: .get() khi mở tab / bấm Refresh — không listener realtime (giảm read mạnh).
       console.log('🔍 Lấy dữ liệu từ collection inventory-materials với filter factory == ASM1...');
-      
-      // Sử dụng snapshotChanges() để có real-time updates
-      // 🔧 SỬA LỖI: Bỏ orderBy để tránh cần index
-      // 🔧 FIX: hủy listener cũ trước khi tạo mới — loadInventoryOverview() có thể bị gọi lại
-      // (permission check, timeout fallback, refresh thủ công) và trước đây không hủy listener
-      // cũ, khiến nhiều listener chồng lên nhau, mỗi cái đọc lại toàn bộ inventory-materials.
       this.inventorySub?.unsubscribe();
-      this.inventorySub = this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
-      )
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
-        this.readTracker.track('inventory-overview-asm1', 'inventory-materials', actions.length);
-        console.log(`🔄 Real-time update: ${actions.length} ASM1 documents changed`);
+      this.inventorySub = undefined;
 
-        if (actions.length === 0) {
-          console.log('ℹ️ Không tìm thấy dữ liệu ASM1 trong collection inventory-materials');
-          this.inventoryItems = [];
-          this.filteredItems = [];
-          this.isLoading = false;
-          return;
-        }
-        
-        console.log(`✅ Real-time update: ${actions.length} ASM1 documents trong collection inventory-materials`);
-        
-        // Process real-time changes
-        this.processInventoryData(actions);
-      });
-      
-      return; // Exit early since we're using subscription
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', 'ASM1')
+      ).get().toPromise();
+
+      const docs = snapshot?.docs || [];
+      this.readTracker.track('inventory-overview-asm1', 'inventory-materials', docs.length);
+      console.log(`✅ Loaded ${docs.length} ASM1 documents (one-time read)`);
+
+      if (docs.length === 0) {
+        this.inventoryItems = [];
+        this.filteredItems = [];
+        this.isLoading = false;
+        return;
+      }
+
+      const actions = docs.map(doc => ({
+        type: 'added',
+        payload: { doc }
+      }));
+      this.processInventoryData(actions);
       
     } catch (error) {
       console.error('❌ Error loading inventory overview:', error);

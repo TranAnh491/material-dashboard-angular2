@@ -19,7 +19,7 @@
         <i class="material-icons">file_download</i>
         Export
       </button>
-      <button type="button" class="btn btn-primary btn-sm btn-dense" (click)="reload()" [disabled]="isLoading">
+      <button type="button" class="btn btn-primary btn-sm btn-dense" (click)="reload()" [disabled]="isLoading || !dashboardStarted">
         <i class="material-icons">refresh</i>
         Refresh
       </button>
@@ -72,9 +72,9 @@
         <div class="ctrl ctrl--daterange">
           <label>Date range</label>
           <div class="date-range">
-            <input class="form-control form-control--dense" type="date" [(ngModel)]="startDate" (change)="reload()" />
+            <input class="form-control form-control--dense" type="date" [(ngModel)]="startDate" />
             <span class="sep">–</span>
-            <input class="form-control form-control--dense" type="date" [(ngModel)]="endDate" (change)="reload()" />
+            <input class="form-control form-control--dense" type="date" [(ngModel)]="endDate" />
           </div>
         </div>
 
@@ -445,6 +445,16 @@
         </select>
       </div>
 
+      <button
+        type="button"
+        class="btn-start"
+        title="Tải heatmap theo lựa chọn hiện tại"
+        (click)="startDashboard()"
+        [disabled]="isLoading">
+        <i class="material-icons">play_arrow</i>
+        Start
+      </button>
+
       <button type="button" class="icon-plain icon-plain--gear" title="Cài đặt màu heatmap" (click)="openColorSettings()">
         <i class="material-icons">settings</i>
       </button>
@@ -453,7 +463,13 @@
 
   <div class="heatmap-card card">
     <div class="card-body card-body--heatmap">
-      <div class="heatmap-wrap" *ngIf="!isLoading; else loadingTpl">
+      <div class="heatmap-wrap heatmap-wrap--idle" *ngIf="!dashboardStarted && !isLoading">
+        <div class="heatmap-empty heatmap-empty--start">
+          <i class="material-icons">tune</i>
+          <p>Chọn <strong>Year</strong>, <strong>Date range</strong> và các tùy chọn bên dưới, sau đó bấm <strong>Start</strong> để tải dữ liệu.</p>
+        </div>
+      </div>
+      <div class="heatmap-wrap" *ngIf="dashboardStarted && !isLoading; else loadingTpl">
         <div class="import-status pallet-cluster-loading" *ngIf="showPalletClusterView && isLoadingPallets">
           <mat-progress-spinner mode="indeterminate" diameter="22"></mat-progress-spinner>
           <span>Đang tải danh sách pallet (cột vị trí)...</span>

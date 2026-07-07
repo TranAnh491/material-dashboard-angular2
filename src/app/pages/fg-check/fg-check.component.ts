@@ -367,12 +367,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   // Load customer code mappings - realtime: cập nhật ngay khi chỉnh danh mục trong FG In
   loadCustomerMappings(): void {
     this.firestore.collection('fg-customer-mapping')
-      .snapshotChanges()
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
+      .subscribe((snapshot) => {
         this.customerMappings.clear();
-        actions.forEach(action => {
-          const data = action.payload.doc.data() as any;
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
           if (data.customerCode && data.materialCode) {
             const normalizedCustomerCode = String(data.customerCode).trim().toUpperCase();
             const materialCode = String(data.materialCode).trim();
@@ -383,17 +383,15 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Load shipment data from Firestore - REALTIME với snapshotChanges()
-  // Lưu ý: Chỉ dựa vào shipmentCode và materialCode để lưu và so sánh
   loadShipmentData(): void {
     this.firestore.collection('shipments')
-      .snapshotChanges() // Thay đổi từ get() sang snapshotChanges() để realtime
+      .get()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((actions) => {
+      .subscribe((snapshot) => {
         this.shipmentDataMap.clear();
         
-        actions.forEach(action => {
-          const data = action.payload.doc.data() as any;
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as any;
           // Normalize shipmentCode và materialCode: trim và uppercase cho shipmentCode
           // LƯU CẢ PO SHIP ĐỂ PHÂN BIỆT CÁC DÒNG CÙNG MATERIALCODE
           const shipmentCode = String(data.shipmentCode || '').trim().toUpperCase();

@@ -181,38 +181,41 @@ export class PdControlComponent implements OnInit, OnDestroy {
   }
 
   private subscribePdReturnScans(): void {
-    this.firestore
-      .collection(this.PD_COLLECTION, ref => ref.where('factory', '==', this.PD_FACTORY).limit(4000))
-      .snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (snap: any[]) => {
-          const rows: PdReturnScanDoc[] = snap
-            .map(doc => {
-              const d = doc.payload.doc.data() as any;
-              const createdAt = d?.createdAt?.toDate ? d.createdAt.toDate() : new Date();
-              return {
-                id: doc.payload.doc.id,
-                employeeId: String(d?.employeeId ?? '').trim(),
-                productionOrder: String(d?.productionOrder ?? '').trim(),
-                rawBarcode: String(d?.rawBarcode ?? '').trim(),
-                createdAt
-              };
-            })
-            .filter(r => this.isSameLocalDay(r.createdAt))
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    void this.loadPdReturnScans();
+  }
 
-          this.todayScans = rows;
-          this.recomputeFromTodayScans();
-          this.lastUpdatedText = new Date().toLocaleTimeString('vi-VN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          });
-          this.cdr.markForCheck();
-        },
-        error: e => console.error('[PD Control] pd-return-scans:', e)
+  private async loadPdReturnScans(): Promise<void> {
+    try {
+      const snapshot = await this.firestore
+        .collection(this.PD_COLLECTION, ref => ref.where('factory', '==', this.PD_FACTORY).limit(4000))
+        .get()
+        .toPromise();
+      const rows: PdReturnScanDoc[] = (snapshot?.docs || [])
+        .map(doc => {
+          const d = doc.data() as any;
+          const createdAt = d?.createdAt?.toDate ? d.createdAt.toDate() : new Date();
+          return {
+            id: doc.id,
+            employeeId: String(d?.employeeId ?? '').trim(),
+            productionOrder: String(d?.productionOrder ?? '').trim(),
+            rawBarcode: String(d?.rawBarcode ?? '').trim(),
+            createdAt
+          };
+        })
+        .filter(r => this.isSameLocalDay(r.createdAt))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      this.todayScans = rows;
+      this.recomputeFromTodayScans();
+      this.lastUpdatedText = new Date().toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
       });
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('[PD Control] pd-return-scans:', e);
+    }
   }
 
   private recomputeFromTodayScans(): void {
@@ -525,6 +528,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
       }
       if (ops > 0) await batch.commit();
       this.deleteVerifyDocIds = null;
+      void this.loadPdReturnScans();
     } catch (e) {
       console.error('[PD Control] delete scan:', e);
       alert('Không xóa được bản ghi. Kiểm tra quyền Firestore.');
@@ -735,6 +739,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
 
       this.resetBatchSession();
       this.scanStatusText = `Đã lưu ${toSave.length} mã trả (${lsxSnap}, ${empSnap}). Quét ID nhân viên để bắt đầu phiên mới.`;
+      void this.loadPdReturnScans();
     } catch (e) {
       console.error('[PD Control] batch commit:', e);
       alert('Không lưu được dữ liệu. Kiểm tra kết nối hoặc quyền Firestore.');

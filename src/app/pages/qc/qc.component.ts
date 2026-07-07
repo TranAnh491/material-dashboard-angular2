@@ -798,130 +798,116 @@ export class QCComponent implements OnInit, OnDestroy {
     
     console.log(`📦 Loading ${this.selectedFactory} inventory materials for QC...`);
     
-    // Chỉ load các mã CHƯA pass (giảm số doc tải + số lần update realtime).
-    // Không dùng orderBy('importDate') vì Firestore không cho kết hợp orderBy field khác
-    // với inequality filter (iqcStatus != 'PASS') — sắp xếp lại ở client sau khi map.
+    void this.fetchMaterialsFromFirestore();
+  }
+
+  private async fetchMaterialsFromFirestore(): Promise<void> {
     try {
-      this.firestore.collection('inventory-materials', ref =>
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
            .where('iqcStatus', '!=', 'PASS')
            .limit(1000)
-      ).snapshotChanges()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (snapshot) => {
-          console.log(`📦 Received ${snapshot.length} documents from Firestore`);
-          this.materials = snapshot.map(doc => {
-            const data = doc.payload.doc.data() as any;
-            return {
-              id: doc.payload.doc.id,
-              factory: data.factory || this.selectedFactory,
-              importDate: this.parseImportDate(data.importDate),
-              receivedDate: data.receivedDate?.toDate() || undefined,
-              batchNumber: this.resolveImdBatchNumber(data),
-              materialCode: data.materialCode || '',
-              materialName: data.materialName || '',
-              poNumber: data.poNumber || '',
-              openingStock: data.openingStock || null,
-              quantity: data.quantity || 0,
-              unit: data.unit || '',
-              exported: data.exported || 0,
-              xt: data.xt || 0,
-              stock: data.stock || 0,
-              location: data.location || '',
-              type: data.type || '',
-              expiryDate: data.expiryDate?.toDate() || new Date(),
-              qualityCheck: data.qualityCheck || false,
-              isReceived: data.isReceived || false,
-              notes: data.notes || '',
-              rollsOrBags: data.rollsOrBags || '',
-              supplier: data.supplier || '',
-              remarks: data.remarks || '',
-              iqcStatus: data.iqcStatus || 'CHỜ KIỂM',
-              totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date()
-            } as InventoryMaterial;
-          });
-          // Sắp xếp ở client (không dùng orderBy Firestore do đã có inequality filter khác field)
-          this.materials.sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
-
-          console.log(`✅ Loaded ${this.materials.length} materials`);
-          this.applyFilters();
-          this.isLoading = false;
-        },
-        error: (error) => {
-          console.error('❌ Error loading materials with iqcStatus filter:', error);
-          // Thử query không có filter iqcStatus (fallback nếu thiếu index)
-          console.log('⚠️ Retrying without iqcStatus filter...');
-          this.loadMaterialsWithoutOrderBy();
-        }
-      });
+      ).get().toPromise();
+      this.applyMaterialsFromDocs(snapshot?.docs || []);
     } catch (error) {
-      console.error('❌ Error setting up Firestore query:', error);
-      this.loadMaterialsWithoutOrderBy();
+      console.error('❌ Error loading materials with iqcStatus filter:', error);
+      await this.loadMaterialsWithoutOrderBy();
     }
   }
-  
-  loadMaterialsWithoutOrderBy(): void {
-    this.firestore.collection('inventory-materials', ref => 
-      ref.where('factory', '==', this.selectedFactory)
-         .limit(1000)
-    ).snapshotChanges()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (snapshot) => {
-        console.log(`📦 Received ${snapshot.length} documents from Firestore (no orderBy)`);
-        this.materials = snapshot.map(doc => {
-          const data = doc.payload.doc.data() as any;
-          return {
-            id: doc.payload.doc.id,
-            factory: data.factory || this.selectedFactory,
-            importDate: this.parseImportDate(data.importDate),
-            receivedDate: data.receivedDate?.toDate() || undefined,
-            batchNumber: data.batchNumber || '',
-            materialCode: data.materialCode || '',
-            materialName: data.materialName || '',
-            poNumber: data.poNumber || '',
-            openingStock: data.openingStock || null,
-            quantity: data.quantity || 0,
-            unit: data.unit || '',
-            exported: data.exported || 0,
-            xt: data.xt || 0,
-            stock: data.stock || 0,
-            location: data.location || '',
-            type: data.type || '',
-            expiryDate: data.expiryDate?.toDate() || new Date(),
-            qualityCheck: data.qualityCheck || false,
-            isReceived: data.isReceived || false,
-            notes: data.notes || '',
-              rollsOrBags: data.rollsOrBags || '',
-              supplier: data.supplier || '',
-              remarks: data.remarks || '',
-              iqcStatus: data.iqcStatus || 'CHỜ XÁC NHẬN',
-              totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date()
-          } as InventoryMaterial;
-        }).filter(m => String(m.iqcStatus || '').trim().toUpperCase() !== 'PASS');
 
-        // Sort manually by importDate
-        this.materials.sort((a, b) => {
-          const dateA = a.importDate?.getTime() || 0;
-          const dateB = b.importDate?.getTime() || 0;
-          return dateB - dateA; // Descending order
-        });
-        
-        console.log(`✅ Loaded ${this.materials.length} materials (sorted manually)`);
-        this.applyFilters();
-        this.isLoading = false;
-      },
-      error: (error) => {
-        console.error('❌ Error loading materials without orderBy:', error);
-        this.errorMessage = `Lỗi khi tải dữ liệu: ${error.message || error}`;
-        this.isLoading = false;
-      }
+  private applyMaterialsFromDocs(docs: any[]): void {
+    console.log(`📦 Received ${docs.length} documents from Firestore`);
+    this.materials = docs.map(doc => {
+      const data = doc.data() as any;
+      return {
+        id: doc.id,
+        factory: data.factory || this.selectedFactory,
+        importDate: this.parseImportDate(data.importDate),
+        receivedDate: data.receivedDate?.toDate() || undefined,
+        batchNumber: this.resolveImdBatchNumber(data),
+        materialCode: data.materialCode || '',
+        materialName: data.materialName || '',
+        poNumber: data.poNumber || '',
+        openingStock: data.openingStock || null,
+        quantity: data.quantity || 0,
+        unit: data.unit || '',
+        exported: data.exported || 0,
+        xt: data.xt || 0,
+        stock: data.stock || 0,
+        location: data.location || '',
+        type: data.type || '',
+        expiryDate: data.expiryDate?.toDate() || new Date(),
+        qualityCheck: data.qualityCheck || false,
+        isReceived: data.isReceived || false,
+        notes: data.notes || '',
+        rollsOrBags: data.rollsOrBags || '',
+        supplier: data.supplier || '',
+        remarks: data.remarks || '',
+        iqcStatus: data.iqcStatus || 'CHỜ KIỂM',
+        totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date()
+      } as InventoryMaterial;
     });
+    this.materials.sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+    console.log(`✅ Loaded ${this.materials.length} materials`);
+    this.applyFilters();
+    this.isLoading = false;
+  }
+  
+  async loadMaterialsWithoutOrderBy(): Promise<void> {
+    try {
+      const snapshot = await this.firestore.collection('inventory-materials', ref => 
+        ref.where('factory', '==', this.selectedFactory)
+           .limit(1000)
+      ).get().toPromise();
+
+      const docs = (snapshot?.docs || []).filter(doc => {
+        const data = doc.data() as any;
+        return String(data.iqcStatus || '').trim().toUpperCase() !== 'PASS';
+      });
+      console.log(`📦 Received ${docs.length} documents from Firestore (no orderBy)`);
+      this.materials = docs.map(doc => {
+        const data = doc.data() as any;
+        return {
+          id: doc.id,
+          factory: data.factory || this.selectedFactory,
+          importDate: this.parseImportDate(data.importDate),
+          receivedDate: data.receivedDate?.toDate() || undefined,
+          batchNumber: data.batchNumber || '',
+          materialCode: data.materialCode || '',
+          materialName: data.materialName || '',
+          poNumber: data.poNumber || '',
+          openingStock: data.openingStock || null,
+          quantity: data.quantity || 0,
+          unit: data.unit || '',
+          exported: data.exported || 0,
+          xt: data.xt || 0,
+          stock: data.stock || 0,
+          location: data.location || '',
+          type: data.type || '',
+          expiryDate: data.expiryDate?.toDate() || new Date(),
+          qualityCheck: data.qualityCheck || false,
+          isReceived: data.isReceived || false,
+          notes: data.notes || '',
+          rollsOrBags: data.rollsOrBags || '',
+          supplier: data.supplier || '',
+          remarks: data.remarks || '',
+          iqcStatus: data.iqcStatus || 'CHỜ XÁC NHẬN',
+          totalBags: Math.max(0, Math.floor(Number(data.totalBags ?? 0))),
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date()
+        } as InventoryMaterial;
+      });
+      this.materials.sort((a, b) => (b.importDate?.getTime() || 0) - (a.importDate?.getTime() || 0));
+      console.log(`✅ Loaded ${this.materials.length} materials (sorted manually)`);
+      this.applyFilters();
+      this.isLoading = false;
+    } catch (error: any) {
+      console.error('❌ Error loading materials without orderBy:', error);
+      this.errorMessage = `Lỗi khi tải dữ liệu: ${error.message || error}`;
+      this.isLoading = false;
+    }
   }
   
   // Parse importDate from various formats
@@ -2286,6 +2272,8 @@ export class QCComponent implements OnInit, OnDestroy {
     const range = this.boxDateRanges['pendingQC'];
     this.firestore.collection('inventory-materials', ref =>
       ref.where('factory', '==', this.selectedFactory)
+         .where('iqcStatus', '!=', 'PASS')
+         .limit(2000)
     ).get()
     .pipe(takeUntil(this.destroy$))
     .subscribe({
@@ -2572,27 +2560,6 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Fallback: count manually
-  loadPendingConfirmCountFallback(): void {
-    this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', this.selectedFactory)
-    ).snapshotChanges()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (snapshot) => {
-        this.pendingConfirmCount = snapshot.filter(doc => {
-          const data = doc.payload.doc.data() as any;
-          return data.iqcStatus === 'CHỜ XÁC NHẬN';
-        }).length;
-        console.log(`📊 Pending confirm count (fallback): ${this.pendingConfirmCount}`);
-      },
-      error: (error) => {
-        console.error('❌ Error loading pending confirm count (fallback):', error);
-        this.pendingConfirmCount = 0;
-      }
-    });
-  }
-  
   // Show today checked materials modal - chỉ hiển thị materials được user kiểm (có qcCheckedBy)
   async showTodayCheckedMaterials(showPopup: boolean = true): Promise<void> {
     if (showPopup) {
@@ -2706,27 +2673,6 @@ export class QCComponent implements OnInit, OnDestroy {
   closeTodayCheckedModal(): void {
     this.showTodayCheckedModal = false;
     this.todayCheckedMaterials = [];
-  }
-  
-  // Fallback: load all ASM1 materials and count manually
-  loadPendingQCCountFallback(): void {
-    this.firestore.collection('inventory-materials', ref =>
-      ref.where('factory', '==', this.selectedFactory)
-    ).snapshotChanges()
-    .pipe(takeUntil(this.destroy$))
-    .subscribe({
-      next: (snapshot) => {
-        this.pendingQCCount = this.countPendingQcLotGroups(
-          snapshot.map(doc => doc.payload.doc.data()),
-          this.boxDateRanges['pendingQC']
-        );
-        console.log(`📊 Pending QC count (fallback, location = IQC): ${this.pendingQCCount}`);
-      },
-      error: (error) => {
-        console.error('❌ Error loading pending QC count (fallback):', error);
-        this.pendingQCCount = 0;
-      }
-    });
   }
   
   // More menu functions (popup modal)
