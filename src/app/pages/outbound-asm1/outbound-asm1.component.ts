@@ -9,6 +9,7 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';
 import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
@@ -205,7 +206,8 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     private rmBagHistory: RmBagHistoryService,
     private outboundQcRule: OutboundQcRuleService,
     private router: Router,
-    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService
+    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
+    private readTracker: ReadTrackerService
   ) {}
 
   /** Cập nhật Người soạn WO theo tên zalo_links của NV scan xuất. */
@@ -1369,6 +1371,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (snapshot) => {
+            this.readTracker.track('outbound-asm1', 'outbound-materials', snapshot.docs.length);
             const materialsAll = snapshot.docs.map((d: any) =>
               this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })
             );
@@ -1420,6 +1423,7 @@ export class OutboundASM1Component implements OnInit, OnDestroy {
     .pipe(takeUntil(this.destroy$))
     .subscribe({
       next: (snapshot) => {
+        this.readTracker.track('outbound-asm1', 'outbound-materials', snapshot.docs.length);
         // 🔧 TỐI ƯU HÓA: Xử lý batch thay vì từng record để tăng tốc độ
         const materials = snapshot.docs.map((d: any) =>
           this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })

@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 import { WorkOrder, WorkOrderStatus } from '../models/material-lifecycle.model';
 import { SafetyService } from '../services/safety.service';
 import { FirebaseAuthService } from '../services/firebase-auth.service';
+import { ReadTrackerService } from '../services/read-tracker.service';
 import * as XLSX from 'xlsx';
 
 interface WorkOrderStatusRow {
@@ -378,7 +379,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private safetyService: SafetyService, 
     private cdr: ChangeDetectorRef,
     private router: Router,
-    private authService: FirebaseAuthService
+    private authService: FirebaseAuthService,
+    private readTracker: ReadTrackerService
   ) { }
 
   @HostListener('window:resize')
@@ -844,6 +846,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         .collection('work-orders', ref => ref.where('createdDate', '>=', cutoff).limit(3000))
         .get()
         .toPromise();
+      this.readTracker.track('dashboard', 'work-orders', snapshot?.docs.length || 0);
 
       const workOrders = (snapshot?.docs || []).map(d => {
         const data = d.data() as any;

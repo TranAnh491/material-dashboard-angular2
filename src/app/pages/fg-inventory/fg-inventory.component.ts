@@ -7,6 +7,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { FgExportService } from '../../services/fg-export.service';
 import { FgInService } from '../../services/fg-in.service';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -160,7 +161,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private fgExportService: FgExportService,
     private fgInService: FgInService,
     private dialog: MatDialog,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private readTracker: ReadTrackerService
   ) {}
 
   /** Chỉ cho sửa "Tồn đầu" với dòng import tồn đầu (batch TDAU1-/TDAU2-) */
@@ -210,6 +212,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
+        this.readTracker.track('fg-inventory', 'fg-inventory', actions.length);
         const firebaseMaterials = actions.map(action => {
           const data = action.payload.doc.data() as any;
           const id = action.payload.doc.id;
@@ -302,6 +305,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     const refresh = async () => {
       try {
         const snap = await this.firestore.collection('fg-in').get().toPromise();
+        this.readTracker.track('fg-inventory', 'fg-in', snap?.docs.length || 0);
         this.fgInQtyByKey.clear();
         this.fgInQtyByBatchKey.clear();
         this.fgInPoByBatchKey.clear();

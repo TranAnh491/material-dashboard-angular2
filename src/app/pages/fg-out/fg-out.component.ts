@@ -7,6 +7,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { FGInventoryLocationService } from '../../services/fg-inventory-location.service';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 
 export interface FgOutItem {
   id?: string;
@@ -294,7 +295,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
     private fgInventoryLocationService: FGInventoryLocationService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private readTracker: ReadTrackerService
   ) {}
 
   ngOnInit(): void {
@@ -404,6 +406,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const refresh = async () => {
       try {
         const snap = await this.firestore.collection('fg-inventory').get().toPromise();
+        this.readTracker.track('fg-out', 'fg-inventory', snap?.docs.length || 0);
         const arr = (snap?.docs || []).map(d => ({ id: d.id, ...(d.data() as any) }));
         this.applyFgInventoryDocs(arr);
       } catch (e) {
@@ -530,6 +533,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       .valueChanges({ idField: 'id' })
       .pipe(takeUntil(this.destroy$))
       .subscribe((docs) => {
+        this.readTracker.track('fg-out', 'fg-out', docs.length);
         this.materials = docs.map(data => ({
           ...data,
           factory: data.factory || 'ASM1',

@@ -7,6 +7,7 @@ import Chart from 'chart.js/auto';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Router } from '@angular/router';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 
 export interface ShipmentItem {
   id?: string;
@@ -276,7 +277,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private router: Router,
     private cdr: ChangeDetectorRef,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private readTracker: ReadTrackerService
   ) {}
 
   goToMenu(): void {
@@ -354,6 +356,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       .get()
       .pipe(takeUntil(this.destroy$))
       .subscribe((snapshot) => {
+        this.readTracker.track('shipment', 'shipments', snapshot.docs.length);
         const firebaseShipments = snapshot.docs.map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
 
         this.shipments = firebaseShipments;
@@ -857,6 +860,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         const snap = await this.firestore.collection('fg-out', ref =>
           ref.where('shipment', 'in', batch)
         ).get().toPromise();
+        this.readTracker.track('shipment', 'fg-out', snap?.docs.length || 0);
 
         snap?.docs.forEach(doc => {
           const data = doc.data() as any;
@@ -1258,6 +1262,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           const snap = await this.firestore.collection('fg-check', ref =>
             ref.where('shipment', 'in', batch)
           ).get().toPromise();
+          this.readTracker.track('shipment', 'fg-check', snap?.docs.length || 0);
 
           if (requestId !== this.fgCheckStatusRequestId) return;
 

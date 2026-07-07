@@ -4,6 +4,7 @@ import { Subject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { TabPermissionService } from '../../services/tab-permission.service';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 
 
 interface InventoryOverviewItem {
@@ -92,7 +93,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private factoryAccessService: FactoryAccessService,
     private tabPermissionService: TabPermissionService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private readTracker: ReadTrackerService
   ) {}
 
   ngOnInit(): void {
@@ -185,8 +187,9 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe((actions) => {
+        this.readTracker.track('inventory-overview-asm1', 'inventory-materials', actions.length);
         console.log(`🔄 Real-time update: ${actions.length} ASM1 documents changed`);
-        
+
         if (actions.length === 0) {
           console.log('ℹ️ Không tìm thấy dữ liệu ASM1 trong collection inventory-materials');
           this.inventoryItems = [];

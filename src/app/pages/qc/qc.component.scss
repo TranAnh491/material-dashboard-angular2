@@ -1313,6 +1313,86 @@ $gray:    #9ca3af;
 .date-range-btn-secondary { background: $surface; color: $muted; &:hover { background: $bg; } }
 .date-range-btn-primary { background: $blue; color: #fff; border-color: $blue; &:hover { background: darken(#3b82f6, 6%); } }
 
+// ── Lấy mẫu modal ────────────────────────────────────
+.sample-take-modal { max-width: 520px; }
+
+.sample-take-modal .modal-body { display: flex; flex-direction: column; gap: 10px; }
+
+.sample-row { display: flex; gap: 10px; align-items: baseline; }
+.sample-row .k { min-width: 70px; color: #334155; font-weight: 700; }
+.sample-row .v { font-weight: 700; color: #0f172a; }
+
+.sample-input label { display: block; font-weight: 700; margin-bottom: 6px; color: #334155; }
+.sample-input input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 16px;
+}
+.sample-input select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.sample-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.sample-checks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.sample-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  font-weight: 700;
+  color: #0f172a;
+}
+.sample-check input { transform: translateY(-0.5px); }
+
+.sample-error {
+  color: #b91c1c;
+  font-weight: 700;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+// "Yes" badge for taken samples (pending QC list)
+.qc-code-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.qc-sample-yes {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  line-height: 1;
+  user-select: none;
+}
+
 // ── Download section ────────────────────────────────
 .download-section { display: flex; flex-direction: column; gap: 16px; }
 

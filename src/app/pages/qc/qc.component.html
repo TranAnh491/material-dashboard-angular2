@@ -435,8 +435,12 @@
             <td
               [class.iqc-history-code]="iqcHistoryContext === 'pendingConfirm'"
               [class.qc-pending-dup-material-code]="iqcHistoryContext === 'pendingQC' && isPendingQcDuplicateMaterialCode(item.materialCode)"
+              (contextmenu)="iqcHistoryContext === 'pendingQC' ? onPendingQcMaterialRightClick($event, item) : null"
               (click)="iqcHistoryContext === 'pendingConfirm' ? openIQCFromHistory(item) : null">
-              {{ item.materialCode }}
+              <span class="qc-code-cell">
+                <span class="qc-code-text">{{ item.materialCode }}</span>
+                <span class="qc-sample-yes" *ngIf="isSampleTakenInPendingQcRow(item)" title="Đã lấy mẫu">Yes</span>
+              </span>
             </td>
             <td>{{ item.poNumber }}</td>
             <td>{{ getDisplayLotBatch(item.batchNumber) }}</td>
@@ -484,6 +488,100 @@
   </div>
 
 </div><!-- end qc-page -->
+
+<!-- Lấy Mẫu Modal -->
+<div class="modal-overlay" *ngIf="showSampleTakeModal" (click)="closeSampleTakeModal()">
+  <div class="modal-content sample-take-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">science</i> Lấy Mẫu</h3>
+      <button class="close-btn" (click)="closeSampleTakeModal()" [disabled]="isSavingSampleTake">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body" *ngIf="sampleTakeSelected">
+      <div class="sample-grid">
+        <div class="sample-input">
+          <label>Năm</label>
+          <input type="text" [value]="sampleTakeYear" readonly>
+        </div>
+        <div class="sample-input">
+          <label>Tháng</label>
+          <input type="text" [value]="sampleTakeMonth" readonly>
+        </div>
+        <div class="sample-input">
+          <label>STT</label>
+          <input type="text" [value]="sampleTakeStt || '—'" readonly>
+        </div>
+      </div>
+
+      <div class="sample-row"><span class="k">Mã hàng:</span><span class="v">{{ sampleTakeSelected.materialCode }}</span></div>
+      <div class="sample-row"><span class="k">PO:</span><span class="v">{{ sampleTakeSelected.poNumber }}</span></div>
+      <div class="sample-row"><span class="k">IMD:</span><span class="v">{{ getDisplayLotBatch(sampleTakeSelected.imd) }}</span></div>
+
+      <div class="sample-checks">
+        <label class="sample-check">
+          <input type="checkbox" [(ngModel)]="sampleTakeIqcTestRosh" [disabled]="isSavingSampleTake">
+          <span>IQC Test Rosh</span>
+        </label>
+        <label class="sample-check">
+          <input type="checkbox" [(ngModel)]="sampleTakeLayMauHangVe" [disabled]="isSavingSampleTake">
+          <span>Lấy mẫu hàng về</span>
+        </label>
+        <label class="sample-check">
+          <input type="checkbox" [(ngModel)]="sampleTakeEngLuuMau" [disabled]="isSavingSampleTake">
+          <span>ENG lưu mẫu</span>
+        </label>
+      </div>
+
+      <div class="sample-input">
+        <label>Số lượng (pcs)</label>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          inputmode="numeric"
+          [(ngModel)]="sampleTakePcsInput"
+          [disabled]="isSavingSampleTake"
+          placeholder="Nhập số pcs">
+      </div>
+
+      <div class="sample-grid">
+        <div class="sample-input">
+          <label>Mã kho (LINKQ)</label>
+          <select [(ngModel)]="sampleTakeMaKho" [disabled]="isSavingSampleTake">
+            <option value="00">00</option>
+            <option value="NVL_KE31">NVL_KE31</option>
+            <option value="NVL_E31">NVL_E31</option>
+            <option value="NVL_KS">NVL_KS</option>
+          </select>
+        </div>
+        <div class="sample-input">
+          <label>Loại hình (LINKQ)</label>
+          <input type="text" [value]="sampleTakeLoaiHinh || '—'" readonly>
+        </div>
+        <div class="sample-input">
+          <label>Ngành nghề</label>
+          <select [(ngModel)]="sampleTakeNganhNghe" [disabled]="isSavingSampleTake">
+            <option value="NNGHE_A">NNGHE_A</option>
+            <option value="NNGHE_B">NNGHE_B</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sample-row"><span class="k">Tổng số lượng:</span><span class="v">{{ sampleTakeTotalQty | number:'1.0-3' }}</span></div>
+
+      <div class="sample-error" *ngIf="sampleTakeError">{{ sampleTakeError }}</div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="action-btn action-btn--ghost" (click)="closeSampleTakeModal()" [disabled]="isSavingSampleTake">Hủy</button>
+      <button type="button" class="action-btn" (click)="saveSampleTakeOnly()" [disabled]="isSavingSampleTake">Lưu</button>
+      <button type="button" class="action-btn action-btn--primary" (click)="printSampleTakeQr()" [disabled]="isSavingSampleTake">
+        <i class="material-icons">qr_code_2</i>
+        In QR
+      </button>
+    </div>
+  </div>
+</div>
 
 
 <!-- ══════════════════ MODALS (unchanged) ══════════════════ -->
@@ -793,12 +891,100 @@
     <div class="modal-body">
       <div class="more-menu-options">
         <button class="menu-option-btn" (click)="openDownloadModal(); closeMoreMenu()"><i class="material-icons">download</i><span>Tải về</span></button>
+        <button class="menu-option-btn" (click)="openSampleCatalogModal()"><i class="material-icons">science</i><span>Lấy Mẫu</span></button>
         <button class="menu-option-btn" (click)="loadQCReport(); closeMoreMenu()"><i class="material-icons">description</i><span>IQC report</span></button>
         <button class="menu-option-btn" (click)="openOutboundQcRuleModal()"><i class="material-icons">policy</i><span>QC rule</span></button>
         <button class="menu-option-btn" (click)="openIqcPermissionModal()"><i class="material-icons">vpn_key</i><span>Quyền</span></button>
         <button class="menu-option-btn" (click)="sendQcReportNow()"><i class="material-icons">send</i><span>Gửi Report</span></button>
         <button class="menu-option-btn" (click)="openHoldNotificationEmailsModal()"><i class="material-icons">mail</i><span>Mail Hold Putaway</span></button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Danh mục Lấy Mẫu (theo tháng) -->
+<div class="modal-overlay" *ngIf="showSampleCatalogModal" (click)="closeSampleCatalogModal()">
+  <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">science</i> Danh mục Lấy Mẫu</h3>
+      <button class="close-btn" (click)="closeSampleCatalogModal()"><i class="material-icons">close</i></button>
+    </div>
+    <div class="modal-body">
+      <div class="download-section">
+        <div class="download-info">
+          <i class="material-icons">info_outline</i>
+          <p>Dữ liệu lưu theo tháng. Hệ thống chỉ giữ <strong>tháng hiện tại</strong> và <strong>tháng trước</strong>.</p>
+        </div>
+
+        <div class="date-selector-group">
+          <div class="date-selector-item">
+            <label class="date-label"><i class="material-icons">calendar_today</i> Tháng</label>
+            <select [(ngModel)]="sampleCatalogMonth" class="date-select" (change)="loadSampleCatalogByMonth()">
+              <option value="">-- Chọn tháng --</option>
+              <option value="01">Tháng 1</option><option value="02">Tháng 2</option><option value="03">Tháng 3</option>
+              <option value="04">Tháng 4</option><option value="05">Tháng 5</option><option value="06">Tháng 6</option>
+              <option value="07">Tháng 7</option><option value="08">Tháng 8</option><option value="09">Tháng 9</option>
+              <option value="10">Tháng 10</option><option value="11">Tháng 11</option><option value="12">Tháng 12</option>
+            </select>
+          </div>
+          <div class="date-selector-item">
+            <label class="date-label"><i class="material-icons">event</i> Năm</label>
+            <select [(ngModel)]="sampleCatalogYear" class="date-select" (change)="loadSampleCatalogByMonth()">
+              <option value="">-- Chọn năm --</option>
+              <option *ngFor="let year of getYearOptions()" [value]="year">{{ year }}</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="download-btn-primary" (click)="downloadSampleCatalogExcel()" [disabled]="isLoadingSampleCatalog || !sampleCatalogRows.length">
+          <i class="material-icons">download</i>
+          <span>{{ isLoadingSampleCatalog ? 'Đang tải dữ liệu...' : 'Tải về Excel' }}</span>
+        </button>
+      </div>
+
+      <div class="loading-report" *ngIf="isLoadingSampleCatalog">
+        <div class="loading-spinner"><i class="material-icons rotating">sync</i></div><p>Đang tải dữ liệu...</p>
+      </div>
+
+      <div class="report-content" *ngIf="!isLoadingSampleCatalog">
+        <table class="report-table" *ngIf="sampleCatalogRows.length > 0">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Mã</th>
+              <th>Số PO</th>
+              <th>IQC Rosh</th>
+              <th>Lấy mẫu</th>
+              <th>ENG lưu</th>
+              <th>Số lượng</th>
+              <th>Mã kho</th>
+              <th>Loại hình</th>
+              <th>Ngành nghề</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of sampleCatalogRows; let i = index">
+              <td>{{ r.stt || (i + 1) }}</td>
+              <td>{{ r.materialCode }}</td>
+              <td>{{ r.poNumber }}</td>
+              <td>{{ r.iqcTestRosh ? '✔' : '—' }}</td>
+              <td>{{ r.layMauHangVe ? '✔' : '—' }}</td>
+              <td>{{ r.engLuuMau ? '✔' : '—' }}</td>
+              <td>{{ r.pcs }}</td>
+              <td>{{ r.maKho }}</td>
+              <td>{{ r.loaiHinh || '—' }}</td>
+              <td>{{ r.nganhNghe }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="empty-report" *ngIf="sampleCatalogRows.length === 0">
+          <i class="material-icons">info</i><p>Không có dữ liệu trong tháng này</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closeSampleCatalogModal()"><i class="material-icons">close</i> Đóng</button>
     </div>
   </div>
 </div>

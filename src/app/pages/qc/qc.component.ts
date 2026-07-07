@@ -197,6 +197,51 @@ export class QCComponent implements OnInit, OnDestroy {
   pendingConfirmMaterials: any[] = [];
   isLoadingReport: boolean = false;
 
+  // Lấy mẫu (chuột phải ở danh sách chờ kiểm)
+  private readonly QC_SAMPLE_COLLECTION = 'qc-sample-takings';
+  showSampleTakeModal = false;
+  isSavingSampleTake = false;
+  sampleTakeError = '';
+  sampleTakePcsInput: string = '';
+  sampleTakeSelected: null | {
+    id?: string;
+    factory: 'ASM1' | 'ASM2';
+    materialCode: string;
+    poNumber: string;
+    imd: string;
+  } = null;
+  sampleTakeYear = 0;
+  sampleTakeMonth = 0;
+  sampleTakeStt = 0;
+  sampleTakeIqcTestRosh = false;
+  sampleTakeLayMauHangVe = false;
+  sampleTakeEngLuuMau = false;
+  sampleTakeTotalQty = 0;
+  sampleTakeMaKho: '00' | 'NVL_KE31' | 'NVL_E31' | 'NVL_KS' = '00';
+  sampleTakeLoaiHinh = '';
+  sampleTakeNganhNghe: 'NNGHE_A' | 'NNGHE_B' = 'NNGHE_A';
+  sampleTakeMonthKey = 0;
+
+  // Danh mục lấy mẫu theo tháng
+  showSampleCatalogModal = false;
+  sampleCatalogYear = '';
+  sampleCatalogMonth = '';
+  isLoadingSampleCatalog = false;
+  sampleCatalogRows: any[] = [];
+
+  /** Set key: material|po|imd đã lấy mẫu (tháng này + tháng trước) */
+  private sampleTakenKeySet = new Set<string>();
+
+  private buildSampleKey(materialCode: string, poNumber: string, imd: string): string {
+    return `${String(materialCode || '').trim().toUpperCase()}|${String(poNumber || '').trim()}|${String(imd || '').trim()}`;
+  }
+
+  isSampleTakenInPendingQcRow(item: any): boolean {
+    if (this.iqcHistoryContext !== 'pendingQC') return false;
+    const key = this.buildSampleKey(item?.materialCode, item?.poNumber, item?.batchNumber);
+    return !!key && this.sampleTakenKeySet.has(key);
+  }
+
   // IQC button permission (separate from QC tab access)
   iqcButtonEnabledForCurrentEmployee: boolean = false;
 
@@ -3978,6 +4023,9 @@ export class QCComponent implements OnInit, OnDestroy {
         this.isSearchingIqcHistory = false;
         this.iqcHistoryError = '';
 
+        // Load sample-taken markers for this list (tháng hiện tại + tháng trước)
+        void this.refreshSampleTakenMarkersForPendingQc(this.iqcHistoryResults);
+
         // Drop priorities that are no longer in current pending QC list
         const idsInList = new Set((this.pendingQCMaterials || []).map((x: any) => x?.id).filter((x: any) => !!x));
         this.priorityPendingQcIds = (this.priorityPendingQcIds || []).filter(id => idsInList.has(id));
@@ -3992,6 +4040,43 @@ export class QCComponent implements OnInit, OnDestroy {
         this.isSearchingIqcHistory = false;
         this.iqcHistoryError = 'Lỗi khi tải mã hàng chờ kiểm';
       }
+    }
+  }
+
+  private async refreshSampleTakenMarkersForPendingQc(items: any[]): Promise<void> {
+    try {
+      this.sampleTakenKeySet = new Set<string>();
+      const now = new Date();
+      const currentKey = now.getFullYear() * 100 + (now.getMonth() + 1);
+      const prevKey = this.monthKeyToPrevMonthKey(currentKey);
+
+      // Query 2 months (no composite index needed)
+      const [snap1, snap2] = await Promise.all([
+        this.firestore
+          .collection(this.QC_SAMPLE_COLLECTION, (ref) =>
+            ref.where('factory', '==', this.selectedFactory).where('monthKey', '==', currentKey).limit(2000)
+          )
+          .get()
+          .toPromise()
+          .catch(() => null),
+        this.firestore
+          .collection(this.QC_SAMPLE_COLLECTION, (ref) =>
+            ref.where('factory', '==', this.selectedFactory).where('monthKey', '==', prevKey).limit(2000)
+          )
+          .get()
+          .toPromise()
+          .catch(() => null)
+      ]);
+
+      const docs = [...(snap1?.docs || []), ...(snap2?.docs || [])];
+      docs.forEach((d) => {
+        const data = d.data() as any;
+        const key = this.buildSampleKey(data?.materialCode, data?.poNumber, data?.imd);
+        if (key) this.sampleTakenKeySet.add(key);
+      });
+    } catch (e) {
+      console.warn('refreshSampleTakenMarkersForPendingQc failed', e);
+      this.sampleTakenKeySet = new Set<string>();
     }
   }
 
@@ -4131,6 +4216,416 @@ export class QCComponent implements OnInit, OnDestroy {
       printWindow.print();
       printWindow.close();
     }, 300);
+  }
+
+  // ===== Lấy mẫu (chuột phải ở danh sách chờ kiểm) =====
+  onPendingQcMaterialRightClick(event: MouseEvent, item: any): void {
+    if (this.iqcHistoryContext !== 'pendingQC') return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const materialCode = String(item?.materialCode || '').trim().toUpperCase();
+    const poNumber = String(item?.poNumber || '').trim();
+    const imd = String(item?.batchNumber || '').trim();
+    if (!materialCode || !poNumber || !imd) {
+      alert('Thiếu dữ liệu (Mã hàng / PO / IMD) — không mở được popup Lấy Mẫu.');
+      return;
+    }
+
+    this.sampleTakeSelected = {
+      id: item?.id ? String(item.id) : undefined,
+      factory: this.selectedFactory,
+      materialCode,
+      poNumber,
+      imd
+    };
+    const now = new Date();
+    this.sampleTakeYear = now.getFullYear();
+    this.sampleTakeMonth = now.getMonth() + 1;
+    this.sampleTakeMonthKey = this.sampleTakeYear * 100 + this.sampleTakeMonth;
+    this.sampleTakeTotalQty = Number(item?.quantity ?? 0) || 0;
+    this.sampleTakeLoaiHinh = String(item?.type || '').trim();
+    this.sampleTakeIqcTestRosh = false;
+    this.sampleTakeLayMauHangVe = false;
+    this.sampleTakeEngLuuMau = false;
+    this.sampleTakeMaKho = '00';
+    this.sampleTakeNganhNghe = 'NNGHE_A';
+    this.sampleTakePcsInput = '';
+    this.sampleTakeError = '';
+    this.showSampleTakeModal = true;
+
+    // Auto STT theo tháng/năm (counter doc) — chạy async, không chặn UI
+    void this.allocateNextSampleTakeStt(this.sampleTakeYear, this.sampleTakeMonth);
+  }
+
+  private async allocateNextSampleTakeStt(year: number, month: number): Promise<void> {
+    try {
+      const mm = String(month).padStart(2, '0');
+      const docId = `${year}-${mm}`;
+      const ref = this.firestore.firestore.collection('qc-sample-taking-counters').doc(docId);
+      const next = await this.firestore.firestore.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const current = snap.exists ? Number((snap.data() as any)?.current || 0) : 0;
+        const n = (Number.isFinite(current) ? current : 0) + 1;
+        tx.set(
+          ref,
+          { year, month, current: n, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
+          { merge: true }
+        );
+        return n;
+      });
+      this.sampleTakeStt = next;
+    } catch (e) {
+      console.warn('allocateNextSampleTakeStt failed', e);
+      // Fallback: vẫn cho lưu, nhưng STT = 0 để nhận biết cần kiểm tra
+      this.sampleTakeStt = 0;
+    }
+  }
+
+  closeSampleTakeModal(): void {
+    if (this.isSavingSampleTake) return;
+    this.showSampleTakeModal = false;
+    this.sampleTakeSelected = null;
+    this.sampleTakePcsInput = '';
+    this.sampleTakeError = '';
+    this.sampleTakeYear = 0;
+    this.sampleTakeMonth = 0;
+    this.sampleTakeStt = 0;
+  }
+
+  private parseSamplePcs(): number | null {
+    const raw = String(this.sampleTakePcsInput || '').trim().replace(/,/g, '');
+    const pcs = Math.floor(Number(raw));
+    if (!Number.isFinite(pcs) || pcs <= 0) return null;
+    return pcs;
+  }
+
+  async saveSampleTakeOnly(): Promise<void> {
+    if (!this.sampleTakeSelected) return;
+    const pcs = this.parseSamplePcs();
+    if (!pcs) {
+      this.sampleTakeError = 'Số pcs phải là số nguyên > 0.';
+      return;
+    }
+
+    this.isSavingSampleTake = true;
+    this.sampleTakeError = '';
+    try {
+      const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
+      await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
+        year: this.sampleTakeYear,
+        month: this.sampleTakeMonth,
+        monthKey,
+        stt: this.sampleTakeStt,
+        factory: this.sampleTakeSelected.factory,
+        materialCode: this.sampleTakeSelected.materialCode,
+        iqcTestRosh: this.sampleTakeIqcTestRosh,
+        layMauHangVe: this.sampleTakeLayMauHangVe,
+        engLuuMau: this.sampleTakeEngLuuMau,
+        totalQuantity: this.sampleTakeTotalQty,
+        poNumber: this.sampleTakeSelected.poNumber,
+        maKho: this.sampleTakeMaKho,
+        loaiHinh: this.sampleTakeLoaiHinh,
+        nganhNghe: this.sampleTakeNganhNghe,
+        imd: this.sampleTakeSelected.imd,
+        pcs,
+        takenBy: this.currentEmployeeId || '',
+        takenAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await this.cleanupOldSampleTakings(monthKey);
+      this.closeSampleTakeModal();
+    } catch (e) {
+      console.error('saveSampleTakeOnly error', e);
+      this.sampleTakeError = 'Không lưu được. Vui lòng thử lại.';
+    } finally {
+      this.isSavingSampleTake = false;
+    }
+  }
+
+  async printSampleTakeQr(): Promise<void> {
+    if (!this.sampleTakeSelected) return;
+    const pcs = this.parseSamplePcs();
+    if (!pcs) {
+      this.sampleTakeError = 'Số pcs phải là số nguyên > 0.';
+      return;
+    }
+
+    this.isSavingSampleTake = true;
+    this.sampleTakeError = '';
+    try {
+      const QRCode = (await import('qrcode')) as any;
+      const mat = this.sampleTakeSelected.materialCode;
+      const po = this.sampleTakeSelected.poNumber;
+      const imd = this.sampleTakeSelected.imd;
+      const printedDate = new Date();
+      const dd = String(printedDate.getDate()).padStart(2, '0');
+      const mm = String(printedDate.getMonth() + 1).padStart(2, '0');
+      const yyyy = printedDate.getFullYear();
+      const printedDateLabel = `${dd}/${mm}/${yyyy}`;
+
+      // Theo yêu cầu: QR = Mã hàng + PO + IMD + Số lượng
+      const qrData = `${mat}|${po}|${imd}|${pcs}`;
+      const qrImage = await QRCode.toDataURL(qrData, {
+        width: 240,
+        margin: 1,
+        color: { dark: '#000000', light: '#FFFFFF' }
+      });
+
+      const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
+      // Lưu Firestore (kèm printedAt) rồi mới in
+      await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
+        year: this.sampleTakeYear,
+        month: this.sampleTakeMonth,
+        monthKey,
+        stt: this.sampleTakeStt,
+        factory: this.sampleTakeSelected.factory,
+        materialCode: mat,
+        iqcTestRosh: this.sampleTakeIqcTestRosh,
+        layMauHangVe: this.sampleTakeLayMauHangVe,
+        engLuuMau: this.sampleTakeEngLuuMau,
+        totalQuantity: this.sampleTakeTotalQty,
+        poNumber: po,
+        maKho: this.sampleTakeMaKho,
+        loaiHinh: this.sampleTakeLoaiHinh,
+        nganhNghe: this.sampleTakeNganhNghe,
+        imd,
+        pcs,
+        takenBy: this.currentEmployeeId || '',
+        takenAt: firebase.firestore.FieldValue.serverTimestamp(),
+        printedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        printedDate: printedDateLabel,
+        qrData
+      });
+      await this.cleanupOldSampleTakings(monthKey);
+
+      this.openSampleQrPrintWindow({
+        qrImage,
+        materialCode: mat,
+        pcs,
+        printedDateLabel
+      });
+      this.closeSampleTakeModal();
+    } catch (e) {
+      console.error('printSampleTakeQr error', e);
+      this.sampleTakeError = 'Không in được QR. Vui lòng thử lại.';
+    } finally {
+      this.isSavingSampleTake = false;
+    }
+  }
+
+  private openSampleQrPrintWindow(payload: { qrImage: string; materialCode: string; pcs: number; printedDateLabel: string }): void {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      return;
+    }
+
+    const esc = (value: unknown) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const labelHtml = `
+      <div class="qr-container">
+        <div class="qr-section">
+          <img class="qr-image" src="${payload.qrImage}" alt="QR"/>
+        </div>
+        <div class="info-section">
+          <div class="info-row material-code material-code-main">${esc(payload.materialCode)}</div>
+          <div class="info-row">${esc(payload.pcs)} pcs</div>
+          <div class="info-row note">Nguyên liệu lấy test và lưu mẫu ngày ${esc(payload.printedDateLabel)}</div>
+        </div>
+      </div>
+    `;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>QR Lấy Mẫu - ${esc(payload.materialCode)}</title>
+          <style>
+            * { margin:0 !important; padding:0 !important; box-sizing:border-box !important; }
+            body { font-family: Arial, sans-serif; background:#fff; overflow:hidden; width:57mm !important; height:32mm !important; }
+            .qr-container {
+              display:flex !important;
+              border:1px solid #000 !important;
+              width:57mm !important;
+              height:32mm !important;
+              background:#fff !important;
+            }
+            .qr-section {
+              width:30mm !important;
+              height:30mm !important;
+              display:flex !important;
+              align-items:center !important;
+              justify-content:center !important;
+              border-right:1px solid #ccc !important;
+            }
+            .qr-image { width:28mm !important; height:28mm !important; display:block !important; }
+            .info-section {
+              flex:1 !important;
+              padding:1mm !important;
+              display:flex !important;
+              flex-direction:column !important;
+              justify-content:flex-start !important;
+              align-items:flex-start !important;
+              color:#000 !important;
+              font-weight:bold !important;
+            }
+            .info-row { margin:0.8mm 0 !important; white-space:nowrap !important; line-height:1.1 !important; }
+            .info-row.material-code.material-code-main { font-size:21.356368px !important; line-height:1.05 !important; }
+            .info-row.note { font-size:8.8px !important; white-space:normal !important; line-height:1.1 !important; }
+            @media print {
+              @page { margin:0 !important; size:57mm 32mm !important; }
+              body { margin:0 !important; width:57mm !important; height:32mm !important; }
+            }
+          </style>
+        </head>
+        <body>
+          ${labelHtml}
+          <script>window.onload=function(){setTimeout(function(){window.print();},500);};</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+
+  private monthKeyToPrevMonthKey(monthKey: number): number {
+    const y = Math.floor(monthKey / 100);
+    const m = monthKey % 100;
+    if (m <= 1) return (y - 1) * 100 + 12;
+    return y * 100 + (m - 1);
+  }
+
+  /** Chỉ giữ dữ liệu: tháng hiện tại + tháng trước; cũ hơn tự xóa. */
+  private async cleanupOldSampleTakings(currentMonthKey: number): Promise<void> {
+    try {
+      const prevMonthKey = this.monthKeyToPrevMonthKey(currentMonthKey);
+      const threshold = prevMonthKey; // delete < prevMonthKey
+      const chunk = 400;
+      while (true) {
+        const snap = await this.firestore.firestore
+          .collection(this.QC_SAMPLE_COLLECTION)
+          .where('monthKey', '<', threshold)
+          .orderBy('monthKey', 'asc')
+          .limit(chunk)
+          .get();
+        if (snap.empty) break;
+        const batch = this.firestore.firestore.batch();
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        if (snap.size < chunk) break;
+      }
+    } catch (e) {
+      console.warn('cleanupOldSampleTakings failed (non-blocking)', e);
+    }
+  }
+
+  // ===== Danh mục Lấy Mẫu (More) =====
+  openSampleCatalogModal(): void {
+    this.showSampleCatalogModal = true;
+    this.closeMoreMenu();
+    const now = new Date();
+    this.sampleCatalogYear = String(now.getFullYear());
+    this.sampleCatalogMonth = String(now.getMonth() + 1).padStart(2, '0');
+    void this.loadSampleCatalogByMonth();
+  }
+
+  closeSampleCatalogModal(): void {
+    this.showSampleCatalogModal = false;
+    this.sampleCatalogRows = [];
+    this.isLoadingSampleCatalog = false;
+  }
+
+  async loadSampleCatalogByMonth(): Promise<void> {
+    if (!this.sampleCatalogYear || !this.sampleCatalogMonth) {
+      alert('Vui lòng chọn tháng và năm');
+      return;
+    }
+    const y = parseInt(this.sampleCatalogYear, 10);
+    const m = parseInt(this.sampleCatalogMonth, 10);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+      alert('Tháng/năm không hợp lệ');
+      return;
+    }
+    const monthKey = y * 100 + m;
+    this.isLoadingSampleCatalog = true;
+    try {
+      // NOTE: bỏ orderBy để không cần composite index; sort trong memory
+      const snap = await this.firestore
+        .collection(this.QC_SAMPLE_COLLECTION, (ref) => ref.where('monthKey', '==', monthKey).limit(2000))
+        .get()
+        .toPromise();
+      const rows = (snap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as any) }));
+      this.sampleCatalogRows = rows.sort((a: any, b: any) => (Number(a?.stt || 0) || 0) - (Number(b?.stt || 0) || 0));
+    } catch (e) {
+      console.error('loadSampleCatalogByMonth error', e);
+      alert('Không tải được danh mục Lấy Mẫu.');
+      this.sampleCatalogRows = [];
+    } finally {
+      this.isLoadingSampleCatalog = false;
+    }
+  }
+
+  downloadSampleCatalogExcel(): void {
+    if (!this.sampleCatalogYear || !this.sampleCatalogMonth) {
+      alert('Vui lòng chọn tháng và năm');
+      return;
+    }
+    const rows = this.sampleCatalogRows || [];
+    if (!rows.length) {
+      alert('Không có dữ liệu để tải');
+      return;
+    }
+
+    import('xlsx')
+      .then((XLSX) => {
+        const wsData: any[][] = [
+          [
+            'Năm',
+            'Tháng',
+            'STT',
+            'Mã',
+            'IQC Test Rosh',
+            'Lấy mẫu hàng về',
+            'ENG lưu mẫu',
+            'Tổng Số Lượng',
+            'Số PO',
+            'Mã Kho (LINKQ)',
+            'Loại Hình (LINKQ)',
+            'Mã ngành nghề'
+          ]
+        ];
+
+        rows.forEach((r: any) => {
+          wsData.push([
+            r.year || '',
+            r.month || '',
+            r.stt || '',
+            r.materialCode || '',
+            r.iqcTestRosh ? '✔' : '',
+            r.layMauHangVe ? '✔' : '',
+            r.engLuuMau ? '✔' : '',
+            r.totalQuantity ?? '',
+            r.poNumber || '',
+            r.maKho || '',
+            r.loaiHinh || '',
+            r.nganhNghe || ''
+          ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'LayMau');
+        const fileName = `Lay_Mau_${this.sampleCatalogMonth}_${this.sampleCatalogYear}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+      })
+      .catch((e) => {
+        console.error('downloadSampleCatalogExcel error', e);
+        alert('Lỗi khi xuất Excel.');
+      });
   }
 
   closePendingQCModal(): void {

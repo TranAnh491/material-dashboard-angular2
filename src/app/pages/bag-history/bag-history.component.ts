@@ -8,6 +8,7 @@ import { Subject } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { RmBagHistoryEventType, RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { ReadTrackerService } from '../../services/read-tracker.service';
 
 export interface BagHistoryRow {
   id: string;
@@ -160,7 +161,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private fns: AngularFireFunctions,
     private snackBar: MatSnackBar,
-    private rmBagHistory: RmBagHistoryService
+    private rmBagHistory: RmBagHistoryService,
+    private readTracker: ReadTrackerService
   ) {}
 
   ngOnInit(): void {
@@ -169,6 +171,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
       .snapshotChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(actions => {
+        this.readTracker.track('bag-history', 'rm-bag-history', actions.length);
         this.rows = actions.map(a =>
           this.toRow(a.payload.doc.id, a.payload.doc.data() as any)
         );
@@ -824,6 +827,7 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         this.fetchAllOutboundDocsForFactory('ASM2', 500, this.outboundDupSinceMs)
       ]);
       const all = [...docs1, ...docs2];
+      this.readTracker.track('bag-history', 'outbound-materials', all.length);
       this.outboundDupTotalScanned = 0;
       const counts = new Map<
         string,
