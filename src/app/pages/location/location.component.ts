@@ -2620,6 +2620,108 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Store Material (Cất NVL) Functions
+
+  /** Parse importDate từ Firestore (Date, Timestamp, chuỗi DDMMYYYY…). */
+  private parseImportDateForStore(importDate: unknown): Date | null {
+    if (!importDate) return null;
+    if (importDate instanceof Date) {
+      return Number.isNaN(importDate.getTime()) ? null : importDate;
+    }
+    if (typeof importDate === 'object' && importDate !== null && 'toDate' in importDate) {
+      try {
+        const d = (importDate as { toDate: () => Date }).toDate();
+        return Number.isNaN(d.getTime()) ? null : d;
+      } catch {
+        return null;
+      }
+    }
+    if (typeof importDate === 'object' && importDate !== null && 'seconds' in importDate) {
+      const d = new Date(Number((importDate as { seconds: number }).seconds) * 1000);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof importDate === 'string') {
+      const t = importDate.trim();
+      if (/^\d{8,10}$/.test(t)) {
+        const day = t.substring(0, 2);
+        const month = t.substring(2, 4);
+        const year = t.substring(4, 8);
+        const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      if (t.includes('/') || t.includes('-')) {
+        const parts = t.split(/[/-]/);
+        if (parts.length === 3) {
+          const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+          return Number.isNaN(d.getTime()) ? null : d;
+        }
+      }
+      const parsed = new Date(t);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (typeof importDate === 'number') {
+      const d = new Date(importDate);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+
+  /** Trích IMD key từ part4 QR — bỏ phần bịch "-x/y" nếu có. */
+  private extractImdKeyFromPart4(part4: string): string {
+    const t = (part4 || '').trim();
+    const di = t.indexOf('-');
+    return di >= 0 ? t.slice(0, di).trim() : t;
+  }
+
+  /** IMD hiển thị/khớp tồn kho — đồng bộ logic QC/Materials (batchNumber 10 số). */
+  private getInventoryImdKeyForStore(data: Record<string, unknown>): string {
+    const batchNumber = String(data?.batchNumber ?? '').trim();
+    const rawImport = String(data?.importDate ?? '').trim();
+
+    if (/^\d{10}$/.test(rawImport)) return rawImport;
+    if (/^\d{10}$/.test(batchNumber)) return batchNumber;
+
+    const importDate = this.parseImportDateForStore(data?.importDate);
+    const baseDate = importDate
+      ? importDate.toLocaleDateString('en-GB').split('/').join('')
+      : (/^\d{8}$/.test(rawImport) ? rawImport : '');
+
+    if (!baseDate) {
+      const m = /^(\d{8,10})/.exec(batchNumber);
+      return m?.[1] || '';
+    }
+
+    if (batchNumber && batchNumber !== baseDate) {
+      if (/^\d{10}$/.test(batchNumber) && batchNumber.startsWith(baseDate)) {
+        return batchNumber;
+      }
+      if (batchNumber.startsWith(baseDate)) {
+        const suffix = batchNumber.substring(baseDate.length);
+        if (/^\d{1,2}$/.test(suffix)) {
+          return baseDate + suffix;
+        }
+      }
+      const m = /^(\d{8,10})/.exec(batchNumber);
+      if (m) return m[1];
+    }
+
+    return baseDate;
+  }
+
+  private imdKeysMatch(scannedKey: string, inventoryKey: string): boolean {
+    if (!scannedKey) return true;
+    if (!inventoryKey) return false;
+    if (scannedKey === inventoryKey) return true;
+    return scannedKey.startsWith(inventoryKey) || inventoryKey.startsWith(scannedKey);
+  }
+
+  private poNumbersMatch(materialPo: string, scannedPo: string): boolean {
+    const a = (materialPo || '').trim();
+    const b = (scannedPo || '').trim();
+    if (!b) return true;
+    if (a === b) return true;
+    return a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
+  }
+
   openStoreMaterialModal(): void {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
@@ -2705,29 +2807,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const parts = qrCode.split('|');
       let materialCode = '';
       let poNumber = '';
-      let imd = '';
-      const extractIMDBeforeDash = (raw: string): string => {
-        const s = (raw || '').trim();
-        if (!s) return '';
-        // Requirement: read IMD from 8..10 chars immediately before the '-' char
-        // Example: "...DDMMYYYY-..." or "...YYYYMMDDHH-..." → take the last 8..10 digits before '-'
-        const m = s.match(/(\d{8,10})(?=-)/);
-        if (m?.[1]) return m[1];
-        // Fallback: if no '-' present, try to get 8..10 digits anywhere
-        const m2 = s.match(/(\d{8,10})/);
-        return m2?.[1] || '';
-      };
+      let imdKey = '';
 
       if (parts.length >= 2) {
-        materialCode = parts[0].trim().substring(0, 7); // Lấy 7 ký tự đầu
-        poNumber = parts[1].trim(); // PO number
+        materialCode = parts[0].trim().substring(0, 7);
+        poNumber = parts[1].trim();
         if (parts.length >= 4) {
-          imd = extractIMDBeforeDash(parts[3]); // IMD (DDMMYYYY) from before '-'
+          imdKey = this.extractImdKeyFromPart4(parts[3]);
         }
       } else if (parts.length >= 1) {
         materialCode = parts[0].trim().substring(0, 7);
         if (parts.length >= 4) {
-          imd = extractIMDBeforeDash(parts[3]);
+          imdKey = this.extractImdKeyFromPart4(parts[3]);
         }
       } else {
         materialCode = qrCode.trim().substring(0, 7);
@@ -2737,18 +2828,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       alert('❌ Không thể đọc mã hàng từ QR code');
       return null;
     }
-
-    const toDDMMYYYY = (dateValue: any): string => {
-        if (!dateValue) return '';
-        try {
-          const d: Date =
-            typeof dateValue?.toDate === 'function' ? dateValue.toDate() : new Date(dateValue);
-          if (Number.isNaN(d.getTime())) return '';
-          return d.toLocaleDateString('en-GB').split('/').join('');
-        } catch {
-          return '';
-        }
-      };
 
       // Tìm tất cả materials có materialCode này trong inventory-materials (để lấy các vị trí khác)
       const allMaterialsSnapshot = await this.firestore
@@ -2769,7 +2848,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       let matchedMaterial: any = null;
 
       allMaterialsSnapshot.forEach(doc => {
-        const data = doc.data() as any;
+        const data = doc.data() as Record<string, unknown>;
         
         // Tính stock đúng cách: openingStock + quantity - exported - xt
         const openingStockValue = data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
@@ -2778,28 +2857,27 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const xt = Number(data.xt) || 0;
         const calculatedStock = openingStockValue + quantity - exported - xt;
         
-        const importDateStr = toDDMMYYYY(data.importDate);
+        const importDateStr = this.getInventoryImdKeyForStore(data);
         const material = {
           id: doc.id,
-          materialCode: data.materialCode || '',
-          poNumber: data.poNumber || '',
-          location: data.location || '',
+          materialCode: String(data.materialCode || ''),
+          poNumber: String(data.poNumber || ''),
+          location: String(data.location || ''),
           stock: calculatedStock,
           openingStock: data.openingStock,
           quantity: quantity,
           exported: exported,
           xt: xt,
-          batchNumber: data.batchNumber || '',
+          batchNumber: String(data.batchNumber || ''),
           importDate: data.importDate,
           importDateStr,
-          iqcStatus: data.iqcStatus || ''
+          iqcStatus: String(data.iqcStatus || '')
         };
 
         const matchesMaterialCode = material.materialCode === materialCode;
-        const matchesPO = !poNumber || material.poNumber === poNumber;
-        const matchesIMD = !imd || (material.importDateStr && material.importDateStr === imd);
+        const matchesPO = this.poNumbersMatch(material.poNumber, poNumber);
+        const matchesIMD = this.imdKeysMatch(imdKey, importDateStr);
 
-        // Yêu cầu mới: PO có thể trùng -> dùng thêm IMD (DDMMYYYY) nếu có trong QR
         if (matchesMaterialCode && matchesPO && matchesIMD) {
           relevantMaterials.push(material);
 
@@ -2807,7 +2885,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             locationSet.add(material.location);
           }
 
-          // Lấy bản ghi đầu tiên khớp để làm "material được scan"
           if (!matchedMaterial) {
             matchedMaterial = material;
           }
@@ -2818,9 +2895,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!poNumber) {
         alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
       } else {
-        const imdLine = imd ? `\nIMD: ${imd}` : '';
+        const imdLine = imdKey ? `\nIMD: ${imdKey}` : '';
         alert(
-          `❌ Không tìm thấy material đúng theo Mã + PO${imd ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`
+          `❌ Không tìm thấy material đúng theo Mã + PO${imdKey ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`
         );
       }
       return null;
@@ -2830,7 +2907,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .filter(loc => loc && loc.trim() !== '')
       .sort();
 
-    return { matchedMaterial, relevantMaterials, suggestedLocations, imd };
+    return { matchedMaterial, relevantMaterials, suggestedLocations, imd: imdKey };
   }
 
   private applyStoreMaterialSelection(
