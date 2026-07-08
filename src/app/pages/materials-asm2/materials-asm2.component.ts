@@ -1641,35 +1641,22 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
   ngOnInit(): void {
     console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
-    
-    // Load catalog first for material names mapping
-    this.loadCatalogFromFirebase().then(() => {
-      console.log('📚 ASM2 Catalog loaded, inventory ready for search');
-    });
+
     this.loadPermissions();
     this.isLocationColumnUnlocked = this.locationUnlock.isUnlocked();
     this.locationUnlock.unlocked$.pipe(takeUntil(this.destroy$)).subscribe(unlocked => {
       this.isLocationColumnUnlocked = unlocked;
       this.cdr.markForCheck();
     });
-    
-    // 🔧 FIX: KHÔNG tự động load inventory - chỉ load khi search
-    // Setup search mechanism only (không gọi loadInventoryFromFirebase)
-    console.log('🔍 Setting up search mechanism...');
+
+    // Chỉ setup search — không load inventory / catalog cho đến khi user search
+    console.log('🔍 Setting up search mechanism (search-first, no auto load)...');
     this.setupDebouncedSearch();
-    console.log('✅ Search mechanism setup completed');
-    
-    // Initialize empty arrays
     this.inventoryMaterials = [];
     this.filteredInventory = [];
-    
-    // Initialize negative stock count and total stock count
-    this.updateNegativeStockCount();
-    
-    // 🆕 Load catalog once when component initializes
-    this.loadCatalogOnce();
 
-    // QTY BAG rule toggle persistence
+    this.updateNegativeStockCount();
+
     const savedRule = localStorage.getItem(this.QTY_BAG_RULE_KEY);
     if (savedRule === '0' || savedRule === '1') {
       this.qtyBagRuleEnabled = savedRule === '1';
@@ -2535,6 +2522,70 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  private ingestCatalogDoc(doc: { id: string; data: () => Record<string, unknown> }): boolean {
+    const data = doc.data();
+    if (!data) return false;
+    const materialCode = String(
+      data.materialCode || data.code || data.material_code || doc.id || ''
+    ).trim().toUpperCase();
+    const materialName = String(data.materialName || data.name || data.material_name || '').trim();
+    if (!materialCode || !materialName) return false;
+    this.catalogCache.set(materialCode, {
+      materialCode,
+      materialName,
+      unit: data.unit || data.unitOfMeasure || 'PCS',
+      standardPacking: Number(data.standardPacking || data.packing || data.unitSize || 0) || 0,
+      standardPackingLocked: data.standardPackingLocked === true
+    });
+    return true;
+  }
+
+  /** Chỉ đọc catalog `materials` cho mã đang search — không load ~9K doc khi mở tab. */
+  private async ensureCatalogForMaterialCodes(codes: string[]): Promise<void> {
+    const unique = [...new Set(codes.map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
+    const missing = unique.filter(c => !this.catalogCache.has(c));
+    if (missing.length === 0) {
+      this.catalogLoaded = true;
+      return;
+    }
+    let reads = 0;
+    for (const code of missing) {
+      try {
+        const byId = await this.firestore.collection('materials').doc(code).get().toPromise();
+        reads++;
+        if (byId?.exists && this.ingestCatalogDoc(byId)) {
+          continue;
+        }
+        const q = await this.firestore.collection('materials', ref =>
+          ref.where('materialCode', '==', code).limit(1)
+        ).get().toPromise();
+        reads += q?.docs?.length || 0;
+        if (q && !q.empty) {
+          this.ingestCatalogDoc(q.docs[0]);
+        }
+      } catch (e) {
+        console.warn('[ASM2] ensureCatalogForMaterialCodes:', code, e);
+      }
+    }
+    if (reads > 0) {
+      this.readTracker.track('materials-asm2', 'materials', reads);
+    }
+    this.catalogLoaded = this.catalogCache.size > 0;
+  }
+
+  private applyCatalogToMaterials(materials: InventoryMaterial[]): void {
+    for (const material of materials) {
+      const code = String(material.materialCode || '').trim().toUpperCase();
+      if (!code || !this.catalogCache.has(code)) continue;
+      const catalogItem = this.catalogCache.get(code)!;
+      material.materialName = catalogItem.materialName;
+      material.unit = catalogItem.unit;
+      if (catalogItem.standardPacking) {
+        material.standardPacking = catalogItem.standardPacking;
+      }
+    }
+  }
+
   // Load catalog from Firebase
   private async loadCatalogFromFirebase(): Promise<void> {
     this.isCatalogLoading = true;
@@ -3091,6 +3142,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
           return material;
         });
         
+        this.readTracker.track('materials-asm2', 'inventory-materials', querySnapshot.docs.length);
+        await this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map(m => m.materialCode));
+        this.applyCatalogToMaterials(this.inventoryMaterials);
+
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
         void this.applyStorageUnitsFromCatalog();
