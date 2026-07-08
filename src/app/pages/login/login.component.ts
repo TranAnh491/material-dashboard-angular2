@@ -108,7 +108,7 @@ export class LoginComponent implements OnInit {
       this.currentLanguage = savedLanguage;
     }
 
-    // Kiểm tra nếu đã đăng nhập thì chuyển về menu (mobile) hoặc dashboard (desktop)
+    // Đã đăng nhập → Menu (tránh auto load Dashboard tốn Firestore reads)
     this.authService.isAuthenticated.subscribe(isAuth => {
       if (isAuth) {
         this.navigateAfterLogin();
@@ -116,15 +116,9 @@ export class LoginComponent implements OnInit {
     });
   }
 
-  /** Mobile: /menu — Desktop: /dashboard */
+  /** Sau đăng nhập luôn vào Menu — không auto Dashboard. */
   private navigateAfterLogin(): void {
-    const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-    const isMobileUa = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|pda|handheld|mobile/i.test(
-      ua.toLowerCase()
-    );
-    const isMobile = w <= 768 || (isMobileUa && w <= 1024);
-    this.router.navigate([isMobile ? '/menu' : '/dashboard']);
+    this.router.navigate(['/menu']);
   }
 
   async onLogin(): Promise<void> {
