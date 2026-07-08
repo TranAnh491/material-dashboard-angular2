@@ -3013,8 +3013,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  private ingestCatalogDoc(doc: { id: string; data: () => Record<string, unknown> }): boolean {
-    const data = doc.data();
+  private ingestCatalogDoc(doc: { id: string; data: () => unknown }): boolean {
+    const data = doc.data() as Record<string, unknown> | undefined;
     if (!data) return false;
     const materialCode = String(
       data.materialCode || data.code || data.material_code || doc.id || ''
