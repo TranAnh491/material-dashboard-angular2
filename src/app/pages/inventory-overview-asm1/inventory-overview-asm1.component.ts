@@ -81,6 +81,10 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Loading states
   isLoading = false;
   isExporting = false;
+  /** Chỉ true sau khi user bấm Refresh — không auto-load khi mở tab */
+  isInventoryLoaded = false;
+  private linkQFileHistoryLoaded = false;
+  private linkQFileHistoryLoading = false;
   
   // Pagination
   currentPage = 1;
@@ -100,17 +104,6 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   ngOnInit(): void {
     console.log('🚀 InventoryOverviewASM1Component initialized');
     this.checkPermissions();
-    
-    // Fallback: if permission check takes too long, load data anyway
-    setTimeout(() => {
-      if (this.inventoryItems.length === 0 && !this.isLoading) {
-        console.log('⏰ Permission check timeout, loading data anyway...');
-        this.loadInventoryOverview();
-      }
-    }, 3000); // 3 seconds timeout
-    
-    // 🔧 SỬA LỖI: Bỏ auto-refresh - chỉ load khi user F5
-    // this.startAutoRefresh();
   }
 
   ngOnDestroy(): void {
@@ -131,29 +124,16 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           
           if (!this.hasAccess) {
             console.warn('⚠️ User does not have access to this tab');
-            // Still try to load data for debugging
-            console.log('🔄 Attempting to load data anyway for debugging...');
-            this.loadInventoryOverview();
-            return;
           }
-          
-          // Load data after permission check
-          this.loadInventoryOverview();
         },
         (error) => {
           console.error('❌ Error checking permissions:', error);
           this.hasAccess = false;
-          // Fallback: try to load data anyway
-          console.log('🔄 Permission check failed, attempting to load data anyway...');
-          this.loadInventoryOverview();
         }
       );
     } catch (error) {
       console.error('❌ Error checking permissions:', error);
       this.hasAccess = false;
-      // Fallback: try to load data anyway
-      console.log('🔄 Permission check failed, attempting to load data anyway...');
-      this.loadInventoryOverview();
     }
   }
 
@@ -168,10 +148,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     console.log('🔄 Loading inventory overview...');
     
     try {
-      // Load LinkQ file history first
-      await this.loadLinkQFileHistory();
-      
-      // 🔧 FIX: .get() khi mở tab / bấm Refresh — không listener realtime (giảm read mạnh).
+      // 🔧 FIX: .get() chỉ khi bấm Refresh — không auto-load khi mở tab.
       console.log('🔍 Lấy dữ liệu từ collection inventory-materials với filter factory == ASM1...');
       this.inventorySub?.unsubscribe();
       this.inventorySub = undefined;
@@ -187,6 +164,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       if (docs.length === 0) {
         this.inventoryItems = [];
         this.filteredItems = [];
+        this.isInventoryLoaded = true;
         this.isLoading = false;
         return;
       }
@@ -382,7 +360,22 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     } catch (error) {
       console.error('❌ Error processing real-time inventory data:', error);
     } finally {
+      this.isInventoryLoaded = true;
       this.isLoading = false;
+    }
+  }
+
+  /** LinkQ history chỉ load khi mở More / Import — không đọc Firebase khi mở tab */
+  private async ensureLinkQFileHistoryLoaded(): Promise<void> {
+    if (this.linkQFileHistoryLoaded || this.linkQFileHistoryLoading) {
+      return;
+    }
+    this.linkQFileHistoryLoading = true;
+    try {
+      await this.loadLinkQFileHistory();
+      this.linkQFileHistoryLoaded = true;
+    } finally {
+      this.linkQFileHistoryLoading = false;
     }
   }
 
@@ -444,6 +437,11 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Toggle more actions dropdown
   toggleMoreActionsDropdown(): void {
     this.isMoreActionsDropdownOpen = !this.isMoreActionsDropdownOpen;
+    if (this.isMoreActionsDropdownOpen) {
+      this.ensureLinkQFileHistoryLoaded().catch(err =>
+        console.error('❌ Error loading LinkQ file history:', err)
+      );
+    }
     console.log(`🔄 Toggled more actions dropdown: ${this.isMoreActionsDropdownOpen}`);
   }
 
@@ -1057,6 +1055,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Import LinkQ stock data
   async importLinkQData(): Promise<void> {
     try {
+      await this.ensureLinkQFileHistoryLoaded();
       console.log('📥 Importing LinkQ stock data...');
       
       // Create file input element
@@ -1687,6 +1686,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Load LinkQ data from saved file
   async loadLinkQFileData(fileId: string): Promise<void> {
     try {
+      await this.ensureLinkQFileHistoryLoaded();
       console.log(`📥 Loading LinkQ data from file ID: ${fileId}`);
       
       // Find the file in our loaded history

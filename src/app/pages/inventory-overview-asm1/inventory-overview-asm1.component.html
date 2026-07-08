@@ -143,7 +143,7 @@
   </div>
 
   <!-- Summary Bar -->
-  <div class="summary-bar">
+  <div class="summary-bar" *ngIf="isInventoryLoaded">
     <div class="summary-item">
       <span class="label">Tổng:</span>
       <span class="value">{{ totalItemsCount }} mã</span>
@@ -164,10 +164,9 @@
       <span class="value">{{ filteredItems.length }} mã</span>
     </div>
     
-    <!-- Auto-refresh status -->
     <div class="summary-item" style="color: #666; font-style: italic;">
-      <span class="label">Auto-refresh:</span>
-      <span class="value">Tắt (chỉ F5 thủ công)</span>
+      <span class="label">Tải dữ liệu:</span>
+      <span class="value">Bấm Refresh (không auto-load)</span>
     </div>
     
     <!-- Comparison status -->
@@ -183,6 +182,17 @@
     </div>
   </div>
 
+  <!-- Start State -->
+  <div class="empty-state start-state" *ngIf="!isInventoryLoaded && !isLoading">
+    <i class="material-icons">inventory_2</i>
+    <h3>RM1 Inventory Overview</h3>
+    <p>Bấm <strong>Refresh</strong> để tải toàn bộ tồn kho. Mở tab không đọc Firebase (tiết kiệm reads).</p>
+    <button class="refresh-btn" (click)="refreshData()" [disabled]="isLoading">
+      <i class="material-icons">refresh</i>
+      Tải dữ liệu
+    </button>
+  </div>
+
   <!-- Loading State -->
   <div class="loading-state" *ngIf="isLoading">
     <div class="spinner"></div>
@@ -190,7 +200,7 @@
   </div>
 
   <!-- Table -->
-  <div class="table-container" *ngIf="!isLoading">
+  <div class="table-container" *ngIf="!isLoading && isInventoryLoaded">
     <table class="inventory-table">
       <thead>
         <tr>
@@ -232,7 +242,7 @@
     </table>
 
     <!-- Empty State -->
-    <div class="empty-state" *ngIf="filteredItems.length === 0">
+    <div class="empty-state" *ngIf="filteredItems.length === 0 && isInventoryLoaded">
       <i class="material-icons">inventory_2</i>
       <h3>Không có dữ liệu</h3>
       <p *ngIf="searchTerm || showOnlyNegativeStock">
@@ -248,7 +258,7 @@
   </div>
 
   <!-- Pagination -->
-  <div class="pagination" *ngIf="totalPages > 1">
+  <div class="pagination" *ngIf="isInventoryLoaded && totalPages > 1">
     <button 
       class="page-btn" 
       [disabled]="currentPage === 1"

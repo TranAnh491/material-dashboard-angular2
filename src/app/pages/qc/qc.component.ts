@@ -216,6 +216,8 @@ export class QCComponent implements OnInit, OnDestroy {
   sampleTakeIqcTestRosh = false;
   sampleTakeLayMauHangVe = false;
   sampleTakeEngLuuMau = false;
+  sampleTakeMuonTest = false;
+  sampleTakeLabelCountInput = '1';
   sampleTakeTotalQty = 0;
   sampleTakeMaKho: '00' | 'NVL_KE31' | 'NVL_E31' | 'NVL_KS' = '00';
   sampleTakeLoaiHinh = '';
@@ -4208,14 +4210,14 @@ export class QCComponent implements OnInit, OnDestroy {
     this.sampleTakeIqcTestRosh = false;
     this.sampleTakeLayMauHangVe = false;
     this.sampleTakeEngLuuMau = false;
+    this.sampleTakeMuonTest = false;
+    this.sampleTakeLabelCountInput = '1';
     this.sampleTakeMaKho = '00';
     this.sampleTakeNganhNghe = 'NNGHE_A';
     this.sampleTakePcsInput = '';
     this.sampleTakeError = '';
+    this.sampleTakeStt = 0;
     this.showSampleTakeModal = true;
-
-    // Auto STT theo tháng/năm (counter doc) — chạy async, không chặn UI
-    void this.allocateNextSampleTakeStt(this.sampleTakeYear, this.sampleTakeMonth);
   }
 
   private async allocateNextSampleTakeStt(year: number, month: number): Promise<void> {
@@ -4247,10 +4249,24 @@ export class QCComponent implements OnInit, OnDestroy {
     this.showSampleTakeModal = false;
     this.sampleTakeSelected = null;
     this.sampleTakePcsInput = '';
+    this.sampleTakeLabelCountInput = '1';
+    this.sampleTakeMuonTest = false;
     this.sampleTakeError = '';
     this.sampleTakeYear = 0;
     this.sampleTakeMonth = 0;
     this.sampleTakeStt = 0;
+  }
+
+  private parseSampleLabelCount(): number | null {
+    const raw = String(this.sampleTakeLabelCountInput || '').trim().replace(/,/g, '');
+    const n = Math.floor(Number(raw));
+    if (!Number.isFinite(n) || n <= 0 || n > 99) return null;
+    return n;
+  }
+
+  private async ensureSampleTakeStt(): Promise<void> {
+    if (this.sampleTakeStt > 0) return;
+    await this.allocateNextSampleTakeStt(this.sampleTakeYear, this.sampleTakeMonth);
   }
 
   private parseSamplePcs(): number | null {
@@ -4262,15 +4278,25 @@ export class QCComponent implements OnInit, OnDestroy {
 
   async saveSampleTakeOnly(): Promise<void> {
     if (!this.sampleTakeSelected) return;
+    if (this.sampleTakeMuonTest) {
+      this.sampleTakeError = 'Mượn Test không lưu vào danh mục lấy mẫu. Dùng In QR nếu chỉ cần in tem.';
+      return;
+    }
     const pcs = this.parseSamplePcs();
     if (!pcs) {
       this.sampleTakeError = 'Số pcs phải là số nguyên > 0.';
+      return;
+    }
+    const labelCount = this.parseSampleLabelCount();
+    if (!labelCount) {
+      this.sampleTakeError = 'Số tem cần in phải là số nguyên từ 1 đến 99.';
       return;
     }
 
     this.isSavingSampleTake = true;
     this.sampleTakeError = '';
     try {
+      await this.ensureSampleTakeStt();
       const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
       await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
         year: this.sampleTakeYear,
@@ -4282,6 +4308,8 @@ export class QCComponent implements OnInit, OnDestroy {
         iqcTestRosh: this.sampleTakeIqcTestRosh,
         layMauHangVe: this.sampleTakeLayMauHangVe,
         engLuuMau: this.sampleTakeEngLuuMau,
+        muonTest: false,
+        labelCount,
         // Theo yêu cầu: Tổng Số Lượng = số lượng nhập popup (pcs)
         totalQuantity: pcs,
         // Lưu thêm để tham chiếu (tồn kho/inventory qty)
@@ -4312,6 +4340,11 @@ export class QCComponent implements OnInit, OnDestroy {
       this.sampleTakeError = 'Số pcs phải là số nguyên > 0.';
       return;
     }
+    const labelCount = this.parseSampleLabelCount();
+    if (!labelCount) {
+      this.sampleTakeError = 'Số tem cần in phải là số nguyên từ 1 đến 99.';
+      return;
+    }
 
     this.isSavingSampleTake = true;
     this.sampleTakeError = '';
@@ -4334,18 +4367,22 @@ export class QCComponent implements OnInit, OnDestroy {
         color: { dark: '#000000', light: '#FFFFFF' }
       });
 
-      const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
-      // Lưu Firestore (kèm printedAt) rồi mới in
-      await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
-        year: this.sampleTakeYear,
-        month: this.sampleTakeMonth,
-        monthKey,
-        stt: this.sampleTakeStt,
-        factory: this.sampleTakeSelected.factory,
-        materialCode: mat,
-        iqcTestRosh: this.sampleTakeIqcTestRosh,
-        layMauHangVe: this.sampleTakeLayMauHangVe,
-        engLuuMau: this.sampleTakeEngLuuMau,
+      if (!this.sampleTakeMuonTest) {
+        const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
+        await this.ensureSampleTakeStt();
+        // Lưu Firestore (kèm printedAt) rồi mới in
+        await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
+          year: this.sampleTakeYear,
+          month: this.sampleTakeMonth,
+          monthKey,
+          stt: this.sampleTakeStt,
+          factory: this.sampleTakeSelected.factory,
+          materialCode: mat,
+          iqcTestRosh: this.sampleTakeIqcTestRosh,
+          layMauHangVe: this.sampleTakeLayMauHangVe,
+          engLuuMau: this.sampleTakeEngLuuMau,
+          muonTest: false,
+          labelCount,
         // Theo yêu cầu: Tổng Số Lượng = số lượng nhập popup (pcs)
         totalQuantity: pcs,
         // Lưu thêm để tham chiếu (tồn kho/inventory qty)
@@ -4361,14 +4398,17 @@ export class QCComponent implements OnInit, OnDestroy {
         printedAt: firebase.firestore.FieldValue.serverTimestamp(),
         printedDate: printedDateLabel,
         qrData
-      });
-      await this.cleanupOldSampleTakings(monthKey);
+        });
+        await this.cleanupOldSampleTakings(monthKey);
+      }
 
       this.openSampleQrPrintWindow({
         qrImage,
         materialCode: mat,
         pcs,
-        printedDateLabel
+        printedDateLabel,
+        labelCount,
+        muonTest: this.sampleTakeMuonTest
       });
       this.closeSampleTakeModal();
     } catch (e) {
@@ -4379,7 +4419,14 @@ export class QCComponent implements OnInit, OnDestroy {
     }
   }
 
-  private openSampleQrPrintWindow(payload: { qrImage: string; materialCode: string; pcs: number; printedDateLabel: string }): void {
+  private openSampleQrPrintWindow(payload: {
+    qrImage: string;
+    materialCode: string;
+    pcs: number;
+    printedDateLabel: string;
+    labelCount: number;
+    muonTest: boolean;
+  }): void {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
@@ -4393,18 +4440,35 @@ export class QCComponent implements OnInit, OnDestroy {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
-    const labelHtml = `
-      <div class="qr-container">
+    const totalLabels = Math.max(1, payload.labelCount || 1);
+    const noteText = payload.muonTest
+      ? `Mượn test ngày ${esc(payload.printedDateLabel)}`
+      : `Nguyên liệu lấy test và lưu mẫu ngày ${esc(payload.printedDateLabel)}`;
+
+    const materialCodeHtml = (() => {
+      const code = String(payload.materialCode || '').trim();
+      if (code.length <= 7) {
+        return `<div class="material-line">${esc(code)}</div>`;
+      }
+      return `<div class="material-line">${esc(code.slice(0, 7))}</div><div class="material-line material-line-wrap">${esc(code.slice(7))}</div>`;
+    })();
+
+    const labelHtml = Array.from({ length: totalLabels }, (_, i) => {
+      const index = i + 1;
+      const fraction = `${index}/${totalLabels}`;
+      return `
+      <div class="qr-container${i < totalLabels - 1 ? ' page-break' : ''}">
         <div class="qr-section">
           <img class="qr-image" src="${payload.qrImage}" alt="QR"/>
         </div>
         <div class="info-section">
-          <div class="info-row material-code material-code-main">${esc(payload.materialCode)}</div>
-          <div class="info-row">${esc(payload.pcs)} pcs</div>
-          <div class="info-row note">Nguyên liệu lấy test và lưu mẫu ngày ${esc(payload.printedDateLabel)}</div>
+          <div class="info-row material-code material-code-main">${materialCodeHtml}</div>
+          <div class="info-row">${esc(payload.pcs)} pcs <span class="label-fraction">${esc(fraction)}</span></div>
+          <div class="info-row note">${noteText}</div>
         </div>
-      </div>
-    `;
+        <div class="iqc-badge">IQC</div>
+      </div>`;
+    }).join('');
 
     printWindow.document.write(`
       <html>
@@ -4416,6 +4480,7 @@ export class QCComponent implements OnInit, OnDestroy {
             body { font-family: Arial, sans-serif; background:#fff; overflow:hidden; width:57mm !important; height:32mm !important; }
             .qr-container {
               display:flex !important;
+              position:relative !important;
               border:1px solid #000 !important;
               width:57mm !important;
               height:32mm !important;
@@ -4441,8 +4506,25 @@ export class QCComponent implements OnInit, OnDestroy {
               font-weight:bold !important;
             }
             .info-row { margin:0.8mm 0 !important; white-space:nowrap !important; line-height:1.1 !important; }
-            .info-row.material-code.material-code-main { font-size:21.356368px !important; line-height:1.05 !important; }
-            .info-row.note { font-size:8.8px !important; white-space:normal !important; line-height:1.1 !important; }
+            .info-row.material-code.material-code-main {
+              font-size:21.356368px !important;
+              line-height:1.05 !important;
+              white-space:normal !important;
+            }
+            .material-line { display:block !important; white-space:nowrap !important; line-height:1.05 !important; }
+            .material-line-wrap { font-size:18px !important; }
+            .info-row.note { font-size:8.8px !important; white-space:normal !important; line-height:1.1 !important; padding-right:7mm !important; }
+            .label-fraction { font-size:10px !important; margin-left:1mm !important; }
+            .iqc-badge {
+              position:absolute !important;
+              right:1mm !important;
+              bottom:0.5mm !important;
+              font-size:9px !important;
+              font-weight:bold !important;
+              color:#000 !important;
+              line-height:1 !important;
+            }
+            .page-break { page-break-after: always !important; break-after: page !important; }
             @media print {
               @page { margin:0 !important; size:57mm 32mm !important; }
               body { margin:0 !important; width:57mm !important; height:32mm !important; }

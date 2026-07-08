@@ -533,21 +533,39 @@
           <input type="checkbox" [(ngModel)]="sampleTakeEngLuuMau" [disabled]="isSavingSampleTake">
           <span>ENG lưu mẫu</span>
         </label>
-      </div>
-
-      <div class="sample-input">
-        <label>Số lượng (pcs)</label>
-        <input
-          type="number"
-          min="1"
-          step="1"
-          inputmode="numeric"
-          [(ngModel)]="sampleTakePcsInput"
-          [disabled]="isSavingSampleTake"
-          placeholder="Nhập số pcs">
+        <label class="sample-check">
+          <input type="checkbox" [(ngModel)]="sampleTakeMuonTest" [disabled]="isSavingSampleTake">
+          <span>Mượn Test <small>(không lưu danh mục)</small></span>
+        </label>
       </div>
 
       <div class="sample-grid">
+        <div class="sample-input">
+          <label>Số lượng (pcs)</label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            inputmode="numeric"
+            [(ngModel)]="sampleTakePcsInput"
+            [disabled]="isSavingSampleTake"
+            placeholder="Nhập số pcs">
+        </div>
+        <div class="sample-input">
+          <label>Số tem cần in</label>
+          <input
+            type="number"
+            min="1"
+            max="99"
+            step="1"
+            inputmode="numeric"
+            [(ngModel)]="sampleTakeLabelCountInput"
+            [disabled]="isSavingSampleTake"
+            placeholder="VD: 2 → 1/2, 2/2">
+        </div>
+      </div>
+
+      <div class="sample-grid sample-grid--kho">
         <div class="sample-input">
           <label>Mã kho (LINKQ)</label>
           <select [(ngModel)]="sampleTakeMaKho" [disabled]="isSavingSampleTake">
@@ -576,7 +594,14 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="action-btn action-btn--ghost" (click)="closeSampleTakeModal()" [disabled]="isSavingSampleTake">Hủy</button>
-      <button type="button" class="action-btn" (click)="saveSampleTakeOnly()" [disabled]="isSavingSampleTake">Lưu</button>
+      <button
+        type="button"
+        class="action-btn"
+        (click)="saveSampleTakeOnly()"
+        [disabled]="isSavingSampleTake || sampleTakeMuonTest"
+        [title]="sampleTakeMuonTest ? 'Mượn Test không lưu danh mục' : 'Lưu vào danh mục lấy mẫu'">
+        Lưu
+      </button>
       <button type="button" class="action-btn action-btn--primary" (click)="printSampleTakeQr()" [disabled]="isSavingSampleTake">
         <i class="material-icons">qr_code_2</i>
         In QR

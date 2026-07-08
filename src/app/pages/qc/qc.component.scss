@@ -1345,6 +1345,8 @@ $gray:    #9ca3af;
   gap: 10px;
 }
 
+.sample-check small { font-weight: 400; color: #64748b; }
+
 .sample-checks {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
