@@ -131,12 +131,10 @@ export class LoginComponent implements OnInit {
     const result = await firstValueFrom(
       this.fns.httpsCallable('truckDriverSignInFn')({ employeeId, password })
     );
-    const payload = (result as { data?: { token?: string } })?.data ?? (result as { token?: string });
-    const token = typeof payload?.token === 'string' ? payload.token.trim() : '';
-    if (!token) {
-      throw new Error('Không nhận được token đăng nhập.');
-    }
-    await this.authService.signInWithCustomToken(token);
+    const payload =
+      (result as { data?: { email?: string } })?.data ?? (result as { email?: string });
+    const email = typeof payload?.email === 'string' ? payload.email.trim().toLowerCase() : 'xetai@asp.com';
+    await this.authService.signIn(email, password);
   }
 
   async onLogin(): Promise<void> {
@@ -276,6 +274,14 @@ export class LoginComponent implements OnInit {
       'auth/invalid-email': {
         en: 'Invalid employee ID!',
         vi: 'Mã số nhân viên không hợp lệ!'
+      },
+      'functions/permission-denied': {
+        en: 'Wrong employee ID or password!',
+        vi: 'Mã hoặc mật khẩu không đúng!'
+      },
+      'functions/internal': {
+        en: 'Login service error. Please try again.',
+        vi: 'Lỗi dịch vụ đăng nhập. Vui lòng thử lại.'
       }
     };
 

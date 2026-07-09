@@ -5,7 +5,10 @@ const XETAI_EMAIL = 'xetai@asp.com';
 const XETAI_EMPLOYEE_ID = 'XETAI';
 const XETAI_PASSWORD = '1234';
 
-export async function signInTruckDriver(employeeIdRaw: string, passwordRaw: string): Promise<{ token: string }> {
+export async function signInTruckDriver(
+  employeeIdRaw: string,
+  passwordRaw: string
+): Promise<{ email: string }> {
   const employeeId = String(employeeIdRaw || '')
     .trim()
     .toUpperCase();
@@ -17,6 +20,12 @@ export async function signInTruckDriver(employeeIdRaw: string, passwordRaw: stri
 
   try {
     await admin.auth().getUser(XETAI_UID);
+    await admin.auth().updateUser(XETAI_UID, {
+      email: XETAI_EMAIL,
+      emailVerified: true,
+      displayName: 'Tài xế Xe Tải',
+      password: XETAI_PASSWORD
+    });
   } catch (e: any) {
     if (e?.code !== 'auth/user-not-found') {
       throw e;
@@ -26,7 +35,7 @@ export async function signInTruckDriver(employeeIdRaw: string, passwordRaw: stri
       email: XETAI_EMAIL,
       emailVerified: true,
       displayName: 'Tài xế Xe Tải',
-      password: 'xetai-1234-driver'
+      password: XETAI_PASSWORD
     });
   }
 
@@ -68,6 +77,5 @@ export async function signInTruckDriver(employeeIdRaw: string, passwordRaw: stri
       { merge: true }
     );
 
-  const token = await admin.auth().createCustomToken(XETAI_UID);
-  return { token };
+  return { email: XETAI_EMAIL };
 }

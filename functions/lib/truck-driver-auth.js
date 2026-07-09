@@ -49,6 +49,12 @@ async function signInTruckDriver(employeeIdRaw, passwordRaw) {
     }
     try {
         await admin.auth().getUser(XETAI_UID);
+        await admin.auth().updateUser(XETAI_UID, {
+            email: XETAI_EMAIL,
+            emailVerified: true,
+            displayName: 'Tài xế Xe Tải',
+            password: XETAI_PASSWORD
+        });
     }
     catch (e) {
         if ((e === null || e === void 0 ? void 0 : e.code) !== 'auth/user-not-found') {
@@ -59,7 +65,7 @@ async function signInTruckDriver(employeeIdRaw, passwordRaw) {
             email: XETAI_EMAIL,
             emailVerified: true,
             displayName: 'Tài xế Xe Tải',
-            password: 'xetai-1234-driver'
+            password: XETAI_PASSWORD
         });
     }
     const now = new Date();
@@ -92,7 +98,6 @@ async function signInTruckDriver(employeeIdRaw, passwordRaw) {
         isTruckDriver: true,
         updatedAt: now
     }, { merge: true });
-    const token = await admin.auth().createCustomToken(XETAI_UID);
-    return { token };
+    return { email: XETAI_EMAIL };
 }
 //# sourceMappingURL=truck-driver-auth.js.map
