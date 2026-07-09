@@ -393,6 +393,45 @@
       }
     }
   }
+
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .search-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid #000000;
+  }
+
+  .search-mode-btn {
+    height: 32px;
+    padding: 6px 10px;
+    border: none;
+    border-right: 1px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+
+    &:last-child {
+      border-right: none;
+    }
+
+    &.active {
+      background: #000000;
+      color: #ffffff;
+    }
+  }
+
+  .search-submit-btn {
+    min-width: 88px !important;
+  }
 }
 
 // Excel-like checkbox styling - Minimal

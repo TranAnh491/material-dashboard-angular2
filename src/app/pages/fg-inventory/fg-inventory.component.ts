@@ -8,6 +8,7 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { FgExportService } from '../../services/fg-export.service';
 import { FgInService } from '../../services/fg-in.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
+import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -70,6 +71,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Search and filter
   searchTerm: string = '';
+  /** Mã TP (7 ký tự, tự tìm) hoặc Vị trí (bấm Search). */
+  searchMode: 'material' | 'location' = 'material';
+  searchStatus: 'idle' | 'typing' | 'searching' | 'found' | 'not-found' | 'non-stock-only' = 'idle';
   
   // Factory filter — mặc định ASM1 (không dùng TOTAL khi mở tab)
   selectedFactory: string = 'ASM1';
@@ -162,7 +166,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private fgInService: FgInService,
     private dialog: MatDialog,
     private cdr: ChangeDetectorRef,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private fgDailyBackup: FgDailyBackupService
   ) {}
 
   /** Chỉ cho sửa "Tồn đầu" với dòng import tồn đầu (batch TDAU1-/TDAU2-) */
@@ -173,10 +178,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.setupDebouncedSearch();
-    this.loadCatalogFromFirebase(); // Load catalog first
-    this.loadMappingFromFirebase(); // Load mapping for customer names
-    this.subscribeFGInOutCaches();  // Đồng bộ Nhập/Xuất từ fg-in và fg-export
-    this.loadMaterialsFromFirebase();
+    this.loadCatalogFromFirebase();
+    this.loadMappingFromFirebase();
     this.startDate = '2020-01-01';
     this.endDate = '2030-12-31';
     this.applyFilters();
@@ -192,75 +195,222 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Setup debounced search for better performance
   private setupDebouncedSearch(): void {
     this.searchSubject.pipe(
-      debounceTime(1000), // Đợi 1 giây sau khi user ngừng gõ
+      debounceTime(400),
       distinctUntilChanged(),
       takeUntil(this.destroy$)
-    ).subscribe(searchTerm => {
-      this.performSearch(searchTerm);
+    ).subscribe((searchTerm) => {
+      void this.runInventorySearch(searchTerm);
     });
   }
 
-  // Load materials from Firebase — .get() khi mở tab / Refresh (không listener sống)
+  private mapDocToInventoryItem(id: string, data: any): FGInventoryItem {
+    const tonDau = data.tonDau || 0;
+    const nhap = data.nhap || data.quantity || 0;
+    const xuat = data.xuat || data.exported || 0;
+    const ton = data.ton != null ? data.ton : data.stock != null ? data.stock : tonDau + nhap - xuat;
+
+    const toDate = (v: any) => {
+      if (!v) return new Date();
+      if (typeof v?.toDate === 'function') return v.toDate();
+      if (v?.seconds != null) return new Date(v.seconds * 1000);
+      return v instanceof Date ? v : new Date(v);
+    };
+
+    return {
+      id,
+      factory: data.factory || 'ASM1',
+      importDate: toDate(data.importDate),
+      receivedDate: toDate(data.receivedDate),
+      batchNumber: data.batchNumber || '',
+      materialCode: data.materialCode || data.maTP || '',
+      lot: data.lot || data.Lot || '',
+      lsx: data.lsx || data.LSX || '',
+      quantity: data.quantity || 0,
+      standard: data.standard || 0,
+      carton: data.carton || 0,
+      odd: data.odd || 0,
+      tonDau,
+      nhap,
+      xuat,
+      ton,
+      location: data.location || data.viTri || 'Temporary',
+      viTriKK: data.viTriKK || data.locationKK || '',
+      notes: data.notes || data.ghiChu || '',
+      customer: data.customer || data.khach || '',
+      poNumber: data.poNumber || data.soPO || '',
+      isReceived: data.isReceived || false,
+      isCompleted: data.isCompleted || false,
+      isDuplicate: data.isDuplicate || false,
+      createdAt: toDate(data.createdAt),
+      updatedAt: toDate(data.updatedAt)
+    };
+  }
+
+  /** Tìm theo mã TP khi đủ 7 ký tự — query Firestore, không load full collection. */
+  async runInventorySearch(termRaw: string): Promise<void> {
+    const term = String(termRaw || '').trim().toUpperCase();
+    this.searchTerm = term;
+
+    if (term.length < 7) {
+      this.searchStatus = 'typing';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.isLoading = true;
+    this.searchStatus = 'searching';
+    this.cdr.detectChanges();
+
+    try {
+      const prefixEnd = term + '\uf8ff';
+      const [byCodeSnap, byMaTpSnap] = await Promise.all([
+        this.firestore
+          .collection('fg-inventory', (ref) =>
+            ref.where('materialCode', '>=', term).where('materialCode', '<=', prefixEnd).limit(300)
+          )
+          .get()
+          .toPromise(),
+        this.firestore
+          .collection('fg-inventory', (ref) =>
+            ref.where('maTP', '>=', term).where('maTP', '<=', prefixEnd).limit(300)
+          )
+          .get()
+          .toPromise()
+      ]).catch(async () => {
+        const byCodeSnap = await this.firestore
+          .collection('fg-inventory', (ref) =>
+            ref.where('materialCode', '>=', term).where('materialCode', '<=', prefixEnd).limit(300)
+          )
+          .get()
+          .toPromise();
+        return [byCodeSnap, { docs: [] }] as const;
+      });
+
+      const readCount = (byCodeSnap?.docs.length || 0) + (byMaTpSnap?.docs.length || 0);
+      this.readTracker.track('fg-inventory', 'fg-inventory-search', readCount);
+
+      const merged = new Map<string, FGInventoryItem>();
+      for (const doc of [...(byCodeSnap?.docs || []), ...(byMaTpSnap?.docs || [])]) {
+        merged.set(doc.id, this.mapDocToInventoryItem(doc.id, doc.data()));
+      }
+
+      this.materials = Array.from(merged.values());
+      this.applyFilters();
+
+      if (this.filteredMaterials.length > 0) {
+        this.searchStatus = 'found';
+      } else if (this.materials.length > 0) {
+        this.searchStatus = 'non-stock-only';
+      } else {
+        this.searchStatus = 'not-found';
+      }
+    } catch (e) {
+      console.error('runInventorySearch failed', e);
+      this.materials = [];
+      this.filteredMaterials = [];
+      this.searchStatus = 'not-found';
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Tìm theo vị trí — bấm Search; hiển thị các mã có tồn tại vị trí đó. */
+  async runLocationSearch(locationRaw: string): Promise<void> {
+    const loc = String(locationRaw || '').trim().toUpperCase();
+    this.searchTerm = loc;
+
+    if (!loc || loc.length < 2) {
+      this.searchStatus = 'typing';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.isLoading = true;
+    this.searchStatus = 'searching';
+    this.cdr.detectChanges();
+
+    try {
+      const locEnd = loc + '\uf8ff';
+      const [byLocationSnap, byViTriSnap] = await Promise.all([
+        this.firestore
+          .collection('fg-inventory', (ref) =>
+            ref.where('location', '>=', loc).where('location', '<=', locEnd).limit(300)
+          )
+          .get()
+          .toPromise(),
+        this.firestore
+          .collection('fg-inventory', (ref) =>
+            ref.where('viTri', '>=', loc).where('viTri', '<=', locEnd).limit(300)
+          )
+          .get()
+          .toPromise()
+      ]);
+
+      const readCount = (byLocationSnap?.docs.length || 0) + (byViTriSnap?.docs.length || 0);
+      this.readTracker.track('fg-inventory', 'fg-inventory-location-search', readCount);
+
+      const merged = new Map<string, FGInventoryItem>();
+      for (const doc of [...(byLocationSnap?.docs || []), ...(byViTriSnap?.docs || [])]) {
+        merged.set(doc.id, this.mapDocToInventoryItem(doc.id, doc.data()));
+      }
+
+      this.materials = Array.from(merged.values());
+      this.applyFilters();
+
+      if (this.filteredMaterials.length > 0) {
+        this.searchStatus = 'found';
+      } else if (this.materials.length > 0) {
+        this.searchStatus = 'non-stock-only';
+      } else {
+        this.searchStatus = 'not-found';
+      }
+    } catch (e) {
+      console.error('runLocationSearch failed', e);
+      this.materials = [];
+      this.filteredMaterials = [];
+      this.searchStatus = 'not-found';
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  setSearchMode(mode: 'material' | 'location'): void {
+    if (this.searchMode === mode) return;
+    this.searchMode = mode;
+    this.clearSearch();
+  }
+
+  onSearchClick(): void {
+    const term = String(this.searchTerm || '').trim().toUpperCase();
+    if (!term) return;
+    if (this.searchMode === 'location') {
+      void this.runLocationSearch(term);
+      return;
+    }
+    if (term.length >= 7) {
+      void this.runInventorySearch(term);
+    }
+  }
+
+  onSearchKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    this.onSearchClick();
+  }
   async loadMaterialsFromFirebase(): Promise<void> {
     this.isLoading = true;
 
     try {
-      const snapshot = await this.firestore.collection('fg-inventory').get().toPromise();
-      const docs = snapshot?.docs || [];
-      this.readTracker.track('fg-inventory', 'fg-inventory', docs.length);
+      const merged = await this.fgDailyBackup.loadMergedDocs('fg-inventory', 'fg-inventory');
+      const docs = merged.docs;
 
-      const firebaseMaterials = docs.map(doc => {
-          const data = doc.data() as any;
-          const id = doc.id;
-
-          // Tồn kho = tonDau + nhap - xuat (ưu tiên đọc trực tiếp từ Firebase nếu đã tính sẵn)
-          const tonDau = data.tonDau || 0;
-          const nhap   = data.nhap   || data.quantity || 0;
-          const xuat   = data.xuat   || data.exported || 0;
-          const ton    = data.ton    != null ? data.ton : (data.stock != null ? data.stock : (tonDau + nhap - xuat));
-
-          // Firestore Timestamp: có thể là .toDate() hoặc .seconds
-          const toDate = (v: any) => {
-            if (!v) return new Date();
-            if (typeof v?.toDate === 'function') return v.toDate();
-            if (v?.seconds != null) return new Date(v.seconds * 1000);
-            return v instanceof Date ? v : new Date(v);
-          };
-
-          return {
-            id,
-            factory:      data.factory      || 'ASM1',
-            importDate:   toDate(data.importDate),
-            receivedDate: toDate(data.receivedDate),
-            batchNumber:  data.batchNumber  || '',
-            materialCode: data.materialCode || data.maTP || '',
-            lot:          data.lot          || data.Lot  || '',
-            lsx:          data.lsx          || data.LSX  || '',
-            quantity:     data.quantity     || 0,
-            standard:     data.standard     || 0,
-            carton:       data.carton       || 0,
-            odd:          data.odd          || 0,
-            tonDau,
-            nhap,
-            xuat,
-            ton,
-            location:     data.location     || data.viTri || 'Temporary',
-            viTriKK:      data.viTriKK      || data.locationKK || '',
-            notes:        data.notes        || data.ghiChu || '',
-            customer:     data.customer     || data.khach  || '',
-            poNumber:     data.poNumber     || data.soPO    || '',
-            isReceived:   data.isReceived   || false,
-            isCompleted:  data.isCompleted  || false,
-            isDuplicate:  data.isDuplicate  || false,
-            createdAt:    toDate(data.createdAt),
-            updatedAt:    toDate(data.updatedAt)
-          };
-        });
+      const firebaseMaterials = docs.map((doc) => this.mapDocToInventoryItem(doc.id, doc.data as any));
 
         this.materials = firebaseMaterials;
-
-        // Đồng bộ lại cột Nhập/Xuất/Tồn theo cache từ fg-in và fg-export
-        this.applyFGInOutCachesToMaterials();
 
         this.sortMaterials();
         this.applyFilters();
@@ -301,8 +451,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   async refreshFgInOutCaches(): Promise<void> {
       try {
-        const snap = await this.firestore.collection('fg-in').get().toPromise();
-        this.readTracker.track('fg-inventory', 'fg-in', snap?.docs.length || 0);
+        const merged = await this.fgDailyBackup.loadMergedDocs('fg-in', 'fg-inventory');
+        const snap = { docs: merged.docs.map((d) => ({ data: () => d.data })) };
         this.fgInQtyByKey.clear();
         this.fgInQtyByBatchKey.clear();
         this.fgInPoByBatchKey.clear();
@@ -517,29 +667,44 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Apply search filters
   applyFilters(): void {
+    const trimmedSearch = (this.searchTerm || '').trim();
+    if (this.searchMode === 'material' && trimmedSearch.length > 0 && trimmedSearch.length < 7) {
+      this.filteredMaterials = [];
+      return;
+    }
+
     this.filteredMaterials = this.materials.filter(material => {
-      // ASM1: không hiển thị danh sách khi chưa search, phải bấm search mới hiện
-      if (this.selectedFactory === 'ASM1' && (!this.searchTerm || this.searchTerm.trim() === '')) {
+      if (this.searchMode === 'material' && this.selectedFactory === 'ASM1' && trimmedSearch.length < 7) {
         return false;
       }
 
-      // Filter by search term (chuẩn hóa: bỏ dấu chấm để "P011022.E" khớp "P011022")
-      if (this.searchTerm && this.searchTerm.trim() !== '') {
-        const term = (this.searchTerm || '').trim().toUpperCase();
-        const termNorm = term.replace(/\./g, '');
-        const searchableText = [
-          material.materialCode,
-          material.batchNumber,
-          material.location,
-          material.lsx,
-          material.lot,
-          material.ton?.toString(),
-          material.notes,
-          material.customer
-        ].filter(Boolean).join(' ').toUpperCase();
-        const textNorm = searchableText.replace(/\./g, '');
-        const match = searchableText.includes(term) || textNorm.includes(termNorm);
-        if (!match) return false;
+      if (trimmedSearch) {
+        const term = trimmedSearch.toUpperCase();
+        if (this.searchMode === 'location') {
+          const location = String(material.location || '').trim().toUpperCase();
+          const viTri = String(material.viTriKK || '').trim().toUpperCase();
+          const matchLocation =
+            location === term ||
+            location.startsWith(term) ||
+            viTri === term ||
+            viTri.startsWith(term);
+          if (!matchLocation) return false;
+        } else {
+          const termNorm = term.replace(/\./g, '');
+          const searchableText = [
+            material.materialCode,
+            material.batchNumber,
+            material.location,
+            material.lsx,
+            material.lot,
+            material.ton?.toString(),
+            material.notes,
+            material.customer
+          ].filter(Boolean).join(' ').toUpperCase();
+          const textNorm = searchableText.replace(/\./g, '');
+          const match = searchableText.includes(term) || textNorm.includes(termNorm);
+          if (!match) return false;
+        }
       }
 
       // Filter by factory (TOTAL = xem tất cả)
@@ -564,14 +729,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       // Filter by completed status
       const isCompletedVisible = this.showCompleted || !material.isCompleted;
 
-      // Filter by stock (ton): ẩn ton=0 theo mặc định; Non Stock mode = chỉ hiện ton=0
+      // Filter by stock (ton): ẩn ton=0 — chỉ hiện khi bấm Non Stock
       const ton = material.ton ?? 0;
       if (this.showNegativeStock) {
-        if (ton >= 0) return false; // Tồn Âm: chỉ hiện ton < 0
+        if (ton >= 0) return false;
       } else if (this.showNonStock) {
-        if (ton > 0) return false; // Non Stock: chỉ hiện ton=0
-      } else {
-        if (ton <= 0) return false; // Mặc định: ẩn ton=0 và tồn âm
+        if (ton > 0) return false;
+      } else if (ton <= 0) {
+        return false;
       }
 
       return isInDateRange && isCompletedVisible;
@@ -601,40 +766,48 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Search functionality with debouncing
   onSearchChange(event: any): void {
     let searchTerm = event.target.value;
-    
-    // Auto-convert to uppercase
+
     if (searchTerm && searchTerm !== searchTerm.toUpperCase()) {
       searchTerm = searchTerm.toUpperCase();
       event.target.value = searchTerm;
     }
-    
-    // Clear results immediately if search is empty
+
     if (!searchTerm || searchTerm.trim() === '') {
       this.clearSearch();
       return;
     }
-    
-    // Send to debounced search
-    this.searchSubject.next(searchTerm);
-  }
 
-  // Clear search and reset to initial state
-  clearSearch(): void {
-    this.searchTerm = '';
-    this.applyFilters(); // Show all materials
-    console.log('Cleared search - showing all materials');
-  }
+    const trimmed = searchTerm.trim();
 
-  // Perform search with minimum character requirement
-  private performSearch(searchTerm: string): void {
-    if (searchTerm.length < 3) {
-      this.applyFilters(); // Show all materials if search too short
-      console.log(`Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự) - showing all materials`);
+    if (this.searchMode === 'location') {
+      this.searchTerm = trimmed;
+      this.searchStatus = trimmed.length < 2 ? 'typing' : 'idle';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
       return;
     }
-    
-    this.searchTerm = searchTerm;
-    this.applyFilters();
+
+    if (trimmed.length < 7) {
+      this.searchTerm = trimmed;
+      this.searchStatus = 'typing';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
+      return;
+    }
+
+    if (trimmed.length === 7) {
+      void this.runInventorySearch(trimmed);
+      return;
+    }
+
+    this.searchSubject.next(trimmed);
+  }
+
+  clearSearch(): void {
+    this.searchTerm = '';
+    this.filteredMaterials = [];
+    this.materials = [];
+    this.searchStatus = 'idle';
   }
 
   // Format number: dấu phẩy hàng nghìn, không có số thập phân
@@ -647,6 +820,15 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   setFactoryFilter(factory: string): void {
     this.selectedFactory = factory;
+    const term = (this.searchTerm || '').trim();
+    if (this.searchMode === 'location' && term.length >= 2) {
+      void this.runLocationSearch(term);
+      return;
+    }
+    if (term.length >= 7) {
+      void this.runInventorySearch(this.searchTerm);
+      return;
+    }
     this.applyFilters();
   }
 

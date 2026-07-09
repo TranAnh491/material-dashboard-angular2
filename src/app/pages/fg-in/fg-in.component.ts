@@ -9,6 +9,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
+import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 
 export interface FgInItem {
   id?: string;
@@ -208,7 +209,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
     private dialog: MatDialog,
-    private router: Router
+    private router: Router,
+    private fgDailyBackup: FgDailyBackupService
   ) {}
 
   ngOnInit(): void {
@@ -278,12 +280,9 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Load materials from Firebase - One-time load for better performance
   loadMaterialsFromFirebase(): void {
-    this.firestore.collection('fg-in')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((querySnapshot) => {
-        const firebaseMaterials = querySnapshot.docs.map(doc => {
-          const data = doc.data() as any;
+    void this.fgDailyBackup.loadMergedDocs('fg-in', 'fg-in').then((merged) => {
+      const firebaseMaterials = merged.docs.map((doc) => {
+          const data = doc.data as any;
           const id = doc.id;
           
           // Map Firebase data structure to component interface
@@ -315,8 +314,8 @@ export class FgInComponent implements OnInit, OnDestroy {
         
         this.materials = firebaseMaterials;
         this.applyFilters();
-        console.log('Loaded FG In materials from Firebase:', this.materials.length);
-        console.log('All materials:', this.materials);
+      }).catch((e) => {
+        console.error('loadMaterialsFromFirebase failed', e);
       });
   }
 

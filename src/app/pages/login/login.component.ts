@@ -42,7 +42,7 @@ export class LoginComponent implements OnInit {
     private router: Router,
     private fns: AngularFireFunctions
   ) {
-    /** Đăng nhập: ASP + 4 số hoặc XETAI (app phụ xe tải). */
+    /** Đăng nhập: ASP + 4 số (ASP9999 cho xe tải) hoặc XETAI. */
     this.loginForm = this.fb.group({
       employeeId: ['', [Validators.required, Validators.pattern(/^(ASP\d{4}|XETAI)$/i)]],
       password: ['', [Validators.required]]
@@ -123,8 +123,15 @@ export class LoginComponent implements OnInit {
     this.router.navigate([toXeTai ? '/xe-tai' : '/menu']);
   }
 
+  private readonly truckDriverEmployeeIds = new Set(['ASP9999', 'XETAI']);
+
   private isTruckDriverLogin(employeeId: string): boolean {
-    return String(employeeId || '').trim().toUpperCase() === 'XETAI';
+    return this.truckDriverEmployeeIds.has(String(employeeId || '').trim().toUpperCase());
+  }
+
+  private toTruckAuthPassword(password: string): string {
+    const p = String(password || '').trim();
+    return p.length >= 6 ? p : p.padEnd(6, '0');
   }
 
   private async signInTruckDriver(employeeId: string, password: string): Promise<void> {
@@ -132,9 +139,16 @@ export class LoginComponent implements OnInit {
       this.fns.httpsCallable('truckDriverSignInFn')({ employeeId, password })
     );
     const payload =
-      (result as { data?: { email?: string } })?.data ?? (result as { email?: string });
-    const email = typeof payload?.email === 'string' ? payload.email.trim().toLowerCase() : 'xetai@asp.com';
-    await this.authService.signIn(email, password);
+      (result as { data?: { email?: string; authPassword?: string } })?.data ??
+      (result as { email?: string; authPassword?: string });
+    const email = typeof payload?.email === 'string'
+      ? payload.email.trim().toLowerCase()
+      : this.loginFieldToEmail(employeeId);
+    const authPassword =
+      typeof payload?.authPassword === 'string' && payload.authPassword
+        ? payload.authPassword
+        : this.toTruckAuthPassword(password);
+    await this.authService.signIn(email, authPassword);
   }
 
   async onLogin(): Promise<void> {
@@ -156,11 +170,11 @@ export class LoginComponent implements OnInit {
           return;
         }
 
-        // Tài xế app phụ Xe Tải: XETAI / 1234
+        // Tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456
         if (this.isTruckDriverLogin(emp)) {
-          if (pass.length < 4) {
+          if (pass.length < 6) {
             this.showMessage(
-              this.currentLanguage === 'en' ? 'Password must be at least 4 characters' : 'Mật khẩu phải có ít nhất 4 ký tự',
+              this.currentLanguage === 'en' ? 'Password must be at least 6 characters' : 'Mật khẩu phải có ít nhất 6 ký tự',
               'error'
             );
             return;

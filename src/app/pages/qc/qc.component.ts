@@ -199,6 +199,8 @@ export class QCComponent implements OnInit, OnDestroy {
 
   // Lấy mẫu (chuột phải ở danh sách chờ kiểm)
   private readonly QC_SAMPLE_COLLECTION = 'qc-sample-takings';
+  /** Khóa duy nhất: Mã + PO + Lô hàng theo từng xưởng (ASM1/ASM2). */
+  private readonly QC_SAMPLE_TAKEN_KEYS = 'qc-sample-taken-keys';
   showSampleTakeModal = false;
   isSavingSampleTake = false;
   sampleTakeError = '';
@@ -231,15 +233,40 @@ export class QCComponent implements OnInit, OnDestroy {
   isLoadingSampleCatalog = false;
   sampleCatalogRows: any[] = [];
 
-  /** Set key: material|po|imd đã lấy mẫu (tháng này + tháng trước) */
+  /** Set key: factory|material|po|imd đã lấy mẫu (theo xưởng ASM1/ASM2). */
   private sampleTakenKeySet = new Set<string>();
 
-  private buildSampleKey(materialCode: string, poNumber: string, imd: string): string {
-    return `${String(materialCode || '').trim().toUpperCase()}|${String(poNumber || '').trim()}|${String(imd || '').trim()}`;
+  private buildSampleKey(
+    factory: string,
+    materialCode: string,
+    poNumber: string,
+    imd: string
+  ): string {
+    const f = String(factory || '').trim().toUpperCase();
+    const m = String(materialCode || '').trim().toUpperCase();
+    const p = String(poNumber || '').trim();
+    const l = String(imd || '').trim();
+    if (!f || !m || !p || !l) return '';
+    return `${f}|${m}|${p}|${l}`;
+  }
+
+  private buildSampleTakenKeyDocId(
+    factory: string,
+    materialCode: string,
+    poNumber: string,
+    imd: string
+  ): string {
+    const key = this.buildSampleKey(factory, materialCode, poNumber, imd);
+    return key.replace(/\|/g, '--').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 450);
   }
 
   isSampleTakenRow(item: any): boolean {
-    const key = this.buildSampleKey(item?.materialCode, item?.poNumber, item?.batchNumber);
+    const key = this.buildSampleKey(
+      this.selectedFactory,
+      item?.materialCode,
+      item?.poNumber,
+      item?.batchNumber
+    );
     return !!key && this.sampleTakenKeySet.has(key);
   }
 
@@ -4008,22 +4035,43 @@ export class QCComponent implements OnInit, OnDestroy {
   private async refreshSampleTakenMarkersForPendingQc(items: any[]): Promise<void> {
     try {
       this.sampleTakenKeySet = new Set<string>();
+      const factory = this.selectedFactory;
+
+      const keysSnap = await this.firestore
+        .collection(this.QC_SAMPLE_TAKEN_KEYS, (ref) =>
+          ref.where('factory', '==', factory).limit(5000)
+        )
+        .get()
+        .toPromise()
+        .catch(() => null);
+
+      (keysSnap?.docs || []).forEach((d) => {
+        const data = d.data() as any;
+        const key = this.buildSampleKey(
+          data?.factory || factory,
+          data?.materialCode,
+          data?.poNumber,
+          data?.imd
+        );
+        if (key) this.sampleTakenKeySet.add(key);
+      });
+
       const now = new Date();
       const currentKey = now.getFullYear() * 100 + (now.getMonth() + 1);
       const prevKey = this.monthKeyToPrevMonthKey(currentKey);
 
-      // Query 2 months (no composite index needed)
+      // Bản ghi cũ (trước khi có qc-sample-taken-keys): tháng hiện tại + tháng trước
       const [snap1, snap2] = await Promise.all([
         this.firestore
           .collection(this.QC_SAMPLE_COLLECTION, (ref) =>
-            ref.where('factory', '==', this.selectedFactory).where('monthKey', '==', currentKey).limit(2000)
+            ref.where('factory', '==', factory).where('monthKey', '==', currentKey).limit(2000)
           )
           .get()
           .toPromise()
           .catch(() => null),
         this.firestore
           .collection(this.QC_SAMPLE_COLLECTION, (ref) =>
-            ref.where('factory', '==', this.selectedFactory).where('monthKey', '==', prevKey).limit(2000)
+            ref.where('factory', '==', factory).where('monthKey', '==', prevKey).limit(2000)
           )
           .get()
           .toPromise()
@@ -4033,7 +4081,8 @@ export class QCComponent implements OnInit, OnDestroy {
       const docs = [...(snap1?.docs || []), ...(snap2?.docs || [])];
       docs.forEach((d) => {
         const data = d.data() as any;
-        const key = this.buildSampleKey(data?.materialCode, data?.poNumber, data?.imd);
+        if (data?.muonTest) return;
+        const key = this.buildSampleKey(factory, data?.materialCode, data?.poNumber, data?.imd);
         if (key) this.sampleTakenKeySet.add(key);
       });
     } catch (e) {
@@ -4190,7 +4239,11 @@ export class QCComponent implements OnInit, OnDestroy {
     const poNumber = String(item?.poNumber || '').trim();
     const imd = String(item?.batchNumber || '').trim();
     if (!materialCode || !poNumber || !imd) {
-      alert('Thiếu dữ liệu (Mã hàng / PO / IMD) — không mở được popup Lấy Mẫu.');
+      alert('Thiếu dữ liệu (Mã hàng / PO / Lô hàng) — không mở được popup Lấy Mẫu.');
+      return;
+    }
+    if (this.isSampleTakenRow(item)) {
+      alert(`Mã ${materialCode} / PO ${poNumber} / Lô ${imd} đã lấy mẫu tại ${this.selectedFactory} — không nhập lại.`);
       return;
     }
 
@@ -4276,6 +4329,39 @@ export class QCComponent implements OnInit, OnDestroy {
     return pcs;
   }
 
+  private async persistSampleTakeRecord(record: Record<string, any>): Promise<void> {
+    const factory = String(record.factory || '').trim().toUpperCase();
+    const materialCode = String(record.materialCode || '').trim().toUpperCase();
+    const poNumber = String(record.poNumber || '').trim();
+    const imd = String(record.imd || '').trim();
+    const key = this.buildSampleKey(factory, materialCode, poNumber, imd);
+    if (!key) {
+      throw new Error('INVALID_SAMPLE_KEY');
+    }
+
+    const keyDocId = this.buildSampleTakenKeyDocId(factory, materialCode, poNumber, imd);
+    const keyRef = this.firestore.firestore.collection(this.QC_SAMPLE_TAKEN_KEYS).doc(keyDocId);
+    const catalogRef = this.firestore.firestore.collection(this.QC_SAMPLE_COLLECTION).doc();
+
+    await this.firestore.firestore.runTransaction(async (tx) => {
+      const keySnap = await tx.get(keyRef);
+      if (keySnap.exists) {
+        throw new Error('ALREADY_TAKEN');
+      }
+      tx.set(keyRef, {
+        factory,
+        materialCode,
+        poNumber,
+        imd,
+        monthKey: record.monthKey,
+        takenAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      tx.set(catalogRef, record);
+    });
+
+    this.sampleTakenKeySet.add(key);
+  }
+
   async saveSampleTakeOnly(): Promise<void> {
     if (!this.sampleTakeSelected) return;
     if (this.sampleTakeMuonTest) {
@@ -4298,7 +4384,7 @@ export class QCComponent implements OnInit, OnDestroy {
     try {
       await this.ensureSampleTakeStt();
       const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
-      await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
+      await this.persistSampleTakeRecord({
         year: this.sampleTakeYear,
         month: this.sampleTakeMonth,
         monthKey,
@@ -4325,9 +4411,13 @@ export class QCComponent implements OnInit, OnDestroy {
       });
       await this.cleanupOldSampleTakings(monthKey);
       this.closeSampleTakeModal();
-    } catch (e) {
+    } catch (e: any) {
       console.error('saveSampleTakeOnly error', e);
-      this.sampleTakeError = 'Không lưu được. Vui lòng thử lại.';
+      if (e?.message === 'ALREADY_TAKEN') {
+        this.sampleTakeError = `Mã / PO / Lô này đã lấy mẫu tại ${this.sampleTakeSelected?.factory || this.selectedFactory}.`;
+      } else {
+        this.sampleTakeError = 'Không lưu được. Vui lòng thử lại.';
+      }
     } finally {
       this.isSavingSampleTake = false;
     }
@@ -4370,8 +4460,7 @@ export class QCComponent implements OnInit, OnDestroy {
       if (!this.sampleTakeMuonTest) {
         const monthKey = this.sampleTakeMonthKey || (this.sampleTakeYear * 100 + this.sampleTakeMonth);
         await this.ensureSampleTakeStt();
-        // Lưu Firestore (kèm printedAt) rồi mới in
-        await this.firestore.collection(this.QC_SAMPLE_COLLECTION).add({
+        await this.persistSampleTakeRecord({
           year: this.sampleTakeYear,
           month: this.sampleTakeMonth,
           monthKey,
@@ -4383,21 +4472,19 @@ export class QCComponent implements OnInit, OnDestroy {
           engLuuMau: this.sampleTakeEngLuuMau,
           muonTest: false,
           labelCount,
-        // Theo yêu cầu: Tổng Số Lượng = số lượng nhập popup (pcs)
-        totalQuantity: pcs,
-        // Lưu thêm để tham chiếu (tồn kho/inventory qty)
-        inventoryTotalQuantity: this.sampleTakeTotalQty,
-        poNumber: po,
-        maKho: this.sampleTakeMaKho,
-        loaiHinh: this.sampleTakeLoaiHinh,
-        nganhNghe: this.sampleTakeNganhNghe,
-        imd,
-        pcs,
-        takenBy: this.currentEmployeeId || '',
-        takenAt: firebase.firestore.FieldValue.serverTimestamp(),
-        printedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        printedDate: printedDateLabel,
-        qrData
+          totalQuantity: pcs,
+          inventoryTotalQuantity: this.sampleTakeTotalQty,
+          poNumber: po,
+          maKho: this.sampleTakeMaKho,
+          loaiHinh: this.sampleTakeLoaiHinh,
+          nganhNghe: this.sampleTakeNganhNghe,
+          imd,
+          pcs,
+          takenBy: this.currentEmployeeId || '',
+          takenAt: firebase.firestore.FieldValue.serverTimestamp(),
+          printedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          printedDate: printedDateLabel,
+          qrData
         });
         await this.cleanupOldSampleTakings(monthKey);
       }
@@ -4411,9 +4498,13 @@ export class QCComponent implements OnInit, OnDestroy {
         muonTest: this.sampleTakeMuonTest
       });
       this.closeSampleTakeModal();
-    } catch (e) {
+    } catch (e: any) {
       console.error('printSampleTakeQr error', e);
-      this.sampleTakeError = 'Không in được QR. Vui lòng thử lại.';
+      if (e?.message === 'ALREADY_TAKEN') {
+        this.sampleTakeError = `Mã / PO / Lô này đã lấy mẫu tại ${this.sampleTakeSelected?.factory || this.selectedFactory}.`;
+      } else {
+        this.sampleTakeError = 'Không in được QR. Vui lòng thử lại.';
+      }
     } finally {
       this.isSavingSampleTake = false;
     }
@@ -4604,15 +4695,35 @@ export class QCComponent implements OnInit, OnDestroy {
       return;
     }
     const monthKey = y * 100 + m;
+    const factory = this.selectedFactory;
     this.isLoadingSampleCatalog = true;
     try {
-      // NOTE: bỏ orderBy để không cần composite index; sort trong memory
       const snap = await this.firestore
-        .collection(this.QC_SAMPLE_COLLECTION, (ref) => ref.where('monthKey', '==', monthKey).limit(2000))
+        .collection(this.QC_SAMPLE_COLLECTION, (ref) =>
+          ref.where('monthKey', '==', monthKey).where('factory', '==', factory).limit(2000)
+        )
         .get()
-        .toPromise();
-      const rows = (snap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as any) }));
-      this.sampleCatalogRows = rows.sort((a: any, b: any) => (Number(a?.stt || 0) || 0) - (Number(b?.stt || 0) || 0));
+        .toPromise()
+        .catch(async () => {
+          const fallback = await this.firestore
+            .collection(this.QC_SAMPLE_COLLECTION, (ref) => ref.where('monthKey', '==', monthKey).limit(2000))
+            .get()
+            .toPromise();
+          return fallback;
+        });
+      const rows = (snap?.docs || [])
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((r: any) => String(r?.factory || 'ASM1').trim().toUpperCase() === factory);
+      const seen = new Set<string>();
+      this.sampleCatalogRows = rows
+        .filter((r: any) => {
+          if (r?.muonTest) return false;
+          const key = this.buildSampleKey(factory, r?.materialCode, r?.poNumber, r?.imd);
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .sort((a: any, b: any) => (Number(a?.stt || 0) || 0) - (Number(b?.stt || 0) || 0));
     } catch (e) {
       console.error('loadSampleCatalogByMonth error', e);
       alert('Không tải được danh mục Lấy Mẫu.');
@@ -4640,12 +4751,14 @@ export class QCComponent implements OnInit, OnDestroy {
             'Năm',
             'Tháng',
             'STT',
+            'Xưởng',
             'Mã',
+            'Số PO',
+            'Lô hàng',
             'IQC Test Rosh',
             'Lấy mẫu hàng về',
             'ENG lưu mẫu',
             'Tổng Số Lượng',
-            'Số PO',
             'Mã Kho (LINKQ)',
             'Loại Hình (LINKQ)',
             'Mã ngành nghề',
@@ -4658,13 +4771,15 @@ export class QCComponent implements OnInit, OnDestroy {
             r.year || '',
             r.month || '',
             r.stt || '',
+            r.factory || this.selectedFactory,
             r.materialCode || '',
+            r.poNumber || '',
+            r.imd || '',
             r.iqcTestRosh ? '✔' : '',
             r.layMauHangVe ? '✔' : '',
             r.engLuuMau ? '✔' : '',
             // Tổng Số Lượng = số lượng nhập popup
             (r.pcs ?? r.totalQuantity ?? ''),
-            r.poNumber || '',
             r.maKho || '',
             r.loaiHinh || '',
             r.nganhNghe || '',
@@ -4675,7 +4790,7 @@ export class QCComponent implements OnInit, OnDestroy {
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'LayMau');
-        const fileName = `Lay_Mau_${this.sampleCatalogMonth}_${this.sampleCatalogYear}.xlsx`;
+        const fileName = `Lay_Mau_${this.selectedFactory}_${this.sampleCatalogMonth}_${this.sampleCatalogYear}.xlsx`;
         XLSX.writeFile(wb, fileName);
       })
       .catch((e) => {
@@ -4917,6 +5032,10 @@ export class QCComponent implements OnInit, OnDestroy {
       this.showMonthlyStatusMaterials('NG');
     } else if (this.iqcHistoryContext === 'monthlyLock' && this.showIqcSearchResults) {
       this.showMonthlyStatusMaterials('LOCK');
+    }
+
+    if (this.showSampleCatalogModal) {
+      void this.loadSampleCatalogByMonth();
     }
   }
 }

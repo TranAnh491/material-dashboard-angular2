@@ -1002,6 +1002,10 @@
     </div>
     <div class="modal-body">
       <div class="more-menu-list">
+        <button class="more-menu-item" (click)="manualRefresh(); showMoreMenu = false">
+          <i class="material-icons">refresh</i>
+          <span>Làm mới</span>
+        </button>
         <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
           <i class="material-icons">file_upload</i>
           <span>Import</span>

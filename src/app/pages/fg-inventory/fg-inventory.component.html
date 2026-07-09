@@ -20,12 +20,39 @@
         </button>
         
         <div class="search-box">
-          <input type="text" 
-                 placeholder="Tìm kiếm theo mã TP, Batch, LSX, LOT, Vị trí..." 
+          <div class="search-mode-toggle">
+            <button type="button"
+                    class="search-mode-btn"
+                    [class.active]="searchMode === 'material'"
+                    (click)="setSearchMode('material')">
+              Mã TP
+            </button>
+            <button type="button"
+                    class="search-mode-btn"
+                    [class.active]="searchMode === 'location'"
+                    (click)="setSearchMode('location')">
+              Vị trí
+            </button>
+          </div>
+          <input type="text"
+                 [placeholder]="searchMode === 'location' ? 'Nhập vị trí rồi bấm Search...' : 'Tìm kiếm (tối thiểu 7 ký tự)...'"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
+                 (keydown)="onSearchKeydown($event)"
                  class="custom-input search-input-uppercase">
+          <button type="button"
+                  class="custom-btn search-submit-btn"
+                  (click)="onSearchClick()"
+                  [disabled]="isLoading || !searchTerm.trim() || (searchMode === 'material' && searchTerm.trim().length < 7) || (searchMode === 'location' && searchTerm.trim().length < 2)">
+            <i class="material-icons">search</i>
+            Search
+          </button>
         </div>
+
+        <button class="custom-btn" (click)="refreshInventoryData()" [disabled]="isLoading">
+          <i class="material-icons">refresh</i>
+          Làm mới
+        </button>
         
         <button class="custom-btn" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i>
@@ -108,11 +135,19 @@
         </thead>
         <tbody>
           <!-- Show message when no results found -->
-          <tr *ngIf="filteredMaterials.length === 0">
+          <tr *ngIf="!isLoading && filteredMaterials.length === 0">
             <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
               <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
               <br>
-              Không có dữ liệu
+              <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (7 ký tự) để tự động tìm kiếm</span>
+              <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi bấm <b>Search</b></span>
+              <span *ngIf="searchStatus === 'typing' && searchMode === 'material'">Nhập thêm để đủ 7 ký tự...</span>
+              <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
+              <span *ngIf="searchStatus === 'not-found' && searchMode === 'location'">Không có mã tồn tại vị trí <b>{{ searchTerm }}</b></span>
+              <span *ngIf="searchStatus === 'not-found' && searchMode === 'material'">Không tìm thấy mã <b>{{ searchTerm }}</b></span>
+              <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'location'">Vị trí <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
+              <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'material'">Mã <b>{{ searchTerm }}</b> có tồn = 0 — bấm <b>Non Stock</b> để xem</span>
+              <span *ngIf="searchStatus === 'searching'">Đang tìm...</span>
             </td>
           </tr>
           

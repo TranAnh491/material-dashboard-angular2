@@ -933,14 +933,14 @@
 <div class="modal-overlay" *ngIf="showSampleCatalogModal" (click)="closeSampleCatalogModal()">
   <div class="modal-content report-modal-content" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h3><i class="material-icons">science</i> Danh mục Lấy Mẫu</h3>
+      <h3><i class="material-icons">science</i> Danh mục Lấy Mẫu — {{ selectedFactory }}</h3>
       <button class="close-btn" (click)="closeSampleCatalogModal()"><i class="material-icons">close</i></button>
     </div>
     <div class="modal-body">
       <div class="download-section">
         <div class="download-info">
           <i class="material-icons">info_outline</i>
-          <p>Dữ liệu lưu theo tháng. Hệ thống chỉ giữ <strong>tháng hiện tại</strong> và <strong>tháng trước</strong>.</p>
+          <p>Danh mục theo xưởng <strong>{{ selectedFactory }}</strong>. Mỗi bộ <strong>Mã + PO + Lô hàng</strong> chỉ ghi nhận một lần. Dữ liệu lưu theo tháng — hệ thống chỉ giữ <strong>tháng hiện tại</strong> và <strong>tháng trước</strong>.</p>
         </div>
 
         <div class="date-selector-group">
@@ -980,6 +980,7 @@
               <th>STT</th>
               <th>Mã</th>
               <th>Số PO</th>
+              <th>Lô hàng</th>
               <th>IQC Rosh</th>
               <th>Lấy mẫu</th>
               <th>ENG lưu</th>
@@ -995,6 +996,7 @@
               <td>{{ r.stt || (i + 1) }}</td>
               <td>{{ r.materialCode }}</td>
               <td>{{ r.poNumber }}</td>
+              <td>{{ r.imd || '—' }}</td>
               <td>{{ r.iqcTestRosh ? '✔' : '—' }}</td>
               <td>{{ r.layMauHangVe ? '✔' : '—' }}</td>
               <td>{{ r.engLuuMau ? '✔' : '—' }}</td>

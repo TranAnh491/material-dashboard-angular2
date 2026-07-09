@@ -402,6 +402,12 @@ tr.drag-over {
     font-size: 11px;
     letter-spacing: 0.3px;
   }
+
+  &.stock-unloaded {
+    color: #9e9e9e;
+    font-weight: 400;
+    cursor: context-menu;
+  }
 }
 .carton-warning {
   color: #d32f2f;

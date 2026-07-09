@@ -1,55 +1,103 @@
 import * as admin from 'firebase-admin';
 
-const XETAI_UID = 'truck-driver-xetai';
-const XETAI_EMAIL = 'xetai@asp.com';
-const XETAI_EMPLOYEE_ID = 'XETAI';
-const XETAI_PASSWORD = '1234';
+type TruckDriverAccount = {
+  uid: string;
+  email: string;
+  employeeId: string;
+  password: string;
+  displayName: string;
+};
 
-export async function signInTruckDriver(
-  employeeIdRaw: string,
-  passwordRaw: string
-): Promise<{ email: string }> {
-  const employeeId = String(employeeIdRaw || '')
-    .trim()
-    .toUpperCase();
-  const password = String(passwordRaw || '').trim();
-
-  if (employeeId !== XETAI_EMPLOYEE_ID || password !== XETAI_PASSWORD) {
-    throw new Error('permission-denied');
+/** Tài khoản app phụ Xe Tải — đăng nhập bằng mã ASP hoặc XETAI, mật khẩu 123456. */
+const TRUCK_DRIVER_ACCOUNTS: Record<string, TruckDriverAccount> = {
+  ASP9999: {
+    uid: 'truck-driver-asp9999',
+    email: 'asp9999@asp.com',
+    employeeId: 'ASP9999',
+    password: '123456',
+    displayName: 'Tài xế Xe Tải'
+  },
+  XETAI: {
+    uid: 'truck-driver-xetai',
+    email: 'xetai@asp.com',
+    employeeId: 'XETAI',
+    password: '123456',
+    displayName: 'Tài xế Xe Tải'
   }
+};
+
+/** Firebase Auth yêu cầu mật khẩu >= 6 ký tự. */
+export function toTruckAuthPassword(password: string): string {
+  const p = String(password || '').trim();
+  if (p.length >= 6) return p;
+  return p.padEnd(6, '0');
+}
+
+async function ensureTruckDriverAuthUser(account: TruckDriverAccount): Promise<string> {
+  const auth = admin.auth();
+  const authPassword = toTruckAuthPassword(account.password);
+
+  const applyUpdate = async (uid: string): Promise<void> => {
+    await auth.updateUser(uid, {
+      email: account.email,
+      emailVerified: true,
+      displayName: account.displayName,
+      password: authPassword
+    });
+  };
 
   try {
-    await admin.auth().getUser(XETAI_UID);
-    await admin.auth().updateUser(XETAI_UID, {
-      email: XETAI_EMAIL,
-      emailVerified: true,
-      displayName: 'Tài xế Xe Tải',
-      password: XETAI_PASSWORD
-    });
+    await auth.getUser(account.uid);
+    try {
+      await applyUpdate(account.uid);
+      return account.uid;
+    } catch (e: any) {
+      if (e?.code !== 'auth/email-already-exists') {
+        throw e;
+      }
+    }
   } catch (e: any) {
     if (e?.code !== 'auth/user-not-found') {
       throw e;
     }
-    await admin.auth().createUser({
-      uid: XETAI_UID,
-      email: XETAI_EMAIL,
-      emailVerified: true,
-      displayName: 'Tài xế Xe Tải',
-      password: XETAI_PASSWORD
-    });
   }
 
+  try {
+    const byEmail = await auth.getUserByEmail(account.email);
+    await auth.updateUser(byEmail.uid, {
+      emailVerified: true,
+      displayName: account.displayName,
+      password: authPassword
+    });
+    return byEmail.uid;
+  } catch (e: any) {
+    if (e?.code !== 'auth/user-not-found') {
+      throw e;
+    }
+  }
+
+  await auth.createUser({
+    uid: account.uid,
+    email: account.email,
+    emailVerified: true,
+    displayName: account.displayName,
+    password: authPassword
+  });
+  return account.uid;
+}
+
+async function ensureTruckDriverFirestore(account: TruckDriverAccount, uid: string): Promise<void> {
   const now = new Date();
   await admin
     .firestore()
     .collection('users')
-    .doc(XETAI_UID)
+    .doc(uid)
     .set(
       {
-        uid: XETAI_UID,
-        email: XETAI_EMAIL,
-        employeeId: XETAI_EMPLOYEE_ID,
-        displayName: 'Tài xế Xe Tải',
+        uid,
+        email: account.email,
+        employeeId: account.employeeId,
+        displayName: account.displayName,
         department: 'LOG',
         factory: 'ALL',
         role: 'User',
@@ -64,18 +112,39 @@ export async function signInTruckDriver(
   await admin
     .firestore()
     .collection('user-permissions')
-    .doc(XETAI_UID)
+    .doc(uid)
     .set(
       {
-        uid: XETAI_UID,
-        email: XETAI_EMAIL,
-        displayName: 'Tài xế Xe Tải',
+        uid,
+        email: account.email,
+        displayName: account.displayName,
         hasReadOnlyPermission: true,
         isTruckDriver: true,
         updatedAt: now
       },
       { merge: true }
     );
+}
 
-  return { email: XETAI_EMAIL };
+export async function signInTruckDriver(
+  employeeIdRaw: string,
+  passwordRaw: string
+): Promise<{ email: string; authPassword: string }> {
+  const employeeId = String(employeeIdRaw || '')
+    .trim()
+    .toUpperCase();
+  const password = String(passwordRaw || '').trim();
+  const account = TRUCK_DRIVER_ACCOUNTS[employeeId];
+
+  if (!account || password !== account.password) {
+    throw new Error('permission-denied');
+  }
+
+  const uid = await ensureTruckDriverAuthUser(account);
+  await ensureTruckDriverFirestore(account, uid);
+
+  return {
+    email: account.email,
+    authPassword: toTruckAuthPassword(account.password)
+  };
 }

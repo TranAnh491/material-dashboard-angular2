@@ -13,6 +13,11 @@
           <i class="material-icons">more_vert</i>
           More
         </button>
+
+        <button class="custom-btn" (click)="refreshAllData()">
+          <i class="material-icons">refresh</i>
+          Làm mới
+        </button>
         
         <div class="search-box">
           <input type="text" 
@@ -289,11 +294,21 @@
                 <ng-container *ngIf="(row.material.materialCode || '').trim()">{{ getCartonOdd(row.material).odd }}</ng-container>
               </td>
               <td class="number-cell stock-cell"
-                  [class.stock-empty]="getInventoryStockByBatch(row.material) <= 0 && (row.material.batchNumber || '').trim()">
-                <ng-container *ngIf="getInventoryStockByBatch(row.material) <= 0 && (row.material.batchNumber || '').trim(); else stockNumber">
-                  Hết stock
+                  [class.stock-empty]="isStockLoaded(row.material) && getInventoryStockByBatch(row.material) <= 0 && (row.material.batchNumber || '').trim()"
+                  [class.stock-unloaded]="!isStockLoaded(row.material) && !isStockLoading(row.material) && (row.material.batchNumber || '').trim()"
+                  (contextmenu)="onStockCellContextMenu($event, row.material)"
+                  title="Chuột phải để tải tồn kho">
+                <ng-container *ngIf="isStockLoading(row.material)">...</ng-container>
+                <ng-container *ngIf="!isStockLoaded(row.material) && !isStockLoading(row.material)">
+                  <ng-container *ngIf="(row.material.batchNumber || '').trim(); else stockDash">—</ng-container>
+                  <ng-template #stockDash></ng-template>
                 </ng-container>
-                <ng-template #stockNumber>{{ getInventoryStockByBatch(row.material) | number }}</ng-template>
+                <ng-container *ngIf="isStockLoaded(row.material) && !isStockLoading(row.material)">
+                  <ng-container *ngIf="getInventoryStockByBatch(row.material) <= 0 && (row.material.batchNumber || '').trim(); else stockNumber">
+                    Hết stock
+                  </ng-container>
+                  <ng-template #stockNumber>{{ getInventoryStockByBatch(row.material) | number }}</ng-template>
+                </ng-container>
               </td>
               <td class="location-cell">
                 <input type="text"
@@ -1068,8 +1083,13 @@
                 </td>
                 <td>{{getCartonOdd(material).odd | number}}</td>
                 <td>{{material.mergeCarton || ''}}</td>
-                <td [style.color]="getInventoryStockByBatch(material) <= 0 && (material.batchNumber || '').trim() ? '#c62828' : ''">
-                  {{ getInventoryStockByBatch(material) <= 0 && (material.batchNumber || '').trim() ? 'Hết stock' : (getInventoryStockByBatch(material) | number) }}
+                <td>
+                  <ng-container *ngIf="!isStockLoaded(material)">—</ng-container>
+                  <ng-container *ngIf="isStockLoaded(material)">
+                    <span [style.color]="getInventoryStockByBatch(material) <= 0 && (material.batchNumber || '').trim() ? '#c62828' : ''">
+                      {{ getInventoryStockByBatch(material) <= 0 && (material.batchNumber || '').trim() ? 'Hết stock' : (getInventoryStockByBatch(material) | number) }}
+                    </span>
+                  </ng-container>
                 </td>
                 <td>{{material.location || ''}}</td>
                 <td>{{material.productType || ''}}</td>

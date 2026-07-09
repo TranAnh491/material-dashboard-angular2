@@ -3,6 +3,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
+import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 
 
 export interface FGCheckItem {
@@ -153,7 +154,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private fgDailyBackup: FgDailyBackupService
   ) {}
 
   ngOnInit(): void {
@@ -268,12 +270,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   loadItemsFromFirebase(): void {
     this.isLoading = true;
     
-    this.firestore.collection('fg-check')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((querySnapshot) => {
-        const firebaseItems = querySnapshot.docs.map(doc => {
-          const data = doc.data() as any;
+    void this.fgDailyBackup.loadMergedDocs('fg-check', 'fg-check').then((merged) => {
+        const firebaseItems = merged.docs.map((doc) => {
+          const data = doc.data as any;
           const id = doc.id;
           
           const item = {
@@ -329,6 +328,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           this.calculateCheckResults();
         }
         this.applyFilters();
+      }).catch((e) => {
+        console.error('loadItemsFromFirebase failed', e);
+        this.isLoading = false;
+        this.cdr.markForCheck();
       });
   }
 

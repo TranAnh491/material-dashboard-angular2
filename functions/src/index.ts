@@ -825,7 +825,7 @@ export const lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (
   }
 });
 
-/** Đăng nhập tài xế app phụ Xe Tải: XETAI / 1234 */
+/** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456 */
 export const truckDriverSignInFn = functions.https.onCall(async (data: { employeeId?: string; password?: string }) => {
   const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
   const password = typeof data?.password === 'string' ? data.password : '';
@@ -837,11 +837,21 @@ export const truckDriverSignInFn = functions.https.onCall(async (data: { employe
     const { signInTruckDriver } = await import('./truck-driver-auth');
     return await signInTruckDriver(employeeId, password);
   } catch (e: unknown) {
-    const anyErr = e as any;
+    const anyErr = e as { code?: string; message?: string };
     const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+    console.error('truckDriverSignInFn error:', anyErr?.code, msg);
     if (msg === 'permission-denied') {
       throw new functions.https.HttpsError('permission-denied', 'Mã hoặc mật khẩu không đúng.');
     }
     throw new functions.https.HttpsError('internal', msg || 'Đăng nhập thất bại.');
   }
 });
+
+/** Backup FG collections mỗi ngày lúc 01:00 (VN) — snapshot hôm qua. */
+export const backupFgCollectionsDaily = functions.pubsub
+  .schedule('0 1 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runFgDailyBackupJob } = await import('./fg-daily-backup');
+    await runFgDailyBackupJob();
+  });

@@ -8,6 +8,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { FGInventoryLocationService } from '../../services/fg-inventory-location.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
+import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 
 export interface FgOutItem {
   id?: string;
@@ -162,6 +163,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private inventoryStockByBatchCache = new Map<string, number>();
   /** Cache tồn theo đúng dòng hiển thị FG Inventory (key = FACTORY|BATCH|MATERIAL). */
   private inventoryStockByBatchMaterialCache = new Map<string, number>();
+  /** Chỉ hiển thị tồn kho sau khi user chuột phải vào ô tồn kho. */
+  private stockLoadedKeys = new Set<string>();
+  private stockLoadingKeys = new Set<string>();
   /** Thành phần tính tồn theo batch */
   private invTonDauByBatch = new Map<string, number>();
   private invNhapByBatch = new Map<string, number>();
@@ -296,14 +300,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private factoryAccessService: FactoryAccessService,
     private fgInventoryLocationService: FGInventoryLocationService,
     private cdr: ChangeDetectorRef,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private fgDailyBackup: FgDailyBackupService
   ) {}
 
   ngOnInit(): void {
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();
-    this.subscribeFgInventoryUnified();
     // Mặc định lọc đúng cửa sổ 30 ngày (trùng dữ liệu load từ Firebase)
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -337,6 +341,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.inventoryStockCache.clear();
     this.inventoryStockByBatchCache.clear();
     this.inventoryStockByBatchMaterialCache.clear();
+    this.stockLoadedKeys.clear();
+    this.stockLoadingKeys.clear();
     this.invTonDauByBatch.clear();
     this.invNhapByBatch.clear();
     this.invXuatByBatch.clear();
@@ -384,16 +390,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Cache tồn fg-inventory — .get() khi mở tab / sau xuất / Refresh (không interval). */
+  /** Cache tồn fg-inventory — backup hôm qua + delta hôm nay. */
   private subscribeFgInventoryUnified(): void {
     void this.refreshFgInventoryCache();
   }
 
+  refreshAllData(): void {
+    this.loadMaterialsFromFirebase();
+  }
+
   async refreshFgInventoryCache(): Promise<void> {
     try {
-      const snap = await this.firestore.collection('fg-inventory').get().toPromise();
-      this.readTracker.track('fg-out', 'fg-inventory', snap?.docs.length || 0);
-      const arr = (snap?.docs || []).map(d => ({ id: d.id, ...(d.data() as any) }));
+      const merged = await this.fgDailyBackup.loadMergedDocs('fg-inventory', 'fg-out');
+      const arr = merged.docs.map((d) => ({ id: d.id, ...(d.data as any) }));
       this.applyFgInventoryDocs(arr);
     } catch (e) {
       console.error('refreshFgInventoryCache failed', e);
@@ -407,6 +416,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.inventoryStockByBatchCache.clear();
     this.inventoryStockByBatchMaterialCache.clear();
     this.inventoryStockCache.clear();
+    this.stockLoadedKeys.clear();
 
     arr.forEach(d => {
       const materialCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
@@ -493,8 +503,28 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return this.inventoryStockCache.get(materialKey) || 0;
   }
 
-  /** Lấy tồn kho theo đúng batch (không cộng dồn các batch khác). */
+  private stockCacheKey(material: FgOutItem): string {
+    const batch = (material.batchNumber || '').toString().trim().toUpperCase();
+    const materialCode = (material.materialCode || '').toString().trim().toUpperCase();
+    const factory = (material.factory || this.selectedFactory || 'ASM1').toString().trim().toUpperCase();
+    if (!batch) return '';
+    if (materialCode) return `${factory}|${batch}|${materialCode}`;
+    return `${factory}|${batch}`;
+  }
+
+  isStockLoaded(material: FgOutItem): boolean {
+    const key = this.stockCacheKey(material);
+    return !!key && this.stockLoadedKeys.has(key);
+  }
+
+  isStockLoading(material: FgOutItem): boolean {
+    const key = this.stockCacheKey(material);
+    return !!key && this.stockLoadingKeys.has(key);
+  }
+
+  /** Lấy tồn kho theo đúng batch — chỉ có giá trị sau khi user chuột phải tải. */
   getInventoryStockByBatch(material: FgOutItem): number {
+    if (!this.isStockLoaded(material)) return 0;
     const batch = (material.batchNumber || '').toString().trim().toUpperCase();
     const materialCode = (material.materialCode || '').toString().trim().toUpperCase();
     const factory = (material.factory || this.selectedFactory || 'ASM1').toString().trim().toUpperCase();
@@ -507,17 +537,75 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return this.inventoryStockByBatchCache.get(batchKey) || 0;
   }
 
+  async onStockCellContextMenu(event: MouseEvent, material: FgOutItem): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const batch = (material.batchNumber || '').trim();
+    if (!batch) return;
+
+    const cacheKey = this.stockCacheKey(material);
+    if (!cacheKey || this.stockLoadingKeys.has(cacheKey) || this.stockLoadedKeys.has(cacheKey)) {
+      return;
+    }
+
+    this.stockLoadingKeys.add(cacheKey);
+    this.cdr.markForCheck();
+
+    try {
+      const factory = (material.factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
+      const materialCode = (material.materialCode || '').trim().toUpperCase();
+
+      const snap = await firstValueFrom(
+        this.firestore.collection('fg-inventory', ref =>
+          ref.where('batchNumber', '==', batch).where('factory', '==', factory).limit(50)
+        ).get()
+      );
+      this.readTracker.track('fg-out', 'fg-inventory-stock-rc', snap.docs.length);
+
+      let ton = 0;
+      snap.docs.forEach(doc => {
+        const d = doc.data() as any;
+        const invCode = this.invNormMaterialCode(d).toUpperCase();
+        if (materialCode && invCode !== materialCode) return;
+        ton += this.invTon(d);
+      });
+
+      const batchKey = this.batchKey(material.factory, material.batchNumber);
+      const matKey = this.batchMaterialKey(material.factory, material.batchNumber, materialCode);
+      if (matKey) {
+        this.inventoryStockByBatchMaterialCache.set(matKey, ton);
+      } else if (batchKey) {
+        this.inventoryStockByBatchCache.set(batchKey, ton);
+      }
+      this.stockLoadedKeys.add(cacheKey);
+    } catch (e) {
+      console.error('onStockCellContextMenu failed', e);
+    } finally {
+      this.stockLoadingKeys.delete(cacheKey);
+      this.cdr.markForCheck();
+    }
+  }
+
+  private invalidateStockCache(materials: FgOutItem[]): void {
+    materials.forEach(m => {
+      const key = this.stockCacheKey(m);
+      if (!key) return;
+      this.stockLoadedKeys.delete(key);
+      this.stockLoadingKeys.delete(key);
+      const batchKey = this.batchKey(m.factory, m.batchNumber);
+      const matKey = this.batchMaterialKey(m.factory, m.batchNumber, m.materialCode);
+      if (matKey) this.inventoryStockByBatchMaterialCache.delete(matKey);
+      if (batchKey) this.inventoryStockByBatchCache.delete(batchKey);
+    });
+    this.cdr.markForCheck();
+  }
+
   // Load materials from Firebase — chỉ 30 ngày gần nhất; .get() khi mở tab / sau xuất / Refresh
   loadMaterialsFromFirebase(): void {
-    const from = this.getFgOutRollingWindowStart();
-    const sub = this.firestore
-      .collection<any>('fg-out', ref => ref.where('exportDate', '>=', from).orderBy('exportDate', 'desc'))
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((snapshot) => {
-        const docs = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-        this.readTracker.track('fg-out', 'fg-out', docs.length);
-        this.materials = docs.map(data => ({
+    void this.fgDailyBackup.loadMergedDocs('fg-out', 'fg-out').then((merged) => {
+      const docs = merged.docs.map((d) => ({ id: d.id, ...(d.data as any) }));
+      this.materials = docs.map((data) => ({
           ...data,
           factory: data.factory || 'ASM1',
           shipment: data.shipment || '',
@@ -546,8 +634,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
         this.applyFilters();
         this.loadAvailableShipments();
         this.loadLocationsSubject.next();
+        this.cdr.markForCheck();
+      }).catch((e) => {
+        console.error('loadMaterialsFromFirebase failed', e);
       });
-    this.bindFgOutDataSubscription(sub);
   }
 
   // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
@@ -1206,7 +1296,27 @@ export class FgOutComponent implements OnInit, OnDestroy {
         stockMax: number;
       }>();
 
-      this.fgInventoryRealtimeDocs.forEach((d: any) => {
+      let snap;
+      if (batchFilter) {
+        snap = await firstValueFrom(
+          this.firestore.collection('fg-inventory', ref =>
+            ref.where('batchNumber', '==', batchFilter).where('factory', '==', factory).limit(100)
+          ).get()
+        );
+      } else {
+        snap = await firstValueFrom(
+          this.firestore.collection('fg-inventory', ref =>
+            ref.where('materialCode', '>=', materialPrefix)
+              .where('materialCode', '<=', materialPrefix + '\uf8ff')
+              .where('factory', '==', factory)
+              .limit(100)
+          ).get()
+        );
+      }
+      this.readTracker.track('fg-out', 'fg-inventory-batch-popup', snap.docs.length);
+
+      snap.docs.forEach(doc => {
+        const d = doc.data() as any;
         // Đồng bộ mặc định factory với FG Inventory (thiếu factory -> ASM1).
         const invFactory = String(d?.factory || 'ASM1').trim().toUpperCase();
         if (invFactory !== factory) return;
@@ -2522,22 +2632,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
     alert(`✅ Đã import thành công ${newMaterials.length} items từ phiếu XTP!`);
   }
 
-  // Load available shipments for filter
+  // Load available shipments for filter (từ dữ liệu đã load — không query full collection)
   loadAvailableShipments(): void {
-    this.firestore.collection('fg-out')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(snapshot => {
-        const shipments = new Set<string>();
-        snapshot.docs.forEach(doc => {
-          const data = doc.data() as any;
-          if (data.shipment) {
-            shipments.add(data.shipment);
-          }
-        });
-        this.availableShipments = Array.from(shipments).sort();
-        console.log('Available shipments:', this.availableShipments);
-      });
+    const shipments = new Set<string>();
+    this.materials.forEach((m) => {
+      if (m.shipment) shipments.add(m.shipment);
+    });
+    this.availableShipments = Array.from(shipments).sort();
   }
 
   // Handle shipment input change
@@ -3862,7 +3963,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
           alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
           this.closeXuatKhoDialog();
           this.loadMaterialsFromFirebase();
-          void this.refreshFgInventoryCache();
+          const exportedKeys = new Set(
+            selectedItems
+              .filter(i => (i.batchNumber || '').trim() && (i.materialCode || '').trim())
+              .map(i => `${(i.batchNumber || '').trim().toUpperCase()}|${(i.materialCode || '').trim().toUpperCase()}`)
+          );
+          const rowsToInvalidate = this.materials.filter(m =>
+            exportedKeys.has(
+              `${(m.batchNumber || '').trim().toUpperCase()}|${(m.materialCode || '').trim().toUpperCase()}`
+            )
+          );
+          this.invalidateStockCache(rowsToInvalidate);
         }
       }).catch(error => {
         console.error('❌ Error creating FG Out record:', error);

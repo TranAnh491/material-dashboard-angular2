@@ -55,16 +55,16 @@
     <form [formGroup]="loginForm" (ngSubmit)="onLogin()" *ngIf="!isSignup">
       <div class="form-group">
         <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Employee ID (ASP + 4 digits or XETAI)' : 'Mã nhân viên (ASP + 4 số hoặc XETAI)' }}</mat-label>
+          <mat-label>{{ currentLanguage === 'en' ? 'Employee ID (ASP + 4 digits)' : 'Mã nhân viên (ASP + 4 số)' }}</mat-label>
           <input matInput formControlName="employeeId" 
                  class="login-id-input"
                  (input)="onEmployeeIdInput($event, 'login')"
-                 [placeholder]="currentLanguage === 'en' ? 'e.g. ASP0704 or XETAI' : 'VD: ASP0704 hoặc XETAI'">
+                 [placeholder]="currentLanguage === 'en' ? 'e.g. ASP9999 (truck) or ASP0704' : 'VD: ASP9999 (xe tải) hoặc ASP0704'">
           <mat-error *ngIf="loginForm.get('employeeId')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'This field is required' : 'Bắt buộc nhập' }}
           </mat-error>
           <mat-error *ngIf="loginForm.get('employeeId')?.hasError('pattern')">
-            {{ currentLanguage === 'en' ? 'Enter ASP + 4 digits or XETAI' : 'Nhập ASP + 4 số hoặc XETAI' }}
+            {{ currentLanguage === 'en' ? 'Enter ASP + 4 digits' : 'Nhập ASP + 4 số' }}
           </mat-error>
         </mat-form-field>
       </div>
