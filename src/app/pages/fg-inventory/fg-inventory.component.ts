@@ -316,6 +316,36 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Chuẩn hóa vị trí khi search: bỏ dấu chấm (C1.2 ↔ C12). */
+  private normalizeLocationSearch(value: string): string {
+    return String(value || '').trim().toUpperCase().replace(/\./g, '');
+  }
+
+  /**
+   * Prefix query Firestore rộng hơn — ví dụ C1.2 và C12 đều query theo C1.
+   * Áp dụng cho vị trí kho A/B/C/D.
+   */
+  private getLocationFirestoreQueryPrefix(term: string): string {
+    const norm = this.normalizeLocationSearch(term);
+    if (!norm) return '';
+    const zoneMatch = norm.match(/^([ABCD])(.*)$/);
+    if (zoneMatch) {
+      const letter = zoneMatch[1];
+      const body = zoneMatch[2] || '';
+      if (!body) return letter;
+      return letter + body.charAt(0);
+    }
+    return norm.length <= 2 ? norm : norm.slice(0, 2);
+  }
+
+  private locationMatchesSearch(material: FGInventoryItem, term: string): boolean {
+    const normTerm = this.normalizeLocationSearch(term);
+    if (!normTerm) return true;
+    const normLoc = this.normalizeLocationSearch(material.location);
+    const normViTri = this.normalizeLocationSearch(material.viTriKK);
+    return normLoc.startsWith(normTerm) || normViTri.startsWith(normTerm);
+  }
+
   /** Tìm theo vị trí — bấm Search; hiển thị các mã có tồn tại vị trí đó. */
   async runLocationSearch(locationRaw: string): Promise<void> {
     const loc = String(locationRaw || '').trim().toUpperCase();
@@ -333,27 +363,43 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     try {
-      const locEnd = loc + '\uf8ff';
-      const [byLocationSnap, byViTriSnap] = await Promise.all([
+      const queryPrefix = this.getLocationFirestoreQueryPrefix(loc);
+      const prefixEnd = queryPrefix + '\uf8ff';
+      const [byLocationSnap, byViTriSnap, byViTriKkSnap] = await Promise.all([
         this.firestore
           .collection('fg-inventory', (ref) =>
-            ref.where('location', '>=', loc).where('location', '<=', locEnd).limit(300)
+            ref.where('location', '>=', queryPrefix).where('location', '<=', prefixEnd).limit(300)
           )
           .get()
           .toPromise(),
         this.firestore
           .collection('fg-inventory', (ref) =>
-            ref.where('viTri', '>=', loc).where('viTri', '<=', locEnd).limit(300)
+            ref.where('viTri', '>=', queryPrefix).where('viTri', '<=', prefixEnd).limit(300)
           )
           .get()
           .toPromise()
+          .catch(() => null),
+        this.firestore
+          .collection('fg-inventory', (ref) =>
+            ref.where('viTriKK', '>=', queryPrefix).where('viTriKK', '<=', prefixEnd).limit(300)
+          )
+          .get()
+          .toPromise()
+          .catch(() => null)
       ]);
 
-      const readCount = (byLocationSnap?.docs.length || 0) + (byViTriSnap?.docs.length || 0);
+      const readCount =
+        (byLocationSnap?.docs.length || 0) +
+        (byViTriSnap?.docs.length || 0) +
+        (byViTriKkSnap?.docs.length || 0);
       this.readTracker.track('fg-inventory', 'fg-inventory-location-search', readCount);
 
       const merged = new Map<string, FGInventoryItem>();
-      for (const doc of [...(byLocationSnap?.docs || []), ...(byViTriSnap?.docs || [])]) {
+      for (const doc of [
+        ...(byLocationSnap?.docs || []),
+        ...(byViTriSnap?.docs || []),
+        ...(byViTriKkSnap?.docs || [])
+      ]) {
         merged.set(doc.id, this.mapDocToInventoryItem(doc.id, doc.data()));
       }
 
@@ -681,14 +727,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       if (trimmedSearch) {
         const term = trimmedSearch.toUpperCase();
         if (this.searchMode === 'location') {
-          const location = String(material.location || '').trim().toUpperCase();
-          const viTri = String(material.viTriKK || '').trim().toUpperCase();
-          const matchLocation =
-            location === term ||
-            location.startsWith(term) ||
-            viTri === term ||
-            viTri.startsWith(term);
-          if (!matchLocation) return false;
+          if (!this.locationMatchesSearch(material, trimmedSearch)) return false;
         } else {
           const termNorm = term.replace(/\./g, '');
           const searchableText = [

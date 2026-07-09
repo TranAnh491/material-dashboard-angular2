@@ -35,7 +35,7 @@
             </button>
           </div>
           <input type="text"
-                 [placeholder]="searchMode === 'location' ? 'Nhập vị trí rồi bấm Search...' : 'Tìm kiếm (tối thiểu 7 ký tự)...'"
+                 [placeholder]="searchMode === 'location' ? 'Nhập vị trí (C1.2 hoặc C12)...' : 'Tìm kiếm (tối thiểu 7 ký tự)...'"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
                  (keydown)="onSearchKeydown($event)"
@@ -189,7 +189,12 @@
                 {{material.location || 'Temporary'}}
               </div>
             </td>
-            <td class="kk-location-cell">{{ material.viTriKK || '' }}</td>
+            <td class="kk-location-cell" [title]="material.viTriKK ? ('Đã kiểm: ' + material.viTriKK) : 'Chưa kiểm'">
+              <ng-container *ngIf="material.viTriKK && (material.viTriKK || '').trim(); else kkEmpty">
+                <i class="material-icons kk-tick" aria-label="Đã kiểm">check_circle</i>
+              </ng-container>
+              <ng-template #kkEmpty>—</ng-template>
+            </td>
             <td class="status-cell">
               <button mat-icon-button color="primary" (click)="scanLocation(material)" 
                       matTooltip="Scan QR code để đổi vị trí">

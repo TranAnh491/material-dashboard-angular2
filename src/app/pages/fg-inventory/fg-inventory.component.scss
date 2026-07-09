@@ -497,7 +497,7 @@ mat-checkbox {
   &:focus {
     outline: none;
     background: #ffffff;
-  border: 1px solid #000000;
+    border: 1px solid #000000;
   }
 }
 
@@ -505,6 +505,13 @@ mat-checkbox {
   color: #1565c0;
   font-weight: 600;
   min-width: 72px;
+  text-align: center;
+}
+
+.kk-tick {
+  font-size: 18px;
+  line-height: 1;
+  color: #2e7d32;
 }
 
 // Date input styling - Minimal
