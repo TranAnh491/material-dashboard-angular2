@@ -134,7 +134,9 @@
 .navbar.navbar--print-label-pass-through,
 .navbar.navbar--print-label-pass-through .container-fluid,
 .navbar.navbar--equipment-pass-through,
-.navbar.navbar--equipment-pass-through .container-fluid {
+.navbar.navbar--equipment-pass-through .container-fluid,
+.navbar.navbar--truck-pass-through,
+.navbar.navbar--truck-pass-through .container-fluid {
   pointer-events: none;
 }
 

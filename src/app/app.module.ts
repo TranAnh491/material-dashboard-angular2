@@ -28,8 +28,7 @@ import { AngularFireFunctionsModule } from '@angular/fire/compat/functions';
 import { AngularFireStorageModule } from '@angular/fire/compat/storage';
 import { environment } from '../environments/environment';
 
-// Components
-import { LoginComponent } from './pages/login/login.component';
+import { TruckScheduleSharedModule } from './pages/truck-schedule/truck-schedule-shared.module';
 
 // Pipes
 import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
@@ -66,12 +65,12 @@ import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
     AngularFirestoreModule,
     AngularFireAuthModule,
     AngularFireFunctionsModule,
-    AngularFireStorageModule
+    AngularFireStorageModule,
+    TruckScheduleSharedModule
   ],
   declarations: [
     AppComponent,
     AdminLayoutComponent,
-    LoginComponent,
     SanitizeHtmlPipe,
     // DocumentsComponent removed from here
   ],

@@ -39,6 +39,7 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
 import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
+import { TruckScheduleComponent } from '../../pages/truck-schedule/truck-schedule.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
 import { TabPermissionGuard } from '../../guards/tab-permission.guard';
@@ -94,6 +95,8 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'shorted-materials',    component: ShortedMaterialsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'report',               component: ReportComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'zalo',                 component: ZaloComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  // Xe Tải: ai đăng nhập cũng dùng được (không quản lý tab permission)
+  { path: 'xe-tai',               component: TruckScheduleComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },

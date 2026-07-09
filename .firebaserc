@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "airspeed-warehouse"
-  }
+  },
+  "targets": {
+    "airspeed-warehouse": {
+      "hosting": {
+        "main": [
+          "airspeed-warehouse"
+        ],
+        "truck-schedule": [
+          "airspeed-truck-schedule"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

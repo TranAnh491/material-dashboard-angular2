@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../out-tsc/truck-schedule-app",
+    "module": "es2020",
+    "baseUrl": "",
+    "types": []
+  },
+  "files": [
+    "main.ts",
+    "../polyfills.ts"
+  ],
+  "include": [
+    "**/*.d.ts"
+  ],
+  "exclude": [
+    "../app/app.module.ts",
+    "../app/app.routing.ts",
+    "../app/layouts/**",
+    "../main.ts"
+  ]
+}

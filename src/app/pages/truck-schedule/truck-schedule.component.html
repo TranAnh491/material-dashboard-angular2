@@ -1,0 +1,559 @@
+<div class="truck-container">
+  <div class="truck-header">
+    <div class="title">
+      <h3>Xe Tải</h3>
+      <div class="subtitle">Chỉ hiển thị 2 tuần (tuần hiện tại + tuần kế tiếp) • Bấm vào ngày để xem chi tiết</div>
+    </div>
+
+    <div class="actions">
+      <div class="range-pill">
+        <i class="material-icons">date_range</i>
+        {{ rangeTitle() }}
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn--ghost" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">menu</i>
+          Về Menu
+        </button>
+
+        <button class="btn btn--ghost" (click)="refreshRange()" [disabled]="isLoadingRange" title="Làm mới 2 tuần">
+          <i class="material-icons">refresh</i>
+          Làm mới
+        </button>
+
+        <button class="btn btn--primary" (click)="openRegisterModal()" [disabled]="isSubmitting" title="Đăng ký lịch xe">
+          <i class="material-icons">add_circle</i>
+          Đăng ký
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="truck-body">
+    <div class="calendar-card">
+      <div class="calendar-head">
+        <div class="dow">T2</div>
+        <div class="dow">T3</div>
+        <div class="dow">T4</div>
+        <div class="dow">T5</div>
+        <div class="dow">T6</div>
+        <div class="dow">T7</div>
+        <div class="dow">CN</div>
+      </div>
+
+      <div class="calendar-grid" *ngIf="!loadError">
+        <div class="week" *ngFor="let week of calendarWeeks">
+          <button
+            class="day"
+            *ngFor="let cell of week; trackBy: trackByYmd"
+            [class.today]="cell.isToday"
+            [class.selected]="cell.ymd === selectedDayYmd"
+            [class.blocked]="cell.blocked"
+            [class.disabled]="cell.isSunday"
+            [disabled]="cell.isSunday"
+            (click)="selectDay(cell)"
+            (contextmenu)="onDayRightClick($event, cell)"
+            type="button"
+          >
+            <div class="day-head">
+              <div class="day-num">{{ cell.date.getDate() }}</div>
+              <i class="material-icons day-block-icon" *ngIf="cell.blocked" title="Ngày đã block">block</i>
+            </div>
+            <div class="badges">
+              <span class="badge badge--approved" *ngIf="cell.approvedCount > 0">{{ cell.approvedCount }} Đã đặt</span>
+              <span class="badge badge--pending" *ngIf="cell.pendingCount > 0">{{ cell.pendingCount }} Chờ xác nhận</span>
+              <span class="badge badge--rejected" *ngIf="cell.rejectedCount > 0">{{ cell.rejectedCount }} Không đặt được</span>
+              <span class="badge badge--rescheduled" *ngIf="cell.rescheduledCount > 0">{{ cell.rescheduledCount }} Đổi lịch</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="error" *ngIf="loadError">
+        <i class="material-icons">error</i>
+        {{ loadError }}
+        <button class="btn btn--ghost" (click)="refreshRange()" style="margin-left: 8px;">
+          Thử lại
+        </button>
+      </div>
+
+      <div class="loading" *ngIf="isLoadingRange">
+        <div class="spinner"></div>
+        <div>Đang tải lịch 2 tuần...</div>
+      </div>
+    </div>
+
+    <div class="day-card">
+      <div class="day-card-head">
+        <div class="day-title">
+          <div class="label">Chi tiết ngày</div>
+          <div class="value">{{ selectedDayYmd }}</div>
+        </div>
+
+        <div class="hint">
+          <span class="chip chip--ok" *ngIf="selectedDayPrimaryRequest?.status === 'approved'">Đã đặt</span>
+          <span class="chip chip--warn" *ngIf="selectedDayPrimaryRequest?.status === 'pending'">Chờ xác nhận</span>
+          <span class="chip chip--danger" *ngIf="selectedDayPrimaryRequest?.status === 'rejected'">Không đặt được</span>
+          <span class="chip chip--info2" *ngIf="selectedDayPrimaryRequest?.status === 'rescheduled'">Đổi lịch</span>
+        </div>
+      </div>
+
+      <div class="empty" *ngIf="!selectedDayPrimaryRequest && !isLoadingRange">
+        <i class="material-icons">event_available</i>
+        <div class="t1">Chưa có đăng ký cho ngày này</div>
+        <div class="t2">Bấm <b>Đăng ký</b> để tạo lịch xe.</div>
+      </div>
+
+      <!-- Top: Đã đặt / Không đặt được -->
+      <div class="list" *ngIf="selectedDayApprovedRequest as r">
+        <div class="row" [class.approved]="true">
+          <div class="row-left">
+            <div class="row-top">
+              <span class="status-pill approved">Đã đặt</span>
+              <span class="emp">{{ r.employeeCode }} • {{ r.employeeName }} • {{ r.department }}</span>
+            </div>
+            <div class="row-mid">
+              <div class="kv"><span class="k">Nơi nhận:</span><span class="v">{{ r.pickupPlace }}</span></div>
+              <div class="kv"><span class="k">Nơi giao:</span><span class="v">{{ r.deliveryPlace }}</span></div>
+              <div class="kv"><span class="k">Người nhận:</span><span class="v">{{ r.receiverName }} • {{ r.receiverPhone }}</span></div>
+              <div class="kv"><span class="k">Link:</span><span class="v">{{ r.receiverLocationLink || '—' }}</span></div>
+              <div class="kv" *ngIf="r.warehouseNote"><span class="k">Ghi chú:</span><span class="v">{{ r.warehouseNote }}</span></div>
+            </div>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn btn--ghost" (click)="downloadDeliveryOrder(r)" type="button" title="Tải / In lệnh giao hàng">
+              <i class="material-icons">download</i>
+              Tải lệnh
+            </button>
+            <button
+              *ngIf="canDelete"
+              class="btn btn--danger"
+              (click)="requestDelete(r)"
+              type="button"
+              title="Xóa lệnh giao hàng"
+            >
+              <i class="material-icons">delete</i>
+              Xóa
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="list" *ngIf="selectedDayRejectedRequest as r">
+        <div class="row">
+          <div class="row-left">
+            <div class="row-top">
+              <span class="status-pill rejected">Không đặt được</span>
+              <span class="emp">{{ r.employeeCode }} • {{ r.employeeName }} • {{ r.department }}</span>
+            </div>
+            <div class="row-mid">
+              <div class="kv"><span class="k">Nơi nhận:</span><span class="v">{{ r.pickupPlace }}</span></div>
+              <div class="kv"><span class="k">Nơi giao:</span><span class="v">{{ r.deliveryPlace }}</span></div>
+              <div class="kv"><span class="k">Người nhận:</span><span class="v">{{ r.receiverName }} • {{ r.receiverPhone }}</span></div>
+              <div class="kv"><span class="k">Link:</span><span class="v">{{ r.receiverLocationLink || '—' }}</span></div>
+              <div class="kv" *ngIf="r.warehouseNote"><span class="k">Ghi chú:</span><span class="v">{{ r.warehouseNote }}</span></div>
+            </div>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn btn--ghost" (click)="downloadDeliveryOrder(r)" type="button" title="Tải / In lệnh giao hàng">
+              <i class="material-icons">download</i>
+              Tải lệnh
+            </button>
+            <button
+              *ngIf="canDelete"
+              class="btn btn--danger"
+              (click)="requestDelete(r)"
+              type="button"
+              title="Xóa lệnh giao hàng"
+            >
+              <i class="material-icons">delete</i>
+              Xóa
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- List dưới: Chờ xác nhận / Đổi lịch (chờ chủ lệnh xác nhận) -->
+      <div class="unconfirmed-list" *ngIf="selectedDayUnconfirmedRequest as p">
+        <div class="list-head">Lệnh chưa được đồng ý</div>
+
+        <div class="row" [class.approved]="false">
+          <div class="row-left">
+            <div class="row-top">
+              <span
+                class="status-pill"
+                [class.pending]="p.status === 'pending'"
+                [class.rescheduled]="p.status === 'rescheduled'"
+              >
+                {{ p.status === 'pending' ? 'Chờ xác nhận' : 'Đổi lịch' }}
+              </span>
+              <span class="emp">{{ p.employeeCode }} • {{ p.employeeName }} • {{ p.department }}</span>
+            </div>
+
+            <div class="row-mid">
+              <div class="kv"><span class="k">Nơi nhận:</span><span class="v">{{ p.pickupPlace }}</span></div>
+              <div class="kv"><span class="k">Nơi giao:</span><span class="v">{{ p.deliveryPlace }}</span></div>
+              <div class="kv"><span class="k">Người nhận:</span><span class="v">{{ p.receiverName }} • {{ p.receiverPhone }}</span></div>
+              <div class="kv"><span class="k">Link:</span><span class="v">{{ p.receiverLocationLink || '—' }}</span></div>
+              <div class="kv" *ngIf="p.warehouseNote"><span class="k">Ghi chú:</span><span class="v">{{ p.warehouseNote }}</span></div>
+            </div>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn btn--ghost" (click)="downloadDeliveryOrder(p)" type="button" title="Tải / In lệnh giao hàng">
+              <i class="material-icons">download</i>
+              Tải lệnh
+            </button>
+
+            <button
+              *ngIf="canApprove && p.status === 'pending'"
+              class="btn btn--approve"
+              (click)="openDecisionModal(p)"
+              type="button"
+              title="Xử lý: Từ chối / Đồng ý / Ngày tùy chọn"
+            >
+              <i class="material-icons">check_circle</i>
+              Đổi thông tin
+            </button>
+
+            <button
+              *ngIf="p.status === 'rescheduled' && isRowRequester(p)"
+              class="btn btn--primary"
+              (click)="confirmRescheduledByRequester(p)"
+              type="button"
+              title="Đồng ý đổi lịch"
+            >
+              <i class="material-icons">check</i>
+              Đồng ý đổi lịch
+            </button>
+
+            <span
+              class="waiting-label"
+              *ngIf="p.status === 'rescheduled' && !isRowRequester(p)"
+            >
+              Chờ người đặt xác nhận
+            </span>
+
+            <button
+              *ngIf="canDelete || isRowRequester(p)"
+              class="btn btn--danger"
+              (click)="requestDelete(p)"
+              type="button"
+              title="Xóa lệnh giao hàng"
+            >
+              <i class="material-icons">delete</i>
+              Xóa
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="warehouse-panel">
+    <div class="warehouse-head">
+      <div>
+        <h4>Lịch chạy cố định</h4>
+        <p>
+          Chỉ hiển thị hôm nay ({{ warehouseTodayYmd }}) • Kho cập nhật mỗi ngày •
+          <span class="legend-green">Xanh = có hàng</span> •
+          <span class="legend-orange">Cam = không có hàng</span>
+        </p>
+      </div>
+      <div class="warehouse-date-pill">
+        <i class="material-icons">today</i>
+        {{ warehouseTodayYmd }}
+      </div>
+      <div class="warehouse-summary" *ngIf="activeWarehouseCodes.length > 0">
+        <i class="material-icons">campaign</i>
+        Đang có hàng: {{ activeWarehouseCodes.join(', ') }}
+      </div>
+    </div>
+
+    <div class="warehouse-today-hint" *ngIf="!warehouseTodayHasData && !isWarehouseLoading">
+      <i class="material-icons">info</i>
+      Chưa có lịch chạy cố định hôm nay — kho vui lòng bấm cập nhật mỗi ngày.
+    </div>
+
+    <div class="warehouse-grid">
+      <button
+        class="warehouse-tile"
+        *ngFor="let wh of warehouseList"
+        type="button"
+        [class.selected]="selectedWarehouse === wh.code"
+        [class.has-goods]="wh.hasGoods"
+        [class.no-goods]="!wh.hasGoods"
+        (click)="selectWarehouse(wh.code)"
+      >
+        <div class="warehouse-tile-top">
+          <i class="material-icons wh-icon">warehouse</i>
+          <i class="material-icons status-icon">{{ wh.hasGoods ? 'check_circle' : 'cancel' }}</i>
+        </div>
+        <div class="wh-name">KHO {{ wh.code }}</div>
+        <div class="wh-status">{{ warehouseStatusLabel(wh) }}</div>
+      </button>
+    </div>
+
+    <div class="warehouse-detail" *ngIf="selectedWarehouse as whCode">
+      <div class="warehouse-detail-head">
+        <div>
+          <div class="detail-label">Hướng dẫn tài xế — {{ whCode }}</div>
+          <div class="detail-action">{{ warehouseDriverAction(whCode) }}</div>
+        </div>
+        <span
+          class="status-pill"
+          [class.approved]="warehouseStatuses[whCode].hasGoods"
+          [class.rejected]="!warehouseStatuses[whCode].hasGoods"
+        >
+          {{ warehouseStatuses[whCode].hasGoods ? 'Có hàng' : 'Không có hàng' }}
+        </span>
+      </div>
+
+      <div class="detail-instruction">
+        <i class="material-icons">local_shipping</i>
+        {{ warehouseInstruction(whCode) }}
+      </div>
+
+      <div class="warehouse-admin" *ngIf="canApprove">
+        <div class="admin-title">Cập nhật lịch chạy hôm nay ({{ warehouseTodayYmd }})</div>
+
+        <div class="admin-actions" *ngIf="whCode !== 'ASM3'">
+          <button
+            class="btn btn--approve"
+            type="button"
+            [disabled]="isWarehouseSaving || warehouseStatuses[whCode].hasGoods"
+            (click)="setWarehouseHasGoods(whCode, true)"
+          >
+            <i class="material-icons">check_circle</i>
+            Có hàng
+          </button>
+          <button
+            class="btn btn--danger"
+            type="button"
+            [disabled]="isWarehouseSaving || !warehouseStatuses[whCode].hasGoods"
+            (click)="setWarehouseHasGoods(whCode, false)"
+          >
+            <i class="material-icons">cancel</i>
+            Không có hàng
+          </button>
+        </div>
+
+        <div class="asm3-scenarios" *ngIf="whCode === 'ASM3'">
+          <button
+            class="scenario-btn"
+            *ngFor="let opt of asm3ScenarioOptions"
+            type="button"
+            [class.active]="warehouseStatuses.ASM3.asm3Scenario === opt.key"
+            [class.has-goods]="opt.key !== 'no_shipment'"
+            [class.no-goods]="opt.key === 'no_shipment'"
+            [disabled]="isWarehouseSaving"
+            (click)="setAsm3Scenario(opt.key)"
+          >
+            <i class="material-icons">{{ opt.key === 'no_shipment' ? 'cancel' : 'check_circle' }}</i>
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="warehouse-empty" *ngIf="!selectedWarehouse">
+      <i class="material-icons">touch_app</i>
+      Bấm vào kho ASM1 / ASM2 / ASM3 để xem tài xế cần làm gì
+    </div>
+
+    <div class="warehouse-legend">
+      <span><i class="material-icons">schedule</i> 8:00 ASM1</span>
+      <span><i class="material-icons">fact_check</i> 9:00 Kiểm tra ASM3</span>
+      <span><i class="material-icons">local_shipping</i> 9:30 Thực hiện</span>
+    </div>
+
+    <div class="warehouse-loading" *ngIf="isWarehouseLoading">
+      <div class="spinner"></div>
+      Đang tải lịch chạy cố định hôm nay...
+    </div>
+
+    <div class="form-error" *ngIf="warehouseError">
+      <i class="material-icons">error</i>
+      {{ warehouseError }}
+    </div>
+  </section>
+</div>
+
+<!-- Register Modal -->
+<div class="modal-overlay" *ngIf="showRegisterModal" (click)="closeRegisterModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">local_shipping</i> Đăng ký lịch xe</h3>
+      <button class="close-btn" (click)="closeRegisterModal()" [disabled]="isSubmitting">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field">
+          <label>Mã nhân viên</label>
+          <input type="text" [(ngModel)]="regEmployeeCode" [disabled]="isSubmitting" placeholder="VD: ASP0123" />
+        </div>
+        <div class="field">
+          <label>Tên</label>
+          <input type="text" [(ngModel)]="regEmployeeName" [disabled]="isSubmitting" placeholder="Nhập tên" />
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Bộ phận</label>
+          <select [(ngModel)]="regDepartment" [disabled]="isSubmitting">
+            <option *ngFor="let d of departments" [value]="d">{{ d }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Chọn ngày</label>
+          <input
+            type="date"
+            [(ngModel)]="regDateYmd"
+            [disabled]="isSubmitting"
+            [min]="toYmd(rangeStart)"
+            [max]="toYmd(rangeEnd)"
+          />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Nơi giao hàng</label>
+        <input type="text" [(ngModel)]="regDeliveryPlace" [disabled]="isSubmitting" placeholder="VD: Công ty A, KCN..." />
+      </div>
+      <div class="field">
+        <label>Nơi nhận hàng</label>
+        <input type="text" [(ngModel)]="regPickupPlace" [disabled]="isSubmitting" placeholder="VD: Kho D / Nhà cung cấp..." />
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Tên người nhận</label>
+          <input type="text" [(ngModel)]="regReceiverName" [disabled]="isSubmitting" placeholder="Nhập tên người nhận" />
+        </div>
+        <div class="field">
+          <label>Số điện thoại</label>
+          <input type="text" [(ngModel)]="regReceiverPhone" [disabled]="isSubmitting" placeholder="VD: 090..." />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Link địa điểm nhận (không bắt buộc)</label>
+        <input type="text" [(ngModel)]="regReceiverLocationLink" [disabled]="isSubmitting" placeholder="Google Maps link..." />
+      </div>
+
+      <div class="form-error" *ngIf="submitError">
+        <i class="material-icons">error</i>
+        {{ submitError }}
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn--ghost" (click)="closeRegisterModal()" [disabled]="isSubmitting">Hủy</button>
+      <button class="btn btn--primary" (click)="submitRegister()" [disabled]="isSubmitting">
+        <i class="material-icons">send</i>
+        Gửi
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Decision Modal -->
+<div class="modal-overlay" *ngIf="showDecisionModal" (click)="closeDecisionModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">policy</i> Xử lý lệnh giao hàng</h3>
+      <button class="close-btn" (click)="closeDecisionModal()" [disabled]="isDecisionProcessing">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="field" style="margin-bottom: 12px;">
+        <label>Thông tin lệnh</label>
+        <div style="font-weight: 900; color: #0f172a;">
+          {{ decisionTarget?.dateYmd || '—' }} • {{ decisionTarget?.employeeCode || '—' }} • {{ decisionTarget?.employeeName || '' }}
+        </div>
+      </div>
+
+      <div class="process-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button
+          class="btn btn--danger"
+          (click)="decideReject()"
+          type="button"
+          [disabled]="isDecisionProcessing"
+          title="Từ chối (Không đặt được)"
+        >
+          <i class="material-icons">cancel</i>
+          Từ chối
+        </button>
+
+        <button
+          class="btn btn--approve"
+          (click)="decideApprove()"
+          type="button"
+          [disabled]="isDecisionProcessing"
+          title="Đồng ý (Đã đặt)"
+        >
+          <i class="material-icons">check_circle</i>
+          Đồng ý
+        </button>
+
+        <button
+          class="btn btn--primary"
+          (click)="startReschedule()"
+          type="button"
+          [disabled]="isDecisionProcessing"
+          title="Ngày tùy chọn (Kho chọn ngày khác)"
+        >
+          <i class="material-icons">event_note</i>
+          Ngày tùy chọn
+        </button>
+      </div>
+
+      <div class="form-error" *ngIf="decisionError">
+        <i class="material-icons">error</i>
+        {{ decisionError }}
+      </div>
+
+      <div class="field" style="margin-top: 12px; margin-bottom: 0;">
+        <label>Ghi chú</label>
+        <textarea
+          rows="3"
+          [(ngModel)]="decisionNote"
+          [disabled]="isDecisionProcessing"
+          placeholder="Nhập ghi chú cho kho (nếu có)..."
+        ></textarea>
+      </div>
+
+      <div *ngIf="showRescheduleInput" style="margin-top: 12px;">
+        <div class="field">
+          <label>Ngày tùy chọn</label>
+          <input
+            type="date"
+            [(ngModel)]="rescheduleDateYmd"
+            [disabled]="isDecisionProcessing"
+          />
+        </div>
+
+        <div class="modal-footer" style="padding: 0; border-top: 0; justify-content: space-between;">
+          <button class="btn btn--ghost" (click)="showRescheduleInput = false" type="button" [disabled]="isDecisionProcessing">
+            <i class="material-icons">undo</i>
+            Bỏ chọn
+          </button>
+          <button class="btn btn--primary" (click)="confirmReschedule()" type="button" [disabled]="isDecisionProcessing">
+            <i class="material-icons">save</i>
+            Xác nhận ngày tùy chọn
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

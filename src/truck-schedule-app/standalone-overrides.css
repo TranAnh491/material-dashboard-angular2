@@ -1,0 +1,6 @@
+/* App này không có trang Menu — ẩn nút "Về Menu" của TruckScheduleComponent (component dùng chung với app chính). */
+body.truck-schedule-tab .btn-home,
+body.truck-schedule-tab button.btn-home,
+body.truck-schedule-tab button[title='Về Menu'] {
+  display: none !important;
+}

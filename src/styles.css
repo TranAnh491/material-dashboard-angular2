@@ -164,3 +164,12 @@ body.location-mobile-tab button[title='Về Menu'] {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* Xe Tải: ẩn nút Home/Về Menu nổi (navbar) để tránh trùng nút trong tab */
+body.truck-schedule-tab .btn-home,
+body.truck-schedule-tab button.btn-home,
+body.truck-schedule-tab button[title='Về Menu'] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

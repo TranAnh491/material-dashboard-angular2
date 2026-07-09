@@ -113,6 +113,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     // Tools & Operations
     { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
     { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Tools' },
+    { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Tools' },
     { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
     { path: '/stock-check', title: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png', category: 'Tools' },
     

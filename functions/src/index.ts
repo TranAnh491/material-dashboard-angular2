@@ -824,3 +824,24 @@ export const lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (
     throw new functions.https.HttpsError('internal', msg || 'Lỗi tra cứu email.');
   }
 });
+
+/** Đăng nhập tài xế app phụ Xe Tải: XETAI / 1234 */
+export const truckDriverSignInFn = functions.https.onCall(async (data: { employeeId?: string; password?: string }) => {
+  const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
+  const password = typeof data?.password === 'string' ? data.password : '';
+  if (!employeeId || !password) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã hoặc mật khẩu.');
+  }
+
+  try {
+    const { signInTruckDriver } = await import('./truck-driver-auth');
+    return await signInTruckDriver(employeeId, password);
+  } catch (e: unknown) {
+    const anyErr = e as any;
+    const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+    if (msg === 'permission-denied') {
+      throw new functions.https.HttpsError('permission-denied', 'Mã hoặc mật khẩu không đúng.');
+    }
+    throw new functions.https.HttpsError('internal', msg || 'Đăng nhập thất bại.');
+  }
+});

@@ -59,6 +59,7 @@ export const ROUTES: RouteInfo[] = [
     children: [
       { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', class: 'material-child-icon' },
       { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: 'material-child-icon' },
+      { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', class: 'material-child-icon' },
       { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
       { path: '/label', title: 'Label', icon: 'label', class: 'material-child-icon' },
       { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: 'material-child-icon' }

@@ -42,10 +42,10 @@ export class LoginComponent implements OnInit {
     private router: Router,
     private fns: AngularFireFunctions
   ) {
-    /** Chỉ đăng nhập bằng mã ASP + 4 số (email Auth được tra server-side). */
+    /** Đăng nhập: ASP + 4 số hoặc XETAI (app phụ xe tải). */
     this.loginForm = this.fb.group({
-      employeeId: ['', [Validators.required, Validators.pattern(/^ASP\d{4}$/i)]],
-      password: ['', [Validators.required, Validators.minLength(6)]]
+      employeeId: ['', [Validators.required, Validators.pattern(/^(ASP\d{4}|XETAI)$/i)]],
+      password: ['', [Validators.required]]
     });
 
     /** Đăng ký: ID ASP + họ tên + bộ phận + email → mật khẩu 6 số gửi qua email */
@@ -116,9 +116,27 @@ export class LoginComponent implements OnInit {
     });
   }
 
-  /** Sau đăng nhập luôn vào Menu — không auto Dashboard. */
+  /** Sau đăng nhập: app phụ Xe Tải → /xe-tai, app chính → /menu */
   private navigateAfterLogin(): void {
-    this.router.navigate(['/menu']);
+    const menuRoute = this.router.config.find((r) => r.path === 'menu');
+    const toXeTai = !!(menuRoute && (menuRoute as { redirectTo?: string }).redirectTo === 'xe-tai');
+    this.router.navigate([toXeTai ? '/xe-tai' : '/menu']);
+  }
+
+  private isTruckDriverLogin(employeeId: string): boolean {
+    return String(employeeId || '').trim().toUpperCase() === 'XETAI';
+  }
+
+  private async signInTruckDriver(employeeId: string, password: string): Promise<void> {
+    const result = await firstValueFrom(
+      this.fns.httpsCallable('truckDriverSignInFn')({ employeeId, password })
+    );
+    const payload = (result as { data?: { token?: string } })?.data ?? (result as { token?: string });
+    const token = typeof payload?.token === 'string' ? payload.token.trim() : '';
+    if (!token) {
+      throw new Error('Không nhận được token đăng nhập.');
+    }
+    await this.authService.signInWithCustomToken(token);
   }
 
   async onLogin(): Promise<void> {
@@ -126,9 +144,11 @@ export class LoginComponent implements OnInit {
       this.loading = true;
       try {
         const { employeeId, password } = this.loginForm.value;
+        const emp = String(employeeId || '').trim().toUpperCase();
+        const pass = String(password || '').trim();
 
         // Xử lý tài khoản đặc biệt ASP0001
-        if (employeeId === 'ASP0001' && password === '112233') {
+        if (emp === 'ASP0001' && pass === '112233') {
           await this.authService.signInSpecialUser('ASP0001', 'ASP0001@asp.com', 'special-asp0001-uid');
           this.showMessage(
             this.currentLanguage === 'en' ? 'Admin login successful!' : 'Đăng nhập quản lý thành công!', 
@@ -138,10 +158,34 @@ export class LoginComponent implements OnInit {
           return;
         }
 
+        // Tài xế app phụ Xe Tải: XETAI / 1234
+        if (this.isTruckDriverLogin(emp)) {
+          if (pass.length < 4) {
+            this.showMessage(
+              this.currentLanguage === 'en' ? 'Password must be at least 4 characters' : 'Mật khẩu phải có ít nhất 4 ký tự',
+              'error'
+            );
+            return;
+          }
+          await this.signInTruckDriver(emp, pass);
+          this.showMessage(
+            this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!',
+            'success'
+          );
+          this.navigateAfterLogin();
+          return;
+        }
 
+        if (pass.length < 6) {
+          this.showMessage(
+            this.currentLanguage === 'en' ? 'Password must be at least 6 characters' : 'Mật khẩu phải có ít nhất 6 ký tự',
+            'error'
+          );
+          return;
+        }
         
-        const email = await this.resolveLoginEmailForSignIn(employeeId);
-        await this.authService.signIn(email, password);
+        const email = await this.resolveLoginEmailForSignIn(emp);
+        await this.authService.signIn(email, pass);
         this.showMessage(
           this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!', 
           'success'

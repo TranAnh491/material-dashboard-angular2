@@ -154,6 +154,8 @@ export class TabPermissionGuard implements CanActivate {
       '/qc-traceability': 'qc',
       '/nhiet-do': 'nhiet-do',
       '/rm1-delivery': 'rm1-delivery',
+      // Xe Tải không dùng tab permission guard
+      // '/xe-tai': 'xe-tai',
       '/report': 'report',
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',

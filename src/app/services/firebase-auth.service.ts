@@ -108,6 +108,26 @@ export class FirebaseAuthService {
     }
   }
 
+  /** Đăng nhập bằng custom token (tài xế XETAI app phụ). */
+  async signInWithCustomToken(token: string): Promise<any> {
+    try {
+      const credential = await this.afAuth.signInWithCustomToken(token);
+      const userDoc = await this.firestore.collection('users').doc(credential.user?.uid || '').get().toPromise();
+      if (!userDoc || !userDoc.exists) {
+        await this.afAuth.signOut();
+        throw new Error('Tài khoản chưa được duyệt. Vui lòng liên hệ quản trị viên.');
+      }
+      if (credential.user) {
+        await this.updateUserLoginInfo(credential.user);
+        await this.saveLoginHistory(credential.user);
+      }
+      return credential;
+    } catch (error) {
+      console.error('❌ signInWithCustomToken thất bại:', error);
+      throw error;
+    }
+  }
+
   // Đăng xuất
   async signOut(): Promise<void> {
     try {

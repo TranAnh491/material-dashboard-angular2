@@ -80,6 +80,7 @@ import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 import { DvLuuTruCatalogComponent } from '../../pages/dv-luu-tru-catalog/dv-luu-tru-catalog.component';
+import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-schedule-shared.module';
 
 @NgModule({
   imports: [
@@ -113,7 +114,8 @@ import { DvLuuTruCatalogComponent } from '../../pages/dv-luu-tru-catalog/dv-luu-
     SharedModule,
     ComponentsModule,
     InventoryOverviewASM1Module,
-    InventoryOverviewASM2Module
+    InventoryOverviewASM2Module,
+    TruckScheduleSharedModule
   ],
   declarations: [
     DashboardComponent,

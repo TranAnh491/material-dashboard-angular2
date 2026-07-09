@@ -333,6 +333,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/label';
     }
 
+    isTruckSchedulePage(): boolean {
+      return this.currentAppPath() === '/xe-tai';
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

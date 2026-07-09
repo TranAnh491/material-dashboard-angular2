@@ -71,6 +71,9 @@ export class FilteredRoutesService {
 
   // Kiểm tra quyền truy cập cho một route
   private hasAccessToRoute(route: RouteInfo, permissions: { [key: string]: boolean }, userRole: string | null): boolean {
+    // Xe Tải: ai đăng nhập cũng truy cập được (không phụ thuộc tab permissions)
+    if (route.path === '/xe-tai') return true;
+
     const tabKey = this.getTabKeyFromRoute(route.path);
     
     if (!tabKey) {
@@ -139,6 +142,8 @@ export class FilteredRoutesService {
       '/shorted-materials': 'shorted-materials',
       '/settings': 'settings',
       '/zalo': 'zalo',
+      // Xe Tải: không check tab permission (hasAccessToRoute sẽ allow)
+      '/xe-tai': 'dashboard',
       
       // Legacy routes (for backward compatibility)
       '#materials': 'materials',
