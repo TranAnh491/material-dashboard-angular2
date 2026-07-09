@@ -189,11 +189,13 @@
                 {{material.location || 'Temporary'}}
               </div>
             </td>
-            <td class="kk-location-cell" [title]="material.viTriKK ? ('Đã kiểm: ' + material.viTriKK) : 'Chưa kiểm'">
-              <ng-container *ngIf="material.viTriKK && (material.viTriKK || '').trim(); else kkEmpty">
-                <i class="material-icons kk-tick" aria-label="Đã kiểm">check_circle</i>
-              </ng-container>
-              <ng-template #kkEmpty>—</ng-template>
+            <td class="kk-location-cell">
+              <mat-checkbox
+                [checked]="isViTriKkChecked(material)"
+                [disabled]="!canEditMaterial(material)"
+                (change)="toggleViTriKk(material, $event.checked)"
+                [matTooltip]="material.viTriKK ? ('Đã kiểm: ' + material.viTriKK) : 'Tick để xác nhận đã kiểm'">
+              </mat-checkbox>
             </td>
             <td class="status-cell">
               <button mat-icon-button color="primary" (click)="scanLocation(material)" 

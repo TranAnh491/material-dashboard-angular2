@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
+import firebase from 'firebase/compat/app';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FactoryAccessService } from '../../services/factory-access.service';
@@ -1044,6 +1045,44 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   canEditMaterial(material: FGInventoryItem): boolean {
     const materialFactory = material.factory || 'ASM1';
     return this.availableFactories.includes(materialFactory);
+  }
+
+  isViTriKkChecked(material: FGInventoryItem): boolean {
+    return !!String(material.viTriKK || '').trim();
+  }
+
+  toggleViTriKk(material: FGInventoryItem, checked: boolean): void {
+    if (!material.id || !this.canEditMaterial(material)) {
+      return;
+    }
+
+    const now = new Date();
+    const location = String(material.location || 'TEMPORARY').trim().toUpperCase();
+
+    if (checked) {
+      material.viTriKK = location;
+      this.firestore.collection('fg-inventory').doc(material.id).update({
+        viTriKK: location,
+        updatedAt: now,
+        kkUpdatedAt: now
+      }).then(() => {
+        console.log(`viTriKK set for ${material.materialCode}: ${location}`);
+      }).catch(error => {
+        console.error('Error setting viTriKK:', error);
+      });
+      return;
+    }
+
+    material.viTriKK = '';
+    this.firestore.collection('fg-inventory').doc(material.id).update({
+      viTriKK: firebase.firestore.FieldValue.delete(),
+      updatedAt: now,
+      kkUpdatedAt: now
+    }).then(() => {
+      console.log(`viTriKK cleared for ${material.materialCode}`);
+    }).catch(error => {
+      console.error('Error clearing viTriKK:', error);
+    });
   }
 
   // Check if user can view material
