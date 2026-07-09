@@ -179,6 +179,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       const role = String(u?.role || '').trim();
       this.canApprove = dept === 'WH' || role === 'Admin' || role === 'Quản lý';
       this.canDelete = this.canApprove;
+      this.applyRegisterUserDefaults();
       this.cdr.markForCheck();
     });
 
@@ -194,6 +195,35 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await this.authService.signOut();
+      this.router.navigate(['/login']);
+    } catch (e) {
+      console.error('logout error', e);
+    }
+  }
+
+  get regEmployeeCodeLocked(): boolean {
+    return !!String(this.currentUser?.employeeId || '').trim();
+  }
+
+  get regEmployeeNameLocked(): boolean {
+    return !!String(this.currentUser?.displayName || '').trim();
+  }
+
+  private applyRegisterUserDefaults(): void {
+    const code = String(this.currentUser?.employeeId || '').trim().toUpperCase();
+    const name = String(this.currentUser?.displayName || '').trim();
+    if (code) this.regEmployeeCode = code;
+    if (name) this.regEmployeeName = name;
+
+    const dept = String(this.currentUser?.department || '').trim().toUpperCase();
+    if (this.departments.includes(dept as DepartmentCode)) {
+      this.regDepartment = dept as DepartmentCode;
+    }
   }
 
   // ===== Calendar helpers =====
@@ -802,12 +832,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   openRegisterModal(): void {
     const todayYmd = this.toYmd(new Date());
     this.submitError = '';
-    this.regEmployeeCode = String(this.currentUser?.employeeId || '').trim() || this.regEmployeeCode;
-    this.regEmployeeName = String(this.currentUser?.displayName || '').trim() || this.regEmployeeName;
-    const dept = String(this.currentUser?.department || '').trim().toUpperCase();
-    if (this.departments.includes(dept as DepartmentCode)) {
-      this.regDepartment = dept as DepartmentCode;
-    }
+    this.applyRegisterUserDefaults();
     // Giới hạn đăng ký trong 2 tuần hiển thị
     const minYmd = this.toYmd(this.rangeStart);
     const maxYmd = this.toYmd(this.rangeEnd);

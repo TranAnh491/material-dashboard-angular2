@@ -26,6 +26,11 @@
           <i class="material-icons">add_circle</i>
           Đăng ký
         </button>
+
+        <button class="btn btn--danger" (click)="logout()" title="Đăng xuất">
+          <i class="material-icons">logout</i>
+          Đăng xuất
+        </button>
       </div>
     </div>
   </div>
@@ -396,11 +401,21 @@
       <div class="grid2">
         <div class="field">
           <label>Mã nhân viên</label>
-          <input type="text" [(ngModel)]="regEmployeeCode" [disabled]="isSubmitting" placeholder="VD: ASP0123" />
+          <input
+            type="text"
+            [(ngModel)]="regEmployeeCode"
+            [disabled]="isSubmitting || regEmployeeCodeLocked"
+            placeholder="VD: ASP0123"
+          />
         </div>
         <div class="field">
           <label>Tên</label>
-          <input type="text" [(ngModel)]="regEmployeeName" [disabled]="isSubmitting" placeholder="Nhập tên" />
+          <input
+            type="text"
+            [(ngModel)]="regEmployeeName"
+            [disabled]="isSubmitting || regEmployeeNameLocked"
+            placeholder="Nhập tên"
+          />
         </div>
       </div>
 
