@@ -8,28 +8,43 @@
     <div class="actions">
       <div class="range-pill">
         <i class="material-icons">date_range</i>
-        {{ rangeTitle() }}
+        <span>{{ rangeTitle() }}</span>
       </div>
 
       <div class="btn-group">
         <button class="btn btn--ghost" (click)="goToMenu()" title="Về Menu">
           <i class="material-icons">menu</i>
-          Về Menu
+          <span class="btn-label">Về Menu</span>
         </button>
 
         <button class="btn btn--ghost" (click)="refreshRange()" [disabled]="isLoadingRange" title="Làm mới 2 tuần">
           <i class="material-icons">refresh</i>
-          Làm mới
+          <span class="btn-label">Làm mới</span>
         </button>
 
-        <button class="btn btn--primary" (click)="openRegisterModal()" [disabled]="isSubmitting" title="Đăng ký lịch xe">
+        <button class="btn btn--ghost" (click)="openGuideModal()" title="Hướng dẫn sử dụng">
+          <i class="material-icons">help_outline</i>
+          <span class="btn-label">Hướng dẫn</span>
+        </button>
+
+        <button class="btn btn--ghost" (click)="openLabelModal()" title="In label chuyển hàng nội bộ">
+          <i class="material-icons">local_offer</i>
+          <span class="btn-label">Label</span>
+        </button>
+
+        <button class="btn btn--ghost" (click)="openScanLabelModal()" title="Scan lô hàng nội bộ — Đã nhận / Đã giao">
+          <i class="material-icons">qr_code_scanner</i>
+          <span class="btn-label">Scan lô hàng</span>
+        </button>
+
+        <button class="btn btn--primary btn--register" (click)="openRegisterModal()" [disabled]="isSubmitting" title="Đăng ký lịch xe">
           <i class="material-icons">add_circle</i>
-          Đăng ký
+          <span class="btn-label">Đăng ký</span>
         </button>
 
         <button class="btn btn--danger" (click)="logout()" title="Đăng xuất">
           <i class="material-icons">logout</i>
-          Đăng xuất
+          <span class="btn-label">Đăng xuất</span>
         </button>
       </div>
     </div>
@@ -66,10 +81,26 @@
               <i class="material-icons day-block-icon" *ngIf="cell.blocked" title="Ngày đã block">block</i>
             </div>
             <div class="badges">
-              <span class="badge badge--approved" *ngIf="cell.approvedCount > 0">{{ cell.approvedCount }} Đã đặt</span>
-              <span class="badge badge--pending" *ngIf="cell.pendingCount > 0">{{ cell.pendingCount }} Chờ xác nhận</span>
-              <span class="badge badge--rejected" *ngIf="cell.rejectedCount > 0">{{ cell.rejectedCount }} Không đặt được</span>
-              <span class="badge badge--rescheduled" *ngIf="cell.rescheduledCount > 0">{{ cell.rescheduledCount }} Đổi lịch</span>
+              <span class="badge badge--approved" *ngIf="cell.approvedCount > 0">
+                <span class="badge-full">{{ cell.approvedCount }} Đã đặt</span>
+                <span class="badge-short">{{ cell.approvedCount }} Đặt</span>
+              </span>
+              <span class="badge badge--pending" *ngIf="cell.pendingCount > 0">
+                <span class="badge-full">{{ cell.pendingCount }} Chờ xác nhận</span>
+                <span class="badge-short">{{ cell.pendingCount }} Chờ</span>
+              </span>
+              <span class="badge badge--rejected" *ngIf="cell.rejectedCount > 0">
+                <span class="badge-full">{{ cell.rejectedCount }} Không đặt được</span>
+                <span class="badge-short">{{ cell.rejectedCount }} Từ chối</span>
+              </span>
+              <span class="badge badge--rescheduled" *ngIf="cell.rescheduledCount > 0">
+                <span class="badge-full">{{ cell.rescheduledCount }} Đổi lịch</span>
+                <span class="badge-short">{{ cell.rescheduledCount }} Đổi</span>
+              </span>
+              <span class="badge badge--internal-label" *ngIf="cell.internalLabelCount > 0" title="Số lô hàng nội bộ được tạo">
+                <span class="badge-full">{{ cell.internalLabelCount }} Lô nội bộ</span>
+                <span class="badge-short">{{ cell.internalLabelCount }} Lô</span>
+              </span>
             </div>
           </button>
         </div>
@@ -208,7 +239,13 @@
           </div>
 
           <div class="row-actions">
-            <button class="btn btn--ghost" (click)="downloadDeliveryOrder(p)" type="button" title="Tải / In lệnh giao hàng">
+            <button
+              *ngIf="p.status !== 'pending'"
+              class="btn btn--ghost"
+              (click)="downloadDeliveryOrder(p)"
+              type="button"
+              title="Tải / In lệnh giao hàng"
+            >
               <i class="material-icons">download</i>
               Tải lệnh
             </button>
@@ -218,10 +255,10 @@
               class="btn btn--approve"
               (click)="openDecisionModal(p)"
               type="button"
-              title="Xử lý: Từ chối / Đồng ý / Ngày tùy chọn"
+              title="Xử lý: Từ chối / Đồng ý / Đổi ngày"
             >
               <i class="material-icons">check_circle</i>
-              Đổi thông tin
+              Cập nhật trạng thái
             </button>
 
             <button
@@ -322,7 +359,7 @@
         {{ warehouseInstruction(whCode) }}
       </div>
 
-      <div class="warehouse-admin" *ngIf="canApprove">
+      <div class="warehouse-admin" *ngIf="canManageWarehouseStatus">
         <div class="admin-title">Cập nhật lịch chạy hôm nay ({{ warehouseTodayYmd }})</div>
 
         <div class="admin-actions" *ngIf="whCode !== 'ASM3'">
@@ -400,67 +437,70 @@
     <div class="modal-body">
       <div class="grid2">
         <div class="field">
-          <label>Mã nhân viên</label>
+          <label>Mã nhân viên <span class="req">*</span></label>
           <input
             type="text"
             [(ngModel)]="regEmployeeCode"
             [disabled]="isSubmitting || regEmployeeCodeLocked"
             placeholder="VD: ASP0123"
+            required
           />
         </div>
         <div class="field">
-          <label>Tên</label>
+          <label>Tên <span class="req">*</span></label>
           <input
             type="text"
             [(ngModel)]="regEmployeeName"
             [disabled]="isSubmitting || regEmployeeNameLocked"
             placeholder="Nhập tên"
+            required
           />
         </div>
       </div>
 
       <div class="grid2">
         <div class="field">
-          <label>Bộ phận</label>
-          <select [(ngModel)]="regDepartment" [disabled]="isSubmitting">
+          <label>Bộ phận <span class="req">*</span></label>
+          <select [(ngModel)]="regDepartment" [disabled]="isSubmitting" required>
             <option *ngFor="let d of departments" [value]="d">{{ d }}</option>
           </select>
         </div>
         <div class="field">
-          <label>Chọn ngày</label>
+          <label>Chọn ngày <span class="req">*</span></label>
           <input
             type="date"
             [(ngModel)]="regDateYmd"
             [disabled]="isSubmitting"
             [min]="toYmd(rangeStart)"
             [max]="toYmd(rangeEnd)"
+            required
           />
         </div>
       </div>
 
       <div class="field">
-        <label>Nơi giao hàng</label>
-        <input type="text" [(ngModel)]="regDeliveryPlace" [disabled]="isSubmitting" placeholder="VD: Công ty A, KCN..." />
+        <label>Nơi giao hàng <span class="req">*</span></label>
+        <input type="text" [(ngModel)]="regDeliveryPlace" [disabled]="isSubmitting" placeholder="VD: Công ty A, KCN..." required />
       </div>
       <div class="field">
-        <label>Nơi nhận hàng</label>
-        <input type="text" [(ngModel)]="regPickupPlace" [disabled]="isSubmitting" placeholder="VD: Kho D / Nhà cung cấp..." />
+        <label>Nơi nhận hàng <span class="req">*</span></label>
+        <input type="text" [(ngModel)]="regPickupPlace" [disabled]="isSubmitting" placeholder="VD: Kho D / Nhà cung cấp..." required />
       </div>
 
       <div class="grid2">
         <div class="field">
-          <label>Tên người nhận</label>
-          <input type="text" [(ngModel)]="regReceiverName" [disabled]="isSubmitting" placeholder="Nhập tên người nhận" />
+          <label>Tên người nhận <span class="req">*</span></label>
+          <input type="text" [(ngModel)]="regReceiverName" [disabled]="isSubmitting" placeholder="Nhập tên người nhận" required />
         </div>
         <div class="field">
-          <label>Số điện thoại</label>
-          <input type="text" [(ngModel)]="regReceiverPhone" [disabled]="isSubmitting" placeholder="VD: 090..." />
+          <label>Số điện thoại <span class="req">*</span></label>
+          <input type="text" [(ngModel)]="regReceiverPhone" [disabled]="isSubmitting" placeholder="VD: 090..." required />
         </div>
       </div>
 
       <div class="field">
-        <label>Link địa điểm nhận (không bắt buộc)</label>
-        <input type="text" [(ngModel)]="regReceiverLocationLink" [disabled]="isSubmitting" placeholder="Google Maps link..." />
+        <label>Link địa điểm nhận <span class="req">*</span></label>
+        <input type="text" [(ngModel)]="regReceiverLocationLink" [disabled]="isSubmitting" placeholder="Google Maps link..." required />
       </div>
 
       <div class="form-error" *ngIf="submitError">
@@ -497,7 +537,7 @@
         </div>
       </div>
 
-      <div class="process-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
+      <div class="process-actions">
         <button
           class="btn btn--danger"
           (click)="decideReject()"
@@ -525,10 +565,10 @@
           (click)="startReschedule()"
           type="button"
           [disabled]="isDecisionProcessing"
-          title="Ngày tùy chọn (Kho chọn ngày khác)"
+          title="Đổi ngày (Kho chọn ngày khác)"
         >
           <i class="material-icons">event_note</i>
-          Ngày tùy chọn
+          Đổi ngày
         </button>
       </div>
 
@@ -549,7 +589,7 @@
 
       <div *ngIf="showRescheduleInput" style="margin-top: 12px;">
         <div class="field">
-          <label>Ngày tùy chọn</label>
+          <label>Đổi ngày</label>
           <input
             type="date"
             [(ngModel)]="rescheduleDateYmd"
@@ -564,10 +604,214 @@
           </button>
           <button class="btn btn--primary" (click)="confirmReschedule()" type="button" [disabled]="isDecisionProcessing">
             <i class="material-icons">save</i>
-            Xác nhận ngày tùy chọn
+            Xác nhận đổi ngày
           </button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Guide Modal -->
+<div class="modal-overlay" *ngIf="showGuideModal" (click)="closeGuideModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">help_outline</i> Hướng dẫn sử dụng</h3>
+      <button class="close-btn" (click)="closeGuideModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body guide-body">
+      <div class="guide-section">
+        <h4>1. Đăng ký lịch xe</h4>
+        <p>Bấm <b>Đăng ký</b>, điền đầy đủ tất cả thông tin (ngày, nơi giao/nhận, người nhận, SĐT, link địa điểm...) rồi Gửi. Mỗi ngày chỉ đăng ký được 1 lượt đặt xe.</p>
+      </div>
+      <div class="guide-section">
+        <h4>2. Trạng thái lệnh</h4>
+        <p><b>Chờ xác nhận</b>: kho chưa xử lý — chưa có nút Tải lệnh.</p>
+        <p><b>Đã đặt</b>: kho đã Đồng ý — có thể Tải lệnh để in.</p>
+        <p><b>Không đặt được</b>: kho đã Từ chối.</p>
+        <p><b>Đổi lịch</b>: kho đổi sang ngày khác — bạn cần bấm <b>Đồng ý đổi lịch</b> để xác nhận, lệnh mới chính thức thành Đã đặt.</p>
+      </div>
+      <div class="guide-section">
+        <h4>3. Thông báo email</h4>
+        <p>Khi kho Duyệt / Từ chối / Đổi ngày, hệ thống tự gửi email về địa chỉ công ty bạn đã đăng ký.</p>
+      </div>
+      <div class="guide-section">
+        <h4>4. Label chuyển hàng nội bộ</h4>
+        <p>Bấm <b>Label</b> để in nhãn 100mm x 100mm dán lên hàng chuyển nội bộ giữa các nhà máy/bộ phận.</p>
+      </div>
+    </div>
+
+    <div class="modal-footer" style="justify-content: flex-end;">
+      <button class="btn btn--primary" (click)="closeGuideModal()">Đã hiểu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Label Modal -->
+<div class="modal-overlay" *ngIf="showLabelModal" (click)="closeLabelModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">local_offer</i> Label chuyển hàng nội bộ (100mm x 100mm)</h3>
+      <button class="close-btn" (click)="closeLabelModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="field">
+        <label>Tên người gửi</label>
+        <input type="text" [(ngModel)]="labelSenderName" [disabled]="isSavingLabel" placeholder="Nhập tên người gửi" />
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Bộ phận gửi</label>
+          <select [(ngModel)]="labelDepartment" [disabled]="isSavingLabel">
+            <option *ngFor="let d of departments" [value]="d">{{ d }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Nhà máy gửi</label>
+          <select [(ngModel)]="labelFactory" [disabled]="isSavingLabel">
+            <option value="ASM1">ASM1</option>
+            <option value="ASM2">ASM2</option>
+            <option value="ASM3">ASM3</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Tên người nhận</label>
+        <input type="text" [(ngModel)]="labelReceiverName" [disabled]="isSavingLabel" placeholder="Nhập tên người nhận" />
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Bộ phận nhận</label>
+          <select [(ngModel)]="labelReceiverDepartment" [disabled]="isSavingLabel">
+            <option *ngFor="let d of departments" [value]="d">{{ d }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Nhà máy nhận</label>
+          <select [(ngModel)]="labelReceiverFactory" [disabled]="isSavingLabel">
+            <option value="ASM1">ASM1</option>
+            <option value="ASM2">ASM2</option>
+            <option value="ASM3">ASM3</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Ngày gửi</label>
+        <input type="date" [(ngModel)]="labelSendDateYmd" [disabled]="isSavingLabel" />
+      </div>
+    </div>
+
+    <div class="modal-footer" style="justify-content: space-between;">
+      <button class="btn btn--ghost" (click)="closeLabelModal()" [disabled]="isSavingLabel">Hủy</button>
+      <button class="btn btn--primary" (click)="printLabel()" [disabled]="isSavingLabel">
+        <i class="material-icons">print</i>
+        {{ isSavingLabel ? 'Đang tạo...' : 'In Label' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Scan Label Modal -->
+<div class="modal-overlay" *ngIf="showScanLabelModal" (click)="closeScanLabelModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">qr_code_scanner</i> Scan lô hàng nội bộ</h3>
+      <button class="close-btn" (click)="closeScanLabelModal()" [disabled]="isSavingScanAction">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="field">
+        <label>Mã lô hàng (scan QR hoặc nhập tay)</label>
+        <div class="scan-input-row">
+          <input
+            type="text"
+            [(ngModel)]="scanLabelCodeInput"
+            [disabled]="isLoadingScanLabel"
+            placeholder="Quét QR hoặc gõ mã 10 số..."
+            (keydown.enter)="lookupScanLabel()"
+            autofocus
+          />
+          <button class="btn btn--ghost btn--camera" type="button" title="Dùng camera quét QR" (click)="scanLabelCodeWithCamera()" [disabled]="isLoadingScanLabel">
+            <i class="material-icons">photo_camera</i>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn--primary" style="width:100%; margin-bottom: 10px;" (click)="lookupScanLabel()" [disabled]="isLoadingScanLabel || !scanLabelCodeInput">
+        <i class="material-icons">search</i>
+        {{ isLoadingScanLabel ? 'Đang tìm...' : 'Tìm lô hàng' }}
+      </button>
+
+      <div class="form-error" *ngIf="scanLabelError">
+        <i class="material-icons">error</i>
+        {{ scanLabelError }}
+      </div>
+
+      <div class="scan-label-result" *ngIf="scanLabelResult as r">
+        <div class="detail-row"><strong>Mã lô:</strong> {{ r.code }}</div>
+        <div class="detail-row"><strong>Người gửi:</strong> {{ r.senderName }} ({{ r.senderDepartment }} · {{ r.senderFactory }})</div>
+        <div class="detail-row"><strong>Người nhận:</strong> {{ r.receiverName }} ({{ r.receiverDepartment }} · {{ r.receiverFactory }})</div>
+        <div class="detail-row"><strong>Ngày gửi:</strong> {{ r.sendDateYmd }}</div>
+        <div class="detail-row">
+          <strong>Trạng thái:</strong>
+          <span class="status-pill" [class.pending]="r.status === 'created'" [class.rescheduled]="r.status === 'received'" [class.approved]="r.status === 'delivered'">
+            {{ r.status === 'created' ? 'Chưa nhận' : (r.status === 'received' ? 'Đã nhận' : 'Đã giao') }}
+          </span>
+        </div>
+        <div class="detail-row" *ngIf="r.deliveredByEmployeeId"><strong>Người nhận đã scan:</strong> {{ r.deliveredByEmployeeId }}</div>
+
+        <div class="scan-label-actions" *ngIf="r.status !== 'delivered'">
+          <button
+            class="btn btn--primary"
+            style="width:100%; margin-top: 10px;"
+            *ngIf="r.status === 'created'"
+            (click)="markLabelReceived()"
+            [disabled]="isSavingScanAction"
+          >
+            <i class="material-icons">inventory_2</i>
+            {{ isSavingScanAction ? 'Đang lưu...' : 'Đã nhận' }}
+          </button>
+
+          <div class="field" style="margin-top: 10px;" *ngIf="r.status === 'received'">
+            <label>Scan mã nhân viên người nhận (ASP + 4 số)</label>
+            <div class="scan-input-row">
+              <input
+                type="text"
+                [(ngModel)]="scanEmployeeCodeInput"
+                [disabled]="isSavingScanAction"
+                placeholder="Quét thẻ nhân viên hoặc gõ ASP0000..."
+                (keydown.enter)="markLabelDelivered()"
+              />
+              <button class="btn btn--ghost btn--camera" type="button" title="Dùng camera quét mã nhân viên" (click)="scanEmployeeCodeWithCamera()" [disabled]="isSavingScanAction">
+                <i class="material-icons">photo_camera</i>
+              </button>
+            </div>
+          </div>
+          <button
+            class="btn btn--primary"
+            style="width:100%; margin-top: 6px;"
+            *ngIf="r.status === 'received'"
+            (click)="markLabelDelivered()"
+            [disabled]="isSavingScanAction || !scanEmployeeCodeInput"
+          >
+            <i class="material-icons">task_alt</i>
+            {{ isSavingScanAction ? 'Đang lưu...' : 'Đã giao' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer" style="justify-content: flex-end;">
+      <button class="btn btn--ghost" (click)="closeScanLabelModal()" [disabled]="isSavingScanAction">Đóng</button>
     </div>
   </div>
 </div>

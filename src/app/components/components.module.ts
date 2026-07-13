@@ -16,11 +16,11 @@ import { SidebarComponent } from './sidebar/sidebar.component';
 import { DeleteConfirmationDialogComponent } from './delete-confirmation-dialog/delete-confirmation-dialog.component';
 import { NotificationDropdownComponent } from './notification-dropdown/notification-dropdown.component';
 import { ImportProgressDialogComponent } from './import-progress-dialog/import-progress-dialog.component';
-import { QRScannerModalComponent } from './qr-scanner-modal/qr-scanner-modal.component';
 import { ScannerInputModalComponent } from './scanner-input-modal/scanner-input-modal.component';
 import { DeliveryScanFlowModalComponent } from './delivery-scan-flow-modal/delivery-scan-flow-modal.component';
 import { FactorySelectDialogComponent } from './factory-select-dialog/factory-select-dialog.component';
 import { StorageUnitPickerComponent } from './storage-unit-picker/storage-unit-picker.component';
+import { QrScannerModule } from './qr-scanner-modal/qr-scanner.module';
 
 @NgModule({
   imports: [
@@ -33,7 +33,8 @@ import { StorageUnitPickerComponent } from './storage-unit-picker/storage-unit-p
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
-    MatProgressBarModule
+    MatProgressBarModule,
+    QrScannerModule
   ],
   declarations: [
     FooterComponent,
@@ -42,7 +43,6 @@ import { StorageUnitPickerComponent } from './storage-unit-picker/storage-unit-p
     DeleteConfirmationDialogComponent,
     NotificationDropdownComponent,
     ImportProgressDialogComponent,
-    QRScannerModalComponent,
     ScannerInputModalComponent,
     DeliveryScanFlowModalComponent,
     FactorySelectDialogComponent,
@@ -55,7 +55,7 @@ import { StorageUnitPickerComponent } from './storage-unit-picker/storage-unit-p
     DeleteConfirmationDialogComponent,
     NotificationDropdownComponent,
     ImportProgressDialogComponent,
-    QRScannerModalComponent,
+    QrScannerModule,
     ScannerInputModalComponent,
     DeliveryScanFlowModalComponent,
     FactorySelectDialogComponent,

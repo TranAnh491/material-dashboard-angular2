@@ -56,3 +56,24 @@
 .app-update-btn:hover {
   background: #2563eb;
 }
+
+.app-update-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.app-update-email-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.app-update-email-error {
+  color: #dc2626;
+  font-size: 13px;
+  margin-top: -4px;
+}

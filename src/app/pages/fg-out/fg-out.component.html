@@ -38,9 +38,20 @@
           <ng-container *ngIf="isSingleShipmentView">
             <span class="total-summary-item">Tổng QTY Shipment: <strong>{{ getTotalQty() | number }}</strong></span>
             <span class="total-summary-item">Tổng thùng Shipment (CTN): <strong>{{ getTotalCarton() | number }}</strong></span>
-            <span class="total-summary-item" style="font-weight: 600;">Tổng theo Mã TP:</span>
-            <span class="total-summary-item" *ngFor="let t of totalsByMaterialCodeInShipment">
-              <strong>{{ t.materialCode }}</strong>: {{ t.totalQty | number }} (CTN {{ t.totalCarton | number }})
+            <span class="total-summary-item"
+                  [style.color]="materialCodeCountComparison.matches ? '#2e7d32' : '#c62828'"
+                  style="font-weight: 600;">
+              Số mã TP: FG Out {{ materialCodeCountComparison.fgOutCount }} / Shipment {{ materialCodeCountComparison.shipmentCount }}
+              <span *ngIf="!materialCodeCountComparison.matches">⚠️ Lệch số mã</span>
+            </span>
+            <span class="total-summary-item" style="font-weight: 600;">So sánh theo Mã TP (FG Out vs Shipment):</span>
+            <span class="total-summary-item"
+                  *ngFor="let t of totalsByMaterialCodeInShipment"
+                  [style.color]="t.qtyMatches ? '#2e7d32' : '#c62828'">
+              <strong>{{ t.materialCode }}</strong>:
+              {{ t.totalQty | number }} (CTN {{ t.totalCarton | number }})
+              vs Shipment {{ t.shipmentQty === null ? '—' : (t.shipmentQty | number) }}
+              <span *ngIf="!t.qtyMatches">⚠️</span>
             </span>
           </ng-container>
         </div>

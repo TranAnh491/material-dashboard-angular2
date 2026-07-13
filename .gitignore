@@ -54,3 +54,6 @@ firebase-debug.*.log
 .DS_Store
 Thumbs.db
 package-lock.json
+
+# Local Netlify folder
+.netlify

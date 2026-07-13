@@ -8,8 +8,10 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialogModule } from '@angular/material/dialog';
 import { LoginComponent } from '../login/login.component';
 import { TruckScheduleComponent } from './truck-schedule.component';
+import { QrScannerModule } from '../../components/qr-scanner-modal/qr-scanner.module';
 
 @NgModule({
   declarations: [LoginComponent, TruckScheduleComponent],
@@ -24,7 +26,9 @@ import { TruckScheduleComponent } from './truck-schedule.component';
     MatSelectModule,
     MatIconModule,
     MatProgressSpinnerModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatDialogModule,
+    QrScannerModule
   ]
 })
 export class TruckScheduleSharedModule {}

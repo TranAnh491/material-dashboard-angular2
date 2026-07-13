@@ -102,6 +102,32 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Schedule charts
   showScheduleChartDialog: boolean = false;
   scheduleChartMonthTotalCarton: number = 0;
+  /** Dữ liệu riêng cho chart theo tháng đã chọn (query Firestore theo actualShipDate). */
+  chartShipments: ShipmentItem[] = [];
+  isScheduleChartLoading = false;
+  private chartMonthLoadToken = 0;
+  scheduleChartKpis = {
+    totalCartons: 0,
+    avgPerDispatchDay: 0,
+    peakDay: 0,
+    peakDayLabel: '',
+    peakDayCartons: 0,
+    dispatchDays: 0
+  };
+  scheduleChartSummary = {
+    highestDayLabel: '',
+    highestDayCartons: 0,
+    lowestDayLabel: '',
+    lowestDayCartons: 0,
+    avgPerDispatchDay: 0,
+    totalDispatchDays: 0
+  };
+  scheduleChartPrepLegend: Array<{
+    label: string;
+    cartons: number;
+    pct: number;
+    colorClass: string;
+  }> = [];
   // Chart.js generic types are strict; use any to avoid TS friction with custom bubble payloads
   private shippedPerDayChart: any = null;
 
@@ -2402,13 +2428,15 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   openScheduleChartDialog(): void {
     this.showScheduleChartDialog = true;
-    // render charts after modal is visible
-    setTimeout(() => this.renderScheduleCharts(), 0);
+    void this.refreshScheduleChartForSelectedMonth();
   }
 
   closeScheduleChartDialog(): void {
     this.showScheduleChartDialog = false;
     this.destroyScheduleCharts();
+    this.chartShipments = [];
+    this.isScheduleChartLoading = false;
+    this.chartMonthLoadToken++;
   }
 
   /** Giá trị input type="month" (YYYY-MM) khớp với scheduleYear / scheduleMonth */
@@ -2417,7 +2445,53 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return `${this.scheduleYear}-${String(m).padStart(2, '0')}`;
   }
 
-  /** Chọn tháng trực tiếp trên modal Chart — cập nhật biểu đồ shipped theo ngày */
+  private getMonthDateRange(year: number, monthIndex0: number): { start: Date; end: Date } {
+    return {
+      start: new Date(year, monthIndex0, 1, 0, 0, 0, 0),
+      end: new Date(year, monthIndex0 + 1, 0, 23, 59, 59, 999)
+    };
+  }
+
+  /** Tải shipment theo Dispatch Date (actualShipDate) trong tháng chart đang chọn. */
+  private async loadChartMonthData(year: number, monthIndex0: number): Promise<void> {
+    const token = ++this.chartMonthLoadToken;
+    const { start, end } = this.getMonthDateRange(year, monthIndex0);
+
+    this.isScheduleChartLoading = true;
+    this.cdr.detectChanges();
+
+    try {
+      const snapshot = await this.firestore
+        .collection('shipments', (ref) =>
+          ref.where('actualShipDate', '>=', start).where('actualShipDate', '<=', end).limit(5000)
+        )
+        .get()
+        .toPromise();
+
+      if (token !== this.chartMonthLoadToken) return;
+
+      const loaded = (snapshot?.docs || []).map((doc) => this.mapShipmentDoc(doc.id, doc.data() as any));
+      this.readTracker.track('shipment', 'shipments-chart-month', loaded.length);
+      this.chartShipments = loaded;
+    } catch (error) {
+      if (token !== this.chartMonthLoadToken) return;
+      console.error('loadChartMonthData error:', error);
+      this.chartShipments = [];
+    } finally {
+      if (token === this.chartMonthLoadToken) {
+        this.isScheduleChartLoading = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
+  private async refreshScheduleChartForSelectedMonth(): Promise<void> {
+    await this.loadChartMonthData(this.scheduleYear, this.scheduleMonth);
+    if (!this.showScheduleChartDialog) return;
+    setTimeout(() => this.renderScheduleCharts(), 0);
+  }
+
+  /** Chọn tháng trực tiếp trên modal Chart — tải dữ liệu tháng rồi vẽ lại chart */
   onScheduleChartMonthPickerChange(value: string): void {
     if (!value || !/^\d{4}-\d{2}$/.test(value)) return;
     const [y, mo] = value.split('-').map(Number);
@@ -2426,7 +2500,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.scheduleYear = y;
     this.scheduleMonth = mo - 1;
     this.generateCalendar();
-    setTimeout(() => this.renderScheduleCharts(), 0);
+    void this.refreshScheduleChartForSelectedMonth();
   }
 
   private destroyScheduleCharts(): void {
@@ -2447,13 +2521,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const daysInMonth = new Date(this.scheduleYear, this.scheduleMonth + 1, 0).getDate();
 
-    // Carton by dispatch day × Day Pre bucket (4 groups)
     const byDay_under1 = new Array<number>(daysInMonth).fill(0);
     const byDay_d1 = new Array<number>(daysInMonth).fill(0);
     const byDay_d2 = new Array<number>(daysInMonth).fill(0);
     const byDay_d3plus = new Array<number>(daysInMonth).fill(0);
 
-    for (const s of this.shipments) {
+    for (const s of this.chartShipments) {
       if (!s?.actualShipDate) continue;
       const d = new Date(s.actualShipDate);
       if (d.getFullYear() !== this.scheduleYear) continue;
@@ -2475,19 +2548,68 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       else byDay_d3plus[idx] += carton;
     }
 
-    this.scheduleChartMonthTotalCarton =
-      byDay_under1.reduce((s, v) => s + v, 0) +
-      byDay_d1.reduce((s, v) => s + v, 0) +
-      byDay_d2.reduce((s, v) => s + v, 0) +
-      byDay_d3plus.reduce((s, v) => s + v, 0);
+    const totalUnder1 = byDay_under1.reduce((s, v) => s + v, 0);
+    const totalD1 = byDay_d1.reduce((s, v) => s + v, 0);
+    const totalD2 = byDay_d2.reduce((s, v) => s + v, 0);
+    const totalD3plus = byDay_d3plus.reduce((s, v) => s + v, 0);
 
-    /** Y-axis: preparation (Day Pre) — two-line tick labels as a clear “column” */
-    const yPrepTickLines = [
-      'Under 1 day\nprep time',
-      '1 day\nprep time',
-      '2 days\nprep time',
-      '3+ days\nprep time'
-    ] as const;
+    this.scheduleChartMonthTotalCarton = totalUnder1 + totalD1 + totalD2 + totalD3plus;
+
+    const dailyTotals = new Array<number>(daysInMonth).fill(0);
+    for (let i = 0; i < daysInMonth; i++) {
+      dailyTotals[i] = byDay_under1[i] + byDay_d1[i] + byDay_d2[i] + byDay_d3plus[i];
+    }
+
+    const dispatchDayIndices = dailyTotals
+      .map((v, i) => ({ day: i + 1, cartons: v }))
+      .filter((x) => x.cartons > 0);
+
+    const dispatchDays = dispatchDayIndices.length;
+    const avgPerDispatchDay = dispatchDays > 0 ? Math.round(this.scheduleChartMonthTotalCarton / dispatchDays) : 0;
+
+    let peakDay = 0;
+    let peakDayCartons = 0;
+    let lowestDay = 0;
+    let lowestDayCartons = 0;
+
+    if (dispatchDayIndices.length > 0) {
+      const peak = dispatchDayIndices.reduce((a, b) => (b.cartons > a.cartons ? b : a));
+      const low = dispatchDayIndices.reduce((a, b) => (b.cartons < a.cartons ? b : a));
+      peakDay = peak.day;
+      peakDayCartons = peak.cartons;
+      lowestDay = low.day;
+      lowestDayCartons = low.cartons;
+    }
+
+    const pct = (n: number) =>
+      this.scheduleChartMonthTotalCarton > 0 ? Math.round((n / this.scheduleChartMonthTotalCarton) * 1000) / 10 : 0;
+
+    this.scheduleChartPrepLegend = [
+      { label: 'Under 1 Day', cartons: totalUnder1, pct: pct(totalUnder1), colorClass: 'prep-red' },
+      { label: '1 Day', cartons: totalD1, pct: pct(totalD1), colorClass: 'prep-orange' },
+      { label: '2 Days', cartons: totalD2, pct: pct(totalD2), colorClass: 'prep-green' },
+      { label: '3+ Days', cartons: totalD3plus, pct: pct(totalD3plus), colorClass: 'prep-blue' }
+    ];
+
+    this.scheduleChartKpis = {
+      totalCartons: this.scheduleChartMonthTotalCarton,
+      avgPerDispatchDay,
+      peakDay,
+      peakDayLabel: peakDay ? this.formatChartShortDay(peakDay) : '—',
+      peakDayCartons,
+      dispatchDays
+    };
+
+    this.scheduleChartSummary = {
+      highestDayLabel: peakDay ? this.formatChartShortDay(peakDay) : '—',
+      highestDayCartons: peakDayCartons,
+      lowestDayLabel: lowestDay ? this.formatChartShortDay(lowestDay) : '—',
+      lowestDayCartons,
+      avgPerDispatchDay,
+      totalDispatchDays: dispatchDays
+    };
+
+    this.cdr.detectChanges();
 
     const yPrepLegend = ['Under 1 day', '1 day', '2 days', '3+ days'] as const;
 
@@ -2505,7 +2627,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const radiusForCarton = (carton: number): number => {
       const r = Math.sqrt(Math.max(0, carton)) * 0.85;
-      return Math.max(3, Math.min(24, r));
+      return Math.max(4, Math.min(28, r));
     };
 
     const buildPoints = (arr: number[], yIndex: number): BubblePoint[] => {
@@ -2524,7 +2646,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         const ctx = chart.ctx as CanvasRenderingContext2D;
         ctx.save();
         ctx.font = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
-        ctx.fillStyle = '#1a1a1a';
+        ctx.fillStyle = '#334155';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         chart.data.datasets.forEach((ds: any, di: number) => {
@@ -2538,10 +2660,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             const x = elem.x as number | undefined;
             const y = elem.y as number | undefined;
             if (typeof x !== 'number' || typeof y !== 'number') return;
-            const text = String(Math.round(raw.carton));
-            const gap = 3;
-            const ty = y + r + gap;
-            ctx.fillText(text, x, ty);
+            ctx.fillText(String(Math.round(raw.carton)), x, y + r + 3);
           });
         });
         ctx.restore();
@@ -2557,43 +2676,47 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             label: 'Under 1 day',
             data: buildPoints(byDay_under1, 0) as any,
             clip: false,
-            backgroundColor: 'rgba(229, 57, 53, 0.28)',
-            borderColor: 'rgba(198, 40, 40, 0.95)',
-            borderWidth: 1
+            backgroundColor: 'rgba(239, 68, 68, 0.35)',
+            borderColor: 'rgba(220, 38, 38, 0.9)',
+            borderWidth: 1.5
           },
           {
             label: '1 day',
             data: buildPoints(byDay_d1, 1) as any,
             clip: false,
-            backgroundColor: 'rgba(255, 235, 59, 0.55)',
-            borderColor: 'rgba(245, 124, 0, 0.95)',
-            borderWidth: 1
+            backgroundColor: 'rgba(249, 115, 22, 0.4)',
+            borderColor: 'rgba(234, 88, 12, 0.9)',
+            borderWidth: 1.5
           },
           {
             label: '2 days',
             data: buildPoints(byDay_d2, 2) as any,
             clip: false,
-            backgroundColor: 'rgba(67, 160, 71, 0.28)',
-            borderColor: 'rgba(46, 125, 50, 0.95)',
-            borderWidth: 1
+            backgroundColor: 'rgba(34, 197, 94, 0.35)',
+            borderColor: 'rgba(22, 163, 74, 0.9)',
+            borderWidth: 1.5
           },
           {
             label: '3+ days',
             data: buildPoints(byDay_d3plus, 3) as any,
             clip: false,
-            backgroundColor: 'rgba(3, 169, 244, 0.28)',
-            borderColor: 'rgba(2, 136, 209, 0.95)',
-            borderWidth: 1
+            backgroundColor: 'rgba(59, 130, 246, 0.35)',
+            borderColor: 'rgba(37, 99, 235, 0.9)',
+            borderWidth: 1.5
           }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { left: 20, right: 28, top: 8, bottom: 22 } },
+        layout: { padding: { left: 8, right: 16, top: 4, bottom: 20 } },
         plugins: {
-          legend: { display: true, position: 'top' },
+          legend: { display: false },
           tooltip: {
+            backgroundColor: '#1e293b',
+            titleFont: { size: 13, weight: 'bold' },
+            bodyFont: { size: 12 },
+            padding: 12,
             callbacks: {
               title: (items) => {
                 const p = items?.[0]?.raw as BubblePoint | undefined;
@@ -2604,7 +2727,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
                 const p = item.raw as BubblePoint;
                 const idx = Math.round(p.y);
                 const prep = yPrepLegend[idx] ?? '';
-                return `${prep}: ${p.carton} cartons`;
+                return `${prep}: ${p.carton.toLocaleString()} cartons`;
               }
             }
           }
@@ -2612,52 +2735,86 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         scales: {
           x: {
             type: 'linear',
-            // Half-day margin so day 01 / last day bubbles are not clipped at chart edges
             min: 0.5,
             max: daysInMonth + 0.5,
+            grid: { color: 'rgba(148, 163, 184, 0.2)' },
             ticks: {
               stepSize: 1,
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
-              font: { size: 10 },
+              font: { size: 11 },
+              color: '#64748b',
               callback: (tickValue) => {
                 const dayNum = typeof tickValue === 'number' ? tickValue : Number(tickValue);
                 if (!Number.isFinite(dayNum)) return '';
                 const d = Math.round(dayNum);
                 if (d < 1 || d > daysInMonth) return '';
-                return String(d).padStart(2, '0');
+                return String(d);
               }
             },
             title: {
               display: true,
-              text: 'Dispatch day of month (dd only; month in chart header)'
+              text: 'Dispatch day of month (dd only)',
+              color: '#64748b',
+              font: { size: 12, weight: 'bold' }
             }
           },
           y: {
             type: 'linear',
             min: -0.5,
             max: 3.5,
+            grid: { color: 'rgba(148, 163, 184, 0.15)' },
             ticks: {
               stepSize: 1,
               autoSkip: false,
-              font: { size: 10, lineHeight: 1.25 },
-              padding: 10,
+              font: { size: 11, lineHeight: 1.3 },
+              padding: 8,
+              color: '#475569',
               callback: (value) => {
                 const idx = typeof value === 'number' ? value : Number(value);
                 if (!Number.isInteger(idx) || idx < 0 || idx > 3) return '';
-                return yPrepTickLines[idx] ?? '';
+                const reversedIdx = 3 - idx;
+                const item = this.scheduleChartPrepLegend[reversedIdx];
+                return item ? `${item.label} — ${item.pct}%` : '';
               }
             },
             title: {
               display: true,
               text: 'Preparation lead time (Day Pre)',
-              padding: { top: 0, bottom: 14 }
+              color: '#64748b',
+              font: { size: 12, weight: 'bold' },
+              padding: { bottom: 10 }
             }
           }
         }
       }
     });
+  }
+
+  /** Format ngày ngắn cho KPI/Summary: "19 Jun" */
+  formatChartShortDay(dayOfMonth: number): string {
+    const dt = new Date(this.scheduleYear, this.scheduleMonth, dayOfMonth);
+    return dt.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+  }
+
+  /** Export dữ liệu chart tháng đang chọn ra Excel */
+  exportChartMonthExcel(): void {
+    if (!this.chartShipments.length) {
+      alert('Không có dữ liệu để export.');
+      return;
+    }
+    const sorted = [...this.chartShipments].sort((a, b) => {
+      const ta = a.actualShipDate ? new Date(a.actualShipDate).getTime() : 0;
+      const tb = b.actualShipDate ? new Date(b.actualShipDate).getTime() : 0;
+      return ta - tb;
+    });
+    const exportData = this.buildShipmentExportRows(sorted);
+    const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(exportData);
+    const wb: XLSX.WorkBook = XLSX.utils.book_new();
+    const m = String(this.scheduleMonth + 1).padStart(2, '0');
+    XLSX.utils.book_append_sheet(wb, ws, `Dispatch ${m}-${this.scheduleYear}`);
+    XLSX.writeFile(wb, `Dispatch_Chart_${m}_${this.scheduleYear}.xlsx`);
   }
 
   // Generate calendar for current month
@@ -2857,7 +3014,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
     this.generateCalendar();
     if (this.showScheduleChartDialog) {
-      setTimeout(() => this.renderScheduleCharts(), 0);
+      void this.refreshScheduleChartForSelectedMonth();
     }
   }
 
@@ -2871,7 +3028,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
     this.generateCalendar();
     if (this.showScheduleChartDialog) {
-      setTimeout(() => this.renderScheduleCharts(), 0);
+      void this.refreshScheduleChartForSelectedMonth();
     }
   }
 

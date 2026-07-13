@@ -1,25 +1,12 @@
-<div class="settings-container" [class.settings-container--under-navbar]="isAdminLoggedIn">
-  <!-- Admin Login -->
-  <div *ngIf="!isAdminLoggedIn" class="login-section">
-    <div class="login-box">
-      <h2>Đăng nhập</h2>
-      <form (ngSubmit)="adminLogin()">
-        <div class="form-group">
-          <label>Tên đăng nhập</label>
-          <input type="text" [(ngModel)]="adminUsername" name="username" required>
-        </div>
-        <div class="form-group">
-          <label>Mật khẩu</label>
-          <input type="password" [(ngModel)]="adminPassword" name="password" required>
-        </div>
-        <div *ngIf="loginError" class="error">{{ loginError }}</div>
-        <button type="submit" [disabled]="!adminUsername || !adminPassword">Đăng nhập</button>
-      </form>
-    </div>
+<div class="settings-container settings-container--under-navbar">
+  <!-- Trang này chỉ ASP0106 vào được (chốt ở SettingsGuard) — không còn cổng đăng nhập phụ. -->
+  <div *ngIf="!isDataLoaded" class="settings-loading">
+    <i class="material-icons settings-loading__icon">hourglass_top</i>
+    <span>Đang tải...</span>
   </div>
 
   <!-- Settings Dashboard — layout theo mockup Quản lý người dùng -->
-  <div *ngIf="isAdminLoggedIn" class="dashboard settings-dashboard">
+  <div *ngIf="isDataLoaded" class="dashboard settings-dashboard">
     <header class="settings-topbar">
       <div class="settings-topbar__brand">
         <div class="settings-topbar__icon-wrap" aria-hidden="true">
@@ -190,6 +177,7 @@
             <strong>ID đăng nhập</strong> (ASP + 4 số) khác <strong>họ tên</strong>. Nhập ID, họ tên, chọn <strong>bộ phận</strong>.
             <strong>Email tùy chọn</strong> — nếu bỏ trống, hệ thống tạo tài khoản và hiển thị <strong>mật khẩu 6 số</strong> cho admin;
             nếu có email, mật khẩu được gửi qua thư. Đăng nhập app bằng <strong>mã ASP + mật khẩu</strong>.
+            Nếu email báo <em>đã được dùng</em> mà không thấy trong danh sách → bấm <strong>Giải phóng email</strong>.
           </p>
         </div>
       </div>
@@ -231,6 +219,14 @@
           [disabled]="isRegisteringUser || !createAccountEmployeeId?.trim() || !createAccountFullName?.trim() || !createAccountDepartment">
           <i class="material-icons">person_add</i>
           {{ isRegisteringUser ? 'Đang xử lý…' : 'Đăng ký' }}
+        </button>
+        <button
+          type="button"
+          class="btn-outline btn-release-email"
+          (click)="releaseRegistrationEmail()"
+          [disabled]="isReleasingRegistrationEmail || isRegisteringUser || !createAccountEmail?.trim()">
+          <i class="material-icons">lock_open</i>
+          {{ isReleasingRegistrationEmail ? 'Đang giải phóng…' : 'Giải phóng email' }}
         </button>
         <button
           type="button"
@@ -521,15 +517,23 @@
           <div class="tabs-permissions">
             <h4>Quyền truy cập các tab:</h4>
             <p *ngIf="isLoadingPermissionModal" class="permission-loading-hint">Đang tải quyền từ hệ thống…</p>
-            <div class="tabs-grid" [class.is-loading]="isLoadingPermissionModal">
-              <div *ngFor="let tab of availableTabs; trackBy: trackByTabKey" class="tab-permission-item">
-                <label class="tab-checkbox">
-                  <input
-                    type="checkbox"
-                    [checked]="tempTabPermissions[tab.key] || false"
-                    (change)="toggleTabPermission(tab.key)">
-                  <span>{{ tab.name }}</span>
-                </label>
+            <div class="tabs-categories" [class.is-loading]="isLoadingPermissionModal">
+              <div *ngFor="let group of tabCategories" class="tab-category">
+                <div class="tab-category__header">
+                  <span class="tab-category__name">{{ group.category }}</span>
+                  <span class="tab-category__count">{{ countCheckedTabsInCategory(group.tabs) }}/{{ group.tabs.length }}</span>
+                </div>
+                <div class="tabs-grid">
+                  <div *ngFor="let tab of group.tabs; trackBy: trackByTabKey" class="tab-permission-item">
+                    <label class="tab-checkbox">
+                      <input
+                        type="checkbox"
+                        [checked]="tempTabPermissions[tab.key] || false"
+                        (change)="toggleTabPermission(tab.key)">
+                      <span>{{ tab.name }}</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

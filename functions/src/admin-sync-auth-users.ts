@@ -42,6 +42,125 @@ export type DeleteUserByEmployeeIdResult = {
   email: string;
 };
 
+export type DeleteUserByUidResult = {
+  ok: true;
+  deletedAuth: boolean;
+  uid: string;
+  email: string;
+  employeeId?: string;
+};
+
+export async function deleteUserFirestoreAndAuth(uid: string): Promise<void> {
+  const batch = admin.firestore().batch();
+  batch.delete(admin.firestore().collection('users').doc(uid));
+  batch.delete(admin.firestore().collection('user-permissions').doc(uid));
+  batch.delete(admin.firestore().collection('user-tab-permissions').doc(uid));
+  await batch.commit();
+  await admin.auth().deleteUser(uid);
+}
+
+/** Admin: giải phóng email bị kẹt trong Firebase Auth nhưng không còn trong danh sách Settings. */
+export async function adminReleaseRegistrationEmail(
+  callerUid: string,
+  emailRaw: string
+): Promise<{ ok: true; released: boolean; uid?: string; message: string }> {
+  if (!callerUid) throw new Error('Thiếu callerUid.');
+
+  const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
+  const callerRole = callerDoc.data()?.role;
+  if (!isAdminOrManager(callerRole)) {
+    throw new Error('permission-denied');
+  }
+
+  const email = (emailRaw || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Email không hợp lệ.');
+  }
+
+  const byEmail = await admin
+    .firestore()
+    .collection('users')
+    .where('email', '==', email)
+    .limit(1)
+    .get();
+
+  if (!byEmail.empty) {
+    const data = byEmail.docs[0].data() as { employeeId?: string };
+    const emp = String(data.employeeId || '').trim().toUpperCase() || byEmail.docs[0].id;
+    throw new Error(
+      `Email vẫn đang gắn tài khoản ${emp} trong danh sách Settings. Hãy xóa tài khoản ${emp} trước.`
+    );
+  }
+
+  try {
+    const existing = await admin.auth().getUserByEmail(email);
+    await deleteUserFirestoreAndAuth(existing.uid);
+    return {
+      ok: true,
+      released: true,
+      uid: existing.uid,
+      message: `Đã giải phóng email ${email} khỏi tài khoản ẩn trong Firebase Auth.`
+    };
+  } catch (e: any) {
+    if (e?.code === 'auth/user-not-found') {
+      return {
+        ok: true,
+        released: false,
+        message: `Email ${email} không còn trong Firebase Auth.`
+      };
+    }
+    throw e;
+  }
+}
+
+/**
+ * Admin: xóa 1 tài khoản theo uid (Auth + Firestore).
+ */
+export async function adminDeleteUserByUid(
+  callerUid: string,
+  targetUidRaw: string
+): Promise<DeleteUserByUidResult> {
+  if (!callerUid) throw new Error('Thiếu callerUid.');
+  const targetUid = (targetUidRaw || '').trim();
+  if (!targetUid) throw new Error('Thiếu uid.');
+
+  const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
+  const callerRole = callerDoc.data()?.role;
+  if (!isAdminOrManager(callerRole)) {
+    throw new Error('permission-denied');
+  }
+
+  if (targetUid === callerUid) {
+    throw new Error('Không thể xóa chính tài khoản đang đăng nhập.');
+  }
+
+  let email = '';
+  let employeeId: string | undefined;
+  try {
+    const ur = await admin.auth().getUser(targetUid);
+    email = ur.email || '';
+  } catch (err: any) {
+    if (err?.code !== 'auth/user-not-found') {
+      throw err;
+    }
+  }
+
+  const userDoc = await admin.firestore().collection('users').doc(targetUid).get();
+  if (userDoc.exists) {
+    const data = userDoc.data() as { email?: string; employeeId?: string };
+    email = email || (typeof data.email === 'string' ? data.email : '');
+    employeeId = typeof data.employeeId === 'string' ? data.employeeId : undefined;
+  }
+
+  if (!email && !userDoc.exists) {
+    throw new Error('Không tìm thấy tài khoản để xóa.');
+  }
+
+  await deleteUserFirestoreAndAuth(targetUid);
+
+  return { ok: true, deletedAuth: true, uid: targetUid, email, employeeId };
+}
+
 /**
  * Admin: xóa 1 tài khoản theo mã nhân viên ASP (ASPxxxx hoặc xxxx).
  * - Xóa Firebase Auth user (Admin SDK)
@@ -114,13 +233,7 @@ export async function adminDeleteUserByEmployeeId(
   }
 
   // Xóa Firestore trước (để app không còn thấy user), sau đó xóa Auth
-  const batch = admin.firestore().batch();
-  batch.delete(admin.firestore().collection('users').doc(uid));
-  batch.delete(admin.firestore().collection('user-permissions').doc(uid));
-  batch.delete(admin.firestore().collection('user-tab-permissions').doc(uid));
-  await batch.commit();
-
-  await admin.auth().deleteUser(uid);
+  await deleteUserFirestoreAndAuth(uid);
 
   return { ok: true, employeeId, deletedAuth: true, uid, email };
 }

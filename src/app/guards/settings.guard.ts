@@ -15,7 +15,7 @@ export class SettingsGuard implements CanActivate {
   ) { }
 
   canActivate(): Observable<boolean> {
-    return this.rolePermissionService.canAccessSettings().pipe(
+    return this.rolePermissionService.canAccessUserManagement().pipe(
       map(hasAccess => {
         if (hasAccess) {
           return true;

@@ -558,6 +558,10 @@
     </div>
     <div class="modal-body">
       <div class="more-menu-list">
+        <button class="more-menu-item" (click)="openLocationReportModal(); showMoreMenu = false">
+          <i class="material-icons">place</i>
+          <span>Vị trí</span>
+        </button>
         <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
           <i class="material-icons">file_upload</i>
           <span>Import tồn đầu</span>
@@ -594,6 +598,61 @@
           <i class="material-icons">undo</i>
           <span>Hoàn lượng xuất</span>
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Location Report Modal -->
+<div class="custom-modal" [class.show]="showLocationReportModal" [style.display]="showLocationReportModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showLocationReportModal = false"></div>
+  <div class="modal-container location-report-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">place</i>
+        Báo cáo Vị trí — Kiểm kê (KK)
+      </h5>
+      <button type="button" class="close-btn" (click)="showLocationReportModal = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="location-report-lead" *ngIf="!isLoadingLocationReport">
+        Nhà máy: <strong>{{ selectedFactory }}</strong> — {{ locationReportRows.length }} vị trí,
+        {{ locationReportTotalChecked }} / {{ locationReportTotalCodes }} mã còn tồn đã tick KK.
+        <br>
+        <span class="location-report-hint">
+          Chỉ tính mã còn tồn &gt; 0 (mã tồn = 0 không cần kiểm kê) — bấm vào 1 dòng để xem chi tiết.
+        </span>
+      </p>
+      <p class="location-report-loading" *ngIf="isLoadingLocationReport">Đang tải báo cáo...</p>
+
+      <div class="location-report-table-wrap" *ngIf="!isLoadingLocationReport">
+        <table class="location-report-table">
+          <thead>
+            <tr>
+              <th>Vị trí</th>
+              <th>Tổng mã</th>
+              <th>Đã tick KK</th>
+              <th>Chưa tick</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let row of locationReportRows; trackBy: trackByLocation"
+              class="location-report-row"
+              (click)="viewLocationFromReport(row.location)"
+            >
+              <td>{{ row.location }}</td>
+              <td>{{ row.totalCount }}</td>
+              <td class="location-report-checked">{{ row.checkedCount }}</td>
+              <td class="location-report-unchecked">{{ row.uncheckedCount }}</td>
+            </tr>
+            <tr *ngIf="locationReportRows.length === 0">
+              <td colspan="4" class="location-report-empty">Không có dữ liệu.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

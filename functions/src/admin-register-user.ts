@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
 import { emailUser, emailPass, emailFrom, emailSmtpHost, emailSmtpPort } from './params-config';
+import { deleteUserFirestoreAndAuth } from './admin-sync-auth-users';
 
 function isAdminOrManager(role: string | undefined | null): boolean {
   const r = (role || '').toString().trim().toLowerCase();
@@ -235,6 +236,56 @@ export async function createAspUserAndSendEmail(
   return { uid, email, employeeId };
 }
 
+/**
+ * Giải phóng email trước khi đăng ký mới:
+ * - Xóa tài khoản Firestore/Auth còn sót cùng email
+ * - Nếu email đang gắn mã ASP khác → báo rõ để admin xóa đúng tài khoản
+ */
+async function releaseEmailForNewRegistration(email: string, newEmployeeId: string): Promise<void> {
+  const byEmail = await admin
+    .firestore()
+    .collection('users')
+    .where('email', '==', email)
+    .limit(5)
+    .get();
+
+  for (const doc of byEmail.docs) {
+    const oldEmp = String((doc.data() as any)?.employeeId || '').trim().toUpperCase();
+    if (oldEmp && oldEmp !== newEmployeeId) {
+      throw new Error(
+        `Email đang được dùng bởi tài khoản ${oldEmp}. Hãy xóa tài khoản ${oldEmp} trước khi đăng ký lại.`
+      );
+    }
+    await deleteUserFirestoreAndAuth(doc.id);
+  }
+
+  try {
+    const existing = await admin.auth().getUserByEmail(email);
+    const userDoc = await admin.firestore().collection('users').doc(existing.uid).get();
+    if (!userDoc.exists) {
+      await deleteUserFirestoreAndAuth(existing.uid);
+      return;
+    }
+
+    const oldEmp = String((userDoc.data() as any)?.employeeId || '').trim().toUpperCase();
+    if (oldEmp && oldEmp !== newEmployeeId) {
+      throw new Error(
+        `Email đang được dùng bởi tài khoản ${oldEmp}. Hãy xóa tài khoản ${oldEmp} trước khi đăng ký lại.`
+      );
+    }
+
+    await deleteUserFirestoreAndAuth(existing.uid);
+  } catch (e: any) {
+    if (e?.message && String(e.message).includes('đang được dùng')) {
+      throw e;
+    }
+    if (e?.code === 'auth/user-not-found') {
+      return;
+    }
+    throw e;
+  }
+}
+
 async function createAspUserCore(params: {
   employeeId: string;
   fullName: string;
@@ -251,19 +302,11 @@ async function createAspUserCore(params: {
     .limit(1)
     .get();
   if (!dupEmp.empty) {
-    throw new Error(`Mã ${employeeId} đã được đăng ký.`);
+    // Cho phép đăng ký lại cùng mã ASP nếu tài khoản cũ chưa xóa sạch.
+    await deleteUserFirestoreAndAuth(dupEmp.docs[0].id);
   }
 
-  try {
-    await admin.auth().getUserByEmail(email);
-    throw new Error('Email đã được dùng cho tài khoản khác.');
-  } catch (e: any) {
-    if (e?.code === 'auth/user-not-found') {
-      // email còn trống
-    } else {
-      throw e;
-    }
-  }
+  await releaseEmailForNewRegistration(email, employeeId);
 
   const userRecord = await admin.auth().createUser({
     email,

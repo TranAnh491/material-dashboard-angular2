@@ -742,9 +742,20 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return this.getDisplayedShipments().length === 1;
   }
 
-  /** Tổng theo từng Mã TP trong shipment đang lọc (chỉ dùng khi isSingleShipmentView = true). */
-  get totalsByMaterialCodeInShipment(): Array<{ materialCode: string; totalQty: number; totalCarton: number }> {
+  /**
+   * Tổng theo từng Mã TP trong shipment đang lọc (chỉ dùng khi isSingleShipmentView = true),
+   * kèm so sánh với số lượng kỳ vọng từ tab Shipment (shipmentExpectedQtyMap) để biết khớp hay lệch.
+   * Lấy hợp (union) mã TP từ cả FG Out lẫn Shipment — mã chỉ có ở 1 bên cũng phải hiện ra (lệch 0).
+   */
+  get totalsByMaterialCodeInShipment(): Array<{
+    materialCode: string;
+    totalQty: number;
+    totalCarton: number;
+    shipmentQty: number | null;
+    qtyMatches: boolean;
+  }> {
     if (!this.isSingleShipmentView) return [];
+    const ship = this.getDisplayedShipments()[0] || '';
     const map = new Map<string, { qty: number; carton: number }>();
     this.displayRows.forEach(r => {
       if (r.type !== 'detail') return;
@@ -756,9 +767,39 @@ export class FgOutComponent implements OnInit, OnDestroy {
       cur.carton += this.getCartonCountForDetailRow(m, r.matIdx);
       map.set(code, cur);
     });
+
+    // Thêm mã TP chỉ có bên Shipment (chưa có dòng nào trong FG Out) để không bị bỏ sót lệch.
+    this.shipmentExpectedQtyMap.forEach((_, key) => {
+      const sep = key.indexOf('|');
+      const keyShip = key.slice(0, sep);
+      const code = key.slice(sep + 1);
+      if (keyShip !== ship || !code) return;
+      if (!map.has(code)) map.set(code, { qty: 0, carton: 0 });
+    });
+
     return Array.from(map.entries())
-      .map(([materialCode, v]) => ({ materialCode, totalQty: v.qty, totalCarton: v.carton }))
+      .map(([materialCode, v]) => {
+        const key = `${ship}|${materialCode}`;
+        const hasShipmentData = this.shipmentExpectedQtyMap.has(key);
+        const shipmentQty = hasShipmentData ? this.shipmentExpectedQtyMap.get(key)! : null;
+        return {
+          materialCode,
+          totalQty: v.qty,
+          totalCarton: v.carton,
+          shipmentQty,
+          qtyMatches: shipmentQty === null ? true : Math.round(v.qty) === Math.round(shipmentQty)
+        };
+      })
       .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+  }
+
+  /** So sánh số lượng Mã TP giữa FG Out (đang lọc) và tab Shipment cho shipment đang xem. */
+  get materialCodeCountComparison(): { fgOutCount: number; shipmentCount: number; matches: boolean } {
+    if (!this.isSingleShipmentView) return { fgOutCount: 0, shipmentCount: 0, matches: true };
+    const rows = this.totalsByMaterialCodeInShipment;
+    const shipmentCount = rows.filter(r => r.shipmentQty !== null).length;
+    const fgOutCount = rows.filter(r => r.totalQty > 0).length;
+    return { fgOutCount, shipmentCount, matches: fgOutCount === shipmentCount };
   }
 
   /** Shipment mặc định khi thêm dòng mới (giống shipment đang hiển thị). */
@@ -1705,6 +1746,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const selectedFact = (this.selectedFactory || '').trim().toUpperCase();
     forkJoin(queries).pipe(take(1), takeUntil(this.destroy$)).subscribe((snapshots: any[]) => {
       snapshots.forEach(snap => {
+        this.readTracker.track('fg-out', 'shipments', (snap.docs || []).length);
         (snap.docs || []).forEach((doc: any) => {
           const d = doc.data() as any;
           const docFactory = String(d.factory ?? 'ASM1').trim().toUpperCase();
@@ -1718,6 +1760,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
           this.shipmentExpectedQtyMap.set(key, cur + qty);
         });
       });
+      this.cdr.markForCheck();
     });
   }
 

@@ -33,11 +33,54 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = void 0;
+exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
 admin.initializeApp();
+/** Tự cập nhật email công ty cho chính tài khoản đang đăng nhập (popup bắt buộc khi thiếu email công ty). */
+exports.selfUpdateCompanyEmailFn = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const email = typeof (data === null || data === void 0 ? void 0 : data.email) === 'string' ? data.email.trim() : '';
+    if (!email) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu email.');
+    }
+    try {
+        const { selfUpdateCompanyEmail } = await Promise.resolve().then(() => __importStar(require('./self-update-email')));
+        const r = await selfUpdateCompanyEmail(context.auth.uid, email);
+        return { ok: true, email: r.email };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const isValidationError = msg.includes('đã được dùng') || msg.includes('không hợp lệ') || msg.includes('Chỉ chấp nhận');
+        throw new functions.https.HttpsError(isValidationError ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** Xe Tải: gửi email cho người đăng ký khi kho Duyệt / Từ chối / Đổi ngày lệnh giao hàng. */
+exports.sendTruckDeliveryDecisionEmailFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const requestId = typeof (data === null || data === void 0 ? void 0 : data.requestId) === 'string' ? data.requestId.trim() : '';
+    const decision = typeof (data === null || data === void 0 ? void 0 : data.decision) === 'string' ? data.decision.trim() : '';
+    const validDecisions = ['approved', 'rejected', 'rescheduled'];
+    if (!requestId || !validDecisions.includes(decision)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu requestId hoặc decision không hợp lệ.');
+    }
+    try {
+        const { sendTruckDeliveryDecisionEmail } = await Promise.resolve().then(() => __importStar(require('./truck-schedule-email')));
+        await sendTruckDeliveryDecisionEmail(requestId, decision);
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError('internal', msg);
+    }
+});
 /**
  * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email.
  * Secret: EMAIL_PASS — chuỗi: EMAIL_USER, EMAIL_TO, … (xem params-config.ts).
@@ -577,6 +620,66 @@ exports.adminDeleteUserByEmployeeIdFn = functions
             throw new functions.https.HttpsError('not-found', msg);
         }
         if (msg.includes('Không thể xóa chính')) {
+            throw new functions.https.HttpsError('failed-precondition', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: xóa user theo uid (Auth + Firestore). */
+exports.adminDeleteUserByUidFn = functions.https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const uid = typeof (data === null || data === void 0 ? void 0 : data.uid) === 'string' ? data.uid.trim() : '';
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
+    }
+    try {
+        const { adminDeleteUserByUid } = await Promise.resolve().then(() => __importStar(require('./admin-sync-auth-users')));
+        return await adminDeleteUserByUid(context.auth.uid, uid);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+        }
+        if (msg.includes('Không tìm thấy tài khoản')) {
+            throw new functions.https.HttpsError('not-found', msg);
+        }
+        if (msg.includes('Không thể xóa chính')) {
+            throw new functions.https.HttpsError('failed-precondition', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: giải phóng email bị kẹt trong Auth (không hiện trong danh sách Settings). */
+exports.adminReleaseRegistrationEmailFn = functions.https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const email = typeof (data === null || data === void 0 ? void 0 : data.email) === 'string' ? data.email.trim() : '';
+    if (!email) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu email.');
+    }
+    try {
+        const { adminReleaseRegistrationEmail } = await Promise.resolve().then(() => __importStar(require('./admin-sync-auth-users')));
+        return await adminReleaseRegistrationEmail(context.auth.uid, email);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới thực hiện được.');
+        }
+        if (msg.includes('Email không hợp lệ')) {
+            throw new functions.https.HttpsError('invalid-argument', msg);
+        }
+        if (msg.includes('vẫn đang gắn')) {
             throw new functions.https.HttpsError('failed-precondition', msg);
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');

@@ -119,7 +119,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // More menu popup
   showMoreMenu: boolean = false;
-  
+
+  // Location (Vị trí) report modal — tổng hợp số mã đã tick KK / chưa tick theo từng vị trí
+  showLocationReportModal: boolean = false;
+  isLoadingLocationReport: boolean = false;
+  locationReportRows: Array<{ location: string; totalCount: number; checkedCount: number; uncheckedCount: number }> = [];
+
   // Factory menu popup
   showFactoryMenu: boolean = false;
 
@@ -152,7 +157,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   showCompleted: boolean = true;
   showNonStock: boolean = false; // false = ẩn ton=0; true (Non Stock mode) = chỉ hiện ton=0
   showNegativeStock: boolean = false; // true = chỉ hiện ton < 0 (tồn âm)
-  
+
   // Permissions
   hasDeletePermission: boolean = false;
   hasCompletePermission: boolean = false;
@@ -1083,6 +1088,82 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }).catch(error => {
       console.error('Error clearing viTriKK:', error);
     });
+  }
+
+  get locationReportTotalCodes(): number {
+    return this.locationReportRows.reduce((sum, r) => sum + r.totalCount, 0);
+  }
+
+  get locationReportTotalChecked(): number {
+    return this.locationReportRows.reduce((sum, r) => sum + r.checkedCount, 0);
+  }
+
+  trackByLocation(_: number, row: { location: string }): string {
+    return row.location;
+  }
+
+  /** Bấm 1 vị trí trong Báo cáo Vị trí → tìm đúng vị trí đó (giống search vị trí bình thường). */
+  viewLocationFromReport(location: string): void {
+    this.showLocationReportModal = false;
+    this.searchMode = 'location';
+    this.searchTerm = location;
+    void this.runLocationSearch(location);
+  }
+
+  /**
+   * Báo cáo Vị trí (nút More → Vị trí): với mỗi vị trí, đếm số mã đã tick KK (viTriKK có giá trị)
+   * và chưa tick. Chỉ tính mã còn tồn > 0 (mã tồn = 0 không cần kiểm kê). Đọc một lần khi bấm nút
+   * (không tự động lặp lại) — đủ theo nhà máy đang chọn.
+   */
+  async openLocationReportModal(): Promise<void> {
+    this.showLocationReportModal = true;
+    this.isLoadingLocationReport = true;
+    this.locationReportRows = [];
+    this.cdr.detectChanges();
+
+    try {
+      const snap = await this.firestore
+        .collection('fg-inventory', (ref) => {
+          let q: firebase.firestore.Query = ref;
+          if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+            q = q.where('factory', '==', this.selectedFactory);
+          }
+          return q.limit(5000);
+        })
+        .get()
+        .toPromise();
+
+      this.readTracker.track('fg-inventory', 'fg-inventory-location-report', snap?.docs.length || 0);
+
+      const byLocation = new Map<string, { checked: number; unchecked: number }>();
+      (snap?.docs || []).forEach((doc) => {
+        const item = this.mapDocToInventoryItem(doc.id, doc.data());
+        if ((item.ton ?? 0) <= 0) return; // Bỏ qua mã tồn = 0 — không cần kiểm kê
+        const location = String(item.location || 'Temporary').trim().toUpperCase() || 'TEMPORARY';
+        const cur = byLocation.get(location) || { checked: 0, unchecked: 0 };
+        if (this.isViTriKkChecked(item)) {
+          cur.checked++;
+        } else {
+          cur.unchecked++;
+        }
+        byLocation.set(location, cur);
+      });
+
+      this.locationReportRows = Array.from(byLocation.entries())
+        .map(([location, v]) => ({
+          location,
+          totalCount: v.checked + v.unchecked,
+          checkedCount: v.checked,
+          uncheckedCount: v.unchecked
+        }))
+        .sort((a, b) => a.location.localeCompare(b.location));
+    } catch (e) {
+      console.error('openLocationReportModal failed', e);
+      this.locationReportRows = [];
+    } finally {
+      this.isLoadingLocationReport = false;
+      this.cdr.detectChanges();
+    }
   }
 
   // Check if user can view material

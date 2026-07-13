@@ -1,9 +1,54 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import type { QcPriorityResolvedPayload } from './qc-priority-email';
+import type { TruckDecisionType } from './truck-schedule-email';
 import { emailPass, zaloBotToken } from './params-config';
 
 admin.initializeApp();
+
+/** Tự cập nhật email công ty cho chính tài khoản đang đăng nhập (popup bắt buộc khi thiếu email công ty). */
+export const selfUpdateCompanyEmailFn = functions.https.onCall(async (data: { email?: string }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+  }
+  const email = typeof data?.email === 'string' ? data.email.trim() : '';
+  if (!email) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu email.');
+  }
+  try {
+    const { selfUpdateCompanyEmail } = await import('./self-update-email');
+    const r = await selfUpdateCompanyEmail(context.auth.uid, email);
+    return { ok: true, email: r.email };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isValidationError =
+      msg.includes('đã được dùng') || msg.includes('không hợp lệ') || msg.includes('Chỉ chấp nhận');
+    throw new functions.https.HttpsError(isValidationError ? 'failed-precondition' : 'internal', msg);
+  }
+});
+
+/** Xe Tải: gửi email cho người đăng ký khi kho Duyệt / Từ chối / Đổi ngày lệnh giao hàng. */
+export const sendTruckDeliveryDecisionEmailFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: { requestId?: string; decision?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const requestId = typeof data?.requestId === 'string' ? data.requestId.trim() : '';
+    const decision = typeof data?.decision === 'string' ? data.decision.trim() : '';
+    const validDecisions: TruckDecisionType[] = ['approved', 'rejected', 'rescheduled'];
+    if (!requestId || !validDecisions.includes(decision as TruckDecisionType)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu requestId hoặc decision không hợp lệ.');
+    }
+    try {
+      const { sendTruckDeliveryDecisionEmail } = await import('./truck-schedule-email');
+      await sendTruckDeliveryDecisionEmail(requestId, decision as TruckDecisionType);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError('internal', msg);
+    }
+  });
 
 /**
  * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email.
@@ -614,6 +659,72 @@ export const adminDeleteUserByEmployeeIdFn = functions
       throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
   });
+
+/** Admin: xóa user theo uid (Auth + Firestore). */
+export const adminDeleteUserByUidFn = functions.https.onCall(async (data: { uid?: string }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+  }
+
+  const uid = typeof data?.uid === 'string' ? data.uid.trim() : '';
+  if (!uid) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
+  }
+
+  try {
+    const { adminDeleteUserByUid } = await import('./admin-sync-auth-users');
+    return await adminDeleteUserByUid(context.auth.uid, uid);
+  } catch (e: unknown) {
+    const anyErr = e as any;
+    const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+    const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+    if (msg === 'permission-denied' || code === 'permission-denied') {
+      throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+    }
+    if (msg.includes('Không tìm thấy tài khoản')) {
+      throw new functions.https.HttpsError('not-found', msg);
+    }
+    if (msg.includes('Không thể xóa chính')) {
+      throw new functions.https.HttpsError('failed-precondition', msg);
+    }
+
+    throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+  }
+});
+
+/** Admin: giải phóng email bị kẹt trong Auth (không hiện trong danh sách Settings). */
+export const adminReleaseRegistrationEmailFn = functions.https.onCall(async (data: { email?: string }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+  }
+
+  const email = typeof data?.email === 'string' ? data.email.trim() : '';
+  if (!email) {
+    throw new functions.https.HttpsError('invalid-argument', 'Thiếu email.');
+  }
+
+  try {
+    const { adminReleaseRegistrationEmail } = await import('./admin-sync-auth-users');
+    return await adminReleaseRegistrationEmail(context.auth.uid, email);
+  } catch (e: unknown) {
+    const anyErr = e as any;
+    const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+    const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+
+    if (msg === 'permission-denied' || code === 'permission-denied') {
+      throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới thực hiện được.');
+    }
+    if (msg.includes('Email không hợp lệ')) {
+      throw new functions.https.HttpsError('invalid-argument', msg);
+    }
+    if (msg.includes('vẫn đang gắn')) {
+      throw new functions.https.HttpsError('failed-precondition', msg);
+    }
+
+    throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+  }
+});
 
 /** Admin: sửa tên, bộ phận, email đăng nhập (Auth + Firestore). */
 export const adminUpdateUserProfileFn = functions.https.onCall(

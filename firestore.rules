@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Chỉ tài khoản ASP0106 (Quản lý người dùng — tab Settings) mới được sửa quyền hạn.
+    function isAsp0106() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId == 'ASP0106';
+    }
+
+    // Hồ sơ cơ bản: ai cũng đọc được (tên/bộ phận hiển thị ở nhiều tab),
+    // nhưng chỉ tự sửa hồ sơ của mình hoặc ASP0106 sửa hộ người khác.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (request.auth.uid == uid || isAsp0106());
+    }
+
+    // Quyền hạn (delete/complete/read-only) và quyền truy cập từng tab:
+    // CHỈ ASP0106 được ghi — chặn mọi tài khoản tự cấp quyền/tab cho chính mình.
+    match /user-permissions/{uid} {
+      allow read: if request.auth != null;
+      allow write: if isAsp0106();
+    }
+    match /user-tab-permissions/{uid} {
+      allow read: if request.auth != null;
+      allow write: if isAsp0106();
+    }
+
+    // Tất cả collection khác — giữ nguyên hành vi hiện tại (mọi tài khoản đã đăng nhập đọc/ghi được).
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+
+      allow delete: if request.auth != null &&
+        exists(/databases/$(database)/documents/user-permissions/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/user-permissions/$(request.auth.uid)).data.hasEditPermission == true;
+    }
+  }
+}

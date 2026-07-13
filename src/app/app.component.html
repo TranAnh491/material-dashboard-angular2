@@ -10,3 +10,23 @@
     <button type="button" class="app-update-btn" (click)="reloadNow()">Tải lại ngay</button>
   </div>
 </div>
+
+<!-- Popup bắt buộc cập nhật email công ty (tài khoản ngoài WH, chưa có email công ty thật). -->
+<div class="app-update-overlay" *ngIf="needsCompanyEmailUpdate && !updateAvailable">
+  <div class="app-update-card">
+    <i class="material-icons app-update-icon">mail</i>
+    <h3>Cần cập nhật email công ty</h3>
+    <p>Vui lòng nhập email công ty (@airspeedmfgvn.com) để tiếp tục sử dụng.</p>
+    <input
+      type="email"
+      class="app-update-email-input"
+      [(ngModel)]="companyEmailInput"
+      [disabled]="companyEmailSubmitting"
+      placeholder="ten@airspeedmfgvn.com"
+    />
+    <div class="app-update-email-error" *ngIf="companyEmailError">{{ companyEmailError }}</div>
+    <button type="button" class="app-update-btn" [disabled]="companyEmailSubmitting" (click)="submitCompanyEmail()">
+      {{ companyEmailSubmitting ? 'Đang cập nhật...' : 'Cập nhật' }}
+    </button>
+  </div>
+</div>

@@ -16703,4 +16703,20 @@ body.truck-schedule-tab button.btn-home,
 body.truck-schedule-tab button[title='Về Menu'] {
   display: none !important;
 }
+/* Mobile: full-bleed, tránh scroll ngang, an toàn notch */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+body.truck-schedule-tab {
+  margin: 0;
+  background: #f8fafc;
+}
+@media (max-width: 768px) {
+  body.truck-schedule-tab {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
 

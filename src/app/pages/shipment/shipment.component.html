@@ -1101,61 +1101,167 @@
   </div>
 </div>
 
-<!-- Schedule Chart Dialog -->
+<!-- Schedule Chart Dialog — Dispatch Performance Dashboard -->
 <div class="custom-modal schedule-chart-modal-root" [class.show]="showScheduleChartDialog" [style.display]="showScheduleChartDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="closeScheduleChartDialog()"></div>
   <div class="modal-container schedule-chart-modal" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h5 class="modal-title">
-        <i class="material-icons">bar_chart</i>
-        Chart — {{ getScheduleMonthNameEn() }}
-      </h5>
-      <button type="button" class="close-btn" (click)="closeScheduleChartDialog()">
-        <i class="material-icons">close</i>
-      </button>
-    </div>
-
-    <div class="modal-body">
-      <div class="calendar-nav chart-chart-month-nav" aria-label="Select month for chart">
-        <button type="button" class="nav-btn" (click)="previousMonth()" title="Previous month">
-          <i class="material-icons">chevron_left</i>
-        </button>
-        <div class="chart-nav-center">
-          <h3 class="calendar-title chart-nav-title">{{ getScheduleMonthNameEn() }}</h3>
-          <label class="chart-month-label" for="schedule-chart-month-input">Select month</label>
-          <input
-            id="schedule-chart-month-input"
-            type="month"
-            class="chart-month-input"
-            [ngModel]="getScheduleChartMonthInputValue()"
-            (ngModelChange)="onScheduleChartMonthPickerChange($event)"
-            (click)="$any($event.target).showPicker?.()"
-            title="Choose month for cartons shipped per dispatch day"
-          />
+    <div class="dispatch-dashboard">
+      <!-- Header -->
+      <div class="dispatch-header">
+        <div class="dispatch-header-left">
+          <h2 class="dispatch-title">Dispatch Performance</h2>
+          <p class="dispatch-subtitle">{{ getScheduleMonthNameEn() }}</p>
         </div>
-        <button type="button" class="nav-btn" (click)="nextMonth()" title="Next month">
-          <i class="material-icons">chevron_right</i>
-        </button>
+        <div class="dispatch-header-nav">
+          <button type="button" class="dispatch-nav-btn" (click)="previousMonth()" title="Previous month">
+            <i class="material-icons">chevron_left</i>
+          </button>
+          <label class="dispatch-month-picker-wrap">
+            <i class="material-icons">calendar_today</i>
+            <input
+              type="month"
+              class="dispatch-month-input"
+              [ngModel]="getScheduleChartMonthInputValue()"
+              (ngModelChange)="onScheduleChartMonthPickerChange($event)"
+              (click)="$any($event.target).showPicker?.()"
+            />
+          </label>
+          <button type="button" class="dispatch-nav-btn" (click)="nextMonth()" title="Next month">
+            <i class="material-icons">chevron_right</i>
+          </button>
+        </div>
+        <div class="dispatch-header-actions">
+          <button type="button" class="dispatch-export-btn" (click)="exportChartMonthExcel()" [disabled]="isScheduleChartLoading">
+            <i class="material-icons">download</i>
+            Export
+          </button>
+          <button type="button" class="dispatch-close-btn" (click)="closeScheduleChartDialog()">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
       </div>
-      <div class="chart-grid">
-        <div class="chart-card">
-          <div class="chart-title">
-            Cartons shipped per dispatch day
-            <span class="chart-subtitle">Month total: {{ scheduleChartMonthTotalCarton | number }}</span>
+
+      <!-- Loading -->
+      <div class="dispatch-loading" *ngIf="isScheduleChartLoading">
+        <div class="chart-loading-spinner"></div>
+        <span>Loading {{ getScheduleMonthNameEn() }}...</span>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="dispatch-kpi-row" [class.dispatch-kpi-row--loading]="isScheduleChartLoading">
+        <div class="dispatch-kpi-card dispatch-kpi-card--blue">
+          <div class="dispatch-kpi-icon"><i class="material-icons">inventory_2</i></div>
+          <div class="dispatch-kpi-body">
+            <div class="dispatch-kpi-value">{{ scheduleChartKpis.totalCartons | number }}</div>
+            <div class="dispatch-kpi-label">Total Cartons</div>
+            <div class="dispatch-kpi-hint">This month</div>
           </div>
-          <p class="chart-hint-en">Y-axis: preparation lead time (Day Pre). Carton counts are shown below each bubble.</p>
-          <div class="chart-canvas-wrap">
+        </div>
+        <div class="dispatch-kpi-card dispatch-kpi-card--green">
+          <div class="dispatch-kpi-icon"><i class="material-icons">trending_up</i></div>
+          <div class="dispatch-kpi-body">
+            <div class="dispatch-kpi-value">{{ scheduleChartKpis.avgPerDispatchDay | number }}</div>
+            <div class="dispatch-kpi-label">Average per Day</div>
+            <div class="dispatch-kpi-hint">Cartons / day</div>
+          </div>
+        </div>
+        <div class="dispatch-kpi-card dispatch-kpi-card--orange">
+          <div class="dispatch-kpi-icon"><i class="material-icons">star</i></div>
+          <div class="dispatch-kpi-body">
+            <div class="dispatch-kpi-value">{{ scheduleChartKpis.peakDayLabel }}</div>
+            <div class="dispatch-kpi-label">Peak Day</div>
+            <div class="dispatch-kpi-hint">{{ scheduleChartKpis.peakDayCartons | number }} cartons</div>
+          </div>
+        </div>
+        <div class="dispatch-kpi-card dispatch-kpi-card--purple">
+          <div class="dispatch-kpi-icon"><i class="material-icons">event</i></div>
+          <div class="dispatch-kpi-body">
+            <div class="dispatch-kpi-value">{{ scheduleChartKpis.dispatchDays }}</div>
+            <div class="dispatch-kpi-label">Dispatch Days</div>
+            <div class="dispatch-kpi-hint">Days with shipments</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main: Chart + Summary -->
+      <div class="dispatch-main" [class.dispatch-main--loading]="isScheduleChartLoading">
+        <div class="dispatch-chart-panel">
+          <div class="dispatch-chart-head">
+            <h3>Cartons Shipped by Dispatch Day</h3>
+            <p>Bubble size represents quantity. Grouped by preparation lead time (Day Pre).</p>
+          </div>
+
+          <div class="dispatch-prep-legend">
+            <div
+              class="dispatch-prep-item"
+              *ngFor="let item of scheduleChartPrepLegend"
+              [ngClass]="item.colorClass"
+            >
+              <span class="dispatch-prep-dot"></span>
+              <span class="dispatch-prep-label">{{ item.label }}</span>
+              <span class="dispatch-prep-pct">{{ item.pct }}%</span>
+              <span class="dispatch-prep-cartons">{{ item.cartons | number }} cartons</span>
+            </div>
+          </div>
+
+          <div class="dispatch-canvas-wrap">
             <canvas id="schedule-shipped-per-day-canvas"></canvas>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <div class="modal-footer">
-      <button type="button" class="btn btn-cancel" (click)="closeScheduleChartDialog()">
-        <i class="material-icons">close</i>
-        Close
-      </button>
+          <div class="dispatch-chart-footer">
+            <i class="material-icons">info</i>
+            Bubble size represents the number of cartons shipped. Hover over a bubble to see more details.
+          </div>
+        </div>
+
+        <aside class="dispatch-summary-panel">
+          <h4 class="dispatch-summary-title">Summary</h4>
+
+          <div class="dispatch-summary-item">
+            <div class="dispatch-summary-icon dispatch-summary-icon--blue">
+              <i class="material-icons">show_chart</i>
+            </div>
+            <div class="dispatch-summary-body">
+              <div class="dispatch-summary-label">Highest Day</div>
+              <div class="dispatch-summary-value">{{ scheduleChartSummary.highestDayLabel }}</div>
+              <div class="dispatch-summary-sub">{{ scheduleChartSummary.highestDayCartons | number }} cartons</div>
+            </div>
+          </div>
+
+          <div class="dispatch-summary-item">
+            <div class="dispatch-summary-icon dispatch-summary-icon--green">
+              <i class="material-icons">trending_down</i>
+            </div>
+            <div class="dispatch-summary-body">
+              <div class="dispatch-summary-label">Lowest Day</div>
+              <div class="dispatch-summary-value">{{ scheduleChartSummary.lowestDayLabel }}</div>
+              <div class="dispatch-summary-sub">{{ scheduleChartSummary.lowestDayCartons | number }} carton{{ scheduleChartSummary.lowestDayCartons !== 1 ? 's' : '' }}</div>
+            </div>
+          </div>
+
+          <div class="dispatch-summary-item">
+            <div class="dispatch-summary-icon dispatch-summary-icon--purple">
+              <i class="material-icons">pie_chart</i>
+            </div>
+            <div class="dispatch-summary-body">
+              <div class="dispatch-summary-label">Average per Dispatch Day</div>
+              <div class="dispatch-summary-value">{{ scheduleChartSummary.avgPerDispatchDay | number }}</div>
+              <div class="dispatch-summary-sub">cartons</div>
+            </div>
+          </div>
+
+          <div class="dispatch-summary-item">
+            <div class="dispatch-summary-icon dispatch-summary-icon--indigo">
+              <i class="material-icons">calendar_month</i>
+            </div>
+            <div class="dispatch-summary-body">
+              <div class="dispatch-summary-label">Total Dispatch Days</div>
+              <div class="dispatch-summary-value">{{ scheduleChartSummary.totalDispatchDays }}</div>
+              <div class="dispatch-summary-sub">days</div>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   </div>
 </div>

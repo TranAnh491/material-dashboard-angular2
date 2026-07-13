@@ -1,9 +1,12 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { Router } from '@angular/router';
 import firebase from 'firebase/compat/app';
-import { Subject, takeUntil } from 'rxjs';
+import { Subject, firstValueFrom, takeUntil } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
+import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
 type DepartmentCode =
   | 'WH'
@@ -59,6 +62,28 @@ type CalendarCell = {
   pendingCount: number;
   rejectedCount: number;
   rescheduledCount: number;
+  internalLabelCount: number;
+};
+
+type InternalLabelStatus = 'created' | 'received' | 'delivered';
+
+type InternalLabel = {
+  id: string;
+  code: string;
+  dayKey: number;
+  sendDateYmd: string;
+  senderName: string;
+  senderDepartment: string;
+  senderFactory: string;
+  receiverName: string;
+  receiverDepartment: string;
+  receiverFactory: string;
+  status: InternalLabelStatus;
+  createdAt?: Date;
+  createdByUid?: string;
+  receivedAt?: Date;
+  deliveredAt?: Date;
+  deliveredByEmployeeId?: string;
 };
 
 type WarehouseCode = 'ASM1' | 'ASM2' | 'ASM3';
@@ -84,6 +109,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   private readonly COLLECTION = 'truck-delivery-requests';
   private readonly BLOCKED_COLLECTION = 'truck-blocked-days';
   private readonly WAREHOUSE_COLLECTION = 'truck-warehouse-status';
+  private readonly INTERNAL_LABEL_COLLECTION = 'truck-internal-labels';
   private readonly bodyClass = 'truck-schedule-tab';
   private readonly WAREHOUSE_CODES: WarehouseCode[] = ['ASM1', 'ASM2', 'ASM3'];
   private readonly APPROVE_PASS = '112233';
@@ -93,6 +119,16 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   currentUser: User | null = null;
   canApprove = false;
   canDelete = false;
+  /** Chỉ các mã ASP này được mở/chọn "Có hàng / Không có hàng" ở lịch chạy cố định. */
+  private readonly WAREHOUSE_STATUS_EDITOR_IDS = new Set([
+    'ASP0054',
+    'ASP0106',
+    'ASP0119',
+    'ASP0538',
+    'ASP2733',
+    'ASP1761'
+  ]);
+  canManageWarehouseStatus = false;
 
   // Calendar state (chỉ 2 tuần: tuần hiện tại + tuần tiếp theo)
   rangeStart = this.getWeekStartMonday(new Date());
@@ -131,6 +167,29 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   isSubmitting = false;
   submitError = '';
 
+  // Modal state (Hướng dẫn)
+  showGuideModal = false;
+
+  // Modal state (Label chuyển hàng nội bộ 100mm x 100mm)
+  showLabelModal = false;
+  isSavingLabel = false;
+  labelSenderName = '';
+  labelReceiverName = '';
+  labelDepartment: DepartmentCode = 'WH';
+  labelFactory: WarehouseCode = 'ASM1';
+  labelReceiverDepartment: DepartmentCode = 'WH';
+  labelReceiverFactory: WarehouseCode = 'ASM1';
+  labelSendDateYmd = this.toYmd(new Date());
+
+  // Modal state (Scan lô hàng nội bộ — Đã nhận / Đã giao)
+  showScanLabelModal = false;
+  scanLabelCodeInput = '';
+  isLoadingScanLabel = false;
+  scanLabelError = '';
+  scanLabelResult: InternalLabel | null = null;
+  scanEmployeeCodeInput = '';
+  isSavingScanAction = false;
+
   // Modal state (Approve/Reject/Reschedule)
   showDecisionModal = false;
   decisionTarget: TruckDeliveryRequest | null = null;
@@ -168,8 +227,20 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private authService: FirebaseAuthService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private fns: AngularFireFunctions,
+    private dialog: MatDialog
   ) {}
+
+  /**
+   * Gửi email cho người đăng ký khi lệnh được Duyệt / Từ chối / Đổi ngày (Cloud Function tự đọc
+   * lại document + email công ty, không cần truyền thêm dữ liệu). Không chặn luồng chính nếu lỗi.
+   */
+  private notifyRequesterByEmail(requestId: string, decision: 'approved' | 'rejected' | 'rescheduled'): void {
+    firstValueFrom(this.fns.httpsCallable('sendTruckDeliveryDecisionEmailFn')({ requestId, decision })).catch(
+      (e) => console.warn('notifyRequesterByEmail failed', requestId, decision, e)
+    );
+  }
 
   ngOnInit(): void {
     document.body.classList.add(this.bodyClass);
@@ -179,6 +250,8 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       const role = String(u?.role || '').trim();
       this.canApprove = dept === 'WH' || role === 'Admin' || role === 'Quản lý';
       this.canDelete = this.canApprove;
+      const employeeId = String(u?.employeeId || '').trim().toUpperCase();
+      this.canManageWarehouseStatus = this.WAREHOUSE_STATUS_EDITOR_IDS.has(employeeId);
       this.applyRegisterUserDefaults();
       this.cdr.markForCheck();
     });
@@ -203,6 +276,373 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       this.router.navigate(['/login']);
     } catch (e) {
       console.error('logout error', e);
+    }
+  }
+
+  // ===== Hướng dẫn =====
+  openGuideModal(): void {
+    this.showGuideModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeGuideModal(): void {
+    this.showGuideModal = false;
+    this.cdr.markForCheck();
+  }
+
+  // ===== Label chuyển hàng nội bộ (100mm x 100mm) =====
+  openLabelModal(): void {
+    this.labelSenderName = String(this.currentUser?.displayName || '').trim();
+    this.labelReceiverName = '';
+    const dept = String(this.currentUser?.department || '').trim().toUpperCase();
+    this.labelDepartment = this.departments.includes(dept as DepartmentCode) ? (dept as DepartmentCode) : 'WH';
+    this.labelFactory = 'ASM1';
+    this.labelReceiverDepartment = 'WH';
+    this.labelReceiverFactory = 'ASM1';
+    this.labelSendDateYmd = this.toYmd(new Date());
+    this.showLabelModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeLabelModal(): void {
+    if (this.isSavingLabel) return;
+    this.showLabelModal = false;
+    this.cdr.markForCheck();
+  }
+
+  /** Mã 10 số ngẫu nhiên cho QR trên label (không bắt đầu bằng 0). */
+  private generateInternalLabelCode(): string {
+    let code = String(Math.floor(Math.random() * 9) + 1);
+    for (let i = 0; i < 9; i++) {
+      code += String(Math.floor(Math.random() * 10));
+    }
+    return code;
+  }
+
+  /**
+   * Tạo lô hàng nội bộ mới (lưu Firestore + mã QR), rồi mở cửa sổ in label 100mm x 100mm.
+   * Tài xế / người nhận sẽ dùng nút "Scan lô hàng" để quét mã QR này, chọn Đã nhận / Đã giao.
+   */
+  async printLabel(): Promise<void> {
+    if (this.isSavingLabel) return;
+    if (!this.labelSenderName.trim() || !this.labelReceiverName.trim()) {
+      alert('Vui lòng nhập đủ Tên người gửi và Tên người nhận.');
+      return;
+    }
+
+    this.isSavingLabel = true;
+    this.cdr.markForCheck();
+
+    try {
+      const code = this.generateInternalLabelCode();
+      const dayKey = this.toDayKey(this.labelSendDateYmd);
+
+      await this.firestore.collection(this.INTERNAL_LABEL_COLLECTION).add({
+        code,
+        dayKey,
+        sendDateYmd: this.labelSendDateYmd,
+        senderName: this.labelSenderName.trim(),
+        senderDepartment: this.labelDepartment,
+        senderFactory: this.labelFactory,
+        receiverName: this.labelReceiverName.trim(),
+        receiverDepartment: this.labelReceiverDepartment,
+        receiverFactory: this.labelReceiverFactory,
+        status: 'created' as InternalLabelStatus,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdByUid: String(this.currentUser?.uid || '')
+      });
+
+      const QRCode = (await import('qrcode')) as any;
+      const qrDataUrl = await QRCode.toDataURL(code, {
+        width: 240,
+        margin: 1,
+        color: { dark: '#000000', light: '#FFFFFF' }
+      });
+
+      this.openLabelPrintWindow(code, qrDataUrl);
+      this.showLabelModal = false;
+
+      // Cập nhật badge số lô hàng trên lịch nếu ngày gửi nằm trong 2 tuần đang xem
+      void this.loadInternalLabelCounts(this.rangeStart, this.rangeEnd);
+    } catch (e) {
+      console.error('printLabel error', e);
+      alert('Không tạo được label. Vui lòng thử lại.');
+    } finally {
+      this.isSavingLabel = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private openLabelPrintWindow(code: string, qrDataUrl: string): void {
+    const esc = (value: unknown) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+      return;
+    }
+
+    win.document.write(`
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title></title>
+          <style>
+            @page { size: 100mm 100mm; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body { margin: 0; padding: 0; width: 100mm; height: 100mm; font-family: Arial, sans-serif; color: #000; }
+            .label {
+              width: 100mm;
+              height: 100mm;
+              padding: 3mm;
+              border: 1.2mm solid #000;
+              display: flex;
+              flex-direction: column;
+            }
+            .label h1 {
+              margin: 0 0 2mm;
+              font-size: 11pt;
+              text-align: center;
+              letter-spacing: 0.5px;
+              border-bottom: 0.6mm solid #000;
+              padding-bottom: 1.5mm;
+            }
+            .label-body { display: flex; gap: 2mm; flex: 1; }
+            .qr-col { width: 27mm; display: flex; flex-direction: column; align-items: center; }
+            .qr-col img { width: 25mm; height: 25mm; }
+            .qr-col .code-text { margin-top: 1mm; font-size: 7pt; font-weight: 700; letter-spacing: 0.5px; }
+            table.label-table { width: 100%; border-collapse: collapse; flex: 1; height: fit-content; }
+            table.label-table td {
+              border: 0.4mm solid #000;
+              padding: 1.5mm 2mm;
+              vertical-align: top;
+            }
+            table.label-table td.k {
+              width: 16mm;
+              font-size: 7pt;
+              font-weight: 700;
+              text-transform: uppercase;
+              background: #f1f1f1;
+            }
+            table.label-table td.v { font-size: 9pt; font-weight: 700; word-break: break-word; }
+            table.label-table td.v .sub { display: block; font-size: 7.5pt; font-weight: 600; color: #333; margin-top: 0.5mm; }
+            .foot { margin-top: 1.5mm; font-size: 7pt; color: #444; text-align: right; }
+            @media print { html, body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <h1>CHUYỂN HÀNG NỘI BỘ</h1>
+            <div class="label-body">
+              <div class="qr-col">
+                <img src="${qrDataUrl}" alt="QR" />
+                <div class="code-text">${esc(code)}</div>
+              </div>
+              <table class="label-table">
+                <tr>
+                  <td class="k">Gửi</td>
+                  <td class="v">${esc(this.labelSenderName || '—')}<span class="sub">${esc(this.labelDepartment)} · ${esc(this.labelFactory)}</span></td>
+                </tr>
+                <tr>
+                  <td class="k">Nhận</td>
+                  <td class="v">${esc(this.labelReceiverName || '—')}<span class="sub">${esc(this.labelReceiverDepartment)} · ${esc(this.labelReceiverFactory)}</span></td>
+                </tr>
+                <tr>
+                  <td class="k">Ngày</td>
+                  <td class="v">${esc(this.labelSendDateYmd)}</td>
+                </tr>
+              </table>
+            </div>
+            <div class="foot">Tab: Xe Tải</div>
+          </div>
+          <script>
+            window.onload = function() { setTimeout(function(){ window.print(); }, 300); };
+          </script>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  }
+
+  // ===== Scan lô hàng nội bộ (Đã nhận / Đã giao) =====
+  openScanLabelModal(): void {
+    this.scanLabelCodeInput = '';
+    this.scanLabelError = '';
+    this.scanLabelResult = null;
+    this.scanEmployeeCodeInput = '';
+    this.showScanLabelModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeScanLabelModal(): void {
+    if (this.isSavingScanAction) return;
+    this.showScanLabelModal = false;
+    this.cdr.markForCheck();
+  }
+
+  private mapDocToInternalLabel(id: string, d: any): InternalLabel {
+    return {
+      id,
+      code: String(d?.code || ''),
+      dayKey: Number(d?.dayKey || 0) || 0,
+      sendDateYmd: String(d?.sendDateYmd || ''),
+      senderName: String(d?.senderName || ''),
+      senderDepartment: String(d?.senderDepartment || ''),
+      senderFactory: String(d?.senderFactory || ''),
+      receiverName: String(d?.receiverName || ''),
+      receiverDepartment: String(d?.receiverDepartment || ''),
+      receiverFactory: String(d?.receiverFactory || ''),
+      status: (String(d?.status || 'created') as InternalLabelStatus),
+      createdAt: d?.createdAt?.toDate?.() || undefined,
+      createdByUid: d?.createdByUid || undefined,
+      receivedAt: d?.receivedAt?.toDate?.() || undefined,
+      deliveredAt: d?.deliveredAt?.toDate?.() || undefined,
+      deliveredByEmployeeId: d?.deliveredByEmployeeId || undefined
+    };
+  }
+
+  /** Mở camera điện thoại để scan QR — dùng chung cho ô mã lô hàng và ô mã nhân viên nhận. */
+  private openCameraScan(data: QRScannerData): Promise<string | null> {
+    return new Promise((resolve) => {
+      const ref = this.dialog.open(QRScannerModalComponent, {
+        data,
+        panelClass: 'qr-scanner-dialog-panel',
+        maxWidth: '95vw',
+        width: '420px'
+      });
+      ref.afterClosed().subscribe((result) => {
+        if (result?.success && result?.text) {
+          resolve(String(result.text).trim());
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  /** Bấm nút camera cạnh ô mã lô hàng — quét xong tự điền mã + tìm lô hàng luôn. */
+  async scanLabelCodeWithCamera(): Promise<void> {
+    const text = await this.openCameraScan({
+      title: 'Quét QR lô hàng nội bộ',
+      message: 'Hướng camera vào mã QR trên label'
+    });
+    if (!text) return;
+    this.scanLabelCodeInput = text;
+    this.cdr.markForCheck();
+    await this.lookupScanLabel();
+  }
+
+  /** Bấm nút camera cạnh ô mã nhân viên nhận — quét xong tự điền (chỉ lấy 7 ký tự đầu ASP+4 số). */
+  async scanEmployeeCodeWithCamera(): Promise<void> {
+    const text = await this.openCameraScan({
+      title: 'Quét mã nhân viên người nhận',
+      message: 'Hướng camera vào mã nhân viên (thẻ / barcode)'
+    });
+    if (!text) return;
+    this.scanEmployeeCodeInput = text.trim().toUpperCase();
+    this.cdr.markForCheck();
+  }
+
+  /** Tìm lô hàng theo mã 10 số (gõ tay hoặc máy scan quét QR rồi tự điền vào ô). */
+  async lookupScanLabel(): Promise<void> {
+    const code = String(this.scanLabelCodeInput || '').trim();
+    if (!code) return;
+
+    this.isLoadingScanLabel = true;
+    this.scanLabelError = '';
+    this.scanLabelResult = null;
+    this.cdr.markForCheck();
+
+    try {
+      const snap = await this.firestore
+        .collection(this.INTERNAL_LABEL_COLLECTION, (ref) => ref.where('code', '==', code).limit(1))
+        .get()
+        .toPromise();
+
+      const doc = snap?.docs?.[0];
+      if (!doc) {
+        this.scanLabelError = `Không tìm thấy lô hàng với mã ${code}.`;
+        return;
+      }
+      this.scanLabelResult = this.mapDocToInternalLabel(doc.id, doc.data());
+    } catch (e) {
+      console.error('lookupScanLabel error', e);
+      this.scanLabelError = 'Tìm lô hàng thất bại. Vui lòng thử lại.';
+    } finally {
+      this.isLoadingScanLabel = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Đánh dấu "Đã nhận" (tài xế đã lấy hàng từ người gửi). */
+  async markLabelReceived(): Promise<void> {
+    if (!this.scanLabelResult?.id) return;
+    if (this.isSavingScanAction) return;
+
+    this.isSavingScanAction = true;
+    this.cdr.markForCheck();
+    try {
+      await this.firestore.collection(this.INTERNAL_LABEL_COLLECTION).doc(this.scanLabelResult.id).set(
+        {
+          status: 'received' as InternalLabelStatus,
+          receivedAt: firebase.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+      this.scanLabelResult = { ...this.scanLabelResult, status: 'received', receivedAt: new Date() };
+    } catch (e) {
+      console.error('markLabelReceived error', e);
+      alert('Cập nhật "Đã nhận" thất bại. Vui lòng thử lại.');
+    } finally {
+      this.isSavingScanAction = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Đánh dấu "Đã giao" — bắt buộc scan mã nhân viên người nhận (ASP + 4 số, đọc 7 ký tự đầu).
+   */
+  async markLabelDelivered(): Promise<void> {
+    if (!this.scanLabelResult?.id) return;
+    if (this.isSavingScanAction) return;
+
+    const raw = String(this.scanEmployeeCodeInput || '').trim().toUpperCase();
+    const employeeId = raw.slice(0, 7);
+    if (!/^ASP\d{4}$/.test(employeeId)) {
+      alert('Vui lòng scan/nhập đúng mã nhân viên người nhận (ASP + 4 số).');
+      return;
+    }
+
+    this.isSavingScanAction = true;
+    this.cdr.markForCheck();
+    try {
+      await this.firestore.collection(this.INTERNAL_LABEL_COLLECTION).doc(this.scanLabelResult.id).set(
+        {
+          status: 'delivered' as InternalLabelStatus,
+          deliveredAt: firebase.firestore.FieldValue.serverTimestamp(),
+          deliveredByEmployeeId: employeeId
+        },
+        { merge: true }
+      );
+      this.scanLabelResult = {
+        ...this.scanLabelResult,
+        status: 'delivered',
+        deliveredAt: new Date(),
+        deliveredByEmployeeId: employeeId
+      };
+      this.scanEmployeeCodeInput = '';
+      alert(`✅ Đã giao cho ${employeeId}.`);
+    } catch (e) {
+      console.error('markLabelDelivered error', e);
+      alert('Cập nhật "Đã giao" thất bại. Vui lòng thử lại.');
+    } finally {
+      this.isSavingScanAction = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -366,7 +806,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   }
 
   async setWarehouseHasGoods(code: WarehouseCode, hasGoods: boolean): Promise<void> {
-    if (!this.canApprove || this.isWarehouseSaving) return;
+    if (!this.canManageWarehouseStatus || this.isWarehouseSaving) return;
 
     if (code === 'ASM3' && hasGoods) {
       await this.setAsm3Scenario('return_asm1');
@@ -378,7 +818,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   }
 
   async setAsm3Scenario(scenario: Asm3Scenario): Promise<void> {
-    if (!this.canApprove || this.isWarehouseSaving) return;
+    if (!this.canManageWarehouseStatus || this.isWarehouseSaving) return;
 
     const hasGoods = scenario !== 'no_shipment';
     await this.saveWarehouseStatus('ASM3', hasGoods, scenario);
@@ -640,12 +1080,40 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
         approvedCount: 0,
         pendingCount: 0,
         rejectedCount: 0,
-        rescheduledCount: 0
+        rescheduledCount: 0,
+        internalLabelCount: 0
       };
       if (i < 7) w1.push(cell);
       else w2.push(cell);
     }
     this.calendarWeeks = [w1, w2];
+  }
+
+  /** Đếm số lô hàng nội bộ được tạo mỗi ngày (theo dayKey) → hiện badge trên lịch. */
+  private async loadInternalLabelCounts(rangeStart: Date, rangeEnd: Date): Promise<void> {
+    try {
+      const startKey = this.toDayKey(this.toYmd(rangeStart));
+      const endKey = this.toDayKey(this.toYmd(rangeEnd));
+      const snap = await this.firestore
+        .collection(this.INTERNAL_LABEL_COLLECTION, (ref) =>
+          ref.where('dayKey', '>=', startKey).where('dayKey', '<=', endKey).limit(2000)
+        )
+        .get()
+        .toPromise();
+
+      const countByDayKey = new Map<number, number>();
+      (snap?.docs || []).forEach((doc) => {
+        const dk = Number((doc.data() as any)?.dayKey || 0) || 0;
+        if (dk > 0) countByDayKey.set(dk, (countByDayKey.get(dk) || 0) + 1);
+      });
+
+      this.calendarWeeks = this.calendarWeeks.map((wk) =>
+        wk.map((c) => ({ ...c, internalLabelCount: countByDayKey.get(this.toDayKey(c.ymd)) || 0 }))
+      );
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('loadInternalLabelCounts error', e);
+    }
   }
 
   private applyRangeData(): void {
@@ -713,6 +1181,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
     this.isLoadingRange = true;
     this.loadError = '';
     this.buildTwoWeekCalendar(rangeStart);
+    void this.loadInternalLabelCounts(rangeStart, rangeEnd);
 
     try {
       const startKey = this.toDayKey(this.toYmd(rangeStart));
@@ -922,6 +1391,16 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       this.cdr.markForCheck();
       return;
     }
+    if (!receiverLocationLink) {
+      this.submitError = 'Thiếu link địa điểm nhận.';
+      this.cdr.markForCheck();
+      return;
+    }
+    if (!department) {
+      this.submitError = 'Thiếu bộ phận.';
+      this.cdr.markForCheck();
+      return;
+    }
 
     this.isSubmitting = true;
     this.cdr.markForCheck();
@@ -1016,6 +1495,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
         { merge: true }
       );
 
+      this.notifyRequesterByEmail(this.decisionTarget.id, 'rejected');
       this.isDecisionProcessing = false;
       this.closeDecisionModal();
       await this.loadRange(this.rangeStart, this.rangeEnd);
@@ -1049,6 +1529,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
         { merge: true }
       );
 
+      this.notifyRequesterByEmail(this.decisionTarget.id, 'approved');
       this.isDecisionProcessing = false;
       this.closeDecisionModal();
       await this.loadRange(this.rangeStart, this.rangeEnd);
@@ -1136,6 +1617,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       const maxYmd = this.toYmd(this.rangeEnd);
       const outOfRange = ymd < minYmd || ymd > maxYmd;
 
+      this.notifyRequesterByEmail(this.decisionTarget.id, 'rescheduled');
       this.isDecisionProcessing = false;
       this.closeDecisionModal();
       await this.loadRange(this.rangeStart, this.rangeEnd);

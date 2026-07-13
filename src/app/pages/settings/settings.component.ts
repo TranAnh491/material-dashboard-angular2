@@ -1,17 +1,13 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
-import { PermissionService, UserPermission } from '../../services/permission.service';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/auth';
-import { UserPermissionService } from '../../services/user-permission.service';
 import { NotificationService } from '../../services/notification.service';
 import { EmployeeCleanupService, CleanupResult, EmployeeComparison } from '../../services/employee-cleanup.service';
 import { ClientReloadService } from '../../services/client-reload.service';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-settings',
@@ -20,19 +16,8 @@ import { Subscription, firstValueFrom } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SettingsComponent implements OnInit, OnDestroy {
-  isAdminLoggedIn = false;
-  private hasLoadedAdminData = false;
-  adminUsername = '';
-  adminPassword = '';
-  loginError = '';
-  isLoggedIn = false;
-  newEmployeeId = '';
-  newPassword = '';
-  hasDeletePermission = false;
-  userPermissions: UserPermission[] = [];
-  editingUser: UserPermission | null = null;
-  showAddUserForm = false;
-  isLoading = false;
+  /** Truy cập trang này đã được chốt ở route (SettingsGuard → chỉ ASP0106) — không còn cổng đăng nhập phụ trong component. */
+  isDataLoaded = false;
   // Firebase users
   firebaseUsers: User[] = [];
   isLoadingFirebaseUsers = false;
@@ -44,67 +29,63 @@ export class SettingsComponent implements OnInit, OnDestroy {
   firebaseUserDepartments: { [key: string]: string } = {};
   // Firebase user passwords
   firebaseUserPasswords: { [key: string]: string } = {};
-  isEditingPermissions = true;
-  // Available tabs for permissions - đồng bộ với sidebar routes hiện tại
-  availableTabs = [
+  // Available tabs for permissions - đồng bộ với sidebar routes hiện tại (nhóm để hiển thị rõ ràng hơn trong popup quyền)
+  availableTabs: Array<{ key: string; name: string; category: string }> = [
     // Main tabs
-    { key: 'dashboard', name: 'Dashboard' },
-    { key: 'task', name: 'Task' },
-    { key: 'materials-dashboard', name: 'Materials Dashboard' },
-    { key: 'fgs-dashboard', name: 'FGs Dashboard' },
-    { key: 'pd-control', name: 'PD Control' },
-    { key: 'work-order-status', name: 'Work Order' },
-    { key: 'shipment', name: 'Shipment' },
-    
+    { key: 'dashboard', name: 'Dashboard', category: 'Chính' },
+    { key: 'task', name: 'Task', category: 'Chính' },
+    { key: 'materials-dashboard', name: 'Materials Dashboard', category: 'Chính' },
+    { key: 'fgs-dashboard', name: 'FGs Dashboard', category: 'Chính' },
+    { key: 'pd-control', name: 'PD Control', category: 'Chính' },
+    { key: 'work-order-status', name: 'Work Order', category: 'Chính' },
+    { key: 'shipment', name: 'Shipment', category: 'Chính' },
+
     // ASM1 RM tabs
-    { key: 'inbound-asm1', name: 'RM1 Inbound' },
-    { key: 'outbound-asm1', name: 'RM1 Outbound' },
-    { key: 'materials-asm1', name: 'RM1 Inventory' },
-    { key: 'inventory-overview-asm1', name: 'RM1 Overview' },
-    { key: 'bag-history', name: 'Control Batch' },
-    
+    { key: 'inbound-asm1', name: 'RM1 Inbound', category: 'RM ASM1' },
+    { key: 'outbound-asm1', name: 'RM1 Outbound', category: 'RM ASM1' },
+    { key: 'materials-asm1', name: 'RM1 Inventory', category: 'RM ASM1' },
+    { key: 'inventory-overview-asm1', name: 'RM1 Overview', category: 'RM ASM1' },
+    { key: 'bag-history', name: 'Control Batch', category: 'RM ASM1' },
+
     // ASM2 RM tabs
-    { key: 'inbound-asm2', name: 'RM2 Inbound' },
-    { key: 'outbound-asm2', name: 'RM2 Outbound' },
-    { key: 'materials-asm2', name: 'RM2 Inventory' },
-    { key: 'inventory-overview-asm2', name: 'RM2 Overview' },
-    
+    { key: 'inbound-asm2', name: 'RM2 Inbound', category: 'RM ASM2' },
+    { key: 'outbound-asm2', name: 'RM2 Outbound', category: 'RM ASM2' },
+    { key: 'materials-asm2', name: 'RM2 Inventory', category: 'RM ASM2' },
+    { key: 'inventory-overview-asm2', name: 'RM2 Overview', category: 'RM ASM2' },
+
     // ASM FG tabs
-    { key: 'fg-in', name: 'FG In' },
-    { key: 'fg-out', name: 'FG Out' },
-    { key: 'fg-check', name: 'FG Check' },
-    { key: 'fg-inventory', name: 'FG Inventory' },
-    { key: 'fg-overview', name: 'FG Overview' },
-    { key: 'fg-location', name: 'FG Location' },
-    { key: 'pallet-id', name: 'Pallet ID' },
-    
+    { key: 'fg-in', name: 'FG In', category: 'FG' },
+    { key: 'fg-out', name: 'FG Out', category: 'FG' },
+    { key: 'fg-check', name: 'FG Check', category: 'FG' },
+    { key: 'fg-inventory', name: 'FG Inventory', category: 'FG' },
+    { key: 'fg-overview', name: 'FG Overview', category: 'FG' },
+    { key: 'fg-location', name: 'FG Location', category: 'FG' },
+    { key: 'pallet-id', name: 'Pallet ID', category: 'FG' },
+
     // Other tabs
-    { key: 'location', name: 'Materials' },
-    { key: 'layout-warehouse', name: 'Layout Warehouse' },
-    { key: 'manage', name: 'Manage' },
-    { key: 'stock-check', name: 'Stock Check' },
-    { key: 'label', name: 'Label' },
-    { key: 'index', name: 'Bonded Report' },
-    { key: 'sxxk', name: 'SXXK' },
-    { key: 'scrap', name: 'SCRAP' },
-    { key: 'checklist', name: 'Safety & Quality' },
-    { key: 'equipment', name: 'Training' },
-    { key: 'qc', name: 'Quality' },
-    { key: 'nhiet-do', name: 'Nhiệt Độ' },
-    { key: 'rm1-delivery', name: 'RM Delivery' },
-    { key: 'report', name: 'Report' },
-    { key: 'shorted-materials', name: 'Shorted materials' },
-    { key: 'settings', name: 'Settings' },
-    { key: 'zalo', name: 'Zalo' }
+    { key: 'location', name: 'Materials', category: 'Khác' },
+    { key: 'layout-warehouse', name: 'Layout Warehouse', category: 'Khác' },
+    { key: 'manage', name: 'Manage', category: 'Khác' },
+    { key: 'stock-check', name: 'Stock Check', category: 'Khác' },
+    { key: 'label', name: 'Label', category: 'Khác' },
+    { key: 'index', name: 'Bonded Report', category: 'Khác' },
+    { key: 'sxxk', name: 'SXXK', category: 'Khác' },
+    { key: 'scrap', name: 'SCRAP', category: 'Khác' },
+    { key: 'checklist', name: 'Safety & Quality', category: 'Khác' },
+    { key: 'equipment', name: 'Training', category: 'Khác' },
+    { key: 'qc', name: 'Quality', category: 'Khác' },
+    { key: 'nhiet-do', name: 'Nhiệt Độ', category: 'Khác' },
+    { key: 'rm1-delivery', name: 'RM Delivery', category: 'Khác' },
+    { key: 'report', name: 'Report', category: 'Khác' },
+    { key: 'shorted-materials', name: 'Shorted materials', category: 'Khác' },
+    { key: 'settings', name: 'Settings', category: 'Khác' },
+    { key: 'zalo', name: 'Zalo', category: 'Khác' }
   ];
   // Firebase user tab permissions
   firebaseUserTabPermissions: { [key: string]: { [key: string]: boolean } } = {};
   // Notifications
   newUserNotifications: any[] = [];
-  
-  // Table columns for Firebase users
-  displayedColumns: string[] = ['email', 'role', 'department', 'factory', 'displayName', 'readOnly', 'lastLoginAt', 'createdAt', 'permission', 'completePermission', 'actions'];
-  
+
   // Thêm biến để kiểm soát refresh
   private refreshTimeout: any = null;
   private isRefreshing = false;
@@ -138,6 +119,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   createAccountEmail = '';
   isRegisteringUser = false;
   isDeletingAccountByEmployeeId = false;
+  isReleasingRegistrationEmail = false;
 
   /** Bộ phận — đồng bộ với bảng user cũ */
   readonly departmentOptions = ['WH', 'QA', 'ENG', 'PLAN', 'PD', 'CS', 'ACC'];
@@ -172,11 +154,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
   private _empIdCache = new Map<string, string>();
 
   constructor(
-    private permissionService: PermissionService,
     private firebaseAuthService: FirebaseAuthService,
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private userPermissionService: UserPermissionService,
     private notificationService: NotificationService,
     private employeeCleanupService: EmployeeCleanupService,
     private clientReloadService: ClientReloadService,
@@ -397,6 +377,44 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Giải phóng email bị kẹt trong Firebase Auth (không hiện trong danh sách Settings). */
+  async releaseRegistrationEmail(): Promise<void> {
+    if (this.isReleasingRegistrationEmail) return;
+
+    const email = (this.createAccountEmail || '').trim().toLowerCase();
+    if (!email) {
+      alert('Vui lòng nhập email cần giải phóng vào ô Email đăng ký.');
+      return;
+    }
+    if (!this.isAllowedRegistrationEmail(email)) {
+      alert('Email phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
+      return;
+    }
+
+    const ok = confirm(
+      `Giải phóng email ${email}?\n\n` +
+        'Dùng khi email báo "đã được dùng" nhưng không thấy tài khoản trong danh sách.\n' +
+        'Hệ thống sẽ xóa tài khoản ẩn trong Firebase Authentication (nếu có).'
+    );
+    if (!ok) return;
+
+    this.isReleasingRegistrationEmail = true;
+    try {
+      const result: any = await firstValueFrom(
+        this.fns.httpsCallable('adminReleaseRegistrationEmailFn')({ email })
+      );
+      alert(`✅ ${result?.message || 'Đã giải phóng email.'}`);
+    } catch (error: any) {
+      console.error('❌ releaseRegistrationEmail:', error);
+      const code = typeof error?.code === 'string' ? error.code : '';
+      const msg = (error?.message as string) || '';
+      alert('❌ Không giải phóng được email: ' + (code ? `${code} — ` : '') + (msg || '(không có chi tiết)'));
+    } finally {
+      this.isReleasingRegistrationEmail = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   /** Email đăng ký (Settings + đồng bộ server) */
   private isAllowedRegistrationEmail(email: string): boolean {
     const e = email.trim().toLowerCase();
@@ -591,14 +609,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    
-    // Export component ra window để debug
-    (window as any).settingsComponent = this;
-    
-    // Setup auth state listener
+    // Truy cập trang này đã được SettingsGuard chốt (chỉ ASP0106) — load dữ liệu ngay.
     this.setupAuthStateListener();
+    void this.loadInitialData();
+  }
 
-    // Không load dữ liệu nặng (Firestore) cho đến khi admin login thành công.
+  private async loadInitialData(): Promise<void> {
+    await this.loadFirebaseUsers();
+    this.isDataLoaded = true;
+    this.cdr.markForCheck();
   }
 
   ngOnDestroy(): void {
@@ -626,310 +645,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
 
 
-  // Kiểm tra trạng thái Firestore và hiển thị thông tin debug
-  async checkFirestoreStatus(): Promise<void> {
+  /** Đăng xuất tài khoản thật (Firebase Auth) — trang này chỉ ASP0106 truy cập được. */
+  async logout(): Promise<void> {
     try {
-      
-      // Kiểm tra quyền truy cập collection 'users'
-      try {
-        const usersSnapshot = await this.firestore.collection('users').get().toPromise();
-      } catch (error) {
-        console.error('❌ Cannot access users collection:', error);
-      }
-      
-      // Kiểm tra quyền truy cập collection 'user-permissions'
-      try {
-        const permissionsSnapshot = await this.firestore.collection('user-permissions').get().toPromise();
-      } catch (error) {
-        console.error('❌ Cannot access user-permissions collection:', error);
-      }
-      
-      // Kiểm tra current user
-      const currentUser = await this.afAuth.currentUser;
-      if (currentUser) {
-        
-        // Kiểm tra xem current user có trong Firestore không
-        try {
-          const userDoc = await this.firestore.collection('users').doc(currentUser.uid).get().toPromise();
-        } catch (error) {
-          console.error('❌ Cannot check current user in Firestore:', error);
-        }
-      } else {
-      }
-      
-      
+      await this.firebaseAuthService.signOut();
+      this.router.navigate(['/login']);
     } catch (error) {
-      console.error('❌ Error checking Firestore status:', error);
-    }
-  }
-
-  async adminLogin(): Promise<void> {
-    if (this.adminUsername === 'Admin' && this.adminPassword === 'Admin') {
-      this.isAdminLoggedIn = true;
-      this.loginError = '';
-      this.adminPassword = ''; // Clear password
-
-      // Chỉ load data sau khi admin login thành công
-      if (!this.hasLoadedAdminData) {
-        await this.loadUserPermissions();
-        await this.loadFirebaseUsers();
-        // Luôn load permissions vì luôn cho phép sửa
-        await this.loadFirebaseUserPermissions();
-        this.hasLoadedAdminData = true;
-      }
-
-      // Seed tài khoản ASP cố định (có thể gọi refresh)
-      await this.ensureAspAccountsSeeded();
-    } else {
-      this.loginError = 'Tên đăng nhập hoặc mật khẩu không đúng!';
-      this.adminPassword = '';
-    }
-  }
-
-  /**
-   * Sau khi đăng nhập Settings (Admin/Admin), tạo/đồng bộ các tài khoản ASP cố định (Firebase Auth + Firestore).
-   */
-  private async ensureAspAccountsSeeded(): Promise<void> {
-    await this.ensureAspAccount('0054', { grantSettingsTab: false });
-    await this.ensureAspAccount('0609', { grantSettingsTab: true });
-    await this.refreshFirebaseUsers();
-  }
-
-  /**
-   * Tạo / đồng bộ tài khoản asp{4 số}@asp.com, mật khẩu 123456.
-   * grantSettingsTab: bật thêm tab Settings (kèm Dashboard).
-   */
-  private async ensureAspAccount(
-    fourDigits: string,
-    options: { grantSettingsTab: boolean }
-  ): Promise<void> {
-    const digits = (fourDigits || '').replace(/\D/g, '').padStart(4, '0').slice(-4);
-    const email = `asp${digits}@asp.com`;
-    const password = '123456';
-    const displayName = `ASP${digits}`;
-
-    const appName = `settings-create-${digits}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    let secondaryApp: firebase.app.App | null = null;
-    try {
-      const appOptions = this.firestore.firestore.app.options as any;
-      secondaryApp = firebase.initializeApp(appOptions, appName);
-      const secondaryAuth = secondaryApp.auth();
-
-      let uid: string;
-      let isNewUser = false;
-
-      const resolveExistingUid = async (): Promise<string> => {
-        const r: any = await firstValueFrom(
-          this.fns.httpsCallable('adminSetUserPasswordByEmployeeIdFn')({
-            employeeId: fourDigits,
-            newPassword: password
-          })
-        );
-        const existingUid = r?.uid as string;
-        if (!existingUid) {
-          throw new Error(`Không nhận được uid khi seed ${displayName}.`);
-        }
-        return existingUid;
-      };
-
-      try {
-        uid = await resolveExistingUid();
-      } catch {
-        try {
-          const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
-          uid = cred.user!.uid;
-          isNewUser = true;
-          await secondaryAuth.signOut();
-        } catch (createErr: any) {
-          if (createErr?.code === 'auth/email-already-in-use') {
-            uid = await resolveExistingUid();
-          } else {
-            throw createErr;
-          }
-        }
-      }
-
-      await this.firestore.collection('users').doc(uid).set(
-        {
-          uid,
-          email,
-          displayName,
-          password,
-          department: '',
-          factory: '',
-          role: 'User',
-          createdAt: new Date(),
-          lastLoginAt: new Date()
-        },
-        { merge: true }
-      );
-
-      const defaultTabPermissions: { [key: string]: boolean } = {};
-      this.availableTabs.forEach((tab) => {
-        const allow =
-          tab.key === 'dashboard' || (options.grantSettingsTab && tab.key === 'settings');
-        defaultTabPermissions[tab.key] = allow;
-      });
-
-      const permRef = this.firestore.collection('user-permissions').doc(uid);
-      const tabPermRef = this.firestore.collection('user-tab-permissions').doc(uid);
-      const [permSnap, tabPermSnap] = await Promise.all([
-        permRef.get().toPromise(),
-        tabPermRef.get().toPromise()
-      ]);
-
-      // Chỉ tạo quyền mặc định khi user mới hoặc chưa có doc — không ghi đè quyền admin đã lưu
-      if (isNewUser || !permSnap?.exists) {
-        await permRef.set(
-          {
-            uid,
-            email,
-            displayName,
-            hasDeletePermission: false,
-            hasCompletePermission: false,
-            hasReadOnlyPermission: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          { merge: true }
-        );
-      }
-
-      if (isNewUser || !tabPermSnap?.exists) {
-        await tabPermRef.set(
-          {
-            uid,
-            email,
-            displayName,
-            tabPermissions: defaultTabPermissions,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          { merge: true }
-        );
-      }
-    } catch (error) {
-      console.error(`❌ ensureAspAccount ${displayName}:`, error);
-    } finally {
-      if (secondaryApp) {
-        try {
-          await secondaryApp.delete();
-        } catch (e) {
-          console.warn('⚠️ Failed to delete secondary Firebase app:', e);
-        }
-      }
-    }
-  }
-
-  logout(): void {
-    this.isAdminLoggedIn = false;
-    this.adminUsername = '';
-    this.adminPassword = '';
-    this.loginError = '';
-
-    // Giữ hasLoadedAdminData để lần login sau không load lại toàn bộ.
-    // Có thể clear arrays nếu bạn muốn (nhưng UI đã ẩn khi chưa login).
-  }
-
-  async loadUserPermissions(): Promise<void> {
-    this.isLoading = true;
-    try {
-      this.userPermissions = await this.permissionService.getAllUserPermissions();
-    } catch (error) {
-      console.error('Error loading user permissions:', error);
-    }
-    this.isLoading = false;
-    this.cdr.markForCheck();
-  }
-
-  async addUser(): Promise<void> {
-    if (!this.newEmployeeId || !this.newPassword) {
-      alert('Vui lòng nhập đầy đủ thông tin!');
-      return;
-    }
-
-    if (this.userPermissions.find(u => u.employeeId === this.newEmployeeId)) {
-      alert('Mã nhân viên đã tồn tại!');
-      return;
-    }
-
-    this.isLoading = true;
-    try {
-      const newUser: UserPermission = {
-        employeeId: this.newEmployeeId,
-        password: this.newPassword,
-        hasDeletePermission: this.hasDeletePermission,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      await this.permissionService.saveUserPermission(newUser);
-      await this.loadUserPermissions();
-      
-      // Reset form
-      this.newEmployeeId = '';
-      this.newPassword = '';
-      this.hasDeletePermission = false;
-      this.showAddUserForm = false;
-
-      alert('Thêm nhân viên thành công!');
-    } catch (error) {
-      console.error('Error adding user:', error);
-      alert('Có lỗi xảy ra khi thêm nhân viên!');
-    }
-    this.isLoading = false;
-    this.cdr.markForCheck();
-  }
-
-  editUser(user: UserPermission): void {
-    this.editingUser = { ...user };
-  }
-
-  async updateUser(): Promise<void> {
-    if (!this.editingUser) return;
-
-    this.isLoading = true;
-    try {
-      this.editingUser.updatedAt = new Date();
-      await this.permissionService.updateUserPermission(this.editingUser);
-      await this.loadUserPermissions();
-      this.editingUser = null;
-      alert('Cập nhật thành công!');
-    } catch (error) {
-      console.error('Error updating user:', error);
-      alert('Có lỗi xảy ra khi cập nhật!');
-    }
-    this.isLoading = false;
-    this.cdr.markForCheck();
-  }
-
-  cancelEdit(): void {
-    this.editingUser = null;
-  }
-
-  async deleteUser(user: UserPermission): Promise<void> {
-    if (confirm(`Bạn có chắc chắn muốn xóa nhân viên ${user.employeeId}?`)) {
-      this.isLoading = true;
-      try {
-        await this.permissionService.deleteUserPermission(user.employeeId);
-        await this.loadUserPermissions();
-        alert('Xóa nhân viên thành công!');
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        alert('Có lỗi xảy ra khi xóa nhân viên!');
-      }
-      this.isLoading = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  toggleAddUserForm(): void {
-    this.showAddUserForm = !this.showAddUserForm;
-    if (!this.showAddUserForm) {
-      // Reset form when hiding
-      this.newEmployeeId = '';
-      this.newPassword = '';
-      this.hasDeletePermission = false;
+      console.error('❌ logout error:', error);
     }
   }
 
@@ -1145,11 +867,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   async deleteFirebaseUser(user: User): Promise<void> {
 
-    if (confirm(`Bạn có chắc chắn muốn xóa user ${user.email}?\n\nHành động này sẽ xóa:\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
+    if (confirm(`Bạn có chắc chắn muốn xóa user ${user.email}?\n\nHành động này sẽ xóa:\n- Firebase Authentication\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
       try {
-        
-        // Sử dụng service để xóa hoàn toàn
-        await this.firebaseAuthService.deleteUser(user.uid);
+        await this.deleteUserCompletelyByUid(user.uid);
         
         // Remove from local arrays
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== user.uid);
@@ -1171,57 +891,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
-
-
-  getCurrentUser(): User | null {
-    let currentUser: User | null = null;
-    this.firebaseAuthService.currentUser.subscribe(user => {
-      currentUser = user;
-    });
-    return currentUser;
+  /** Xóa hoàn toàn user (Auth + Firestore) qua Cloud Function — client không xóa được Auth. */
+  private async deleteUserCompletelyByUid(uid: string): Promise<void> {
+    await firstValueFrom(
+      this.fns.httpsCallable('adminDeleteUserByUidFn')({ uid })
+    );
   }
 
 
-
-  /** @deprecated Bulk-loaded inside loadFirebaseUsers() — kept for backward compatibility */
-  async loadFirebaseUserPermissions(): Promise<void> { this._rebuildUserCache(); }
-  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
-  async loadFirebaseUserReadOnlyPermissions(): Promise<void> {}
-  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
-  async loadFirebaseUserDepartments(): Promise<void> {}
-  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
-  async loadFirebaseUserPasswords(): Promise<void> {}
-  /** @deprecated Bulk-loaded inside loadFirebaseUsers() */
-  async loadFirebaseUserTabPermissions(): Promise<void> { this._rebuildUserCache(); }
-
-  /** Chỉ tạo doc quyền tab nếu chưa có — không ghi đè quyền admin đã lưu */
-  private async createDefaultTabPermissionsForUser(user: User): Promise<void> {
-    try {
-      const docRef = this.firestore.collection('user-tab-permissions').doc(user.uid);
-      const existing = await docRef.get().toPromise();
-      if (existing?.exists) {
-        return;
-      }
-
-      const finalPermissions: { [key: string]: boolean } = {};
-      this.availableTabs.forEach(tab => {
-        finalPermissions[tab.key] = tab.key === 'dashboard';
-      });
-
-      await docRef.set({
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName || '',
-        tabPermissions: finalPermissions,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      this.firebaseUserTabPermissions[user.uid] = finalPermissions;
-    } catch (error) {
-      console.error(`❌ Error creating default tab permissions for ${user.email}:`, error);
-    }
-  }
 
   /** Đọc lại quyền tab từ Firestore (sau lưu / mở popup) */
   private async reloadTabPermissionsForUser(uid: string): Promise<void> {
@@ -1258,394 +935,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
   }
 
-  async refreshTabPermissions(): Promise<void> {
-    try {
-      await this.loadFirebaseUserTabPermissions();
-      await this.syncMissingTabPermissions();
-    } catch (error) {
-      console.error('❌ Error refreshing tab permissions:', error);
-    }
-  }
-
-  private async syncMissingTabPermissions(): Promise<void> {
-    try {
-      
-      for (const user of this.firebaseUsers) {
-        const userTabPermissions = this.firebaseUserTabPermissions[user.uid] || {};
-        let hasChanges = false;
-        
-        // Check if user has permissions for all available tabs
-        for (const tab of this.availableTabs) {
-          if (userTabPermissions[tab.key] === undefined) {
-            // Add missing tab permission - KHÔNG có tab nào được tick mặc định
-            userTabPermissions[tab.key] = false;
-            hasChanges = true;
-          }
-        }
-        
-        // Save updated permissions if there were changes
-        if (hasChanges) {
-          await this.firestore.collection('user-tab-permissions').doc(user.uid).set({
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || '',
-            tabPermissions: userTabPermissions,
-            updatedAt: new Date()
-          }, { merge: true });
-          
-          // Update local data
-          this.firebaseUserTabPermissions[user.uid] = userTabPermissions;
-        }
-      }
-      
-    } catch (error) {
-      console.error('❌ Error syncing tab permissions:', error);
-    }
-  }
-
-  // Other methods...
-  async updateUserPermission(userId: string, hasPermission: boolean): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      await this.firestore.collection('user-permissions').doc(userId).set({
-        uid: userId,
-        email: user.email,
-        displayName: user.displayName || '',
-        hasDeletePermission: hasPermission,
-        hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
-        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
-        updatedAt: new Date()
-      }, { merge: true });
-
-      this.firebaseUserPermissions[userId] = hasPermission;
-    } catch (error) {
-      console.error('❌ Error updating user permission:', error);
-    }
-  }
-
-  async updateUserCompletePermission(userId: string, hasPermission: boolean): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      await this.firestore.collection('user-permissions').doc(userId).set({
-        uid: userId,
-        email: user.email,
-        displayName: user.displayName || '',
-        hasDeletePermission: this.firebaseUserPermissions[userId] || false,
-        hasCompletePermission: hasPermission,
-        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
-        updatedAt: new Date()
-      }, { merge: true });
-
-      this.firebaseUserCompletePermissions[userId] = hasPermission;
-    } catch (error) {
-      console.error('❌ Error updating user complete permission:', error);
-    }
-  }
-
-  async updateUserReadOnlyPermission(userId: string, hasPermission: boolean): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      await this.firestore.collection('user-permissions').doc(userId).set({
-        uid: userId,
-        email: user.email,
-        displayName: user.displayName || '',
-        hasDeletePermission: this.firebaseUserPermissions[userId] || false,
-        hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
-        hasReadOnlyPermission: hasPermission,
-        updatedAt: new Date()
-      }, { merge: true });
-
-      this.firebaseUserReadOnlyPermissions[userId] = hasPermission;
-    } catch (error) {
-      console.error('❌ Error updating user read-only permission:', error);
-    }
-  }
-
-  // Lấy tab permissions mặc định dựa trên department
-  private getDefaultTabPermissionsByDepartment(department: string): { [key: string]: boolean } {
-    const defaultPermissions: { [key: string]: boolean } = {};
-    
-    // Khởi tạo tất cả tabs là false
-    this.availableTabs.forEach(tab => {
-      defaultPermissions[tab.key] = false;
-    });
-
-    // Thiết lập permissions theo department
-    switch (department?.toUpperCase()) {
-      case 'QA':
-        // QA: Dashboard, Label, Quality
-        defaultPermissions['dashboard'] = true;
-        defaultPermissions['label'] = true;
-        defaultPermissions['qc'] = true; // Quality
-        break;
-        
-      case 'PLAN':
-        // PLAN: Dashboard, Work order, Find
-        defaultPermissions['dashboard'] = true;
-        defaultPermissions['work-order-status'] = true; // Work Order
-        defaultPermissions['find'] = true;
-        break;
-        
-      case 'ENG':
-        // ENG: Dashboard, Label
-        defaultPermissions['dashboard'] = true;
-        defaultPermissions['label'] = true;
-        break;
-        
-      case 'ACC':
-        // ACC: Dashboard, Find
-        defaultPermissions['dashboard'] = true;
-        defaultPermissions['find'] = true;
-        break;
-        
-      default:
-        // Mặc định chỉ có Dashboard
-        defaultPermissions['dashboard'] = true;
-        break;
-    }
-    
-    return defaultPermissions;
-  }
-
-  async updateUserDepartment(userId: string, department: string): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      await this.firestore.collection('users').doc(userId).update({
-        department: department,
-        updatedAt: new Date()
-      });
-
-      // Cập nhật permissions nếu có
-      if (this.firebaseUserPermissions[userId] !== undefined || 
-          this.firebaseUserCompletePermissions[userId] !== undefined ||
-          this.firebaseUserReadOnlyPermissions[userId] !== undefined) {
-        await this.firestore.collection('user-permissions').doc(userId).set({
-          uid: userId,
-          email: user.email,
-          displayName: user.displayName || '',
-          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
-          hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
-          hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
-          updatedAt: new Date()
-        }, { merge: true });
-      }
-
-      // Tự động cập nhật tab permissions dựa trên department
-      const defaultTabPermissions = this.getDefaultTabPermissionsByDepartment(department);
-      
-      // Đảm bảo user có tab permissions object
-      if (!this.firebaseUserTabPermissions[userId]) {
-        this.firebaseUserTabPermissions[userId] = {};
-      }
-      
-      // Cập nhật tab permissions theo department mặc định
-      Object.keys(defaultTabPermissions).forEach(tabKey => {
-        this.firebaseUserTabPermissions[userId][tabKey] = defaultTabPermissions[tabKey];
-      });
-      
-      // Lưu vào Firestore
-      await this.firestore.collection('user-tab-permissions').doc(userId).set({
-        uid: userId,
-        email: user.email,
-        displayName: user.displayName || '',
-        tabPermissions: this.firebaseUserTabPermissions[userId],
-        updatedAt: new Date()
-      }, { merge: true });
-
-      this.firebaseUserDepartments[userId] = department;
-    } catch (error) {
-      console.error('❌ Error updating user department:', error);
-    }
-  }
-
-  async updateUserFactory(userId: string, factory: string): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      await this.firestore.collection('users').doc(userId).update({
-        factory: factory,
-        updatedAt: new Date()
-      });
-
-      // Cập nhật permissions nếu có
-      if (this.firebaseUserPermissions[userId] !== undefined || 
-          this.firebaseUserCompletePermissions[userId] !== undefined ||
-          this.firebaseUserReadOnlyPermissions[userId] !== undefined) {
-        await this.firestore.collection('user-permissions').doc(userId).set({
-          uid: userId,
-          email: user.email,
-          displayName: user.displayName || '',
-          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
-          hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
-          hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
-          updatedAt: new Date()
-        }, { merge: true });
-      }
-
-      user.factory = factory;
-    } catch (error) {
-      console.error('❌ Error updating user factory:', error);
-    }
-  }
-
-  async updateUserRole(userId: string, role: string): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      await this.firestore.collection('users').doc(userId).update({
-        role: role,
-        updatedAt: new Date()
-      });
-
-      // Cập nhật permissions nếu có
-      if (this.firebaseUserPermissions[userId] !== undefined || 
-          this.firebaseUserCompletePermissions[userId] !== undefined ||
-          this.firebaseUserReadOnlyPermissions[userId] !== undefined) {
-        await this.firestore.collection('user-permissions').doc(userId).set({
-          uid: userId,
-          email: user.email,
-          displayName: user.displayName || '',
-          hasDeletePermission: this.firebaseUserPermissions[userId] || false,
-          hasCompletePermission: this.firebaseUserCompletePermissions[userId] || false,
-          hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[userId] || false,
-          updatedAt: new Date()
-        }, { merge: true });
-      }
-
-      user.role = role;
-    } catch (error) {
-      console.error('❌ Error updating user role:', error);
-    }
-  }
-
-  async updateUserTabPermission(userId: string, tabKey: string, hasAccess: boolean): Promise<void> {
-    try {
-      const user = this.firebaseUsers.find(u => u.uid === userId);
-      if (!user) return;
-
-      // Ensure user has tab permissions object
-      if (!this.firebaseUserTabPermissions[userId]) {
-        this.firebaseUserTabPermissions[userId] = {};
-      }
-
-      // Update local data
-      this.firebaseUserTabPermissions[userId][tabKey] = hasAccess;
-
-      // Update in Firestore
-      await this.firestore.collection('user-tab-permissions').doc(userId).set({
-        uid: userId,
-        email: user.email,
-        displayName: user.displayName || '',
-        tabPermissions: this.firebaseUserTabPermissions[userId],
-        updatedAt: new Date()
-      }, { merge: true });
-
-    } catch (error) {
-      console.error('❌ Error updating user tab permission:', error);
-    }
-  }
-
-  async saveAllPermissions(): Promise<void> {
-    try {
-
-      // Save delete, complete and read-only permissions
-      const permissions = Object.keys(this.firebaseUserPermissions).map(uid => ({
-        uid: uid,
-        hasDeletePermission: this.firebaseUserPermissions[uid],
-        hasCompletePermission: this.firebaseUserCompletePermissions[uid] || false,
-        hasReadOnlyPermission: this.firebaseUserReadOnlyPermissions[uid] || false
-      }));
-
-      for (const permission of permissions) {
-        const user = this.firebaseUsers.find(u => u.uid === permission.uid);
-        if (user) {
-          await this.firestore.collection('user-permissions').doc(permission.uid).set({
-            uid: permission.uid,
-            email: user.email,
-            displayName: user.displayName || '',
-            hasDeletePermission: permission.hasDeletePermission,
-            hasCompletePermission: permission.hasCompletePermission,
-            hasReadOnlyPermission: permission.hasReadOnlyPermission,
-            updatedAt: new Date()
-          }, { merge: true });
-        }
-      }
-
-      // Save tab permissions
-      for (const [userId, tabPermissions] of Object.entries(this.firebaseUserTabPermissions)) {
-        const user = this.firebaseUsers.find(u => u.uid === userId);
-        if (user) {
-          await this.firestore.collection('user-tab-permissions').doc(userId).set({
-            uid: userId,
-            email: user.email,
-            displayName: user.displayName || '',
-            tabPermissions: tabPermissions,
-            updatedAt: new Date()
-          }, { merge: true });
-        }
-      }
-
-      alert('✅ Đã lưu tất cả quyền hạn thành công!');
-    } catch (error) {
-      console.error('❌ Error saving permissions:', error);
-      alert('❌ Có lỗi xảy ra khi lưu quyền hạn!');
-    }
-  }
-
-  cancelPermissionEdit(): void {
-    this.isEditingPermissions = false;
-    // Reload permissions to reset any unsaved changes
-    this.loadFirebaseUserPermissions();
-    this.loadFirebaseUserReadOnlyPermissions();
-    this.loadFirebaseUserTabPermissions();
-  }
-
-  getTableColumns(): string[] {
-    return ['email', 'role', 'department', 'factory', 'displayName', 'readOnly', 'lastLoginAt', 'createdAt', 'permission', 'completePermission', 'actions', ...this.availableTabs.map(tab => 'tab-' + tab.key)];
-  }
-
-  getAccountDisplay(user: any): string {
-    // admin@asp.com chỉ hiển thị là Admin
-    if (user.email === 'admin@asp.com') {
-      return 'Admin';
-    }
-    
-    // Nếu có employeeId, hiển thị mã nhân viên ASP
-    if (user.employeeId) {
-      const displayName = user.displayName ? ` - ${user.displayName}` : '';
-      return `${user.employeeId}${displayName}`;
-    }
-    
-    // Xử lý email bắt đầu bằng "asp" - chỉ hiển thị 4 số sau
-    if (user.email && user.email.toLowerCase().startsWith('asp')) {
-      const email = user.email.toLowerCase();
-      const match = email.match(/^asp(\d{4})@/);
-      if (match) {
-        const numbers = match[1];
-        const displayName = user.displayName ? ` - ${user.displayName}` : '';
-        return `ASP${numbers}${displayName}`;
-      }
-    }
-    
-    // Email @gmail hiển thị nguyên email
-    if (user.email && user.email.includes('@gmail')) {
-      return user.email;
-    }
-    
-    // Nếu không có employeeId và không phải email asp, hiển thị email
-    return user.email;
-  }
-
   // Chỉ hiển thị mã nhân viên, không hiển thị tên
   getEmployeeIdOnly(user: any): string {
     if (!user?.uid) return this.extractAspEmployeeId(user) || user?.email || '';
@@ -1668,67 +957,26 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return null;
   }
 
-  /** Email chuẩn dùng cho đăng nhập Firebase Auth. */
-  private getCanonicalAspEmail(user: any): string | null {
-    const employeeId = this.extractAspEmployeeId(user);
-    if (!employeeId) return null;
-    return `${employeeId.toLowerCase()}@asp.com`;
-  }
-
-  getAccountTypeLabel(user: any): string {
-    
-    if (user.employeeId) {
-      return 'Mã nhân viên ASP';
-    }
-    
-    // Xử lý email bắt đầu bằng "asp"
-    if (user.email && user.email.toLowerCase().startsWith('asp')) {
-      const email = user.email.toLowerCase();
-      const match = email.match(/^asp(\d{4})@/);
-      if (match) {
-        return 'Mã nhân viên ASP';
+  /** Nhóm availableTabs theo category (Chính / RM ASM1 / RM ASM2 / FG / Khác) — dùng cho popup quyền tab. */
+  private _tabCategoriesCache: Array<{ category: string; tabs: Array<{ key: string; name: string; category: string }> }> | null = null;
+  get tabCategories(): Array<{ category: string; tabs: Array<{ key: string; name: string; category: string }> }> {
+    if (this._tabCategoriesCache) return this._tabCategoriesCache;
+    const order: string[] = [];
+    const map = new Map<string, Array<{ key: string; name: string; category: string }>>();
+    this.availableTabs.forEach(tab => {
+      if (!map.has(tab.category)) {
+        map.set(tab.category, []);
+        order.push(tab.category);
       }
-    }
-    
-    return 'Email';
+      map.get(tab.category)!.push(tab);
+    });
+    this._tabCategoriesCache = order.map(category => ({ category, tabs: map.get(category)! }));
+    return this._tabCategoriesCache;
   }
 
-  getAccountTypeIcon(user: any): string {
-    
-    if (user.employeeId) {
-      return '👤';
-    }
-    
-    // Xử lý email bắt đầu bằng "asp"
-    if (user.email && user.email.toLowerCase().startsWith('asp')) {
-      const email = user.email.toLowerCase();
-      const match = email.match(/^asp(\d{4})@/);
-      if (match) {
-        return '👤';
-      }
-    }
-    
-    return '📧';
-  }
-
-  // Get factory display class for styling
-  getFactoryClass(factory: string): string {
-    switch (factory?.toUpperCase()) {
-      case 'ASM1': return 'factory-asm1';
-      case 'ASM2': return 'factory-asm2';
-      case 'ALL': return 'factory-all';
-      default: return 'factory-default';
-    }
-  }
-
-  // Get role display class for styling
-  getRoleClass(role: string): string {
-    switch (role?.toLowerCase()) {
-      case 'admin': return 'role-admin';
-      case 'quản lý': return 'role-manager';
-      case 'user': return 'role-user';
-      default: return 'role-default';
-    }
+  /** Số tab đang bật trong 1 nhóm (đang tick trong popup) — hiển thị "3/7" cạnh tên nhóm. */
+  countCheckedTabsInCategory(tabs: Array<{ key: string }>): number {
+    return tabs.filter(t => this.tempTabPermissions[t.key] === true).length;
   }
 
   getSortedFirebaseUsers(): User[] {
@@ -2148,11 +1396,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async deleteUserFromModal(): Promise<void> {
     if (!this.selectedUser) return;
 
-    if (confirm(`Bạn có chắc chắn muốn xóa user ${this.selectedUser.email}?\n\nHành động này sẽ xóa:\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
+    if (confirm(`Bạn có chắc chắn muốn xóa user ${this.selectedUser.email}?\n\nHành động này sẽ xóa:\n- Firebase Authentication\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
       try {
-        
-        // Sử dụng service để xóa hoàn toàn
-        await this.firebaseAuthService.deleteUser(this.selectedUser.uid);
+        const deletedEmail = this.selectedUser.email;
+        await this.deleteUserCompletelyByUid(this.selectedUser.uid);
         
         // Remove from local arrays
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== this.selectedUser!.uid);
@@ -2164,7 +1411,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         delete this.firebaseUserTabPermissions[this.selectedUser.uid];
         
         // Show success message
-        alert(`✅ Đã xóa thành công user ${this.selectedUser.email}!`);
+        alert(`✅ Đã xóa thành công user ${deletedEmail}!`);
         
         // Đóng modal
         this.closePermissionModal();
@@ -2241,66 +1488,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.isResettingPassword = false;
     }
   }
-
-  /**
-   * Cập nhật password Firebase Auth cho user đích thông qua secondary app.
-   * Yêu cầu biết password hiện tại của user đích để sign-in lại.
-   */
-  private async updateFirebaseAuthPasswordViaSecondaryApp(
-    emails: string[],
-    currentPasswords: string[],
-    newPassword: string
-  ): Promise<string> {
-    const appName = `settings-pwd-updater-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    let secondaryApp: firebase.app.App | null = null;
-    let lastError: any = null;
-    try {
-      const appOptions = this.firestore.firestore.app.options as any;
-      secondaryApp = firebase.initializeApp(appOptions, appName);
-      const secondaryAuth = secondaryApp.auth();
-
-      for (const email of emails) {
-        for (const currentPassword of currentPasswords) {
-          try {
-            await secondaryAuth.signInWithEmailAndPassword(email, currentPassword);
-            const targetUser = secondaryAuth.currentUser;
-            if (!targetUser) {
-              throw new Error('Không thể xác thực tài khoản đích để đổi password.');
-            }
-
-            await targetUser.updatePassword(newPassword);
-            await secondaryAuth.signOut();
-            return email;
-          } catch (attemptErr: any) {
-            lastError = attemptErr;
-            try {
-              await secondaryAuth.signOut();
-            } catch (_) {}
-          }
-        }
-      }
-      throw lastError || new Error('Không xác thực được tài khoản trên Firebase Auth.');
-    } catch (error: any) {
-      console.error(`❌ Failed updating Firebase Auth password for candidates:`, { emails, error });
-
-      if (error?.code === 'auth/wrong-password') {
-        throw new Error('Password hiện tại trong Settings không khớp với Firebase Auth của tài khoản này.');
-      }
-      if (error?.code === 'auth/user-not-found') {
-        throw new Error('Không tìm thấy tài khoản trên Firebase Authentication (kiểm tra lại email tài khoản trong Settings).');
-      }
-      throw error;
-    } finally {
-      if (secondaryApp) {
-        try {
-          await secondaryApp.delete();
-        } catch (e) {
-          console.warn('⚠️ Failed to delete secondary Firebase app:', e);
-        }
-      }
-    }
-  }
-
 
   // Get count of admin users
   getAdminUsersCount(): number {
