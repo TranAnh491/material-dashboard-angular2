@@ -75,6 +75,14 @@ export class MenuComponent implements OnInit, OnDestroy {
       category: 'Main',
       subtitle: 'Sơ đồ kho D — LayoutD',
     },
+    {
+      path: '/layout-warehouse-asm3',
+      title: 'Layout Warehouse ASM3',
+      icon: 'warehouse',
+      iconImage: 'assets/img/location.png',
+      category: 'Main',
+      subtitle: 'Sơ đồ Kho ASM3',
+    },
 
     // Report
     { path: '/report', title: 'Report', icon: 'analytics', iconImage: 'assets/img/dasboard.png', category: 'Report' },

@@ -66,6 +66,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     // Other tabs
     { key: 'location', name: 'Materials', category: 'Khác' },
     { key: 'layout-warehouse', name: 'Layout Warehouse', category: 'Khác' },
+    { key: 'layout-warehouse-asm3', name: 'Layout Warehouse ASM3', category: 'Khác' },
     { key: 'manage', name: 'Manage', category: 'Khác' },
     { key: 'stock-check', name: 'Stock Check', category: 'Khác' },
     { key: 'label', name: 'Label', category: 'Khác' },

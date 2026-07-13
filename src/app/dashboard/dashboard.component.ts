@@ -1508,12 +1508,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return 'cho-vi-tri';
   }
 
+  /**
+   * 🔧 FIX: Trước đây đọc TOÀN BỘ collection fg-in (không where/limit) mỗi lần gọi — kể cả mỗi 5 phút
+   * qua timer refreshNonFirestoreDashboardData(). Heatmap chỉ dùng dữ liệu tuần hiện tại (T2–T7), nên
+   * giới hạn theo importDate: từ đầu tuần (Thứ 2) đến hết Thứ 7 — giống cách đã tối ưu shipments/work-orders.
+   */
   private loadFgInPendingWeeklyHeatmap(): void {
+    const monday = this.getMondayOfWeekContaining(new Date());
+    const saturdayEnd = new Date(monday);
+    saturdayEnd.setDate(monday.getDate() + 5);
+    saturdayEnd.setHours(23, 59, 59, 999);
+
     this.firestore
-      .collection('fg-in')
+      .collection('fg-in', ref =>
+        ref.where('importDate', '>=', monday).where('importDate', '<=', saturdayEnd).limit(5000)
+      )
       .get()
       .subscribe(
         (snapshot) => {
+          this.readTracker.track('dashboard', 'fg-in', snapshot.docs.length);
           const rows = snapshot.docs.map((doc) => {
             const data = doc.data() as any;
             const importDate = this.parseFgInImportDate(data);
@@ -1795,8 +1808,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
   }
 
+  /**
+   * 🔧 FIX: Trước đây dùng getSafetyMaterials() (.snapshotChanges() — listener SỐNG trên toàn bộ
+   * collection `safety`) và KHÔNG bao giờ unsubscribe → mỗi lần vào lại tab Dashboard là thêm 1
+   * listener chồng lên, mỗi listener tính phí đọc cho MỌI lần ghi vào `safety` ở bất kỳ đâu trong
+   * app, suốt phiên làm việc — cùng dạng bug đã fix ở work-orders. Đổi sang đọc 1 lần vì màu ngày
+   * trong tuần không cần cập nhật realtime.
+   */
   private loadSafetyData() {
-    this.safetyService.getSafetyMaterials().subscribe(materials => {
+    this.safetyService.getSafetyMaterialsOnce().subscribe(materials => {
       if (materials.length > 0) {
         // Get all scan dates from materials - ONLY from scanDate column
         const scanDates = new Set<string>();
@@ -2252,6 +2272,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Cache docs Putaway staging (IQC + TRA) theo nhà máy — tránh đọc lại khi mở popup Putaway ngay sau khi Dashboard vừa tải. */
+  private putawayDocsCache: { factory: string; docs: any[]; traDocs: any[] } | null = null;
+
   // Load IQC Materials by Week (8 weeks)
   async loadIQCByWeek() {
     this.iqcLoading = true;
@@ -2264,6 +2287,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.fetchPutawayStagingInventoryDocs(factory),
         this.fetchPutawayTraInventoryDocs(factory)
       ]);
+      this.putawayDocsCache = { factory, docs, traDocs };
 
       if (!docs.length) {
         this.iqcWeekData = [];
@@ -2784,10 +2808,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.iqcMaterialsLoading = true;
     try {
       const factory = this.selectedFactory || 'ASM1';
-      const [docs, traDocs] = await Promise.all([
-        this.fetchPutawayStagingInventoryDocs(factory),
-        this.fetchPutawayTraInventoryDocs(factory)
-      ]);
+      // Dùng lại docs đã tải bởi loadIQCByWeek() (cùng nhà máy) nếu có — tránh đọc lại Firestore mỗi lần mở popup.
+      let docs: any[];
+      let traDocs: any[];
+      if (this.putawayDocsCache && this.putawayDocsCache.factory === factory) {
+        docs = this.putawayDocsCache.docs;
+        traDocs = this.putawayDocsCache.traDocs;
+      } else {
+        [docs, traDocs] = await Promise.all([
+          this.fetchPutawayStagingInventoryDocs(factory),
+          this.fetchPutawayTraInventoryDocs(factory)
+        ]);
+        this.putawayDocsCache = { factory, docs, traDocs };
+      }
       this.iqcMaterialsBySku = docs.length > 0 ? this.buildPutawayModalSkuRows(docs) : [];
       this.putawayTraMaterialsBySku = traDocs.length > 0 ? this.buildPutawayTraModalSkuRows(traDocs) : [];
 

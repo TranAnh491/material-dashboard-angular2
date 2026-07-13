@@ -1,0 +1,156 @@
+.asm3-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 90px);
+  padding: 12px 16px;
+  box-sizing: border-box;
+  background: #f8fafc;
+}
+
+.asm3-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.asm3-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+
+  i {
+    color: #2563eb;
+  }
+}
+
+.asm3-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.asm3-zoom-label {
+  min-width: 48px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.asm3-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #f1f5f9;
+  }
+
+  &--icon {
+    padding: 6px;
+  }
+
+  &--ghost {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  &--sm {
+    padding: 4px;
+  }
+}
+
+.asm3-hint {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.asm3-viewport {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 24px;
+}
+
+.asm3-svg {
+  display: block;
+}
+
+.asm3-wall {
+  fill: #f8fafc;
+  stroke: #64748b;
+  stroke-width: 2;
+}
+
+.asm3-row-label {
+  font-size: 10px;
+  font-weight: 800;
+  fill: #1e293b;
+}
+
+.asm3-side-label {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #94a3b8;
+  letter-spacing: 1px;
+}
+
+.asm3-slot {
+  cursor: pointer;
+
+  rect {
+    fill: #bfdbfe;
+    stroke: #3b82f6;
+    stroke-width: 0.6;
+    transition: fill 0.1s ease;
+  }
+
+  &:hover rect {
+    fill: #93c5fd;
+  }
+
+  &--selected rect {
+    fill: #f97316;
+    stroke: #c2410c;
+  }
+}
+
+.asm3-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 13.5px;
+
+  i {
+    color: #2563eb;
+  }
+
+  .asm3-btn {
+    margin-left: auto;
+  }
+}

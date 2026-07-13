@@ -67,6 +67,17 @@ export class SafetyService {
     );
   }
 
+  /**
+   * Đọc 1 lần (không phải live listener) — dùng cho các widget chỉ cần snapshot tại thời điểm tải
+   * (VD: Dashboard tô màu ngày trong tuần), tránh giữ 1 listener sống trên toàn collection `safety`
+   * suốt vòng đời tab (mọi lần ghi ở collection này từ bất kỳ đâu trong app đều tính phí đọc cho listener đó).
+   */
+  getSafetyMaterialsOnce(): Observable<SafetyMaterial[]> {
+    return this.firestore.collection('safety').get().pipe(
+      map(snapshot => snapshot.docs.map(doc => this.convertFirestoreData(doc.data() as any, doc.id)))
+    );
+  }
+
   // Get safety material by ID
   getSafetyMaterial(id: string): Observable<SafetyMaterial | undefined> {
     return this.firestore.doc<SafetyMaterial>(`safety/${id}`).valueChanges();

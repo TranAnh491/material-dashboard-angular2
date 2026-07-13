@@ -24,7 +24,7 @@ const CHUNK_SIZE = 250;
 const FG_BACKUP_CONFIG: Record<FgBackupCollectionKey, FgBackupConfig> = {
   'fg-inventory': { sourceCollection: 'fg-inventory', dateField: 'updatedAt', fallbackDateField: 'importDate' },
   'fg-in': { sourceCollection: 'fg-in', dateField: 'updatedAt', fallbackDateField: 'importDate' },
-  'fg-out': { sourceCollection: 'fg-out', dateField: 'exportDate' },
+  'fg-out': { sourceCollection: 'fg-out', dateField: 'updatedAt', fallbackDateField: 'exportDate' },
   'fg-check': { sourceCollection: 'fg-check', dateField: 'updatedAt', fallbackDateField: 'createdAt' }
 };
 

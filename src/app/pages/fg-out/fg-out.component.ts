@@ -601,7 +601,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // Load materials from Firebase — chỉ 30 ngày gần nhất; .get() khi mở tab / sau xuất / Refresh
+  // Load materials from Firebase — snapshot backup hôm qua (toàn bộ collection) + delta hôm nay
+  // (theo updatedAt — bắt cả dòng mới nhập/sửa có exportDate cũ). .get() khi mở tab / sau xuất / Refresh
   loadMaterialsFromFirebase(): void {
     void this.fgDailyBackup.loadMergedDocs('fg-out', 'fg-out').then((merged) => {
       const docs = merged.docs.map((d) => ({ id: d.id, ...(d.data as any) }));

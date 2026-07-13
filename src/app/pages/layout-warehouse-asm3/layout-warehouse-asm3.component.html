@@ -1,0 +1,72 @@
+<div class="asm3-page">
+  <header class="asm3-header">
+    <button type="button" class="asm3-btn asm3-btn--ghost" (click)="goToMenu()">
+      <i class="material-icons">arrow_back</i>
+      Về Menu
+    </button>
+    <h4 class="asm3-title"><i class="material-icons">warehouse</i> Sơ đồ Kho ASM3</h4>
+    <div class="asm3-zoom-controls">
+      <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(-0.2)" title="Thu nhỏ">
+        <i class="material-icons">remove</i>
+      </button>
+      <span class="asm3-zoom-label">{{ (zoom * 100) | number:'1.0-0' }}%</span>
+      <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(0.2)" title="Phóng to">
+        <i class="material-icons">add</i>
+      </button>
+      <button type="button" class="asm3-btn asm3-btn--icon" (click)="resetZoom()" title="Vừa khung">
+        <i class="material-icons">fit_screen</i>
+      </button>
+    </div>
+  </header>
+
+  <p class="asm3-hint">
+    Kho 30m (mặt A↔D) × 100m (mặt C↔B) — 8 dãy kệ A–H nằm ngang, mỗi kệ dài 30 ô (F3-A1…A30, ~1m/ô).
+    Khối kệ cách mặt A 10m. Dãy A trên cùng, cách mặt C 5m.
+    A cách B,C 2m · C cách D,E 2m · E cách F,G 2m · G cách H 2m.
+  </p>
+
+  <div class="asm3-viewport" #viewport (click)="clearSelection()">
+    <svg
+      class="asm3-svg"
+      [attr.viewBox]="'0 0 ' + svgWidth + ' ' + svgHeight"
+      [style.width.px]="svgWidth * zoom"
+      [style.height.px]="svgHeight * zoom">
+      <rect class="asm3-wall" x="0" y="0" [attr.width]="svgWidth" [attr.height]="svgHeight"></rect>
+
+      <text class="asm3-side-label" [attr.x]="6" [attr.y]="svgHeight / 2" text-anchor="middle">A</text>
+      <text class="asm3-side-label" [attr.x]="svgWidth - 6" [attr.y]="svgHeight / 2" text-anchor="middle">D</text>
+      <text class="asm3-side-label" [attr.x]="svgWidth / 2" [attr.y]="14" text-anchor="middle">C</text>
+      <text class="asm3-side-label" [attr.x]="svgWidth / 2" [attr.y]="svgHeight - 6" text-anchor="middle">B</text>
+
+      <g *ngFor="let row of rackRows">
+        <text
+          class="asm3-row-label"
+          [attr.x]="px(LEFT_MARGIN_M) - 6"
+          [attr.y]="px(row.yM) + px(row.hM) / 2"
+          text-anchor="end"
+          dominant-baseline="middle">{{ row.letter }}</text>
+
+        <g *ngFor="let slot of row.slots"
+           class="asm3-slot"
+           [class.asm3-slot--selected]="selectedSlot?.name === slot.name"
+           (click)="selectSlot(slot); $event.stopPropagation()">
+          <title>{{ slot.name }}</title>
+          <rect
+            [attr.x]="px(slot.xM)"
+            [attr.y]="px(slot.yM)"
+            [attr.width]="px(slot.wM) - 1"
+            [attr.height]="px(slot.hM)">
+          </rect>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <div class="asm3-info" *ngIf="selectedSlot">
+    <i class="material-icons">place</i>
+    <span>Vị trí: <strong>{{ selectedSlot.name }}</strong> — Dãy {{ selectedSlot.row }}, ô {{ selectedSlot.index }}/30</span>
+    <button type="button" class="asm3-btn asm3-btn--ghost asm3-btn--sm" (click)="clearSelection()">
+      <i class="material-icons">close</i>
+    </button>
+  </div>
+</div>

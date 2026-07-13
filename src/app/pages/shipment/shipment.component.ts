@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
-import { Subject, combineLatest } from 'rxjs';
+import { Subject, combineLatest, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
@@ -375,18 +375,26 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Load shipments from Firebase — chỉ 30 ngày gần nhất, đọc 1 lần (không dùng listener sống)
+  // 🔧 FIX: gộp thêm truy vấn requestDate == null — where('requestDate','>=',cutoff) loại vĩnh viễn mọi
+  // doc có requestDate=null khỏi kết quả (bug cũ ở onCSDateChange khi xóa trống CS Date), khiến dòng đó
+  // biến mất khỏi tab dù vẫn còn trên Firestore và không cách nào tìm lại qua UI.
   loadShipmentsFromFirebase(): void {
-    this.firestore.collection('shipments', ref =>
+    forkJoin([
+      this.firestore.collection('shipments', ref =>
         ref.where('requestDate', '>=', this.shipmentRecentCutoffDate()).limit(5000)
-      )
-      .get()
+      ).get(),
+      this.firestore.collection('shipments', ref =>
+        ref.where('requestDate', '==', null).limit(500)
+      ).get()
+    ])
       .pipe(takeUntil(this.destroy$))
-      .subscribe((snapshot) => {
-        this.readTracker.track('shipment', 'shipments', snapshot.docs.length);
-        const firebaseShipments = snapshot.docs.map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
+      .subscribe(([recentSnap, nullDateSnap]) => {
+        this.readTracker.track('shipment', 'shipments', recentSnap.docs.length + nullDateSnap.docs.length);
+        const firebaseShipments = recentSnap.docs.map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
+        const nullRequestDateShipments = nullDateSnap.docs.map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
 
-        this.shipments = firebaseShipments;
-        this.autoHideShippedOlderThanOneDay(firebaseShipments);
+        this.shipments = [...firebaseShipments, ...nullRequestDateShipments];
+        this.autoHideShippedOlderThanOneDay(this.shipments);
         this.applyFilters();
 
         // Restore scroll position if needed
@@ -2224,9 +2232,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   // Handle CS Date change - sync to all rows with same shipmentCode
+  // 🔧 FIX: requestDate KHÔNG được để null — loadShipmentsFromFirebase() lọc where('requestDate','>=',cutoff),
+  // Firestore loại bỏ vĩnh viễn mọi doc có requestDate=null khỏi kết quả (không phụ thuộc cutoff), khiến dòng
+  // đó biến mất khỏi tab Shipment và không cách nào tìm lại qua UI. Xóa ô CS Date thì fallback về ngày hiện tại
+  // thay vì null (giống quy ước updateDateField cho các field ngày khác không dùng làm điều kiện lọc chính).
   onCSDateChange(shipment: ShipmentItem, dateString: string): void {
     const shipmentCode = this.normalizeShipmentCode(shipment.shipmentCode);
-    const newDate = dateString ? new Date(dateString) : null;
+    const newDate = dateString ? new Date(dateString) : new Date();
     
     // Update current shipment first
     shipment.requestDate = newDate;
