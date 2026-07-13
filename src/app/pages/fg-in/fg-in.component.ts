@@ -172,7 +172,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Confirm Receipt Dialog (Xác nhận phiếu nhập kho)
   showConfirmReceiptDialog: boolean = false;
   selectedReceiptMaterial: FgInItem | null = null;
-  // Nếu phiếu đã tick khóa nhưng location = 'Temporary'/rỗng => chỉ cập nhật vị trí
+  // Nếu phiếu đã tick khóa nhưng location = Temporary / Tem-1 / Tam-3 / … => chỉ cập nhật vị trí
   locationUpdateOnlyMode: boolean = false;
   confirmReceiptData = {
     materialCodeConfirmed: false,
@@ -322,7 +322,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Lock / Unlock (cột Lock): Tick = khóa (chuyển Inventory), Bỏ tick = mở khóa để sửa
   updateLockStatus(material: FgInItem, checked: boolean): void {
     material.isReceived = checked;
-    // Khi tick khóa trực tiếp (không scan vị trí), đảm bảo UI mobile không bị trống cột location.
+    // Khi tick khóa trực tiếp (không scan vị trí), gán Temporary nếu chưa có vị trí.
     if (checked && (!material.location || String(material.location).trim() === '')) {
       material.location = 'Temporary';
     }
@@ -2608,33 +2608,41 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.mobilePendingZoneFilter = this.mobilePendingZoneFilter === zone ? null : zone;
   }
 
-  /** Nhận diện vùng Temporary 1 / 3 từ vị trí (Tem-1, TEMPORARY 3, …) */
+  /** Chuẩn hóa vị trí FG In để so khớp Tem-1, Tam-3, Temp1, … */
+  private compactFgInLocation(location: string | undefined | null): string {
+    return String(location ?? '')
+      .trim()
+      .toUpperCase()
+      .replace(/[\s_-]+/g, '');
+  }
+
+  private matchesTempZone(compact: string, zone: '1' | '3'): boolean {
+    const aliases = [`TEMPORARY${zone}`, `TEM${zone}`, `TAM${zone}`, `TEMP${zone}`];
+    if (aliases.includes(compact)) {
+      return true;
+    }
+    if (compact.endsWith(`TEMPORARY${zone}`)) {
+      return true;
+    }
+    return new RegExp(`(?:^|TEMPORARY|TEM|TAM|TEMP)${zone}$`).test(compact);
+  }
+
+  /** Nhận diện vùng Temporary 1 / 3 từ vị trí (Tem-1, Tam-3, Temp1, TEMPORARY 3, …) */
   getTempZoneBadge(location: string | undefined | null): '1' | '3' | null {
     const raw = String(location ?? '').trim();
     if (!raw) {
       return null;
     }
-    const upper = raw.toUpperCase();
-    const compact = upper.replace(/[\s_-]+/g, '');
 
-    if (
-      compact === 'TEMPORARY3' ||
-      compact === 'TEM3' ||
-      compact.endsWith('TEMPORARY3') ||
-      /(?:^|TEMPORARY|TEM)3$/.test(compact)
-    ) {
+    const compact = this.compactFgInLocation(raw);
+    if (this.matchesTempZone(compact, '3')) {
       return '3';
     }
-    if (
-      compact === 'TEMPORARY1' ||
-      compact === 'TEM1' ||
-      compact.endsWith('TEMPORARY1') ||
-      /(?:^|TEMPORARY|TEM)1$/.test(compact)
-    ) {
+    if (this.matchesTempZone(compact, '1')) {
       return '1';
     }
 
-    const zoneMatch = upper.match(/(?:TEMPORARY|TEM)[\s_-]*([13])\s*$/);
+    const zoneMatch = raw.toUpperCase().match(/(?:TEMPORARY|TEM|TAM|TEMP)[\s_-]*([13])\s*$/);
     if (zoneMatch) {
       return zoneMatch[1] as '1' | '3';
     }
@@ -2651,10 +2659,17 @@ export class FgInComponent implements OnInit, OnDestroy {
     return this.filteredMaterials.filter(m => !m.isReceived).length;
   }
 
-  private isTemporaryLocation(location: string): boolean {
-    const s = String(location ?? '').trim();
-    if (!s) return true;
-    return s.toUpperCase() === 'TEMPORARY';
+  private isTemporaryLocation(location: string | undefined | null): boolean {
+    const raw = String(location ?? '').trim();
+    if (!raw) {
+      return true;
+    }
+    const compact = this.compactFgInLocation(raw);
+    if (compact === 'TEMPORARY') {
+      return true;
+    }
+    // Tem-1, Tem-3, Tam-1, Tam-3, Temp1, Temp3, Temporary 1/3, …
+    return this.getTempZoneBadge(location) !== null;
   }
 
   // Mobile: đã tick khóa nhưng vẫn ở trạng thái Temporary (chưa có vị trí thật)

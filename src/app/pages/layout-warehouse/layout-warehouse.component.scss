@@ -1352,6 +1352,13 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
   stroke-width: 0.5px !important;
 }
 
+.lw-svg-host ::ng-deep .lw-zone--factory-violation > rect,
+.lw-svg-host ::ng-deep [data-shelf].lw-zone--factory-violation rect {
+  fill: #ffe0b2 !important;
+  stroke: #e65100 !important;
+  stroke-width: 0.5px !important;
+}
+
 // Live: chỉ tô ô kệ nhỏ (không tô khu Secured WH / IQC)
 .lw-svg-host ::ng-deep g[data-loc].lw-zone--live > rect:not(.lw-slot-marker),
 .lw-svg-host ::ng-deep g[data-shelf].lw-zone--live > rect:not(.lw-slot-marker) {

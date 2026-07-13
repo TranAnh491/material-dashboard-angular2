@@ -426,6 +426,103 @@
       <i class="material-icons">verified</i>
       Tất cả vị trí đều đúng rule.
     </p>
+
+    <section class="lw-section lw-section--factory-usage">
+      <h2 class="lw-section__title"><i class="material-icons">factory</i> Kiểm tra vị trí nhà máy</h2>
+      <p class="lw-hint">Khách GNRAC (Danh mục NVLKH) phải để vị trí ASM3, khách khác không được để ở ASM3.</p>
+
+      <button
+        type="button"
+        class="lw-btn lw-btn--rule"
+        [disabled]="isFactoryUsageChecking"
+        (click)="openFactoryUsageCheck()">
+        <i class="material-icons">factory</i>
+        Kiểm tra vị trí nhà máy
+      </button>
+
+      <div class="lw-btn-row lw-factory-usage-selector" *ngIf="showFactoryUsageSelector">
+        <span class="lw-hint">Chọn nhà máy cần kiểm tra:</span>
+        <div class="lw-btn-row">
+          <button
+            type="button"
+            class="lw-btn lw-btn--primary lw-btn--sm"
+            [disabled]="isFactoryUsageChecking"
+            (click)="checkFactoryUsage('ASM1')">
+            ASM1
+          </button>
+          <button
+            type="button"
+            class="lw-btn lw-btn--primary lw-btn--sm"
+            [disabled]="isFactoryUsageChecking"
+            (click)="checkFactoryUsage('ASM2')">
+            ASM2
+          </button>
+          <button
+            type="button"
+            class="lw-btn lw-btn--primary lw-btn--sm"
+            [disabled]="isFactoryUsageChecking"
+            (click)="checkFactoryUsage('ASM3')">
+            ASM3
+          </button>
+          <button type="button" class="lw-btn lw-btn--soft lw-btn--sm" (click)="closeFactoryUsageCheck()">
+            Đóng
+          </button>
+        </div>
+      </div>
+
+      <div class="lw-alert lw-alert--error" *ngIf="factoryUsageError">
+        <i class="material-icons">error</i> {{ factoryUsageError }}
+      </div>
+
+      <p class="lw-hint" *ngIf="isFactoryUsageChecking">
+        <i class="material-icons rotating">sync</i> Đang kiểm tra {{ factoryUsageFactory }}…
+      </p>
+
+      <section class="lw-stats" *ngIf="factoryUsageFactory && !isFactoryUsageChecking && !factoryUsageError">
+        <div class="lw-stat" [class.lw-stat--bad]="factoryUsageViolations.length">
+          <span class="lw-stat__label">Sai nhà máy ({{ factoryUsageFactory }})</span>
+          <strong class="lw-stat__value">{{ factoryUsageViolations.length }}</strong>
+        </div>
+        <div class="lw-stat lw-stat--ok" *ngIf="!factoryUsageViolations.length">
+          <i class="material-icons">check_circle</i>
+          <span>Không có mã sai</span>
+        </div>
+      </section>
+
+      <div class="lw-btn-row" *ngIf="factoryUsageFactory && !isFactoryUsageChecking">
+        <button
+          type="button"
+          class="lw-btn lw-btn--download"
+          [disabled]="!canDownloadFactoryUsageResults"
+          (click)="downloadFactoryUsageResults()">
+          <i class="material-icons">download</i>
+          Tải kết quả
+        </button>
+        <button type="button" class="lw-btn lw-btn--soft lw-btn--sm" (click)="clearFactoryUsageCheck()">
+          Xóa kết quả
+        </button>
+      </div>
+
+      <section class="lw-rule-list" *ngIf="factoryUsageViolations.length">
+        <h2 class="lw-section__title lw-section__title--warn">
+          <i class="material-icons">warning_amber</i>
+          Mã sai nhà máy ({{ factoryUsageViolations.length }})
+        </h2>
+        <button
+          type="button"
+          class="lw-rule-item"
+          *ngFor="let item of factoryUsageViolations"
+          (click)="jumpToFactoryUsageViolation(item)">
+          <div class="lw-rule-item__top">
+            <span class="lw-rule-item__loc">{{ item.materialCode }}</span>
+            <span class="lw-rule-item__badge">{{ item.location }}</span>
+          </div>
+          <div class="lw-rule-item__detail">
+            <span class="lw-rule-item__expect">Khách {{ item.customer || '(chưa có DMNVLKH)' }} — cần chuyển tới {{ item.expectedFactory }}</span>
+          </div>
+        </button>
+      </section>
+    </section>
   </aside>
 </div>
 

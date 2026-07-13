@@ -46,6 +46,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'materials-asm1', name: 'RM1 Inventory', category: 'RM ASM1' },
     { key: 'inventory-overview-asm1', name: 'RM1 Overview', category: 'RM ASM1' },
     { key: 'bag-history', name: 'Control Batch', category: 'RM ASM1' },
+    { key: 'danh-muc-nvlkh', name: 'Danh mục NVLKH', category: 'RM ASM1' },
 
     // ASM2 RM tabs
     { key: 'inbound-asm2', name: 'RM2 Inbound', category: 'RM ASM2' },

@@ -17,6 +17,7 @@ import { MaterialsDashboardService } from '../../services/materials-dashboard.se
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
+import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
@@ -127,6 +128,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   storageUnitPickerMaterialCode = '';
   isSavingStorageUnit = false;
   private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
+  /** Danh mục NVLKH: mã NVL (đã chuẩn hóa) → khách hàng (hoặc "Shared"). */
+  private nvlkhCustomerMap = new Map<string, string>();
   isCatalogLoading = false;
   isResetting = false; // Loading state for reset operation
   isDownloadingSearch = false;
@@ -154,6 +157,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   searchTerm = '';
   searchType: 'material' = 'material';
   searchByLocation = false;
+  /** Tìm theo khách hàng (Danh mục NVLKH) — loại trừ lẫn nhau với searchByLocation. */
+  searchByCustomer = false;
+  /** Hiện cột KH — mặc định tắt để không tải Danh mục NVLKH nếu không cần. */
+  showKhColumn = false;
   private searchSubject = new Subject<string>();
   
   // 🚀 OPTIMIZATION: Add loading states
@@ -307,12 +314,28 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private materialsDashboard: MaterialsDashboardService,
     private locationUnlock: LocationUnlockService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
+    private nvlkhCatalog: NvlkhCatalogService,
     private readTracker: ReadTrackerService
   ) {}
 
   getStorageUnitLabel(material: InventoryMaterial): string {
     const code = this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
     return material.storageUnitSize || this.storageUnitCatalogMap.get(code) || '';
+  }
+
+  /** Khách hàng của mã NVL (từ Danh mục NVLKH) — trống nếu chưa có trong danh mục. */
+  getCustomerForMaterial(material: InventoryMaterial): string {
+    const code = this.nvlkhCatalog.normalizeMaterialCode(material.materialCode);
+    return this.nvlkhCustomerMap.get(code) || '';
+  }
+
+  private async applyNvlkhFromCatalog(): Promise<void> {
+    try {
+      this.nvlkhCustomerMap = await this.nvlkhCatalog.loadAllAsMap();
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('Load Danh mục NVLKH error:', e);
+    }
   }
 
   hasStorageUnit(material: InventoryMaterial): boolean {
@@ -2335,6 +2358,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         this.filteredInventory = [...this.inventoryMaterials];
         console.log(`🔍 DEBUG: Loaded ${this.inventoryMaterials.length} inventory materials`);
         void this.applyStorageUnitsFromCatalog();
+        if (this.showKhColumn) void this.applyNvlkhFromCatalog();
         console.log(`🔍 DEBUG: First material:`, this.inventoryMaterials[0]);
         
         // Gộp dòng trùng lặp TRƯỚC KHI xử lý outbound
@@ -3302,11 +3326,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         if (this.searchByLocation) {
           const loc = String(material.location ?? (material as any).viTri ?? '').trim().toUpperCase();
           if (!loc.includes(term)) return false;
+        } else if (this.searchByCustomer) {
+          const customer = this.getCustomerForMaterial(material).toUpperCase();
+          if (!customer.includes(term)) return false;
         } else if (!material.materialCode?.toUpperCase().includes(term)) {
           return false;
         }
       }
-      
+
       return true;
     });
 
@@ -3400,11 +3427,29 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   get searchInputPlaceholder(): string {
     if (this.isLoading) return '🔍 Đang tải...';
-    return this.searchByLocation ? 'Vị trí (H12, TRA…)…' : 'Mã hàng…';
+    if (this.searchByLocation) return 'Vị trí (H12, TRA…)…';
+    if (this.searchByCustomer) return 'Khách hàng (VD: Customer A, Shared)…';
+    return 'Mã hàng…';
   }
 
   onSearchByLocationChange(): void {
+    if (this.searchByLocation) this.searchByCustomer = false;
     this.clearSearch();
+  }
+
+  onSearchByCustomerChange(): void {
+    if (this.searchByCustomer) {
+      this.searchByLocation = false;
+      this.showKhColumn = true;
+      void this.applyNvlkhFromCatalog();
+    }
+    this.clearSearch();
+  }
+
+  onShowKhColumnChange(): void {
+    if (this.showKhColumn) {
+      void this.applyNvlkhFromCatalog();
+    }
   }
 
   // Clear search and reset to initial state
@@ -3497,6 +3542,31 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             this.docMatchesLocationSearch(doc.data(), normalizedLocation)
           );
           querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+        }
+      } else if (this.searchByCustomer) {
+        const term = searchTerm.trim().toUpperCase();
+        console.log(`🔍 ASM1 Searching by customer (Danh mục NVLKH): "${term}"`);
+        this.searchProgress = 20;
+        const customerMap = await this.nvlkhCatalog.loadAllAsMap();
+        this.nvlkhCustomerMap = customerMap;
+        const matchingCodes = [...customerMap.entries()]
+          .filter(([, customer]) => customer.toUpperCase().includes(term))
+          .map(([code]) => code);
+
+        if (!matchingCodes.length) {
+          querySnapshot = { docs: [], empty: true };
+        } else {
+          this.searchProgress = 50;
+          const chunkSize = 10; // giới hạn Firestore cho toán tử 'in'
+          const allDocs: any[] = [];
+          for (let i = 0; i < matchingCodes.length; i += chunkSize) {
+            const chunk = matchingCodes.slice(i, i + chunkSize);
+            const snap = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.FACTORY).where('materialCode', 'in', chunk).limit(500)
+            ).get().toPromise();
+            if (snap?.docs) allDocs.push(...snap.docs);
+          }
+          querySnapshot = { docs: allDocs, empty: allDocs.length === 0 };
         }
       } else {
         console.log(`🔍 ASM1 Searching for materialCode: "${searchTerm}" - Loading from Firebase...`);
@@ -3603,7 +3673,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         await this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map(m => m.materialCode));
         this.applyCatalogToMaterials(this.inventoryMaterials);
         void this.applyStorageUnitsFromCatalog();
-        
+        if (this.showKhColumn) void this.applyNvlkhFromCatalog();
+
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
         
@@ -4480,6 +4551,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   closeMorePopup(): void {
     this.showMorePopup = false;
+  }
+
+  openDanhMucNvlkh(): void {
+    void this.router.navigate(['/danh-muc-nvlkh']);
   }
 
   openStandardPackingManager(): void {

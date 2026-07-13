@@ -10,6 +10,7 @@ import * as QRCode from 'qrcode';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { LocationAddUnlockService } from '../../services/location-add-unlock.service';
+import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import {
   blocksSingleLetterPrefixMatch,
   getDefaultLocationsForWarehouse,
@@ -125,7 +126,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   filteredItems: LocationItem[] = [];
   /** Lookup inventory items by scanned/typed location */
   locationLookupLocation = '';
-  locationLookupItems: { id: string; materialCode: string; poNumber?: string; stock?: number }[] = [];
+  locationLookupItems: { id: string; materialCode: string; poNumber?: string; stock?: number; factoryInUse?: string }[] = [];
   isLocationLookupLoading = false;
   private locationLookupSeq = 0;
   
@@ -367,6 +368,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   scannedIMDForStore = '';
   foundMaterialsForStore: any[] = []; // Các materials tìm được theo materialCode
   selectedMaterialForStore: any = null; // Material được chọn để cất
+  /** Nhà máy sử dụng của mã đang scan để đổi vị trí — GNRAC (DMNVLKH) → ASM3, còn lại giữ nguyên nhà máy hiện tại. */
+  storeMaterialFactoryInUse = '';
   suggestedLocations: string[] = []; // Danh sách vị trí hiện tại của material
   selectedTargetLocation = ''; // Vị trí đích được chọn
   /** Bước 2: scan nhiều mã (tối đa 10), cùng chuyển sang vị trí mới một lần. */
@@ -1339,6 +1342,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
     private locationAddUnlock: LocationAddUnlockService,
+    private nvlkhCatalog: NvlkhCatalogService,
     private cdr: ChangeDetectorRef,
     private router: Router
   ) {
@@ -1716,7 +1720,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       // If a newer lookup started, ignore this result
       if (seq !== this.locationLookupSeq) return;
 
-      const items: { id: string; materialCode: string; poNumber?: string; stock?: number }[] = [];
+      const items: { id: string; materialCode: string; poNumber?: string; stock?: number; factoryInUse?: string }[] = [];
       snapshot?.forEach(doc => {
         const data = doc.data() as any;
         const openingStock = Number(data.openingStock) || 0;
@@ -1734,6 +1738,16 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       });
 
       items.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+
+      // 1 lần đọc (cache 5 phút, dùng chung toàn app) — tra "Nhà máy sử dụng": khách GNRAC → ASM3, còn lại giữ nguyên nhà máy hiện tại
+      const customerMap = await this.nvlkhCatalog.loadAllAsMap();
+      if (seq !== this.locationLookupSeq) return;
+      items.forEach(item => {
+        const code = this.nvlkhCatalog.normalizeMaterialCode(item.materialCode);
+        const customer = customerMap.get(code) || '';
+        item.factoryInUse = customer.toUpperCase() === 'GNRAC' ? 'ASM3' : (this.selectedFactory || '');
+      });
+
       this.locationLookupItems = items.filter(i => !!i.materialCode);
     } catch (error) {
       // Keep silent UI; do not alert on every keystroke
@@ -2733,6 +2747,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.scannedMaterialCodeForStore = '';
     this.foundMaterialsForStore = [];
     this.selectedMaterialForStore = null;
+    this.storeMaterialFactoryInUse = '';
     this.suggestedLocations = [];
     this.selectedTargetLocation = '';
     this.isTargetLocationForced = false;
@@ -2776,6 +2791,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.scannedMaterialCodeForStore = '';
     this.foundMaterialsForStore = [];
     this.selectedMaterialForStore = null;
+    this.storeMaterialFactoryInUse = '';
     this.suggestedLocations = [];
     this.selectedTargetLocation = '';
     this.isTargetLocationForced = false;
@@ -2934,6 +2950,36 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .sort((a, b) => a.location.localeCompare(b.location));
 
     this.suggestedLocations = suggestedLocations;
+    void this.updateStoreMaterialFactoryInUse(matchedMaterial.materialCode);
+  }
+
+  /** 1 lượt read Danh mục NVLKH (cache 5 phút, dùng chung toàn app) để biết nhà máy sử dụng của mã đang đổi vị trí. */
+  private async updateStoreMaterialFactoryInUse(materialCode: string): Promise<void> {
+    try {
+      const customerMap = await this.nvlkhCatalog.loadAllAsMap();
+      const code = this.nvlkhCatalog.normalizeMaterialCode(materialCode);
+      const customer = customerMap.get(code) || '';
+      this.storeMaterialFactoryInUse = customer.toUpperCase() === 'GNRAC' ? 'ASM3' : (this.selectedFactory || '');
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('Load Danh mục NVLKH error:', e);
+    }
+  }
+
+  /** Đổi vị trí hàng loạt: gắn "Nhà máy sử dụng" cho từng mã — 1 lượt read Danh mục NVLKH (cache 5 phút, dùng chung toàn app). */
+  private async applyFactoryInUseToBulkItems(items: any[]): Promise<void> {
+    try {
+      const customerMap = await this.nvlkhCatalog.loadAllAsMap();
+      if (this.bulkItems !== items) return; // Đã scan vị trí khác trong lúc đang tải
+      items.forEach(item => {
+        const code = this.nvlkhCatalog.normalizeMaterialCode(item.materialCode);
+        const customer = customerMap.get(code) || '';
+        item.factoryInUse = customer.toUpperCase() === 'GNRAC' ? 'ASM3' : (this.selectedFactory || '');
+      });
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('Load Danh mục NVLKH error:', e);
+    }
   }
 
   onStoreMaterialMultiCodeChange(): void {
@@ -3623,6 +3669,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       items.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
       this.bulkItems = items;
       this.bulkStep = 'select-items';
+      void this.applyFactoryInUseToBulkItems(items);
     } catch (error) {
       console.error(`❌ Error loading ${this.selectedFactory} items by location:`, error);
       alert('❌ Lỗi khi tải mã hàng theo vị trí. Vui lòng thử lại.');

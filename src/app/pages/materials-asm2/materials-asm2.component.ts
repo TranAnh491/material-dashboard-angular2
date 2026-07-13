@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -16,6 +17,7 @@ import { MaterialsDashboardService } from '../../services/materials-dashboard.se
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
+import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
@@ -118,6 +120,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   storageUnitPickerMaterialCode = '';
   isSavingStorageUnit = false;
   private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
+  /** Danh mục NVLKH: mã NVL (đã chuẩn hóa) → khách hàng (hoặc "Shared"). */
+  private nvlkhCustomerMap = new Map<string, string>();
   isCatalogLoading = false;
   isResetting = false;
   isDownloadingSearch = false;
@@ -142,6 +146,10 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   searchTerm = '';
   searchType: 'material' | 'po' | 'location' = 'material';
   searchByLocation = false;
+  /** Tìm theo khách hàng (Danh mục NVLKH) — loại trừ lẫn nhau với searchByLocation. */
+  searchByCustomer = false;
+  /** Hiện cột KH — mặc định tắt để không tải Danh mục NVLKH nếu không cần. */
+  showKhColumn = false;
   private searchSubject = new Subject<string>();
   
   // 🚀 OPTIMIZATION: Add loading states
@@ -293,7 +301,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     private materialsDashboard: MaterialsDashboardService,
     private locationUnlock: LocationUnlockService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
-    private readTracker: ReadTrackerService
+    private nvlkhCatalog: NvlkhCatalogService,
+    private readTracker: ReadTrackerService,
+    private router: Router
   ) {}
 
   getStorageUnitLabel(material: InventoryMaterial): string {
@@ -303,6 +313,25 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
 
   hasStorageUnit(material: InventoryMaterial): boolean {
     return !!this.getStorageUnitLabel(material);
+  }
+
+  /** Khách hàng của mã NVL (từ Danh mục NVLKH) — trống nếu chưa có trong danh mục. */
+  getCustomerForMaterial(material: InventoryMaterial): string {
+    const code = this.nvlkhCatalog.normalizeMaterialCode(material.materialCode);
+    return this.nvlkhCustomerMap.get(code) || '';
+  }
+
+  private async applyNvlkhFromCatalog(): Promise<void> {
+    try {
+      this.nvlkhCustomerMap = await this.nvlkhCatalog.loadAllAsMap();
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('Load Danh mục NVLKH error:', e);
+    }
+  }
+
+  openDanhMucNvlkh(): void {
+    void this.router.navigate(['/danh-muc-nvlkh']);
   }
 
   private getStorageMaterialKey(material: InventoryMaterial): string {
@@ -1888,7 +1917,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       // Set filteredInventory to show all loaded items
       this.filteredInventory = [...this.inventoryMaterials];
       void this.applyStorageUnitsFromCatalog();
-      
+      if (this.showKhColumn) void this.applyNvlkhFromCatalog();
+
       // 🔧 FIX: Chỉ consolidate LOCAL, KHÔNG save lại Firebase để tránh vòng lặp
       console.log('🔄 Consolidating duplicate materials (LOCAL ONLY)...');
       this.consolidateInventoryData(); // Chỉ gộp local, không save
@@ -2787,29 +2817,34 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       // Apply search filter based on search type
       if (this.searchTerm) {
         const searchTermLower = this.searchTerm.toLowerCase();
-        
-        switch (this.searchType) {
-          case 'material':
-            // Search by material code or name
-            if (!material.materialCode?.toLowerCase().includes(searchTermLower) &&
-                !material.materialName?.toLowerCase().includes(searchTermLower)) {
-              return false;
-            }
-            break;
-            
-          case 'po':
-            // Search by PO number
-            if (!material.poNumber?.toLowerCase().includes(searchTermLower)) {
-              return false;
-            }
-            break;
-            
-          case 'location':
-              {
-                const loc = String(material.location ?? (material as any).viTri ?? '').trim().toLowerCase();
-                if (!loc.includes(searchTermLower)) return false;
+
+        if (this.searchByCustomer) {
+          const customer = this.getCustomerForMaterial(material).toLowerCase();
+          if (!customer.includes(searchTermLower)) return false;
+        } else {
+          switch (this.searchType) {
+            case 'material':
+              // Search by material code or name
+              if (!material.materialCode?.toLowerCase().includes(searchTermLower) &&
+                  !material.materialName?.toLowerCase().includes(searchTermLower)) {
+                return false;
               }
               break;
+
+            case 'po':
+              // Search by PO number
+              if (!material.poNumber?.toLowerCase().includes(searchTermLower)) {
+                return false;
+              }
+              break;
+
+            case 'location':
+                {
+                  const loc = String(material.location ?? (material as any).viTri ?? '').trim().toLowerCase();
+                  if (!loc.includes(searchTermLower)) return false;
+                }
+                break;
+          }
         }
       }
       
@@ -2907,6 +2942,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   get searchInputPlaceholder(): string {
     if (this.isLoading) return '🔍 Đang tải...';
     if (this.searchByLocation) return 'Tìm theo vị trí (VD: H12, TRA, IQC)…';
+    if (this.searchByCustomer) return 'Tìm theo khách hàng (VD: Customer A, Shared)…';
     if (this.searchType === 'po') return 'Tìm theo PO…';
     return 'Tìm theo mã hàng…';
   }
@@ -2918,10 +2954,26 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   onSearchByLocationChange(): void {
     if (this.searchByLocation) {
       this.searchType = 'location';
+      this.searchByCustomer = false;
     } else if (this.searchType === 'location') {
       this.searchType = 'material';
     }
     this.clearSearch();
+  }
+
+  onSearchByCustomerChange(): void {
+    if (this.searchByCustomer) {
+      this.searchByLocation = false;
+      this.showKhColumn = true;
+      void this.applyNvlkhFromCatalog();
+    }
+    this.clearSearch();
+  }
+
+  onShowKhColumnChange(): void {
+    if (this.showKhColumn) {
+      void this.applyNvlkhFromCatalog();
+    }
   }
 
   // Clear search and reset to initial state
@@ -2946,7 +2998,7 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   
   // Cycle through search types (Mã / PO — bỏ qua Location khi dùng tick Location)
   cycleSearchType(): void {
-    if (this.searchByLocation) return;
+    if (this.searchByLocation || this.searchByCustomer) return;
     const types: ('material' | 'po')[] = ['material', 'po'];
     const currentIndex = types.indexOf(this.searchType as 'material' | 'po');
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % types.length;
@@ -3051,6 +3103,31 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
             querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
           }
         }
+      } else if (this.searchByCustomer) {
+        const term = searchTerm.trim().toUpperCase();
+        console.log(`🔍 ASM2 Searching by customer (Danh mục NVLKH): "${term}"`);
+        this.searchProgress = 20;
+        const customerMap = await this.nvlkhCatalog.loadAllAsMap();
+        this.nvlkhCustomerMap = customerMap;
+        const matchingCodes = [...customerMap.entries()]
+          .filter(([, customer]) => customer.toUpperCase().includes(term))
+          .map(([code]) => code);
+
+        if (!matchingCodes.length) {
+          querySnapshot = { docs: [], empty: true };
+        } else {
+          this.searchProgress = 50;
+          const chunkSize = 10; // giới hạn Firestore cho toán tử 'in'
+          const allDocs: any[] = [];
+          for (let i = 0; i < matchingCodes.length; i += chunkSize) {
+            const chunk = matchingCodes.slice(i, i + chunkSize);
+            const snap = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.FACTORY).where('materialCode', 'in', chunk).limit(500)
+            ).get().toPromise();
+            if (snap?.docs) allDocs.push(...snap.docs);
+          }
+          querySnapshot = { docs: allDocs, empty: allDocs.length === 0 };
+        }
       } else if (this.searchType === 'po') {
         // Tìm kiếm theo PO number
         this.searchProgress = 25;
@@ -3149,7 +3226,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
         void this.applyStorageUnitsFromCatalog();
-        
+        if (this.showKhColumn) void this.applyNvlkhFromCatalog();
+
         // KHÔNG gộp dòng khi search - chỉ gộp khi bấm nút "Gộp dòng trùng lặp"
         // this.consolidateInventoryData();
         

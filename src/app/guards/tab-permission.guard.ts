@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router } from '@angular/router';
 import { Observable, of, forkJoin } from 'rxjs';
-import { map, catchError, switchMap } from 'rxjs/operators';
+import { map, catchError, switchMap, take } from 'rxjs/operators';
 import { TabPermissionService } from '../services/tab-permission.service';
 import { RolePermissionService } from '../services/role-permission.service';
 
@@ -67,8 +67,8 @@ export class TabPermissionGuard implements CanActivate {
     // DV Lưu trữ catalog — user có quyền inbound ASM1 hoặc ASM2
     if (tabKey === 'dv-luu-tru-catalog') {
       return forkJoin([
-        this.tabPermissionService.canAccessTab('inbound-asm1'),
-        this.tabPermissionService.canAccessTab('inbound-asm2')
+        this.tabPermissionService.canAccessTab('inbound-asm1').pipe(take(1)),
+        this.tabPermissionService.canAccessTab('inbound-asm2').pipe(take(1))
       ]).pipe(
         map(([asm1, asm2]) => {
           const allowed = asm1 || asm2;
@@ -80,6 +80,28 @@ export class TabPermissionGuard implements CanActivate {
         }),
         catchError(error => {
           console.error('❌ Error checking dv-luu-tru-catalog permission:', error);
+          this.router.navigate(['/dashboard']);
+          return of(false);
+        })
+      );
+    }
+
+    // Danh mục NVLKH — user có quyền Materials ASM1 hoặc ASM2
+    if (tabKey === 'danh-muc-nvlkh') {
+      return forkJoin([
+        this.tabPermissionService.canAccessTab('materials-asm1').pipe(take(1)),
+        this.tabPermissionService.canAccessTab('materials-asm2').pipe(take(1))
+      ]).pipe(
+        map(([asm1, asm2]) => {
+          const allowed = asm1 || asm2;
+          if (!allowed) {
+            console.log('❌ Access denied to danh-muc-nvlkh');
+            this.router.navigate(['/dashboard']);
+          }
+          return allowed;
+        }),
+        catchError(error => {
+          console.error('❌ Error checking danh-muc-nvlkh permission:', error);
           this.router.navigate(['/dashboard']);
           return of(false);
         })
@@ -126,6 +148,7 @@ export class TabPermissionGuard implements CanActivate {
       // ASM2 routes
       '/inbound-asm2': 'inbound-asm2',
       '/dv-luu-tru-catalog': 'dv-luu-tru-catalog',
+      '/danh-muc-nvlkh': 'danh-muc-nvlkh',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
       '/inventory-overview-asm2': 'inventory-overview-asm2',

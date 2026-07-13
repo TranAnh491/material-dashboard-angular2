@@ -37,6 +37,8 @@ import {
   LocationGuidanceDoc
 } from '../../services/layout-warehouse-guidance.service';
 import { LayoutWarehouseSettingsService } from '../../services/layout-warehouse-settings.service';
+import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
+import * as XLSX from 'xlsx';
 import {
   parseWarehouseLocation,
   ParsedWarehouseLocation,
@@ -115,6 +117,13 @@ interface SearchResultInfo {
 interface ViolationGroup {
   location: string;
   items: RuleViolation[];
+}
+
+interface FactoryUsageViolation {
+  materialCode: string;
+  location: string;
+  customer: string;
+  expectedFactory: string;
 }
 
 interface ShelfStorageGuideRow {
@@ -210,6 +219,13 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   ruleExcludedCodes: string[] = [];
   ruleExcludeDraft = '';
 
+  /** Kiểm tra vị trí nhà máy — khách GNRAC (Danh mục NVLKH) phải để vị trí ASM3. */
+  showFactoryUsageSelector = false;
+  isFactoryUsageChecking = false;
+  factoryUsageError = '';
+  factoryUsageFactory: 'ASM1' | 'ASM2' | 'ASM3' | null = null;
+  factoryUsageViolations: FactoryUsageViolation[] = [];
+
   activeGuidanceLoc = '';
   guidanceDraft = '';
   guidanceLoading = false;
@@ -279,6 +295,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     private guidanceService: LayoutWarehouseGuidanceService,
     private warehouseSettingsService: LayoutWarehouseSettingsService,
     private ruleCheckService: LocationRuleCheckService,
+    private nvlkhCatalog: NvlkhCatalogService,
     private cdr: ChangeDetectorRef,
     private router: Router
   ) {}
@@ -355,6 +372,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     this.stopLiveMode();
     this.stopHeatmapMode();
     this.closeRack3d();
+    this.clearFactoryUsageHighlights();
 
   }
 
@@ -1205,6 +1223,175 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       }
     }
     this.cdr.markForCheck();
+  }
+
+  /** Bấm nút "Kiểm tra vị trí nhà máy" — hiện chọn nhà máy trước khi chạy check. */
+  openFactoryUsageCheck(): void {
+    this.showFactoryUsageSelector = true;
+    this.factoryUsageError = '';
+    this.factoryUsageFactory = null;
+    this.factoryUsageViolations = [];
+    this.clearFactoryUsageHighlights();
+    this.cdr.markForCheck();
+  }
+
+  closeFactoryUsageCheck(): void {
+    this.showFactoryUsageSelector = false;
+    this.factoryUsageFactory = null;
+    this.factoryUsageError = '';
+    this.factoryUsageViolations = [];
+    this.clearFactoryUsageHighlights();
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Check ASM1/ASM2: khách GNRAC (tra theo Danh mục NVLKH) mà vị trí không phải ASM3 → sai nhà máy (cần ASM3).
+   * Check ASM3: khách KHÔNG phải GNRAC mà vị trí là ASM3 → sai nhà máy (cần ASM1).
+   * Tối ưu read: đúng 1 lượt read inventory-materials (lọc theo field factory, không cần composite index)
+   * + 1 lượt read Danh mục NVLKH (cache 5 phút, dùng chung toàn app — 0 lượt read nếu vừa tải nơi khác).
+   */
+  async checkFactoryUsage(factory: 'ASM1' | 'ASM2' | 'ASM3'): Promise<void> {
+    this.factoryUsageFactory = factory;
+    this.isFactoryUsageChecking = true;
+    this.factoryUsageError = '';
+    this.factoryUsageViolations = [];
+    this.clearFactoryUsageHighlights();
+    this.cdr.markForCheck();
+
+    try {
+      const [snap, customerMap] = await Promise.all([
+        this.firestore
+          .collection('inventory-materials', ref => ref.where('factory', '==', factory).limit(10000))
+          .get()
+          .toPromise(),
+        this.nvlkhCatalog.loadAllAsMap()
+      ]);
+
+      const violations: FactoryUsageViolation[] = [];
+      const seen = new Set<string>();
+
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as Record<string, unknown>;
+        const materialCode = String(data['materialCode'] || '').trim();
+        const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+        if (!materialCode || !location || location.toUpperCase() === 'TEMPORARY') continue;
+
+        const qty = Number(data['quantity']) || 0;
+        const exported = Number(data['exported']) || 0;
+        const stockField = Number(data['stock']) || 0;
+        const openingStock = data['openingStock'] != null ? Number(data['openingStock']) : 0;
+        const xt = Number(data['xt']) || 0;
+        const available = qty > 0 ? openingStock + qty - exported - xt : stockField > 0 ? stockField : openingStock;
+        if (available <= 0) continue;
+
+        const code = this.nvlkhCatalog.normalizeMaterialCode(materialCode);
+        const customer = customerMap.get(code) || '';
+        const isGnrac = customer.toUpperCase() === 'GNRAC';
+
+        let expectedFactory: string;
+        if (factory === 'ASM3') {
+          if (isGnrac) continue; // Đúng: khách GNRAC ở ASM3
+          expectedFactory = 'ASM1';
+        } else {
+          if (!isGnrac) continue; // Không phải GNRAC thì không áp rule ASM3
+          if (isAsm3PrefixLocation(location)) continue; // Đúng: đã ở vị trí ASM3
+          expectedFactory = 'ASM3';
+        }
+
+        const key = `${code}\0${location.toUpperCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        violations.push({ materialCode, location, customer, expectedFactory });
+      }
+
+      violations.sort((a, b) => a.location.localeCompare(b.location, 'vi', { numeric: true }));
+      this.factoryUsageViolations = violations;
+      this.isFactoryUsageChecking = false;
+      this.cdr.markForCheck();
+
+      if (factory === 'ASM1') {
+        requestAnimationFrame(() => this.highlightFactoryUsageViolations(violations));
+      }
+    } catch (err) {
+      this.factoryUsageError = (err as Error)?.message || String(err);
+      this.isFactoryUsageChecking = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  clearFactoryUsageCheck(): void {
+    this.factoryUsageViolations = [];
+    this.factoryUsageError = '';
+    this.clearFactoryUsageHighlights();
+    this.cdr.markForCheck();
+  }
+
+  get canDownloadFactoryUsageResults(): boolean {
+    return !!this.factoryUsageFactory && !this.isFactoryUsageChecking && this.factoryUsageViolations.length > 0;
+  }
+
+  downloadFactoryUsageResults(): void {
+    if (!this.factoryUsageFactory || !this.factoryUsageViolations.length) return;
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+
+    // Cột A: Mã hàng, cột B/C/D: Vị trí / Khách hàng / Nhà máy nên chuyển tới
+    const rows: (string | number)[][] = [
+      ['Mã hàng', 'Vị trí', 'Khách hàng', 'Nhà máy nên chuyển tới']
+    ];
+    for (const v of this.factoryUsageViolations) {
+      rows.push([v.materialCode, v.location, v.customer || '(chưa có trong DMNVLKH)', v.expectedFactory]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sai nha may');
+    XLSX.writeFile(wb, `KiemTraViTriNhaMay-${this.factoryUsageFactory}-${dateStr}.xlsx`);
+  }
+
+  jumpToFactoryUsageViolation(item: FactoryUsageViolation): void {
+    const parsed = parseWarehouseLocation(item.location, this.knownShelves);
+    if (parsed) {
+      this.highlightParsedLocation(parsed);
+      this.searchResult = {
+        materialCode: item.materialCode,
+        location: item.location,
+        shelf: parsed.shelf,
+        slot: parsed.slot
+      };
+      this.selectedLoc = `${item.materialCode} — ${item.location} (sai nhà máy)`;
+    } else {
+      const zone = this.findMapZone(item.location);
+      if (zone) {
+        this.selectZoneElement(zone);
+        zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+    }
+    this.cdr.markForCheck();
+  }
+
+  private highlightFactoryUsageViolations(violations: FactoryUsageViolation[]): void {
+    const host = this.svgHost?.nativeElement;
+    if (!host) return;
+
+    const seen = new Set<Element>();
+    const uniqueLocs = [...new Set(violations.map(v => v.location))];
+
+    for (const loc of uniqueLocs) {
+      const zone = this.findZoneForLocation(loc);
+      if (!zone || seen.has(zone)) continue;
+      seen.add(zone);
+      zone.classList.add('lw-zone--factory-violation');
+    }
+  }
+
+  private clearFactoryUsageHighlights(): void {
+    const host = this.svgHost?.nativeElement;
+    host?.querySelectorAll('.lw-zone--factory-violation').forEach(el => {
+      el.classList.remove('lw-zone--factory-violation');
+    });
   }
 
   private buildViolationGroups(violations: RuleViolation[]): ViolationGroup[] {

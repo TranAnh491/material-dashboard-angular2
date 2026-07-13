@@ -70,6 +70,16 @@
             <i class="material-icons">place</i>
             <span class="search-location-toggle__label">Location</span>
           </label>
+          <label class="search-location-toggle" title="Tick để tìm theo khách hàng (Danh mục NVLKH)">
+            <input type="checkbox" [(ngModel)]="searchByCustomer" (change)="onSearchByCustomerChange()" />
+            <i class="material-icons">groups</i>
+            <span class="search-location-toggle__label">KH</span>
+          </label>
+          <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
+            <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
+            <i class="material-icons">visibility</i>
+            <span class="search-location-toggle__label">Hiện KH</span>
+          </label>
           <!-- Search Box -->
           <div class="search-box">
             <input type="text"
@@ -150,6 +160,16 @@
           <input type="checkbox" [(ngModel)]="searchByLocation" (change)="onSearchByLocationChange()" />
           <i class="material-icons">place</i>
           <span class="search-location-toggle__label">Location</span>
+        </label>
+        <label class="search-location-toggle" title="Tick để tìm theo khách hàng (Danh mục NVLKH)">
+          <input type="checkbox" [(ngModel)]="searchByCustomer" (change)="onSearchByCustomerChange()" />
+          <i class="material-icons">groups</i>
+          <span class="search-location-toggle__label">KH</span>
+        </label>
+        <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
+          <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
+          <i class="material-icons">visibility</i>
+          <span class="search-location-toggle__label">Hiện KH</span>
         </label>
         <div class="search-box">
           <input type="text"
@@ -460,6 +480,7 @@
             </th>
             <th>Change</th>
             <th>Loại Hình</th>
+            <th *ngIf="showKhColumn">KH</th>
 
             <th>Lưu ý</th>
             <th>Standard Packing</th>
@@ -616,6 +637,7 @@
             <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
+            <td class="kh-cell" *ngIf="showKhColumn" [title]="getCustomerForMaterial(material)">{{ getCustomerForMaterial(material) || '—' }}</td>
 
             <td class="notes-cell">
               <input type="text" 
@@ -1087,6 +1109,10 @@
           <button type="button" class="popup-action-btn" (click)="downloadCatalogTemplate(); closeMorePopup()">
             <i class="material-icons">description</i>
             <span>Download Standard Packing Template</span>
+          </button>
+          <button type="button" class="popup-action-btn" (click)="openDanhMucNvlkh(); closeMorePopup()">
+            <i class="material-icons">groups</i>
+            <span>Danh mục NVLKH (Mã NVL → Khách hàng)</span>
           </button>
         </div>
       </div>

@@ -395,6 +395,7 @@
           <div class="material-box-grid" *ngIf="!isLocationLookupLoading && locationLookupLocation && locationLookupItems.length > 0">
             <div class="material-box" *ngFor="let m of locationLookupItems">
               <div class="material-code">{{ m.materialCode }}</div>
+              <div class="material-factory" *ngIf="m.factoryInUse">Nhà máy sử dụng: {{ m.factoryInUse }}</div>
             </div>
           </div>
         </div>
@@ -610,6 +611,7 @@
       <div class="material-box-grid" *ngIf="!isLocationLookupLoading && locationLookupLocation && locationLookupItems.length > 0">
         <div class="material-box" *ngFor="let m of locationLookupItems">
           <div class="material-code">{{ m.materialCode }}</div>
+          <div class="material-factory" *ngIf="m.factoryInUse">Nhà máy sử dụng: {{ m.factoryInUse }}</div>
         </div>
       </div>
     </div>
@@ -1007,6 +1009,9 @@
                 <span class="item-imd" *ngIf="!item.importDateStr">IMD: —</span>
                 <span class="iqc-status-badge iqc-none" *ngIf="!item.iqcStatus">—</span>
               </div>
+              <div class="item-details" *ngIf="item.factoryInUse">
+                <span class="item-imd">Nhà máy sử dụng: {{ item.factoryInUse }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1208,6 +1213,10 @@
               <span class="store-summary__label">Tồn PO</span>
               <span class="store-summary__value store-summary__value--stock">{{ storeMaterialPOStock | number:'1.0-0' }}</span>
             </div>
+            <div class="store-summary__cell" *ngIf="storeMaterialFactoryInUse">
+              <span class="store-summary__label">Nhà máy sử dụng</span>
+              <span class="store-summary__value">{{ storeMaterialFactoryInUse }}</span>
+            </div>
           </div>
           <div class="store-summary__stocks" *ngIf="storeMaterialStockByLocation.length">
             <span class="store-summary__stocks-label">Đang lưu tại:</span>
@@ -1306,10 +1315,14 @@
             <span class="label">Vị trí mới:</span>
             <span class="value highlight">{{ selectedTargetLocation }}</span>
           </div>
+          <div class="info-row" *ngIf="storeMaterialFactoryInUse">
+            <span class="label">Nhà máy sử dụng:</span>
+            <span class="value">{{ storeMaterialFactoryInUse }}</span>
+          </div>
         </div>
       </div>
     </div>
-    
+
     <div class="modal-footer">
       <button class="btn btn-cancel" (click)="closeStoreMaterialModal()">
         <i class="material-icons">close</i>
