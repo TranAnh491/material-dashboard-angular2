@@ -200,9 +200,14 @@ export class PdControlComponent implements OnInit, OnDestroy {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
 
+      // 🔧 FIX: Không có orderBy trước đây — Firestore tự sắp XẾP TĂNG DẦN theo field bất đẳng thức
+      // (createdAt) khi thiếu orderBy tường minh, nên limit(4000) giữ lại 4000 dòng CŨ NHẤT trong
+      // ngày, cắt mất các mã vừa quét (mới nhất) một khi hôm nay đã vượt 4000 dòng. Thêm
+      // orderBy(desc) để limit(4000) luôn ưu tiên giữ dữ liệu MỚI nhất.
       const snapshot = await this.firestore
         .collection(this.PD_COLLECTION, ref =>
-          ref.where('factory', '==', this.PD_FACTORY).where('createdAt', '>=', startOfToday).limit(4000)
+          ref.where('factory', '==', this.PD_FACTORY).where('createdAt', '>=', startOfToday)
+             .orderBy('createdAt', 'desc').limit(4000)
         )
         .get()
         .toPromise();

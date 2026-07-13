@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "pd-return-scans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",      "order": "ASCENDING" },
+        { "fieldPath": "createdAt",    "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "inventory-materials",
       "queryScope": "COLLECTION",
       "fields": [

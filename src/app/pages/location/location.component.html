@@ -1056,6 +1056,7 @@
               <i class="material-icons">arrow_forward</i>
             </button>
           </div>
+          <p class="store-factory-warning" *ngIf="bulkFactoryMismatchWarning">{{ bulkFactoryMismatchWarning }}</p>
         </div>
 
         <div class="target-section">
@@ -1253,6 +1254,7 @@
             placeholder="Scan hoặc nhập vị trí mới..."
             class="location-input"
             autofocus>
+          <p class="store-factory-warning" *ngIf="storeMaterialFactoryMismatchWarning">{{ storeMaterialFactoryMismatchWarning }}</p>
 
           <div class="store-batch-section" *ngIf="storeMaterialMultiCode">
             <p class="store-batch-count">{{ storeMaterialBatchCount }}/{{ STORE_MATERIAL_BATCH_MAX }} mã</p>

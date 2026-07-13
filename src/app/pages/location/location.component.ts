@@ -2982,6 +2982,42 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  private isAsm3Location(location: string): boolean {
+    return String(location || '').replace(/\s/g, '').toUpperCase().startsWith('ASM3');
+  }
+
+  /**
+   * Cảnh báo "sai nhà máy" khi vị trí đích không khớp Nhà máy sử dụng — CHỈ báo, KHÔNG chặn lưu:
+   * NVL khách GNRAC không bắt buộc phải để ở ASM3, người dùng có thể chọn bất kỳ vị trí nào.
+   */
+  get storeMaterialFactoryMismatchWarning(): string {
+    if (!this.storeMaterialFactoryInUse || !this.selectedTargetLocation?.trim()) return '';
+    const targetIsAsm3 = this.storeMaterialUseAsm3 || this.isAsm3Location(this.selectedTargetLocation);
+    const expectAsm3 = this.storeMaterialFactoryInUse === 'ASM3';
+    if (expectAsm3 && !targetIsAsm3) {
+      return `⚠️ Sai nhà máy — mã này (khách GNRAC) nên để ở vị trí ASM3, đang chọn vị trí khác.`;
+    }
+    if (!expectAsm3 && targetIsAsm3) {
+      return `⚠️ Sai nhà máy — mã này nên để ở ${this.storeMaterialFactoryInUse}, đang chọn vị trí ASM3.`;
+    }
+    return '';
+  }
+
+  /** Đổi vị trí hàng loạt: cảnh báo nếu có mã trong danh sách đã chọn bị sai nhà máy so với vị trí đích — chỉ báo, không chặn. */
+  get bulkFactoryMismatchWarning(): string {
+    const target = this.bulkNewLocationInput?.trim();
+    if (!target) return '';
+    const targetIsAsm3 = this.bulkUseAsm3 || this.isAsm3Location(target);
+    const mismatched = this.bulkItems.filter(item => {
+      if (!this.bulkSelectedItems.has(item.id) || !item.factoryInUse) return false;
+      const expectAsm3 = item.factoryInUse === 'ASM3';
+      return expectAsm3 !== targetIsAsm3;
+    });
+    if (!mismatched.length) return '';
+    const codes = [...new Set(mismatched.map(m => m.materialCode))].slice(0, 5).join(', ');
+    return `⚠️ Sai nhà máy cho ${mismatched.length} mã (${codes}${mismatched.length > 5 ? '…' : ''}) — vị trí đích không đúng Nhà máy sử dụng.`;
+  }
+
   onStoreMaterialMultiCodeChange(): void {
     if (this.storeMaterialMultiCode) {
       this.initStoreMaterialBatchFromSelection();
