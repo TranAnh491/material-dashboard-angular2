@@ -1,28 +1,37 @@
 <div class="asm3-page">
-  <header class="asm3-header">
-    <button type="button" class="asm3-btn asm3-btn--ghost" (click)="goToMenu()">
+  <header class="asm3-toolbar">
+    <button type="button" class="asm3-btn" (click)="goToMenu()">
       <i class="material-icons">arrow_back</i>
       Về Menu
     </button>
-    <h4 class="asm3-title"><i class="material-icons">warehouse</i> Sơ đồ Kho ASM3</h4>
-    <div class="asm3-zoom-controls">
-      <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(-0.2)" title="Thu nhỏ">
-        <i class="material-icons">remove</i>
+
+    <div class="asm3-toolbar__title">
+      <i class="material-icons">warehouse</i>
+      <span>Sơ đồ Kho ASM3</span>
+    </div>
+
+    <div class="asm3-toolbar__actions">
+      <button type="button" class="asm3-btn" (click)="openPrintLabelModal()">
+        <i class="material-icons">print</i>
+        In Label
       </button>
-      <span class="asm3-zoom-label">{{ (zoom * 100) | number:'1.0-0' }}%</span>
-      <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(0.2)" title="Phóng to">
-        <i class="material-icons">add</i>
-      </button>
-      <button type="button" class="asm3-btn asm3-btn--icon" (click)="resetZoom()" title="Vừa khung">
-        <i class="material-icons">fit_screen</i>
-      </button>
+      <div class="asm3-zoom">
+        <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(-0.2)" title="Thu nhỏ">
+          <i class="material-icons">remove</i>
+        </button>
+        <span class="asm3-zoom__label">{{ (zoom * 100) | number:'1.0-0' }}%</span>
+        <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(0.2)" title="Phóng to">
+          <i class="material-icons">add</i>
+        </button>
+        <button type="button" class="asm3-btn asm3-btn--icon" (click)="resetZoom()" title="Vừa khung">
+          <i class="material-icons">fit_screen</i>
+        </button>
+      </div>
     </div>
   </header>
 
-  <p class="asm3-hint">
-    Kho 30m (mặt A↔D) × 100m (mặt C↔B) — 8 dãy kệ A–H nằm ngang, mỗi kệ dài 30 ô (F3-A1…A30, ~1m/ô).
-    Khối kệ cách mặt A 10m. Dãy A trên cùng, cách mặt C 5m.
-    A cách B,C 2m · C cách D,E 2m · E cách F,G 2m · G cách H 2m.
+  <p class="asm3-sub">
+    8 dãy kệ A–H · 30 ô/dãy (F3-A1…H30) · Bấm ô để chọn vị trí
   </p>
 
   <div class="asm3-viewport" #viewport (click)="clearSelection()">
@@ -33,25 +42,40 @@
       [style.height.px]="svgHeight * zoom">
       <rect class="asm3-wall" x="0" y="0" [attr.width]="svgWidth" [attr.height]="svgHeight"></rect>
 
-      <text class="asm3-side-label" [attr.x]="6" [attr.y]="svgHeight / 2" text-anchor="middle">A</text>
-      <text class="asm3-side-label" [attr.x]="svgWidth - 6" [attr.y]="svgHeight / 2" text-anchor="middle">D</text>
-      <text class="asm3-side-label" [attr.x]="svgWidth / 2" [attr.y]="14" text-anchor="middle">C</text>
-      <text class="asm3-side-label" [attr.x]="svgWidth / 2" [attr.y]="svgHeight - 6" text-anchor="middle">B</text>
+      <g class="asm3-aisles">
+        <rect *ngFor="let aisle of aisleZones"
+          class="asm3-aisle"
+          [attr.x]="px(aisle.xM)"
+          [attr.y]="px(aisle.yM)"
+          [attr.width]="px(aisle.wM)"
+          [attr.height]="px(aisle.hM)">
+        </rect>
+      </g>
+
+      <text class="asm3-side" [attr.x]="14" [attr.y]="svgHeight / 2" text-anchor="middle" dominant-baseline="middle">A</text>
+      <text class="asm3-side" [attr.x]="svgWidth - 14" [attr.y]="svgHeight / 2" text-anchor="middle" dominant-baseline="middle">D</text>
+      <text class="asm3-side" [attr.x]="svgWidth / 2" [attr.y]="16" text-anchor="middle">C</text>
+      <text class="asm3-side" [attr.x]="svgWidth / 2" [attr.y]="svgHeight - 8" text-anchor="middle">B</text>
 
       <g *ngFor="let row of rackRows">
         <text
-          class="asm3-row-label"
-          [attr.x]="px(LEFT_MARGIN_M) - 6"
+          class="asm3-row"
+          [attr.x]="px(LEFT_MARGIN_M) - 8"
           [attr.y]="px(row.yM) + px(row.hM) / 2"
           text-anchor="end"
           dominant-baseline="middle">{{ row.letter }}</text>
 
         <g *ngFor="let slot of row.slots"
            class="asm3-slot"
+           [class.asm3-slot--on]="hoveredSlot?.name === slot.name || selectedSlot?.name === slot.name"
            [class.asm3-slot--selected]="selectedSlot?.name === slot.name"
+           (mouseenter)="onSlotHover(slot)"
+           (mouseleave)="onSlotHover(null)"
            (click)="selectSlot(slot); $event.stopPropagation()">
           <title>{{ slot.name }}</title>
           <rect
+            class="asm3-slot__box"
+            rx="1.5"
             [attr.x]="px(slot.xM)"
             [attr.y]="px(slot.yM)"
             [attr.width]="px(slot.wM) - 1"
@@ -62,11 +86,44 @@
     </svg>
   </div>
 
-  <div class="asm3-info" *ngIf="selectedSlot">
-    <i class="material-icons">place</i>
-    <span>Vị trí: <strong>{{ selectedSlot.name }}</strong> — Dãy {{ selectedSlot.row }}, ô {{ selectedSlot.index }}/30</span>
-    <button type="button" class="asm3-btn asm3-btn--ghost asm3-btn--sm" (click)="clearSelection()">
+  <div class="asm3-selected" *ngIf="selectedSlot">
+    <span><strong>{{ selectedSlot.name }}</strong> — Dãy {{ selectedSlot.row }}, ô {{ selectedSlot.index }}/30</span>
+    <button type="button" class="asm3-btn asm3-btn--primary asm3-btn--sm" (click)="openPrintLabelModal()">
+      <i class="material-icons">print</i> In tem
+    </button>
+    <button type="button" class="asm3-btn asm3-btn--icon" (click)="clearSelection()">
       <i class="material-icons">close</i>
     </button>
+  </div>
+
+  <div class="asm3-modal-overlay" *ngIf="showPrintLabelModal" (click)="closePrintLabelModal()">
+    <div class="asm3-modal" (click)="$event.stopPropagation()">
+      <h4 class="asm3-modal__title">In Label vị trí</h4>
+
+      <div class="asm3-modal__row">
+        <label>Dãy kệ</label>
+        <select [(ngModel)]="printLabelRow">
+          <option *ngFor="let letter of rackLetters" [value]="letter">{{ letter }}</option>
+        </select>
+      </div>
+
+      <div class="asm3-modal__row">
+        <label>Số thứ tự</label>
+        <select [(ngModel)]="printLabelIndex">
+          <option *ngFor="let n of slotIndexes" [value]="n">{{ n }}</option>
+        </select>
+      </div>
+
+      <div class="asm3-modal__preview">
+        Tem: <strong>{{ printLabelName }}</strong>
+      </div>
+
+      <div class="asm3-modal__actions">
+        <button type="button" class="asm3-btn" (click)="closePrintLabelModal()" [disabled]="isPrintingLabel">Hủy</button>
+        <button type="button" class="asm3-btn asm3-btn--primary" (click)="printAsm3Label()" [disabled]="isPrintingLabel">
+          {{ isPrintingLabel ? 'Đang tạo...' : 'In tem' }}
+        </button>
+      </div>
+    </div>
   </div>
 </div>

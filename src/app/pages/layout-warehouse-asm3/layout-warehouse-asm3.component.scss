@@ -1,95 +1,143 @@
 .asm3-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 90px);
+  height: 100vh;
   padding: 12px 16px;
   box-sizing: border-box;
-  background: #f8fafc;
+  background: #f4f6f8;
 }
 
-.asm3-header {
+.asm3-toolbar {
+  position: relative;
+  z-index: 10;
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 6px;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.asm3-title {
+.asm3-toolbar__title {
   flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
-  color: #1e293b;
+  color: #111827;
 
   i {
+    font-size: 22px;
     color: #2563eb;
   }
 }
 
-.asm3-zoom-controls {
+.asm3-toolbar__actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
 }
 
-.asm3-zoom-label {
-  min-width: 48px;
+.asm3-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.asm3-zoom__label {
+  min-width: 44px;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: #4b5563;
 }
 
 .asm3-btn {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   padding: 7px 12px;
+  border: 1px solid #d1d5db;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
   background: #fff;
-  color: #334155;
+  color: #374151;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 
-  &:hover {
-    background: #f1f5f9;
+  i {
+    font-size: 18px;
+  }
+
+  &:hover:not(:disabled) {
+    background: #f9fafb;
+    border-color: #9ca3af;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
   }
 
   &--icon {
     padding: 6px;
-  }
-
-  &--ghost {
-    border-color: transparent;
-    background: transparent;
+    min-width: 34px;
+    min-height: 34px;
   }
 
   &--sm {
-    padding: 4px;
+    padding: 6px 10px;
+  }
+
+  &--primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 
-.asm3-hint {
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  color: #64748b;
+.asm3-sub {
+  margin: 0 0 10px 2px;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .asm3-viewport {
+  position: relative;
   flex: 1;
+  min-height: 0;
   overflow: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  padding: 20px;
   background: #fff;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .asm3-svg {
@@ -97,60 +145,153 @@
 }
 
 .asm3-wall {
-  fill: #f8fafc;
-  stroke: #64748b;
+  fill: #fafafa;
+  stroke: #9ca3af;
   stroke-width: 2;
 }
 
-.asm3-row-label {
-  font-size: 10px;
-  font-weight: 800;
-  fill: #1e293b;
+.asm3-aisle {
+  fill: #f3f4f6;
 }
 
-.asm3-side-label {
+.asm3-row {
+  font-size: 10px;
+  font-weight: 700;
+  fill: #374151;
+}
+
+.asm3-side {
   font-size: 11px;
   font-weight: 700;
-  fill: #94a3b8;
-  letter-spacing: 1px;
+  fill: #9ca3af;
 }
 
 .asm3-slot {
   cursor: pointer;
+  outline: none;
 
-  rect {
-    fill: #bfdbfe;
-    stroke: #3b82f6;
+  &__box {
+    fill: #dbeafe;
+    stroke: #60a5fa;
     stroke-width: 0.6;
-    transition: fill 0.1s ease;
+    transition: fill 0.12s, stroke 0.12s, filter 0.12s;
   }
 
-  &:hover rect {
+  &:hover &__box,
+  &--on:not(&--selected) &__box {
     fill: #93c5fd;
+    stroke: #2563eb;
+    stroke-width: 1;
+    filter: drop-shadow(0 2px 3px rgba(37, 99, 235, 0.35));
   }
 
-  &--selected rect {
-    fill: #f97316;
-    stroke: #c2410c;
+  &--selected &__box {
+    fill: #fb923c;
+    stroke: #ea580c;
+    stroke-width: 1.2;
+    filter: drop-shadow(0 2px 4px rgba(234, 88, 12, 0.4));
   }
 }
 
-.asm3-info {
+.asm3-selected {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-top: 10px;
   padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #bfdbfe;
   border-radius: 8px;
-  background: #eff6ff;
-  color: #1e3a8a;
-  font-size: 13.5px;
+  font-size: 13px;
+  color: #1e40af;
 
-  i {
-    color: #2563eb;
+  span {
+    flex: 1;
+  }
+}
+
+.asm3-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.asm3-modal {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+}
+
+.asm3-modal__title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.asm3-modal__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
   }
 
-  .asm3-btn {
-    margin-left: auto;
+  select {
+    flex: 1;
+    max-width: 140px;
+    padding: 7px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+  }
+}
+
+.asm3-modal__preview {
+  margin: 12px 0 16px;
+  padding: 10px;
+  text-align: center;
+  font-size: 14px;
+  color: #1e40af;
+  background: #eff6ff;
+  border-radius: 8px;
+}
+
+.asm3-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .asm3-page {
+    padding: 8px;
+  }
+
+  .asm3-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .asm3-toolbar__title {
+    order: -1;
+    width: 100%;
+  }
+
+  .asm3-toolbar__actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }

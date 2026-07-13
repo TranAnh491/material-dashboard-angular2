@@ -318,7 +318,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
     }
 
     isLayoutWarehousePage(): boolean {
-      return this.currentAppPath() === '/layout-warehouse';
+      const p = this.currentAppPath();
+      return p === '/layout-warehouse' || p === '/layout-warehouse-asm3';
     }
 
     isQcTraceabilityPage(): boolean {
