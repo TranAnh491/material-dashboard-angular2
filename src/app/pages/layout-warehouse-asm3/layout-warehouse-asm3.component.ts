@@ -112,6 +112,9 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   /** Mã pallet đang gán cho từng ô — key = tên ô (VD: WH3-A1). */
   slotPallets: Map<string, string> = new Map();
+  /** Vị trí bị khóa — không cho gán / chuyển pallet tới. */
+  lockedSlots: Set<string> = new Set();
+  isTogglingLock = false;
   showScanInput = false;
   scanPalletInput = '';
   isSavingPallet = false;
@@ -123,6 +126,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   isMovingPallet = false;
 
   private readonly SLOT_PALLET_COLLECTION = 'asm3-slot-pallets';
+  private readonly SLOT_LOCK_COLLECTION = 'asm3-slot-locks';
   /** Tiền tố mã vị trí kho ASM3 — VD: WH3-A1 */
   private readonly WAREHOUSE_SLOT_PREFIX = 'WH3';
   private readonly INVENTORY_COLLECTION = 'inventory-materials';
@@ -141,6 +145,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     this.updateLayoutMode();
     setTimeout(() => this.applyFitZoom(), 0);
     void this.loadSlotPallets();
+    void this.loadLockedSlots();
   }
 
   get totalSlots(): number {
@@ -151,8 +156,16 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return this.slotPallets.size;
   }
 
+  get lockedCount(): number {
+    return this.lockedSlots.size;
+  }
+
   get emptyCount(): number {
-    return Math.max(0, this.totalSlots - this.occupiedCount);
+    let lockedEmpty = 0;
+    this.lockedSlots.forEach(name => {
+      if (!this.slotPallets.has(name)) lockedEmpty++;
+    });
+    return Math.max(0, this.totalSlots - this.occupiedCount - lockedEmpty);
   }
 
   get utilizationPct(): number {
@@ -192,6 +205,71 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     } catch (e) {
       console.error('[LayoutWarehouseAsm3] loadSlotPallets failed', e);
     }
+  }
+
+  private async loadLockedSlots(): Promise<void> {
+    try {
+      const snap = await this.firestore.collection(this.SLOT_LOCK_COLLECTION).get().toPromise();
+      const set = new Set<string>();
+      (snap?.docs || []).forEach(doc => {
+        const data = doc.data() as { locked?: boolean };
+        if (data?.locked === false) return;
+        set.add(this.normalizeSlotName(doc.id));
+      });
+      this.lockedSlots = set;
+      this.lastUpdated = new Date();
+    } catch (e) {
+      console.error('[LayoutWarehouseAsm3] loadLockedSlots failed', e);
+    }
+  }
+
+  isSlotLocked(slot: Asm3RackSlot | null): boolean {
+    if (!slot) return false;
+    return this.lockedSlots.has(slot.name);
+  }
+
+  async toggleSlotLock(): Promise<void> {
+    if (!this.selectedSlot || this.isTogglingLock || this.moveMode) return;
+    const slot = this.selectedSlot;
+    const slotName = slot.name;
+    const nextLocked = !this.isSlotLocked(slot);
+
+    if (nextLocked) {
+      if (!confirm(`Khóa vị trí ${this.slotShortCode(slot)}?\nVị trí bị khóa sẽ không cho gán / chuyển pallet tới.`)) {
+        return;
+      }
+    }
+
+    this.isTogglingLock = true;
+    try {
+      if (nextLocked) {
+        await this.firestore.collection(this.SLOT_LOCK_COLLECTION).doc(slotName).set({
+          slotName,
+          locked: true,
+          updatedAt: new Date()
+        });
+        this.lockedSlots.add(slotName);
+      } else {
+        await this.firestore.collection(this.SLOT_LOCK_COLLECTION).doc(slotName).delete();
+        this.lockedSlots.delete(slotName);
+      }
+      this.lockedSlots = new Set(this.lockedSlots);
+      this.lastUpdated = new Date();
+      this.showScanInput = false;
+      this.scanPalletInput = '';
+      if (nextLocked && this.moveMode) this.cancelMovePosition();
+    } catch (e) {
+      console.error('[LayoutWarehouseAsm3] toggleSlotLock failed', e);
+      alert('Lỗi khi cập nhật khóa vị trí. Vui lòng thử lại.');
+    } finally {
+      this.isTogglingLock = false;
+    }
+  }
+
+  slotStatusLabel(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    if (this.isSlotLocked(slot)) return 'Locked';
+    return this.isSlotOccupied(slot) ? 'Occupied' : 'Empty';
   }
 
   @HostListener('window:resize')
@@ -306,7 +384,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   openScanForFirstEmpty(): void {
     for (const row of this.rackRows) {
       for (const slot of row.slots) {
-        if (!this.isSlotOccupied(slot)) {
+        if (!this.isSlotOccupied(slot) && !this.isSlotLocked(slot)) {
           this.filterRow = 'ALL';
           this.selectSlot(slot);
           this.scrollToSlot(slot);
@@ -315,24 +393,26 @@ export class LayoutWarehouseAsm3Component implements OnInit {
         }
       }
     }
-    alert('Không còn ô trống.');
+    alert('Không còn ô trống (hoặc các ô trống đều đã bị khóa).');
   }
 
   async refreshData(): Promise<void> {
-    await this.loadSlotPallets();
+    await Promise.all([this.loadSlotPallets(), this.loadLockedSlots()]);
   }
 
   exportLayout(): void {
-    const lines = ['Vi_tri,Dãy,Ô,Pallet,Trạng_thái'];
+    const lines = ['Vi_tri,Dãy,Ô,Pallet,Trạng_thái,Khóa'];
     for (const row of this.rackRows) {
       for (const slot of row.slots) {
         const pallet = this.palletAtSlot(slot);
+        const locked = this.isSlotLocked(slot);
         lines.push([
           slot.name,
           slot.row,
           String(slot.index),
           pallet || '',
-          pallet ? 'Occupied' : 'Empty'
+          locked ? 'Locked' : pallet ? 'Occupied' : 'Empty',
+          locked ? 'Yes' : 'No'
         ].join(','));
       }
     }
@@ -458,6 +538,10 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       alert('Chỉ đổi vị trí được khi ô đang có pallet.');
       return;
     }
+    if (this.isSlotLocked(this.selectedSlot)) {
+      alert('Vị trí đang bị khóa. Mở khóa trước khi đổi vị trí.');
+      return;
+    }
     this.moveMode = true;
     this.moveFromSlot = this.selectedSlot;
     this.movePalletCode = this.palletAtSlot(this.selectedSlot);
@@ -483,6 +567,11 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
     if (this.isSlotOccupied(target)) {
       alert(`Vị trí ${this.slotShortCode(target)} đã có pallet. Hãy chọn ô trống.`);
+      return;
+    }
+
+    if (this.isSlotLocked(target)) {
+      alert(`Vị trí ${this.slotShortCode(target)} đang bị khóa. Không thể chuyển tới.`);
       return;
     }
 
@@ -541,6 +630,10 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   openScanForSelectedSlot(): void {
     if (!this.selectedSlot) return;
+    if (this.isSlotLocked(this.selectedSlot)) {
+      alert('Vị trí đang bị khóa. Mở khóa trước khi gán pallet.');
+      return;
+    }
     if (this.isSlotOccupied(this.selectedSlot)) {
       alert('Vị trí này đã có pallet. Mỗi vị trí chỉ được gán một pallet. Xóa pallet hiện tại trước khi gán mới.');
       return;
@@ -561,6 +654,10 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     if (!code) return;
 
     const slotName = this.selectedSlot.name;
+    if (this.isSlotLocked(this.selectedSlot)) {
+      alert('Vị trí đang bị khóa. Không thể gán pallet.');
+      return;
+    }
     if (this.isSlotOccupied(this.selectedSlot)) {
       alert('Vị trí này đã có pallet. Mỗi vị trí chỉ được gán một pallet.');
       return;
@@ -751,6 +848,10 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   async clearSlotPallet(): Promise<void> {
     if (!this.selectedSlot) return;
+    if (this.isSlotLocked(this.selectedSlot)) {
+      alert('Vị trí đang bị khóa. Mở khóa trước khi xóa pallet.');
+      return;
+    }
     const slotName = this.selectedSlot.name;
     if (!this.slotPallets.has(slotName)) return;
     if (!confirm(`Xóa pallet đang gán cho ${slotName}?`)) return;

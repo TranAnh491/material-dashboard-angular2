@@ -30,6 +30,11 @@
           <strong class="wms-kpi__num">{{ emptyCount }}</strong>
           <span class="wms-kpi__lbl">Empty</span>
         </div>
+        <div class="wms-kpi-divider"></div>
+        <div class="wms-kpi">
+          <strong class="wms-kpi__num wms-kpi__num--orange">{{ lockedCount }}</strong>
+          <span class="wms-kpi__lbl">Locked</span>
+        </div>
       </div>
 
       <div class="wms-header__right">
@@ -105,10 +110,11 @@
                           *ngFor="let slot of block.row.slots"
                           [attr.data-slot]="slot.name"
                           [class.wms-cell--selected]="selectedSlot?.name === slot.name"
+                          [class.wms-cell--locked]="isSlotLocked(slot)"
                           [class.wms-cell--match]="isSearchMatch(slot)"
                           [class.wms-cell--move-from]="moveMode && moveFromSlot?.name === slot.name"
-                          [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot)"
-                          [title]="slot.name + (palletAtSlot(slot) ? ' — Pallet: ' + palletAtSlot(slot) : '')"
+                          [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot) && !isSlotLocked(slot)"
+                          [title]="slot.name + (isSlotLocked(slot) ? ' — LOCKED' : '') + (palletAtSlot(slot) ? ' — Pallet: ' + palletAtSlot(slot) : '')"
                           (mouseenter)="onSlotHover(slot)"
                           (mouseleave)="onSlotHover(null)"
                           (click)="selectSlot(slot); $event.stopPropagation()">
@@ -143,8 +149,12 @@
               <span class="wms-detail__sub">Vị trí đang chọn</span>
               <h3>{{ slotShortCode(selectedSlot) }}</h3>
             </div>
-            <span class="wms-tag" [class.wms-tag--green]="isSlotOccupied(selectedSlot)" [class.wms-tag--gray]="!isSlotOccupied(selectedSlot)">
-              {{ isSlotOccupied(selectedSlot) ? 'Occupied' : 'Empty' }}
+            <span
+              class="wms-tag"
+              [class.wms-tag--red]="isSlotLocked(selectedSlot)"
+              [class.wms-tag--green]="!isSlotLocked(selectedSlot) && isSlotOccupied(selectedSlot)"
+              [class.wms-tag--gray]="!isSlotLocked(selectedSlot) && !isSlotOccupied(selectedSlot)">
+              {{ slotStatusLabel(selectedSlot) }}
             </span>
           </div>
 
@@ -154,8 +164,11 @@
             <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / 30</dd></div>
             <div class="wms-fields__row" *ngIf="palletAtSlot(selectedSlot)"><dt>Pallet</dt><dd class="wms-fields__blue">{{ palletAtSlot(selectedSlot) }}</dd></div>
             <div class="wms-fields__row"><dt>Trạng thái</dt>
-              <dd [class.wms-fields__green]="isSlotOccupied(selectedSlot)" [class.wms-fields__muted]="!isSlotOccupied(selectedSlot)">
-                {{ isSlotOccupied(selectedSlot) ? 'Đang có hàng' : 'Trống' }}
+              <dd
+                [class.wms-fields__green]="!isSlotLocked(selectedSlot) && isSlotOccupied(selectedSlot)"
+                [class.wms-fields__muted]="!isSlotLocked(selectedSlot) && !isSlotOccupied(selectedSlot)"
+                [class.wms-fields__red]="isSlotLocked(selectedSlot)">
+                {{ isSlotLocked(selectedSlot) ? 'Đã khóa — không cho dùng' : (isSlotOccupied(selectedSlot) ? 'Đang có hàng' : 'Trống') }}
               </dd>
             </div>
           </dl>
@@ -174,21 +187,27 @@
           <div class="wms-detail__btns" *ngIf="!showScanInput && !moveMode">
             <button type="button" class="wms-btn wms-btn--primary wms-btn--block"
               (click)="openScanForSelectedSlot()"
-              [disabled]="isSlotOccupied(selectedSlot)">
+              [disabled]="isSlotOccupied(selectedSlot) || isSlotLocked(selectedSlot)">
               <i class="material-icons">qr_code_scanner</i> Gán pallet
             </button>
             <button type="button" class="wms-btn wms-btn--outline"
+              (click)="toggleSlotLock()"
+              [disabled]="isTogglingLock">
+              <i class="material-icons">{{ isSlotLocked(selectedSlot) ? 'lock_open' : 'lock' }}</i>
+              {{ isSlotLocked(selectedSlot) ? 'Mở khóa' : 'Khóa vị trí' }}
+            </button>
+            <button type="button" class="wms-btn wms-btn--outline"
               (click)="startMovePosition()"
-              *ngIf="isSlotOccupied(selectedSlot)">
+              *ngIf="isSlotOccupied(selectedSlot)"
+              [disabled]="isSlotLocked(selectedSlot)">
               <i class="material-icons">swap_horiz</i> Đổi vị trí
             </button>
             <button type="button" class="wms-btn wms-btn--outline" (click)="openPrintLabelModal()">
               <i class="material-icons">print</i> In tem
             </button>
-            <button type="button" class="wms-btn wms-btn--outline" disabled>
-              <i class="material-icons">history</i> Lịch sử
-            </button>
-            <button type="button" class="wms-btn wms-btn--outline" (click)="clearSlotPallet()" *ngIf="isSlotOccupied(selectedSlot)">
+            <button type="button" class="wms-btn wms-btn--outline" (click)="clearSlotPallet()"
+              *ngIf="isSlotOccupied(selectedSlot)"
+              [disabled]="isSlotLocked(selectedSlot)">
               <i class="material-icons">delete</i> Xóa pallet
             </button>
           </div>
@@ -236,7 +255,7 @@
     <!-- Status bar -->
     <footer class="wms-bar">
       <span *ngIf="lastUpdated">Cập nhật lần cuối: {{ lastUpdated | date:'dd/MM/yyyy HH:mm:ss' }}</span>
-      <span>Tổng vị trí: {{ totalSlots }} | Occupied: {{ occupiedCount }} | Empty: {{ emptyCount }}</span>
+      <span>Tổng vị trí: {{ totalSlots }} | Occupied: {{ occupiedCount }} | Empty: {{ emptyCount }} | Locked: {{ lockedCount }}</span>
     </footer>
   </div>
 

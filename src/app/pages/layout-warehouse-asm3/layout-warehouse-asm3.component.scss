@@ -533,6 +533,38 @@ $mobile: 767px;
     box-shadow: 0 0 0 1px #7c3aed;
   }
 
+  &--locked {
+    background: #fecaca;
+    border-color: #ef4444;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 3px,
+      rgba(127, 29, 29, 0.08) 3px,
+      rgba(127, 29, 29, 0.08) 6px
+    );
+
+    .wms-cell__label {
+      color: #7f1d1d;
+      font-weight: 800;
+    }
+
+    &:hover:not(.wms-cell--selected) {
+      background: #fecaca;
+      box-shadow: 0 1px 4px rgba(239, 68, 68, 0.25);
+    }
+  }
+
+  &--locked.wms-cell--selected {
+    background: #fecaca;
+    border: 2px solid #dc2626;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.3);
+
+    .wms-cell__label {
+      color: #7f1d1d;
+    }
+  }
+
   &--move-from {
     background: #ffedd5;
     border: 2px solid $orange;
@@ -741,6 +773,7 @@ $mobile: 767px;
 
   &--green { background: $green-bg; color: #15803d; }
   &--gray { background: #f1f5f9; color: $muted; }
+  &--red { background: #fee2e2; color: #b91c1c; }
 }
 
 .wms-fields {
@@ -767,6 +800,7 @@ $mobile: 767px;
   &__blue { color: $blue; }
   &__green { color: $green; }
   &__muted { color: $muted; }
+  &__red { color: #b91c1c; font-weight: 700; }
 }
 
 .wms-scan-row {
