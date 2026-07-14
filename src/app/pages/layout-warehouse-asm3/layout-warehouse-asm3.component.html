@@ -1,126 +1,265 @@
-<div class="asm3-page">
-  <header class="asm3-toolbar">
-    <button type="button" class="asm3-btn" (click)="goToMenu()">
-      <i class="material-icons">arrow_back</i>
-      Về Menu
-    </button>
+<div
+  class="wms"
+  [class.wms--mobile]="isMobileLayout"
+  [class.wms--has-slot]="!!selectedSlot"
+  [class.wms--move-mode]="moveMode">
 
-    <div class="asm3-toolbar__title">
-      <i class="material-icons">warehouse</i>
-      <span>Sơ đồ Kho ASM3</span>
-    </div>
+  <div class="wms-shell">
+    <!-- Header -->
+    <header class="wms-header">
+      <div class="wms-header__brand">
+        <div class="wms-header__logo"><i class="material-icons">home</i></div>
+        <div>
+          <strong class="wms-header__title">ASM3 Warehouse</strong>
+          <span class="wms-header__crumb">Sơ đồ kho / ASM3</span>
+        </div>
+      </div>
 
-    <div class="asm3-toolbar__actions">
-      <button type="button" class="asm3-btn" (click)="openPrintLabelModal()">
-        <i class="material-icons">print</i>
-        In Label
-      </button>
-      <div class="asm3-zoom">
-        <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(-0.2)" title="Thu nhỏ">
-          <i class="material-icons">remove</i>
+      <div class="wms-kpi-strip">
+        <div class="wms-kpi wms-kpi--ring">
+          <div class="wms-kpi__ring" [style.--pct]="utilizationPct"><span>{{ utilizationPct }}%</span></div>
+          <span class="wms-kpi__lbl">Utilization</span>
+        </div>
+        <div class="wms-kpi-divider"></div>
+        <div class="wms-kpi">
+          <strong class="wms-kpi__num wms-kpi__num--green">{{ occupiedCount }}</strong>
+          <span class="wms-kpi__lbl">Occupied</span>
+        </div>
+        <div class="wms-kpi-divider"></div>
+        <div class="wms-kpi">
+          <strong class="wms-kpi__num">{{ emptyCount }}</strong>
+          <span class="wms-kpi__lbl">Empty</span>
+        </div>
+      </div>
+
+      <div class="wms-header__right">
+        <div class="wms-search">
+          <i class="material-icons">search</i>
+          <input
+            #searchInputRef
+            type="text"
+            [(ngModel)]="searchQuery"
+            (keyup.enter)="onSearchSubmit()"
+            placeholder="Tìm vị trí, SKU, Lot, Part No…">
+          <kbd *ngIf="!isMobileLayout">/</kbd>
+        </div>
+        <button type="button" class="wms-icon-btn wms-icon-btn--bell" title="Thông báo">
+          <i class="material-icons">notifications_none</i>
+          <span class="wms-icon-btn__dot"></span>
         </button>
-        <span class="asm3-zoom__label">{{ (zoom * 100) | number:'1.0-0' }}%</span>
-        <button type="button" class="asm3-btn asm3-btn--icon" (click)="setZoom(0.2)" title="Phóng to">
-          <i class="material-icons">add</i>
-        </button>
-        <button type="button" class="asm3-btn asm3-btn--icon" (click)="resetZoom()" title="Vừa khung">
-          <i class="material-icons">fit_screen</i>
+        <button type="button" class="wms-user" (click)="refreshData()" title="Làm mới">
+          <span class="wms-user__avatar">WT</span>
+          <span class="wms-user__name">Warehouse Team</span>
+          <i class="material-icons">expand_more</i>
         </button>
       </div>
+    </header>
+
+    <!-- Workspace -->
+    <div class="wms-workspace">
+      <div class="wms-center">
+        <!-- Map card -->
+        <section class="wms-map">
+          <div class="wms-map__toolbar">
+            <h2>Sơ đồ kho ASM3</h2>
+            <div class="wms-map__controls">
+              <div class="wms-move-banner" *ngIf="moveMode && moveFromSlot">
+                <i class="material-icons">swap_horiz</i>
+                <span>Đổi vị trí: chọn ô trống để chuyển pallet <strong>{{ movePalletCode }}</strong> từ <strong>{{ slotShortCode(moveFromSlot) }}</strong></span>
+                <button type="button" class="wms-btn wms-btn--ghost wms-btn--nav" (click)="cancelMovePosition()" [disabled]="isMovingPallet">Hủy</button>
+              </div>
+              <select class="wms-select" [(ngModel)]="filterRow" (ngModelChange)="onFilterRowChange()" [disabled]="moveMode">
+                <option value="ALL">Tất cả dãy</option>
+                <option *ngFor="let letter of rackLetters" [value]="letter">Dãy {{ letter }}</option>
+              </select>
+              <div class="wms-zoom">
+                <button type="button" class="wms-icon-btn wms-icon-btn--sm" (click)="setZoom(-0.1)"><i class="material-icons">remove</i></button>
+                <span>{{ (zoom * 100) | number:'1.0-0' }}%</span>
+                <button type="button" class="wms-icon-btn wms-icon-btn--sm" (click)="setZoom(0.1)"><i class="material-icons">add</i></button>
+                <input type="range" min="0.5" max="2.5" step="0.05" [ngModel]="zoom" (ngModelChange)="setZoomFromSlider($event)">
+                <button type="button" class="wms-fit-btn" (click)="resetZoom()">
+                  <i class="material-icons">open_in_full</i> Fit screen
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="wms-viewport" #viewport (click)="clearSelection()">
+            <div class="wms-grid-wrap" [style.zoom]="zoom">
+              <div class="wms-grid-frame">
+                <div class="wms-grid-wall wms-grid-wall--top">C</div>
+                <div class="wms-grid-body">
+                  <div class="wms-grid-wall wms-grid-wall--side wms-grid-wall--a">Cửa Kho Tạm</div>
+                  <div class="wms-grid">
+                    <div class="wms-grid__cols">
+                      <span class="wms-grid__corner"></span>
+                      <span class="wms-grid__col" *ngFor="let col of colHeaders">{{ col }}</span>
+                    </div>
+                    <ng-container *ngFor="let block of displayGridBlocks">
+                      <div *ngIf="block.type === 'aisle'" class="wms-aisle"><span>{{ block.aisleLabel }}</span></div>
+                      <div *ngIf="block.type === 'row' && block.row" class="wms-grid__row">
+                        <span class="wms-row-badge">{{ block.row.letter }}</span>
+                        <button
+                          type="button"
+                          class="wms-cell"
+                          *ngFor="let slot of block.row.slots"
+                          [attr.data-slot]="slot.name"
+                          [class.wms-cell--selected]="selectedSlot?.name === slot.name"
+                          [class.wms-cell--match]="isSearchMatch(slot)"
+                          [class.wms-cell--move-from]="moveMode && moveFromSlot?.name === slot.name"
+                          [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot)"
+                          [title]="slot.name + (palletAtSlot(slot) ? ' — Pallet: ' + palletAtSlot(slot) : '')"
+                          (mouseenter)="onSlotHover(slot)"
+                          (mouseleave)="onSlotHover(null)"
+                          (click)="selectSlot(slot); $event.stopPropagation()">
+                          <span class="wms-cell__label">{{ slotShortCode(slot) }}</span>
+                        </button>
+                      </div>
+                    </ng-container>
+                  </div>
+                  <div class="wms-grid-wall wms-grid-wall--side">D</div>
+                </div>
+                <div class="wms-grid-wall wms-grid-wall--bottom">B</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right detail -->
+      <aside class="wms-detail" (click)="$event.stopPropagation()">
+        <div class="wms-detail__nav">
+          <button type="button" class="wms-btn wms-btn--outline wms-btn--nav" (click)="goBack()">
+            <i class="material-icons">arrow_back</i> Back
+          </button>
+          <button type="button" class="wms-btn wms-btn--outline wms-btn--nav" (click)="goToMenu()">
+            <i class="material-icons">home</i> Về Menu
+          </button>
+        </div>
+
+        <ng-container *ngIf="selectedSlot; else emptyDetail">
+          <div class="wms-detail__top">
+            <div>
+              <span class="wms-detail__sub">Vị trí đang chọn</span>
+              <h3>{{ slotShortCode(selectedSlot) }}</h3>
+            </div>
+            <span class="wms-tag" [class.wms-tag--green]="isSlotOccupied(selectedSlot)" [class.wms-tag--gray]="!isSlotOccupied(selectedSlot)">
+              {{ isSlotOccupied(selectedSlot) ? 'Occupied' : 'Empty' }}
+            </span>
+          </div>
+
+          <dl class="wms-fields">
+            <div class="wms-fields__row"><dt>Mã vị trí</dt><dd class="wms-fields__blue">{{ selectedSlot.name }}</dd></div>
+            <div class="wms-fields__row"><dt>Dãy kệ</dt><dd>{{ selectedSlot.row }}</dd></div>
+            <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / 30</dd></div>
+            <div class="wms-fields__row" *ngIf="palletAtSlot(selectedSlot)"><dt>Pallet</dt><dd class="wms-fields__blue">{{ palletAtSlot(selectedSlot) }}</dd></div>
+            <div class="wms-fields__row"><dt>Trạng thái</dt>
+              <dd [class.wms-fields__green]="isSlotOccupied(selectedSlot)" [class.wms-fields__muted]="!isSlotOccupied(selectedSlot)">
+                {{ isSlotOccupied(selectedSlot) ? 'Đang có hàng' : 'Trống' }}
+              </dd>
+            </div>
+          </dl>
+
+          <div class="wms-detail__scan" *ngIf="showScanInput">
+            <label for="wms-scan">Scan mã pallet</label>
+            <div class="wms-scan-row">
+              <input id="wms-scan" #scanPalletInputRef type="text" [(ngModel)]="scanPalletInput"
+                (keyup.enter)="submitScanPallet()" placeholder="Quét hoặc nhập..." [disabled]="isSavingPallet">
+              <button type="button" class="wms-btn wms-btn--primary wms-btn--icon" (click)="submitScanPallet()"
+                [disabled]="isSavingPallet || !scanPalletInput.trim()"><i class="material-icons">check</i></button>
+            </div>
+            <button type="button" class="wms-btn wms-btn--ghost wms-btn--block" (click)="cancelScanPallet()">Hủy</button>
+          </div>
+
+          <div class="wms-detail__btns" *ngIf="!showScanInput && !moveMode">
+            <button type="button" class="wms-btn wms-btn--primary wms-btn--block"
+              (click)="openScanForSelectedSlot()"
+              [disabled]="isSlotOccupied(selectedSlot)">
+              <i class="material-icons">qr_code_scanner</i> Gán pallet
+            </button>
+            <button type="button" class="wms-btn wms-btn--outline"
+              (click)="startMovePosition()"
+              *ngIf="isSlotOccupied(selectedSlot)">
+              <i class="material-icons">swap_horiz</i> Đổi vị trí
+            </button>
+            <button type="button" class="wms-btn wms-btn--outline" (click)="openPrintLabelModal()">
+              <i class="material-icons">print</i> In tem
+            </button>
+            <button type="button" class="wms-btn wms-btn--outline" disabled>
+              <i class="material-icons">history</i> Lịch sử
+            </button>
+            <button type="button" class="wms-btn wms-btn--outline" (click)="clearSlotPallet()" *ngIf="isSlotOccupied(selectedSlot)">
+              <i class="material-icons">delete</i> Xóa pallet
+            </button>
+          </div>
+
+          <div class="wms-detail__move" *ngIf="moveMode && moveFromSlot">
+            <p>
+              Đang đổi vị trí pallet <strong>{{ movePalletCode }}</strong><br>
+              từ <strong>{{ slotShortCode(moveFromSlot) }}</strong>.<br>
+              Bấm một ô <strong>trống</strong> trên sơ đồ để chuyển tới.
+            </p>
+            <button type="button" class="wms-btn wms-btn--ghost wms-btn--block" (click)="cancelMovePosition()" [disabled]="isMovingPallet">
+              Hủy đổi vị trí
+            </button>
+          </div>
+        </ng-container>
+
+        <ng-template #emptyDetail>
+          <div class="wms-detail__empty">
+            <i class="material-icons">touch_app</i>
+            <h3>Chọn vị trí</h3>
+            <p>Bấm một ô trên sơ đồ để xem chi tiết, scan pallet hoặc in tem vị trí.</p>
+          </div>
+        </ng-template>
+
+        <div class="wms-detail__quick">
+          <h4>Thao tác nhanh</h4>
+          <div class="wms-quick-grid">
+            <button type="button" class="wms-quick-card" (click)="openQuickScan()">
+              <i class="material-icons">qr_code_scanner</i><span>Scan pallet</span>
+            </button>
+            <button type="button" class="wms-quick-card" (click)="focusSearch()">
+              <i class="material-icons">search</i><span>Tìm vị trí</span>
+            </button>
+            <button type="button" class="wms-quick-card" (click)="openScanForFirstEmpty()">
+              <i class="material-icons">south</i><span>Putaway</span>
+            </button>
+            <button type="button" class="wms-quick-card wms-quick-card--green" (click)="exportLayout()">
+              <i class="material-icons">file_download</i><span>Export layout</span>
+            </button>
+          </div>
+        </div>
+      </aside>
     </div>
-  </header>
 
-  <p class="asm3-sub">
-    8 dãy kệ A–H · 30 ô/dãy (F3-A1…H30) · Bấm ô để chọn vị trí
-  </p>
-
-  <div class="asm3-viewport" #viewport (click)="clearSelection()">
-    <svg
-      class="asm3-svg"
-      [attr.viewBox]="'0 0 ' + svgWidth + ' ' + svgHeight"
-      [style.width.px]="svgWidth * zoom"
-      [style.height.px]="svgHeight * zoom">
-      <rect class="asm3-wall" x="0" y="0" [attr.width]="svgWidth" [attr.height]="svgHeight"></rect>
-
-      <g class="asm3-aisles">
-        <rect *ngFor="let aisle of aisleZones"
-          class="asm3-aisle"
-          [attr.x]="px(aisle.xM)"
-          [attr.y]="px(aisle.yM)"
-          [attr.width]="px(aisle.wM)"
-          [attr.height]="px(aisle.hM)">
-        </rect>
-      </g>
-
-      <text class="asm3-side" [attr.x]="14" [attr.y]="svgHeight / 2" text-anchor="middle" dominant-baseline="middle">A</text>
-      <text class="asm3-side" [attr.x]="svgWidth - 14" [attr.y]="svgHeight / 2" text-anchor="middle" dominant-baseline="middle">D</text>
-      <text class="asm3-side" [attr.x]="svgWidth / 2" [attr.y]="16" text-anchor="middle">C</text>
-      <text class="asm3-side" [attr.x]="svgWidth / 2" [attr.y]="svgHeight - 8" text-anchor="middle">B</text>
-
-      <g *ngFor="let row of rackRows">
-        <text
-          class="asm3-row"
-          [attr.x]="px(LEFT_MARGIN_M) - 8"
-          [attr.y]="px(row.yM) + px(row.hM) / 2"
-          text-anchor="end"
-          dominant-baseline="middle">{{ row.letter }}</text>
-
-        <g *ngFor="let slot of row.slots"
-           class="asm3-slot"
-           [class.asm3-slot--on]="hoveredSlot?.name === slot.name || selectedSlot?.name === slot.name"
-           [class.asm3-slot--selected]="selectedSlot?.name === slot.name"
-           (mouseenter)="onSlotHover(slot)"
-           (mouseleave)="onSlotHover(null)"
-           (click)="selectSlot(slot); $event.stopPropagation()">
-          <title>{{ slot.name }}</title>
-          <rect
-            class="asm3-slot__box"
-            rx="1.5"
-            [attr.x]="px(slot.xM)"
-            [attr.y]="px(slot.yM)"
-            [attr.width]="px(slot.wM) - 1"
-            [attr.height]="px(slot.hM)">
-          </rect>
-        </g>
-      </g>
-    </svg>
+    <!-- Status bar -->
+    <footer class="wms-bar">
+      <span *ngIf="lastUpdated">Cập nhật lần cuối: {{ lastUpdated | date:'dd/MM/yyyy HH:mm:ss' }}</span>
+      <span>Tổng vị trí: {{ totalSlots }} | Occupied: {{ occupiedCount }} | Empty: {{ emptyCount }}</span>
+    </footer>
   </div>
 
-  <div class="asm3-selected" *ngIf="selectedSlot">
-    <span><strong>{{ selectedSlot.name }}</strong> — Dãy {{ selectedSlot.row }}, ô {{ selectedSlot.index }}/30</span>
-    <button type="button" class="asm3-btn asm3-btn--primary asm3-btn--sm" (click)="openPrintLabelModal()">
-      <i class="material-icons">print</i> In tem
-    </button>
-    <button type="button" class="asm3-btn asm3-btn--icon" (click)="clearSelection()">
-      <i class="material-icons">close</i>
-    </button>
-  </div>
-
-  <div class="asm3-modal-overlay" *ngIf="showPrintLabelModal" (click)="closePrintLabelModal()">
-    <div class="asm3-modal" (click)="$event.stopPropagation()">
-      <h4 class="asm3-modal__title">In Label vị trí</h4>
-
-      <div class="asm3-modal__row">
+  <!-- Print modal -->
+  <div class="wms-modal-bg" *ngIf="showPrintLabelModal" (click)="closePrintLabelModal()">
+    <div class="wms-modal" (click)="$event.stopPropagation()">
+      <h4>In Label vị trí</h4>
+      <div class="wms-modal__row">
         <label>Dãy kệ</label>
         <select [(ngModel)]="printLabelRow">
           <option *ngFor="let letter of rackLetters" [value]="letter">{{ letter }}</option>
         </select>
       </div>
-
-      <div class="asm3-modal__row">
+      <div class="wms-modal__row">
         <label>Số thứ tự</label>
         <select [(ngModel)]="printLabelIndex">
           <option *ngFor="let n of slotIndexes" [value]="n">{{ n }}</option>
         </select>
       </div>
-
-      <div class="asm3-modal__preview">
-        Tem: <strong>{{ printLabelName }}</strong>
-      </div>
-
-      <div class="asm3-modal__actions">
-        <button type="button" class="asm3-btn" (click)="closePrintLabelModal()" [disabled]="isPrintingLabel">Hủy</button>
-        <button type="button" class="asm3-btn asm3-btn--primary" (click)="printAsm3Label()" [disabled]="isPrintingLabel">
+      <p class="wms-modal__preview">Tem: <strong>{{ printLabelName }}</strong></p>
+      <div class="wms-modal__actions">
+        <button type="button" class="wms-btn wms-btn--ghost" (click)="closePrintLabelModal()" [disabled]="isPrintingLabel">Hủy</button>
+        <button type="button" class="wms-btn wms-btn--primary" (click)="printAsm3Label()" [disabled]="isPrintingLabel">
           {{ isPrintingLabel ? 'Đang tạo...' : 'In tem' }}
         </button>
       </div>

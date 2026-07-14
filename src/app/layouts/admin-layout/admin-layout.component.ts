@@ -170,7 +170,7 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
   }
 
   public shouldShowFooter(): boolean {
-    const hideFooterOnRoutes = ['/maps', '/work-order-status', '/documents'];
+    const hideFooterOnRoutes = ['/maps', '/work-order-status', '/documents', '/layout-warehouse-asm3'];
     return !hideFooterOnRoutes.includes(this.location.path());
   }
   
