@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject, forkJoin, firstValueFrom, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, take, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -301,8 +302,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private fgInventoryLocationService: FGInventoryLocationService,
     private cdr: ChangeDetectorRef,
     private readTracker: ReadTrackerService,
-    private fgDailyBackup: FgDailyBackupService
+    private fgDailyBackup: FgDailyBackupService,
+    private router: Router
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
   ngOnInit(): void {
     this.loadMaterialsFromFirebase();

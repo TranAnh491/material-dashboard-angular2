@@ -360,6 +360,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/nhiet-do',
       '/location',
       '/fg-in',
+      '/fg-out',
+      '/fg-inventory',
       '/fg-location',
       '/layout-warehouse',
       '/layout-warehouse-asm3',

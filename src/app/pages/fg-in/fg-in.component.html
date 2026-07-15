@@ -1,4 +1,3 @@
-<app-tab-back-button variant="floating"></app-tab-back-button>
 <div class="main-content" [class.fg-m-page]="isMobile">
 
   <!-- Mobile: chọn nhà máy (giống tab Location) -->
@@ -30,6 +29,9 @@
       </div>
       <div class="fg-m-header__right">
         <span class="fg-m-pending-badge" *ngIf="getPendingCount() > 0">{{ getPendingCount() }} chờ</span>
+        <button type="button" class="fg-m-menu-btn" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+        </button>
       </div>
     </header>
 
@@ -161,6 +163,11 @@
         <button class="custom-btn hide-on-mobile" (click)="showMoreMenu = true">
           <i class="material-icons">more_vert</i>
           More
+        </button>
+
+        <button class="custom-btn hide-on-mobile" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+          Về Menu
         </button>
 
         <div class="dropdown factory-filter-dropdown hide-on-mobile">

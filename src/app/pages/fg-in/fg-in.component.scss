@@ -3893,6 +3893,27 @@ body.fg-in-mobile-tab {
   border-radius: 999px;
 }
 
+.fg-m-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fg-m-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #f2f2f7;
+  color: #1c1c1e;
+  cursor: pointer;
+
+  i { font-size: 20px; }
+}
+
 .fg-m-body {
   flex: 1;
   overflow-y: auto;

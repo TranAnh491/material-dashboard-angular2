@@ -16,6 +16,9 @@
         <button type="button" class="icon-btn" title="Back" (click)="goBack()">
           <i class="material-icons">arrow_back</i>
         </button>
+        <button type="button" class="icon-btn" title="Về Menu" (click)="goToMenu()">
+          <i class="material-icons">home</i>
+        </button>
       </div>
 
       <!-- Batch Filter Indicator -->
@@ -101,6 +104,14 @@
                   title="Back">
             <i class="material-icons">arrow_back</i>
             Back
+          </button>
+
+          <button type="button"
+                  class="btn btn--ghost mobile-hide toolbar-back-menu-btn"
+                  (click)="goToMenu()"
+                  title="Về Menu">
+            <i class="material-icons">home</i>
+            Về Menu
           </button>
         </div>
 

@@ -237,6 +237,10 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
+
   @HostListener('window:resize')
   onWindowResize(): void {
     this.updateMobileLayout();

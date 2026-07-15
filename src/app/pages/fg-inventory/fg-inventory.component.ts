@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -173,8 +174,13 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private cdr: ChangeDetectorRef,
     private readTracker: ReadTrackerService,
-    private fgDailyBackup: FgDailyBackupService
+    private fgDailyBackup: FgDailyBackupService,
+    private router: Router
   ) {}
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
   /** Chỉ cho sửa "Tồn đầu" với dòng import tồn đầu (batch TDAU1-/TDAU2-) */
   isTonDauEditable(material: FGInventoryItem): boolean {
