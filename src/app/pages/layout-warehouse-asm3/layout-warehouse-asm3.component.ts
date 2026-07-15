@@ -127,6 +127,17 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   private readonly SLOT_PALLET_COLLECTION = 'asm3-slot-pallets';
   private readonly SLOT_LOCK_COLLECTION = 'asm3-slot-locks';
+  private readonly INFO_COLLECTION = 'asm3-config';
+  private readonly INFO_DOC = 'storage-conditions';
+
+  showQuickActionsModal = false;
+  showInfoModal = false;
+  isEditingInfo = false;
+  isLoadingInfo = false;
+  isSavingInfo = false;
+  storageConditionsText = '';
+  storageConditionsDraft = '';
+  private infoLoaded = false;
   /** Tiền tố mã vị trí kho ASM3 — VD: WH3-A1 */
   private readonly WAREHOUSE_SLOT_PREFIX = 'WH3';
   private readonly INVENTORY_COLLECTION = 'inventory-materials';
@@ -430,6 +441,70 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   goBack(): void {
     this.location.back();
+  }
+
+  openQuickActionsModal(): void {
+    this.showQuickActionsModal = true;
+  }
+
+  closeQuickActionsModal(): void {
+    this.showQuickActionsModal = false;
+  }
+
+  openInfoModal(): void {
+    this.showInfoModal = true;
+    if (!this.infoLoaded) {
+      void this.loadStorageConditions();
+    }
+  }
+
+  closeInfoModal(): void {
+    if (this.isSavingInfo) return;
+    this.showInfoModal = false;
+    this.isEditingInfo = false;
+  }
+
+  startEditInfo(): void {
+    this.storageConditionsDraft = this.storageConditionsText;
+    this.isEditingInfo = true;
+  }
+
+  cancelEditInfo(): void {
+    this.isEditingInfo = false;
+    this.storageConditionsDraft = '';
+  }
+
+  private async loadStorageConditions(): Promise<void> {
+    this.isLoadingInfo = true;
+    try {
+      const doc = await this.firestore.collection(this.INFO_COLLECTION).doc(this.INFO_DOC).get().toPromise();
+      const data = doc?.data() as { content?: string } | undefined;
+      this.storageConditionsText = data?.content || '';
+      this.infoLoaded = true;
+    } catch (e) {
+      console.error('[LayoutWarehouseAsm3] loadStorageConditions failed', e);
+    } finally {
+      this.isLoadingInfo = false;
+    }
+  }
+
+  async saveInfo(): Promise<void> {
+    if (this.isSavingInfo) return;
+    this.isSavingInfo = true;
+    try {
+      const content = this.storageConditionsDraft.trim();
+      await this.firestore.collection(this.INFO_COLLECTION).doc(this.INFO_DOC).set({
+        content,
+        updatedAt: new Date()
+      });
+      this.storageConditionsText = content;
+      this.isEditingInfo = false;
+    } catch (e) {
+      console.error('[LayoutWarehouseAsm3] saveInfo failed', e);
+      alert('Lỗi khi lưu thông tin. Vui lòng thử lại.');
+    } finally {
+      this.isSavingInfo = false;
+    }
   }
 
   private buildRackRows(): Asm3RackRow[] {

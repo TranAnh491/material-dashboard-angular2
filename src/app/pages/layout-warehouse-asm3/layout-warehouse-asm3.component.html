@@ -48,6 +48,9 @@
             placeholder="Tìm vị trí, SKU, Lot, Part No…">
           <kbd *ngIf="!isMobileLayout">/</kbd>
         </div>
+        <button type="button" class="wms-icon-btn" title="Thông tin điều kiện lưu trữ" (click)="openInfoModal()">
+          <i class="material-icons">info</i>
+        </button>
         <button type="button" class="wms-icon-btn wms-icon-btn--bell" title="Thông báo">
           <i class="material-icons">notifications_none</i>
           <span class="wms-icon-btn__dot"></span>
@@ -77,6 +80,9 @@
                 <option value="ALL">Tất cả dãy</option>
                 <option *ngFor="let letter of rackLetters" [value]="letter">Dãy {{ letter }}</option>
               </select>
+              <button type="button" class="wms-btn wms-btn--outline" (click)="openQuickActionsModal()">
+                <i class="material-icons">bolt</i> Chức năng
+              </button>
               <div class="wms-zoom">
                 <button type="button" class="wms-icon-btn wms-icon-btn--sm" (click)="setZoom(-0.1)"><i class="material-icons">remove</i></button>
                 <span>{{ (zoom * 100) | number:'1.0-0' }}%</span>
@@ -111,6 +117,7 @@
                           [attr.data-slot]="slot.name"
                           [class.wms-cell--selected]="selectedSlot?.name === slot.name"
                           [class.wms-cell--locked]="isSlotLocked(slot)"
+                          [class.wms-cell--occupied]="isSlotOccupied(slot)"
                           [class.wms-cell--match]="isSearchMatch(slot)"
                           [class.wms-cell--move-from]="moveMode && moveFromSlot?.name === slot.name"
                           [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot) && !isSlotLocked(slot)"
@@ -118,7 +125,7 @@
                           (mouseenter)="onSlotHover(slot)"
                           (mouseleave)="onSlotHover(null)"
                           (click)="selectSlot(slot); $event.stopPropagation()">
-                          <span class="wms-cell__label">{{ slotShortCode(slot) }}</span>
+                          <span class="wms-cell__label">{{ isSlotOccupied(slot) ? palletAtSlot(slot) : slotShortCode(slot) }}</span>
                         </button>
                       </div>
                     </ng-container>
@@ -231,24 +238,6 @@
             <p>Bấm một ô trên sơ đồ để xem chi tiết, scan pallet hoặc in tem vị trí.</p>
           </div>
         </ng-template>
-
-        <div class="wms-detail__quick">
-          <h4>Thao tác nhanh</h4>
-          <div class="wms-quick-grid">
-            <button type="button" class="wms-quick-card" (click)="openQuickScan()">
-              <i class="material-icons">qr_code_scanner</i><span>Scan pallet</span>
-            </button>
-            <button type="button" class="wms-quick-card" (click)="focusSearch()">
-              <i class="material-icons">search</i><span>Tìm vị trí</span>
-            </button>
-            <button type="button" class="wms-quick-card" (click)="openScanForFirstEmpty()">
-              <i class="material-icons">south</i><span>Putaway</span>
-            </button>
-            <button type="button" class="wms-quick-card wms-quick-card--green" (click)="exportLayout()">
-              <i class="material-icons">file_download</i><span>Export layout</span>
-            </button>
-          </div>
-        </div>
       </aside>
     </div>
 
@@ -281,6 +270,66 @@
         <button type="button" class="wms-btn wms-btn--primary" (click)="printAsm3Label()" [disabled]="isPrintingLabel">
           {{ isPrintingLabel ? 'Đang tạo...' : 'In tem' }}
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick actions modal -->
+  <div class="wms-modal-bg" *ngIf="showQuickActionsModal" (click)="closeQuickActionsModal()">
+    <div class="wms-modal wms-modal--quick" (click)="$event.stopPropagation()">
+      <h4>Thao tác nhanh</h4>
+      <div class="wms-quick-grid">
+        <button type="button" class="wms-quick-card" (click)="openQuickScan(); closeQuickActionsModal()">
+          <i class="material-icons">qr_code_scanner</i><span>Scan pallet</span>
+        </button>
+        <button type="button" class="wms-quick-card" (click)="focusSearch(); closeQuickActionsModal()">
+          <i class="material-icons">search</i><span>Tìm vị trí</span>
+        </button>
+        <button type="button" class="wms-quick-card" (click)="openScanForFirstEmpty(); closeQuickActionsModal()">
+          <i class="material-icons">south</i><span>Putaway</span>
+        </button>
+        <button type="button" class="wms-quick-card wms-quick-card--green" (click)="exportLayout(); closeQuickActionsModal()">
+          <i class="material-icons">file_download</i><span>Export layout</span>
+        </button>
+      </div>
+      <div class="wms-modal__actions">
+        <button type="button" class="wms-btn wms-btn--ghost" (click)="closeQuickActionsModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info modal: điều kiện lưu trữ -->
+  <div class="wms-modal-bg" *ngIf="showInfoModal" (click)="closeInfoModal()">
+    <div class="wms-modal wms-modal--info" (click)="$event.stopPropagation()">
+      <h4>Thông tin điều kiện lưu trữ</h4>
+
+      <p *ngIf="isLoadingInfo" class="wms-info-empty">Đang tải...</p>
+
+      <ng-container *ngIf="!isLoadingInfo">
+        <div *ngIf="!isEditingInfo" class="wms-info-view">
+          <p class="wms-info-empty" *ngIf="!storageConditionsText">Chưa có nội dung. Bấm "Sửa" để nhập điều kiện lưu trữ.</p>
+          <p class="wms-info-text" *ngIf="storageConditionsText">{{ storageConditionsText }}</p>
+        </div>
+
+        <textarea
+          *ngIf="isEditingInfo"
+          class="wms-info-textarea"
+          [(ngModel)]="storageConditionsDraft"
+          rows="10"
+          placeholder="Nhập điều kiện lưu trữ..."></textarea>
+      </ng-container>
+
+      <div class="wms-modal__actions">
+        <ng-container *ngIf="!isEditingInfo">
+          <button type="button" class="wms-btn wms-btn--ghost" (click)="closeInfoModal()">Đóng</button>
+          <button type="button" class="wms-btn wms-btn--primary" (click)="startEditInfo()" [disabled]="isLoadingInfo">Sửa</button>
+        </ng-container>
+        <ng-container *ngIf="isEditingInfo">
+          <button type="button" class="wms-btn wms-btn--ghost" (click)="cancelEditInfo()" [disabled]="isSavingInfo">Hủy</button>
+          <button type="button" class="wms-btn wms-btn--primary" (click)="saveInfo()" [disabled]="isSavingInfo">
+            {{ isSavingInfo ? 'Đang lưu...' : 'Lưu' }}
+          </button>
+        </ng-container>
       </div>
     </div>
   </div>

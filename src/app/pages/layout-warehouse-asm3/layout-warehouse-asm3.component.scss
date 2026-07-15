@@ -505,6 +505,10 @@ $mobile: 767px;
 
   &__label {
     display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 8px;
     font-weight: 700;
     color: #0f172a;
@@ -515,6 +519,11 @@ $mobile: 767px;
   &:hover:not(&--selected) {
     background: #f8fafc;
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  }
+
+  &--occupied {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.35);
   }
 
   &--selected {
@@ -933,6 +942,50 @@ $mobile: 767px;
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+
+  &--info {
+    width: 480px;
+  }
+}
+
+.wms-info-view {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.wms-info-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+  color: $text2;
+}
+
+.wms-info-empty {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: $muted;
+  font-style: italic;
+}
+
+.wms-info-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+
+  &:focus {
+    outline: none;
+    border-color: $blue;
   }
 }
 
