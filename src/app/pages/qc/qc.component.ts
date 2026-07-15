@@ -4,6 +4,7 @@ import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { Router } from '@angular/router';
+import { Location } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
@@ -319,7 +320,8 @@ export class QCComponent implements OnInit, OnDestroy {
     private router: Router,
     private fns: AngularFireFunctions,
     private rmBagHistory: RmBagHistoryService,
-    private outboundQcRule: OutboundQcRuleService
+    private outboundQcRule: OutboundQcRuleService,
+    private location: Location
   ) {}
   
   get monthlyTotal(): number {
@@ -4999,6 +5001,10 @@ export class QCComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  goBack(): void {
+    this.location.back();
   }
 
   onFactoryChange(factory: 'ASM1' | 'ASM2'): void {

@@ -5,6 +5,7 @@ import { AngularFireModule } from '@angular/fire/compat';
 import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 
 import { InventoryOverviewASM1Component } from './inventory-overview-asm1.component';
+import { SharedModule } from '../../shared/shared.module';
 
 @NgModule({
   declarations: [
@@ -14,7 +15,8 @@ import { InventoryOverviewASM1Component } from './inventory-overview-asm1.compon
     CommonModule,
     FormsModule,
     AngularFireModule,
-    AngularFirestoreModule
+    AngularFirestoreModule,
+    SharedModule
   ],
   exports: [
     InventoryOverviewASM1Component

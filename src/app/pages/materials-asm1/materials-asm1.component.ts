@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
+import { Location } from '@angular/common';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -315,7 +316,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private locationUnlock: LocationUnlockService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private nvlkhCatalog: NvlkhCatalogService,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private location: Location
   ) {}
 
   getStorageUnitLabel(material: InventoryMaterial): string {
@@ -1708,6 +1710,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  goBack(): void {
+    this.location.back();
   }
 
   ngOnInit(): void {

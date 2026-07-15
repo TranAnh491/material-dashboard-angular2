@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { PalletIdComponent } from './pallet-id.component';
+import { SharedModule } from '../../shared/shared.module';
 
 @NgModule({
   declarations: [PalletIdComponent],
@@ -12,7 +13,8 @@ import { PalletIdComponent } from './pallet-id.component';
     FormsModule,
     RouterModule.forChild([
       { path: '', component: PalletIdComponent }
-    ])
+    ]),
+    SharedModule
   ],
   exports: [PalletIdComponent]
 })

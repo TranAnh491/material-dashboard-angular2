@@ -1,0 +1,16 @@
+<div class="tab-back-bar" *ngIf="variant === 'bar'">
+  <button type="button" class="tab-back-btn" (click)="goBack()" title="Quay lại">
+    <i class="material-icons">arrow_back</i>
+    <span>Back</span>
+  </button>
+</div>
+
+<button
+  *ngIf="variant === 'floating'"
+  type="button"
+  class="tab-back-btn tab-back-btn--floating"
+  (click)="goBack()"
+  title="Quay lại">
+  <i class="material-icons">arrow_back</i>
+  <span>Back</span>
+</button>

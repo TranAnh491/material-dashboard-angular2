@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FGCheckComponent } from './fg-check.component';
+import { SharedModule } from '../../shared/shared.module';
 
 const routes: Routes = [
   { path: '', component: FGCheckComponent }
@@ -23,7 +24,8 @@ const routes: Routes = [
     MatCheckboxModule,
     MatButtonModule,
     MatIconModule,
-    MatTooltipModule
+    MatTooltipModule,
+    SharedModule
   ],
   exports: [
     FGCheckComponent

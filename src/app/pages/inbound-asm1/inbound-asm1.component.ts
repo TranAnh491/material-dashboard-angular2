@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { Router } from '@angular/router';
+import { Location } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -246,15 +247,16 @@ export class InboundASM1Component implements OnInit, OnDestroy {
     private rmBagHistory: RmBagHistoryService,
     private inboundTbhdCheck: InboundTbhdCheckService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
-    private router: Router
+    private router: Router,
+    private location: Location
   ) {}
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
   }
 
-  goHome(): void {
-    this.router.navigate(['/dashboard']);
+  goBack(): void {
+    this.location.back();
   }
   
   ngOnInit(): void {

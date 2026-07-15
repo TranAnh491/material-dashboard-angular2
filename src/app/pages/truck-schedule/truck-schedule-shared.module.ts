@@ -12,6 +12,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { LoginComponent } from '../login/login.component';
 import { TruckScheduleComponent } from './truck-schedule.component';
 import { QrScannerModule } from '../../components/qr-scanner-modal/qr-scanner.module';
+import { SharedModule } from '../../shared/shared.module';
 
 @NgModule({
   declarations: [LoginComponent, TruckScheduleComponent],
@@ -28,7 +29,8 @@ import { QrScannerModule } from '../../components/qr-scanner-modal/qr-scanner.mo
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatDialogModule,
-    QrScannerModule
+    QrScannerModule,
+    SharedModule
   ]
 })
 export class TruckScheduleSharedModule {}

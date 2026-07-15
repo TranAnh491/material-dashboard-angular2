@@ -1,0 +1,56 @@
+// Nút Back dùng chung cho các tab — style tham khảo .action-btn của tab QC
+// (src/app/pages/qc/qc.component.scss)
+
+// Mặc định: nằm trong dòng chảy layout (đầu trang), không đè lên toolbar/nội dung riêng của tab.
+.tab-back-bar {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px 0;
+  box-sizing: border-box;
+}
+
+.tab-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 10px;
+  background: #ffffff;
+  color: rgba(15, 23, 42, 0.55);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
+  transition: background .15s, color .15s;
+
+  .material-icons { font-size: 18px; }
+
+  &:hover {
+    background: rgba(15, 23, 42, 0.04);
+    color: rgba(15, 23, 42, 0.92);
+  }
+
+  // Opt-in: neo cố định theo viewport — chỉ dùng khi chắc chắn tab không có toolbar
+  // riêng ở góc phải trên (mặc định KHÔNG dùng biến thể này để tránh đè nội dung).
+  &--floating {
+    position: fixed;
+    top: 72px;
+    right: 16px;
+    z-index: 1000;
+  }
+}
+
+@media (max-width: 768px) {
+  .tab-back-btn--floating {
+    top: 64px;
+    right: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .tab-back-btn span { display: none; }
+  .tab-back-btn { padding: 8px 10px; }
+}

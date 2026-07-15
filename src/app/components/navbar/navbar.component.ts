@@ -338,6 +338,42 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/xe-tai';
     }
 
+    /**
+     * Đường dẫn các tab đã tự có nút Back / Về Menu riêng gắn trong toolbar của trang —
+     * ẩn nút "Về Menu" nổi trên navbar ở các tab này để tránh trùng lặp / lệch style.
+     * Thêm path vào đây mỗi khi một tab được gắn nút điều hướng riêng.
+     */
+    private static readonly PAGES_WITH_OWN_NAV = new Set<string>([
+      '/dashboard',
+      '/menu',
+      '/shipment',
+      '/qc',
+      '/qc-traceability',
+      '/settings',
+      '/rm1-delivery',
+      '/inbound-asm1',
+      '/inbound-asm2',
+      '/outbound-asm1',
+      '/outbound-asm2',
+      '/pd-control',
+      '/shorted-materials',
+      '/nhiet-do',
+      '/location',
+      '/fg-in',
+      '/fg-location',
+      '/layout-warehouse',
+      '/layout-warehouse-asm3',
+      '/report',
+      '/label',
+      '/equipment',
+      '/xe-tai',
+      '/materials-asm1'
+    ]);
+
+    hasOwnNav(): boolean {
+      return NavbarComponent.PAGES_WITH_OWN_NAV.has(this.currentAppPath());
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

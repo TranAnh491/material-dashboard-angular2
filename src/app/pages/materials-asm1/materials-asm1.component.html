@@ -26,7 +26,19 @@
         <div class="mobile-menu-btn" (click)="toggleMobileMenu()">
           <i class="material-icons">menu</i>
         </div>
-        
+
+        <!-- Back -->
+        <button class="more-btn" type="button" (click)="goBack()" title="Quay lại">
+          <i class="material-icons">arrow_back</i>
+          <span class="btn-label">Back</span>
+        </button>
+
+        <!-- Về Menu -->
+        <button class="more-btn" type="button" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+          <span class="btn-label">Menu</span>
+        </button>
+
         <!-- More — mở popup -->
         <button class="more-btn" type="button" (click)="openMorePopup()">
           <i class="material-icons">more_vert</i>

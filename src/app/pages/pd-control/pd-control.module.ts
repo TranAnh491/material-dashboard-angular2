@@ -3,12 +3,13 @@ import { NgModule } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 import { PdControlComponent } from './pd-control.component';
+import { SharedModule } from '../../shared/shared.module';
 
 const routes: Routes = [{ path: '', component: PdControlComponent }];
 
 @NgModule({
   declarations: [PdControlComponent],
-  imports: [CommonModule, FormsModule, RouterModule.forChild(routes)]
+  imports: [CommonModule, FormsModule, RouterModule.forChild(routes), SharedModule]
 })
 export class PdControlModule {}
 

@@ -7,6 +7,7 @@ import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 import { AngularFireAuthModule } from '@angular/fire/compat/auth';
 import { LayoutWarehouseComponent } from './layout-warehouse.component';
 import { LayoutWarehouseRack3dComponent } from './layout-warehouse-rack-3d.component';
+import { SharedModule } from '../../shared/shared.module';
 
 @NgModule({
   declarations: [LayoutWarehouseComponent, LayoutWarehouseRack3dComponent],
@@ -18,7 +19,8 @@ import { LayoutWarehouseRack3dComponent } from './layout-warehouse-rack-3d.compo
     AngularFireAuthModule,
     RouterModule.forChild([
       { path: '', component: LayoutWarehouseComponent }
-    ])
+    ]),
+    SharedModule
   ]
 })
 export class LayoutWarehouseModule {}
