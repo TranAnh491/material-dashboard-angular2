@@ -18,22 +18,22 @@
       <div class="wms-kpi-strip">
         <div class="wms-kpi wms-kpi--ring">
           <div class="wms-kpi__ring" [style.--pct]="utilizationPct"><span>{{ utilizationPct }}%</span></div>
-          <span class="wms-kpi__lbl">Utilization</span>
+          <span class="wms-kpi__lbl">Tỷ lệ lấp đầy</span>
         </div>
         <div class="wms-kpi-divider"></div>
         <div class="wms-kpi">
           <strong class="wms-kpi__num wms-kpi__num--green">{{ occupiedCount }}</strong>
-          <span class="wms-kpi__lbl">Occupied</span>
+          <span class="wms-kpi__lbl">Đã chứa</span>
         </div>
         <div class="wms-kpi-divider"></div>
         <div class="wms-kpi">
           <strong class="wms-kpi__num">{{ emptyCount }}</strong>
-          <span class="wms-kpi__lbl">Empty</span>
+          <span class="wms-kpi__lbl">Trống</span>
         </div>
         <div class="wms-kpi-divider"></div>
         <div class="wms-kpi">
           <strong class="wms-kpi__num wms-kpi__num--orange">{{ lockedCount }}</strong>
-          <span class="wms-kpi__lbl">Locked</span>
+          <span class="wms-kpi__lbl">Đã khóa</span>
         </div>
       </div>
 
@@ -76,12 +76,21 @@
                 <span>Đổi vị trí: chọn ô trống để chuyển pallet <strong>{{ movePalletCode }}</strong> từ <strong>{{ slotShortCode(moveFromSlot) }}</strong></span>
                 <button type="button" class="wms-btn wms-btn--ghost wms-btn--nav" (click)="cancelMovePosition()" [disabled]="isMovingPallet">Hủy</button>
               </div>
-              <select class="wms-select" [(ngModel)]="filterRow" (ngModelChange)="onFilterRowChange()" [disabled]="moveMode">
+              <div class="wms-move-banner" *ngIf="bulkLockMode">
+                <i class="material-icons">lock</i>
+                <span>Đang chọn vị trí để khóa chung — đã chọn <strong>{{ bulkLockSelectedSlots.size }}</strong> vị trí</span>
+                <button type="button" class="wms-btn wms-btn--primary wms-btn--nav" (click)="confirmBulkLockSelection()" [disabled]="bulkLockSelectedSlots.size === 0">Khóa</button>
+                <button type="button" class="wms-btn wms-btn--ghost wms-btn--nav" (click)="cancelBulkLockMode()">Hủy</button>
+              </div>
+              <select class="wms-select" [(ngModel)]="filterRow" (ngModelChange)="onFilterRowChange()" [disabled]="moveMode || bulkLockMode">
                 <option value="ALL">Tất cả dãy</option>
                 <option *ngFor="let letter of rackLetters" [value]="letter">Dãy {{ letter }}</option>
               </select>
-              <button type="button" class="wms-btn wms-btn--outline" (click)="openQuickActionsModal()">
+              <button type="button" class="wms-btn wms-btn--outline" (click)="openQuickActionsModal()" [disabled]="bulkLockMode">
                 <i class="material-icons">bolt</i> Chức năng
+              </button>
+              <button type="button" class="wms-btn wms-btn--outline" (click)="startBulkLockMode()" *ngIf="!bulkLockMode" [disabled]="moveMode">
+                <i class="material-icons">lock</i> Khóa nhiều pallet
               </button>
               <div class="wms-zoom">
                 <button type="button" class="wms-icon-btn wms-icon-btn--sm" (click)="setZoom(-0.1)"><i class="material-icons">remove</i></button>
@@ -121,11 +130,12 @@
                           [class.wms-cell--match]="isSearchMatch(slot)"
                           [class.wms-cell--move-from]="moveMode && moveFromSlot?.name === slot.name"
                           [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot) && !isSlotLocked(slot)"
-                          [title]="slot.name + (isSlotLocked(slot) ? ' — LOCKED' : '') + (palletAtSlot(slot) ? ' — Pallet: ' + palletAtSlot(slot) : '')"
+                          [class.wms-cell--bulk-picked]="bulkLockMode && bulkLockSelectedSlots.has(slot.name)"
+                          [title]="slot.name + (isSlotLocked(slot) ? ' — Đã khóa' + (slotLockGroupLabel(slot) ? ' chung với ' + slotLockGroupLabel(slot) : '') : '') + (isSlotOccupied(slot) ? ' — ' + slotDisplayLabel(slot) : '')"
                           (mouseenter)="onSlotHover(slot)"
                           (mouseleave)="onSlotHover(null)"
                           (click)="selectSlot(slot); $event.stopPropagation()">
-                          <span class="wms-cell__label">{{ isSlotOccupied(slot) ? palletAtSlot(slot) : slotShortCode(slot) }}</span>
+                          <span class="wms-cell__label">{{ slotDisplayLabel(slot) }}</span>
                         </button>
                       </div>
                     </ng-container>
@@ -169,7 +179,8 @@
             <div class="wms-fields__row"><dt>Mã vị trí</dt><dd class="wms-fields__blue">{{ selectedSlot.name }}</dd></div>
             <div class="wms-fields__row"><dt>Dãy kệ</dt><dd>{{ selectedSlot.row }}</dd></div>
             <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / 30</dd></div>
-            <div class="wms-fields__row" *ngIf="palletAtSlot(selectedSlot)"><dt>Pallet</dt><dd class="wms-fields__blue">{{ palletAtSlot(selectedSlot) }}</dd></div>
+            <div class="wms-fields__row" *ngIf="isSlotOccupied(selectedSlot)"><dt>Vị trí / Pallet</dt><dd class="wms-fields__blue">{{ slotDisplayLabel(selectedSlot) }}</dd></div>
+            <div class="wms-fields__row" *ngIf="slotLockGroupLabel(selectedSlot)"><dt>Khóa chung với</dt><dd class="wms-fields__blue">{{ slotLockGroupLabel(selectedSlot) }}</dd></div>
             <div class="wms-fields__row"><dt>Trạng thái</dt>
               <dd
                 [class.wms-fields__green]="!isSlotLocked(selectedSlot) && isSlotOccupied(selectedSlot)"
@@ -244,8 +255,34 @@
     <!-- Status bar -->
     <footer class="wms-bar">
       <span *ngIf="lastUpdated">Cập nhật lần cuối: {{ lastUpdated | date:'dd/MM/yyyy HH:mm:ss' }}</span>
-      <span>Tổng vị trí: {{ totalSlots }} | Occupied: {{ occupiedCount }} | Empty: {{ emptyCount }} | Locked: {{ lockedCount }}</span>
+      <span>Tổng vị trí: {{ totalSlots }} | Đã chứa: {{ occupiedCount }} | Trống: {{ emptyCount }} | Đã khóa: {{ lockedCount }}</span>
     </footer>
+  </div>
+
+  <!-- Bulk lock: chọn vị trí đại diện nhóm -->
+  <div class="wms-modal-bg" *ngIf="showBulkLockGroupModal" (click)="cancelBulkLockGroupModal()">
+    <div class="wms-modal" (click)="$event.stopPropagation()">
+      <h4>Khóa chung với vị trí nào?</h4>
+      <p class="wms-info-empty">
+        Chọn 1 vị trí đại diện — cả {{ bulkLockSelectedSlotNames.length }} vị trí đã chọn sẽ được gom khóa chung theo vị trí này.
+      </p>
+      <div class="wms-bulklock-options">
+        <button
+          type="button"
+          class="wms-bulklock-option"
+          *ngFor="let name of bulkLockSelectedSlotNames"
+          [class.wms-bulklock-option--active]="bulkLockGroupChoice === name"
+          (click)="bulkLockGroupChoice = name">
+          {{ shortCodeFromSlotName(name) }}
+        </button>
+      </div>
+      <div class="wms-modal__actions">
+        <button type="button" class="wms-btn wms-btn--ghost" (click)="cancelBulkLockGroupModal()" [disabled]="isBulkLocking">Hủy</button>
+        <button type="button" class="wms-btn wms-btn--primary" (click)="submitBulkLock()" [disabled]="!bulkLockGroupChoice || isBulkLocking">
+          {{ isBulkLocking ? 'Đang khóa...' : 'Xác nhận khóa' }}
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Print modal -->

@@ -591,6 +591,47 @@ $mobile: 767px;
     border-color: $blue;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
   }
+
+  &--bulk-picked {
+    background: #ede9fe;
+    border: 2px solid #7c3aed;
+    box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.35);
+    z-index: 1;
+
+    .wms-cell__label {
+      color: #5b21b6;
+      font-weight: 800;
+    }
+  }
+}
+
+.wms-bulklock-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.wms-bulklock-option {
+  padding: 8px 12px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  background: $card;
+  font-size: 13px;
+  font-weight: 700;
+  color: $text2;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover { background: #f8fafc; }
+
+  &--active {
+    background: #ede9fe;
+    border-color: #7c3aed;
+    color: #5b21b6;
+  }
 }
 
 .wms-move-banner {

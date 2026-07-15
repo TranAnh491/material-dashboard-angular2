@@ -112,8 +112,16 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   /** Mã pallet đang gán cho từng ô — key = tên ô (VD: WH3-A1). */
   slotPallets: Map<string, string> = new Map();
+  /**
+   * Vị trí đọc được từ cột "Vị trí" bên tab Materials ASM1/ASM2 (inventory-materials.location) —
+   * key = tên ô (VD: WH3-F1), value = chuỗi vị trí ĐẦY ĐỦ đã nhập (VD: WH3-F1-0379).
+   * Ưu tiên hiển thị cái này trên ô lưới vì đây là dữ liệu người dùng tự nhập khi đọc vị trí.
+   */
+  inventoryLocationLabels: Map<string, string> = new Map();
   /** Vị trí bị khóa — không cho gán / chuyển pallet tới. */
   lockedSlots: Set<string> = new Set();
+  /** Nhóm khóa chung của từng vị trí (nếu được khóa hàng loạt) — key = tên ô, value = tên vị trí đại diện nhóm. */
+  lockGroups: Map<string, string> = new Map();
   isTogglingLock = false;
   showScanInput = false;
   scanPalletInput = '';
@@ -124,6 +132,13 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   moveFromSlot: Asm3RackSlot | null = null;
   movePalletCode = '';
   isMovingPallet = false;
+
+  /** Chế độ khóa nhiều vị trí cùng lúc, gom chung theo 1 vị trí đại diện. */
+  bulkLockMode = false;
+  bulkLockSelectedSlots: Set<string> = new Set();
+  showBulkLockGroupModal = false;
+  bulkLockGroupChoice = '';
+  isBulkLocking = false;
 
   private readonly SLOT_PALLET_COLLECTION = 'asm3-slot-pallets';
   private readonly SLOT_LOCK_COLLECTION = 'asm3-slot-locks';
@@ -157,6 +172,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     setTimeout(() => this.applyFitZoom(), 0);
     void this.loadSlotPallets();
     void this.loadLockedSlots();
+    void this.loadInventoryLocations();
   }
 
   get totalSlots(): number {
@@ -222,16 +238,77 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     try {
       const snap = await this.firestore.collection(this.SLOT_LOCK_COLLECTION).get().toPromise();
       const set = new Set<string>();
+      const groups = new Map<string, string>();
       (snap?.docs || []).forEach(doc => {
-        const data = doc.data() as { locked?: boolean };
+        const data = doc.data() as { locked?: boolean; lockGroup?: string };
         if (data?.locked === false) return;
-        set.add(this.normalizeSlotName(doc.id));
+        const slotName = this.normalizeSlotName(doc.id);
+        set.add(slotName);
+        if (data?.lockGroup) groups.set(slotName, data.lockGroup);
       });
       this.lockedSlots = set;
+      this.lockGroups = groups;
       this.lastUpdated = new Date();
     } catch (e) {
       console.error('[LayoutWarehouseAsm3] loadLockedSlots failed', e);
     }
+  }
+
+  /**
+   * Đọc cột "Vị trí" (inventory-materials.location) của ASM1 + ASM2, chỉ lấy các dòng có
+   * vị trí bắt đầu bằng "WH3-" (đã lưu trữ tại kho ASM3) — dùng range query trên field
+   * "location" (đã có composite index factory+location) nên KHÔNG quét toàn bộ collection,
+   * chỉ đọc đúng số doc khớp tiền tố → tối thiểu lượt read.
+   */
+  private async loadInventoryLocations(): Promise<void> {
+    try {
+      const map = new Map<string, string>();
+      const prefix = `${this.WAREHOUSE_SLOT_PREFIX}-`;
+
+      for (const factory of this.SYNC_FACTORIES) {
+        const snap = await this.firestore
+          .collection(this.INVENTORY_COLLECTION, ref =>
+            ref
+              .where('factory', '==', factory)
+              .where('location', '>=', prefix)
+              .where('location', '<', prefix + '')
+          )
+          .get()
+          .toPromise();
+
+        (snap?.docs || []).forEach(doc => {
+          const data = doc.data() as { location?: string };
+          const raw = String(data?.location || '').trim().toUpperCase();
+          const slotName = this.extractSlotNameFromLocation(raw);
+          if (slotName) map.set(slotName, raw);
+        });
+      }
+
+      this.inventoryLocationLabels = map;
+      this.lastUpdated = new Date();
+    } catch (e) {
+      console.error('[LayoutWarehouseAsm3] loadInventoryLocations failed', e);
+    }
+  }
+
+  /** VD: "WH3-F1-0379" → "WH3-F1" (tên ô trên sơ đồ). Trả về null nếu không khớp định dạng ô ASM3. */
+  private extractSlotNameFromLocation(location: string): string | null {
+    const m = location.match(/^WH3-([A-H])(\d{1,2})(?:-.+)?$/);
+    if (!m) return null;
+    const row = m[1];
+    const index = parseInt(m[2], 10);
+    if (!this.rackLetters.includes(row) || index < 1 || index > this.SLOTS_PER_RACK) return null;
+    return this.buildSlotName(row, index);
+  }
+
+  /** Nhãn hiển thị trên ô lưới: ưu tiên vị trí đầy đủ đọc từ Materials ASM1/ASM2, sau đó tới pallet đã scan tay, cuối cùng là mã ô. */
+  slotDisplayLabel(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    const invLabel = this.inventoryLocationLabels.get(slot.name);
+    if (invLabel) return invLabel;
+    const pallet = this.slotPallets.get(slot.name);
+    if (pallet) return pallet;
+    return this.slotShortCode(slot);
   }
 
   isSlotLocked(slot: Asm3RackSlot | null): boolean {
@@ -260,11 +337,14 @@ export class LayoutWarehouseAsm3Component implements OnInit {
           updatedAt: new Date()
         });
         this.lockedSlots.add(slotName);
+        this.lockGroups.delete(slotName);
       } else {
         await this.firestore.collection(this.SLOT_LOCK_COLLECTION).doc(slotName).delete();
         this.lockedSlots.delete(slotName);
+        this.lockGroups.delete(slotName);
       }
       this.lockedSlots = new Set(this.lockedSlots);
+      this.lockGroups = new Map(this.lockGroups);
       this.lastUpdated = new Date();
       this.showScanInput = false;
       this.scanPalletInput = '';
@@ -277,10 +357,104 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     }
   }
 
+  /** Tên vị trí đại diện nhóm khóa chung của 1 ô (nếu có) — dạng ngắn (VD: B1). */
+  slotLockGroupLabel(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    const group = this.lockGroups.get(slot.name);
+    return group ? this.shortCodeFromSlotName(group) : '';
+  }
+
+  shortCodeFromSlotName(slotName: string): string {
+    return slotName.replace(`${this.WAREHOUSE_SLOT_PREFIX}-`, '');
+  }
+
+  get bulkLockSelectedSlotNames(): string[] {
+    return Array.from(this.bulkLockSelectedSlots).sort();
+  }
+
+  startBulkLockMode(): void {
+    if (this.moveMode) this.cancelMovePosition();
+    this.bulkLockMode = true;
+    this.bulkLockSelectedSlots = new Set();
+    this.selectedSlot = null;
+    this.showScanInput = false;
+    this.scanPalletInput = '';
+  }
+
+  cancelBulkLockMode(): void {
+    this.bulkLockMode = false;
+    this.bulkLockSelectedSlots = new Set();
+  }
+
+  toggleBulkLockSlot(slot: Asm3RackSlot): void {
+    if (this.isSlotLocked(slot)) return;
+    const next = new Set(this.bulkLockSelectedSlots);
+    if (next.has(slot.name)) {
+      next.delete(slot.name);
+    } else {
+      next.add(slot.name);
+    }
+    this.bulkLockSelectedSlots = next;
+  }
+
+  confirmBulkLockSelection(): void {
+    if (this.bulkLockSelectedSlots.size === 0) return;
+    this.bulkLockGroupChoice = this.bulkLockSelectedSlotNames[0] || '';
+    this.showBulkLockGroupModal = true;
+  }
+
+  cancelBulkLockGroupModal(): void {
+    if (this.isBulkLocking) return;
+    this.showBulkLockGroupModal = false;
+  }
+
+  async submitBulkLock(): Promise<void> {
+    if (!this.bulkLockGroupChoice || this.isBulkLocking) return;
+    const slotNames = this.bulkLockSelectedSlotNames;
+    if (!slotNames.length) return;
+
+    if (!confirm(`Khóa chung ${slotNames.length} vị trí theo nhóm "${this.shortCodeFromSlotName(this.bulkLockGroupChoice)}"?\nVị trí bị khóa sẽ không cho gán / chuyển pallet tới.`)) {
+      return;
+    }
+
+    this.isBulkLocking = true;
+    try {
+      const batch = this.firestore.firestore.batch();
+      const col = this.firestore.collection(this.SLOT_LOCK_COLLECTION);
+      const now = new Date();
+      const group = this.bulkLockGroupChoice;
+      slotNames.forEach(slotName => {
+        batch.set(col.doc(slotName).ref, {
+          slotName,
+          locked: true,
+          lockGroup: group,
+          updatedAt: now
+        });
+      });
+      await batch.commit();
+
+      slotNames.forEach(name => {
+        this.lockedSlots.add(name);
+        this.lockGroups.set(name, group);
+      });
+      this.lockedSlots = new Set(this.lockedSlots);
+      this.lockGroups = new Map(this.lockGroups);
+      this.lastUpdated = now;
+
+      this.showBulkLockGroupModal = false;
+      this.cancelBulkLockMode();
+    } catch (e) {
+      console.error('[LayoutWarehouseAsm3] submitBulkLock failed', e);
+      alert('Lỗi khi khóa chung. Vui lòng thử lại.');
+    } finally {
+      this.isBulkLocking = false;
+    }
+  }
+
   slotStatusLabel(slot: Asm3RackSlot | null): string {
     if (!slot) return '';
-    if (this.isSlotLocked(slot)) return 'Locked';
-    return this.isSlotOccupied(slot) ? 'Occupied' : 'Empty';
+    if (this.isSlotLocked(slot)) return 'Đã khóa';
+    return this.isSlotOccupied(slot) ? 'Đã chứa' : 'Trống';
   }
 
   @HostListener('window:resize')
@@ -341,7 +515,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   isSlotOccupied(slot: Asm3RackSlot | null): boolean {
-    return !!this.palletAtSlot(slot);
+    if (!slot) return false;
+    return this.slotPallets.has(slot.name) || this.inventoryLocationLabels.has(slot.name);
   }
 
   isSearchMatch(slot: Asm3RackSlot): boolean {
@@ -408,22 +583,22 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   async refreshData(): Promise<void> {
-    await Promise.all([this.loadSlotPallets(), this.loadLockedSlots()]);
+    await Promise.all([this.loadSlotPallets(), this.loadLockedSlots(), this.loadInventoryLocations()]);
   }
 
   exportLayout(): void {
     const lines = ['Vi_tri,Dãy,Ô,Pallet,Trạng_thái,Khóa'];
     for (const row of this.rackRows) {
       for (const slot of row.slots) {
-        const pallet = this.palletAtSlot(slot);
+        const occupied = this.isSlotOccupied(slot);
         const locked = this.isSlotLocked(slot);
         lines.push([
           slot.name,
           slot.row,
           String(slot.index),
-          pallet || '',
-          locked ? 'Locked' : pallet ? 'Occupied' : 'Empty',
-          locked ? 'Yes' : 'No'
+          occupied ? this.slotDisplayLabel(slot) : '',
+          locked ? 'Đã khóa' : occupied ? 'Đã chứa' : 'Trống',
+          locked ? 'Có' : 'Không'
         ].join(','));
       }
     }
@@ -582,6 +757,11 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   selectSlot(slot: Asm3RackSlot): void {
+    if (this.bulkLockMode) {
+      this.toggleBulkLockSlot(slot);
+      return;
+    }
+
     if (this.moveMode && this.moveFromSlot) {
       void this.completeMoveToSlot(slot);
       return;
@@ -600,7 +780,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   clearSelection(): void {
-    if (this.moveMode) return;
+    if (this.moveMode || this.bulkLockMode) return;
     this.selectedSlot = null;
     this.hoveredSlot = null;
     this.showScanInput = false;
