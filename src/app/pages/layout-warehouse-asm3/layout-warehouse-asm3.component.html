@@ -209,6 +209,11 @@
               <i class="material-icons">qr_code_scanner</i> Gán pallet
             </button>
             <button type="button" class="wms-btn wms-btn--outline"
+              (click)="viewSelectedSlotInMaterials()"
+              *ngIf="isSlotOccupied(selectedSlot)">
+              <i class="material-icons">open_in_new</i> Xem chi tiết
+            </button>
+            <button type="button" class="wms-btn wms-btn--outline"
               (click)="toggleSlotLock()"
               [disabled]="isTogglingLock">
               <i class="material-icons">{{ isSlotLocked(selectedSlot) ? 'lock_open' : 'lock' }}</i>

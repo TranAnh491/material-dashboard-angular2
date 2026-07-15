@@ -958,6 +958,15 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return this.slotPallets.get(slot.name) || '';
   }
 
+  /** Nhảy qua tab Materials ASM1, tự tìm theo đúng chuỗi vị trí đã lưu trên Firestore để xem mã NVL. */
+  viewSelectedSlotInMaterials(): void {
+    if (!this.selectedSlot) return;
+    const groupRef = this.lockGroups.get(this.selectedSlot.name);
+    const targetName = groupRef || this.selectedSlot.name;
+    const location = this.inventoryLocationFull.get(targetName) || targetName;
+    this.router.navigate(['/materials-asm1'], { queryParams: { location } });
+  }
+
   openScanForSelectedSlot(): void {
     if (!this.selectedSlot) return;
     if (this.isSlotLocked(this.selectedSlot)) {

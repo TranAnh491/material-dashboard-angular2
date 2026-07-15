@@ -45,6 +45,7 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
 .lw-panel--right {
   width: 260px;
   border-left: 1px solid $lw-border;
+  overflow-y: auto;
 }
 
 .lw-panel__head {

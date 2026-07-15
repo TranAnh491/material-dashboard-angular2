@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -309,6 +309,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private excelImportService: ExcelImportService,
     private dialog: MatDialog,
     private router: Router,
+    private route: ActivatedRoute,
     private rmBagHistory: RmBagHistoryService,
     private temXuatKho: TemXuatKhoService,
     private labelReprintFlags: LabelReprintFlagService,
@@ -1731,6 +1732,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.setupDebouncedSearch();
     this.inventoryMaterials = [];
     this.filteredInventory = [];
+
+    // Đến từ tab khác (VD: Layout Warehouse ASM3 → "Xem chi tiết") kèm ?location=... → tự tìm theo vị trí đó.
+    const locationParam = this.route.snapshot.queryParamMap.get('location');
+    if (locationParam) {
+      this.searchByLocation = true;
+      this.searchTerm = locationParam;
+      void this.performSearch(locationParam);
+    }
 
     this.updateNegativeStockCount();
 
