@@ -125,13 +125,13 @@
                           *ngFor="let slot of block.row.slots"
                           [attr.data-slot]="slot.name"
                           [class.wms-cell--selected]="selectedSlot?.name === slot.name"
-                          [class.wms-cell--locked]="isSlotLocked(slot)"
+                          [class.wms-cell--locked]="isSlotLocked(slot) && !slotLockGroupLabel(slot)"
                           [class.wms-cell--occupied]="isSlotOccupied(slot)"
                           [class.wms-cell--match]="isSearchMatch(slot)"
                           [class.wms-cell--move-from]="moveMode && moveFromSlot?.name === slot.name"
                           [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot) && !isSlotLocked(slot)"
                           [class.wms-cell--bulk-picked]="bulkLockMode && bulkLockSelectedSlots.has(slot.name)"
-                          [title]="slot.name + (isSlotLocked(slot) ? ' — Đã khóa' + (slotLockGroupLabel(slot) ? ' chung với ' + slotLockGroupLabel(slot) : '') : '') + (isSlotOccupied(slot) ? ' — ' + slotDisplayLabel(slot) : '')"
+                          [title]="slotTooltip(slot)"
                           (mouseenter)="onSlotHover(slot)"
                           (mouseleave)="onSlotHover(null)"
                           (click)="selectSlot(slot); $event.stopPropagation()">
@@ -168,9 +168,9 @@
             </div>
             <span
               class="wms-tag"
-              [class.wms-tag--red]="isSlotLocked(selectedSlot)"
-              [class.wms-tag--green]="!isSlotLocked(selectedSlot) && isSlotOccupied(selectedSlot)"
-              [class.wms-tag--gray]="!isSlotLocked(selectedSlot) && !isSlotOccupied(selectedSlot)">
+              [class.wms-tag--red]="isSlotLocked(selectedSlot) && !slotLockGroupLabel(selectedSlot)"
+              [class.wms-tag--green]="isSlotOccupied(selectedSlot)"
+              [class.wms-tag--gray]="!isSlotOccupied(selectedSlot) && !isSlotLocked(selectedSlot)">
               {{ slotStatusLabel(selectedSlot) }}
             </span>
           </div>
@@ -179,14 +179,14 @@
             <div class="wms-fields__row"><dt>Mã vị trí</dt><dd class="wms-fields__blue">{{ selectedSlot.name }}</dd></div>
             <div class="wms-fields__row"><dt>Dãy kệ</dt><dd>{{ selectedSlot.row }}</dd></div>
             <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / 30</dd></div>
-            <div class="wms-fields__row" *ngIf="isSlotOccupied(selectedSlot)"><dt>Vị trí / Pallet</dt><dd class="wms-fields__blue">{{ slotDisplayLabel(selectedSlot) }}</dd></div>
+            <div class="wms-fields__row" *ngIf="isSlotOccupied(selectedSlot)"><dt>Vị trí / Pallet</dt><dd class="wms-fields__blue">{{ slotDetailLabel(selectedSlot) }}</dd></div>
             <div class="wms-fields__row" *ngIf="slotLockGroupLabel(selectedSlot)"><dt>Khóa chung với</dt><dd class="wms-fields__blue">{{ slotLockGroupLabel(selectedSlot) }}</dd></div>
             <div class="wms-fields__row"><dt>Trạng thái</dt>
               <dd
-                [class.wms-fields__green]="!isSlotLocked(selectedSlot) && isSlotOccupied(selectedSlot)"
-                [class.wms-fields__muted]="!isSlotLocked(selectedSlot) && !isSlotOccupied(selectedSlot)"
-                [class.wms-fields__red]="isSlotLocked(selectedSlot)">
-                {{ isSlotLocked(selectedSlot) ? 'Đã khóa — không cho dùng' : (isSlotOccupied(selectedSlot) ? 'Đang có hàng' : 'Trống') }}
+                [class.wms-fields__green]="isSlotOccupied(selectedSlot)"
+                [class.wms-fields__muted]="!isSlotOccupied(selectedSlot) && !isSlotLocked(selectedSlot)"
+                [class.wms-fields__red]="isSlotLocked(selectedSlot) && !slotLockGroupLabel(selectedSlot)">
+                {{ slotStatusText(selectedSlot) }}
               </dd>
             </div>
           </dl>
@@ -216,7 +216,7 @@
             </button>
             <button type="button" class="wms-btn wms-btn--outline"
               (click)="startMovePosition()"
-              *ngIf="isSlotOccupied(selectedSlot)"
+              *ngIf="isSlotOccupied(selectedSlot) && !slotLockGroupLabel(selectedSlot)"
               [disabled]="isSlotLocked(selectedSlot)">
               <i class="material-icons">swap_horiz</i> Đổi vị trí
             </button>
@@ -224,7 +224,7 @@
               <i class="material-icons">print</i> In tem
             </button>
             <button type="button" class="wms-btn wms-btn--outline" (click)="clearSlotPallet()"
-              *ngIf="isSlotOccupied(selectedSlot)"
+              *ngIf="isSlotOccupied(selectedSlot) && !slotLockGroupLabel(selectedSlot)"
               [disabled]="isSlotLocked(selectedSlot)">
               <i class="material-icons">delete</i> Xóa pallet
             </button>

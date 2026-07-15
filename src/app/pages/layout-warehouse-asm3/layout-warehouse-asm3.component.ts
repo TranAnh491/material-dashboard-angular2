@@ -118,6 +118,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
    * Ưu tiên hiển thị cái này trên ô lưới vì đây là dữ liệu người dùng tự nhập khi đọc vị trí.
    */
   inventoryLocationLabels: Map<string, string> = new Map();
+  /** Chuỗi vị trí ĐẦY ĐỦ (VD: "WH3-B1-F1-0138") theo tên ô — dùng cho tooltip/panel chi tiết. */
+  inventoryLocationFull: Map<string, string> = new Map();
   /** Vị trí bị khóa — không cho gán / chuyển pallet tới. */
   lockedSlots: Set<string> = new Set();
   /** Nhóm khóa chung của từng vị trí (nếu được khóa hàng loạt) — key = tên ô, value = tên vị trí đại diện nhóm. */
@@ -179,20 +181,30 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return this.rackRows.length * this.SLOTS_PER_RACK;
   }
 
+  /** Đếm theo isSlotOccupied (gồm cả pallet scan tay, vị trí đọc từ Materials, và ô dự trữ chung nhóm khóa). */
   get occupiedCount(): number {
-    return this.slotPallets.size;
+    let count = 0;
+    for (const row of this.rackRows) {
+      for (const slot of row.slots) {
+        if (this.isSlotOccupied(slot)) count++;
+      }
+    }
+    return count;
   }
 
   get lockedCount(): number {
     return this.lockedSlots.size;
   }
 
+  /** Trống = không occupied (bằng bất kỳ nguồn nào) và không bị khóa (kể cả khóa đơn lẻ không gán nhóm). */
   get emptyCount(): number {
-    let lockedEmpty = 0;
-    this.lockedSlots.forEach(name => {
-      if (!this.slotPallets.has(name)) lockedEmpty++;
-    });
-    return Math.max(0, this.totalSlots - this.occupiedCount - lockedEmpty);
+    let count = 0;
+    for (const row of this.rackRows) {
+      for (const slot of row.slots) {
+        if (!this.isSlotOccupied(slot) && !this.isSlotLocked(slot)) count++;
+      }
+    }
+    return count;
   }
 
   get utilizationPct(): number {
@@ -262,7 +274,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
    */
   private async loadInventoryLocations(): Promise<void> {
     try {
-      const map = new Map<string, string>();
+      const shortMap = new Map<string, string>();
+      const fullMap = new Map<string, string>();
       const prefix = `${this.WAREHOUSE_SLOT_PREFIX}-`;
 
       for (const factory of this.SYNC_FACTORIES) {
@@ -279,36 +292,89 @@ export class LayoutWarehouseAsm3Component implements OnInit {
         (snap?.docs || []).forEach(doc => {
           const data = doc.data() as { location?: string };
           const raw = String(data?.location || '').trim().toUpperCase();
-          const slotName = this.extractSlotNameFromLocation(raw);
-          if (slotName) map.set(slotName, raw);
+          const parsed = this.parseInventoryLocation(raw);
+          if (parsed) {
+            shortMap.set(parsed.slotName, parsed.palletNumber);
+            fullMap.set(parsed.slotName, raw);
+          }
         });
       }
 
-      this.inventoryLocationLabels = map;
+      this.inventoryLocationLabels = shortMap;
+      this.inventoryLocationFull = fullMap;
       this.lastUpdated = new Date();
     } catch (e) {
       console.error('[LayoutWarehouseAsm3] loadInventoryLocations failed', e);
     }
   }
 
-  /** VD: "WH3-F1-0379" → "WH3-F1" (tên ô trên sơ đồ). Trả về null nếu không khớp định dạng ô ASM3. */
-  private extractSlotNameFromLocation(location: string): string | null {
-    const m = location.match(/^WH3-([A-H])(\d{1,2})(?:-.+)?$/);
+  /**
+   * VD: "WH3-B1-F1-0138" → tên ô "WH3-B1" (row B, index 1) + số pallet "F1-0138" (phần còn lại,
+   * có thể có dấu gạch ngang riêng, không liên quan tới dãy/ô của ASM3).
+   * Bắt buộc phải có phần số pallet phía sau (không khớp nếu location chỉ là "WH3-B1" trơn) —
+   * vì "WH3-B1" trơn thường chỉ là do chính trang này tự ghi ngược lại sau khi scan pallet
+   * (syncInventoryLocationForPallet), không phải dữ liệu vị trí thật nhập từ Materials, nếu
+   * khớp sẽ đè nhầm lên mã pallet gốc đã scan tay trong slotPallets.
+   * Trả về null nếu không khớp định dạng ô ASM3.
+   */
+  private parseInventoryLocation(location: string): { slotName: string; palletNumber: string } | null {
+    const m = location.match(/^WH3-([A-H])(\d{1,2})-(.+)$/);
     if (!m) return null;
     const row = m[1];
     const index = parseInt(m[2], 10);
     if (!this.rackLetters.includes(row) || index < 1 || index > this.SLOTS_PER_RACK) return null;
-    return this.buildSlotName(row, index);
+    return { slotName: this.buildSlotName(row, index), palletNumber: m[3] || '' };
   }
 
-  /** Nhãn hiển thị trên ô lưới: ưu tiên vị trí đầy đủ đọc từ Materials ASM1/ASM2, sau đó tới pallet đã scan tay, cuối cùng là mã ô. */
+  /** Số pallet ngắn gọn của 1 ô (không tính ô dự trữ chung nhóm khóa) — rỗng nếu ô đang trống. */
+  private rawSlotLabel(slotName: string): string {
+    return this.inventoryLocationLabels.get(slotName) || this.slotPallets.get(slotName) || '';
+  }
+
+  /** Chuỗi vị trí ĐẦY ĐỦ của 1 ô (VD: "WH3-B1-F1-0138") — dùng cho tooltip/panel chi tiết. */
+  private rawSlotFullLabel(slotName: string): string {
+    return this.inventoryLocationFull.get(slotName) || this.slotPallets.get(slotName) || '';
+  }
+
+  /**
+   * Nhãn NGẮN hiển thị trên ô lưới (chỉ số pallet, VD: "F1-0138"). Nếu ô là ô dự trữ chung nhóm khóa
+   * (VD: B2-B9 khóa chung với B1), hiển thị ĐÚNG số pallet của vị trí đại diện (B1) — bấm vào ô nào
+   * trong nhóm cũng thấy cùng 1 số pallet. Ngược lại: ưu tiên số pallet đọc từ Materials ASM1/ASM2,
+   * sau đó pallet scan tay, cuối cùng là mã ô.
+   */
   slotDisplayLabel(slot: Asm3RackSlot | null): string {
     if (!slot) return '';
-    const invLabel = this.inventoryLocationLabels.get(slot.name);
-    if (invLabel) return invLabel;
-    const pallet = this.slotPallets.get(slot.name);
-    if (pallet) return pallet;
-    return this.slotShortCode(slot);
+    const groupRef = this.lockGroups.get(slot.name);
+    if (groupRef) {
+      return this.rawSlotLabel(groupRef) || this.shortCodeFromSlotName(groupRef);
+    }
+    return this.rawSlotLabel(slot.name) || this.slotShortCode(slot);
+  }
+
+  /** Nhãn ĐẦY ĐỦ (VD: "WH3-B1-F1-0138") dùng cho panel chi tiết / tooltip khi rê chuột. */
+  slotDetailLabel(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    const groupRef = this.lockGroups.get(slot.name);
+    if (groupRef) {
+      return this.rawSlotFullLabel(groupRef) || this.rawSlotLabel(groupRef) || this.shortCodeFromSlotName(groupRef);
+    }
+    return this.rawSlotFullLabel(slot.name) || this.slotShortCode(slot);
+  }
+
+  /** Tooltip đầy đủ khi hover 1 ô trên sơ đồ. */
+  slotTooltip(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    const parts = [slot.name];
+    const group = this.slotLockGroupLabel(slot);
+    if (group) {
+      parts.push(`Dự trữ cho ${group}`);
+    } else if (this.isSlotLocked(slot)) {
+      parts.push('Đã khóa');
+    }
+    if (this.isSlotOccupied(slot)) {
+      parts.push(this.slotDetailLabel(slot));
+    }
+    return parts.join(' — ');
   }
 
   isSlotLocked(slot: Asm3RackSlot | null): boolean {
@@ -453,8 +519,17 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   slotStatusLabel(slot: Asm3RackSlot | null): string {
     if (!slot) return '';
-    if (this.isSlotLocked(slot)) return 'Đã khóa';
+    if (this.isSlotLocked(slot) && !this.slotLockGroupLabel(slot)) return 'Đã khóa';
     return this.isSlotOccupied(slot) ? 'Đã chứa' : 'Trống';
+  }
+
+  /** Câu mô tả trạng thái đầy đủ hiển thị trong panel chi tiết. */
+  slotStatusText(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    const group = this.slotLockGroupLabel(slot);
+    if (group) return `Đang có hàng — dự trữ cho ${group}`;
+    if (this.isSlotLocked(slot)) return 'Đã khóa — không cho dùng';
+    return this.isSlotOccupied(slot) ? 'Đang có hàng' : 'Trống';
   }
 
   @HostListener('window:resize')
@@ -516,7 +591,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   isSlotOccupied(slot: Asm3RackSlot | null): boolean {
     if (!slot) return false;
-    return this.slotPallets.has(slot.name) || this.inventoryLocationLabels.has(slot.name);
+    return this.slotPallets.has(slot.name) || this.inventoryLocationLabels.has(slot.name) || this.lockGroups.has(slot.name);
   }
 
   isSearchMatch(slot: Asm3RackSlot): boolean {
@@ -596,7 +671,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
           slot.name,
           slot.row,
           String(slot.index),
-          occupied ? this.slotDisplayLabel(slot) : '',
+          occupied ? this.slotDetailLabel(slot) : '',
           locked ? 'Đã khóa' : occupied ? 'Đã chứa' : 'Trống',
           locked ? 'Có' : 'Không'
         ].join(','));
