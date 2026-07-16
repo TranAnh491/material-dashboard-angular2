@@ -61,6 +61,9 @@
                     [class.is-active]="mobilePendingZoneFilter === '1'"
                     (click)="togglePendingZoneFilter('1')">1</button>
             <button type="button" class="fg-m-zone-filter"
+                    [class.is-active]="mobilePendingZoneFilter === '2'"
+                    (click)="togglePendingZoneFilter('2')">2</button>
+            <button type="button" class="fg-m-zone-filter"
                     [class.is-active]="mobilePendingZoneFilter === '3'"
                     (click)="togglePendingZoneFilter('3')">3</button>
           </div>
@@ -1058,7 +1061,7 @@
             <i class="material-icons">business</i>
             <span>ASM1</span>
           </button>
-          <button class="factory-option" 
+          <button class="factory-option"
                   [class.selected]="importSelectedFactory === 'ASM2'"
                   (click)="importSelectedFactory = 'ASM2'">
             <i class="material-icons">business</i>
@@ -1066,7 +1069,31 @@
           </button>
         </div>
       </div>
-      
+
+      <div class="factory-selection">
+        <label class="selection-label">Chọn vị trí nhập (bắt buộc Temp-1 / Temp-2 / Temp-3):</label>
+        <div class="factory-options">
+          <button class="factory-option"
+                  [class.selected]="importSelectedLocation === 'Temp-1'"
+                  (click)="importSelectedLocation = 'Temp-1'">
+            <i class="material-icons">place</i>
+            <span>Temp-1</span>
+          </button>
+          <button class="factory-option"
+                  [class.selected]="importSelectedLocation === 'Temp-2'"
+                  (click)="importSelectedLocation = 'Temp-2'">
+            <i class="material-icons">place</i>
+            <span>Temp-2</span>
+          </button>
+          <button class="factory-option"
+                  [class.selected]="importSelectedLocation === 'Temp-3'"
+                  (click)="importSelectedLocation = 'Temp-3'">
+            <i class="material-icons">place</i>
+            <span>Temp-3</span>
+          </button>
+        </div>
+      </div>
+
       <div class="import-help-section">
         <button class="help-toggle-btn" (click)="showImportHelp = !showImportHelp">
           <i class="material-icons">{{ showImportHelp ? 'expand_less' : 'help_outline' }}</i>

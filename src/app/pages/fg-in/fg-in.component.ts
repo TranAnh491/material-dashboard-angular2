@@ -81,8 +81,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   isMobile = false;
   showMobileFactorySelect = false;
   mobileBottomTab: 'pending' | 'location' = 'pending';
-  /** Lọc phiếu chờ theo vùng Temporary 1 / 3 (mobile) */
-  mobilePendingZoneFilter: '1' | '3' | null = null;
+  /** Lọc phiếu chờ theo vùng Temp 1 / 2 / 3 (mobile) */
+  mobilePendingZoneFilter: '1' | '2' | '3' | null = null;
   private readonly fgInMobileBodyClass = 'fg-in-mobile-tab';
   
   // Time range filter
@@ -111,6 +111,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Import Factory Dialog
   showImportFactoryDialog: boolean = false;
   importSelectedFactory: string = 'ASM1';
+  /** Vị trí gán cho toàn bộ các dòng khi import: bắt buộc là Temp-1 / Temp-2 / Temp-3 */
+  importSelectedLocation: 'Temp-1' | 'Temp-2' | 'Temp-3' = 'Temp-1';
   showImportHelp: boolean = false;
   
   // Product Catalog
@@ -304,7 +306,7 @@ export class FgInComponent implements OnInit, OnDestroy {
             carton: data.carton || 0,
             odd: data.odd || 0,
             // Nếu phiếu đã khóa mà chưa có vị trí thì vẫn hiển thị placeholder để cột "Vị trí" không bị trống.
-            location: data.location || data.viTri || (data.isReceived ? 'Temporary' : ''),
+            location: data.location || data.viTri || (data.isReceived ? 'Temp-1' : ''),
             notes: data.notes || data.ghiChu || '',
             customer: data.customer || data.khach || '',
             isReceived: data.isReceived || false,
@@ -326,9 +328,9 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Lock / Unlock (cột Lock): Tick = khóa (chuyển Inventory), Bỏ tick = mở khóa để sửa
   updateLockStatus(material: FgInItem, checked: boolean): void {
     material.isReceived = checked;
-    // Khi tick khóa trực tiếp (không scan vị trí), gán Temporary nếu chưa có vị trí.
+    // Khi tick khóa trực tiếp (không scan vị trí), gán Temp-1 nếu chưa có vị trí.
     if (checked && (!material.location || String(material.location).trim() === '')) {
-      material.location = 'Temporary';
+      material.location = 'Temp-1';
     }
     material.updatedAt = new Date();
     this.updateMaterialInFirebase(material);
@@ -379,7 +381,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       ton: quantity,
       exported: 0,
       stock: quantity,
-      location: material.location || 'Temporary',
+      location: material.location || 'Temp-1',
       notes: material.notes || '',
       customer: material.customer || customerFromCatalog || '',
       isReceived: true,
@@ -661,7 +663,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         { label: 'LOT', value: (material.lot || '').trim() },
         { label: 'Lượng', value: String(material.quantity ?? 0) },
         { label: 'Ngày Nhập', value: this.formatFgInImportDate(material.importDate) },
-        { label: 'Vị Trí', value: (material.location || 'Temporary').trim() }
+        { label: 'Vị Trí', value: (material.location || 'Temp-1').trim() }
       ];
 
       const rowsHtml = fields
@@ -821,7 +823,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       quantity: qty,
       carton: 0,
       odd: 0,
-      location: 'Temporary',
+      location: 'Temp-1',
       notes: '',
       customer: '',
       isReceived: false,
@@ -975,10 +977,17 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Import file functionality
   importFile(): void {
     this.importSelectedFactory = 'ASM1';
+    this.importSelectedLocation = 'Temp-1';
     this.showImportFactoryDialog = true;
   }
 
+  private static readonly VALID_IMPORT_LOCATIONS = ['Temp-1', 'Temp-2', 'Temp-3'];
+
   confirmImportFactory(): void {
+    if (!FgInComponent.VALID_IMPORT_LOCATIONS.includes(this.importSelectedLocation)) {
+      alert('❌ Vị trí nhập không hợp lệ. Vui lòng chọn Temp-1, Temp-2 hoặc Temp-3 rồi import lại.');
+      return;
+    }
     this.showImportFactoryDialog = false;
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -999,6 +1008,10 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   private async processImportFile(file: File): Promise<void> {
     try {
+      if (!FgInComponent.VALID_IMPORT_LOCATIONS.includes(this.importSelectedLocation)) {
+        alert('❌ Vị trí nhập không hợp lệ (phải là Temp-1, Temp-2 hoặc Temp-3). Vui lòng import lại.');
+        return;
+      }
       const rows = await this.readExcelFileAsRows(file);
       const materials = this.parseBangKeNhap02Data(rows);
       if (materials.length === 0) {
@@ -1025,6 +1038,7 @@ export class FgInComponent implements OnInit, OnDestroy {
    */
   private parseBangKeNhap02Data(rows: any[][]): FgInItem[] {
     const factory = this.importSelectedFactory;
+    const location = this.importSelectedLocation;
     const result: FgInItem[] = [];
     const colM = 12;   // Mã TP
     const colN = 13;   // LSX
@@ -1061,7 +1075,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         quantity: qty,
         carton: 0,
         odd: 0,
-        location: 'Temporary',
+        location,
         notes: '',
         customer: '',
         isReceived: false,
@@ -1163,7 +1177,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         quantity: qty,
         carton: 0,
         odd: 0,
-        location: 'Temporary',
+        location: 'Temp-1',
         notes: '',
         customer: '',
         isReceived: false,
@@ -1228,7 +1242,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         quantity: parseInt(row['Lượng Nhập'], 10) || 0,
         carton: 0,
         odd: 0,
-        location: (row['Vị trí'] || row['Vi tri'] || 'Temporary').toString().trim() || 'Temporary',
+        location: this.normalizeFgLocationValue((row['Vị trí'] || row['Vi tri'] || '').toString()) || 'Temp-1',
         notes: row['Ghi chú'] || '',
         customer: '',
         isReceived: false,
@@ -1319,7 +1333,7 @@ export class FgInComponent implements OnInit, OnDestroy {
           'LOT': 'LOT001',
           'LSX': 'LSX001',
           'Lượng Nhập': 100,
-          'Vị trí': 'Temporary',
+          'Vị trí': 'Temp-1',
           'Ghi chú': 'All items received in good condition'
         },
         {
@@ -1328,7 +1342,7 @@ export class FgInComponent implements OnInit, OnDestroy {
           'LOT': 'LOT002',
           'LSX': 'LSX002',
           'Lượng Nhập': 200,
-          'Vị trí': 'Temporary',
+          'Vị trí': 'Temp-1',
           'Ghi chú': 'Second batch items'
         }
       ];
@@ -1341,9 +1355,9 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Additional methods needed for the component
   editLocation(material: FgInItem): void {
-    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa):', material.location || '');
+    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa, Tem1/Temp1/Temporary... sẽ tự chuẩn hóa thành Temp-1/2/3):', material.location || '');
     if (newLocation !== null) {
-      material.location = newLocation.toUpperCase();
+      material.location = this.normalizeFgLocationValue(newLocation);
       material.updatedAt = new Date();
       console.log(`Updated location for ${material.materialCode}: ${material.location}`);
       this.updateMaterialInFirebase(material);
@@ -2608,7 +2622,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     return list.filter(m => this.getTempZoneBadge(m.location) === this.mobilePendingZoneFilter);
   }
 
-  togglePendingZoneFilter(zone: '1' | '3'): void {
+  togglePendingZoneFilter(zone: '1' | '2' | '3'): void {
     this.mobilePendingZoneFilter = this.mobilePendingZoneFilter === zone ? null : zone;
   }
 
@@ -2620,7 +2634,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       .replace(/[\s_-]+/g, '');
   }
 
-  private matchesTempZone(compact: string, zone: '1' | '3'): boolean {
+  private matchesTempZone(compact: string, zone: '1' | '2' | '3'): boolean {
     const aliases = [`TEMPORARY${zone}`, `TEM${zone}`, `TAM${zone}`, `TEMP${zone}`];
     if (aliases.includes(compact)) {
       return true;
@@ -2631,8 +2645,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     return new RegExp(`(?:^|TEMPORARY|TEM|TAM|TEMP)${zone}$`).test(compact);
   }
 
-  /** Nhận diện vùng Temporary 1 / 3 từ vị trí (Tem-1, Tam-3, Temp1, TEMPORARY 3, …) */
-  getTempZoneBadge(location: string | undefined | null): '1' | '3' | null {
+  /** Nhận diện vùng Temp 1 / 2 / 3 từ vị trí (Tem-1, Tam-2, Temp3, TEMPORARY 3, …) */
+  getTempZoneBadge(location: string | undefined | null): '1' | '2' | '3' | null {
     const raw = String(location ?? '').trim();
     if (!raw) {
       return null;
@@ -2642,20 +2656,35 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (this.matchesTempZone(compact, '3')) {
       return '3';
     }
+    if (this.matchesTempZone(compact, '2')) {
+      return '2';
+    }
     if (this.matchesTempZone(compact, '1')) {
       return '1';
     }
 
-    const zoneMatch = raw.toUpperCase().match(/(?:TEMPORARY|TEM|TAM|TEMP)[\s_-]*([13])\s*$/);
+    const zoneMatch = raw.toUpperCase().match(/(?:TEMPORARY|TEM|TAM|TEMP)[\s_-]*([123])\s*$/);
     if (zoneMatch) {
-      return zoneMatch[1] as '1' | '3';
+      return zoneMatch[1] as '1' | '2' | '3';
     }
     return null;
   }
 
+  /** Chuẩn hóa các biến thể tạm (Tem1/tem-1/temp1/Temporary…) về Temp-1/Temp-2/Temp-3.
+   *  Vị trí thật (không khớp biến thể tạm nào) được giữ nguyên (viết hoa). */
+  private normalizeFgLocationValue(raw: string | undefined | null): string {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return '';
+    const compact = this.compactFgInLocation(trimmed);
+    if (compact === 'TEMPORARY') return 'Temp-1';
+    const zone = this.getTempZoneBadge(trimmed);
+    if (zone) return `Temp-${zone}`;
+    return trimmed.toUpperCase();
+  }
+
   getPendingLocationLabel(material: FgInItem): string {
     const loc = String(material?.location ?? '').trim();
-    return loc || 'Temporary';
+    return loc || 'Temp-1';
   }
 
   // Get pending count
@@ -2719,6 +2748,8 @@ export class FgInComponent implements OnInit, OnDestroy {
       .replace(/[^A-Z0-9.\-()+]/g, '');
     if (!compact) return '';
     if (this.fgInUseAsm3) return this.buildAsm3PrefixedLocation(compact);
+    const zone = this.getTempZoneBadge(compact);
+    if (zone) return `Temp-${zone}`;
     return compact;
   }
 
@@ -2830,7 +2861,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     // ===== Chỉ cập nhật vị trí (phiếu đã tick khóa nhưng đang Temporary) =====
     if (this.locationUpdateOnlyMode) {
-      const newLocation = this.confirmReceiptData.location.trim().toUpperCase();
+      const newLocation = this.confirmReceiptData.location.trim();
 
       // Update fg-in (phiếu) location
       this.selectedReceiptMaterial.location = newLocation;
@@ -2990,7 +3021,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     const firestoreBatch = this.firestore.firestore.batch();
     matched.forEach(doc => {
       firestoreBatch.update(doc.ref, {
-        location: newLocation.toUpperCase(),
+        location: newLocation,
         updatedAt: new Date()
       });
     });

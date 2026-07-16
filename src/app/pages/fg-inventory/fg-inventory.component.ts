@@ -245,7 +245,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       nhap,
       xuat,
       ton,
-      location: data.location || data.viTri || 'Temporary',
+      location: data.location || data.viTri || 'Temp-1',
       viTriKK: data.viTriKK || data.locationKK || '',
       notes: data.notes || data.ghiChu || '',
       customer: data.customer || data.khach || '',
@@ -1699,11 +1699,23 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     XLSX.writeFile(wb, 'FG_Inventory_AddMaTP_Template.xlsx');
   }
 
+  /** Chuẩn hóa các biến thể tạm (Tem1/tem-1/temp1/Temporary…) về Temp-1/Temp-2/Temp-3.
+   *  Vị trí thật (không khớp biến thể tạm nào) được giữ nguyên (viết hoa). */
+  private normalizeFgLocationValue(raw: string | undefined | null): string {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return '';
+    const compact = trimmed.toUpperCase().replace(/[\s_-]+/g, '');
+    if (compact === 'TEMPORARY') return 'Temp-1';
+    const zoneMatch = compact.match(/^(?:TEMPORARY|TEMP|TEM|TAM)([123])$/);
+    if (zoneMatch) return `Temp-${zoneMatch[1]}`;
+    return trimmed.toUpperCase();
+  }
+
   // Additional methods needed for the component
   editLocation(material: FGInventoryItem): void {
-    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa):', material.location || '');
+    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa, Tem1/Temp1/Temporary... sẽ tự chuẩn hóa thành Temp-1/2/3):', material.location || '');
     if (newLocation !== null) {
-      material.location = newLocation.toUpperCase();
+      material.location = this.normalizeFgLocationValue(newLocation);
       material.updatedAt = new Date();
       console.log(`Updated location for ${material.materialCode}: ${material.location}`);
       this.updateMaterialInFirebase(material);
@@ -1721,7 +1733,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   scanLocation(material: FGInventoryItem): void {
     const dialogData: QRScannerData = {
       title: `Scan QR Code - Đổi vị trí cho ${material.materialCode}`,
-      message: `Vị trí hiện tại: ${material.location || 'Temporary'}`,
+      message: `Vị trí hiện tại: ${material.location || 'Temp-1'}`,
       materialCode: material.materialCode
     };
 
@@ -1736,7 +1748,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.trim() !== '') {
         const oldLocation = material.location;
-        material.location = result.toUpperCase();
+        material.location = this.normalizeFgLocationValue(result);
         
         // Update in Firebase
         this.updateMaterialInFirebase(material);
