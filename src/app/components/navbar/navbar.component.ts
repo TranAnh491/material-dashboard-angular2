@@ -369,7 +369,9 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/label',
       '/equipment',
       '/xe-tai',
-      '/materials-asm1'
+      '/materials-asm1',
+      '/danh-muc-nvlkh',
+      '/danh-muc-nvl-tp'
     ]);
 
     hasOwnNav(): boolean {

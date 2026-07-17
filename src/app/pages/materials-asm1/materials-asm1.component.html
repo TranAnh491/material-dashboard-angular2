@@ -1106,21 +1106,9 @@
             <i class="material-icons">file_upload</i>
             <span>Import Inventory (Tồn đầu)</span>
           </button>
-          <button type="button" class="popup-action-btn" (click)="importCatalog(); closeMorePopup()">
-            <i class="material-icons">file_upload</i>
-            <span>Update Standard Packing</span>
-          </button>
-          <button type="button" class="popup-action-btn" (click)="loadStandardPacking(); closeMorePopup()">
-            <i class="material-icons">file_download</i>
-            <span>Tải Standard Packing (Excel)</span>
-          </button>
-          <button type="button" class="popup-action-btn" (click)="openStandardPackingManager(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="goToDanhMucNvlTp(); closeMorePopup()">
             <i class="material-icons">manage_search</i>
-            <span>Quản lý Standard Packing</span>
-          </button>
-          <button type="button" class="popup-action-btn" (click)="downloadCatalogTemplate(); closeMorePopup()">
-            <i class="material-icons">description</i>
-            <span>Download Standard Packing Template</span>
+            <span>Danh mục NVL (Standard Packing)</span>
           </button>
           <button type="button" class="popup-action-btn" (click)="openDanhMucNvlkh(); closeMorePopup()">
             <i class="material-icons">groups</i>
@@ -1307,107 +1295,6 @@
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Standard Packing Manager Modal -->
-<div class="modal-overlay" *ngIf="showStandardPackingManager" (click)="closeStandardPackingManager()">
-  <div class="modal-content" style="max-width: 980px; width: 95%;" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>🔎 Quản lý Standard Packing — ASM1</h3>
-      <button type="button" class="close-btn" (click)="closeStandardPackingManager()">
-        <i class="material-icons">close</i>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
-        <input
-          type="text"
-          class="editable-input"
-          style="min-width: 260px;"
-          [(ngModel)]="spSearchCode"
-          placeholder="Nhập mã hàng để search..."
-          (keyup.enter)="searchStandardPacking()">
-        <button type="button" class="popup-action-btn" (click)="searchStandardPacking()">
-          <i class="material-icons">search</i>
-          <span>{{ spIsSearching ? 'Đang search...' : 'Search' }}</span>
-        </button>
-      </div>
-
-      <div style="margin-top: 14px; max-height: 420px; overflow: auto; border: 1px solid #eee; border-radius: 8px;">
-        <table class="excel-table" style="min-width: 780px;">
-          <thead>
-            <tr>
-              <th>Mã hàng</th>
-              <th>Tên</th>
-              <th>Standard hiện tại</th>
-              <th>Sửa Standard</th>
-              <th>Lock</th>
-              <th>Update</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let r of spResults">
-              <td>{{ r.materialCode }}</td>
-              <td>{{ r.materialName || '-' }}</td>
-              <td style="text-align:right">{{ formatNumber(r.current) }}</td>
-              <td style="text-align:right">
-                <input type="number"
-                       class="editable-input"
-                       style="max-width: 140px;"
-                       [(ngModel)]="r.edit"
-                       [disabled]="r.locked || !canEdit"
-                       min="0"
-                       step="1">
-              </td>
-              <td style="text-align:center; vertical-align: middle;">
-                <mat-slide-toggle
-                  color="primary"
-                  [checked]="r.locked"
-                  [disabled]="!canEdit || spLockSaving"
-                  (change)="onStandardPackingLockToggle($event, r)">
-                </mat-slide-toggle>
-              </td>
-              <td>
-                <button type="button"
-                        class="popup-action-btn"
-                        [disabled]="r.locked || !canEdit"
-                        (click)="updateStandardPackingRow(r)">
-                  <i class="material-icons">save</i>
-                  <span>Update</span>
-                </button>
-              </td>
-            </tr>
-            <tr *ngIf="spResults.length === 0">
-              <td colspan="6" style="text-align:center; padding: 14px;">Chưa có kết quả. Nhập mã và bấm Search.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div style="margin-top: 16px; border-top: 1px solid #eee; padding-top: 12px;">
-        <h4 style="margin: 0 0 10px 0;">➕ Thêm mã mới + Standard</h4>
-        <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
-          <input type="text"
-                 class="editable-input"
-                 style="min-width: 220px;"
-                 [(ngModel)]="spNewCode"
-                 placeholder="Mã hàng mới...">
-          <input type="number"
-                 class="editable-input"
-                 style="max-width: 160px;"
-                 [(ngModel)]="spNewStandard"
-                 min="0"
-                 step="1"
-                 placeholder="Standard...">
-          <button type="button" class="popup-action-btn" (click)="addNewStandardPacking()">
-            <i class="material-icons">add</i>
-            <span>Thêm</span>
-          </button>
-        </div>
-        <p style="margin-top: 8px; color:#666;">Ghi vào collection <strong>materials</strong>. Nếu mã chưa có tên, hệ thống sẽ tạo tên mặc định = mã.</p>
       </div>
     </div>
   </div>

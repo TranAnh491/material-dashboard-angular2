@@ -8,6 +8,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Router } from '@angular/router';
 import { ReadTrackerService } from '../../services/read-tracker.service';
+import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 
 export interface ShipmentItem {
   id?: string;
@@ -304,7 +305,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     private router: Router,
     private cdr: ChangeDetectorRef,
     private ngZone: NgZone,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private tpCatalogService: TpCatalogFullService
   ) {}
 
   goToMenu(): void {
@@ -433,23 +435,22 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Load danh mục mã khách (fg-customer-mapping) cho Shipment Order — đọc 1 lần, danh mục ít đổi
+  // Load danh mục mã khách cho Shipment Order — dùng cache dùng chung (TpCatalogFullService, gộp cả
+  // fg-catalog lẫn fg-customer-mapping) để không bỏ sót mã KH của các mã TP import mới (chỉ nằm
+  // trong fg-catalog, không còn ghi vào fg-customer-mapping nữa).
   loadCustomerMapping(): void {
-    this.firestore.collection('fg-customer-mapping')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(snapshot => {
-        this.customerMappingItems = snapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          return {
-            id: doc.id,
-            customerCode: (data.customerCode || '').toString().trim(),
-            materialCode: (data.materialCode || '').toString().trim(),
-            description: (data.description || '').toString().trim()
-          };
-        });
+    this.tpCatalogService
+      .loadMerged()
+      .then(items => {
+        this.customerMappingItems = items.map(item => ({
+          id: item.catalogId || item.mappingId || '',
+          customerCode: item.customerCode,
+          materialCode: item.materialCode,
+          description: item.description
+        }));
         this.refreshUniqueKhNamesList();
-      });
+      })
+      .catch(err => console.error('Load danh mục TP (cached) failed:', err));
   }
 
   /** Key mã TP dùng để map KH: chỉ lấy 7 ký tự đầu */
@@ -654,7 +655,9 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.importKhSaved = saved;
       this.importKhProgressPct = 100;
       this.importingKhCatalog = false;
-      // Không còn listener sống trên fg-customer-mapping nên load lại sau khi import xong.
+      // Ghi thẳng fg-customer-mapping (ngoài TpCatalogFullService) — phải invalidate cache dùng chung
+      // trước khi load lại, nếu không sẽ đọc lại đúng cache cũ vừa hết hạn.
+      this.tpCatalogService.invalidateCache();
       this.loadCustomerMapping();
       this.cdr.detectChanges();
       alert(
@@ -4163,17 +4166,16 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   private async loadFgCatalogStandardMap(): Promise<Map<string, number>> {
     const map = new Map<string, number>();
     try {
-      const snap = await this.firestore.collection('fg-catalog').get().toPromise();
-      snap?.docs.forEach(doc => {
-        const d = doc.data() as any;
-        const code = String(d.materialCode || '').trim().toUpperCase();
-        const num = parseFloat(String(d.standard ?? '').trim());
+      const items = await this.tpCatalogService.getCatalogItemsCached();
+      items.forEach(item => {
+        const code = item.materialCode.toUpperCase();
+        const num = parseFloat(item.standard);
         if (code && !isNaN(num) && num > 0) {
           map.set(code, num);
         }
       });
     } catch (e) {
-      console.error('Load fg-catalog for print error:', e);
+      console.error('Load fg-catalog (cached) for print error:', e);
     }
     return map;
   }

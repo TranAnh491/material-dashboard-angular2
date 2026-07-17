@@ -10,6 +10,7 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { FGInventoryLocationService } from '../../services/fg-inventory-location.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
+import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 
 export interface FgOutItem {
   id?: string;
@@ -303,7 +304,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private readTracker: ReadTrackerService,
     private fgDailyBackup: FgDailyBackupService,
-    private router: Router
+    private router: Router,
+    private tpCatalogService: TpCatalogFullService
   ) {}
 
   goToMenu(): void {
@@ -647,43 +649,24 @@ export class FgOutComponent implements OnInit, OnDestroy {
       });
   }
 
-  // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
-  // 🔧 FIX: .get() thay vì .snapshotChanges() — đây là danh mục, ít đổi, không cần listener sống.
-  loadMappingFromFirebase(): void {
-    this.firestore.collection('fg-customer-mapping')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(snapshot => {
-        const firebaseMapping = snapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          return {
-            id: doc.id,
-            customerCode: data.customerCode || '',
-            materialCode: data.materialCode || '',
-            description: data.description || ''
-          };
-        });
-        this.mappingItems = firebaseMapping;
-      });
+  // Load Customer Code Mapping — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng Firestore
+  loadMappingFromFirebase(forceRefresh = false): void {
+    this.tpCatalogService
+      .getMappingItemsCached(forceRefresh)
+      .then(items => {
+        this.mappingItems = items;
+      })
+      .catch(err => console.error('Load fg-customer-mapping (cached) failed:', err));
   }
 
-  // Load danh mục (fg-catalog) – có cột Standard để tính Carton/ODD
-  loadCatalogFromFirebase(): void {
-    this.firestore.collection('fg-catalog')
-      .snapshotChanges()
-      .pipe(take(1), takeUntil(this.destroy$))
-      .subscribe(actions => {
-        this.catalogItems = actions.map(action => {
-          const data = action.payload.doc.data() as any;
-          return {
-            id: action.payload.doc.id,
-            materialCode: (data.materialCode || '').toString().trim(),
-            standard: (data.standard != null && data.standard !== '') ? String(data.standard).trim() : '',
-            customer: data.customer || '',
-            customerCode: data.customerCode || ''
-          };
-        });
-      });
+  // Load danh mục (fg-catalog) – dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng Firestore
+  loadCatalogFromFirebase(forceRefresh = false): void {
+    this.tpCatalogService
+      .getCatalogItemsCached(forceRefresh)
+      .then(items => {
+        this.catalogItems = items;
+      })
+      .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
 
   /** Lấy Standard (số) theo Mã TP từ danh mục. Trả về null nếu không có hoặc không hợp lệ. */

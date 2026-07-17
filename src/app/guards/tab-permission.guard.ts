@@ -149,6 +149,7 @@ export class TabPermissionGuard implements CanActivate {
       '/inbound-asm2': 'inbound-asm2',
       '/dv-luu-tru-catalog': 'dv-luu-tru-catalog',
       '/danh-muc-nvlkh': 'danh-muc-nvlkh',
+      '/danh-muc-nvl-tp': 'danh-muc-nvl-tp',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
       '/inventory-overview-asm2': 'inventory-overview-asm2',

@@ -68,6 +68,7 @@ export class TabPermissionService {
       'inbound-asm2': factoryAccess.canAccessASM2 === true, // Chỉ cho phép khi TRUE rõ ràng
       'dv-luu-tru-catalog': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'danh-muc-nvlkh': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
+      'danh-muc-nvl-tp': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       
       // Outbound tabs
       'outbound-asm1': factoryAccess.canAccessASM1 === true,

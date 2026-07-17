@@ -10,6 +10,8 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
+import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
+import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 
 export interface FgInItem {
   id?: string;
@@ -49,16 +51,6 @@ export interface CustomerCodeMappingItem {
   description?: string; // Mô tả
   createdAt?: Date;
   updatedAt?: Date;
-}
-
-/** Gộp Danh mục TP + Mapping KH-TP: một dòng = Mã TP + Standard + Mã KH + Tên KH, có thể có catalogId và/hoặc mappingId */
-export interface MergedCatalogItem {
-  catalogId?: string;
-  mappingId?: string;
-  materialCode: string;
-  customerCode: string;
-  description: string;
-  standard: string;
 }
 
 @Component({
@@ -116,8 +108,6 @@ export class FgInComponent implements OnInit, OnDestroy {
   showImportHelp: boolean = false;
   
   // Product Catalog
-  showCatalogDialog: boolean = false;
-  showCatalogHelp: boolean = false;
   catalogItems: ProductCatalogItem[] = [];
   filteredCatalogItems: ProductCatalogItem[] = [];
   catalogSearchTerm: string = '';
@@ -136,20 +126,9 @@ export class FgInComponent implements OnInit, OnDestroy {
   filteredMappingItems: CustomerCodeMappingItem[] = [];
   mappingSearchTerm: string = '';
 
-  // Gộp Danh mục TP + Mapping: một danh sách, một dialog
-  mergedCatalogItems: MergedCatalogItem[] = [];
-  filteredMergedCatalogItems: MergedCatalogItem[] = [];
-  mergedSearchTerm: string = '';
-  mergedCatalogLastImportAt: Date | null = null;
-  mergedCatalogLastImportDetail: string = '';
-  private readonly mergedCatalogImportMetaPath = 'fg-catalog-meta/merged-import';
-  newMergedItem: { materialCode: string; standard: string; customerCode: string; description: string } = {
-    materialCode: '',
-    standard: '',
-    customerCode: '',
-    description: ''
-  };
-  
+  // Lượng Đóng Thùng (danh mục riêng của Kho — ưu tiên hơn SL SP/thùng khi tính Carton)
+  cartonPackingQtyMap: Map<string, number> = new Map();
+
   // New mapping item for manual addition (giữ cho tương thích)
   newMappingItem: CustomerCodeMappingItem = {
     customerCode: '',
@@ -212,19 +191,23 @@ export class FgInComponent implements OnInit, OnDestroy {
     private factoryAccessService: FactoryAccessService,
     private dialog: MatDialog,
     private router: Router,
-    private fgDailyBackup: FgDailyBackupService
+    private fgDailyBackup: FgDailyBackupService,
+    private cartonPackingQtyService: CartonPackingQtyService,
+    private tpCatalogService: TpCatalogFullService
   ) {}
 
   ngOnInit(): void {
     // Mặc định chỉ hiển thị hôm nay
     this.startDate = new Date();
     this.endDate = new Date();
-    
+
     this.loadMaterialsFromFirebase();
     // Load catalog immediately so calculations work
     this.loadCatalogFromFirebase();
     // Load mapping immediately
     this.loadMappingFromFirebase();
+    // Load Lượng Đóng Thùng (danh mục riêng của Kho — ưu tiên hơn SL SP/thùng khi tính Carton)
+    void this.loadCartonPackingQty();
     this.startDate = new Date(2020, 0, 1);
     this.endDate = new Date(2030, 11, 31);
     this.applyFilters();
@@ -241,6 +224,11 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  /** Quản lý Danh mục TP & Mapping KH-TP đã chuyển sang tab riêng — Danh mục NVL & TP. */
+  goToDanhMucNvlTp(): void {
+    this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'tp' } });
   }
 
   @HostListener('window:resize')
@@ -348,14 +336,13 @@ export class FgInComponent implements OnInit, OnDestroy {
     // Tìm thông tin từ catalog
     const catalogItem = this.catalogItems.find(item => item.materialCode === material.materialCode);
     const customerFromCatalog = catalogItem ? catalogItem.customer : '';
-    const standardFromCatalog = catalogItem ? catalogItem.standard : '';
 
-    // Tính toán Carton và ODD từ Standard
+    // Tính toán Carton và ODD — ưu tiên Lượng Đóng Thùng (danh mục riêng của Kho), sau đó mới đến SL SP/thùng
+    const standard = this.getPackingQtyForCode(material.materialCode);
     let carton = 0;
     let odd = 0;
 
-    if (standardFromCatalog && !isNaN(parseFloat(standardFromCatalog)) && parseFloat(standardFromCatalog) > 0) {
-      const standard = parseFloat(standardFromCatalog);
+    if (standard > 0) {
       carton = Math.ceil(quantity / standard); // Làm tròn lên
       odd = quantity % standard; // Số lẻ
     }
@@ -394,7 +381,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.firestore.collection('fg-inventory').add(inventoryMaterial)
       .then((docRef) => {
         console.log(`Successfully added ${material.materialCode} to FG inventory with ID: ${docRef.id}`);
-        console.log(`Carton: ${carton}, ODD: ${odd} (Standard: ${standardFromCatalog})`);
+        console.log(`Carton: ${carton}, ODD: ${odd} (Lượng đóng thùng: ${standard})`);
       })
       .catch(error => {
         console.error(`Error adding ${material.materialCode} to FG inventory:`, error);
@@ -876,20 +863,39 @@ export class FgInComponent implements OnInit, OnDestroy {
     console.log('=== END DEBUG ===');
   }
 
+  async loadCartonPackingQty(forceRefresh = false): Promise<void> {
+    try {
+      this.cartonPackingQtyMap = await this.cartonPackingQtyService.loadAllAsMap(forceRefresh);
+    } catch (err) {
+      console.error('Load carton-packing-qty failed:', err);
+    }
+  }
+
+  /**
+   * SL SP/thùng dùng để tính Carton: ưu tiên Lượng Đóng Thùng (danh mục riêng của Kho, sửa qua
+   * nút "Sai số thùng") nếu có; không có thì lấy SL SP/thùng trong Danh mục TP (`fg-catalog`).
+   */
+  private getPackingQtyForCode(materialCode: string): number {
+    const override = this.cartonPackingQtyMap.get(String(materialCode || '').trim().toUpperCase());
+    if (override && override > 0) return override;
+    const catalogItem = this.catalogItems.find(item => item.materialCode === materialCode);
+    const standardFromCatalog = catalogItem ? catalogItem.standard : '';
+    const standard = parseFloat(standardFromCatalog);
+    return !isNaN(standard) && standard > 0 ? standard : 0;
+  }
+
   // Tính toán Carton và ODD cho material (để hiển thị trong bảng)
   calculateCartonAndOdd(material: FgInItem): { carton: number, odd: number } {
-    const catalogItem = this.catalogItems.find(item => item.materialCode === material.materialCode);
-    const standardFromCatalog = catalogItem ? catalogItem.standard : '';
-    
+    const standard = this.getPackingQtyForCode(material.materialCode);
+
     let carton = 0;
     let odd = 0;
-    
-    if (standardFromCatalog && !isNaN(parseFloat(standardFromCatalog)) && parseFloat(standardFromCatalog) > 0) {
-      const standard = parseFloat(standardFromCatalog);
+
+    if (standard > 0) {
       carton = Math.ceil(material.quantity / standard); // Làm tròn lên
       odd = material.quantity % standard; // Số lẻ
     }
-    
+
     return { carton, odd };
   }
 
@@ -1509,393 +1515,16 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // ===== PRODUCT CATALOG METHODS =====
 
-  // Load catalog from Firebase - One-time load when needed
-  loadCatalogFromFirebase(): void {
-    this.firestore.collection('fg-catalog')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((querySnapshot) => {
-        const firebaseCatalog = querySnapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          const id = doc.id;
-          return {
-            id: id,
-            ...data,
-            createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
-            updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
-          };
-        });
-        
-        this.catalogItems = firebaseCatalog;
+  // Load catalog — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng fg-catalog
+  loadCatalogFromFirebase(forceRefresh = false): void {
+    this.tpCatalogService
+      .getCatalogItemsCached(forceRefresh)
+      .then(items => {
+        this.catalogItems = items;
         this.applyCatalogFilters();
-        this.buildMergedCatalogItems();
-        console.log('Loaded FG Catalog from Firebase:', this.catalogItems.length);
-      });
-  }
-
-  // Show catalog dialog (dùng chung cho cả Danh mục TP và Mapping KH-TP)
-  showCatalog(): void {
-    this.showCatalogDialog = true;
-    if (this.catalogItems.length === 0) this.loadCatalogFromFirebase();
-    if (this.mappingItems.length === 0) this.loadMappingFromFirebase();
-    this.loadMergedCatalogLastImport();
-    this.buildMergedCatalogItems();
-    this.applyMergedCatalogFilters();
-  }
-
-  // Mapping mở cùng dialog gộp
-  showMapping(): void {
-    this.showCatalogDialog = true;
-    if (this.catalogItems.length === 0) this.loadCatalogFromFirebase();
-    if (this.mappingItems.length === 0) this.loadMappingFromFirebase();
-    this.loadMergedCatalogLastImport();
-    this.buildMergedCatalogItems();
-    this.applyMergedCatalogFilters();
-  }
-
-  loadMergedCatalogLastImport(): void {
-    this.firestore.doc(this.mergedCatalogImportMetaPath).get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(snap => {
-        if (!snap.exists) {
-          this.mergedCatalogLastImportAt = null;
-          this.mergedCatalogLastImportDetail = '';
-          return;
-        }
-        const d = snap.data() as any;
-        const at = d?.lastImportAt;
-        this.mergedCatalogLastImportAt = at?.toDate
-          ? at.toDate()
-          : (at ? new Date(at) : null);
-        const parts: string[] = [];
-        if (d?.fileName) parts.push(String(d.fileName));
-        const added = Number(d?.addedCount) || 0;
-        const updated = Number(d?.updatedCount) || 0;
-        if (added > 0 || updated > 0) {
-          parts.push(`thêm ${added}, ghi đè ${updated}`);
-        }
-        this.mergedCatalogLastImportDetail = parts.join(' · ');
-      });
-  }
-
-  private async saveMergedCatalogLastImport(meta: {
-    addedCount: number;
-    updatedCount: number;
-    fileName?: string;
-  }): Promise<void> {
-    const now = new Date();
-    await this.firestore.doc(this.mergedCatalogImportMetaPath).set({
-      lastImportAt: now,
-      addedCount: meta.addedCount,
-      updatedCount: meta.updatedCount,
-      fileName: meta.fileName || '',
-      updatedAt: now
-    }, { merge: true });
-    this.mergedCatalogLastImportAt = now;
-    const parts: string[] = [];
-    if (meta.fileName) parts.push(meta.fileName);
-    if (meta.addedCount > 0 || meta.updatedCount > 0) {
-      parts.push(`thêm ${meta.addedCount}, ghi đè ${meta.updatedCount}`);
-    }
-    this.mergedCatalogLastImportDetail = parts.join(' · ');
-  }
-
-  // Close catalog dialog
-  closeCatalog(): void {
-    this.showCatalogDialog = false;
-    this.catalogSearchTerm = '';
-    this.mergedSearchTerm = '';
-    this.newCatalogItem = { materialCode: '', standard: '', customer: '', customerCode: '' };
-    this.newMergedItem = { materialCode: '', standard: '', customerCode: '', description: '' };
-  }
-
-  onMergedSearchChange(event: any): void {
-    this.mergedSearchTerm = event.target.value;
-    this.applyMergedCatalogFilters();
-  }
-
-  // Thêm một dòng gộp: ghi vào cả fg-catalog và fg-customer-mapping
-  addMergedCatalogItem(): void {
-    const mc = (this.newMergedItem.materialCode || '').trim();
-    const cc = (this.newMergedItem.customerCode || '').trim();
-    const desc = (this.newMergedItem.description || '').trim();
-    const std = (this.newMergedItem.standard || '').trim();
-    if (!mc && !cc) {
-      alert('❌ Vui lòng nhập ít nhất Mã TP hoặc Mã KH');
-      return;
-    }
-    const key = `${mc.toUpperCase()}|${cc.toUpperCase()}`;
-    const exists = this.mergedCatalogItems.some(
-      m => `${(m.materialCode || '').toUpperCase()}|${(m.customerCode || '').toUpperCase()}` === key
-    );
-    if (exists) {
-      alert(`❌ Cặp Mã TP "${mc}" + Mã KH "${cc}" đã tồn tại`);
-      return;
-    }
-    const catalogData = {
-      materialCode: mc,
-      standard: std,
-      customer: desc,
-      customerCode: cc,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    const mappingData = {
-      customerCode: cc,
-      materialCode: mc,
-      description: desc,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    this.firestore.collection('fg-catalog').add(catalogData).then(docCatalog => {
-      this.firestore.collection('fg-customer-mapping').add(mappingData).then(() => {
-        this.loadCatalogFromFirebase();
-        this.loadMappingFromFirebase();
-        this.newMergedItem = { materialCode: '', standard: '', customerCode: '', description: '' };
-        alert('✅ Đã thêm vào danh mục & mapping');
-      }).catch(err => {
-        console.error('Error adding mapping:', err);
-        alert('❌ Lỗi khi thêm mapping: ' + (err?.message || err));
-      });
-    }).catch(err => {
-      console.error('Error adding catalog:', err);
-      alert('❌ Lỗi khi thêm danh mục: ' + (err?.message || err));
-    });
-  }
-
-  // Xóa một dòng gộp: xóa cả catalog và mapping (nếu có)
-  deleteMergedCatalogItem(item: MergedCatalogItem): void {
-    const label = `Mã TP "${item.materialCode}" / Mã KH "${item.customerCode}"`;
-    if (!confirm(`Xác nhận xóa ${label}?`)) return;
-    const done = () => {
-      this.loadCatalogFromFirebase();
-      this.loadMappingFromFirebase();
-      alert('✅ Đã xóa');
-    };
-    let pending = 0;
-    if (item.catalogId) {
-      pending++;
-      this.firestore.collection('fg-catalog').doc(item.catalogId).delete().then(() => { pending--; if (pending === 0) done(); }).catch(() => { pending--; if (pending === 0) done(); });
-    }
-    if (item.mappingId) {
-      pending++;
-      this.firestore.collection('fg-customer-mapping').doc(item.mappingId).delete().then(() => { pending--; if (pending === 0) done(); }).catch(() => { pending--; if (pending === 0) done(); });
-    }
-    if (pending === 0) done();
-  }
-
-  /** Cập nhật Standard + Tên KH cho dòng danh mục gộp. */
-  updateMergedCatalogItem(item: MergedCatalogItem): void {
-    if (!item.catalogId && !item.mappingId) {
-      alert('❌ Không tìm thấy dữ liệu để cập nhật');
-      return;
-    }
-    const standard = String(item.standard ?? '').trim();
-    const description = String(item.description ?? '').trim();
-    const tasks: Promise<void>[] = [];
-
-    if (item.catalogId) {
-      tasks.push(
-        this.firestore.collection('fg-catalog').doc(item.catalogId).update({
-          standard,
-          customer: description,
-          updatedAt: new Date()
-        }) as Promise<void>
-      );
-    }
-    if (item.mappingId) {
-      tasks.push(
-        this.firestore.collection('fg-customer-mapping').doc(item.mappingId).update({
-          description,
-          updatedAt: new Date()
-        }) as Promise<void>
-      );
-    }
-
-    Promise.all(tasks)
-      .then(() => {
-        if (item.catalogId) {
-          const c = this.catalogItems.find(x => x.id === item.catalogId);
-          if (c) {
-            c.standard = standard;
-            c.customer = description;
-          }
-        }
-        if (item.mappingId) {
-          const m = this.mappingItems.find(x => x.id === item.mappingId);
-          if (m) {
-            m.description = description;
-          }
-        }
-        this.buildMergedCatalogItems();
+        console.log('Loaded FG Catalog (cached):', this.catalogItems.length);
       })
-      .catch(err => {
-        console.error('Error updating merged catalog item:', err);
-        alert('❌ Lỗi khi cập nhật: ' + (err?.message || err));
-        this.loadCatalogFromFirebase();
-        this.loadMappingFromFirebase();
-      });
-  }
-
-  // Import Excel gộp: cột Mã TP, Standard, Mã KH, Tên KH -> ghi cả catalog + mapping
-  // Nếu trùng Mã TP + Mã KH → ghi đè Standard và Tên KH
-  // Nếu không trùng → thêm mới
-  importMergedCatalog(): void {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.xlsx,.xls';
-    fileInput.style.display = 'none';
-    fileInput.onchange = async (e: any) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        const data: any[] = await this.readExcelFile(file);
-        const rows = (data || []).map((row: any) => ({
-          materialCode: (row['Mã TP'] || '').toString().trim(),
-          standard: (row['Standard'] || '').toString().trim(),
-          customerCode: (row['Mã KH'] || row['Mã khách hàng'] || row['Mã Khách Hàng'] || '').toString().trim(),
-          description: (row['Tên KH'] || row['Khách'] || row['Mô Tả'] || '').toString().trim()
-        })).filter(r => r.materialCode || r.customerCode);
-        
-        if (rows.length === 0) {
-          alert('❌ Không có dòng hợp lệ (cần Mã TP hoặc Mã KH)');
-          return;
-        }
-        
-        const key = (mc: string, cc: string) => `${mc.toUpperCase()}|${cc.toUpperCase()}`;
-        let addedCount = 0;
-        let updatedCount = 0;
-        
-        for (const r of rows) {
-          const rowKey = key(r.materialCode, r.customerCode);
-          const existing = this.mergedCatalogItems.find(m => key(m.materialCode, m.customerCode) === rowKey);
-          
-          if (existing && existing.catalogId) {
-            // Trùng → ghi đè Standard và Tên KH
-            await this.firestore.collection('fg-catalog').doc(existing.catalogId).update({
-              standard: r.standard,
-              customer: r.description,
-              updatedAt: new Date()
-            });
-            // Cập nhật mapping nếu có
-            if (existing.mappingId) {
-              await this.firestore.collection('fg-customer-mapping').doc(existing.mappingId).update({
-                description: r.description,
-                updatedAt: new Date()
-              });
-            }
-            updatedCount++;
-          } else {
-            // Không trùng → thêm mới
-            await this.firestore.collection('fg-catalog').add({
-              materialCode: r.materialCode,
-              standard: r.standard,
-              customer: r.description,
-              customerCode: r.customerCode,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-            await this.firestore.collection('fg-customer-mapping').add({
-              customerCode: r.customerCode,
-              materialCode: r.materialCode,
-              description: r.description,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-            addedCount++;
-          }
-        }
-        
-        await this.saveMergedCatalogLastImport({
-          addedCount,
-          updatedCount,
-          fileName: file.name
-        });
-        this.loadCatalogFromFirebase();
-        this.loadMappingFromFirebase();
-        alert(`✅ Import hoàn tất!\n- Thêm mới: ${addedCount} dòng\n- Ghi đè: ${updatedCount} dòng`);
-      } catch (err: any) {
-        alert('❌ Lỗi đọc file: ' + (err?.message || err));
-      }
-    };
-    document.body.appendChild(fileInput);
-    fileInput.click();
-    document.body.removeChild(fileInput);
-  }
-
-  // Xóa toàn bộ danh mục để import lại từ đầu
-  async deleteAllCatalog(): Promise<void> {
-    const count = this.mergedCatalogItems.length;
-    if (count === 0) {
-      alert('❌ Danh mục đang trống!');
-      return;
-    }
-    
-    if (!confirm(`⚠️ Bạn có chắc muốn xóa TẤT CẢ ${count} dòng danh mục?\n\nHành động này không thể hoàn tác!`)) {
-      return;
-    }
-    
-    // Yêu cầu nhập mật khẩu
-    const password = prompt('Nhập mật khẩu để xác nhận xóa:');
-    if (password !== '111') {
-      alert('❌ Mật khẩu không đúng!');
-      return;
-    }
-    
-    try {
-      let deletedCount = 0;
-      
-      for (const item of this.mergedCatalogItems) {
-        if (item.catalogId) {
-          await this.firestore.collection('fg-catalog').doc(item.catalogId).delete();
-        }
-        if (item.mappingId) {
-          await this.firestore.collection('fg-customer-mapping').doc(item.mappingId).delete();
-        }
-        deletedCount++;
-      }
-      
-      this.loadCatalogFromFirebase();
-      this.loadMappingFromFirebase();
-      alert(`✅ Đã xóa ${deletedCount} dòng danh mục!`);
-    } catch (err: any) {
-      console.error('Error deleting catalog:', err);
-      alert('❌ Lỗi khi xóa: ' + (err?.message || err));
-    }
-  }
-
-  downloadMergedCatalogTemplate(): void {
-    const templateData = [
-      { 'Mã TP': 'FG001', 'Standard': '100', 'Mã KH': 'CUST001', 'Tên KH': 'Khách hàng A' },
-      { 'Mã TP': 'FG002', 'Standard': '200', 'Mã KH': 'CUST002', 'Tên KH': 'Khách hàng B' }
-    ];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, 'FG_DanhMuc_Mapping_Template.xlsx');
-  }
-
-  /** Tải về danh mục đang hiển thị (theo ô tìm kiếm hiện tại) */
-  downloadMergedCatalogCurrent(): void {
-    const rows = (this.filteredMergedCatalogItems || []).map(item => ({
-      'Mã TP': item.materialCode || '',
-      'Standard': item.standard || '',
-      'Mã KH': item.customerCode || '',
-      'Tên KH': item.description || ''
-    }));
-
-    if (rows.length === 0) {
-      alert('❌ Không có dữ liệu để tải');
-      return;
-    }
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Danh mục');
-
-    const now = new Date();
-    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    XLSX.writeFile(wb, `FG_DanhMuc_${stamp}.xlsx`);
+      .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
 
   // Apply catalog filters
@@ -2191,74 +1820,16 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // ===== CUSTOMER CODE MAPPING METHODS =====
 
-  // Load mapping from Firebase
-  loadMappingFromFirebase(): void {
-    this.firestore.collection('fg-customer-mapping')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((querySnapshot) => {
-        const firebaseMapping = querySnapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          const id = doc.id;
-          return {
-            id: id,
-            ...data,
-            createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
-            updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
-          };
-        });
-        
-        this.mappingItems = firebaseMapping;
+  // Load mapping — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng fg-customer-mapping
+  loadMappingFromFirebase(forceRefresh = false): void {
+    this.tpCatalogService
+      .getMappingItemsCached(forceRefresh)
+      .then(items => {
+        this.mappingItems = items;
         this.applyMappingFilters();
-        this.buildMergedCatalogItems();
-        console.log('Loaded Customer Code Mapping from Firebase:', this.mappingItems.length);
-      });
-  }
-
-  /** Gộp catalog + mapping theo key (materialCode, customerCode) */
-  buildMergedCatalogItems(): void {
-    const map = new Map<string, MergedCatalogItem>();
-    const norm = (v: any) => String(v ?? '').trim();
-    const key = (mc: any, cc: any) => `${norm(mc).toUpperCase()}|${norm(cc).toUpperCase()}`;
-    this.catalogItems.forEach(c => {
-      const k = key(c.materialCode, c.customerCode);
-      map.set(k, {
-        catalogId: c.id,
-        materialCode: norm(c.materialCode),
-        customerCode: norm(c.customerCode),
-        description: norm(c.customer),
-        standard: norm(c.standard)
-      });
-    });
-    this.mappingItems.forEach(m => {
-      const k = key(m.materialCode, m.customerCode);
-      const existing = map.get(k);
-      if (existing) {
-        existing.mappingId = m.id;
-        const desc = norm(m.description);
-        if (desc) existing.description = desc;
-      } else {
-        map.set(k, {
-          mappingId: m.id,
-          materialCode: norm(m.materialCode),
-          customerCode: norm(m.customerCode),
-          description: norm(m.description),
-          standard: ''
-        });
-      }
-    });
-    this.mergedCatalogItems = Array.from(map.values()).filter(m => m.materialCode || m.customerCode);
-    this.applyMergedCatalogFilters();
-  }
-
-  applyMergedCatalogFilters(): void {
-    const term = (this.mergedSearchTerm || '').toUpperCase();
-    this.filteredMergedCatalogItems = term
-      ? this.mergedCatalogItems.filter(item => {
-          const s = [item.materialCode, item.customerCode, item.description, item.standard].filter(Boolean).join(' ').toUpperCase();
-          return s.includes(term);
-        })
-      : [...this.mergedCatalogItems];
+        console.log('Loaded Customer Code Mapping (cached):', this.mappingItems.length);
+      })
+      .catch(err => console.error('Load fg-customer-mapping (cached) failed:', err));
   }
 
   // Show mapping dialog
@@ -2590,21 +2161,37 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   onCartonVerifyWrong(): void {
     this.cartonWrongMode = true;
-    this.cartonCorrectInput = this.displayCartonCount > 0 ? this.displayCartonCount : 1;
+    const current = this.getPackingQtyForCode(this.selectedReceiptMaterial?.materialCode || '');
+    this.cartonCorrectInput = current > 0 ? current : 1;
   }
 
   onCartonCorrectInputKeyPress(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
-      this.submitCartonCorrection();
+      void this.submitCartonCorrection();
     }
   }
 
-  submitCartonCorrection(): void {
+  /**
+   * Lưu Lượng Đóng Thùng mới cho mã đang nhận (ghi vào danh mục riêng của Kho — `carton-packing-qty`,
+   * không đụng tới Danh mục TP), rồi tính lại Carton từ giá trị này.
+   */
+  async submitCartonCorrection(): Promise<void> {
     const n = Number(this.cartonCorrectInput);
     if (!Number.isFinite(n) || n < 1) {
       return;
     }
-    this.displayCartonCount = Math.round(n);
+    const material = this.selectedReceiptMaterial;
+    if (!material) return;
+    const qty = Math.round(n);
+    try {
+      await this.cartonPackingQtyService.upsert(material.materialCode, qty);
+      this.cartonPackingQtyMap.set(String(material.materialCode || '').trim().toUpperCase(), qty);
+    } catch (err) {
+      console.error('Save carton-packing-qty failed:', err);
+      alert('❌ Không lưu được Lượng Đóng Thùng. Thử lại.');
+      return;
+    }
+    this.displayCartonCount = Math.ceil(material.quantity / qty);
     this.confirmReceiptData.cartonConfirmed = true;
     this.closeCartonVerifyDialog();
   }

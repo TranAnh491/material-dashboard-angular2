@@ -1,0 +1,344 @@
+<div class="dv-catalog-page">
+  <div class="dv-catalog-header">
+    <div class="dv-catalog-header__title">
+      <h2>Danh mục NVL &amp; TP</h2>
+      <p>Quản lý tập trung: Danh mục nguyên vật liệu (NVL) và thành phẩm (TP) &amp; mapping khách hàng.</p>
+    </div>
+    <div class="dv-catalog-header__actions">
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="goToMenu()">
+        <i class="material-icons">arrow_back</i> Về Menu
+      </button>
+    </div>
+  </div>
+
+  <div class="dv-tabs">
+    <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'nvl'" (click)="setTab('nvl')">
+      Danh mục NVL
+    </button>
+    <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'tp'" (click)="setTab('tp')">
+      Danh mục TP &amp; Mapping KH
+    </button>
+  </div>
+
+  <!-- ===== NVL ===== -->
+  <section class="dv-panel" *ngIf="activeTab === 'nvl'">
+    <div class="dv-toolbar-row dv-toolbar-row--end">
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="downloadNvlTemplate()">
+        <i class="material-icons">download</i> Tải Template
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" [class.dv-btn--active]="showNvlAddForm" (click)="toggleNvlAddForm()">
+        <i class="material-icons">edit_note</i> Thêm Thủ Công
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="exportNvlCurrent()">
+        <i class="material-icons">file_download</i> Export danh sách
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="importNvlFromExcel()" [disabled]="isNvlImporting"
+              title="Chỉ cập nhật Standard Packing cho mã đã có sẵn, bỏ qua mã chưa có hoặc đang Lock">
+        <i class="material-icons">file_upload</i> {{ isNvlImporting ? 'Đang import...' : 'Import Standard Packing' }}
+      </button>
+    </div>
+
+    <div class="dv-toolbar-row">
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="loadNvl(true)" [disabled]="isNvlLoading">
+        <i class="material-icons">refresh</i> {{ isNvlLoading ? 'Đang tải...' : 'Làm mới' }}
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="openDeleteAllDialog('nvl')">
+        <i class="material-icons">delete</i> Xóa tất cả
+      </button>
+    </div>
+
+    <div class="dv-add-row" *ngIf="showNvlAddForm">
+      <input type="text" class="dv-input" [(ngModel)]="newNvlItem.materialCode" placeholder="Mã NVL mới...">
+      <input type="text" class="dv-input" [(ngModel)]="newNvlItem.materialName" placeholder="Tên NVL...">
+      <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newNvlItem.unit" placeholder="ĐVT...">
+      <input type="number" class="dv-input dv-input--sm" [(ngModel)]="newNvlItem.standardPacking" min="0" placeholder="Standard Packing...">
+      <button type="button" class="dv-btn dv-btn--primary" (click)="addNvlItem()">
+        <i class="material-icons">add</i> Thêm
+      </button>
+    </div>
+
+    <div class="dv-filter-bar">
+      <div class="dv-search-bar">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="nvlSearchText" (input)="onNvlSearchChange()" placeholder="Nhập mã NVL, tên hoặc ĐVT...">
+        <button type="button" class="dv-search-clear" *ngIf="nvlSearchText" (click)="clearNvlSearch()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="dv-column-filters">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialCode"
+               (ngModelChange)="applyNvlFilters()" placeholder="Mã NVL">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialName"
+               (ngModelChange)="applyNvlFilters()" placeholder="Tên">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unit"
+               (ngModelChange)="applyNvlFilters()" placeholder="ĐVT">
+      </div>
+    </div>
+
+    <div class="dv-page-bar">
+      <label class="dv-page-size">
+        Hiển thị
+        <select [(ngModel)]="nvlPageSize" (ngModelChange)="onNvlPageSizeChange()">
+          <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+        </select>
+        dòng
+      </label>
+      <div class="dv-page-bar__right">
+        <span class="dv-page-total">Tổng: {{ filteredNvlItems.length | number }} dòng</span>
+        <div class="dv-pagination" *ngIf="nvlTotalPages > 1">
+          <button type="button" class="dv-page-btn" [disabled]="nvlCurrentPage === 1" (click)="setNvlPage(nvlCurrentPage - 1)">
+            <i class="material-icons">chevron_left</i>
+          </button>
+          <ng-container *ngFor="let p of nvlPageNumbers()">
+            <button type="button" class="dv-page-btn" *ngIf="p !== '...'" [class.dv-page-btn--active]="p === nvlCurrentPage"
+                    (click)="setNvlPage($any(p))">{{ p }}</button>
+            <span class="dv-page-ellipsis" *ngIf="p === '...'">…</span>
+          </ng-container>
+          <button type="button" class="dv-page-btn" [disabled]="nvlCurrentPage === nvlTotalPages" (click)="setNvlPage(nvlCurrentPage + 1)">
+            <i class="material-icons">chevron_right</i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-catalog-empty" *ngIf="!isNvlLoading && !filteredNvlItems.length">Chưa có dữ liệu.</div>
+    <div class="dv-catalog-loading" *ngIf="isNvlLoading">Đang tải danh mục...</div>
+
+    <div class="dv-table-wrap" *ngIf="!isNvlLoading && pagedNvlItems.length">
+      <table class="dv-catalog-table">
+        <thead>
+          <tr>
+            <th>Mã NVL</th>
+            <th>Tên</th>
+            <th>ĐVT</th>
+            <th>Standard Packing</th>
+            <th>Lock</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of pagedNvlItems">
+            <td class="dv-cell-code">{{ row.materialCode }}</td>
+            <td>
+              <input type="text" class="dv-input dv-input--cell" [(ngModel)]="row.materialName"
+                     [disabled]="row.standardPackingLocked" (change)="updateNvlItem(row)">
+            </td>
+            <td>
+              <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.unit"
+                     [disabled]="row.standardPackingLocked" (change)="updateNvlItem(row)">
+            </td>
+            <td>
+              <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.standardPacking"
+                     [disabled]="row.standardPackingLocked" min="0" (change)="updateNvlItem(row)">
+            </td>
+            <td class="dv-lock-cell">
+              <mat-slide-toggle color="primary" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)"></mat-slide-toggle>
+            </td>
+            <td class="dv-actions">
+              <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteNvlItem(row)">Xóa</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== TP ===== -->
+  <section class="dv-panel" *ngIf="activeTab === 'tp'">
+    <div class="dv-toolbar-row dv-toolbar-row--end">
+      <span class="dv-import-summary" *ngIf="tpLastImportAt">
+        Import gần nhất: {{ formatUpdatedAt(tpLastImportAt) }}
+        <span *ngIf="tpLastImportDetail"> · {{ tpLastImportDetail }}</span>
+      </span>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="downloadTpTemplate()">
+        <i class="material-icons">download</i> Tải Template
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" [class.dv-btn--active]="showTpAddForm" (click)="toggleTpAddForm()">
+        <i class="material-icons">edit_note</i> Thêm Thủ Công
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="downloadTpCurrent()">
+        <i class="material-icons">file_download</i> Export danh sách
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="importTpFromExcel()" [disabled]="isTpImporting"
+              title="Import sẽ XÓA TOÀN BỘ danh mục hiện tại và thay bằng dữ liệu trong file. Trùng Mã S.Phẩm KH chỉ giữ dòng cuối">
+        <i class="material-icons">file_upload</i> {{ isTpImporting ? 'Đang import...' : 'Import Excel (thay thế toàn bộ)' }}
+      </button>
+    </div>
+
+    <div class="dv-toolbar-row">
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="loadTp(true)" [disabled]="isTpLoading">
+        <i class="material-icons">refresh</i> {{ isTpLoading ? 'Đang tải...' : 'Làm mới' }}
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="deleteTpItemsWithoutCustomerCode()"
+              title="Xóa các dòng chưa có Mã KH">
+        <i class="material-icons">playlist_remove</i> Xóa dòng thiếu Mã KH
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="openDeleteAllDialog('tp')">
+        <i class="material-icons">delete</i> Xóa tất cả
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="copyCartonPackingQtyFromStandard()" [disabled]="isTpCopyingCartonQty"
+              title="Copy toàn bộ SL SP/thùng sang Lượng Đóng Thùng (ghi đè)">
+        <i class="material-icons">content_copy</i> {{ isTpCopyingCartonQty ? 'Đang copy...' : 'Copy SL SP/thùng → Lượng Đóng Thùng' }}
+      </button>
+    </div>
+
+    <div class="dv-add-row dv-add-row--wrap" *ngIf="showTpAddForm">
+      <input type="text" class="dv-input" [(ngModel)]="newTpItem.materialCode" placeholder="Mã vật tư...">
+      <input type="text" class="dv-input" [(ngModel)]="newTpItem.customerCode" placeholder="Mã S.Phẩm KH...">
+      <input type="text" class="dv-input" [(ngModel)]="newTpItem.productName" placeholder="Tên vật tư...">
+      <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newTpItem.unit" placeholder="Đvt...">
+      <input type="text" class="dv-input" [(ngModel)]="newTpItem.description" placeholder="Khách hàng...">
+      <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newTpItem.cartonSize" placeholder="K.Thước thùng...">
+      <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newTpItem.grossWeight" placeholder="Gross Weight...">
+      <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newTpItem.netWeight" placeholder="Net Weight...">
+      <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newTpItem.standard" placeholder="SL SP/thùng..."
+             (keyup.enter)="addTpItem()">
+      <button type="button" class="dv-btn dv-btn--primary" (click)="addTpItem()">
+        <i class="material-icons">add</i> Thêm
+      </button>
+    </div>
+
+    <div class="dv-filter-bar">
+      <div class="dv-search-bar">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="tpSearchText" (input)="onTpSearchChange()" placeholder="Nhập mã vật tư, mã KH hoặc tên khách hàng">
+        <button type="button" class="dv-search-clear" *ngIf="tpSearchText" (click)="clearTpSearch()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="dv-column-filters">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.materialCode"
+               (ngModelChange)="applyTpFilters()" placeholder="Mã vật tư">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.customerCode"
+               (ngModelChange)="applyTpFilters()" placeholder="Mã S.Phẩm KH">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.productName"
+               (ngModelChange)="applyTpFilters()" placeholder="Tên vật tư">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.unit"
+               (ngModelChange)="applyTpFilters()" placeholder="Đvt">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.description"
+               (ngModelChange)="applyTpFilters()" placeholder="Khách hàng">
+      </div>
+    </div>
+
+    <div class="dv-page-bar">
+      <label class="dv-page-size">
+        Hiển thị
+        <select [(ngModel)]="tpPageSize" (ngModelChange)="onTpPageSizeChange()">
+          <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+        </select>
+        dòng
+      </label>
+      <div class="dv-page-bar__right">
+        <span class="dv-page-total">Tổng: {{ filteredTpItems.length | number }} dòng</span>
+        <div class="dv-pagination" *ngIf="tpTotalPages > 1">
+          <button type="button" class="dv-page-btn" [disabled]="tpCurrentPage === 1" (click)="setTpPage(tpCurrentPage - 1)">
+            <i class="material-icons">chevron_left</i>
+          </button>
+          <ng-container *ngFor="let p of tpPageNumbers()">
+            <button type="button" class="dv-page-btn" *ngIf="p !== '...'" [class.dv-page-btn--active]="p === tpCurrentPage"
+                    (click)="setTpPage($any(p))">{{ p }}</button>
+            <span class="dv-page-ellipsis" *ngIf="p === '...'">…</span>
+          </ng-container>
+          <button type="button" class="dv-page-btn" [disabled]="tpCurrentPage === tpTotalPages" (click)="setTpPage(tpCurrentPage + 1)">
+            <i class="material-icons">chevron_right</i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-catalog-empty" *ngIf="!isTpLoading && !filteredTpItems.length">Chưa có dữ liệu — Import Excel hoặc thêm dòng mới.</div>
+    <div class="dv-catalog-loading" *ngIf="isTpLoading">Đang tải danh mục...</div>
+
+    <div class="dv-table-wrap" *ngIf="!isTpLoading && pagedTpItems.length">
+      <div class="dv-table-scroll">
+        <table class="dv-catalog-table">
+          <thead>
+            <tr>
+              <th>Mã vật tư</th>
+              <th>Mã S.Phẩm KH</th>
+              <th>Tên vật tư</th>
+              <th>Đvt</th>
+              <th>Khách hàng</th>
+              <th>K.Thước thùng (cm)</th>
+              <th>Gross Weight</th>
+              <th>Net Weight</th>
+              <th>SL SP/thùng</th>
+              <th title="Danh mục riêng của Kho — ưu tiên dùng thay SL SP/thùng khi tính Carton ở FG In">Lượng Đóng Thùng</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of pagedTpItems">
+              <td class="dv-cell-code">{{ item.materialCode }}</td>
+              <td class="dv-cell-code">{{ item.customerCode }}</td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell" [(ngModel)]="item.productName" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.unit" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell" [(ngModel)]="item.description" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.cartonSize" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.grossWeight" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.netWeight" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.standard" (change)="updateTpItem(item)">
+              </td>
+              <td>
+                <input type="number" class="dv-input dv-input--cell dv-input--sm" min="0" [(ngModel)]="item.cartonPackingQty"
+                       (change)="updateTpCartonPackingQty(item)" placeholder="—">
+              </td>
+              <td class="dv-actions">
+                <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteTpItem(item)">Xóa</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Xóa toàn bộ danh mục — OTP qua Zalo ===== -->
+  <div class="dv-modal-overlay" *ngIf="showDeleteAllDialog" (click)="closeDeleteAllDialog()">
+    <div class="dv-modal" (click)="$event.stopPropagation()">
+      <h3 class="dv-modal-title">
+        <i class="material-icons">delete_sweep</i>
+        Xóa tất cả — {{ deleteAllScope === 'tp' ? 'Danh mục TP & Mapping KH' : 'Danh mục NVL' }}
+      </h3>
+
+      <ng-container *ngIf="deleteAllStep === 'confirm'">
+        <p class="dv-modal-text">
+          Hành động này sẽ xóa <strong>toàn bộ</strong> {{ deleteAllScope === 'tp' ? 'Danh mục TP & Mapping KH' : 'Danh mục NVL' }}
+          và <strong>không thể hoàn tác</strong>. Cần mã xác nhận 4 số gửi qua Zalo tới ASP0106.
+        </p>
+        <div class="dv-modal-actions">
+          <button type="button" class="dv-btn dv-btn--ghost" (click)="closeDeleteAllDialog()">Hủy</button>
+          <button type="button" class="dv-btn dv-btn--danger" (click)="sendDeleteAllOtp()" [disabled]="deleteAllSending">
+            <i class="material-icons">send</i> {{ deleteAllSending ? 'Đang gửi...' : 'Gửi mã xác nhận qua Zalo' }}
+          </button>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="deleteAllStep === 'otp'">
+        <p class="dv-modal-text">Đã gửi mã xác nhận 4 số tới Zalo ASP0106 (hiệu lực 10 phút). Nhập mã để xác nhận xóa.</p>
+        <input type="text" class="dv-input dv-modal-otp-input" [(ngModel)]="deleteAllCode" maxlength="4"
+               placeholder="Nhập mã 4 số..." (keyup.enter)="confirmDeleteAll()">
+        <div class="dv-modal-actions">
+          <button type="button" class="dv-btn dv-btn--ghost" (click)="closeDeleteAllDialog()">Hủy</button>
+          <button type="button" class="dv-btn dv-btn--ghost" (click)="sendDeleteAllOtp()" [disabled]="deleteAllSending">Gửi lại mã</button>
+          <button type="button" class="dv-btn dv-btn--danger" (click)="confirmDeleteAll()" [disabled]="deleteAllVerifying">
+            <i class="material-icons">delete_forever</i> {{ deleteAllVerifying ? 'Đang xóa...' : 'Xác nhận xóa' }}
+          </button>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+</div>

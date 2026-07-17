@@ -1,9 +1,12 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Location } from '@angular/common';
+import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
+import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 
 
 export interface FGCheckItem {
@@ -155,7 +158,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private cdr: ChangeDetectorRef,
-    private fgDailyBackup: FgDailyBackupService
+    private fgDailyBackup: FgDailyBackupService,
+    private tpCatalogService: TpCatalogFullService,
+    private router: Router,
+    private location: Location
   ) {}
 
   ngOnInit(): void {
@@ -168,6 +174,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  goBack(): void {
+    this.location.back();
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
   }
 
   // Mở dialog đổi số shipment
@@ -367,23 +381,22 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return merged;
   }
 
-  // Load customer code mappings - realtime: cập nhật ngay khi chỉnh danh mục trong FG In
+  // Load customer code mappings — dùng cache dùng chung (TpCatalogFullService, gộp cả fg-catalog
+  // lẫn fg-customer-mapping) thay vì chỉ đọc fg-customer-mapping, để không bỏ sót mã KH của các
+  // mã TP import mới (chỉ nằm trong fg-catalog, không còn ghi vào fg-customer-mapping nữa).
   loadCustomerMappings(): void {
-    this.firestore.collection('fg-customer-mapping')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((snapshot) => {
+    this.tpCatalogService
+      .loadMerged()
+      .then(items => {
         this.customerMappings.clear();
-        snapshot.docs.forEach(doc => {
-          const data = doc.data() as any;
-          if (data.customerCode && data.materialCode) {
-            const normalizedCustomerCode = String(data.customerCode).trim().toUpperCase();
-            const materialCode = String(data.materialCode).trim();
-            this.customerMappings.set(normalizedCustomerCode, materialCode);
+        items.forEach(item => {
+          if (item.customerCode && item.materialCode) {
+            this.customerMappings.set(item.customerCode.trim().toUpperCase(), item.materialCode.trim());
           }
         });
         this.cdr.detectChanges();
-      });
+      })
+      .catch(err => console.error('Load danh mục TP (cached) failed:', err));
   }
 
   loadShipmentData(): void {

@@ -311,6 +311,55 @@ export const verifyLocationAddOtpFn = functions
     }
   });
 
+/** Danh mục NVL & TP: gửi mã OTP 4 số qua Zalo tới ASP0106 để xác nhận xóa toàn bộ danh mục (nvl | tp). */
+export const requestCatalogDeleteOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const scope = data?.scope === 'tp' ? 'tp' : 'nvl';
+    const requestedBy = typeof data?.requestedBy === 'string' ? data.requestedBy.trim().slice(0, 20) : '';
+    try {
+      const { requestCatalogDeleteOtp } = await import('./catalog-delete-otp');
+      await requestCatalogDeleteOtp(admin.firestore(), scope, requestedBy);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Danh mục NVL & TP: xác nhận mã OTP để xóa toàn bộ danh mục (nvl | tp). */
+export const verifyCatalogDeleteOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const scope = data?.scope === 'tp' ? 'tp' : 'nvl';
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+      const { verifyCatalogDeleteOtp } = await import('./catalog-delete-otp');
+      const result = await verifyCatalogDeleteOtp(admin.firestore(), scope, code);
+      return result;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** Equipment: hoàn thành bài kiểm tra kho → lưu file hình lên Storage + Firestore. */
 export const saveWarehouseTrainingQuizImageFn = functions.https.onCall(async (data: any, context) => {
   if (!context.auth) {

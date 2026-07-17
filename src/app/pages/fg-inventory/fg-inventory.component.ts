@@ -11,6 +11,7 @@ import { FgExportService } from '../../services/fg-export.service';
 import { FgInService } from '../../services/fg-in.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
+import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -175,7 +176,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private readTracker: ReadTrackerService,
     private fgDailyBackup: FgDailyBackupService,
-    private router: Router
+    private router: Router,
+    private tpCatalogService: TpCatalogFullService
   ) {}
 
   goToMenu(): void {
@@ -1759,53 +1761,31 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Load catalog from Firebase (only once)
+  // Load catalog — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng fg-catalog
   loadCatalogFromFirebase(): void {
     if (this.catalogLoaded) {
       return; // Already loaded
     }
 
-    this.firestore.collection('fg-catalog')
-      .get()
-      .subscribe((querySnapshot) => {
-        this.catalogItems = querySnapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          return {
-            id: doc.id,
-            materialCode: data.materialCode || '',
-            standard: data.standard || '',
-            customer: data.customer || '',
-            createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
-            updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
-          };
-        });
+    this.tpCatalogService
+      .getCatalogItemsCached()
+      .then(items => {
+        this.catalogItems = items;
         this.catalogLoaded = true;
-        console.log('Catalog loaded once:', this.catalogItems.length, 'items');
-        
-        // Only calculate Tồn - other data comes from FG In
-      });
+        console.log('Catalog loaded (cached):', this.catalogItems.length, 'items');
+      })
+      .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
 
-  // Load Customer Code Mapping từ Firebase (Tên Khách Hàng = description)
-  // 🔧 FIX: .get() thay vì .snapshotChanges() — đây là danh mục, ít đổi, không cần listener sống
-  // (trước đây bất kỳ ai sửa danh mục KH ở tab khác cũng khiến tab này đọc lại toàn bộ).
+  // Load Customer Code Mapping — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng Firestore
   loadMappingFromFirebase(): void {
-    this.firestore.collection('fg-customer-mapping')
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(snapshot => {
-        const firebaseMapping = snapshot.docs.map(doc => {
-          const data = doc.data() as any;
-          return {
-            id: doc.id,
-            customerCode: data.customerCode || '',
-            materialCode: data.materialCode || '',
-            description: data.description || ''
-          };
-        });
-        this.mappingItems = firebaseMapping;
-        console.log('Loaded Customer Code Mapping from Firebase:', this.mappingItems.length);
-      });
+    this.tpCatalogService
+      .getMappingItemsCached()
+      .then(items => {
+        this.mappingItems = items;
+        console.log('Loaded Customer Code Mapping (cached):', this.mappingItems.length);
+      })
+      .catch(err => console.error('Load fg-customer-mapping (cached) failed:', err));
   }
 
   // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)

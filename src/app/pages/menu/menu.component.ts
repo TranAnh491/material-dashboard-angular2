@@ -68,6 +68,14 @@ export class MenuComponent implements OnInit, OnDestroy {
       subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
     },
     {
+      path: '/danh-muc-nvl-tp',
+      title: 'Danh Mục',
+      icon: 'menu_book',
+      iconImage: 'assets/img/rminventory.png',
+      category: 'Main',
+      subtitle: 'Quản lý danh mục NVL & TP',
+    },
+    {
       path: '/layout-warehouse',
       title: 'Layout Warehouse',
       icon: 'map',
