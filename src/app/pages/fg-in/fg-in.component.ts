@@ -2157,12 +2157,36 @@ export class FgInComponent implements OnInit, OnDestroy {
   onCartonVerifyCorrect(): void {
     this.confirmReceiptData.cartonConfirmed = true;
     this.closeCartonVerifyDialog();
+    void this.saveConfirmedCartonPackingQty();
+  }
+
+  /**
+   * Khi Carton được xác nhận ĐÚNG, lưu luôn Lượng Đóng Thùng (giá trị vừa dùng để tính — override
+   * cũ hoặc SL SP/thùng) vào danh mục riêng của Kho, để lần nhận sau của mã này không còn phụ
+   * thuộc Danh mục TP nữa (tránh mất khi import Excel thay thế toàn bộ). Chạy nền, không chặn thao
+   * tác của người dùng và không báo lỗi nếu thất bại.
+   */
+  private async saveConfirmedCartonPackingQty(): Promise<void> {
+    const material = this.selectedReceiptMaterial;
+    if (!material) return;
+    const qty = this.getPackingQtyForCode(material.materialCode);
+    if (qty <= 0) return;
+    const code = String(material.materialCode || '').trim().toUpperCase();
+    if (this.cartonPackingQtyMap.get(code) === qty) return;
+    try {
+      await this.cartonPackingQtyService.upsert(material.materialCode, qty);
+      this.cartonPackingQtyMap.set(code, qty);
+    } catch (err) {
+      console.error('Save carton-packing-qty (confirm correct) failed:', err);
+    }
   }
 
   onCartonVerifyWrong(): void {
     this.cartonWrongMode = true;
     const current = this.getPackingQtyForCode(this.selectedReceiptMaterial?.materialCode || '');
-    this.cartonCorrectInput = current > 0 ? current : 1;
+    // Không tự điền mặc định "1" khi mã chưa có dữ liệu — để trống bắt buộc người dùng gõ số thật,
+    // tránh trường hợp bấm Xác nhận nhầm mà không sửa lại (1 SP/thùng gần như luôn là số vô lý).
+    this.cartonCorrectInput = current > 0 ? current : null;
   }
 
   onCartonCorrectInputKeyPress(event: KeyboardEvent): void {
@@ -2177,7 +2201,8 @@ export class FgInComponent implements OnInit, OnDestroy {
    */
   async submitCartonCorrection(): Promise<void> {
     const n = Number(this.cartonCorrectInput);
-    if (!Number.isFinite(n) || n < 1) {
+    if (this.cartonCorrectInput === null || !Number.isFinite(n) || n < 2) {
+      alert('⚠️ Vui lòng nhập Lượng Đóng Thùng hợp lệ (số sản phẩm/thùng, tối thiểu 2).');
       return;
     }
     const material = this.selectedReceiptMaterial;

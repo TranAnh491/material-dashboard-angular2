@@ -513,7 +513,8 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   /**
    * Import = THAY THẾ TOÀN BỘ Danh mục TP hiện tại bằng dữ liệu trong file (chỉ giữ các cột dưới đây,
-   * bỏ hết các cột khác trong file gốc). Trùng Mã S.Phẩm KH (Mã KH) → chỉ giữ dòng cuối cùng trong file.
+   * bỏ hết các cột khác trong file gốc). Trùng Mã S.Phẩm KH (Mã KH) → ưu tiên giữ dòng có "Ngày tạo
+   * bản vẽ" mới nhất; nếu không có ngày (hoặc bằng nhau) thì giữ dòng nằm cuối file (hành vi cũ).
    */
   private async processTpImportFile(file: File): Promise<void> {
     this.isTpImporting = true;
@@ -529,7 +530,8 @@ export class DanhMucNvlTpComponent implements OnInit {
           cartonSize: String(row['K.Thước thùng (cm)'] || '').trim(),
           grossWeight: String(row['Gross Weight'] || '').trim(),
           netWeight: String(row['Net Weight'] || '').trim(),
-          standard: String(row['SL SP trên thùng'] || '').trim()
+          standard: String(row['SL SP trên thùng'] || '').trim(),
+          drawingDate: this.parseExcelDate(row['Ngày tạo bản vẽ'])
         }))
         .filter(r => r.materialCode || r.customerCode);
 
@@ -540,7 +542,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (
         !confirm(
           `Import sẽ XÓA TOÀN BỘ Danh mục TP hiện tại (${this.tpItems.length} dòng) và thay bằng ${parsed.length} dòng trong file này.\n` +
-            `Mã S.Phẩm KH trùng nhau sẽ chỉ giữ dòng cuối cùng.\n\nHành động không thể hoàn tác. Tiếp tục?`
+            `Mã S.Phẩm KH trùng nhau sẽ ưu tiên giữ dòng có Ngày tạo bản vẽ mới nhất.\n\nHành động không thể hoàn tác. Tiếp tục?`
         )
       ) {
         return;
@@ -652,6 +654,29 @@ export class DanhMucNvlTpComponent implements OnInit {
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  /** Đọc "Ngày tạo bản vẽ" — chấp nhận cả ô định dạng ngày Excel (số serial), text dd/mm/yyyy, hoặc Date. */
+  private parseExcelDate(raw: unknown): Date | null {
+    if (raw === null || raw === undefined || raw === '') return null;
+    if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+    if (typeof raw === 'number') {
+      const utcMs = (raw - 25569) * 86400 * 1000;
+      const d = new Date(utcMs);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(raw).trim();
+    if (!s) return null;
+    const m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/.exec(s);
+    if (m) {
+      const day = Number(m[1]);
+      const month = Number(m[2]);
+      const year = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+      const d = new Date(year, month - 1, day);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const parsed = new Date(s);
+    return isNaN(parsed.getTime()) ? null : parsed;
   }
 
   // ===== Xóa toàn bộ danh mục (OTP qua Zalo → ASP0106) =====

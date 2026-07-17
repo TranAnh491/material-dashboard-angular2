@@ -34,6 +34,8 @@ export interface TpImportRow {
   grossWeight: string;
   netWeight: string;
   standard: string;
+  /** Ngày tạo bản vẽ — chỉ dùng để chọn dòng nào thắng khi trùng Mã S.Phẩm KH, không lưu vào fg-catalog. */
+  drawingDate?: Date | null;
 }
 
 /** Doc thô trong `fg-catalog` — dùng cho các tab (FG In/Out/Check/Inventory, Shipment...) chỉ cần tra cứu, không quản lý. */
@@ -424,8 +426,9 @@ export class TpCatalogFullService {
 
   /**
    * Import Excel = THAY THẾ TOÀN BỘ danh mục TP (`fg-catalog`): xóa hết dữ liệu cũ rồi ghi lại từ file.
-   * Trùng Mã S.Phẩm KH (customerCode) trong file → chỉ giữ dòng nằm CUỐI CÙNG. Dòng thiếu cả Mã vật tư
-   * lẫn Mã S.Phẩm KH bị bỏ qua. Không đụng tới `fg-customer-mapping` (mapping thủ công cũ giữ nguyên).
+   * Trùng Mã S.Phẩm KH (customerCode) trong file → ưu tiên giữ dòng có "Ngày tạo bản vẽ" MỚI NHẤT;
+   * nếu không có ngày (cả hai đều thiếu, hoặc bằng nhau) thì giữ dòng nằm CUỐI CÙNG trong file (hành
+   * vi cũ). Dòng thiếu cả Mã vật tư lẫn Mã S.Phẩm KH bị bỏ qua. Không đụng tới `fg-customer-mapping`.
    */
   async replaceAllFromRows(rows: TpImportRow[], fileName = ''): Promise<{ count: number }> {
     const byCustomerCode = new Map<string, TpImportRow>();
@@ -434,7 +437,16 @@ export class TpCatalogFullService {
       const cc = this.norm(r.customerCode);
       if (!mc && !cc) return;
       const dedupeKey = cc || `__no_kh_${idx}`;
-      byCustomerCode.set(dedupeKey, r);
+      const existing = byCustomerCode.get(dedupeKey);
+      if (!existing) {
+        byCustomerCode.set(dedupeKey, r);
+        return;
+      }
+      const existingTime = existing.drawingDate?.getTime() ?? -Infinity;
+      const newTime = r.drawingDate?.getTime() ?? -Infinity;
+      if (newTime >= existingTime) {
+        byCustomerCode.set(dedupeKey, r);
+      }
     });
     const finalRows = Array.from(byCustomerCode.values());
 

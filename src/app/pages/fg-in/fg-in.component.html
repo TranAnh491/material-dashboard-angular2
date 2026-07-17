@@ -722,10 +722,10 @@
       <div class="carton-wrong-form" *ngIf="cartonWrongMode">
         <label class="carton-wrong-label">Nhập Lượng Đóng Thùng đúng (SL sản phẩm / thùng)</label>
         <p class="carton-verify-hint">Số mới sẽ lưu vào danh mục Lượng Đóng Thùng — dùng cho các lần nhận sau của mã này</p>
-        <input type="number" class="carton-wrong-input" min="1" step="1"
+        <input type="number" class="carton-wrong-input" min="2" step="1"
                [(ngModel)]="cartonCorrectInput"
                (keypress)="onCartonCorrectInputKeyPress($event)"
-               placeholder="SL sản phẩm / thùng...">
+               placeholder="Nhập SL sản phẩm / thùng (bắt buộc)...">
         <button type="button" class="carton-verify-btn carton-verify-btn--ok carton-verify-btn--full"
                 (click)="submitCartonCorrection()">
           Xác nhận
