@@ -95,8 +95,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   // Filter by shipment - để lọc theo shipment đang check
   filterByShipment: string = ''; // Shipment đang được filter
   
-  // Customer code mapping
-  customerMappings: Map<string, string> = new Map(); // customerCode -> materialCode
+  // Customer code mapping — 1 Mã KH có thể khớp nhiều Mã TP trong danh mục (nhiều dòng cùng
+  // Mã S.Phẩm KH), nên lưu TẤT CẢ ứng viên rồi đối chiếu với shipment đang scan để chọn đúng mã.
+  customerMappings: Map<string, string[]> = new Map(); // customerCode -> materialCode[]
   
   // Shipment data for checking
   shipmentDataMap: Map<string, ShipmentData[]> = new Map(); // shipmentCode -> ShipmentData[]
@@ -391,7 +392,11 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         this.customerMappings.clear();
         items.forEach(item => {
           if (item.customerCode && item.materialCode) {
-            this.customerMappings.set(item.customerCode.trim().toUpperCase(), item.materialCode.trim());
+            const key = item.customerCode.trim().toUpperCase();
+            const materialCode = item.materialCode.trim();
+            const list = this.customerMappings.get(key) || [];
+            if (!list.includes(materialCode)) list.push(materialCode);
+            this.customerMappings.set(key, list);
           }
         });
         this.cdr.detectChanges();
@@ -694,20 +699,43 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return (Number(item.carton) || 0) >= expected;
   }
 
-  // Get material code from customer code
+  // Get material code from customer code — 1 Mã KH có thể khớp nhiều Mã TP trong danh mục,
+  // nên khi có nhiều ứng viên phải đối chiếu với shipment đang scan để chọn đúng mã. Không mã
+  // nào khớp danh mục / khớp shipment → trả '' để nơi gọi báo "không có".
   getMaterialCodeFromCustomerCode(customerCode: string): string {
     // Normalize customerCode: uppercase and trim for lookup
     const normalizedCustomerCode = String(customerCode).trim().toUpperCase();
-    const materialCode = this.customerMappings.get(normalizedCustomerCode) || '';
-    
-    if (!materialCode) {
+    const candidates = this.customerMappings.get(normalizedCustomerCode) || [];
+
+    if (candidates.length === 0) {
       console.warn(`⚠️ No mapping found for customerCode: "${customerCode}" (normalized: "${normalizedCustomerCode}")`);
       console.log('📋 Available mappings:', Array.from(this.customerMappings.keys()));
-    } else {
-      console.log(`✅ Found mapping: ${normalizedCustomerCode} -> ${materialCode}`);
+      return '';
     }
-    
-    return materialCode;
+
+    if (candidates.length === 1) {
+      console.log(`✅ Found mapping: ${normalizedCustomerCode} -> ${candidates[0]}`);
+      return candidates[0];
+    }
+
+    // Nhiều Mã TP cùng Mã KH trong danh mục — chọn mã có mặt trong shipment đang scan
+    const shipmentCode = String(this.scannedShipment || '').trim().toUpperCase();
+    const shipmentMaterialCodes = new Set(
+      (this.shipmentDataMap.get(shipmentCode) || []).map(item => String(item.materialCode || '').trim().toUpperCase())
+    );
+    const matched = candidates.find(mc => shipmentMaterialCodes.has(mc.trim().toUpperCase()));
+
+    if (matched) {
+      console.log(
+        `✅ Mã KH "${normalizedCustomerCode}" có ${candidates.length} Mã TP trong danh mục (${candidates.join(', ')}) — chọn "${matched}" vì khớp shipment "${shipmentCode}"`
+      );
+      return matched;
+    }
+
+    console.warn(
+      `⚠️ Mã KH "${normalizedCustomerCode}" có ${candidates.length} Mã TP trong danh mục (${candidates.join(', ')}) nhưng KHÔNG mã nào khớp shipment "${shipmentCode}"`
+    );
+    return '';
   }
 
   // Reload mapping and update material codes for existing items
@@ -1605,7 +1633,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Tìm customerCode từ mapping (reverse lookup)
       let customerCode = '';
       this.customerMappings.forEach((materialCode, custCode) => {
-        if (materialCode === shipmentData.materialCode) {
+        if (materialCode.includes(shipmentData.materialCode)) {
           customerCode = custCode;
         }
       });
@@ -1699,7 +1727,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Tìm customerCode từ mapping
       let customerCode = '';
       this.customerMappings.forEach((materialCode, custCode) => {
-        if (materialCode === shipmentData.materialCode) {
+        if (materialCode.includes(shipmentData.materialCode)) {
           customerCode = custCode;
         }
       });

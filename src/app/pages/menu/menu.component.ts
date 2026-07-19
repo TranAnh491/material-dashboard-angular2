@@ -50,7 +50,14 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/sxxk',
     '/settings',
     '/zalo',
-    '/shorted-materials'
+    '/shorted-materials',
+    '/layout-warehouse',
+    '/layout-warehouse-asm3',
+    '/danh-muc-nvl-tp',
+    '/nhiet-do',
+    '/report',
+    '/materials-dashboard',
+    '/fgs-dashboard'
   ];
   
   menuTabs: MenuTab[] = [

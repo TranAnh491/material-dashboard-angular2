@@ -512,9 +512,11 @@ export class DanhMucNvlTpComponent implements OnInit {
   }
 
   /**
-   * Import = THAY THẾ TOÀN BỘ Danh mục TP hiện tại bằng dữ liệu trong file (chỉ giữ các cột dưới đây,
-   * bỏ hết các cột khác trong file gốc). Trùng Mã S.Phẩm KH (Mã KH) → ưu tiên giữ dòng có "Ngày tạo
-   * bản vẽ" mới nhất; nếu không có ngày (hoặc bằng nhau) thì giữ dòng nằm cuối file (hành vi cũ).
+   * Import = THAY THẾ TOÀN BỘ Danh mục TP hiện tại bằng dữ liệu trong file. Đọc và lưu TOÀN BỘ cột
+   * có trong file (không chỉ lọc theo danh sách cột cố định như trước) — mỗi cột gốc trong Excel trở
+   * thành 1 field trong Firestore, các field đã có UI riêng (materialCode, customerCode, standard...)
+   * vẫn được chuẩn hoá đè lên trên. Trùng Mã S.Phẩm KH (Mã KH) → ưu tiên giữ dòng có "Ngày tạo bản
+   * vẽ" mới nhất; nếu không có ngày (hoặc bằng nhau) thì giữ dòng nằm cuối file (hành vi cũ).
    */
   private async processTpImportFile(file: File): Promise<void> {
     this.isTpImporting = true;
@@ -531,7 +533,8 @@ export class DanhMucNvlTpComponent implements OnInit {
           grossWeight: String(row['Gross Weight'] || '').trim(),
           netWeight: String(row['Net Weight'] || '').trim(),
           standard: String(row['SL SP trên thùng'] || '').trim(),
-          drawingDate: this.parseExcelDate(row['Ngày tạo bản vẽ'])
+          drawingDate: this.parseExcelDate(row['Ngày tạo bản vẽ']),
+          raw: row
         }))
         .filter(r => r.materialCode || r.customerCode);
 
@@ -542,7 +545,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (
         !confirm(
           `Import sẽ XÓA TOÀN BỘ Danh mục TP hiện tại (${this.tpItems.length} dòng) và thay bằng ${parsed.length} dòng trong file này.\n` +
-            `Mã S.Phẩm KH trùng nhau sẽ ưu tiên giữ dòng có Ngày tạo bản vẽ mới nhất.\n\nHành động không thể hoàn tác. Tiếp tục?`
+            `Ghi tất cả dòng (1 Mã KH có nhiều Mã vật tư vẫn giữ hết); chỉ dòng trùng cả Mã vật tư + Mã KH mới gộp, ưu tiên Ngày tạo bản vẽ mới nhất.\n\nHành động không thể hoàn tác. Tiếp tục?`
         )
       ) {
         return;

@@ -36,6 +36,8 @@ export interface TpImportRow {
   standard: string;
   /** Ngày tạo bản vẽ — chỉ dùng để chọn dòng nào thắng khi trùng Mã S.Phẩm KH, không lưu vào fg-catalog. */
   drawingDate?: Date | null;
+  /** Toàn bộ cột gốc trong file Excel (kể cả cột chưa có UI riêng) — lưu nguyên vào fg-catalog. */
+  raw?: Record<string, any>;
 }
 
 /** Doc thô trong `fg-catalog` — dùng cho các tab (FG In/Out/Check/Inventory, Shipment...) chỉ cần tra cứu, không quản lý. */
@@ -426,29 +428,30 @@ export class TpCatalogFullService {
 
   /**
    * Import Excel = THAY THẾ TOÀN BỘ danh mục TP (`fg-catalog`): xóa hết dữ liệu cũ rồi ghi lại từ file.
-   * Trùng Mã S.Phẩm KH (customerCode) trong file → ưu tiên giữ dòng có "Ngày tạo bản vẽ" MỚI NHẤT;
-   * nếu không có ngày (cả hai đều thiếu, hoặc bằng nhau) thì giữ dòng nằm CUỐI CÙNG trong file (hành
-   * vi cũ). Dòng thiếu cả Mã vật tư lẫn Mã S.Phẩm KH bị bỏ qua. Không đụng tới `fg-customer-mapping`.
+   * Ghi TẤT CẢ dòng trong file — 1 Mã S.Phẩm KH có nhiều Mã vật tư là hợp lệ, giữ hết. Chỉ gộp dòng
+   * trùng THẬT SỰ (cùng cả Mã vật tư LẪN Mã S.Phẩm KH): ưu tiên giữ dòng có "Ngày tạo bản vẽ" MỚI
+   * NHẤT, không có ngày (hoặc bằng nhau) thì giữ dòng nằm CUỐI CÙNG trong file. Dòng thiếu cả Mã vật
+   * tư lẫn Mã S.Phẩm KH bị bỏ qua. Không đụng tới `fg-customer-mapping`.
    */
   async replaceAllFromRows(rows: TpImportRow[], fileName = ''): Promise<{ count: number }> {
-    const byCustomerCode = new Map<string, TpImportRow>();
-    rows.forEach((r, idx) => {
+    const byPair = new Map<string, TpImportRow>();
+    rows.forEach(r => {
       const mc = this.norm(r.materialCode);
       const cc = this.norm(r.customerCode);
       if (!mc && !cc) return;
-      const dedupeKey = cc || `__no_kh_${idx}`;
-      const existing = byCustomerCode.get(dedupeKey);
+      const dedupeKey = `${mc.toUpperCase()}|${cc.toUpperCase()}`;
+      const existing = byPair.get(dedupeKey);
       if (!existing) {
-        byCustomerCode.set(dedupeKey, r);
+        byPair.set(dedupeKey, r);
         return;
       }
       const existingTime = existing.drawingDate?.getTime() ?? -Infinity;
       const newTime = r.drawingDate?.getTime() ?? -Infinity;
       if (newTime >= existingTime) {
-        byCustomerCode.set(dedupeKey, r);
+        byPair.set(dedupeKey, r);
       }
     });
-    const finalRows = Array.from(byCustomerCode.values());
+    const finalRows = Array.from(byPair.values());
 
     await this.deleteAllCatalogOnly();
 
@@ -460,7 +463,12 @@ export class TpCatalogFullService {
       const chunk = finalRows.slice(idx, idx + 450);
       chunk.forEach(r => {
         const ref = this.firestore.collection(this.catalogCollection).doc().ref;
+        // Ghi toàn bộ cột gốc trong file trước (bỏ giá trị undefined vì Firestore không chấp nhận),
+        // rồi đè lên bằng các field đã chuẩn hoá — đảm bảo phần đang có UI/tính toán riêng luôn đúng.
+        const rawEntries = Object.entries(r.raw || {}).filter(([, v]) => v !== undefined);
+        const sanitizedRaw = Object.fromEntries(rawEntries);
         batch.set(ref, {
+          ...sanitizedRaw,
           materialCode: this.norm(r.materialCode),
           customerCode: this.norm(r.customerCode),
           productName: this.norm(r.productName),
