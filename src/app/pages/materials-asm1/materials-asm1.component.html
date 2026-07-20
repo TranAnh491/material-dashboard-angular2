@@ -497,6 +497,8 @@
 
             <th>Lưu ý</th>
             <th>Standard Packing</th>
+            <th title="Mã thuộc danh sách MSD/ESD — gán ở Inbound/Danh mục">MSD/ESD</th>
+            <th title="Đã kiểm kê (đếm tồn kho)">KK</th>
             <th>Trạng thái</th>
             <th>IQC Status</th>
             <th>Last status</th>
@@ -686,6 +688,19 @@
                      min="0"
                      step="1"
                      placeholder="SP">
+            </td>
+            <td class="msd-esd-cell">
+              <span class="badge msd-esd-badge" *ngIf="getMsdEsdLabel(material.materialCode)">
+                {{ getMsdEsdLabel(material.materialCode) }}
+              </span>
+              <span *ngIf="!getMsdEsdLabel(material.materialCode)" class="no-msd-esd">—</span>
+            </td>
+            <td class="kk-cell">
+              <input type="checkbox"
+                     [checked]="material.kkChecked"
+                     [disabled]="!canEdit"
+                     (change)="toggleKk(material)"
+                     title="Đã kiểm kê">
             </td>
             <td class="status-cell">
               <span class="badge" 

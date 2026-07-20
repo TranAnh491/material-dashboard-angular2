@@ -9,6 +9,10 @@ export interface NvlCatalogItem {
   standardPackingLocked: boolean;
   /** Cho phép quét Tem Thùng (tem thùng riêng, không phải QR thường) để xuất kho ở Outbound ASM1/ASM2. */
   allowExportByCarton: boolean;
+  /** Mã thuộc danh sách MSD (Moisture Sensitive Device) — gán ở Inbound/Danh mục, hiển thị ở Materials ASM1/ASM2. */
+  isMsd: boolean;
+  /** Mã thuộc danh sách ESD (Electrostatic Sensitive Device) — gán ở Inbound/Danh mục, hiển thị ở Materials ASM1/ASM2. */
+  isEsd: boolean;
   updatedAt?: Date;
 }
 
@@ -67,6 +71,8 @@ export class NvlCatalogFullService {
       standardPacking: Number(d['standardPacking']) || 0,
       standardPackingLocked: d['standardPackingLocked'] === true,
       allowExportByCarton: d['allowExportByCarton'] === true,
+      isMsd: d['isMsd'] === true,
+      isEsd: d['isEsd'] === true,
       updatedAt: (d['updatedAt'] as any)?.toDate ? (d['updatedAt'] as any).toDate() : undefined
     };
   }
@@ -126,6 +132,8 @@ export class NvlCatalogFullService {
         standardPacking: 0,
         standardPackingLocked: false,
         allowExportByCarton: false,
+        isMsd: false,
+        isEsd: false,
         ...patch
       });
       this.cachedItems.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
@@ -152,6 +160,8 @@ export class NvlCatalogFullService {
       standardPacking,
       standardPackingLocked: false,
       allowExportByCarton: false,
+      isMsd: false,
+      isEsd: false,
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -161,7 +171,9 @@ export class NvlCatalogFullService {
       unit,
       standardPacking,
       standardPackingLocked: false,
-      allowExportByCarton: false
+      allowExportByCarton: false,
+      isMsd: false,
+      isEsd: false
     });
   }
 

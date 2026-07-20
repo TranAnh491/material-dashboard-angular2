@@ -50,6 +50,8 @@ export interface InventoryMaterial {
   supplier: string;
   remarks: string;
   standardPacking?: number;
+  /** Đã kiểm kê (đếm tồn kho) — tick tay ở cột KK, riêng theo dòng (Mã + PO + IMD). */
+  kkChecked?: boolean;
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
@@ -2631,7 +2633,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       materialName,
       unit: data.unit || data.unitOfMeasure || 'PCS',
       standardPacking: Number(data.standardPacking || data.packing || data.unitSize || 0) || 0,
-      standardPackingLocked: data.standardPackingLocked === true
+      standardPackingLocked: data.standardPackingLocked === true,
+      isMsd: data.isMsd === true,
+      isEsd: data.isEsd === true
     });
     return true;
   }
@@ -6387,6 +6391,33 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       console.log(`❌ Material ${materialCode} NOT found in catalog cache`);
       console.log(`📋 Available catalog keys:`, Array.from(this.catalogCache.keys()));
       return 0;
+    }
+  }
+
+  /** Nhãn MSD/ESD theo mã (đọc từ danh mục NVL — gán sau ở Inbound/Danh mục). Rỗng nếu mã không thuộc danh sách nào. */
+  getMsdEsdLabel(materialCode: string): string {
+    const item = this.catalogCache.get(materialCode);
+    if (!item) return '';
+    const labels: string[] = [];
+    if (item.isMsd) labels.push('MSD');
+    if (item.isEsd) labels.push('ESD');
+    return labels.join(' / ');
+  }
+
+  /** Tick "đã kiểm kê" cho dòng — chỉ ghi 1 field vào đúng doc này, không đọc lại. */
+  async toggleKk(material: InventoryMaterial): Promise<void> {
+    if (!this.canEdit || !material.id) return;
+    const next = !material.kkChecked;
+    material.kkChecked = next;
+    try {
+      await this.firestore.collection('inventory-materials').doc(material.id).update({
+        kkChecked: next,
+        updatedAt: new Date()
+      });
+    } catch (e) {
+      console.error('❌ toggleKk:', e);
+      material.kkChecked = !next;
+      alert('❌ Không lưu được trạng thái Kiểm kê.');
     }
   }
 

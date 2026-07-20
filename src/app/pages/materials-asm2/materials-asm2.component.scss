@@ -933,6 +933,45 @@
   font-weight: normal !important;
 }
 
+// Cột MSD/ESD - nhãn cảnh báo theo mã (đọc từ danh mục, gán ở Inbound/Danh mục)
+.msd-esd-cell {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+  text-align: center;
+  padding: 4px 6px;
+}
+
+.msd-esd-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.no-msd-esd {
+  color: #9ca3af;
+}
+
+// Cột KK - tick đã kiểm kê
+.kk-cell {
+  width: 46px !important;
+  min-width: 46px !important;
+  max-width: 46px !important;
+  text-align: center;
+  padding: 4px !important;
+
+  input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+}
+
 // Cột Tem Thùng - bấm để in tem thùng cho dòng đó
 .tem-thung-cell {
   width: 56px !important;
