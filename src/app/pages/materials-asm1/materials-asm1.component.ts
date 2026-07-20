@@ -4625,11 +4625,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.showMorePopup = false;
   }
 
-  openDanhMucNvlkh(): void {
-    void this.router.navigate(['/danh-muc-nvlkh']);
-  }
-
-  /** Quản lý danh mục NVL (Standard Packing) đã chuyển sang tab riêng — Danh mục NVL & TP. */
+  /** Quản lý danh mục NVL (Mã/Tên/ĐVT/KH/Standard Packing) đã chuyển sang tab riêng — Danh mục NVL & TP. */
   goToDanhMucNvlTp(): void {
     void this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'nvl' } });
   }

@@ -80,7 +80,6 @@ import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 import { DvLuuTruCatalogComponent } from '../../pages/dv-luu-tru-catalog/dv-luu-tru-catalog.component';
-import { DanhMucNvlkhComponent } from '../../pages/danh-muc-nvlkh/danh-muc-nvlkh.component';
 import { DanhMucNvlTpComponent } from '../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp.component';
 import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-schedule-shared.module';
 
@@ -159,7 +158,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
     ZaloComponent,
     NhietDoComponent,
     DvLuuTruCatalogComponent,
-    DanhMucNvlkhComponent,
     DanhMucNvlTpComponent
   ],
   providers: [

@@ -320,7 +320,7 @@
 
 .dv-table-wrap {
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
   background: #fff;
 }
@@ -340,7 +340,7 @@
 
   th,
   td {
-    border-bottom: 1px solid #e5e7eb;
+    border: 1px solid #e5e7eb;
     padding: 10px 12px;
     text-align: left;
     font-size: 0.8125rem;
@@ -353,15 +353,45 @@
     font-weight: 600;
     color: #374151;
     white-space: nowrap;
-    border-bottom: 1px solid #e5e7eb;
+  }
+}
+
+/** Danh mục NVL: Tên rộng gấp đôi; Khách hàng/ĐVT/Standard Packing thu nhỏ còn một nửa. */
+.dv-catalog-table--nvl {
+  table-layout: fixed;
+
+  th:nth-child(1),
+  td:nth-child(1) {
+    width: 12%;
   }
 
-  tbody tr:last-child td {
-    border-bottom: none;
+  th:nth-child(2),
+  td:nth-child(2) {
+    width: 32%;
   }
 
-  tbody tr:hover td {
-    background: #fafafa;
+  th:nth-child(3),
+  td:nth-child(3),
+  th:nth-child(4),
+  td:nth-child(4),
+  th:nth-child(5),
+  td:nth-child(5) {
+    width: 8%;
+  }
+
+  th:nth-child(6),
+  td:nth-child(6) {
+    width: 10%;
+  }
+
+  th:nth-child(7),
+  td:nth-child(7) {
+    width: 11%;
+  }
+
+  th:nth-child(8),
+  td:nth-child(8) {
+    width: 11%;
   }
 }
 

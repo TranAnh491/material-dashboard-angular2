@@ -67,7 +67,6 @@ export class TabPermissionService {
       'inbound-asm1': factoryAccess.canAccessASM1 === true, // Chỉ cho phép khi TRUE rõ ràng
       'inbound-asm2': factoryAccess.canAccessASM2 === true, // Chỉ cho phép khi TRUE rõ ràng
       'dv-luu-tru-catalog': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
-      'danh-muc-nvlkh': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'danh-muc-nvl-tp': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       
       // Outbound tabs
@@ -169,7 +168,6 @@ export class TabPermissionService {
     // Inventory tabs
     { key: 'materials-asm1', name: 'RM1 Inventory' },
     { key: 'materials-asm2', name: 'RM2 Inventory' },
-    { key: 'danh-muc-nvlkh', name: 'Danh mục NVLKH' },
     { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
     { key: 'inventory-overview-asm2', name: 'RM2 Inventory Overview' },
     { key: 'bag-history', name: 'Control Batch' },

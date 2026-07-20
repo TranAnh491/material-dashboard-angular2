@@ -6,9 +6,15 @@ import { NvlCatalogFullService, NvlCatalogItem } from '../../services/nvl-catalo
 import { TpCatalogFullService, MergedCatalogItem, TpImportRow } from '../../services/tp-catalog-full.service';
 import { CatalogDeleteOtpService, CatalogDeleteScope } from '../../services/catalog-delete-otp.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
+import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 
 type CatalogTab = 'nvl' | 'tp';
+
+/** Dòng hiển thị NVL — gộp thêm Khách hàng (Danh mục NVLKH, dữ liệu riêng, gộp vào tab này để sửa cùng chỗ). */
+interface NvlCatalogRow extends NvlCatalogItem {
+  customer: string;
+}
 
 /**
  * Tab quản lý toàn bộ Danh mục NVL & TP — gộp từ 2 nơi trước đây:
@@ -23,21 +29,24 @@ type CatalogTab = 'nvl' | 'tp';
   styleUrls: ['./danh-muc-nvl-tp.component.scss']
 })
 export class DanhMucNvlTpComponent implements OnInit {
-  activeTab: CatalogTab = 'nvl';
+  /** Chưa bấm chọn tab nào thì không hiển thị gì (và không tải dữ liệu). */
+  activeTab: CatalogTab | null = null;
 
   readonly pageSizeOptions = [10, 25, 50, 100];
 
   // ===== NVL state =====
-  nvlItems: NvlCatalogItem[] = [];
-  filteredNvlItems: NvlCatalogItem[] = [];
-  pagedNvlItems: NvlCatalogItem[] = [];
+  nvlItems: NvlCatalogRow[] = [];
+  filteredNvlItems: NvlCatalogRow[] = [];
+  pagedNvlItems: NvlCatalogRow[] = [];
   nvlSearchText = '';
-  nvlColumnFilters = { materialCode: '', materialName: '', unit: '' };
+  nvlColumnFilters = { materialCode: '', materialName: '', unit: '', customer: '' };
   nvlPageSize = 25;
   nvlCurrentPage = 1;
   nvlLoadedAt: Date | null = null;
   isNvlLoading = false;
   isNvlImporting = false;
+  isNvlKhImporting = false;
+  isNvlDeduping = false;
   showNvlAddForm = false;
   newNvlItem = { materialCode: '', materialName: '', unit: '', standardPacking: 0 };
 
@@ -91,6 +100,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     private tpService: TpCatalogFullService,
     private catalogDeleteOtp: CatalogDeleteOtpService,
     private cartonPackingQtyService: CartonPackingQtyService,
+    private nvlkhCatalog: NvlkhCatalogService,
     private authService: FirebaseAuthService,
     private route: ActivatedRoute,
     private router: Router
@@ -98,13 +108,14 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   ngOnInit(): void {
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab === 'tp' || tab === 'nvl') this.activeTab = tab;
-    void this.loadNvl();
-    void this.loadTp();
+    if (tab === 'tp' || tab === 'nvl') this.setTab(tab);
   }
 
+  /** Chỉ tải dữ liệu của tab được chọn, và chỉ tải lần đầu tiên bấm vào — giảm lượt đọc. */
   setTab(tab: CatalogTab): void {
     this.activeTab = tab;
+    if (tab === 'nvl' && !this.nvlLoadedAt) void this.loadNvl();
+    if (tab === 'tp' && !this.tpLoadedAt) void this.loadTp();
   }
 
   goToMenu(): void {
@@ -124,7 +135,11 @@ export class DanhMucNvlTpComponent implements OnInit {
   async loadNvl(forceRefresh = false): Promise<void> {
     this.isNvlLoading = true;
     try {
-      this.nvlItems = await this.nvlService.listAll(forceRefresh);
+      const [items, customerMap] = await Promise.all([
+        this.nvlService.listAll(forceRefresh),
+        this.nvlkhCatalog.loadAllAsMap(forceRefresh)
+      ]);
+      this.nvlItems = items.map(i => ({ ...i, customer: customerMap.get(i.materialCode) || '' }));
       this.nvlLoadedAt = new Date();
       this.applyNvlFilters();
     } catch (e: any) {
@@ -139,10 +154,15 @@ export class DanhMucNvlTpComponent implements OnInit {
     const q = this.nvlSearchText.trim().toLowerCase();
     const cf = this.nvlColumnFilters;
     this.filteredNvlItems = this.nvlItems.filter(item => {
-      if (q && !(item.materialCode.toLowerCase().includes(q) || item.materialName.toLowerCase().includes(q))) return false;
+      if (q && !(
+        item.materialCode.toLowerCase().includes(q) ||
+        item.materialName.toLowerCase().includes(q) ||
+        item.customer.toLowerCase().includes(q)
+      )) return false;
       if (cf.materialCode && !item.materialCode.toLowerCase().includes(cf.materialCode.toLowerCase())) return false;
       if (cf.materialName && !item.materialName.toLowerCase().includes(cf.materialName.toLowerCase())) return false;
       if (cf.unit && !item.unit.toLowerCase().includes(cf.unit.toLowerCase())) return false;
+      if (cf.customer && !item.customer.toLowerCase().includes(cf.customer.toLowerCase())) return false;
       return true;
     });
     this.nvlCurrentPage = 1;
@@ -215,6 +235,16 @@ export class DanhMucNvlTpComponent implements OnInit {
     }
   }
 
+  /** Sửa Khách hàng (Danh mục NVLKH) trực tiếp trên dòng NVL — để trống để xóa khỏi danh mục NVLKH. */
+  async updateNvlKh(row: NvlCatalogRow): Promise<void> {
+    try {
+      await this.nvlkhCatalog.setCustomer(row.materialCode, row.customer);
+    } catch (e: any) {
+      alert('❌ Lỗi khi cập nhật Khách hàng: ' + (e?.message || e));
+      await this.loadNvl();
+    }
+  }
+
   async toggleNvlLock(item: NvlCatalogItem): Promise<void> {
     const next = !item.standardPackingLocked;
     try {
@@ -249,6 +279,26 @@ export class DanhMucNvlTpComponent implements OnInit {
     }
   }
 
+  /** Mỗi mã NVL chỉ tồn tại 1 dòng — quét và gộp các mã bị trùng (dữ liệu cũ), giữ lại đúng 1 dòng/mã. */
+  async dedupeNvlDuplicates(): Promise<void> {
+    if (!confirm('Quét toàn bộ Danh mục NVL và gộp các mã bị trùng (mỗi mã chỉ giữ lại 1 dòng)?\nKhông thể hoàn tác.')) return;
+    this.isNvlDeduping = true;
+    try {
+      const result = await this.nvlService.dedupeDuplicates();
+      if (result.dedupedCodes === 0) {
+        alert('✅ Không có mã nào bị trùng.');
+      } else {
+        alert(`✅ Đã gộp ${result.dedupedCodes} mã bị trùng (xóa ${result.deletedDocs} bản ghi thừa).`);
+      }
+      await this.loadNvl(true);
+    } catch (e: any) {
+      console.error(e);
+      alert('❌ Lỗi khi xóa trùng lặp: ' + (e?.message || e));
+    } finally {
+      this.isNvlDeduping = false;
+    }
+  }
+
   importNvlFromExcel(): void {
     const input = document.createElement('input');
     input.type = 'file';
@@ -260,24 +310,27 @@ export class DanhMucNvlTpComponent implements OnInit {
     input.click();
   }
 
+  /** Cột A = Mã, Cột D = Tên, Cột E = DVT. Dữ liệu bắt đầu từ dòng 5 (bỏ qua 4 dòng đầu). */
   private async processNvlImportFile(file: File): Promise<void> {
     this.isNvlImporting = true;
     try {
-      const rows = await this.readExcelRows(file);
+      const rows = await this.readExcelRowsAsArray(file);
       const parsed = rows
-        .map((row: any) => ({
-          materialCode: String(row['Mã hàng'] || row['Mã NVL'] || row['materialCode'] || '').trim(),
-          standardPacking: parseFloat(row['Standard Packing'] || row['standardPacking'] || '0') || 0
+        .slice(4)
+        .map((row: any[]) => ({
+          materialCode: String(row?.[0] ?? '').trim(),
+          materialName: String(row?.[3] ?? '').trim(),
+          unit: String(row?.[4] ?? '').trim()
         }))
         .filter(r => r.materialCode);
 
       if (!parsed.length) {
-        alert('Không tìm thấy dòng hợp lệ (cần cột "Mã hàng" và "Standard Packing").');
+        alert('Không tìm thấy dòng hợp lệ (Cột A = Mã, Cột D = Tên, Cột E = DVT, dữ liệu từ dòng 5).');
         return;
       }
-      const result = await this.nvlService.importStandardPackingFromRows(parsed);
+      const result = await this.nvlService.importCatalogFromRows(parsed);
       alert(
-        `✅ Import xong!\n✏️ Ghi đè: ${result.updated}\n⏭️ Bỏ qua (không có trong danh mục hoặc đang Lock): ${result.skipped}\n📄 Tổng mã trong file: ${result.uniqueInFile}`
+        `✅ Import xong!\n➕ Thêm mã mới: ${result.added}\n✏️ Cập nhật Tên/ĐVT: ${result.updated}\n⏭️ Bỏ qua (dòng thiếu Tên/ĐVT của mã đã có): ${result.skipped}\n📄 Tổng mã trong file: ${result.uniqueInFile}\n\nStandard Packing / Lock / Xuất thùng không bị ảnh hưởng.`
       );
       await this.loadNvl();
     } catch (e: any) {
@@ -288,15 +341,20 @@ export class DanhMucNvlTpComponent implements OnInit {
     }
   }
 
+  /** Cột A = Mã, Cột D = Tên, Cột E = DVT. Dữ liệu bắt đầu từ dòng 5 (khớp đúng format import). */
   downloadNvlTemplate(): void {
-    const templateData = [
-      { 'Mã hàng': 'B123456', 'Standard Packing': 100 },
-      { 'Mã hàng': 'B234567', 'Standard Packing': 200 }
+    const rows: any[][] = [
+      [],
+      [],
+      [],
+      ['Mã', '', '', 'Tên', 'DVT'],
+      ['B123456', '', '', 'Tên nguyên vật liệu A', 'PCS'],
+      ['B234567', '', '', 'Tên nguyên vật liệu B', 'KG']
     ];
-    const ws = XLSX.utils.json_to_sheet(templateData);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'NVL Template');
-    XLSX.writeFile(wb, 'NVL_StandardPacking_Template.xlsx');
+    XLSX.writeFile(wb, 'NVL_Template.xlsx');
   }
 
   exportNvlCurrent(): void {
@@ -304,6 +362,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       'Mã hàng': i.materialCode,
       Tên: i.materialName,
       ĐVT: i.unit,
+      'Khách hàng': i.customer,
       'Standard Packing': i.standardPacking
     }));
     if (!rows.length) {
@@ -314,6 +373,70 @@ export class DanhMucNvlTpComponent implements OnInit {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Danh muc NVL');
     XLSX.writeFile(wb, `Danh_Muc_NVL_${this.timestamp()}.xlsx`);
+  }
+
+  importNvlKhFromExcel(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (event: any) => {
+      const file = event.target.files?.[0];
+      if (file) void this.processNvlKhImportFile(file);
+    };
+    input.click();
+  }
+
+  private async processNvlKhImportFile(file: File): Promise<void> {
+    try {
+      const rows = await this.readExcelRows(file);
+      const parsed: Array<{ materialCode: string; customer: string }> = [];
+      const seen = new Set<string>();
+      for (const row of rows as any[]) {
+        const materialCode = String(row['Mã NVL'] || row['Mã hàng'] || row['materialCode'] || '').trim();
+        const customer = String(row['Khách hàng'] || row['customer'] || '').trim();
+        if (!materialCode || !customer) continue;
+        const key = materialCode.toUpperCase();
+        if (seen.has(key)) {
+          const idx = parsed.findIndex(r => r.materialCode.toUpperCase() === key);
+          if (idx >= 0) parsed.splice(idx, 1);
+        }
+        seen.add(key);
+        parsed.push({ materialCode, customer });
+      }
+
+      if (!parsed.length) {
+        alert('Không tìm thấy dòng hợp lệ (cần cột "Mã NVL" và "Khách hàng").');
+        return;
+      }
+      if (
+        !confirm(
+          `Import sẽ THAY THẾ TOÀN BỘ Khách hàng theo mã (Danh mục NVLKH) bằng ${parsed.length} mã trong file này.\nMã nào không có trong file sẽ bị xóa Khách hàng.\n\nTiếp tục?`
+        )
+      ) {
+        return;
+      }
+
+      this.isNvlKhImporting = true;
+      const count = await this.nvlkhCatalog.importFromRows(parsed);
+      alert(`✅ Đã import ${count} mã Khách hàng.`);
+      await this.loadNvl();
+    } catch (e: any) {
+      console.error(e);
+      alert('Lỗi khi đọc file: ' + (e?.message || e));
+    } finally {
+      this.isNvlKhImporting = false;
+    }
+  }
+
+  downloadNvlKhTemplate(): void {
+    const templateData = [
+      { 'Mã NVL': 'B123456', 'Khách hàng': 'Customer A' },
+      { 'Mã NVL': 'B234567', 'Khách hàng': 'Shared' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'NVLKH Template');
+    XLSX.writeFile(wb, 'NVLKH_Template.xlsx');
   }
 
   // ===== TP =====
@@ -661,6 +784,26 @@ export class DanhMucNvlTpComponent implements OnInit {
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           resolve(XLSX.utils.sheet_to_json(worksheet));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /** Đọc theo vị trí cột (không theo tên header) — mỗi dòng là mảng giá trị theo cột A, B, C... */
+  private readExcelRowsAsArray(file: File): Promise<any[][]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          resolve(XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]);
         } catch (err) {
           reject(err);
         }

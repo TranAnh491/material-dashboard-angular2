@@ -253,54 +253,161 @@ export class NvlCatalogFullService {
   }
 
   /**
-   * Import Excel Standard Packing: CHỈ cập nhật mã đã có sẵn trong `materials`, bỏ qua mã không tồn tại
-   * (không tạo mới qua import) và bỏ qua mã đang Lock. Giữ nguyên hành vi cũ để không phá dữ liệu hiện có.
+   * Gộp các document bị trùng mã (cùng materialCode sau chuẩn hóa nhưng nằm ở doc ID khác nhau —
+   * dữ liệu cũ trước khi doc ID luôn = mã chuẩn hóa). Mỗi mã chỉ giữ lại đúng 1 document tại đúng
+   * vị trí `doc(code)` (nơi mọi thao tác CRUD khác đang dùng); dữ liệu không rỗng ở các bản trùng
+   * được gộp vào bản giữ lại trước khi xóa phần thừa, tránh mất dữ liệu.
    */
-  async importStandardPackingFromRows(
-    rows: Array<{ materialCode: string; standardPacking: number }>
-  ): Promise<{ updated: number; skipped: number; uniqueInFile: number }> {
-    const byCode = new Map<string, number>();
-    for (const r of rows) {
-      const code = this.normalizeCode(r.materialCode);
-      if (!code) continue;
-      byCode.set(code, Number(r.standardPacking) || 0);
-    }
-    const codes = Array.from(byCode.keys());
-    if (codes.length === 0) return { updated: 0, skipped: 0, uniqueInFile: 0 };
+  async dedupeDuplicates(): Promise<{ dedupedCodes: number; deletedDocs: number }> {
+    const snap = await this.firestore.collection(this.collectionName, ref => ref.limit(10000)).get().toPromise();
+    const docs = snap?.docs || [];
 
-    const existing = await this.listAll();
-    const existingByCode = new Map(existing.map(i => [i.materialCode, i]));
+    const groups = new Map<string, typeof docs>();
+    for (const d of docs) {
+      const data = d.data() as Record<string, unknown>;
+      const code = this.normalizeCode(String(data['materialCode'] || d.id));
+      if (!code) continue;
+      const arr = groups.get(code) || [];
+      arr.push(d);
+      groups.set(code, arr);
+    }
+
+    const toUpsert: Array<{ id: string; data: Record<string, unknown> }> = [];
+    const toDelete: string[] = [];
+    let dedupedCodes = 0;
+
+    for (const [code, group] of groups) {
+      if (group.length <= 1) continue;
+      dedupedCodes++;
+
+      const canonical = group.find(d => d.id === code) || group[0];
+      const others = group.filter(d => d.id !== canonical.id);
+      const canonicalData = canonical.data() as Record<string, unknown>;
+
+      const merged: Record<string, unknown> = {};
+      for (const other of others) {
+        const od = other.data() as Record<string, unknown>;
+        if (!canonicalData['materialName'] && od['materialName']) merged['materialName'] = od['materialName'];
+        if (!canonicalData['unit'] && od['unit']) merged['unit'] = od['unit'];
+        if (!Number(canonicalData['standardPacking']) && Number(od['standardPacking'])) merged['standardPacking'] = od['standardPacking'];
+        if (od['standardPackingLocked'] === true) merged['standardPackingLocked'] = true;
+        if (od['allowExportByCarton'] === true) merged['allowExportByCarton'] = true;
+        if (od['isMsd'] === true) merged['isMsd'] = true;
+        if (od['isEsd'] === true) merged['isEsd'] = true;
+        toDelete.push(other.id);
+      }
+
+      if (canonical.id !== code) {
+        toUpsert.push({ id: code, data: { ...canonicalData, ...merged, materialCode: code, updatedAt: new Date() } });
+        toDelete.push(canonical.id);
+      } else if (Object.keys(merged).length > 0) {
+        toUpsert.push({ id: code, data: { ...merged, updatedAt: new Date() } });
+      }
+    }
 
     const db = this.firestore.firestore;
-    let updated = 0;
-    let skipped = 0;
     let idx = 0;
-    const toApply = codes.filter(code => {
-      const item = existingByCode.get(code);
-      if (!item) {
-        skipped++;
-        return false;
-      }
-      if (item.standardPackingLocked) {
-        skipped++;
-        return false;
-      }
-      return true;
-    });
-
-    while (idx < toApply.length) {
+    while (idx < toUpsert.length) {
       const batch = db.batch();
-      const chunk = toApply.slice(idx, idx + 450);
-      for (const code of chunk) {
-        const ref = this.firestore.collection(this.collectionName).doc(code).ref;
-        batch.update(ref, { standardPacking: byCode.get(code), updatedAt: new Date() });
-      }
+      const chunk = toUpsert.slice(idx, idx + 400);
+      chunk.forEach(u => batch.set(this.firestore.collection(this.collectionName).doc(u.id).ref, u.data, { merge: true }));
       await batch.commit();
-      chunk.forEach(code => this.patchCache(code, { standardPacking: byCode.get(code) }));
-      updated += chunk.length;
+      idx += chunk.length;
+    }
+    idx = 0;
+    while (idx < toDelete.length) {
+      const batch = db.batch();
+      const chunk = toDelete.slice(idx, idx + 400);
+      chunk.forEach(id => batch.delete(this.firestore.collection(this.collectionName).doc(id).ref));
+      await batch.commit();
       idx += chunk.length;
     }
 
-    return { updated, skipped, uniqueInFile: codes.length };
+    this.invalidateCache();
+    return { dedupedCodes, deletedDocs: toDelete.length };
+  }
+
+  /**
+   * Import Danh mục NVL gốc (Mã, Tên, ĐVT): thêm mã mới nếu chưa có, cập nhật Tên/ĐVT cho mã đã có.
+   * KHÔNG đụng tới Standard Packing / Lock / Xuất thùng — các cột đó do Kho tự quản lý riêng
+   * (chỉ sửa tay hoặc qua các hành động chuyên biệt khác), độc lập với import danh mục gốc này.
+   */
+  async importCatalogFromRows(
+    rows: Array<{ materialCode: string; materialName: string; unit: string }>
+  ): Promise<{ added: number; updated: number; skipped: number; uniqueInFile: number }> {
+    const byCode = new Map<string, { materialName: string; unit: string }>();
+    for (const r of rows) {
+      const code = this.normalizeCode(r.materialCode);
+      if (!code) continue;
+      byCode.set(code, { materialName: (r.materialName || '').trim(), unit: (r.unit || '').trim() });
+    }
+    const codes = Array.from(byCode.keys());
+    if (codes.length === 0) return { added: 0, updated: 0, skipped: 0, uniqueInFile: 0 };
+
+    const existing = await this.listAll();
+    const existingCodes = new Set(existing.map(i => i.materialCode));
+
+    const db = this.firestore.firestore;
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+    let idx = 0;
+    while (idx < codes.length) {
+      const batch = db.batch();
+      const chunk = codes.slice(idx, idx + 450);
+      for (const code of chunk) {
+        const info = byCode.get(code)!;
+        const ref = this.firestore.collection(this.collectionName).doc(code).ref;
+        if (existingCodes.has(code)) {
+          if (!info.materialName && !info.unit) {
+            skipped++;
+            continue;
+          }
+          const payload: Record<string, unknown> = { updatedAt: new Date() };
+          const patch: Partial<NvlCatalogItem> = {};
+          if (info.materialName) {
+            payload['materialName'] = info.materialName;
+            patch.materialName = info.materialName;
+          }
+          if (info.unit) {
+            payload['unit'] = info.unit;
+            patch.unit = info.unit;
+          }
+          batch.set(ref, payload, { merge: true });
+          this.patchCache(code, patch);
+          updated++;
+        } else {
+          const materialName = info.materialName || code;
+          const unit = info.unit || 'PCS';
+          batch.set(ref, {
+            materialCode: code,
+            materialName,
+            unit,
+            standardPacking: 0,
+            standardPackingLocked: false,
+            allowExportByCarton: false,
+            isMsd: false,
+            isEsd: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          this.patchCache(code, {
+            materialCode: code,
+            materialName,
+            unit,
+            standardPacking: 0,
+            standardPackingLocked: false,
+            allowExportByCarton: false,
+            isMsd: false,
+            isEsd: false
+          });
+          added++;
+        }
+      }
+      await batch.commit();
+      idx += chunk.length;
+    }
+
+    return { added, updated, skipped, uniqueInFile: codes.length };
   }
 }

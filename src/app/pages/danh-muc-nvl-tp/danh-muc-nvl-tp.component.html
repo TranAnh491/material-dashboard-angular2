@@ -33,14 +33,25 @@
         <i class="material-icons">file_download</i> Export danh sách
       </button>
       <button type="button" class="dv-btn dv-btn--ghost" (click)="importNvlFromExcel()" [disabled]="isNvlImporting"
-              title="Chỉ cập nhật Standard Packing cho mã đã có sẵn, bỏ qua mã chưa có hoặc đang Lock">
-        <i class="material-icons">file_upload</i> {{ isNvlImporting ? 'Đang import...' : 'Import Standard Packing' }}
+              title="Cột A = Mã, Cột D = Tên, Cột E = DVT, dữ liệu từ dòng 5. Thêm mã mới nếu chưa có, cập nhật Tên/ĐVT cho mã đã có. Không đụng Standard Packing/Lock/Xuất thùng">
+        <i class="material-icons">file_upload</i> {{ isNvlImporting ? 'Đang import...' : 'Import Danh mục (Mã/Tên/ĐVT)' }}
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="downloadNvlKhTemplate()">
+        <i class="material-icons">download</i> Tải Template KH
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="importNvlKhFromExcel()" [disabled]="isNvlKhImporting"
+              title="Import sẽ thay thế toàn bộ Khách hàng theo mã (Danh mục NVLKH) bằng dữ liệu trong file">
+        <i class="material-icons">groups</i> {{ isNvlKhImporting ? 'Đang import...' : 'Import Khách hàng (thay thế)' }}
       </button>
     </div>
 
     <div class="dv-toolbar-row">
       <button type="button" class="dv-btn dv-btn--ghost" (click)="loadNvl(true)" [disabled]="isNvlLoading">
         <i class="material-icons">refresh</i> {{ isNvlLoading ? 'Đang tải...' : 'Làm mới' }}
+      </button>
+      <button type="button" class="dv-btn dv-btn--ghost" (click)="dedupeNvlDuplicates()" [disabled]="isNvlDeduping"
+              title="Quét toàn bộ danh mục, gộp các mã bị trùng — mỗi mã chỉ giữ lại 1 dòng">
+        <i class="material-icons">merge_type</i> {{ isNvlDeduping ? 'Đang gộp...' : 'Xóa trùng lặp' }}
       </button>
       <button type="button" class="dv-btn dv-btn--ghost" (click)="openDeleteAllDialog('nvl')">
         <i class="material-icons">delete</i> Xóa tất cả
@@ -72,6 +83,8 @@
                (ngModelChange)="applyNvlFilters()" placeholder="Tên">
         <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unit"
                (ngModelChange)="applyNvlFilters()" placeholder="ĐVT">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.customer"
+               (ngModelChange)="applyNvlFilters()" placeholder="Khách hàng">
       </div>
     </div>
 
@@ -105,12 +118,14 @@
     <div class="dv-catalog-loading" *ngIf="isNvlLoading">Đang tải danh mục...</div>
 
     <div class="dv-table-wrap" *ngIf="!isNvlLoading && pagedNvlItems.length">
-      <table class="dv-catalog-table">
+      <div class="dv-table-scroll">
+      <table class="dv-catalog-table dv-catalog-table--nvl">
         <thead>
           <tr>
             <th>Mã NVL</th>
             <th>Tên</th>
             <th>ĐVT</th>
+            <th title="Danh mục NVLKH — gộp vào đây để sửa cùng chỗ">Khách hàng</th>
             <th>Standard Packing</th>
             <th>Lock</th>
             <th title="Cho phép quét Tem Thùng để xuất kho ở Outbound">Xuất thùng</th>
@@ -129,6 +144,10 @@
                      [disabled]="row.standardPackingLocked" (change)="updateNvlItem(row)">
             </td>
             <td>
+              <input type="text" class="dv-input dv-input--cell" [(ngModel)]="row.customer"
+                     (change)="updateNvlKh(row)" placeholder="—">
+            </td>
+            <td>
               <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.standardPacking"
                      [disabled]="row.standardPackingLocked" min="0" (change)="updateNvlItem(row)">
             </td>
@@ -144,6 +163,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </section>
 

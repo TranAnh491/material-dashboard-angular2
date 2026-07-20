@@ -18,7 +18,6 @@ import { InventoryOverviewASM2Component } from '../../pages/inventory-overview-a
 import { InboundASM1Component } from '../../pages/inbound-asm1/inbound-asm1.component';
 import { InboundASM2Component } from '../../pages/inbound-asm2/inbound-asm2.component';
 import { DvLuuTruCatalogComponent } from '../../pages/dv-luu-tru-catalog/dv-luu-tru-catalog.component';
-import { DanhMucNvlkhComponent } from '../../pages/danh-muc-nvlkh/danh-muc-nvlkh.component';
 import { DanhMucNvlTpComponent } from '../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp.component';
 import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
 import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
@@ -64,7 +63,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'inbound-asm1',         component: InboundASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound-asm2',         component: InboundASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'dv-luu-tru-catalog',   component: DvLuuTruCatalogComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'danh-muc-nvlkh',       component: DanhMucNvlkhComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'danh-muc-nvl-tp',      component: DanhMucNvlTpComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },

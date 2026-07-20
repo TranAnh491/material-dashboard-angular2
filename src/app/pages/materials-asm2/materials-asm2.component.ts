@@ -324,10 +324,6 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  openDanhMucNvlkh(): void {
-    void this.router.navigate(['/danh-muc-nvlkh']);
-  }
-
   private getStorageMaterialKey(material: InventoryMaterial): string {
     return this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
   }

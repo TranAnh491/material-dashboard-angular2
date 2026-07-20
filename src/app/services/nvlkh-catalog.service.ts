@@ -133,6 +133,23 @@ export class NvlkhCatalogService {
     this.cachedMap = null;
   }
 
+  /** Sửa/thêm 1 dòng (VD: sửa tay ở tab Danh mục NVL). Khách hàng rỗng → xóa mã khỏi danh mục. */
+  async setCustomer(materialCode: string, customer: string): Promise<void> {
+    const code = this.normalizeMaterialCode(materialCode);
+    if (!code) return;
+    const id = this.buildDocId(code);
+    const trimmed = (customer || '').trim();
+    if (!trimmed) {
+      await this.firestore.collection(this.collectionName).doc(id).delete();
+    } else {
+      await this.firestore.collection(this.collectionName).doc(id).set(
+        { materialCode: code, customer: trimmed, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+    }
+    this.cachedMap = null;
+  }
+
   private mapDoc(id: string, data: Record<string, unknown>): NvlkhEntry {
     return {
       id,
