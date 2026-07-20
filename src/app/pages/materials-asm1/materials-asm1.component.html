@@ -492,6 +492,7 @@
             </th>
             <th>Change</th>
             <th>Loại Hình</th>
+            <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
             <th *ngIf="showKhColumn">KH</th>
 
             <th>Lưu ý</th>
@@ -648,6 +649,11 @@
             </td>
             <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
+            </td>
+            <td class="tem-thung-cell">
+              <button type="button" class="tem-thung-cell-btn" (click)="openTemThungColumnPopup(material)" title="In Tem Thùng cho dòng này">
+                <i class="material-icons">local_offer</i>
+              </button>
             </td>
             <td class="kh-cell" *ngIf="showKhColumn" [title]="getCustomerForMaterial(material)">{{ getCustomerForMaterial(material) || '—' }}</td>
 
@@ -936,6 +942,57 @@
               [disabled]="temThungBusy || !temThungSelectedKey">
         <i class="material-icons">print</i>
         {{ temThungBusy ? 'Đang in...' : 'In tem thùng' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tem Thùng theo cột (mới) Popup -->
+<div class="modal-overlay" *ngIf="showTemThungColumnPopup" (click)="closeTemThungColumnPopup()">
+  <div class="modal-content tem-le-popup-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🏷️ In Tem Thùng — {{ temThungColumnMaterial?.materialCode }}</h3>
+      <button type="button" class="close-btn" (click)="closeTemThungColumnPopup()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="tem-xuat-hint">
+        PO: <strong>{{ temThungColumnMaterial?.poNumber }}</strong> ·
+        Tồn: <strong>{{ calculateCurrentStock(temThungColumnMaterial) | number:'1.0-2' }}</strong>.
+        Nhập <strong>lượng tem thùng</strong> (số lượng trên 1 tem) — hệ thống tự tính <strong>số tem = Tồn ÷ Lượng tem thùng</strong>.
+        Tem in 57×32mm (cùng format cột QR).
+      </p>
+      <input
+        id="tem-thung-column-qty-input-asm1"
+        type="number"
+        class="editable-input"
+        style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
+        [(ngModel)]="temThungColumnQtyInput"
+        (keyup.enter)="printTemThungColumnLabels()"
+        placeholder="Nhập lượng tem thùng"
+        min="1"
+        step="1"
+        [disabled]="temThungColumnBusy"
+      />
+
+      <div class="tem-le-error" *ngIf="temThungColumnError">
+        <i class="material-icons">error</i>
+        {{ temThungColumnError }}
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeTemThungColumnPopup()" [disabled]="temThungColumnBusy">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+      <button type="button" class="delete-batch-btn" style="background:#111827;"
+              (click)="printTemThungColumnLabels()"
+              [disabled]="temThungColumnBusy || !temThungColumnQtyInput">
+        <i class="material-icons">print</i>
+        {{ temThungColumnBusy ? 'Đang in...' : 'In tem thùng' }}
       </button>
     </div>
   </div>

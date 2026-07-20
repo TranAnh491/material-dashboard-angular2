@@ -707,7 +707,7 @@
   <div class="modal-overlay" (click)="closeCartonVerifyDialog()"></div>
   <div class="modal-container carton-verify-container" (click)="$event.stopPropagation()">
     <div class="modal-body">
-      <h6 class="carton-verify-title" *ngIf="!cartonWrongMode">Số thùng đang đúng hay sai?</h6>
+      <h6 class="carton-verify-title" *ngIf="!cartonWrongMode">Số thùng (Carton) đang đúng hay sai?</h6>
       <p class="carton-verify-hint" *ngIf="!cartonWrongMode">Hệ thống tính: <strong>{{ displayCartonCount }}</strong> thùng</p>
 
       <div class="carton-verify-actions" *ngIf="!cartonWrongMode">
@@ -715,17 +715,17 @@
           <i class="material-icons">check_circle</i> Đúng
         </button>
         <button type="button" class="carton-verify-btn carton-verify-btn--wrong" (click)="onCartonVerifyWrong()">
-          <i class="material-icons">error_outline</i> Sai
+          <i class="material-icons">error_outline</i> Sai Carton
         </button>
       </div>
 
       <div class="carton-wrong-form" *ngIf="cartonWrongMode">
-        <label class="carton-wrong-label">Nhập Lượng Đóng Thùng đúng (SL sản phẩm / thùng)</label>
-        <p class="carton-verify-hint">Số mới sẽ lưu vào danh mục Lượng Đóng Thùng — dùng cho các lần nhận sau của mã này</p>
+        <label class="carton-wrong-label">Nhập lượng trên thùng</label>
+        <p class="carton-verify-hint">Nhập đúng số sản phẩm thực tế trong 1 thùng — hệ thống sẽ tự tính lại số thùng, lưu số này để dùng cho các lần nhận sau của mã này, và báo email cho Kho + Kỹ thuật.</p>
         <input type="number" class="carton-wrong-input" min="2" step="1"
                [(ngModel)]="cartonCorrectInput"
                (keypress)="onCartonCorrectInputKeyPress($event)"
-               placeholder="Nhập SL sản phẩm / thùng (bắt buộc)...">
+               placeholder="Nhập lượng trên thùng (bắt buộc)...">
         <button type="button" class="carton-verify-btn carton-verify-btn--ok carton-verify-btn--full"
                 (click)="submitCartonCorrection()">
           Xác nhận

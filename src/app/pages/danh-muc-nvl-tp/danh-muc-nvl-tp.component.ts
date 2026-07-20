@@ -226,6 +226,17 @@ export class DanhMucNvlTpComponent implements OnInit {
     }
   }
 
+  async toggleNvlAllowExportByCarton(item: NvlCatalogItem): Promise<void> {
+    const next = !item.allowExportByCarton;
+    try {
+      await this.nvlService.setAllowExportByCarton(item.materialCode, next);
+      item.allowExportByCarton = next;
+    } catch (e) {
+      console.error(e);
+      alert('❌ Không lưu được trạng thái Xuất thùng.');
+    }
+  }
+
   async deleteNvlItem(item: NvlCatalogItem): Promise<void> {
     if (!confirm(`Xóa mã NVL "${item.materialCode}" khỏi danh mục?`)) return;
     try {

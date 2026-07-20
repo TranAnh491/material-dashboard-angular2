@@ -11,6 +11,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
+import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-alert.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 
 export interface FgInItem {
@@ -193,6 +194,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     private router: Router,
     private fgDailyBackup: FgDailyBackupService,
     private cartonPackingQtyService: CartonPackingQtyService,
+    private cartonPackingQtyAlertService: CartonPackingQtyAlertService,
     private tpCatalogService: TpCatalogFullService
   ) {}
 
@@ -2207,10 +2209,14 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
     const material = this.selectedReceiptMaterial;
     if (!material) return;
+    // Mã TP dùng để lưu/báo phải lấy đúng từ phiếu đang xác nhận (material.materialCode) — mã này
+    // đã được xác định chính xác tuyệt đối, không suy ra từ Mã KH (1 Mã KH có thể có nhiều Mã TP).
+    const materialCode = material.materialCode;
+    const oldQty = this.getPackingQtyForCode(materialCode);
     const qty = Math.round(n);
     try {
-      await this.cartonPackingQtyService.upsert(material.materialCode, qty);
-      this.cartonPackingQtyMap.set(String(material.materialCode || '').trim().toUpperCase(), qty);
+      await this.cartonPackingQtyService.upsert(materialCode, qty);
+      this.cartonPackingQtyMap.set(String(materialCode || '').trim().toUpperCase(), qty);
     } catch (err) {
       console.error('Save carton-packing-qty failed:', err);
       alert('❌ Không lưu được Lượng Đóng Thùng. Thử lại.');
@@ -2219,6 +2225,32 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.displayCartonCount = Math.ceil(material.quantity / qty);
     this.confirmReceiptData.cartonConfirmed = true;
     this.closeCartonVerifyDialog();
+    void this.sendCartonPackingQtyAlert(materialCode, oldQty, qty, material);
+  }
+
+  /** Báo mail Kho + Kỹ thuật khi kho vừa sửa Lượng SP/thùng — chạy nền, không chặn thao tác của người dùng. */
+  private async sendCartonPackingQtyAlert(
+    materialCode: string,
+    oldQty: number,
+    newQty: number,
+    material: FgInItem
+  ): Promise<void> {
+    try {
+      const user = await this.afAuth.currentUser;
+      const reportedBy = user ? (user.email || user.uid).split('@')[0].toUpperCase() : 'UNKNOWN';
+      await this.cartonPackingQtyAlertService.sendAlert({
+        materialCode,
+        oldQty,
+        newQty,
+        quantity: material.quantity || 0,
+        lot: material.lot || '',
+        lsx: material.lsx || '',
+        factory: material.factory || '',
+        reportedBy
+      });
+    } catch (err) {
+      console.error('Send carton-packing-qty alert email failed:', err);
+    }
   }
 
   // Get pending materials (not yet locked)

@@ -113,6 +113,7 @@
             <th>ĐVT</th>
             <th>Standard Packing</th>
             <th>Lock</th>
+            <th title="Cho phép quét Tem Thùng để xuất kho ở Outbound">Xuất thùng</th>
             <th></th>
           </tr>
         </thead>
@@ -133,6 +134,9 @@
             </td>
             <td class="dv-lock-cell">
               <mat-slide-toggle color="primary" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)"></mat-slide-toggle>
+            </td>
+            <td class="dv-lock-cell">
+              <mat-slide-toggle color="primary" [checked]="row.allowExportByCarton" (change)="toggleNvlAllowExportByCarton(row)"></mat-slide-toggle>
             </td>
             <td class="dv-actions">
               <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteNvlItem(row)">Xóa</button>

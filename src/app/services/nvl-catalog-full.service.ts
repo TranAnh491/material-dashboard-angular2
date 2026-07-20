@@ -7,6 +7,8 @@ export interface NvlCatalogItem {
   unit: string;
   standardPacking: number;
   standardPackingLocked: boolean;
+  /** Cho phép quét Tem Thùng (tem thùng riêng, không phải QR thường) để xuất kho ở Outbound ASM1/ASM2. */
+  allowExportByCarton: boolean;
   updatedAt?: Date;
 }
 
@@ -64,6 +66,7 @@ export class NvlCatalogFullService {
       unit: String(d['unit'] || ''),
       standardPacking: Number(d['standardPacking']) || 0,
       standardPackingLocked: d['standardPackingLocked'] === true,
+      allowExportByCarton: d['allowExportByCarton'] === true,
       updatedAt: (d['updatedAt'] as any)?.toDate ? (d['updatedAt'] as any).toDate() : undefined
     };
   }
@@ -122,6 +125,7 @@ export class NvlCatalogFullService {
         unit: '',
         standardPacking: 0,
         standardPackingLocked: false,
+        allowExportByCarton: false,
         ...patch
       });
       this.cachedItems.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
@@ -147,10 +151,18 @@ export class NvlCatalogFullService {
       unit,
       standardPacking,
       standardPackingLocked: false,
+      allowExportByCarton: false,
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    this.patchCache(code, { materialCode: code, materialName, unit, standardPacking, standardPackingLocked: false });
+    this.patchCache(code, {
+      materialCode: code,
+      materialName,
+      unit,
+      standardPacking,
+      standardPackingLocked: false,
+      allowExportByCarton: false
+    });
   }
 
   async update(materialCode: string, changes: { materialName?: string; unit?: string; standardPacking?: number }): Promise<void> {
@@ -183,6 +195,25 @@ export class NvlCatalogFullService {
       { merge: true }
     );
     this.patchCache(code, { standardPackingLocked: locked });
+  }
+
+  async setAllowExportByCarton(materialCode: string, allowed: boolean): Promise<void> {
+    const code = this.normalizeCode(materialCode);
+    if (!code) return;
+    await this.firestore.collection(this.collectionName).doc(code).set(
+      { allowExportByCarton: allowed, updatedAt: new Date() },
+      { merge: true }
+    );
+    this.patchCache(code, { allowExportByCarton: allowed });
+  }
+
+  /**
+   * Tập mã được phép quét Tem Thùng để xuất kho — dùng ở Outbound ASM1/ASM2, load 1 lần từ cache
+   * dùng chung (listAll, TTL 6 tiếng), không tạo thêm lượt đọc Firestore mỗi lần scan.
+   */
+  async loadAllowExportByCartonSet(forceRefresh = false): Promise<Set<string>> {
+    const items = await this.listAll(forceRefresh);
+    return new Set(items.filter(i => i.allowExportByCarton).map(i => i.materialCode));
   }
 
   async deleteItem(materialCode: string): Promise<void> {

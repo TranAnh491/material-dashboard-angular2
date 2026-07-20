@@ -21,6 +21,7 @@ import { ReadTrackerService } from '../../services/read-tracker.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
+import { buildTemThungQrData, stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -247,6 +248,13 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     stock: number;
   }> = [];
   temThungSelectedKey: string | null = null;
+
+  // ===== Tem Thùng theo cột (mới): mã đã chọn sẵn từ dòng bảng, chỉ nhập lượng tem thùng =====
+  showTemThungColumnPopup = false;
+  temThungColumnMaterial: InventoryMaterial | null = null;
+  temThungColumnQtyInput: number | null = null;
+  temThungColumnError = '';
+  temThungColumnBusy = false;
 
   // Mobile menu state
   showMobileMenu = false;
@@ -638,6 +646,80 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
       this.temThungError = e?.message || 'Lỗi khi in tem thùng.';
     } finally {
       this.temThungBusy = false;
+    }
+  }
+
+  /** Mở popup Tem Thùng cho 1 dòng đã chọn sẵn trong bảng (cột Tem Thùng). */
+  openTemThungColumnPopup(material: InventoryMaterial): void {
+    this.temThungColumnMaterial = material;
+    this.temThungColumnQtyInput = null;
+    this.temThungColumnError = '';
+    this.temThungColumnBusy = false;
+    this.showTemThungColumnPopup = true;
+    setTimeout(() => {
+      const el = document.getElementById('tem-thung-column-qty-input-asm2') as HTMLInputElement | null;
+      el?.focus();
+    }, 50);
+  }
+
+  closeTemThungColumnPopup(): void {
+    this.showTemThungColumnPopup = false;
+    this.temThungColumnMaterial = null;
+    this.temThungColumnQtyInput = null;
+    this.temThungColumnError = '';
+    this.temThungColumnBusy = false;
+  }
+
+  /**
+   * In Tem Thùng cho dòng đã chọn: số tem = tồn kho hiện tại ÷ lượng tem thùng nhập vào.
+   * Nội dung QR gắn tiền tố ẩn `TT:` (không hiện trên tem in) để Outbound nhận diện và áp dụng
+   * luật Xuất thùng — không tạo thêm lượt đọc Firestore (chỉ dùng dữ liệu dòng đã có sẵn).
+   */
+  async printTemThungColumnLabels(): Promise<void> {
+    const material = this.temThungColumnMaterial;
+    if (!material) return;
+    const qtyPerLabel = Number(this.temThungColumnQtyInput);
+    if (!Number.isFinite(qtyPerLabel) || qtyPerLabel <= 0) {
+      this.temThungColumnError = 'Vui lòng nhập lượng tem thùng > 0.';
+      return;
+    }
+    const stock = this.calculateCurrentStock(material);
+    if (!stock || stock <= 0) {
+      this.temThungColumnError = 'Mã này không có tồn kho > 0.';
+      return;
+    }
+    this.temThungColumnBusy = true;
+    this.temThungColumnError = '';
+    try {
+      const QRCode = await import('qrcode') as any;
+      const fullCount = Math.floor(stock / qtyPerLabel + 1e-9);
+      let remainder = stock - fullCount * qtyPerLabel;
+      remainder = Math.round(remainder * 10000) / 10000;
+      if (remainder < 1e-9) remainder = 0;
+      const n = fullCount + (remainder > 0 ? 1 : 0);
+      if (n < 1) {
+        this.temThungColumnError = 'Không tính được số tem — kiểm tra lại lượng tem thùng.';
+        return;
+      }
+      const importDateStr = this.getImdKeyForMaterial(material);
+      const qrImages: Array<{ image: string; qrData: string; index: number }> = [];
+      for (let i = 1; i <= n; i++) {
+        const qty = i <= fullCount ? qtyPerLabel : remainder;
+        const qrData = buildTemThungQrData(material.materialCode, material.poNumber || '', qty, `${importDateStr}-${i}/${n}`);
+        const image = await QRCode.toDataURL(qrData, {
+          width: 240,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+        qrImages.push({ image, qrData, index: i });
+      }
+      this.createQRPrintWindow(qrImages, material, false, false);
+      this.closeTemThungColumnPopup();
+    } catch (e: any) {
+      console.error('[TemThungColumn] print failed', e);
+      this.temThungColumnError = e?.message || 'Lỗi khi in tem thùng.';
+    } finally {
+      this.temThungColumnBusy = false;
     }
   }
 
@@ -6845,8 +6927,9 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     const di = p4.indexOf('-');
     const imd = di >= 0 ? p4.slice(0, di).trim() : p4;
     const bag = di >= 0 ? p4.slice(di + 1).trim() : '';
+    const { materialCode } = stripTemThungMarker(parts[0] || '');
     return {
-      materialCode: (parts[0] || '').trim(),
+      materialCode: materialCode.trim(),
       po: (parts[1] || '').trim(),
       quantity: (parts[2] || '').trim(),
       imd,

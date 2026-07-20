@@ -933,6 +933,37 @@
   font-weight: normal !important;
 }
 
+// Cột Tem Thùng - bấm để in tem thùng cho dòng đó
+.tem-thung-cell {
+  width: 56px !important;
+  min-width: 56px !important;
+  max-width: 56px !important;
+  text-align: center;
+  padding: 4px !important;
+}
+
+.tem-thung-cell-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #4338ca;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  i.material-icons {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: #e0e7ff;
+  }
+}
+
 // Horizontal Layout Styles - Copy from inbound
 .action-controls-horizontal {
   display: flex;

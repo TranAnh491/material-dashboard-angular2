@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import type { QcPriorityResolvedPayload } from './qc-priority-email';
+import type { CartonPackingQtyAlertPayload } from './carton-packing-qty-alert-email';
 import type { TruckDecisionType } from './truck-schedule-email';
 import { emailPass, zaloBotToken } from './params-config';
 
@@ -188,6 +189,37 @@ export const sendQcPriorityResolvedEmailFn = functions
         msg.includes('Thiếu') ? 'failed-precondition' : 'internal',
         msg
       );
+    }
+  });
+
+/** FG In: bấm "Sai Carton" xác nhận Lượng SP/thùng mới → báo mail cho Kho + Kỹ thuật. */
+export const sendCartonPackingQtyAlertEmailFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: Partial<CartonPackingQtyAlertPayload>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const materialCode = typeof data?.materialCode === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    if (!materialCode) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode.');
+    }
+    const payload: CartonPackingQtyAlertPayload = {
+      materialCode,
+      oldQty: Number(data?.oldQty) || 0,
+      newQty: Number(data?.newQty) || 0,
+      quantity: Number(data?.quantity) || 0,
+      lot: typeof data?.lot === 'string' ? data.lot.trim().slice(0, 80) : '',
+      lsx: typeof data?.lsx === 'string' ? data.lsx.trim().slice(0, 80) : '',
+      factory: typeof data?.factory === 'string' ? data.factory.trim().slice(0, 40) : '',
+      reportedBy: typeof data?.reportedBy === 'string' ? data.reportedBy.trim().slice(0, 80) : ''
+    };
+    try {
+      const { sendCartonPackingQtyAlertEmail } = await import('./carton-packing-qty-alert-email');
+      await sendCartonPackingQtyAlertEmail(payload);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
     }
   });
 

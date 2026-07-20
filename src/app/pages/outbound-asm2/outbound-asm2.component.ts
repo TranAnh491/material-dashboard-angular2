@@ -13,6 +13,8 @@ import { ReadTrackerService } from '../../services/read-tracker.service';
 import { QRScannerService, QRScanResult } from '../../services/qr-scanner.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
+import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
+import { stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
 
 
@@ -152,8 +154,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     private rmBagHistory: RmBagHistoryService,
     private outboundQcRule: OutboundQcRuleService,
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private nvlCatalog: NvlCatalogFullService
   ) {}
+
+  /** Tập mã được phép quét Tem Thùng để xuất kho — load 1 lần từ cache dùng chung (không thêm read). */
+  private allowExportByCartonSet: Set<string> = new Set();
 
   private syncWorkOrderCreatedByAfterExport(lsx?: string, employeeId?: string): void {
     const po = (lsx || this.batchProductionOrder || '').trim();
@@ -196,6 +202,15 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     document.addEventListener('keydown', (event) => this.onGlobalKeydown(event));
 
     void this.refreshOutboundQcRuleCache();
+    void this.loadAllowExportByCartonSet();
+  }
+
+  private async loadAllowExportByCartonSet(): Promise<void> {
+    try {
+      this.allowExportByCartonSet = await this.nvlCatalog.loadAllowExportByCartonSet();
+    } catch (e) {
+      console.error('❌ Load Xuất thùng allowlist:', e);
+    }
   }
 
   private async refreshOutboundQcRuleCache(): Promise<void> {
@@ -1920,7 +1935,14 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       if (!this.lastScannedData.materialCode || !this.lastScannedData.poNumber || this.lastScannedData.quantity <= 0) {
         throw new Error('Invalid material data: missing code, PO, or quantity');
       }
-      
+
+      // Tem Thùng (tiền tố ẩn TT:) chỉ được xuất nếu mã nằm trong danh mục Xuất thùng
+      const strippedScan = stripTemThungMarker(this.lastScannedData.materialCode);
+      if (strippedScan.isTemThung && !this.allowExportByCartonSet.has(strippedScan.materialCode.trim().toUpperCase())) {
+        throw new Error(`Mã ${strippedScan.materialCode} không nằm trong danh mục Xuất thùng — không thể xuất bằng Tem Thùng.`);
+      }
+      this.lastScannedData.materialCode = strippedScan.materialCode;
+
       console.log('✅ Final parsed data:', this.lastScannedData);
       console.log('✅ Export quantity set to:', this.exportQuantity);
       
@@ -2886,21 +2908,30 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     let quantity = 1;
     let importDate: string | null = null;
     const text = (scannedData || '').trim();
+    let isTemThung = false;
     if (text.includes('|')) {
       const parts = text.replace(/\s*\|\s*/g, '|').split('|');
       if (parts.length >= 3) {
-        materialCode = parts[0].trim();
+        const stripped = stripTemThungMarker(parts[0]);
+        isTemThung = stripped.isTemThung;
+        materialCode = stripped.materialCode;
         poNumber = parts[1].trim();
         quantity = parseFloat(parts[2]) || 1;
         if (parts.length >= 4) importDate = parts[3].trim();
       }
     } else {
-      materialCode = text;
+      const stripped = stripTemThungMarker(text);
+      isTemThung = stripped.isTemThung;
+      materialCode = stripped.materialCode;
       poNumber = 'Unknown';
       quantity = 1;
     }
     if (!materialCode) {
       this.showScanError('Không thể đọc mã hàng từ dữ liệu scan!');
+      return;
+    }
+    if (isTemThung && !this.allowExportByCartonSet.has(materialCode.trim().toUpperCase())) {
+      this.showScanError(`Mã ${materialCode} không nằm trong danh mục Xuất thùng — không thể xuất bằng Tem Thùng.`);
       return;
     }
 
