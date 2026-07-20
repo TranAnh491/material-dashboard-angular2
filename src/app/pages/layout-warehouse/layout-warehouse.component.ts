@@ -61,6 +61,7 @@ import {
   isNgPrefixLocation,
   resolveMixzoneShelfFromLocation,
   isAsm3PrefixLocation,
+  isAsm3OrWh3PrefixLocation,
   resolveAsm3WarehouseShelf,
   mapAsm3ShelfToLayoutCell,
   FINISHED_GOODS_GUIDANCE,
@@ -1245,7 +1246,8 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   /**
-   * Check ASM1/ASM2: khách GNRAC (tra theo Danh mục NVLKH) mà vị trí không phải ASM3 → sai nhà máy (cần ASM3).
+   * Check ASM1/ASM2: khách GNRAC (tra theo Danh mục NVLKH) mà vị trí không bắt đầu bằng ASM3 hoặc WH3
+   * → sai nhà máy (cần ASM3). Vị trí ASM3... hoặc WH3... đều coi là đúng nhà máy ASM3.
    * Check ASM3: khách KHÔNG phải GNRAC mà vị trí là ASM3 → sai nhà máy (cần ASM1).
    * Tối ưu read: đúng 1 lượt read inventory-materials (lọc theo field factory, không cần composite index)
    * + 1 lượt read Danh mục NVLKH (cache 5 phút, dùng chung toàn app — 0 lượt read nếu vừa tải nơi khác).
@@ -1294,7 +1296,7 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
           expectedFactory = 'ASM1';
         } else {
           if (!isGnrac) continue; // Không phải GNRAC thì không áp rule ASM3
-          if (isAsm3PrefixLocation(location)) continue; // Đúng: đã ở vị trí ASM3
+          if (isAsm3OrWh3PrefixLocation(location)) continue; // Đúng: đã ở vị trí ASM3 (ASM3... hoặc WH3...)
           expectedFactory = 'ASM3';
         }
 
