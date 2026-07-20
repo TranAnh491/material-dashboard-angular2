@@ -755,6 +755,7 @@
               <tr>
                 <th>STT</th>
                 <th>Mã hàng (SKU)</th>
+                <th>Kho</th>
                 <th class="col-num">Day</th>
                 <th class="col-num">Đã Pass</th>
                 <th class="col-num">Hold</th>
@@ -771,6 +772,7 @@
               >
                 <td>{{ i + 1 }}</td>
                 <td class="putaway-sku-code">{{ row.materialCode }}</td>
+                <td class="putaway-sku-kho" [class.putaway-sku-kho--asm3]="row.recommendedKho === 'ASM3'">{{ row.recommendedKho }}</td>
                 <td class="col-num putaway-sku-day">{{ row.dayInIqc }}</td>
                 <td class="col-num putaway-sku-pass">{{ row.passCount }}</td>
                 <td class="col-num putaway-sku-hold">{{ row.holdCount > 0 ? row.holdCount : '' }}</td>

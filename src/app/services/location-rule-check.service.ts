@@ -151,6 +151,16 @@ export class LocationRuleCheckService {
     };
   }
 
+  /**
+   * Trả về hàm tra Kho Mát/Kho Thường theo mã (rule `materialByPrefix` cấu hình ở tab Location),
+   * không phụ thuộc vị trí hiện tại — dùng để gợi ý nơi cần cất (VD: popup Put Away ở Dashboard).
+   * Dùng chung cache 2 phút của loadRuleContext — không tạo thêm lượt đọc nếu vừa tải nơi khác.
+   */
+  async getMaterialWarehouseTypeResolver(factory: 'ASM1' | 'ASM2'): Promise<(materialCode: string) => WarehouseType | ''> {
+    const context = await this.loadRuleContext(factory);
+    return (materialCode: string) => this.getWarehouseTypeForMaterial(context, materialCode);
+  }
+
   /** IQC*, NG, ASM3*, BOX-*: không áp rule — mọi mã đều được cất (ASM3 không có trên sơ đồ layout). */
   isRuleExemptLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();

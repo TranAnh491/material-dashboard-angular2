@@ -8,6 +8,8 @@ import { WorkOrder, WorkOrderStatus } from '../models/material-lifecycle.model';
 import { SafetyService } from '../services/safety.service';
 import { FirebaseAuthService } from '../services/firebase-auth.service';
 import { ReadTrackerService } from '../services/read-tracker.service';
+import { NvlkhCatalogService } from '../services/nvlkh-catalog.service';
+import { LocationRuleCheckService, WarehouseType } from '../services/location-rule-check.service';
 import * as XLSX from 'xlsx';
 
 interface WorkOrderStatusRow {
@@ -96,6 +98,8 @@ interface PutawayModalSkuRow {
   totalStock: number;
   /** Số ngày kể từ khi nhập IQC (Day 1 = hôm nay, Day 2 = hôm qua, ...) */
   dayInIqc: number;
+  /** Kho cần cất hàng — khách GNRAC (Danh mục NVLKH) → ASM3, còn lại → cùng nhà máy đang xem (ASM1/ASM2). */
+  recommendedKho: string;
 }
 
 @Component({
@@ -382,7 +386,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private router: Router,
     private authService: FirebaseAuthService,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private nvlkhCatalog: NvlkhCatalogService,
+    private locationRuleCheck: LocationRuleCheckService
   ) { }
 
   @HostListener('window:resize')
@@ -2641,7 +2647,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Gom inventory IQC staging → 1 dòng / mã hàng, đếm SKU con Pass vs chưa Pass. */
-  private buildPutawayModalSkuRows(docs: any[]): PutawayModalSkuRow[] {
+  /**
+   * Khách GNRAC (Danh mục NVLKH) → cất Kho ASM3; còn lại → cất tại nhà máy đang xem (ASM1/ASM2),
+   * kèm rõ Kho Mát/Kho Thường theo rule mã ở tab Location (nếu mã có cấu hình rule).
+   */
+  private resolveRecommendedKho(
+    materialCode: string,
+    customerMap: Map<string, string>,
+    khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null
+  ): string {
+    const code = this.nvlkhCatalog.normalizeMaterialCode(materialCode);
+    const customer = customerMap.get(code) || '';
+    if (customer.toUpperCase() === 'GNRAC') return 'ASM3';
+
+    const base = this.selectedFactory || 'ASM1';
+    const whType = khoTypeResolver ? khoTypeResolver(materialCode) : '';
+    return whType ? `${base} (${whType})` : base;
+  }
+
+  private buildPutawayModalSkuRows(
+    docs: any[],
+    customerMap: Map<string, string>,
+    khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null
+  ): PutawayModalSkuRow[] {
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
     const skuLines = new Map<
@@ -2712,6 +2740,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           totalSkuCount: v.passCount + v.holdCount + v.notPassCount,
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay (không tính Chủ Nhật)
+          recommendedKho: this.resolveRecommendedKho(materialCode, customerMap, khoTypeResolver),
         };
       })
       .sort((a, b) => {
@@ -2724,7 +2753,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Gom inventory vị trí TRA → 1 dòng / mã hàng. */
-  private buildPutawayTraModalSkuRows(docs: any[]): PutawayModalSkuRow[] {
+  private buildPutawayTraModalSkuRows(
+    docs: any[],
+    customerMap: Map<string, string>,
+    khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null
+  ): PutawayModalSkuRow[] {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -2794,6 +2827,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           totalSkuCount: v.passCount + v.holdCount + v.notPassCount,
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,
+          recommendedKho: this.resolveRecommendedKho(materialCode, customerMap, khoTypeResolver),
         };
       })
       .sort((a, b) => {
@@ -2808,21 +2842,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.iqcMaterialsLoading = true;
     try {
       const factory = this.selectedFactory || 'ASM1';
+      const khoFactory: 'ASM1' | 'ASM2' = factory === 'ASM2' ? 'ASM2' : 'ASM1';
       // Dùng lại docs đã tải bởi loadIQCByWeek() (cùng nhà máy) nếu có — tránh đọc lại Firestore mỗi lần mở popup.
       let docs: any[];
       let traDocs: any[];
+      let customerMap: Map<string, string>;
+      let khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null;
       if (this.putawayDocsCache && this.putawayDocsCache.factory === factory) {
         docs = this.putawayDocsCache.docs;
         traDocs = this.putawayDocsCache.traDocs;
+        [customerMap, khoTypeResolver] = await Promise.all([
+          this.nvlkhCatalog.loadAllAsMap(),
+          this.locationRuleCheck.getMaterialWarehouseTypeResolver(khoFactory)
+        ]);
       } else {
-        [docs, traDocs] = await Promise.all([
+        [docs, traDocs, customerMap, khoTypeResolver] = await Promise.all([
           this.fetchPutawayStagingInventoryDocs(factory),
-          this.fetchPutawayTraInventoryDocs(factory)
+          this.fetchPutawayTraInventoryDocs(factory),
+          this.nvlkhCatalog.loadAllAsMap(),
+          this.locationRuleCheck.getMaterialWarehouseTypeResolver(khoFactory)
         ]);
         this.putawayDocsCache = { factory, docs, traDocs };
       }
-      this.iqcMaterialsBySku = docs.length > 0 ? this.buildPutawayModalSkuRows(docs) : [];
-      this.putawayTraMaterialsBySku = traDocs.length > 0 ? this.buildPutawayTraModalSkuRows(traDocs) : [];
+      this.iqcMaterialsBySku = docs.length > 0 ? this.buildPutawayModalSkuRows(docs, customerMap, khoTypeResolver) : [];
+      this.putawayTraMaterialsBySku = traDocs.length > 0 ? this.buildPutawayTraModalSkuRows(traDocs, customerMap, khoTypeResolver) : [];
 
       console.log('📊 Putaway modal SKU rows:', this.iqcMaterialsBySku.length, 'TRA:', this.putawayTraMaterialsBySku.length);
       this.cdr.detectChanges();
