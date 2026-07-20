@@ -523,6 +523,85 @@
         </button>
       </section>
     </section>
+
+    <section class="lw-section lw-section--customer-view">
+      <h2 class="lw-section__title"><i class="material-icons">groups</i> Xem nguyên liệu theo khách hàng</h2>
+      <p class="lw-hint">Chọn khách hàng — vị trí đang có tồn của khách đó sẽ được tô nền đỏ trên sơ đồ.</p>
+
+      <button
+        type="button"
+        class="lw-btn lw-btn--rule"
+        [disabled]="isCustomerViewLoading"
+        (click)="openCustomerView()">
+        <i class="material-icons">groups</i>
+        Xem theo khách hàng
+      </button>
+
+      <div class="lw-btn-row lw-factory-usage-selector" *ngIf="showCustomerViewSelector">
+        <span class="lw-hint" *ngIf="!customerViewList.length && isCustomerViewLoading">Đang tải danh sách khách hàng…</span>
+        <ng-container *ngIf="customerViewList.length">
+          <span class="lw-hint">Chọn khách hàng cần xem:</span>
+          <div class="lw-btn-row">
+            <select
+              class="lw-select"
+              [ngModel]="selectedCustomerView"
+              (ngModelChange)="viewMaterialsByCustomer($event)"
+              [disabled]="isCustomerViewLoading">
+              <option [ngValue]="null" disabled>-- Chọn khách hàng --</option>
+              <option *ngFor="let c of customerViewList" [ngValue]="c">{{ c }}</option>
+            </select>
+            <button type="button" class="lw-btn lw-btn--soft lw-btn--sm" (click)="closeCustomerView()">
+              Đóng
+            </button>
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="lw-alert lw-alert--error" *ngIf="customerViewError">
+        <i class="material-icons">error</i> {{ customerViewError }}
+      </div>
+
+      <p class="lw-hint" *ngIf="isCustomerViewLoading && selectedCustomerView">
+        <i class="material-icons rotating">sync</i> Đang tải vị trí của khách {{ selectedCustomerView }}…
+      </p>
+
+      <section class="lw-stats" *ngIf="selectedCustomerView && !isCustomerViewLoading && !customerViewError">
+        <div class="lw-stat" [class.lw-stat--bad]="customerViewItems.length">
+          <span class="lw-stat__label">Vị trí có tồn — khách {{ selectedCustomerView }}</span>
+          <strong class="lw-stat__value">{{ customerViewItems.length }}</strong>
+        </div>
+        <div class="lw-stat" *ngIf="!customerViewItems.length">
+          <i class="material-icons">info</i>
+          <span>Không có tồn kho của khách này</span>
+        </div>
+      </section>
+
+      <div class="lw-btn-row" *ngIf="selectedCustomerView && !isCustomerViewLoading">
+        <button type="button" class="lw-btn lw-btn--soft lw-btn--sm" (click)="clearCustomerView()">
+          Xóa kết quả
+        </button>
+      </div>
+
+      <section class="lw-rule-list" *ngIf="customerViewItems.length">
+        <h2 class="lw-section__title lw-section__title--warn">
+          <i class="material-icons">place</i>
+          Vị trí khách {{ selectedCustomerView }} ({{ customerViewItems.length }})
+        </h2>
+        <button
+          type="button"
+          class="lw-rule-item"
+          *ngFor="let item of customerViewItems"
+          (click)="jumpToCustomerViewItem(item)">
+          <div class="lw-rule-item__top">
+            <span class="lw-rule-item__loc">{{ item.materialCode }}</span>
+            <span class="lw-rule-item__badge">{{ item.location }}</span>
+          </div>
+          <div class="lw-rule-item__detail">
+            <span class="lw-rule-item__expect">Tồn: {{ item.stock | number:'1.0-2' }}</span>
+          </div>
+        </button>
+      </section>
+    </section>
   </aside>
 </div>
 

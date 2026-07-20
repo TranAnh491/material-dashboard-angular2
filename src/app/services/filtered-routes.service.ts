@@ -109,7 +109,6 @@ export class FilteredRoutesService {
       
       // ASM2 routes
       '/inbound-asm2': 'inbound-asm2',
-      '/dv-luu-tru-catalog': 'dv-luu-tru-catalog',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',
       '/inventory-overview-asm2': 'inventory-overview-asm2',

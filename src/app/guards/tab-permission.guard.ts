@@ -64,28 +64,6 @@ export class TabPermissionGuard implements CanActivate {
       );
     }
 
-    // DV Lưu trữ catalog — user có quyền inbound ASM1 hoặc ASM2
-    if (tabKey === 'dv-luu-tru-catalog') {
-      return forkJoin([
-        this.tabPermissionService.canAccessTab('inbound-asm1').pipe(take(1)),
-        this.tabPermissionService.canAccessTab('inbound-asm2').pipe(take(1))
-      ]).pipe(
-        map(([asm1, asm2]) => {
-          const allowed = asm1 || asm2;
-          if (!allowed) {
-            console.log('❌ Access denied to dv-luu-tru-catalog');
-            this.router.navigate(['/dashboard']);
-          }
-          return allowed;
-        }),
-        catchError(error => {
-          console.error('❌ Error checking dv-luu-tru-catalog permission:', error);
-          this.router.navigate(['/dashboard']);
-          return of(false);
-        })
-      );
-    }
-
     // Kiểm tra quyền truy cập tab cho các tab khác
     return this.tabPermissionService.canAccessTab(tabKey).pipe(
       map(hasAccess => {
@@ -125,7 +103,6 @@ export class TabPermissionGuard implements CanActivate {
       
       // ASM2 routes
       '/inbound-asm2': 'inbound-asm2',
-      '/dv-luu-tru-catalog': 'dv-luu-tru-catalog',
       '/danh-muc-nvl-tp': 'danh-muc-nvl-tp',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',

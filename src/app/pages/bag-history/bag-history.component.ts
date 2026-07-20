@@ -961,32 +961,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
         );
       });
       this.outboundDupRows = dupes;
-
-      // Push alert to Firestore so backend can notify specific members on new duplicates.
-      // Backend will deduplicate and only notify on newly appeared / increased counts.
-      if (dupes.length > 0) {
-        try {
-          await this.firestore.collection('zalo_alerts').add({
-            type: 'outbound_duplicate_detected',
-            source: 'bag-history',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            dupes: dupes.slice(0, 50).map(d => ({
-              dupKey: d.dupKey,
-              factory: d.factory,
-              materialCode: d.materialCode,
-              poNumber: d.poNumber,
-              imd: d.imd,
-              bagBatch: d.bagBatch,
-              bagNumberDisplay: (d as any).bagNumberDisplay || null,
-              count: d.count,
-              latestExportAtLabel: d.latestExportAtLabel || null,
-              revivedAfterIgnore: d.revivedAfterIgnore || null
-            }))
-          });
-        } catch (e) {
-          console.warn('bag-history write zalo_alerts failed', e);
-        }
-      }
+      // Zalo/email báo trùng xuất kho: Cloud Functions tự quét lại theo lịch 12h/17h (hoặc nút Send Mail),
+      // dùng chung logic quét này — không ghi gì thêm từ client ở đây (tránh ghi thừa mỗi 30 phút).
     } catch (e) {
       console.error('bag-history outbound duplicate scan', e);
       this.outboundDupError =

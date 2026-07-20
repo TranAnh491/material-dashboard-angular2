@@ -80,8 +80,6 @@ export interface InventoryMaterial {
   // Edit states
   isEditingOpeningStock?: boolean;
   isEditingXT?: boolean;
-  isEditingStandardPacking?: boolean;
-  editStandardPackingValue?: number | null;
 
   createdAt?: Date;
   updatedAt?: Date;
@@ -4630,12 +4628,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     void this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'nvl' } });
   }
 
-  /** Khóa chỉnh sửa Standard Packing khi Lock ON (catalog Firestore). */
-  isStandardPackingLockedForCode(materialCode: string): boolean {
-    const code = String(materialCode || '').trim().toUpperCase();
-    return this.catalogCache.get(code)?.standardPackingLocked === true;
-  }
-
   // Toggle mobile menu
   toggleMobileMenu(): void {
     this.showMobileMenu = !this.showMobileMenu;
@@ -5103,115 +5095,6 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     // Update negative stock count for real-time display
     this.updateNegativeStockCount();
-  }
-
-  startEditingStandardPacking(material: InventoryMaterial): void {
-    if (!this.canEdit) {
-      return;
-    }
-    if (this.isStandardPackingLockedForCode(material.materialCode)) {
-      alert(
-        '⚠️ Standard Packing đang bị khóa (Lock ON). Tắt Lock trong More → Quản lý Standard Packing.'
-      );
-      return;
-    }
-    material.isEditingStandardPacking = true;
-    const fromCat = this.getStandardPacking(material.materialCode);
-    const fromRow = material.standardPacking;
-    const v =
-      fromRow != null && fromRow > 0 ? fromRow : fromCat > 0 ? fromCat : null;
-    material.editStandardPackingValue = v;
-    this.cdr.markForCheck();
-  }
-
-  cancelEditingStandardPacking(material: InventoryMaterial): void {
-    material.isEditingStandardPacking = false;
-    material.editStandardPackingValue = null;
-    this.cdr.markForCheck();
-  }
-
-  async finishEditingStandardPacking(material: InventoryMaterial): Promise<void> {
-    if (!material.isEditingStandardPacking) {
-      return;
-    }
-    if (!this.canEdit) {
-      this.cancelEditingStandardPacking(material);
-      return;
-    }
-    const raw = material.editStandardPackingValue;
-    const num =
-      raw === null || raw === undefined || (typeof raw === 'string' && String(raw).trim() === '')
-        ? 0
-        : Math.max(0, Number(raw));
-    if (!Number.isFinite(num)) {
-      this.cancelEditingStandardPacking(material);
-      return;
-    }
-
-    material.isEditingStandardPacking = false;
-    material.editStandardPackingValue = null;
-
-    const ok = await this.updateStandardPackingInCatalog(material.materialCode, num);
-    if (ok) {
-      if (this.catalogCache.has(material.materialCode)) {
-        this.catalogCache.get(material.materialCode)!.standardPacking = num;
-      }
-      material.standardPacking = num;
-    }
-    this.cdr.markForCheck();
-  }
-
-  private async updateStandardPackingInCatalog(materialCode: string, standardPacking: number): Promise<boolean> {
-    const normalizedCode = String(materialCode || '').trim();
-    if (!normalizedCode) return false;
-    if (this.isStandardPackingLockedForCode(normalizedCode)) {
-      alert(
-        '⚠️ Standard Packing đang bị khóa (Lock ON). Tắt Lock trong More → Quản lý Standard Packing.'
-      );
-      return false;
-    }
-
-    const payload = {
-      standardPacking,
-      updatedAt: new Date()
-    };
-
-    try {
-      const byIdDoc = await this.firestore.collection('materials').doc(normalizedCode).get().toPromise();
-      if (byIdDoc && byIdDoc.exists) {
-        await this.firestore.collection('materials').doc(normalizedCode).update(payload);
-        return true;
-      }
-    } catch (e) {
-      console.warn('⚠️ Update materials by docId failed:', e);
-    }
-
-    const targets = [
-      { collection: 'materials', fields: ['materialCode', 'code', 'material_code'] },
-      { collection: 'catalog', fields: ['materialCode', 'code', 'material_code'] },
-      { collection: 'material-catalog', fields: ['materialCode', 'code', 'material_code'] }
-    ];
-
-    for (const target of targets) {
-      for (const field of target.fields) {
-        try {
-          const snap = await this.firestore
-            .collection(target.collection, ref => ref.where(field, '==', normalizedCode).limit(1))
-            .get()
-            .toPromise();
-          const first = snap && !snap.empty ? snap.docs[0] : null;
-          if (first) {
-            await this.firestore.collection(target.collection).doc(first.id).update(payload);
-            return true;
-          }
-        } catch (e) {
-          console.warn(`⚠️ Update ${target.collection}.${field} failed:`, e);
-        }
-      }
-    }
-
-    alert(`❌ Không tìm thấy mã ${normalizedCode} trong catalog để lưu Standard Packing.`);
-    return false;
   }
 
   // onHSDChange method removed - HSD column deleted

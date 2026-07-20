@@ -404,26 +404,9 @@
           
           <div class="info-row">
             <span class="label">Standard Packing:</span>
-            <ng-container *ngIf="!material.isEditingStandardPacking">
-              <span class="value"
-                    [class.readonly-metric]="!canEdit || isStandardPackingLockedForCode(material.materialCode)"
-                    [class.standard-packing-dbl]="canEdit && !isStandardPackingLockedForCode(material.materialCode)"
-                    [title]="isStandardPackingLockedForCode(material.materialCode) ? 'Đang Lock — không sửa được' : (canEdit ? 'Double-click để sửa' : '')"
-                    (dblclick)="startEditingStandardPacking(material)">
-                {{ getStandardPacking(material.materialCode) }}
-              </span>
-            </ng-container>
-            <input *ngIf="material.isEditingStandardPacking"
-                   type="number"
-                   class="mobile-input"
-                   [disabled]="isStandardPackingLockedForCode(material.materialCode)"
-                   [ngModel]="material.editStandardPackingValue"
-                   (ngModelChange)="material.editStandardPackingValue = $event === '' || $event === null ? null : +$event"
-                   (blur)="finishEditingStandardPacking(material)"
-                   (keyup.enter)="finishEditingStandardPacking(material)"
-                   (keyup.escape)="cancelEditingStandardPacking(material)"
-                   min="0"
-                   step="1">
+            <span class="value readonly-metric" title="Chỉ đọc — sửa ở Danh mục NVL">
+              {{ getStandardPacking(material.materialCode) }}
+            </span>
           </div>
         </div>
         
@@ -667,27 +650,11 @@
                      placeholder="Nhập lưu ý..."
                      title="Lưu ý từ inbound">
             </td>
-            <td class="standard-packing-cell"
-                [class.readonly-cell]="!canEdit || isStandardPackingLockedForCode(material.materialCode)"
-                [title]="isStandardPackingLockedForCode(material.materialCode) ? 'Đang Lock — không sửa được' : (canEdit ? 'Double-click để sửa Standard Packing (lưu catalog)' : 'Không có quyền sửa')">
-              <span *ngIf="!material.isEditingStandardPacking"
-                    class="standard-packing-value"
-                    [class.standard-packing-dbl]="canEdit && !isStandardPackingLockedForCode(material.materialCode)"
-                    (dblclick)="startEditingStandardPacking(material)">
+            <td class="standard-packing-cell readonly-cell"
+                title="Chỉ đọc — sửa ở Danh mục NVL">
+              <span class="standard-packing-value">
                 {{ getStandardPacking(material.materialCode) }}
               </span>
-              <input *ngIf="material.isEditingStandardPacking"
-                     type="number"
-                     class="standard-packing-input"
-                     [disabled]="isStandardPackingLockedForCode(material.materialCode)"
-                     [ngModel]="material.editStandardPackingValue"
-                     (ngModelChange)="material.editStandardPackingValue = $event === '' || $event === null ? null : +$event"
-                     (blur)="finishEditingStandardPacking(material)"
-                     (keyup.enter)="finishEditingStandardPacking(material)"
-                     (keyup.escape)="cancelEditingStandardPacking(material)"
-                     min="0"
-                     step="1"
-                     placeholder="SP">
             </td>
             <td class="msd-esd-cell">
               <span class="badge msd-esd-badge" *ngIf="getMsdEsdLabel(material.materialCode)">

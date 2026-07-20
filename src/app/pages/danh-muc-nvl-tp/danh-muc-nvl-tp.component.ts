@@ -2,18 +2,33 @@ import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import * as XLSX from 'xlsx';
-import { NvlCatalogFullService, NvlCatalogItem } from '../../services/nvl-catalog-full.service';
+import { NvlCatalogFullService, NvlCatalogItem, OutboundQtyStats } from '../../services/nvl-catalog-full.service';
 import { TpCatalogFullService, MergedCatalogItem, TpImportRow } from '../../services/tp-catalog-full.service';
 import { CatalogDeleteOtpService, CatalogDeleteScope } from '../../services/catalog-delete-otp.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
+import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
+import { StorageUnitSize, getStorageUnitOption } from '../../models/storage-unit.model';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 
 type CatalogTab = 'nvl' | 'tp';
 
-/** Dòng hiển thị NVL — gộp thêm Khách hàng (Danh mục NVLKH, dữ liệu riêng, gộp vào tab này để sửa cùng chỗ). */
+/** Dòng hiển thị NVL — gộp thêm Khách hàng (NVLKH) và DV Lưu trữ (dữ liệu riêng, gộp vào tab này để sửa cùng chỗ). */
 interface NvlCatalogRow extends NvlCatalogItem {
   customer: string;
+  storageUnitSize: StorageUnitSize | '';
+}
+
+/** 1 dòng đề xuất sửa Standard Packing, suy ra từ lịch sử Outbound. */
+interface SpAuditSuggestion {
+  materialCode: string;
+  materialName: string;
+  currentSp: number;
+  suggestedSp: number | null;
+  sampleCount: number;
+  totalScans: number;
+  reason: 'missing' | 'decimal';
+  locked: boolean;
 }
 
 /**
@@ -47,8 +62,23 @@ export class DanhMucNvlTpComponent implements OnInit {
   isNvlImporting = false;
   isNvlKhImporting = false;
   isNvlDeduping = false;
+  nvlOnlyWithStock = false;
+  isNvlStockFilterLoading = false;
+  private nvlCodesWithStock: Set<string> | null = null;
   showNvlAddForm = false;
+  editingNvlCode: string | null = null;
+  nvlEditDraft: Partial<NvlCatalogRow> | null = null;
   newNvlItem = { materialCode: '', materialName: '', unit: '', standardPacking: 0 };
+
+  // ===== DV Lưu trữ (gộp từ Danh mục DV Lưu trữ) =====
+  showStorageUnitPicker = false;
+  storageUnitPickerMaterialCode = '';
+  isSavingStorageUnit = false;
+
+  // ===== Rà soát Standard Packing từ lịch sử Outbound =====
+  isSpAuditRunning = false;
+  showSpAuditPanel = false;
+  spAuditSuggestions: SpAuditSuggestion[] = [];
 
   // ===== TP state =====
   tpItems: MergedCatalogItem[] = [];
@@ -101,6 +131,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     private catalogDeleteOtp: CatalogDeleteOtpService,
     private cartonPackingQtyService: CartonPackingQtyService,
     private nvlkhCatalog: NvlkhCatalogService,
+    private dvLuuTruCatalog: DvLuuTruCatalogService,
     private authService: FirebaseAuthService,
     private route: ActivatedRoute,
     private router: Router
@@ -108,7 +139,7 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   ngOnInit(): void {
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab === 'tp' || tab === 'nvl') this.setTab(tab);
+    this.setTab(tab === 'tp' ? 'tp' : 'nvl');
   }
 
   /** Chỉ tải dữ liệu của tab được chọn, và chỉ tải lần đầu tiên bấm vào — giảm lượt đọc. */
@@ -124,10 +155,59 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   toggleNvlAddForm(): void {
     this.showNvlAddForm = !this.showNvlAddForm;
+    if (this.showNvlAddForm) this.cancelEditNvl();
   }
 
   toggleTpAddForm(): void {
     this.showTpAddForm = !this.showTpAddForm;
+  }
+
+  isNvlEditing(row: NvlCatalogRow): boolean {
+    return this.editingNvlCode === row.materialCode;
+  }
+
+  startEditNvl(row: NvlCatalogRow): void {
+    this.editingNvlCode = row.materialCode;
+    this.nvlEditDraft = {
+      materialName: row.materialName,
+      unit: row.unit,
+      standardPacking: row.standardPacking,
+      customer: row.customer
+    };
+    this.showNvlAddForm = false;
+  }
+
+  cancelEditNvl(): void {
+    this.editingNvlCode = null;
+    this.nvlEditDraft = null;
+  }
+
+  async saveEditNvl(row: NvlCatalogRow): Promise<void> {
+    if (!this.nvlEditDraft) return;
+    row.materialName = String(this.nvlEditDraft.materialName ?? row.materialName).trim();
+    row.unit = String(this.nvlEditDraft.unit ?? row.unit).trim();
+    row.standardPacking = Number(this.nvlEditDraft.standardPacking ?? row.standardPacking) || 0;
+    row.customer = String(this.nvlEditDraft.customer ?? row.customer).trim();
+    await this.updateNvlItem(row);
+    await this.updateNvlKh(row);
+    this.cancelEditNvl();
+  }
+
+  getCustomerTags(customer: string): string[] {
+    return String(customer || '')
+      .split(/[,;|/]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  isSharedCustomerTag(label: string): boolean {
+    const v = label.trim().toLowerCase();
+    return v === 'shared' || v === 'dùng chung' || v === 'dung chung';
+  }
+
+  formatStandardPacking(value: number): string {
+    const n = Number(value) || 0;
+    return Number.isInteger(n) ? String(n) : String(n);
   }
 
   // ===== NVL =====
@@ -135,11 +215,16 @@ export class DanhMucNvlTpComponent implements OnInit {
   async loadNvl(forceRefresh = false): Promise<void> {
     this.isNvlLoading = true;
     try {
-      const [items, customerMap] = await Promise.all([
+      const [items, customerMap, storageUnitMap] = await Promise.all([
         this.nvlService.listAll(forceRefresh),
-        this.nvlkhCatalog.loadAllAsMap(forceRefresh)
+        this.nvlkhCatalog.loadAllAsMap(forceRefresh),
+        this.dvLuuTruCatalog.loadAllAsMap(forceRefresh)
       ]);
-      this.nvlItems = items.map(i => ({ ...i, customer: customerMap.get(i.materialCode) || '' }));
+      this.nvlItems = items.map(i => ({
+        ...i,
+        customer: customerMap.get(i.materialCode) || '',
+        storageUnitSize: storageUnitMap.get(this.dvLuuTruCatalog.normalizeMaterialCode(i.materialCode)) || ''
+      }));
       this.nvlLoadedAt = new Date();
       this.applyNvlFilters();
     } catch (e: any) {
@@ -163,10 +248,29 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (cf.materialName && !item.materialName.toLowerCase().includes(cf.materialName.toLowerCase())) return false;
       if (cf.unit && !item.unit.toLowerCase().includes(cf.unit.toLowerCase())) return false;
       if (cf.customer && !item.customer.toLowerCase().includes(cf.customer.toLowerCase())) return false;
+      if (this.nvlOnlyWithStock && this.nvlCodesWithStock && !this.nvlCodesWithStock.has(item.materialCode)) return false;
       return true;
     });
     this.nvlCurrentPage = 1;
     this.updateNvlPaging();
+  }
+
+  /** Bật/tắt chỉ hiển thị mã đang có tồn kho (ASM1 + ASM2) — chỉ đọc Firestore ở lần bật đầu tiên. */
+  async toggleNvlOnlyWithStock(): Promise<void> {
+    this.nvlOnlyWithStock = !this.nvlOnlyWithStock;
+    if (this.nvlOnlyWithStock && !this.nvlCodesWithStock) {
+      this.isNvlStockFilterLoading = true;
+      try {
+        this.nvlCodesWithStock = await this.nvlService.loadCodesWithStock();
+      } catch (e) {
+        console.error(e);
+        alert('❌ Không tải được dữ liệu tồn kho để lọc.');
+        this.nvlOnlyWithStock = false;
+      } finally {
+        this.isNvlStockFilterLoading = false;
+      }
+    }
+    this.applyNvlFilters();
   }
 
   onNvlSearchChange(): void {
@@ -245,6 +349,42 @@ export class DanhMucNvlTpComponent implements OnInit {
     }
   }
 
+  /** Nhãn DV Lưu trữ (VD "M (4/10)") — rỗng nếu mã chưa gán. */
+  getStorageUnitLabel(size: StorageUnitSize | ''): string {
+    if (!size) return '';
+    const option = getStorageUnitOption(size);
+    return option ? `${option.label} (${option.fractionLabel})` : size;
+  }
+
+  onStorageUnitCellClick(row: NvlCatalogRow): void {
+    this.storageUnitPickerMaterialCode = row.materialCode;
+    this.showStorageUnitPicker = true;
+  }
+
+  closeStorageUnitPicker(): void {
+    if (this.isSavingStorageUnit) return;
+    this.showStorageUnitPicker = false;
+    this.storageUnitPickerMaterialCode = '';
+  }
+
+  /** Lưu DV Lưu trữ — đồng thời đồng bộ luôn sang Inbound/Inventory theo mã (mọi PO/IMD/nhà máy). */
+  async onStorageUnitConfirmed(size: StorageUnitSize): Promise<void> {
+    const materialCode = this.storageUnitPickerMaterialCode;
+    if (!materialCode) return;
+    this.isSavingStorageUnit = true;
+    try {
+      await this.dvLuuTruCatalog.assignStorageUnit(materialCode, size);
+      const row = this.nvlItems.find(i => i.materialCode === materialCode);
+      if (row) row.storageUnitSize = size;
+      this.closeStorageUnitPicker();
+    } catch (e: any) {
+      console.error(e);
+      alert('❌ Không lưu được DV Lưu trữ.');
+    } finally {
+      this.isSavingStorageUnit = false;
+    }
+  }
+
   async toggleNvlLock(item: NvlCatalogItem): Promise<void> {
     const next = !item.standardPackingLocked;
     try {
@@ -297,6 +437,95 @@ export class DanhMucNvlTpComponent implements OnInit {
     } finally {
       this.isNvlDeduping = false;
     }
+  }
+
+  /**
+   * Rà soát Standard Packing: mã đang thiếu (0) hoặc nghi sai (số thập phân, VD 0.1) — so với
+   * giá trị "quantity" xuất hiện nhiều nhất trong lịch sử Outbound (tem đầy quét đủ = đúng SP).
+   * Đọc toàn bộ outbound-materials 2 nhà máy — chỉ chạy khi bấm nút, không tự động.
+   */
+  async auditStandardPackingFromOutbound(): Promise<void> {
+    if (
+      !confirm(
+        'Quét toàn bộ lịch sử Outbound (ASM1 + ASM2) để đề xuất Standard Packing cho các mã đang thiếu hoặc nghi sai (số thập phân)?\nCó thể mất một lúc và tốn khá nhiều lượt đọc Firestore. Tiếp tục?'
+      )
+    ) {
+      return;
+    }
+    this.isSpAuditRunning = true;
+    this.showSpAuditPanel = true;
+    this.spAuditSuggestions = [];
+    try {
+      const stats = await this.nvlService.auditStandardPackingFromOutbound();
+      const suggestions: SpAuditSuggestion[] = [];
+      for (const row of this.nvlItems) {
+        const sp = Number(row.standardPacking) || 0;
+        const isMissing = !sp;
+        const isDecimal = sp > 0 && !Number.isInteger(sp);
+        if (!isMissing && !isDecimal) continue;
+        const s: OutboundQtyStats | undefined = stats.get(row.materialCode);
+        suggestions.push({
+          materialCode: row.materialCode,
+          materialName: row.materialName,
+          currentSp: sp,
+          suggestedSp: s?.suggestedStandardPacking ?? null,
+          sampleCount: s?.sampleCount ?? 0,
+          totalScans: s?.totalScans ?? 0,
+          reason: isMissing ? 'missing' : 'decimal',
+          locked: row.standardPackingLocked
+        });
+      }
+      suggestions.sort((a, b) => {
+        const aHas = a.suggestedSp != null ? 1 : 0;
+        const bHas = b.suggestedSp != null ? 1 : 0;
+        if (aHas !== bHas) return bHas - aHas;
+        return b.totalScans - a.totalScans;
+      });
+      this.spAuditSuggestions = suggestions;
+    } catch (e: any) {
+      console.error(e);
+      alert('❌ Lỗi khi rà soát: ' + (e?.message || e));
+    } finally {
+      this.isSpAuditRunning = false;
+    }
+  }
+
+  closeSpAuditPanel(): void {
+    if (this.isSpAuditRunning) return;
+    this.showSpAuditPanel = false;
+  }
+
+  async applySpAuditSuggestion(s: SpAuditSuggestion): Promise<void> {
+    if (s.locked || s.suggestedSp == null) return;
+    try {
+      await this.nvlService.update(s.materialCode, { standardPacking: s.suggestedSp });
+      const row = this.nvlItems.find(i => i.materialCode === s.materialCode);
+      if (row) row.standardPacking = s.suggestedSp;
+      this.spAuditSuggestions = this.spAuditSuggestions.filter(x => x.materialCode !== s.materialCode);
+      this.applyNvlFilters();
+    } catch (e: any) {
+      alert('❌ Lỗi khi áp dụng: ' + (e?.message || e));
+    }
+  }
+
+  async applyAllSpAuditSuggestions(): Promise<void> {
+    const applicable = this.spAuditSuggestions.filter(s => !s.locked && s.suggestedSp != null);
+    if (!applicable.length) return;
+    if (!confirm(`Áp dụng Standard Packing đề xuất cho ${applicable.length} mã?`)) return;
+    let ok = 0;
+    for (const s of applicable) {
+      try {
+        await this.nvlService.update(s.materialCode, { standardPacking: s.suggestedSp! });
+        const row = this.nvlItems.find(i => i.materialCode === s.materialCode);
+        if (row) row.standardPacking = s.suggestedSp!;
+        ok++;
+      } catch (e) {
+        console.error('applyAllSpAuditSuggestions failed for', s.materialCode, e);
+      }
+    }
+    this.spAuditSuggestions = this.spAuditSuggestions.filter(s => s.locked || s.suggestedSp == null);
+    this.applyNvlFilters();
+    alert(`✅ Đã áp dụng ${ok}/${applicable.length} mã.`);
   }
 
   importNvlFromExcel(): void {

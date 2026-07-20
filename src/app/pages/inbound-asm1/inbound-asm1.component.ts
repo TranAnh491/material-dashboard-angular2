@@ -1401,7 +1401,7 @@ export class InboundASM1Component implements OnInit, OnDestroy {
   }
 
   openDvLuuTruCatalog(): void {
-    this.router.navigate(['/dv-luu-tru-catalog'], { queryParams: { factory: this.selectedFactory } });
+    this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'nvl' } });
   }
 
   getStorageUnitLabel(material: InboundMaterial): string {

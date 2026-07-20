@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import * as firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 
 export interface NvlCatalogItem {
   materialCode: string;
@@ -14,6 +16,15 @@ export interface NvlCatalogItem {
   /** Mã thuộc danh sách ESD (Electrostatic Sensitive Device) — gán ở Inbound/Danh mục, hiển thị ở Materials ASM1/ASM2. */
   isEsd: boolean;
   updatedAt?: Date;
+}
+
+export interface OutboundQtyStats {
+  /** Giá trị "quantity" (tem đầy) xuất hiện nhiều nhất trong lịch sử Outbound của mã này. */
+  suggestedStandardPacking: number;
+  /** Số lần giá trị đề xuất xuất hiện. */
+  sampleCount: number;
+  /** Tổng số lần scan có quantity hợp lệ của mã này (mọi giá trị). */
+  totalScans: number;
 }
 
 /**
@@ -32,6 +43,7 @@ export class NvlCatalogFullService {
 
   private cachedItems: NvlCatalogItem[] | null = null;
   private cachedAt = 0;
+  private codesWithStockCache: Set<string> | null = null;
 
   constructor(private firestore: AngularFirestore) {}
 
@@ -233,6 +245,107 @@ export class NvlCatalogFullService {
     if (!code) return;
     await this.firestore.collection(this.collectionName).doc(code).delete();
     this.patchCache(code, null);
+  }
+
+  /**
+   * Tập mã đang có tồn kho > 0 (quét `inventory-materials` ASM1 + ASM2) — dùng cho bộ lọc
+   * "Chỉ có tồn" ở Danh mục NVL. Chỉ đọc khi bật lọc (không tải sẵn khi mở tab), cache trong
+   * bộ nhớ theo phiên làm việc — bật/tắt lại không đọc lại Firestore.
+   */
+  async loadCodesWithStock(forceRefresh = false): Promise<Set<string>> {
+    if (!forceRefresh && this.codesWithStockCache) return this.codesWithStockCache;
+
+    const factories: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
+    const snaps = await Promise.all(
+      factories.map(f =>
+        this.firestore
+          .collection('inventory-materials', ref => ref.where('factory', '==', f).limit(10000))
+          .get()
+          .toPromise()
+      )
+    );
+
+    const codes = new Set<string>();
+    for (const snap of snaps) {
+      for (const doc of snap?.docs || []) {
+        const d = doc.data() as Record<string, unknown>;
+        const code = this.normalizeCode(String(d['materialCode'] || ''));
+        if (!code) continue;
+        const openingStock = d['openingStock'] != null ? Number(d['openingStock']) : 0;
+        const quantity = Number(d['quantity']) || 0;
+        const exported = Number(d['exported']) || 0;
+        const xt = Number(d['xt']) || 0;
+        const stock = openingStock + quantity - exported - xt;
+        if (stock > 0) codes.add(code);
+      }
+    }
+
+    this.codesWithStockCache = codes;
+    return codes;
+  }
+
+  /**
+   * Rà soát Standard Packing từ lịch sử Outbound (ASM1+ASM2): mỗi lần quét ghi lại `quantity`
+   * (tem đầy) — hoặc `exportQuantity` nếu `quantity` trống (luồng Bổ Sung không ghi quantity).
+   * Với mỗi mã, giá trị xuất hiện NHIỀU NHẤT chính là Standard Packing thực tế (tem đầy quét đủ
+   * = đúng bằng Standard Packing). Đọc 1 lần khi bấm nút "Rà soát" — không cache, không tự chạy lại.
+   */
+  async auditStandardPackingFromOutbound(): Promise<Map<string, OutboundQtyStats>> {
+    const freq = new Map<string, Map<number, number>>();
+    const factories: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
+
+    const ingestDoc = (d: Record<string, unknown>): void => {
+      const code = this.normalizeCode(String(d['materialCode'] || ''));
+      if (!code) return;
+      const fromQuantity = Number(d['quantity']);
+      const fromExport = Number(d['exportQuantity']);
+      const qty = fromQuantity > 0 ? fromQuantity : fromExport > 0 ? fromExport : 0;
+      if (qty <= 0) return;
+      let table = freq.get(code);
+      if (!table) {
+        table = new Map<number, number>();
+        freq.set(code, table);
+      }
+      table.set(qty, (table.get(qty) || 0) + 1);
+    };
+
+    // Firestore giới hạn limit tối đa 10000/truy vấn — phân trang theo documentId để đọc hết lịch sử.
+    const db = this.firestore.firestore;
+    const col = db.collection('outbound-materials');
+    const idPath = firebase.default.firestore.FieldPath.documentId();
+    const pageSize = 2000;
+    for (const factory of factories) {
+      let last: firebase.default.firestore.QueryDocumentSnapshot | null = null;
+      for (;;) {
+        let q: firebase.default.firestore.Query = col.where('factory', '==', factory).orderBy(idPath).limit(pageSize);
+        if (last) {
+          q = q.startAfter(last);
+        }
+        const snap = await q.get();
+        if (snap.empty) break;
+        snap.docs.forEach(doc => ingestDoc(doc.data() as Record<string, unknown>));
+        if (snap.docs.length < pageSize) break;
+        last = snap.docs[snap.docs.length - 1] as firebase.default.firestore.QueryDocumentSnapshot;
+      }
+    }
+
+    const result = new Map<string, OutboundQtyStats>();
+    for (const [code, table] of freq.entries()) {
+      let bestQty = 0;
+      let bestCount = 0;
+      let totalScans = 0;
+      for (const [qty, count] of table.entries()) {
+        totalScans += count;
+        if (count > bestCount) {
+          bestCount = count;
+          bestQty = qty;
+        }
+      }
+      if (bestCount > 0) {
+        result.set(code, { suggestedStandardPacking: bestQty, sampleCount: bestCount, totalScans });
+      }
+    }
+    return result;
   }
 
   /** Xóa TOÀN BỘ danh mục NVL (collection `materials`). Không thể hoàn tác. */

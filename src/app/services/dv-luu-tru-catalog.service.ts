@@ -12,6 +12,11 @@ import {
 export class DvLuuTruCatalogService {
   readonly collectionName = 'dv-luu-tru-catalog';
 
+  /** Cache toàn bộ danh mục (theo mã) — dùng cho Danh mục NVL, tránh đọc 1 lượt/mã. */
+  private cachedMap: Map<string, StorageUnitSize> | null = null;
+  private cachedAt = 0;
+  private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
+
   constructor(private firestore: AngularFirestore) {}
 
   normalizeMaterialCode(code: string | null | undefined): string {
@@ -58,6 +63,30 @@ export class DvLuuTruCatalogService {
     return this.loadMapForMaterialCodes(keys);
   }
 
+  /**
+   * Đọc toàn bộ danh mục 1 lần (theo mã), cache 5 phút — dùng cho Danh mục NVL để tra cứu theo mã
+   * mà không phải đọc riêng từng mã (loadMapForMaterialCodes tốn 1 read/mã).
+   */
+  async loadAllAsMap(forceRefresh = false): Promise<Map<string, StorageUnitSize>> {
+    const now = Date.now();
+    if (!forceRefresh && this.cachedMap && now - this.cachedAt < DvLuuTruCatalogService.CACHE_TTL_MS) {
+      return this.cachedMap;
+    }
+
+    const snap = await this.firestore.collection(this.collectionName, ref => ref.limit(10000)).get().toPromise();
+    const map = new Map<string, StorageUnitSize>();
+    (snap?.docs || []).forEach(doc => {
+      const d = doc.data() as Record<string, unknown>;
+      const code = this.normalizeMaterialCode(String(d['materialCode'] || ''));
+      const size = String(d['size'] || '') as StorageUnitSize;
+      if (code && size) map.set(code, size);
+    });
+
+    this.cachedMap = map;
+    this.cachedAt = now;
+    return map;
+  }
+
   async listEntries(): Promise<DvLuuTruCatalogEntry[]> {
     const snap = await this.firestore
       .collection(this.collectionName, ref => ref.orderBy('updatedAt', 'desc').limit(500))
@@ -96,6 +125,7 @@ export class DvLuuTruCatalogService {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     await this.firestore.collection(this.collectionName).doc(id).set(payload, { merge: true });
+    this.cachedMap = null;
     return {
       id,
       factory,
@@ -108,6 +138,7 @@ export class DvLuuTruCatalogService {
 
   async deleteEntry(id: string): Promise<void> {
     await this.firestore.collection(this.collectionName).doc(id).delete();
+    this.cachedMap = null;
   }
 
   async assignStorageUnit(

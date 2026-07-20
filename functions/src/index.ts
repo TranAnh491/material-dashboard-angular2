@@ -52,11 +52,11 @@ export const sendTruckDeliveryDecisionEmailFn = functions
   });
 
 /**
- * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email.
- * Secret: EMAIL_PASS — chuỗi: EMAIL_USER, EMAIL_TO, … (xem params-config.ts).
+ * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email + Zalo (ASP0106).
+ * Secrets: EMAIL_PASS (chuỗi: EMAIL_USER, EMAIL_TO, … xem params-config.ts) và ZALO_BOT_TOKEN.
  */
 export const notifyOutboundDuplicatesAt12 = functions
-  .runWith({ secrets: [emailPass] })
+  .runWith({ secrets: [emailPass, zaloBotToken] })
   .pubsub.schedule('0 12 * * *')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
@@ -65,7 +65,7 @@ export const notifyOutboundDuplicatesAt12 = functions
   });
 
 export const notifyOutboundDuplicatesAt17 = functions
-  .runWith({ secrets: [emailPass] })
+  .runWith({ secrets: [emailPass, zaloBotToken] })
   .pubsub.schedule('0 17 * * *')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
@@ -124,9 +124,9 @@ export const sendNhietDoZaloRemindTestFn = functions
     }
   });
 
-/** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
+/** Callable: gửi mail + Zalo (ASP0106) báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 export const sendControlBatchReportEmail = functions
-  .runWith({ secrets: [emailPass] })
+  .runWith({ secrets: [emailPass, zaloBotToken] })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');

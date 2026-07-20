@@ -127,6 +127,12 @@ interface FactoryUsageViolation {
   expectedFactory: string;
 }
 
+interface CustomerMaterialLocation {
+  materialCode: string;
+  location: string;
+  stock: number;
+}
+
 interface ShelfStorageGuideRow {
   rackLetter: string;
   prefixes: string[];
@@ -226,6 +232,14 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   factoryUsageError = '';
   factoryUsageFactory: 'ASM1' | 'ASM2' | 'ASM3' | null = null;
   factoryUsageViolations: FactoryUsageViolation[] = [];
+
+  /** Xem nguyên liệu theo khách hàng — tô đỏ mọi vị trí đang có tồn của khách được chọn. */
+  showCustomerViewSelector = false;
+  isCustomerViewLoading = false;
+  customerViewError = '';
+  customerViewList: string[] = [];
+  selectedCustomerView: string | null = null;
+  customerViewItems: CustomerMaterialLocation[] = [];
 
   activeGuidanceLoc = '';
   guidanceDraft = '';
@@ -1393,6 +1407,151 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
     const host = this.svgHost?.nativeElement;
     host?.querySelectorAll('.lw-zone--factory-violation').forEach(el => {
       el.classList.remove('lw-zone--factory-violation');
+    });
+  }
+
+  /** Bấm nút "Xem theo khách hàng" — tải danh sách khách (Danh mục NVLKH, cache 5 phút) rồi hiện chọn. */
+  async openCustomerView(): Promise<void> {
+    this.showCustomerViewSelector = true;
+    this.customerViewError = '';
+    this.selectedCustomerView = null;
+    this.customerViewItems = [];
+    this.clearCustomerViewHighlights();
+    this.cdr.markForCheck();
+
+    if (this.customerViewList.length) return;
+    this.isCustomerViewLoading = true;
+    try {
+      const map = await this.nvlkhCatalog.loadAllAsMap();
+      this.customerViewList = [...new Set(Array.from(map.values()))].sort((a, b) => a.localeCompare(b, 'vi'));
+    } catch (err) {
+      this.customerViewError = (err as Error)?.message || String(err);
+    } finally {
+      this.isCustomerViewLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  closeCustomerView(): void {
+    this.showCustomerViewSelector = false;
+    this.selectedCustomerView = null;
+    this.customerViewItems = [];
+    this.customerViewError = '';
+    this.clearCustomerViewHighlights();
+    this.cdr.markForCheck();
+  }
+
+  clearCustomerView(): void {
+    this.selectedCustomerView = null;
+    this.customerViewItems = [];
+    this.customerViewError = '';
+    this.clearCustomerViewHighlights();
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Tô đỏ toàn bộ vị trí đang có tồn kho của khách hàng được chọn (nhà máy {{factory}}).
+   * 1 lượt read inventory-materials (theo factory) + Danh mục NVLKH (cache 5 phút, dùng chung toàn app).
+   */
+  async viewMaterialsByCustomer(customer: string): Promise<void> {
+    if (!customer) return;
+    this.selectedCustomerView = customer;
+    this.isCustomerViewLoading = true;
+    this.customerViewError = '';
+    this.customerViewItems = [];
+    this.clearCustomerViewHighlights();
+    this.cdr.markForCheck();
+
+    try {
+      const [snap, customerMap] = await Promise.all([
+        this.firestore
+          .collection('inventory-materials', ref => ref.where('factory', '==', this.factory).limit(10000))
+          .get()
+          .toPromise(),
+        this.nvlkhCatalog.loadAllAsMap()
+      ]);
+
+      const items: CustomerMaterialLocation[] = [];
+      const seen = new Set<string>();
+
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as Record<string, unknown>;
+        const materialCode = String(data['materialCode'] || '').trim();
+        const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+        if (!materialCode || !location || location.toUpperCase() === 'TEMPORARY') continue;
+
+        const qty = Number(data['quantity']) || 0;
+        const exported = Number(data['exported']) || 0;
+        const stockField = Number(data['stock']) || 0;
+        const openingStock = data['openingStock'] != null ? Number(data['openingStock']) : 0;
+        const xt = Number(data['xt']) || 0;
+        const available = qty > 0 ? openingStock + qty - exported - xt : stockField > 0 ? stockField : openingStock;
+        if (available <= 0) continue;
+
+        const code = this.nvlkhCatalog.normalizeMaterialCode(materialCode);
+        const rowCustomer = customerMap.get(code) || '';
+        if (rowCustomer !== customer) continue;
+
+        const key = `${code}\0${location.toUpperCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        items.push({ materialCode, location, stock: available });
+      }
+
+      items.sort((a, b) => a.location.localeCompare(b.location, 'vi', { numeric: true }));
+      this.customerViewItems = items;
+      this.isCustomerViewLoading = false;
+      this.cdr.markForCheck();
+
+      requestAnimationFrame(() => this.highlightCustomerViewLocations(items));
+    } catch (err) {
+      this.customerViewError = (err as Error)?.message || String(err);
+      this.isCustomerViewLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  jumpToCustomerViewItem(item: CustomerMaterialLocation): void {
+    const parsed = parseWarehouseLocation(item.location, this.knownShelves);
+    if (parsed) {
+      this.highlightParsedLocation(parsed);
+      this.searchResult = {
+        materialCode: item.materialCode,
+        location: item.location,
+        shelf: parsed.shelf,
+        slot: parsed.slot
+      };
+      this.selectedLoc = `${item.materialCode} — ${item.location} (KH: ${this.selectedCustomerView})`;
+    } else {
+      const zone = this.findMapZone(item.location);
+      if (zone) {
+        this.selectZoneElement(zone);
+        zone.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+    }
+    this.cdr.markForCheck();
+  }
+
+  private highlightCustomerViewLocations(items: CustomerMaterialLocation[]): void {
+    const host = this.svgHost?.nativeElement;
+    if (!host) return;
+
+    const seen = new Set<Element>();
+    const uniqueLocs = [...new Set(items.map(i => i.location))];
+
+    for (const loc of uniqueLocs) {
+      const zone = this.findZoneForLocation(loc);
+      if (!zone || seen.has(zone)) continue;
+      seen.add(zone);
+      zone.classList.add('lw-zone--customer-material');
+    }
+  }
+
+  private clearCustomerViewHighlights(): void {
+    const host = this.svgHost?.nativeElement;
+    host?.querySelectorAll('.lw-zone--customer-material').forEach(el => {
+      el.classList.remove('lw-zone--customer-material');
     });
   }
 

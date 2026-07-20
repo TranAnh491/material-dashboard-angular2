@@ -7,11 +7,14 @@ import {
   emailSmtpHost,
   emailSmtpPort,
   emailTo,
-  emailUser
+  emailUser,
+  zaloBotToken
 } from './params-config';
 
 const CONTROL_BATCH_EXCLUSION_COLLECTION = 'control-batch-exclusion';
 const CONTROL_BATCH_EXCLUSION_DOC = 'settings';
+/** Cùng người nhận OTP xóa danh mục / mở khóa vị trí — đầu mối Zalo cố định của app. */
+const ZALO_DUP_RECIPIENT_ID = 'ASP0106';
 
 /** Mặc định: 02/04/2026 00:00 (VN), lưu dạng YYYY-MM-DD trên Firestore. */
 export const DEFAULT_OUTBOUND_DUP_SINCE_YMD = '2026-04-02';
@@ -546,6 +549,75 @@ async function sendDupEmail(
   });
 }
 
+/** Tra chatId theo memberId — 1 truy vấn có điều kiện (limit 1), không quét cả collection `zalo_links`. */
+async function resolveZaloChatId(db: admin.firestore.Firestore, memberId: string): Promise<string | null> {
+  const snap = await db.collection('zalo_links').where('memberId', '==', memberId).limit(1).get();
+  if (snap.empty) return null;
+  const chatId = String(snap.docs[0].data()?.chatId || '').trim();
+  return chatId || null;
+}
+
+async function sendZaloText(token: string, chatId: string, text: string): Promise<void> {
+  const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text })
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`Zalo sendMessage failed: ${res.status} ${JSON.stringify(body)}`);
+  }
+}
+
+function buildZaloDupMessage(dupes: OutboundDupRow[], dupSinceLabel: string, contextLabel: string): string {
+  const MAX_LINES = 15;
+  const lines = dupes
+    .slice(0, MAX_LINES)
+    .map(
+      r =>
+        `• ${r.factory} ${r.materialCode} PO ${r.poNumber} IMD ${r.imd || '—'} Bịch ${r.bagBatch || '—'} Bag ${r.bagNumberDisplay || '—'} — ${r.count} lần`
+    );
+  const more = dupes.length > MAX_LINES ? `\n… và ${dupes.length - MAX_LINES} nhóm khác` : '';
+  return (
+    `🚨 [Control Batch] ${dupes.length} nhóm trùng xuất kho (${contextLabel})\n` +
+    `Từ ngày: ${dupSinceLabel}\n\n` +
+    lines.join('\n') +
+    more +
+    `\n\nTab: Bag History → Control Batch`
+  );
+}
+
+/**
+ * Gửi Zalo tới ASP0106 — dùng lại đúng `dupes` đã quét cho email (không quét thêm lần nào),
+ * chỉ tốn thêm 1 lượt đọc `zalo_links` (có điều kiện) mỗi lần gọi. Không throw ra ngoài —
+ * lỗi Zalo không được làm hỏng luồng gửi mail đã thành công.
+ */
+async function sendDupZaloAlert(
+  db: admin.firestore.Firestore,
+  dupes: OutboundDupRow[],
+  dupSinceLabel: string,
+  contextLabel: string
+): Promise<void> {
+  if (dupes.length === 0) return;
+  try {
+    const token = zaloBotToken.value().trim();
+    if (!token) {
+      console.error('outbound-dup-notify: thiếu ZALO_BOT_TOKEN, bỏ qua gửi Zalo');
+      return;
+    }
+    const chatId = await resolveZaloChatId(db, ZALO_DUP_RECIPIENT_ID);
+    if (!chatId) {
+      console.error(`outbound-dup-notify: chưa có zalo_links cho ${ZALO_DUP_RECIPIENT_ID}`);
+      return;
+    }
+    await sendZaloText(token, chatId, buildZaloDupMessage(dupes, dupSinceLabel, contextLabel));
+    console.log(`outbound-dup-notify: đã gửi Zalo (${contextLabel}) — ${dupes.length} nhóm`);
+  } catch (e) {
+    console.error('outbound-dup-notify: gửi Zalo thất bại', e);
+  }
+}
+
 /**
  * Quét trùng tại thời điểm gọi và gửi mail (nút Send Mail trên Control Batch).
  * `settings` nếu có (từ app) = đúng mốc ngày + loại trừ đang hiển thị; không thì đọc Firestore.
@@ -619,6 +691,7 @@ ${exclHtml}
     text: `${buildPlainText(dupes, s.dupSinceLabel, exclNote.trim() || undefined)}\n\n---\nThời điểm quét: ${atStr}`,
     html: bodyHtml
   });
+  await sendDupZaloAlert(db, dupes, s.dupSinceLabel, 'Send Mail thủ công');
   return { dupGroups: dupes.length };
 }
 
@@ -679,6 +752,9 @@ export async function runOutboundDupNotifyForSlot(
     }
 
     const emailCfg = getEmailCfg();
+    // Zalo độc lập với email — vẫn gửi kể cả khi thiếu cấu hình SMTP, dùng chung `dupes` đã quét (không quét thêm).
+    await sendDupZaloAlert(db, dupes, settings.dupSinceLabel, `lịch ${slot}h`);
+
     if (!emailCfg) {
       console.error(
         'outbound-dup-notify: có trùng nhưng thiếu SMTP (EMAIL_USER, secret EMAIL_PASS, EMAIL_TO)'

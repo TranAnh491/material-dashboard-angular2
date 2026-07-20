@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -82,11 +82,11 @@ exports.sendTruckDeliveryDecisionEmailFn = functions
     }
 });
 /**
- * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email.
- * Secret: EMAIL_PASS — chuỗi: EMAIL_USER, EMAIL_TO, … (xem params-config.ts).
+ * Control Batch: 12:00 và 17:00 (Asia/Ho_Chi_Minh) quét trùng xuất outbound; có trùng thì gửi email + Zalo (ASP0106).
+ * Secrets: EMAIL_PASS (chuỗi: EMAIL_USER, EMAIL_TO, … xem params-config.ts) và ZALO_BOT_TOKEN.
  */
 exports.notifyOutboundDuplicatesAt12 = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .pubsub.schedule('0 12 * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
@@ -94,7 +94,7 @@ exports.notifyOutboundDuplicatesAt12 = functions
     await runOutboundDupNotifyForSlot(admin.firestore(), '12');
 });
 exports.notifyOutboundDuplicatesAt17 = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .pubsub.schedule('0 17 * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
@@ -145,9 +145,9 @@ exports.sendNhietDoZaloRemindTestFn = functions
             : 'internal', msg);
     }
 });
-/** Callable: gửi mail báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
+/** Callable: gửi mail + Zalo (ASP0106) báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 exports.sendControlBatchReportEmail = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -196,6 +196,37 @@ exports.sendQcPriorityResolvedEmailFn = functions
     try {
         const { sendQcPriorityResolvedEmail } = await Promise.resolve().then(() => __importStar(require('./qc-priority-email')));
         await sendQcPriorityResolvedEmail(payload);
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** FG In: bấm "Sai Carton" xác nhận Lượng SP/thùng mới → báo mail cho Kho + Kỹ thuật. */
+exports.sendCartonPackingQtyAlertEmailFn = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const materialCode = typeof (data === null || data === void 0 ? void 0 : data.materialCode) === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    if (!materialCode) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode.');
+    }
+    const payload = {
+        materialCode,
+        oldQty: Number(data === null || data === void 0 ? void 0 : data.oldQty) || 0,
+        newQty: Number(data === null || data === void 0 ? void 0 : data.newQty) || 0,
+        quantity: Number(data === null || data === void 0 ? void 0 : data.quantity) || 0,
+        lot: typeof (data === null || data === void 0 ? void 0 : data.lot) === 'string' ? data.lot.trim().slice(0, 80) : '',
+        lsx: typeof (data === null || data === void 0 ? void 0 : data.lsx) === 'string' ? data.lsx.trim().slice(0, 80) : '',
+        factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 40) : '',
+        reportedBy: typeof (data === null || data === void 0 ? void 0 : data.reportedBy) === 'string' ? data.reportedBy.trim().slice(0, 80) : ''
+    };
+    try {
+        const { sendCartonPackingQtyAlertEmail } = await Promise.resolve().then(() => __importStar(require('./carton-packing-qty-alert-email')));
+        await sendCartonPackingQtyAlertEmail(payload);
         return { ok: true };
     }
     catch (e) {

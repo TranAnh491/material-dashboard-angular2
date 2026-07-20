@@ -66,7 +66,6 @@ export class TabPermissionService {
       // Inbound tabs
       'inbound-asm1': factoryAccess.canAccessASM1 === true, // Chỉ cho phép khi TRUE rõ ràng
       'inbound-asm2': factoryAccess.canAccessASM2 === true, // Chỉ cho phép khi TRUE rõ ràng
-      'dv-luu-tru-catalog': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'danh-muc-nvl-tp': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       
       // Outbound tabs
@@ -159,8 +158,7 @@ export class TabPermissionService {
     // Inbound tabs
     { key: 'inbound-asm1', name: 'RM1 Inbound' },
     { key: 'inbound-asm2', name: 'RM2 Inbound' },
-    { key: 'dv-luu-tru-catalog', name: 'Danh mục DV Lưu trữ' },
-    
+
     // Outbound tabs
     { key: 'outbound-asm1', name: 'RM1 Outbound' },
     { key: 'outbound-asm2', name: 'RM2 Outbound' },

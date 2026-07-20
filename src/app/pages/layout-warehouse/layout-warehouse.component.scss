@@ -200,6 +200,28 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
   }
 }
 
+.lw-select {
+  padding: 7px 10px;
+  border: 1px solid $lw-border;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #f8fafc;
+  color: $lw-text;
+  box-sizing: border-box;
+  min-width: 200px;
+
+  &:focus {
+    outline: none;
+    border-color: $lw-accent;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
 .lw-fg-locs {
   margin-top: 8px;
   border-top: 1px dashed rgba(22, 163, 74, 0.35);
@@ -1357,6 +1379,13 @@ $lw-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
 .lw-svg-host ::ng-deep [data-shelf].lw-zone--factory-violation rect {
   fill: #ffe0b2 !important;
   stroke: #e65100 !important;
+  stroke-width: 0.5px !important;
+}
+
+.lw-svg-host ::ng-deep .lw-zone--customer-material > rect,
+.lw-svg-host ::ng-deep [data-shelf].lw-zone--customer-material rect {
+  fill: #ffcdd2 !important;
+  stroke: #c62828 !important;
   stroke-width: 0.5px !important;
 }
 
