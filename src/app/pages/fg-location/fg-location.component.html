@@ -256,18 +256,6 @@
           <i class="material-icons">location_on</i>
           <span>Đổi vị trí</span>
         </button>
-        <button type="button" class="fg-hub-btn fg-hub-btn--kk" (click)="startKkFlow()">
-          <i class="material-icons">fact_check</i>
-          <span>Kiểm kê (scan vị trí + mã)</span>
-        </button>
-        <button type="button" class="fg-hub-btn fg-hub-btn--print" (click)="printTpCodeSheet()" [disabled]="isLoading">
-          <i class="material-icons">print</i>
-          <span>In danh sách mã TP</span>
-        </button>
-        <button type="button" class="fg-hub-btn fg-hub-btn--summary" (click)="openLocationSummary()" [disabled]="isLoading">
-          <i class="material-icons">summarize</i>
-          <span>Tổng hợp vị trí</span>
-        </button>
       </div>
       <button class="back-btn" (click)="backToFactorySelection()">← Đổi nhà máy</button>
     </div>

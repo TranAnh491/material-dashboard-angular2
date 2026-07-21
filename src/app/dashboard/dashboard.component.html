@@ -287,14 +287,20 @@
               </span>
               <span class="dash-widget__title-text">Work Order Status (weekly)</span>
             </div>
-            <button
-              type="button"
-              class="dash-widget__pill dash-widget__pill--btn"
-              (click)="toggleWoHeatmapWeek()"
-              [attr.title]="woHeatmapWeekOffset === 0 ? 'Xem tuần trước' : 'Về tuần này'">
-              <span>{{ woWeekPillLabel }}</span>
-              <i class="material-icons">expand_more</i>
-            </button>
+            <div class="dash-widget__headrow-actions">
+              <button type="button" class="detail-run-btn" (click)="runWorkOrderStatus()" [disabled]="woStatusLoading">
+                <i class="material-icons">refresh</i>
+                {{ woStatusLoading ? 'Đang tải...' : 'Run' }}
+              </button>
+              <button
+                type="button"
+                class="dash-widget__pill dash-widget__pill--btn"
+                (click)="toggleWoHeatmapWeek()"
+                [attr.title]="woHeatmapWeekOffset === 0 ? 'Xem tuần trước' : 'Về tuần này'">
+                <span>{{ woWeekPillLabel }}</span>
+                <i class="material-icons">expand_more</i>
+              </button>
+            </div>
           </div>
         </header>
         <div class="card-body card-body--wo-chart">
@@ -320,16 +326,47 @@
                   </div>
                 </div>
               </div>
-              <div class="wo-heatmap-legend" *ngIf="woHeatmapHasCells">
-                <span><span class="wo-legend-dot wo-legend-dot--done" aria-hidden="true"></span>Done</span>
-                <span><span class="wo-legend-dot wo-legend-dot--waiting" aria-hidden="true"></span>Waiting</span>
-                <span><span class="wo-legend-dot wo-legend-dot--kitting" aria-hidden="true"></span>Kitting</span>
-                <span><span class="wo-legend-dot wo-legend-dot--ready" aria-hidden="true"></span>Ready</span>
-                <span><span class="wo-legend-dot wo-legend-dot--delay" aria-hidden="true"></span>Delay</span>
-                <span><span class="wo-legend-dot wo-legend-dot--asm3" aria-hidden="true"></span>ASM3</span>
-              </div>
             </div>
             <div *ngIf="!woHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
+          </div>
+
+          <div class="wo-sample-heatmap-section">
+            <div class="wo-sample-heatmap-section__label">
+              <i class="material-icons">science</i>
+              <span>LSX Sample — {{ woSampleFactoryLabel }}</span>
+            </div>
+            <div class="wo-heatmap-inner" *ngIf="woSampleHeatmapDays.length">
+              <div class="putaway-heatmap wo-heatmap" aria-label="Sample work order weekly heatmap">
+                <div *ngFor="let col of woSampleHeatmapDays" class="putaway-heatmap__col">
+                  <div class="putaway-heatmap__head">
+                    <span class="putaway-heatmap__week">{{ col.weekday }}</span>
+                    <span class="wo-heatmap__date">{{ col.label }}</span>
+                    <span class="putaway-heatmap__cnt wo-heatmap__cnt">{{ col.total }}</span>
+                  </div>
+                  <div class="putaway-heatmap__cells">
+                    <div
+                      *ngFor="let c of col.cells"
+                      class="putaway-heatmap__cell wo-heatmap__cell"
+                      [ngClass]="'wo-heatmap__cell--' + c.kind"
+                      [class.wo-heatmap__cell--giao-asm3]="c.giaoAsm3"
+                      [attr.title]="c.tooltip"
+                    >
+                      <span *ngIf="c.giaoAsm3" class="wo-heatmap__asm3-dot" aria-hidden="true"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="!woSampleHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
+          </div>
+
+          <div class="wo-heatmap-legend" *ngIf="woHeatmapHasCells || woSampleHeatmapDays.length">
+            <span><span class="wo-legend-dot wo-legend-dot--done" aria-hidden="true"></span>Done</span>
+            <span><span class="wo-legend-dot wo-legend-dot--waiting" aria-hidden="true"></span>Waiting</span>
+            <span><span class="wo-legend-dot wo-legend-dot--kitting" aria-hidden="true"></span>Kitting</span>
+            <span><span class="wo-legend-dot wo-legend-dot--ready" aria-hidden="true"></span>Ready</span>
+            <span><span class="wo-legend-dot wo-legend-dot--delay" aria-hidden="true"></span>Delay</span>
+            <span><span class="wo-legend-dot wo-legend-dot--asm3" aria-hidden="true"></span>ASM3</span>
           </div>
         </div>
       </article>
@@ -427,7 +464,7 @@
     <section class="dash-chart-row dash-grid dash-grid--triple" aria-label="Accuracy and turnover">
 
       <!-- Materials Accuracy -->
-      <article class="card card-chart chart-card chart-card-green dash-surface-card">
+      <article class="card card-chart chart-card chart-card-green dash-surface-card dash-widget--clickable" (click)="openAccuracyTurnoverEditModal()" title="Bấm để nhập/sửa data Accuracy &amp; Turnover">
         <div class="card-body chart-body acc-card-body">
           <div class="chart-badge chart-badge-green">Target Achieved</div>
           <h4 class="card-title dash-chart-title">
@@ -447,7 +484,7 @@
       </article>
 
       <!-- Finished Goods Accuracy -->
-      <article class="card card-chart chart-card chart-card-blue dash-surface-card">
+      <article class="card card-chart chart-card chart-card-blue dash-surface-card dash-widget--clickable" (click)="openAccuracyTurnoverEditModal()" title="Bấm để nhập/sửa data Accuracy &amp; Turnover">
         <div class="card-body chart-body acc-card-body">
           <div class="chart-badge chart-badge-green">Target Achieved</div>
           <h4 class="card-title dash-chart-title">
@@ -467,7 +504,7 @@
       </article>
 
       <!-- FGs Inventory Turnover -->
-      <article class="card card-chart chart-card chart-card-amber dash-surface-card">
+      <article class="card card-chart chart-card chart-card-amber dash-surface-card dash-widget--clickable" (click)="openAccuracyTurnoverEditModal()" title="Bấm để nhập/sửa data Accuracy &amp; Turnover">
         <div class="card-body chart-body acc-card-body acc-card-body--turnover">
           <div class="chart-badge chart-badge-amber">{{ fgTurnoverReportedMonthsCount }}/12 tháng</div>
           <h4 class="card-title dash-chart-title">
@@ -570,47 +607,63 @@
             </h4>
             <p class="custom-card-desc">Weekly: Thứ 2 – Thứ 7 (6 ngày làm việc)</p>
           </div>
-          <button type="button" class="detail-viewall-btn" (click)="navigateToTab('/work-order-status')">Xem tất cả</button>
+          <div class="detail-card-header__actions">
+            <button type="button" class="detail-run-btn" (click)="runWorkOrderStatus()" [disabled]="woStatusLoading">
+              <i class="material-icons">refresh</i>
+              {{ woStatusLoading ? 'Đang tải...' : 'Run' }}
+            </button>
+            <button type="button" class="detail-viewall-btn" (click)="navigateToTab('/work-order-status')">Xem tất cả</button>
+          </div>
         </div>
         <div class="card-body">
-          <table class="table table-bordered table-striped workorder-status-table">
-            <thead>
-              <tr>
-                <th>Ngày</th>
-                <th>Hôm qua (trễ)</th>
-                <th>Done</th>
-                <th>Waiting</th>
-                <th>Kitting</th>
-                <th>Ready</th>
-                <th>Delay</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of woPagedRows">
-                <td [title]="row.code">{{ row.code }}</td>
-                <td class="empty-cell">—</td>
-                <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
-                <td [class]="row.waitingClass" [title]="row.note">{{ row.note }}</td>
-                <td [class]="row.kittingClass" [title]="row.kitting">{{ row.kitting }}</td>
-                <td [class]="row.readyClass" [title]="row.ready">{{ row.ready }}</td>
-                <td [class]="row.delayClass" [title]="row.extra">{{ row.extra }}</td>
-              </tr>
-              <tr *ngIf="workOrderStatus.length === 0">
-                <td colspan="7" class="text-center text-muted">No work orders found for the selected factory</td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="detail-pagination" *ngIf="workOrderStatus.length > 0">
-            <span class="detail-pagination__info">
-              Hiển thị {{ (woCurrentPage-1)*woPageSize+1 }}–{{ woCurrentPage*woPageSize > workOrderStatus.length ? workOrderStatus.length : woCurrentPage*woPageSize }} trong {{ workOrderStatus.length }}
-            </span>
-            <div class="detail-pagination__controls">
-              <button class="pg-btn" (click)="woPrevPage()" [disabled]="woCurrentPage === 1">&#8249;</button>
-              <span class="pg-num">{{ woCurrentPage }}</span>
-              <button class="pg-btn" (click)="woNextPage()" [disabled]="woCurrentPage === woPageCount">&#8250;</button>
-              <span class="pg-sep">{{ woPageSize }} / trang</span>
-            </div>
+          <div class="dash-run-empty" *ngIf="!woStatusLoaded && !woStatusLoading">
+            <i class="material-icons">play_circle</i>
+            <p>Chưa tải dữ liệu — bấm <strong>Run</strong> để xem Work Order Status.</p>
           </div>
+          <div class="dash-run-loading" *ngIf="woStatusLoading">
+            <i class="material-icons">hourglass_top</i>
+            <span>Đang tải...</span>
+          </div>
+          <ng-container *ngIf="woStatusLoaded && !woStatusLoading">
+            <table class="table table-bordered table-striped workorder-status-table">
+              <thead>
+                <tr>
+                  <th>Ngày</th>
+                  <th>Hôm qua (trễ)</th>
+                  <th>Done</th>
+                  <th>Waiting</th>
+                  <th>Kitting</th>
+                  <th>Ready</th>
+                  <th>Delay</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of woPagedRows">
+                  <td [title]="row.code">{{ row.code }}</td>
+                  <td class="empty-cell">—</td>
+                  <td [class]="row.doneClass" [title]="row.value">{{ row.value }}</td>
+                  <td [class]="row.waitingClass" [title]="row.note">{{ row.note }}</td>
+                  <td [class]="row.kittingClass" [title]="row.kitting">{{ row.kitting }}</td>
+                  <td [class]="row.readyClass" [title]="row.ready">{{ row.ready }}</td>
+                  <td [class]="row.delayClass" [title]="row.extra">{{ row.extra }}</td>
+                </tr>
+                <tr *ngIf="workOrderStatus.length === 0">
+                  <td colspan="7" class="text-center text-muted">No work orders found for the selected factory</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="detail-pagination" *ngIf="workOrderStatus.length > 0">
+              <span class="detail-pagination__info">
+                Hiển thị {{ (woCurrentPage-1)*woPageSize+1 }}–{{ woCurrentPage*woPageSize > workOrderStatus.length ? workOrderStatus.length : woCurrentPage*woPageSize }} trong {{ workOrderStatus.length }}
+              </span>
+              <div class="detail-pagination__controls">
+                <button class="pg-btn" (click)="woPrevPage()" [disabled]="woCurrentPage === 1">&#8249;</button>
+                <span class="pg-num">{{ woCurrentPage }}</span>
+                <button class="pg-btn" (click)="woNextPage()" [disabled]="woCurrentPage === woPageCount">&#8250;</button>
+                <span class="pg-sep">{{ woPageSize }} / trang</span>
+              </div>
+            </div>
+          </ng-container>
         </div>
       </div>
 
@@ -626,48 +679,64 @@
               Các lô có ngày ship (Dispatch → Request → Import) trong <strong>7 ngày sắp tới</strong> (từ hôm nay), cùng collection <strong>shipments</strong> với tab Shipment — theo nhà máy đang chọn trên dashboard. Cùng <strong>Shipment</strong> và cùng <strong>trạng thái</strong> thì <strong>gộp tổng Carton</strong>; cột ngày ship lấy ngày sớm nhất trong nhóm.
             </p>
           </div>
-          <button type="button" class="detail-viewall-btn" (click)="goShipment()">Mở Shipment</button>
+          <div class="detail-card-header__actions">
+            <button type="button" class="detail-run-btn" (click)="runShipmentDetail()" [disabled]="shipmentDetailLoading">
+              <i class="material-icons">refresh</i>
+              {{ shipmentDetailLoading ? 'Đang tải...' : 'Run' }}
+            </button>
+            <button type="button" class="detail-viewall-btn" (click)="goShipment()">Mở Shipment</button>
+          </div>
         </div>
         <div class="card-body table-responsive">
-          <table class="table table-bordered table-striped workorder-status-table">
-            <thead>
-              <tr>
-                <th>Ngày ship</th>
-                <th>Shipment</th>
-                <th>Carton</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of shipmentDetailPagedRows">
-                <td [title]="row.shipDateLabel">{{ row.shipDateLabel }}</td>
-                <td [title]="row.shipmentCode">{{ row.shipmentCode }}</td>
-                <td [title]="row.cartonLabel">{{ row.cartonLabel }}</td>
-                <td>
-                  <span class="status-badge"
-                    [class.status-badge--amber]="row.statusBadge === 'amber'"
-                    [class.status-badge--red]="row.statusBadge === 'red'"
-                    [class.status-badge--green]="row.statusBadge === 'green'">
-                    {{ row.statusLabel }}
-                  </span>
-                </td>
-              </tr>
-              <tr *ngIf="shipmentWeeklyDetailRows.length === 0">
-                <td colspan="4" class="text-center">Không có lô shipment trong 7 ngày sắp tới cho nhà máy đang chọn.</td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="detail-pagination" *ngIf="shipmentWeeklyDetailRows.length > 0">
-            <span class="detail-pagination__info">
-              Hiển thị {{ (shipmentDetailCurrentPage-1)*shipmentDetailPageSize+1 }}–{{ shipmentDetailCurrentPage*shipmentDetailPageSize > shipmentWeeklyDetailRows.length ? shipmentWeeklyDetailRows.length : shipmentDetailCurrentPage*shipmentDetailPageSize }} trong {{ shipmentWeeklyDetailRows.length }}
-            </span>
-            <div class="detail-pagination__controls">
-              <button class="pg-btn" (click)="shipmentDetailPrevPage()" [disabled]="shipmentDetailCurrentPage === 1">&#8249;</button>
-              <span class="pg-num">{{ shipmentDetailCurrentPage }}</span>
-              <button class="pg-btn" (click)="shipmentDetailNextPage()" [disabled]="shipmentDetailCurrentPage === shipmentDetailPageCount">&#8250;</button>
-              <span class="pg-sep">{{ shipmentDetailPageSize }} / trang</span>
-            </div>
+          <div class="dash-run-empty" *ngIf="!shipmentDetailLoaded && !shipmentDetailLoading">
+            <i class="material-icons">play_circle</i>
+            <p>Chưa tải dữ liệu — bấm <strong>Run</strong> để xem Shipment chi tiết.</p>
           </div>
+          <div class="dash-run-loading" *ngIf="shipmentDetailLoading">
+            <i class="material-icons">hourglass_top</i>
+            <span>Đang tải...</span>
+          </div>
+          <ng-container *ngIf="shipmentDetailLoaded && !shipmentDetailLoading">
+            <table class="table table-bordered table-striped workorder-status-table">
+              <thead>
+                <tr>
+                  <th>Ngày ship</th>
+                  <th>Shipment</th>
+                  <th>Carton</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of shipmentDetailPagedRows">
+                  <td [title]="row.shipDateLabel">{{ row.shipDateLabel }}</td>
+                  <td [title]="row.shipmentCode">{{ row.shipmentCode }}</td>
+                  <td [title]="row.cartonLabel">{{ row.cartonLabel }}</td>
+                  <td>
+                    <span class="status-badge"
+                      [class.status-badge--amber]="row.statusBadge === 'amber'"
+                      [class.status-badge--red]="row.statusBadge === 'red'"
+                      [class.status-badge--green]="row.statusBadge === 'green'">
+                      {{ row.statusLabel }}
+                    </span>
+                  </td>
+                </tr>
+                <tr *ngIf="shipmentWeeklyDetailRows.length === 0">
+                  <td colspan="4" class="text-center">Không có lô shipment trong 7 ngày sắp tới cho nhà máy đang chọn.</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="detail-pagination" *ngIf="shipmentWeeklyDetailRows.length > 0">
+              <span class="detail-pagination__info">
+                Hiển thị {{ (shipmentDetailCurrentPage-1)*shipmentDetailPageSize+1 }}–{{ shipmentDetailCurrentPage*shipmentDetailPageSize > shipmentWeeklyDetailRows.length ? shipmentWeeklyDetailRows.length : shipmentDetailCurrentPage*shipmentDetailPageSize }} trong {{ shipmentWeeklyDetailRows.length }}
+              </span>
+              <div class="detail-pagination__controls">
+                <button class="pg-btn" (click)="shipmentDetailPrevPage()" [disabled]="shipmentDetailCurrentPage === 1">&#8249;</button>
+                <span class="pg-num">{{ shipmentDetailCurrentPage }}</span>
+                <button class="pg-btn" (click)="shipmentDetailNextPage()" [disabled]="shipmentDetailCurrentPage === shipmentDetailPageCount">&#8250;</button>
+                <span class="pg-sep">{{ shipmentDetailPageSize }} / trang</span>
+              </div>
+            </div>
+          </ng-container>
         </div>
       </div>
     </section>
@@ -786,5 +855,50 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Accuracy & Turnover Modal — danh mục chung cho Materials Accuracy / Finished Goods Accuracy / FGs Inventory Turnover -->
+<div class="modal-overlay" *ngIf="showAccuracyTurnoverModal" (click)="closeAccuracyTurnoverModal()">
+  <div class="modal-content acc-turnover-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">edit_note</i>
+        Nhập data — Accuracy &amp; Turnover
+      </h3>
+      <button class="close-btn" (click)="closeAccuracyTurnoverModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="acc-turnover-row">
+        <label class="acc-turnover-label">Materials Accuracy — tháng này (%)</label>
+        <input type="number" step="0.01" min="0" max="100" class="acc-turnover-input" [(ngModel)]="accuracyTurnoverForm.matAccuracy">
+      </div>
+      <div class="acc-turnover-row">
+        <label class="acc-turnover-label">Finished Goods Accuracy — tháng này (%)</label>
+        <input type="number" step="0.01" min="0" max="100" class="acc-turnover-input" [(ngModel)]="accuracyTurnoverForm.fgAccuracy">
+      </div>
+      <div class="acc-turnover-row">
+        <label class="acc-turnover-label">FGs Inventory Turnover — Target / tháng</label>
+        <input type="number" step="0.01" min="0" class="acc-turnover-input" [(ngModel)]="accuracyTurnoverForm.turnoverTarget">
+      </div>
+
+      <p class="acc-turnover-months-title">FGs Inventory Turnover 2026 — theo tháng (để trống nếu tháng chưa có dữ liệu)</p>
+      <div class="acc-turnover-months-grid">
+        <div class="acc-turnover-month-cell" *ngFor="let label of fgTurnoverMonthLabels; let i = index">
+          <label class="acc-turnover-label acc-turnover-label--month">{{ label }}</label>
+          <input type="number" step="0.01" min="0" class="acc-turnover-input" [(ngModel)]="accuracyTurnoverForm.turnoverMonths[i]">
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer acc-turnover-footer">
+      <button type="button" class="acc-turnover-btn acc-turnover-btn--cancel" (click)="closeAccuracyTurnoverModal()" [disabled]="accuracyTurnoverSaving">Hủy</button>
+      <button type="button" class="acc-turnover-btn acc-turnover-btn--save" (click)="saveAccuracyTurnover()" [disabled]="accuracyTurnoverSaving">
+        {{ accuracyTurnoverSaving ? 'Đang lưu...' : 'Lưu' }}
+      </button>
+    </div>
   </div>
 </div>

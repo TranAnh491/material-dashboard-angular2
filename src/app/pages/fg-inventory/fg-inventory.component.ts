@@ -127,6 +127,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   isLoadingLocationReport: boolean = false;
   locationReportRows: Array<{ location: string; totalCount: number; checkedCount: number; uncheckedCount: number }> = [];
 
+  showCustomerSummaryModal: boolean = false;
+  isLoadingCustomerSummary: boolean = false;
+  customerSummaryRows: Array<{ customer: string; totalCarton: number }> = [];
+
   // Factory menu popup
   showFactoryMenu: boolean = false;
 
@@ -1170,6 +1174,51 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       this.locationReportRows = [];
     } finally {
       this.isLoadingLocationReport = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Tổng hợp Carton theo Khách hàng (nút More → Khách hàng): với mỗi khách (Tên Khách Hàng từ
+   * Customer Code Mapping), cộng dồn Carton của các mã còn tồn > 0. Đọc một lần khi bấm nút,
+   * theo nhà máy đang chọn — giống openLocationReportModal.
+   */
+  async openCustomerSummaryModal(): Promise<void> {
+    this.showCustomerSummaryModal = true;
+    this.isLoadingCustomerSummary = true;
+    this.customerSummaryRows = [];
+    this.cdr.detectChanges();
+
+    try {
+      const snap = await this.firestore
+        .collection('fg-inventory', (ref) => {
+          let q: firebase.firestore.Query = ref;
+          if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+            q = q.where('factory', '==', this.selectedFactory);
+          }
+          return q.limit(5000);
+        })
+        .get()
+        .toPromise();
+
+      this.readTracker.track('fg-inventory', 'fg-inventory-customer-summary', snap?.docs.length || 0);
+
+      const byCustomer = new Map<string, number>();
+      (snap?.docs || []).forEach((doc) => {
+        const item = this.mapDocToInventoryItem(doc.id, doc.data());
+        if ((item.ton ?? 0) <= 0) return; // Bỏ qua mã tồn = 0
+        const customer = this.getCustomerNameFromMapping(item.materialCode).trim() || 'Không xác định';
+        byCustomer.set(customer, (byCustomer.get(customer) || 0) + (item.carton || 0));
+      });
+
+      this.customerSummaryRows = Array.from(byCustomer.entries())
+        .map(([customer, totalCarton]) => ({ customer, totalCarton }))
+        .sort((a, b) => b.totalCarton - a.totalCarton);
+    } catch (e) {
+      console.error('openCustomerSummaryModal failed', e);
+      this.customerSummaryRows = [];
+    } finally {
+      this.isLoadingCustomerSummary = false;
       this.cdr.detectChanges();
     }
   }

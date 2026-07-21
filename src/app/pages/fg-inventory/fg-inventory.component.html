@@ -567,6 +567,10 @@
           <i class="material-icons">place</i>
           <span>Vị trí</span>
         </button>
+        <button class="more-menu-item" (click)="openCustomerSummaryModal(); showMoreMenu = false">
+          <i class="material-icons">groups</i>
+          <span>Khách hàng</span>
+        </button>
         <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
           <i class="material-icons">file_upload</i>
           <span>Import tồn đầu</span>
@@ -655,6 +659,48 @@
             </tr>
             <tr *ngIf="locationReportRows.length === 0">
               <td colspan="4" class="location-report-empty">Không có dữ liệu.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Customer Summary Modal -->
+<div class="custom-modal" [class.show]="showCustomerSummaryModal" [style.display]="showCustomerSummaryModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showCustomerSummaryModal = false"></div>
+  <div class="modal-container location-report-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">groups</i>
+        Tổng hợp Carton theo Khách hàng
+      </h5>
+      <button type="button" class="close-btn" (click)="showCustomerSummaryModal = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="location-report-lead" *ngIf="!isLoadingCustomerSummary">
+        Nhà máy: <strong>{{ selectedFactory }}</strong> — {{ customerSummaryRows.length }} khách hàng.
+      </p>
+      <p class="location-report-loading" *ngIf="isLoadingCustomerSummary">Đang tải dữ liệu...</p>
+
+      <div class="location-report-table-wrap" *ngIf="!isLoadingCustomerSummary">
+        <table class="location-report-table">
+          <thead>
+            <tr>
+              <th>Khách hàng</th>
+              <th>Tổng Carton</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of customerSummaryRows" class="location-report-row">
+              <td>{{ row.customer }}</td>
+              <td>{{ row.totalCarton }}</td>
+            </tr>
+            <tr *ngIf="customerSummaryRows.length === 0">
+              <td colspan="2" class="location-report-empty">Không có dữ liệu.</td>
             </tr>
           </tbody>
         </table>

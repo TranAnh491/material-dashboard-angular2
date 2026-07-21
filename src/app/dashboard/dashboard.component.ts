@@ -118,8 +118,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
   workOrder = "...";
   shipment = "...";
   workOrderStatus: WorkOrderStatusRow[] = [];
-  /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) */
+  /** Work Order (heatmap + KPI + Details) không tự đọc Firestore nữa — chỉ đọc khi bấm Run. */
+  woStatusLoaded = false;
+  woStatusLoading = false;
+  /** Shipment (KPI + Details) không tự đọc Firestore nữa — chỉ đọc khi bấm Run. */
+  shipmentDetailLoaded = false;
+  shipmentDetailLoading = false;
+  /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) — không gồm LSX Sample */
   woHeatmapDays: WoHeatmapDayCol[] = [];
+  /** 6 cột T2–T7 riêng cho LSX Sample (Sample 1/Sample 2) — tách khỏi heatmap chính */
+  woSampleHeatmapDays: WoHeatmapDayCol[] = [];
   /** 0 = tuần hiện tại, -1 = tuần trước */
   woHeatmapWeekOffset = 0;
   /** Hiển thị tooltip heatmap — khớp `createdByPickerOptions` tab Work Order Status */
@@ -228,20 +236,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Charts for widgets
   private fgTurnoverChart: Chart | null = null;
 
-  /** % Accuracy hiển thị “tháng này” (đồng bộ với donut) */
+  /** % Accuracy hiển thị “tháng này” (đồng bộ với donut) — nhập tay qua modal chung (danh mục Accuracy/Turnover). */
   matAccuracyThisMonth = 99.85;
   fgAccuracyThisMonth = 100;
 
-  /** FGs Inventory Turnover — 12 tháng 2026 (cột có số; tháng chưa có dữ liệu: chỉ nhãn) + target tháng */
+  /** FGs Inventory Turnover — 12 tháng 2026 (cột có số; tháng chưa có dữ liệu: chỉ nhãn) + target tháng — nhập tay qua modal chung. */
   readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `Thg ${i + 1}`);
-  readonly fgTurnoverMonthValues: readonly (number | null)[] = [
+  fgTurnoverMonthValues: (number | null)[] = [
     1.33, 0.4, 0.83, 0.8, 1, null, null, null, null, null, null, null
   ];
-  readonly fgTurnoverTargetMonthly = 1.33;
+  fgTurnoverTargetMonthly = 1.33;
 
   get fgTurnoverReportedMonthsCount(): number {
     return this.fgTurnoverMonthValues.filter((v) => typeof v === 'number' && Number.isFinite(v)).length;
   }
+
+  /** Modal chung: Materials Accuracy + Finished Goods Accuracy + FGs Inventory Turnover — bấm vào
+   *  chart bất kỳ trong 3 chart này đều mở cùng 1 modal để nhập/sửa data (lưu Firestore, dùng chung
+   *  cho cả 3 vì cùng 1 "danh mục" số liệu báo cáo hàng tháng). */
+  private static readonly ACCURACY_TURNOVER_DOC = 'dashboard-metrics/accuracy-turnover';
+  showAccuracyTurnoverModal = false;
+  accuracyTurnoverSaving = false;
+  accuracyTurnoverForm: {
+    matAccuracy: number | null;
+    fgAccuracy: number | null;
+    turnoverTarget: number | null;
+    turnoverMonths: Array<number | null>;
+  } = { matAccuracy: null, fgAccuracy: null, turnoverTarget: null, turnoverMonths: Array(12).fill(null) };
 
   // Shipment — pagination bảng chi tiết (7 ngày sắp tới, tab Shipment)
   shipmentDetailCurrentPage = 1;
@@ -592,6 +613,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     this.initializeCurrentWeek();
     this.loadDashboardData();
+    this.loadAccuracyTurnoverSettings();
     this.refreshInterval = setInterval(() => this.refreshNonFirestoreDashboardData(), this.refreshTime);
     
     // Load Safety data for weekday colors - Copied from Chart tab
@@ -603,24 +625,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     // Load IQC materials by week
     this.loadIQCByWeek();
-    
+
     // Listen for factory changes from navbar
-    window.addEventListener('factoryChanged', (event: any) => {
-      this.selectedFactory = event.detail.factory;
-      console.log('Dashboard received factory change:', this.selectedFactory);
+    window.addEventListener('factoryChanged', this.onFactoryChangedBound);
+
+    // Listen for factory changes from localStorage (for cross-tab sync)
+    window.addEventListener('storage', this.onStorageBound);
+  }
+
+  /**
+   * 🔧 FIX: ngOnInit đăng ký 2 listener trên `window` nhưng ngOnDestroy trước đây KHÔNG gỡ —
+   * mỗi lần rời rồi quay lại tab Dashboard, Angular destroy/recreate component nhưng listener cũ
+   * vẫn treo trên window. Về sau mỗi lần đổi nhà máy, TẤT CẢ listener cộng dồn cùng fire, gọi lại
+   * loadDashboardData()+loadIQCByWeek() nhiều lần → nhân read Firestore lên gấp nhiều lần theo số
+   * lần mở tab trong phiên. Dùng handler tham chiếu ổn định (bound 1 lần) để removeEventListener
+   * đúng trong ngOnDestroy.
+   */
+  private onFactoryChangedBound = (event: any): void => {
+    this.selectedFactory = event.detail.factory;
+    console.log('Dashboard received factory change:', this.selectedFactory);
+    this.loadDashboardData();
+    this.loadIQCByWeek();
+  };
+
+  private onStorageBound = (event: StorageEvent): void => {
+    if (event.key === 'selectedFactory') {
+      this.selectedFactory = event.newValue || 'ASM1';
       this.loadDashboardData();
       this.loadIQCByWeek();
-    });
-    
-    // Listen for factory changes from localStorage (for cross-tab sync)
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'selectedFactory') {
-        this.selectedFactory = event.newValue || 'ASM1';
-        this.loadDashboardData();
-        this.loadIQCByWeek();
-      }
-    });
-  }
+    }
+  };
 
   ngOnDestroy() {
     if (typeof document !== 'undefined') {
@@ -628,6 +662,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     if (this.rackWarningsDailyTimer) clearTimeout(this.rackWarningsDailyTimer);
+    window.removeEventListener('factoryChanged', this.onFactoryChangedBound);
+    window.removeEventListener('storage', this.onStorageBound);
     this.workOrdersSub?.unsubscribe();
     if (this.fgTurnoverChart) {
       try {
@@ -811,32 +847,66 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Load đầy đủ (khởi tạo listener work-orders + Google Sheets + charts). Chỉ nên gọi khi thật sự
-   *  cần re-query Firestore (khởi tạo, đổi nhà máy) — KHÔNG gọi từ timer định kỳ. */
+  /**
+   * 🔧 FIX: Work Order (heatmap + KPI + Details) và Shipment (KPI + Details) KHÔNG còn tự đọc
+   * Firestore khi mở tab / đổi nhà máy nữa — chỉ đọc khi người dùng bấm nút Run trong box Details
+   * tương ứng (runWorkOrderStatus() / runShipmentDetail()). Đổi nhà máy chỉ reset về trạng thái
+   * chưa tải (tránh hiển thị nhầm dữ liệu nhà máy cũ) chứ không tự query lại.
+   * Vẫn tự làm mới: charts tĩnh (Materials/FG Accuracy, FG Turnover) và FG Inbound heatmap.
+   */
   async loadDashboardData() {
     try {
-      // Load work orders from Firebase (this will also update summaries) — thiết lập listener 1 lần
-      this.loadWorkOrdersFromFirebase();
-
-      // Load shipment data from Google Sheets (keep existing)
-      this.loadShipmentDataFromGoogleSheets();
-
-      // Create charts (keep existing)
+      this.resetWorkOrderData();
+      this.resetShipmentData();
       this.createCharts();
-
+      this.loadFgInPendingWeeklyHeatmap();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
   }
 
+  private resetWorkOrderData(): void {
+    this.workOrdersSub?.unsubscribe();
+    this.workOrders = [];
+    this.filteredWorkOrders = [];
+    this.workOrderStatus = [];
+    this.woHeatmapDays = [];
+    this.woSampleHeatmapDays = [];
+    this.workOrder = '...';
+    this.yesterdayOverdueCount = 0;
+    this.woStatusLoaded = false;
+    this.woStatusLoading = false;
+  }
+
+  private resetShipmentData(): void {
+    this.shipment = '...';
+    this.shipmentWeeklyDetailRows = [];
+    this.shipmentDetailCurrentPage = 1;
+    this.shipmentDetailLoaded = false;
+    this.shipmentDetailLoading = false;
+  }
+
+  /** Bấm nút Run trong box "Work Order Status ... (Details)" — đọc Firestore work-orders, cập nhật
+   *  luôn heatmap + KPI Work Order + Yesterday overdue (cùng dùng chung dữ liệu này). */
+  runWorkOrderStatus(): void {
+    if (this.woStatusLoading) return;
+    this.woStatusLoading = true;
+    this.loadWorkOrdersFromFirebase();
+  }
+
+  /** Bấm nút Run trong box "Shipment — chi tiết" — đọc Firestore shipments, cập nhật luôn KPI Shipment. */
+  runShipmentDetail(): void {
+    if (this.shipmentDetailLoading) return;
+    this.shipmentDetailLoading = true;
+    this.loadShipmentDataFromGoogleSheets();
+  }
+
   /**
-   * 🔧 FIX: Refresh định kỳ (mỗi 5 phút) KHÔNG gọi lại loadWorkOrdersFromFirebase() nữa — listener
-   * work-orders đã tự cập nhật realtime, việc dựng lại full read mỗi 5 phút (dù dùng .get()) vẫn
-   * tốn tới hàng nghìn read mỗi lần dù dữ liệu không đổi. Timer chỉ còn làm mới phần không phải
-   * Firestore (Google Sheets) + vẽ lại chart từ dữ liệu work-orders đã có sẵn (do listener cập nhật).
+   * 🔧 FIX: Refresh định kỳ (mỗi 5 phút) không còn đụng Firestore work-orders/shipments (2 phần đó
+   * giờ chỉ đọc khi bấm Run) — chỉ làm mới FG Inbound heatmap (đã tối ưu theo tuần) + vẽ lại charts tĩnh.
    */
   private refreshNonFirestoreDashboardData(): void {
-    this.loadShipmentDataFromGoogleSheets();
+    this.loadFgInPendingWeeklyHeatmap();
     this.createCharts();
   }
 
@@ -902,10 +972,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.updateWorkOrderSummary();
           this.updateWorkOrderStatus();
           this.createCharts();
+          this.woStatusLoaded = true;
+          this.woStatusLoading = false;
           this.cdr.markForCheck();
         },
         error: (error) => {
           console.error('Error loading work orders from Firebase:', error);
+          this.woStatusLoading = false;
+          this.cdr.markForCheck();
         }
       });
   }
@@ -1046,6 +1120,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.woHeatmapDays || []).some((d) => (d.cells?.length || 0) > 0);
   }
 
+  /** Nhãn khách Sample tương ứng nhà máy đang chọn — dùng cho tiêu đề khu Sample bên dưới heatmap chính. */
+  get woSampleFactoryLabel(): string {
+    return this.selectedFactory === 'ASM1' ? 'Sample 1' : 'Sample 2';
+  }
+
   get woWeekPillLabel(): string {
     const monday = this.getWoHeatmapMonday();
     const saturday = new Date(monday);
@@ -1097,6 +1176,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (!deliveryDate) return false;
       return deliveryDate.toDateString() === targetDate.toDateString();
     });
+  }
+
+  /** WO thuộc Sample 1/Sample 2 (khác ASM1/ASM2 thật) — dùng để tách heatmap Sample riêng. */
+  private isSampleFactory(factory?: string): boolean {
+    const f = (factory || '').toString().trim().toLowerCase();
+    return f === 'sample 1' || f === 'sample 2';
   }
 
   private woHeatKindFromWorkOrder(wo: WorkOrder): WoHeatKind | null {
@@ -1191,10 +1276,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return { kind, tooltip: lines.join('\n'), giaoAsm3 };
   }
 
-  private rebuildWoHeatmap(monday: Date): void {
+  /** Dựng 6 cột T2–T7 từ WO của `monday`, lọc theo `filterFn` (dùng chung cho heatmap chính + Sample). */
+  private buildWoHeatmapDays(monday: Date, filterFn: (wo: WorkOrder) => boolean): WoHeatmapDayCol[] {
     const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const kindOrder: WoHeatKind[] = ['done', 'waiting', 'kitting', 'ready', 'delay'];
-    this.woHeatmapDays = [];
+    const days: WoHeatmapDayCol[] = [];
     for (let i = 0; i < 6; i++) {
       const targetDate = new Date(monday);
       targetDate.setDate(monday.getDate() + i);
@@ -1202,7 +1288,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         day: '2-digit',
         month: '2-digit'
       });
-      const workOrdersForDate = this.getWorkOrdersForDeliveryDate(targetDate);
+      const workOrdersForDate = this.getWorkOrdersForDeliveryDate(targetDate).filter(filterFn);
       const cells: WoHeatmapCell[] = [];
       for (const kind of kindOrder) {
         for (const wo of workOrdersForDate) {
@@ -1211,13 +1297,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         }
       }
-      this.woHeatmapDays.push({
+      days.push({
         label: dateStr,
         weekday: vnDays[i] ?? `D${i + 1}`,
         total: cells.length,
         cells
       });
     }
+    return days;
+  }
+
+  /** Tách heatmap chính (ASM1/ASM2 thật) khỏi heatmap LSX Sample (Sample 1/Sample 2). */
+  private rebuildWoHeatmap(monday: Date): void {
+    this.woHeatmapDays = this.buildWoHeatmapDays(monday, (wo) => !this.isSampleFactory(wo.factory));
+    this.woSampleHeatmapDays = this.buildWoHeatmapDays(monday, (wo) => this.isSampleFactory(wo.factory));
   }
 
   private getYesterdayOverdueCount(today: Date): number {
@@ -1459,16 +1552,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.log(`Breakdown: ${completedShipments} shipment hoàn tất / ${totalShipments} shipment trong tháng`);
 
       this.rebuildShipmentWeeklyDetailRows(allShipments);
+      this.shipmentDetailLoaded = true;
+      this.shipmentDetailLoading = false;
       this.cdr.detectChanges();
     }, error => {
       console.error('Error loading shipment data from Firebase:', error);
       this.shipment = "0/0";
       this.shipmentWeeklyDetailRows = [];
       this.shipmentDetailCurrentPage = 1;
+      this.shipmentDetailLoading = false;
       this.cdr.detectChanges();
     });
-
-    this.loadFgInPendingWeeklyHeatmap();
   }
 
   /** FG Inbound: cùng filter factory với WO (ASM1 + Sample 1 / ASM2 + Sample 2). */
@@ -1610,13 +1704,79 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private createCharts() {
-    this.matAccuracyThisMonth = 99.85;
-    this.fgAccuracyThisMonth = 100;
-
     this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', this.matAccuracyThisMonth, '#22c55e');
     this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', this.fgAccuracyThisMonth, '#3b82f6');
 
     this.createFgTurnoverMonthlyBarChart('completedTasksChart');
+  }
+
+  /** Đọc data Materials/FG Accuracy + FG Turnover đã lưu (nếu có) — 1 lần khi mở tab, doc nhỏ nên không đáng kể. */
+  private loadAccuracyTurnoverSettings(): void {
+    this.firestore
+      .doc(DashboardComponent.ACCURACY_TURNOVER_DOC)
+      .get()
+      .subscribe({
+        next: (doc) => {
+          const data = doc.data() as any;
+          if (!data) return;
+          if (typeof data.matAccuracy === 'number') this.matAccuracyThisMonth = data.matAccuracy;
+          if (typeof data.fgAccuracy === 'number') this.fgAccuracyThisMonth = data.fgAccuracy;
+          if (typeof data.turnoverTarget === 'number') this.fgTurnoverTargetMonthly = data.turnoverTarget;
+          if (Array.isArray(data.turnoverMonths) && data.turnoverMonths.length === 12) {
+            this.fgTurnoverMonthValues = data.turnoverMonths.map((v: any) =>
+              typeof v === 'number' && Number.isFinite(v) ? v : null
+            );
+          }
+          this.createCharts();
+          this.cdr.detectChanges();
+        },
+        error: (e) => console.error('loadAccuracyTurnoverSettings failed', e)
+      });
+  }
+
+  /** Bấm vào Materials Accuracy / Finished Goods Accuracy / FGs Inventory Turnover — cùng mở 1 modal
+   *  nhập liệu chung (3 chart này chung 1 "danh mục" số liệu báo cáo hàng tháng). */
+  openAccuracyTurnoverEditModal(): void {
+    this.accuracyTurnoverForm = {
+      matAccuracy: this.matAccuracyThisMonth,
+      fgAccuracy: this.fgAccuracyThisMonth,
+      turnoverTarget: this.fgTurnoverTargetMonthly,
+      turnoverMonths: [...this.fgTurnoverMonthValues]
+    };
+    this.showAccuracyTurnoverModal = true;
+  }
+
+  closeAccuracyTurnoverModal(): void {
+    this.showAccuracyTurnoverModal = false;
+  }
+
+  async saveAccuracyTurnover(): Promise<void> {
+    if (this.accuracyTurnoverSaving) return;
+    this.accuracyTurnoverSaving = true;
+    try {
+      const form = this.accuracyTurnoverForm;
+      const data = {
+        matAccuracy: Number(form.matAccuracy) || 0,
+        fgAccuracy: Number(form.fgAccuracy) || 0,
+        turnoverTarget: Number(form.turnoverTarget) || 0,
+        turnoverMonths: form.turnoverMonths.map((v) =>
+          v === null || v === undefined || (v as any) === '' ? null : Number(v)
+        )
+      };
+      await this.firestore.doc(DashboardComponent.ACCURACY_TURNOVER_DOC).set(data, { merge: true });
+
+      this.matAccuracyThisMonth = data.matAccuracy;
+      this.fgAccuracyThisMonth = data.fgAccuracy;
+      this.fgTurnoverTargetMonthly = data.turnoverTarget;
+      this.fgTurnoverMonthValues = data.turnoverMonths;
+      this.createCharts();
+      this.showAccuracyTurnoverModal = false;
+    } catch (e) {
+      console.error('saveAccuracyTurnover failed', e);
+    } finally {
+      this.accuracyTurnoverSaving = false;
+      this.cdr.detectChanges();
+    }
   }
 
   /** Cột 12 tháng + đường target; số vẽ trong cột; tháng chưa có dữ liệu: null (chỉ nhãn trục X) */

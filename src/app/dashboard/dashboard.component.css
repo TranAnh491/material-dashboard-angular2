@@ -97,6 +97,13 @@
   color: var(--dash-muted);
 }
 
+.dash-widget__headrow-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .dash-widget__pill {
   height: 28px;
   display: inline-flex;
@@ -574,6 +581,29 @@
   border-radius: 50%;
   background: #22c55e;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
+/* Khu LSX Sample — tách riêng bên dưới heatmap chính, cùng box Work Order Status */
+.wo-sample-heatmap-section {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+}
+
+.wo-sample-heatmap-section__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(15, 23, 42, 0.5);
+  margin-bottom: 4px;
+}
+
+.wo-sample-heatmap-section__label .material-icons {
+  font-size: 13px;
 }
 
 /* Putaway staging — cùng kích thước/chữ với wo-heatmap-legend, màu khớp ô heatmap */
@@ -1871,6 +1901,112 @@
 
 .iqc-materials-modal .modal-header .material-icons { color: #d97706 !important; }
 
+/* Accuracy & Turnover — modal nhập liệu chung cho 3 chart Materials/FG Accuracy + FG Turnover */
+.acc-turnover-modal {
+  position: relative;
+  background: var(--dash-surface);
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+  max-width: 92%;
+  width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.acc-turnover-modal .modal-header .material-icons { color: #2563eb !important; }
+
+.acc-turnover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.acc-turnover-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dash-text);
+}
+
+.acc-turnover-input {
+  width: 120px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: right;
+  color: var(--dash-text);
+  background: var(--dash-bg);
+}
+
+.acc-turnover-months-title {
+  margin: 18px 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--dash-muted);
+}
+
+.acc-turnover-months-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 12px;
+}
+
+.acc-turnover-month-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.acc-turnover-label--month {
+  font-size: 11.5px;
+  color: var(--dash-muted);
+}
+
+.acc-turnover-month-cell .acc-turnover-input {
+  width: 100%;
+  text-align: left;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--dash-border);
+}
+
+.acc-turnover-btn {
+  height: 34px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.acc-turnover-btn--cancel {
+  background: var(--dash-bg);
+  border-color: var(--dash-border-strong);
+  color: var(--dash-text);
+}
+
+.acc-turnover-btn--save {
+  background: #2563eb;
+  color: #fff;
+}
+
+.acc-turnover-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .close-btn {
   background: var(--dash-bg);
   border: 1px solid var(--dash-border);
@@ -2860,6 +2996,66 @@
 
 .detail-viewall-btn:hover {
   background: rgba(37, 99, 235, 0.07);
+}
+
+.detail-card-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.detail-run-btn {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s;
+}
+
+.detail-run-btn .material-icons {
+  font-size: 15px;
+}
+
+.detail-run-btn:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.18);
+}
+
+.detail-run-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.dash-run-empty,
+.dash-run-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  color: rgba(15, 23, 42, 0.45);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.dash-run-empty .material-icons {
+  font-size: 26px;
+  opacity: 0.6;
+}
+
+.dash-run-loading .material-icons {
+  font-size: 20px;
 }
 
 /* ══════════════════════════════════════════════════
