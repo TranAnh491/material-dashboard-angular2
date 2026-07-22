@@ -56,9 +56,9 @@ interface GridMapBlock {
   styleUrls: ['./layout-warehouse-asm3.component.scss']
 })
 export class LayoutWarehouseAsm3Component implements OnInit {
-  private readonly WAREHOUSE_WIDTH_M = 30; // mặt A (trái) ↔ mặt D (phải) — chồng 8 dãy kệ dọc theo đây
-  private readonly WAREHOUSE_LENGTH_M = 100; // mặt C (trên) ↔ mặt B (dưới) — mỗi kệ dài 30 ô dọc theo đây
-  private readonly SLOTS_PER_RACK = 30;
+  private readonly WAREHOUSE_WIDTH_M = 30; // mặt A (trái) ↔ mặt D (phải) — chồng 9 dãy kệ dọc theo đây
+  private readonly WAREHOUSE_LENGTH_M = 100; // mặt C (trên) ↔ mặt B (dưới) — mỗi kệ dài 60 ô dọc theo đây
+  readonly SLOTS_PER_RACK = 60;
   /** Bề rộng 1 ô (pallet) — không đổi khi xoay sơ đồ */
   private readonly SLOT_LEN_M = 1;
   private readonly RACK_DEPTH_M = 1.5;
@@ -82,7 +82,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   readonly CELL_H = 22;
   readonly GRID_GAP = 3;
   readonly ROW_LABEL_W = 30;
-  readonly colHeaders: string[] = Array.from({ length: 30 }, (_, i) =>
+  readonly colHeaders: string[] = Array.from({ length: this.SLOTS_PER_RACK }, (_, i) =>
     String(i + 1).padStart(2, '0')
   );
 
@@ -102,7 +102,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   selectedSlot: Asm3RackSlot | null = null;
   hoveredSlot: Asm3RackSlot | null = null;
 
-  readonly rackLetters: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  readonly rackLetters: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
   readonly slotIndexes: number[] = Array.from({ length: this.SLOTS_PER_RACK }, (_, i) => i + 1);
 
   showPrintLabelModal = false;
@@ -120,6 +120,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   inventoryLocationLabels: Map<string, string> = new Map();
   /** Chuỗi vị trí ĐẦY ĐỦ (VD: "WH3-B1-F1-0138") theo tên ô — dùng cho tooltip/panel chi tiết. */
   inventoryLocationFull: Map<string, string> = new Map();
+  /** Mã hàng (materialCode) từ inventory-materials theo tên ô — dùng để search + tô nền xanh ô có mã hàng. */
+  inventoryMaterialCodes: Map<string, string> = new Map();
   /** Vị trí bị khóa — không cho gán / chuyển pallet tới. */
   lockedSlots: Set<string> = new Set();
   /** Nhóm khóa chung của từng vị trí (nếu được khóa hàng loạt) — key = tên ô, value = tên vị trí đại diện nhóm. */
@@ -171,7 +173,10 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     this.aisleLabels = this.buildAisleLabels();
     this.gridBlocks = this.buildGridBlocks();
     this.updateLayoutMode();
-    setTimeout(() => this.applyFitZoom(), 0);
+    // Không auto co zoom để vừa khung hình nữa — 60 ô/dãy rộng hơn khung nhìn là bình thường,
+    // giữ cỡ ô thật (zoom mặc định 1) và cho cuộn ngang xem hết. Nút "Fit screen" vẫn co zoom
+    // thủ công khi người dùng chủ động bấm (xem resetZoom()).
+    setTimeout(() => this.applyFitZoom(false), 0);
     void this.loadSlotPallets();
     void this.loadLockedSlots();
     void this.loadInventoryLocations();
@@ -276,6 +281,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     try {
       const shortMap = new Map<string, string>();
       const fullMap = new Map<string, string>();
+      const materialCodeMap = new Map<string, string>();
       const prefix = `${this.WAREHOUSE_SLOT_PREFIX}-`;
 
       for (const factory of this.SYNC_FACTORIES) {
@@ -290,18 +296,21 @@ export class LayoutWarehouseAsm3Component implements OnInit {
           .toPromise();
 
         (snap?.docs || []).forEach(doc => {
-          const data = doc.data() as { location?: string };
+          const data = doc.data() as { location?: string; materialCode?: string };
           const raw = String(data?.location || '').trim().toUpperCase();
           const parsed = this.parseInventoryLocation(raw);
           if (parsed) {
             shortMap.set(parsed.slotName, parsed.palletNumber);
             fullMap.set(parsed.slotName, raw);
+            const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+            if (materialCode) materialCodeMap.set(parsed.slotName, materialCode);
           }
         });
       }
 
       this.inventoryLocationLabels = shortMap;
       this.inventoryLocationFull = fullMap;
+      this.inventoryMaterialCodes = materialCodeMap;
       this.lastUpdated = new Date();
     } catch (e) {
       console.error('[LayoutWarehouseAsm3] loadInventoryLocations failed', e);
@@ -318,7 +327,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
    * Trả về null nếu không khớp định dạng ô ASM3.
    */
   private parseInventoryLocation(location: string): { slotName: string; palletNumber: string } | null {
-    const m = location.match(/^WH3-([A-H])(\d{1,2})-(.+)$/);
+    const m = location.match(/^WH3-([A-I])(\d{1,2})-(.+)$/);
     if (!m) return null;
     const row = m[1];
     const index = parseInt(m[2], 10);
@@ -334,6 +343,24 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   /** Chuỗi vị trí ĐẦY ĐỦ của 1 ô (VD: "WH3-B1-F1-0138") — dùng cho tooltip/panel chi tiết. */
   private rawSlotFullLabel(slotName: string): string {
     return this.inventoryLocationFull.get(slotName) || this.slotPallets.get(slotName) || '';
+  }
+
+  /** Mã hàng (materialCode) của 1 ô (không tính ô dự trữ chung nhóm khóa) — rỗng nếu chưa có. */
+  private rawSlotMaterialCode(slotName: string): string {
+    return this.inventoryMaterialCodes.get(slotName) || '';
+  }
+
+  /** Mã hàng hiển thị cho 1 ô — nếu là ô dự trữ chung nhóm khóa thì lấy mã của vị trí đại diện. */
+  slotMaterialCode(slot: Asm3RackSlot | null): string {
+    if (!slot) return '';
+    const groupRef = this.lockGroups.get(slot.name);
+    if (groupRef) return this.rawSlotMaterialCode(groupRef);
+    return this.rawSlotMaterialCode(slot.name);
+  }
+
+  /** Ô có mã hàng thật (đồng bộ từ Materials ASM1/ASM2) — dùng để tô nền xanh dương trên sơ đồ. */
+  hasMaterialCode(slot: Asm3RackSlot | null): boolean {
+    return !!this.slotMaterialCode(slot);
   }
 
   /**
@@ -573,7 +600,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   private buildGridBlocks(): GridMapBlock[] {
-    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H']];
+    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H', 'I']];
     const blocks: GridMapBlock[] = [];
     let aisleNum = 1;
 
@@ -597,11 +624,20 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   isSearchMatch(slot: Asm3RackSlot): boolean {
     const q = this.searchQuery.trim().toUpperCase();
     if (!q) return false;
-    return slot.name.toUpperCase().includes(q) || this.palletAtSlot(slot).toUpperCase().includes(q);
+    return (
+      slot.name.toUpperCase().includes(q) ||
+      this.palletAtSlot(slot).toUpperCase().includes(q) ||
+      this.slotMaterialCode(slot).includes(q)
+    );
+  }
+
+  /** Ô search luôn lưu giá trị viết hoa — bind qua đây thay vì [(ngModel)] trực tiếp. */
+  onSearchQueryInput(value: string): void {
+    this.searchQuery = (value || '').toUpperCase();
   }
 
   onFilterRowChange(): void {
-    setTimeout(() => this.applyFitZoom(true), 0);
+    setTimeout(() => this.applyFitZoom(false), 0);
   }
 
   onSearchSubmit(): void {
@@ -610,7 +646,11 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
     for (const row of this.rackRows) {
       for (const slot of row.slots) {
-        if (slot.name.toUpperCase().includes(q) || this.palletAtSlot(slot).toUpperCase().includes(q)) {
+        if (
+          slot.name.toUpperCase().includes(q) ||
+          this.palletAtSlot(slot).toUpperCase().includes(q) ||
+          this.slotMaterialCode(slot).includes(q)
+        ) {
           this.filterRow = 'ALL';
           this.selectSlot(slot);
           this.scrollToSlot(slot);
@@ -618,7 +658,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
         }
       }
     }
-    alert('Không tìm thấy vị trí hoặc pallet khớp.');
+    alert('Không tìm thấy vị trí, pallet hoặc mã hàng khớp.');
   }
 
   scrollToSlot(slot: Asm3RackSlot): void {
@@ -758,8 +798,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   private buildRackRows(): Asm3RackRow[] {
-    // A đứng riêng — B,C sát nhau — D,E sát nhau — F,G sát nhau — H đứng riêng (chồng từ trên xuống)
-    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H']];
+    // A đứng riêng — B,C sát nhau — D,E sát nhau — F,G sát nhau — H,I sát nhau (chồng từ trên xuống)
+    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H', 'I']];
     const slotLenM = this.SLOT_LEN_M;
 
     const rows: Asm3RackRow[] = [];

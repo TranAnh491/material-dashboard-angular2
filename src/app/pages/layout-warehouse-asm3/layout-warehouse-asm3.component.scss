@@ -383,12 +383,20 @@ $mobile: 767px;
   overflow: auto;
   padding: 16px;
   background: #fafbfc;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
 }
 
-.wms-grid-wrap { flex-shrink: 0; }
+/**
+ * 🔧 FIX: viewport trước dùng display:flex + justify-content:center để canh giữa sơ đồ — khi nội
+ * dung tràn khung (60 ô/dãy rộng hơn khung nhìn), cách canh giữa bằng flex có lỗi kinh điển: trình
+ * duyệt không cho cuộn về để thấy phần ĐẦU bị tràn (cột 1-8), dù cuộn phải vẫn xem được phần cuối.
+ * Đổi sang width:fit-content + margin:auto — canh giữa bình thường khi vừa khung, cuộn được đầy đủ
+ * cả 2 phía khi tràn khung (không còn vùng nội dung nào bị kẹt ngoài tầm cuộn).
+ */
+.wms-grid-wrap {
+  flex-shrink: 0;
+  width: fit-content;
+  margin: 0 auto;
+}
 
 .wms-grid-frame {
   border: 2px solid #cbd5e1;
@@ -524,6 +532,13 @@ $mobile: 767px;
   &--occupied {
     border-color: #16a34a;
     box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.35);
+  }
+
+  /** Ô có mã hàng thật (đồng bộ từ Materials ASM1/ASM2) — nền xanh dương để phân biệt với ô chỉ scan pallet tay. */
+  &--has-material {
+    background: #dbeafe;
+    border-color: $blue;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
   }
 
   &--selected {

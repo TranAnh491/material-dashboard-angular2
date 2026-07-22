@@ -43,9 +43,11 @@
           <input
             #searchInputRef
             type="text"
-            [(ngModel)]="searchQuery"
+            [ngModel]="searchQuery"
+            (ngModelChange)="onSearchQueryInput($event)"
             (keyup.enter)="onSearchSubmit()"
-            placeholder="Tìm vị trí, SKU, Lot, Part No…">
+            placeholder="Tìm vị trí, mã hàng, Lot, Part No…"
+            style="text-transform: uppercase;">
           <kbd *ngIf="!isMobileLayout">/</kbd>
         </div>
         <button type="button" class="wms-icon-btn" title="Thông tin điều kiện lưu trữ" (click)="openInfoModal()">
@@ -127,6 +129,7 @@
                           [class.wms-cell--selected]="selectedSlot?.name === slot.name"
                           [class.wms-cell--locked]="isSlotLocked(slot) && !slotLockGroupLabel(slot)"
                           [class.wms-cell--occupied]="isSlotOccupied(slot)"
+                          [class.wms-cell--has-material]="hasMaterialCode(slot)"
                           [class.wms-cell--match]="isSearchMatch(slot)"
                           [class.wms-cell--move-from]="moveMode && moveFromSlot?.name === slot.name"
                           [class.wms-cell--move-target]="moveMode && moveFromSlot?.name !== slot.name && !isSlotOccupied(slot) && !isSlotLocked(slot)"
@@ -178,7 +181,7 @@
           <dl class="wms-fields">
             <div class="wms-fields__row"><dt>Mã vị trí</dt><dd class="wms-fields__blue">{{ selectedSlot.name }}</dd></div>
             <div class="wms-fields__row"><dt>Dãy kệ</dt><dd>{{ selectedSlot.row }}</dd></div>
-            <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / 30</dd></div>
+            <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / {{ SLOTS_PER_RACK }}</dd></div>
             <div class="wms-fields__row" *ngIf="isSlotOccupied(selectedSlot)"><dt>Vị trí / Pallet</dt><dd class="wms-fields__blue">{{ slotDetailLabel(selectedSlot) }}</dd></div>
             <div class="wms-fields__row" *ngIf="slotLockGroupLabel(selectedSlot)"><dt>Khóa chung với</dt><dd class="wms-fields__blue">{{ slotLockGroupLabel(selectedSlot) }}</dd></div>
             <div class="wms-fields__row"><dt>Trạng thái</dt>
