@@ -15,6 +15,8 @@ export interface MergedCatalogItem {
   netWeight: string;
   /** Lượng Đóng Thùng — đọc/ghi qua CartonPackingQtyService (collection riêng `carton-packing-qty`), gắn tạm vào đây để hiển thị. */
   cartonPackingQty?: number;
+  /** Mã nhân viên (employeeId) người sửa gần nhất — hiển thị ở cột ID cuối bảng Danh mục TP. */
+  lastEditedBy?: string;
 }
 
 export interface TpImportMeta {
@@ -54,6 +56,8 @@ export interface RawFgCatalogDoc {
   netWeight: string;
   createdAt?: Date;
   updatedAt?: Date;
+  /** Mã nhân viên (employeeId) người sửa gần nhất. */
+  lastEditedBy?: string;
 }
 
 /** Doc thô trong `fg-customer-mapping` — dùng cho các tab chỉ cần tra cứu. */
@@ -142,7 +146,8 @@ export class TpCatalogFullService {
         grossWeight: this.norm(d.grossWeight),
         netWeight: this.norm(d.netWeight),
         createdAt: this.toDate(d.createdAt),
-        updatedAt: this.toDate(d.updatedAt)
+        updatedAt: this.toDate(d.updatedAt),
+        lastEditedBy: this.norm(d.lastEditedBy) || undefined
       };
     });
     this.cachedCatalogDocs = docs;
@@ -269,7 +274,8 @@ export class TpCatalogFullService {
         unit: this.norm(c.unit),
         cartonSize: this.norm(c.cartonSize),
         grossWeight: this.norm(c.grossWeight),
-        netWeight: this.norm(c.netWeight)
+        netWeight: this.norm(c.netWeight),
+        lastEditedBy: c.lastEditedBy
       });
     });
 
@@ -292,17 +298,20 @@ export class TpCatalogFullService {
   }
 
   /** Thêm một dòng: ghi vào fg-catalog. */
-  async addItem(item: {
-    materialCode: string;
-    standard: string;
-    customerCode: string;
-    description: string;
-    productName?: string;
-    unit?: string;
-    cartonSize?: string;
-    grossWeight?: string;
-    netWeight?: string;
-  }): Promise<void> {
+  async addItem(
+    item: {
+      materialCode: string;
+      standard: string;
+      customerCode: string;
+      description: string;
+      productName?: string;
+      unit?: string;
+      cartonSize?: string;
+      grossWeight?: string;
+      netWeight?: string;
+    },
+    editedBy?: string
+  ): Promise<void> {
     const mc = this.norm(item.materialCode);
     const cc = this.norm(item.customerCode);
     if (!mc && !cc) throw new Error('Vui lòng nhập ít nhất Mã vật tư hoặc Mã S.Phẩm KH');
@@ -318,6 +327,7 @@ export class TpCatalogFullService {
       cartonSize: this.norm(item.cartonSize),
       grossWeight: this.norm(item.grossWeight),
       netWeight: this.norm(item.netWeight),
+      ...(editedBy ? { lastEditedBy: editedBy } : {}),
       createdAt: now,
       updatedAt: now
     });
@@ -325,7 +335,7 @@ export class TpCatalogFullService {
   }
 
   /** Cập nhật toàn bộ field của dòng danh mục (giữ nguyên mappingId nếu có, chỉ đồng bộ Tên KH sang mapping). */
-  async updateItem(item: MergedCatalogItem): Promise<void> {
+  async updateItem(item: MergedCatalogItem, editedBy?: string): Promise<void> {
     const description = this.norm(item.description);
     const tasks: Promise<void>[] = [];
     if (item.catalogId) {
@@ -338,6 +348,7 @@ export class TpCatalogFullService {
           cartonSize: this.norm(item.cartonSize),
           grossWeight: this.norm(item.grossWeight),
           netWeight: this.norm(item.netWeight),
+          ...(editedBy ? { lastEditedBy: editedBy } : {}),
           updatedAt: new Date()
         }) as Promise<void>
       );
@@ -352,6 +363,16 @@ export class TpCatalogFullService {
     }
     if (tasks.length === 0) throw new Error('Không tìm thấy dữ liệu để cập nhật');
     await Promise.all(tasks);
+    this.invalidateCache();
+  }
+
+  /** Chỉ cập nhật lastEditedBy (không đụng field khác) — dùng khi sửa ở nơi khác (VD Lượng Đóng Thùng, collection riêng) nhưng vẫn cần ghi nhận người sửa dòng danh mục này. */
+  async touchLastEditedBy(catalogId: string | undefined, editedBy: string): Promise<void> {
+    if (!catalogId || !editedBy) return;
+    await this.firestore.collection(this.catalogCollection).doc(catalogId).set(
+      { lastEditedBy: editedBy, updatedAt: new Date() },
+      { merge: true }
+    );
     this.invalidateCache();
   }
 

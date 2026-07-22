@@ -38,8 +38,22 @@
                     (click)="setSearchMode('location')">
               Vị trí
             </button>
+            <button type="button"
+                    class="search-mode-btn"
+                    [class.active]="searchMode === 'customer'"
+                    (click)="setSearchMode('customer')">
+              Khách hàng
+            </button>
           </div>
-          <input type="text"
+          <select *ngIf="searchMode === 'customer'"
+                  class="custom-input search-input-uppercase"
+                  [ngModel]="searchTerm"
+                  (ngModelChange)="onCustomerSelected($event)">
+            <option value="">-- Chọn khách hàng --</option>
+            <option *ngFor="let c of customerOptions" [value]="c">{{ c }}</option>
+          </select>
+          <input *ngIf="searchMode !== 'customer'"
+                 type="text"
                  [placeholder]="searchMode === 'location' ? 'Nhập vị trí (C1.2 hoặc C12)...' : 'Tìm kiếm (tối thiểu 7 ký tự)...'"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
@@ -47,6 +61,7 @@
                  class="custom-input search-input-uppercase">
           <button type="button"
                   class="custom-btn search-submit-btn"
+                  *ngIf="searchMode !== 'customer'"
                   (click)="onSearchClick()"
                   [disabled]="isLoading || !searchTerm.trim() || (searchMode === 'material' && searchTerm.trim().length < 7) || (searchMode === 'location' && searchTerm.trim().length < 2)">
             <i class="material-icons">search</i>
@@ -146,12 +161,15 @@
               <br>
               <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (7 ký tự) để tự động tìm kiếm</span>
               <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi bấm <b>Search</b></span>
+              <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng ở trên để tìm kiếm</span>
               <span *ngIf="searchStatus === 'typing' && searchMode === 'material'">Nhập thêm để đủ 7 ký tự...</span>
               <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
               <span *ngIf="searchStatus === 'not-found' && searchMode === 'location'">Không có mã tồn tại vị trí <b>{{ searchTerm }}</b></span>
               <span *ngIf="searchStatus === 'not-found' && searchMode === 'material'">Không tìm thấy mã <b>{{ searchTerm }}</b></span>
+              <span *ngIf="searchStatus === 'not-found' && searchMode === 'customer'">Không tìm thấy khách hàng <b>{{ searchTerm }}</b></span>
               <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'location'">Vị trí <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
               <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'material'">Mã <b>{{ searchTerm }}</b> có tồn = 0 — bấm <b>Non Stock</b> để xem</span>
+              <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'customer'">Khách hàng <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
               <span *ngIf="searchStatus === 'searching'">Đang tìm...</span>
             </td>
           </tr>

@@ -167,6 +167,7 @@
             <th>Lock</th>
             <th title="Cho phép quét Tem Thùng để xuất kho ở Outbound">Xuất thùng</th>
             <th>Thao tác</th>
+            <th title="Mã nhân viên người sửa gần nhất">ID</th>
           </tr>
         </thead>
         <tbody>
@@ -210,11 +211,14 @@
               </button>
             </td>
             <td class="dv-cell-number">
-              <ng-container *ngIf="isNvlEditing(row); else nvlPackingView">
+              <ng-container *ngIf="isNvlEditing(row); else nvlPackingInlineView">
                 <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.standardPacking"
                        [disabled]="row.standardPackingLocked" min="0">
               </ng-container>
-              <ng-template #nvlPackingView>{{ formatStandardPacking(row.standardPacking) }}</ng-template>
+              <ng-template #nvlPackingInlineView>
+                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.standardPacking"
+                       [disabled]="row.standardPackingLocked" min="0" (change)="updateNvlItem(row)">
+              </ng-template>
             </td>
             <td class="dv-lock-cell">
               <mat-slide-toggle color="primary" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)"></mat-slide-toggle>
@@ -240,6 +244,7 @@
                 </button>
               </ng-template>
             </td>
+            <td class="dv-cell-code">{{ row.lastEditedBy || '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -354,6 +359,12 @@
       </label>
       <div class="dv-page-bar__right">
         <span class="dv-page-total">Tổng: {{ filteredTpItems.length | number }} dòng</span>
+        <button type="button" class="dv-mismatch-badge dv-mismatch-badge--btn" *ngIf="tpMismatchCount > 0"
+                (click)="openTpMismatchPanel()"
+                title="Cả SL SP/thùng và Lượng Đóng Thùng đều đã có giá trị nhưng khác nhau (không tính mã đang trống Lượng Đóng Thùng). Bấm để xem danh sách.">
+          <i class="material-icons">error_outline</i>
+          {{ tpMismatchCount | number }} mã lệch SL SP/thùng ≠ Lượng Đóng Thùng
+        </button>
         <div class="dv-pagination" *ngIf="tpTotalPages > 1">
           <button type="button" class="dv-page-btn" [disabled]="tpCurrentPage === 1" (click)="setTpPage(tpCurrentPage - 1)">
             <i class="material-icons">chevron_left</i>
@@ -389,6 +400,7 @@
               <th>SL SP/thùng</th>
               <th title="Danh mục riêng của Kho — ưu tiên dùng thay SL SP/thùng khi tính Carton ở FG In">Lượng Đóng Thùng</th>
               <th></th>
+              <th title="Mã nhân viên người sửa gần nhất">ID</th>
             </tr>
           </thead>
           <tbody>
@@ -423,6 +435,7 @@
               <td class="dv-actions">
                 <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteTpItem(item)">Xóa</button>
               </td>
+              <td class="dv-cell-code">{{ item.lastEditedBy || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -529,6 +542,56 @@
                 (click)="applyAllSpAuditSuggestions()">
           Áp dụng tất cả ({{ spAuditSuggestions.length }})
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Danh sách mã lệch SL SP/thùng ≠ Lượng Đóng Thùng ===== -->
+  <div class="dv-modal-overlay" *ngIf="showTpMismatchPanel" (click)="closeTpMismatchPanel()">
+    <div class="dv-modal dv-modal--wide" (click)="$event.stopPropagation()">
+      <h3 class="dv-modal-title">
+        <i class="material-icons">error_outline</i>
+        Mã lệch SL SP/thùng ≠ Lượng Đóng Thùng
+      </h3>
+
+      <p class="dv-modal-text" *ngIf="!tpMismatchItems.length">
+        ✅ Không còn mã nào lệch.
+      </p>
+
+      <ng-container *ngIf="tpMismatchItems.length">
+        <p class="dv-modal-text">
+          <strong>{{ tpMismatchItems.length }}</strong> mã đang có cả 2 giá trị nhưng khác nhau — bấm 1 dòng để lọc bảng chính về đúng mã đó rồi sửa tay.
+        </p>
+        <div class="dv-table-wrap">
+          <div class="dv-table-scroll">
+            <table class="dv-catalog-table">
+              <thead>
+                <tr>
+                  <th>Mã vật tư</th>
+                  <th>Tên vật tư</th>
+                  <th>SL SP/thùng</th>
+                  <th>Lượng Đóng Thùng</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of tpMismatchItems">
+                  <td class="dv-cell-code">{{ item.materialCode }}</td>
+                  <td>{{ item.productName }}</td>
+                  <td class="dv-cell-number">{{ item.standard }}</td>
+                  <td class="dv-cell-number">{{ item.cartonPackingQty }}</td>
+                  <td class="dv-actions">
+                    <button type="button" class="dv-btn dv-btn--sm dv-btn--primary" (click)="jumpToTpMismatchRow(item)">Sửa</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </ng-container>
+
+      <div class="dv-modal-actions">
+        <button type="button" class="dv-btn dv-btn--ghost" (click)="closeTpMismatchPanel()">Đóng</button>
       </div>
     </div>
   </div>

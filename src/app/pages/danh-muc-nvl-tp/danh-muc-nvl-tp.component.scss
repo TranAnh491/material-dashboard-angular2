@@ -280,6 +280,33 @@
   white-space: nowrap;
 }
 
+.dv-mismatch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+
+  .material-icons {
+    font-size: 15px;
+  }
+}
+
+.dv-mismatch-badge--btn {
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #fde68a;
+  }
+}
+
 .dv-pagination {
   display: flex;
   align-items: center;
@@ -424,7 +451,7 @@
 }
 
 /** Danh mục NVL: Tên rộng gấp đôi; Khách hàng/ĐVT/Standard Packing thu nhỏ còn một nửa. */
-// Cột: 1 Mã, 2 Tên, 3 ĐVT, 4 Khách hàng, 5 DV Lưu trữ, 6 Standard Packing, 7 Lock, 8 Xuất thùng, 9 Thao tác
+// Cột: 1 Mã, 2 Tên, 3 ĐVT, 4 Khách hàng, 5 DV Lưu trữ, 6 Standard Packing, 7 Lock, 8 Xuất thùng, 9 Thao tác, 10 ID
 .dv-catalog-table--nvl {
   table-layout: fixed;
 
@@ -449,19 +476,26 @@
     width: 7%;
   }
 
+  /** Lock — thu nhỏ còn 70% (9% → 6.3%) để nhường chỗ cho cột ID. */
   th:nth-child(7),
   td:nth-child(7) {
-    width: 9%;
+    width: 6.3%;
   }
 
+  /** Xuất thùng — thu nhỏ còn 70% (11% → 7.7%) để nhường chỗ cho cột ID. */
   th:nth-child(8),
   td:nth-child(8) {
-    width: 11%;
+    width: 7.7%;
   }
 
   th:nth-child(9),
   td:nth-child(9) {
     width: 11%;
+  }
+
+  th:nth-child(10),
+  td:nth-child(10) {
+    width: 6%;
   }
 }
 

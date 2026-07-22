@@ -16,6 +16,8 @@ export interface NvlCatalogItem {
   /** Mã thuộc danh sách ESD (Electrostatic Sensitive Device) — gán ở Inbound/Danh mục, hiển thị ở Materials ASM1/ASM2. */
   isEsd: boolean;
   updatedAt?: Date;
+  /** Mã nhân viên (employeeId) người sửa gần nhất — hiển thị ở cột ID cuối bảng Danh mục NVL. */
+  lastEditedBy?: string;
 }
 
 export interface OutboundQtyStats {
@@ -85,7 +87,8 @@ export class NvlCatalogFullService {
       allowExportByCarton: d['allowExportByCarton'] === true,
       isMsd: d['isMsd'] === true,
       isEsd: d['isEsd'] === true,
-      updatedAt: (d['updatedAt'] as any)?.toDate ? (d['updatedAt'] as any).toDate() : undefined
+      updatedAt: (d['updatedAt'] as any)?.toDate ? (d['updatedAt'] as any).toDate() : undefined,
+      lastEditedBy: d['lastEditedBy'] ? String(d['lastEditedBy']) : undefined
     };
   }
 
@@ -154,7 +157,10 @@ export class NvlCatalogFullService {
   }
 
   /** Thêm mã mới. Báo lỗi nếu mã đã tồn tại (dùng addOrUpdate để ghi đè có chủ đích). */
-  async addNew(item: { materialCode: string; materialName: string; unit: string; standardPacking: number }): Promise<void> {
+  async addNew(
+    item: { materialCode: string; materialName: string; unit: string; standardPacking: number },
+    editedBy?: string
+  ): Promise<void> {
     const code = this.normalizeCode(item.materialCode);
     if (!code) throw new Error('Thiếu mã NVL');
     const ref = this.firestore.collection(this.collectionName).doc(code);
@@ -174,6 +180,7 @@ export class NvlCatalogFullService {
       allowExportByCarton: false,
       isMsd: false,
       isEsd: false,
+      ...(editedBy ? { lastEditedBy: editedBy } : {}),
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -185,11 +192,16 @@ export class NvlCatalogFullService {
       standardPackingLocked: false,
       allowExportByCarton: false,
       isMsd: false,
-      isEsd: false
+      isEsd: false,
+      ...(editedBy ? { lastEditedBy: editedBy } : {})
     });
   }
 
-  async update(materialCode: string, changes: { materialName?: string; unit?: string; standardPacking?: number }): Promise<void> {
+  async update(
+    materialCode: string,
+    changes: { materialName?: string; unit?: string; standardPacking?: number },
+    editedBy?: string
+  ): Promise<void> {
     const code = this.normalizeCode(materialCode);
     if (!code) return;
     const payload: Record<string, unknown> = { updatedAt: new Date() };
@@ -207,28 +219,30 @@ export class NvlCatalogFullService {
       payload['standardPacking'] = sp;
       patch.standardPacking = sp;
     }
+    if (editedBy) {
+      payload['lastEditedBy'] = editedBy;
+      patch.lastEditedBy = editedBy;
+    }
     await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
     this.patchCache(code, patch);
   }
 
-  async setLocked(materialCode: string, locked: boolean): Promise<void> {
+  async setLocked(materialCode: string, locked: boolean, editedBy?: string): Promise<void> {
     const code = this.normalizeCode(materialCode);
     if (!code) return;
-    await this.firestore.collection(this.collectionName).doc(code).set(
-      { standardPackingLocked: locked, updatedAt: new Date() },
-      { merge: true }
-    );
-    this.patchCache(code, { standardPackingLocked: locked });
+    const payload: Record<string, unknown> = { standardPackingLocked: locked, updatedAt: new Date() };
+    if (editedBy) payload['lastEditedBy'] = editedBy;
+    await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
+    this.patchCache(code, { standardPackingLocked: locked, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
   }
 
-  async setAllowExportByCarton(materialCode: string, allowed: boolean): Promise<void> {
+  async setAllowExportByCarton(materialCode: string, allowed: boolean, editedBy?: string): Promise<void> {
     const code = this.normalizeCode(materialCode);
     if (!code) return;
-    await this.firestore.collection(this.collectionName).doc(code).set(
-      { allowExportByCarton: allowed, updatedAt: new Date() },
-      { merge: true }
-    );
-    this.patchCache(code, { allowExportByCarton: allowed });
+    const payload: Record<string, unknown> = { allowExportByCarton: allowed, updatedAt: new Date() };
+    if (editedBy) payload['lastEditedBy'] = editedBy;
+    await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
+    this.patchCache(code, { allowExportByCarton: allowed, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
   }
 
   /**

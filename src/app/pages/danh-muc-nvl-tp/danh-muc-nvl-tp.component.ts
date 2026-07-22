@@ -205,11 +205,6 @@ export class DanhMucNvlTpComponent implements OnInit {
     return v === 'shared' || v === 'dùng chung' || v === 'dung chung';
   }
 
-  formatStandardPacking(value: number): string {
-    const n = Number(value) || 0;
-    return Number.isInteger(n) ? String(n) : String(n);
-  }
-
   // ===== NVL =====
 
   async loadNvl(forceRefresh = false): Promise<void> {
@@ -312,7 +307,8 @@ export class DanhMucNvlTpComponent implements OnInit {
       return;
     }
     try {
-      await this.nvlService.addNew(this.newNvlItem);
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.addNew(this.newNvlItem, editedBy);
       this.newNvlItem = { materialCode: '', materialName: '', unit: '', standardPacking: 0 };
       await this.loadNvl();
       alert(`✅ Đã thêm mã NVL "${code}"`);
@@ -328,11 +324,17 @@ export class DanhMucNvlTpComponent implements OnInit {
       return;
     }
     try {
-      await this.nvlService.update(item.materialCode, {
-        materialName: item.materialName,
-        unit: item.unit,
-        standardPacking: item.standardPacking
-      });
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.update(
+        item.materialCode,
+        {
+          materialName: item.materialName,
+          unit: item.unit,
+          standardPacking: item.standardPacking
+        },
+        editedBy
+      );
+      if (editedBy) item.lastEditedBy = editedBy;
     } catch (e: any) {
       alert('❌ Lỗi khi cập nhật: ' + (e?.message || e));
       await this.loadNvl();
@@ -388,8 +390,10 @@ export class DanhMucNvlTpComponent implements OnInit {
   async toggleNvlLock(item: NvlCatalogItem): Promise<void> {
     const next = !item.standardPackingLocked;
     try {
-      await this.nvlService.setLocked(item.materialCode, next);
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.setLocked(item.materialCode, next, editedBy);
       item.standardPackingLocked = next;
+      if (editedBy) item.lastEditedBy = editedBy;
     } catch (e) {
       console.error(e);
       alert('❌ Không lưu được trạng thái Lock.');
@@ -399,8 +403,10 @@ export class DanhMucNvlTpComponent implements OnInit {
   async toggleNvlAllowExportByCarton(item: NvlCatalogItem): Promise<void> {
     const next = !item.allowExportByCarton;
     try {
-      await this.nvlService.setAllowExportByCarton(item.materialCode, next);
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.setAllowExportByCarton(item.materialCode, next, editedBy);
       item.allowExportByCarton = next;
+      if (editedBy) item.lastEditedBy = editedBy;
     } catch (e) {
       console.error(e);
       alert('❌ Không lưu được trạng thái Xuất thùng.');
@@ -786,7 +792,8 @@ export class DanhMucNvlTpComponent implements OnInit {
       return;
     }
     try {
-      await this.tpService.addItem(this.newTpItem);
+      const editedBy = await this.currentEmployeeId();
+      await this.tpService.addItem(this.newTpItem, editedBy);
       this.newTpItem = {
         materialCode: '',
         standard: '',
@@ -807,33 +814,70 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   async updateTpItem(item: MergedCatalogItem): Promise<void> {
     try {
-      await this.tpService.updateItem(item);
+      const editedBy = await this.currentEmployeeId();
+      await this.tpService.updateItem(item, editedBy);
+      if (editedBy) item.lastEditedBy = editedBy;
     } catch (e: any) {
       alert('❌ Lỗi khi cập nhật: ' + (e?.message || e));
       await this.loadTp();
     }
   }
 
-  /** Sửa Lượng Đóng Thùng — danh mục riêng của Kho, không thuộc fg-catalog. */
+  /** Mã TP có SL SP/thùng VÀ Lượng Đóng Thùng đều đã có giá trị nhưng KHÁC nhau — không tính trường hợp Lượng Đóng Thùng đang trống (đó là "chưa điền", không phải "lệch"). */
+  get tpMismatchItems(): MergedCatalogItem[] {
+    return this.tpItems.filter(i => {
+      const std = parseFloat(i.standard) || 0;
+      const carton = i.cartonPackingQty || 0;
+      return std > 0 && carton > 0 && std !== carton;
+    });
+  }
+
+  get tpMismatchCount(): number {
+    return this.tpMismatchItems.length;
+  }
+
+  showTpMismatchPanel = false;
+
+  openTpMismatchPanel(): void {
+    this.showTpMismatchPanel = true;
+  }
+
+  closeTpMismatchPanel(): void {
+    this.showTpMismatchPanel = false;
+  }
+
+  /** Bấm 1 dòng trong danh sách mã lệch → lọc bảng chính về đúng mã đó để sửa. */
+  jumpToTpMismatchRow(item: MergedCatalogItem): void {
+    this.tpColumnFilters.materialCode = item.materialCode;
+    this.applyTpFilters();
+    this.closeTpMismatchPanel();
+  }
+
+  /** Sửa Lượng Đóng Thùng — danh mục riêng của Kho, không thuộc fg-catalog. Vẫn ghi lastEditedBy lên dòng fg-catalog để cột ID phản ánh đúng người sửa gần nhất. */
   async updateTpCartonPackingQty(item: MergedCatalogItem): Promise<void> {
     try {
+      const editedBy = await this.currentEmployeeId();
       await this.cartonPackingQtyService.upsert(item.materialCode, item.cartonPackingQty || 0);
+      if (editedBy) {
+        await this.tpService.touchLastEditedBy(item.catalogId, editedBy);
+        item.lastEditedBy = editedBy;
+      }
     } catch (e: any) {
       alert('❌ Lỗi khi lưu Lượng Đóng Thùng: ' + (e?.message || e));
       await this.loadTp();
     }
   }
 
-  /** Bước 1: copy toàn bộ SL SP/thùng hiện có sang Lượng Đóng Thùng (ghi đè). */
+  /** Copy SL SP/thùng sang Lượng Đóng Thùng — CHỈ cho mã đang có Lượng Đóng Thùng = 0/trống. Không đụng mã đã có giá trị (kể cả khi khác SL SP/thùng). */
   async copyCartonPackingQtyFromStandard(): Promise<void> {
-    const withStandard = this.tpItems.filter(i => parseFloat(i.standard) > 0).length;
-    if (withStandard === 0) {
-      alert('Không có dòng nào có SL SP/thùng > 0 để copy.');
+    const fillable = this.tpItems.filter(i => !i.cartonPackingQty && parseFloat(i.standard) > 0);
+    if (fillable.length === 0) {
+      alert('Không có mã nào cần copy (Lượng Đóng Thùng đang trống + có SL SP/thùng > 0).');
       return;
     }
     if (
       !confirm(
-        `Copy SL SP/thùng sang Lượng Đóng Thùng cho ${withStandard} mã.\n\nSẽ GHI ĐÈ Lượng Đóng Thùng hiện có (nếu có). Tiếp tục?`
+        `Copy SL SP/thùng sang Lượng Đóng Thùng cho ${fillable.length} mã đang trống.\n\nKhông đụng tới mã đã có Lượng Đóng Thùng (kể cả khi khác SL SP/thùng). Tiếp tục?`
       )
     ) {
       return;
@@ -841,7 +885,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     this.isTpCopyingCartonQty = true;
     try {
       const count = await this.cartonPackingQtyService.copyAllFromStandard(
-        this.tpItems.map(i => ({ materialCode: i.materialCode, standard: i.standard }))
+        fillable.map(i => ({ materialCode: i.materialCode, standard: i.standard }))
       );
       await this.loadTp(true);
       alert(`✅ Đã copy Lượng Đóng Thùng cho ${count} mã.`);

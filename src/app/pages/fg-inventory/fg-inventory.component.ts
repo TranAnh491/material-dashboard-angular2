@@ -74,8 +74,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Search and filter
   searchTerm: string = '';
-  /** Mã TP (7 ký tự, tự tìm) hoặc Vị trí (bấm Search). */
-  searchMode: 'material' | 'location' = 'material';
+  /** Mã TP (7 ký tự, tự tìm) hoặc Vị trí / Khách hàng (bấm Search). */
+  searchMode: 'material' | 'location' | 'customer' = 'material';
   searchStatus: 'idle' | 'typing' | 'searching' | 'found' | 'not-found' | 'non-stock-only' = 'idle';
   
   // Factory filter — mặc định ASM1 (không dùng TOTAL khi mở tab)
@@ -442,10 +442,116 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
-  setSearchMode(mode: 'material' | 'location'): void {
+  /**
+   * Tìm theo Khách hàng — chọn ở dropdown. Không query thẳng field `customer` trên fg-inventory
+   * (dữ liệu thô, có thể thiếu/không khớp) mà dò theo đúng cột "Khách hàng" ở tab Danh mục TP
+   * (fg-catalog.customer, đã cache sẵn qua catalogItems từ lúc mở tab — KHÔNG dùng mappingItems/
+   * fg-customer-mapping vì đó là dữ liệu cũ, import mới không còn ghi vào đó nữa): dò theo cột
+   * Mã vật tư (materialCode) để biết Khách hàng, gom lại danh sách Mã TP thuộc khách đó. Sau đó
+   * mới query fg-inventory theo đúng các Mã TP này (chunk 10 mã/lần vì giới hạn của mệnh đề 'in').
+   */
+  async runCustomerSearch(customerRaw: string): Promise<void> {
+    const term = String(customerRaw || '').trim().toUpperCase();
+    this.searchTerm = term;
+
+    if (!term || term.length < 2) {
+      this.searchStatus = 'typing';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.isLoading = true;
+    this.searchStatus = 'searching';
+    this.cdr.detectChanges();
+
+    try {
+      // fg-catalog lưu Mã vật tư có thể kèm hậu tố theo khách (VD "P001005_C"), nhưng fg-inventory
+      // chỉ lưu đúng 7 ký tự đầu (mã TP gốc) — cắt về 7 ký tự trước khi query, nếu không sẽ không
+      // khớp được dòng tồn kho nào.
+      const matchedCodes = Array.from(
+        new Set(
+          this.catalogItems
+            .filter(c => (c.customer || '').trim().toUpperCase() === term)
+            .map(c => (c.materialCode || '').trim().toUpperCase().slice(0, 7))
+            .filter(Boolean)
+        )
+      );
+
+      if (matchedCodes.length === 0) {
+        this.materials = [];
+        this.filteredMaterials = [];
+        this.searchStatus = 'not-found';
+        return;
+      }
+
+      const chunks: string[][] = [];
+      for (let i = 0; i < matchedCodes.length; i += 10) {
+        chunks.push(matchedCodes.slice(i, i + 10));
+      }
+
+      const snaps = await Promise.all(
+        chunks.map(chunk =>
+          this.firestore
+            .collection('fg-inventory', ref => ref.where('materialCode', 'in', chunk))
+            .get()
+            .toPromise()
+            .catch(() => null)
+        )
+      );
+
+      const readCount = snaps.reduce((sum, s) => sum + (s?.docs.length || 0), 0);
+      this.readTracker.track('fg-inventory', 'fg-inventory-customer-search', readCount);
+
+      const merged = new Map<string, FGInventoryItem>();
+      for (const snap of snaps) {
+        (snap?.docs || []).forEach(doc => merged.set(doc.id, this.mapDocToInventoryItem(doc.id, doc.data())));
+      }
+
+      this.materials = Array.from(merged.values());
+      this.applyFilters();
+
+      if (this.filteredMaterials.length > 0) {
+        this.searchStatus = 'found';
+      } else if (this.materials.length > 0) {
+        this.searchStatus = 'non-stock-only';
+      } else {
+        this.searchStatus = 'not-found';
+      }
+    } catch (e) {
+      console.error('runCustomerSearch failed', e);
+      this.materials = [];
+      this.filteredMaterials = [];
+      this.searchStatus = 'not-found';
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  setSearchMode(mode: 'material' | 'location' | 'customer'): void {
     if (this.searchMode === mode) return;
     this.searchMode = mode;
     this.clearSearch();
+  }
+
+  /** Danh sách tên khách hàng (cột "Khách hàng" ở tab Danh mục TP, theo Mã vật tư) — dùng cho dropdown chọn khi search theo Khách hàng, không cần gõ tay. */
+  get customerOptions(): string[] {
+    const set = new Set<string>();
+    for (const c of this.catalogItems) {
+      const name = (c.customer || '').trim();
+      if (name) set.add(name);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }
+
+  /** Bấm chọn 1 khách trong dropdown — tìm luôn, không cần bấm Search. */
+  onCustomerSelected(value: string): void {
+    if (!value) {
+      this.clearSearch();
+      return;
+    }
+    void this.runCustomerSearch(value);
   }
 
   onSearchClick(): void {
@@ -453,6 +559,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     if (!term) return;
     if (this.searchMode === 'location') {
       void this.runLocationSearch(term);
+      return;
+    }
+    if (this.searchMode === 'customer') {
+      void this.runCustomerSearch(term);
       return;
     }
     if (term.length >= 7) {
@@ -746,6 +856,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         const term = trimmedSearch.toUpperCase();
         if (this.searchMode === 'location') {
           if (!this.locationMatchesSearch(material, trimmedSearch)) return false;
+        } else if (this.searchMode === 'customer') {
+          // Đã lọc đúng theo Khách hàng khi fetch (runCustomerSearch dùng mapping Mã hàng ↔ Khách) — không lọc lại theo text ở đây.
         } else {
           const termNorm = term.replace(/\./g, '');
           const searchableText = [
@@ -880,6 +992,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     const term = (this.searchTerm || '').trim();
     if (this.searchMode === 'location' && term.length >= 2) {
       void this.runLocationSearch(term);
+      return;
+    }
+    if (this.searchMode === 'customer' && term.length >= 2) {
+      void this.runCustomerSearch(term);
       return;
     }
     if (term.length >= 7) {
