@@ -102,7 +102,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   selectedSlot: Asm3RackSlot | null = null;
   hoveredSlot: Asm3RackSlot | null = null;
 
-  readonly rackLetters: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+  readonly rackLetters: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L'];
   readonly slotIndexes: number[] = Array.from({ length: this.SLOTS_PER_RACK }, (_, i) => i + 1);
 
   showPrintLabelModal = false;
@@ -327,7 +327,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
    * Trả về null nếu không khớp định dạng ô ASM3.
    */
   private parseInventoryLocation(location: string): { slotName: string; palletNumber: string } | null {
-    const m = location.match(/^WH3-([A-I])(\d{1,2})-(.+)$/);
+    const m = location.match(/^WH3-([A-IK-L])(\d{1,2})-(.+)$/);
     if (!m) return null;
     const row = m[1];
     const index = parseInt(m[2], 10);
@@ -600,7 +600,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   private buildGridBlocks(): GridMapBlock[] {
-    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H', 'I']];
+    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H', 'I'], ['K', 'L']];
     const blocks: GridMapBlock[] = [];
     let aisleNum = 1;
 
@@ -798,8 +798,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   private buildRackRows(): Asm3RackRow[] {
-    // A đứng riêng — B,C sát nhau — D,E sát nhau — F,G sát nhau — H,I sát nhau (chồng từ trên xuống)
-    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H', 'I']];
+    // A đứng riêng — B,C sát nhau — D,E sát nhau — F,G sát nhau — H,I sát nhau — K,L sát nhau (chồng từ trên xuống)
+    const groups: string[][] = [['A'], ['B', 'C'], ['D', 'E'], ['F', 'G'], ['H', 'I'], ['K', 'L']];
     const slotLenM = this.SLOT_LEN_M;
 
     const rows: Asm3RackRow[] = [];
