@@ -338,6 +338,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/xe-tai';
     }
 
+    isFgInventoryPage(): boolean {
+      return this.currentAppPath() === '/fg-inventory';
+    }
+
     /**
      * Đường dẫn các tab đã tự có nút Back / Về Menu riêng gắn trong toolbar của trang —
      * ẩn nút "Về Menu" nổi trên navbar ở các tab này để tránh trùng lặp / lệch style.

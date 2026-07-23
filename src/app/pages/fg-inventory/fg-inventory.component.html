@@ -1,256 +1,268 @@
 <div class="main-content">
-  <!-- Excel-like Container -->
-  <div class="excel-container">
-    <!-- Excel-like Header -->
-    <div class="excel-header">
-      <h4>📦 FG INVENTORY - Kho thành phẩm</h4>
+  <div class="fgi-page">
+    <!-- Header -->
+    <div class="fgi-header">
+      <div class="fgi-header__title">
+        <span class="fgi-header__icon" aria-hidden="true">
+          <i class="material-icons">inventory_2</i>
+        </span>
+        <h2>FG INVENTORY - Kho thành phẩm</h2>
+      </div>
+      <div class="fgi-header__right">
+        <span class="fgi-updated">
+          <i class="material-icons">schedule</i>
+          Cập nhật lúc: {{ formatLastUpdated() }}
+        </span>
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="filterTodayImport()">
+          <i class="material-icons">today</i> NK hôm nay
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline"
+                [class.fgi-btn--active-amber]="showNonStock"
+                (click)="filterNonStock()">
+          <i class="material-icons">inventory_2</i> {{ showNonStock ? 'Non Stock ✓' : 'Non Stock' }}
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline"
+                [class.fgi-btn--active-warn]="showNegativeStock"
+                [class.fgi-btn--pulse]="hasNegativeStockBatches()"
+                (click)="filterNegativeStock()">
+          <i class="material-icons">thermostat</i> {{ showNegativeStock ? 'Tồn Âm ✓' : 'Tồn Âm' }}
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline fgi-btn--menu" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">arrow_back</i> Về Menu
+        </button>
+      </div>
     </div>
-    
-    <!-- Excel-like Actions -->
-    <div class="excel-actions">
-      <div class="action-controls">
-        <button class="custom-btn" (click)="showMoreMenu = true">
-          <i class="material-icons">more_vert</i>
-          More
-        </button>
 
-        <button class="custom-btn" (click)="goToMenu()" title="Về Menu">
-          <i class="material-icons">home</i>
-          Về Menu
+    <!-- Toolbar -->
+    <div class="fgi-toolbar">
+      <div class="fgi-toolbar__group">
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="showMoreMenu = true">
+          <i class="material-icons">menu</i> Menu
         </button>
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="showFactoryMenu = true">
+          <i class="material-icons">apartment</i> Factory: {{ selectedFactory }}
+        </button>
+      </div>
 
-        <button class="custom-btn" (click)="showFactoryMenu = true">
-          <i class="material-icons">business</i>
-          Factory: {{ selectedFactory }}
-        </button>
-        
-        <div class="search-box">
-          <div class="search-mode-toggle">
-            <button type="button"
-                    class="search-mode-btn"
-                    [class.active]="searchMode === 'material'"
-                    (click)="setSearchMode('material')">
-              Mã TP
-            </button>
-            <button type="button"
-                    class="search-mode-btn"
-                    [class.active]="searchMode === 'location'"
-                    (click)="setSearchMode('location')">
-              Vị trí
-            </button>
-            <button type="button"
-                    class="search-mode-btn"
-                    [class.active]="searchMode === 'customer'"
-                    (click)="setSearchMode('customer')">
-              Khách hàng
-            </button>
-          </div>
-          <select *ngIf="searchMode === 'customer'"
-                  class="custom-input search-input-uppercase"
-                  [ngModel]="searchTerm"
-                  (ngModelChange)="onCustomerSelected($event)">
-            <option value="">-- Chọn khách hàng --</option>
-            <option *ngFor="let c of customerOptions" [value]="c">{{ c }}</option>
-          </select>
-          <input *ngIf="searchMode !== 'customer'"
-                 type="text"
-                 [placeholder]="searchMode === 'location' ? 'Nhập vị trí (C1.2 hoặc C12)...' : 'Tìm kiếm (tối thiểu 7 ký tự)...'"
-                 [(ngModel)]="searchTerm"
-                 (input)="onSearchChange($event)"
+      <div class="fgi-toolbar__group fgi-toolbar__filters">
+        <div class="fgi-field">
+          <span class="fgi-field__prefix">Mã TP</span>
+          <input type="text"
+                 class="fgi-input"
+                 [ngModel]="filterMaTp"
+                 (ngModelChange)="onFilterMaTpChange($event)"
                  (keydown)="onSearchKeydown($event)"
-                 class="custom-input search-input-uppercase">
-          <button type="button"
-                  class="custom-btn search-submit-btn"
-                  *ngIf="searchMode !== 'customer'"
-                  (click)="onSearchClick()"
-                  [disabled]="isLoading || !searchTerm.trim() || (searchMode === 'material' && searchTerm.trim().length < 7) || (searchMode === 'location' && searchTerm.trim().length < 2)">
-            <i class="material-icons">search</i>
-            Search
+                 placeholder="Tất cả"
+                 autocomplete="off">
+          <button type="button" class="fgi-field__clear" *ngIf="filterMaTp" (click)="clearFilterMaTp()" title="Xóa">
+            <i class="material-icons">close</i>
           </button>
         </div>
 
-        <button class="custom-btn" (click)="refreshInventoryData()" [disabled]="isLoading">
-          <i class="material-icons">refresh</i>
-          Làm mới
-        </button>
-        
-        <button class="custom-btn" (click)="showTimeRangeDialog = true">
-          <i class="material-icons">schedule</i>
-          Chọn thời gian
-        </button>
-        
-        <button class="custom-btn" (click)="viewAllMaterials()">
-          <i class="material-icons">visibility</i>
-          Xem tất cả
-        </button>
+        <div class="fgi-field">
+          <span class="fgi-field__prefix">Vị trí</span>
+          <input type="text"
+                 class="fgi-input"
+                 [ngModel]="filterLocation"
+                 (ngModelChange)="onFilterLocationChange($event)"
+                 (keydown)="onSearchKeydown($event)"
+                 placeholder="Tất cả"
+                 autocomplete="off">
+          <button type="button" class="fgi-field__clear" *ngIf="filterLocation" (click)="clearFilterLocation()" title="Xóa">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
 
-        <!-- Refresh hoan tac (undo) từ FG Out -->
-        <button class="custom-btn"
+        <div class="fgi-field fgi-field--customer">
+          <span class="fgi-field__prefix">KH</span>
+          <select class="fgi-input fgi-select"
+                  [ngModel]="filterCustomer"
+                  (ngModelChange)="onFilterCustomerChange($event)">
+            <option value="">Tất cả</option>
+            <option *ngFor="let c of customerOptions" [value]="c">{{ c }}</option>
+          </select>
+          <button type="button" class="fgi-field__clear" *ngIf="filterCustomer" (click)="clearFilterCustomer()" title="Xóa">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+      </div>
+
+      <div class="fgi-toolbar__group fgi-toolbar__actions">
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="refreshInventoryData()" [disabled]="isLoading">
+          <i class="material-icons">refresh</i> Làm mới
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="showTimeRangeDialog = true">
+          <i class="material-icons">schedule</i> Chọn thời gian
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="viewAllMaterials()">
+          <i class="material-icons">visibility</i> Xem tất cả
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--primary"
                 (click)="refreshUndoExports()"
                 [disabled]="isLoading">
-          <i class="material-icons">refresh</i>
-          Refresh hoan tac
+          <i class="material-icons">sync</i> Refresh hoàn tác
         </button>
-        
-        <button class="custom-btn btn-today" (click)="filterTodayImport()">
-          <i class="material-icons">today</i>
-          NK hôm nay
-        </button>
-
-        <button class="custom-btn"
-                [class.btn-non-stock-active]="showNonStock"
-                (click)="filterNonStock()">
-          <i class="material-icons">inventory</i>
-          {{ showNonStock ? 'Non Stock ✓' : 'Non Stock' }}
-        </button>
-
-        <button class="custom-btn"
-                [class.btn-negative-active]="showNegativeStock"
-                [class.btn-negative-alert]="hasNegativeStockBatches()"
-                (click)="filterNegativeStock()">
-          <i class="material-icons">report</i>
-          {{ showNegativeStock ? 'Tồn Âm ✓' : 'Tồn Âm' }}
-        </button>
-
       </div>
     </div>
-    
-    <!-- Loading Indicator -->
-    <div *ngIf="isLoading" class="loading-indicator">
+
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="fgi-loading">
       <i class="material-icons">refresh</i>
       <span>Đang tải dữ liệu...</span>
     </div>
 
-    <!-- Excel-like Body -->
-    <div class="excel-body" [style.display]="isLoading ? 'none' : 'block'">
-      <!-- Box báo trùng Batch -->
+    <!-- Body -->
+    <div class="fgi-body" [hidden]="isLoading">
       <div *ngIf="hasDuplicateBatches()" class="duplicate-batch-alert">
         <i class="material-icons">warning</i>
         <span><strong>Trùng Batch:</strong> {{ getDuplicateBatchMessage() }}</span>
       </div>
-      <table class="excel-table">
-        <thead>
-          <tr>
-            <th class="row-header">No</th>
-            <th>Factory</th>
-            <th>Batch</th>
-            <th>Mã TP</th>
-            <th>LOT</th>
-            <th>LSX</th>
-            <th>PO</th>
-            <th>Tồn đầu</th>
-            <th>Nhập</th>
-            <th>Xuất</th>
-            <th>Tồn kho</th>
-            <th>Carton</th>
-            <th>ODD</th>
-            <th>Vị trí</th>
-            <th>Vị trí KK</th>
-            <th>Scan</th>
-            <th>Ghi chú</th>
-            <th>Khách</th>
-            <th>Tạo PX</th>
-            <th>Xóa</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Show message when no results found -->
-          <tr *ngIf="!isLoading && filteredMaterials.length === 0">
-            <td colspan="20" class="text-center" style="padding: 20px; color: #666;">
-              <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
-              <br>
-              <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (7 ký tự) để tự động tìm kiếm</span>
-              <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi bấm <b>Search</b></span>
-              <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng ở trên để tìm kiếm</span>
-              <span *ngIf="searchStatus === 'typing' && searchMode === 'material'">Nhập thêm để đủ 7 ký tự...</span>
-              <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
-              <span *ngIf="searchStatus === 'not-found' && searchMode === 'location'">Không có mã tồn tại vị trí <b>{{ searchTerm }}</b></span>
-              <span *ngIf="searchStatus === 'not-found' && searchMode === 'material'">Không tìm thấy mã <b>{{ searchTerm }}</b></span>
-              <span *ngIf="searchStatus === 'not-found' && searchMode === 'customer'">Không tìm thấy khách hàng <b>{{ searchTerm }}</b></span>
-              <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'location'">Vị trí <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
-              <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'material'">Mã <b>{{ searchTerm }}</b> có tồn = 0 — bấm <b>Non Stock</b> để xem</span>
-              <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'customer'">Khách hàng <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
-              <span *ngIf="searchStatus === 'searching'">Đang tìm...</span>
-            </td>
-          </tr>
-          
-          <tr *ngFor="let material of filteredMaterials; let i = index">
 
-            <td class="row-header">{{i + 1}}</td>
-            <td>{{material.factory || 'ASM1'}}</td>
-            <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{material.batchNumber}}</td>
-            <td class="code-cell">{{material.materialCode}}</td>
-            <td>{{material.lot}}</td>
-            <td>{{material.lsx}}</td>
-            <td class="po-cell">{{material.poNumber || ''}}</td>
-            <td class="number-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.tonDau" 
-                     (change)="updateTon(material)"
-                     [disabled]="!canEditMaterial(material) || !isTonDauEditable(material)">
-            </td>
-            <td class="number-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.nhap" 
-                     (change)="updateTon(material)"
-                     [disabled]="!canEditMaterial(material)">
-            </td>
-            <td class="number-cell">
-              <input type="number" 
-                     class="editable-input" 
-                     [(ngModel)]="material.xuat" 
-                     (change)="updateTon(material)"
-                     [disabled]="!canEditMaterial(material)">
-            </td>
-            <td class="number-cell">{{formatNumber(material.ton)}}</td>
-            <td class="number-cell">{{formatNumber(material.carton)}}</td>
-            <td class="number-cell">{{formatNumber(material.odd)}}</td>
-            <td>
-              <div class="editable-location" (click)="editLocation(material)">
-                {{material.location || 'Temporary'}}
-              </div>
-            </td>
-            <td class="kk-location-cell">
-              <mat-checkbox
-                [checked]="isViTriKkChecked(material)"
-                [disabled]="!canEditMaterial(material)"
-                (change)="toggleViTriKk(material, $event.checked)"
-                [matTooltip]="material.viTriKK ? ('Đã kiểm: ' + material.viTriKK) : 'Tick để xác nhận đã kiểm'">
-              </mat-checkbox>
-            </td>
-            <td class="status-cell">
-              <button mat-icon-button color="primary" (click)="scanLocation(material)" 
-                      matTooltip="Scan QR code để đổi vị trí">
-                <mat-icon>qr_code_scanner</mat-icon>
-              </button>
-            </td>
-            <td>
-              <input type="text" 
-                     class="editable-input" 
-                     [(ngModel)]="material.notes" 
-                     (change)="updateNotes(material)"
-                     placeholder="Nhập ghi chú..."
-                     [disabled]="!canEditMaterial(material)">
-            </td>
-            <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
-            <td class="status-cell">
-              <button mat-icon-button color="primary" (click)="openCreatePXDialog(material)" 
-                      matTooltip="Tạo phiếu xuất">
-                <mat-icon>add_shopping_cart</mat-icon>
-              </button>
-            </td>
-            <td class="status-cell">
-              <button mat-icon-button color="warn" (click)="deleteItem(material)" 
-                      matTooltip="Xóa"
-                      *ngIf="hasDeletePermission">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="fgi-table-wrap">
+        <table class="fgi-table">
+          <thead>
+            <tr>
+              <th>NO</th>
+              <th>FACTORY</th>
+              <th>BATCH</th>
+              <th>MÃ TP</th>
+              <th>LOT</th>
+              <th>LSX</th>
+              <th>PO</th>
+              <th>TỒN ĐẦU</th>
+              <th>NHẬP</th>
+              <th>XUẤT</th>
+              <th>TỒN KHO</th>
+              <th>CARTON</th>
+              <th>ODD</th>
+              <th>VỊ TRÍ</th>
+              <th>VỊ TRÍ KK</th>
+              <th>SCAN</th>
+              <th>GHI CHÚ</th>
+              <th>KHÁCH</th>
+              <th>TẠO PX</th>
+              <th>XÓA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="!isLoading && filteredMaterials.length === 0">
+              <td colspan="20" class="fgi-empty">
+                <i class="material-icons">inbox</i>
+                <div>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (7 ký tự) để tự động tìm kiếm</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi Enter / Search</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng để tìm kiếm</span>
+                  <span *ngIf="searchStatus === 'typing' && searchMode === 'material'">Nhập thêm để đủ 7 ký tự...</span>
+                  <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
+                  <span *ngIf="searchStatus === 'not-found' && searchMode === 'location'">Không có mã tồn tại vị trí <b>{{ searchTerm }}</b></span>
+                  <span *ngIf="searchStatus === 'not-found' && searchMode === 'material'">Không tìm thấy mã <b>{{ searchTerm }}</b></span>
+                  <span *ngIf="searchStatus === 'not-found' && searchMode === 'customer'">Không tìm thấy khách hàng <b>{{ searchTerm }}</b></span>
+                  <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'location'">Vị trí <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
+                  <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'material'">Mã <b>{{ searchTerm }}</b> có tồn = 0 — bấm <b>Non Stock</b> để xem</span>
+                  <span *ngIf="searchStatus === 'non-stock-only' && searchMode === 'customer'">Khách hàng <b>{{ searchTerm }}</b> có dữ liệu nhưng tồn = 0 — bấm <b>Non Stock</b> để xem</span>
+                  <span *ngIf="searchStatus === 'searching'">Đang tìm...</span>
+                </div>
+              </td>
+            </tr>
+
+            <tr *ngFor="let material of pagedMaterials; let i = index">
+              <td>{{ pageStartIndex + i }}</td>
+              <td>{{ material.factory || 'ASM1' }}</td>
+              <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{ material.batchNumber }}</td>
+              <td class="fgi-code-link">{{ material.materialCode }}</td>
+              <td>{{ material.lot }}</td>
+              <td>{{ material.lsx }}</td>
+              <td>{{ material.poNumber || '' }}</td>
+              <td class="fgi-num">
+                <input type="number"
+                       class="fgi-cell-input"
+                       [(ngModel)]="material.tonDau"
+                       (change)="updateTon(material)"
+                       [disabled]="!canEditMaterial(material) || !isTonDauEditable(material)">
+              </td>
+              <td class="fgi-num">
+                <input type="number"
+                       class="fgi-cell-input"
+                       [(ngModel)]="material.nhap"
+                       (change)="updateTon(material)"
+                       [disabled]="!canEditMaterial(material)">
+              </td>
+              <td class="fgi-num">
+                <input type="number"
+                       class="fgi-cell-input"
+                       [(ngModel)]="material.xuat"
+                       (change)="updateTon(material)"
+                       [disabled]="!canEditMaterial(material)">
+              </td>
+              <td class="fgi-num">{{ formatNumber(material.ton) }}</td>
+              <td class="fgi-num">{{ formatNumber(getDisplayCarton(material)) }}</td>
+              <td class="fgi-num">{{ formatNumber(getDisplayOdd(material)) }}</td>
+              <td>
+                <div class="fgi-location" (click)="editLocation(material)">
+                  {{ material.location || 'Temporary' }}
+                </div>
+              </td>
+              <td class="kk-location-cell">
+                <mat-checkbox
+                  class="fgi-kk-check"
+                  [checked]="isViTriKkChecked(material)"
+                  [disabled]="!canEditMaterial(material)"
+                  (change)="toggleViTriKk(material, $event.checked)"
+                  [matTooltip]="material.viTriKK ? ('Đã kiểm: ' + material.viTriKK) : 'Tick để xác nhận đã kiểm'">
+                </mat-checkbox>
+              </td>
+              <td class="fgi-action-cell">
+                <button type="button" class="fgi-icon-btn" (click)="scanLocation(material)" title="Scan QR đổi vị trí">
+                  <i class="material-icons">qr_code_scanner</i>
+                </button>
+              </td>
+              <td>
+                <input type="text"
+                       class="fgi-cell-input fgi-cell-input--wide"
+                       [(ngModel)]="material.notes"
+                       (change)="updateNotes(material)"
+                       placeholder="Nhập ghi chú..."
+                       [disabled]="!canEditMaterial(material)">
+              </td>
+              <td>{{ getCustomerNameFromMapping(material.materialCode) }}</td>
+              <td class="fgi-action-cell">
+                <button type="button" class="fgi-icon-btn fgi-icon-btn--blue" (click)="openCreatePXDialog(material)" title="Tạo phiếu xuất">
+                  <i class="material-icons">add_shopping_cart</i>
+                </button>
+              </td>
+              <td class="fgi-action-cell">
+                <button type="button" class="fgi-icon-btn fgi-icon-btn--danger" (click)="deleteItem(material)"
+                        title="Xóa" *ngIf="hasDeletePermission">
+                  <i class="material-icons">delete</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="fgi-footer" *ngIf="filteredMaterials.length">
+        <span class="fgi-footer__info">
+          Hiển thị {{ pageStartIndex }} đến {{ pageEndIndex }} của {{ filteredMaterials.length | number }} dòng
+        </span>
+        <div class="fgi-pagination">
+          <button type="button" class="fgi-page-btn" [disabled]="currentPage === 1" (click)="setPage(currentPage - 1)">‹</button>
+          <ng-container *ngFor="let p of pageNumbers">
+            <button type="button" class="fgi-page-btn" *ngIf="p !== '...'"
+                    [class.fgi-page-btn--active]="p === currentPage"
+                    (click)="setPage($any(p))">{{ p }}</button>
+            <span class="fgi-page-ellipsis" *ngIf="p === '...'">…</span>
+          </ng-container>
+          <button type="button" class="fgi-page-btn" [disabled]="currentPage === totalPages" (click)="setPage(currentPage + 1)">›</button>
+        </div>
+        <label class="fgi-page-size">
+          Hiển thị
+          <select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange()">
+            <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+          </select>
+          dòng
+        </label>
+      </div>
     </div>
   </div>
 </div>
@@ -581,6 +593,10 @@
     </div>
     <div class="modal-body">
       <div class="more-menu-list">
+        <button class="more-menu-item" (click)="goToMenu(); showMoreMenu = false">
+          <i class="material-icons">home</i>
+          <span>Về Menu</span>
+        </button>
         <button class="more-menu-item" (click)="openLocationReportModal(); showMoreMenu = false">
           <i class="material-icons">place</i>
           <span>Vị trí</span>

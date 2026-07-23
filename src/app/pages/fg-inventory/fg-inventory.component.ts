@@ -12,6 +12,7 @@ import { FgInService } from '../../services/fg-in.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
+import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -54,15 +55,6 @@ export interface ProductCatalogItem {
   updatedAt?: Date;
 }
 
-export interface CustomerCodeMappingItem {
-  id?: string;
-  customerCode: string;
-  materialCode: string;
-  description?: string; // Tên Khách Hàng
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
 @Component({
   selector: 'app-fg-inventory',
   templateUrl: './fg-inventory.component.html',
@@ -77,6 +69,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   /** Mã TP (7 ký tự, tự tìm) hoặc Vị trí / Khách hàng (bấm Search). */
   searchMode: 'material' | 'location' | 'customer' = 'material';
   searchStatus: 'idle' | 'typing' | 'searching' | 'found' | 'not-found' | 'non-stock-only' = 'idle';
+  /** Ba ô filter UI (đồng bộ với searchTerm + searchMode). */
+  filterMaTp = '';
+  filterLocation = '';
+  filterCustomer = '';
+
+  // Pagination (client-side trên filteredMaterials)
+  pageSize = 20;
+  currentPage = 1;
+  readonly pageSizeOptions = [20, 50, 100, 200];
+  lastUpdatedAt: Date | null = null;
   
   // Factory filter — mặc định ASM1 (không dùng TOTAL khi mở tab)
   selectedFactory: string = 'ASM1';
@@ -86,8 +88,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   catalogItems: ProductCatalogItem[] = [];
   catalogLoaded: boolean = false;
 
-  // Customer Code Mapping (Tên Khách Hàng = description)
-  mappingItems: CustomerCodeMappingItem[] = [];
+  /** Lượng Đóng Thùng (danh mục riêng của Kho) — key = 7 ký tự đầu Mã TP, dùng để tính Carton cho dòng Tồn đầu (batch TDAU). */
+  cartonPackingQtyMap: Map<string, number> = new Map();
 
   // Search optimization
   private searchSubject = new Subject<string>();
@@ -181,11 +183,124 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private readTracker: ReadTrackerService,
     private fgDailyBackup: FgDailyBackupService,
     private router: Router,
-    private tpCatalogService: TpCatalogFullService
+    private tpCatalogService: TpCatalogFullService,
+    private cartonPackingQtyService: CartonPackingQtyService
   ) {}
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  get pagedMaterials(): FGInventoryItem[] {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.filteredMaterials.slice(start, start + this.pageSize);
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredMaterials.length / this.pageSize) || 1);
+  }
+
+  get pageStartIndex(): number {
+    if (!this.filteredMaterials.length) return 0;
+    return (this.currentPage - 1) * this.pageSize + 1;
+  }
+
+  get pageEndIndex(): number {
+    return Math.min(this.currentPage * this.pageSize, this.filteredMaterials.length);
+  }
+
+  get pageNumbers(): Array<number | '...'> {
+    const total = this.totalPages;
+    const current = this.currentPage;
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages: Array<number | '...'> = [1];
+    if (current > 3) pages.push('...');
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+    for (let p = start; p <= end; p++) pages.push(p);
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+  }
+
+  setPage(page: number): void {
+    if (page < 1 || page > this.totalPages) return;
+    this.currentPage = page;
+  }
+
+  onPageSizeChange(): void {
+    this.currentPage = 1;
+  }
+
+  markUpdatedNow(): void {
+    this.lastUpdatedAt = new Date();
+  }
+
+  formatLastUpdated(): string {
+    if (!this.lastUpdatedAt) return '—';
+    const d = this.lastUpdatedAt;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  onFilterMaTpChange(value: string): void {
+    this.filterMaTp = String(value || '').toUpperCase();
+    this.filterLocation = '';
+    this.filterCustomer = '';
+    this.searchMode = 'material';
+    this.searchTerm = this.filterMaTp;
+    this.currentPage = 1;
+    this.onSearchChange({ target: { value: this.filterMaTp } } as any);
+  }
+
+  onFilterLocationChange(value: string): void {
+    this.filterLocation = String(value || '').toUpperCase();
+    this.filterMaTp = '';
+    this.filterCustomer = '';
+    this.searchMode = 'location';
+    this.searchTerm = this.filterLocation;
+    this.currentPage = 1;
+    this.onSearchChange({ target: { value: this.filterLocation } } as any);
+  }
+
+  onFilterCustomerChange(value: string): void {
+    this.filterCustomer = String(value || '').toUpperCase();
+    this.filterMaTp = '';
+    this.filterLocation = '';
+    this.searchMode = 'customer';
+    this.searchTerm = this.filterCustomer;
+    this.currentPage = 1;
+    this.onCustomerSelected(this.filterCustomer);
+  }
+
+  clearFilterCustomer(): void {
+    this.filterCustomer = '';
+    this.searchTerm = '';
+    this.searchStatus = 'idle';
+    this.filteredMaterials = [];
+    this.currentPage = 1;
+  }
+
+  clearFilterMaTp(): void {
+    this.filterMaTp = '';
+    if (this.searchMode === 'material') {
+      this.searchTerm = '';
+      this.searchStatus = 'idle';
+      this.filteredMaterials = [];
+      this.currentPage = 1;
+    }
+  }
+
+  clearFilterLocation(): void {
+    this.filterLocation = '';
+    if (this.searchMode === 'location') {
+      this.searchTerm = '';
+      this.searchStatus = 'idle';
+      this.filteredMaterials = [];
+      this.currentPage = 1;
+    }
   }
 
   /** Chỉ cho sửa "Tồn đầu" với dòng import tồn đầu (batch TDAU1-/TDAU2-) */
@@ -197,7 +312,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.setupDebouncedSearch();
     this.loadCatalogFromFirebase();
-    this.loadMappingFromFirebase();
+    this.loadCartonPackingQty();
     this.startDate = '2020-01-01';
     this.endDate = '2030-12-31';
     this.applyFilters();
@@ -447,8 +562,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
    * (dữ liệu thô, có thể thiếu/không khớp) mà dò theo đúng cột "Khách hàng" ở tab Danh mục TP
    * (fg-catalog.customer, đã cache sẵn qua catalogItems từ lúc mở tab — KHÔNG dùng mappingItems/
    * fg-customer-mapping vì đó là dữ liệu cũ, import mới không còn ghi vào đó nữa): dò theo cột
-   * Mã vật tư (materialCode) để biết Khách hàng, gom lại danh sách Mã TP thuộc khách đó. Sau đó
-   * mới query fg-inventory theo đúng các Mã TP này (chunk 10 mã/lần vì giới hạn của mệnh đề 'in').
+   * Mã vật tư (materialCode) để biết Khách hàng, gom lại danh sách Mã TP gốc (7 ký tự) thuộc khách
+   * đó. Danh mục TP lưu đúng 7 ký tự gốc, nhưng fg-inventory có thể lưu kèm hậu tố (VD "P013011_0")
+   * — nên phải query theo kiểu "bắt đầu bằng" (prefix range), KHÔNG dùng 'in' so khớp tuyệt đối
+   * (sẽ không khớp được các dòng có hậu tố).
    */
   async runCustomerSearch(customerRaw: string): Promise<void> {
     const term = String(customerRaw || '').trim().toUpperCase();
@@ -466,9 +583,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     try {
-      // fg-catalog lưu Mã vật tư có thể kèm hậu tố theo khách (VD "P001005_C"), nhưng fg-inventory
-      // chỉ lưu đúng 7 ký tự đầu (mã TP gốc) — cắt về 7 ký tự trước khi query, nếu không sẽ không
-      // khớp được dòng tồn kho nào.
       const matchedCodes = Array.from(
         new Set(
           this.catalogItems
@@ -485,15 +599,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const chunks: string[][] = [];
-      for (let i = 0; i < matchedCodes.length; i += 10) {
-        chunks.push(matchedCodes.slice(i, i + 10));
-      }
-
       const snaps = await Promise.all(
-        chunks.map(chunk =>
+        matchedCodes.map(code =>
           this.firestore
-            .collection('fg-inventory', ref => ref.where('materialCode', 'in', chunk))
+            .collection('fg-inventory', ref =>
+              ref.where('materialCode', '>=', code).where('materialCode', '<', code + '')
+            )
             .get()
             .toPromise()
             .catch(() => null)
@@ -601,6 +712,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   async refreshInventoryData(): Promise<void> {
     await this.refreshFgInOutCaches();
     await this.loadMaterialsFromFirebase();
+    this.markUpdatedNow();
   }
 
   /** Key chuẩn hoá để map Nhập/Xuất theo đúng dòng (Mã TP|Batch|LSX|LOT). */
@@ -930,6 +1042,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       totalMaterials: this.materials.length,
       filteredMaterials: this.filteredMaterials.length
     });
+
+    const maxPage = Math.max(1, Math.ceil(this.filteredMaterials.length / this.pageSize) || 1);
+    if (this.currentPage > maxPage) this.currentPage = maxPage;
+    this.markUpdatedNow();
   }
 
   // Search functionality with debouncing
@@ -974,9 +1090,13 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   clearSearch(): void {
     this.searchTerm = '';
+    this.filterMaTp = '';
+    this.filterLocation = '';
+    this.filterCustomer = '';
     this.filteredMaterials = [];
     this.materials = [];
     this.searchStatus = 'idle';
+    this.currentPage = 1;
   }
 
   // Format number: dấu phẩy hàng nghìn, không có số thập phân
@@ -1235,6 +1355,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.showLocationReportModal = false;
     this.searchMode = 'location';
     this.searchTerm = location;
+    this.filterLocation = location;
+    this.filterMaTp = '';
+    this.filterCustomer = '';
+    this.currentPage = 1;
     void this.runLocationSearch(location);
   }
 
@@ -1378,14 +1502,49 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     try {
       this.isLoading = true;
       const rawData = await this.readExcelFile(file);
-      const materials = this.parseExcelData(rawData);
+      // Đọc thẳng Firestore để biết batch TDAU lớn nhất đã có — tránh sinh trùng batch với các lần
+      // import trước (trước đây luôn bắt đầu lại từ 000001 mỗi lần import).
+      const startSeqByFactory = {
+        ASM1: await this.getNextTdauBatchSeq('ASM1'),
+        ASM2: await this.getNextTdauBatchSeq('ASM2')
+      };
+      const materials = this.parseExcelData(rawData, startSeqByFactory);
       await this.runInventoryImport(materials, 'tonDau');
-      
+
     } catch (error) {
       console.error('Error processing Excel file:', error);
       this.isLoading = false;
       this.showImportProgressDialog = false;
       alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+    }
+  }
+
+  /**
+   * Số thứ tự tiếp theo cho batch TDAU (Tồn đầu) theo nhà máy — đọc thẳng Firestore (không dựa vào
+   * this.materials vì đó chỉ là kết quả search hiện tại, có thể chưa chứa hết batch TDAU đã có) để
+   * đảm bảo không sinh trùng batch với các lần import trước.
+   */
+  private async getNextTdauBatchSeq(factory: string): Promise<number> {
+    const prefix = (factory === 'ASM2' ? 'TDAU2-' : 'TDAU1-').toUpperCase();
+    try {
+      const snap = await this.firestore
+        .collection('fg-inventory', ref =>
+          ref
+            .where('batchNumber', '>=', prefix + '000000')
+            .where('batchNumber', '<=', prefix + '999999')
+            .orderBy('batchNumber', 'desc')
+            .limit(1)
+        )
+        .get()
+        .toPromise();
+      const doc = snap?.docs?.[0];
+      if (!doc) return 1;
+      const b = String((doc.data() as any)?.batchNumber || '').trim().toUpperCase();
+      const n = parseInt(b.slice(prefix.length), 10);
+      return !isNaN(n) ? n + 1 : 1;
+    } catch (e) {
+      console.error('getNextTdauBatchSeq failed', e);
+      return 1;
     }
   }
 
@@ -1507,7 +1666,11 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Parse dữ liệu import tồn đầu - cột: A=Nhà máy, C=Mã TP, D=LOT, E=LSX, F=Tồn đầu, G=Vị trí, H=Ghi chú
   // Batch tự sinh: TDAU000001, TDAU000002... (đọc batch biết là import tồn đầu)
   // Loại trùng: gộp các dòng trùng (Factory + Mã TP + LOT + LSX + Vị trí) bằng cách cộng dồn tồn đầu
-  private parseExcelData(rawData: any[][]): FGInventoryItem[] {
+  // startSeqByFactory: số thứ tự bắt đầu (đã trừ trùng với batch cũ) — xem getNextTdauBatchSeq().
+  private parseExcelData(
+    rawData: any[][],
+    startSeqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1 }
+  ): FGInventoryItem[] {
     const rows = rawData.filter(r => r && r.length > 0);
     let startIndex = 0;
     if (rows.length > 0 && this.isHeaderRow(rows[0])) {
@@ -1551,13 +1714,18 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
     // Bước 2: Chuyển thành FGInventoryItem với batch tự sinh (ASM1: TDAU1-xxx, ASM2: TDAU2-xxx)
     const materials: FGInventoryItem[] = [];
-    const seqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1 };
+    const seqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1, ...startSeqByFactory };
     mergedMap.forEach((item) => {
       const factory = item.factory || 'ASM1';
       const prefix = factory === 'ASM2' ? 'TDAU2' : 'TDAU1';
       const seq = seqByFactory[factory] || 1;
       seqByFactory[factory] = seq + 1;
       const notes = item.notes.filter(n => n).join('; ');
+      // Tính Carton/ODD ngay lúc import theo Lượng Đóng Thùng/SL SP thùng ở Danh mục TP — không cần
+      // đợi sửa Tồn đầu hoặc bấm "Tính Tồn" mới có carton đúng.
+      const packingQty = this.getPackingQtyForTdau(item.materialCode);
+      const carton = packingQty > 0 ? Math.ceil(item.tonDau / packingQty) : 0;
+      const odd = packingQty > 0 ? item.tonDau % packingQty : 0;
       materials.push({
         factory,
         importDate: new Date(),
@@ -1568,8 +1736,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         lsx: item.lsx,
         quantity: 0,
         standard: 0,
-        carton: 0,
-        odd: 0,
+        carton,
+        odd,
         tonDau: item.tonDau,
         nhap: 0,
         xuat: 0,
@@ -1942,21 +2110,67 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
 
-  // Load Customer Code Mapping — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng Firestore
-  loadMappingFromFirebase(): void {
-    this.tpCatalogService
-      .getMappingItemsCached()
-      .then(items => {
-        this.mappingItems = items;
-        console.log('Loaded Customer Code Mapping (cached):', this.mappingItems.length);
-      })
-      .catch(err => console.error('Load fg-customer-mapping (cached) failed:', err));
+  /**
+   * Lấy Tên khách hàng theo Mã TP — dò trên cột "Khách hàng" ở tab Danh mục TP (catalogItems, từ
+   * fg-catalog). Không dùng mappingItems (fg-customer-mapping) vì đó là dữ liệu cũ, import mới
+   * không còn ghi vào đó nữa. Mã TP luôn có dạng P + 6 số (7 ký tự); Mã vật tư ở Danh mục TP có thể
+   * kèm hậu tố theo khách (VD "P001005_C") nên chỉ so 7 ký tự đầu của cả 2 bên.
+   */
+  getCustomerNameFromMapping(materialCode: string): string {
+    const code7 = String(materialCode || '').trim().toUpperCase().slice(0, 7);
+    if (!code7) return '';
+    const catalogItem = this.catalogItems.find(
+      c => (c.materialCode || '').trim().toUpperCase().slice(0, 7) === code7
+    );
+    return catalogItem ? (catalogItem.customer || '') : '';
   }
 
-  // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
-  getCustomerNameFromMapping(materialCode: string): string {
-    const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
-    return mapping ? (mapping.description || '') : '';
+  /** Lượng Đóng Thùng — danh mục riêng của Kho (collection carton-packing-qty), key = Mã TP. */
+  async loadCartonPackingQty(forceRefresh = false): Promise<void> {
+    try {
+      this.cartonPackingQtyMap = await this.cartonPackingQtyService.loadAllAsMap(forceRefresh);
+    } catch (err) {
+      console.error('Load carton-packing-qty failed:', err);
+    }
+  }
+
+  /**
+   * SL SP/thùng dùng để tính Carton cho dòng Tồn đầu (batch TDAU1-/TDAU2-): ưu tiên Lượng Đóng Thùng
+   * (danh mục riêng của Kho) nếu có; không có thì lấy SL SP/thùng ở Danh mục TP. So theo 7 ký tự đầu
+   * Mã TP vì cả 2 nguồn đều lưu đúng mã gốc, còn material.materialCode ở dòng TDAU có thể kèm hậu tố
+   * tùy file import (VD "P013011_0").
+   */
+  private getPackingQtyForTdau(materialCode: string): number {
+    const code7 = String(materialCode || '').trim().toUpperCase().slice(0, 7);
+    if (!code7) return 0;
+    const override = this.cartonPackingQtyMap.get(code7);
+    if (override && override > 0) return override;
+    const catalogItem = this.catalogItems.find(
+      c => (c.materialCode || '').trim().toUpperCase().slice(0, 7) === code7
+    );
+    const standard = catalogItem ? parseFloat(catalogItem.standard) : NaN;
+    return !isNaN(standard) && standard > 0 ? standard : 0;
+  }
+
+  /**
+   * Carton hiển thị trên bảng — tính trực tiếp lúc render cho dòng Tồn đầu (TDAU) thay vì chỉ đọc
+   * material.carton đã lưu (nhiều dòng cũ import trước khi có Lượng Đóng Thùng vẫn đang lưu 0).
+   */
+  getDisplayCarton(material: FGInventoryItem): number {
+    if (this.isTonDauEditable(material)) {
+      const packingQty = this.getPackingQtyForTdau(material.materialCode);
+      return packingQty > 0 ? Math.ceil((material.ton || 0) / packingQty) : 0;
+    }
+    return material.carton || 0;
+  }
+
+  /** ODD hiển thị trên bảng — cùng cách tính với getDisplayCarton (xem giải thích ở đó). */
+  getDisplayOdd(material: FGInventoryItem): number {
+    if (this.isTonDauEditable(material)) {
+      const packingQty = this.getPackingQtyForTdau(material.materialCode);
+      return packingQty > 0 ? (material.ton || 0) % packingQty : 0;
+    }
+    return material.odd || 0;
   }
 
   // Get customer from material data (no catalog lookup needed)
@@ -2045,9 +2259,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Update Tồn when Tồn đầu, Nhập, or Xuất changes
   updateTon(material: FGInventoryItem): void {
     this.recalculateTon(material);
-    
-    // Recalculate Carton/ODD based on new Tồn
-    if (material.standard > 0) {
+
+    // Dòng Tồn đầu (batch TDAU): tính Carton theo Lượng Đóng Thùng/SL SP thùng ở Danh mục TP,
+    // không dùng material.standard (thường = 0 vì đây là dòng import tồn đầu, không qua FG In).
+    if (this.isTonDauEditable(material)) {
+      const packingQty = this.getPackingQtyForTdau(material.materialCode);
+      if (packingQty > 0) {
+        material.carton = Math.ceil(material.ton / packingQty);
+        material.odd = material.ton % packingQty;
+      }
+    } else if (material.standard > 0) {
       material.carton = Math.ceil(material.ton / material.standard);
       material.odd = material.ton % material.standard;
     }
@@ -2101,13 +2322,20 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       const calculatedTon = this.calculateTon(material);
       if (material.ton !== calculatedTon) {
         material.ton = calculatedTon;
-        
-        // Recalculate Carton/ODD based on new Tồn
-        if (material.standard > 0) {
+
+        // Recalculate Carton/ODD based on new Tồn — dòng Tồn đầu (TDAU) dùng Lượng Đóng Thùng/SL SP
+        // thùng ở Danh mục TP thay vì material.standard.
+        if (this.isTonDauEditable(material)) {
+          const packingQty = this.getPackingQtyForTdau(material.materialCode);
+          if (packingQty > 0) {
+            material.carton = Math.ceil(material.ton / packingQty);
+            material.odd = material.ton % packingQty;
+          }
+        } else if (material.standard > 0) {
           material.carton = Math.ceil(material.ton / material.standard);
           material.odd = material.ton % material.standard;
         }
-        
+
         materialsToUpdate.push(material);
         console.log(`Updated ${material.materialCode}: Tồn=${material.ton}, Carton=${material.carton}, ODD=${material.odd}`);
       }
@@ -2258,12 +2486,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   viewAllMaterials(): void {
     this.searchTerm = '';
+    this.filterMaTp = '';
+    this.filterLocation = '';
+    this.filterCustomer = '';
     this.startDate = '2020-01-01';
     this.endDate = '2030-12-31';
     this.showCompleted = true;
     this.showNonStock = false;
     this.showNegativeStock = false;
     this.selectedFactory = 'TOTAL';
+    this.currentPage = 1;
     this.applyFilters();
     this.showTimeRangeDialog = false;
     
