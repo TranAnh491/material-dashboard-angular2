@@ -305,6 +305,69 @@
   </div>
 </div>
 
+<!-- Sửa Vị trí — nhập tay hoặc "Chuyển ASM3" chọn từ danh sách vị trí kho ASM3 -->
+<div class="custom-modal" [class.show]="showLocationEditModal" [style.display]="showLocationEditModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeLocationEditModal()"></div>
+  <div class="modal-container location-edit-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">place</i>
+        Sửa vị trí — {{ locationEditMaterial?.materialCode }}
+      </h5>
+      <button type="button" class="close-btn" (click)="closeLocationEditModal()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <!-- Bước 1: nhập tay hoặc bấm Chuyển ASM3 -->
+    <ng-container *ngIf="!showAsm3PositionPicker">
+      <div class="modal-body">
+        <label class="input-label">Vị trí mới</label>
+        <input type="text" class="date-input location-edit-input" [(ngModel)]="locationEditDraft"
+               placeholder="VD: C1.2, Temp-1..." (keyup.enter)="saveLocationEdit()">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-cancel" (click)="closeLocationEditModal()">
+          <i class="material-icons">close</i>
+          Hủy
+        </button>
+        <button type="button" class="btn btn-cancel" (click)="openAsm3PositionPicker()">
+          <i class="material-icons">warehouse</i>
+          Chuyển ASM3
+        </button>
+        <button type="button" class="btn btn-apply" (click)="saveLocationEdit()">
+          <i class="material-icons">check</i>
+          Lưu
+        </button>
+      </div>
+    </ng-container>
+
+    <!-- Bước 2: chọn vị trí ASM3 theo Dãy + Số -->
+    <ng-container *ngIf="showAsm3PositionPicker">
+      <div class="modal-body">
+        <p class="asm3-picker-hint">Bấm chọn 1 vị trí (Dãy + Số) — cập nhật ngay, không cần bấm Lưu.</p>
+        <div class="asm3-picker-scroll">
+          <div class="asm3-picker-row" *ngFor="let row of asm3PositionRows">
+            <span class="asm3-picker-row__label">{{ row }}</span>
+            <div class="asm3-picker-row__cells">
+              <button type="button" class="asm3-picker-cell" *ngFor="let idx of asm3PositionIndexes"
+                      (click)="selectAsm3Position(row, idx)">
+                {{ row }}{{ idx }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-cancel" (click)="showAsm3PositionPicker = false">
+          <i class="material-icons">arrow_back</i>
+          Quay lại
+        </button>
+      </div>
+    </ng-container>
+  </div>
+</div>
+
 <!-- Create PX Dialog -->
 <div class="custom-modal" [class.show]="showCreatePXDialog" [style.display]="showCreatePXDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showCreatePXDialog = false"></div>

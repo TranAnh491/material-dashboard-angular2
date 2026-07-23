@@ -133,6 +133,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   isLoadingCustomerSummary: boolean = false;
   customerSummaryRows: Array<{ customer: string; totalCarton: number }> = [];
 
+  // Sửa vị trí (bấm vào ô Vị trí) — nhập tay hoặc "Chuyển ASM3" chọn từ danh sách vị trí kho ASM3
+  showLocationEditModal: boolean = false;
+  locationEditMaterial: FGInventoryItem | null = null;
+  locationEditDraft: string = '';
+  showAsm3PositionPicker: boolean = false;
+  readonly asm3PositionRows: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+  readonly asm3PositionIndexes: number[] = Array.from({ length: 60 }, (_, i) => i + 1);
+
   // Factory menu popup
   showFactoryMenu: boolean = false;
 
@@ -2048,13 +2056,52 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Additional methods needed for the component
   editLocation(material: FGInventoryItem): void {
-    const newLocation = prompt('Nhập vị trí (sẽ tự động viết hoa, Tem1/Temp1/Temporary... sẽ tự chuẩn hóa thành Temp-1/2/3):', material.location || '');
-    if (newLocation !== null) {
-      material.location = this.normalizeFgLocationValue(newLocation);
-      material.updatedAt = new Date();
-      console.log(`Updated location for ${material.materialCode}: ${material.location}`);
-      this.updateMaterialInFirebase(material);
+    this.locationEditMaterial = material;
+    this.locationEditDraft = material.location || '';
+    this.showAsm3PositionPicker = false;
+    this.showLocationEditModal = true;
+  }
+
+  /** Đóng modal sửa vị trí — nếu đang ở bước chọn vị trí ASM3 thì lùi về bước nhập tay trước. */
+  closeLocationEditModal(): void {
+    if (this.showAsm3PositionPicker) {
+      this.showAsm3PositionPicker = false;
+      return;
     }
+    this.showLocationEditModal = false;
+    this.locationEditMaterial = null;
+    this.locationEditDraft = '';
+  }
+
+  /** Lưu vị trí nhập tay (không qua ASM3). */
+  saveLocationEdit(): void {
+    if (!this.locationEditMaterial) return;
+    const material = this.locationEditMaterial;
+    material.location = this.normalizeFgLocationValue(this.locationEditDraft);
+    material.updatedAt = new Date();
+    console.log(`Updated location for ${material.materialCode}: ${material.location}`);
+    this.updateMaterialInFirebase(material);
+    this.showLocationEditModal = false;
+    this.locationEditMaterial = null;
+    this.locationEditDraft = '';
+  }
+
+  openAsm3PositionPicker(): void {
+    this.showAsm3PositionPicker = true;
+  }
+
+  /** Bấm chọn 1 vị trí ASM3 (VD A1, B23...) — cập nhật thẳng vị trí, dạng "WH3-{Dãy}{Số}". */
+  selectAsm3Position(row: string, index: number): void {
+    if (!this.locationEditMaterial) return;
+    const material = this.locationEditMaterial;
+    material.location = `WH3-${row}${index}`;
+    material.updatedAt = new Date();
+    console.log(`Updated location for ${material.materialCode}: ${material.location}`);
+    this.updateMaterialInFirebase(material);
+    this.showAsm3PositionPicker = false;
+    this.showLocationEditModal = false;
+    this.locationEditMaterial = null;
+    this.locationEditDraft = '';
   }
 
 

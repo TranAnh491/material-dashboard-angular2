@@ -1129,6 +1129,85 @@ $fgi-kk: #ec4899;
       font-size: 13px;
       color: #666;
     }
+
+    &.location-edit-modal {
+      max-width: 700px;
+    }
+
+    .location-edit-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid $fgi-border;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #ffffff;
+
+      &:focus {
+        outline: none;
+        border-color: $fgi-blue;
+      }
+    }
+
+    .asm3-picker-hint {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .asm3-picker-scroll {
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .asm3-picker-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #f0f0f0;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &__label {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: $fgi-blue-dark;
+        color: #ffffff;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      &__cells {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+    }
+
+    .asm3-picker-cell {
+      min-width: 30px;
+      height: 24px;
+      padding: 0 4px;
+      border: 1px solid $fgi-border;
+      border-radius: 3px;
+      background: #ffffff;
+      font-size: 10px;
+      cursor: pointer;
+
+      &:hover {
+        background: $fgi-blue;
+        border-color: $fgi-blue;
+        color: #ffffff;
+      }
+    }
   }
 }
 
