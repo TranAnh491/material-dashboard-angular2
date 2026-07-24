@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -138,7 +138,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   locationEditMaterial: FGInventoryItem | null = null;
   locationEditDraft: string = '';
   showAsm3PositionPicker: boolean = false;
-  readonly asm3PositionRows: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+  // Dãy A-G ở kho ASM3 dành cho NVL (Materials ASM1/ASM2) — TP chỉ được gán vào dãy H, I, K, L.
+  readonly asm3PositionRows: string[] = ['H', 'I', 'K', 'L'];
   readonly asm3PositionIndexes: number[] = Array.from({ length: 60 }, (_, i) => i + 1);
 
   // Factory menu popup
@@ -191,6 +192,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private readTracker: ReadTrackerService,
     private fgDailyBackup: FgDailyBackupService,
     private router: Router,
+    private route: ActivatedRoute,
     private tpCatalogService: TpCatalogFullService,
     private cartonPackingQtyService: CartonPackingQtyService
   ) {}
@@ -326,6 +328,13 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
+
+    // Đến từ tab khác (VD: Layout Warehouse ASM3 → "Xem chi tiết") kèm ?location=... → tự tìm theo vị trí đó.
+    const locationParam = this.route.snapshot.queryParamMap.get('location');
+    if (locationParam) {
+      this.searchMode = 'location';
+      void this.runLocationSearch(locationParam);
+    }
   }
 
   ngOnDestroy(): void {

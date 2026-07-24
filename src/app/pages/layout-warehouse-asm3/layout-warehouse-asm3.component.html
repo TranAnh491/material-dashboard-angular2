@@ -207,10 +207,14 @@
 
           <div class="wms-detail__btns" *ngIf="!showScanInput && !moveMode">
             <button type="button" class="wms-btn wms-btn--primary wms-btn--block"
+              *ngIf="!isFgRow(selectedSlot.row)"
               (click)="openScanForSelectedSlot()"
               [disabled]="isSlotOccupied(selectedSlot) || isSlotLocked(selectedSlot)">
               <i class="material-icons">qr_code_scanner</i> Gán pallet
             </button>
+            <p class="wms-fg-hint" *ngIf="isFgRow(selectedSlot.row)">
+              Vị trí TP được gán qua tab <strong>FG In</strong> / <strong>FG Inventory</strong> (nút "Chuyển ASM3") — trang này chỉ hiển thị.
+            </p>
             <button type="button" class="wms-btn wms-btn--outline"
               (click)="viewSelectedSlotInMaterials()"
               *ngIf="isSlotOccupied(selectedSlot)">
@@ -224,7 +228,7 @@
             </button>
             <button type="button" class="wms-btn wms-btn--outline"
               (click)="startMovePosition()"
-              *ngIf="isSlotOccupied(selectedSlot) && !slotLockGroupLabel(selectedSlot)"
+              *ngIf="isSlotOccupied(selectedSlot) && !slotLockGroupLabel(selectedSlot) && !isFgRow(selectedSlot.row)"
               [disabled]="isSlotLocked(selectedSlot)">
               <i class="material-icons">swap_horiz</i> Đổi vị trí
             </button>

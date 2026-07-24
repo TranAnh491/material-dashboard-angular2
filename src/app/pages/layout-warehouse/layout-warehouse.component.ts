@@ -275,6 +275,14 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
   /** Tổng mã ASM3 (vị trí ASM3* hoặc factory ASM3) — hiển thị box Factory 3 */
   asm3HeatmapTotal = 0;
 
+  /** Bảng dời kho — số mã NVL theo từng ô kệ (A1, A2, D3, …), bấm ô để xem danh sách mã. */
+  showRelocationModal = false;
+  relocationLoading = false;
+  relocationError = '';
+  relocationRows: HeatmapShelfRow[] = [];
+  relocationGroups: { rackLetter: string; rows: HeatmapShelfRow[] }[] = [];
+  selectedRelocationRow: HeatmapShelfRow | null = null;
+
   rack3dActive = false;
   rack3dLoading = false;
   rack3dError = '';
@@ -1028,6 +1036,123 @@ export class LayoutWarehouseComponent implements OnInit, AfterViewInit, OnDestro
       this.storageGuideError = (err as Error)?.message || String(err);
     } finally {
       this.storageGuideLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  openRelocationGrid(): void {
+    this.showRelocationModal = true;
+    this.selectedRelocationRow = null;
+    void this.loadRelocationGrid();
+  }
+
+  closeRelocationGrid(): void {
+    this.showRelocationModal = false;
+    this.selectedRelocationRow = null;
+  }
+
+  selectRelocationCell(row: HeatmapShelfRow): void {
+    this.selectedRelocationRow = row;
+  }
+
+  closeRelocationCellDetail(): void {
+    this.selectedRelocationRow = null;
+  }
+
+  async loadRelocationGrid(): Promise<void> {
+    this.relocationLoading = true;
+    this.relocationError = '';
+    this.relocationRows = [];
+    this.relocationGroups = [];
+    this.cdr.markForCheck();
+
+    try {
+      if (!this.knownShelves.length) {
+        this.collectKnownShelves();
+      }
+
+      const [nvlSnap, fgSnap] = await Promise.all([
+        this.firestore
+          .collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.factory).limit(10000)
+          )
+          .get()
+          .toPromise(),
+        this.firestore
+          .collection('fg-inventory', ref =>
+            ref.where('factory', '==', this.factory).limit(10000)
+          )
+          .get()
+          .toPromise()
+      ]);
+
+      const byShelf = new Map<string, Set<string>>();
+
+      const ingestIntoShelf = (materialCode: string, location: string): void => {
+        if (!materialCode || !location || location.toUpperCase() === 'TEMPORARY') return;
+        const parsed = parseWarehouseLocation(location, this.knownShelves);
+        const shelf = (parsed?.shelf || location).toUpperCase();
+        if (!shelf) return;
+
+        const codes = byShelf.get(shelf) || new Set<string>();
+        codes.add(materialCode);
+        byShelf.set(shelf, codes);
+      };
+
+      for (const doc of nvlSnap?.docs || []) {
+        const data = doc.data() as Record<string, unknown>;
+        const materialCode = String(data['materialCode'] || '').trim().toUpperCase();
+        const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+
+        const qty = Number(data['quantity']) || 0;
+        const exported = Number(data['exported']) || 0;
+        const stockField = Number(data['stock']) || 0;
+        const openingStock = data['openingStock'] != null ? Number(data['openingStock']) : 0;
+        const xt = Number(data['xt']) || 0;
+        const available =
+          qty > 0 ? openingStock + qty - exported - xt : stockField > 0 ? stockField : openingStock;
+        if (available <= 0) continue;
+
+        ingestIntoShelf(materialCode, location);
+      }
+
+      for (const doc of fgSnap?.docs || []) {
+        const data = doc.data() as Record<string, unknown>;
+        const materialCode = String(data['materialCode'] || '').trim().toUpperCase();
+        const location = String(data['location'] ?? data['viTri'] ?? '').trim();
+        const available = Number(data['ton']) || 0;
+        if (available <= 0) continue;
+
+        ingestIntoShelf(materialCode, location);
+      }
+
+      this.relocationRows = Array.from(byShelf.entries())
+        .map(([shelf, codes]) => ({
+          shelf,
+          codeCount: codes.size,
+          materialCodes: Array.from(codes).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }))
+        }))
+        .sort((a, b) => {
+          const rackCmp = compareRackLetters(
+            extractRackLetter(a.shelf, this.knownShelves),
+            extractRackLetter(b.shelf, this.knownShelves)
+          );
+          return rackCmp !== 0 ? rackCmp : a.shelf.localeCompare(b.shelf, 'vi', { numeric: true });
+        });
+
+      const groupMap = new Map<string, HeatmapShelfRow[]>();
+      for (const row of this.relocationRows) {
+        const rackLetter = extractRackLetter(row.shelf, this.knownShelves) || row.shelf;
+        if (!groupMap.has(rackLetter)) groupMap.set(rackLetter, []);
+        groupMap.get(rackLetter)!.push(row);
+      }
+      this.relocationGroups = Array.from(groupMap.entries())
+        .map(([rackLetter, rows]) => ({ rackLetter, rows }))
+        .sort((a, b) => compareRackLetters(a.rackLetter, b.rackLetter));
+    } catch (err) {
+      this.relocationError = (err as Error)?.message || String(err);
+    } finally {
+      this.relocationLoading = false;
       this.cdr.markForCheck();
     }
   }

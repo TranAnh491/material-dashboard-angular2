@@ -160,8 +160,15 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   /** Tiền tố mã vị trí kho ASM3 — VD: WH3-A1 */
   private readonly WAREHOUSE_SLOT_PREFIX = 'WH3';
   private readonly INVENTORY_COLLECTION = 'inventory-materials';
+  /** Danh mục TP (kho thành phẩm) — dãy H, I, K, L đồng bộ từ đây thay vì inventory-materials. */
+  private readonly FG_INVENTORY_COLLECTION = 'fg-inventory';
   private readonly LOCATION_HISTORY_COLLECTION = 'material-location-history';
   private readonly SYNC_FACTORIES = ['ASM1', 'ASM2'] as const;
+  /** Dãy A-G: NVL (inventory-materials, Materials ASM1/ASM2). */
+  private readonly NVL_ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+  /** Dãy H, I, K, L: TP (fg-inventory, FG Inventory) — vị trí được gán qua tab FG In/FG Inventory
+   *  (nút "Chuyển ASM3"), trang này chỉ đọc để hiển thị, không có tính năng scan/gán pallet ngược lại. */
+  private readonly FG_ROWS = ['H', 'I', 'K', 'L'];
 
   @ViewChild('scanPalletInputRef') scanPalletInputRef?: ElementRef<HTMLInputElement>;
 
@@ -272,10 +279,11 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   /**
-   * Đọc cột "Vị trí" (inventory-materials.location) của ASM1 + ASM2, chỉ lấy các dòng có
-   * vị trí bắt đầu bằng "WH3-" (đã lưu trữ tại kho ASM3) — dùng range query trên field
-   * "location" (đã có composite index factory+location) nên KHÔNG quét toàn bộ collection,
-   * chỉ đọc đúng số doc khớp tiền tố → tối thiểu lượt read.
+   * Đọc cột "Vị trí" của ASM1 + ASM2 từ 2 nguồn riêng theo đúng khu vực: dãy A-G là NVL
+   * (inventory-materials — Materials ASM1/ASM2), dãy H, I, K, L là TP (fg-inventory — FG Inventory,
+   * gán qua nút "Chuyển ASM3"). Chỉ lấy các dòng có vị trí bắt đầu bằng "WH3-" — dùng range query
+   * trên field "location" nên KHÔNG quét toàn bộ collection. Lọc thêm theo đúng nhóm dãy của từng
+   * nguồn để tránh nhầm khu vực nếu có dữ liệu ghi sai vị trí.
    */
   private async loadInventoryLocations(): Promise<void> {
     try {
@@ -283,6 +291,19 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       const fullMap = new Map<string, string>();
       const materialCodeMap = new Map<string, string>();
       const prefix = `${this.WAREHOUSE_SLOT_PREFIX}-`;
+
+      const ingestSnap = (snap: { docs?: Array<{ data: () => any }> } | undefined, allowedRows: string[]) => {
+        (snap?.docs || []).forEach(doc => {
+          const data = doc.data() as { location?: string; materialCode?: string };
+          const raw = String(data?.location || '').trim().toUpperCase();
+          const parsed = this.parseInventoryLocation(raw);
+          if (!parsed || !allowedRows.includes(parsed.row)) return;
+          shortMap.set(parsed.slotName, parsed.palletNumber);
+          fullMap.set(parsed.slotName, raw);
+          const materialCode = String(data?.materialCode || '').trim().toUpperCase();
+          if (materialCode) materialCodeMap.set(parsed.slotName, materialCode);
+        });
+      };
 
       for (const factory of this.SYNC_FACTORIES) {
         const snap = await this.firestore
@@ -294,18 +315,18 @@ export class LayoutWarehouseAsm3Component implements OnInit {
           )
           .get()
           .toPromise();
+        ingestSnap(snap, this.NVL_ROWS);
 
-        (snap?.docs || []).forEach(doc => {
-          const data = doc.data() as { location?: string; materialCode?: string };
-          const raw = String(data?.location || '').trim().toUpperCase();
-          const parsed = this.parseInventoryLocation(raw);
-          if (parsed) {
-            shortMap.set(parsed.slotName, parsed.palletNumber);
-            fullMap.set(parsed.slotName, raw);
-            const materialCode = String(data?.materialCode || '').trim().toUpperCase();
-            if (materialCode) materialCodeMap.set(parsed.slotName, materialCode);
-          }
-        });
+        const fgSnap = await this.firestore
+          .collection(this.FG_INVENTORY_COLLECTION, ref =>
+            ref
+              .where('factory', '==', factory)
+              .where('location', '>=', prefix)
+              .where('location', '<', prefix + '~')
+          )
+          .get()
+          .toPromise();
+        ingestSnap(fgSnap, this.FG_ROWS);
       }
 
       this.inventoryLocationLabels = shortMap;
@@ -326,13 +347,13 @@ export class LayoutWarehouseAsm3Component implements OnInit {
    * khớp sẽ đè nhầm lên mã pallet gốc đã scan tay trong slotPallets.
    * Trả về null nếu không khớp định dạng ô ASM3.
    */
-  private parseInventoryLocation(location: string): { slotName: string; palletNumber: string } | null {
+  private parseInventoryLocation(location: string): { slotName: string; row: string; palletNumber: string } | null {
     const m = location.match(/^WH3-([A-IK-L])(\d{1,2})-(.+)$/);
     if (!m) return null;
     const row = m[1];
     const index = parseInt(m[2], 10);
     if (!this.rackLetters.includes(row) || index < 1 || index > this.SLOTS_PER_RACK) return null;
-    return { slotName: this.buildSlotName(row, index), palletNumber: m[3] || '' };
+    return { slotName: this.buildSlotName(row, index), row, palletNumber: m[3] || '' };
   }
 
   /** Số pallet ngắn gọn của 1 ô (không tính ô dự trữ chung nhóm khóa) — rỗng nếu ô đang trống. */
@@ -586,6 +607,11 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return `${slot.row}${slot.index}`;
   }
 
+  /** true nếu dãy thuộc khu TP (H, I, K, L) — đồng bộ từ fg-inventory, không có scan/gán pallet ngược lại. */
+  isFgRow(row: string | undefined | null): boolean {
+    return !!row && this.FG_ROWS.includes(row);
+  }
+
   private buildSlotName(row: string, index: number): string {
     return `${this.WAREHOUSE_SLOT_PREFIX}-${row}${index}`;
   }
@@ -684,6 +710,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   openScanForFirstEmpty(): void {
     for (const row of this.rackRows) {
+      if (this.isFgRow(row.letter)) continue;
       for (const slot of row.slots) {
         if (!this.isSlotOccupied(slot) && !this.isSlotLocked(slot)) {
           this.filterRow = 'ALL';
@@ -908,6 +935,10 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       alert('Chỉ đổi vị trí được khi ô đang có pallet.');
       return;
     }
+    if (this.isFgRow(this.selectedSlot.row)) {
+      alert('Vị trí TP được gán qua tab FG In / FG Inventory (nút "Chuyển ASM3") — không đổi vị trí ở đây.');
+      return;
+    }
     if (this.isSlotLocked(this.selectedSlot)) {
       alert('Vị trí đang bị khóa. Mở khóa trước khi đổi vị trí.');
       return;
@@ -998,17 +1029,25 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return this.slotPallets.get(slot.name) || '';
   }
 
-  /** Nhảy qua tab Materials ASM1, tự tìm theo đúng chuỗi vị trí đã lưu trên Firestore để xem mã NVL. */
+  /**
+   * Nhảy qua tab tương ứng, tự tìm theo đúng chuỗi vị trí đã lưu trên Firestore: dãy A-G (NVL) →
+   * Materials ASM1, dãy H, I, K, L (TP) → FG Inventory.
+   */
   viewSelectedSlotInMaterials(): void {
     if (!this.selectedSlot) return;
     const groupRef = this.lockGroups.get(this.selectedSlot.name);
     const targetName = groupRef || this.selectedSlot.name;
     const location = this.inventoryLocationFull.get(targetName) || targetName;
-    this.router.navigate(['/materials-asm1'], { queryParams: { location } });
+    const path = this.isFgRow(this.selectedSlot.row) ? '/fg-inventory' : '/materials-asm1';
+    this.router.navigate([path], { queryParams: { location } });
   }
 
   openScanForSelectedSlot(): void {
     if (!this.selectedSlot) return;
+    if (this.isFgRow(this.selectedSlot.row)) {
+      alert('Vị trí TP được gán qua tab FG In / FG Inventory (nút "Chuyển ASM3") — không gán ở đây.');
+      return;
+    }
     if (this.isSlotLocked(this.selectedSlot)) {
       alert('Vị trí đang bị khóa. Mở khóa trước khi gán pallet.');
       return;

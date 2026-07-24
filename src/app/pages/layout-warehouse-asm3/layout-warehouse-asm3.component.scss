@@ -674,6 +674,20 @@ $mobile: 767px;
   strong { font-weight: 800; color: #7c2d12; }
 }
 
+/* Gợi ý ở panel chi tiết khi chọn ô thuộc dãy TP (H, I, K, L) — không cho gán/đổi pallet ở ASM3. */
+.wms-fg-hint {
+  margin: 0;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 12px;
+  line-height: 1.4;
+
+  strong { font-weight: 800; }
+}
+
 .wms--move-mode .wms-viewport {
   cursor: crosshair;
 }

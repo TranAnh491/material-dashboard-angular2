@@ -211,6 +211,14 @@
         <i class="material-icons">{{ heatmapLoading ? 'hourglass_top' : 'grid_on' }}</i>
         {{ heatmapLoading ? 'Đang tải…' : (heatmapModeActive ? 'Heatmap (' + heatmapShelfCount + ')' : 'Heatmap') }}
       </button>
+      <button
+        type="button"
+        class="lw-btn lw-btn--guide"
+        [disabled]="isLoading"
+        (click)="openRelocationGrid()">
+        <i class="material-icons">apps</i>
+        Sơ Đồ Chi Tiết
+      </button>
       <p class="lw-live-hint" *ngIf="liveModeActive && !liveLoading">
         Hôm nay: {{ liveMoves.length }} lần đổi vị trí · {{ liveShelfCount }} kệ màu cam (theo vị trí mới nhất)
         <span *ngIf="liveUnmappedCount"> · {{ liveUnmappedCount }} kệ không có trên sơ đồ</span>
@@ -740,6 +748,83 @@
         <div class="lw-guide-rack__prefixes">
           <span class="lw-guide-prefix" *ngFor="let p of row.prefixes">{{ p }}</span>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="lw-modal-backdrop" *ngIf="showRelocationModal" (click)="closeRelocationGrid()">
+  <div class="lw-modal lw-modal--wide" role="dialog" (click)="$event.stopPropagation()">
+    <header class="lw-modal__head">
+      <div>
+        <h2 class="lw-modal__title"><i class="material-icons">apps</i> Sơ Đồ Chi Tiết</h2>
+        <p class="lw-modal__sub">Số mã NVL/TP đang chứa theo từng ô kệ — bấm vào ô để xem danh sách mã</p>
+      </div>
+      <button type="button" class="lw-modal__close" (click)="closeRelocationGrid()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+
+    <div class="lw-modal__toolbar">
+      <button
+        type="button"
+        class="lw-btn lw-btn--soft lw-btn--sm"
+        [disabled]="relocationLoading"
+        (click)="loadRelocationGrid()">
+        <i class="material-icons">refresh</i>
+        Làm mới
+      </button>
+      <span class="lw-relocation-total" *ngIf="!relocationLoading && relocationRows.length">
+        {{ relocationRows.length }} ô đang có hàng
+      </span>
+    </div>
+
+    <div class="lw-modal__loading" *ngIf="relocationLoading">
+      <i class="material-icons lw-spin">sync</i> Đang đọc tồn kho…
+    </div>
+
+    <div class="lw-alert lw-alert--error lw-modal__error" *ngIf="relocationError">
+      <i class="material-icons">error</i> {{ relocationError }}
+    </div>
+
+    <div class="lw-modal__body" *ngIf="!relocationLoading && !relocationError">
+      <div class="lw-guide-empty" *ngIf="!relocationRows.length">
+        Không có hàng tồn trên sơ đồ.
+      </div>
+      <div class="lw-relocation-groups" *ngIf="relocationRows.length">
+        <div class="lw-relocation-row" *ngFor="let group of relocationGroups">
+          <span class="lw-relocation-row__label">Kệ {{ group.rackLetter }}</span>
+          <div class="lw-relocation-row__cells">
+            <button
+              type="button"
+              class="lw-relocation-cell"
+              *ngFor="let row of group.rows"
+              [title]="row.shelf"
+              (click)="selectRelocationCell(row)">
+              <span class="lw-relocation-cell__shelf">{{ row.shelf }}</span>
+              <span class="lw-relocation-cell__count">{{ row.codeCount }} mã</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="lw-modal-backdrop" *ngIf="selectedRelocationRow" (click)="closeRelocationCellDetail()">
+  <div class="lw-modal lw-modal--settings" role="dialog" (click)="$event.stopPropagation()">
+    <header class="lw-modal__head">
+      <div>
+        <h2 class="lw-modal__title"><i class="material-icons">inventory_2</i> Ô {{ selectedRelocationRow?.shelf }}</h2>
+        <p class="lw-modal__sub">{{ selectedRelocationRow?.codeCount }} mã đang lưu tại ô này</p>
+      </div>
+      <button type="button" class="lw-modal__close" (click)="closeRelocationCellDetail()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+    <div class="lw-modal__body">
+      <div class="lw-guide-rack__prefixes">
+        <span class="lw-guide-prefix" *ngFor="let code of selectedRelocationRow?.materialCodes">{{ code }}</span>
       </div>
     </div>
   </div>
