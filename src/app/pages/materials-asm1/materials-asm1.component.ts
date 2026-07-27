@@ -53,6 +53,10 @@ export interface InventoryMaterial {
   standardPacking?: number;
   /** Đã kiểm kê (đếm tồn kho) — tick tay ở cột KK, riêng theo dòng (Mã + PO + IMD). */
   kkChecked?: boolean;
+  /** Tài khoản đã tick/bỏ tick KK gần nhất. */
+  kkBy?: string;
+  /** Thời điểm tick/bỏ tick KK gần nhất. */
+  kkAt?: Date | null;
   isCompleted: boolean;
   isDuplicate?: boolean;
   importStatus?: string;
@@ -6701,14 +6705,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return labels.join(' / ');
   }
 
-  /** Tick "đã kiểm kê" cho dòng — chỉ ghi 1 field vào đúng doc này, không đọc lại. */
+  /** Tick "đã kiểm kê" cho dòng — ghi kèm tài khoản đã tick vào đúng doc này, không đọc lại. */
   async toggleKk(material: InventoryMaterial): Promise<void> {
     if (!this.canEdit || !material.id) return;
     const next = !material.kkChecked;
+    const operator = await this.resolveLocationOperatorId();
+    const kkAt = new Date();
     material.kkChecked = next;
+    material.kkBy = operator;
+    material.kkAt = kkAt;
     try {
       await this.firestore.collection('inventory-materials').doc(material.id).update({
         kkChecked: next,
+        kkBy: operator,
+        kkAt,
         updatedAt: new Date()
       });
     } catch (e) {
@@ -6716,6 +6726,23 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       material.kkChecked = !next;
       alert('❌ Không lưu được trạng thái Kiểm kê.');
     }
+  }
+
+  /** Tooltip cho checkbox KK: hiển thị tài khoản + thời điểm tick/bỏ tick gần nhất. */
+  getKkTitle(material: InventoryMaterial): string {
+    const at = this.normalizeTimestamp(material.kkAt);
+    const who = material.kkBy ? ` bởi ${material.kkBy}` : '';
+    const when = at ? ` lúc ${this.formatLastStatusDate(at)}` : '';
+    return material.kkChecked ? `Đã kiểm kê${who}${when}` : `Chưa kiểm kê${who ? ' — bỏ tick gần nhất' + who + when : ''}`;
+  }
+
+  private normalizeTimestamp(v: unknown): Date | null {
+    if (!v) return null;
+    if (v instanceof Date) return v;
+    const ts = v as { toDate?: () => Date; seconds?: number };
+    if (typeof ts.toDate === 'function') return ts.toDate();
+    if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
+    return null;
   }
 
 

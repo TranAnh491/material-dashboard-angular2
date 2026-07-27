@@ -88,6 +88,14 @@
         { "fieldPath": "factory",      "order": "ASCENDING" },
         { "fieldPath": "iqcStatus",    "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "fg-deleted-docs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collectionKey", "order": "ASCENDING" },
+        { "fieldPath": "deletedAt",     "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

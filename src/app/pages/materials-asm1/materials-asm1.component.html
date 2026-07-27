@@ -667,7 +667,7 @@
                      [checked]="material.kkChecked"
                      [disabled]="!canEdit"
                      (change)="toggleKk(material)"
-                     title="Đã kiểm kê">
+                     [title]="getKkTitle(material)">
             </td>
             <td class="status-cell">
               <span class="badge" 

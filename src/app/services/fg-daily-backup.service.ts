@@ -19,6 +19,7 @@ interface FgBackupConfig {
 }
 
 const FG_BACKUP_ROOT = 'fg-daily-backups';
+const FG_DELETED_ROOT = 'fg-deleted-docs';
 const CHUNK_SIZE = 250;
 
 const FG_BACKUP_CONFIG: Record<FgBackupCollectionKey, FgBackupConfig> = {
@@ -65,12 +66,57 @@ export class FgDailyBackupService {
       merged.set(doc.id, { id: doc.id, data: doc.data() as Record<string, unknown> });
     }
 
+    // Doc nằm trong backup hôm qua nhưng đã bị xóa hôm nay sẽ không có trong delta
+    // (vì không còn tồn tại để query) → phải loại thủ công theo "tombstone", nếu không
+    // nó sẽ tái xuất hiện mỗi lần load cho tới khi backup ngày mai được tạo lại.
+    const deletedIds = await this.loadDeletedIds(collectionKey, this.startOfDayTimestamp(yesterdayYmd));
+    for (const id of deletedIds) merged.delete(id);
+
     return {
       docs: Array.from(merged.values()),
       backupCount,
       deltaCount,
       usedFallback: false
     };
+  }
+
+  /**
+   * Ghi "tombstone" khi xóa 1 doc — để loadMergedDocs loại nó ra dù backup hôm qua
+   * (chụp trước khi xóa) vẫn còn chứa doc này. Gọi ngay sau khi delete() Firestore thành công.
+   */
+  async markDeleted(collectionKey: FgBackupCollectionKey, docId: string): Promise<void> {
+    if (!docId) return;
+    try {
+      await this.firestore
+        .collection(FG_DELETED_ROOT)
+        .doc(`${collectionKey}_${docId}`)
+        .set({
+          collectionKey,
+          docId,
+          deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (e) {
+      console.error('[FgDailyBackup] markDeleted failed', collectionKey, docId, e);
+    }
+  }
+
+  /** Chỉ cần tombstone từ mốc backup hôm qua trở đi — cũ hơn thì backup kế tiếp đã tự loại bỏ rồi. */
+  private async loadDeletedIds(
+    collectionKey: FgBackupCollectionKey,
+    since: firebase.firestore.Timestamp
+  ): Promise<Set<string>> {
+    try {
+      const snap = await this.firestore
+        .collection(FG_DELETED_ROOT, (ref) =>
+          ref.where('collectionKey', '==', collectionKey).where('deletedAt', '>=', since)
+        )
+        .get()
+        .toPromise();
+      return new Set((snap?.docs || []).map((d) => (d.data() as { docId?: string }).docId).filter((id): id is string => !!id));
+    } catch (e) {
+      console.warn('[FgDailyBackup] loadDeletedIds failed', collectionKey, e);
+      return new Set();
+    }
   }
 
   private async loadBackupItems(

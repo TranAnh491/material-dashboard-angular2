@@ -11,6 +11,7 @@ import { FGInventoryLocationService } from '../../services/fg-inventory-location
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
+import firebase from 'firebase/compat/app';
 
 export interface FgOutItem {
   id?: string;
@@ -918,34 +919,62 @@ export class FgOutComponent implements OnInit, OnDestroy {
   updateMaterialInFirebase(material: FgOutItem): void {
     if (material.id) {
       // Update existing record
-      const updateData = {
+      const updateData: Record<string, unknown> = {
         ...material,
         exportDate: material.exportDate,
         pushNo: material.pushNo || '000', // Đảm bảo pushNo được lưu
         updatedAt: new Date()
       };
-      
+
       delete updateData.id;
-      
+
+      // Firestore .update() ném lỗi (và KHÔNG lưu gì cả) nếu bất kỳ field nào = undefined
+      // (VD: approvedAt/approvedBy bị set undefined khi bỏ tick duyệt). Đổi thành FieldValue.delete()
+      // để field đó thực sự bị xóa khỏi document thay vì làm cả update thất bại âm thầm.
+      for (const key of Object.keys(updateData)) {
+        if (updateData[key] === undefined) {
+          updateData[key] = firebase.firestore.FieldValue.delete();
+        }
+      }
+
       this.firestore.collection('fg-out').doc(material.id).update(updateData)
         .then(() => {
           console.log('FG Out material updated in Firebase successfully');
         })
         .catch(error => {
           console.error('Error updating FG Out material in Firebase:', error);
+          if (error?.code === 'not-found') {
+            // Dòng này đã bị xóa (ở tab khác / trước đó) nhưng vẫn còn sót trong danh sách đang xem —
+            // ghi tombstone NGAY (nếu chưa có, vd: bị xóa từ trước khi có cơ chế tombstone) rồi mới
+            // dọn khỏi UI, nếu không nó sẽ tái xuất hiện ở lần load kế tiếp giống hệt lần xóa gốc.
+            void this.fgDailyBackup.markDeleted('fg-out', material.id!);
+            const index = this.materials.indexOf(material);
+            if (index > -1) {
+              this.materials.splice(index, 1);
+              this.applyFilters();
+            }
+            alert('⚠️ Dòng này đã bị xóa trước đó. Đã tự động làm mới danh sách.');
+          } else {
+            alert('❌ Không lưu được thay đổi lên Firebase. Vui lòng thử lại.');
+          }
         });
     } else {
       // Create new record
-      const newData = {
+      const newData: Record<string, unknown> = {
         ...material,
         exportDate: material.exportDate,
         pushNo: material.pushNo || '000',
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       delete newData.id;
-      
+
+      // .add() cũng từ chối field undefined — loại bỏ hẳn (doc mới thì không cần FieldValue.delete()).
+      for (const key of Object.keys(newData)) {
+        if (newData[key] === undefined) delete newData[key];
+      }
+
       this.firestore.collection('fg-out').add(newData)
         .then(docRef => {
           material.id = docRef.id;
@@ -953,6 +982,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('Error creating FG Out material in Firebase:', error);
+          alert('❌ Không lưu được dòng mới lên Firebase. Vui lòng thử lại.');
         });
     }
   }
@@ -1521,22 +1551,33 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Delete material
   deleteMaterial(material: FgOutItem): void {
+    const removeLocally = () => {
+      const index = this.materials.indexOf(material);
+      if (index > -1) {
+        this.materials.splice(index, 1);
+        console.log(`Deleted FG Out material: ${material.materialCode}`);
+        this.applyFilters();
+      }
+    };
+
     if (material.id) {
+      // Chỉ xóa khỏi bảng SAU KHI Firestore xác nhận xóa thành công —
+      // tránh tình trạng UI báo đã xóa nhưng document vẫn còn (F5 lại thấy dòng cũ).
       this.firestore.collection('fg-out').doc(material.id).delete()
         .then(() => {
           console.log('FG Out material deleted from Firebase successfully');
+          // Đánh dấu tombstone — nếu không, doc này vẫn còn trong snapshot backup hôm qua
+          // và sẽ tái xuất hiện mỗi lần load (F5) cho tới khi backup ngày mai chạy lại.
+          void this.fgDailyBackup.markDeleted('fg-out', material.id!);
+          removeLocally();
         })
         .catch(error => {
           console.error('Error deleting FG Out material from Firebase:', error);
+          alert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại hoặc kiểm tra quyền xóa.');
         });
-    }
-    
-    // Remove from local array immediately
-    const index = this.materials.indexOf(material);
-    if (index > -1) {
-      this.materials.splice(index, 1);
-      console.log(`Deleted FG Out material: ${material.materialCode}`);
-      this.applyFilters();
+    } else {
+      // Chưa có id (chưa từng lưu lên Firebase) — chỉ cần bỏ khỏi bảng.
+      removeLocally();
     }
   }
 
