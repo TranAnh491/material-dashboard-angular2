@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, forkJoin, firstValueFrom, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, take, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
@@ -306,6 +306,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private readTracker: ReadTrackerService,
     private fgDailyBackup: FgDailyBackupService,
     private router: Router,
+    private route: ActivatedRoute,
     private tpCatalogService: TpCatalogFullService
   ) {}
 
@@ -313,7 +314,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.router.navigate(['/menu']);
   }
 
+  /** Cho phép nhảy từ trang khác (VD: Shipment) sang đây và tự search luôn theo shipment. */
+  private applyIncomingQueryParams(): void {
+    const params = this.route.snapshot.queryParamMap;
+    const shipment = (params.get('shipment') || '').trim();
+    const factory = (params.get('factory') || '').trim().toUpperCase();
+    if (shipment) {
+      this.searchTerm = shipment;
+    }
+    if (factory === 'ASM1' || factory === 'ASM2') {
+      this.selectedFactory = factory;
+    }
+  }
+
   ngOnInit(): void {
+    this.applyIncomingQueryParams();
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();

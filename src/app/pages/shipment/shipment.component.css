@@ -1150,6 +1150,36 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
 }
 
+.goto-fgout-cell {
+  text-align: center;
+  width: 44px;
+  min-width: 44px;
+}
+
+.goto-fgout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  padding: 0;
+}
+
+.goto-fgout-btn:hover {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+}
+
+.goto-fgout-btn .material-icons {
+  font-size: 18px;
+}
+
 .code-cell {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Thống nhất font chữ */
   font-weight: bold;

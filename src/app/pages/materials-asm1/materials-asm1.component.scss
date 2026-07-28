@@ -208,6 +208,143 @@
   width: 95%;
 }
 
+.kk-check-popup-content {
+  max-width: 1280px;
+  width: 95%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+// Mở như 1 trang riêng (full màn hình) thay vì popup nhỏ giữa màn hình.
+.kk-check-fullpage-overlay {
+  background: #f3f4f6;
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.kk-check-popup-content.kk-check-fullpage {
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .modal-header {
+    flex: 0 0 auto;
+
+    .kk-check-back-btn {
+      margin-right: 4px;
+    }
+
+    h3 {
+      flex: 1;
+    }
+  }
+
+  .kk-check-fullpage-body {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kk-check-table-wrap {
+    flex: 1;
+    max-height: none;
+  }
+}
+
+.kk-check-summary {
+  margin-top: 14px;
+}
+
+.kk-check-total {
+  font-size: 13px;
+  color: #111827;
+  margin: 0 0 6px 0;
+}
+
+.kk-check-filter {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+
+.kk-filter-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &.active {
+    background: #111827;
+    border-color: #111827;
+    color: #ffffff;
+  }
+}
+
+.kk-check-empty-filtered {
+  padding: 14px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.kk-check-table-wrap {
+  margin-top: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.kk-check-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+
+  th, td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: #f9fafb;
+    font-weight: 700;
+    color: #374151;
+  }
+
+  .badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    background: #fef2f2;
+
+    &.done {
+      border-color: #bbf7d0;
+      background: #ecfdf5;
+      color: #065f46;
+    }
+  }
+}
+
 .tem-le-row {
   display: flex;
   align-items: center;

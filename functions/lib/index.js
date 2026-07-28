@@ -965,9 +965,12 @@ exports.truckDriverSignInFn = functions.https.onCall(async (data) => {
         throw new functions.https.HttpsError('internal', msg || 'Đăng nhập thất bại.');
     }
 });
-/** Backup FG collections mỗi ngày lúc 01:00 (VN) — snapshot hôm qua. */
-exports.backupFgCollectionsDaily = functions.pubsub
-    .schedule('0 1 * * *')
+/** Backup FG collections mỗi ngày lúc 01:00 (VN) — snapshot hôm qua.
+ *  timeoutSeconds/memory tăng vì mặc định 60s không đủ khi 4 collection cộng lại hàng chục nghìn dòng
+ *  (từng bị timeout giữa chừng, khiến 1 vài collection không được backup ngày hôm đó). */
+exports.backupFgCollectionsDaily = functions
+    .runWith({ timeoutSeconds: 540, memory: '1GB' })
+    .pubsub.schedule('every 2 minutes')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
     const { runFgDailyBackupJob } = await Promise.resolve().then(() => __importStar(require('./fg-daily-backup')));

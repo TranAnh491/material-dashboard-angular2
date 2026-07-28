@@ -74,6 +74,15 @@ async function backupCollection(db, key, source, dayYmd) {
     const items = snap.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
     const chunkCount = Math.max(1, Math.ceil(items.length / CHUNK_SIZE));
     const chunksCol = dayRef.collection('chunks');
+    // Ghi hết các chunk TRƯỚC, chỉ ghi doc tổng (đánh dấu "đã backup xong", dùng để check existing.exists)
+    // SAU CÙNG — tránh trường hợp function timeout giữa chừng khiến doc tổng tồn tại nhưng chunk còn thiếu,
+    // làm lần chạy sau tưởng đã xong rồi bỏ qua vĩnh viễn ngày đó.
+    const chunkWrites = [];
+    for (let i = 0; i < chunkCount; i++) {
+        const slice = items.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        chunkWrites.push(chunksCol.doc(String(i).padStart(3, '0')).set({ index: i, items: slice }));
+    }
+    await Promise.all(chunkWrites);
     await dayRef.set({
         collectionKey: key,
         dayKey,
@@ -82,19 +91,15 @@ async function backupCollection(db, key, source, dayYmd) {
         chunkCount,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    for (let i = 0; i < chunkCount; i++) {
-        const slice = items.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-        await chunksCol.doc(String(i).padStart(3, '0')).set({ index: i, items: slice });
-    }
     return items.length;
 }
-/** Backup cuối ngày hôm qua (VN) cho các collection FG. */
+/** Backup cuối ngày hôm qua (VN) cho các collection FG — chạy song song 4 collection để tránh timeout khi dữ liệu lớn. */
 async function runFgDailyBackupJob() {
     const db = admin.firestore();
     const backupYmd = shiftYmd(formatYmdInTz(new Date()), -1);
-    for (const cfg of COLLECTIONS) {
+    await Promise.all(COLLECTIONS.map(async (cfg) => {
         const count = await backupCollection(db, cfg.key, cfg.source, backupYmd);
         console.log(`[fg-daily-backup] ${cfg.key} ${backupYmd}: ${count} items`);
-    }
+    }));
 }
 //# sourceMappingURL=fg-daily-backup.js.map

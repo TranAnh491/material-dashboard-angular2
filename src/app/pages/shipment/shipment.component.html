@@ -226,6 +226,7 @@
             <th>NGÀY IMPORT</th>
             <th>BIỂN SỐ XE</th>
             <th>DISPATCH DATE</th>
+            <th class="col-goto-fgout">FG-OUT</th>
             <th>SHIPMENT</th>
             <th>LƯỢNG KTRA</th>
             <th>CHECK</th>
@@ -353,7 +354,16 @@
                      (click)="$event.target.showPicker()"
                      title="Click để chọn ngày Dispatch Date">
             </td>
-            
+
+            <td class="goto-fgout-cell">
+              <button type="button"
+                      class="goto-fgout-btn"
+                      (click)="goToFgOutForShipment(shipment)"
+                      title="Về FG-Out và lọc theo shipment này">
+                <i class="material-icons">open_in_new</i>
+              </button>
+            </td>
+
             <td class="code-cell">
               <input type="text"
                      class="editable-input"
@@ -438,6 +448,7 @@
                       (change)="updateShipmentInFirebase(shipment)">
                 <option value="Pallet">Pallet</option>
                 <option value="Box">Box</option>
+                <option value="Đã đai pallet">Đã đai pallet</option>
               </select>
             </td>
             <td class="number-cell">
@@ -883,6 +894,7 @@
             <select class="form-input" [(ngModel)]="newShipment.packing">
               <option value="Pallet">Pallet</option>
               <option value="Box">Box</option>
+              <option value="Đã đai pallet">Đã đai pallet</option>
             </select>
           </div>
           <div class="input-group">

@@ -133,6 +133,14 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   resetLowStockRows: ResetLowStockRow[] = [];
   isDeletingResetLowStock = false;
   resetZeroDeletedCount = 0;
+  /** Popup Kiểm Kê: tiến độ tick KK toàn bộ tồn kho + theo từng mã B (B + 6 số) */
+  showKkCheckPopup = false;
+  kkCheckRunning = false;
+  kkCheckRan = false;
+  kkCheckTotalRows = 0;
+  kkCheckCheckedRows = 0;
+  kkCheckByMaterial: Array<{ materialCode: string; total: number; checked: number; remaining: number; locations: string }> = [];
+  kkCheckFilterMode: 'all' | 'checked' | 'unchecked' = 'all';
   /** More → ghi snapshot TỒN từ kho → rm-bag-history */
   isSnapshottingBagHistory = false;
   showSnapshotCodesModal = false;
@@ -6368,6 +6376,93 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     if (typeof ts.toDate === 'function') return ts.toDate();
     if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000);
     return null;
+  }
+
+  openKkCheckPopup(): void {
+    this.showKkCheckPopup = true;
+    this.kkCheckRan = false;
+    this.kkCheckTotalRows = 0;
+    this.kkCheckCheckedRows = 0;
+    this.kkCheckByMaterial = [];
+    this.kkCheckFilterMode = 'all';
+  }
+
+  closeKkCheckPopup(): void {
+    if (this.kkCheckRunning) return;
+    this.showKkCheckPopup = false;
+  }
+
+  setKkCheckFilterMode(mode: 'all' | 'checked' | 'unchecked'): void {
+    this.kkCheckFilterMode = mode;
+  }
+
+  get kkCheckDoneCount(): number {
+    return this.kkCheckByMaterial.filter((r) => r.remaining === 0).length;
+  }
+
+  get kkCheckPendingCount(): number {
+    return this.kkCheckByMaterial.filter((r) => r.remaining > 0).length;
+  }
+
+  /** Danh sách mã hiển thị trong bảng theo bộ lọc đang chọn (Tất cả / Đã KK đủ / Chưa KK đủ). */
+  get kkCheckFilteredMaterials(): Array<{ materialCode: string; total: number; checked: number; remaining: number; locations: string }> {
+    if (this.kkCheckFilterMode === 'checked') {
+      return this.kkCheckByMaterial.filter((r) => r.remaining === 0);
+    }
+    if (this.kkCheckFilterMode === 'unchecked') {
+      return this.kkCheckByMaterial.filter((r) => r.remaining > 0);
+    }
+    return this.kkCheckByMaterial;
+  }
+
+  /** Đọc toàn bộ tồn kho factory hiện tại → tính số dòng đã tick KK + breakdown theo mã B (B + 6 số). */
+  async runKkCheck(): Promise<void> {
+    this.kkCheckRunning = true;
+    try {
+      const snapshot = await this.firestore
+        .collection('inventory-materials', (ref) => ref.where('factory', '==', this.FACTORY))
+        .get()
+        .toPromise();
+
+      const docs = snapshot?.docs || [];
+      const bCodeRegex = /^B\d{6}$/;
+      const byMaterial = new Map<string, { total: number; checked: number; locations: Set<string> }>();
+      let checkedCount = 0;
+
+      docs.forEach((doc) => {
+        const data = doc.data() as any;
+        const isChecked = data.kkChecked === true;
+        if (isChecked) checkedCount++;
+
+        const code = String(data.materialCode || '').trim().toUpperCase();
+        if (bCodeRegex.test(code)) {
+          const entry = byMaterial.get(code) || { total: 0, checked: 0, locations: new Set<string>() };
+          entry.total++;
+          if (isChecked) entry.checked++;
+          const loc = String(data.location || '').trim().toUpperCase();
+          if (loc) entry.locations.add(loc);
+          byMaterial.set(code, entry);
+        }
+      });
+
+      this.kkCheckTotalRows = docs.length;
+      this.kkCheckCheckedRows = checkedCount;
+      this.kkCheckByMaterial = Array.from(byMaterial.entries())
+        .map(([materialCode, v]) => ({
+          materialCode,
+          total: v.total,
+          checked: v.checked,
+          remaining: v.total - v.checked,
+          locations: Array.from(v.locations).sort().join(', ') || '—'
+        }))
+        .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+      this.kkCheckRan = true;
+    } catch (e) {
+      console.error('❌ runKkCheck:', e);
+      alert('❌ Lỗi khi chạy Kiểm Kê. Vui lòng thử lại.');
+    } finally {
+      this.kkCheckRunning = false;
+    }
   }
 
 

@@ -313,6 +313,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.router.navigate(['/menu']);
   }
 
+  /** Nhảy qua FG-Out và tự search luôn theo đúng shipment này. */
+  goToFgOutForShipment(shipment: ShipmentItem): void {
+    const code = String(shipment.shipmentCode || '').trim();
+    if (!code) {
+      alert('Chưa có mã Shipment để lọc.');
+      return;
+    }
+    this.router.navigate(['/fg-out'], {
+      queryParams: { shipment: code, factory: shipment.factory || 'ASM1' }
+    });
+  }
+
   /** Sidebar: Calendar = mở Schedules. */
   openSchedulesFromSidebar(): void {
     this.openScheduleDialog();
