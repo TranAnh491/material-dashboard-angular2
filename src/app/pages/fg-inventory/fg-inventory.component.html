@@ -45,15 +45,14 @@
       </div>
 
       <div class="fgi-toolbar__group fgi-toolbar__filters">
-        <div class="fgi-field">
+        <div class="fgi-field fgi-field--material">
           <span class="fgi-field__prefix">Mã TP</span>
-          <input type="text"
-                 class="fgi-input"
-                 [ngModel]="filterMaTp"
-                 (ngModelChange)="onFilterMaTpChange($event)"
-                 (keydown)="onSearchKeydown($event)"
-                 placeholder="Tất cả"
-                 autocomplete="off">
+          <select class="fgi-input fgi-select"
+                  [ngModel]="filterMaTp"
+                  (ngModelChange)="onFilterMaTpChange($event)">
+            <option value="">Tất cả</option>
+            <option *ngFor="let m of materialOptions" [value]="m">{{ m }}</option>
+          </select>
           <button type="button" class="fgi-field__clear" *ngIf="filterMaTp" (click)="clearFilterMaTp()" title="Xóa">
             <i class="material-icons">close</i>
           </button>
@@ -155,10 +154,9 @@
               <td colspan="20" class="fgi-empty">
                 <i class="material-icons">inbox</i>
                 <div>
-                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (7 ký tự) để tự động tìm kiếm</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Chọn mã TP để tìm kiếm</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi Enter / Search</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng để tìm kiếm</span>
-                  <span *ngIf="searchStatus === 'typing' && searchMode === 'material'">Nhập thêm để đủ 7 ký tự...</span>
                   <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
                   <span *ngIf="searchStatus === 'not-found' && searchMode === 'location'">Không có mã tồn tại vị trí <b>{{ searchTerm }}</b></span>
                   <span *ngIf="searchStatus === 'not-found' && searchMode === 'material'">Không tìm thấy mã <b>{{ searchTerm }}</b></span>
@@ -674,6 +672,10 @@
           <i class="material-icons">groups</i>
           <span>Khách hàng</span>
         </button>
+        <button class="more-menu-item" (click)="openTpStockListModal(); showMoreMenu = false">
+          <i class="material-icons">inventory</i>
+          <span>Danh sách TP</span>
+        </button>
         <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
           <i class="material-icons">file_upload</i>
           <span>Import tồn đầu</span>
@@ -804,6 +806,88 @@
             </tr>
             <tr *ngIf="customerSummaryRows.length === 0">
               <td colspan="2" class="location-report-empty">Không có dữ liệu.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Danh sách TP tồn kho -->
+<div class="custom-modal" [class.show]="showTpStockListModal" [style.display]="showTpStockListModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="showTpStockListModal = false"></div>
+  <div class="modal-container tp-stock-list-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">inventory</i>
+        Danh sách TP tồn kho
+      </h5>
+      <button type="button" class="close-btn" (click)="showTpStockListModal = false">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="location-report-lead" *ngIf="!isLoadingTpStockList">
+        Nhà máy: <strong>{{ selectedFactory }}</strong> — {{ tpStockListDisplayRows.length }} mã TP
+        <span *ngIf="tpStockListFilterMa || tpStockListFilterCustomer"> (đã lọc)</span>.
+        <span class="tp-stock-list-total">Tổng Carton: <strong>{{ formatNumber(tpStockListTotalCarton) }}</strong></span>
+      </p>
+      <p class="location-report-loading" *ngIf="isLoadingTpStockList">Đang tải dữ liệu...</p>
+
+      <div class="tp-stock-list-filters" *ngIf="!isLoadingTpStockList">
+        <div class="tp-stock-list-field">
+          <label class="tp-stock-list-label">Mã TP</label>
+          <select class="tp-stock-list-select"
+                  [ngModel]="tpStockListFilterMa"
+                  (ngModelChange)="onTpStockListFilterMaChange($event)">
+            <option value="">Tất cả</option>
+            <option *ngFor="let m of tpStockListMaFilterOptions" [value]="m">{{ m }}</option>
+          </select>
+        </div>
+        <div class="tp-stock-list-field">
+          <label class="tp-stock-list-label">Khách</label>
+          <select class="tp-stock-list-select"
+                  [ngModel]="tpStockListFilterCustomer"
+                  (ngModelChange)="onTpStockListFilterCustomerChange($event)">
+            <option value="">Tất cả</option>
+            <option *ngFor="let c of tpStockListCustomerFilterOptions" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <button type="button" class="tp-stock-list-clear" *ngIf="tpStockListFilterMa || tpStockListFilterCustomer"
+                (click)="clearTpStockListFilters()">
+          <i class="material-icons">filter_alt_off</i> Xóa lọc
+        </button>
+      </div>
+
+      <div class="location-report-table-wrap" *ngIf="!isLoadingTpStockList">
+        <table class="location-report-table tp-stock-list-table">
+          <thead>
+            <tr>
+              <th>Mã TP</th>
+              <th class="tp-stock-list-num">Lượng</th>
+              <th class="tp-stock-list-num tp-stock-list-sortable" (click)="toggleTpStockListCartonSort()" title="Bấm để đổi chiều sắp xếp">
+                Carton
+                <i class="material-icons tp-stock-list-sort-icon">{{ tpStockListSortCartonDesc ? 'arrow_downward' : 'arrow_upward' }}</i>
+              </th>
+              <th>Khách</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of tpStockListDisplayRows">
+              <td class="tp-stock-list-code">{{ row.materialCode }}</td>
+              <td class="tp-stock-list-num">{{ formatNumber(row.quantity) }}</td>
+              <td class="tp-stock-list-num">{{ formatNumber(row.carton) }}</td>
+              <td>{{ row.customer }}</td>
+            </tr>
+            <tr *ngIf="tpStockListDisplayRows.length === 0">
+              <td colspan="4" class="location-report-empty">Không có dữ liệu tồn kho.</td>
+            </tr>
+            <tr *ngIf="tpStockListDisplayRows.length > 0" class="tp-stock-list-total-row">
+              <td><strong>Tổng</strong></td>
+              <td class="tp-stock-list-num"><strong>{{ formatNumber(tpStockListTotalQuantity) }}</strong></td>
+              <td class="tp-stock-list-num"><strong>{{ formatNumber(tpStockListTotalCarton) }}</strong></td>
+              <td></td>
             </tr>
           </tbody>
         </table>

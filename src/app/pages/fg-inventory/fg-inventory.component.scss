@@ -142,6 +142,10 @@ $fgi-kk: #ec4899;
   &--customer {
     min-width: 160px;
   }
+
+  &--material {
+    min-width: 160px;
+  }
 }
 
 .fgi-field__prefix {
@@ -1408,6 +1412,117 @@ $fgi-kk: #ec4899;
   text-align: center;
   color: #999;
   padding: 20px;
+}
+
+.tp-stock-list-modal {
+  max-width: 760px;
+  width: 94%;
+}
+
+.tp-stock-list-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.tp-stock-list-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  flex: 1 1 160px;
+}
+
+.tp-stock-list-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.tp-stock-list-select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.tp-stock-list-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+
+  i {
+    font-size: 16px;
+  }
+
+  &:hover {
+    background: #f8fafc;
+  }
+}
+
+.tp-stock-list-table {
+  .tp-stock-list-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tp-stock-list-code {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .tp-stock-list-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+
+    &:hover {
+      background: #eef2ff;
+    }
+  }
+
+  .tp-stock-list-sort-icon {
+    font-size: 14px;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+
+  .tp-stock-list-total-row {
+    background: #f1f5f9;
+    border-top: 2px solid #cbd5e1;
+
+    td {
+      font-weight: 700;
+    }
+  }
+}
+
+.tp-stock-list-total {
+  display: inline-block;
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid #cbd5e1;
+  color: #334155;
+
+  strong {
+    color: #0f172a;
+  }
 }
 
 .add-ma-tp-lead {

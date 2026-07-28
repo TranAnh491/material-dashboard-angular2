@@ -66,7 +66,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Search and filter
   searchTerm: string = '';
-  /** Mã TP (7 ký tự, tự tìm) hoặc Vị trí / Khách hàng (bấm Search). */
+  /** Mã TP (chọn dropdown) / Vị trí (gõ + Enter) / Khách hàng (dropdown). */
   searchMode: 'material' | 'location' | 'customer' = 'material';
   searchStatus: 'idle' | 'typing' | 'searching' | 'found' | 'not-found' | 'non-stock-only' = 'idle';
   /** Ba ô filter UI (đồng bộ với searchTerm + searchMode). */
@@ -132,6 +132,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   showCustomerSummaryModal: boolean = false;
   isLoadingCustomerSummary: boolean = false;
   customerSummaryRows: Array<{ customer: string; totalCarton: number }> = [];
+
+  /** Danh sách TP tồn kho — Menu → Danh sách TP */
+  showTpStockListModal = false;
+  isLoadingTpStockList = false;
+  tpStockListAllRows: Array<{ materialCode: string; quantity: number; carton: number; customer: string }> = [];
+  tpStockListFilterMa = '';
+  tpStockListFilterCustomer = '';
+  tpStockListSortCartonDesc = true;
 
   // Sửa vị trí (bấm vào ô Vị trí) — nhập tay hoặc "Chuyển ASM3" chọn từ danh sách vị trí kho ASM3
   showLocationEditModal: boolean = false;
@@ -262,7 +270,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.searchMode = 'material';
     this.searchTerm = this.filterMaTp;
     this.currentPage = 1;
-    this.onSearchChange({ target: { value: this.filterMaTp } } as any);
+    this.onMaterialSelected(this.filterMaTp);
   }
 
   onFilterLocationChange(value: string): void {
@@ -295,12 +303,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   clearFilterMaTp(): void {
     this.filterMaTp = '';
-    if (this.searchMode === 'material') {
-      this.searchTerm = '';
-      this.searchStatus = 'idle';
-      this.filteredMaterials = [];
-      this.currentPage = 1;
-    }
+    this.searchTerm = '';
+    this.searchStatus = 'idle';
+    this.filteredMaterials = [];
+    this.currentPage = 1;
   }
 
   clearFilterLocation(): void {
@@ -663,6 +669,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.clearSearch();
   }
 
+  /** Danh sách Mã TP (7 ký tự gốc từ Danh mục TP) — dropdown chọn khi lọc theo Mã TP. */
+  get materialOptions(): string[] {
+    const set = new Set<string>();
+    for (const c of this.catalogItems) {
+      const code = (c.materialCode || '').trim().toUpperCase().slice(0, 7);
+      if (code) set.add(code);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }
+
   /** Danh sách tên khách hàng (cột "Khách hàng" ở tab Danh mục TP, theo Mã vật tư) — dùng cho dropdown chọn khi search theo Khách hàng, không cần gõ tay. */
   get customerOptions(): string[] {
     const set = new Set<string>();
@@ -671,6 +687,15 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       if (name) set.add(name);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }
+
+  /** Bấm chọn 1 Mã TP trong dropdown — tìm luôn, không cần bấm Search. */
+  onMaterialSelected(value: string): void {
+    if (!value) {
+      this.clearFilterMaTp();
+      return;
+    }
+    void this.runInventorySearch(value);
   }
 
   /** Bấm chọn 1 khách trong dropdown — tìm luôn, không cần bấm Search. */
@@ -997,6 +1022,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
           if (!this.locationMatchesSearch(material, trimmedSearch)) return false;
         } else if (this.searchMode === 'customer') {
           // Đã lọc đúng theo Khách hàng khi fetch (runCustomerSearch dùng mapping Mã hàng ↔ Khách) — không lọc lại theo text ở đây.
+        } else if (this.searchMode === 'material' && term.length === 7) {
+          // Đã lọc theo Mã TP khi fetch (runInventorySearch prefix query) — không lọc lại theo text ở đây.
         } else {
           const termNorm = term.replace(/\./g, '');
           const searchableText = [
@@ -1143,6 +1170,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
     if (this.searchMode === 'customer' && term.length >= 2) {
       void this.runCustomerSearch(term);
+      return;
+    }
+    if (this.searchMode === 'material' && term.length >= 7) {
+      void this.runInventorySearch(term);
       return;
     }
     if (term.length >= 7) {
@@ -1445,11 +1476,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Tổng hợp Carton theo Khách hàng (nút More → Khách hàng): với mỗi khách (Tên Khách Hàng từ
-   * Customer Code Mapping), cộng dồn Carton của các mã còn tồn > 0. Đọc một lần khi bấm nút,
-   * theo nhà máy đang chọn — giống openLocationReportModal.
-   */
   async openCustomerSummaryModal(): Promise<void> {
     this.showCustomerSummaryModal = true;
     this.isLoadingCustomerSummary = true;
@@ -1488,6 +1514,110 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       this.isLoadingCustomerSummary = false;
       this.cdr.detectChanges();
     }
+  }
+
+  /** Menu → Danh sách TP: tổng hợp tồn theo mã TP (7 ký tự), lọc Mã/Khách, sắp xếp carton. */
+  async openTpStockListModal(): Promise<void> {
+    this.showTpStockListModal = true;
+    this.isLoadingTpStockList = true;
+    this.tpStockListAllRows = [];
+    this.tpStockListFilterMa = '';
+    this.tpStockListFilterCustomer = '';
+    this.tpStockListSortCartonDesc = true;
+    this.cdr.detectChanges();
+
+    try {
+      const snap = await this.firestore
+        .collection('fg-inventory', (ref) => {
+          let q: firebase.firestore.Query = ref;
+          if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+            q = q.where('factory', '==', this.selectedFactory);
+          }
+          return q.limit(5000);
+        })
+        .get()
+        .toPromise();
+
+      this.readTracker.track('fg-inventory', 'fg-inventory-tp-stock-list', snap?.docs.length || 0);
+
+      const byCode = new Map<string, { quantity: number; carton: number }>();
+      (snap?.docs || []).forEach((doc) => {
+        const item = this.mapDocToInventoryItem(doc.id, doc.data());
+        const ton = Number(item.ton ?? 0);
+        if (ton <= 0) return;
+        const code = String(item.materialCode || '').trim().toUpperCase().slice(0, 7);
+        if (!code) return;
+        const cur = byCode.get(code) || { quantity: 0, carton: 0 };
+        cur.quantity += ton;
+        cur.carton += Number(item.carton || 0);
+        byCode.set(code, cur);
+      });
+
+      this.tpStockListAllRows = Array.from(byCode.entries()).map(([materialCode, v]) => ({
+        materialCode,
+        quantity: v.quantity,
+        carton: v.carton,
+        customer: this.getCustomerNameFromMapping(materialCode).trim() || 'Không xác định'
+      }));
+    } catch (e) {
+      console.error('openTpStockListModal failed', e);
+      this.tpStockListAllRows = [];
+    } finally {
+      this.isLoadingTpStockList = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  get tpStockListMaFilterOptions(): string[] {
+    const set = new Set(this.tpStockListAllRows.map((r) => r.materialCode));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }
+
+  get tpStockListCustomerFilterOptions(): string[] {
+    const set = new Set(this.tpStockListAllRows.map((r) => r.customer).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }
+
+  get tpStockListDisplayRows(): Array<{ materialCode: string; quantity: number; carton: number; customer: string }> {
+    let rows = this.tpStockListAllRows;
+    if (this.tpStockListFilterMa) {
+      rows = rows.filter((r) => r.materialCode === this.tpStockListFilterMa);
+    }
+    if (this.tpStockListFilterCustomer) {
+      rows = rows.filter((r) => r.customer === this.tpStockListFilterCustomer);
+    }
+    return [...rows].sort((a, b) =>
+      this.tpStockListSortCartonDesc ? b.carton - a.carton : a.carton - b.carton
+    );
+  }
+
+  get tpStockListTotalCarton(): number {
+    return this.tpStockListDisplayRows.reduce((sum, r) => sum + (Number(r.carton) || 0), 0);
+  }
+
+  get tpStockListTotalQuantity(): number {
+    return this.tpStockListDisplayRows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+  }
+
+  onTpStockListFilterMaChange(value: string): void {
+    this.tpStockListFilterMa = String(value || '').toUpperCase();
+    this.cdr.detectChanges();
+  }
+
+  onTpStockListFilterCustomerChange(value: string): void {
+    this.tpStockListFilterCustomer = String(value || '').trim();
+    this.cdr.detectChanges();
+  }
+
+  clearTpStockListFilters(): void {
+    this.tpStockListFilterMa = '';
+    this.tpStockListFilterCustomer = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleTpStockListCartonSort(): void {
+    this.tpStockListSortCartonDesc = !this.tpStockListSortCartonDesc;
+    this.cdr.detectChanges();
   }
 
   // Check if user can view material
