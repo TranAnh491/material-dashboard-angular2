@@ -4,6 +4,7 @@ import { Observable, of, forkJoin } from 'rxjs';
 import { map, catchError, switchMap, take } from 'rxjs/operators';
 import { TabPermissionService } from '../services/tab-permission.service';
 import { RolePermissionService } from '../services/role-permission.service';
+import { MobileDetectionService } from '../services/mobile-detection.service';
 
 @Injectable({
   providedIn: 'root'
@@ -13,6 +14,7 @@ export class TabPermissionGuard implements CanActivate {
   constructor(
     private tabPermissionService: TabPermissionService,
     private rolePermissionService: RolePermissionService,
+    private mobileDetection: MobileDetectionService,
     private router: Router
   ) { }
 
@@ -20,6 +22,16 @@ export class TabPermissionGuard implements CanActivate {
     route: ActivatedRouteSnapshot,
     state: RouterStateSnapshot
   ): Observable<boolean> {
+    // Tab chưa có giao diện mobile/tablet — mở trên điện thoại/tablet thì tự chuyển về Menu,
+    // chỉ kiểm tra lúc điều hướng vào route (không theo dõi resize liên tục để tránh mất dữ liệu
+    // đang nhập nếu người dùng đang ở trong trang rồi xoay màn hình/thu nhỏ cửa sổ).
+    const path = state.url.split('?')[0].split('#')[0];
+    if (path !== '/menu' && this.mobileDetection.isDesktopOnlyPath(path) && this.mobileDetection.isMobileOrTablet()) {
+      console.log(`📱 ${path} chưa có giao diện mobile/tablet — chuyển về Menu`);
+      this.router.navigate(['/menu']);
+      return of(false);
+    }
+
     // Lấy tab key từ route
     const tabKey = this.getTabKeyFromRoute(state.url);
     

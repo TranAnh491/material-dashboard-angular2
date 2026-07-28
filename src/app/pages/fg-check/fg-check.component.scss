@@ -543,9 +543,15 @@
 }
 
 .excel-body {
-  overflow: auto;
+  overflow: hidden;
   flex: 1;
   position: relative;
+  min-height: 0;
+}
+
+.excel-viewport {
+  height: 100%;
+  width: 100%;
 }
 
 .excel-table {

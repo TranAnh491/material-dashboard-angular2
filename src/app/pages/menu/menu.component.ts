@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { MobileDetectionService } from '../../services/mobile-detection.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 @Component({
@@ -27,39 +28,12 @@ export class MenuComponent implements OnInit, OnDestroy {
     Admin: []
   };
   
-  // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop)
-  // FG Check, FG Location, FG In được cho phép hiển thị trên mobile
-  desktopOnlyTabs: string[] = [
-    // Hide on mobile per request (keep on desktop)
-    '/dashboard',
-    '/bag-history',
-    '/fg-overview',
-    '/qc',
-    '/qc-traceability',
-    // PrintLabelComponent is routed as /label (admin-layout.routing.ts)
-    '/label',
-    '/work-order-status',
-    '/shipment',
-    '/inventory-overview-asm1',
-    '/inventory-overview-asm2',
-    '/fg-out',
-    '/fg-inventory',
-    '/pallet-id',
-    '/checklist',
-    '/equipment',
-    '/sxxk',
-    '/settings',
-    '/zalo',
-    '/shorted-materials',
-    '/layout-warehouse',
-    '/layout-warehouse-asm3',
-    '/danh-muc-nvl-tp',
-    '/nhiet-do',
-    '/report',
-    '/materials-dashboard',
-    '/fgs-dashboard'
-  ];
-  
+  // Danh sách các tab không hỗ trợ mobile (chỉ chạy trên desktop) — nguồn dùng chung ở
+  // MobileDetectionService, để TabPermissionGuard cũng chặn đúng những tab này khi vào thẳng URL.
+  get desktopOnlyTabs(): string[] {
+    return this.mobileDetection.desktopOnlyTabPaths;
+  }
+
   menuTabs: MenuTab[] = [
     // Dashboard - First
     { path: '/dashboard', title: 'Dashboard', icon: 'speed', iconImage: 'assets/img/dasboard.png', category: 'Main' },
@@ -164,7 +138,8 @@ export class MenuComponent implements OnInit, OnDestroy {
     private router: Router,
     private authService: FirebaseAuthService,
     private sanitizer: DomSanitizer,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private mobileDetection: MobileDetectionService
   ) { }
 
   ngOnInit(): void {
@@ -182,17 +157,11 @@ export class MenuComponent implements OnInit, OnDestroy {
   }
   
   private detectMobileDevice(): void {
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-    const isMobileUserAgent = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
-    const isMobileScreen = window.innerWidth <= 768;
-    const isPDA = /pda|handheld|mobile|android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
-    const isSmallScreen = window.innerWidth <= 1024;
-    
-    this.isMobile = isMobileUserAgent || isMobileScreen || isPDA || isSmallScreen;
+    this.isMobile = this.mobileDetection.isMobileOrTablet();
   }
-  
+
   isDesktopOnly(path: string): boolean {
-    return this.desktopOnlyTabs.includes(path);
+    return this.mobileDetection.isDesktopOnlyPath(path);
   }
 
   private norm(s: unknown): string {

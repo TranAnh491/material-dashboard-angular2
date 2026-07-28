@@ -1,8 +1,8 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { debounceTime, takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
@@ -32,6 +32,8 @@ export interface FGCheckItem {
   docIds?: string[]; // Nhiều doc Firebase gộp lại (cùng shipment + materialCode + palletNo)
   createdAt?: Date;
   updatedAt?: Date;
+  /** Cache UI — gán trong applyFilters(), không gọi hàm format trong template. */
+  display?: FGCheckItemDisplay;
 }
 
 export interface ShipmentData {
@@ -57,6 +59,22 @@ export interface FactoryItemGroup {
   items: FGCheckItem[];
 }
 
+/** Trường hiển thị tính sẵn — tránh gọi hàm trong template mỗi change detection cycle. */
+export interface FGCheckItemDisplay {
+  time: string;
+  carton: number;
+  cartonText: string;
+  quantityText: string;
+  checkTypeLabel: 'Thùng' | 'Lượng';
+  checkNote: string;
+  isDuplicate: boolean;
+  isCartonOk: boolean;
+}
+
+export type FgCheckTableRow =
+  | { kind: 'factory-header'; factory: string; count: number; key: string }
+  | { kind: 'item'; item: FGCheckItem; rowNo: number; key: string };
+
 export interface ShipmentCheckBoxItem {
   shipmentCode: string;
   status: string;
@@ -66,7 +84,8 @@ export interface ShipmentCheckBoxItem {
 @Component({
   selector: 'app-fg-check',
   templateUrl: './fg-check.component.html',
-  styleUrls: ['./fg-check.component.scss']
+  styleUrls: ['./fg-check.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FGCheckComponent implements OnInit, OnDestroy {
   items: FGCheckItem[] = [];
@@ -75,6 +94,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
    * trực tiếp trong *ngFor (Angular re-chạy expression trong template mỗi change detection cycle,
    * gọi thẳng hàm group+sort ở đó khiến trang càng nhiều dữ liệu càng chậm). */
   groupedFilteredItems: FactoryItemGroup[] = [];
+  /** Danh sách phẳng cho virtual scroll (header factory + dòng dữ liệu). */
+  flatTableRows: FgCheckTableRow[] = [];
+  tableColspan = 13;
   /** Cache "shipment|materialCode" bị trùng — tính 1 lần trong applyFilters() thay vì filter lại
    * toàn bộ this.items cho MỖI dòng mỗi lần render (isDuplicateMaterialCode cũ là O(n²)/cycle). */
   private duplicateShipmentMaterialKeys = new Set<string>();
@@ -157,6 +179,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   private deleteScanFirstCharTime: number = 0;
   
   private destroy$ = new Subject<void>();
+  private searchInput$ = new Subject<string>();
   isLoading: boolean = false;
   checkIdCounter: number = 1;
 
@@ -173,6 +196,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.updateTableColspan();
+    this.searchInput$
+      .pipe(debounceTime(300), takeUntil(this.destroy$))
+      .subscribe((term) => {
+        this.searchTerm = term;
+        this.applyFilters();
+        this.cdr.markForCheck();
+      });
     this.loadItemsFromFirebase();
     this.loadCustomerMappings();
     this.loadLastCheckId();
@@ -350,6 +381,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           this.calculateCheckResults();
         }
         this.applyFilters();
+        this.cdr.markForCheck();
       }).catch((e) => {
         console.error('loadItemsFromFirebase failed', e);
         this.isLoading = false;
@@ -450,13 +482,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           }
         });
         
-        console.log('✅ Loaded shipment data (REALTIME) for', this.shipmentDataMap.size, 'shipments');
-        
-        // Log all shipment codes and their data
-        this.shipmentDataMap.forEach((dataList, shipmentCode) => {
-          console.log(`📦 Shipment ${shipmentCode} has ${dataList.length} items:`, 
-            dataList.map(d => `materialCode=${d.materialCode}, quantity=${d.quantity}`));
-        });
+        console.log('✅ Loaded shipment data for', this.shipmentDataMap.size, 'shipments');
         
         this.shipmentDataLoaded = true;
         
@@ -466,6 +492,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           this.enrichItemsFactory();
           this.calculateCheckResults();
         }
+        this.cdr.markForCheck();
       });
   }
 
@@ -864,6 +891,49 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
     this.recomputeDuplicateMaterialCodeKeys();
     this.groupedFilteredItems = this.getFilteredItemsGroupedByFactory();
+    for (const item of this.filteredItems) {
+      this.computeItemDisplayFields(item);
+    }
+    this.rebuildFlatTableRows();
+  }
+
+  private computeItemDisplayFields(item: FGCheckItem): void {
+    const carton = this.getDisplayCarton(item);
+    item.display = {
+      time: this.formatCheckTime(item.createdAt),
+      carton,
+      cartonText: this.formatNumber(carton),
+      quantityText: this.formatNumber(item.quantity),
+      checkTypeLabel: this.getCheckTypeLabel(item),
+      checkNote: this.getCheckNote(item),
+      isDuplicate: this.isDuplicateMaterialCode(item),
+      isCartonOk: this.isCartonOk(item)
+    };
+  }
+
+  private rebuildFlatTableRows(): void {
+    const rows: FgCheckTableRow[] = [];
+    for (const group of this.groupedFilteredItems) {
+      rows.push({
+        kind: 'factory-header',
+        factory: group.factory,
+        count: group.items.length,
+        key: `header-${group.factory}`
+      });
+      group.items.forEach((item, index) => {
+        rows.push({
+          kind: 'item',
+          item,
+          rowNo: index + 1,
+          key: item.id || `${group.factory}-${item.checkId || index}-${item.materialCode}`
+        });
+      });
+    }
+    this.flatTableRows = rows;
+  }
+
+  updateTableColspan(): void {
+    this.tableColspan = this.checkMode === 'pn-qty' ? 12 : 13;
   }
 
   /** Tính 1 lần các cặp "shipment|materialCode" bị trùng (thay vì filter toàn bộ items mỗi dòng mỗi lần render). */
@@ -929,7 +999,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   getTableColspan(): number {
-    return this.checkMode === 'pn-qty' ? 12 : 13;
+    return this.tableColspan;
   }
 
   /** Chia bảng theo Factory (ASM1 / ASM2 / …) để dễ nhìn */
@@ -999,14 +1069,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   onSearchChange(event: any): void {
     let searchTerm = event.target.value;
-    
+
     if (searchTerm && searchTerm !== searchTerm.toUpperCase()) {
       searchTerm = searchTerm.toUpperCase();
       event.target.value = searchTerm;
     }
-    
-    this.searchTerm = searchTerm;
-    this.applyFilters();
+
+    this.searchInput$.next(searchTerm);
   }
 
   // Format number
@@ -1038,6 +1107,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   /** Chọn mode Check Thùng hoặc Check Số Lượng, chuyển sang form nhập ID/Shipment/Pallet */
   selectCheckMode(mode: 'pn' | 'pn-qty'): void {
     this.checkMode = mode;
+    this.updateTableColspan();
     this.checkDialogStep = 'form';
     this.cdr.detectChanges();
     setTimeout(() => {
@@ -3090,4 +3160,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   trackByIndex(index: number, _: any): number { return index; }
+
+  trackByTableRow(_index: number, row: FgCheckTableRow): string {
+    return row.key;
+  }
+
+  trackByItemId(_index: number, item: FGCheckItem): string {
+    return item.id || item.checkId || String(_index);
+  }
 }
