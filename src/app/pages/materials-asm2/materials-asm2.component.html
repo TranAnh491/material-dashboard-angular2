@@ -1019,88 +1019,151 @@
   </div>
 </div>
 
-<!-- Kiểm Kê Popup (dạng full-page) -->
-<div class="modal-overlay kk-check-fullpage-overlay" *ngIf="showKkCheckPopup">
-  <div class="modal-content kk-check-popup-content kk-check-fullpage">
-    <div class="modal-header">
-      <button type="button" class="close-btn kk-check-back-btn" (click)="closeKkCheckPopup()" [disabled]="kkCheckRunning" title="Quay lại">
-        <i class="material-icons">arrow_back</i>
-      </button>
-      <h3>📋 Kiểm Kê — Tiến độ KK</h3>
-      <button type="button" class="close-btn" (click)="closeKkCheckPopup()" [disabled]="kkCheckRunning">
+<!-- Kiểm Kê — Tiến độ KK (full page) -->
+<div class="kk-pro-overlay" *ngIf="showKkCheckPopup">
+  <div class="kk-pro-page">
+    <header class="kk-pro-header">
+      <div class="kk-pro-header__left">
+        <button type="button" class="kk-pro-icon-btn" (click)="closeKkCheckPopup()" [disabled]="kkCheckRunning" title="Quay lại">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <div class="kk-pro-header__title">
+          <h2>Kiểm Kê — Tiến độ KK</h2>
+          <p>Quét tồn kho và theo dõi tick KK theo mã <strong>B + 6 số</strong></p>
+        </div>
+      </div>
+      <button type="button" class="kk-pro-icon-btn" (click)="closeKkCheckPopup()" [disabled]="kkCheckRunning" title="Đóng">
         <i class="material-icons">close</i>
       </button>
-    </div>
+    </header>
 
-    <div class="modal-body kk-check-fullpage-body">
-      <p class="tem-xuat-hint">
-        Bấm <strong>Run</strong> để đọc toàn bộ tồn kho ASM2 và tính số dòng đã tick <strong>KK</strong>,
-        kèm bảng theo từng mã <strong>B + 6 số</strong> (đã KK bao nhiêu / còn thiếu bao nhiêu).
-      </p>
-
-      <div class="tem-le-row">
-        <button type="button" class="delete-batch-btn" style="background:#111827;"
-                (click)="runKkCheck()" [disabled]="kkCheckRunning">
-          <i class="material-icons">{{ kkCheckRunning ? 'sync' : 'play_arrow' }}</i>
-          {{ kkCheckRunning ? 'Đang chạy...' : 'Run' }}
-        </button>
+    <div class="kk-pro-body">
+      <div class="kk-pro-toolbar">
+        <div class="kk-pro-toolbar__left">
+          <div class="kk-pro-factory-group">
+            <span class="kk-pro-toolbar-label">Nhà máy</span>
+            <button type="button" class="kk-pro-factory-btn"
+                    [class.kk-pro-factory-btn--active]="kkCheckSelectedFactory === 'ASM1'"
+                    [disabled]="kkCheckRunning" (click)="setKkCheckFactory('ASM1')">ASM1</button>
+            <button type="button" class="kk-pro-factory-btn"
+                    [class.kk-pro-factory-btn--active]="kkCheckSelectedFactory === 'ASM2'"
+                    [disabled]="kkCheckRunning" (click)="setKkCheckFactory('ASM2')">ASM2</button>
+            <button type="button" class="kk-pro-factory-btn"
+                    [class.kk-pro-factory-btn--active]="kkCheckSelectedFactory === 'ASM3'"
+                    [disabled]="kkCheckRunning" (click)="setKkCheckFactory('ASM3')">ASM3</button>
+          </div>
+          <div class="kk-pro-search-group" *ngIf="kkCheckRan && kkCheckByMaterial.length > 0">
+            <span class="kk-pro-toolbar-label">Tìm</span>
+            <input type="text" class="kk-pro-search-input" placeholder="Mã NVL" [(ngModel)]="kkCheckSearchCode">
+            <input type="text" class="kk-pro-search-input" placeholder="Vị trí" [(ngModel)]="kkCheckSearchLocation">
+          </div>
+          <div class="kk-pro-filters" *ngIf="kkCheckRan && kkCheckByMaterial.length > 0">
+            <span class="kk-pro-toolbar-label">Trạng thái</span>
+            <button type="button" class="kk-pro-chip" [class.kk-pro-chip--active]="kkCheckFilterMode === 'all'"
+                    (click)="setKkCheckFilterMode('all')">Tất cả ({{ kkCheckByMaterial.length }})</button>
+            <button type="button" class="kk-pro-chip" [class.kk-pro-chip--active]="kkCheckFilterMode === 'checked'"
+                    (click)="setKkCheckFilterMode('checked')">Đã KK đủ ({{ kkCheckDoneCount }})</button>
+            <button type="button" class="kk-pro-chip" [class.kk-pro-chip--active]="kkCheckFilterMode === 'unchecked'"
+                    (click)="setKkCheckFilterMode('unchecked')">Chưa đủ ({{ kkCheckPendingCount }})</button>
+          </div>
+        </div>
+        <div class="kk-pro-toolbar__right">
+          <div class="kk-pro-export-group">
+            <span class="kk-pro-toolbar-label">Danh mục KK</span>
+            <input type="date" class="kk-pro-search-input kk-pro-search-input--date" [(ngModel)]="kkCatalogDate">
+            <button type="button" class="kk-pro-export-btn" (click)="exportKkCatalog()" [disabled]="kkCatalogExporting || kkCheckRunning">
+              <i class="material-icons">download</i>
+              {{ kkCatalogExporting ? 'Đang tải...' : 'Tải về' }}
+            </button>
+          </div>
+          <button type="button" class="kk-pro-run-btn" (click)="runKkCheck()" [disabled]="kkCheckRunning">
+            <i class="material-icons kk-pro-run-btn__icon" [class.kk-pro-spin]="kkCheckRunning">{{ kkCheckRunning ? 'sync' : 'play_arrow' }}</i>
+            {{ kkCheckRunning ? 'Đang quét...' : 'Run' }}
+          </button>
+        </div>
       </div>
 
-      <div class="kk-check-summary" *ngIf="kkCheckRan">
-        <p class="kk-check-total">
-          Tổng số dòng đã KK: <strong>{{ kkCheckCheckedRows }}</strong> / <strong>{{ kkCheckTotalRows }}</strong>
-          <span *ngIf="kkCheckTotalRows > 0">
-            ({{ (kkCheckCheckedRows / kkCheckTotalRows) * 100 | number:'1.0-1' }}%)
-          </span>
-        </p>
-        <p class="kk-check-total">
-          Số mã <strong>B + 6 số</strong> có trong tồn kho: <strong>{{ kkCheckByMaterial.length }}</strong>
-        </p>
+      <div class="kk-pro-idle" *ngIf="!kkCheckRan && !kkCheckRunning">
+        <i class="material-icons">fact_check</i>
+        <h3>Sẵn sàng quét Kiểm Kê</h3>
+        <p>Chọn nhà máy <strong>{{ kkCheckSelectedFactory }}</strong>, bấm <strong>Run</strong> để đọc toàn bộ tồn kho và thống kê tick KK.</p>
+      </div>
 
-        <div class="kk-check-filter" *ngIf="kkCheckByMaterial.length > 0">
-          <button type="button" class="kk-filter-btn" [class.active]="kkCheckFilterMode === 'all'" (click)="setKkCheckFilterMode('all')">
-            Tất cả ({{ kkCheckByMaterial.length }})
-          </button>
-          <button type="button" class="kk-filter-btn" [class.active]="kkCheckFilterMode === 'checked'" (click)="setKkCheckFilterMode('checked')">
-            Đã KK đủ ({{ kkCheckDoneCount }})
-          </button>
-          <button type="button" class="kk-filter-btn" [class.active]="kkCheckFilterMode === 'unchecked'" (click)="setKkCheckFilterMode('unchecked')">
-            Chưa KK đủ ({{ kkCheckPendingCount }})
-          </button>
+      <div class="kk-pro-loading" *ngIf="kkCheckRunning">
+        <i class="material-icons kk-pro-spin">sync</i>
+        <span>Đang đọc tồn kho {{ kkCheckSelectedFactory }}...</span>
+      </div>
+
+      <div class="kk-pro-results" *ngIf="kkCheckRan && !kkCheckRunning">
+        <div class="kk-pro-kpis">
+          <div class="kk-pro-kpi kk-pro-kpi--primary">
+            <span class="kk-pro-kpi__label">Tiến độ KK</span>
+            <span class="kk-pro-kpi__value">{{ kkCheckProgressPercent | number:'1.0-1' }}%</span>
+            <div class="kk-pro-progress">
+              <div class="kk-pro-progress__bar" [style.width.%]="kkCheckProgressPercent"></div>
+            </div>
+            <span class="kk-pro-kpi__sub">{{ kkCheckCheckedRows | number }} / {{ kkCheckTotalRows | number }} dòng</span>
+          </div>
+          <div class="kk-pro-kpi">
+            <span class="kk-pro-kpi__label">Nhà máy</span>
+            <span class="kk-pro-kpi__value kk-pro-kpi__value--sm">{{ kkCheckSelectedFactory }}</span>
+          </div>
+          <div class="kk-pro-kpi">
+            <span class="kk-pro-kpi__label">Mã B + 6 số</span>
+            <span class="kk-pro-kpi__value">{{ kkCheckByMaterial.length | number }}</span>
+          </div>
+          <div class="kk-pro-kpi kk-pro-kpi--success">
+            <span class="kk-pro-kpi__label">Đã KK đủ</span>
+            <span class="kk-pro-kpi__value">{{ kkCheckDoneCount | number }}</span>
+          </div>
+          <div class="kk-pro-kpi kk-pro-kpi--warn">
+            <span class="kk-pro-kpi__label">Chưa KK đủ</span>
+            <span class="kk-pro-kpi__value">{{ kkCheckPendingCount | number }}</span>
+          </div>
         </div>
 
-        <div class="kk-check-table-wrap" *ngIf="kkCheckByMaterial.length > 0">
-          <table class="kk-check-table">
-            <thead>
-              <tr>
-                <th>STT</th>
-                <th>Mã hàng</th>
-                <th>Vị trí</th>
-                <th>Tổng dòng</th>
-                <th>Đã KK</th>
-                <th>Chưa KK</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of kkCheckFilteredMaterials; let i = index">
-                <td>{{ i + 1 }}</td>
-                <td>{{ row.materialCode }}</td>
-                <td>{{ row.locations }}</td>
-                <td>{{ row.total }}</td>
-                <td>{{ row.checked }}</td>
-                <td>{{ row.remaining }}</td>
-                <td>
-                  <span class="badge" [class.done]="row.remaining === 0">
-                    {{ row.remaining === 0 ? 'Đã KK đủ' : 'Chưa KK đủ' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p class="kk-check-empty-filtered" *ngIf="kkCheckFilteredMaterials.length === 0">Không có mã nào khớp bộ lọc.</p>
+        <div class="kk-pro-table-panel" *ngIf="kkCheckByMaterial.length > 0">
+          <div class="kk-pro-table-wrap">
+            <table class="kk-pro-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Mã hàng</th>
+                  <th>Vị trí</th>
+                  <th>Tổng</th>
+                  <th>Đã KK</th>
+                  <th>Chưa KK</th>
+                  <th>Tiến độ</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of kkCheckFilteredMaterials; let i = index" [class.kk-pro-row--done]="row.remaining === 0">
+                  <td>{{ i + 1 }}</td>
+                  <td class="kk-pro-code">{{ row.materialCode }}</td>
+                  <td class="kk-pro-loc" [title]="row.locations">{{ row.locations }}</td>
+                  <td class="kk-pro-num">{{ row.total }}</td>
+                  <td class="kk-pro-num kk-pro-num--ok">{{ row.checked }}</td>
+                  <td class="kk-pro-num" [class.kk-pro-num--warn]="row.remaining > 0">{{ row.remaining }}</td>
+                  <td class="kk-pro-row-progress">
+                    <div class="kk-pro-progress kk-pro-progress--sm">
+                      <div class="kk-pro-progress__bar" [class.kk-pro-progress__bar--done]="row.remaining === 0"
+                           [style.width.%]="getKkRowProgress(row)"></div>
+                    </div>
+                    <span>{{ getKkRowProgress(row) | number:'1.0-0' }}%</span>
+                  </td>
+                  <td>
+                    <span class="kk-pro-status" [class.kk-pro-status--done]="row.remaining === 0">
+                      {{ row.remaining === 0 ? 'Đã KK đủ' : 'Chưa đủ' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="kk-pro-empty-filter" *ngIf="kkCheckFilteredMaterials.length === 0">Không có mã nào khớp bộ lọc.</p>
         </div>
-        <p *ngIf="kkCheckByMaterial.length === 0">Không tìm thấy mã dạng B + 6 số nào trong tồn kho.</p>
+        <p class="kk-pro-no-data" *ngIf="kkCheckByMaterial.length === 0">Không tìm thấy mã dạng B + 6 số trong tồn kho {{ kkCheckSelectedFactory }}.</p>
       </div>
     </div>
   </div>

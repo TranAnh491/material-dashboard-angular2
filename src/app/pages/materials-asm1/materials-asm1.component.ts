@@ -16,6 +16,7 @@ import { LabelReprintFlagService } from '../../services/label-reprint-flag.servi
 import { MaterialsDashboardService } from '../../services/materials-dashboard.service';
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
+import { isAsm3OrWh3PrefixLocation } from '../layout-warehouse/layout-warehouse-location.util';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
@@ -150,6 +151,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   kkCheckCheckedRows = 0;
   kkCheckByMaterial: Array<{ materialCode: string; total: number; checked: number; remaining: number; locations: string }> = [];
   kkCheckFilterMode: 'all' | 'checked' | 'unchecked' = 'all';
+  kkCheckSelectedFactory: 'ASM1' | 'ASM2' | 'ASM3' = 'ASM1';
+  kkCheckSearchCode = '';
+  kkCheckSearchLocation = '';
+  kkCatalogDate = new Date().toISOString().slice(0, 10);
+  kkCatalogExporting = false;
   /** Ghi snapshot TỒN từ kho → rm-bag-history */
   isSnapshottingBagHistory = false;
   /** Popup nhập danh sách mã trước khi snapshot (tránh quá tải) */
@@ -6729,6 +6735,24 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         kkAt,
         updatedAt: new Date()
       });
+      if (next) {
+        await this.firestore.collection('inventory-kk-history').add({
+          inventoryDocId: material.id,
+          factory: this.resolveKkFactoryForMaterial(material),
+          materialCode: String(material.materialCode || '').trim().toUpperCase(),
+          materialName: String(material.materialName || '').trim(),
+          poNumber: String(material.poNumber || '').trim(),
+          batchNumber: String(material.batchNumber || '').trim(),
+          location: String(material.location || '').trim().toUpperCase(),
+          quantity: Number(material.quantity) || 0,
+          stock: Number(this.calculateCurrentStock(material)) || 0,
+          unit: String(material.unit || '').trim(),
+          checkedBy: operator,
+          checkedAt: kkAt,
+          checkedDateKey: this.toDateKey(kkAt),
+          createdAt: new Date()
+        });
+      }
     } catch (e) {
       console.error('❌ toggleKk:', e);
       material.kkChecked = !next;
@@ -6760,6 +6784,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.kkCheckCheckedRows = 0;
     this.kkCheckByMaterial = [];
     this.kkCheckFilterMode = 'all';
+    this.kkCheckSearchCode = '';
+    this.kkCheckSearchLocation = '';
+    this.kkCheckSelectedFactory = this.FACTORY;
   }
 
   closeKkCheckPopup(): void {
@@ -6767,8 +6794,30 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.showKkCheckPopup = false;
   }
 
+  setKkCheckFactory(factory: 'ASM1' | 'ASM2' | 'ASM3'): void {
+    if (this.kkCheckRunning || this.kkCheckSelectedFactory === factory) return;
+    this.kkCheckSelectedFactory = factory;
+    this.kkCheckRan = false;
+    this.kkCheckTotalRows = 0;
+    this.kkCheckCheckedRows = 0;
+    this.kkCheckByMaterial = [];
+    this.kkCheckFilterMode = 'all';
+    this.kkCheckSearchCode = '';
+    this.kkCheckSearchLocation = '';
+  }
+
   setKkCheckFilterMode(mode: 'all' | 'checked' | 'unchecked'): void {
     this.kkCheckFilterMode = mode;
+  }
+
+  get kkCheckProgressPercent(): number {
+    if (!this.kkCheckTotalRows) return 0;
+    return Math.min(100, (this.kkCheckCheckedRows / this.kkCheckTotalRows) * 100);
+  }
+
+  getKkRowProgress(row: { total: number; checked: number }): number {
+    if (!row?.total) return 0;
+    return Math.min(100, (row.checked / row.total) * 100);
   }
 
   get kkCheckDoneCount(): number {
@@ -6779,27 +6828,62 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     return this.kkCheckByMaterial.filter((r) => r.remaining > 0).length;
   }
 
-  /** Danh sách mã hiển thị trong bảng theo bộ lọc đang chọn (Tất cả / Đã KK đủ / Chưa KK đủ). */
+  /** Danh sách mã hiển thị trong bảng theo bộ lọc trạng thái + tìm mã / vị trí. */
   get kkCheckFilteredMaterials(): Array<{ materialCode: string; total: number; checked: number; remaining: number; locations: string }> {
+    let rows = this.kkCheckByMaterial;
     if (this.kkCheckFilterMode === 'checked') {
-      return this.kkCheckByMaterial.filter((r) => r.remaining === 0);
+      rows = rows.filter((r) => r.remaining === 0);
+    } else if (this.kkCheckFilterMode === 'unchecked') {
+      rows = rows.filter((r) => r.remaining > 0);
     }
-    if (this.kkCheckFilterMode === 'unchecked') {
-      return this.kkCheckByMaterial.filter((r) => r.remaining > 0);
+    const codeQ = (this.kkCheckSearchCode || '').trim().toUpperCase();
+    const locQ = (this.kkCheckSearchLocation || '').trim().toUpperCase();
+    if (codeQ) {
+      rows = rows.filter((r) => r.materialCode.includes(codeQ));
     }
-    return this.kkCheckByMaterial;
+    if (locQ) {
+      rows = rows.filter((r) => r.locations.toUpperCase().includes(locQ));
+    }
+    return rows;
   }
 
   /** Đọc toàn bộ tồn kho factory hiện tại → tính số dòng đã tick KK + breakdown theo mã B (B + 6 số). */
   async runKkCheck(): Promise<void> {
     this.kkCheckRunning = true;
     try {
-      const snapshot = await this.firestore
-        .collection('inventory-materials', (ref) => ref.where('factory', '==', this.FACTORY))
-        .get()
-        .toPromise();
+      const factory = this.kkCheckSelectedFactory;
+      let docs: any[] = [];
 
-      const docs = snapshot?.docs || [];
+      if (factory === 'ASM3') {
+        const [snapAsm3, snapAsm1, snapAsm2] = await Promise.all([
+          this.firestore.collection('inventory-materials', (ref) => ref.where('factory', '==', 'ASM3').limit(10000)).get().toPromise(),
+          this.firestore.collection('inventory-materials', (ref) => ref.where('factory', '==', 'ASM1').limit(10000)).get().toPromise(),
+          this.firestore.collection('inventory-materials', (ref) => ref.where('factory', '==', 'ASM2').limit(10000)).get().toPromise(),
+        ]);
+        const seen = new Set<string>();
+        for (const snap of [snapAsm3, snapAsm1, snapAsm2]) {
+          for (const doc of snap?.docs || []) {
+            const data = doc.data() as any;
+            const loc = String(data.location || '');
+            const docFactory = String(data.factory || '').trim().toUpperCase();
+            if (docFactory === 'ASM3' || isAsm3OrWh3PrefixLocation(loc)) {
+              if (!seen.has(doc.id)) {
+                seen.add(doc.id);
+                docs.push(doc);
+              }
+            }
+          }
+        }
+      } else {
+        const snapshot = await this.firestore
+          .collection('inventory-materials', (ref) => ref.where('factory', '==', factory).limit(10000))
+          .get()
+          .toPromise();
+        docs = (snapshot?.docs || []).filter((doc) => {
+          const data = doc.data() as any;
+          return !isAsm3OrWh3PrefixLocation(String(data.location || ''));
+        });
+      }
       const bCodeRegex = /^B\d{6}$/;
       const byMaterial = new Map<string, { total: number; checked: number; locations: Set<string> }>();
       let checkedCount = 0;
@@ -6838,6 +6922,155 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     } finally {
       this.kkCheckRunning = false;
     }
+  }
+
+  async exportKkCatalog(): Promise<void> {
+    if (this.kkCatalogExporting) return;
+    const dateKey = String(this.kkCatalogDate || '').trim();
+    if (!dateKey) {
+      alert('Vui lòng chọn ngày kiểm kê.');
+      return;
+    }
+
+    this.kkCatalogExporting = true;
+    try {
+      const factory = this.kkCheckSelectedFactory;
+      const rows: Array<Record<string, unknown>> = [];
+
+      const historySnapshot = await this.firestore
+        .collection('inventory-kk-history', ref =>
+          ref
+            .where('factory', '==', factory)
+            .where('checkedDateKey', '==', dateKey)
+            .limit(10000)
+        )
+        .get()
+        .toPromise();
+
+      for (const doc of historySnapshot?.docs || []) {
+        const data = doc.data() as any;
+        rows.push({
+          'Ngày kiểm': dateKey,
+          'Nhà máy': String(data.factory || factory),
+          'Mã hàng': String(data.materialCode || ''),
+          'Tên hàng': String(data.materialName || ''),
+          'PO': String(data.poNumber || ''),
+          'Batch': String(data.batchNumber || ''),
+          'Vị trí': String(data.location || ''),
+          'Số lượng lúc kiểm': Number(data.quantity) || 0,
+          'Tồn lúc kiểm': Number(data.stock) || 0,
+          'ĐVT': String(data.unit || ''),
+          'ID kiểm': String(data.checkedBy || ''),
+          'Thời gian kiểm': this.formatLastStatusDate(this.normalizeTimestamp(data.checkedAt)),
+          'Inventory Doc ID': String(data.inventoryDocId || '')
+        });
+      }
+
+      if (!rows.length) {
+        const docs = await this.loadKkDocsForFactory(factory);
+        docs.forEach((doc) => {
+          const data = doc.data() as any;
+          const kkAt = this.normalizeTimestamp(data.kkAt);
+          if (data.kkChecked !== true || this.toDateKey(kkAt) !== dateKey) return;
+          rows.push({
+            'Ngày kiểm': dateKey,
+            'Nhà máy': this.resolveKkFactoryFromDocData(data),
+            'Mã hàng': String(data.materialCode || '').trim().toUpperCase(),
+            'Tên hàng': String(data.materialName || ''),
+            'PO': String(data.poNumber || ''),
+            'Batch': String(data.batchNumber || ''),
+            'Vị trí': String(data.location || '').trim().toUpperCase(),
+            'Số lượng lúc kiểm': Number(data.quantity) || 0,
+            'Tồn lúc kiểm': this.calculateKkStockFromDoc(data),
+            'ĐVT': String(data.unit || ''),
+            'ID kiểm': String(data.kkBy || ''),
+            'Thời gian kiểm': this.formatLastStatusDate(kkAt),
+            'Inventory Doc ID': String(doc.id || '')
+          });
+        });
+      }
+
+      if (!rows.length) {
+        alert(`Không có dữ liệu danh mục KK cho ${factory} ngày ${dateKey}.`);
+        return;
+      }
+
+      rows.sort((a, b) => {
+        const aTime = String(a['Thời gian kiểm'] || '');
+        const bTime = String(b['Thời gian kiểm'] || '');
+        return aTime.localeCompare(bTime);
+      });
+
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Danh muc KK');
+      XLSX.writeFile(wb, `Danh_muc_KK_${factory}_${dateKey}.xlsx`);
+    } catch (e) {
+      console.error('❌ exportKkCatalog:', e);
+      alert('❌ Không tải được danh mục KK.');
+    } finally {
+      this.kkCatalogExporting = false;
+    }
+  }
+
+  private async loadKkDocsForFactory(factory: 'ASM1' | 'ASM2' | 'ASM3'): Promise<any[]> {
+    if (factory === 'ASM3') {
+      const [snapAsm3, snapAsm1, snapAsm2] = await Promise.all([
+        this.firestore.collection('inventory-materials', ref => ref.where('factory', '==', 'ASM3').limit(10000)).get().toPromise(),
+        this.firestore.collection('inventory-materials', ref => ref.where('factory', '==', 'ASM1').limit(10000)).get().toPromise(),
+        this.firestore.collection('inventory-materials', ref => ref.where('factory', '==', 'ASM2').limit(10000)).get().toPromise()
+      ]);
+      const docs: any[] = [];
+      const seen = new Set<string>();
+      for (const snap of [snapAsm3, snapAsm1, snapAsm2]) {
+        for (const doc of snap?.docs || []) {
+          const data = doc.data() as any;
+          const docFactory = String(data.factory || '').trim().toUpperCase();
+          if (docFactory === 'ASM3' || isAsm3OrWh3PrefixLocation(String(data.location || ''))) {
+            if (!seen.has(doc.id)) {
+              seen.add(doc.id);
+              docs.push(doc);
+            }
+          }
+        }
+      }
+      return docs;
+    }
+
+    const snapshot = await this.firestore
+      .collection('inventory-materials', ref => ref.where('factory', '==', factory).limit(10000))
+      .get()
+      .toPromise();
+    return (snapshot?.docs || []).filter((doc) => !isAsm3OrWh3PrefixLocation(String((doc.data() as any).location || '')));
+  }
+
+  private calculateKkStockFromDoc(data: any): number {
+    const openingStock = data?.openingStock != null ? Number(data.openingStock) : 0;
+    const quantity = Number(data?.quantity) || 0;
+    const exported = Number(data?.exported) || 0;
+    const xt = Number(data?.xt) || 0;
+    return openingStock + quantity - exported - xt;
+  }
+
+  private resolveKkFactoryFromDocData(data: any): 'ASM1' | 'ASM2' | 'ASM3' {
+    const location = String(data?.location || '');
+    const rawFactory = String(data?.factory || '').trim().toUpperCase();
+    if (rawFactory === 'ASM3' || isAsm3OrWh3PrefixLocation(location)) return 'ASM3';
+    if (rawFactory === 'ASM2') return 'ASM2';
+    return 'ASM1';
+  }
+
+  private resolveKkFactoryForMaterial(material: InventoryMaterial): 'ASM1' | 'ASM2' | 'ASM3' {
+    return this.resolveKkFactoryFromDocData(material);
+  }
+
+  private toDateKey(value: Date | null | undefined): string {
+    if (!value) return '';
+    const yyyy = value.getFullYear();
+    const mm = String(value.getMonth() + 1).padStart(2, '0');
+    const dd = String(value.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
 

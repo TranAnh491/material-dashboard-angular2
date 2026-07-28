@@ -54,7 +54,7 @@ export class DanhMucNvlTpComponent implements OnInit {
   filteredNvlItems: NvlCatalogRow[] = [];
   pagedNvlItems: NvlCatalogRow[] = [];
   nvlSearchText = '';
-  nvlColumnFilters = { materialCode: '', materialName: '', unit: '', customer: '' };
+  nvlColumnFilters = { materialCode: '', materialName: '', unit: '', unitWeight: '', customer: '' };
   nvlPageSize = 25;
   nvlCurrentPage = 1;
   nvlLoadedAt: Date | null = null;
@@ -68,7 +68,7 @@ export class DanhMucNvlTpComponent implements OnInit {
   showNvlAddForm = false;
   editingNvlCode: string | null = null;
   nvlEditDraft: Partial<NvlCatalogRow> | null = null;
-  newNvlItem = { materialCode: '', materialName: '', unit: '', standardPacking: 0 };
+  newNvlItem = { materialCode: '', materialName: '', unit: '', unitWeight: 0, standardPacking: 0 };
 
   // ===== DV Lưu trữ (gộp từ Danh mục DV Lưu trữ) =====
   showStorageUnitPicker = false;
@@ -171,6 +171,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     this.nvlEditDraft = {
       materialName: row.materialName,
       unit: row.unit,
+      unitWeight: row.unitWeight,
       standardPacking: row.standardPacking,
       customer: row.customer
     };
@@ -186,6 +187,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     if (!this.nvlEditDraft) return;
     row.materialName = String(this.nvlEditDraft.materialName ?? row.materialName).trim();
     row.unit = String(this.nvlEditDraft.unit ?? row.unit).trim();
+    row.unitWeight = Math.max(0, Number(this.nvlEditDraft.unitWeight ?? row.unitWeight) || 0);
     row.standardPacking = Number(this.nvlEditDraft.standardPacking ?? row.standardPacking) || 0;
     row.customer = String(this.nvlEditDraft.customer ?? row.customer).trim();
     await this.updateNvlItem(row);
@@ -242,6 +244,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (cf.materialCode && !item.materialCode.toLowerCase().includes(cf.materialCode.toLowerCase())) return false;
       if (cf.materialName && !item.materialName.toLowerCase().includes(cf.materialName.toLowerCase())) return false;
       if (cf.unit && !item.unit.toLowerCase().includes(cf.unit.toLowerCase())) return false;
+      if (cf.unitWeight && !String(item.unitWeight ?? '').toLowerCase().includes(cf.unitWeight.toLowerCase())) return false;
       if (cf.customer && !item.customer.toLowerCase().includes(cf.customer.toLowerCase())) return false;
       if (this.nvlOnlyWithStock && this.nvlCodesWithStock && !this.nvlCodesWithStock.has(item.materialCode)) return false;
       return true;
@@ -309,7 +312,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       const editedBy = await this.currentEmployeeId();
       await this.nvlService.addNew(this.newNvlItem, editedBy);
-      this.newNvlItem = { materialCode: '', materialName: '', unit: '', standardPacking: 0 };
+      this.newNvlItem = { materialCode: '', materialName: '', unit: '', unitWeight: 0, standardPacking: 0 };
       await this.loadNvl();
       alert(`✅ Đã thêm mã NVL "${code}"`);
     } catch (e: any) {
@@ -330,6 +333,7 @@ export class DanhMucNvlTpComponent implements OnInit {
         {
           materialName: item.materialName,
           unit: item.unit,
+          unitWeight: item.unitWeight,
           standardPacking: item.standardPacking
         },
         editedBy
@@ -597,6 +601,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       'Mã hàng': i.materialCode,
       Tên: i.materialName,
       ĐVT: i.unit,
+      'Trọng lượng (g)': i.unitWeight || 0,
       'Khách hàng': i.customer,
       'Standard Packing': i.standardPacking
     }));

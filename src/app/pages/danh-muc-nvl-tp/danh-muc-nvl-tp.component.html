@@ -98,6 +98,7 @@
       <input type="text" class="dv-input" [(ngModel)]="newNvlItem.materialCode" placeholder="Mã NVL mới...">
       <input type="text" class="dv-input" [(ngModel)]="newNvlItem.materialName" placeholder="Tên NVL...">
       <input type="text" class="dv-input dv-input--sm" [(ngModel)]="newNvlItem.unit" placeholder="ĐVT...">
+      <input type="number" class="dv-input dv-input--sm" [(ngModel)]="newNvlItem.unitWeight" min="0" placeholder="Trọng lượng (g)...">
       <input type="number" class="dv-input dv-input--sm" [(ngModel)]="newNvlItem.standardPacking" min="0" placeholder="Standard Packing...">
       <button type="button" class="dv-btn dv-btn--primary" (click)="addNvlItem()">
         <i class="material-icons">add</i> Thêm
@@ -119,6 +120,8 @@
                (ngModelChange)="applyNvlFilters()" placeholder="Tên">
         <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unit"
                (ngModelChange)="applyNvlFilters()" placeholder="ĐVT">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unitWeight"
+               (ngModelChange)="applyNvlFilters()" placeholder="Trọng lượng">
         <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.customer"
                (ngModelChange)="applyNvlFilters()" placeholder="Khách hàng">
       </div>
@@ -161,6 +164,7 @@
             <th>Mã NVL</th>
             <th>Tên</th>
             <th>ĐVT</th>
+            <th>Trọng lượng</th>
             <th title="Danh mục NVLKH — gộp vào đây để sửa cùng chỗ">Khách hàng</th>
             <th title="Danh mục DV Lưu trữ — gộp vào đây để sửa cùng chỗ">DV Lưu trữ</th>
             <th>Standard Packing</th>
@@ -188,6 +192,13 @@
                        [disabled]="row.standardPackingLocked">
               </ng-container>
               <ng-template #nvlUnitView>{{ row.unit }}</ng-template>
+            </td>
+            <td class="dv-cell-number">
+              <ng-container *ngIf="isNvlEditing(row); else nvlWeightView">
+                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.unitWeight"
+                       [disabled]="row.standardPackingLocked" min="0">
+              </ng-container>
+              <ng-template #nvlWeightView>{{ row.unitWeight || 0 }}</ng-template>
             </td>
             <td class="dv-cell-customers">
               <ng-container *ngIf="isNvlEditing(row); else nvlCustomerView">

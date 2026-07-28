@@ -7,6 +7,8 @@ export interface NvlCatalogItem {
   materialCode: string;
   materialName: string;
   unit: string;
+  /** Trọng lượng đơn vị (gram) nếu có trong danh mục NVL. */
+  unitWeight?: number;
   standardPacking: number;
   standardPackingLocked: boolean;
   /** Cho phép quét Tem Thùng (tem thùng riêng, không phải QR thường) để xuất kho ở Outbound ASM1/ASM2. */
@@ -82,6 +84,7 @@ export class NvlCatalogFullService {
       materialCode: String(d['materialCode'] || id).trim().toUpperCase(),
       materialName: String(d['materialName'] || ''),
       unit: String(d['unit'] || ''),
+      unitWeight: Number(d['unitWeight'] ?? d['unit_weight']) || 0,
       standardPacking: Number(d['standardPacking']) || 0,
       standardPackingLocked: d['standardPackingLocked'] === true,
       allowExportByCarton: d['allowExportByCarton'] === true,
@@ -144,6 +147,7 @@ export class NvlCatalogFullService {
         materialCode: code,
         materialName: '',
         unit: '',
+        unitWeight: 0,
         standardPacking: 0,
         standardPackingLocked: false,
         allowExportByCarton: false,
@@ -158,7 +162,7 @@ export class NvlCatalogFullService {
 
   /** Thêm mã mới. Báo lỗi nếu mã đã tồn tại (dùng addOrUpdate để ghi đè có chủ đích). */
   async addNew(
-    item: { materialCode: string; materialName: string; unit: string; standardPacking: number },
+    item: { materialCode: string; materialName: string; unit: string; unitWeight?: number; standardPacking: number },
     editedBy?: string
   ): Promise<void> {
     const code = this.normalizeCode(item.materialCode);
@@ -170,11 +174,13 @@ export class NvlCatalogFullService {
     }
     const materialName = (item.materialName || '').trim() || code;
     const unit = (item.unit || '').trim() || 'PCS';
+    const unitWeight = Math.max(0, Number(item.unitWeight) || 0);
     const standardPacking = Math.max(0, Number(item.standardPacking) || 0);
     await ref.set({
       materialCode: code,
       materialName,
       unit,
+      unitWeight,
       standardPacking,
       standardPackingLocked: false,
       allowExportByCarton: false,
@@ -188,6 +194,7 @@ export class NvlCatalogFullService {
       materialCode: code,
       materialName,
       unit,
+      unitWeight,
       standardPacking,
       standardPackingLocked: false,
       allowExportByCarton: false,
@@ -199,7 +206,7 @@ export class NvlCatalogFullService {
 
   async update(
     materialCode: string,
-    changes: { materialName?: string; unit?: string; standardPacking?: number },
+    changes: { materialName?: string; unit?: string; unitWeight?: number; standardPacking?: number },
     editedBy?: string
   ): Promise<void> {
     const code = this.normalizeCode(materialCode);
@@ -213,6 +220,11 @@ export class NvlCatalogFullService {
     if (changes.unit !== undefined) {
       payload['unit'] = changes.unit.trim();
       patch.unit = changes.unit.trim();
+    }
+    if (changes.unitWeight !== undefined) {
+      const unitWeight = Math.max(0, Number(changes.unitWeight) || 0);
+      payload['unitWeight'] = unitWeight;
+      patch.unitWeight = unitWeight;
     }
     if (changes.standardPacking !== undefined) {
       const sp = Math.max(0, Number(changes.standardPacking) || 0);
