@@ -1,10 +1,11 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { Subject, forkJoin } from 'rxjs';
+import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
+import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 
 /** Một bản cache import duy nhất — document `current` trong collection này. */
 const FG_OVERVIEW_IMPORT_CACHE_COLLECTION = 'fg-overview-import-cache';
@@ -96,7 +97,8 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private router: Router
+    private router: Router,
+    private fgDailyBackup: FgDailyBackupService
   ) {}
 
   ngOnInit(): void {
@@ -117,96 +119,128 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
   }
 
   loadFgInventory(): void {
+    void this.loadFgInventoryAsync();
+  }
+
+  private async loadFgInventoryAsync(): Promise<void> {
     this.isLoadingFg = true;
     this.fgError = null;
     const factory = this.selectedFactory;
-    forkJoin({
-      inventory: this.firestore
-        .collection('fg-inventory', ref => ref.where('factory', '==', factory))
-        .get(),
-      fgIn: this.firestore.collection('fg-in').get()
-    })
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: ({ inventory, fgIn }) => {
-          const fgInQtyByBatchKey = new Map<string, number>();
-          fgIn.docs.forEach(doc => {
-            const d = doc.data() as { batchNumber?: string; quantity?: number };
-            const bk = String(d.batchNumber || '').trim().toUpperCase();
-            if (!bk) return;
-            const q = Number(d.quantity) || 0;
-            fgInQtyByBatchKey.set(bk, (fgInQtyByBatchKey.get(bk) || 0) + q);
-          });
 
-          this.tonByCode.clear();
-          this.locationsByCode.clear();
-          const locationSetByNorm = new Map<string, Set<string>>();
-          inventory.docs.forEach(doc => {
-            const d = doc.data() as {
-              materialCode?: string;
-              maTP?: string;
-              tonDau?: number;
-              nhap?: number;
-              quantity?: number;
-              xuat?: number;
-              exported?: number;
-              batchNumber?: string;
-              location?: string;
-              viTri?: string;
-            };
-            const code = String(d.materialCode || d.maTP || '').trim();
-            if (!code) return;
+    try {
+      const [inventoryMerged, fgInMerged] = await Promise.all([
+        this.fgDailyBackup.loadMergedDocs('fg-inventory', 'fg-overview'),
+        this.fgDailyBackup.loadMergedDocs('fg-in', 'fg-overview')
+      ]);
 
-            const ton = this.resolveInventoryTon(d, fgInQtyByBatchKey);
-            this.tonByCode.set(code, (this.tonByCode.get(code) || 0) + ton);
+      const fgInQtyByBatchKey = new Map<string, number>();
+      fgInMerged.docs.forEach(doc => {
+        const d = doc.data as { batchNumber?: string; quantity?: number; factory?: string };
+        const docFactory = String(d.factory || 'ASM1').trim().toUpperCase();
+        if (docFactory !== factory) return;
+        const bk = this.fgBatchKeyWithFactory(docFactory, d.batchNumber);
+        if (!bk) return;
+        const q = Number(d.quantity) || 0;
+        fgInQtyByBatchKey.set(bk, (fgInQtyByBatchKey.get(bk) || 0) + q);
+      });
 
-            const norm = this.normalizeCode(code);
-            const loc = String(d.location || d.viTri || '').trim();
-            if (loc) {
-              const set = locationSetByNorm.get(norm) || new Set<string>();
-              set.add(loc);
-              locationSetByNorm.set(norm, set);
-            }
-          });
-          locationSetByNorm.forEach((set, norm) => {
-            this.locationsByCode.set(norm, Array.from(set).sort((a, b) => a.localeCompare(b)).join(', '));
-          });
-          this.isLoadingFg = false;
-          this.rebuildRows();
-        },
-        error: err => {
-          console.error('FG Overview load fg-inventory:', err);
-          this.fgError = 'Không tải được FG Inventory. Thử lại sau.';
-          this.isLoadingFg = false;
-          this.tonByCode.clear();
-          this.rebuildRows();
+      this.tonByCode.clear();
+      this.locationsByCode.clear();
+      const locationSetByNorm = new Map<string, Set<string>>();
+
+      inventoryMerged.docs.forEach(doc => {
+        const d = doc.data as {
+          materialCode?: string;
+          maTP?: string;
+          factory?: string;
+          tonDau?: number;
+          ton?: number;
+          stock?: number;
+          nhap?: number;
+          quantity?: number;
+          xuat?: number;
+          exported?: number;
+          batchNumber?: string;
+          location?: string;
+          viTri?: string;
+        };
+        const docFactory = String(d.factory || 'ASM1').trim().toUpperCase();
+        if (docFactory !== factory) return;
+
+        const code = String(d.materialCode || d.maTP || '').trim();
+        if (!code) return;
+
+        const ton = this.resolveInventoryTon(d, fgInQtyByBatchKey, docFactory);
+        this.tonByCode.set(code, (this.tonByCode.get(code) || 0) + ton);
+
+        const norm = this.normalizeCode(code);
+        const loc = String(d.location || d.viTri || '').trim();
+        if (loc) {
+          const set = locationSetByNorm.get(norm) || new Set<string>();
+          set.add(loc);
+          locationSetByNorm.set(norm, set);
         }
       });
+
+      locationSetByNorm.forEach((set, norm) => {
+        this.locationsByCode.set(norm, Array.from(set).sort((a, b) => a.localeCompare(b)).join(', '));
+      });
+      this.isLoadingFg = false;
+      this.rebuildRows();
+    } catch (err) {
+      console.error('FG Overview load fg-inventory:', err);
+      this.fgError = 'Không tải được FG Inventory. Thử lại sau.';
+      this.isLoadingFg = false;
+      this.tonByCode.clear();
+      this.rebuildRows();
+    }
+  }
+
+  /** Key batch + factory — trùng số batch giữa ASM1/ASM2 không gộp nhầm. */
+  private fgBatchKeyWithFactory(factory: string, batchNumber: unknown): string {
+    const bk = String(batchNumber || '').trim().toUpperCase();
+    if (!bk) return '';
+    return `${String(factory || 'ASM1').trim().toUpperCase()}|${bk}`;
   }
 
   /**
-   * Cùng công thức với tab FG Inventory: ton = tonDau + nhap - xuat,
-   * nhập lấy từ tổng fg-in theo số batch (nếu có).
+   * Khớp cách tab FG Inventory hiển thị cột Tồn kho (mapDocToInventoryItem):
+   * ưu tiên trường ton/stock đã lưu trên Firestore; nếu không có thì tonDau + nhap − xuat,
+   * nhap lấy từ fg-in theo factory|batch khi có.
    */
   private resolveInventoryTon(
     d: {
       tonDau?: number;
+      ton?: number;
+      stock?: number;
       nhap?: number;
       quantity?: number;
       xuat?: number;
       exported?: number;
       batchNumber?: string;
     },
-    fgInQtyByBatchKey: Map<string, number>
+    fgInQtyByBatchKey: Map<string, number>,
+    factory: string
   ): number {
     const tonDau = Number(d.tonDau) || 0;
-    let nhap = Number(d.nhap ?? d.quantity) || 0;
-    const xuat = Number(d.xuat ?? d.exported) || 0;
-    const bk = String(d.batchNumber || '').trim().toUpperCase();
-    if (bk && fgInQtyByBatchKey.has(bk)) {
-      nhap = fgInQtyByBatchKey.get(bk)!;
+    let nhap = Number(d.nhap || d.quantity) || 0;
+    const xuat = Number(d.xuat || d.exported) || 0;
+
+    const bk = this.fgBatchKeyWithFactory(factory, d.batchNumber);
+    const nhapCache = bk ? fgInQtyByBatchKey.get(bk) : undefined;
+    if (nhapCache != null) nhap = nhapCache;
+
+    const recalculated = tonDau + nhap - xuat;
+
+    if (d.ton != null) {
+      const stored = Number(d.ton);
+      if (!isNaN(stored)) return stored;
     }
-    return tonDau + nhap - xuat;
+    if (d.stock != null) {
+      const stored = Number(d.stock);
+      if (!isNaN(stored)) return stored;
+    }
+    return recalculated;
   }
 
   openImportDialog(): void {

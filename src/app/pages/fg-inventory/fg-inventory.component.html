@@ -97,6 +97,12 @@
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="viewAllMaterials()">
           <i class="material-icons">visibility</i> Xem tất cả
         </button>
+        <button type="button" class="fgi-btn fgi-btn--outline"
+                (click)="downloadBctkReport()"
+                [disabled]="isLoading"
+                title="Tải Báo Cáo Tồn Kho (BCTK) của nhà máy đang chọn">
+          <i class="material-icons">file_download</i> Tải BCTK
+        </button>
         <button type="button" class="fgi-btn fgi-btn--primary"
                 (click)="refreshUndoExports()"
                 [disabled]="isLoading">

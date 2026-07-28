@@ -747,6 +747,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return String(batchNumber || '').trim().toUpperCase();
   }
 
+  /**
+   * Key theo Batch + Factory — số batch có thể trùng giữa ASM1/ASM2 (2 nhà máy đánh số độc lập),
+   * nếu chỉ khoá theo batch thì Nhập của 1 batch sẽ bị cộng gộp luôn cả batch trùng số bên nhà máy kia.
+   */
+  private fgBatchKeyWithFactory(factory: any, batchNumber: any): string {
+    const bk = this.fgBatchKey(batchNumber);
+    if (!bk) return '';
+    return `${String(factory || 'ASM1').trim().toUpperCase()}|${bk}`;
+  }
+
   /** 🔧 FIX: chỉ .get() khi mở tab / refresh thủ công — bỏ interval 5 phút. */
   private subscribeFGInOutCaches(): void {
     void this.refreshFgInOutCaches();
@@ -762,7 +772,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         (snap?.docs || []).forEach(doc => {
           const d = doc.data() as any;
           const k = this.fgKey(d.materialCode, d.batchNumber, d.lsx, d.lot);
-          const bk = this.fgBatchKey(d.batchNumber);
+          const bk = this.fgBatchKeyWithFactory(d.factory, d.batchNumber);
           const q = Number(d.quantity) || 0;
           if (k && k !== '|||') {
             this.fgInQtyByKey.set(k, (this.fgInQtyByKey.get(k) || 0) + q);
@@ -795,9 +805,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   private applyFGInOutCachesToMaterials(): void {
     if (!this.materials || this.materials.length === 0) return;
     this.materials.forEach(m => {
-      // Theo yêu cầu: chỉ cộng theo số batch.
+      // Theo yêu cầu: chỉ cộng theo số batch (trong đúng nhà máy — batch có thể trùng số giữa ASM1/ASM2).
       // LOT/LSX/Mã TP chỉ là thông tin đi kèm của dòng batch trong fg-inventory.
-      const bk = this.fgBatchKey(m.batchNumber);
+      const bk = this.fgBatchKeyWithFactory(m.factory, m.batchNumber);
       if (!bk) return;
 
       const nhapCache = this.fgInQtyByBatchKey.get(bk);
@@ -2457,12 +2467,26 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return this.materials.filter(m => (m.factory || 'ASM1') === this.resetSelectedFactory).length;
   }
 
-  /** Tải báo cáo tồn kho trước khi reset */
+  /**
+   * Nút "Tải BCTK": trang này chỉ tải `materials` khi bấm "Làm mới" (không tự tải lúc mở trang) —
+   * nên phải tự đảm bảo có dữ liệu trước khi xuất báo cáo, nếu không sẽ luôn báo "Không có dữ liệu".
+   */
+  async downloadBctkReport(): Promise<void> {
+    if (this.materials.length === 0) {
+      await this.loadMaterialsFromFirebase();
+    }
+    this.downloadInventoryReport(this.selectedFactory);
+  }
+
+  /** Tải Báo Cáo Tồn Kho (BCTK) — dùng cả cho nút "Tải BCTK" và trước khi reset. */
   downloadInventoryReport(factory: string): void {
     const list = factory === 'TOTAL'
       ? [...this.materials]
       : this.materials.filter(m => (m.factory || 'ASM1') === factory);
-    if (list.length === 0) return;
+    if (list.length === 0) {
+      alert('Không có dữ liệu để tải báo cáo cho nhà máy này.');
+      return;
+    }
 
     const excelData = list.map((m, i) => ({
       'No': i + 1,
