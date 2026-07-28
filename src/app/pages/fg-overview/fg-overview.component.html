@@ -169,7 +169,7 @@
       <tbody>
         <tr
           *ngFor="let r of filteredRows; let i = index"
-          [class.negative-row]="r.compare !== 'Khớp' || r.normQtyMismatch"
+          [class.negative-row]="r.compare !== 'Khớp'"
         >
           <td class="col-stt">{{ i + 1 }}</td>
           <td class="material-code-cell">{{ r.materialCode }}</td>
@@ -182,7 +182,14 @@
             <ng-container *ngIf="r.qtyDelta !== null">{{ r.qtyDelta | number : '1.0-3' }}</ng-container>
           </td>
           <td class="center-cell">{{ r.inImport ? 'Có' : 'Không' }}</td>
-          <td>{{ r.compare }}</td>
+          <td>
+            <span class="compare-badge" [ngClass]="{
+              'compare-ok': r.compare === 'Khớp',
+              'compare-qty': r.compare === 'Lệch số lượng',
+              'compare-missing': r.compare === 'Thiếu ở file import',
+              'compare-extra': r.compare === 'Dư so với FG Inventory'
+            }">{{ r.compare }}</span>
+          </td>
           <td>{{ r.location }}</td>
         </tr>
       </tbody>
@@ -221,6 +228,7 @@
           <li>So với FG Inventory: chỉ lấy <strong>7 ký tự đầu</strong> của mã kho và mã file để gộp, rồi <strong>so sánh tổng số lượng</strong>. Cột <strong>Mã TP</strong> hiển thị 7 ký tự đầu.</li>
           <li><strong>Tồn FG Inventory</strong> cộng mọi mã kho có cùng 7 ký tự đầu (nhà máy <strong>ASM1</strong> hoặc <strong>ASM2</strong> đang chọn), tính <strong>ton = Tồn đầu + Nhập − Xuất</strong> giống tab FG Inventory.</li>
           <li><strong>So sánh lượng</strong> = tổng tồn file (theo 7 ký tự) − tổng tồn FG (theo 7 ký tự); âm = file ít hơn kho. Hiển thị một lần ở dòng cuối cùng của nhóm trong file.</li>
+          <li><strong>So sánh mã</strong> (4 trạng thái): <strong>Khớp</strong> = mã có ở cả 2 bên VÀ tổng tồn FG Inventory = tổng tồn file import; <strong>Lệch số lượng</strong> = mã có ở cả 2 bên nhưng tổng tồn khác nhau; <strong>Thiếu ở file import</strong> = mã có trong FG (tồn &gt; 0) nhưng không có trong file; <strong>Dư so với FG Inventory</strong> = mã có trong file nhưng không có trong FG.</li>
           <li>Mã chỉ có trong FG, không có trong file: tồn FG &gt; 0 → <strong>Thiếu ở file import</strong>; tồn FG = 0 → <strong>Khớp</strong> (hết stock).</li>
           <li>Dữ liệu import được <strong>lưu trên Firebase theo từng nhà máy</strong> (ASM1/ASM2 tách riêng). Chọn ASM nào sẽ mở bản import của ASM đó; import mới ghi đè bản của đúng ASM đang chọn.</li>
         </ul>

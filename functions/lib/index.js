@@ -970,7 +970,7 @@ exports.truckDriverSignInFn = functions.https.onCall(async (data) => {
  *  (từng bị timeout giữa chừng, khiến 1 vài collection không được backup ngày hôm đó). */
 exports.backupFgCollectionsDaily = functions
     .runWith({ timeoutSeconds: 540, memory: '1GB' })
-    .pubsub.schedule('every 2 minutes')
+    .pubsub.schedule('0 1 * * *')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
     const { runFgDailyBackupJob } = await Promise.resolve().then(() => __importStar(require('./fg-daily-backup')));

@@ -46,7 +46,8 @@ export interface FgOverviewRow {
   /** Tổng SL file của mã này có lệch tồn FG (dùng tô cả các dòng cùng mã). */
   normQtyMismatch: boolean;
   inImport: boolean;
-  compare: 'Khớp' | 'Thiếu ở file import' | 'Dư so với FG Inventory';
+  /** Khớp = mã có ở cả 2 bên VÀ tổng tồn FG Inventory bằng tổng tồn file import. */
+  compare: 'Khớp' | 'Lệch số lượng' | 'Thiếu ở file import' | 'Dư so với FG Inventory';
 }
 
 @Component({
@@ -632,9 +633,12 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       const qtyDelta: number | null =
         isLastForNorm ? sumImp - tonFg : null;
 
+      // Khớp chỉ khi mã có ở FG VÀ tổng tồn 2 bên bằng nhau (normMismatch = false).
+      // Trước đây chỉ check "có mã" (inFg) nên dù lệch số lượng vẫn ghi "Khớp" — gây hiểu nhầm.
       let compare: FgOverviewRow['compare'];
-      if (inFg) compare = 'Khớp';
-      else compare = 'Dư so với FG Inventory';
+      if (!inFg) compare = 'Dư so với FG Inventory';
+      else if (normMismatch) compare = 'Lệch số lượng';
+      else compare = 'Khớp';
 
       list.push({
         materialCode: line.display,

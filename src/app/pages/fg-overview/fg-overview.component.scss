@@ -404,11 +404,45 @@
   }
 
   .comparison-cell.has-difference {
-    background: #f0f0f0;
+    background: #fdecea;
   }
 
   tr.negative-row td {
-    background: #f0f0f0;
+    background: #fdecea;
+  }
+
+  .compare-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid transparent;
+    white-space: nowrap;
+
+    &.compare-ok {
+      background: #ecfdf5;
+      border-color: #bbf7d0;
+      color: #065f46;
+    }
+
+    &.compare-qty {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      color: #9a3412;
+    }
+
+    &.compare-missing {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+
+    &.compare-extra {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #991b1b;
+    }
   }
 }
 
