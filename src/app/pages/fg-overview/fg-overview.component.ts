@@ -5,7 +5,6 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as firebase from 'firebase/compat/app';
-import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 
 /** Một bản cache import duy nhất — document `current` trong collection này. */
 const FG_OVERVIEW_IMPORT_CACHE_COLLECTION = 'fg-overview-import-cache';
@@ -40,8 +39,8 @@ export interface FgOverviewRow {
   tonImport: number;
   location: string;
   /**
-   * Chênh lệch tổng (tồn file theo mã − tồn FG), chỉ ghi trên dòng cuối cùng của cùng mã trong file;
-   * null ở các dòng trung gian cùng mã hoặc không có import.
+   * Chênh lệch tổng (tồn file theo mã − tồn FG).
+   * null khi mã không có trong file import.
    */
   qtyDelta: number | null;
   /** Tổng SL file của mã này có lệch tồn FG (dùng tô cả các dòng cùng mã). */
@@ -61,8 +60,8 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
   isLoadingFg = false;
   fgError: string | null = null;
 
-  /** Tổng tồn theo Mã TP từ Firebase */
-  private tonByCode = new Map<string, number>();
+  /** Tổng tồn theo 7 ký tự đầu Mã TP từ Firebase */
+  private tonByNorm = new Map<string, number>();
   /** Danh sách vị trí theo mã TP (gộp unique từ fg-inventory) */
   private locationsByCode = new Map<string, string>();
   /** Tập mã (chuẩn hóa) có trong file import */
@@ -97,8 +96,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
 
   constructor(
     private firestore: AngularFirestore,
-    private router: Router,
-    private fgDailyBackup: FgDailyBackupService
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -128,14 +126,14 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     const factory = this.selectedFactory;
 
     try {
-      const [inventoryMerged, fgInMerged] = await Promise.all([
-        this.fgDailyBackup.loadMergedDocs('fg-inventory', 'fg-overview'),
-        this.fgDailyBackup.loadMergedDocs('fg-in', 'fg-overview')
+      const [inventoryDocs, fgInDocs] = await Promise.all([
+        this.loadAllCollectionDocs('fg-inventory'),
+        this.loadAllCollectionDocs('fg-in')
       ]);
 
       const fgInQtyByBatchKey = new Map<string, number>();
-      fgInMerged.docs.forEach(doc => {
-        const d = doc.data as { batchNumber?: string; quantity?: number; factory?: string };
+      fgInDocs.forEach(doc => {
+        const d = doc.data() as { batchNumber?: string; quantity?: number; factory?: string };
         const docFactory = String(d.factory || 'ASM1').trim().toUpperCase();
         if (docFactory !== factory) return;
         const bk = this.fgBatchKeyWithFactory(docFactory, d.batchNumber);
@@ -144,12 +142,12 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
         fgInQtyByBatchKey.set(bk, (fgInQtyByBatchKey.get(bk) || 0) + q);
       });
 
-      this.tonByCode.clear();
+      this.tonByNorm.clear();
       this.locationsByCode.clear();
       const locationSetByNorm = new Map<string, Set<string>>();
 
-      inventoryMerged.docs.forEach(doc => {
-        const d = doc.data as {
+      (inventoryDocs).forEach(doc => {
+        const d = doc.data() as {
           materialCode?: string;
           maTP?: string;
           factory?: string;
@@ -170,10 +168,12 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
         const code = String(d.materialCode || d.maTP || '').trim();
         if (!code) return;
 
-        const ton = this.resolveInventoryTon(d, fgInQtyByBatchKey, docFactory);
-        this.tonByCode.set(code, (this.tonByCode.get(code) || 0) + ton);
-
         const norm = this.normalizeCode(code);
+        if (!norm || !this.isValidMaTpFormat(norm)) return;
+
+        const ton = this.resolveInventoryTon(d, fgInQtyByBatchKey, docFactory);
+        this.tonByNorm.set(norm, (this.tonByNorm.get(norm) || 0) + ton);
+
         const loc = String(d.location || d.viTri || '').trim();
         if (loc) {
           const set = locationSetByNorm.get(norm) || new Set<string>();
@@ -191,9 +191,37 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       console.error('FG Overview load fg-inventory:', err);
       this.fgError = 'Không tải được FG Inventory. Thử lại sau.';
       this.isLoadingFg = false;
-      this.tonByCode.clear();
+      this.tonByNorm.clear();
       this.rebuildRows();
     }
+  }
+
+  /** Đọc trực tiếp Firestore (không qua backup) để không bỏ sót mã vừa import. */
+  private async loadAllCollectionDocs(
+    collectionName: string
+  ): Promise<firebase.default.firestore.QueryDocumentSnapshot[]> {
+    const batchSize = 500;
+    let lastDoc: firebase.default.firestore.QueryDocumentSnapshot | null = null;
+    const allDocs: firebase.default.firestore.QueryDocumentSnapshot[] = [];
+
+    while (true) {
+      const snap = await this.firestore
+        .collection(collectionName, ref => {
+          let q: firebase.default.firestore.Query = ref.orderBy('__name__').limit(batchSize);
+          if (lastDoc) q = q.startAfter(lastDoc);
+          return q;
+        })
+        .get()
+        .toPromise();
+
+      const docs = snap?.docs || [];
+      if (!docs.length) break;
+      allDocs.push(...docs);
+      if (docs.length < batchSize) break;
+      lastDoc = docs[docs.length - 1];
+    }
+
+    return allDocs;
   }
 
   /** Key batch + factory — trùng số batch giữa ASM1/ASM2 không gộp nhầm. */
@@ -293,6 +321,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
         this.applyImportedLines(parsed.lines, file.name);
         this.persistImportCacheToFirebase();
         this.showImportDialog = false;
+        void this.loadFgInventoryAsync();
       } catch (err) {
         console.error('FG Overview import:', err);
         this.importFileName = null;
@@ -321,6 +350,21 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  /**
+   * Bấm lượng Tồn FG Inventory → mở FG Out, lọc bảng kê phiếu xuất theo 7 ký tự đầu mã TP
+   * để xem mã đó đã scan xuất bao nhiêu.
+   */
+  openFgOutForMaterial(row: FgOverviewRow): void {
+    const code = this.normalizeCode(row?.materialCode || '');
+    if (!code || code.length < 7) return;
+    this.router.navigate(['/fg-out'], {
+      queryParams: {
+        maTp: code,
+        factory: this.selectedFactory
+      }
+    });
   }
 
   /** Lưu lại ô fill cột (sau khi user chỉnh tay). */
@@ -433,9 +477,22 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     lines: { norm: string; display: string; ton: number }[],
     fileName: string | null
   ): void {
-    this.importLines = lines;
-    this.importCodesNormalized = new Set(lines.map(l => l.norm));
-    this.importRowCount = lines.length;
+    // Gộp trùng 7 ký tự (cache cũ / file nhiều dòng cùng mã)
+    const byNorm = new Map<string, number>();
+    for (const line of lines) {
+      const norm = this.normalizeCode(line.norm || line.display);
+      if (!norm) continue;
+      const ton = typeof line.ton === 'number' && isFinite(line.ton) ? line.ton : 0;
+      if (!(ton > 0)) continue;
+      byNorm.set(norm, (byNorm.get(norm) || 0) + ton);
+    }
+    this.importLines = Array.from(byNorm.entries()).map(([norm, ton]) => ({
+      norm,
+      display: norm,
+      ton
+    }));
+    this.importCodesNormalized = new Set(this.importLines.map(l => l.norm));
+    this.importRowCount = this.importLines.length;
     if (fileName !== null) {
       this.importFileName = fileName;
     }
@@ -585,9 +642,29 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     return /^[PTML]\d{6}$/.test(head);
   }
 
+  /** Chuẩn hóa ô Mã TP từ Excel (text hoặc số). */
+  private formatImportCodeCell(cell: unknown): string {
+    if (cell == null || cell === '') return '';
+    let s: string;
+    if (typeof cell === 'number' && isFinite(cell)) {
+      s = String(Math.round(cell));
+    } else {
+      s = String(cell).trim();
+    }
+    if (/^\d+\.0+$/.test(s)) {
+      s = s.replace(/\.0+$/, '');
+    }
+    // Excel đôi khi bỏ chữ P: 1001003 → P001003
+    if (/^\d{7}$/.test(s)) {
+      s = `P${s.slice(1)}`;
+    }
+    return s.toUpperCase();
+  }
+
   /**
    * Đọc file import cố định: dòng 7 trở đi (chỉ số mảng 6),
    * cột A (0) = Mã TP, cột F (5) = số lượng tồn kho.
+   * Cùng 7 ký tự đầu → gộp 1 dòng, cộng lượng.
    */
   private parseImportFromRow7(raw: any[][]): {
     lines: { norm: string; display: string; ton: number }[];
@@ -596,12 +673,12 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     const COL_TON = 5; // F
     const START_INDEX = 6; // dòng 7 trên Excel (1-based)
 
-    const lines: { norm: string; display: string; ton: number }[] = [];
+    const byNorm = new Map<string, number>();
 
     for (let i = START_INDEX; i < raw.length; i++) {
       const row = raw[i];
       if (!row || !row.length) continue;
-      const codeCell = row[COL_MA_TP] != null ? String(row[COL_MA_TP]).trim() : '';
+      const codeCell = this.formatImportCodeCell(row[COL_MA_TP]);
       if (!codeCell) continue;
       if (!this.isValidMaTpFormat(codeCell)) continue;
       const norm = this.normalizeCode(codeCell);
@@ -621,54 +698,34 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       }
       // Không hiển thị mã TP từ file import nếu lượng tồn <= 0
       if (!(qty > 0)) continue;
-      const displayKey = norm;
-      lines.push({ norm, display: displayKey, ton: qty });
+      byNorm.set(norm, (byNorm.get(norm) || 0) + qty);
     }
+
+    const lines = Array.from(byNorm.entries()).map(([norm, ton]) => ({
+      norm,
+      display: norm,
+      ton
+    }));
 
     return { lines };
   }
 
   private rebuildRows(): void {
-    const codesFg = new Set<string>();
-    this.tonByCode.forEach((_, code) => codesFg.add(this.normalizeCode(code)));
-
+    const codesFg = new Set<string>(this.tonByNorm.keys());
     const codesImport = new Set(this.importCodesNormalized);
 
-    const tonFgForNorm = (norm: string): number => {
-      let t = 0;
-      this.tonByCode.forEach((ton, code) => {
-        if (this.normalizeCode(code) === norm) t += ton;
-      });
-      return t;
-    };
-
-    /** Tổng SL file theo mã (cộng mọi dòng cùng mã) */
-    const sumImportByNorm = new Map<string, number>();
-    this.importLines.forEach(line => {
-      sumImportByNorm.set(line.norm, (sumImportByNorm.get(line.norm) || 0) + line.ton);
-    });
-
-    /** Chỉ số dòng cuối trong file cho từng mã (để hiển thị qtyDelta tổng một lần) */
-    const lastLineIndexByNorm = new Map<string, number>();
-    this.importLines.forEach((line, idx) => {
-      lastLineIndexByNorm.set(line.norm, idx);
-    });
+    const tonFgForNorm = (norm: string): number => this.tonByNorm.get(norm) || 0;
 
     const list: FgOverviewRow[] = [];
 
-    // Một dòng lưới = một dòng file import (thứ tự file)
-    this.importLines.forEach((line, idx) => {
+    // Một dòng lưới = một mã TP (đã gộp lượng từ file nếu trùng 7 ký tự)
+    this.importLines.forEach(line => {
       const inFg = codesFg.has(line.norm);
       const tonFg = tonFgForNorm(line.norm);
-      const sumImp = sumImportByNorm.get(line.norm) ?? 0;
-      const normMismatch =
-        inFg && Math.abs(sumImp - tonFg) >= 1e-6;
-      const isLastForNorm = lastLineIndexByNorm.get(line.norm) === idx;
-      const qtyDelta: number | null =
-        isLastForNorm ? sumImp - tonFg : null;
+      const sumImp = line.ton;
+      const normMismatch = inFg && Math.abs(sumImp - tonFg) >= 1e-6;
+      const qtyDelta: number | null = sumImp - tonFg;
 
-      // Khớp chỉ khi mã có ở FG VÀ tổng tồn 2 bên bằng nhau (normMismatch = false).
-      // Trước đây chỉ check "có mã" (inFg) nên dù lệch số lượng vẫn ghi "Khớp" — gây hiểu nhầm.
       let compare: FgOverviewRow['compare'];
       if (!inFg) compare = 'Dư so với FG Inventory';
       else if (normMismatch) compare = 'Lệch số lượng';
@@ -677,7 +734,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       list.push({
         materialCode: line.display,
         tonFg,
-        tonImport: line.ton,
+        tonImport: sumImp,
         location: this.locationsByCode.get(line.norm) || '',
         qtyDelta,
         normQtyMismatch: normMismatch,
@@ -706,7 +763,6 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
       });
     });
 
-    // Thứ tự: giữ nguyên block dòng import, sau đó mã chỉ FG — sắp theo mã TP
     const importCount = this.importLines.length;
     const importPart = list.slice(0, importCount);
     const fgOnlyPart = list.slice(importCount).sort((a, b) =>

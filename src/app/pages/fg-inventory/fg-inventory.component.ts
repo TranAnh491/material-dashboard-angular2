@@ -16,6 +16,12 @@ import { CartonPackingQtyService } from '../../services/carton-packing-qty.servi
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
+/** LOT/LSX chưa có khi import bổ sung — cập nhật sau trên lưới FG Inventory. */
+export const FG_PENDING_LOT = 'Chờ LOT';
+export const FG_PENDING_LSX = 'Chờ LSX';
+
+export type FgInventoryImportMode = 'tonDau' | 'tonDauSupplement' | 'addMaTp';
+
 export interface FGInventoryItem {
   id?: string;
   factory?: string;
@@ -129,17 +135,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   isLoadingLocationReport: boolean = false;
   locationReportRows: Array<{ location: string; totalCount: number; checkedCount: number; uncheckedCount: number }> = [];
 
+  // KPI KK — % đã kiểm kê (mã tồn > 0)
+  showKkKpiModal = false;
+  isLoadingKkKpi = false;
+  kkKpiPercent: number | null = null;
+  kkKpiChecked = 0;
+  kkKpiTotal = 0;
+
   showCustomerSummaryModal: boolean = false;
   isLoadingCustomerSummary: boolean = false;
   customerSummaryRows: Array<{ customer: string; totalCarton: number }> = [];
-
-  /** Danh sách TP tồn kho — Menu → Danh sách TP */
-  showTpStockListModal = false;
-  isLoadingTpStockList = false;
-  tpStockListAllRows: Array<{ materialCode: string; quantity: number; carton: number; customer: string }> = [];
-  tpStockListFilterMa = '';
-  tpStockListFilterCustomer = '';
-  tpStockListSortCartonDesc = true;
 
   // Sửa vị trí (bấm vào ô Vị trí) — nhập tay hoặc "Chuyển ASM3" chọn từ danh sách vị trí kho ASM3
   showLocationEditModal: boolean = false;
@@ -155,7 +160,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Import progress dialog (hiển thị trong quá trình import)
   showImportProgressDialog: boolean = false;
-  importMode: 'tonDau' | 'addMaTp' = 'tonDau';
+  importMode: FgInventoryImportMode = 'tonDau';
   importProgressCurrentBatch: number = 0;
   importProgressTotalBatches: number = 0;
   importProgressImportedCount: number = 0;
@@ -169,6 +174,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Add mã TP dialog
   showAddMaTpDialog: boolean = false;
+
+  // Import tồn đầu dialog
+  showImportTonDauDialog: boolean = false;
 
   // Duplicate batch dialog
   showDuplicateBatchDialog: boolean = false;
@@ -207,6 +215,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
+  }
+
+  goToTpStockList(): void {
+    this.router.navigate(['/fg-inventory/tp-list'], {
+      queryParams: { factory: this.selectedFactory }
+    });
   }
 
   get pagedMaterials(): FGInventoryItem[] {
@@ -270,7 +284,31 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.searchMode = 'material';
     this.searchTerm = this.filterMaTp;
     this.currentPage = 1;
-    this.onMaterialSelected(this.filterMaTp);
+    // Gõ tay: đủ 7 ký tự thì tìm; chọn từ datalist cũng qua đây
+    if (!this.filterMaTp) {
+      this.clearFilterMaTp();
+      return;
+    }
+    if (this.filterMaTp.length >= 7) {
+      void this.runInventorySearch(this.filterMaTp);
+    } else {
+      this.searchStatus = 'typing';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
+    }
+  }
+
+  onMaTpKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const term = String(this.filterMaTp || '').trim().toUpperCase();
+    if (term.length < 7) {
+      this.searchStatus = 'typing';
+      this.filteredMaterials = [];
+      this.cdr.detectChanges();
+      return;
+    }
+    this.onFilterMaTpChange(term);
   }
 
   onFilterLocationChange(value: string): void {
@@ -340,6 +378,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     if (locationParam) {
       this.searchMode = 'location';
       void this.runLocationSearch(locationParam);
+    }
+
+    const factoryParam = this.route.snapshot.queryParamMap.get('factory');
+    if (factoryParam && this.availableFactories.includes(factoryParam)) {
+      this.selectedFactory = factoryParam;
+    }
+
+    const maTpParam = this.route.snapshot.queryParamMap.get('maTp');
+    if (maTpParam) {
+      this.onFilterMaTpChange(maTpParam);
     }
   }
 
@@ -1404,6 +1452,65 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return this.locationReportRows.reduce((sum, r) => sum + r.checkedCount, 0);
   }
 
+  async openKkKpi(): Promise<void> {
+    this.showKkKpiModal = true;
+    this.isLoadingKkKpi = true;
+    this.kkKpiPercent = null;
+    this.kkKpiChecked = 0;
+    this.kkKpiTotal = 0;
+    this.cdr.detectChanges();
+
+    try {
+      const { checked, total } = await this.loadKkStats();
+      this.kkKpiChecked = checked;
+      this.kkKpiTotal = total;
+      this.kkKpiPercent = total > 0 ? Math.round((checked / total) * 1000) / 10 : 0;
+    } catch (e) {
+      console.error('openKkKpi failed', e);
+      this.kkKpiChecked = 0;
+      this.kkKpiTotal = 0;
+      this.kkKpiPercent = 0;
+    } finally {
+      this.isLoadingKkKpi = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  closeKkKpi(): void {
+    this.showKkKpiModal = false;
+  }
+
+  openLocationReportFromKkKpi(): void {
+    this.closeKkKpi();
+    void this.openLocationReportModal();
+  }
+
+  /** Đếm KK trên mã còn tồn > 0 theo nhà máy đang chọn. */
+  private async loadKkStats(): Promise<{ checked: number; total: number }> {
+    const snap = await this.firestore
+      .collection('fg-inventory', (ref) => {
+        let q: firebase.firestore.Query = ref;
+        if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+          q = q.where('factory', '==', this.selectedFactory);
+        }
+        return q.limit(5000);
+      })
+      .get()
+      .toPromise();
+
+    this.readTracker.track('fg-inventory', 'fg-inventory-kk-kpi', snap?.docs.length || 0);
+
+    let checked = 0;
+    let total = 0;
+    (snap?.docs || []).forEach((doc) => {
+      const item = this.mapDocToInventoryItem(doc.id, doc.data());
+      if ((item.ton ?? 0) <= 0) return;
+      total += 1;
+      if (this.isViTriKkChecked(item)) checked += 1;
+    });
+    return { checked, total };
+  }
+
   trackByLocation(_: number, row: { location: string }): string {
     return row.location;
   }
@@ -1516,110 +1623,6 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Menu → Danh sách TP: tổng hợp tồn theo mã TP (7 ký tự), lọc Mã/Khách, sắp xếp carton. */
-  async openTpStockListModal(): Promise<void> {
-    this.showTpStockListModal = true;
-    this.isLoadingTpStockList = true;
-    this.tpStockListAllRows = [];
-    this.tpStockListFilterMa = '';
-    this.tpStockListFilterCustomer = '';
-    this.tpStockListSortCartonDesc = true;
-    this.cdr.detectChanges();
-
-    try {
-      const snap = await this.firestore
-        .collection('fg-inventory', (ref) => {
-          let q: firebase.firestore.Query = ref;
-          if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
-            q = q.where('factory', '==', this.selectedFactory);
-          }
-          return q.limit(5000);
-        })
-        .get()
-        .toPromise();
-
-      this.readTracker.track('fg-inventory', 'fg-inventory-tp-stock-list', snap?.docs.length || 0);
-
-      const byCode = new Map<string, { quantity: number; carton: number }>();
-      (snap?.docs || []).forEach((doc) => {
-        const item = this.mapDocToInventoryItem(doc.id, doc.data());
-        const ton = Number(item.ton ?? 0);
-        if (ton <= 0) return;
-        const code = String(item.materialCode || '').trim().toUpperCase().slice(0, 7);
-        if (!code) return;
-        const cur = byCode.get(code) || { quantity: 0, carton: 0 };
-        cur.quantity += ton;
-        cur.carton += Number(item.carton || 0);
-        byCode.set(code, cur);
-      });
-
-      this.tpStockListAllRows = Array.from(byCode.entries()).map(([materialCode, v]) => ({
-        materialCode,
-        quantity: v.quantity,
-        carton: v.carton,
-        customer: this.getCustomerNameFromMapping(materialCode).trim() || 'Không xác định'
-      }));
-    } catch (e) {
-      console.error('openTpStockListModal failed', e);
-      this.tpStockListAllRows = [];
-    } finally {
-      this.isLoadingTpStockList = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  get tpStockListMaFilterOptions(): string[] {
-    const set = new Set(this.tpStockListAllRows.map((r) => r.materialCode));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
-  }
-
-  get tpStockListCustomerFilterOptions(): string[] {
-    const set = new Set(this.tpStockListAllRows.map((r) => r.customer).filter(Boolean));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
-  }
-
-  get tpStockListDisplayRows(): Array<{ materialCode: string; quantity: number; carton: number; customer: string }> {
-    let rows = this.tpStockListAllRows;
-    if (this.tpStockListFilterMa) {
-      rows = rows.filter((r) => r.materialCode === this.tpStockListFilterMa);
-    }
-    if (this.tpStockListFilterCustomer) {
-      rows = rows.filter((r) => r.customer === this.tpStockListFilterCustomer);
-    }
-    return [...rows].sort((a, b) =>
-      this.tpStockListSortCartonDesc ? b.carton - a.carton : a.carton - b.carton
-    );
-  }
-
-  get tpStockListTotalCarton(): number {
-    return this.tpStockListDisplayRows.reduce((sum, r) => sum + (Number(r.carton) || 0), 0);
-  }
-
-  get tpStockListTotalQuantity(): number {
-    return this.tpStockListDisplayRows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
-  }
-
-  onTpStockListFilterMaChange(value: string): void {
-    this.tpStockListFilterMa = String(value || '').toUpperCase();
-    this.cdr.detectChanges();
-  }
-
-  onTpStockListFilterCustomerChange(value: string): void {
-    this.tpStockListFilterCustomer = String(value || '').trim();
-    this.cdr.detectChanges();
-  }
-
-  clearTpStockListFilters(): void {
-    this.tpStockListFilterMa = '';
-    this.tpStockListFilterCustomer = '';
-    this.cdr.detectChanges();
-  }
-
-  toggleTpStockListCartonSort(): void {
-    this.tpStockListSortCartonDesc = !this.tpStockListSortCartonDesc;
-    this.cdr.detectChanges();
-  }
-
   // Check if user can view material
   canViewMaterial(material: FGInventoryItem): boolean {
     const materialFactory = material.factory || 'ASM1';
@@ -1637,7 +1640,16 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   }
 
   // Import file functionality
-  importFile(): void {
+  openImportTonDauDialog(): void {
+    this.showImportTonDauDialog = true;
+  }
+
+  closeImportTonDauDialog(): void {
+    this.showImportTonDauDialog = false;
+  }
+
+  importFile(supplement = false): void {
+    this.closeImportTonDauDialog();
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx,.xls';
@@ -1646,7 +1658,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     fileInput.onchange = (event: any) => {
       const file = event.target.files[0];
       if (file) {
-        this.processExcelFile(file);
+        this.processExcelFile(file, supplement);
       }
     };
     
@@ -1655,7 +1667,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     document.body.removeChild(fileInput);
   }
 
-  private async processExcelFile(file: File): Promise<void> {
+  private async processExcelFile(file: File, supplement = false): Promise<void> {
     try {
       this.isLoading = true;
       const rawData = await this.readExcelFile(file);
@@ -1665,8 +1677,17 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         ASM1: await this.getNextTdauBatchSeq('ASM1'),
         ASM2: await this.getNextTdauBatchSeq('ASM2')
       };
-      const materials = this.parseExcelData(rawData, startSeqByFactory);
-      await this.runInventoryImport(materials, 'tonDau');
+      const materials = this.parseExcelData(rawData, startSeqByFactory, supplement);
+      if (materials.length === 0) {
+        this.isLoading = false;
+        alert(
+          supplement
+            ? '⚠️ Không có dòng hợp lệ. Import bổ sung (form B) cần Mã TP + cột Tồn kho (I) > 0. LOT/LSX = 0 → Chờ LOT/Chờ LSX.'
+            : '⚠️ Không có dòng hợp lệ. Kiểm tra file Excel (Mã TP + Tồn đầu > 0).'
+        );
+        return;
+      }
+      await this.runInventoryImport(materials, supplement ? 'tonDauSupplement' : 'tonDau');
 
     } catch (error) {
       console.error('Error processing Excel file:', error);
@@ -1754,12 +1775,15 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async runInventoryImport(materials: FGInventoryItem[], mode: 'tonDau' | 'addMaTp'): Promise<void> {
+  private async runInventoryImport(materials: FGInventoryItem[], mode: FgInventoryImportMode): Promise<void> {
     materials.forEach(m => {
       const catalogItem = this.catalogItems.find(c => c.materialCode === m.materialCode);
       const standard = catalogItem?.standard ? parseFloat(String(catalogItem.standard)) : 0;
       m.standard = standard;
-      const qtyBase = mode === 'tonDau' ? m.tonDau : m.nhap;
+      const qtyBase =
+        mode === 'addMaTp' || mode === 'tonDauSupplement'
+          ? (m.nhap || m.ton || 0)
+          : m.tonDau;
       if (standard > 0 && qtyBase > 0) {
         m.carton = Math.floor(qtyBase / standard);
         m.odd = qtyBase % standard;
@@ -1820,42 +1844,152 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
            third.includes('mã') || third.includes('ma tp');
   }
 
+  /** LOT/LSX trống hoặc = 0 (Excel hay ghi 0 thay vì để trống). */
+  private isEmptyLotLsxValue(val: unknown): boolean {
+    const s = String(val ?? '').trim();
+    return !s || s === '0';
+  }
+
+  private cellAt(row: any[], colIndex: number, fallback = ''): string {
+    if (colIndex < 0 || colIndex >= row.length) return fallback;
+    const v = row[colIndex];
+    if (v == null) return fallback;
+    return String(v).trim();
+  }
+
+  private parseImportQty(cell: unknown): number {
+    if (typeof cell === 'number' && isFinite(cell)) return Math.round(cell);
+    const n = parseInt(String(cell ?? '').trim().replace(/,/g, ''), 10);
+    return !isNaN(n) ? n : 0;
+  }
+
+  /**
+   * Template chuẩn: A=Nhà máy, C=Mã TP, D=LOT, E=LSX, F=Tồn đầu, G=Vị trí, H=Ghi chú.
+   * Import bổ sung — file export FG Inventory: lượng lấy cột Tồn kho (I), Vị trí (L), Ghi chú (N), Khách (O).
+   */
+  private resolveTonDauColumnMap(rows: any[][], supplement: boolean): {
+    startIndex: number;
+    factory: number;
+    materialCode: number;
+    lot: number;
+    lsx: number;
+    tonDau: number;
+    nhap: number;
+    tonKho: number;
+    location: number;
+    notes: number;
+    customer: number;
+    useNhapAsQty: boolean;
+  } {
+    const defaults = {
+      startIndex: 0,
+      factory: 0,
+      materialCode: 2,
+      lot: 3,
+      lsx: 4,
+      tonDau: 5,
+      nhap: -1,
+      tonKho: -1,
+      location: 6,
+      notes: 7,
+      customer: -1,
+      useNhapAsQty: false
+    };
+
+    if (!rows.length || !this.isHeaderRow(rows[0])) {
+      return defaults;
+    }
+
+    const header = rows[0].map(c => String(c ?? '').trim().toLowerCase());
+    const findCol = (...labels: string[]): number => {
+      for (const label of labels) {
+        const idx = header.findIndex(h => h === label || h.includes(label));
+        if (idx >= 0) return idx;
+      }
+      return -1;
+    };
+
+    const viTriIdx = header.findIndex(h => {
+      const isLocation = h === 'vị trí' || h === 'vi tri' || h === 'location';
+      return isLocation && !h.includes('kk');
+    });
+    const tonKhoIdx = findCol('tồn kho', 'ton kho');
+    const nhapIdx = findCol('nhập', 'nhap');
+    const useExportLayout = supplement && tonKhoIdx >= 0 && viTriIdx >= 0;
+
+    return {
+      startIndex: 1,
+      factory: findCol('factory', 'nhà máy') >= 0 ? findCol('factory', 'nhà máy') : 0,
+      materialCode: findCol('mã tp', 'ma tp') >= 0 ? findCol('mã tp', 'ma tp') : 2,
+      lot: findCol('lot') >= 0 ? findCol('lot') : 3,
+      lsx: findCol('lsx') >= 0 ? findCol('lsx') : 4,
+      tonDau: findCol('tồn đầu', 'ton dau') >= 0 ? findCol('tồn đầu', 'ton dau') : 5,
+      nhap: nhapIdx,
+      tonKho: tonKhoIdx,
+      location: useExportLayout ? viTriIdx : (findCol('vị trí', 'vi tri', 'location') >= 0 ? findCol('vị trí', 'vi tri', 'location') : 6),
+      notes: findCol('ghi chú', 'ghi chu') >= 0 ? findCol('ghi chú', 'ghi chu') : 7,
+      customer: findCol('khách', 'khach', 'customer'),
+      useNhapAsQty: useExportLayout
+    };
+  }
+
   // Parse dữ liệu import tồn đầu - cột: A=Nhà máy, C=Mã TP, D=LOT, E=LSX, F=Tồn đầu, G=Vị trí, H=Ghi chú
   // Batch tự sinh: TDAU000001, TDAU000002... (đọc batch biết là import tồn đầu)
   // Loại trùng: gộp các dòng trùng (Factory + Mã TP + LOT + LSX + Vị trí) bằng cách cộng dồn tồn đầu
   // startSeqByFactory: số thứ tự bắt đầu (đã trừ trùng với batch cũ) — xem getNextTdauBatchSeq().
   private parseExcelData(
     rawData: any[][],
-    startSeqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1 }
+    startSeqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1 },
+    supplement = false
   ): FGInventoryItem[] {
     const rows = rawData.filter(r => r && r.length > 0);
-    let startIndex = 0;
-    if (rows.length > 0 && this.isHeaderRow(rows[0])) {
-      startIndex = 1; // Bỏ qua dòng header
-    }
+    const col = this.resolveTonDauColumnMap(rows, supplement);
+    const startIndex = col.startIndex;
 
-    // Bước 1: Parse và gộp trùng theo key (factory|materialCode|lot|lsx|location)
-    const mergedMap = new Map<string, { factory: string; materialCode: string; lot: string; lsx: string; location: string; tonDau: number; notes: string[] }>();
-    
+    const mergedMap = new Map<string, {
+      factory: string;
+      materialCode: string;
+      lot: string;
+      lsx: string;
+      location: string;
+      tonDau: number;
+      nhap: number;
+      notes: string[];
+      customer: string;
+    }>();
+
     for (let i = startIndex; i < rows.length; i++) {
       const row = rows[i];
-      const factory = String(row[0] || '').trim() || 'ASM1';
-      const materialCode = String(row[2] || '').trim(); // Cột C
-      const lot = String(row[3] || '').trim();          // Cột D
-      const lsx = String(row[4] || '').trim();          // Cột E
-      const tonDau = parseInt(String(row[5] || '0'), 10) || 0;  // Cột F
-      const location = String(row[6] || '').trim() || 'Temporary'; // Cột G
-      const notes = String(row[7] || '').trim();        // Cột H
+      const factory = this.cellAt(row, col.factory) || 'ASM1';
+      const materialCode = this.cellAt(row, col.materialCode);
+      let lot = this.cellAt(row, col.lot);
+      let lsx = this.cellAt(row, col.lsx);
+      if (supplement) {
+        if (this.isEmptyLotLsxValue(lot)) lot = FG_PENDING_LOT;
+        if (this.isEmptyLotLsxValue(lsx)) lsx = FG_PENDING_LSX;
+      }
+      let tonDau = this.parseImportQty(col.tonDau >= 0 ? row[col.tonDau] : 0);
+      let nhap = 0;
+      if (supplement && col.useNhapAsQty && tonDau <= 0) {
+        // Form B: lượng import = cột Tồn kho (I), không dùng Nhập (G)
+        nhap = this.parseImportQty(col.tonKho >= 0 ? row[col.tonKho] : 0);
+      }
+      const qty = nhap > 0 ? nhap : tonDau;
+      const location = this.cellAt(row, col.location) || 'Temporary';
+      const notes = this.cellAt(row, col.notes);
+      const customer = col.customer >= 0 ? this.cellAt(row, col.customer) : '';
 
-      // Bỏ qua dòng trống (không có mã TP hoặc tồn đầu = 0)
-      if (!materialCode && tonDau === 0) continue;
+      if (!materialCode && qty <= 0) continue;
+      if (qty <= 0) continue;
 
       const key = `${factory}|${materialCode}|${lot}|${lsx}|${location}`.toUpperCase();
       const existing = mergedMap.get(key);
-      
+
       if (existing) {
         existing.tonDau += tonDau;
+        existing.nhap += nhap;
         if (notes) existing.notes.push(notes);
+        if (customer && !existing.customer) existing.customer = customer;
       } else {
         mergedMap.set(key, {
           factory,
@@ -1864,12 +1998,13 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
           lsx,
           location,
           tonDau,
-          notes: notes ? [notes] : []
+          nhap,
+          notes: notes ? [notes] : [],
+          customer
         });
       }
     }
 
-    // Bước 2: Chuyển thành FGInventoryItem với batch tự sinh (ASM1: TDAU1-xxx, ASM2: TDAU2-xxx)
     const materials: FGInventoryItem[] = [];
     const seqByFactory: Record<string, number> = { ASM1: 1, ASM2: 1, ...startSeqByFactory };
     mergedMap.forEach((item) => {
@@ -1878,11 +2013,11 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       const seq = seqByFactory[factory] || 1;
       seqByFactory[factory] = seq + 1;
       const notes = item.notes.filter(n => n).join('; ');
-      // Tính Carton/ODD ngay lúc import theo Lượng Đóng Thùng/SL SP thùng ở Danh mục TP — không cần
-      // đợi sửa Tồn đầu hoặc bấm "Tính Tồn" mới có carton đúng.
+      const qtyBase = item.nhap > 0 ? item.nhap : item.tonDau;
       const packingQty = this.getPackingQtyForTdau(item.materialCode);
-      const carton = packingQty > 0 ? Math.ceil(item.tonDau / packingQty) : 0;
-      const odd = packingQty > 0 ? item.tonDau % packingQty : 0;
+      const carton = packingQty > 0 ? Math.ceil(qtyBase / packingQty) : 0;
+      const odd = packingQty > 0 ? qtyBase % packingQty : 0;
+      const useNhap = supplement && item.nhap > 0;
       materials.push({
         factory,
         importDate: new Date(),
@@ -1891,17 +2026,17 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         materialCode: item.materialCode || '',
         lot: item.lot,
         lsx: item.lsx,
-        quantity: 0,
+        quantity: useNhap ? item.nhap : 0,
         standard: 0,
         carton,
         odd,
-        tonDau: item.tonDau,
-        nhap: 0,
+        tonDau: useNhap ? 0 : item.tonDau,
+        nhap: useNhap ? item.nhap : 0,
         xuat: 0,
-        ton: item.tonDau,
+        ton: qtyBase,
         location: item.location,
         notes,
-        customer: '',
+        customer: item.customer || '',
         isReceived: true,
         isCompleted: false,
         isDuplicate: false,
@@ -2048,7 +2183,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Save materials to Firebase - chia nhỏ từng phần (chunk), ghi tuần tự từng dòng tránh lỗi "Document already exists"
   private readonly IMPORT_CHUNK_SIZE = 50;
 
-  async saveMaterialsToFirebase(materials: FGInventoryItem[], mode: 'tonDau' | 'addMaTp' = 'tonDau'): Promise<void> {
+  async saveMaterialsToFirebase(materials: FGInventoryItem[], mode: FgInventoryImportMode = 'tonDau'): Promise<void> {
     let batchIndex = 0;
     let savedCount = 0;
     this.importSkippedCount = 0;
@@ -2058,9 +2193,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       batchIndex++;
       
       for (const material of chunk) {
-        const exists = mode === 'addMaTp'
-          ? await this.checkDuplicateAddMaTpExists(material)
-          : await this.checkDuplicateExists(material);
+        const exists =
+          mode === 'addMaTp' || mode === 'tonDauSupplement'
+            ? await this.checkDuplicateAddMaTpExists(material)
+            : await this.checkDuplicateExists(material);
         if (exists) {
           this.importSkippedCount++;
           continue;
@@ -2254,6 +2390,25 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   }
 
 
+
+  isPendingLot(material: FGInventoryItem): boolean {
+    return (material.lot || '').trim() === FG_PENDING_LOT;
+  }
+
+  isPendingLsx(material: FGInventoryItem): boolean {
+    return (material.lsx || '').trim() === FG_PENDING_LSX;
+  }
+
+  /** Cập nhật LOT/LSX sau khi import bổ sung (thay "Chờ LOT" / "Chờ LSX"). */
+  savePendingLotLsx(material: FGInventoryItem, field: 'lot' | 'lsx'): void {
+    if (!material.id) return;
+    const raw = field === 'lot' ? material.lot : material.lsx;
+    const val = String(raw || '').trim();
+    if (!val) return;
+    if (field === 'lot' && val === FG_PENDING_LOT) return;
+    if (field === 'lsx' && val === FG_PENDING_LSX) return;
+    this.updateMaterialInFirebase(material);
+  }
 
   updateNotes(material: FGInventoryItem): void {
     console.log('Updating notes for material:', material.materialCode, 'to:', material.notes);

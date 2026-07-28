@@ -8,15 +8,18 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
 import { FGInventoryComponent } from './fg-inventory.component';
+import { FgTpStockListComponent } from './fg-tp-stock-list.component';
 import { SharedModule } from '../../shared/shared.module';
 
 const routes: Routes = [
-  { path: '', component: FGInventoryComponent }
+  { path: '', component: FGInventoryComponent },
+  { path: 'tp-list', component: FgTpStockListComponent }
 ];
 
 @NgModule({
   declarations: [
-    FGInventoryComponent
+    FGInventoryComponent,
+    FgTpStockListComponent
   ],
   imports: [
     CommonModule,

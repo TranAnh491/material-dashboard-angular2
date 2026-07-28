@@ -27,6 +27,7 @@ export class MobileDetectionService {
     '/inventory-overview-asm2',
     '/fg-out',
     '/fg-inventory',
+    '/fg-inventory/tp-list',
     '/pallet-id',
     '/checklist',
     '/equipment',

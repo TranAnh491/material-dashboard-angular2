@@ -1,0 +1,98 @@
+<div class="main-content">
+  <div class="tp-list-page">
+    <div class="tp-list-header">
+      <div class="tp-list-header__title">
+        <span class="tp-list-header__icon"><i class="material-icons">inventory</i></span>
+        <h2>Thống Kê TP theo thùng</h2>
+      </div>
+      <div class="tp-list-header__actions">
+        <button type="button" class="tp-list-btn tp-list-btn--outline" (click)="goToFgInventory()">
+          <i class="material-icons">arrow_back</i> FG Inventory
+        </button>
+        <button type="button" class="tp-list-btn tp-list-btn--outline" (click)="goToMenu()">
+          <i class="material-icons">home</i> Menu
+        </button>
+      </div>
+    </div>
+
+    <div class="tp-list-toolbar">
+      <div class="tp-list-factory">
+        <button type="button" class="tp-list-factory-btn"
+                *ngFor="let f of factoryOptions"
+                [class.active]="selectedFactory === f"
+                (click)="setFactory(f)">
+          {{ f }}
+        </button>
+      </div>
+
+      <div class="tp-list-filters">
+        <div class="tp-list-field">
+          <label class="tp-list-label">Mã TP</label>
+          <select class="tp-list-select" [ngModel]="filterMa" (ngModelChange)="onFilterMaChange($event)">
+            <option value="">Tất cả</option>
+            <option *ngFor="let m of maFilterOptions" [value]="m">{{ m }}</option>
+          </select>
+        </div>
+        <div class="tp-list-field">
+          <label class="tp-list-label">Khách</label>
+          <select class="tp-list-select" [ngModel]="filterCustomer" (ngModelChange)="onFilterCustomerChange($event)">
+            <option value="">Tất cả</option>
+            <option *ngFor="let c of customerFilterOptions" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <button type="button" class="tp-list-clear" *ngIf="filterMa || filterCustomer" (click)="clearFilters()">
+          <i class="material-icons">filter_alt_off</i> Xóa lọc
+        </button>
+        <button type="button" class="tp-list-sort-btn" (click)="toggleCartonSort()">
+          <i class="material-icons">{{ sortCartonDesc ? 'arrow_downward' : 'arrow_upward' }}</i>
+          Carton {{ sortCartonDesc ? '↓' : '↑' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="tp-list-summary" *ngIf="!isLoading">
+      <span>Nhà máy: <strong>{{ selectedFactory }}</strong></span>
+      <span>{{ displayRows.length }} mã TP</span>
+      <span>Tổng Carton: <strong>{{ formatNumber(totalCarton) }}</strong></span>
+      <span>KK: <strong>{{ totalKkChecked }}/{{ totalKkTotal }}</strong></span>
+    </div>
+
+    <div class="tp-list-loading" *ngIf="isLoading">
+      <i class="material-icons">refresh</i>
+      <span>Đang tải dữ liệu...</span>
+    </div>
+
+    <div class="tp-list-body" *ngIf="!isLoading">
+      <div class="tp-list-grid" *ngIf="displayRows.length > 0">
+        <button type="button"
+                class="tp-list-card"
+                *ngFor="let row of displayRows"
+                (click)="selectMaterial(row.materialCode)"
+                [title]="'Bấm để lọc ' + row.materialCode + ' ở FG Inventory'">
+          <div class="tp-list-card__code">{{ row.materialCode }}</div>
+          <div class="tp-list-card__line">
+            <span>Lượng</span>
+            <strong>{{ formatNumber(row.quantity) }}</strong>
+          </div>
+          <div class="tp-list-card__line">
+            <span>Carton</span>
+            <strong>{{ formatNumber(row.carton) }}</strong>
+          </div>
+          <div class="tp-list-card__customer" [title]="row.customer">{{ row.customer }}</div>
+          <div class="tp-list-card__kk"
+               [class.tp-list-card__kk--done]="isKkComplete(row)"
+               [class.tp-list-card__kk--partial]="row.kkTotal > 0 && row.kkChecked < row.kkTotal">
+            KK {{ formatKk(row) }}
+          </div>
+        </button>
+      </div>
+      <div class="tp-list-empty" *ngIf="displayRows.length === 0">Không có dữ liệu tồn kho.</div>
+    </div>
+
+    <div class="tp-list-footer" *ngIf="!isLoading && displayRows.length > 0">
+      <span><strong>Tổng</strong> — Lượng: {{ formatNumber(totalQuantity) }}</span>
+      <span>Carton: {{ formatNumber(totalCarton) }}</span>
+      <span>KK: {{ totalKkChecked }}/{{ totalKkTotal }}</span>
+    </div>
+  </div>
+</div>

@@ -1,7 +1,7 @@
 // FG Out - Giao diện đơn giản, nền trắng viền đen
 $fg-font-family: 'Segoe UI', Arial, sans-serif;
 $fg-font-size-base: 13px;
-$fg-cell-padding: 8px 6px;
+$fg-cell-padding: 9px 7px;
 
 :host {
   display: block;
@@ -417,9 +417,9 @@ tr.drag-over {
   white-space: nowrap;
 }
 
-// Dòng filter - nền trắng, viền đen, chữ đen
+// Dòng filter - nền xám nhạt (đồng bộ khối tiêu đề), viền đen, chữ đen
 .filter-row th {
-  background: #ffffff !important;
+  background: #eef1f5 !important;
   color: #000000 !important;
   border: 1px solid #000000 !important;
   padding: 6px 4px !important;
@@ -436,7 +436,7 @@ tr.drag-over {
   font-size: $fg-font-size-base;
   font-family: $fg-font-family;
   border: 1px solid #000000;
-  border-radius: 0;
+  border-radius: 4px;
   background: #ffffff;
   color: #000000;
 }
@@ -575,6 +575,13 @@ tr.pallet-odd td {
 tr.pallet-even td {
   background-color: #e8f5e9 !important; // xanh lạt
 }
+// Hover riêng cho dòng có màu pallet — nếu không thì màu !important ở trên sẽ che mất hiệu ứng hover chung
+tr.pallet-odd:hover td {
+  background-color: #fad0e6 !important;
+}
+tr.pallet-even:hover td {
+  background-color: #d3ecd6 !important;
+}
 .subtotal-label {
   font-weight: 600;
   color: #000;
@@ -674,9 +681,9 @@ tr.pallet-even td {
     position: sticky !important;
     top: 0 !important;
     z-index: 1000 !important;
-    background: #ffffff !important;
+    background: #eef1f5 !important;
   }
-  
+
   th, td {
     border: 1px solid #000000;
     padding: $fg-cell-padding;
@@ -690,10 +697,10 @@ tr.pallet-even td {
     background: transparent;
     font-family: $fg-font-family;
   }
-  
-  // Dòng tiêu đề chính
+
+  // Dòng tiêu đề chính — nền xám nhạt riêng để phân biệt rõ với dữ liệu khi cuộn (trước trùng màu trắng)
   thead tr:first-child th {
-    background: #ffffff !important;
+    background: #eef1f5 !important;
     color: #000000 !important;
     font-weight: 600;
     font-size: $fg-font-size-base;
@@ -709,9 +716,10 @@ tr.pallet-even td {
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: center;
-    
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+
     &.row-header {
-      background: #ffffff !important;
+      background: #eef1f5 !important;
       color: #000000 !important;
       font-size: $fg-font-size-base;
       text-align: center;
@@ -720,7 +728,7 @@ tr.pallet-even td {
     }
 
     &.update-header {
-      background: #ffffff !important;
+      background: #eef1f5 !important;
       color: #000000 !important;
       font-size: $fg-font-size-base;
       text-align: center;
@@ -1035,6 +1043,17 @@ tr.pallet-even td {
   }
 }
 
+// Dải phân cách nhẹ giữa các nhóm nút trên toolbar (điều hướng / tìm kiếm / bộ lọc / thao tác)
+// — giúp quét mắt nhanh hơn thay vì 12+ nút liền một hàng không phân nhóm.
+.toolbar-divider {
+  display: inline-block;
+  width: 1px;
+  align-self: stretch;
+  min-height: 28px;
+  background: #d0d0d0;
+  margin: 0 4px;
+}
+
 // Excel-like action buttons - Minimal
 .excel-actions {
   background: #ffffff;
@@ -1059,10 +1078,10 @@ tr.pallet-even td {
     font-weight: 500 !important;
     font-size: $fg-font-size-base !important;
     font-family: $fg-font-family !important;
-    border-radius: 0 !important;
+    border-radius: 6px !important;
     display: flex !important;
     align-items: center !important;
-    
+
     &.btn-primary {
       background: #000000 !important;
       color: #ffffff !important;
@@ -1148,20 +1167,21 @@ tr.pallet-even td {
     color: #000000 !important;
     font-size: $fg-font-size-base !important;
     font-family: $fg-font-family !important;
-    border-radius: 0 !important;
+    border-radius: 6px !important;
     min-width: 150px !important;
     transition: none !important;
-    
-    &::placeholder {
-      color: #666666 !important;
-    }
-    
+
     &:focus {
-      outline: none !important;
+      outline: 2px solid #1976d2 !important;
+      outline-offset: -1px !important;
       border-color: #000000 !important;
       background: #ffffff !important;
     }
-    
+
+    &::placeholder {
+      color: #666666 !important;
+    }
+
     &.search-input-uppercase {
       text-transform: uppercase !important;
       font-weight: 500 !important;
@@ -1354,16 +1374,16 @@ mat-checkbox {
 
 // Date Input overrides (for table cells)
 .excel-table .date-input {
-  font-size: calc(#{$fg-font-size-base} * 0.72);
+  font-size: calc(#{$fg-font-size-base} * 0.85);
   padding: 4px 6px;
 }
 
 .excel-table td.date-cell {
-  font-size: calc(#{$fg-font-size-base} * 0.72) !important;
+  font-size: calc(#{$fg-font-size-base} * 0.85) !important;
 }
 
 .excel-table td.date-cell input.editable-input[type="date"] {
-  font-size: calc(#{$fg-font-size-base} * 0.72) !important;
+  font-size: calc(#{$fg-font-size-base} * 0.85) !important;
 }
 
 .excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit,
@@ -1371,7 +1391,7 @@ mat-checkbox {
 .excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-month-field,
 .excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-day-field,
 .excel-table td.date-cell input.editable-input[type="date"]::-webkit-datetime-edit-year-field {
-  font-size: calc(#{$fg-font-size-base} * 0.72) !important;
+  font-size: calc(#{$fg-font-size-base} * 0.85) !important;
 }
 
 .date-input::-webkit-calendar-picker-indicator {
@@ -2338,13 +2358,18 @@ mat-checkbox {
   }
 }
 
-// Approval checkbox styling
+// Approval checkbox styling — phóng to cho dễ bấm trúng (trước 16px hơi nhỏ so với thao tác nhanh)
 .approval-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   cursor: pointer;
   accent-color: #28a745;
-  
+  transform: scale(1.05);
+
+  &:hover {
+    filter: brightness(0.95);
+  }
+
   &:checked {
     background-color: #28a745;
     border-color: #28a745;

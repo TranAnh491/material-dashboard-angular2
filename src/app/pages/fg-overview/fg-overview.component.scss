@@ -398,6 +398,18 @@
     font-weight: bold;
   }
 
+  .ton-fg-link {
+    cursor: pointer;
+    color: #1d4ed8;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: #1e40af;
+      background: #eff6ff;
+    }
+  }
+
   td:last-child,
   th:last-child {
     min-width: 160px;

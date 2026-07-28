@@ -339,7 +339,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
     }
 
     isFgInventoryPage(): boolean {
-      return this.currentAppPath() === '/fg-inventory';
+      const path = this.currentAppPath();
+      return path === '/fg-inventory' || path.startsWith('/fg-inventory/');
     }
 
     /**
@@ -366,6 +367,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/fg-in',
       '/fg-out',
       '/fg-inventory',
+      '/fg-inventory/tp-list',
       '/fg-location',
       '/layout-warehouse',
       '/layout-warehouse-asm3',

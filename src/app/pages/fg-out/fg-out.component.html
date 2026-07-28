@@ -23,13 +23,15 @@
           <i class="material-icons">refresh</i>
           Làm mới
         </button>
-        
+
+        <span class="toolbar-divider"></span>
+
         <div class="search-box">
           <input type="text" 
                  class="custom-input search-input-uppercase" 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
-                 placeholder="4–5 ký tự: Shipment · ≥7 ký tự: Mã TP · không dùng 6 ký tự (30 ngày)">
+                 placeholder="4–5 ký tự: Shipment · Mã TP: P + 6 số (VD: P002052)">
         </div>
         <div class="shipment-box" *ngIf="filteredMaterials.length">
           <span class="shipment-box-label">Shipment:</span>
@@ -60,7 +62,9 @@
             </span>
           </ng-container>
         </div>
-        
+
+        <span class="toolbar-divider"></span>
+
         <div class="factory-filter">
           <span class="filter-label">Nhà máy:</span>
           <button type="button" 
@@ -86,7 +90,9 @@
           <i class="material-icons">visibility</i>
           Xem tất cả
         </button>
-        
+
+        <span class="toolbar-divider"></span>
+
         <button class="custom-btn" (click)="addNewRow()">
           <i class="material-icons">add</i>
           Thêm dòng

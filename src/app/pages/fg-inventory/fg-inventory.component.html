@@ -27,6 +27,13 @@
                 (click)="filterNegativeStock()">
           <i class="material-icons">thermostat</i> {{ showNegativeStock ? 'Tồn Âm ✓' : 'Tồn Âm' }}
         </button>
+        <button type="button" class="fgi-btn fgi-btn--outline fgi-kpi-kk"
+                (click)="openKkKpi()"
+                title="Bấm để xem % đã kiểm kê (KK)">
+          <i class="material-icons">fact_check</i>
+          KK
+          <span class="fgi-kpi-kk__value" *ngIf="kkKpiPercent !== null">{{ kkKpiPercent | number:'1.0-1' }}%</span>
+        </button>
         <button type="button" class="fgi-btn fgi-btn--outline fgi-btn--menu" (click)="goToMenu()" title="Về Menu">
           <i class="material-icons">arrow_back</i> Về Menu
         </button>
@@ -47,12 +54,18 @@
       <div class="fgi-toolbar__group fgi-toolbar__filters">
         <div class="fgi-field fgi-field--material">
           <span class="fgi-field__prefix">Mã TP</span>
-          <select class="fgi-input fgi-select"
-                  [ngModel]="filterMaTp"
-                  (ngModelChange)="onFilterMaTpChange($event)">
-            <option value="">Tất cả</option>
-            <option *ngFor="let m of materialOptions" [value]="m">{{ m }}</option>
-          </select>
+          <input type="text"
+                 class="fgi-input"
+                 [ngModel]="filterMaTp"
+                 (ngModelChange)="onFilterMaTpChange($event)"
+                 (keydown)="onMaTpKeydown($event)"
+                 list="fgi-ma-tp-datalist"
+                 placeholder="Nhập hoặc chọn"
+                 autocomplete="off"
+                 spellcheck="false">
+          <datalist id="fgi-ma-tp-datalist">
+            <option *ngFor="let m of materialOptions" [value]="m"></option>
+          </datalist>
           <button type="button" class="fgi-field__clear" *ngIf="filterMaTp" (click)="clearFilterMaTp()" title="Xóa">
             <i class="material-icons">close</i>
           </button>
@@ -154,7 +167,7 @@
               <td colspan="20" class="fgi-empty">
                 <i class="material-icons">inbox</i>
                 <div>
-                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Chọn mã TP để tìm kiếm</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (tối thiểu 7 ký tự) rồi Enter</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi Enter / Search</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng để tìm kiếm</span>
                   <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
@@ -174,8 +187,24 @@
               <td>{{ material.factory || 'ASM1' }}</td>
               <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{ material.batchNumber }}</td>
               <td class="fgi-code-link">{{ material.materialCode }}</td>
-              <td>{{ material.lot }}</td>
-              <td>{{ material.lsx }}</td>
+              <td>
+                <input *ngIf="isPendingLot(material); else lotCell"
+                       type="text"
+                       class="fgi-cell-input fgi-pending-cell"
+                       [(ngModel)]="material.lot"
+                       (blur)="savePendingLotLsx(material, 'lot')"
+                       [disabled]="!canEditMaterial(material)">
+                <ng-template #lotCell>{{ material.lot }}</ng-template>
+              </td>
+              <td>
+                <input *ngIf="isPendingLsx(material); else lsxCell"
+                       type="text"
+                       class="fgi-cell-input fgi-pending-cell"
+                       [(ngModel)]="material.lsx"
+                       (blur)="savePendingLotLsx(material, 'lsx')"
+                       [disabled]="!canEditMaterial(material)">
+                <ng-template #lsxCell>{{ material.lsx }}</ng-template>
+              </td>
               <td>{{ material.poNumber || '' }}</td>
               <td class="fgi-num">
                 <input type="number"
@@ -498,7 +527,7 @@
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons spinning">sync</i>
-        Đang import {{ importMode === 'addMaTp' ? 'Add mã TP' : 'tồn đầu' }}...
+        Đang import {{ importMode === 'addMaTp' ? 'Add mã TP' : (importMode === 'tonDauSupplement' ? 'tồn đầu bổ sung' : 'tồn đầu') }}...
       </h5>
     </div>
     <div class="modal-body">
@@ -526,7 +555,7 @@
     <div class="modal-header success-header">
       <h5 class="modal-title">
         <i class="material-icons">check_circle</i>
-        {{ importMode === 'addMaTp' ? 'Add mã TP thành công' : 'Import tồn đầu thành công' }}
+        {{ importMode === 'addMaTp' ? 'Add mã TP thành công' : (importMode === 'tonDauSupplement' ? 'Import bổ sung thành công' : 'Import tồn đầu thành công') }}
       </h5>
       <button type="button" class="close-btn" (click)="closeImportSuccessDialog()">
         <i class="material-icons">close</i>
@@ -538,10 +567,14 @@
         <p class="success-message" *ngIf="importMode === 'tonDau'">
           Đã import thành công <strong>{{ importSuccessCount | number }}</strong> dòng tồn đầu.
         </p>
+        <p class="success-message" *ngIf="importMode === 'tonDauSupplement'">
+          Đã import bổ sung thành công <strong>{{ importSuccessCount | number }}</strong> mã TP.
+          LOT/LSX trống được ghi <strong>Chờ LOT</strong> / <strong>Chờ LSX</strong> — cập nhật sau trên lưới.
+        </p>
         <p class="success-message" *ngIf="importMode === 'addMaTp'">
           Đã thêm thành công <strong>{{ importSuccessCount | number }}</strong> mã TP vào FG Inventory.
         </p>
-        <p class="success-skipped" *ngIf="importSkippedCount > 0 && importMode === 'tonDau'">
+        <p class="success-skipped" *ngIf="importSkippedCount > 0 && (importMode === 'tonDau' || importMode === 'tonDauSupplement')">
           Bỏ qua <strong>{{ importSkippedCount | number }}</strong> dòng trùng (Mã TP + LOT + LSX + Tồn đầu + Vị trí).
         </p>
         <p class="success-skipped" *ngIf="importSkippedCount > 0 && importMode === 'addMaTp'">
@@ -664,19 +697,11 @@
           <i class="material-icons">home</i>
           <span>Về Menu</span>
         </button>
-        <button class="more-menu-item" (click)="openLocationReportModal(); showMoreMenu = false">
-          <i class="material-icons">place</i>
-          <span>Vị trí</span>
-        </button>
-        <button class="more-menu-item" (click)="openCustomerSummaryModal(); showMoreMenu = false">
-          <i class="material-icons">groups</i>
-          <span>Khách hàng</span>
-        </button>
-        <button class="more-menu-item" (click)="openTpStockListModal(); showMoreMenu = false">
+        <button class="more-menu-item" (click)="goToTpStockList(); showMoreMenu = false">
           <i class="material-icons">inventory</i>
-          <span>Danh sách TP</span>
+          <span>Thống Kê TP theo thùng</span>
         </button>
-        <button class="more-menu-item" (click)="importFile(); showMoreMenu = false">
+        <button class="more-menu-item" (click)="openImportTonDauDialog(); showMoreMenu = false">
           <i class="material-icons">file_upload</i>
           <span>Import tồn đầu</span>
         </button>
@@ -691,18 +716,6 @@
         <button class="more-menu-item" (click)="debugCartonOdd(); showMoreMenu = false">
           <i class="material-icons">bug_report</i>
           <span>Debug Carton/ODD</span>
-        </button>
-        <button class="more-menu-item" (click)="forceCalculateTon(); showMoreMenu = false">
-          <i class="material-icons">calculate</i>
-          <span>Tính Tồn</span>
-        </button>
-        <button class="more-menu-item" (click)="checkRawData(); showMoreMenu = false">
-          <i class="material-icons">data_usage</i>
-          <span>Kiểm tra dữ liệu</span>
-        </button>
-        <button class="more-menu-item" (click)="openResetDialog(); showMoreMenu = false">
-          <i class="material-icons text-danger">delete_sweep</i>
-          <span>Reset về 0</span>
         </button>
         <button class="more-menu-item" (click)="openDuplicateBatchDialog(); showMoreMenu = false">
           <i class="material-icons">content_copy</i>
@@ -772,6 +785,37 @@
   </div>
 </div>
 
+<!-- KPI KK Modal -->
+<div class="custom-modal" [class.show]="showKkKpiModal" [style.display]="showKkKpiModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeKkKpi()"></div>
+  <div class="modal-container kk-kpi-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">fact_check</i>
+        KPI Kiểm kê (KK)
+      </h5>
+      <button type="button" class="close-btn" (click)="closeKkKpi()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="kk-kpi-loading" *ngIf="isLoadingKkKpi">Đang tính % đã KK...</p>
+      <div class="kk-kpi-result" *ngIf="!isLoadingKkKpi">
+        <div class="kk-kpi-percent">{{ kkKpiPercent | number:'1.0-1' }}%</div>
+        <p class="kk-kpi-detail">
+          Nhà máy <strong>{{ selectedFactory }}</strong> —
+          đã tick KK <strong>{{ kkKpiChecked | number }}</strong> /
+          <strong>{{ kkKpiTotal | number }}</strong> mã còn tồn (&gt; 0).
+        </p>
+        <p class="kk-kpi-hint">Chỉ tính dòng tồn &gt; 0. Mã tồn = 0 không đưa vào KPI.</p>
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="openLocationReportFromKkKpi()">
+          <i class="material-icons">place</i> Xem chi tiết theo vị trí
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Customer Summary Modal -->
 <div class="custom-modal" [class.show]="showCustomerSummaryModal" [style.display]="showCustomerSummaryModal ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showCustomerSummaryModal = false"></div>
@@ -814,83 +858,98 @@
   </div>
 </div>
 
-<!-- Danh sách TP tồn kho -->
-<div class="custom-modal" [class.show]="showTpStockListModal" [style.display]="showTpStockListModal ? 'flex' : 'none'">
-  <div class="modal-overlay" (click)="showTpStockListModal = false"></div>
-  <div class="modal-container tp-stock-list-modal">
+<!-- Import tồn đầu Dialog -->
+<div class="custom-modal" [class.show]="showImportTonDauDialog" [style.display]="showImportTonDauDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeImportTonDauDialog()"></div>
+  <div class="modal-container add-ma-tp-modal import-tondau-modal">
     <div class="modal-header">
       <h5 class="modal-title">
-        <i class="material-icons">inventory</i>
-        Danh sách TP tồn kho
+        <i class="material-icons">file_upload</i>
+        Import tồn đầu
       </h5>
-      <button type="button" class="close-btn" (click)="showTpStockListModal = false">
+      <button type="button" class="close-btn" (click)="closeImportTonDauDialog()">
         <i class="material-icons">close</i>
       </button>
     </div>
     <div class="modal-body">
-      <p class="location-report-lead" *ngIf="!isLoadingTpStockList">
-        Nhà máy: <strong>{{ selectedFactory }}</strong> — {{ tpStockListDisplayRows.length }} mã TP
-        <span *ngIf="tpStockListFilterMa || tpStockListFilterCustomer"> (đã lọc)</span>.
-        <span class="tp-stock-list-total">Tổng Carton: <strong>{{ formatNumber(tpStockListTotalCarton) }}</strong></span>
+      <p class="add-ma-tp-lead">
+        Import vào <strong>FG Inventory</strong> từ file Excel — <strong>dòng 1 = tiêu đề</strong>, dữ liệu từ <strong>dòng 2</strong>.
+        Sheet đầu tiên của file sẽ được đọc.
       </p>
-      <p class="location-report-loading" *ngIf="isLoadingTpStockList">Đang tải dữ liệu...</p>
 
-      <div class="tp-stock-list-filters" *ngIf="!isLoadingTpStockList">
-        <div class="tp-stock-list-field">
-          <label class="tp-stock-list-label">Mã TP</label>
-          <select class="tp-stock-list-select"
-                  [ngModel]="tpStockListFilterMa"
-                  (ngModelChange)="onTpStockListFilterMaChange($event)">
-            <option value="">Tất cả</option>
-            <option *ngFor="let m of tpStockListMaFilterOptions" [value]="m">{{ m }}</option>
-          </select>
-        </div>
-        <div class="tp-stock-list-field">
-          <label class="tp-stock-list-label">Khách</label>
-          <select class="tp-stock-list-select"
-                  [ngModel]="tpStockListFilterCustomer"
-                  (ngModelChange)="onTpStockListFilterCustomerChange($event)">
-            <option value="">Tất cả</option>
-            <option *ngFor="let c of tpStockListCustomerFilterOptions" [value]="c">{{ c }}</option>
-          </select>
-        </div>
-        <button type="button" class="tp-stock-list-clear" *ngIf="tpStockListFilterMa || tpStockListFilterCustomer"
-                (click)="clearTpStockListFilters()">
-          <i class="material-icons">filter_alt_off</i> Xóa lọc
-        </button>
-      </div>
-
-      <div class="location-report-table-wrap" *ngIf="!isLoadingTpStockList">
-        <table class="location-report-table tp-stock-list-table">
+      <div class="import-rules-block">
+        <p class="add-ma-tp-notes__title">① Import tồn đầu — cột cố định (file mẫu)</p>
+        <table class="import-rules-table">
           <thead>
-            <tr>
-              <th>Mã TP</th>
-              <th class="tp-stock-list-num">Lượng</th>
-              <th class="tp-stock-list-num tp-stock-list-sortable" (click)="toggleTpStockListCartonSort()" title="Bấm để đổi chiều sắp xếp">
-                Carton
-                <i class="material-icons tp-stock-list-sort-icon">{{ tpStockListSortCartonDesc ? 'arrow_downward' : 'arrow_upward' }}</i>
-              </th>
-              <th>Khách</th>
-            </tr>
+            <tr><th>Cột</th><th>Tiêu đề gợi ý</th><th>Bắt buộc</th><th>Ghi chú</th></tr>
           </thead>
           <tbody>
-            <tr *ngFor="let row of tpStockListDisplayRows">
-              <td class="tp-stock-list-code">{{ row.materialCode }}</td>
-              <td class="tp-stock-list-num">{{ formatNumber(row.quantity) }}</td>
-              <td class="tp-stock-list-num">{{ formatNumber(row.carton) }}</td>
-              <td>{{ row.customer }}</td>
-            </tr>
-            <tr *ngIf="tpStockListDisplayRows.length === 0">
-              <td colspan="4" class="location-report-empty">Không có dữ liệu tồn kho.</td>
-            </tr>
-            <tr *ngIf="tpStockListDisplayRows.length > 0" class="tp-stock-list-total-row">
-              <td><strong>Tổng</strong></td>
-              <td class="tp-stock-list-num"><strong>{{ formatNumber(tpStockListTotalQuantity) }}</strong></td>
-              <td class="tp-stock-list-num"><strong>{{ formatNumber(tpStockListTotalCarton) }}</strong></td>
-              <td></td>
-            </tr>
+            <tr><td><strong>A</strong></td><td>Nhà máy / Factory</td><td>Có</td><td>ASM1 hoặc ASM2</td></tr>
+            <tr><td><strong>B</strong></td><td>—</td><td>—</td><td>Bỏ qua (Batch tự sinh TDAU1-/TDAU2-)</td></tr>
+            <tr><td><strong>C</strong></td><td>Mã TP</td><td>Có</td><td>Mã đầy đủ, VD: P001003_K001</td></tr>
+            <tr><td><strong>D</strong></td><td>LOT</td><td>Có</td><td></td></tr>
+            <tr><td><strong>E</strong></td><td>LSX</td><td>Có</td><td></td></tr>
+            <tr><td><strong>F</strong></td><td>Tồn đầu</td><td>Có</td><td>Số &gt; 0</td></tr>
+            <tr><td><strong>G</strong></td><td>Vị trí</td><td>Không</td><td>Trống → Temporary</td></tr>
+            <tr><td><strong>H</strong></td><td>Ghi chú</td><td>Không</td><td></td></tr>
           </tbody>
         </table>
+        <p class="add-ma-tp-notes__hint">
+          Dòng trùng (Nhà máy + Mã TP + LOT + LSX + Tồn đầu + Vị trí) sẽ bỏ qua.
+        </p>
+      </div>
+
+      <div class="import-rules-block import-rules-block--supplement">
+        <p class="add-ma-tp-notes__title">② Import bổ sung — 2 cách (chọn 1)</p>
+
+        <p class="import-rules-subtitle"><strong>Cách A:</strong> Cùng file mẫu như trên</p>
+        <ul class="import-rules-list">
+          <li>Cột <strong>D LOT</strong> / <strong>E LSX</strong> trống hoặc <strong>0</strong> → ghi <strong>Chờ LOT</strong> / <strong>Chờ LSX</strong></li>
+          <li>Cột <strong>F Tồn đầu</strong> phải &gt; 0</li>
+        </ul>
+
+        <p class="import-rules-subtitle"><strong>Cách B:</strong> File export / báo cáo FG Inventory (như Sheet2 của bạn)</p>
+        <p class="import-rules-note">Dòng 1 phải có tiêu đề cột (Factory, Mã TP, Tồn kho, Vị trí…). Hệ thống tự nhận theo tên cột:</p>
+        <table class="import-rules-table">
+          <thead>
+            <tr><th>Cột</th><th>Tiêu đề</th><th>Đọc?</th><th>Ghi chú</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>A</strong></td><td>Factory</td><td>Có</td><td>ASM1 / ASM2</td></tr>
+            <tr><td><strong>B</strong></td><td>Batch</td><td>Không</td><td>Bỏ qua — sinh batch TDAU mới</td></tr>
+            <tr><td><strong>C</strong></td><td>Mã TP</td><td>Có</td><td>Bắt buộc</td></tr>
+            <tr><td><strong>D</strong></td><td>LOT</td><td>Có</td><td>0 hoặc trống → <strong>Chờ LOT</strong></td></tr>
+            <tr><td><strong>E</strong></td><td>LSX</td><td>Có</td><td>0 hoặc trống → <strong>Chờ LSX</strong></td></tr>
+            <tr><td><strong>F</strong></td><td>Tồn đầu</td><td>Không</td><td>Form B bỏ qua (thường = 0)</td></tr>
+            <tr><td><strong>G</strong></td><td>Nhập</td><td>Không</td><td>Form B bỏ qua</td></tr>
+            <tr><td><strong>H</strong></td><td>Xuất</td><td>Không</td><td>Bỏ qua</td></tr>
+            <tr><td><strong>I</strong></td><td>Tồn kho</td><td>Có</td><td><strong>Lượng import</strong> (bắt buộc &gt; 0)</td></tr>
+            <tr><td><strong>J–K</strong></td><td>Carton / ODD</td><td>Không</td><td>Bỏ qua — tự tính</td></tr>
+            <tr><td><strong>L</strong></td><td>Vị trí</td><td>Có</td><td>VD: Chờ vị trí</td></tr>
+            <tr><td><strong>M</strong></td><td>Vị trí KK</td><td>Không</td><td>Bỏ qua</td></tr>
+            <tr><td><strong>N</strong></td><td>Ghi chú</td><td>Có</td><td>Tùy chọn</td></tr>
+            <tr><td><strong>O</strong></td><td>Khách</td><td>Có</td><td>Tùy chọn</td></tr>
+          </tbody>
+        </table>
+        <p class="add-ma-tp-notes__hint">
+          Dòng hợp lệ: có <strong>Mã TP</strong> và <strong>Tồn kho (I) &gt; 0</strong>.
+          Sau import, sửa <strong>Chờ LOT</strong> / <strong>Chờ LSX</strong> trực tiếp trên lưới.
+        </p>
+      </div>
+
+      <div class="add-ma-tp-actions import-tondau-actions">
+        <button type="button" class="custom-btn" (click)="downloadTemplate()">
+          <i class="material-icons">download</i>
+          Tải file mẫu
+        </button>
+        <button type="button" class="custom-btn primary-btn" (click)="importFile(false)">
+          <i class="material-icons">file_upload</i>
+          Import tồn đầu
+        </button>
+        <button type="button" class="custom-btn supplement-btn" (click)="importFile(true)">
+          <i class="material-icons">playlist_add</i>
+          Import bổ sung
+        </button>
       </div>
     </div>
   </div>

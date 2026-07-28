@@ -94,6 +94,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Search and filter
   searchTerm: string = '';
+  private maTpSearchTimer: ReturnType<typeof setTimeout> | null = null;
   
   // Factory filter
   selectedFactory: string = 'ASM1';
@@ -314,12 +315,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.router.navigate(['/menu']);
   }
 
-  /** Cho phép nhảy từ trang khác (VD: Shipment) sang đây và tự search luôn theo shipment. */
+  /** Cho phép nhảy từ trang khác (Shipment / FG Overview) sang đây và tự search. */
   private applyIncomingQueryParams(): void {
     const params = this.route.snapshot.queryParamMap;
     const shipment = (params.get('shipment') || '').trim();
+    const maTp = (params.get('maTp') || params.get('materialCode') || '').trim().toUpperCase();
     const factory = (params.get('factory') || '').trim().toUpperCase();
-    if (shipment) {
+    // Ưu tiên mã TP (≥7 ký tự) từ FG Overview; shipment khi nhảy từ tab Shipment
+    if (maTp.length >= 7) {
+      this.searchTerm = maTp.slice(0, 7);
+    } else if (shipment) {
       this.searchTerm = shipment;
     }
     if (factory === 'ASM1' || factory === 'ASM2') {
@@ -340,6 +345,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
+    // loadFactoryAccess có thể reset factory — áp lại query (maTp / factory) từ FG Overview / Shipment
+    this.applyIncomingQueryParams();
     this.afAuth.user.pipe(takeUntil(this.destroy$)).subscribe(u => {
       const email = u?.email || u?.uid || '';
       this.currentUserDisplay = email.includes('@') ? email.split('@')[0].toUpperCase() : (email || 'NV');
@@ -356,6 +363,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.maTpSearchTimer) {
+      clearTimeout(this.maTpSearchTimer);
+      this.maTpSearchTimer = null;
+    }
     this.fgOutDataSub?.unsubscribe();
     this.fgOutDataSub = null;
     this.destroy$.next();
@@ -657,6 +668,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
         this.sortMaterials();
         this.applyFilters();
+        const maTpKey = this.extractMaTpSearchKey(this.searchTerm);
+        if (maTpKey) {
+          void this.searchExportsByMaTp(maTpKey);
+        }
         this.loadAvailableShipments();
         this.loadLocationsSubject.next();
         this.cdr.markForCheck();
@@ -1596,39 +1611,152 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Apply search filters — 4–5 ký tự: chỉ Shipment; từ 7 ký tự: chỉ Mã TP; 6 ký tự: không hiển thị
+  // Apply search filters — 4–5 ký tự: Shipment; mã TP (P/T/M/L + 6 số): lọc theo 7 ký tự đầu
   applyFilters(): void {
     if (this.historyMode) return; // Đang xem History: không ghi đè
-    const trimmed = (this.searchTerm || '').trim();
+    const trimmed = (this.searchTerm || '').trim().toUpperCase();
     if (trimmed.length < 4) {
       this.filteredMaterials = [];
       this.displayRows = [];
       return;
     }
-    if (trimmed.length === 6) {
+
+    const maTpKey = this.extractMaTpSearchKey(trimmed);
+    // 6 ký tự và không phải mã TP → không tìm (tránh nhầm shipment/mã)
+    if (!maTpKey && trimmed.length === 6) {
       this.filteredMaterials = [];
       this.displayRows = [];
       return;
     }
 
     const baseFiltered = this.materials.filter(material => {
-      const term = this.searchTerm.trim().toUpperCase();
       const ship = String(material.shipment ?? '').toUpperCase();
       const code = String(material.materialCode ?? '').toUpperCase();
-      const len = term.length;
-      const matchesSearch =
-        len >= 4 && len <= 5 ? ship.includes(term) : len >= 7 ? code.includes(term) : false;
+      let matchesSearch = false;
+      if (maTpKey) {
+        // Mã TP: so khớp 7 ký tự đầu (P002052 khớp P002052_X1)
+        matchesSearch = code.slice(0, 7) === maTpKey;
+      } else if (trimmed.length >= 4 && trimmed.length <= 5) {
+        matchesSearch = ship.includes(trimmed);
+      } else if (trimmed.length >= 7) {
+        matchesSearch = code.includes(trimmed);
+      }
       if (!matchesSearch) return false;
       if (this.selectedFactory) {
         const materialFactory = material.factory || 'ASM1';
         if (materialFactory !== this.selectedFactory) return false;
       }
-      const exportDate = new Date(material.exportDate);
-      if (exportDate < this.startDate || exportDate > this.endDate) return false;
+      // Tìm theo mã TP: không khóa cửa sổ 30 ngày — lấy hết dòng đã load của mã đó
+      if (!maTpKey) {
+        const exportDate = new Date(material.exportDate);
+        if (exportDate < this.startDate || exportDate > this.endDate) return false;
+      }
       return true;
     });
 
-    // Dropdown options từ dữ liệu đã lọc (search+factory+date)
+    this.applyColumnFiltersAndBuildDisplay(baseFiltered);
+  }
+
+  /** Mã TP hợp lệ: 7 ký tự đầu = P/T/M/L + 6 chữ số (VD: P002052). */
+  private extractMaTpSearchKey(term: string): string | null {
+    const t = String(term || '').trim().toUpperCase();
+    if (t.length < 7) return null;
+    const head = t.slice(0, 7);
+    return /^[PTML]\d{6}$/.test(head) ? head : null;
+  }
+
+  /**
+   * Tìm phiếu xuất theo mã TP (P + 6 số) — query Firestore theo prefix 7 ký tự,
+   * hiện đủ danh sách xuất của mã đó (không giới hạn 30 ngày trên màn hình).
+   */
+  private async searchExportsByMaTp(code7: string): Promise<void> {
+    const key = this.extractMaTpSearchKey(code7);
+    if (!key) return;
+    if (this.historyMode) this.exitHistoryMode();
+
+    try {
+      const prefixEnd = key + '\uf8ff';
+      const snap = await this.firestore
+        .collection('fg-out', (ref) =>
+          ref.where('materialCode', '>=', key).where('materialCode', '<=', prefixEnd).limit(1000)
+        )
+        .get()
+        .toPromise();
+
+      const byId = new Map<string, FgOutItem>();
+      (snap?.docs || []).forEach((doc) => {
+        const d = doc.data() as any;
+        const code = String(d.materialCode || '').trim().toUpperCase();
+        if (code.slice(0, 7) !== key) return;
+        byId.set(doc.id, this.mapFgOutDoc(doc.id, d));
+      });
+
+      // Gộp thêm dòng local (vừa nhập chưa kịp vào kết quả query / cùng mã)
+      this.materials.forEach((m) => {
+        const code = String(m.materialCode || '').trim().toUpperCase();
+        if (code.slice(0, 7) !== key) return;
+        if (m.id) byId.set(m.id, m);
+        else byId.set(`local-${code}-${m.batchNumber}-${m.shipment}-${m.quantity}`, m);
+      });
+
+      let items = Array.from(byId.values());
+      if (this.selectedFactory) {
+        items = items.filter((m) => (m.factory || 'ASM1') === this.selectedFactory);
+      }
+
+      this.applyColumnFiltersAndBuildDisplay(items);
+      this.cdr.markForCheck();
+    } catch (err) {
+      console.error('searchExportsByMaTp failed', err);
+      // Fallback: lọc trên dữ liệu đã load
+      this.applyFilters();
+    }
+  }
+
+  private mapFgOutDoc(id: string, d: any): FgOutItem {
+    return {
+      id,
+      factory: d.factory || 'ASM1',
+      exportDate: d.exportDate?.seconds
+        ? new Date(d.exportDate.seconds * 1000)
+        : d.exportDate
+          ? new Date(d.exportDate)
+          : new Date(),
+      shipment: d.shipment || '',
+      pallet: d.pallet || '',
+      xp: d.xp || '',
+      materialCode: d.materialCode || '',
+      batchNumber: d.batchNumber || '',
+      lot: d.lot || '',
+      lsx: d.lsx || '',
+      quantity: Number(d.quantity) || 0,
+      carton: Number(d.carton) || 0,
+      odd: Number(d.odd) || 0,
+      location: d.location || '',
+      productType: d.productType || '',
+      notes: d.notes || '',
+      customerCode: d.customerCode || '',
+      poShip: d.poShip || '',
+      qtyBox: d.qtyBox || 100,
+      updateCount: d.updateCount || 1,
+      pushNo: d.pushNo || '000',
+      approved: d.approved || false,
+      approvedBy: d.approvedBy || '',
+      approvedAt: d.approvedAt
+        ? typeof d.approvedAt?.toDate === 'function'
+          ? d.approvedAt.toDate()
+          : d.approvedAt?.seconds != null
+            ? new Date(d.approvedAt.seconds * 1000)
+            : d.approvedAt instanceof Date
+              ? d.approvedAt
+              : new Date(d.approvedAt)
+        : undefined,
+      mergeCarton: d.mergeCarton || ''
+    } as FgOutItem;
+  }
+
+  /** Lọc cột dropdown + sắp xếp + dựng displayRows (dùng chung search shipment / mã TP). */
+  private applyColumnFiltersAndBuildDisplay(baseFiltered: FgOutItem[]): void {
     const shipSet = new Set<string>();
     const palletSet = new Set<string>();
     const batchSet = new Set<string>();
@@ -1648,7 +1776,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.colFilterOptionsBatch = Array.from(batchSet).sort();
     this.colFilterOptionsMaterialCode = Array.from(codeSet).sort();
 
-    // Áp dụng lọc cột (dropdown chọn chính xác)
     this.filteredMaterials = baseFiltered.filter(material => {
       if (this.colFilterShipment && String(material.shipment ?? '').trim() !== this.colFilterShipment) return false;
       if (this.colFilterPallet && String(material.pallet ?? '').trim() !== this.colFilterPallet) return false;
@@ -1656,8 +1783,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       if (this.colFilterMaterialCode && String(material.materialCode ?? '').trim() !== this.colFilterMaterialCode) return false;
       return true;
     });
-    
-    // Sắp xếp: Shipment → Pallet → Gộp Thùng (mergeCarton) → Mã TP
+
     this.filteredMaterials.sort((a, b) => {
       const shipA = String(a.shipment ?? '').toUpperCase();
       const shipB = String(b.shipment ?? '').toUpperCase();
@@ -1665,8 +1791,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
       const palletCmp = this.comparePalletForSort(a.pallet, b.pallet);
       if (palletCmp !== 0) return palletCmp;
-      // Rows có mergeCarton được nhóm ngay sau nhau (trong cùng pallet)
-      const mcA = String(a.mergeCarton ?? '').padStart(3, '0'); // pad để sort '01' < '09' < '10'
+      const mcA = String(a.mergeCarton ?? '').padStart(3, '0');
       const mcB = String(b.mergeCarton ?? '').padStart(3, '0');
       if (mcA !== mcB) return mcA.localeCompare(mcB);
       const codeA = String(a.materialCode ?? '').toUpperCase();
@@ -1683,11 +1808,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return batchA.localeCompare(batchB);
     });
 
-    // Build display rows: chỉ chi tiết (không có dòng tổng theo Mã TP)
     this.displayRows = this.filteredMaterials.map((m, i) =>
       ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
 
-    // Dựng map "dòng đầu tiên theo mergeCarton" trước khi cộng carton cho các palletTotal
     this.rebuildMergeCartonFirstRowMap();
 
     // Chèn dòng tổng carton theo pallet (chỉ khi có pallet)
@@ -1769,7 +1892,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         (r as { renderShipmentCell?: boolean }).renderShipmentCell = true;
       }
     });
-    
+
     // Khi lọc theo shipment: load số lượng kỳ vọng từ tab Shipment để so sánh
     this.loadShipmentExpectedQtys();
 
@@ -1979,12 +2102,31 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return sum;
   }
 
-  // Search functionality — chỉ tìm khi nhập đủ 4 ký tự hoặc xóa hết
+  // Search — 4–5 ký tự: Shipment; mã TP (P/T/M/L + 6 số): query danh sách xuất
   onSearchChange(event: any): void {
     this.searchTerm = event.target.value.toUpperCase();
     event.target.value = this.searchTerm;
     const trimmed = this.searchTerm.trim();
-    if (trimmed.length === 0 || trimmed.length >= 4) {
+
+    if (this.maTpSearchTimer) {
+      clearTimeout(this.maTpSearchTimer);
+      this.maTpSearchTimer = null;
+    }
+
+    if (trimmed.length === 0) {
+      this.applyFilters();
+      return;
+    }
+
+    const maTpKey = this.extractMaTpSearchKey(trimmed);
+    if (maTpKey) {
+      this.maTpSearchTimer = setTimeout(() => {
+        void this.searchExportsByMaTp(maTpKey);
+      }, 300);
+      return;
+    }
+
+    if (trimmed.length >= 4) {
       this.applyFilters();
     }
   }
@@ -1995,16 +2137,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.hasCompletePermission = true;
   }
 
-  // Load factory access permissions - FG Out is only for ASM1
+  // Load factory access — UI hỗ trợ ASM1/ASM2; giữ factory đã set từ query nếu hợp lệ
   private loadFactoryAccess(): void {
-    // FG Out is only for ASM1, so no need to load factory access
-    this.selectedFactory = 'ASM1';
-    this.availableFactories = ['ASM1'];
-    
-    console.log('🏭 Factory access set for FG Out (ASM1 only):', {
-      selectedFactory: this.selectedFactory,
-      availableFactories: this.availableFactories
-    });
+    this.availableFactories = ['ASM1', 'ASM2'];
+    if (this.selectedFactory !== 'ASM1' && this.selectedFactory !== 'ASM2') {
+      this.selectedFactory = 'ASM1';
+    }
   }
 
   // Check if user can edit material
@@ -2739,7 +2877,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Lọc theo nhà máy: ASM1, ASM2, TOTAL ('' = tất cả)
   setFactoryFilter(factory: string): void {
     this.selectedFactory = factory;
-    this.applyFilters();
+    const maTpKey = this.extractMaTpSearchKey(this.searchTerm);
+    if (maTpKey) {
+      void this.searchExportsByMaTp(maTpKey);
+    } else {
+      this.applyFilters();
+    }
   }
 
   // Handle approval change
