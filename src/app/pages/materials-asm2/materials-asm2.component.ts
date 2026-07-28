@@ -4474,6 +4474,18 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
     return email.substring(0, 24) || 'UNKNOWN';
   }
 
+  private async resolveKkOperatorId(): Promise<string | null> {
+    const raw = window.prompt('Quét mã nhân viên để kiểm kê.\nHệ thống chỉ lưu 7 ký tự đầu theo chuẩn ASP1234.');
+    if (raw == null) return null;
+    const normalized = String(raw).trim().toUpperCase().replace(/\s+/g, '');
+    const shortCode = normalized.slice(0, 7);
+    if (!/^ASP\d{4}$/.test(shortCode)) {
+      alert('Mã nhân viên không đúng định dạng. Vui lòng scan theo chuẩn ASP + 4 số.');
+      return null;
+    }
+    return shortCode;
+  }
+
   /** Lưu riêng cột Vị trí lên inventory-materials + material-location-history. */
   private async persistLocationChange(material: InventoryMaterial): Promise<void> {
     if (!this.isLocationColumnUnlocked && !this.canEdit) return;
@@ -6348,7 +6360,8 @@ export class MaterialsASM2Component implements OnInit, OnDestroy, AfterViewInit 
   async toggleKk(material: InventoryMaterial): Promise<void> {
     if (!this.canEdit || !material.id) return;
     const next = !material.kkChecked;
-    const operator = await this.resolveLocationOperatorId();
+    const operator = await this.resolveKkOperatorId();
+    if (!operator) return;
     const kkAt = new Date();
     material.kkChecked = next;
     material.kkBy = operator;

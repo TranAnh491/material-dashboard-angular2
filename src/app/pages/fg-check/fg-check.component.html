@@ -143,7 +143,7 @@
             </td>
           </tr>
           
-          <ng-container *ngFor="let group of getFilteredItemsGroupedByFactory(); trackBy: trackByFactoryGroup">
+          <ng-container *ngFor="let group of groupedFilteredItems; trackBy: trackByFactoryGroup">
             <tr class="factory-section-header-row">
               <td [attr.colspan]="getTableColspan()" class="factory-section-header-cell">
                 <span class="factory-section-label">Factory</span>

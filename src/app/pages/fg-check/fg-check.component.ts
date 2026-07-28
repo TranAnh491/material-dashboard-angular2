@@ -71,7 +71,14 @@ export interface ShipmentCheckBoxItem {
 export class FGCheckComponent implements OnInit, OnDestroy {
   items: FGCheckItem[] = [];
   filteredItems: FGCheckItem[] = [];
-  
+  /** Cache của getFilteredItemsGroupedByFactory() — tính lại trong applyFilters(), KHÔNG gọi hàm
+   * trực tiếp trong *ngFor (Angular re-chạy expression trong template mỗi change detection cycle,
+   * gọi thẳng hàm group+sort ở đó khiến trang càng nhiều dữ liệu càng chậm). */
+  groupedFilteredItems: FactoryItemGroup[] = [];
+  /** Cache "shipment|materialCode" bị trùng — tính 1 lần trong applyFilters() thay vì filter lại
+   * toàn bộ this.items cho MỖI dòng mỗi lần render (isDuplicateMaterialCode cũ là O(n²)/cycle). */
+  private duplicateShipmentMaterialKeys = new Set<string>();
+
   // Search
   searchTerm: string = '';
   
@@ -854,6 +861,24 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       const materialB = String(b.materialCode || '').trim().toUpperCase();
       return materialA.localeCompare(materialB);
     });
+
+    this.recomputeDuplicateMaterialCodeKeys();
+    this.groupedFilteredItems = this.getFilteredItemsGroupedByFactory();
+  }
+
+  /** Tính 1 lần các cặp "shipment|materialCode" bị trùng (thay vì filter toàn bộ items mỗi dòng mỗi lần render). */
+  private recomputeDuplicateMaterialCodeKeys(): void {
+    const counts = new Map<string, number>();
+    for (const item of this.items) {
+      const s = String(item.shipment || '').trim().toUpperCase();
+      const m = String(item.materialCode || '').trim();
+      if (!s || !m) continue;
+      const key = `${s}|${m}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    this.duplicateShipmentMaterialKeys = new Set(
+      Array.from(counts.entries()).filter(([, c]) => c > 1).map(([k]) => k)
+    );
   }
 
   normalizeFactory(factory: string | undefined): string {
@@ -992,24 +1017,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return value.toLocaleString('vi-VN');
   }
 
-  // Kiểm tra xem mã TP có trùng trong cùng shipment không
+  // Kiểm tra xem mã TP có trùng trong cùng shipment không (tra cache, không quét lại this.items).
   isDuplicateMaterialCode(item: FGCheckItem): boolean {
     const itemShipment = String(item.shipment || '').trim().toUpperCase();
     const itemMaterialCode = String(item.materialCode || '').trim();
-    
     if (!itemShipment || !itemMaterialCode) {
       return false;
     }
-    
-    // Đếm số lượng items có cùng shipment và materialCode (kiểm tra trong toàn bộ items, không chỉ filteredItems)
-    const duplicateCount = this.items.filter(i => {
-      const iShipment = String(i.shipment || '').trim().toUpperCase();
-      const iMaterialCode = String(i.materialCode || '').trim();
-      return iShipment === itemShipment && iMaterialCode === itemMaterialCode;
-    }).length;
-    
-    // Trả về true nếu có nhiều hơn 1 item (tức là có trùng)
-    return duplicateCount > 1;
+    return this.duplicateShipmentMaterialKeys.has(`${itemShipment}|${itemMaterialCode}`);
   }
 
   // Check Methods
