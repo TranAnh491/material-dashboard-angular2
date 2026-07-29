@@ -371,8 +371,16 @@
               {{ getDisplayScannedValue(shipment) | number:'1.0-0':'en-US' }}
             </td>
             <td class="check-status-cell">
-              <span *ngIf="isCheckOK(shipment)" [class.check-ok-qty]="getCheckModeForKey(shipment) === 'pn-qty'" [class.check-ok-carton]="getCheckModeForKey(shipment) === 'pn'">
-                {{ getCheckModeForKey(shipment) === 'pn' ? 'Thùng OK' : 'Lượng OK' }}
+              <span *ngIf="isScanCheckExemptShipment(shipment)" class="check-ok-qty" title="Khách FJXR không cần scan check">
+                Không cần scan
+              </span>
+              <span *ngIf="!isScanCheckExemptShipment(shipment) && isStatusScanChecked(shipment)" class="check-ok-qty"
+                    title="Status = Đã Check">
+                Đã Check
+              </span>
+              <span *ngIf="!isScanCheckExemptShipment(shipment) && !isStatusScanChecked(shipment)" class="check-pending"
+                    title="Status chưa phải Đã Check">
+                Chưa check
               </span>
             </td>
             <td class="code-cell">

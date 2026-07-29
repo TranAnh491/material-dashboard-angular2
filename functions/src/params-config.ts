@@ -44,3 +44,10 @@ export const qcMonthlyReportEmailTo = defineString('QC_MONTHLY_REPORT_EMAIL_TO',
   default: 'asm1-quality@airspeedmfg.com',
   description: 'Email nhận QC monthly report (ASM1)'
 });
+
+/**
+ * Secret dùng để gọi function notifyClientsReload (gửi lệnh F5 toàn bộ trình duyệt sau khi deploy).
+ * Bí mật:
+ *   firebase functions:secrets:set DEPLOY_RELOAD_SECRET
+ */
+export const deployReloadSecret = defineSecret('DEPLOY_RELOAD_SECRET');

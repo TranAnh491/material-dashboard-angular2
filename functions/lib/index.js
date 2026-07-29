@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.notifyClientsReload = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -1022,5 +1022,40 @@ exports.backupFgCollectionsDaily = functions
     .onRun(async () => {
     const { runFgDailyBackupJob } = await Promise.resolve().then(() => __importStar(require('./fg-daily-backup')));
     await runFgDailyBackupJob();
+});
+/**
+ * Gọi sau mỗi lần deploy hosting để tự động gửi lệnh "F5 toàn bộ" cho mọi tab đang mở web —
+ * cùng cơ chế Firestore (app-settings/client-reload) mà nút "F5 toàn bộ" trong Settings đang dùng
+ * (xem ClientReloadService). Bảo vệ bằng secret trong query string (?secret=...), không yêu cầu đăng
+ * nhập vì được gọi từ script deploy, không phải từ trình duyệt người dùng.
+ */
+exports.notifyClientsReload = functions
+    .runWith({ secrets: [params_config_1.deployReloadSecret] })
+    .https.onRequest(async (req, res) => {
+    var _a, _b, _c, _d, _e;
+    const provided = String((_c = (_a = req.query.secret) !== null && _a !== void 0 ? _a : (_b = req.body) === null || _b === void 0 ? void 0 : _b.secret) !== null && _c !== void 0 ? _c : '');
+    if (!provided || provided !== params_config_1.deployReloadSecret.value()) {
+        res.status(403).json({ ok: false, error: 'Forbidden' });
+        return;
+    }
+    try {
+        const db = admin.firestore();
+        const ref = db.doc('app-settings/client-reload');
+        const snap = await ref.get();
+        const current = Number((_e = (_d = snap.data()) === null || _d === void 0 ? void 0 : _d.reloadToken) !== null && _e !== void 0 ? _e : 0);
+        const nextToken = (Number.isFinite(current) ? current : 0) + 1;
+        await ref.set({
+            reloadToken: nextToken,
+            requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+            requestedBy: 'AUTO_DEPLOY',
+            message: 'Đã có bản cập nhật mới — vui lòng tải lại trang.'
+        }, { merge: true });
+        res.status(200).json({ ok: true, token: nextToken });
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('notifyClientsReload failed:', msg);
+        res.status(500).json({ ok: false, error: msg });
+    }
 });
 //# sourceMappingURL=index.js.map

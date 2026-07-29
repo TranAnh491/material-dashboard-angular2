@@ -96,6 +96,30 @@
         { "fieldPath": "collectionKey", "order": "ASCENDING" },
         { "fieldPath": "deletedAt",     "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "fg-out",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",      "order": "ASCENDING" },
+        { "fieldPath": "exportDate",   "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fg-in",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",      "order": "ASCENDING" },
+        { "fieldPath": "importDate",   "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inbound-materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "factory",      "order": "ASCENDING" },
+        { "fieldPath": "importDate",   "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

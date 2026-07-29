@@ -1241,8 +1241,8 @@
 }
 
 .check-status-cell {
-  min-width: 72px;
-  width: 72px;
+  min-width: 88px;
+  width: 88px;
   text-align: center;
   vertical-align: middle;
   padding: 6px 4px;
@@ -1263,6 +1263,12 @@
 /* Check OK text: Lượng OK = xanh lá, Thùng OK = xanh da trời (70% size) */
 .check-status-cell .check-ok-qty {
   color: #4CAF50;
+  font-weight: 600;
+  font-size: 8.4px;
+}
+
+.check-status-cell .check-pending {
+  color: #dc2626;
   font-weight: 600;
   font-size: 8.4px;
 }

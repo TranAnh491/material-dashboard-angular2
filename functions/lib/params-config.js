@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.qcMonthlyReportEmailTo = exports.qcPriorityEmailTo = exports.zaloBotToken = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
+exports.deployReloadSecret = exports.qcMonthlyReportEmailTo = exports.qcPriorityEmailTo = exports.zaloBotToken = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
 /**
  * SMTP cho Control Batch (email cảnh báo trùng xuất kho).
  *
@@ -43,4 +43,10 @@ exports.qcMonthlyReportEmailTo = (0, params_1.defineString)('QC_MONTHLY_REPORT_E
     default: 'asm1-quality@airspeedmfg.com',
     description: 'Email nhận QC monthly report (ASM1)'
 });
+/**
+ * Secret dùng để gọi function notifyClientsReload (gửi lệnh F5 toàn bộ trình duyệt sau khi deploy).
+ * Bí mật:
+ *   firebase functions:secrets:set DEPLOY_RELOAD_SECRET
+ */
+exports.deployReloadSecret = (0, params_1.defineSecret)('DEPLOY_RELOAD_SECRET');
 //# sourceMappingURL=params-config.js.map

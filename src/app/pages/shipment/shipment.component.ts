@@ -219,37 +219,73 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return { packType: 'Box', isBanded: false, packingLabel: 'Ship Box' };
   }
 
-  /** Scan check (FG Check) theo toàn bộ mã TP trong shipment. */
+  /** Khách không bắt buộc scan check (FG Check). */
+  private static readonly SCAN_CHECK_EXEMPT_CUSTOMERS = new Set(['FJXR']);
+
+  private isScanCheckExemptCustomerName(name: string | undefined | null): boolean {
+    const n = String(name || '').trim().toUpperCase();
+    return !!n && ShipmentComponent.SCAN_CHECK_EXEMPT_CUSTOMERS.has(n);
+  }
+
+  /** FJXR (và danh sách exempt) không cần scan check. */
+  isScanCheckExemptShipment(shipment: ShipmentItem | null | undefined): boolean {
+    if (!shipment) return false;
+    if (this.isScanCheckExemptCustomerName(this.getKhNameForShipment(shipment))) return true;
+    if (this.isScanCheckExemptCustomerName(shipment.customerCode)) return true;
+    // Tên KH trên card day-detail đôi khi chỉ là mã ngắn từ mapping description
+    const tenKh = this.getTenKhFromMaterialCode(shipment.materialCode);
+    return this.isScanCheckExemptCustomerName(tenKh);
+  }
+
+  /**
+   * Khách khác FJXR: coi đã scan khi Status = "Đã Check".
+   * (Không dựa FG Check số lượng/thùng.)
+   */
+  isStatusScanChecked(shipment: ShipmentItem | null | undefined): boolean {
+    return String(shipment?.status || '').trim() === 'Đã Check';
+  }
+
+  /** Scan badge trên card ngày: FJXR miễn; còn lại theo cột Status. */
   private resolveShipmentScanCheck(rows: ShipmentItem[]): {
     scanStatus: 'ok' | 'partial' | 'none';
     scanLabel: string;
     scanPct: number | null;
   } {
-    const byMat = new Map<string, ShipmentItem>();
+    const byMat = new Map<string, ShipmentItem[]>();
     for (const r of rows || []) {
       const mat = String(r?.materialCode || '').trim().toUpperCase();
       if (!mat) continue;
-      if (!byMat.has(mat)) byMat.set(mat, r);
+      if (!byMat.has(mat)) byMat.set(mat, []);
+      byMat.get(mat)!.push(r);
     }
     if (byMat.size === 0) {
-      return { scanStatus: 'none', scanLabel: 'Chưa scan check', scanPct: null };
+      return { scanStatus: 'none', scanLabel: 'Chưa check', scanPct: null };
     }
 
     let ok = 0;
     let partial = 0;
     let none = 0;
+    let exempt = 0;
     let pctSum = 0;
     let pctN = 0;
 
-    byMat.forEach((sample) => {
-      const disp = this.getShipmentCheckDisplay(sample);
-      if (disp.status === 'ok' || disp.status === 'excess') {
+    byMat.forEach((matRows) => {
+      if (matRows.some((r) => this.isScanCheckExemptShipment(r))) {
+        ok += 1;
+        exempt += 1;
+        pctSum += 100;
+        pctN += 1;
+        return;
+      }
+      const checkedCount = matRows.filter((r) => this.isStatusScanChecked(r)).length;
+      if (checkedCount === matRows.length) {
         ok += 1;
         pctSum += 100;
         pctN += 1;
-      } else if (disp.status === 'percentage' && (disp.value || 0) > 0) {
+      } else if (checkedCount > 0) {
         partial += 1;
-        pctSum += Number(disp.value) || 0;
+        const pct = Math.round((checkedCount / matRows.length) * 100);
+        pctSum += pct;
         pctN += 1;
       } else {
         none += 1;
@@ -259,14 +295,17 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const avgPct = pctN > 0 ? Math.round(pctSum / pctN) : 0;
     if (ok === byMat.size) {
-      return { scanStatus: 'ok', scanLabel: 'Đã scan check', scanPct: 100 };
+      if (exempt === byMat.size) {
+        return { scanStatus: 'ok', scanLabel: 'Không cần scan', scanPct: 100 };
+      }
+      return { scanStatus: 'ok', scanLabel: 'Đã Check', scanPct: 100 };
     }
     if (ok === 0 && partial === 0) {
-      return { scanStatus: 'none', scanLabel: 'Chưa scan check', scanPct: null };
+      return { scanStatus: 'none', scanLabel: 'Chưa check', scanPct: null };
     }
     return {
       scanStatus: 'partial',
-      scanLabel: `Scan check ${avgPct}%`,
+      scanLabel: `Check ${avgPct}%`,
       scanPct: avgPct
     };
   }
@@ -1430,9 +1469,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // Coi là đã check khi tổng lượng scan đủ (không so sánh đúng/sai nữa)
+  // Coi đã check: FJXR miễn; khách khác khi Status = "Đã Check"
   isShipmentChecked(shipment: ShipmentItem): boolean {
-    return this.getShipmentCheckDisplay(shipment).status === 'ok';
+    if (this.isScanCheckExemptShipment(shipment)) return true;
+    return this.isStatusScanChecked(shipment);
   }
 
   /**
@@ -1523,71 +1563,23 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * So sánh: cùng 1 shipment + 1 mã TP → tổng (Shipment) với tổng đã check (FG Check).
-   * Theo cột Loại check ở FG Check: Thùng (pn) thì so tổng thùng, Lượng (pn-qty) thì so tổng số lượng.
+   * Badge CHECK: FJXR miễn; khách khác theo Status = "Đã Check".
    */
   isCheckOK(shipment: ShipmentItem): boolean {
-    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
-    const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
-    const key = `${shipmentCode}|${materialCode}`;
-    const scannedCarton = this.fgCheckScannedCarton.get(key) || 0;
-    const scannedQty = this.fgCheckScannedQty.get(key) || 0;
-    const mode = this.fgCheckModeByKey.get(key) || 'pn-qty';
-
-    if (mode === 'pn') {
-      const totalCarton = this.shipments
-        .filter(s => {
-          const sCode = String(s.shipmentCode || '').trim().toUpperCase();
-          const mCode = String(s.materialCode || '').trim().toUpperCase();
-          return sCode === shipmentCode && mCode === materialCode;
-        })
-        .reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
-      return totalCarton > 0 && totalCarton === scannedCarton;
-    }
-
-    // Kiểm tra bằng số lượng: tổng lượng xuất = tổng lượng KTRA
-    const totalQuantity = this.shipments
-      .filter(s => {
-        const sCode = String(s.shipmentCode || '').trim().toUpperCase();
-        const mCode = String(s.materialCode || '').trim().toUpperCase();
-        return sCode === shipmentCode && mCode === materialCode;
-      })
-      .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
-    return totalQuantity > 0 && scannedQty > 0 && totalQuantity === scannedQty;
+    if (this.isScanCheckExemptShipment(shipment)) return true;
+    return this.isStatusScanChecked(shipment);
   }
 
   /** So sánh tổng đã check (FG Check) với tổng shipment theo (shipment + mã TP). Theo Loại check: Thùng so thùng, Lượng so số lượng. */
   getShipmentCheckDisplay(shipment: ShipmentItem): { status: 'ok' | 'excess' | 'percentage'; value: number | null } {
-    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
-    const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
-    const key = `${shipmentCode}|${materialCode}`;
-    const scannedCarton = this.fgCheckScannedCarton.get(key) || 0;
-    const scannedQty = this.fgCheckScannedQty.get(key) || 0;
-    const mode = this.fgCheckModeByKey.get(key) || 'pn-qty';
-
-    const sameGroup = (s: ShipmentItem) => {
-      const sCode = String(s.shipmentCode || '').trim().toUpperCase();
-      const mCode = String(s.materialCode || '').trim().toUpperCase();
-      return sCode === shipmentCode && mCode === materialCode;
-    };
-
-    if (mode === 'pn') {
-      const totalCarton = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
-      if (totalCarton <= 0) return scannedCarton > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
-      if (scannedCarton > totalCarton) return { status: 'excess', value: null };
-      if (scannedCarton === totalCarton) return { status: 'ok', value: null };
-      const pct = Math.round((scannedCarton / totalCarton) * 100);
-      return { status: 'percentage', value: pct };
+    if (this.isScanCheckExemptShipment(shipment)) {
+      return { status: 'ok', value: null };
     }
-
-    const totalQuantity = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
-    if (totalQuantity <= 0) {
-      return scannedQty > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+    // Khách khác FJXR: Status "Đã Check" ≈ đã scan
+    if (this.isStatusScanChecked(shipment)) {
+      return { status: 'ok', value: null };
     }
-    if (scannedQty > totalQuantity) return { status: 'excess', value: null };
-    if (scannedQty === totalQuantity) return { status: 'ok', value: null };
-    const pct = Math.round((scannedQty / totalQuantity) * 100);
-    return { status: 'percentage', value: pct };
+    return { status: 'percentage', value: 0 };
   }
 
 

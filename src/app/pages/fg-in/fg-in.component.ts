@@ -393,20 +393,32 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Update material in Firebase
   updateMaterialInFirebase(material: FgInItem): void {
     if (material.id) {
-      const updateData = {
+      const updateData: Record<string, unknown> = {
         ...material,
         importDate: material.importDate,
         updatedAt: new Date()
       };
-      
+
       delete updateData.id;
-      
-      this.firestore.collection('fg-in').doc(material.id).update(updateData)
+
+      // Firestore .update() từ chối cả write nếu có field = undefined — loại bỏ trước khi gửi.
+      for (const key of Object.keys(updateData)) {
+        if (updateData[key] === undefined) delete updateData[key];
+      }
+
+      const materialId = material.id;
+      this.firestore.collection('fg-in').doc(materialId).update(updateData)
         .then(() => {
           console.log('FG In material updated in Firebase successfully');
         })
         .catch(error => {
           console.error('Error updating FG In material in Firebase:', error);
+          if (error?.code === 'not-found') {
+            // Dòng này đã bị xóa (bỏ khóa rồi xóa quá nhanh, update đang chạy dở nhắm vào doc đã mất) —
+            // dọn khỏi UI ngay thay vì để lỗi âm thầm khiến dòng "kẹt" lại trên bảng.
+            this.materials = this.materials.filter(m => m.id !== materialId);
+            this.filteredMaterials = this.filteredMaterials.filter(m => m.id !== materialId);
+          }
         });
     }
   }
@@ -417,22 +429,23 @@ export class FgInComponent implements OnInit, OnDestroy {
       console.error('❌ Material has no ID - cannot delete');
       return;
     }
-    
+
     const materialId = material.id;
-    
-    // Xóa khỏi local arrays ngay lập tức để UI cập nhật nhanh
-    this.materials = this.materials.filter(m => m.id !== materialId);
-    this.filteredMaterials = this.filteredMaterials.filter(m => m.id !== materialId);
-    
-    // Xóa từ Firebase
+
+    // Chỉ xóa khỏi bảng SAU KHI Firestore xác nhận xóa thành công — tránh tình trạng UI báo đã xóa
+    // nhưng document vẫn còn (F5 lại thấy dòng cũ, nhất là khi vừa bỏ khóa rồi xóa liền).
     this.firestore.collection('fg-in').doc(materialId).delete()
       .then(() => {
         console.log('✅ Deleted:', material.materialCode);
+        // Ghi tombstone — nếu không, doc này vẫn còn trong snapshot backup hôm qua (FgDailyBackupService)
+        // và sẽ tái xuất hiện mỗi lần load (F5) cho tới khi backup ngày mai chạy lại.
+        void this.fgDailyBackup.markDeleted('fg-in', materialId);
+        this.materials = this.materials.filter(m => m.id !== materialId);
+        this.filteredMaterials = this.filteredMaterials.filter(m => m.id !== materialId);
       })
       .catch(error => {
         console.error('❌ Error deleting:', error);
-        // Nếu lỗi, refresh lại data
-        this.refreshData();
+        alert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại.');
       });
   }
 

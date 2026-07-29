@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import type { QcPriorityResolvedPayload } from './qc-priority-email';
 import type { CartonPackingQtyAlertPayload } from './carton-packing-qty-alert-email';
 import type { TruckDecisionType } from './truck-schedule-email';
-import { emailPass, zaloBotToken } from './params-config';
+import { emailPass, zaloBotToken, deployReloadSecret } from './params-config';
 
 admin.initializeApp();
 
@@ -1102,4 +1102,41 @@ export const backupFgCollectionsDaily = functions
   .onRun(async () => {
     const { runFgDailyBackupJob } = await import('./fg-daily-backup');
     await runFgDailyBackupJob();
+  });
+
+/**
+ * Gọi sau mỗi lần deploy hosting để tự động gửi lệnh "F5 toàn bộ" cho mọi tab đang mở web —
+ * cùng cơ chế Firestore (app-settings/client-reload) mà nút "F5 toàn bộ" trong Settings đang dùng
+ * (xem ClientReloadService). Bảo vệ bằng secret trong query string (?secret=...), không yêu cầu đăng
+ * nhập vì được gọi từ script deploy, không phải từ trình duyệt người dùng.
+ */
+export const notifyClientsReload = functions
+  .runWith({ secrets: [deployReloadSecret] })
+  .https.onRequest(async (req, res) => {
+    const provided = String(req.query.secret ?? req.body?.secret ?? '');
+    if (!provided || provided !== deployReloadSecret.value()) {
+      res.status(403).json({ ok: false, error: 'Forbidden' });
+      return;
+    }
+    try {
+      const db = admin.firestore();
+      const ref = db.doc('app-settings/client-reload');
+      const snap = await ref.get();
+      const current = Number(snap.data()?.reloadToken ?? 0);
+      const nextToken = (Number.isFinite(current) ? current : 0) + 1;
+      await ref.set(
+        {
+          reloadToken: nextToken,
+          requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+          requestedBy: 'AUTO_DEPLOY',
+          message: 'Đã có bản cập nhật mới — vui lòng tải lại trang.'
+        },
+        { merge: true }
+      );
+      res.status(200).json({ ok: true, token: nextToken });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('notifyClientsReload failed:', msg);
+      res.status(500).json({ ok: false, error: msg });
+    }
   });

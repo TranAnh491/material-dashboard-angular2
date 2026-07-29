@@ -25,7 +25,13 @@ export interface TpStockListRow {
 })
 export class FgTpStockListComponent implements OnInit, OnDestroy {
   selectedFactory = 'ASM1';
-  readonly factoryOptions = ['ASM1', 'ASM2', 'TOTAL'];
+  readonly factoryOptions = ['ASM1', 'ASM2', 'ASM3', 'TOTAL'];
+
+  /**
+   * Khách thuộc ASM3 (danh mục KH) — tạm thời cố định, bổ sung thêm sau.
+   * So khớp không phân biệt hoa thường.
+   */
+  private static readonly ASM3_CUSTOMERS = new Set(['GNRAC', 'HPPPS']);
 
   isLoading = false;
   catalogItems: ProductCatalogItem[] = [];
@@ -64,8 +70,8 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
         this.catalogItems = items;
         this.packingQtyMap = packingMap;
         this.cdr.markForCheck();
-        // Reload nếu data đã về trước catalog — tính lại carton
-        if (this.allRows.length) {
+        // Reload nếu data đã về trước catalog — tính lại carton / phân ASM3 theo KH
+        if (this.allRows.length || this.selectedFactory === 'ASM3') {
           void this.loadData();
         }
       })
@@ -100,8 +106,10 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   }
 
   goToFgInventory(): void {
+    // FG Inventory chưa có tab ASM3 — mở TOTAL để còn tra mã
+    const factory = this.selectedFactory === 'ASM3' ? 'TOTAL' : this.selectedFactory;
     this.router.navigate(['/fg-inventory'], {
-      queryParams: { factory: this.selectedFactory }
+      queryParams: { factory }
     });
   }
 
@@ -112,9 +120,29 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   selectMaterial(materialCode: string): void {
     const code = String(materialCode || '').trim().toUpperCase();
     if (!code) return;
+    const factory = this.selectedFactory === 'ASM3' ? 'TOTAL' : this.selectedFactory;
     this.router.navigate(['/fg-inventory'], {
-      queryParams: { maTp: code, factory: this.selectedFactory }
+      queryParams: { maTp: code, factory }
     });
+  }
+
+  /** Khách thuộc ASM3 theo danh mục (GNRAC, HPPPS, …). */
+  private isAsm3Customer(customerName: string | undefined | null): boolean {
+    const name = String(customerName || '').trim().toUpperCase();
+    return !!name && FgTpStockListComponent.ASM3_CUSTOMERS.has(name);
+  }
+
+  /** Dòng có thuộc nhà máy đang chọn không (ASM3 theo danh mục KH). */
+  private matchesSelectedFactory(data: any, materialCode7: string): boolean {
+    const factory = String(data?.factory || 'ASM1').trim().toUpperCase() || 'ASM1';
+    const customer = this.getCustomerName(materialCode7).trim();
+    const isAsm3Kh = this.isAsm3Customer(customer);
+
+    if (this.selectedFactory === 'TOTAL') return true;
+    if (this.selectedFactory === 'ASM3') return isAsm3Kh;
+    // ASM1 / ASM2: theo field factory, loại trừ khách ASM3
+    if (isAsm3Kh) return false;
+    return factory === this.selectedFactory;
   }
 
   async loadData(): Promise<void> {
@@ -125,10 +153,12 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
 
     try {
+      // ASM3 lọc theo danh mục KH — load rộng rồi lọc client.
+      // ASM1/ASM2 query theo factory rồi loại khách ASM3 phía client.
       const snap = await this.firestore
         .collection('fg-inventory', (ref) => {
           let q: firebase.firestore.Query = ref;
-          if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+          if (this.selectedFactory === 'ASM1' || this.selectedFactory === 'ASM2') {
             q = q.where('factory', '==', this.selectedFactory);
           }
           return q.limit(5000);
@@ -145,6 +175,7 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
         if (ton <= 0) return;
         const code = String(data.materialCode || data.maTP || '').trim().toUpperCase().slice(0, 7);
         if (!code) return;
+        if (!this.matchesSelectedFactory(data, code)) return;
         const cur = byCode.get(code) || { quantity: 0, carton: 0, kkChecked: 0, kkTotal: 0 };
         cur.quantity += ton;
         // Tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil), không dùng carton đã lưu (có thể floor = 0)
