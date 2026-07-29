@@ -526,7 +526,7 @@ $fgi-kk: #ec4899;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.75rem;
-  min-width: 1400px;
+  min-width: 1600px;
 
   thead {
     position: sticky;
@@ -558,6 +558,24 @@ $fgi-kk: #ec4899;
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  th.fgi-col-lot,
+  td.fgi-col-lot {
+    min-width: 140px;
+    max-width: none;
+    width: 140px;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  th.fgi-col-lsx,
+  td.fgi-col-lsx {
+    min-width: 180px;
+    max-width: none;
+    width: 180px;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   tbody tr {
@@ -608,6 +626,18 @@ $fgi-kk: #ec4899;
   &--wide {
     width: 120px;
     text-align: left;
+  }
+
+  &--lot {
+    width: 128px;
+    min-width: 128px;
+    max-width: none;
+  }
+
+  &--lsx {
+    width: 168px;
+    min-width: 168px;
+    max-width: none;
   }
 
   &::placeholder {

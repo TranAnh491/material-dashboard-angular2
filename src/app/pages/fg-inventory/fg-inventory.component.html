@@ -162,8 +162,8 @@
               <th>FACTORY</th>
               <th>BATCH</th>
               <th>MÃ TP</th>
-              <th>LOT</th>
-              <th>LSX</th>
+              <th class="fgi-col-lot">LOT</th>
+              <th class="fgi-col-lsx">LSX</th>
               <th>PO</th>
               <th>TỒN ĐẦU</th>
               <th>NHẬP</th>
@@ -207,9 +207,9 @@
               <td>{{ material.factory || 'ASM1' }}</td>
               <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{ material.batchNumber }}</td>
               <td class="fgi-code-link">{{ material.materialCode }}</td>
-              <td>
+              <td class="fgi-col-lot">
                 <input type="text"
-                       class="fgi-cell-input"
+                       class="fgi-cell-input fgi-cell-input--lot"
                        [class.fgi-pending-cell]="isPendingLot(material)"
                        [ngModel]="displayLotValue(material)"
                        (ngModelChange)="onLotInput(material, $event)"
@@ -220,9 +220,9 @@
                        [placeholder]="isPendingLot(material) ? 'Nhập LOT' : ''"
                        title="Nhập LOT rồi Enter — cần mã Zalo ASP0106 để lưu">
               </td>
-              <td>
+              <td class="fgi-col-lsx">
                 <input type="text"
-                       class="fgi-cell-input"
+                       class="fgi-cell-input fgi-cell-input--lsx"
                        [class.fgi-pending-cell]="isPendingLsx(material)"
                        [ngModel]="displayLsxValue(material)"
                        (ngModelChange)="onLsxInput(material, $event)"
