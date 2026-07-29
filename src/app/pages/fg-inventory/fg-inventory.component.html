@@ -29,66 +29,68 @@
       </div>
     </div>
 
-    <!-- Toolbar: điều hướng · lọc · trạng thái · thao tác dữ liệu -->
+    <!-- Toolbar: hàng lọc + hàng nút đều nhau -->
     <div class="fgi-toolbar">
-      <div class="fgi-toolbar__group">
-        <button type="button" class="fgi-btn fgi-btn--outline" (click)="showMoreMenu = true">
-          <i class="material-icons">menu</i> Menu
-        </button>
-        <button type="button" class="fgi-btn fgi-btn--outline" (click)="showFactoryMenu = true">
-          <i class="material-icons">apartment</i> Factory: {{ selectedFactory }}
-        </button>
+      <div class="fgi-toolbar__top">
+        <div class="fgi-toolbar__group">
+          <button type="button" class="fgi-btn fgi-btn--outline" (click)="showMoreMenu = true">
+            <i class="material-icons">menu</i> Menu
+          </button>
+          <button type="button" class="fgi-btn fgi-btn--outline" (click)="showFactoryMenu = true">
+            <i class="material-icons">apartment</i> Factory: {{ selectedFactory }}
+          </button>
+        </div>
+
+        <div class="fgi-toolbar__group fgi-toolbar__filters">
+          <div class="fgi-field fgi-field--material">
+            <span class="fgi-field__prefix">Mã TP</span>
+            <input type="text"
+                   class="fgi-input"
+                   [ngModel]="filterMaTp"
+                   (ngModelChange)="onFilterMaTpChange($event)"
+                   (keydown)="onMaTpKeydown($event)"
+                   list="fgi-ma-tp-datalist"
+                   placeholder="Nhập hoặc chọn"
+                   autocomplete="off"
+                   spellcheck="false">
+            <datalist id="fgi-ma-tp-datalist">
+              <option *ngFor="let m of materialOptions" [value]="m"></option>
+            </datalist>
+            <button type="button" class="fgi-field__clear" *ngIf="filterMaTp" (click)="clearFilterMaTp()" title="Xóa">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+
+          <div class="fgi-field">
+            <span class="fgi-field__prefix">Vị trí</span>
+            <input type="text"
+                   class="fgi-input"
+                   [ngModel]="filterLocation"
+                   (ngModelChange)="onFilterLocationChange($event)"
+                   (keydown)="onSearchKeydown($event)"
+                   placeholder="Tất cả"
+                   autocomplete="off">
+            <button type="button" class="fgi-field__clear" *ngIf="filterLocation" (click)="clearFilterLocation()" title="Xóa">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+
+          <div class="fgi-field fgi-field--customer">
+            <span class="fgi-field__prefix">KH</span>
+            <select class="fgi-input fgi-select"
+                    [ngModel]="filterCustomer"
+                    (ngModelChange)="onFilterCustomerChange($event)">
+              <option value="">Tất cả</option>
+              <option *ngFor="let c of customerOptions" [value]="c">{{ c }}</option>
+            </select>
+            <button type="button" class="fgi-field__clear" *ngIf="filterCustomer" (click)="clearFilterCustomer()" title="Xóa">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div class="fgi-toolbar__group fgi-toolbar__filters">
-        <div class="fgi-field fgi-field--material">
-          <span class="fgi-field__prefix">Mã TP</span>
-          <input type="text"
-                 class="fgi-input"
-                 [ngModel]="filterMaTp"
-                 (ngModelChange)="onFilterMaTpChange($event)"
-                 (keydown)="onMaTpKeydown($event)"
-                 list="fgi-ma-tp-datalist"
-                 placeholder="Nhập hoặc chọn"
-                 autocomplete="off"
-                 spellcheck="false">
-          <datalist id="fgi-ma-tp-datalist">
-            <option *ngFor="let m of materialOptions" [value]="m"></option>
-          </datalist>
-          <button type="button" class="fgi-field__clear" *ngIf="filterMaTp" (click)="clearFilterMaTp()" title="Xóa">
-            <i class="material-icons">close</i>
-          </button>
-        </div>
-
-        <div class="fgi-field">
-          <span class="fgi-field__prefix">Vị trí</span>
-          <input type="text"
-                 class="fgi-input"
-                 [ngModel]="filterLocation"
-                 (ngModelChange)="onFilterLocationChange($event)"
-                 (keydown)="onSearchKeydown($event)"
-                 placeholder="Tất cả"
-                 autocomplete="off">
-          <button type="button" class="fgi-field__clear" *ngIf="filterLocation" (click)="clearFilterLocation()" title="Xóa">
-            <i class="material-icons">close</i>
-          </button>
-        </div>
-
-        <div class="fgi-field fgi-field--customer">
-          <span class="fgi-field__prefix">KH</span>
-          <select class="fgi-input fgi-select"
-                  [ngModel]="filterCustomer"
-                  (ngModelChange)="onFilterCustomerChange($event)">
-            <option value="">Tất cả</option>
-            <option *ngFor="let c of customerOptions" [value]="c">{{ c }}</option>
-          </select>
-          <button type="button" class="fgi-field__clear" *ngIf="filterCustomer" (click)="clearFilterCustomer()" title="Xóa">
-            <i class="material-icons">close</i>
-          </button>
-        </div>
-      </div>
-
-      <div class="fgi-toolbar__group fgi-toolbar__status">
+      <div class="fgi-toolbar__group fgi-toolbar__buttons">
         <button type="button" class="fgi-btn fgi-btn--outline fgi-btn--pending"
                 (click)="loadPendingLotLsx()"
                 [disabled]="isLoading"
@@ -116,9 +118,6 @@
           KK
           <span class="fgi-kpi-kk__value" *ngIf="kkKpiPercent !== null">{{ kkKpiPercent | number:'1.0-1' }}%</span>
         </button>
-      </div>
-
-      <div class="fgi-toolbar__group fgi-toolbar__actions">
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="refreshInventoryData()" [disabled]="isLoading">
           <i class="material-icons">refresh</i> Làm mới
         </button>
