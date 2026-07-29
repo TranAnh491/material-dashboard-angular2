@@ -392,6 +392,59 @@ export const verifyCatalogDeleteOtpFn = functions
     }
   });
 
+/** FG Inventory: gửi mã OTP 4 số qua Zalo tới ASP0106 để xác nhận sửa LOT / LSX. */
+export const requestFgLotLsxOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { requestFgLotLsxOtp } = await import('./fg-lot-lsx-otp');
+      await requestFgLotLsxOtp(admin.firestore(), {
+        requestedBy: typeof data?.requestedBy === 'string' ? data.requestedBy : '',
+        materialCode: typeof data?.materialCode === 'string' ? data.materialCode : '',
+        batchNumber: typeof data?.batchNumber === 'string' ? data.batchNumber : '',
+        field: typeof data?.field === 'string' ? data.field : 'LOT',
+        oldValue: typeof data?.oldValue === 'string' ? data.oldValue : '',
+        newValue: typeof data?.newValue === 'string' ? data.newValue : ''
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
+export const verifyFgLotLsxOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+      const { verifyFgLotLsxOtp } = await import('./fg-lot-lsx-otp');
+      const result = await verifyFgLotLsxOtp(admin.firestore(), code);
+      return result;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** Equipment: hoàn thành bài kiểm tra kho → lưu file hình lên Storage + Firestore. */
 export const saveWarehouseTrainingQuizImageFn = functions.https.onCall(async (data: any, context) => {
   if (!context.auth) {

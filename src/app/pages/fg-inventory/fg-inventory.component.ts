@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import firebase from 'firebase/compat/app';
@@ -13,6 +13,8 @@ import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
+import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
+import { FgLotLsxOtpService } from '../../services/fg-lot-lsx-otp.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 
@@ -21,6 +23,17 @@ export const FG_PENDING_LOT = 'Chờ LOT';
 export const FG_PENDING_LSX = 'Chờ LSX';
 
 export type FgInventoryImportMode = 'tonDau' | 'tonDauSupplement' | 'addMaTp';
+
+/** Hành động ghi vào cột Lịch sử. */
+export type FGEditHistoryAction = 'LOT' | 'LSX' | 'KK' | 'VI_TRI';
+
+export interface FGEditHistoryEntry {
+  action: FGEditHistoryAction;
+  /** Mã NV / ID người sửa */
+  by: string;
+  at: Date;
+  detail?: string;
+}
 
 export interface FGInventoryItem {
   id?: string;
@@ -48,6 +61,8 @@ export interface FGInventoryItem {
   isReceived: boolean;
   isCompleted: boolean;
   isDuplicate: boolean;
+  /** Lịch sử sửa LOT / LSX / Tick KK / Đổi vị trí */
+  editHistory?: FGEditHistoryEntry[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -142,6 +157,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   kkKpiChecked = 0;
   kkKpiTotal = 0;
 
+  /** Đang xem danh sách Chờ LOT / Chờ LSX (bỏ qua bắt buộc nhập 7 ký tự mã TP). */
+  showPendingLotLsxMode = false;
+
   showCustomerSummaryModal: boolean = false;
   isLoadingCustomerSummary: boolean = false;
   customerSummaryRows: Array<{ customer: string; totalCarton: number }> = [];
@@ -151,6 +169,30 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   locationEditMaterial: FGInventoryItem | null = null;
   locationEditDraft: string = '';
   showAsm3PositionPicker: boolean = false;
+
+  /** Modal cột Lịch sử */
+  showEditHistoryModal = false;
+  editHistoryMaterial: FGInventoryItem | null = null;
+  /** ID người đang đăng nhập (employeeId / displayName / email prefix) */
+  currentEditorId = 'NV';
+  private readonly EDIT_HISTORY_MAX = 30;
+  /** Giá trị LOT/LSX trước khi focus (để ghi detail lịch sử) */
+  private pendingFieldOldValue = new Map<string, { lot?: string; lsx?: string }>();
+
+  /** OTP Zalo ASP0106 khi sửa LOT/LSX */
+  showLotLsxOtpModal = false;
+  lotLsxOtpStep: 1 | 2 = 1;
+  lotLsxOtpCode = '';
+  lotLsxOtpError = '';
+  lotLsxOtpInfo = '';
+  lotLsxOtpSending = false;
+  lotLsxOtpVerifying = false;
+  private pendingLotLsxChange: {
+    material: FGInventoryItem;
+    field: 'lot' | 'lsx';
+    oldVal: string;
+    newVal: string;
+  } | null = null;
   // Dãy A-G ở kho ASM3 dành cho NVL (Materials ASM1/ASM2) — TP chỉ được gán vào dãy H, I, K, L.
   readonly asm3PositionRows: string[] = ['H', 'I', 'K', 'L'];
   readonly asm3PositionIndexes: number[] = Array.from({ length: 60 }, (_, i) => i + 1);
@@ -200,6 +242,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
+    private authService: FirebaseAuthService,
     private factoryAccessService: FactoryAccessService,
     private fgExportService: FgExportService,
     private fgInService: FgInService,
@@ -210,7 +253,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     private router: Router,
     private route: ActivatedRoute,
     private tpCatalogService: TpCatalogFullService,
-    private cartonPackingQtyService: CartonPackingQtyService
+    private cartonPackingQtyService: CartonPackingQtyService,
+    private fgLotLsxOtp: FgLotLsxOtpService
   ) {}
 
   goToMenu(): void {
@@ -239,6 +283,29 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   get pageEndIndex(): number {
     return Math.min(this.currentPage * this.pageSize, this.filteredMaterials.length);
+  }
+
+  /** Hiện KPI tổng tồn khi đang lọc theo Mã TP hoặc Khách hàng và có kết quả. */
+  get showFilterStockKpi(): boolean {
+    if (!this.filteredMaterials.length || this.isLoading) return false;
+    if (this.searchMode === 'customer' && !!String(this.filterCustomer || '').trim()) return true;
+    if (this.searchMode === 'material' && String(this.filterMaTp || '').trim().length >= 7) return true;
+    return false;
+  }
+
+  /** Tổng tồn kho của các dòng đang lọc (Mã TP / Khách). */
+  get filteredTonTotal(): number {
+    return this.filteredMaterials.reduce((sum, m) => sum + (Number(m.ton) || 0), 0);
+  }
+
+  get filterStockKpiLabel(): string {
+    if (this.searchMode === 'customer' && this.filterCustomer) {
+      return `KH ${this.filterCustomer}`;
+    }
+    if (this.filterMaTp) {
+      return `Mã ${this.filterMaTp}`;
+    }
+    return 'Lọc';
   }
 
   get pageNumbers(): Array<number | '...'> {
@@ -284,6 +351,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.searchMode = 'material';
     this.searchTerm = this.filterMaTp;
     this.currentPage = 1;
+    this.showPendingLotLsxMode = false;
     // Gõ tay: đủ 7 ký tự thì tìm; chọn từ datalist cũng qua đây
     if (!this.filterMaTp) {
       this.clearFilterMaTp();
@@ -343,6 +411,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.filterMaTp = '';
     this.searchTerm = '';
     this.searchStatus = 'idle';
+    this.showPendingLotLsxMode = false;
     this.filteredMaterials = [];
     this.currentPage = 1;
   }
@@ -372,6 +441,10 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.loadPermissions();
     this.loadFactoryAccess();
+
+    this.authService.currentUser.pipe(takeUntil(this.destroy$)).subscribe(u => {
+      this.currentEditorId = this.resolveEditorId(u);
+    });
 
     // Đến từ tab khác (VD: Layout Warehouse ASM3 → "Xem chi tiết") kèm ?location=... → tự tìm theo vị trí đó.
     const locationParam = this.route.snapshot.queryParamMap.get('location');
@@ -445,9 +518,127 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       isReceived: data.isReceived || false,
       isCompleted: data.isCompleted || false,
       isDuplicate: data.isDuplicate || false,
+      editHistory: this.mapEditHistory(data.editHistory),
       createdAt: toDate(data.createdAt),
       updatedAt: toDate(data.updatedAt)
     };
+  }
+
+  private mapEditHistory(raw: any): FGEditHistoryEntry[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((e: any) => ({
+        action: (e?.action || '') as FGEditHistoryAction,
+        by: String(e?.by || '').trim(),
+        at: e?.at?.toDate
+          ? e.at.toDate()
+          : e?.at?.seconds != null
+            ? new Date(e.at.seconds * 1000)
+            : e?.at instanceof Date
+              ? e.at
+              : new Date(e?.at || Date.now()),
+        detail: String(e?.detail || '').trim()
+      }))
+      .filter(e => !!e.action && !!e.by);
+  }
+
+  private resolveEditorId(user: User | null): string {
+    if (!user) return 'NV';
+    const employeeId = String(user.employeeId || '').trim();
+    if (employeeId) return employeeId.toUpperCase();
+    const displayName = String(user.displayName || '').trim();
+    if (displayName) return displayName.toUpperCase();
+    const email = String(user.email || '').trim();
+    if (email.includes('@')) return email.split('@')[0].toUpperCase();
+    if (email) return email.toUpperCase();
+    return String(user.uid || 'NV').toUpperCase();
+  }
+
+  private async getEditorId(): Promise<string> {
+    if (this.currentEditorId && this.currentEditorId !== 'NV') {
+      return this.currentEditorId;
+    }
+    try {
+      const user = await firstValueFrom(this.authService.currentUser);
+      this.currentEditorId = this.resolveEditorId(user);
+    } catch {
+      // giữ giá trị hiện tại
+    }
+    return this.currentEditorId || 'NV';
+  }
+
+  private appendLocalHistory(
+    material: FGInventoryItem,
+    entry: FGEditHistoryEntry
+  ): FGEditHistoryEntry[] {
+    const list = [...(material.editHistory || []), entry];
+    const trimmed = list.slice(-this.EDIT_HISTORY_MAX);
+    material.editHistory = trimmed;
+    return trimmed;
+  }
+
+  private async recordEditHistory(
+    material: FGInventoryItem,
+    action: FGEditHistoryAction,
+    detail?: string
+  ): Promise<FGEditHistoryEntry[]> {
+    const by = await this.getEditorId();
+    return this.appendLocalHistory(material, {
+      action,
+      by,
+      at: new Date(),
+      detail: detail || ''
+    });
+  }
+
+  historyActionLabel(action: FGEditHistoryAction | string): string {
+    switch (action) {
+      case 'LOT': return 'Sửa LOT';
+      case 'LSX': return 'Sửa LSX';
+      case 'KK': return 'Tick KK';
+      case 'VI_TRI': return 'Đổi vị trí';
+      default: return String(action || '');
+    }
+  }
+
+  formatHistoryTime(at: Date | null | undefined): string {
+    if (!at) return '—';
+    const d = at instanceof Date ? at : new Date(at);
+    if (isNaN(d.getTime())) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  getHistoryPreview(material: FGInventoryItem): string {
+    const list = material.editHistory || [];
+    if (!list.length) return '—';
+    const last = list[list.length - 1];
+    return `${last.action} · ${last.by}`;
+  }
+
+  getHistoryTooltip(material: FGInventoryItem): string {
+    const list = material.editHistory || [];
+    if (!list.length) return 'Chưa có lịch sử';
+    return list
+      .slice(-5)
+      .reverse()
+      .map(e => `${this.historyActionLabel(e.action)} — ${e.by}${e.detail ? ` (${e.detail})` : ''} — ${this.formatHistoryTime(e.at)}`)
+      .join('\n');
+  }
+
+  openEditHistory(material: FGInventoryItem): void {
+    this.editHistoryMaterial = material;
+    this.showEditHistoryModal = true;
+  }
+
+  closeEditHistory(): void {
+    this.showEditHistoryModal = false;
+    this.editHistoryMaterial = null;
+  }
+
+  get editHistoryRows(): FGEditHistoryEntry[] {
+    const list = this.editHistoryMaterial?.editHistory || [];
+    return [...list].reverse();
   }
 
   /** Tìm theo mã TP khi đủ 7 ký tự — query Firestore, không load full collection. */
@@ -1060,7 +1251,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     }
 
     this.filteredMaterials = this.materials.filter(material => {
-      if (this.searchMode === 'material' && this.selectedFactory === 'ASM1' && trimmedSearch.length < 7) {
+      if (
+        !this.showPendingLotLsxMode &&
+        this.searchMode === 'material' &&
+        this.selectedFactory === 'ASM1' &&
+        trimmedSearch.length < 7
+      ) {
         return false;
       }
 
@@ -1418,30 +1614,38 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     const now = new Date();
     const location = String(material.location || 'TEMPORARY').trim().toUpperCase();
 
-    if (checked) {
-      material.viTriKK = location;
-      this.firestore.collection('fg-inventory').doc(material.id).update({
-        viTriKK: location,
-        updatedAt: now,
-        kkUpdatedAt: now
-      }).then(() => {
-        console.log(`viTriKK set for ${material.materialCode}: ${location}`);
-      }).catch(error => {
-        console.error('Error setting viTriKK:', error);
-      });
-      return;
-    }
+    void (async () => {
+      if (checked) {
+        material.viTriKK = location;
+        await this.recordEditHistory(material, 'KK', `Tick KK: ${location}`);
+        this.firestore.collection('fg-inventory').doc(material.id).update({
+          viTriKK: location,
+          updatedAt: now,
+          kkUpdatedAt: now,
+          editHistory: material.editHistory || []
+        }).then(() => {
+          console.log(`viTriKK set for ${material.materialCode}: ${location}`);
+          this.cdr.detectChanges();
+        }).catch(error => {
+          console.error('Error setting viTriKK:', error);
+        });
+        return;
+      }
 
-    material.viTriKK = '';
-    this.firestore.collection('fg-inventory').doc(material.id).update({
-      viTriKK: firebase.firestore.FieldValue.delete(),
-      updatedAt: now,
-      kkUpdatedAt: now
-    }).then(() => {
-      console.log(`viTriKK cleared for ${material.materialCode}`);
-    }).catch(error => {
-      console.error('Error clearing viTriKK:', error);
-    });
+      material.viTriKK = '';
+      await this.recordEditHistory(material, 'KK', 'Bỏ tick KK');
+      this.firestore.collection('fg-inventory').doc(material.id).update({
+        viTriKK: firebase.firestore.FieldValue.delete(),
+        updatedAt: now,
+        kkUpdatedAt: now,
+        editHistory: material.editHistory || []
+      }).then(() => {
+        console.log(`viTriKK cleared for ${material.materialCode}`);
+        this.cdr.detectChanges();
+      }).catch(error => {
+        console.error('Error clearing viTriKK:', error);
+      });
+    })();
   }
 
   get locationReportTotalCodes(): number {
@@ -2362,10 +2566,12 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   saveLocationEdit(): void {
     if (!this.locationEditMaterial) return;
     const material = this.locationEditMaterial;
-    material.location = this.normalizeFgLocationValue(this.locationEditDraft);
+    const oldLoc = String(material.location || '').trim();
+    const newLoc = this.normalizeFgLocationValue(this.locationEditDraft);
+    material.location = newLoc;
     material.updatedAt = new Date();
     console.log(`Updated location for ${material.materialCode}: ${material.location}`);
-    this.updateMaterialInFirebase(material);
+    void this.persistLocationChange(material, oldLoc, newLoc);
     this.showLocationEditModal = false;
     this.locationEditMaterial = null;
     this.locationEditDraft = '';
@@ -2379,14 +2585,31 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   selectAsm3Position(row: string, index: number): void {
     if (!this.locationEditMaterial) return;
     const material = this.locationEditMaterial;
-    material.location = `WH3-${row}${index}`;
+    const oldLoc = String(material.location || '').trim();
+    const newLoc = `WH3-${row}${index}`;
+    material.location = newLoc;
     material.updatedAt = new Date();
     console.log(`Updated location for ${material.materialCode}: ${material.location}`);
-    this.updateMaterialInFirebase(material);
+    void this.persistLocationChange(material, oldLoc, newLoc);
     this.showAsm3PositionPicker = false;
     this.showLocationEditModal = false;
     this.locationEditMaterial = null;
     this.locationEditDraft = '';
+  }
+
+  private async persistLocationChange(
+    material: FGInventoryItem,
+    oldLoc: string,
+    newLoc: string
+  ): Promise<void> {
+    if (String(oldLoc || '').trim().toUpperCase() !== String(newLoc || '').trim().toUpperCase()) {
+      await this.recordEditHistory(
+        material,
+        'VI_TRI',
+        `${oldLoc || '—'} → ${newLoc || '—'}`
+      );
+    }
+    this.updateMaterialInFirebase(material);
   }
 
 
@@ -2399,15 +2622,280 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return (material.lsx || '').trim() === FG_PENDING_LSX;
   }
 
-  /** Cập nhật LOT/LSX sau khi import bổ sung (thay "Chờ LOT" / "Chờ LSX"). */
+  /** Ô đang chờ: hiện trống + placeholder để gõ ngay. */
+  displayLotValue(material: FGInventoryItem): string {
+    return this.isPendingLot(material) ? '' : (material.lot || '');
+  }
+
+  displayLsxValue(material: FGInventoryItem): string {
+    return this.isPendingLsx(material) ? '' : (material.lsx || '');
+  }
+
+  onLotInput(material: FGInventoryItem, value: string): void {
+    material.lot = String(value || '').toUpperCase();
+  }
+
+  onLsxInput(material: FGInventoryItem, value: string): void {
+    material.lsx = String(value || '').toUpperCase();
+  }
+
+  onPendingFieldFocus(material: FGInventoryItem, field: 'lot' | 'lsx'): void {
+    if (material.id) {
+      const cur = this.pendingFieldOldValue.get(material.id) || {};
+      if (field === 'lot') cur.lot = material.lot || '';
+      if (field === 'lsx') cur.lsx = material.lsx || '';
+      this.pendingFieldOldValue.set(material.id, cur);
+    }
+    if (field === 'lot' && this.isPendingLot(material)) {
+      material.lot = '';
+    }
+    if (field === 'lsx' && this.isPendingLsx(material)) {
+      material.lsx = '';
+    }
+  }
+
+  onPendingLotLsxKeydown(event: KeyboardEvent, material: FGInventoryItem, field: 'lot' | 'lsx'): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    (event.target as HTMLInputElement | null)?.blur();
+    this.savePendingLotLsx(material, field);
+  }
+
+  /**
+   * Cập nhật LOT/LSX (thay "Chờ LOT" / "Chờ LSX").
+   * Để trống khi blur → giữ lại trạng thái chờ.
+   * Đổi giá trị thật → cần OTP Zalo ASP0106 (giống thêm vị trí), trừ khi đã mở khóa trong 10 phút.
+   */
   savePendingLotLsx(material: FGInventoryItem, field: 'lot' | 'lsx'): void {
     if (!material.id) return;
-    const raw = field === 'lot' ? material.lot : material.lsx;
-    const val = String(raw || '').trim();
-    if (!val) return;
-    if (field === 'lot' && val === FG_PENDING_LOT) return;
-    if (field === 'lsx' && val === FG_PENDING_LSX) return;
+    if (!this.canEditMaterial(material)) return;
+    if (this.showLotLsxOtpModal) return;
+
+    const oldSnap = this.pendingFieldOldValue.get(material.id) || {};
+
+    if (field === 'lot') {
+      const val = String(material.lot || '').trim().toUpperCase();
+      if (!val) {
+        material.lot = FG_PENDING_LOT;
+        this.cdr.detectChanges();
+        return;
+      }
+      const oldVal = String(oldSnap.lot != null ? oldSnap.lot : material.lot).trim();
+      if (oldVal.toUpperCase() === val) {
+        material.lot = val;
+        this.cdr.detectChanges();
+        return;
+      }
+      material.lot = val;
+      void this.beginLotLsxChange(material, 'lot', oldVal, val);
+      return;
+    }
+
+    const val = String(material.lsx || '').trim().toUpperCase();
+    if (!val) {
+      material.lsx = FG_PENDING_LSX;
+      this.cdr.detectChanges();
+      return;
+    }
+    const oldVal = String(oldSnap.lsx != null ? oldSnap.lsx : material.lsx).trim();
+    if (oldVal.toUpperCase() === val) {
+      material.lsx = val;
+      this.cdr.detectChanges();
+      return;
+    }
+    material.lsx = val;
+    void this.beginLotLsxChange(material, 'lsx', oldVal, val);
+  }
+
+  private async beginLotLsxChange(
+    material: FGInventoryItem,
+    field: 'lot' | 'lsx',
+    oldVal: string,
+    newVal: string
+  ): Promise<void> {
+    if (this.fgLotLsxOtp.isUnlocked()) {
+      await this.commitLotLsxChange(material, field, oldVal, newVal);
+      return;
+    }
+    this.pendingLotLsxChange = { material, field, oldVal, newVal };
+    this.openLotLsxOtpModal();
+  }
+
+  private async commitLotLsxChange(
+    material: FGInventoryItem,
+    field: 'lot' | 'lsx',
+    oldVal: string,
+    newVal: string
+  ): Promise<void> {
+    if (field === 'lot') {
+      material.lot = newVal;
+      await this.recordEditHistory(material, 'LOT', `${oldVal || '—'} → ${newVal}`);
+    } else {
+      material.lsx = newVal;
+      await this.recordEditHistory(material, 'LSX', `${oldVal || '—'} → ${newVal}`);
+    }
     this.updateMaterialInFirebase(material);
+    this.cdr.detectChanges();
+  }
+
+  private openLotLsxOtpModal(): void {
+    this.showLotLsxOtpModal = true;
+    this.lotLsxOtpStep = 1;
+    this.lotLsxOtpCode = '';
+    this.lotLsxOtpError = '';
+    this.lotLsxOtpInfo = '';
+    this.cdr.detectChanges();
+  }
+
+  closeLotLsxOtpModal(revert = true): void {
+    if (revert && this.pendingLotLsxChange) {
+      const { material, field, oldVal } = this.pendingLotLsxChange;
+      if (field === 'lot') {
+        material.lot = oldVal || FG_PENDING_LOT;
+      } else {
+        material.lsx = oldVal || FG_PENDING_LSX;
+      }
+    }
+    this.showLotLsxOtpModal = false;
+    this.pendingLotLsxChange = null;
+    this.lotLsxOtpStep = 1;
+    this.lotLsxOtpCode = '';
+    this.lotLsxOtpError = '';
+    this.lotLsxOtpInfo = '';
+    this.lotLsxOtpSending = false;
+    this.lotLsxOtpVerifying = false;
+    this.cdr.detectChanges();
+  }
+
+  get lotLsxOtpTargetLabel(): string {
+    const p = this.pendingLotLsxChange;
+    if (!p) return '';
+    const field = p.field === 'lsx' ? 'LSX' : 'LOT';
+    return `${p.material.materialCode || ''} · ${field}: ${p.oldVal || '—'} → ${p.newVal}`;
+  }
+
+  async sendLotLsxOtp(): Promise<void> {
+    const p = this.pendingLotLsxChange;
+    if (!p) return;
+    this.lotLsxOtpError = '';
+    this.lotLsxOtpInfo = '';
+    this.lotLsxOtpSending = true;
+    try {
+      const requestedBy = await this.getEditorId();
+      await this.fgLotLsxOtp.requestOtp({
+        requestedBy,
+        materialCode: p.material.materialCode || '',
+        batchNumber: p.material.batchNumber || '',
+        field: p.field === 'lsx' ? 'LSX' : 'LOT',
+        oldValue: p.oldVal,
+        newValue: p.newVal
+      });
+      this.lotLsxOtpStep = 2;
+      this.lotLsxOtpInfo = 'Đã gửi mã 4 số qua Zalo tới ASP0106.';
+    } catch (e: unknown) {
+      this.lotLsxOtpError = this.extractCallableError(e);
+    } finally {
+      this.lotLsxOtpSending = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async verifyLotLsxOtp(): Promise<void> {
+    this.lotLsxOtpError = '';
+    if (this.lotLsxOtpCode.trim().length !== 4) {
+      this.lotLsxOtpError = 'Mã OTP phải gồm 4 chữ số.';
+      return;
+    }
+    const p = this.pendingLotLsxChange;
+    if (!p) return;
+    this.lotLsxOtpVerifying = true;
+    try {
+      const ok = await this.fgLotLsxOtp.verifyOtp(this.lotLsxOtpCode);
+      if (!ok) {
+        this.lotLsxOtpError = 'Mã OTP không đúng.';
+        return;
+      }
+      const change = this.pendingLotLsxChange;
+      this.closeLotLsxOtpModal(false);
+      if (change) {
+        await this.commitLotLsxChange(change.material, change.field, change.oldVal, change.newVal);
+      }
+    } catch (e: unknown) {
+      this.lotLsxOtpError = this.extractCallableError(e);
+    } finally {
+      this.lotLsxOtpVerifying = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private extractCallableError(e: unknown): string {
+    const err = e as { message?: string; details?: string };
+    return String(err?.message || err?.details || e || 'Có lỗi xảy ra.').replace(/^FirebaseError:\s*/i, '');
+  }
+
+  /** Tải các dòng đang Chờ LOT hoặc Chờ LSX để nhập tiếp. */
+  async loadPendingLotLsx(): Promise<void> {
+    this.isLoading = true;
+    this.showPendingLotLsxMode = true;
+    this.searchStatus = 'searching';
+    this.searchMode = 'material';
+    this.filterMaTp = '';
+    this.filterLocation = '';
+    this.filterCustomer = '';
+    this.searchTerm = '';
+    this.currentPage = 1;
+    this.cdr.detectChanges();
+
+    try {
+      const [byLot, byLsx] = await Promise.all([
+        this.firestore
+          .collection('fg-inventory', (ref) => ref.where('lot', '==', FG_PENDING_LOT).limit(500))
+          .get()
+          .toPromise(),
+        this.firestore
+          .collection('fg-inventory', (ref) => ref.where('lsx', '==', FG_PENDING_LSX).limit(500))
+          .get()
+          .toPromise()
+      ]);
+
+      const merged = new Map<string, FGInventoryItem>();
+      [...(byLot?.docs || []), ...(byLsx?.docs || [])].forEach((doc) => {
+        const item = this.mapDocToInventoryItem(doc.id, doc.data());
+        if (this.selectedFactory && this.selectedFactory !== 'TOTAL') {
+          if ((item.factory || 'ASM1') !== this.selectedFactory) return;
+        }
+        merged.set(doc.id, item);
+      });
+
+      this.readTracker.track(
+        'fg-inventory',
+        'fg-inventory-pending-lot-lsx',
+        (byLot?.docs.length || 0) + (byLsx?.docs.length || 0)
+      );
+
+      this.materials = Array.from(merged.values());
+      this.sortMaterials();
+      this.showNonStock = false;
+      this.showNegativeStock = false;
+      // Bỏ lọc theo ngày để hiện đủ dòng chờ nhập
+      this.startDate = '';
+      this.endDate = '';
+      this.applyFilters();
+
+      if (!this.filteredMaterials.length) {
+        this.searchStatus = 'not-found';
+      } else {
+        this.searchStatus = 'idle';
+      }
+    } catch (e) {
+      console.error('loadPendingLotLsx failed', e);
+      this.searchStatus = 'not-found';
+      this.filteredMaterials = [];
+      alert('❌ Không tải được danh sách Chờ LOT/LSX. Thử lại sau.');
+    } finally {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }
   }
 
   updateNotes(material: FGInventoryItem): void {
@@ -2435,10 +2923,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       if (result && result.trim() !== '') {
         const oldLocation = material.location;
         material.location = this.normalizeFgLocationValue(result);
-        
-        // Update in Firebase
-        this.updateMaterialInFirebase(material);
-        
+
+        void this.persistLocationChange(material, oldLocation || '', material.location);
+
         console.log(`Updated location for ${material.materialCode}: ${oldLocation} → ${result}`);
         alert(`✅ Đã cập nhật vị trí cho ${material.materialCode}: ${result}`);
       }

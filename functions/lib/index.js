@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -377,6 +377,53 @@ exports.verifyCatalogDeleteOtpFn = functions
     try {
         const { verifyCatalogDeleteOtp } = await Promise.resolve().then(() => __importStar(require('./catalog-delete-otp')));
         const result = await verifyCatalogDeleteOtp(admin.firestore(), scope, code);
+        return result;
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có')
+            ? 'failed-precondition'
+            : 'internal', msg);
+    }
+});
+/** FG Inventory: gửi mã OTP 4 số qua Zalo tới ASP0106 để xác nhận sửa LOT / LSX. */
+exports.requestFgLotLsxOtpFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+        const { requestFgLotLsxOtp } = await Promise.resolve().then(() => __importStar(require('./fg-lot-lsx-otp')));
+        await requestFgLotLsxOtp(admin.firestore(), {
+            requestedBy: typeof (data === null || data === void 0 ? void 0 : data.requestedBy) === 'string' ? data.requestedBy : '',
+            materialCode: typeof (data === null || data === void 0 ? void 0 : data.materialCode) === 'string' ? data.materialCode : '',
+            batchNumber: typeof (data === null || data === void 0 ? void 0 : data.batchNumber) === 'string' ? data.batchNumber : '',
+            field: typeof (data === null || data === void 0 ? void 0 : data.field) === 'string' ? data.field : 'LOT',
+            oldValue: typeof (data === null || data === void 0 ? void 0 : data.oldValue) === 'string' ? data.oldValue : '',
+            newValue: typeof (data === null || data === void 0 ? void 0 : data.newValue) === 'string' ? data.newValue : ''
+        });
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
+exports.verifyFgLotLsxOtpFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof (data === null || data === void 0 ? void 0 : data.code) === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+        const { verifyFgLotLsxOtp } = await Promise.resolve().then(() => __importStar(require('./fg-lot-lsx-otp')));
+        const result = await verifyFgLotLsxOtp(admin.firestore(), code);
         return result;
     }
     catch (e) {

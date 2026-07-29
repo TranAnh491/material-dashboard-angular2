@@ -12,6 +12,10 @@
   background: #f6f8fc;
 }
 
+.shipment-layout--no-sidebar {
+  grid-template-columns: 1fr;
+}
+
 .shipment-sidebar {
   background: #ffffff;
   border-right: 1px solid rgba(15, 23, 42, 0.08);
@@ -442,9 +446,46 @@
 
 .more-button-container {
   display: flex;
-  justify-content: flex-start; /* Căn trái */
+  justify-content: space-between;
   align-items: center;
-  gap: 15px; /* Khoảng cách giữa More button và Search */
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-right {
+  margin-left: auto;
+}
+
+.toolbar-icon-btn {
+  min-width: 40px;
+  padding-left: 10px;
+  padding-right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-icon-btn .material-icons {
+  font-size: 18px;
+  margin: 0;
+}
+
+.toolbar-kh-btn {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.toolbar-kh-label {
+  font-size: 12px;
+  line-height: 1;
 }
 
 /* Date Range Filter */
@@ -3052,6 +3093,74 @@ input[type="date"]::-webkit-clear-button {
   font-weight: 900;
   color: #000;
   letter-spacing: 0.01em;
+}
+
+.schedule-box-flags,
+.lots-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.lots-flags {
+  margin-top: 8px;
+}
+
+.ship-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.ship-flag--box {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ship-flag--pallet {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.ship-flag--banded {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.ship-flag--unbanded {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.ship-flag--scan-ok {
+  border-color: #86efac;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.ship-flag--scan-partial {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.ship-flag--scan-none {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .schedule-box-kh-mat-list {

@@ -1,34 +1,5 @@
-<!-- Shipment - Dashboard layout (match screenshot) -->
-<div class="shipment-layout">
-  <aside class="shipment-sidebar">
-    <button type="button" class="sidebar-logo" title="Shipment">
-      <i class="material-icons">local_shipping</i>
-    </button>
-    <nav class="sidebar-nav" aria-label="Sidebar">
-      <button type="button" class="nav-icon-btn is-active" title="Home" (click)="goToMenu()">
-        <i class="material-icons">home</i>
-      </button>
-      <button type="button" class="nav-icon-btn" title="Shipments">
-        <i class="material-icons">local_shipping</i>
-      </button>
-      <button type="button" class="nav-icon-btn" title="Calendar" (click)="openSchedulesFromSidebar()">
-        <i class="material-icons">event</i>
-      </button>
-      <button type="button" class="nav-icon-btn nav-icon-kh" title="Danh mục KH (khách hàng)" (click)="openKhFilterDialog()">
-        <span class="sidebar-nav-kh" aria-hidden="true">KH</span>
-      </button>
-      <button type="button" class="nav-icon-btn" title="Analytics" (click)="openChartFromSidebar()">
-        <i class="material-icons">bar_chart</i>
-      </button>
-    </nav>
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-icon-btn" title="Settings">
-        <i class="material-icons">settings</i>
-      </button>
-      <button type="button" class="sidebar-locale" title="Locale">VN</button>
-    </div>
-  </aside>
-
+<!-- Shipment - Dashboard layout -->
+<div class="shipment-layout shipment-layout--no-sidebar">
   <div class="shipment-body">
     <div class="main-content">
   <div class="container-fluid">
@@ -143,71 +114,96 @@
             </div>
           </div>
           
-          <!-- More Button and Search Row -->
+          <!-- Toolbar: filter trái — thao tác phải (cạnh Tải lịch sử) -->
           <div class="more-button-row">
             <div class="col-12">
               <div class="more-button-container">
-                <button class="btn btn-outline-secondary" type="button" (click)="toggleDropdown()">
-                  <i class="material-icons">more_vert</i>
-                  More
-                </button>
-                
-                <!-- Import File Button -->
-                <button class="btn btn-outline-secondary" type="button" (click)="importFile()">
-                  <i class="material-icons">file_upload</i>
-                  Import File
-                </button>
-                
-                <!-- Date Range Filter -->
-                <div class="date-range-container">
-                  <label class="date-range-label">Từ:</label>
-                  <input type="date" 
-                         class="date-range-input" 
-                         [value]="formatDateForInput(startDate)"
-                         (change)="startDate = parseDateForRange($event.target.value); applyFilters()"
-                         (click)="$event.target.showPicker()"
-                         title="Ngày bắt đầu">
-                  <label class="date-range-label">Đến:</label>
-                  <input type="date" 
-                         class="date-range-input" 
-                         [value]="formatDateForInput(endDate)"
-                         (change)="endDate = parseDateForRange($event.target.value); applyFilters()"
-                         (click)="$event.target.showPicker()"
-                         title="Ngày kết thúc">
-                </div>
-                
-                <div class="search-container">
-                  <input type="text" 
-                         class="search-input" 
-                         placeholder="Tìm kiếm..." 
-                         [(ngModel)]="searchTerm"
-                         (input)="applyFilters()">
-                  <i class="material-icons search-icon">search</i>
+                <div class="toolbar-left">
+                  <!-- Date Range Filter -->
+                  <div class="date-range-container">
+                    <label class="date-range-label">Từ:</label>
+                    <input type="date"
+                           class="date-range-input"
+                           [value]="formatDateForInput(startDate)"
+                           (change)="startDate = parseDateForRange($event.target.value); applyFilters()"
+                           (click)="$event.target.showPicker()"
+                           title="Ngày bắt đầu">
+                    <label class="date-range-label">Đến:</label>
+                    <input type="date"
+                           class="date-range-input"
+                           [value]="formatDateForInput(endDate)"
+                           (change)="endDate = parseDateForRange($event.target.value); applyFilters()"
+                           (click)="$event.target.showPicker()"
+                           title="Ngày kết thúc">
+                  </div>
+
+                  <div class="search-container">
+                    <input type="text"
+                           class="search-input"
+                           placeholder="Tìm kiếm..."
+                           [(ngModel)]="searchTerm"
+                           (input)="applyFilters()">
+                    <i class="material-icons search-icon">search</i>
+                  </div>
+
+                  <div class="search-total-carton-box"
+                       *ngIf="isShipmentSearchActive && filteredShipments.length > 0">
+                    Tổng thùng (Carton): <strong>{{ getTotalCartonFilteredShipments() | number }}</strong>
+                  </div>
                 </div>
 
-                <!-- Tổng carton theo shipment sau khi search -->
-                <div class="search-total-carton-box"
-                     *ngIf="isShipmentSearchActive && filteredShipments.length > 0">
-                  Tổng thùng (Carton): <strong>{{ getTotalCartonFilteredShipments() | number }}</strong>
+                <div class="toolbar-right">
+                  <button class="btn btn-outline-secondary" type="button" (click)="toggleDropdown()">
+                    <i class="material-icons">more_vert</i>
+                    More
+                  </button>
+
+                  <button class="btn btn-outline-secondary" type="button" (click)="importFile()">
+                    <i class="material-icons">file_upload</i>
+                    Import File
+                  </button>
+
+                  <button class="btn btn-outline-secondary"
+                          type="button"
+                          (click)="openMonthViewDialog()"
+                          title="Chọn tháng để chỉ hiển thị shipment có CS Date trong tháng đó">
+                    <i class="material-icons">calendar_view_month</i>
+                    Hiện tất cả
+                  </button>
+
+                  <button class="btn btn-outline-primary"
+                          type="button"
+                          (click)="downloadFullShipmentHistoryExcel()"
+                          title="Tải Excel toàn bộ shipment đã tải từ hệ thống (mọi tháng)">
+                    <i class="material-icons">cloud_download</i>
+                    Tải lịch sử
+                  </button>
+
+                  <button class="btn btn-outline-secondary toolbar-icon-btn"
+                          type="button"
+                          (click)="openSchedulesFromSidebar()"
+                          title="Calendar / Schedules">
+                    <i class="material-icons">event</i>
+                  </button>
+                  <button class="btn btn-outline-secondary toolbar-icon-btn toolbar-kh-btn"
+                          type="button"
+                          (click)="openKhFilterDialog()"
+                          title="Danh mục KH (khách hàng)">
+                    <span class="toolbar-kh-label">KH</span>
+                  </button>
+                  <button class="btn btn-outline-secondary toolbar-icon-btn"
+                          type="button"
+                          (click)="openChartFromSidebar()"
+                          title="Analytics">
+                    <i class="material-icons">bar_chart</i>
+                  </button>
+                  <button class="btn btn-outline-secondary toolbar-icon-btn"
+                          type="button"
+                          (click)="goToMenu()"
+                          title="Về Menu">
+                    <i class="material-icons">home</i>
+                  </button>
                 </div>
-                
-                <!-- Chọn tháng xem (lọc theo CS Date trong tháng) + tải toàn bộ lịch sử -->
-                <button class="btn btn-outline-secondary"
-                        type="button"
-                        (click)="openMonthViewDialog()"
-                        title="Chọn tháng để chỉ hiển thị shipment có CS Date trong tháng đó">
-                  <i class="material-icons">calendar_view_month</i>
-                  Hiện tất cả
-                </button>
-                <button class="btn btn-outline-primary"
-                        type="button"
-                        (click)="downloadFullShipmentHistoryExcel()"
-                        title="Tải Excel toàn bộ shipment đã tải từ hệ thống (mọi tháng)">
-                  <i class="material-icons">cloud_download</i>
-                  Tải lịch sử
-                </button>
-                
-                <!-- Schedules moved to left Calendar icon -->
               </div>
             </div>
           </div>
@@ -1345,6 +1341,21 @@
             </div>
           </div>
           <div class="schedule-box-shipment">{{ b.shipmentCode }}</div>
+          <div class="schedule-box-flags">
+            <span class="ship-flag"
+                  [class.ship-flag--box]="b.packType === 'Box'"
+                  [class.ship-flag--pallet]="b.packType === 'Pallet'"
+                  [class.ship-flag--banded]="b.isBanded"
+                  [class.ship-flag--unbanded]="b.packType === 'Pallet' && !b.isBanded">
+              {{ b.packingLabel }}
+            </span>
+            <span class="ship-flag"
+                  [class.ship-flag--scan-ok]="b.scanStatus === 'ok'"
+                  [class.ship-flag--scan-partial]="b.scanStatus === 'partial'"
+                  [class.ship-flag--scan-none]="b.scanStatus === 'none'">
+              {{ b.scanLabel }}
+            </span>
+          </div>
           <div class="schedule-box-kh-mat-list" *ngIf="b.lots?.length">
             <div class="schedule-box-kh-mat-row" *ngFor="let lot of b.lots">
               <span class="schedule-box-kh-side" [title]="lot.khName || '—'">{{ lot.khName || '—' }}</span>
@@ -1353,7 +1364,8 @@
           </div>
           <div class="schedule-box-meta">
             <div>Carton: <strong>{{ b.totalCarton | number:'1.0-0':'en-US' }}</strong></div>
-            <div>Lô: <strong>{{ b.lots.length }}</strong> • Pallet: <strong>{{ b.totalPallet | number:'1.0-0':'en-US' }}</strong></div>
+            <div *ngIf="b.packType === 'Pallet'">Lô: <strong>{{ b.lots.length }}</strong> • Pallet: <strong>{{ b.totalPallet | number:'1.0-0':'en-US' }}</strong></div>
+            <div *ngIf="b.packType === 'Box'">Lô: <strong>{{ b.lots.length }}</strong> • Ship Box</div>
           </div>
         </button>
       </div>
@@ -1383,8 +1395,23 @@
     </div>
 
     <div class="modal-body">
-      <div class="lots-subtitle" *ngIf="selectedShipmentBox?.khName">
-        KH: <strong>{{ selectedShipmentBox?.khName }}</strong>
+      <div class="lots-subtitle" *ngIf="selectedShipmentBox">
+        <span *ngIf="selectedShipmentBox.khName">KH: <strong>{{ selectedShipmentBox.khName }}</strong></span>
+        <div class="schedule-box-flags lots-flags">
+          <span class="ship-flag"
+                [class.ship-flag--box]="selectedShipmentBox.packType === 'Box'"
+                [class.ship-flag--pallet]="selectedShipmentBox.packType === 'Pallet'"
+                [class.ship-flag--banded]="selectedShipmentBox.isBanded"
+                [class.ship-flag--unbanded]="selectedShipmentBox.packType === 'Pallet' && !selectedShipmentBox.isBanded">
+            {{ selectedShipmentBox.packingLabel }}
+          </span>
+          <span class="ship-flag"
+                [class.ship-flag--scan-ok]="selectedShipmentBox.scanStatus === 'ok'"
+                [class.ship-flag--scan-partial]="selectedShipmentBox.scanStatus === 'partial'"
+                [class.ship-flag--scan-none]="selectedShipmentBox.scanStatus === 'none'">
+            {{ selectedShipmentBox.scanLabel }}
+          </span>
+        </div>
       </div>
 
       <div class="schedule-detail-table-wrapper" *ngIf="selectedShipmentBox?.lots?.length">

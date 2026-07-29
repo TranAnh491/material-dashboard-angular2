@@ -1,6 +1,6 @@
 <div class="main-content">
   <div class="fgi-page">
-    <!-- Header -->
+    <!-- Header: tiêu đề + cập nhật + KPI tồn (khi lọc) + Về Menu -->
     <div class="fgi-header">
       <div class="fgi-header__title">
         <span class="fgi-header__icon" aria-hidden="true">
@@ -13,34 +13,23 @@
           <i class="material-icons">schedule</i>
           Cập nhật lúc: {{ formatLastUpdated() }}
         </span>
-        <button type="button" class="fgi-btn fgi-btn--outline" (click)="filterTodayImport()">
-          <i class="material-icons">today</i> NK hôm nay
-        </button>
-        <button type="button" class="fgi-btn fgi-btn--outline"
-                [class.fgi-btn--active-amber]="showNonStock"
-                (click)="filterNonStock()">
-          <i class="material-icons">inventory_2</i> {{ showNonStock ? 'Non Stock ✓' : 'Non Stock' }}
-        </button>
-        <button type="button" class="fgi-btn fgi-btn--outline"
-                [class.fgi-btn--active-warn]="showNegativeStock"
-                [class.fgi-btn--pulse]="hasNegativeStockBatches()"
-                (click)="filterNegativeStock()">
-          <i class="material-icons">thermostat</i> {{ showNegativeStock ? 'Tồn Âm ✓' : 'Tồn Âm' }}
-        </button>
-        <button type="button" class="fgi-btn fgi-btn--outline fgi-kpi-kk"
-                (click)="openKkKpi()"
-                title="Bấm để xem % đã kiểm kê (KK)">
-          <i class="material-icons">fact_check</i>
-          KK
-          <span class="fgi-kpi-kk__value" *ngIf="kkKpiPercent !== null">{{ kkKpiPercent | number:'1.0-1' }}%</span>
-        </button>
+
+        <div class="fgi-kpi-ton" *ngIf="showFilterStockKpi" [title]="'Tổng tồn kho theo ' + filterStockKpiLabel">
+          <span class="fgi-kpi-ton__label">
+            <i class="material-icons">analytics</i>
+            {{ filterStockKpiLabel }}
+          </span>
+          <span class="fgi-kpi-ton__value">{{ formatNumber(filteredTonTotal) }}</span>
+          <span class="fgi-kpi-ton__meta">{{ filteredMaterials.length | number }} dòng</span>
+        </div>
+
         <button type="button" class="fgi-btn fgi-btn--outline fgi-btn--menu" (click)="goToMenu()" title="Về Menu">
           <i class="material-icons">arrow_back</i> Về Menu
         </button>
       </div>
     </div>
 
-    <!-- Toolbar -->
+    <!-- Toolbar: điều hướng · lọc · trạng thái · thao tác dữ liệu -->
     <div class="fgi-toolbar">
       <div class="fgi-toolbar__group">
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="showMoreMenu = true">
@@ -99,12 +88,42 @@
         </div>
       </div>
 
+      <div class="fgi-toolbar__group fgi-toolbar__status">
+        <button type="button" class="fgi-btn fgi-btn--outline fgi-btn--pending"
+                (click)="loadPendingLotLsx()"
+                [disabled]="isLoading"
+                title="Hiện các dòng LOT/LSX đang chờ nhập (Chờ LOT / Chờ LSX)">
+          <i class="material-icons">pending_actions</i> Chờ LOT/LSX
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="filterTodayImport()">
+          <i class="material-icons">today</i> NK hôm nay
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline"
+                [class.fgi-btn--active-amber]="showNonStock"
+                (click)="filterNonStock()">
+          <i class="material-icons">inventory_2</i> {{ showNonStock ? 'Non Stock ✓' : 'Non Stock' }}
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline"
+                [class.fgi-btn--active-warn]="showNegativeStock"
+                [class.fgi-btn--pulse]="hasNegativeStockBatches()"
+                (click)="filterNegativeStock()">
+          <i class="material-icons">thermostat</i> {{ showNegativeStock ? 'Tồn Âm ✓' : 'Tồn Âm' }}
+        </button>
+        <button type="button" class="fgi-btn fgi-btn--outline fgi-kpi-kk"
+                (click)="openKkKpi()"
+                title="Bấm để xem % đã kiểm kê (KK)">
+          <i class="material-icons">fact_check</i>
+          KK
+          <span class="fgi-kpi-kk__value" *ngIf="kkKpiPercent !== null">{{ kkKpiPercent | number:'1.0-1' }}%</span>
+        </button>
+      </div>
+
       <div class="fgi-toolbar__group fgi-toolbar__actions">
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="refreshInventoryData()" [disabled]="isLoading">
           <i class="material-icons">refresh</i> Làm mới
         </button>
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="showTimeRangeDialog = true">
-          <i class="material-icons">schedule</i> Chọn thời gian
+          <i class="material-icons">schedule</i> Thời gian
         </button>
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="viewAllMaterials()">
           <i class="material-icons">visibility</i> Xem tất cả
@@ -158,16 +177,18 @@
               <th>SCAN</th>
               <th>GHI CHÚ</th>
               <th>KHÁCH</th>
+              <th title="Người sửa LOT / LSX / Tick KK / Đổi vị trí">LỊCH SỬ</th>
               <th>TẠO PX</th>
               <th>XÓA</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngIf="!isLoading && filteredMaterials.length === 0">
-              <td colspan="20" class="fgi-empty">
+              <td colspan="21" class="fgi-empty">
                 <i class="material-icons">inbox</i>
                 <div>
-                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material'">Nhập mã TP (tối thiểu 7 ký tự) rồi Enter</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material' && showPendingLotLsxMode">Đang hiện dòng <b>Chờ LOT / Chờ LSX</b> — bấm ô cam để nhập</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material' && !showPendingLotLsxMode">Nhập mã TP (tối thiểu 7 ký tự) rồi Enter</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi Enter / Search</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng để tìm kiếm</span>
                   <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
@@ -188,22 +209,30 @@
               <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{ material.batchNumber }}</td>
               <td class="fgi-code-link">{{ material.materialCode }}</td>
               <td>
-                <input *ngIf="isPendingLot(material); else lotCell"
-                       type="text"
-                       class="fgi-cell-input fgi-pending-cell"
-                       [(ngModel)]="material.lot"
+                <input type="text"
+                       class="fgi-cell-input"
+                       [class.fgi-pending-cell]="isPendingLot(material)"
+                       [ngModel]="displayLotValue(material)"
+                       (ngModelChange)="onLotInput(material, $event)"
+                       (focus)="onPendingFieldFocus(material, 'lot')"
                        (blur)="savePendingLotLsx(material, 'lot')"
-                       [disabled]="!canEditMaterial(material)">
-                <ng-template #lotCell>{{ material.lot }}</ng-template>
+                       (keydown)="onPendingLotLsxKeydown($event, material, 'lot')"
+                       [disabled]="!canEditMaterial(material)"
+                       [placeholder]="isPendingLot(material) ? 'Nhập LOT' : ''"
+                       title="Nhập LOT rồi Enter — cần mã Zalo ASP0106 để lưu">
               </td>
               <td>
-                <input *ngIf="isPendingLsx(material); else lsxCell"
-                       type="text"
-                       class="fgi-cell-input fgi-pending-cell"
-                       [(ngModel)]="material.lsx"
+                <input type="text"
+                       class="fgi-cell-input"
+                       [class.fgi-pending-cell]="isPendingLsx(material)"
+                       [ngModel]="displayLsxValue(material)"
+                       (ngModelChange)="onLsxInput(material, $event)"
+                       (focus)="onPendingFieldFocus(material, 'lsx')"
                        (blur)="savePendingLotLsx(material, 'lsx')"
-                       [disabled]="!canEditMaterial(material)">
-                <ng-template #lsxCell>{{ material.lsx }}</ng-template>
+                       (keydown)="onPendingLotLsxKeydown($event, material, 'lsx')"
+                       [disabled]="!canEditMaterial(material)"
+                       [placeholder]="isPendingLsx(material) ? 'Nhập LSX' : ''"
+                       title="Nhập LSX rồi Enter — cần mã Zalo ASP0106 để lưu">
               </td>
               <td>{{ material.poNumber || '' }}</td>
               <td class="fgi-num">
@@ -258,6 +287,17 @@
                        [disabled]="!canEditMaterial(material)">
               </td>
               <td>{{ getCustomerNameFromMapping(material.materialCode) }}</td>
+              <td class="fgi-history-cell">
+                <button type="button"
+                        class="fgi-history-btn"
+                        *ngIf="material.editHistory?.length"
+                        (click)="openEditHistory(material)"
+                        [title]="getHistoryTooltip(material)">
+                  <span class="fgi-history-preview">{{ getHistoryPreview(material) }}</span>
+                  <i class="material-icons">history</i>
+                </button>
+                <span class="fgi-history-empty" *ngIf="!material.editHistory?.length">—</span>
+              </td>
               <td class="fgi-action-cell">
                 <button type="button" class="fgi-icon-btn fgi-icon-btn--blue" (click)="openCreatePXDialog(material)" title="Tạo phiếu xuất">
                   <i class="material-icons">add_shopping_cart</i>
@@ -812,6 +852,106 @@
           <i class="material-icons">place</i> Xem chi tiết theo vị trí
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lịch sử sửa LOT / LSX / KK / Vị trí -->
+<div class="custom-modal" [class.show]="showEditHistoryModal" [style.display]="showEditHistoryModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeEditHistory()"></div>
+  <div class="modal-container fgi-history-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">history</i>
+        Lịch sử — {{ editHistoryMaterial?.materialCode }}
+      </h5>
+      <button type="button" class="close-btn" (click)="closeEditHistory()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="fgi-history-lead" *ngIf="editHistoryMaterial">
+        Batch <strong>{{ editHistoryMaterial.batchNumber }}</strong>
+        · {{ editHistoryRows.length }} lần ghi nhận (LOT / LSX / Tick KK / Đổi vị trí)
+      </p>
+      <div class="fgi-history-empty-msg" *ngIf="!editHistoryRows.length">Chưa có lịch sử sửa.</div>
+      <table class="fgi-history-table" *ngIf="editHistoryRows.length">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Hành động</th>
+            <th>ID</th>
+            <th>Chi tiết</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of editHistoryRows">
+            <td>{{ formatHistoryTime(row.at) }}</td>
+            <td>{{ historyActionLabel(row.action) }}</td>
+            <td class="fgi-history-id">{{ row.by }}</td>
+            <td>{{ row.detail || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- OTP Zalo ASP0106 — xác nhận sửa LOT / LSX -->
+<div class="custom-modal" [class.show]="showLotLsxOtpModal" [style.display]="showLotLsxOtpModal ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeLotLsxOtpModal(true)"></div>
+  <div class="modal-container fgi-lot-lsx-otp-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">lock</i>
+        Xác nhận sửa LOT / LSX
+      </h5>
+      <button type="button" class="close-btn" (click)="closeLotLsxOtpModal(true)"
+              [disabled]="lotLsxOtpSending || lotLsxOtpVerifying">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="fgi-otp-hint">
+        Mã 4 số sẽ được gửi qua <strong>Zalo tới ASP0106</strong> để xác nhận sửa LOT/LSX (hiệu lực 10 phút).
+      </p>
+      <p class="fgi-otp-target" *ngIf="lotLsxOtpTargetLabel">
+        <span class="fgi-otp-target__label">Thay đổi:</span>
+        <strong>{{ lotLsxOtpTargetLabel }}</strong>
+      </p>
+      <ng-container *ngIf="lotLsxOtpStep === 2">
+        <label class="fgi-otp-label">Mã từ Zalo (4 số)</label>
+        <input type="text"
+               class="date-input fgi-otp-input"
+               [(ngModel)]="lotLsxOtpCode"
+               maxlength="4"
+               inputmode="numeric"
+               placeholder="0000"
+               [disabled]="lotLsxOtpVerifying"
+               (keyup.enter)="verifyLotLsxOtp()">
+      </ng-container>
+      <p class="fgi-otp-error" *ngIf="lotLsxOtpError">{{ lotLsxOtpError }}</p>
+      <p class="fgi-otp-info" *ngIf="lotLsxOtpInfo">{{ lotLsxOtpInfo }}</p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-cancel" (click)="closeLotLsxOtpModal(true)"
+              [disabled]="lotLsxOtpSending || lotLsxOtpVerifying">
+        Hủy
+      </button>
+      <button type="button" class="btn btn-cancel" *ngIf="lotLsxOtpStep === 2"
+              (click)="lotLsxOtpStep = 1; lotLsxOtpCode = ''; lotLsxOtpError = ''"
+              [disabled]="lotLsxOtpSending || lotLsxOtpVerifying">
+        Gửi lại mã
+      </button>
+      <button type="button" class="btn btn-apply" *ngIf="lotLsxOtpStep === 1"
+              (click)="sendLotLsxOtp()" [disabled]="lotLsxOtpSending">
+        {{ lotLsxOtpSending ? 'Đang gửi…' : 'Gửi mã Zalo' }}
+      </button>
+      <button type="button" class="btn btn-apply" *ngIf="lotLsxOtpStep === 2"
+              (click)="verifyLotLsxOtp()"
+              [disabled]="lotLsxOtpVerifying || lotLsxOtpCode.trim().length !== 4">
+        {{ lotLsxOtpVerifying ? 'Đang xác nhận…' : 'Xác nhận' }}
+      </button>
     </div>
   </div>
 </div>

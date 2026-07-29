@@ -148,6 +148,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     khName: string;
     totalCarton: number;
     totalPallet: number;
+    packType: 'Box' | 'Pallet';
+    isBanded: boolean;
+    packingLabel: string;
+    scanStatus: 'ok' | 'partial' | 'none';
+    scanLabel: string;
+    scanPct: number | null;
     lots: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
     statusDots: Array<{ status: string; css: string }>;
   }> = [];
@@ -159,6 +165,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     khName: string;
     totalCarton: number;
     totalPallet: number;
+    packType: 'Box' | 'Pallet';
+    isBanded: boolean;
+    packingLabel: string;
+    scanStatus: 'ok' | 'partial' | 'none';
+    scanLabel: string;
+    scanPct: number | null;
     lots: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
     statusDots: Array<{ status: string; css: string }>;
   } = null;
@@ -171,6 +183,92 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   closeShipmentLots(): void {
     this.showScheduleShipmentLotsDialog = false;
     this.selectedShipmentBox = null;
+  }
+
+  /** Đóng gói shipment: Box hay Pallet; nếu Pallet thì đã đai chưa. */
+  private resolveShipmentPackingInfo(rows: ShipmentItem[]): {
+    packType: 'Box' | 'Pallet';
+    isBanded: boolean;
+    packingLabel: string;
+  } {
+    let hasBanded = false;
+    let hasPallet = false;
+    let hasBox = false;
+    for (const r of rows || []) {
+      const p = String(r?.packing || '').trim().toLowerCase();
+      if (!p) continue;
+      if (p.includes('đai') || p.includes('dai')) hasBanded = true;
+      if (p.includes('pallet')) hasPallet = true;
+      if (p.includes('box') || p.includes('carton') || p === 'thùng') hasBox = true;
+    }
+    if (hasBanded || hasPallet) {
+      return {
+        packType: 'Pallet',
+        isBanded: hasBanded,
+        packingLabel: hasBanded ? 'Pallet · Đã đai' : 'Pallet · Chưa đai'
+      };
+    }
+    if (hasBox) {
+      return { packType: 'Box', isBanded: false, packingLabel: 'Ship Box' };
+    }
+    // Mặc định theo qty pallet
+    const anyPalletQty = (rows || []).some((r) => (Number(r?.qtyPallet) || 0) > 0);
+    if (anyPalletQty) {
+      return { packType: 'Pallet', isBanded: false, packingLabel: 'Pallet · Chưa đai' };
+    }
+    return { packType: 'Box', isBanded: false, packingLabel: 'Ship Box' };
+  }
+
+  /** Scan check (FG Check) theo toàn bộ mã TP trong shipment. */
+  private resolveShipmentScanCheck(rows: ShipmentItem[]): {
+    scanStatus: 'ok' | 'partial' | 'none';
+    scanLabel: string;
+    scanPct: number | null;
+  } {
+    const byMat = new Map<string, ShipmentItem>();
+    for (const r of rows || []) {
+      const mat = String(r?.materialCode || '').trim().toUpperCase();
+      if (!mat) continue;
+      if (!byMat.has(mat)) byMat.set(mat, r);
+    }
+    if (byMat.size === 0) {
+      return { scanStatus: 'none', scanLabel: 'Chưa scan check', scanPct: null };
+    }
+
+    let ok = 0;
+    let partial = 0;
+    let none = 0;
+    let pctSum = 0;
+    let pctN = 0;
+
+    byMat.forEach((sample) => {
+      const disp = this.getShipmentCheckDisplay(sample);
+      if (disp.status === 'ok' || disp.status === 'excess') {
+        ok += 1;
+        pctSum += 100;
+        pctN += 1;
+      } else if (disp.status === 'percentage' && (disp.value || 0) > 0) {
+        partial += 1;
+        pctSum += Number(disp.value) || 0;
+        pctN += 1;
+      } else {
+        none += 1;
+        pctN += 1;
+      }
+    });
+
+    const avgPct = pctN > 0 ? Math.round(pctSum / pctN) : 0;
+    if (ok === byMat.size) {
+      return { scanStatus: 'ok', scanLabel: 'Đã scan check', scanPct: 100 };
+    }
+    if (ok === 0 && partial === 0) {
+      return { scanStatus: 'none', scanLabel: 'Chưa scan check', scanPct: null };
+    }
+    return {
+      scanStatus: 'partial',
+      scanLabel: `Scan check ${avgPct}%`,
+      scanPct: avgPct
+    };
   }
 
   private buildStatusDots(lots: Array<{ status: string; carton?: number }>): Array<{ status: string; css: string }> {
@@ -2951,6 +3049,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       khName: string;
       totalCarton: number;
       totalPallet: number;
+      packType: 'Box' | 'Pallet';
+      isBanded: boolean;
+      packingLabel: string;
+      scanStatus: 'ok' | 'partial' | 'none';
+      scanLabel: string;
+      scanPct: number | null;
       lots: Array<{ materialCode: string; khName: string; qtyPallet: number; carton: number; status: string }>;
       statusDots: Array<{ status: string; css: string }>;
     }> = [];
@@ -3003,12 +3107,20 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       groups.push({ khName, shipmentCode: shipCode, rows: detailRows, sumCarton });
 
       const totalPallet = detailRows.reduce((mx, r) => Math.max(mx, Number(r.qtyPallet) || 0), 0);
+      const packingInfo = this.resolveShipmentPackingInfo(shipRows);
+      const scanInfo = this.resolveShipmentScanCheck(shipRows);
       boxes.push({
         shipmentCode: shipCode,
         factory,
         khName,
         totalCarton: sumCarton,
         totalPallet,
+        packType: packingInfo.packType,
+        isBanded: packingInfo.isBanded,
+        packingLabel: packingInfo.packingLabel,
+        scanStatus: scanInfo.scanStatus,
+        scanLabel: scanInfo.scanLabel,
+        scanPct: scanInfo.scanPct,
         lots: detailRows,
         statusDots: this.buildStatusDots(detailRows)
       });
