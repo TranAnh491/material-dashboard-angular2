@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyClientsReload = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -1055,6 +1055,90 @@ exports.notifyClientsReload = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('notifyClientsReload failed:', msg);
+        res.status(500).json({ ok: false, error: msg });
+    }
+});
+/**
+ * ONE-OFF: tìm + phục hồi 1 mã bị xóa nhầm khỏi fg-inventory, đọc từ snapshot backup ngày gần nhất
+ * (fg-daily-backups/fg-inventory/days/{dayKey}/chunks/*). ?mode=find (mặc định, chỉ xem) hoặc
+ * ?mode=restore (ghi lại vào fg-inventory với đúng ID cũ). Xóa khỏi source sau khi dùng xong.
+ */
+exports.oneOffRecoverFgInventory = functions
+    .runWith({ secrets: [params_config_1.deployReloadSecret] })
+    .https.onRequest(async (req, res) => {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const provided = String((_c = (_a = req.query.secret) !== null && _a !== void 0 ? _a : (_b = req.body) === null || _b === void 0 ? void 0 : _b.secret) !== null && _c !== void 0 ? _c : '');
+    if (!provided || provided !== params_config_1.deployReloadSecret.value()) {
+        res.status(403).json({ ok: false, error: 'Forbidden' });
+        return;
+    }
+    const materialCode = String((_d = req.query.materialCode) !== null && _d !== void 0 ? _d : '').trim().toUpperCase();
+    if (!materialCode) {
+        res.status(400).json({ ok: false, error: 'Thiếu ?materialCode=' });
+        return;
+    }
+    const mode = String((_e = req.query.mode) !== null && _e !== void 0 ? _e : 'find');
+    try {
+        const db = admin.firestore();
+        const daysSnap = await db
+            .collection('fg-daily-backups')
+            .doc('fg-inventory')
+            .collection('days')
+            .orderBy('dayKey', 'desc')
+            .limit(5)
+            .get();
+        const matches = [];
+        const seenIds = new Set();
+        for (const dayDoc of daysSnap.docs) {
+            const dayKey = Number(dayDoc.id);
+            const chunksSnap = await dayDoc.ref.collection('chunks').orderBy('index', 'asc').get();
+            for (const chunkDoc of chunksSnap.docs) {
+                const items = (chunkDoc.data().items || []);
+                for (const item of items) {
+                    if (seenIds.has(item.id))
+                        continue;
+                    const code = String(((_f = item.data) === null || _f === void 0 ? void 0 : _f.materialCode) || '').trim().toUpperCase();
+                    // So khớp "bắt đầu bằng" — mã có thể kèm hậu tố (VD "P001013_A", "P001013_C").
+                    if (code === materialCode || code.startsWith(materialCode + '_') || code.startsWith(materialCode)) {
+                        matches.push({ id: item.id, dayKey, data: item.data });
+                        seenIds.add(item.id);
+                    }
+                }
+            }
+            if (matches.length > 0)
+                break; // dùng bản gần ngày hiện tại nhất có chứa mã này
+        }
+        // Chỉ giữ những dòng HIỆN KHÔNG còn trong fg-inventory (tức thật sự đã bị xóa) —
+        // backup snapshot chứa cả dòng còn sống lẫn dòng đã xóa, không lọc sẽ trả về nhầm cả 2.
+        const missingOnly = [];
+        for (const m of matches) {
+            const existing = await db.collection('fg-inventory').doc(m.id).get();
+            if (!existing.exists)
+                missingOnly.push(m);
+        }
+        if (mode === 'restore') {
+            // Bắt buộc chỉ định rõ ?ids=id1,id2 — KHÔNG tự động phục hồi hết mọi dòng tìm thấy,
+            // để người dùng tự chọn đúng dòng cần khôi phục thay vì phục hồi hàng loạt ngoài ý muốn.
+            const idsParam = String((_g = req.query.ids) !== null && _g !== void 0 ? _g : '').trim();
+            if (!idsParam) {
+                res.status(400).json({ ok: false, error: 'restore cần chỉ định ?ids=id1,id2 (không tự phục hồi tất cả).', missingNow: missingOnly.length, items: missingOnly });
+                return;
+            }
+            const requestedIds = new Set(idsParam.split(',').map(s => s.trim()).filter(Boolean));
+            const toRestore = missingOnly.filter(m => requestedIds.has(m.id));
+            let restored = 0;
+            for (const m of toRestore) {
+                await db.collection('fg-inventory').doc(m.id).set(m.data);
+                restored++;
+            }
+            res.status(200).json({ ok: true, mode, foundInBackup: matches.length, missingNow: missingOnly.length, restored, items: toRestore });
+            return;
+        }
+        res.status(200).json({ ok: true, mode, foundInBackup: matches.length, missingNow: missingOnly.length, items: missingOnly });
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('oneOffRecoverFgInventory failed:', msg);
         res.status(500).json({ ok: false, error: msg });
     }
 });

@@ -124,7 +124,7 @@
         <button type="button" class="fgi-btn fgi-btn--outline" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i> Thời gian
         </button>
-        <button type="button" class="fgi-btn fgi-btn--outline" (click)="viewAllMaterials()">
+        <button type="button" class="fgi-btn fgi-btn--outline" (click)="viewAllMaterials()" [disabled]="isLoading">
           <i class="material-icons">visibility</i> Xem tất cả
         </button>
         <button type="button" class="fgi-btn fgi-btn--outline"
@@ -187,7 +187,8 @@
                 <i class="material-icons">inbox</i>
                 <div>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'material' && showPendingLotLsxMode">Đang hiện dòng <b>Chờ LOT / Chờ LSX</b> — bấm ô cam để nhập</span>
-                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material' && !showPendingLotLsxMode">Nhập mã TP (tối thiểu 7 ký tự) rồi Enter</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material' && showViewAllMode">Đang hiện <b>tất cả mã có tồn</b> — bấm <b>Tải BCTK</b> để tải Excel</span>
+                  <span *ngIf="searchStatus === 'idle' && searchMode === 'material' && !showPendingLotLsxMode && !showViewAllMode">Nhập mã TP (tối thiểu 7 ký tự) rồi Enter</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'location'">Nhập vị trí (tối thiểu 2 ký tự) rồi Enter / Search</span>
                   <span *ngIf="searchStatus === 'idle' && searchMode === 'customer'">Chọn khách hàng để tìm kiếm</span>
                   <span *ngIf="searchStatus === 'typing' && searchMode === 'location'">Nhập thêm vị trí (tối thiểu 2 ký tự)...</span>
@@ -764,6 +765,72 @@
           <i class="material-icons">undo</i>
           <span>Hoàn lượng xuất</span>
         </button>
+        <button class="more-menu-item" (click)="openRecentlyDeletedDialog(); showMoreMenu = false">
+          <i class="material-icons">restore_from_trash</i>
+          <span>Đã xóa gần đây (7 ngày)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Đã xóa gần đây (7 ngày) -->
+<div class="custom-modal" [class.show]="showRecentlyDeletedDialog" [style.display]="showRecentlyDeletedDialog ? 'flex' : 'none'">
+  <div class="modal-overlay" (click)="closeRecentlyDeletedDialog()"></div>
+  <div class="modal-container recently-deleted-modal">
+    <div class="modal-header">
+      <h5 class="modal-title">
+        <i class="material-icons">restore_from_trash</i>
+        Đã xóa gần đây (7 ngày)
+      </h5>
+      <button type="button" class="close-btn" (click)="closeRecentlyDeletedDialog()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="rd-hint" *ngIf="!recentlyDeletedLoading">
+        {{ recentlyDeletedItems.length }} dòng đã xóa trong 7 ngày qua. Bấm "Khôi phục" trên đúng dòng cần lấy lại.
+      </p>
+      <div class="rd-loading" *ngIf="recentlyDeletedLoading">
+        <i class="material-icons rd-spin">sync</i> Đang tải...
+      </div>
+      <div class="rd-table-wrap" *ngIf="!recentlyDeletedLoading">
+        <table class="rd-table">
+          <thead>
+            <tr>
+              <th>Mã TP</th>
+              <th>Batch</th>
+              <th>LOT</th>
+              <th>PO</th>
+              <th>Vị trí</th>
+              <th class="num">Tồn</th>
+              <th>Xóa lúc</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let it of recentlyDeletedItems">
+              <td>{{ it.data?.materialCode || '—' }}</td>
+              <td>{{ it.data?.batchNumber || '—' }}</td>
+              <td>{{ it.data?.lot || '—' }}</td>
+              <td>{{ it.data?.poNumber || '—' }}</td>
+              <td>{{ it.data?.location || '—' }}</td>
+              <td class="num">{{ it.data?.ton ?? '—' }}</td>
+              <td>{{ it.deletedAt ? (it.deletedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td>
+                <button type="button" class="rd-restore-btn"
+                        [disabled]="!it.data || it.restoring"
+                        (click)="restoreDeletedItem(it)">
+                  <i class="material-icons">{{ it.restoring ? 'sync' : 'restore' }}</i>
+                  Khôi phục
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="recentlyDeletedItems.length === 0">
+              <td colspan="8" class="rd-empty">Không có dòng nào bị xóa trong 7 ngày qua.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

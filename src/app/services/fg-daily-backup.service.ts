@@ -83,21 +83,60 @@ export class FgDailyBackupService {
   /**
    * Ghi "tombstone" khi xóa 1 doc — để loadMergedDocs loại nó ra dù backup hôm qua
    * (chụp trước khi xóa) vẫn còn chứa doc này. Gọi ngay sau khi delete() Firestore thành công.
+   * Truyền kèm `data` (nội dung dòng vừa xóa) để hỗ trợ danh sách "Đã xóa gần đây" + khôi phục
+   * (xem listRecentlyDeleted / restoreDeleted) — không bắt buộc, không có vẫn hoạt động bình thường.
    */
-  async markDeleted(collectionKey: FgBackupCollectionKey, docId: string): Promise<void> {
+  async markDeleted(collectionKey: FgBackupCollectionKey, docId: string, data?: Record<string, unknown>): Promise<void> {
     if (!docId) return;
     try {
-      await this.firestore
-        .collection(FG_DELETED_ROOT)
-        .doc(`${collectionKey}_${docId}`)
-        .set({
-          collectionKey,
-          docId,
-          deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+      const payload: Record<string, unknown> = {
+        collectionKey,
+        docId,
+        deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      if (data) {
+        payload.data = data;
+        payload.materialCode = (data['materialCode'] as string) || null;
+      }
+      await this.firestore.collection(FG_DELETED_ROOT).doc(`${collectionKey}_${docId}`).set(payload, { merge: true });
     } catch (e) {
       console.error('[FgDailyBackup] markDeleted failed', collectionKey, docId, e);
     }
+  }
+
+  /** Danh sách các dòng đã xóa trong N ngày gần nhất (mặc định 7) — dùng cho popup "Đã xóa gần đây". */
+  async listRecentlyDeleted(
+    collectionKey: FgBackupCollectionKey,
+    days = 7
+  ): Promise<Array<{ docId: string; deletedAt: Date | null; data: Record<string, unknown> | null }>> {
+    const since = firebase.firestore.Timestamp.fromDate(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+    try {
+      const snap = await this.firestore
+        .collection(FG_DELETED_ROOT, (ref) => ref.where('collectionKey', '==', collectionKey).where('deletedAt', '>=', since))
+        .get()
+        .toPromise();
+      const rows = (snap?.docs || []).map((d) => {
+        const raw = d.data() as { docId?: string; deletedAt?: { toDate?: () => Date }; data?: Record<string, unknown> };
+        return {
+          docId: raw.docId || d.id,
+          deletedAt: typeof raw.deletedAt?.toDate === 'function' ? raw.deletedAt.toDate() : null,
+          data: raw.data || null
+        };
+      });
+      // Sort client-side (mới nhất trước) để không cần thêm composite index riêng cho orderBy.
+      rows.sort((a, b) => (b.deletedAt?.getTime() || 0) - (a.deletedAt?.getTime() || 0));
+      return rows;
+    } catch (e) {
+      console.error('[FgDailyBackup] listRecentlyDeleted failed', collectionKey, e);
+      return [];
+    }
+  }
+
+  /** Khôi phục 1 dòng đã xóa: ghi lại data (đã lưu kèm tombstone) vào collection gốc + xoá tombstone. */
+  async restoreDeleted(collectionKey: FgBackupCollectionKey, docId: string, data: Record<string, unknown>): Promise<void> {
+    const cfg = FG_BACKUP_CONFIG[collectionKey];
+    await this.firestore.collection(cfg.sourceCollection).doc(docId).set(data);
+    await this.firestore.collection(FG_DELETED_ROOT).doc(`${collectionKey}_${docId}`).delete();
   }
 
   /** Chỉ cần tombstone từ mốc backup hôm qua trở đi — cũ hơn thì backup kế tiếp đã tự loại bỏ rồi. */

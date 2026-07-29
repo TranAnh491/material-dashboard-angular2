@@ -160,6 +160,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   /** Đang xem danh sách Chờ LOT / Chờ LSX (bỏ qua bắt buộc nhập 7 ký tự mã TP). */
   showPendingLotLsxMode = false;
 
+  /** Đang xem tất cả mã có tồn (>0) — không cần nhập mã TP 7 ký tự. */
+  showViewAllMode = false;
+
   showCustomerSummaryModal: boolean = false;
   isLoadingCustomerSummary: boolean = false;
   customerSummaryRows: Array<{ customer: string; totalCarton: number }> = [];
@@ -352,6 +355,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.searchTerm = this.filterMaTp;
     this.currentPage = 1;
     this.showPendingLotLsxMode = false;
+    this.showViewAllMode = false;
     // Gõ tay: đủ 7 ký tự thì tìm; chọn từ datalist cũng qua đây
     if (!this.filterMaTp) {
       this.clearFilterMaTp();
@@ -412,6 +416,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.searchTerm = '';
     this.searchStatus = 'idle';
     this.showPendingLotLsxMode = false;
+    this.showViewAllMode = false;
     this.filteredMaterials = [];
     this.currentPage = 1;
   }
@@ -655,6 +660,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
     this.isLoading = true;
     this.searchStatus = 'searching';
+    this.showViewAllMode = false;
+    this.showPendingLotLsxMode = false;
     this.cdr.detectChanges();
 
     try {
@@ -755,6 +762,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
     this.isLoading = true;
     this.searchStatus = 'searching';
+    this.showViewAllMode = false;
+    this.showPendingLotLsxMode = false;
     this.cdr.detectChanges();
 
     try {
@@ -842,6 +851,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
     this.isLoading = true;
     this.searchStatus = 'searching';
+    this.showViewAllMode = false;
+    this.showPendingLotLsxMode = false;
     this.cdr.detectChanges();
 
     try {
@@ -1155,23 +1166,32 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
   // Delete material
   deleteMaterial(material: FGInventoryItem): void {
-    if (material.id) {
-      this.firestore.collection('fg-inventory').doc(material.id).delete()
-        .then(() => {
-          console.log('FG Inventory material deleted from Firebase successfully');
-        })
-        .catch(error => {
-          console.error('Error deleting FG Inventory material from Firebase:', error);
-        });
-    }
-    
-    // Remove from local array immediately
-    const index = this.materials.indexOf(material);
-    if (index > -1) {
-      this.materials.splice(index, 1);
-      console.log(`Deleted FG Inventory material: ${material.materialCode}`);
-      this.applyFilters();
-    }
+    if (!material.id) return;
+    const materialId = material.id;
+
+    // Lưu snapshot dữ liệu trước khi xóa — dùng cho tombstone (danh sách "Đã xóa gần đây" + khôi phục).
+    const snapshot: Record<string, unknown> = { ...material };
+    delete snapshot.id;
+
+    // Chỉ xóa khỏi bảng SAU KHI Firestore xác nhận xóa thành công — tránh tình trạng UI báo đã xóa
+    // nhưng document vẫn còn (F5 lại thấy dòng cũ).
+    this.firestore.collection('fg-inventory').doc(materialId).delete()
+      .then(() => {
+        console.log('FG Inventory material deleted from Firebase successfully');
+        // Ghi tombstone kèm snapshot — vừa tránh dòng "sống lại" từ backup hôm qua, vừa cho phép
+        // khôi phục qua danh sách "Đã xóa gần đây" nếu xóa nhầm.
+        void this.fgDailyBackup.markDeleted('fg-inventory', materialId, snapshot);
+        const index = this.materials.indexOf(material);
+        if (index > -1) {
+          this.materials.splice(index, 1);
+          console.log(`Deleted FG Inventory material: ${material.materialCode}`);
+          this.applyFilters();
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting FG Inventory material from Firebase:', error);
+        alert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại.');
+      });
   }
 
   // Delete item (alias for deleteMaterial)
@@ -1253,6 +1273,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.filteredMaterials = this.materials.filter(material => {
       if (
         !this.showPendingLotLsxMode &&
+        !this.showViewAllMode &&
         this.searchMode === 'material' &&
         this.selectedFactory === 'ASM1' &&
         trimmedSearch.length < 7
@@ -1393,6 +1414,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.filterCustomer = '';
     this.filteredMaterials = [];
     this.materials = [];
+    this.showViewAllMode = false;
     this.searchStatus = 'idle';
     this.currentPage = 1;
   }
@@ -2841,6 +2863,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   async loadPendingLotLsx(): Promise<void> {
     this.isLoading = true;
     this.showPendingLotLsxMode = true;
+    this.showViewAllMode = false;
     this.searchStatus = 'searching';
     this.searchMode = 'material';
     this.filterMaTp = '';
@@ -3271,14 +3294,24 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     if (this.materials.length === 0) {
       await this.loadMaterialsFromFirebase();
     }
+    if (this.showViewAllMode) {
+      this.applyFilters();
+      if (this.filteredMaterials.length === 0) {
+        alert('Không có mã có tồn để tải báo cáo.');
+        return;
+      }
+      this.downloadInventoryReport(this.selectedFactory, this.filteredMaterials);
+      return;
+    }
     this.downloadInventoryReport(this.selectedFactory);
   }
 
   /** Tải Báo Cáo Tồn Kho (BCTK) — dùng cả cho nút "Tải BCTK" và trước khi reset. */
-  downloadInventoryReport(factory: string): void {
+  downloadInventoryReport(factory: string, sourceList?: FGInventoryItem[]): void {
+    const base = sourceList ?? this.materials;
     const list = factory === 'TOTAL'
-      ? [...this.materials]
-      : this.materials.filter(m => (m.factory || 'ASM1') === factory);
+      ? [...base]
+      : base.filter(m => (m.factory || 'ASM1') === factory);
     if (list.length === 0) {
       alert('Không có dữ liệu để tải báo cáo cho nhà máy này.');
       return;
@@ -3360,7 +3393,9 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
 
 
 
-  viewAllMaterials(): void {
+  async viewAllMaterials(): Promise<void> {
+    this.showViewAllMode = true;
+    this.showPendingLotLsxMode = false;
     this.searchTerm = '';
     this.filterMaTp = '';
     this.filterLocation = '';
@@ -3372,13 +3407,26 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     this.showNegativeStock = false;
     this.selectedFactory = 'TOTAL';
     this.currentPage = 1;
-    this.applyFilters();
+    this.searchStatus = 'searching';
     this.showTimeRangeDialog = false;
-    
-    console.log('Cleared search - all materials hidden:', {
-      totalMaterials: this.materials.length,
-      filteredMaterials: this.filteredMaterials.length
-    });
+    this.cdr.detectChanges();
+
+    try {
+      await this.refreshInventoryData();
+      if (!this.filteredMaterials.length) {
+        this.searchStatus = 'not-found';
+        alert('Không có mã nào có tồn kho.');
+      } else {
+        this.searchStatus = 'idle';
+      }
+    } catch (e) {
+      console.error('viewAllMaterials failed', e);
+      this.searchStatus = 'not-found';
+      this.filteredMaterials = [];
+      alert('❌ Không tải được danh sách tồn kho. Thử lại sau.');
+    } finally {
+      this.cdr.detectChanges();
+    }
   }
 
   filterNonStock(): void {
@@ -3505,6 +3553,48 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       };
     } finally {
       this.isRecalcXuatLoading = false;
+    }
+  }
+
+  // ====================== ĐÃ XÓA GẦN ĐÂY (RECOVERY) ======================
+  showRecentlyDeletedDialog: boolean = false;
+  recentlyDeletedLoading: boolean = false;
+  recentlyDeletedItems: Array<{ docId: string; deletedAt: Date | null; data: Record<string, unknown> | null; restoring?: boolean }> = [];
+
+  async openRecentlyDeletedDialog(): Promise<void> {
+    this.showRecentlyDeletedDialog = true;
+    this.recentlyDeletedLoading = true;
+    this.recentlyDeletedItems = [];
+    try {
+      const rows = await this.fgDailyBackup.listRecentlyDeleted('fg-inventory', 7);
+      this.recentlyDeletedItems = rows.map(r => ({ ...r, restoring: false }));
+    } catch (error) {
+      console.error('Lỗi tải danh sách đã xóa:', error);
+    } finally {
+      this.recentlyDeletedLoading = false;
+    }
+  }
+
+  closeRecentlyDeletedDialog(): void {
+    this.showRecentlyDeletedDialog = false;
+  }
+
+  async restoreDeletedItem(item: { docId: string; deletedAt: Date | null; data: Record<string, unknown> | null; restoring?: boolean }): Promise<void> {
+    if (!item.data || item.restoring) return;
+    const code = (item.data['materialCode'] as string) || item.docId;
+    if (!confirm(`Khôi phục dòng "${code}" (batch ${item.data['batchNumber'] || '—'}) về FG Inventory?`)) {
+      return;
+    }
+    item.restoring = true;
+    try {
+      await this.fgDailyBackup.restoreDeleted('fg-inventory', item.docId, item.data);
+      this.recentlyDeletedItems = this.recentlyDeletedItems.filter(x => x.docId !== item.docId);
+      await this.loadMaterialsFromFirebase();
+      alert(`✅ Đã khôi phục "${code}" thành công.`);
+    } catch (error: any) {
+      console.error('Lỗi khôi phục:', error);
+      alert(`❌ Không khôi phục được: ${error?.message || error}`);
+      item.restoring = false;
     }
   }
 

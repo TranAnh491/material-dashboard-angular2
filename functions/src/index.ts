@@ -1140,3 +1140,89 @@ export const notifyClientsReload = functions
       res.status(500).json({ ok: false, error: msg });
     }
   });
+
+/**
+ * ONE-OFF: tìm + phục hồi 1 mã bị xóa nhầm khỏi fg-inventory, đọc từ snapshot backup ngày gần nhất
+ * (fg-daily-backups/fg-inventory/days/{dayKey}/chunks/*). ?mode=find (mặc định, chỉ xem) hoặc
+ * ?mode=restore (ghi lại vào fg-inventory với đúng ID cũ). Xóa khỏi source sau khi dùng xong.
+ */
+export const oneOffRecoverFgInventory = functions
+  .runWith({ secrets: [deployReloadSecret] })
+  .https.onRequest(async (req, res) => {
+    const provided = String(req.query.secret ?? req.body?.secret ?? '');
+    if (!provided || provided !== deployReloadSecret.value()) {
+      res.status(403).json({ ok: false, error: 'Forbidden' });
+      return;
+    }
+    const materialCode = String(req.query.materialCode ?? '').trim().toUpperCase();
+    if (!materialCode) {
+      res.status(400).json({ ok: false, error: 'Thiếu ?materialCode=' });
+      return;
+    }
+    const mode = String(req.query.mode ?? 'find');
+
+    try {
+      const db = admin.firestore();
+      const daysSnap = await db
+        .collection('fg-daily-backups')
+        .doc('fg-inventory')
+        .collection('days')
+        .orderBy('dayKey', 'desc')
+        .limit(5)
+        .get();
+
+      const matches: Array<{ id: string; dayKey: number; data: Record<string, unknown> }> = [];
+      const seenIds = new Set<string>();
+
+      for (const dayDoc of daysSnap.docs) {
+        const dayKey = Number(dayDoc.id);
+        const chunksSnap = await dayDoc.ref.collection('chunks').orderBy('index', 'asc').get();
+        for (const chunkDoc of chunksSnap.docs) {
+          const items = (chunkDoc.data().items || []) as Array<{ id: string; data: Record<string, unknown> }>;
+          for (const item of items) {
+            if (seenIds.has(item.id)) continue;
+            const code = String(item.data?.materialCode || '').trim().toUpperCase();
+            // So khớp "bắt đầu bằng" — mã có thể kèm hậu tố (VD "P001013_A", "P001013_C").
+            if (code === materialCode || code.startsWith(materialCode + '_') || code.startsWith(materialCode)) {
+              matches.push({ id: item.id, dayKey, data: item.data });
+              seenIds.add(item.id);
+            }
+          }
+        }
+        if (matches.length > 0) break; // dùng bản gần ngày hiện tại nhất có chứa mã này
+      }
+
+      // Chỉ giữ những dòng HIỆN KHÔNG còn trong fg-inventory (tức thật sự đã bị xóa) —
+      // backup snapshot chứa cả dòng còn sống lẫn dòng đã xóa, không lọc sẽ trả về nhầm cả 2.
+      const missingOnly: typeof matches = [];
+      for (const m of matches) {
+        const existing = await db.collection('fg-inventory').doc(m.id).get();
+        if (!existing.exists) missingOnly.push(m);
+      }
+
+      if (mode === 'restore') {
+        // Bắt buộc chỉ định rõ ?ids=id1,id2 — KHÔNG tự động phục hồi hết mọi dòng tìm thấy,
+        // để người dùng tự chọn đúng dòng cần khôi phục thay vì phục hồi hàng loạt ngoài ý muốn.
+        const idsParam = String(req.query.ids ?? '').trim();
+        if (!idsParam) {
+          res.status(400).json({ ok: false, error: 'restore cần chỉ định ?ids=id1,id2 (không tự phục hồi tất cả).', missingNow: missingOnly.length, items: missingOnly });
+          return;
+        }
+        const requestedIds = new Set(idsParam.split(',').map(s => s.trim()).filter(Boolean));
+        const toRestore = missingOnly.filter(m => requestedIds.has(m.id));
+        let restored = 0;
+        for (const m of toRestore) {
+          await db.collection('fg-inventory').doc(m.id).set(m.data);
+          restored++;
+        }
+        res.status(200).json({ ok: true, mode, foundInBackup: matches.length, missingNow: missingOnly.length, restored, items: toRestore });
+        return;
+      }
+
+      res.status(200).json({ ok: true, mode, foundInBackup: matches.length, missingNow: missingOnly.length, items: missingOnly });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('oneOffRecoverFgInventory failed:', msg);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
