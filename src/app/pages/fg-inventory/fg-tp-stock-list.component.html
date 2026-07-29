@@ -47,6 +47,11 @@
           <i class="material-icons">{{ sortCartonDesc ? 'arrow_downward' : 'arrow_upward' }}</i>
           Carton {{ sortCartonDesc ? '↓' : '↑' }}
         </button>
+        <button type="button" class="tp-list-btn tp-list-btn--primary" (click)="openCustomerCartonModal()"
+                [disabled]="isLoading || allRows.length === 0"
+                title="Xem tổng carton theo từng khách hàng">
+          <i class="material-icons">groups</i> Carton theo khách
+        </button>
       </div>
     </div>
 
@@ -93,6 +98,50 @@
       <span><strong>Tổng</strong> — Lượng: {{ formatNumber(totalQuantity) }}</span>
       <span>Carton: {{ formatNumber(totalCarton) }}</span>
       <span>KK: {{ totalKkChecked }}/{{ totalKkTotal }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Carton theo khách -->
+<div class="tp-modal" *ngIf="showCustomerCartonModal" (click)="closeCustomerCartonModal()">
+  <div class="tp-modal__panel" (click)="$event.stopPropagation()">
+    <div class="tp-modal__header">
+      <h3>
+        <i class="material-icons">groups</i>
+        Carton theo khách
+      </h3>
+      <button type="button" class="tp-modal__close" (click)="closeCustomerCartonModal()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="tp-modal__body">
+      <p class="tp-modal__lead">
+        Nhà máy <strong>{{ selectedFactory }}</strong> —
+        {{ customerCartonRows.length }} khách · Tổng carton
+        <strong>{{ formatNumber(customerCartonTotal) }}</strong>
+        (sắp xếp cao → thấp)
+      </p>
+      <div class="tp-modal__table-wrap" *ngIf="customerCartonRows.length">
+        <table class="tp-modal__table">
+          <thead>
+            <tr>
+              <th class="col-no">#</th>
+              <th>Khách hàng</th>
+              <th class="col-num">Số mã TP</th>
+              <th class="col-num">Tổng Carton</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of customerCartonRows; let i = index">
+              <td class="col-no">{{ i + 1 }}</td>
+              <td>{{ row.customer }}</td>
+              <td class="col-num">{{ row.materialCount | number }}</td>
+              <td class="col-num col-carton">{{ formatNumber(row.totalCarton) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tp-modal__empty" *ngIf="!customerCartonRows.length">Không có dữ liệu.</div>
     </div>
   </div>
 </div>

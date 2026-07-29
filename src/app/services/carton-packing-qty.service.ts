@@ -127,4 +127,24 @@ export class CartonPackingQtyService {
     this.invalidateCache();
     return rows.length;
   }
+
+  /**
+   * Tính Carton / ODD từ tồn và lượng đóng thùng.
+   * Rule: tồn > 0 nhưng nhỏ hơn lượng đóng thùng → vẫn 1 carton (chiếm 1 thùng chưa full).
+   * Dùng Math.ceil(ton / packingQty).
+   */
+  static computeCartonOdd(ton: number, packingQty: number): { carton: number; odd: number } {
+    const qty = Number(ton) || 0;
+    const per = Number(packingQty) || 0;
+    if (qty <= 0) {
+      return { carton: 0, odd: 0 };
+    }
+    if (per <= 0) {
+      return { carton: 0, odd: qty };
+    }
+    return {
+      carton: Math.ceil(qty / per),
+      odd: qty % per
+    };
+  }
 }

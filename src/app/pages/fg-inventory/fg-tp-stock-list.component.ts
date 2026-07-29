@@ -6,6 +6,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
+import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import { ProductCatalogItem } from './fg-inventory.component';
 
 export interface TpStockListRow {
@@ -28,11 +29,14 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
 
   isLoading = false;
   catalogItems: ProductCatalogItem[] = [];
+  private packingQtyMap = new Map<string, number>();
 
   allRows: TpStockListRow[] = [];
   filterMa = '';
   filterCustomer = '';
   sortCartonDesc = true;
+
+  showCustomerCartonModal = false;
 
   private destroy$ = new Subject<void>();
 
@@ -42,7 +46,8 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private cdr: ChangeDetectorRef,
     private readTracker: ReadTrackerService,
-    private tpCatalogService: TpCatalogFullService
+    private tpCatalogService: TpCatalogFullService,
+    private cartonPackingQtyService: CartonPackingQtyService
   ) {}
 
   ngOnInit(): void {
@@ -51,13 +56,20 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
       this.selectedFactory = factory;
     }
 
-    this.tpCatalogService
-      .getCatalogItemsCached()
-      .then((items) => {
+    Promise.all([
+      this.tpCatalogService.getCatalogItemsCached(),
+      this.cartonPackingQtyService.loadAllAsMap()
+    ])
+      .then(([items, packingMap]) => {
         this.catalogItems = items;
+        this.packingQtyMap = packingMap;
         this.cdr.markForCheck();
+        // Reload nếu data đã về trước catalog — tính lại carton
+        if (this.allRows.length) {
+          void this.loadData();
+        }
       })
-      .catch((err) => console.error('Load catalog failed:', err));
+      .catch((err) => console.error('Load catalog/packing qty failed:', err));
 
     void this.loadData();
 
@@ -135,7 +147,10 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
         if (!code) return;
         const cur = byCode.get(code) || { quantity: 0, carton: 0, kkChecked: 0, kkTotal: 0 };
         cur.quantity += ton;
-        cur.carton += Number(data.carton || 0);
+        // Tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil), không dùng carton đã lưu (có thể floor = 0)
+        const per = this.getPackingQty(code);
+        const computed = CartonPackingQtyService.computeCartonOdd(ton, per);
+        cur.carton += per > 0 ? computed.carton : Number(data.carton || 0);
         cur.kkTotal += 1;
         if (String(data.viTriKK || data.locationKK || '').trim()) {
           cur.kkChecked += 1;
@@ -231,6 +246,52 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   toggleCartonSort(): void {
     this.sortCartonDesc = !this.sortCartonDesc;
     this.cdr.markForCheck();
+  }
+
+  /** Gom carton theo khách (toàn bộ mã TP nhà máy đang chọn), sắp cao → thấp. */
+  get customerCartonRows(): Array<{ customer: string; totalCarton: number; materialCount: number }> {
+    const byCustomer = new Map<string, { totalCarton: number; materialCount: number }>();
+    for (const row of this.allRows) {
+      const customer = String(row.customer || '').trim() || 'Không xác định';
+      const cur = byCustomer.get(customer) || { totalCarton: 0, materialCount: 0 };
+      cur.totalCarton += Number(row.carton) || 0;
+      cur.materialCount += 1;
+      byCustomer.set(customer, cur);
+    }
+    return Array.from(byCustomer.entries())
+      .map(([customer, v]) => ({
+        customer,
+        totalCarton: v.totalCarton,
+        materialCount: v.materialCount
+      }))
+      .sort((a, b) => b.totalCarton - a.totalCarton || a.customer.localeCompare(b.customer, 'vi'));
+  }
+
+  get customerCartonTotal(): number {
+    return this.customerCartonRows.reduce((s, r) => s + (Number(r.totalCarton) || 0), 0);
+  }
+
+  openCustomerCartonModal(): void {
+    this.showCustomerCartonModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeCustomerCartonModal(): void {
+    this.showCustomerCartonModal = false;
+    this.cdr.markForCheck();
+  }
+
+  /** Ưu tiên Lượng Đóng Thùng; không có thì Standard danh mục TP. */
+  private getPackingQty(materialCode: string): number {
+    const code7 = String(materialCode || '').trim().toUpperCase().slice(0, 7);
+    if (!code7) return 0;
+    const override = this.packingQtyMap.get(code7);
+    if (override && override > 0) return override;
+    const catalogItem = this.catalogItems.find(
+      (c) => (c.materialCode || '').trim().toUpperCase().slice(0, 7) === code7
+    );
+    const standard = catalogItem ? parseFloat(String(catalogItem.standard)) : NaN;
+    return !isNaN(standard) && standard > 0 ? standard : 0;
   }
 
   private getCustomerName(materialCode: string): string {

@@ -71,6 +71,21 @@ $tp-muted: #64748b;
     }
   }
 
+  &--primary {
+    border: 1px solid $tp-blue;
+    background: $tp-blue;
+    color: #fff;
+
+    &:hover {
+      background: #1d4ed8;
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+  }
+
   .material-icons {
     font-size: 18px;
   }
@@ -304,4 +319,135 @@ $tp-muted: #64748b;
   .tp-list-grid {
     grid-template-columns: repeat(4, minmax(118px, 1fr));
   }
+}
+
+.tp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 16px;
+}
+
+.tp-modal__panel {
+  width: min(640px, 96vw);
+  max-height: min(80vh, 720px);
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tp-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid $tp-border;
+
+  h3 {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: $tp-text;
+
+    .material-icons {
+      font-size: 22px;
+      color: $tp-blue;
+    }
+  }
+}
+
+.tp-modal__close {
+  border: none;
+  background: transparent;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: $tp-muted;
+
+  &:hover {
+    background: #f1f5f9;
+    color: $tp-text;
+  }
+
+  .material-icons {
+    font-size: 20px;
+  }
+}
+
+.tp-modal__body {
+  padding: 12px 16px 16px;
+  overflow: auto;
+}
+
+.tp-modal__lead {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: $tp-muted;
+}
+
+.tp-modal__table-wrap {
+  border: 1px solid $tp-border;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tp-modal__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+  }
+
+  th {
+    background: #f8fafc;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: $tp-muted;
+    font-weight: 700;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .col-no {
+    width: 44px;
+    color: $tp-muted;
+  }
+
+  .col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .col-carton {
+    font-weight: 800;
+    color: #1d4ed8;
+  }
+}
+
+.tp-modal__empty {
+  padding: 24px;
+  text-align: center;
+  color: $tp-muted;
+  font-style: italic;
 }

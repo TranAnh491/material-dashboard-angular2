@@ -1812,7 +1812,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         const item = this.mapDocToInventoryItem(doc.id, doc.data());
         if ((item.ton ?? 0) <= 0) return; // Bỏ qua mã tồn = 0
         const customer = this.getCustomerNameFromMapping(item.materialCode).trim() || 'Không xác định';
-        byCustomer.set(customer, (byCustomer.get(customer) || 0) + (item.carton || 0));
+        byCustomer.set(customer, (byCustomer.get(customer) || 0) + this.getDisplayCarton(item));
       });
 
       this.customerSummaryRows = Array.from(byCustomer.entries())
@@ -1988,9 +1988,14 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         mode === 'addMaTp' || mode === 'tonDauSupplement'
           ? (m.nhap || m.ton || 0)
           : m.tonDau;
-      if (standard > 0 && qtyBase > 0) {
-        m.carton = Math.floor(qtyBase / standard);
-        m.odd = qtyBase % standard;
+      // Ưu tiên Lượng Đóng Thùng; không có thì Standard danh mục.
+      // Tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil).
+      const packingQty = this.getPackingQtyForMaterial(m.materialCode);
+      const per = packingQty > 0 ? packingQty : standard;
+      if (per > 0 && qtyBase > 0) {
+        const r = this.computeCartonOddForQty(qtyBase, per);
+        m.carton = r.carton;
+        m.odd = r.odd;
       }
     });
 
@@ -2218,9 +2223,8 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       seqByFactory[factory] = seq + 1;
       const notes = item.notes.filter(n => n).join('; ');
       const qtyBase = item.nhap > 0 ? item.nhap : item.tonDau;
-      const packingQty = this.getPackingQtyForTdau(item.materialCode);
-      const carton = packingQty > 0 ? Math.ceil(qtyBase / packingQty) : 0;
-      const odd = packingQty > 0 ? qtyBase % packingQty : 0;
+      const packingQty = this.getPackingQtyForMaterial(item.materialCode);
+      const { carton, odd } = this.computeCartonOddForQty(qtyBase, packingQty);
       const useNhap = supplement && item.nhap > 0;
       materials.push({
         factory,
@@ -2991,22 +2995,58 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Carton hiển thị trên bảng — tính trực tiếp lúc render cho dòng Tồn đầu (TDAU) thay vì chỉ đọc
-   * material.carton đã lưu (nhiều dòng cũ import trước khi có Lượng Đóng Thùng vẫn đang lưu 0).
+   * Lượng đóng thùng / SL SP/thùng dùng tính Carton:
+   * ưu tiên Lượng Đóng Thùng (Kho), không có thì Standard danh mục TP.
+   */
+  private getPackingQtyForMaterial(materialCode: string): number {
+    return this.getPackingQtyForTdau(materialCode);
+  }
+
+  /** Áp rule: tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil). */
+  private computeCartonOddForQty(ton: number, packingQty: number): { carton: number; odd: number } {
+    return CartonPackingQtyService.computeCartonOdd(ton, packingQty);
+  }
+
+  private applyCartonOddFromTon(material: FGInventoryItem): void {
+    const packingQty = this.getPackingQtyForMaterial(material.materialCode);
+    const fromPacking = packingQty > 0
+      ? this.computeCartonOddForQty(material.ton || 0, packingQty)
+      : null;
+    if (fromPacking) {
+      material.carton = fromPacking.carton;
+      material.odd = fromPacking.odd;
+      return;
+    }
+    if (material.standard > 0) {
+      const r = this.computeCartonOddForQty(material.ton || 0, material.standard);
+      material.carton = r.carton;
+      material.odd = r.odd;
+    }
+  }
+
+  /**
+   * Carton hiển thị — luôn tính lại từ tồn + lượng đóng thùng (mọi dòng FG Inventory).
+   * Tồn > 0 nhưng nhỏ hơn lượng đóng thùng → 1 carton.
    */
   getDisplayCarton(material: FGInventoryItem): number {
-    if (this.isTonDauEditable(material)) {
-      const packingQty = this.getPackingQtyForTdau(material.materialCode);
-      return packingQty > 0 ? Math.ceil((material.ton || 0) / packingQty) : 0;
+    const packingQty = this.getPackingQtyForMaterial(material.materialCode);
+    if (packingQty > 0) {
+      return this.computeCartonOddForQty(material.ton || 0, packingQty).carton;
+    }
+    if (material.standard > 0) {
+      return this.computeCartonOddForQty(material.ton || 0, material.standard).carton;
     }
     return material.carton || 0;
   }
 
-  /** ODD hiển thị trên bảng — cùng cách tính với getDisplayCarton (xem giải thích ở đó). */
+  /** ODD hiển thị — cùng nguồn với getDisplayCarton. */
   getDisplayOdd(material: FGInventoryItem): number {
-    if (this.isTonDauEditable(material)) {
-      const packingQty = this.getPackingQtyForTdau(material.materialCode);
-      return packingQty > 0 ? (material.ton || 0) % packingQty : 0;
+    const packingQty = this.getPackingQtyForMaterial(material.materialCode);
+    if (packingQty > 0) {
+      return this.computeCartonOddForQty(material.ton || 0, packingQty).odd;
+    }
+    if (material.standard > 0) {
+      return this.computeCartonOddForQty(material.ton || 0, material.standard).odd;
     }
     return material.odd || 0;
   }
@@ -3017,12 +3057,18 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
     return '';
   }
 
-  // Calculate Carton and ODD - data comes from FG In
+  // Calculate Carton and ODD theo rule tồn lẻ = 1 thùng
   calculateCartonAndOdd(material: FGInventoryItem): { carton: number, odd: number } {
-    // Data already calculated in FG In, just return stored values
-    return { 
-      carton: material.carton || 0, 
-      odd: material.odd || 0 
+    const packingQty = this.getPackingQtyForMaterial(material.materialCode);
+    if (packingQty > 0) {
+      return this.computeCartonOddForQty(material.ton || 0, packingQty);
+    }
+    if (material.standard > 0) {
+      return this.computeCartonOddForQty(material.ton || 0, material.standard);
+    }
+    return {
+      carton: material.carton || 0,
+      odd: material.odd || 0
     };
   }
 
@@ -3056,11 +3102,13 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
         needsUpdate = true;
       }
       
-      // Calculate Carton/ODD if standard is available
-      if (material.standard > 0) {
+      // Calculate Carton/ODD if packing qty / standard is available
+      // Rule: tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil)
+      const packingQty = this.getPackingQtyForMaterial(material.materialCode);
+      const per = packingQty > 0 ? packingQty : (material.standard > 0 ? material.standard : 0);
+      if (per > 0) {
         const tonToUse = material.ton || 0;
-        const newCarton = Math.ceil(tonToUse / material.standard);
-        const newOdd = tonToUse % material.standard;
+        const { carton: newCarton, odd: newOdd } = this.computeCartonOddForQty(tonToUse, per);
         
         if (material.carton !== newCarton || material.odd !== newOdd) {
           material.carton = newCarton;
@@ -3097,19 +3145,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
   // Update Tồn when Tồn đầu, Nhập, or Xuất changes
   updateTon(material: FGInventoryItem): void {
     this.recalculateTon(material);
-
-    // Dòng Tồn đầu (batch TDAU): tính Carton theo Lượng Đóng Thùng/SL SP thùng ở Danh mục TP,
-    // không dùng material.standard (thường = 0 vì đây là dòng import tồn đầu, không qua FG In).
-    if (this.isTonDauEditable(material)) {
-      const packingQty = this.getPackingQtyForTdau(material.materialCode);
-      if (packingQty > 0) {
-        material.carton = Math.ceil(material.ton / packingQty);
-        material.odd = material.ton % packingQty;
-      }
-    } else if (material.standard > 0) {
-      material.carton = Math.ceil(material.ton / material.standard);
-      material.odd = material.ton % material.standard;
-    }
+    this.applyCartonOddFromTon(material);
     
     this.updateMaterialInFirebase(material);
     console.log(`Updated Tồn for ${material.materialCode}: ${material.ton}, Carton: ${material.carton}, ODD: ${material.odd}`);
@@ -3160,19 +3196,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       const calculatedTon = this.calculateTon(material);
       if (material.ton !== calculatedTon) {
         material.ton = calculatedTon;
-
-        // Recalculate Carton/ODD based on new Tồn — dòng Tồn đầu (TDAU) dùng Lượng Đóng Thùng/SL SP
-        // thùng ở Danh mục TP thay vì material.standard.
-        if (this.isTonDauEditable(material)) {
-          const packingQty = this.getPackingQtyForTdau(material.materialCode);
-          if (packingQty > 0) {
-            material.carton = Math.ceil(material.ton / packingQty);
-            material.odd = material.ton % packingQty;
-          }
-        } else if (material.standard > 0) {
-          material.carton = Math.ceil(material.ton / material.standard);
-          material.odd = material.ton % material.standard;
-        }
+        this.applyCartonOddFromTon(material);
 
         materialsToUpdate.push(material);
         console.log(`Updated ${material.materialCode}: Tồn=${material.ton}, Carton=${material.carton}, ODD=${material.odd}`);
@@ -3271,7 +3295,7 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
       'Nhập': m.nhap,
       'Xuất': m.xuat,
       'Tồn kho': m.ton,
-      'Carton': m.carton,
+      'Carton': this.getDisplayCarton(m),
       'ODD': m.odd,
       'Vị trí': m.location || 'Temporary',
       'Vị trí KK': m.viTriKK || '',
