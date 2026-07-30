@@ -8,6 +8,23 @@ import { ReadTrackerService } from '../../services/read-tracker.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import { ProductCatalogItem } from './fg-inventory.component';
+import {
+  buildStorageZones,
+  checkStorageLocations,
+  parseStorageSlotLocation,
+  shortStorageCustomerLabel,
+  STORAGE_LAYOUT_RULES,
+  StorageCheckResult,
+  StorageInventoryLine,
+  StorageZoneView,
+  ZONE_A_CUSTOMERS,
+  ZONE_A_RESERVED_CUSTOMERS,
+  ZONE_AXON_CUSTOMERS,
+  ZONE_B_GIL_HOB_CUSTOMERS,
+  ZONE_SCIEN_CUSTOMERS
+} from './fg-storage-layout';
+import { FgCustomerLabelCodeService } from '../../services/fg-customer-label-code.service';
+import { CustomerCodeEntry, printCustomerCodeLabels } from './fg-customer-code.util';
 
 export interface TpStockListRow {
   materialCode: string;
@@ -38,11 +55,24 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   private packingQtyMap = new Map<string, number>();
 
   allRows: TpStockListRow[] = [];
+  /** Chi tiết từng dòng FG Inventory (để Check vị trí). */
+  private inventoryDetailLines: StorageInventoryLine[] = [];
   filterMa = '';
   filterCustomer = '';
   sortCartonDesc = true;
 
   showCustomerCartonModal = false;
+  showCustomerCodeModal = false;
+  customerCodeCatalog: CustomerCodeEntry[] = [];
+  isSyncingCustomerCodes = false;
+  showStorageDiagramModal = false;
+  storageSearchInput = '';
+  storageSearchMessage = '';
+  private storageHighlightedSlots = new Set<string>();
+  showStorageCheckModal = false;
+  isStorageChecking = false;
+  storageCheckResult: StorageCheckResult | null = null;
+  readonly storageRules = STORAGE_LAYOUT_RULES;
 
   private destroy$ = new Subject<void>();
 
@@ -53,7 +83,8 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private readTracker: ReadTrackerService,
     private tpCatalogService: TpCatalogFullService,
-    private cartonPackingQtyService: CartonPackingQtyService
+    private cartonPackingQtyService: CartonPackingQtyService,
+    private customerLabelCodeService: FgCustomerLabelCodeService
   ) {}
 
   ngOnInit(): void {
@@ -73,6 +104,8 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
         // Reload nếu data đã về trước catalog — tính lại carton / phân ASM3 theo KH
         if (this.allRows.length || this.selectedFactory === 'ASM3') {
           void this.loadData();
+        } else {
+          void this.syncCustomerLabelCodes();
         }
       })
       .catch((err) => console.error('Load catalog/packing qty failed:', err));
@@ -148,6 +181,7 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   async loadData(): Promise<void> {
     this.isLoading = true;
     this.allRows = [];
+    this.inventoryDetailLines = [];
     this.filterMa = '';
     this.filterCustomer = '';
     this.cdr.markForCheck();
@@ -169,6 +203,7 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
       this.readTracker.track('fg-inventory', 'fg-inventory-tp-stock-list', snap?.docs.length || 0);
 
       const byCode = new Map<string, { quantity: number; carton: number; kkChecked: number; kkTotal: number }>();
+      const detailLines: StorageInventoryLine[] = [];
       (snap?.docs || []).forEach((doc) => {
         const data = doc.data() as any;
         const ton = Number(data.ton ?? data.stock ?? 0);
@@ -176,6 +211,17 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
         const code = String(data.materialCode || data.maTP || '').trim().toUpperCase().slice(0, 7);
         if (!code) return;
         if (!this.matchesSelectedFactory(data, code)) return;
+
+        const location = String(data.location || data.viTri || '').trim();
+        const customer = this.getCustomerName(code).trim() || 'Không xác định';
+        detailLines.push({
+          materialCode: code,
+          customer,
+          location,
+          ton,
+          batchNumber: String(data.batchNumber || '').trim()
+        });
+
         const cur = byCode.get(code) || { quantity: 0, carton: 0, kkChecked: 0, kkTotal: 0 };
         cur.quantity += ton;
         // Tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil), không dùng carton đã lưu (có thể floor = 0)
@@ -189,6 +235,7 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
         byCode.set(code, cur);
       });
 
+      this.inventoryDetailLines = detailLines;
       this.allRows = Array.from(byCode.entries()).map(([materialCode, v]) => ({
         materialCode,
         quantity: v.quantity,
@@ -202,6 +249,44 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
       this.allRows = [];
     } finally {
       this.isLoading = false;
+      void this.syncCustomerLabelCodes();
+      this.cdr.markForCheck();
+    }
+  }
+
+  private collectCustomerNames(): string[] {
+    const names = new Set<string>();
+    for (const c of this.catalogItems) {
+      const n = String(c.customer || '').trim();
+      if (n) names.add(n);
+    }
+    for (const r of this.allRows) {
+      const n = String(r.customer || '').trim();
+      if (n) names.add(n);
+    }
+    for (const code of [
+      ...ZONE_A_CUSTOMERS,
+      ...ZONE_A_RESERVED_CUSTOMERS,
+      ...ZONE_B_GIL_HOB_CUSTOMERS,
+      ...ZONE_SCIEN_CUSTOMERS,
+      ...ZONE_AXON_CUSTOMERS
+    ]) {
+      names.add(code);
+    }
+    return [...names];
+  }
+
+  /** Đồng bộ danh mục mã KH — khách mới nhận số tiếp theo, mã cũ không đổi. */
+  async syncCustomerLabelCodes(): Promise<void> {
+    if (this.isSyncingCustomerCodes) return;
+    this.isSyncingCustomerCodes = true;
+    try {
+      this.customerCodeCatalog = await this.customerLabelCodeService.syncCustomers(this.collectCustomerNames());
+    } catch (e) {
+      console.error('syncCustomerLabelCodes failed', e);
+      this.customerCodeCatalog = this.customerLabelCodeService.getCatalog();
+    } finally {
+      this.isSyncingCustomerCodes = false;
       this.cdr.markForCheck();
     }
   }
@@ -302,6 +387,46 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     return this.customerCartonRows.reduce((s, r) => s + (Number(r.totalCarton) || 0), 0);
   }
 
+  /** Danh mục mã hóa KH (lưu Firebase — mã cũ cố định). */
+  getCustomerCode(customer: string): string {
+    const code = this.customerLabelCodeService.getCode(customer);
+    return code || '—';
+  }
+
+  async openCustomerCodeModal(): Promise<void> {
+    await this.syncCustomerLabelCodes();
+    this.showCustomerCodeModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeCustomerCodeModal(): void {
+    this.showCustomerCodeModal = false;
+    this.cdr.markForCheck();
+  }
+
+  printCustomerCodeLabel(entry: CustomerCodeEntry): void {
+    if (!printCustomerCodeLabels([entry])) {
+      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+    }
+  }
+
+  printCustomerCodeByName(customer: string): void {
+    const entry = this.customerCodeCatalog.find((e) => e.customer === String(customer || '').trim());
+    if (!entry) return;
+    this.printCustomerCodeLabel(entry);
+  }
+
+  printAllCustomerCodeLabels(): void {
+    const list = this.customerCodeCatalog;
+    if (!list.length) {
+      alert('Không có khách hàng để in tem.');
+      return;
+    }
+    if (!printCustomerCodeLabels(list)) {
+      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+    }
+  }
+
   openCustomerCartonModal(): void {
     this.showCustomerCartonModal = true;
     this.cdr.markForCheck();
@@ -310,6 +435,153 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   closeCustomerCartonModal(): void {
     this.showCustomerCartonModal = false;
     this.cdr.markForCheck();
+  }
+
+  /** Sơ đồ lưu trữ — phân bổ carton theo quy tắc kệ A/B/C. */
+  get storageZones(): StorageZoneView[] {
+    return buildStorageZones(this.allRows);
+  }
+
+  openStorageDiagramModal(): void {
+    this.clearStorageDiagramSearch();
+    this.showStorageDiagramModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeStorageDiagramModal(): void {
+    this.showStorageDiagramModal = false;
+    this.clearStorageDiagramSearch();
+    this.cdr.markForCheck();
+  }
+
+  onStorageSearchKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    this.searchStorageDiagram();
+  }
+
+  /** Tìm vị trí/mã TP — highlight ô mâm tương ứng (A1.1, A11…). */
+  searchStorageDiagram(): void {
+    const term = String(this.storageSearchInput || '').trim().toUpperCase();
+    this.storageHighlightedSlots.clear();
+    this.storageSearchMessage = '';
+
+    if (!term) {
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const addSlot = (label: string) => {
+      if (label) this.storageHighlightedSlots.add(label);
+    };
+
+    const parsed = parseStorageSlotLocation(term);
+    if (parsed) addSlot(parsed.label);
+
+    for (const line of this.inventoryDetailLines) {
+      const code = String(line.materialCode || '').trim().toUpperCase();
+      const loc = String(line.location || '').trim();
+      if (!loc) continue;
+      const locNorm = loc.toUpperCase();
+      if (code === term || code.startsWith(term) || locNorm.startsWith(term)) {
+        const locParsed = parseStorageSlotLocation(loc);
+        if (locParsed) addSlot(locParsed.label);
+      }
+    }
+
+    if (this.storageHighlightedSlots.size === 0) {
+      const termCompact = term.replace(/[^A-Z0-9]/g, '');
+      for (const zone of this.storageZones) {
+        for (const rack of zone.racks) {
+          for (const lv of rack.levels) {
+            const labelCompact = lv.label.replace(/[^A-Z0-9]/g, '');
+            if (labelCompact.startsWith(termCompact) || termCompact.startsWith(labelCompact)) {
+              addSlot(lv.label);
+            }
+          }
+        }
+      }
+    }
+
+    if (this.storageHighlightedSlots.size === 0) {
+      this.storageSearchMessage = `Không tìm thấy vị trí cho "${term}"`;
+    } else {
+      this.storageSearchMessage = `Đã tìm thấy ${this.storageHighlightedSlots.size} ô`;
+      setTimeout(() => this.scrollToHighlightedStorageSlot(), 80);
+    }
+
+    this.cdr.markForCheck();
+  }
+
+  clearStorageDiagramSearch(): void {
+    this.storageSearchInput = '';
+    this.storageSearchMessage = '';
+    this.storageHighlightedSlots.clear();
+  }
+
+  onClearStorageSearch(): void {
+    this.clearStorageDiagramSearch();
+    this.cdr.markForCheck();
+  }
+
+  isStorageSlotHighlighted(label: string): boolean {
+    return this.storageHighlightedSlots.has(label);
+  }
+
+  private scrollToHighlightedStorageSlot(): void {
+    const first = [...this.storageHighlightedSlots][0];
+    if (!first) return;
+    const el = document.getElementById(`storage-slot-${first.replace(/\./g, '-')}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+  }
+
+  shortKh(name: string): string {
+    return shortStorageCustomerLabel(name);
+  }
+
+  async runStorageLocationCheck(): Promise<void> {
+    this.isStorageChecking = true;
+    this.storageCheckResult = null;
+    this.showStorageCheckModal = true;
+    this.cdr.markForCheck();
+
+    try {
+      if (!this.inventoryDetailLines.length && !this.isLoading) {
+        await this.loadData();
+      }
+      this.storageCheckResult = checkStorageLocations(this.inventoryDetailLines);
+    } catch (e) {
+      console.error('runStorageLocationCheck failed', e);
+      this.storageCheckResult = {
+        scannedLines: 0,
+        scannedSlots: 0,
+        wrongSlotCount: 0,
+        issues: []
+      };
+    } finally {
+      this.isStorageChecking = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  closeStorageCheckModal(): void {
+    this.showStorageCheckModal = false;
+    this.cdr.markForCheck();
+  }
+
+  storageIssueLabel(type: string): string {
+    switch (type) {
+      case 'multi_customer':
+        return '2+ khách / mâm';
+      case 'wrong_zone':
+        return 'Sai khu kệ';
+      case 'invalid_location':
+        return 'Vị trí không hợp lệ';
+      case 'unknown_rack':
+        return 'Kệ không có trên sơ đồ';
+      default:
+        return type;
+    }
   }
 
   /** Ưu tiên Lượng Đóng Thùng; không có thì Standard danh mục TP. */

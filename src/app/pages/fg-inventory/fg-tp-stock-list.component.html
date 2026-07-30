@@ -52,6 +52,20 @@
                 title="Xem tổng carton theo từng khách hàng">
           <i class="material-icons">groups</i> Carton theo khách
         </button>
+        <button type="button" class="tp-list-btn tp-list-btn--outline" (click)="openCustomerCodeModal()"
+                title="Danh mục mã hóa khách hàng — in tem 100×100mm">
+          <i class="material-icons">qr_code_2</i> Mã KH / In tem
+        </button>
+        <button type="button" class="tp-list-btn tp-list-btn--outline" (click)="openStorageDiagramModal()"
+                [disabled]="isLoading"
+                title="Sơ đồ kệ lưu trữ theo khách hàng">
+          <i class="material-icons">grid_view</i> Sơ đồ lưu trữ
+        </button>
+        <button type="button" class="tp-list-btn tp-list-btn--outline" (click)="runStorageLocationCheck()"
+                [disabled]="isLoading || isStorageChecking"
+                title="Dò vị trí + mã TP trong FG Inventory so với quy tắc kệ">
+          <i class="material-icons">fact_check</i> Check
+        </button>
       </div>
     </div>
 
@@ -110,9 +124,15 @@
         <i class="material-icons">groups</i>
         Carton theo khách
       </h3>
-      <button type="button" class="tp-modal__close" (click)="closeCustomerCartonModal()" title="Đóng">
-        <i class="material-icons">close</i>
-      </button>
+      <div class="tp-modal__header-actions">
+        <button type="button" class="tp-list-btn tp-list-btn--outline tp-list-btn--sm"
+                (click)="openCustomerCodeModal()" title="Danh mục mã KH">
+          <i class="material-icons">qr_code_2</i> Mã KH
+        </button>
+        <button type="button" class="tp-modal__close" (click)="closeCustomerCartonModal()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
     </div>
     <div class="tp-modal__body">
       <p class="tp-modal__lead">
@@ -127,21 +147,229 @@
             <tr>
               <th class="col-no">#</th>
               <th>Khách hàng</th>
+              <th class="col-code">Mã tem</th>
               <th class="col-num">Số mã TP</th>
               <th class="col-num">Tổng Carton</th>
+              <th class="col-act"></th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let row of customerCartonRows; let i = index">
               <td class="col-no">{{ i + 1 }}</td>
               <td>{{ row.customer }}</td>
+              <td class="col-code"><strong>{{ getCustomerCode(row.customer) }}</strong></td>
               <td class="col-num">{{ row.materialCount | number }}</td>
               <td class="col-num col-carton">{{ formatNumber(row.totalCarton) }}</td>
+              <td class="col-act">
+                <button type="button" class="tp-print-kh-btn"
+                        *ngIf="getCustomerCode(row.customer) !== '—'"
+                        (click)="printCustomerCodeByName(row.customer)"
+                        title="In tem 100×100mm">
+                  <i class="material-icons">print</i>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="tp-modal__empty" *ngIf="!customerCartonRows.length">Không có dữ liệu.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Sơ đồ lưu trữ -->
+<div class="tp-modal tp-modal--wide" *ngIf="showStorageDiagramModal" (click)="closeStorageDiagramModal()">
+  <div class="tp-modal__panel tp-modal__panel--storage" (click)="$event.stopPropagation()">
+    <div class="tp-modal__header">
+      <h3>
+        <i class="material-icons">grid_view</i>
+        Sơ đồ lưu trữ
+      </h3>
+      <div class="tp-modal__header-actions">
+        <button type="button" class="tp-list-btn tp-list-btn--outline tp-list-btn--sm"
+                (click)="runStorageLocationCheck()"
+                [disabled]="isStorageChecking">
+          <i class="material-icons">fact_check</i> Check vị trí
+        </button>
+        <button type="button" class="tp-modal__close" (click)="closeStorageDiagramModal()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+    </div>
+    <div class="tp-modal__body tp-storage">
+      <p class="tp-modal__lead">
+        Nhà máy <strong>{{ selectedFactory }}</strong> —
+        Mỗi kệ 5 tầng/mâm (vd. A6.1–A6.5 = 5 khách nếu đủ),
+        mỗi tầng 3 pallet, tối đa <strong>{{ storageRules.maxLotPerPallet }} LOT</strong>/pallet,
+        <strong>{{ storageRules.maxCartonPerPallet }} carton</strong>/pallet.
+      </p>
+
+      <div class="tp-storage__search">
+        <input type="text"
+               class="tp-storage__search-input"
+               [(ngModel)]="storageSearchInput"
+               (keydown)="onStorageSearchKeydown($event)"
+               placeholder="Mã TP hoặc vị trí (A1.1, A11, B3.2…)"
+               autocomplete="off">
+        <button type="button" class="tp-list-btn tp-list-btn--primary tp-list-btn--sm" (click)="searchStorageDiagram()">
+          <i class="material-icons">search</i> Search
+        </button>
+        <button type="button" class="tp-list-btn tp-list-btn--outline tp-list-btn--sm"
+                *ngIf="storageSearchInput || storageSearchMessage"
+                (click)="onClearStorageSearch()">
+          <i class="material-icons">close</i>
+        </button>
+        <span class="tp-storage__search-msg" *ngIf="storageSearchMessage">{{ storageSearchMessage }}</span>
+      </div>
+
+      <section class="tp-storage__zone" *ngFor="let zone of storageZones">
+        <header class="tp-storage__zone-head">
+          <h4>{{ zone.title }}</h4>
+          <span>{{ zone.subtitle }}</span>
+        </header>
+        <div class="tp-storage__rack-grid">
+          <div class="tp-storage__rack"
+               *ngFor="let rack of zone.racks"
+               [title]="rack.id + ' · ' + rack.totalCarton + '/' + rack.capacityCarton + ' carton'">
+            <div class="tp-storage__rack-id">{{ rack.id }}</div>
+            <div class="tp-storage__rack-customer">{{ shortKh(rack.primaryCustomer) }}</div>
+            <div class="tp-storage__levels">
+              <div class="tp-storage__level"
+                   *ngFor="let lv of rack.levels"
+                   [id]="'storage-slot-' + lv.label.replace('.', '-')"
+                   [class.tp-storage__level--hit]="isStorageSlotHighlighted(lv.label)"
+                   [title]="lv.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + lv.carton + '/' + lv.capacityCarton + ' ct'">
+                <span class="tp-storage__level-label">{{ lv.label }}</span>
+                <span class="tp-storage__level-kh">{{ lv.customer ? shortKh(lv.customer) : '—' }}</span>
+              </div>
+            </div>
+            <div class="tp-storage__rack-meta">
+              {{ rack.totalCarton | number }} / {{ rack.capacityCarton | number }} ct
+              <span *ngIf="rack.utilizationPct > 0">({{ rack.utilizationPct }}%)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Danh mục mã hóa KH -->
+<div class="tp-modal tp-modal--wide" *ngIf="showCustomerCodeModal" (click)="closeCustomerCodeModal()">
+  <div class="tp-modal__panel tp-modal__panel--storage" (click)="$event.stopPropagation()">
+    <div class="tp-modal__header">
+      <h3>
+        <i class="material-icons">qr_code_2</i>
+        Danh mục mã hóa khách hàng
+      </h3>
+      <div class="tp-modal__header-actions">
+        <button type="button" class="tp-list-btn tp-list-btn--primary tp-list-btn--sm"
+                (click)="printAllCustomerCodeLabels()"
+                [disabled]="!customerCodeCatalog.length">
+          <i class="material-icons">print</i> In tất cả
+        </button>
+        <button type="button" class="tp-modal__close" (click)="closeCustomerCodeModal()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+    </div>
+    <div class="tp-modal__body">
+      <p class="tp-modal__lead">
+        Quy tắc: <strong>2 ký tự đầu</strong> + <strong>2 số thứ tự</strong> (vd. GIL → GI01).
+        Mã đã cấp <strong>không đổi</strong>; khách mới nhận số tiếp theo.
+        Tem in <strong>100×100mm</strong> — chỉ in mã.
+      </p>
+      <div class="tp-check-loading" *ngIf="isSyncingCustomerCodes">
+        <i class="material-icons">refresh</i> Đang đồng bộ danh mục...
+      </div>
+      <div class="tp-modal__table-wrap" *ngIf="customerCodeCatalog.length && !isSyncingCustomerCodes">
+        <table class="tp-modal__table tp-kh-code-table">
+          <thead>
+            <tr>
+              <th class="col-no">#</th>
+              <th>Khách hàng</th>
+              <th>Prefix</th>
+              <th class="col-code">Mã tem</th>
+              <th class="col-act">In tem</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of customerCodeCatalog; let i = index">
+              <td class="col-no">{{ i + 1 }}</td>
+              <td>{{ row.customer }}</td>
+              <td>{{ row.prefix }}</td>
+              <td class="col-code"><strong>{{ row.code }}</strong></td>
+              <td class="col-act">
+                <button type="button" class="tp-print-kh-btn" (click)="printCustomerCodeLabel(row)" title="In tem 100×100mm">
+                  <i class="material-icons">print</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tp-modal__empty" *ngIf="!customerCodeCatalog.length">Chưa có dữ liệu khách hàng.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Kết quả Check vị trí -->
+<div class="tp-modal tp-modal--wide" *ngIf="showStorageCheckModal" (click)="closeStorageCheckModal()">
+  <div class="tp-modal__panel tp-modal__panel--storage" (click)="$event.stopPropagation()">
+    <div class="tp-modal__header">
+      <h3>
+        <i class="material-icons">fact_check</i>
+        Check vị trí lưu trữ
+      </h3>
+      <button type="button" class="tp-modal__close" (click)="closeStorageCheckModal()" title="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="tp-modal__body">
+      <div class="tp-check-loading" *ngIf="isStorageChecking">
+        <i class="material-icons">refresh</i> Đang dò FG Inventory...
+      </div>
+      <ng-container *ngIf="!isStorageChecking && storageCheckResult">
+        <p class="tp-modal__lead">
+          Nhà máy <strong>{{ selectedFactory }}</strong> —
+          {{ storageCheckResult.scannedLines | number }} dòng tồn ·
+          {{ storageCheckResult.scannedSlots | number }} mâm kệ ·
+          <strong [class.tp-check-bad]="storageCheckResult.wrongSlotCount > 0"
+                    [class.tp-check-ok]="storageCheckResult.wrongSlotCount === 0">
+            {{ storageCheckResult.wrongSlotCount | number }} mâm sai
+          </strong>
+        </p>
+        <p class="tp-check-hint">
+          Sai khi: 2+ khách cùng 1 mâm (tầng), hoặc khách không thuộc khu kệ (A/B/C).
+        </p>
+        <div class="tp-modal__table-wrap" *ngIf="storageCheckResult.issues.length">
+          <table class="tp-modal__table tp-check-table">
+            <thead>
+              <tr>
+                <th>Loại</th>
+                <th>Mâm</th>
+                <th>Vị trí</th>
+                <th>Mã TP</th>
+                <th>Khách</th>
+                <th>Chi tiết</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of storageCheckResult.issues">
+                <td><span class="tp-check-tag" [attr.data-type]="row.type">{{ storageIssueLabel(row.type) }}</span></td>
+                <td>{{ row.slotLabel }}</td>
+                <td>{{ row.location }}</td>
+                <td>{{ row.materialCode }}</td>
+                <td>{{ shortKh(row.customer) }}</td>
+                <td class="tp-check-detail">{{ row.detail }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tp-modal__empty tp-check-ok-msg" *ngIf="!storageCheckResult.issues.length">
+          Không phát hiện vị trí sai theo quy tắc kệ.
+        </div>
+      </ng-container>
     </div>
   </div>
 </div>
