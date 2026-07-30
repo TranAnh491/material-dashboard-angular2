@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import type { QcPriorityResolvedPayload } from './qc-priority-email';
 import type { CartonPackingQtyAlertPayload } from './carton-packing-qty-alert-email';
+import type { TpCatalogPackingMismatchPayload } from './tp-catalog-packing-mismatch-email';
 import type { TruckDecisionType } from './truck-schedule-email';
 import { emailPass, zaloBotToken, deployReloadSecret } from './params-config';
 
@@ -216,6 +217,33 @@ export const sendCartonPackingQtyAlertEmailFn = functions
     try {
       const { sendCartonPackingQtyAlertEmail } = await import('./carton-packing-qty-alert-email');
       await sendCartonPackingQtyAlertEmail(payload);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
+  });
+
+/** Danh mục TP: bấm icon "Gửi mail" ở dòng lệch SL SP/thùng ≠ Lượng Đóng Thùng → báo Kho + Kỹ thuật. */
+export const sendTpCatalogPackingMismatchEmailFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: Partial<TpCatalogPackingMismatchPayload>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const materialCode = typeof data?.materialCode === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    if (!materialCode) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu materialCode.');
+    }
+    const payload: TpCatalogPackingMismatchPayload = {
+      materialCode,
+      standardQty: Number(data?.standardQty) || 0,
+      cartonPackingQty: Number(data?.cartonPackingQty) || 0,
+      reportedBy: typeof data?.reportedBy === 'string' ? data.reportedBy.trim().slice(0, 80) : ''
+    };
+    try {
+      const { sendTpCatalogPackingMismatchEmail } = await import('./tp-catalog-packing-mismatch-email');
+      await sendTpCatalogPackingMismatchEmail(payload);
       return { ok: true };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

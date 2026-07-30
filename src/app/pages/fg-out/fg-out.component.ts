@@ -11,6 +11,7 @@ import { FGInventoryLocationService } from '../../services/fg-inventory-location
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
+import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import firebase from 'firebase/compat/app';
 
 export interface FgOutItem {
@@ -191,7 +192,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
   mappingItems: CustomerCodeMappingItem[] = [];
   // Danh mục (fg-catalog) – Standard theo Mã TP để tính Carton/ODD
   catalogItems: FgCatalogItem[] = [];
-  
+  // Lượng Đóng Thùng (danh mục riêng của Kho, collection carton-packing-qty) – ưu tiên hơn Standard khi tính Carton/ODD
+  cartonPackingQtyMap: Map<string, number> = new Map();
+
   // Product types for dropdown
   productTypes: string[] = ['MASS', 'ĐL', 'SAMPLE'];
 
@@ -308,7 +311,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private fgDailyBackup: FgDailyBackupService,
     private router: Router,
     private route: ActivatedRoute,
-    private tpCatalogService: TpCatalogFullService
+    private tpCatalogService: TpCatalogFullService,
+    private cartonPackingQtyService: CartonPackingQtyService
   ) {}
 
   goToMenu(): void {
@@ -337,6 +341,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.loadMaterialsFromFirebase();
     this.loadMappingFromFirebase();
     this.loadCatalogFromFirebase();
+    this.loadCartonPackingQty();
     // Mặc định lọc đúng cửa sổ 30 ngày (trùng dữ liệu load từ Firebase)
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -700,11 +705,32 @@ export class FgOutComponent implements OnInit, OnDestroy {
       .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
 
-  /** Lấy Standard (số) theo Mã TP từ danh mục. Trả về null nếu không có hoặc không hợp lệ. */
+  // Load Lượng Đóng Thùng (danh mục riêng của Kho) – dùng cache dùng chung (CartonPackingQtyService, TTL 6h)
+  loadCartonPackingQty(forceRefresh = false): void {
+    this.cartonPackingQtyService
+      .loadAllAsMap(forceRefresh)
+      .then(map => {
+        this.cartonPackingQtyMap = map;
+        this.cdr.markForCheck();
+      })
+      .catch(err => console.error('Load carton-packing-qty (cached) failed:', err));
+  }
+
+  /**
+   * Lấy SL SP/thùng dùng tính Carton cho 1 Mã TP: ưu tiên Lượng Đóng Thùng (danh mục riêng của Kho)
+   * nếu có; không có thì lấy SL SP/thùng ở Danh mục TP. So theo 7 ký tự đầu Mã TP (P/T/M/L + 6 số)
+   * vì cả 2 nguồn đều lưu đúng mã gốc, còn material.materialCode ở FG Out có thể kèm hậu tố
+   * (VD "P002052_A1") — cùng rule với FG Inventory / Shipment. Trả về null nếu không có hoặc không hợp lệ.
+   */
   getStandardForMaterial(materialCode: string): number | null {
-    if (!materialCode || !this.catalogItems.length) return null;
-    const code = (materialCode || '').toString().trim().toUpperCase();
-    const item = this.catalogItems.find(c => (c.materialCode || '').trim().toUpperCase() === code);
+    const code7 = (materialCode || '').toString().trim().toUpperCase().slice(0, 7);
+    if (!code7) return null;
+
+    const override = this.cartonPackingQtyMap.get(code7);
+    if (override && override > 0) return override;
+
+    if (!this.catalogItems.length) return null;
+    const item = this.catalogItems.find(c => (c.materialCode || '').trim().toUpperCase().slice(0, 7) === code7);
     if (!item || !item.standard) return null;
     const num = parseFloat(item.standard);
     return !isNaN(num) && num > 0 ? num : null;

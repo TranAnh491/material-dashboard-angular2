@@ -774,6 +774,22 @@
   color: #991b1b;
 }
 
+.shipment-carton-mismatch-list {
+  margin-top: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.shipment-carton-mismatch-item {
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.shipment-carton-mismatch-item strong {
+  font-weight: 800;
+}
+
 .group-stat-status .group-status-pill {
   display: inline-block;
   font-size: 8px;

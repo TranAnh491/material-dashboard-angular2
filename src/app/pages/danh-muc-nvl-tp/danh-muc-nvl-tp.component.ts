@@ -10,6 +10,7 @@ import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { StorageUnitSize, getStorageUnitOption } from '../../models/storage-unit.model';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-alert.service';
 
 type CatalogTab = 'nvl' | 'tp';
 
@@ -133,6 +134,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     private nvlkhCatalog: NvlkhCatalogService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private authService: FirebaseAuthService,
+    private cartonPackingQtyAlertService: CartonPackingQtyAlertService,
     private route: ActivatedRoute,
     private router: Router
   ) {}
@@ -839,6 +841,43 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   get tpMismatchCount(): number {
     return this.tpMismatchItems.length;
+  }
+
+  /** Dòng đang lệch SL SP/thùng ≠ Lượng Đóng Thùng — chỉ dòng này mới hiện icon "Gửi mail". */
+  isTpRowMismatched(item: MergedCatalogItem): boolean {
+    const std = parseFloat(item.standard) || 0;
+    const carton = item.cartonPackingQty || 0;
+    return std > 0 && carton > 0 && std !== carton;
+  }
+
+  /** Mã TP đang gửi mail cảnh báo (disable nút, tránh bấm trùng). */
+  private tpSendingMailCodes = new Set<string>();
+
+  isTpMailSending(item: MergedCatalogItem): boolean {
+    return this.tpSendingMailCodes.has(item.materialCode);
+  }
+
+  /** Cột "Gửi mail" — báo Kho + Kỹ thuật mã TP đang lệch SL SP/thùng so với Lượng Đóng Thùng. */
+  async sendTpMismatchMail(item: MergedCatalogItem): Promise<void> {
+    if (!this.isTpRowMismatched(item) || this.tpSendingMailCodes.has(item.materialCode)) return;
+    if (!confirm(`Gửi mail báo mã "${item.materialCode}" đang lệch SL SP/thùng (${item.standard}) so với Lượng Đóng Thùng (${item.cartonPackingQty}) tới nhóm mail ENG?`)) {
+      return;
+    }
+    this.tpSendingMailCodes.add(item.materialCode);
+    try {
+      const reportedBy = await this.currentEmployeeId();
+      await this.cartonPackingQtyAlertService.sendTpCatalogMismatchAlert({
+        materialCode: item.materialCode,
+        standardQty: parseFloat(item.standard) || 0,
+        cartonPackingQty: item.cartonPackingQty || 0,
+        reportedBy: reportedBy || 'UNKNOWN'
+      });
+      alert(`✅ Đã gửi mail báo mã "${item.materialCode}" tới nhóm mail ENG.`);
+    } catch (e: any) {
+      alert('❌ Gửi mail thất bại: ' + (e?.message || e));
+    } finally {
+      this.tpSendingMailCodes.delete(item.materialCode);
+    }
   }
 
   showTpMismatchPanel = false;

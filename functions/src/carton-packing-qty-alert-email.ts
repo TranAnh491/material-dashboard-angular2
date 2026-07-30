@@ -1,8 +1,8 @@
 import * as nodemailer from 'nodemailer';
 import { emailFrom, emailPass, emailSmtpHost, emailSmtpPort, emailUser } from './params-config';
 
-/** Danh sách cố định nhận cảnh báo sai Lượng Đóng Thùng (FG In → nút "Sai Carton"). */
-const ALERT_RECIPIENTS = [
+/** Danh sách cố định nhận cảnh báo sai Lượng Đóng Thùng (FG In → nút "Sai Carton", Danh mục TP → cột "Gửi mail"). */
+export const ALERT_RECIPIENTS = [
   'wh1@airspeedmfgvn.com',
   'wh2@airspeedmfgvn.com',
   'wh3@airspeedmfgvn.com',
@@ -24,7 +24,7 @@ export type CartonPackingQtyAlertPayload = {
   reportedBy: string;
 };
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return String(s || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -32,7 +32,7 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function getSmtpConfig(): { host: string; port: number; user: string; pass: string; from: string } | null {
+export function getSmtpConfig(): { host: string; port: number; user: string; pass: string; from: string } | null {
   const user = emailUser.value().trim();
   const pass = emailPass.value().trim();
   if (!user || !pass) {

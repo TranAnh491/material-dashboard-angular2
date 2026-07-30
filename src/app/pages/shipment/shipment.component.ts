@@ -9,6 +9,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Router } from '@angular/router';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
+import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 
 export interface ShipmentItem {
   id?: string;
@@ -68,6 +69,19 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   private fgOutCartonTotalByShipment = new Map<string, number>();
   private fgOutCartonCheckReady = false;
   private fgOutCartonCheckRequestId = 0;
+  /** Dòng FG Out gốc theo shipment (normalized code) — dùng để chỉ rõ mã nào lệch + phát hiện "chưa có phiếu xuất". */
+  private fgOutRawItemsByShipment = new Map<string, Array<{
+    shipment?: string;
+    materialCode?: string;
+    mergeCarton?: string;
+    quantity?: number;
+    carton?: number;
+    pallet?: string;
+    lsx?: string;
+    exportDate?: Date | null;
+    batchNumber?: string;
+  }>>();
+  private fgOutStandardByCodeCache = new Map<string, number>();
   
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
@@ -237,55 +251,57 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return this.isScanCheckExemptCustomerName(tenKh);
   }
 
-  /**
-   * Khách khác FJXR: coi đã scan khi Status = "Đã Check".
-   * (Không dựa FG Check số lượng/thùng.)
-   */
+  /** Status = "Đã Check" (check tay trên cột Status). Chỉ dùng cho FJXR → badge "Đã check tay". */
   isStatusScanChecked(shipment: ShipmentItem | null | undefined): boolean {
     return String(shipment?.status || '').trim() === 'Đã Check';
   }
 
-  /** Scan badge trên card ngày: FJXR miễn; còn lại theo cột Status. */
+  /**
+   * Scan badge trên card ngày:
+   * - FJXR + Status Đã Check → "Đã check tay"
+   * - FJXR khác → "Không cần scan"
+   * - Khách còn lại → rule cũ đọc FG Check
+   */
   private resolveShipmentScanCheck(rows: ShipmentItem[]): {
     scanStatus: 'ok' | 'partial' | 'none';
     scanLabel: string;
     scanPct: number | null;
   } {
-    const byMat = new Map<string, ShipmentItem[]>();
+    const byMat = new Map<string, ShipmentItem>();
     for (const r of rows || []) {
       const mat = String(r?.materialCode || '').trim().toUpperCase();
       if (!mat) continue;
-      if (!byMat.has(mat)) byMat.set(mat, []);
-      byMat.get(mat)!.push(r);
+      if (!byMat.has(mat)) byMat.set(mat, r);
     }
     if (byMat.size === 0) {
-      return { scanStatus: 'none', scanLabel: 'Chưa check', scanPct: null };
+      return { scanStatus: 'none', scanLabel: 'Chưa scan check', scanPct: null };
     }
 
     let ok = 0;
     let partial = 0;
     let none = 0;
-    let exempt = 0;
+    let fjxrExempt = 0;
+    let fjxrManual = 0;
     let pctSum = 0;
     let pctN = 0;
 
-    byMat.forEach((matRows) => {
-      if (matRows.some((r) => this.isScanCheckExemptShipment(r))) {
+    byMat.forEach((sample) => {
+      if (this.isScanCheckExemptShipment(sample)) {
         ok += 1;
-        exempt += 1;
         pctSum += 100;
         pctN += 1;
+        if (this.isStatusScanChecked(sample)) fjxrManual += 1;
+        else fjxrExempt += 1;
         return;
       }
-      const checkedCount = matRows.filter((r) => this.isStatusScanChecked(r)).length;
-      if (checkedCount === matRows.length) {
+      const disp = this.getShipmentCheckDisplay(sample);
+      if (disp.status === 'ok' || disp.status === 'excess') {
         ok += 1;
         pctSum += 100;
         pctN += 1;
-      } else if (checkedCount > 0) {
+      } else if (disp.status === 'percentage' && (disp.value || 0) > 0) {
         partial += 1;
-        const pct = Math.round((checkedCount / matRows.length) * 100);
-        pctSum += pct;
+        pctSum += Number(disp.value) || 0;
         pctN += 1;
       } else {
         none += 1;
@@ -295,17 +311,20 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const avgPct = pctN > 0 ? Math.round(pctSum / pctN) : 0;
     if (ok === byMat.size) {
-      if (exempt === byMat.size) {
+      if (fjxrExempt + fjxrManual === byMat.size) {
+        if (fjxrManual === byMat.size) {
+          return { scanStatus: 'ok', scanLabel: 'Đã check tay', scanPct: 100 };
+        }
         return { scanStatus: 'ok', scanLabel: 'Không cần scan', scanPct: 100 };
       }
-      return { scanStatus: 'ok', scanLabel: 'Đã Check', scanPct: 100 };
+      return { scanStatus: 'ok', scanLabel: 'Đã scan check', scanPct: 100 };
     }
     if (ok === 0 && partial === 0) {
-      return { scanStatus: 'none', scanLabel: 'Chưa check', scanPct: null };
+      return { scanStatus: 'none', scanLabel: 'Chưa scan check', scanPct: null };
     }
     return {
       scanStatus: 'partial',
-      scanLabel: `Check ${avgPct}%`,
+      scanLabel: `Scan check ${avgPct}%`,
       scanPct: avgPct
     };
   }
@@ -443,7 +462,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private ngZone: NgZone,
     private readTracker: ReadTrackerService,
-    private tpCatalogService: TpCatalogFullService
+    private tpCatalogService: TpCatalogFullService,
+    private cartonPackingQtyService: CartonPackingQtyService
   ) {}
 
   goToMenu(): void {
@@ -1069,15 +1089,22 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       if (requestId !== this.fgOutCartonCheckRequestId) return;
 
       const totals = new Map<string, number>();
+      const rawByShipment = new Map<string, typeof allItems>();
       for (const code of codes) {
         const norm = this.normalizeShipmentCode(code);
         totals.set(
           norm,
           this.computeFgOutTotalCartonForShipment(code, allItems, standardByCode)
         );
+        rawByShipment.set(
+          norm,
+          allItems.filter(it => this.normalizeShipmentCode(it.shipment) === norm && String(it.materialCode || '').trim())
+        );
       }
 
       this.fgOutCartonTotalByShipment = totals;
+      this.fgOutRawItemsByShipment = rawByShipment;
+      this.fgOutStandardByCodeCache = standardByCode;
       this.fgOutCartonCheckReady = true;
       this.ngZone.run(() => this.cdr.markForCheck());
     } catch (error) {
@@ -1152,6 +1179,67 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const matched = this.isCartonCheckMatched(shipment);
     if (matched === null) return '…';
     return matched ? 'Đúng' : 'Sai';
+  }
+
+  /** FG-Out đã có phiếu xuất nào cho shipment này chưa — phân biệt "chưa xuất" với "sai dữ liệu". */
+  hasFgOutRecordsForShipment(shipment: ShipmentItem): boolean {
+    if (!this.fgOutCartonCheckReady) return true;
+    const norm = this.normalizeShipmentCode(shipment?.shipmentCode);
+    return (this.fgOutRawItemsByShipment.get(norm) || []).length > 0;
+  }
+
+  /** Tổng carton Shipment theo từng mã TP (trong cùng shipmentCode). */
+  private getShipmentCartonByMaterial(shipment: ShipmentItem): Map<string, number> {
+    const norm = this.normalizeShipmentCode(shipment?.shipmentCode);
+    const map = new Map<string, number>();
+    for (const s of this.filteredShipments) {
+      if (this.normalizeShipmentCode(s.shipmentCode) !== norm) continue;
+      const code = String(s.materialCode || '').trim().toUpperCase();
+      if (!code) continue;
+      map.set(code, (map.get(code) || 0) + (Number(s.carton) || 0));
+    }
+    return map;
+  }
+
+  /** Tổng carton FG Out theo từng mã TP (cùng thuật toán đếm với tổng shipment). */
+  private computeFgOutCartonByMaterialForShipment(shipmentCode: string): Map<string, number> {
+    const norm = this.normalizeShipmentCode(shipmentCode);
+    const items = this.fgOutRawItemsByShipment.get(norm) || [];
+    const sorted = this.sortFgOutRowsLikeTable(items);
+    const displayRows = sorted.map((material, matIdx) => ({ material, matIdx }));
+    const mergeCartonFirstMatIdx = new Map<string, number>();
+    displayRows.forEach(r => {
+      const mc = this.normalizeFgOutMergeCarton(r.material.mergeCarton);
+      if (!mc || mergeCartonFirstMatIdx.has(mc)) return;
+      mergeCartonFirstMatIdx.set(mc, r.matIdx);
+    });
+
+    const byMaterial = new Map<string, number>();
+    for (const r of displayRows) {
+      const count = this.getFgOutCartonCountForDetailRow(r.material, r.matIdx, mergeCartonFirstMatIdx, this.fgOutStandardByCodeCache);
+      const code = String(r.material.materialCode || '').trim().toUpperCase();
+      byMaterial.set(code, (byMaterial.get(code) || 0) + count);
+    }
+    return byMaterial;
+  }
+
+  /**
+   * Chi tiết từng mã TP lệch carton giữa Shipment và FG-Out — dùng khi hiển thị cảnh báo "Sai"
+   * để chỉ rõ mã nào bị lệch, tránh báo "Sai" chung chung không biết sửa ở đâu.
+   */
+  getCartonMismatchDetails(shipment: ShipmentItem): Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }> {
+    if (!this.fgOutCartonCheckReady) return [];
+    const shipMap = this.getShipmentCartonByMaterial(shipment);
+    const fgMap = this.computeFgOutCartonByMaterialForShipment(shipment?.shipmentCode);
+    const codes = new Set<string>([...shipMap.keys(), ...fgMap.keys()]);
+    const result: Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }> = [];
+    for (const code of codes) {
+      const s = shipMap.get(code) || 0;
+      const f = fgMap.get(code) || 0;
+      if (s !== f) result.push({ materialCode: code, shipmentCarton: s, fgOutCarton: f });
+    }
+    result.sort((a, b) => a.materialCode.localeCompare(b.materialCode, 'vi'));
+    return result;
   }
 
   /** Status ưu tiên (Delay → … → Đã Ship) cho header nhóm shipment. */
@@ -1469,10 +1557,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // Coi đã check: FJXR miễn; khách khác khi Status = "Đã Check"
+  // Coi đã check: FJXR luôn OK (miễn scan); khách khác theo FG Check
   isShipmentChecked(shipment: ShipmentItem): boolean {
     if (this.isScanCheckExemptShipment(shipment)) return true;
-    return this.isStatusScanChecked(shipment);
+    return this.getShipmentCheckDisplay(shipment).status === 'ok';
   }
 
   /**
@@ -1563,11 +1651,29 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Badge CHECK: FJXR miễn; khách khác theo Status = "Đã Check".
+   * Badge CHECK (rule cũ — mọi khách trừ FJXR): khớp thật với FG Check theo đúng Loại check
+   * đang dùng cho dòng đó (Thùng so carton, Lượng so số lượng) — không dựa vào Status.
+   */
+  isFgCheckMatched(shipment: ShipmentItem): boolean {
+    return this.getCheckModeForKey(shipment) === 'pn'
+      ? this.isCheckOKByCarton(shipment)
+      : this.isQuantityMatched(shipment);
+  }
+
+  /**
+   * FJXR + Status đã đánh dấu tay "Đã Check" → badge CHECK báo "Đã check tay".
+   * CHỈ áp dụng cho FJXR — khách khác luôn theo rule cũ (isFgCheckMatched ở trên).
+   */
+  isFjxrManualChecked(shipment: ShipmentItem): boolean {
+    return this.isScanCheckExemptShipment(shipment) && this.isStatusScanChecked(shipment);
+  }
+
+  /**
+   * Badge CHECK (helper): FJXR miễn; khách khác theo rule cũ FG Check.
    */
   isCheckOK(shipment: ShipmentItem): boolean {
     if (this.isScanCheckExemptShipment(shipment)) return true;
-    return this.isStatusScanChecked(shipment);
+    return this.isFgCheckMatched(shipment);
   }
 
   /** So sánh tổng đã check (FG Check) với tổng shipment theo (shipment + mã TP). Theo Loại check: Thùng so thùng, Lượng so số lượng. */
@@ -1575,11 +1681,37 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (this.isScanCheckExemptShipment(shipment)) {
       return { status: 'ok', value: null };
     }
-    // Khách khác FJXR: Status "Đã Check" ≈ đã scan
-    if (this.isStatusScanChecked(shipment)) {
-      return { status: 'ok', value: null };
+
+    const shipmentCode = String(shipment.shipmentCode || '').trim().toUpperCase();
+    const materialCode = String(shipment.materialCode || '').trim().toUpperCase();
+    const key = `${shipmentCode}|${materialCode}`;
+    const scannedCarton = this.fgCheckScannedCarton.get(key) || 0;
+    const scannedQty = this.fgCheckScannedQty.get(key) || 0;
+    const mode = this.fgCheckModeByKey.get(key) || 'pn-qty';
+
+    const sameGroup = (s: ShipmentItem) => {
+      const sCode = String(s.shipmentCode || '').trim().toUpperCase();
+      const mCode = String(s.materialCode || '').trim().toUpperCase();
+      return sCode === shipmentCode && mCode === materialCode;
+    };
+
+    if (mode === 'pn') {
+      const totalCarton = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
+      if (totalCarton <= 0) return scannedCarton > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+      if (scannedCarton > totalCarton) return { status: 'excess', value: null };
+      if (scannedCarton === totalCarton) return { status: 'ok', value: null };
+      const pct = Math.round((scannedCarton / totalCarton) * 100);
+      return { status: 'percentage', value: pct };
     }
-    return { status: 'percentage', value: 0 };
+
+    const totalQuantity = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    if (totalQuantity <= 0) {
+      return scannedQty > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
+    }
+    if (scannedQty > totalQuantity) return { status: 'excess', value: null };
+    if (scannedQty === totalQuantity) return { status: 'ok', value: null };
+    const pct = Math.round((scannedQty / totalQuantity) * 100);
+    return { status: 'percentage', value: pct };
   }
 
 
@@ -4279,16 +4411,26 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * SL SP/thùng dùng tính Carton, key = 7 ký tự đầu Mã TP (P/T/M/L + 6 số): ưu tiên Lượng Đóng Thùng
+   * (danh mục riêng của Kho, collection carton-packing-qty) nếu có; không có thì lấy SL SP/thùng ở
+   * Danh mục TP. So theo 7 ký tự đầu vì cả 2 nguồn đều lưu đúng mã gốc, còn materialCode ở FG Out có
+   * thể kèm hậu tố (VD "P002052_A1") — cùng rule với FG Inventory / FG Out.
+   */
   private async loadFgCatalogStandardMap(): Promise<Map<string, number>> {
     const map = new Map<string, number>();
     try {
       const items = await this.tpCatalogService.getCatalogItemsCached();
       items.forEach(item => {
-        const code = item.materialCode.toUpperCase();
+        const code7 = item.materialCode.toUpperCase().slice(0, 7);
         const num = parseFloat(item.standard);
-        if (code && !isNaN(num) && num > 0) {
-          map.set(code, num);
+        if (code7 && !isNaN(num) && num > 0) {
+          map.set(code7, num);
         }
+      });
+      const overrideMap = await this.cartonPackingQtyService.loadAllAsMap();
+      overrideMap.forEach((qty, code7) => {
+        if (qty > 0) map.set(code7, qty);
       });
     } catch (e) {
       console.error('Load fg-catalog (cached) for print error:', e);
@@ -4312,8 +4454,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (mc) {
       return mergeCartonFirstMatIdx.get(mc) === matIdx ? 1 : 0;
     }
-    const code = String(row.materialCode || '').trim().toUpperCase();
-    const standard = standardByCode.get(code);
+    const code7 = String(row.materialCode || '').trim().toUpperCase().slice(0, 7);
+    const standard = standardByCode.get(code7);
     if (standard && standard > 0) {
       const qty = Number(row.quantity) || 0;
       return Math.floor(qty / standard);

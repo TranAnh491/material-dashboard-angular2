@@ -410,6 +410,7 @@
               <th>Net Weight</th>
               <th>SL SP/thùng</th>
               <th title="Danh mục riêng của Kho — ưu tiên dùng thay SL SP/thùng khi tính Carton ở FG In">Lượng Đóng Thùng</th>
+              <th title="Chỉ hiện ở mã đang lệch SL SP/thùng ≠ Lượng Đóng Thùng — bấm để báo nhóm mail ENG">Gửi mail</th>
               <th></th>
               <th title="Mã nhân viên người sửa gần nhất">ID</th>
             </tr>
@@ -442,6 +443,13 @@
               <td>
                 <input type="number" class="dv-input dv-input--cell dv-input--sm" min="0" [(ngModel)]="item.cartonPackingQty"
                        (change)="updateTpCartonPackingQty(item)" placeholder="—">
+              </td>
+              <td class="dv-cell-mail">
+                <button type="button" class="dv-btn dv-btn--sm dv-btn--mail" *ngIf="isTpRowMismatched(item)"
+                        [disabled]="isTpMailSending(item)" (click)="sendTpMismatchMail(item)"
+                        title="Gửi mail báo mã này lệch SL SP/thùng ≠ Lượng Đóng Thùng tới nhóm mail ENG">
+                  <i class="material-icons">{{ isTpMailSending(item) ? 'hourglass_empty' : 'mail' }}</i>
+                </button>
               </td>
               <td class="dv-actions">
                 <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteTpItem(item)">Xóa</button>

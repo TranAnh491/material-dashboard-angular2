@@ -303,10 +303,22 @@
                             </div>
                             </div>
                             <div class="shipment-carton-mismatch-warn" *ngIf="isCartonCheckMatched(shipment) === false">
-                              Lượng thùng ở Fg-Out đang sai
-                              <span class="shipment-carton-mismatch-detail">
-                                (Shipment {{ g.totalCarton | number : '1.0-0' }} · FG-Out {{ getFgOutCartonTotalForGroup(shipment) | number : '1.0-0' }})
-                              </span>
+                              <ng-container *ngIf="!hasFgOutRecordsForShipment(shipment); else cartonMismatchDetailTpl">
+                                ⚠️ FG-Out chưa có phiếu xuất nào cho shipment này — chưa thể so sánh, không phải do sai dữ liệu.
+                              </ng-container>
+                              <ng-template #cartonMismatchDetailTpl>
+                                Lượng thùng ở Fg-Out đang sai
+                                <span class="shipment-carton-mismatch-detail">
+                                  (Shipment {{ g.totalCarton | number : '1.0-0' }} · FG-Out {{ getFgOutCartonTotalForGroup(shipment) | number : '1.0-0' }})
+                                </span>
+                                <div class="shipment-carton-mismatch-list">
+                                  <div class="shipment-carton-mismatch-item" *ngFor="let m of getCartonMismatchDetails(shipment)">
+                                    <strong>{{ m.materialCode }}</strong>:
+                                    <span *ngIf="m.fgOutCarton === 0">chưa có phiếu xuất cho mã này</span>
+                                    <span *ngIf="m.fgOutCarton > 0">Shipment {{ m.shipmentCarton | number : '1.0-0' }} · FG-Out {{ m.fgOutCarton | number : '1.0-0' }}</span>
+                                  </div>
+                                </div>
+                              </ng-template>
                             </div>
                           </div>
                           </ng-container>
@@ -371,15 +383,20 @@
               {{ getDisplayScannedValue(shipment) | number:'1.0-0':'en-US' }}
             </td>
             <td class="check-status-cell">
-              <span *ngIf="isScanCheckExemptShipment(shipment)" class="check-ok-qty" title="Khách FJXR không cần scan check">
+              <span *ngIf="isFjxrManualChecked(shipment)" class="check-ok-qty" title="Khách FJXR — Status đã đánh dấu Đã Check (check tay)">
+                Đã check tay
+              </span>
+              <span *ngIf="!isFjxrManualChecked(shipment) && isScanCheckExemptShipment(shipment)" class="check-ok-qty" title="Khách FJXR không cần scan check">
                 Không cần scan
               </span>
-              <span *ngIf="!isScanCheckExemptShipment(shipment) && isStatusScanChecked(shipment)" class="check-ok-qty"
-                    title="Status = Đã Check">
-                Đã Check
+              <span *ngIf="!isScanCheckExemptShipment(shipment) && isFgCheckMatched(shipment)"
+                    [class.check-ok-qty]="getCheckModeForKey(shipment) === 'pn-qty'"
+                    [class.check-ok-carton]="getCheckModeForKey(shipment) === 'pn'"
+                    [title]="getCheckModeForKey(shipment) === 'pn' ? 'Đã khớp thùng tại FG Check' : 'Đã khớp lượng tại FG Check'">
+                {{ getCheckModeForKey(shipment) === 'pn' ? 'Đã check thùng' : 'Đã check lượng' }}
               </span>
-              <span *ngIf="!isScanCheckExemptShipment(shipment) && !isStatusScanChecked(shipment)" class="check-pending"
-                    title="Status chưa phải Đã Check">
+              <span *ngIf="!isScanCheckExemptShipment(shipment) && !isFgCheckMatched(shipment)" class="check-pending"
+                    title="Chưa khớp số lượng/thùng tại FG Check">
                 Chưa check
               </span>
             </td>

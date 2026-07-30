@@ -732,6 +732,22 @@
   }
 }
 
+.dv-btn--mail {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fdba74;
+
+  &:hover:not(:disabled) {
+    background: #ffedd5;
+  }
+}
+
+.dv-cell-mail {
+  white-space: nowrap;
+  width: 1%;
+  text-align: center;
+}
+
 .dv-btn--active {
   background: #eef2ff;
   border-color: #6366f1;
