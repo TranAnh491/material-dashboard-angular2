@@ -344,6 +344,11 @@ $stg-sky: #38bdf8;
     background: #ecfdf5;
     border-color: #16a34a;
   }
+
+  &--sample {
+    background: #fefce8;
+    border-color: #eab308;
+  }
 }
 
 .stg-level__head {
@@ -371,6 +376,11 @@ $stg-sky: #38bdf8;
   &--empty {
     color: #94a3b8;
     font-weight: 500;
+  }
+
+  &--sample {
+    color: #a16207;
+    font-weight: 800;
   }
 }
 

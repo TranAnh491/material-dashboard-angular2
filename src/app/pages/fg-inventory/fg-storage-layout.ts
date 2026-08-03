@@ -176,6 +176,16 @@ export const ZONE_A_RESERVED_SLOTS: ReadonlyArray<{
   { rackId: 'A6', level: 1, label: 'A6.1', customerCode: 'ADAM' }
 ];
 
+/** Mâm để trống (sample) — không phân bổ khách mass */
+export const ZONE_A_SAMPLE_SLOTS: ReadonlyArray<{
+  rackId: string;
+  level: number;
+  label: string;
+  displayLabel: string;
+}> = [
+  { rackId: 'A1', level: 2, label: 'A1.2', displayLabel: 'SAMPLE' }
+];
+
 /** Kệ B1..B6 */
 export const ZONE_B_GIL_HOB_CUSTOMERS = ['GIL', 'HOB'] as const;
 
@@ -338,6 +348,15 @@ export function isReservedStorageSlot(label: string): boolean {
   return ZONE_A_RESERVED_SLOTS.some((s) => s.label === label);
 }
 
+export function isSampleStorageSlot(label: string): boolean {
+  const key = String(label || '').trim().toUpperCase();
+  return ZONE_A_SAMPLE_SLOTS.some((s) => s.label === key || key.startsWith(s.label));
+}
+
+function getSampleDisplayForSlot(rackId: string, level: number): string | null {
+  return ZONE_A_SAMPLE_SLOTS.find((s) => s.rackId === rackId && s.level === level)?.displayLabel ?? null;
+}
+
 function isReservedZoneACustomer(customer: string): boolean {
   return (ZONE_A_RESERVED_CUSTOMERS as readonly string[]).some((code) =>
     matchesStorageCustomer(customer, code)
@@ -350,8 +369,13 @@ function isPrimaryZoneACustomer(customer: string): boolean {
   );
 }
 
-/** Khách được phép ở mâm (tầng) cụ thể — khu A có mâm cố định A5/A6. */
+/** Khách được phép ở mâm (tầng) cụ thể — khu A có mâm cố định A5/A6; A1.2 dành sample. */
 export function isCustomerAllowedOnSlot(customer: string, rackId: string, level: number): boolean {
+  if (getSampleDisplayForSlot(rackId, level)) {
+    // Sample slot — không gán khách mass; cho phép rỗng / SAMPLE
+    const c = String(customer || '').trim().toUpperCase();
+    return !c || c === 'SAMPLE' || c.includes('SAMPLE');
+  }
   const reservedCode = getReservedCodeForSlot(rackId, level);
   if (reservedCode) {
     return matchesStorageCustomer(customer, reservedCode);
@@ -365,7 +389,8 @@ export function isCustomerAllowedOnSlot(customer: string, rackId: string, level:
 }
 
 /**
- * Khu A: 6 mâm cố định A5/A6 cho OST…ADAM; khách chính xếp các mâm còn lại.
+ * Khu A: 6 mâm cố định A5/A6 cho OST…ADAM; A1.2 để trống (sample);
+ * khách chính xếp các mâm còn lại.
  */
 function allocateZoneA(
   rackDefs: RackDef[],
@@ -373,11 +398,20 @@ function allocateZoneA(
 ): StorageRackView[] {
   const levels: StorageLevelSlot[] = [];
   const reservedLabels = new Set(ZONE_A_RESERVED_SLOTS.map((s) => s.label));
+  const sampleLabels = new Set(ZONE_A_SAMPLE_SLOTS.map((s) => s.label));
 
   for (const rack of rackDefs) {
     for (let lv = 1; lv <= LEVELS_PER_RACK; lv++) {
       levels.push(emptyLevel(rack.id, lv));
     }
+  }
+
+  // A1.2 — để trống cho sample
+  for (const sample of ZONE_A_SAMPLE_SLOTS) {
+    const slot = levels.find((l) => l.rackId === sample.rackId && l.level === sample.level);
+    if (!slot) continue;
+    slot.customer = sample.displayLabel;
+    fillLevelCartons(slot, 0);
   }
 
   const reservedNames = new Set<string>();
@@ -412,7 +446,7 @@ function allocateZoneA(
     let remaining = totalCarton;
     while (remaining > 0 && levelIdx < levels.length) {
       const slot = levels[levelIdx];
-      if (reservedLabels.has(slot.label)) {
+      if (reservedLabels.has(slot.label) || sampleLabels.has(slot.label)) {
         levelIdx += 1;
         continue;
       }
@@ -433,7 +467,14 @@ function allocateZoneA(
     }
   }
 
-  return rackDefs.map((rack) => buildRackView(rack, levels));
+  return rackDefs.map((rack) => {
+    const view = buildRackView(rack, levels);
+    // Khu A: không gán tên khách ở đầu kệ (nhiều khách / xem theo mâm)
+    if (rack.zone === 'A') {
+      view.primaryCustomer = '';
+    }
+    return view;
+  });
 }
 
 /**
@@ -515,7 +556,7 @@ export function buildStorageZones(
       key: 'A',
       title: 'Khu A',
       subtitle:
-        `A1–A4 + A5/A6 (dư) · A5.1–A5.5, A6.1: ${ZONE_A_RESERVED_CUSTOMERS.join(', ')}`
+        `A1–A4 + A5/A6 (dư) · A1.2: SAMPLE · A5.1–A5.5, A6.1: ${ZONE_A_RESERVED_CUSTOMERS.join(', ')}`
     },
     {
       key: 'B-GIL',

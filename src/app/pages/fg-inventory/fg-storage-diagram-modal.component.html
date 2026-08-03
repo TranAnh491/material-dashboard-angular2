@@ -7,6 +7,11 @@
       </h3>
       <div class="stg-modal__header-actions">
         <button type="button" class="stg-btn stg-btn--outline"
+                (click)="printLayout()"
+                title="In layout giấy A4">
+          <i class="material-icons">print</i> In layout
+        </button>
+        <button type="button" class="stg-btn stg-btn--outline"
                 *ngIf="mode !== 'pick'"
                 (click)="checkRequested.emit()">
           <i class="material-icons">fact_check</i> Check vị trí
@@ -69,10 +74,11 @@
             </header>
             <div class="stg-rack-grid">
               <div class="stg-rack" *ngFor="let rack of zone.racks"
-                   [class.stg-rack--current]="isCurrentCustomerRack(rack.primaryCustomer)"
-                   [title]="rack.id + ' · ' + (rack.primaryCustomer || '—') + ' · ' + rack.totalCarton + '/' + rack.capacityCarton + ' carton'">
+                   [class.stg-rack--current]="zone.key !== 'A' && isCurrentCustomerRack(rack.primaryCustomer)"
+                   [title]="rack.id + (zone.key !== 'A' && rack.primaryCustomer && rack.primaryCustomer !== '—' ? ' · ' + rack.primaryCustomer : '') + ' · ' + rack.totalCarton + '/' + rack.capacityCarton + ' carton'">
                 <div class="stg-rack__id">{{ rack.id }}</div>
                 <div class="stg-rack__customer"
+                     *ngIf="zone.key !== 'A'"
                      [class.stg-rack__customer--empty]="!rack.primaryCustomer || rack.primaryCustomer === '—'">
                   {{ shortKh(rack.primaryCustomer) }}
                 </div>
@@ -82,11 +88,13 @@
                        [id]="storageSlotDomId(lv.label)"
                        [class.stg-level--hit]="isStorageSlotHighlighted(lv.label) || isAnyPalletHighlighted(lv)"
                        [class.stg-level--current]="isCurrentCustomerLevel(lv)"
+                       [class.stg-level--sample]="isSampleLevel(lv)"
                        [title]="lv.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + lv.carton + '/' + lv.capacityCarton + ' ct'">
                     <div class="stg-level__head">
                       <span class="stg-level__label">{{ lv.label }}</span>
                       <span class="stg-level__kh"
-                            [class.stg-level__kh--empty]="!lv.customer">
+                            [class.stg-level__kh--empty]="!lv.customer"
+                            [class.stg-level__kh--sample]="isSampleLevel(lv)">
                         {{ lv.customer ? shortKh(lv.customer) : '—' }}
                       </span>
                     </div>

@@ -14,6 +14,7 @@ import {
   extractPalletQrCode,
   getCartonPerPallet,
   inventoryLineMatchesPallet,
+  isSampleStorageSlot,
   matchesStorageCustomer,
   normalizeStorageLocation,
   parseStorageSlotLocation,
@@ -188,6 +189,107 @@ export class FgStorageDiagramModalComponent implements OnChanges {
 
   shortKh(name: string): string {
     return shortStorageCustomerLabel(name);
+  }
+
+  isSampleLevel(lv: StorageLevelSlot): boolean {
+    return isSampleStorageSlot(lv?.label) || String(lv?.customer || '').toUpperCase() === 'SAMPLE';
+  }
+
+  /** In sơ đồ layout ra giấy A4. */
+  printLayout(): void {
+    if (!this.storageZones?.length) {
+      this.rebuildZones();
+    }
+    const escape = (s: string) =>
+      String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const zonesHtml = this.storageZones
+      .map((zone) => {
+        const racksHtml = zone.racks
+          .map((rack) => {
+            const showRackKh = zone.key !== 'A' && rack.primaryCustomer && rack.primaryCustomer !== '—';
+            const levelsHtml = rack.levels
+              .map((lv) => {
+                const isSample = this.isSampleLevel(lv);
+                const kh = lv.customer ? shortStorageCustomerLabel(lv.customer) : '—';
+                const palletsHtml = (lv.pallets || [])
+                  .map(
+                    (pl) =>
+                      `<span class="pl">${escape(pl.slotLetter || String(pl.palletNo))}</span>`
+                  )
+                  .join('');
+                return `<div class="lv${isSample ? ' sample' : ''}">
+                  <div class="lv-h"><b>${escape(lv.label)}</b><span>${escape(kh)}</span></div>
+                  <div class="pls">${palletsHtml}</div>
+                </div>`;
+              })
+              .join('');
+            return `<div class="rack">
+              <div class="rack-id">${escape(rack.id)}</div>
+              ${showRackKh ? `<div class="rack-kh">${escape(shortStorageCustomerLabel(rack.primaryCustomer))}</div>` : ''}
+              <div class="levels">${levelsHtml}</div>
+              <div class="rack-meta">${rack.totalCarton}/${rack.capacityCarton} ct</div>
+            </div>`;
+          })
+          .join('');
+        return `<section class="zone">
+          <header><h2>${escape(zone.title)}</h2><p>${escape(zone.subtitle)}</p></header>
+          <div class="rack-grid">${racksHtml}</div>
+        </section>`;
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Sơ đồ lưu trữ — ${escape(this.factory)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; padding: 10mm; font-size: 9pt; }
+  h1 { font-size: 14pt; margin-bottom: 2mm; }
+  .meta { font-size: 8pt; color: #475569; margin-bottom: 4mm; }
+  .zone { margin-bottom: 5mm; page-break-inside: avoid; }
+  .zone header h2 { font-size: 11pt; }
+  .zone header p { font-size: 7.5pt; color: #64748b; margin: 1mm 0 2mm; }
+  .rack-grid { display: flex; flex-wrap: wrap; gap: 2.5mm; }
+  .rack {
+    border: 1px solid #38bdf8; border-radius: 2mm; padding: 1.5mm;
+    width: 32mm; min-height: 38mm;
+  }
+  .rack-id { font-weight: 900; text-align: center; font-size: 10pt; }
+  .rack-kh { text-align: center; font-size: 7pt; font-weight: 700; min-height: 2.5mm; }
+  .levels { display: flex; flex-direction: column; gap: 1mm; margin-top: 1mm; }
+  .lv { border: 1px solid #bae6fd; border-radius: 1mm; padding: 0.8mm 1mm; }
+  .lv.sample { background: #fef9c3; border-color: #facc15; }
+  .lv-h { display: flex; justify-content: space-between; gap: 1mm; font-size: 7pt; }
+  .lv-h b { font-weight: 800; }
+  .pls { display: flex; gap: 0.6mm; margin-top: 0.6mm; }
+  .pl {
+    flex: 1; text-align: center; border: 1px solid #7dd3fc; border-radius: 0.6mm;
+    font-size: 7pt; font-weight: 800; padding: 0.4mm 0;
+  }
+  .rack-meta { text-align: center; font-size: 6.5pt; color: #64748b; margin-top: 1mm; }
+  @page { size: A4 portrait; margin: 8mm; }
+  @media print {
+    body { padding: 0; }
+    .zone { break-inside: avoid; }
+  }
+</style></head><body>
+  <h1>Sơ đồ lưu trữ</h1>
+  <p class="meta">Nhà máy: <b>${escape(this.factory)}</b> · In lúc ${new Date().toLocaleString('vi-VN')} · Mâm A/B/C · A1.2 = SAMPLE</p>
+  ${zonesHtml}
+  <script>window.onload=function(){setTimeout(function(){window.print();},250);};</script>
+</body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('Không mở được cửa sổ in. Cho phép popup rồi thử lại.');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
   }
 
   storageSlotDomId(label: string): string {
