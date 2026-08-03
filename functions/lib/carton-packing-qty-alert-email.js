@@ -33,11 +33,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ALERT_RECIPIENTS = void 0;
+exports.esc = esc;
+exports.getSmtpConfig = getSmtpConfig;
 exports.sendCartonPackingQtyAlertEmail = sendCartonPackingQtyAlertEmail;
 const nodemailer = __importStar(require("nodemailer"));
 const params_config_1 = require("./params-config");
-/** Danh sách cố định nhận cảnh báo sai Lượng Đóng Thùng (FG In → nút "Sai Carton"). */
-const ALERT_RECIPIENTS = [
+/** Danh sách cố định nhận cảnh báo sai Lượng Đóng Thùng (FG In → nút "Sai Carton", Danh mục TP → cột "Gửi mail"). */
+exports.ALERT_RECIPIENTS = [
     'wh1@airspeedmfgvn.com',
     'wh2@airspeedmfgvn.com',
     'wh3@airspeedmfgvn.com',
@@ -107,7 +110,7 @@ async function sendCartonPackingQtyAlertEmail(p) {
     });
     await transporter.sendMail({
         from: cfg.from,
-        to: ALERT_RECIPIENTS,
+        to: exports.ALERT_RECIPIENTS,
         subject: `[Cảnh báo] Mã TP ${p.materialCode} sai Lượng SP/thùng`.slice(0, 250),
         text,
         html

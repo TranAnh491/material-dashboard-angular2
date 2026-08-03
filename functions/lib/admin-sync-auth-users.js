@@ -67,7 +67,15 @@ async function deleteUserFirestoreAndAuth(uid) {
     batch.delete(admin.firestore().collection('user-permissions').doc(uid));
     batch.delete(admin.firestore().collection('user-tab-permissions').doc(uid));
     await batch.commit();
-    await admin.auth().deleteUser(uid);
+    try {
+        await admin.auth().deleteUser(uid);
+    }
+    catch (e) {
+        // Orphan Firestore / đã xóa Auth trước đó — vẫn coi là thành công
+        if ((e === null || e === void 0 ? void 0 : e.code) !== 'auth/user-not-found') {
+            throw e;
+        }
+    }
 }
 /** Admin: giải phóng email bị kẹt trong Firebase Auth nhưng không còn trong danh sách Settings. */
 async function adminReleaseRegistrationEmail(callerUid, emailRaw) {
@@ -117,8 +125,9 @@ async function adminReleaseRegistrationEmail(callerUid, emailRaw) {
 }
 /**
  * Admin: xóa 1 tài khoản theo uid (Auth + Firestore).
+ * Hỗ trợ orphan: chỉ còn user-permissions / user-tab-permissions, hoặc Auth lệch uid theo email.
  */
-async function adminDeleteUserByUid(callerUid, targetUidRaw) {
+async function adminDeleteUserByUid(callerUid, targetUidRaw, emailHintRaw) {
     var _a;
     if (!callerUid)
         throw new Error('Thiếu callerUid.');
@@ -133,28 +142,71 @@ async function adminDeleteUserByUid(callerUid, targetUidRaw) {
     if (targetUid === callerUid) {
         throw new Error('Không thể xóa chính tài khoản đang đăng nhập.');
     }
+    const emailHint = (emailHintRaw || '').trim().toLowerCase();
     let email = '';
     let employeeId;
+    let authExistsForUid = false;
     try {
         const ur = await admin.auth().getUser(targetUid);
-        email = ur.email || '';
+        email = (ur.email || '').toLowerCase();
+        authExistsForUid = true;
     }
     catch (err) {
         if ((err === null || err === void 0 ? void 0 : err.code) !== 'auth/user-not-found') {
             throw err;
         }
     }
-    const userDoc = await admin.firestore().collection('users').doc(targetUid).get();
+    const db = admin.firestore();
+    const [userDoc, permDoc, tabDoc] = await Promise.all([
+        db.collection('users').doc(targetUid).get(),
+        db.collection('user-permissions').doc(targetUid).get(),
+        db.collection('user-tab-permissions').doc(targetUid).get()
+    ]);
     if (userDoc.exists) {
         const data = userDoc.data();
-        email = email || (typeof data.email === 'string' ? data.email : '');
+        email = email || (typeof data.email === 'string' ? data.email.trim().toLowerCase() : '');
         employeeId = typeof data.employeeId === 'string' ? data.employeeId : undefined;
     }
-    if (!email && !userDoc.exists) {
+    if (permDoc.exists) {
+        const data = permDoc.data();
+        email = email || (typeof data.email === 'string' ? data.email.trim().toLowerCase() : '');
+        if (!employeeId && typeof data.employeeId === 'string') {
+            employeeId = data.employeeId;
+        }
+    }
+    if (tabDoc.exists) {
+        const data = tabDoc.data();
+        email = email || (typeof data.email === 'string' ? data.email.trim().toLowerCase() : '');
+    }
+    email = email || emailHint;
+    // Auth có thể còn theo email nhưng uid khác bản ghi Settings (orphan)
+    let authUidByEmail = null;
+    if (email) {
+        try {
+            const ur = await admin.auth().getUserByEmail(email);
+            authUidByEmail = ur.uid;
+        }
+        catch (err) {
+            if ((err === null || err === void 0 ? void 0 : err.code) !== 'auth/user-not-found') {
+                throw err;
+            }
+        }
+    }
+    const hasFirestore = userDoc.exists || permDoc.exists || tabDoc.exists;
+    if (!authExistsForUid && !hasFirestore && !authUidByEmail) {
         throw new Error('Không tìm thấy tài khoản để xóa.');
     }
     await deleteUserFirestoreAndAuth(targetUid);
-    return { ok: true, deletedAuth: true, uid: targetUid, email, employeeId };
+    if (authUidByEmail && authUidByEmail !== targetUid) {
+        await deleteUserFirestoreAndAuth(authUidByEmail);
+    }
+    return {
+        ok: true,
+        deletedAuth: authExistsForUid || !!authUidByEmail,
+        uid: authUidByEmail || targetUid,
+        email,
+        employeeId
+    };
 }
 /**
  * Admin: xóa 1 tài khoản theo mã nhân viên ASP (ASPxxxx hoặc xxxx).

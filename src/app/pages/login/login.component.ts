@@ -297,6 +297,10 @@ export class LoginComponent implements OnInit {
         en: 'Wrong employee ID or password!',
         vi: 'Mã hoặc mật khẩu không đúng!'
       },
+      'auth/invalid-login-credentials': {
+        en: 'Wrong employee ID or password!',
+        vi: 'Mã hoặc mật khẩu không đúng!'
+      },
       'functions/permission-denied': {
         en: 'Wrong employee ID or password!',
         vi: 'Mã hoặc mật khẩu không đúng!'

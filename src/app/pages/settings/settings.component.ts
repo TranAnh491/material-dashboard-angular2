@@ -871,7 +871,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     if (confirm(`Bạn có chắc chắn muốn xóa user ${user.email}?\n\nHành động này sẽ xóa:\n- Firebase Authentication\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
       try {
-        await this.deleteUserCompletelyByUid(user.uid);
+        await this.deleteUserCompletelyByUid(user.uid, user.email);
         
         // Remove from local arrays
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== user.uid);
@@ -894,10 +894,62 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   /** Xóa hoàn toàn user (Auth + Firestore) qua Cloud Function — client không xóa được Auth. */
-  private async deleteUserCompletelyByUid(uid: string): Promise<void> {
-    await firstValueFrom(
-      this.fns.httpsCallable('adminDeleteUserByUidFn')({ uid })
-    );
+  private async deleteUserCompletelyByUid(uid: string, email?: string): Promise<void> {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    try {
+      await firstValueFrom(
+        this.fns.httpsCallable('adminDeleteUserByUidFn')({
+          uid,
+          email: normalizedEmail || undefined
+        })
+      );
+      return;
+    } catch (err: any) {
+      const msg = String(err?.message || err || '');
+      const code = String(err?.code || '');
+      const isNotFound =
+        code.includes('not-found') ||
+        msg.includes('not-found') ||
+        msg.includes('Không tìm thấy tài khoản');
+
+      // Orphan: còn trên Settings (permissions) nhưng không có Auth/users → dọn phía client
+      if (!isNotFound) {
+        throw err;
+      }
+
+      console.warn('adminDeleteUserByUidFn not-found → fallback orphan cleanup', { uid, email: normalizedEmail });
+      await this.deleteOrphanUserRemnants(uid, normalizedEmail);
+    }
+  }
+
+  /** Dọn users / permissions theo uid + giải phóng Auth theo email (nếu còn). */
+  private async deleteOrphanUserRemnants(uid: string, email: string): Promise<void> {
+    const tryDelete = async (collection: string) => {
+      try {
+        await this.firestore.collection(collection).doc(uid).delete();
+      } catch (e) {
+        console.warn(`Không xóa được ${collection}/${uid}:`, e);
+      }
+    };
+
+    await Promise.all([
+      tryDelete('users'),
+      tryDelete('user-permissions'),
+      tryDelete('user-tab-permissions')
+    ]);
+
+    if (!email) {
+      return;
+    }
+
+    try {
+      await firstValueFrom(
+        this.fns.httpsCallable('adminReleaseRegistrationEmailFn')({ email })
+      );
+    } catch (e) {
+      // Auth có thể đã không còn — OK nếu Firestore đã sạch
+      console.warn('adminReleaseRegistrationEmailFn after orphan cleanup:', e);
+    }
   }
 
 
@@ -1401,7 +1453,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (confirm(`Bạn có chắc chắn muốn xóa user ${this.selectedUser.email}?\n\nHành động này sẽ xóa:\n- Firebase Authentication\n- Thông tin user\n- Quyền hạn\n- Phân quyền tab\n- Không thể hoàn tác!`)) {
       try {
         const deletedEmail = this.selectedUser.email;
-        await this.deleteUserCompletelyByUid(this.selectedUser.uid);
+        await this.deleteUserCompletelyByUid(this.selectedUser.uid, this.selectedUser.email);
         
         // Remove from local arrays
         this.firebaseUsers = this.firebaseUsers.filter(u => u.uid !== this.selectedUser!.uid);

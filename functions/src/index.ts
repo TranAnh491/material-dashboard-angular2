@@ -823,7 +823,7 @@ export const adminDeleteUserByEmployeeIdFn = functions
   });
 
 /** Admin: xóa user theo uid (Auth + Firestore). */
-export const adminDeleteUserByUidFn = functions.https.onCall(async (data: { uid?: string }, context) => {
+export const adminDeleteUserByUidFn = functions.https.onCall(async (data: { uid?: string; email?: string }, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
   }
@@ -832,10 +832,11 @@ export const adminDeleteUserByUidFn = functions.https.onCall(async (data: { uid?
   if (!uid) {
     throw new functions.https.HttpsError('invalid-argument', 'Thiếu uid.');
   }
+  const email = typeof data?.email === 'string' ? data.email.trim() : '';
 
   try {
     const { adminDeleteUserByUid } = await import('./admin-sync-auth-users');
-    return await adminDeleteUserByUid(context.auth.uid, uid);
+    return await adminDeleteUserByUid(context.auth.uid, uid, email || undefined);
   } catch (e: unknown) {
     const anyErr = e as any;
     const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
