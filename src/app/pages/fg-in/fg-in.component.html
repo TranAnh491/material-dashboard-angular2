@@ -127,6 +127,59 @@
           <p>Không có phiếu Temporary</p>
         </div>
       </section>
+
+      <section class="fg-m-panel" *ngIf="mobileBottomTab === 'temp'">
+        <p class="fg-m-section-label">Vùng Temp ({{ getMobileTempTotalCount() }})</p>
+
+        <div class="fg-m-temp-zones">
+          <button type="button" class="fg-m-temp-zone"
+                  [class.is-active]="mobileTempZone === '1'"
+                  (click)="setMobileTempZone('1')">
+            Temp-1
+            <em *ngIf="getTempZoneCount('1') > 0">{{ getTempZoneCount('1') }}</em>
+          </button>
+          <button type="button" class="fg-m-temp-zone"
+                  [class.is-active]="mobileTempZone === '2'"
+                  (click)="setMobileTempZone('2')">
+            Temp-2
+            <em *ngIf="getTempZoneCount('2') > 0">{{ getTempZoneCount('2') }}</em>
+          </button>
+          <button type="button" class="fg-m-temp-zone"
+                  [class.is-active]="mobileTempZone === '3'"
+                  (click)="setMobileTempZone('3')">
+            Temp-3
+            <em *ngIf="getTempZoneCount('3') > 0">{{ getTempZoneCount('3') }}</em>
+          </button>
+        </div>
+
+        <p class="fg-m-section-hint" *ngIf="mobileTempZone">
+          Mã đang ở Temp-{{ mobileTempZone }} — bấm để chọn Sơ đồ lưu trữ
+        </p>
+
+        <div class="fg-m-card-list" *ngIf="mobileTempZone">
+          <div class="fg-m-card fg-m-card--temp"
+               *ngFor="let material of getMobileTempMaterials()"
+               (click)="openConfirmReceiptDialog(material)">
+            <div class="fg-m-card__code">{{ material.materialCode }}</div>
+            <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
+            <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
+            <span class="fg-m-card__meta">LOT: {{ material.batchNumber || material.lot || '—' }}</span>
+            <span class="fg-m-card__meta">SL: {{ material.quantity | number:'1.0-0' }}</span>
+            <span class="fg-m-card__meta fg-m-card__meta--warn">
+              Vị trí: <strong>{{ material.location || ('Temp-' + mobileTempZone) }}</strong>
+            </span>
+            <div class="fg-m-card__action fg-m-card__action--scan">
+              <i class="material-icons">grid_on</i>
+              Sơ đồ lưu trữ → Done
+            </div>
+          </div>
+        </div>
+
+        <div class="fg-m-empty" *ngIf="mobileTempZone && getMobileTempMaterials().length === 0">
+          <i class="material-icons">inbox</i>
+          <p>Không có mã ở Temp-{{ mobileTempZone }}</p>
+        </div>
+      </section>
     </div>
 
     <nav class="fg-m-bottomnav">
@@ -139,6 +192,11 @@
         <i class="material-icons">location_on</i>
         <span>Vị trí</span>
         <em class="fg-m-nav-badge fg-m-nav-badge--warn" *ngIf="getLockedWithoutLocationCount() > 0">{{ getLockedWithoutLocationCount() }}</em>
+      </button>
+      <button type="button" class="fg-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'temp'" (click)="setMobileBottomTab('temp')">
+        <i class="material-icons">view_quilt</i>
+        <span>Temp</span>
+        <em class="fg-m-nav-badge" *ngIf="getMobileTempTotalCount() > 0">{{ getMobileTempTotalCount() }}</em>
       </button>
       <button type="button" class="fg-m-bottomnav__btn fg-m-bottomnav__btn--menu" (click)="goMobileMenu()">
         <i class="material-icons">home</i>
@@ -600,14 +658,14 @@
           </div>
         </div>
 
-        <!-- Scan QR pallet — mã nằm cuối vị trí (vd. C1.4A-F1-111) -->
+        <!-- Scan QR pallet — giao diện giống scanner vị trí -->
         <div class="pallet-qr-section" (click)="$event.stopPropagation()">
-          <label class="pallet-qr-section__label">
-            <i class="material-icons">qr_code_scanner</i>
-            Scan QR pallet
-          </label>
-          <div class="scanner-input-container pallet-qr-scanner">
-            <i class="material-icons scanner-icon">qr_code_2</i>
+          <div class="pallet-qr-section__head">
+            <h6>QR pallet:</h6>
+          </div>
+          <div class="scanner-input-container"
+               [class.scanner-input-container--done]="!!palletQrValue">
+            <i class="material-icons scanner-icon">qr_code_scanner</i>
             <input
               #palletQrScannerInput
               type="text"
@@ -615,7 +673,7 @@
               [(ngModel)]="palletQrValue"
               (input)="onPalletQrInput()"
               (keypress)="onPalletQrKeyPress($event)"
-              placeholder="Scan mã pallet (vd. F1-111)..."
+              placeholder="Scan mã pallet..."
               autocomplete="off"
               autocapitalize="characters">
             <button
@@ -626,9 +684,10 @@
               <i class="material-icons">close</i>
             </button>
           </div>
-          <p class="pallet-qr-section__hint">
-            Chọn ô trên sơ đồ (vd. <b>C1.4A</b>) rồi scan QR → lưu <b>C1.4A-F1-111</b>
-          </p>
+          <div class="location-result" *ngIf="confirmReceiptData.location && !isMultiplePallet && palletQrValue">
+            <i class="material-icons">check_circle</i>
+            <span>Vị trí đã lưu: <strong>{{ confirmReceiptData.location }}</strong></span>
+          </div>
         </div>
       </div>
 
@@ -704,7 +763,7 @@
             <span>ASM3</span>
           </label>
         </div>
-        <p class="fg-asm3-hint" *ngIf="fgInUseAsm3">Vị trí lưu: <strong>ASM3+</strong> + mã scan</p>
+        <p class="fg-asm3-hint" *ngIf="fgInUseAsm3">Vị trí sơ đồ sẽ lưu dạng <strong>ASM3+</strong> + mã kệ</p>
         <p class="multi-location-active-hint" *ngIf="isMultiplePallet && multiLocationRows.length">
           Đang chọn dòng <strong>#{{ activeLocationRowIndex + 1 }}</strong>
         </p>
@@ -723,33 +782,10 @@
           </button>
         </div>
 
-        <div class="scanner-input-container">
-          <i class="material-icons scanner-icon">qr_code_scanner</i>
-          <input 
-            #locationScannerInput
-            type="text" 
-            class="scanner-input"
-            [(ngModel)]="locationScannerValue"
-            (keypress)="onLocationScannerKeyPress($event)"
-            (input)="onLocationScannerInput()"
-            placeholder="Scan hoặc nhập vị trí..."
-            autocomplete="off"
-            autocapitalize="characters"
-            (click)="$event.stopPropagation()">
-          <button 
-            class="clear-btn" 
-            *ngIf="locationScannerValue"
-            (click)="clearLocationScanner(); $event.stopPropagation()">
-            <i class="material-icons">close</i>
-          </button>
-        </div>
         <div class="location-result" *ngIf="!isMultiplePallet && confirmReceiptData.location">
           <i class="material-icons">check_circle</i>
           <span>Vị trí đã lưu: <strong>{{ confirmReceiptData.location }}</strong></span>
         </div>
-        <p class="location-compose-hint" *ngIf="!isMultiplePallet && locationScannerValue && palletQrValue && !isTempShelf(locationScannerValue)">
-          Ghép: <strong>{{ locationScannerValue }}</strong> + <strong>{{ palletQrValue }}</strong>
-        </p>
       </div>
 
       <!-- Confirmation Status -->
@@ -759,12 +795,16 @@
         <span *ngIf="isAllFieldsConfirmed() && isMultiplePallet && !isMultiLocationsValid()">
           Cần ô kệ A/B/C + mã QR pallet + số lượng (tối đa {{ maxMultiLocations }})
         </span>
-        <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && !confirmReceiptData.location">Cần chọn vị trí kệ</span>
+        <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && !confirmReceiptData.location">
+          {{ locationUpdateOnlyMode ? 'Chọn vị trí trên Sơ đồ lưu trữ' : 'Cần chọn vị trí kệ' }}
+        </span>
         <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && confirmReceiptData.location && !canLockReceipt()">
-          Cần scan QR pallet (vd. F1-111) — mã nằm cuối vị trí
+          {{ locationUpdateOnlyMode
+            ? 'Cần vị trí thật + mã QR pallet đi kèm'
+            : 'Cần scan QR pallet (vd. F1-111) — mã nằm cuối vị trí' }}
         </span>
         <span *ngIf="canLockReceipt()">
-          {{ locationUpdateOnlyMode ? 'Sẵn sàng cập nhật vị trí!' : 'Sẵn sàng khóa phiếu!' }}
+          {{ locationUpdateOnlyMode ? 'Sẵn sàng chuyển vị trí!' : 'Sẵn sàng khóa phiếu!' }}
         </span>
       </div>
     </div>
@@ -778,8 +818,8 @@
               *ngIf="locationUpdateOnlyMode"
               (click)="confirmAndLockReceipt()"
               [disabled]="!canLockReceipt()">
-        <i class="material-icons">update</i>
-        Update vị trí
+        <i class="material-icons">done</i>
+        Done
       </button>
       <button type="button"
               class="btn btn-done"

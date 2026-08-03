@@ -105,8 +105,7 @@ export function composeStorageLocation(shelfSlot: string, palletQrCode: string):
   if (!slot) return qr;
   if (!qr) return slot;
   if (slot.endsWith(`-${qr}`) || slot.endsWith(qr)) return slot;
-  // Temp không ghép mã pallet
-  if (/^TEMP-[123]$/i.test(slot) || slot === 'TEMPORARY') return slot;
+  // Temp-1 + F1-111 → Temp-1-F1-111; kệ C1.4A + F1-111 → C1.4A-F1-111
   return `${slot}-${qr}`;
 }
 
@@ -123,8 +122,11 @@ export function normalizePalletQrCode(raw: string): string {
 export function extractPalletQrCode(location: string): string {
   const raw = normalizeStorageLocation(location);
   if (!raw) return '';
+  // Temp-1-F1-111 / TEMPORARY-F1-111
+  let m = raw.match(/^(?:TEMP-[123]|TEMPORARY)-(.+)$/i);
+  if (m) return normalizePalletQrCode(m[1]);
   // Legacy: C1.4-PL1-F1-111
-  let m = raw.match(/^[ABC]\d+\.\d+(?:[-_]?PL\d+|[ABC])-(.+)$/i);
+  m = raw.match(/^[ABC]\d+\.\d+(?:[-_]?PL\d+|[ABC])-(.+)$/i);
   if (m) return normalizePalletQrCode(m[1]);
   // Slot chữ + QR: C1.4A-F1-111
   m = raw.match(/^[ABC]\d+\.\d+[ABC]-(.+)$/i);
@@ -142,7 +144,12 @@ export function extractShelfSlot(location: string): string {
   if (parsed?.palletLabel) return parsed.palletLabel;
   if (parsed?.label) return parsed.label;
   const raw = normalizeStorageLocation(location);
-  if (/^TEMP-[123]$/i.test(raw) || raw === 'TEMPORARY') return raw;
+  const tempM = raw.match(/^(TEMP-[123]|TEMPORARY)(?:-|$)/i);
+  if (tempM) {
+    const t = tempM[1].toUpperCase();
+    if (t === 'TEMPORARY') return 'Temp-1';
+    return `Temp-${t.replace('TEMP-', '')}`;
+  }
   return raw;
 }
 
@@ -709,7 +716,7 @@ export function parseStorageSlotLocation(location: string): {
   palletQrCode?: string;
 } | null {
   const raw = String(location || '').trim().toUpperCase();
-  if (!raw || raw === 'TEMPORARY' || /^TEMP-[123]$/.test(raw)) return null;
+  if (!raw || raw === 'TEMPORARY' || /^TEMP[-_]?[123]/.test(raw) || /^TEMPORARY/.test(raw)) return null;
 
   // C1.4A-F1-111 / C1.4A
   let m = raw.match(/^([ABC])(\d+)\.(\d+)([ABC])(?:-(.+))?$/);

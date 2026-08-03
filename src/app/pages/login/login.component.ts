@@ -289,6 +289,14 @@ export class LoginComponent implements OnInit {
         en: 'Invalid employee ID!',
         vi: 'Mã số nhân viên không hợp lệ!'
       },
+      'auth/too-many-requests': {
+        en: 'Too many login attempts. This device is temporarily blocked. Wait 15–60 minutes or try another network/device.',
+        vi: 'Đăng nhập quá nhiều lần. Thiết bị đang bị Firebase tạm khóa. Đợi 15–60 phút hoặc thử mạng/thiết bị khác.'
+      },
+      'auth/invalid-credential': {
+        en: 'Wrong employee ID or password!',
+        vi: 'Mã hoặc mật khẩu không đúng!'
+      },
       'functions/permission-denied': {
         en: 'Wrong employee ID or password!',
         vi: 'Mã hoặc mật khẩu không đúng!'

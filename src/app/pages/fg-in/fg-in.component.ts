@@ -8,8 +8,6 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import firebase from 'firebase/compat/app';
 import { FactoryAccessService } from '../../services/factory-access.service';
-import { MatDialog } from '@angular/material/dialog';
-import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-alert.service';
@@ -81,7 +79,9 @@ export class FgInComponent implements OnInit, OnDestroy {
   mobileFactorySelected: boolean = false;
   isMobile = false;
   showMobileFactorySelect = false;
-  mobileBottomTab: 'pending' | 'location' = 'pending';
+  mobileBottomTab: 'pending' | 'location' | 'temp' = 'pending';
+  /** Tab Temp: vùng đang xem (Temp-1/2/3) */
+  mobileTempZone: '1' | '2' | '3' | null = null;
   /** Lọc phiếu chờ theo vùng Temp 1 / 2 / 3 (mobile) */
   mobilePendingZoneFilter: '1' | '2' | '3' | null = null;
   private readonly fgInMobileBodyClass = 'fg-in-mobile-tab';
@@ -181,11 +181,11 @@ export class FgInComponent implements OnInit, OnDestroy {
   systemCartonCount = 0;
   cartonCorrectInput: number | null = null;
   
-  // Scanner input for location
+  /** Giá trị ô kệ đang chọn (Temp / sơ đồ) — không còn input scan vị trí. */
   locationScannerValue: string = '';
   /** Mã QR pallet (nằm cuối vị trí đầy đủ, vd. F1-111 trong C1.4A-F1-111) */
   palletQrValue: string = '';
-  /** Tick ASM3: ghép ASM3+ + vị trí scan */
+  /** Tick ASM3: ghép ASM3+ + vị trí từ sơ đồ */
   fgInUseAsm3 = false;
   /** Modal sơ đồ chọn vị trí khi khóa phiếu */
   showStorageLocationPicker = false;
@@ -193,7 +193,6 @@ export class FgInComponent implements OnInit, OnDestroy {
   storageCartonRows: Array<{ customer: string; carton: number }> = [];
   private storageDiagramLoadedForFactory = '';
   readonly tempQuickLocations = ['Temp-1', 'Temp-2', 'Temp-3'] as const;
-  @ViewChild('locationScannerInput') locationScannerInput: ElementRef;
   @ViewChild('palletQrScannerInput') palletQrScannerInput: ElementRef;
   
   // Multiple pallet (nhiều vị trí, tối đa 5)
@@ -210,7 +209,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
-    private dialog: MatDialog,
     private router: Router,
     private fgDailyBackup: FgDailyBackupService,
     private cartonPackingQtyService: CartonPackingQtyService,
@@ -286,8 +284,15 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.showMobileFactorySelect = true;
   }
 
-  setMobileBottomTab(tab: 'pending' | 'location'): void {
+  setMobileBottomTab(tab: 'pending' | 'location' | 'temp'): void {
     this.mobileBottomTab = tab;
+    if (tab === 'temp' && !this.mobileTempZone) {
+      this.mobileTempZone = '1';
+    }
+  }
+
+  setMobileTempZone(zone: '1' | '2' | '3'): void {
+    this.mobileTempZone = zone;
   }
 
   goMobileMenu(): void {
@@ -2118,7 +2123,8 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''
     };
     this.locationScannerValue = '';
-    this.palletQrValue = '';
+    // Giữ mã pallet đã gắn ở Temp (Temp-1-F1-111 → F1-111) khi chuyển sang kệ thật
+    this.palletQrValue = extractPalletQrCode(material.location || '') || '';
     this.fgInUseAsm3 = false;
     this.isMultiplePallet = false;
     this.originalQuantity = material.quantity || 0;
@@ -2134,8 +2140,8 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     this.showConfirmReceiptDialog = true;
     
-    // Auto focus scanner input
-    this.focusLocationScanner();
+    // Focus ô scan QR pallet (vị trí chọn bằng Temp / sơ đồ)
+    this.focusPalletQrScanner();
   }
 
   // Close confirm receipt dialog
@@ -2335,17 +2341,26 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (aliases.includes(compact)) {
       return true;
     }
+    // Temp-1-F1-111 → TEMP1F1111 — bắt đầu bằng TEMP1 / TEM1 / …
+    if (aliases.some((a) => compact.startsWith(a))) {
+      return true;
+    }
     if (compact.endsWith(`TEMPORARY${zone}`)) {
       return true;
     }
     return new RegExp(`(?:^|TEMPORARY|TEM|TAM|TEMP)${zone}$`).test(compact);
   }
 
-  /** Nhận diện vùng Temp 1 / 2 / 3 từ vị trí (Tem-1, Tam-2, Temp3, TEMPORARY 3, …) */
+  /** Nhận diện vùng Temp 1 / 2 / 3 — vị trí bắt đầu bằng Temp-1/2/3 (có thể kèm mã pallet). */
   getTempZoneBadge(location: string | undefined | null): '1' | '2' | '3' | null {
     const raw = String(location ?? '').trim();
     if (!raw) {
       return null;
+    }
+
+    const startMatch = raw.toUpperCase().match(/^(?:TEMPORARY|TEM|TAM|TEMP)[\s_-]*([123])/);
+    if (startMatch) {
+      return startMatch[1] as '1' | '2' | '3';
     }
 
     const compact = this.compactFgInLocation(raw);
@@ -2367,14 +2382,17 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   /** Chuẩn hóa các biến thể tạm (Tem1/tem-1/temp1/Temporary…) về Temp-1/Temp-2/Temp-3.
-   *  Vị trí thật (không khớp biến thể tạm nào) được giữ nguyên (viết hoa). */
+   *  Giữ mã QR pallet nếu đã gắn (Temp-1-F1-111). */
   private normalizeFgLocationValue(raw: string | undefined | null): string {
     const trimmed = String(raw ?? '').trim();
     if (!trimmed) return '';
     const compact = this.compactFgInLocation(trimmed);
-    if (compact === 'TEMPORARY') return 'Temp-1';
+    const qr = extractPalletQrCode(trimmed);
+    if (compact === 'TEMPORARY' || compact.startsWith('TEMPORARY')) {
+      return qr ? `Temp-1-${qr}` : 'Temp-1';
+    }
     const zone = this.getTempZoneBadge(trimmed);
-    if (zone) return `Temp-${zone}`;
+    if (zone) return qr ? `Temp-${zone}-${qr}` : `Temp-${zone}`;
     return trimmed.toUpperCase();
   }
 
@@ -2410,21 +2428,11 @@ export class FgInComponent implements OnInit, OnDestroy {
     return this.getLockedWithoutLocationMaterials().length;
   }
 
-  // Handle scanner input - auto uppercase
-  onLocationScannerInput(): void {
-    if (this.locationScannerValue) {
-      this.locationScannerValue = this.locationScannerValue.toUpperCase();
-      this.applyLocationValue(this.locationScannerValue);
-    } else {
-      this.clearActiveLocationValue();
-    }
-  }
-
   onFgInAsm3Change(): void {
     if (this.locationScannerValue) {
       this.applyLocationValue(this.locationScannerValue);
     }
-    this.focusLocationScanner();
+    this.focusPalletQrScanner();
   }
 
   private buildAsm3PrefixedLocation(raw: string): string {
@@ -2437,51 +2445,25 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   private normalizeFgInLocationInput(raw: string): string {
-    const compact = String(raw || '')
-      .trim()
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return '';
+    const qr = extractPalletQrCode(trimmed);
+    const compact = trimmed
       .replace(/\s+/g, '')
       .toUpperCase()
       .replace(/[^A-Z0-9.\-()+]/g, '');
     if (!compact) return '';
     if (this.fgInUseAsm3) return this.buildAsm3PrefixedLocation(compact);
-    const zone = this.getTempZoneBadge(compact);
-    if (zone) return `Temp-${zone}`;
+    const zone = this.getTempZoneBadge(trimmed) || this.getTempZoneBadge(compact);
+    if (zone) return qr ? `Temp-${zone}-${qr}` : `Temp-${zone}`;
     return compact;
-  }
-
-  // Handle Enter key from scanner
-  onLocationScannerKeyPress(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      this.saveScannedLocation();
-    }
-  }
-
-  // Save the scanned location
-  saveScannedLocation(): void {
-    if (this.locationScannerValue && this.locationScannerValue.trim() !== '') {
-      this.applyLocationValue(this.locationScannerValue);
-      console.log(`✅ Location saved: ${this.confirmReceiptData.location}`);
-    }
-  }
-
-  // Clear scanner input
-  clearLocationScanner(): void {
-    this.locationScannerValue = '';
-    this.clearActiveLocationValue();
-    setTimeout(() => {
-      if (this.locationScannerInput) {
-        this.locationScannerInput.nativeElement.focus();
-      }
-    }, 100);
   }
 
   applyQuickTempLocation(temp: string): void {
     this.fgInUseAsm3 = false;
-    this.palletQrValue = '';
+    // Giữ mã QR pallet đã scan — ghép Temp-1-F1-111
     this.locationScannerValue = temp;
     this.applyLocationValue(temp);
-    this.focusLocationScanner();
   }
 
   /** Gán vị trí kệ vào dòng đang chọn (multi) hoặc vị trí đơn — giữ mã QR pallet. */
@@ -2520,8 +2502,28 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   isTempShelf(loc: string): boolean {
-    const s = String(loc || '').trim().toUpperCase();
-    return /^TEMP-[123]$/.test(s) || s === 'TEMPORARY';
+    return this.getTempZoneBadge(loc) !== null ||
+      String(loc || '').trim().toUpperCase() === 'TEMPORARY';
+  }
+
+  /** Danh sách phiếu ở vùng Temp (đã khóa hoặc chưa) — vị trí bắt đầu Temp-1/2/3. */
+  getTempZoneMaterials(zone: '1' | '2' | '3'): FgInItem[] {
+    return this.filteredMaterials.filter(
+      (m) => this.getTempZoneBadge(m.location) === zone
+    );
+  }
+
+  getTempZoneCount(zone: '1' | '2' | '3'): number {
+    return this.getTempZoneMaterials(zone).length;
+  }
+
+  getMobileTempMaterials(): FgInItem[] {
+    if (!this.mobileTempZone) return [];
+    return this.getTempZoneMaterials(this.mobileTempZone);
+  }
+
+  getMobileTempTotalCount(): number {
+    return this.filteredMaterials.filter((m) => this.getTempZoneBadge(m.location) !== null).length;
   }
 
   /** Vị trí đã đủ để khóa: Temp OK; kệ thật cần ô A/B/C + mã QR pallet. */
@@ -2535,19 +2537,36 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   onPalletQrInput(): void {
-    this.palletQrValue = normalizePalletQrCode(this.palletQrValue);
+    if (this.palletQrValue) {
+      this.palletQrValue = this.palletQrValue.toUpperCase();
+    }
     this.applyPalletQrToActive(this.palletQrValue);
   }
 
   onPalletQrKeyPress(event: KeyboardEvent): void {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    this.onPalletQrInput();
+    this.savePalletQrFromScanner();
+  }
+
+  /** Enter từ máy scan QR pallet — giống scanner vị trí. */
+  savePalletQrFromScanner(): void {
+    if (!this.palletQrValue || !this.palletQrValue.trim()) return;
+    this.palletQrValue = normalizePalletQrCode(this.palletQrValue);
+    this.applyPalletQrToActive(this.palletQrValue);
+    console.log(`✅ Pallet QR saved: ${this.palletQrValue}`);
   }
 
   clearPalletQr(): void {
     this.palletQrValue = '';
     this.applyPalletQrToActive('');
+    this.focusPalletQrScanner();
+  }
+
+  focusPalletQrScanner(): void {
+    setTimeout(() => {
+      this.palletQrScannerInput?.nativeElement?.focus();
+    }, 200);
   }
 
   private applyPalletQrToActive(qr: string): void {
@@ -2569,12 +2588,6 @@ export class FgInComponent implements OnInit, OnDestroy {
         extractShelfSlot(this.confirmReceiptData.location) || this.locationScannerValue;
       this.confirmReceiptData.location = this.composeRowLocation(shelf, code);
     }
-  }
-
-  focusPalletQrScanner(): void {
-    setTimeout(() => {
-      this.palletQrScannerInput?.nativeElement?.focus();
-    }, 200);
   }
 
   private clearActiveLocationValue(): void {
@@ -2624,7 +2637,13 @@ export class FgInComponent implements OnInit, OnDestroy {
   canLockReceipt(): boolean {
     if (!this.isAllFieldsConfirmed()) return false;
     if (this.locationUpdateOnlyMode) {
-      return this.isLocationReady(this.confirmReceiptData.location);
+      const loc = String(this.confirmReceiptData.location || '').trim();
+      if (!loc || this.isTemporaryLocation(loc)) return false;
+      const qr =
+        normalizePalletQrCode(this.palletQrValue) ||
+        extractPalletQrCode(loc) ||
+        extractPalletQrCode(this.selectedReceiptMaterial?.location || '');
+      return !!extractShelfSlot(loc) && !!qr;
     }
     if (this.isMultiplePallet) return this.isMultiLocationsValid();
     return this.isLocationReady(this.confirmReceiptData.location);
@@ -2636,7 +2655,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     const row = this.multiLocationRows[index];
     this.locationScannerValue = extractShelfSlot(row.location) || '';
     this.palletQrValue = row.palletQr || extractPalletQrCode(row.location) || '';
-    this.focusLocationScanner();
+    this.focusPalletQrScanner();
   }
 
   addMultiLocationRow(): void {
@@ -2648,7 +2667,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.activeLocationRowIndex = this.multiLocationRows.length - 1;
     this.locationScannerValue = '';
     this.palletQrValue = '';
-    this.focusLocationScanner();
+    this.focusPalletQrScanner();
     setTimeout(() => this.scrollMultiLocationUiIntoView(), 80);
   }
 
@@ -2721,8 +2740,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.showStorageLocationPicker = false;
     if (!this.isTempShelf(shelf)) {
       this.focusPalletQrScanner();
-    } else {
-      this.focusLocationScanner();
     }
   }
 
@@ -2805,13 +2822,9 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.storageCartonRows = [...this.storageCartonRows, { customer: cur, carton: receiptCarton }];
   }
 
-  // Focus scanner input when dialog opens
+  // Focus ô QR pallet (scanner cứng) — không còn ô scan vị trí
   focusLocationScanner(): void {
-    setTimeout(() => {
-      if (this.locationScannerInput) {
-        this.locationScannerInput.nativeElement.focus();
-      }
-    }, 300);
+    this.focusPalletQrScanner();
   }
 
   // Parse batch number to get base and suffix (e.g. 11030001A -> base: 11030001, suffix: A)
@@ -2898,10 +2911,25 @@ export class FgInComponent implements OnInit, OnDestroy {
     // ===== Chỉ cập nhật vị trí (phiếu đã tick khóa nhưng đang Temporary) =====
     if (this.locationUpdateOnlyMode) {
       if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
-        alert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
+        alert('❌ Vui lòng chọn vị trí trên sơ đồ lưu trữ trước khi Done');
         return;
       }
-      const newLocation = this.confirmReceiptData.location.trim();
+      const shelf =
+        extractShelfSlot(this.confirmReceiptData.location) ||
+        this.confirmReceiptData.location.trim();
+      const qr =
+        normalizePalletQrCode(this.palletQrValue) ||
+        extractPalletQrCode(this.confirmReceiptData.location) ||
+        extractPalletQrCode(this.selectedReceiptMaterial.location || '');
+      if (!qr) {
+        alert('❌ Thiếu mã QR pallet. Vui lòng scan lại mã pallet trước khi chuyển vị trí.');
+        return;
+      }
+      const newLocation = composeStorageLocation(shelf, qr);
+      if (this.isTemporaryLocation(newLocation)) {
+        alert('❌ Vui lòng chọn vị trí thật trên Sơ đồ lưu trữ (không phải Temp).');
+        return;
+      }
 
       this.selectedReceiptMaterial.location = newLocation;
       this.selectedReceiptMaterial.updatedAt = new Date();
@@ -2911,7 +2939,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         .then(() => {
           this.closeConfirmReceiptDialog();
           this.refreshData();
-          alert(`✅ Đã cập nhật vị trí cho batch: ${newLocation}`);
+          alert(`✅ Đã chuyển pallet sang vị trí mới: ${newLocation}`);
         })
         .catch(err => {
           console.error('Location update error:', err);

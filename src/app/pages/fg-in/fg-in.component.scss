@@ -1920,42 +1920,114 @@ mat-checkbox {
 
     .pallet-qr-section {
       margin-top: 12px;
-      padding: 12px;
-      border: 1px solid #90caf9;
-      border-radius: 8px;
-      background: #f0f9ff;
+      padding-top: 12px;
+      border-top: 1px solid #e0e0e0;
 
-      &__label {
+      &__head {
         display: flex;
         align-items: center;
-        gap: 6px;
-        margin: 0 0 8px;
-        font-size: 13px;
-        font-weight: 700;
-        color: #0c4a6e;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
 
-        .material-icons {
-          font-size: 18px;
-          color: #0284c7;
+        h6 {
+          margin: 0;
+          font-size: 13px;
+          font-weight: 600;
+          color: #000000;
         }
       }
 
-      &__hint {
-        margin: 8px 0 0;
-        font-size: 11px;
-        color: #0369a1;
-        line-height: 1.35;
+      // Cùng style ô scan vị trí (đang nằm trong .location-section)
+      .scanner-input-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 8px;
+        background: #ffffff;
+        border: 2px solid #2196f3;
+        border-radius: 6px;
+        margin-bottom: 10px;
+
+        .scanner-icon {
+          color: #2196f3;
+          font-size: 24px;
+          flex-shrink: 0;
+        }
+
+        .scanner-input {
+          flex: 1;
+          min-width: 0;
+          border: none;
+          outline: none;
+          font-size: 16px;
+          font-weight: 600;
+          text-transform: uppercase;
+          padding: 10px 0;
+          background: transparent;
+
+          &::placeholder {
+            color: #999;
+            font-weight: normal;
+            text-transform: none;
+          }
+        }
+
+        .clear-btn {
+          background: transparent;
+          border: none;
+          padding: 4px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+
+          .material-icons {
+            color: #999;
+            font-size: 20px;
+          }
+
+          &:hover .material-icons {
+            color: #f44336;
+          }
+        }
+
+        &--done {
+          border-color: #4caf50;
+          background: #f1f8e9;
+
+          .scanner-icon {
+            color: #4caf50;
+          }
+        }
       }
 
-      .pallet-qr-scanner {
+      .location-result {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: #e8f5e9;
+        border: 1px solid #a5d6a7;
+        border-radius: 6px;
         margin-bottom: 0;
-      }
-    }
 
-    .location-compose-hint {
-      margin: 8px 0 0;
-      font-size: 12px;
-      color: #475569;
+        .material-icons {
+          color: #4caf50;
+          font-size: 20px;
+        }
+
+        span {
+          font-size: 13px;
+          color: #2e7d32;
+
+          strong {
+            font-weight: 800;
+            letter-spacing: 0.02em;
+          }
+        }
+      }
     }
 
     .location-section {
@@ -4430,6 +4502,53 @@ body.fg-in-mobile-tab {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
+.fg-m-temp-zones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.fg-m-temp-zone {
+  position: relative;
+  border: 1.5px solid #f9a825;
+  background: #fffde7;
+  color: #ef6c00;
+  border-radius: 10px;
+  padding: 12px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+
+  em {
+    display: block;
+    margin-top: 4px;
+    font-style: normal;
+    font-size: 11px;
+    font-weight: 600;
+    color: #c62828;
+  }
+
+  &.is-active {
+    background: #ef6c00;
+    border-color: #ef6c00;
+    color: #fff;
+
+    em { color: #fff; }
+  }
+}
+
+.fg-m-section-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.fg-m-card--temp {
+  border-left: 3px solid #ef6c00;
+}
+
 .fg-m-bottomnav__btn {
   flex: 1;
   min-width: 0;
@@ -4672,6 +4791,31 @@ body.fg-in-mobile-tab {
             .field-value {
               font-size: 14px;
               line-height: 1.25;
+            }
+          }
+        }
+
+        .pallet-qr-section {
+          margin-top: 10px;
+          padding-top: 10px;
+
+          &__head {
+            margin-bottom: 8px;
+
+            h6 { font-size: 13px; }
+          }
+
+          .scanner-input-container {
+            margin-bottom: 10px;
+            padding: 2px 10px;
+            border-width: 2px;
+            border-radius: 6px;
+
+            .scanner-icon { font-size: 24px; }
+
+            .scanner-input {
+              font-size: 15px;
+              padding: 14px 0;
             }
           }
         }
