@@ -599,6 +599,37 @@
             </div>
           </div>
         </div>
+
+        <!-- Scan QR pallet — mã nằm cuối vị trí (vd. C1.4A-F1-111) -->
+        <div class="pallet-qr-section" (click)="$event.stopPropagation()">
+          <label class="pallet-qr-section__label">
+            <i class="material-icons">qr_code_scanner</i>
+            Scan QR pallet
+          </label>
+          <div class="scanner-input-container pallet-qr-scanner">
+            <i class="material-icons scanner-icon">qr_code_2</i>
+            <input
+              #palletQrScannerInput
+              type="text"
+              class="scanner-input"
+              [(ngModel)]="palletQrValue"
+              (input)="onPalletQrInput()"
+              (keypress)="onPalletQrKeyPress($event)"
+              placeholder="Scan mã pallet (vd. F1-111)..."
+              autocomplete="off"
+              autocapitalize="characters">
+            <button
+              class="clear-btn"
+              type="button"
+              *ngIf="palletQrValue"
+              (click)="clearPalletQr(); $event.stopPropagation()">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+          <p class="pallet-qr-section__hint">
+            Chọn ô trên sơ đồ (vd. <b>C1.4A</b>) rồi scan QR → lưu <b>C1.4A-F1-111</b>
+          </p>
+        </div>
       </div>
 
       <!-- Multiple Pallet Section -->
@@ -607,40 +638,91 @@
           <i class="material-icons">{{ isMultiplePallet ? 'check_box' : 'check_box_outline_blank' }}</i>
           <span>Nhập nhiều pallet (chia số lượng)</span>
         </div>
-        
-        <div class="partial-quantity-input" *ngIf="isMultiplePallet">
+
+        <div class="multi-location-panel" *ngIf="isMultiplePallet" (click)="$event.stopPropagation()">
           <div class="quantity-row">
             <span class="qty-label">Số lượng gốc:</span>
             <span class="qty-value original">{{ originalQuantity | number:'1.0-0' }}</span>
           </div>
-          <div class="quantity-row editable">
-            <span class="qty-label">Số lượng xác nhận:</span>
-            <input 
-              type="number" 
-              class="qty-input"
-              [(ngModel)]="confirmQuantity"
-              (ngModelChange)="onConfirmQuantityChange()"
-              [max]="originalQuantity"
-              min="1"
-              (click)="$event.stopPropagation()">
+          <div class="quantity-row">
+            <span class="qty-label">Đã chia:</span>
+            <span class="qty-value original">{{ multiLocationsTotalQty | number:'1.0-0' }}</span>
           </div>
-          <div class="quantity-row remaining" *ngIf="confirmQuantity < originalQuantity">
+          <div class="quantity-row remaining" *ngIf="multiLocationsRemainingQty > 0">
             <span class="qty-label">Còn lại:</span>
-            <span class="qty-value remaining-value">{{ originalQuantity - confirmQuantity | number:'1.0-0' }}</span>
+            <span class="qty-value remaining-value">{{ multiLocationsRemainingQty | number:'1.0-0' }}</span>
           </div>
+
+          <div class="multi-location-list">
+            <div class="multi-location-row"
+                 *ngFor="let row of multiLocationRows; let i = index"
+                 [class.active]="activeLocationRowIndex === i"
+                 (click)="setActiveLocationRow(i)">
+              <span class="multi-location-row__idx">{{ i + 1 }}</span>
+              <div class="multi-location-row__loc">
+                <span class="multi-location-row__loc-label" *ngIf="row.location">{{ row.location }}</span>
+                <span class="multi-location-row__loc-empty" *ngIf="!row.location">Chọn ô A/B/C + scan QR pallet</span>
+              </div>
+              <input type="number"
+                     class="multi-location-row__qty"
+                     [(ngModel)]="row.quantity"
+                     (ngModelChange)="onMultiLocationQtyChange(i)"
+                     min="1"
+                     [max]="originalQuantity"
+                     placeholder="SL"
+                     (click)="$event.stopPropagation()">
+              <button type="button"
+                      class="multi-location-row__remove"
+                      (click)="removeMultiLocationRow(i); $event.stopPropagation()"
+                      title="Xóa vị trí"
+                      *ngIf="multiLocationRows.length > 1">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
+          </div>
+
+          <button type="button"
+                  class="multi-location-add-btn"
+                  (click)="addMultiLocationRow()"
+                  [disabled]="multiLocationRows.length >= maxMultiLocations">
+            <i class="material-icons">add_location_alt</i>
+            Thêm vị trí
+            <span class="multi-location-add-btn__cap">({{ multiLocationRows.length }}/{{ maxMultiLocations }})</span>
+          </button>
+          <p class="multi-location-hint">
+            Chọn dòng → sơ đồ (ô A/B/C) → scan QR pallet. Tối đa {{ maxMultiLocations }} pallet.
+          </p>
         </div>
       </div>
 
       <!-- Location Section -->
       <div class="location-section">
         <div class="location-section__head">
-          <h6>Vị trí lưu kho:</h6>
+          <h6>{{ isMultiplePallet ? 'Gắn vị trí cho dòng đang chọn:' : 'Vị trí lưu kho:' }}</h6>
           <label class="fg-asm3-checkbox" (click)="$event.stopPropagation()">
             <input type="checkbox" [(ngModel)]="fgInUseAsm3" (ngModelChange)="onFgInAsm3Change()">
             <span>ASM3</span>
           </label>
         </div>
         <p class="fg-asm3-hint" *ngIf="fgInUseAsm3">Vị trí lưu: <strong>ASM3+</strong> + mã scan</p>
+        <p class="multi-location-active-hint" *ngIf="isMultiplePallet && multiLocationRows.length">
+          Đang chọn dòng <strong>#{{ activeLocationRowIndex + 1 }}</strong>
+        </p>
+
+        <div class="location-quick-row" (click)="$event.stopPropagation()">
+          <button type="button"
+                  class="location-temp-btn"
+                  *ngFor="let t of tempQuickLocations"
+                  [class.selected]="(isMultiplePallet ? (multiLocationRows[activeLocationRowIndex]?.location || '') : confirmReceiptData.location) === t"
+                  (click)="applyQuickTempLocation(t)">
+            {{ t }}
+          </button>
+          <button type="button" class="location-map-btn" (click)="openStorageLocationPicker()">
+            <i class="material-icons">grid_view</i>
+            Sơ đồ lưu trữ
+          </button>
+        </div>
+
         <div class="scanner-input-container">
           <i class="material-icons scanner-icon">qr_code_scanner</i>
           <input 
@@ -661,18 +743,27 @@
             <i class="material-icons">close</i>
           </button>
         </div>
-        <div class="location-result" *ngIf="confirmReceiptData.location">
+        <div class="location-result" *ngIf="!isMultiplePallet && confirmReceiptData.location">
           <i class="material-icons">check_circle</i>
           <span>Vị trí đã lưu: <strong>{{ confirmReceiptData.location }}</strong></span>
         </div>
+        <p class="location-compose-hint" *ngIf="!isMultiplePallet && locationScannerValue && palletQrValue && !isTempShelf(locationScannerValue)">
+          Ghép: <strong>{{ locationScannerValue }}</strong> + <strong>{{ palletQrValue }}</strong>
+        </p>
       </div>
 
       <!-- Confirmation Status -->
-      <div class="confirm-status" [class.all-confirmed]="isAllFieldsConfirmed() && confirmReceiptData.location">
-        <i class="material-icons">{{ isAllFieldsConfirmed() && confirmReceiptData.location ? 'verified' : 'pending' }}</i>
+      <div class="confirm-status" [class.all-confirmed]="canLockReceipt()">
+        <i class="material-icons">{{ canLockReceipt() ? 'verified' : 'pending' }}</i>
         <span *ngIf="!isAllFieldsConfirmed()">Còn {{ getRemainingConfirmCount() }} thông tin chưa xác nhận</span>
-        <span *ngIf="isAllFieldsConfirmed() && !confirmReceiptData.location">Cần scan hoặc nhập vị trí</span>
-        <span *ngIf="isAllFieldsConfirmed() && confirmReceiptData.location">
+        <span *ngIf="isAllFieldsConfirmed() && isMultiplePallet && !isMultiLocationsValid()">
+          Cần ô kệ A/B/C + mã QR pallet + số lượng (tối đa {{ maxMultiLocations }})
+        </span>
+        <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && !confirmReceiptData.location">Cần chọn vị trí kệ</span>
+        <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && confirmReceiptData.location && !canLockReceipt()">
+          Cần scan QR pallet (vd. F1-111) — mã nằm cuối vị trí
+        </span>
+        <span *ngIf="canLockReceipt()">
           {{ locationUpdateOnlyMode ? 'Sẵn sàng cập nhật vị trí!' : 'Sẵn sàng khóa phiếu!' }}
         </span>
       </div>
@@ -686,7 +777,7 @@
               class="btn btn-done"
               *ngIf="locationUpdateOnlyMode"
               (click)="confirmAndLockReceipt()"
-              [disabled]="!isAllFieldsConfirmed() || !confirmReceiptData.location">
+              [disabled]="!canLockReceipt()">
         <i class="material-icons">update</i>
         Update vị trí
       </button>
@@ -694,7 +785,7 @@
               class="btn btn-done"
               *ngIf="!locationUpdateOnlyMode"
               (click)="confirmAndLockReceipt()"
-              [disabled]="!isAllFieldsConfirmed() || !confirmReceiptData.location">
+              [disabled]="!canLockReceipt()">
         <i class="material-icons">lock</i>
         Done - Khóa phiếu
       </button>
@@ -872,3 +963,15 @@
     </div>
   </div>
 </div>
+
+<app-fg-storage-diagram-modal
+  [open]="showStorageLocationPicker"
+  mode="pick"
+  [factory]="selectedFactory"
+  [showTempPicker]="true"
+  [inventoryLines]="[]"
+  [cartonRows]="storageCartonRows"
+  [currentCustomer]="currentStorageCustomer"
+  (closed)="closeStorageLocationPicker()"
+  (pickedLocation)="onStorageLocationPicked($event)">
+</app-fg-storage-diagram-modal>

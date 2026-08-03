@@ -11,7 +11,6 @@ import { ProductCatalogItem } from './fg-inventory.component';
 import {
   buildStorageZones,
   checkStorageLocations,
-  parseStorageSlotLocation,
   shortStorageCustomerLabel,
   STORAGE_LAYOUT_RULES,
   StorageCheckResult,
@@ -55,8 +54,8 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   private packingQtyMap = new Map<string, number>();
 
   allRows: TpStockListRow[] = [];
-  /** Chi tiết từng dòng FG Inventory (để Check vị trí). */
-  private inventoryDetailLines: StorageInventoryLine[] = [];
+  /** Chi tiết từng dòng FG Inventory (để Check vị trí / dời pallet). */
+  inventoryDetailLines: StorageInventoryLine[] = [];
   filterMa = '';
   filterCustomer = '';
   sortCartonDesc = true;
@@ -66,9 +65,6 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   customerCodeCatalog: CustomerCodeEntry[] = [];
   isSyncingCustomerCodes = false;
   showStorageDiagramModal = false;
-  storageSearchInput = '';
-  storageSearchMessage = '';
-  private storageHighlightedSlots = new Set<string>();
   showStorageCheckModal = false;
   isStorageChecking = false;
   storageCheckResult: StorageCheckResult | null = null;
@@ -214,20 +210,26 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
 
         const location = String(data.location || data.viTri || '').trim();
         const customer = this.getCustomerName(code).trim() || 'Không xác định';
+        const packingPer = this.getPackingQty(code);
+        const computed = CartonPackingQtyService.computeCartonOdd(ton, packingPer);
+        const lineCarton = packingPer > 0 ? computed.carton : Number(data.carton || 0);
         detailLines.push({
+          id: doc.id,
           materialCode: code,
           customer,
           location,
           ton,
-          batchNumber: String(data.batchNumber || '').trim()
+          carton: lineCarton,
+          batchNumber: String(data.batchNumber || '').trim(),
+          lot: String(data.lot || '').trim(),
+          lsx: String(data.lsx || '').trim(),
+          factory: String(data.factory || 'ASM1').trim(),
+          editHistory: Array.isArray(data.editHistory) ? data.editHistory : []
         });
 
         const cur = byCode.get(code) || { quantity: 0, carton: 0, kkChecked: 0, kkTotal: 0 };
         cur.quantity += ton;
-        // Tồn > 0 & < lượng đóng thùng → 1 carton (Math.ceil), không dùng carton đã lưu (có thể floor = 0)
-        const per = this.getPackingQty(code);
-        const computed = CartonPackingQtyService.computeCartonOdd(ton, per);
-        cur.carton += per > 0 ? computed.carton : Number(data.carton || 0);
+        cur.carton += lineCarton;
         cur.kkTotal += 1;
         if (String(data.viTriKK || data.locationKK || '').trim()) {
           cur.kkChecked += 1;
@@ -442,97 +444,22 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     return buildStorageZones(this.allRows);
   }
 
+  get storageCartonRows(): Array<{ customer: string; carton: number }> {
+    return this.allRows.map((r) => ({ customer: r.customer, carton: r.carton }));
+  }
+
   openStorageDiagramModal(): void {
-    this.clearStorageDiagramSearch();
     this.showStorageDiagramModal = true;
     this.cdr.markForCheck();
   }
 
   closeStorageDiagramModal(): void {
     this.showStorageDiagramModal = false;
-    this.clearStorageDiagramSearch();
     this.cdr.markForCheck();
   }
 
-  onStorageSearchKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    this.searchStorageDiagram();
-  }
-
-  /** Tìm vị trí/mã TP — highlight ô mâm tương ứng (A1.1, A11…). */
-  searchStorageDiagram(): void {
-    const term = String(this.storageSearchInput || '').trim().toUpperCase();
-    this.storageHighlightedSlots.clear();
-    this.storageSearchMessage = '';
-
-    if (!term) {
-      this.cdr.markForCheck();
-      return;
-    }
-
-    const addSlot = (label: string) => {
-      if (label) this.storageHighlightedSlots.add(label);
-    };
-
-    const parsed = parseStorageSlotLocation(term);
-    if (parsed) addSlot(parsed.label);
-
-    for (const line of this.inventoryDetailLines) {
-      const code = String(line.materialCode || '').trim().toUpperCase();
-      const loc = String(line.location || '').trim();
-      if (!loc) continue;
-      const locNorm = loc.toUpperCase();
-      if (code === term || code.startsWith(term) || locNorm.startsWith(term)) {
-        const locParsed = parseStorageSlotLocation(loc);
-        if (locParsed) addSlot(locParsed.label);
-      }
-    }
-
-    if (this.storageHighlightedSlots.size === 0) {
-      const termCompact = term.replace(/[^A-Z0-9]/g, '');
-      for (const zone of this.storageZones) {
-        for (const rack of zone.racks) {
-          for (const lv of rack.levels) {
-            const labelCompact = lv.label.replace(/[^A-Z0-9]/g, '');
-            if (labelCompact.startsWith(termCompact) || termCompact.startsWith(labelCompact)) {
-              addSlot(lv.label);
-            }
-          }
-        }
-      }
-    }
-
-    if (this.storageHighlightedSlots.size === 0) {
-      this.storageSearchMessage = `Không tìm thấy vị trí cho "${term}"`;
-    } else {
-      this.storageSearchMessage = `Đã tìm thấy ${this.storageHighlightedSlots.size} ô`;
-      setTimeout(() => this.scrollToHighlightedStorageSlot(), 80);
-    }
-
-    this.cdr.markForCheck();
-  }
-
-  clearStorageDiagramSearch(): void {
-    this.storageSearchInput = '';
-    this.storageSearchMessage = '';
-    this.storageHighlightedSlots.clear();
-  }
-
-  onClearStorageSearch(): void {
-    this.clearStorageDiagramSearch();
-    this.cdr.markForCheck();
-  }
-
-  isStorageSlotHighlighted(label: string): boolean {
-    return this.storageHighlightedSlots.has(label);
-  }
-
-  private scrollToHighlightedStorageSlot(): void {
-    const first = [...this.storageHighlightedSlots][0];
-    if (!first) return;
-    const el = document.getElementById(`storage-slot-${first.replace(/\./g, '-')}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+  async onStorageMoved(): Promise<void> {
+    await this.loadData();
   }
 
   shortKh(name: string): string {

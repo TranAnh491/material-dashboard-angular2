@@ -9,6 +9,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
 import { FgInComponent } from './fg-in.component';
 import { SharedModule } from '../../shared/shared.module';
+import { FgStorageSharedModule } from '../fg-inventory/fg-storage-shared.module';
 
 const routes: Routes = [
   { path: '', component: FgInComponent }
@@ -27,7 +28,8 @@ const routes: Routes = [
     MatIconModule,
     MatTooltipModule,
     MatDialogModule,
-    SharedModule
+    SharedModule,
+    FgStorageSharedModule
   ],
   exports: [
     FgInComponent

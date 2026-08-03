@@ -2980,17 +2980,39 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // Subtract quantity from FG Inventory (theo Mã TP, nhà máy, batch) và cập nhật fg-export
+  // Nếu tồn nằm ở nhiều vị trí/doc → FIFO trừ lần lượt từng doc (ưu tiên khớp vị trí trên phiếu xuất).
   private subtractFromFGInventory(material: FgOutItem): void {
     console.log(`📉 Processing export for ${material.quantity} units of ${material.materialCode}`);
     const factory = (material.factory || 'ASM1').toString().trim().toUpperCase();
     const materialCodeNorm = (material.materialCode || '').toString().trim().toUpperCase();
     const batchNorm = (material.batchNumber || '').toString().trim();
+    const lotNorm = (material.lot || '').toString().trim().toUpperCase();
+    const lsxNorm = (material.lsx || '').toString().trim().toUpperCase();
+    const locationNorm = (material.location || '').toString().trim().toUpperCase();
 
-    const matchDocs = (docs: any[]) =>
+    const matchByMaterial = (docs: any[]) =>
       docs.filter(doc => {
         const d = doc.data() as any;
         const invCode = (d.materialCode || d.maTP || '').toString().trim().toUpperCase();
-        return invCode === materialCodeNorm;
+        if (invCode !== materialCodeNorm) {
+          // Cho phép khớp base code (P030105 vs P030105_B)
+          if (!(materialCodeNorm.startsWith(invCode) && invCode.length >= 6) &&
+              !(invCode.startsWith(materialCodeNorm) && materialCodeNorm.length >= 6)) {
+            return false;
+          }
+        }
+        const ton = Number(d.ton ?? d.stock ?? 0) || 0;
+        return ton > 0;
+      });
+
+    const matchByMaterialLotLsx = (docs: any[]) =>
+      matchByMaterial(docs).filter(doc => {
+        const d = doc.data() as any;
+        const invLot = (d.lot || d.Lot || '').toString().trim().toUpperCase();
+        const invLsx = (d.lsx || d.LSX || '').toString().trim().toUpperCase();
+        if (lotNorm && invLot && invLot !== lotNorm) return false;
+        if (lsxNorm && invLsx && invLsx !== lsxNorm) return false;
+        return true;
       });
 
     const processDocs = (matchingDocs: any[]) => {
@@ -3000,9 +3022,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Tổng tồn có sẵn (ton hoặc stock)
+      const sorted = this.sortInventoryDocsForDeduction(matchingDocs, locationNorm);
+
       let totalAvailable = 0;
-      matchingDocs.forEach(doc => {
+      sorted.forEach(doc => {
         const d = doc.data() as any;
         totalAvailable += Number(d.ton ?? d.stock ?? 0) || 0;
       });
@@ -3013,32 +3036,94 @@ export class FgOutComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Trừ tồn theo thứ tự (FIFO)
-      this.subtractFromInventoryDocs(matchingDocs, material.quantity);
+      // Trừ tồn FIFO theo từng vị trí/doc
+      this.subtractFromInventoryDocs(sorted, material.quantity);
       this.addToExportCollection(material);
     };
 
-    // Ưu tiên tìm theo factory + batch (đúng thiết kế)
-    this.firestore.collection('fg-inventory', ref =>
-      ref.where('factory', '==', factory).where('batchNumber', '==', batchNorm)
-    ).get().subscribe(snapshot => {
-      const matchingDocs = matchDocs(snapshot.docs);
-      if (matchingDocs.length > 0) {
-        processDocs(matchingDocs);
+    const expandAcrossLocationsIfNeeded = (primaryDocs: any[]) => {
+      const primaryMatched = matchByMaterial(primaryDocs);
+      let totalAvailable = 0;
+      primaryMatched.forEach(doc => {
+        const d = doc.data() as any;
+        totalAvailable += Number(d.ton ?? d.stock ?? 0) || 0;
+      });
+
+      if (totalAvailable >= material.quantity && primaryMatched.length > 0) {
+        processDocs(primaryMatched);
         return;
       }
 
-      // Fallback: nếu dữ liệu cũ lưu factory không đồng nhất (hoa/thường/thiếu field),
-      // vẫn cho phép tìm theo batch rồi lọc mã TP.
+      // Không đủ trên batch — lấy thêm các vị trí khác cùng mã (+ LOT/LSX nếu có)
+      this.firestore.collection('fg-inventory', ref =>
+        ref.where('factory', '==', factory)
+      ).get().subscribe(snapAll => {
+        const expanded = matchByMaterialLotLsx(snapAll.docs);
+        const byId = new Map<string, any>();
+        primaryMatched.forEach(d => byId.set(d.id, d));
+        expanded.forEach(d => byId.set(d.id, d));
+        processDocs(Array.from(byId.values()));
+      }, () => processDocs(primaryMatched));
+    };
+
+    // Ưu tiên tìm theo factory + batch
+    this.firestore.collection('fg-inventory', ref =>
+      ref.where('factory', '==', factory).where('batchNumber', '==', batchNorm)
+    ).get().subscribe(snapshot => {
+      if (snapshot.docs.length > 0) {
+        expandAcrossLocationsIfNeeded(snapshot.docs);
+        return;
+      }
+
+      // Fallback: batch không kèm factory
       this.firestore.collection('fg-inventory', ref =>
         ref.where('batchNumber', '==', batchNorm)
       ).get().subscribe(s2 => {
-        processDocs(matchDocs(s2.docs));
+        if (s2.docs.length > 0) {
+          expandAcrossLocationsIfNeeded(s2.docs);
+          return;
+        }
+        // Không có batch — phân bổ theo mã + vị trí (nhiều pallet)
+        this.firestore.collection('fg-inventory', ref =>
+          ref.where('factory', '==', factory)
+        ).get().subscribe(s3 => {
+          processDocs(matchByMaterialLotLsx(s3.docs));
+        });
       });
     });
   }
 
-  // Trừ tồn từ danh sách doc FG Inventory (FIFO)
+  /** Ưu tiên doc khớp vị trí phiếu xuất, sau đó FIFO theo ngày nhập/tạo. */
+  private sortInventoryDocsForDeduction(docs: any[], preferredLocation: string): any[] {
+    const pref = String(preferredLocation || '').trim().toUpperCase();
+    return [...docs].sort((a, b) => {
+      const da = a.data() as any;
+      const db = b.data() as any;
+      if (pref) {
+        const locA = String(da.location || '').trim().toUpperCase();
+        const locB = String(db.location || '').trim().toUpperCase();
+        const aMatch = locA === pref ? 0 : 1;
+        const bMatch = locB === pref ? 0 : 1;
+        if (aMatch !== bMatch) return aMatch - bMatch;
+      }
+      const dateA = this.toMillis(da.receivedDate || da.importDate || da.createdAt);
+      const dateB = this.toMillis(db.receivedDate || db.importDate || db.createdAt);
+      if (dateA !== dateB) return dateA - dateB;
+      return String(a.id).localeCompare(String(b.id));
+    });
+  }
+
+  private toMillis(value: any): number {
+    if (!value) return 0;
+    if (typeof value.toDate === 'function') {
+      try { return value.toDate().getTime(); } catch { return 0; }
+    }
+    if (value instanceof Date) return value.getTime();
+    const n = new Date(value).getTime();
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // Trừ tồn từ danh sách doc FG Inventory (FIFO từng vị trí)
   private subtractFromInventoryDocs(docs: any[], totalQuantity: number): void {
     let remainingQuantity = totalQuantity;
     docs.forEach(doc => {
@@ -3050,19 +3135,25 @@ export class FgOutComponent implements OnInit, OnDestroy {
         const newQuantity = availableQuantity - quantityToSubtract;
         const currentExported = Number(d.xuat ?? d.exported ?? 0) || 0;
         const newExported = currentExported + quantityToSubtract;
+        const loc = String(d.location || '').trim() || '—';
         doc.ref.update({
           ton: newQuantity,
           xuat: newExported,
-          exported: newExported, // backward-compat cho dữ liệu cũ đọc field exported
+          exported: newExported,
           updatedAt: new Date()
         }).then(() => {
-          console.log(`✅ Updated inventory ${doc.id}: ton=${newQuantity}, xuat=${newExported} (subtracted ${quantityToSubtract})`);
+          console.log(
+            `✅ Updated inventory ${doc.id} @ ${loc}: ton=${newQuantity}, xuat=${newExported} (subtracted ${quantityToSubtract})`
+          );
         }).catch(error => {
           console.error('❌ Error updating inventory:', error);
         });
         remainingQuantity -= quantityToSubtract;
       }
     });
+    if (remainingQuantity > 0) {
+      console.warn(`⚠️ Còn ${remainingQuantity} chưa trừ hết sau khi duyệt các vị trí`);
+    }
   }
 
   // Add export record to fg-export collection

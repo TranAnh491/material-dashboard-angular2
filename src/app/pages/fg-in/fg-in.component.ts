@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
+import firebase from 'firebase/compat/app';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
@@ -13,6 +14,13 @@ import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
 import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-alert.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
+import {
+  composeStorageLocation,
+  extractPalletQrCode,
+  extractShelfSlot,
+  normalizePalletQrCode,
+  parseStorageSlotLocation
+} from '../fg-inventory/fg-storage-layout';
 
 export interface FgInItem {
   id?: string;
@@ -175,14 +183,26 @@ export class FgInComponent implements OnInit, OnDestroy {
   
   // Scanner input for location
   locationScannerValue: string = '';
+  /** Mã QR pallet (nằm cuối vị trí đầy đủ, vd. F1-111 trong C1.4A-F1-111) */
+  palletQrValue: string = '';
   /** Tick ASM3: ghép ASM3+ + vị trí scan */
   fgInUseAsm3 = false;
+  /** Modal sơ đồ chọn vị trí khi khóa phiếu */
+  showStorageLocationPicker = false;
+  /** Carton theo khách — dùng vẽ sơ đồ khi chọn vị trí */
+  storageCartonRows: Array<{ customer: string; carton: number }> = [];
+  private storageDiagramLoadedForFactory = '';
+  readonly tempQuickLocations = ['Temp-1', 'Temp-2', 'Temp-3'] as const;
   @ViewChild('locationScannerInput') locationScannerInput: ElementRef;
+  @ViewChild('palletQrScannerInput') palletQrScannerInput: ElementRef;
   
-  // Multiple pallet (partial confirmation)
+  // Multiple pallet (nhiều vị trí, tối đa 5)
   isMultiplePallet: boolean = false;
   confirmQuantity: number = 0;
   originalQuantity: number = 0;
+  readonly maxMultiLocations = 5;
+  multiLocationRows: Array<{ location: string; quantity: number; palletQr: string }> = [];
+  activeLocationRowIndex = 0;
   
   private destroy$ = new Subject<void>();
 
@@ -329,11 +349,22 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Add material to Inventory when received (supports partial quantity and custom batch)
-  private addToInventory(material: FgInItem, customQuantity?: number, customBatch?: string): void {
+  // Add material to Inventory when received (supports partial quantity, custom batch, custom location)
+  private addToInventory(
+    material: FgInItem,
+    customQuantity?: number,
+    customBatch?: string,
+    customLocation?: string
+  ): void {
     const quantity = customQuantity !== undefined ? customQuantity : material.quantity;
     const batchNumber = customBatch !== undefined ? customBatch : material.batchNumber;
-    console.log(`Adding ${material.materialCode} to FG Inventory with quantity: ${quantity}, batch: ${batchNumber}...`);
+    const location =
+      customLocation !== undefined && String(customLocation).trim()
+        ? String(customLocation).trim()
+        : material.location || 'Temp-1';
+    console.log(
+      `Adding ${material.materialCode} to FG Inventory with quantity: ${quantity}, batch: ${batchNumber}, location: ${location}...`
+    );
 
     // Tìm thông tin từ catalog
     const catalogItem = this.catalogItems.find(item => item.materialCode === material.materialCode);
@@ -370,7 +401,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       ton: quantity,
       exported: 0,
       stock: quantity,
-      location: material.location || 'Temp-1',
+      location,
       notes: material.notes || '',
       customer: material.customer || customerFromCatalog || '',
       isReceived: true,
@@ -511,6 +542,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Nhập Kho - open/close dialog
   setFactoryFilter(factory: string): void {
     this.selectedFactory = factory;
+    this.storageCartonRows = [];
+    this.storageDiagramLoadedForFactory = '';
     this.applyFilters();
     if (factory === 'ASM1' || factory === 'ASM2') {
       this.mobileFactorySelected = true;
@@ -2085,10 +2118,13 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''
     };
     this.locationScannerValue = '';
+    this.palletQrValue = '';
     this.fgInUseAsm3 = false;
     this.isMultiplePallet = false;
     this.originalQuantity = material.quantity || 0;
     this.confirmQuantity = this.originalQuantity;
+    this.multiLocationRows = [];
+    this.activeLocationRowIndex = 0;
     const cartonCalc = this.calculateCartonAndOdd(material);
     this.displayCartonCount = cartonCalc.carton;
     this.systemCartonCount = cartonCalc.carton;
@@ -2117,6 +2153,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       location: ''
     };
     this.locationScannerValue = '';
+    this.palletQrValue = '';
     this.fgInUseAsm3 = false;
     this.showCartonVerifyDialog = false;
     this.cartonWrongMode = false;
@@ -2126,6 +2163,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.isMultiplePallet = false;
     this.confirmQuantity = 0;
     this.originalQuantity = 0;
+    this.multiLocationRows = [];
+    this.activeLocationRowIndex = 0;
   }
 
   // Toggle confirmation for a field
@@ -2375,15 +2414,15 @@ export class FgInComponent implements OnInit, OnDestroy {
   onLocationScannerInput(): void {
     if (this.locationScannerValue) {
       this.locationScannerValue = this.locationScannerValue.toUpperCase();
-      this.confirmReceiptData.location = this.normalizeFgInLocationInput(this.locationScannerValue);
+      this.applyLocationValue(this.locationScannerValue);
     } else {
-      this.confirmReceiptData.location = '';
+      this.clearActiveLocationValue();
     }
   }
 
   onFgInAsm3Change(): void {
     if (this.locationScannerValue) {
-      this.confirmReceiptData.location = this.normalizeFgInLocationInput(this.locationScannerValue);
+      this.applyLocationValue(this.locationScannerValue);
     }
     this.focusLocationScanner();
   }
@@ -2421,7 +2460,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Save the scanned location
   saveScannedLocation(): void {
     if (this.locationScannerValue && this.locationScannerValue.trim() !== '') {
-      this.confirmReceiptData.location = this.normalizeFgInLocationInput(this.locationScannerValue);
+      this.applyLocationValue(this.locationScannerValue);
       console.log(`✅ Location saved: ${this.confirmReceiptData.location}`);
     }
   }
@@ -2429,13 +2468,341 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Clear scanner input
   clearLocationScanner(): void {
     this.locationScannerValue = '';
-    this.confirmReceiptData.location = '';
-    // Focus back to input
+    this.clearActiveLocationValue();
     setTimeout(() => {
       if (this.locationScannerInput) {
         this.locationScannerInput.nativeElement.focus();
       }
     }, 100);
+  }
+
+  applyQuickTempLocation(temp: string): void {
+    this.fgInUseAsm3 = false;
+    this.palletQrValue = '';
+    this.locationScannerValue = temp;
+    this.applyLocationValue(temp);
+    this.focusLocationScanner();
+  }
+
+  /** Gán vị trí kệ vào dòng đang chọn (multi) hoặc vị trí đơn — giữ mã QR pallet. */
+  private applyLocationValue(raw: string): void {
+    const normalized = this.normalizeFgInLocationInput(raw);
+    const parsed = parseStorageSlotLocation(normalized);
+    const shelf =
+      parsed?.palletLabel ||
+      (/^TEMP-[123]$/i.test(normalized) ? normalized : extractShelfSlot(normalized));
+    const qrFromLoc = extractPalletQrCode(normalized);
+    if (qrFromLoc) {
+      this.palletQrValue = qrFromLoc;
+    }
+
+    if (this.isMultiplePallet) {
+      if (!this.multiLocationRows.length) {
+        this.addMultiLocationRow();
+      }
+      const idx = Math.min(
+        Math.max(0, this.activeLocationRowIndex),
+        this.multiLocationRows.length - 1
+      );
+      this.activeLocationRowIndex = idx;
+      const row = this.multiLocationRows[idx];
+      if (qrFromLoc) row.palletQr = qrFromLoc;
+      row.location = this.composeRowLocation(shelf, row.palletQr || this.palletQrValue);
+      this.syncConfirmLocationFromMultiRows();
+    } else {
+      this.confirmReceiptData.location = this.composeRowLocation(shelf, this.palletQrValue);
+    }
+    this.locationScannerValue = shelf;
+  }
+
+  private composeRowLocation(shelfSlot: string, palletQr: string): string {
+    return composeStorageLocation(shelfSlot, palletQr);
+  }
+
+  isTempShelf(loc: string): boolean {
+    const s = String(loc || '').trim().toUpperCase();
+    return /^TEMP-[123]$/.test(s) || s === 'TEMPORARY';
+  }
+
+  /** Vị trí đã đủ để khóa: Temp OK; kệ thật cần ô A/B/C + mã QR pallet. */
+  private isLocationReady(fullLocation: string): boolean {
+    const loc = String(fullLocation || '').trim();
+    if (!loc) return false;
+    if (this.isTempShelf(loc) || this.isTemporaryLocation(loc)) return true;
+    const parsed = parseStorageSlotLocation(loc);
+    if (!parsed?.palletLabel) return false;
+    return !!extractPalletQrCode(loc);
+  }
+
+  onPalletQrInput(): void {
+    this.palletQrValue = normalizePalletQrCode(this.palletQrValue);
+    this.applyPalletQrToActive(this.palletQrValue);
+  }
+
+  onPalletQrKeyPress(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    this.onPalletQrInput();
+  }
+
+  clearPalletQr(): void {
+    this.palletQrValue = '';
+    this.applyPalletQrToActive('');
+  }
+
+  private applyPalletQrToActive(qr: string): void {
+    const code = normalizePalletQrCode(qr);
+    if (this.isMultiplePallet) {
+      if (!this.multiLocationRows.length) this.addMultiLocationRow();
+      const idx = Math.min(
+        Math.max(0, this.activeLocationRowIndex),
+        this.multiLocationRows.length - 1
+      );
+      this.activeLocationRowIndex = idx;
+      const row = this.multiLocationRows[idx];
+      row.palletQr = code;
+      const shelf = extractShelfSlot(row.location) || this.locationScannerValue;
+      row.location = this.composeRowLocation(shelf, code);
+      this.syncConfirmLocationFromMultiRows();
+    } else {
+      const shelf =
+        extractShelfSlot(this.confirmReceiptData.location) || this.locationScannerValue;
+      this.confirmReceiptData.location = this.composeRowLocation(shelf, code);
+    }
+  }
+
+  focusPalletQrScanner(): void {
+    setTimeout(() => {
+      this.palletQrScannerInput?.nativeElement?.focus();
+    }, 200);
+  }
+
+  private clearActiveLocationValue(): void {
+    if (this.isMultiplePallet && this.multiLocationRows.length) {
+      const idx = Math.min(
+        Math.max(0, this.activeLocationRowIndex),
+        this.multiLocationRows.length - 1
+      );
+      this.multiLocationRows[idx].location = '';
+      this.multiLocationRows[idx].palletQr = '';
+      this.syncConfirmLocationFromMultiRows();
+    } else {
+      this.confirmReceiptData.location = '';
+    }
+    this.palletQrValue = '';
+  }
+
+  private syncConfirmLocationFromMultiRows(): void {
+    const filled = this.multiLocationRows.find((r) => String(r.location || '').trim());
+    this.confirmReceiptData.location = filled ? String(filled.location).trim() : '';
+  }
+
+  get multiLocationsTotalQty(): number {
+    return this.multiLocationRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  }
+
+  get multiLocationsRemainingQty(): number {
+    return Math.max(0, this.originalQuantity - this.multiLocationsTotalQty);
+  }
+
+  isMultiLocationsValid(): boolean {
+    if (!this.multiLocationRows.length || this.multiLocationRows.length > this.maxMultiLocations) {
+      return false;
+    }
+    const locs = new Set<string>();
+    for (const r of this.multiLocationRows) {
+      const loc = String(r.location || '').trim().toUpperCase();
+      const qty = Number(r.quantity) || 0;
+      if (!loc || qty <= 0) return false;
+      if (!this.isLocationReady(loc)) return false;
+      if (locs.has(loc)) return false;
+      locs.add(loc);
+    }
+    return this.multiLocationsTotalQty <= this.originalQuantity && this.multiLocationsTotalQty > 0;
+  }
+
+  canLockReceipt(): boolean {
+    if (!this.isAllFieldsConfirmed()) return false;
+    if (this.locationUpdateOnlyMode) {
+      return this.isLocationReady(this.confirmReceiptData.location);
+    }
+    if (this.isMultiplePallet) return this.isMultiLocationsValid();
+    return this.isLocationReady(this.confirmReceiptData.location);
+  }
+
+  setActiveLocationRow(index: number): void {
+    if (index < 0 || index >= this.multiLocationRows.length) return;
+    this.activeLocationRowIndex = index;
+    const row = this.multiLocationRows[index];
+    this.locationScannerValue = extractShelfSlot(row.location) || '';
+    this.palletQrValue = row.palletQr || extractPalletQrCode(row.location) || '';
+    this.focusLocationScanner();
+  }
+
+  addMultiLocationRow(): void {
+    if (this.multiLocationRows.length >= this.maxMultiLocations) return;
+    this.multiLocationRows = [
+      ...this.multiLocationRows,
+      { location: '', quantity: 0, palletQr: '' }
+    ];
+    this.activeLocationRowIndex = this.multiLocationRows.length - 1;
+    this.locationScannerValue = '';
+    this.palletQrValue = '';
+    this.focusLocationScanner();
+    setTimeout(() => this.scrollMultiLocationUiIntoView(), 80);
+  }
+
+  private scrollMultiLocationUiIntoView(): void {
+    const addBtn = document.querySelector('.multi-location-add-btn') as HTMLElement | null;
+    const locSection = document.querySelector('.confirm-receipt-modal .location-section') as HTMLElement | null;
+    const target = locSection || addBtn;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  removeMultiLocationRow(index: number): void {
+    if (index < 0 || index >= this.multiLocationRows.length) return;
+    this.multiLocationRows = this.multiLocationRows.filter((_, i) => i !== index);
+    if (!this.multiLocationRows.length) {
+      this.activeLocationRowIndex = 0;
+      this.confirmReceiptData.location = '';
+      this.palletQrValue = '';
+      return;
+    }
+    this.activeLocationRowIndex = Math.min(index, this.multiLocationRows.length - 1);
+    this.syncConfirmLocationFromMultiRows();
+    const row = this.multiLocationRows[this.activeLocationRowIndex];
+    this.locationScannerValue = extractShelfSlot(row?.location) || '';
+    this.palletQrValue = row?.palletQr || extractPalletQrCode(row?.location || '') || '';
+  }
+
+  onMultiLocationQtyChange(index: number): void {
+    const row = this.multiLocationRows[index];
+    if (!row) return;
+    let qty = Number(row.quantity) || 0;
+    if (qty < 0) qty = 0;
+    const otherSum = this.multiLocationRows.reduce(
+      (s, r, i) => (i === index ? s : s + (Number(r.quantity) || 0)),
+      0
+    );
+    const maxForRow = Math.max(0, this.originalQuantity - otherSum);
+    if (qty > maxForRow) qty = maxForRow;
+    row.quantity = qty;
+  }
+
+  /** Khách của phiếu đang khóa — hiện trên sơ đồ. */
+  get currentStorageCustomer(): string {
+    const m = this.selectedReceiptMaterial;
+    if (!m) return '';
+    const fromItem = String(m.customer || '').trim();
+    if (fromItem) return fromItem;
+    return this.resolveCustomerForStorage(m.materialCode);
+  }
+
+  openStorageLocationPicker(): void {
+    this.showStorageLocationPicker = true;
+    void this.ensureStorageDiagramData();
+  }
+
+  closeStorageLocationPicker(): void {
+    this.showStorageLocationPicker = false;
+  }
+
+  onStorageLocationPicked(location: string): void {
+    const loc = String(location || '').trim();
+    if (!loc) return;
+    if (/^TEMP-[123]$/i.test(loc)) {
+      this.fgInUseAsm3 = false;
+      this.palletQrValue = '';
+    }
+    // Chỉ lấy phần ô kệ (C1.4A) — mã QR pallet scan riêng, nằm cuối khi ghép
+    const shelf = extractShelfSlot(loc) || loc.toUpperCase();
+    this.locationScannerValue = shelf;
+    this.applyLocationValue(shelf);
+    this.showStorageLocationPicker = false;
+    if (!this.isTempShelf(shelf)) {
+      this.focusPalletQrScanner();
+    } else {
+      this.focusLocationScanner();
+    }
+  }
+
+  private resolveCustomerForStorage(materialCode: string): string {
+    const code7 = String(materialCode || '').trim().toUpperCase().slice(0, 7);
+    if (!code7) return '';
+    const catalogItem = this.catalogItems.find(
+      (c) => String(c.materialCode || '').trim().toUpperCase().slice(0, 7) === code7
+    );
+    if (catalogItem?.customer) return String(catalogItem.customer).trim();
+    const mapping = this.mappingItems.find(
+      (item) => String(item.materialCode || '').trim().toUpperCase().slice(0, 7) === code7
+    );
+    return mapping ? String(mapping.description || '').trim() : '';
+  }
+
+  /** Load tồn theo khách để vẽ tên KH trên từng ô kệ. */
+  private async ensureStorageDiagramData(): Promise<void> {
+    const factory = this.selectedFactory || 'ASM1';
+    if (this.storageCartonRows.length && this.storageDiagramLoadedForFactory === factory) {
+      this.ensureCurrentCustomerInCartonRows();
+      return;
+    }
+
+    try {
+      const snap = await this.firestore
+        .collection('fg-inventory', (ref) => {
+          let q: firebase.firestore.Query = ref;
+          if (factory === 'ASM1' || factory === 'ASM2') {
+            q = q.where('factory', '==', factory);
+          }
+          return q.limit(5000);
+        })
+        .get()
+        .toPromise();
+
+      const byCustomer = new Map<string, number>();
+      (snap?.docs || []).forEach((doc) => {
+        const data = doc.data() as any;
+        const ton = Number(data.ton ?? data.stock ?? 0);
+        if (ton <= 0) return;
+        const code = String(data.materialCode || data.maTP || '')
+          .trim()
+          .toUpperCase()
+          .slice(0, 7);
+        if (!code) return;
+        const customer = this.resolveCustomerForStorage(code) || 'Không xác định';
+        const packingPer = this.getPackingQtyForCode(code);
+        const lineCarton =
+          packingPer > 0
+            ? Math.ceil(ton / packingPer)
+            : Number(data.carton || 0) || Math.max(1, Math.ceil(ton / 100));
+        byCustomer.set(customer, (byCustomer.get(customer) || 0) + lineCarton);
+      });
+
+      this.storageCartonRows = Array.from(byCustomer.entries()).map(([customer, carton]) => ({
+        customer,
+        carton
+      }));
+      this.storageDiagramLoadedForFactory = factory;
+      this.ensureCurrentCustomerInCartonRows();
+    } catch (e) {
+      console.error('ensureStorageDiagramData failed', e);
+      this.storageCartonRows = [];
+      this.ensureCurrentCustomerInCartonRows();
+    }
+  }
+
+  /** Bảo đảm khách phiếu hiện tại có trên sơ đồ (highlight + tên ô). */
+  private ensureCurrentCustomerInCartonRows(): void {
+    const cur = this.currentStorageCustomer;
+    if (!cur) return;
+    const curUp = cur.toUpperCase();
+    const exists = this.storageCartonRows.some((r) => {
+      const name = String(r.customer || '').trim().toUpperCase();
+      return name === curUp || name.includes(curUp) || curUp.includes(name);
+    });
+    if (exists) return;
+    const receiptCarton = Math.max(1, Number(this.displayCartonCount) || 1);
+    this.storageCartonRows = [...this.storageCartonRows, { customer: cur, carton: receiptCarton }];
   }
 
   // Focus scanner input when dialog opens
@@ -2483,13 +2850,30 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Toggle multiple pallet checkbox
   toggleMultiplePallet(): void {
     this.isMultiplePallet = !this.isMultiplePallet;
-    if (!this.isMultiplePallet) {
-      // Reset to original quantity when unchecked
+    if (this.isMultiplePallet) {
+      const existingLoc = String(this.confirmReceiptData.location || '').trim();
+      const qr = this.palletQrValue || extractPalletQrCode(existingLoc);
+      this.multiLocationRows = [{
+        location: existingLoc,
+        quantity: 0,
+        palletQr: qr
+      }];
+      this.activeLocationRowIndex = 0;
+      this.locationScannerValue = extractShelfSlot(existingLoc) || '';
+      this.palletQrValue = qr;
+    } else {
+      const first = this.multiLocationRows[0];
+      const firstLoc = String(first?.location || '').trim();
+      this.multiLocationRows = [];
+      this.activeLocationRowIndex = 0;
       this.confirmQuantity = this.originalQuantity;
+      this.confirmReceiptData.location = firstLoc;
+      this.locationScannerValue = extractShelfSlot(firstLoc) || '';
+      this.palletQrValue = first?.palletQr || extractPalletQrCode(firstLoc) || '';
     }
   }
 
-  // Validate confirm quantity input
+  // Validate confirm quantity input (legacy single partial — giữ tương thích)
   onConfirmQuantityChange(): void {
     if (this.confirmQuantity < 0) {
       this.confirmQuantity = 0;
@@ -2511,21 +2895,18 @@ export class FgInComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
-      alert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
-      return;
-    }
-
     // ===== Chỉ cập nhật vị trí (phiếu đã tick khóa nhưng đang Temporary) =====
     if (this.locationUpdateOnlyMode) {
+      if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
+        alert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
+        return;
+      }
       const newLocation = this.confirmReceiptData.location.trim();
 
-      // Update fg-in (phiếu) location
       this.selectedReceiptMaterial.location = newLocation;
       this.selectedReceiptMaterial.updatedAt = new Date();
       this.updateMaterialInFirebase(this.selectedReceiptMaterial);
 
-      // Update fg-inventory location (chỉ update trường location)
       this.updateInventoryLocationOnly(this.selectedReceiptMaterial, newLocation)
         .then(() => {
           this.closeConfirmReceiptDialog();
@@ -2539,100 +2920,128 @@ export class FgInComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Validate confirm quantity for multiple pallet
+    // ===== Nhiều vị trí pallet =====
     if (this.isMultiplePallet) {
-      if (this.confirmQuantity <= 0) {
-        alert('❌ Số lượng xác nhận phải lớn hơn 0');
-        return;
-      }
-      if (this.confirmQuantity > this.originalQuantity) {
-        alert('❌ Số lượng xác nhận không được lớn hơn số lượng gốc');
-        return;
-      }
+      this.confirmAndLockMultiLocations();
+      return;
     }
 
-    const quantityToConfirm = this.isMultiplePallet ? this.confirmQuantity : this.originalQuantity;
-    const remainingQuantity = this.originalQuantity - quantityToConfirm;
-    const isPartialConfirm = this.isMultiplePallet && remainingQuantity > 0;
-
-    // Batch suffix for multiple pallet: A, B, C...
-    let batchForInventory = this.selectedReceiptMaterial.batchNumber || '';
-    let batchForRemaining = '';
-    if (isPartialConfirm) {
-      const { base, suffix } = this.getBatchBaseAndSuffix(this.selectedReceiptMaterial.batchNumber || '');
-      const currentSuffix = suffix || 'A';
-      batchForInventory = this.getBatchWithSuffix(base, currentSuffix);
-      batchForRemaining = this.getBatchWithSuffix(base, this.getNextSuffix(currentSuffix));
+    if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
+      alert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
+      return;
     }
+
+    const quantityToConfirm = this.originalQuantity;
+    const batchForInventory = this.selectedReceiptMaterial.batchNumber || '';
 
     let confirmMsg = `✅ Xác nhận khóa phiếu?\n\n` +
       `Mã TP: ${this.selectedReceiptMaterial.materialCode}\n` +
       `PO: ${this.selectedReceiptMaterial.poNumber || 'N/A'}\n` +
       `LSX: ${this.selectedReceiptMaterial.lsx}\n` +
-      `LOT: ${this.selectedReceiptMaterial.lot}\n`;
-
-    if (isPartialConfirm) {
-      confirmMsg += `\n📦 NHẬP NHIỀU PALLET:\n` +
-        `Batch vào kho: ${batchForInventory}\n` +
-        `Số lượng: ${quantityToConfirm.toLocaleString()}\n` +
-        `Batch còn lại: ${batchForRemaining}\n` +
-        `Số lượng còn lại: ${remainingQuantity.toLocaleString()}\n`;
-    } else {
-      confirmMsg += `Batch: ${batchForInventory}\n` +
-        `Số lượng: ${quantityToConfirm.toLocaleString()}\n`;
-    }
-
-    confirmMsg += `Vị trí: ${this.confirmReceiptData.location}\n\n` +
+      `LOT: ${this.selectedReceiptMaterial.lot}\n` +
+      `Batch: ${batchForInventory}\n` +
+      `Số lượng: ${quantityToConfirm.toLocaleString()}\n` +
+      `Vị trí: ${this.confirmReceiptData.location}\n\n` +
       `Dữ liệu sẽ được chuyển vào FG Inventory.`;
 
     if (!confirm(confirmMsg)) {
       return;
     }
 
-    // Update location
     this.selectedReceiptMaterial.location = this.confirmReceiptData.location;
     this.selectedReceiptMaterial.updatedAt = new Date();
+    this.selectedReceiptMaterial.isReceived = true;
+    this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+    this.addToInventory(this.selectedReceiptMaterial);
+    this.closeConfirmReceiptDialog();
+    alert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
+    this.refreshData();
+  }
 
-    if (isPartialConfirm) {
-      // PARTIAL CONFIRMATION: Add suffix A, B, C... to batch
-      console.log(`📦 Partial confirmation: ${quantityToConfirm} of ${this.originalQuantity}, batch ${batchForInventory} -> FG, ${batchForRemaining} remaining`);
-      
-      // Add confirmed quantity to FG Inventory with batch suffix (e.g. 11030001A)
-      this.addToInventory(this.selectedReceiptMaterial, quantityToConfirm, batchForInventory);
-      
-      // Update fg-in record: remaining quantity with next batch suffix (e.g. 11030001B)
-      this.selectedReceiptMaterial.quantity = remainingQuantity;
-      this.selectedReceiptMaterial.batchNumber = batchForRemaining;
-      this.selectedReceiptMaterial.isReceived = false;
-      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
-      
-      // Close dialog
-      this.closeConfirmReceiptDialog();
-      
-      // Show success message
-      alert(`✅ Đã xác nhận ${quantityToConfirm.toLocaleString()} sản phẩm!\n\n` +
-        `Batch vào kho: ${batchForInventory}\n` +
-        `Vị trí: ${this.confirmReceiptData.location}\n` +
-        `Batch còn lại: ${batchForRemaining}\n` +
-        `Số lượng còn lại: ${remainingQuantity.toLocaleString()} sản phẩm chờ xác nhận`);
-    } else {
-      // FULL CONFIRMATION: Confirm entire quantity
-      this.selectedReceiptMaterial.isReceived = true;
-      
-      // Update in Firebase
-      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
-      
-      // Add to FG Inventory
-      this.addToInventory(this.selectedReceiptMaterial);
-      
-      // Close dialog
-      this.closeConfirmReceiptDialog();
-      
-      // Show success message
-      alert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
+  /** Khóa phiếu với nhiều vị trí (tối đa 5) — mỗi vị trí 1 dòng fg-inventory. */
+  private confirmAndLockMultiLocations(): void {
+    if (!this.selectedReceiptMaterial) return;
+
+    if (!this.isMultiLocationsValid()) {
+      alert(
+        '❌ Kiểm tra lại danh sách vị trí:\n' +
+          `- Tối đa ${this.maxMultiLocations} vị trí\n` +
+          '- Mỗi dòng cần ô kệ A/B/C + mã QR pallet + số lượng > 0\n' +
+          '- Không trùng vị trí\n' +
+          '- Tổng số lượng không vượt quá số lượng phiếu'
+      );
+      return;
     }
 
-    // Refresh data
+    const rows = this.multiLocationRows.map((r) => ({
+      location: String(r.location || '').trim(),
+      quantity: Number(r.quantity) || 0
+    }));
+    const quantityToConfirm = rows.reduce((s, r) => s + r.quantity, 0);
+    const remainingQuantity = this.originalQuantity - quantityToConfirm;
+    const isPartialConfirm = remainingQuantity > 0;
+
+    const { base, suffix } = this.getBatchBaseAndSuffix(this.selectedReceiptMaterial.batchNumber || '');
+    let nextSuffix = suffix || 'A';
+    const needSuffixes = rows.length > 1 || isPartialConfirm || !!suffix;
+
+    const planned: Array<{ location: string; quantity: number; batch: string }> = [];
+    for (const row of rows) {
+      const batch = needSuffixes ? this.getBatchWithSuffix(base, nextSuffix) : base;
+      planned.push({ location: row.location, quantity: row.quantity, batch });
+      if (needSuffixes) nextSuffix = this.getNextSuffix(nextSuffix);
+    }
+    const batchForRemaining = isPartialConfirm
+      ? this.getBatchWithSuffix(base, needSuffixes ? nextSuffix : this.getNextSuffix(suffix || 'A'))
+      : '';
+
+    let confirmMsg =
+      `✅ Xác nhận khóa phiếu — ${planned.length} vị trí?\n\n` +
+      `Mã TP: ${this.selectedReceiptMaterial.materialCode}\n` +
+      `LOT: ${this.selectedReceiptMaterial.lot}\n` +
+      `LSX: ${this.selectedReceiptMaterial.lsx}\n\n`;
+    for (const p of planned) {
+      confirmMsg += `• ${p.location}: ${p.quantity.toLocaleString()} (batch ${p.batch})\n`;
+    }
+    confirmMsg += `\nTổng nhập: ${quantityToConfirm.toLocaleString()} / ${this.originalQuantity.toLocaleString()}`;
+    if (isPartialConfirm) {
+      confirmMsg += `\nCòn lại trên phiếu: ${remainingQuantity.toLocaleString()} (batch ${batchForRemaining})`;
+    }
+    confirmMsg += `\n\nMỗi vị trí sẽ tạo 1 dòng trong FG Inventory.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const lastLocation = planned[planned.length - 1].location;
+    this.selectedReceiptMaterial.updatedAt = new Date();
+
+    for (const p of planned) {
+      this.selectedReceiptMaterial.location = p.location;
+      this.addToInventory(this.selectedReceiptMaterial, p.quantity, p.batch, p.location);
+    }
+
+    if (isPartialConfirm) {
+      this.selectedReceiptMaterial.quantity = remainingQuantity;
+      this.selectedReceiptMaterial.batchNumber = batchForRemaining;
+      this.selectedReceiptMaterial.location = lastLocation;
+      this.selectedReceiptMaterial.isReceived = false;
+      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+      this.closeConfirmReceiptDialog();
+      alert(
+        `✅ Đã nhập ${planned.length} vị trí (${quantityToConfirm.toLocaleString()} sp)!\n\n` +
+          planned.map((p) => `${p.location}: ${p.quantity.toLocaleString()} [${p.batch}]`).join('\n') +
+          `\n\nCòn lại: ${remainingQuantity.toLocaleString()} — batch ${batchForRemaining}`
+      );
+    } else {
+      this.selectedReceiptMaterial.location = lastLocation;
+      this.selectedReceiptMaterial.isReceived = true;
+      this.updateMaterialInFirebase(this.selectedReceiptMaterial);
+      this.closeConfirmReceiptDialog();
+      alert(
+        `✅ Đã khóa phiếu — ${planned.length} vị trí vào FG Inventory!\n\n` +
+          planned.map((p) => `${p.location}: ${p.quantity.toLocaleString()} [${p.batch}]`).join('\n')
+      );
+    }
+
     this.refreshData();
   }
 

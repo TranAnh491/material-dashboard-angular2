@@ -1,0 +1,177 @@
+<div class="stg-modal" *ngIf="open" (click)="close()">
+  <div class="stg-modal__panel" (click)="$event.stopPropagation()">
+    <div class="stg-modal__header">
+      <h3>
+        <i class="material-icons">grid_view</i>
+        {{ title }}
+      </h3>
+      <div class="stg-modal__header-actions">
+        <button type="button" class="stg-btn stg-btn--outline"
+                *ngIf="mode !== 'pick'"
+                (click)="checkRequested.emit()">
+          <i class="material-icons">fact_check</i> Check vị trí
+        </button>
+        <button type="button" class="stg-modal__close" (click)="close()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+    </div>
+
+    <div class="stg-modal__body">
+      <p class="stg-modal__lead">
+        Nhà máy <strong>{{ factory }}</strong> —
+        Mỗi mâm 3 vị trí <strong>A / B / C</strong> (vd. <strong>C1.4A</strong>).
+        Vị trí đầy đủ: <strong>C1.4A-F1-111</strong> (ô kệ + mã QR pallet).
+        Mặc định <strong>{{ storageRules.maxCartonPerPallet }} ct</strong>/pallet ·
+        B1–B9 &amp; C1–C6 tầng1: <strong>{{ storageRules.maxCartonPerPalletBcL1 }} ct</strong>/PL ·
+        tầng2: <strong>{{ storageRules.maxCartonPerPalletBcL2 }} ct</strong>/PL.
+        <span *ngIf="mode === 'pick'"> — <b>Bấm ô A/B/C</b> để chọn vị trí kệ.</span>
+        <span *ngIf="mode === 'move'"> — Bấm ô → tick LOT → <b>Dời</b> → bấm ô đích (hoặc search mã QR pallet).</span>
+      </p>
+
+      <div class="stg-current-kh" *ngIf="currentCustomer">
+        <i class="material-icons">person</i>
+        Khách hiện tại: <strong>{{ currentCustomerLabel }}</strong>
+        <span class="stg-current-kh__hint">Ô tô màu xanh lá là khu vực của khách này</span>
+      </div>
+
+      <div class="stg-temp" *ngIf="mode === 'pick' && showTempPicker">
+        <span class="stg-temp__label">Vị trí tạm:</span>
+        <button type="button" class="stg-btn stg-btn--temp" *ngFor="let t of tempLocations" (click)="pickTemp(t)">
+          {{ t }}
+        </button>
+      </div>
+
+      <div class="stg-search">
+        <input type="text"
+               class="stg-search__input"
+               [(ngModel)]="storageSearchInput"
+               (keydown)="onStorageSearchKeydown($event)"
+               placeholder="Vị trí / mã QR pallet (C1.4A, F1-111…)"
+               autocomplete="off">
+        <button type="button" class="stg-btn stg-btn--primary" (click)="searchStorageDiagram()">
+          <i class="material-icons">search</i> Search
+        </button>
+        <button type="button" class="stg-btn stg-btn--outline"
+                *ngIf="storageSearchInput || storageSearchMessage"
+                (click)="clearStorageSearch()">
+          <i class="material-icons">close</i>
+        </button>
+        <span class="stg-search__msg" *ngIf="storageSearchMessage">{{ storageSearchMessage }}</span>
+      </div>
+
+      <div class="stg-layout" [class.stg-layout--with-panel]="mode === 'move' && !!selectedPalletLabel">
+        <div class="stg-diagram">
+          <section class="stg-zone" *ngFor="let zone of storageZones">
+            <header class="stg-zone__head">
+              <h4>{{ zone.title }}</h4>
+              <span>{{ zone.subtitle }}</span>
+            </header>
+            <div class="stg-rack-grid">
+              <div class="stg-rack" *ngFor="let rack of zone.racks"
+                   [class.stg-rack--current]="isCurrentCustomerRack(rack.primaryCustomer)"
+                   [title]="rack.id + ' · ' + (rack.primaryCustomer || '—') + ' · ' + rack.totalCarton + '/' + rack.capacityCarton + ' carton'">
+                <div class="stg-rack__id">{{ rack.id }}</div>
+                <div class="stg-rack__customer"
+                     [class.stg-rack__customer--empty]="!rack.primaryCustomer || rack.primaryCustomer === '—'">
+                  {{ shortKh(rack.primaryCustomer) }}
+                </div>
+                <div class="stg-levels">
+                  <div class="stg-level"
+                       *ngFor="let lv of rack.levels"
+                       [id]="storageSlotDomId(lv.label)"
+                       [class.stg-level--hit]="isStorageSlotHighlighted(lv.label) || isAnyPalletHighlighted(lv)"
+                       [class.stg-level--current]="isCurrentCustomerLevel(lv)"
+                       [title]="lv.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + lv.carton + '/' + lv.capacityCarton + ' ct'">
+                    <div class="stg-level__head">
+                      <span class="stg-level__label">{{ lv.label }}</span>
+                      <span class="stg-level__kh"
+                            [class.stg-level__kh--empty]="!lv.customer">
+                        {{ lv.customer ? shortKh(lv.customer) : '—' }}
+                      </span>
+                    </div>
+                    <div class="stg-pallets">
+                      <button type="button"
+                              class="stg-pallet"
+                              *ngFor="let pl of lv.pallets"
+                              [id]="storageSlotDomId(pl.label)"
+                              [class.stg-pallet--hit]="isStorageSlotHighlighted(pl.label)"
+                              [class.stg-pallet--selected]="isPalletSelected(pl.label)"
+                              [class.stg-pallet--source]="isPalletMoveSource(pl.label)"
+                              [class.stg-pallet--current]="isCurrentCustomerLevel(lv)"
+                              [class.stg-pallet--clickable]="mode === 'pick' || mode === 'move'"
+                              [title]="pl.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + pl.carton + '/' + pl.capacityCarton + ' ct'"
+                              (click)="onPalletClick(pl, lv)">
+                        <span class="stg-pallet__id">{{ pl.slotLetter || ('PL' + pl.palletNo) }}</span>
+                        <span class="stg-pallet__kh">{{ lv.customer ? shortKh(lv.customer) : '—' }}</span>
+                        <span class="stg-pallet__cap">{{ pl.carton }}/{{ pl.capacityCarton }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="stg-rack__meta">
+                  {{ rack.totalCarton | number }} / {{ rack.capacityCarton | number }} ct
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Panel dời LOT (mode move) -->
+        <aside class="stg-panel" *ngIf="mode === 'move' && selectedPalletLabel">
+          <div class="stg-panel__head">
+            <strong>{{ selectedPalletLabel }}</strong>
+            <span>{{ selectedPalletCapacity }} ct/PL</span>
+          </div>
+          <p class="stg-panel__hint" *ngIf="panelMessage">{{ panelMessage }}</p>
+          <p class="stg-panel__hint" *ngIf="!panelMessage && !isMoving">
+            Tick dòng cần dời, bấm <b>Dời</b>, rồi chọn pallet đích.
+          </p>
+
+          <div class="stg-panel__toolbar" *ngIf="!isMoving">
+            <label class="stg-check">
+              <input type="checkbox" [checked]="allSelected" (change)="toggleSelectAll()">
+              Chọn tất cả ({{ palletLines.length }})
+            </label>
+            <button type="button" class="stg-btn stg-btn--primary"
+                    [disabled]="selectedCount === 0 || isSavingMove"
+                    (click)="startMove()">
+              Dời ({{ selectedCount }})
+            </button>
+          </div>
+          <div class="stg-panel__toolbar" *ngIf="isMoving">
+            <span class="stg-panel__moving">Đang dời {{ selectedCount }} dòng từ {{ moveSourceLabel }}</span>
+            <button type="button" class="stg-btn stg-btn--outline" (click)="cancelMove()" [disabled]="isSavingMove">
+              Hủy dời
+            </button>
+          </div>
+
+          <div class="stg-panel__list" *ngIf="palletLines.length">
+            <label class="stg-lot"
+                   *ngFor="let line of palletLines"
+                   [class.stg-lot--on]="isLineSelected(line)">
+              <input type="checkbox"
+                     *ngIf="!isMoving"
+                     [checked]="isLineSelected(line)"
+                     (change)="toggleLine(line)"
+                     [disabled]="!line.id">
+              <span class="stg-lot__body">
+                <span class="stg-lot__code">{{ line.materialCode }}</span>
+                <span class="stg-lot__meta">
+                  LOT {{ line.lot || '—' }} · LSX {{ line.lsx || '—' }} · Batch {{ line.batchNumber || '—' }}
+                </span>
+                <span class="stg-lot__ton">Tồn {{ formatNumber(line.ton) }}</span>
+              </span>
+            </label>
+          </div>
+          <div class="stg-panel__empty" *ngIf="!palletLines.length">
+            Không có dòng tồn tại pallet này.
+          </div>
+          <p class="stg-panel__saving" *ngIf="isSavingMove">
+            <i class="material-icons">refresh</i> Đang cập nhật...
+          </p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>

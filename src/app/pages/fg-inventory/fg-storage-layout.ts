@@ -1,5 +1,17 @@
 /** Cấu hình & phân bổ sơ đồ kệ lưu trữ TP (Thống Kê TP theo thùng). */
 
+export interface StoragePalletSlot {
+  /** vd. A1.1A */
+  label: string;
+  /** 1|2|3 tương ứng A|B|C trên mâm */
+  palletNo: number;
+  /** Chữ vị trí trên mâm: A / B / C */
+  slotLetter: string;
+  carton: number;
+  capacityCarton: number;
+  utilizationPct: number;
+}
+
 export interface StorageLevelSlot {
   label: string;
   rackId: string;
@@ -8,6 +20,9 @@ export interface StorageLevelSlot {
   carton: number;
   capacityCarton: number;
   utilizationPct: number;
+  /** Mỗi mâm 3 vị trí: A1.1A … A1.1C */
+  pallets: StoragePalletSlot[];
+  cartonPerPallet: number;
 }
 
 export interface StorageRackView {
@@ -30,11 +45,106 @@ export interface StorageZoneView {
 
 const LEVELS_PER_RACK = 5;
 const PALLETS_PER_LEVEL = 3;
+/** Mặc định (khu A và tầng thường): 18 carton / pallet */
 const MAX_CARTON_PER_PALLET = 18;
+/** Tầng 1 dãy B1–B9, C1–C6 */
+const MAX_CARTON_PER_PALLET_BC_L1 = 42;
+/** Tầng 2 dãy B1–B9, C1–C6 */
+const MAX_CARTON_PER_PALLET_BC_L2 = 3;
 const MAX_LOT_PER_PALLET = 3;
 
 export const LEVEL_CAPACITY_CARTON = PALLETS_PER_LEVEL * MAX_CARTON_PER_PALLET;
 export const RACK_CAPACITY_CARTON = LEVELS_PER_RACK * LEVEL_CAPACITY_CARTON;
+
+/** Sức chứa 1 pallet theo kệ + tầng. */
+export function getCartonPerPallet(rackId: string, level: number): number {
+  const id = String(rackId || '').trim().toUpperCase();
+  const lv = Number(level) || 0;
+  const isBcSpecial = /^B[1-9]$/.test(id) || /^C[1-6]$/.test(id);
+  if (isBcSpecial) {
+    if (lv === 1) return MAX_CARTON_PER_PALLET_BC_L1;
+    if (lv === 2) return MAX_CARTON_PER_PALLET_BC_L2;
+  }
+  return MAX_CARTON_PER_PALLET;
+}
+
+export function getLevelCapacityCarton(rackId: string, level: number): number {
+  return PALLETS_PER_LEVEL * getCartonPerPallet(rackId, level);
+}
+
+/** PL1→A, PL2→B, PL3→C */
+export function palletNoToLetter(palletNo: number): string {
+  const n = Number(palletNo) || 0;
+  if (n === 1) return 'A';
+  if (n === 2) return 'B';
+  if (n === 3) return 'C';
+  return '';
+}
+
+export function palletLetterToNo(letter: string): number {
+  const L = String(letter || '').trim().toUpperCase();
+  if (L === 'A' || L === '1') return 1;
+  if (L === 'B' || L === '2') return 2;
+  if (L === 'C' || L === '3') return 3;
+  return 0;
+}
+
+/** Nhãn ô trên mâm: C1.4A (không còn -PL1). */
+export function buildPalletLabel(levelLabel: string, palletNo: number): string {
+  const letter = palletNoToLetter(palletNo);
+  return letter ? `${levelLabel}${letter}` : levelLabel;
+}
+
+/**
+ * Ghép vị trí kệ + mã QR pallet.
+ * vd. slot=C1.4A, qr=F1-111 → C1.4A-F1-111
+ */
+export function composeStorageLocation(shelfSlot: string, palletQrCode: string): string {
+  const slot = normalizeStorageLocation(shelfSlot).replace(/-+$/, '');
+  const qr = normalizePalletQrCode(palletQrCode);
+  if (!slot) return qr;
+  if (!qr) return slot;
+  if (slot.endsWith(`-${qr}`) || slot.endsWith(qr)) return slot;
+  // Temp không ghép mã pallet
+  if (/^TEMP-[123]$/i.test(slot) || slot === 'TEMPORARY') return slot;
+  return `${slot}-${qr}`;
+}
+
+/** Chuẩn hóa mã QR pallet (giữ dấu -, bỏ khoảng trắng). */
+export function normalizePalletQrCode(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/[^A-Z0-9.\-_+]/g, '');
+}
+
+/** Tách mã QR pallet ở cuối vị trí đầy đủ (C1.4A-F1-111 → F1-111). */
+export function extractPalletQrCode(location: string): string {
+  const raw = normalizeStorageLocation(location);
+  if (!raw) return '';
+  // Legacy: C1.4-PL1-F1-111
+  let m = raw.match(/^[ABC]\d+\.\d+(?:[-_]?PL\d+|[ABC])-(.+)$/i);
+  if (m) return normalizePalletQrCode(m[1]);
+  // Slot chữ + QR: C1.4A-F1-111
+  m = raw.match(/^[ABC]\d+\.\d+[ABC]-(.+)$/i);
+  if (m) return normalizePalletQrCode(m[1]);
+  // Nếu chuỗi không phải slot kệ → coi cả chuỗi là mã pallet
+  if (!/^[ABC]\d+/i.test(raw) && !/^TEMP/i.test(raw)) {
+    return normalizePalletQrCode(raw);
+  }
+  return '';
+}
+
+/** Chỉ phần kệ/tầng/ô (C1.4A), bỏ mã pallet phía sau. */
+export function extractShelfSlot(location: string): string {
+  const parsed = parseStorageSlotLocation(location);
+  if (parsed?.palletLabel) return parsed.palletLabel;
+  if (parsed?.label) return parsed.label;
+  const raw = normalizeStorageLocation(location);
+  if (/^TEMP-[123]$/i.test(raw) || raw === 'TEMPORARY') return raw;
+  return raw;
+}
 
 /** Khách khu A — kệ A1..A4 + phần còn lại A5/A6 */
 export const ZONE_A_PRIMARY_CUSTOMERS = [
@@ -158,22 +268,55 @@ function racksForZone(zoneKey: string): RackDef[] {
   return [];
 }
 
+function emptyPallets(levelLabel: string, cartonPerPallet: number): StoragePalletSlot[] {
+  return Array.from({ length: PALLETS_PER_LEVEL }, (_, i) => {
+    const palletNo = i + 1;
+    return {
+      label: buildPalletLabel(levelLabel, palletNo),
+      palletNo,
+      slotLetter: palletNoToLetter(palletNo),
+      carton: 0,
+      capacityCarton: cartonPerPallet,
+      utilizationPct: 0
+    };
+  });
+}
+
 function emptyLevel(rackId: string, level: number): StorageLevelSlot {
+  const label = `${rackId}.${level}`;
+  const cartonPerPallet = getCartonPerPallet(rackId, level);
+  const capacityCarton = PALLETS_PER_LEVEL * cartonPerPallet;
   return {
-    label: `${rackId}.${level}`,
+    label,
     rackId,
     level,
     customer: '',
     carton: 0,
-    capacityCarton: LEVEL_CAPACITY_CARTON,
-    utilizationPct: 0
+    capacityCarton,
+    utilizationPct: 0,
+    pallets: emptyPallets(label, cartonPerPallet),
+    cartonPerPallet
   };
+}
+
+/** Đổ carton vào 3 vị trí của mâm (A → C), cập nhật tổng mâm. */
+function fillLevelCartons(slot: StorageLevelSlot, totalCarton: number): void {
+  let remaining = Math.max(0, Number(totalCarton) || 0);
+  for (const p of slot.pallets) {
+    const put = Math.min(remaining, p.capacityCarton);
+    p.carton = put;
+    p.utilizationPct = p.capacityCarton > 0 ? Math.min(100, Math.round((put / p.capacityCarton) * 100)) : 0;
+    remaining -= put;
+  }
+  slot.carton = slot.pallets.reduce((s, p) => s + p.carton, 0);
+  slot.utilizationPct =
+    slot.capacityCarton > 0 ? Math.min(100, Math.round((slot.carton / slot.capacityCarton) * 100)) : 0;
 }
 
 function buildRackView(rack: RackDef, levels: StorageLevelSlot[]): StorageRackView {
   const rackLevels = levels.filter((l) => l.rackId === rack.id).sort((a, b) => b.level - a.level);
   const totalCarton = rackLevels.reduce((s, l) => s + l.carton, 0);
-  const capacityCarton = rackLevels.length * LEVEL_CAPACITY_CARTON;
+  const capacityCarton = rackLevels.reduce((s, l) => s + l.capacityCarton, 0);
   const primary = rackLevels.find((l) => l.customer)?.customer || '—';
   return {
     id: rack.id,
@@ -255,9 +398,7 @@ function allocateZoneA(
     slot.customer = customerName || slotDef.customerCode;
     if (customerName) {
       reservedNames.add(customerName);
-      const put = Math.min(totalCarton, slot.capacityCarton);
-      slot.carton = put;
-      slot.utilizationPct = put > 0 ? Math.min(100, Math.round((put / slot.capacityCarton) * 100)) : 0;
+      fillLevelCartons(slot, Math.min(totalCarton, slot.capacityCarton));
     }
   }
 
@@ -286,8 +427,7 @@ function allocateZoneA(
         continue;
       }
       const put = Math.min(remaining, free);
-      slot.carton += put;
-      slot.utilizationPct = Math.min(100, Math.round((slot.carton / slot.capacityCarton) * 100));
+      fillLevelCartons(slot, slot.carton + put);
       remaining -= put;
       levelIdx += 1;
     }
@@ -330,8 +470,7 @@ function allocateOneCustomerPerLevel(
         continue;
       }
       const put = Math.min(remaining, free);
-      slot.carton += put;
-      slot.utilizationPct = Math.min(100, Math.round((slot.carton / slot.capacityCarton) * 100));
+      fillLevelCartons(slot, slot.carton + put);
       remaining -= put;
       // 1 mâm chỉ 1 khách — sang mâm kế tiếp nếu còn dư hoặc đã dùng mâm này
       levelIdx += 1;
@@ -381,22 +520,22 @@ export function buildStorageZones(
     {
       key: 'B-GIL',
       title: 'Khu B — GIL / HOB',
-      subtitle: 'Kệ B1–B6 · mỗi tầng 3 pallet'
+      subtitle: 'B1–B6 · tầng1: 42 ct/PL · tầng2: 3 ct/PL · mỗi mâm 3 pallet'
     },
     {
       key: 'B-SCIEN',
       title: 'Khu B — Scien',
-      subtitle: 'Kệ B7–B9'
+      subtitle: 'B7–B9 · tầng1: 42 ct/PL · tầng2: 3 ct/PL'
     },
     {
       key: 'C-AXON',
       title: 'Khu C — Axon',
-      subtitle: 'Kệ C1–C6'
+      subtitle: 'C1–C6 · tầng1: 42 ct/PL · tầng2: 3 ct/PL · mỗi mâm 3 pallet'
     },
     {
       key: 'C-SCIEN',
       title: 'Khu C — Scien',
-      subtitle: 'Kệ C7–C9'
+      subtitle: 'C7–C9 · mặc định 18 ct/pallet'
     }
   ];
 
@@ -442,17 +581,59 @@ export const STORAGE_LAYOUT_RULES = {
   levelsPerRack: LEVELS_PER_RACK,
   palletsPerLevel: PALLETS_PER_LEVEL,
   maxCartonPerPallet: MAX_CARTON_PER_PALLET,
+  maxCartonPerPalletBcL1: MAX_CARTON_PER_PALLET_BC_L1,
+  maxCartonPerPalletBcL2: MAX_CARTON_PER_PALLET_BC_L2,
   maxLotPerPallet: MAX_LOT_PER_PALLET,
   levelCapacityCarton: LEVEL_CAPACITY_CARTON,
   rackCapacityCarton: RACK_CAPACITY_CARTON
 };
 
 export interface StorageInventoryLine {
+  id?: string;
   materialCode: string;
   customer: string;
   location: string;
   ton: number;
+  carton?: number;
   batchNumber?: string;
+  lot?: string;
+  lsx?: string;
+  factory?: string;
+  editHistory?: Array<{ action: string; by: string; at: Date | string; detail?: string }>;
+}
+
+/** Chuẩn hóa vị trí để so khớp. */
+export function normalizeStorageLocation(location: string): string {
+  return String(location || '').trim().toUpperCase();
+}
+
+/**
+ * Dòng tồn có thuộc pallet/ô không?
+ * - Khớp đúng C1.4A hoặc C1.4A-F1-111
+ * - Legacy A1.1-PL2
+ * - Hoặc chỉ ghi mâm C1.4 → thuộc mọi ô của mâm
+ * - Hoặc chỉ scan mã pallet F1-111 → khớp nếu location kết thúc bằng mã đó
+ */
+export function inventoryLineMatchesPallet(location: string, palletLabel: string): boolean {
+  const loc = normalizeStorageLocation(location);
+  const pallet = normalizeStorageLocation(palletLabel);
+  if (!loc || !pallet) return false;
+  if (loc === pallet) return true;
+
+  // Khớp theo mã QR pallet (dời hàng chỉ scan mã pallet)
+  const qrFromLoc = extractPalletQrCode(loc);
+  const qrFromQuery = extractPalletQrCode(pallet);
+  if (qrFromQuery && qrFromLoc && qrFromLoc === qrFromQuery) return true;
+  if (qrFromQuery && !parseStorageSlotLocation(pallet) && loc.endsWith(qrFromQuery)) return true;
+
+  const parsedPallet = parseStorageSlotLocation(pallet);
+  if (!parsedPallet) return false;
+  const parsedLoc = parseStorageSlotLocation(loc);
+  if (!parsedLoc) return false;
+  if (parsedLoc.label !== parsedPallet.label) return false;
+  if (!parsedLoc.palletNo) return true;
+  if (!parsedPallet.palletNo) return true;
+  return parsedLoc.palletNo === parsedPallet.palletNo;
 }
 
 export interface StorageCheckIssue {
@@ -473,16 +654,68 @@ export interface StorageCheckResult {
 
 const KNOWN_RACK_IDS = new Set(RACK_DEFS.map((r) => r.id));
 
-/** Parse vị trí FG Inventory → mâm kệ (vd. A6.1, A6-1, A61). */
+/**
+ * Parse vị trí FG Inventory → mâm kệ.
+ * Hỗ trợ: C1.4A, C1.4A-F1-111, C1.4-PL1, C1.4, A6-1, A61…
+ */
 export function parseStorageSlotLocation(location: string): {
   rackId: string;
   level: number;
   label: string;
+  palletNo?: number;
+  palletLabel?: string;
+  slotLetter?: string;
+  palletQrCode?: string;
 } | null {
   const raw = String(location || '').trim().toUpperCase();
-  if (!raw || raw === 'TEMPORARY' || raw === 'TEMP-1') return null;
+  if (!raw || raw === 'TEMPORARY' || /^TEMP-[123]$/.test(raw)) return null;
 
-  let m = raw.match(/^([ABC])(\d+)\.(\d+)$/);
+  // C1.4A-F1-111 / C1.4A
+  let m = raw.match(/^([ABC])(\d+)\.(\d+)([ABC])(?:-(.+))?$/);
+  if (m) {
+    const rackId = `${m[1]}${Number(m[2])}`;
+    const level = Number(m[3]);
+    const slotLetter = m[4];
+    const palletNo = palletLetterToNo(slotLetter);
+    const qr = m[5] ? normalizePalletQrCode(m[5]) : '';
+    if (level >= 1 && level <= LEVELS_PER_RACK && palletNo >= 1) {
+      const label = `${rackId}.${level}`;
+      return {
+        rackId,
+        level,
+        label,
+        palletNo,
+        slotLetter,
+        palletLabel: buildPalletLabel(label, palletNo),
+        palletQrCode: qr || undefined
+      };
+    }
+    return null;
+  }
+
+  // Legacy: A1.1-PL2 / A1.1_PL2 / A1.1PL2 (+ optional -QR)
+  m = raw.match(/^([ABC])(\d+)\.(\d+)[-_]?PL(\d+)(?:-(.+))?$/);
+  if (m) {
+    const rackId = `${m[1]}${Number(m[2])}`;
+    const level = Number(m[3]);
+    const palletNo = Number(m[4]);
+    const qr = m[5] ? normalizePalletQrCode(m[5]) : '';
+    if (level >= 1 && level <= LEVELS_PER_RACK && palletNo >= 1 && palletNo <= PALLETS_PER_LEVEL) {
+      const label = `${rackId}.${level}`;
+      return {
+        rackId,
+        level,
+        label,
+        palletNo,
+        slotLetter: palletNoToLetter(palletNo),
+        palletLabel: buildPalletLabel(label, palletNo),
+        palletQrCode: qr || undefined
+      };
+    }
+    return null;
+  }
+
+  m = raw.match(/^([ABC])(\d+)\.(\d+)$/);
   if (m) {
     const rackId = `${m[1]}${Number(m[2])}`;
     const level = Number(m[3]);
@@ -503,6 +736,56 @@ export function parseStorageSlotLocation(location: string): {
   }
 
   const compact = raw.replace(/[^A-Z0-9]/g, '');
+  // C14A / C14APALLET…
+  m = compact.match(/^([ABC])(\d{1,2})(\d)([ABC])(.*)$/);
+  if (m) {
+    const rackId = `${m[1]}${Number(m[2])}`;
+    const level = Number(m[3]);
+    const palletNo = palletLetterToNo(m[4]);
+    if (
+      level >= 1 &&
+      level <= LEVELS_PER_RACK &&
+      palletNo >= 1 &&
+      KNOWN_RACK_IDS.has(rackId)
+    ) {
+      const label = `${rackId}.${level}`;
+      return {
+        rackId,
+        level,
+        label,
+        palletNo,
+        slotLetter: palletNoToLetter(palletNo),
+        palletLabel: buildPalletLabel(label, palletNo),
+        palletQrCode: m[5] ? normalizePalletQrCode(m[5]) : undefined
+      };
+    }
+  }
+
+  m = compact.match(/^([ABC])(\d{1,2})(\d)PL(\d+)(.*)$/);
+  if (m) {
+    const rackId = `${m[1]}${Number(m[2])}`;
+    const level = Number(m[3]);
+    const palletNo = Number(m[4]);
+    if (
+      level >= 1 &&
+      level <= LEVELS_PER_RACK &&
+      palletNo >= 1 &&
+      palletNo <= PALLETS_PER_LEVEL &&
+      KNOWN_RACK_IDS.has(rackId)
+    ) {
+      const label = `${rackId}.${level}`;
+      return {
+        rackId,
+        level,
+        label,
+        palletNo,
+        slotLetter: palletNoToLetter(palletNo),
+        palletLabel: buildPalletLabel(label, palletNo),
+        palletQrCode: m[5] ? normalizePalletQrCode(m[5]) : undefined
+      };
+    }
+  }
+
   m = compact.match(/^([ABC])(\d{1,2})(\d)$/);
   if (m) {
     const rackId = `${m[1]}${Number(m[2])}`;

@@ -177,82 +177,18 @@
   </div>
 </div>
 
-<!-- Sơ đồ lưu trữ -->
-<div class="tp-modal tp-modal--wide" *ngIf="showStorageDiagramModal" (click)="closeStorageDiagramModal()">
-  <div class="tp-modal__panel tp-modal__panel--storage" (click)="$event.stopPropagation()">
-    <div class="tp-modal__header">
-      <h3>
-        <i class="material-icons">grid_view</i>
-        Sơ đồ lưu trữ
-      </h3>
-      <div class="tp-modal__header-actions">
-        <button type="button" class="tp-list-btn tp-list-btn--outline tp-list-btn--sm"
-                (click)="runStorageLocationCheck()"
-                [disabled]="isStorageChecking">
-          <i class="material-icons">fact_check</i> Check vị trí
-        </button>
-        <button type="button" class="tp-modal__close" (click)="closeStorageDiagramModal()" title="Đóng">
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-    </div>
-    <div class="tp-modal__body tp-storage">
-      <p class="tp-modal__lead">
-        Nhà máy <strong>{{ selectedFactory }}</strong> —
-        Mỗi kệ 5 tầng/mâm (vd. A6.1–A6.5 = 5 khách nếu đủ),
-        mỗi tầng 3 pallet, tối đa <strong>{{ storageRules.maxLotPerPallet }} LOT</strong>/pallet,
-        <strong>{{ storageRules.maxCartonPerPallet }} carton</strong>/pallet.
-      </p>
-
-      <div class="tp-storage__search">
-        <input type="text"
-               class="tp-storage__search-input"
-               [(ngModel)]="storageSearchInput"
-               (keydown)="onStorageSearchKeydown($event)"
-               placeholder="Mã TP hoặc vị trí (A1.1, A11, B3.2…)"
-               autocomplete="off">
-        <button type="button" class="tp-list-btn tp-list-btn--primary tp-list-btn--sm" (click)="searchStorageDiagram()">
-          <i class="material-icons">search</i> Search
-        </button>
-        <button type="button" class="tp-list-btn tp-list-btn--outline tp-list-btn--sm"
-                *ngIf="storageSearchInput || storageSearchMessage"
-                (click)="onClearStorageSearch()">
-          <i class="material-icons">close</i>
-        </button>
-        <span class="tp-storage__search-msg" *ngIf="storageSearchMessage">{{ storageSearchMessage }}</span>
-      </div>
-
-      <section class="tp-storage__zone" *ngFor="let zone of storageZones">
-        <header class="tp-storage__zone-head">
-          <h4>{{ zone.title }}</h4>
-          <span>{{ zone.subtitle }}</span>
-        </header>
-        <div class="tp-storage__rack-grid">
-          <div class="tp-storage__rack"
-               *ngFor="let rack of zone.racks"
-               [title]="rack.id + ' · ' + rack.totalCarton + '/' + rack.capacityCarton + ' carton'">
-            <div class="tp-storage__rack-id">{{ rack.id }}</div>
-            <div class="tp-storage__rack-customer">{{ shortKh(rack.primaryCustomer) }}</div>
-            <div class="tp-storage__levels">
-              <div class="tp-storage__level"
-                   *ngFor="let lv of rack.levels"
-                   [id]="'storage-slot-' + lv.label.replace('.', '-')"
-                   [class.tp-storage__level--hit]="isStorageSlotHighlighted(lv.label)"
-                   [title]="lv.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + lv.carton + '/' + lv.capacityCarton + ' ct'">
-                <span class="tp-storage__level-label">{{ lv.label }}</span>
-                <span class="tp-storage__level-kh">{{ lv.customer ? shortKh(lv.customer) : '—' }}</span>
-              </div>
-            </div>
-            <div class="tp-storage__rack-meta">
-              {{ rack.totalCarton | number }} / {{ rack.capacityCarton | number }} ct
-              <span *ngIf="rack.utilizationPct > 0">({{ rack.utilizationPct }}%)</span>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  </div>
-</div>
+<!-- Sơ đồ lưu trữ (move) -->
+<app-fg-storage-diagram-modal
+  [open]="showStorageDiagramModal"
+  mode="move"
+  [factory]="selectedFactory"
+  [inventoryLines]="inventoryDetailLines"
+  [cartonRows]="storageCartonRows"
+  [currentCustomer]="filterCustomer"
+  (closed)="closeStorageDiagramModal()"
+  (moved)="onStorageMoved()"
+  (checkRequested)="runStorageLocationCheck()">
+</app-fg-storage-diagram-modal>
 
 <!-- Danh mục mã hóa KH -->
 <div class="tp-modal tp-modal--wide" *ngIf="showCustomerCodeModal" (click)="closeCustomerCodeModal()">

@@ -10,6 +10,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { FGInventoryComponent } from './fg-inventory.component';
 import { FgTpStockListComponent } from './fg-tp-stock-list.component';
 import { SharedModule } from '../../shared/shared.module';
+import { FgStorageSharedModule } from './fg-storage-shared.module';
 
 const routes: Routes = [
   { path: '', component: FGInventoryComponent },
@@ -30,7 +31,8 @@ const routes: Routes = [
     MatIconModule,
     MatTooltipModule,
     MatDialogModule,
-    SharedModule
+    SharedModule,
+    FgStorageSharedModule
   ],
   exports: [
     FGInventoryComponent
