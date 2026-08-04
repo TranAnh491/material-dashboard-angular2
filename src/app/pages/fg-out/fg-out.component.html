@@ -31,6 +31,7 @@
                  class="custom-input search-input-uppercase" 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
+                 (keydown.enter)="onSearchEnter($event)"
                  placeholder="Shipment 4–5 · Mã TP P002052 · Lô exact 5492(4)">
         </div>
         <span class="load-hint" *ngIf="isLoadingMaterials || materialsLoadHint">
@@ -201,7 +202,7 @@
                      [(ngModel)]="colFilterBatch"
                      (keyup.enter)="onBatchColFilterTyped()"
                      (blur)="onBatchColFilterTyped()"
-                     placeholder="Lô 5492(4)"
+                     placeholder="vd: 5492(4)"
                      style="text-transform: uppercase">
             </th>
             <th>
@@ -666,7 +667,7 @@
 <!-- Time Range Dialog -->
 <div class="custom-modal" [class.show]="showTimeRangeDialog" [style.display]="showTimeRangeDialog ? 'flex' : 'none'">
   <div class="modal-overlay" (click)="showTimeRangeDialog = false"></div>
-  <div class="modal-container modal-date-range">
+  <div class="modal-container fg-out-time-dialog" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <h5 class="modal-title">
         <i class="material-icons">calendar_today</i>
@@ -677,36 +678,37 @@
       </button>
     </div>
     <div class="modal-body">
-      <div class="date-inputs">
-        <div class="input-group">
-          <label class="input-label">Từ ngày</label>
-          <mat-form-field appearance="outline" class="date-picker-field">
-            <input matInput [matDatepicker]="pickerStart" [(ngModel)]="startDate" placeholder="dd/mm/yyyy">
-            <mat-datepicker-toggle matSuffix [for]="pickerStart"></mat-datepicker-toggle>
-            <mat-datepicker #pickerStart></mat-datepicker>
-          </mat-form-field>
-        </div>
-        <div class="input-group">
-          <label class="input-label">Đến ngày</label>
-          <mat-form-field appearance="outline" class="date-picker-field">
-            <input matInput [matDatepicker]="pickerEnd" [(ngModel)]="endDate" placeholder="dd/mm/yyyy">
-            <mat-datepicker-toggle matSuffix [for]="pickerEnd"></mat-datepicker-toggle>
-            <mat-datepicker #pickerEnd></mat-datepicker>
-          </mat-form-field>
+      <div class="fg-out-time-dates">
+        <label class="fg-out-time-field">
+          <span>Từ ngày</span>
+          <input type="date"
+                 class="fg-out-time-input"
+                 [value]="formatDateForInput(startDate)"
+                 (change)="onTimeRangeStartInput($event)">
+        </label>
+        <label class="fg-out-time-field">
+          <span>Đến ngày</span>
+          <input type="date"
+                 class="fg-out-time-input"
+                 [value]="formatDateForInput(endDate)"
+                 (change)="onTimeRangeEndInput($event)">
+        </label>
+      </div>
+
+      <div class="fg-out-time-quick">
+        <span class="fg-out-time-quick__label">Chọn nhanh</span>
+        <div class="fg-out-time-quick__btns">
+          <button type="button" (click)="setQuickRange(7)">7 ngày</button>
+          <button type="button" (click)="setQuickRange(14)">2 tuần</button>
+          <button type="button" (click)="setQuickRange(30)">30 ngày</button>
+          <button type="button" (click)="setQuickRange(0)">Tối đa 30 ngày</button>
         </div>
       </div>
-      <p class="time-range-hint" style="font-size: 12px; color: #666; margin: 8px 0 0 0;">
-        Khung này lọc trong <strong>30 ngày</strong> đã tải trên máy.
-        Lô cũ hơn (vd <strong>5492(4)</strong>): nhập đúng lô vào ô tìm phía trên — hệ thống query thẳng, không cần đủ trong khung.
-        Báo cáo Excel cũ: <strong>More → Tải FG-OUT Report</strong>.
+
+      <p class="fg-out-time-hint">
+        Lọc trên dữ liệu <strong>30 ngày</strong> đã tải.
+        Lô cũ hơn (vd <code>5492(4)</code>): gõ đúng lô ở ô tìm phía trên.
       </p>
-      <!-- Nút chọn nhanh -->
-      <div class="quick-range-btns">
-        <button type="button" class="btn-quick-range" (click)="setQuickRange(7)">7 ngày</button>
-        <button type="button" class="btn-quick-range" (click)="setQuickRange(14)">2 tuần</button>
-        <button type="button" class="btn-quick-range" (click)="setQuickRange(30)">30 ngày</button>
-        <button type="button" class="btn-quick-range" (click)="setQuickRange(0)">30 ngày tối đa</button>
-      </div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-cancel" (click)="showTimeRangeDialog = false">

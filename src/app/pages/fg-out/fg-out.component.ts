@@ -100,6 +100,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   private remoteSearchItems: FgOutItem[] | null = null;
   isLoadingMaterials: boolean = false;
   materialsLoadHint: string = '';
+  /** Tránh spam alert cùng một từ khóa tìm khi không có kết quả */
+  private lastEmptySearchAlert = '';
   
   // Factory filter
   selectedFactory: string = 'ASM1';
@@ -1786,6 +1788,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
       this.remoteSearchItems = items;
       this.applyColumnFiltersAndBuildDisplay(items);
+      if (!items.length) {
+        this.materialsLoadHint = `Không có phiếu xuất cho mã TP ${key}.`;
+        this.alertSearchNotFound(key, 'maTp');
+      } else {
+        this.materialsLoadHint = `Mã TP ${key}: ${items.length} dòng`;
+        this.lastEmptySearchAlert = '';
+      }
       this.cdr.markForCheck();
     } catch (err) {
       console.error('searchExportsByMaTp failed', err);
@@ -1797,8 +1806,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
   /**
    * Tìm phiếu xuất theo lô/batch exact (vd 5492(4)) — query Firestore, không giới hạn 30 ngày.
    */
-  private async searchExportsByBatchLot(rawKey: string): Promise<void> {
-    const key = this.extractBatchLotSearchKey(rawKey) || String(rawKey || '').trim().toUpperCase();
+  private async searchExportsByBatchLot(rawKey: string, opts?: { forceExact?: boolean }): Promise<void> {
+    let key = this.extractBatchLotSearchKey(rawKey);
+    if (!key && opts?.forceExact) {
+      key = String(rawKey || '').trim().toUpperCase();
+    }
+    if (!key) {
+      key = String(rawKey || '').trim().toUpperCase();
+    }
     if (!key || key.length < 4) return;
     if (this.historyMode) this.exitHistoryMode();
 
@@ -1847,9 +1862,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
       this.remoteSearchItems = items;
       this.applyColumnFiltersAndBuildDisplay(items);
-      this.materialsLoadHint = items.length
-        ? `Lô ${key}: ${items.length} dòng`
-        : `Không có phiếu xuất cho lô ${key}. Thử mở rộng thời gian (Lọc theo thời gian) hoặc kiểm tra lại mã lô.`;
+      if (!items.length) {
+        this.materialsLoadHint = `Không có phiếu xuất cho lô ${key}.`;
+        this.alertSearchNotFound(key, 'lot');
+      } else {
+        this.materialsLoadHint = `Lô ${key}: ${items.length} dòng`;
+        this.lastEmptySearchAlert = '';
+      }
       this.cdr.markForCheck();
     } catch (err) {
       console.error('searchExportsByBatchLot failed', err);
@@ -1858,6 +1877,32 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.applyFilters();
       this.cdr.markForCheck();
     }
+  }
+
+  /** Popup khi search không có kết quả */
+  private alertSearchNotFound(term: string, kind: 'lot' | 'maTp' | 'shipment'): void {
+    const t = String(term || '').trim().toUpperCase();
+    if (!t) return;
+    const sig = `${kind}:${t}`;
+    if (this.lastEmptySearchAlert === sig) return;
+    this.lastEmptySearchAlert = sig;
+
+    if (kind === 'lot') {
+      alert(
+        `Không tìm thấy lô «${t}».\n\n` +
+          `Kiểm tra lại mã lô (có cả phần trong ngoặc nếu có), ví dụ: 5492(4).\n` +
+          `Hoặc mở «Lọc theo thời gian» rồi tìm lại.`
+      );
+      return;
+    }
+    if (kind === 'maTp') {
+      alert(`Không tìm thấy phiếu xuất cho mã TP «${t}».`);
+      return;
+    }
+    alert(
+      `Không tìm thấy kết quả cho «${t}».\n\n` +
+        `Nếu đang tìm lô, hãy gõ đúng mã (vd: 5492(4)).`
+    );
   }
 
   private mapFgOutDoc(id: string, d: any): FgOutItem {
@@ -2299,6 +2344,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (trimmed.length === 0) {
       this.remoteSearchItems = null;
       this.materialsLoadHint = '';
+      this.lastEmptySearchAlert = '';
       this.applyFilters();
       return;
     }
@@ -2322,7 +2368,34 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (trimmed.length >= 4) {
       this.remoteSearchItems = null;
       this.applyFilters();
+      // Shipment/kết quả trống → thử tìm như lô exact rồi popup nếu vẫn không có
+      this.maTpSearchTimer = setTimeout(() => {
+        if (this.filteredMaterials.length > 0) {
+          this.lastEmptySearchAlert = '';
+          return;
+        }
+        void this.searchExportsByBatchLot(trimmed, { forceExact: true }).then(() => {
+          if (!this.filteredMaterials.length && !this.remoteSearchItems?.length) {
+            // searchExportsByBatchLot đã alert loại lot; nếu không chạy được thì alert shipment
+            if (this.lastEmptySearchAlert !== `lot:${trimmed}`) {
+              this.alertSearchNotFound(trimmed, 'shipment');
+            }
+          }
+        });
+      }, 350);
     }
+  }
+
+  onSearchEnter(event: Event): void {
+    event.preventDefault();
+    const trimmed = (this.searchTerm || '').trim().toUpperCase();
+    if (trimmed.length < 4) {
+      alert('Nhập ít nhất 4 ký tự để tìm (Shipment / Mã TP / Lô).');
+      return;
+    }
+    this.lastEmptySearchAlert = '';
+    const fakeEvent = { target: { value: trimmed } };
+    this.onSearchChange(fakeEvent);
   }
 
   // Load user permissions
@@ -3645,6 +3718,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
       material.exportDate = new Date(dateValue);
       this.updateMaterialInFirebase(material);
     }
+  }
+
+  /** Chọn khung thời gian — input type=date */
+  onTimeRangeStartInput(event: Event): void {
+    const v = (event.target as HTMLInputElement)?.value;
+    if (!v) return;
+    const d = new Date(v + 'T00:00:00');
+    if (!isNaN(d.getTime())) this.startDate = d;
+  }
+
+  onTimeRangeEndInput(event: Event): void {
+    const v = (event.target as HTMLInputElement)?.value;
+    if (!v) return;
+    const d = new Date(v + 'T23:59:59');
+    if (!isNaN(d.getTime())) this.endDate = d;
   }
 
   /**

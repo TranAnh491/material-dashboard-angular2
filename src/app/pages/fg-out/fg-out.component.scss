@@ -81,7 +81,140 @@ tr.drag-over {
   &:hover { background: #e3f2fd; }
 }
 
-// Modal lọc thời gian
+// Modal lọc thời gian — layout Excel gọn
+.fg-out-time-dialog {
+  width: min(420px, calc(100vw - 32px)) !important;
+  max-width: 420px !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+
+  .modal-header {
+    padding: 12px 14px !important;
+    border-bottom: 1px solid #000;
+    background: #f5f5f5;
+
+    .modal-title {
+      font-size: 14px !important;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .material-icons { font-size: 18px; }
+    }
+  }
+
+  .modal-body {
+    padding: 16px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .modal-footer {
+    padding: 10px 14px !important;
+    border-top: 1px solid #ddd;
+    gap: 8px;
+  }
+}
+
+.fg-out-time-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fg-out-time-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+
+  > span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #111;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+}
+
+.fg-out-time-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 6px 10px;
+  border: 1px solid #111;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  color: #111;
+  font-family: inherit;
+
+  &:focus {
+    outline: 2px solid #1976d2;
+    outline-offset: 0;
+  }
+}
+
+.fg-out-time-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &__label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #555;
+    text-transform: uppercase;
+  }
+
+  &__btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+
+    button {
+      height: 34px;
+      border: 1px solid #111;
+      border-radius: 4px;
+      background: #fff;
+      color: #111;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+
+      &:hover {
+        background: #111;
+        color: #fff;
+      }
+
+      &:active {
+        background: #333;
+        color: #fff;
+      }
+    }
+  }
+}
+
+.fg-out-time-hint {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f7f7f7;
+  border: 1px dashed #bbb;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #444;
+
+  code {
+    font-family: Consolas, monospace;
+    background: #eee;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+}
+
 .modal-date-range {
   min-width: 360px;
   max-width: 420px;
@@ -96,7 +229,7 @@ tr.drag-over {
   }
 }
 
-// Nút chọn nhanh khoảng ngày
+// Nút chọn nhanh khoảng ngày (report dialog / legacy)
 .quick-range-btns {
   display: flex;
   gap: 8px;
@@ -110,19 +243,17 @@ tr.drag-over {
   flex: 1;
   min-width: 70px;
   padding: 6px 10px;
-  border: 1px solid #90caf9;
-  border-radius: 16px;
-  background: #e3f2fd;
-  color: #1565c0;
+  border: 1px solid #111;
+  border-radius: 4px;
+  background: #fff;
+  color: #111;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
 
   &:hover {
-    background: #1976d2;
+    background: #111;
     color: #fff;
-    border-color: #1976d2;
   }
 }
 
