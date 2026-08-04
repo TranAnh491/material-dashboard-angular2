@@ -2139,8 +2139,8 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.cartonCorrectInput = null;
 
     this.showConfirmReceiptDialog = true;
-    
-    // Focus ô scan QR pallet (vị trí chọn bằng Temp / sơ đồ)
+
+    // Cập nhật vị trí: có thể chọn Temp / sơ đồ; QR pallet tùy chọn
     this.focusPalletQrScanner();
   }
 
@@ -2580,12 +2580,19 @@ export class FgInComponent implements OnInit, OnDestroy {
       this.activeLocationRowIndex = idx;
       const row = this.multiLocationRows[idx];
       row.palletQr = code;
-      const shelf = extractShelfSlot(row.location) || this.locationScannerValue;
+      const shelf =
+        String(this.locationScannerValue || '').trim() ||
+        extractShelfSlot(row.location) ||
+        '';
       row.location = this.composeRowLocation(shelf, code);
       this.syncConfirmLocationFromMultiRows();
     } else {
+      // Ưu tiên locationScannerValue (ô kệ đã chọn). Không dùng location hiện tại
+      // nếu chỉ là QR đang gõ — tránh F → F-F1 → F-F1-F1-0044…
       const shelf =
-        extractShelfSlot(this.confirmReceiptData.location) || this.locationScannerValue;
+        String(this.locationScannerValue || '').trim() ||
+        extractShelfSlot(this.confirmReceiptData.location) ||
+        '';
       this.confirmReceiptData.location = this.composeRowLocation(shelf, code);
     }
   }
@@ -2637,13 +2644,13 @@ export class FgInComponent implements OnInit, OnDestroy {
   canLockReceipt(): boolean {
     if (!this.isAllFieldsConfirmed()) return false;
     if (this.locationUpdateOnlyMode) {
+      // Có vị trí (Temp hoặc kệ) là Done được — QR pallet không bắt buộc
       const loc = String(this.confirmReceiptData.location || '').trim();
-      if (!loc || this.isTemporaryLocation(loc)) return false;
-      const qr =
-        normalizePalletQrCode(this.palletQrValue) ||
-        extractPalletQrCode(loc) ||
-        extractPalletQrCode(this.selectedReceiptMaterial?.location || '');
-      return !!extractShelfSlot(loc) && !!qr;
+      if (!loc) return false;
+      const shelf =
+        String(this.locationScannerValue || '').trim() ||
+        extractShelfSlot(loc);
+      return !!shelf;
     }
     if (this.isMultiplePallet) return this.isMultiLocationsValid();
     return this.isLocationReady(this.confirmReceiptData.location);
@@ -2729,11 +2736,11 @@ export class FgInComponent implements OnInit, OnDestroy {
   onStorageLocationPicked(location: string): void {
     const loc = String(location || '').trim();
     if (!loc) return;
+
     if (/^TEMP-[123]$/i.test(loc)) {
       this.fgInUseAsm3 = false;
-      this.palletQrValue = '';
     }
-    // Chỉ lấy phần ô kệ (C1.4A) — mã QR pallet scan riêng, nằm cuối khi ghép
+    // Chỉ lấy phần ô kệ (C1.4A) — mã QR pallet scan riêng (tùy chọn), nằm cuối khi ghép
     const shelf = extractShelfSlot(loc) || loc.toUpperCase();
     this.locationScannerValue = shelf;
     this.applyLocationValue(shelf);
@@ -2910,40 +2917,40 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     // ===== Chỉ cập nhật vị trí (phiếu đã tick khóa nhưng đang Temporary) =====
     if (this.locationUpdateOnlyMode) {
-      if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
-        alert('❌ Vui lòng chọn vị trí trên sơ đồ lưu trữ trước khi Done');
+      const shelf =
+        String(this.locationScannerValue || '').trim() ||
+        extractShelfSlot(this.confirmReceiptData.location) ||
+        String(this.confirmReceiptData.location || '').trim();
+      if (!shelf) {
+        alert('❌ Vui lòng chọn Temp-1/2/3 hoặc vị trí trên Sơ đồ lưu trữ trước khi Done');
         return;
       }
-      const shelf =
-        extractShelfSlot(this.confirmReceiptData.location) ||
-        this.confirmReceiptData.location.trim();
       const qr =
         normalizePalletQrCode(this.palletQrValue) ||
         extractPalletQrCode(this.confirmReceiptData.location) ||
-        extractPalletQrCode(this.selectedReceiptMaterial.location || '');
-      if (!qr) {
-        alert('❌ Thiếu mã QR pallet. Vui lòng scan lại mã pallet trước khi chuyển vị trí.');
-        return;
-      }
+        '';
+      const oldLocationForMatch = String(this.selectedReceiptMaterial.location || '').trim();
+      // QR pallet tùy chọn — có thì ghép cuối vị trí
       const newLocation = composeStorageLocation(shelf, qr);
-      if (this.isTemporaryLocation(newLocation)) {
-        alert('❌ Vui lòng chọn vị trí thật trên Sơ đồ lưu trữ (không phải Temp).');
-        return;
-      }
 
       this.selectedReceiptMaterial.location = newLocation;
       this.selectedReceiptMaterial.updatedAt = new Date();
       this.updateMaterialInFirebase(this.selectedReceiptMaterial);
 
-      this.updateInventoryLocationOnly(this.selectedReceiptMaterial, newLocation)
-        .then(() => {
+      this.updateInventoryLocationOnly(this.selectedReceiptMaterial, newLocation, oldLocationForMatch)
+        .then((invMsg) => {
           this.closeConfirmReceiptDialog();
           this.refreshData();
-          alert(`✅ Đã chuyển pallet sang vị trí mới: ${newLocation}`);
+          alert(`✅ Đã cập nhật vị trí: ${newLocation}${invMsg ? '\n' + invMsg : ''}`);
         })
         .catch(err => {
           console.error('Location update error:', err);
-          alert(`❌ Lỗi cập nhật vị trí: ${err?.message || err}`);
+          this.closeConfirmReceiptDialog();
+          this.refreshData();
+          alert(
+            `⚠️ Đã cập nhật vị trí trên FG In: ${newLocation}\n` +
+              `Nhưng FG Inventory: ${err?.message || err}`
+          );
         });
       return;
     }
@@ -3077,12 +3084,18 @@ export class FgInComponent implements OnInit, OnDestroy {
    * Cập nhật CHỈ `location` trong FG Inventory cho batch tương ứng.
    * Không cộng/trừ tồn, không tạo doc mới.
    */
-  private async updateInventoryLocationOnly(material: FgInItem, newLocation: string): Promise<void> {
+  private async updateInventoryLocationOnly(
+    material: FgInItem,
+    newLocation: string,
+    previousLocation?: string
+  ): Promise<string> {
     const factory = String(material.factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
     const materialCodeNorm = String(material.materialCode || '').trim().toUpperCase();
+    const materialCode7 = materialCodeNorm.slice(0, 7);
     const batchNorm = String(material.batchNumber || '').trim().toUpperCase();
     const lsxNorm = String(material.lsx || '').trim().toUpperCase();
     const lotNorm = String(material.lot || '').trim().toUpperCase();
+    const oldLoc = String(previousLocation || '').trim().toUpperCase();
 
     if (!materialCodeNorm || !batchNorm) {
       throw new Error('Thiếu materialCode hoặc batchNumber để cập nhật vị trí.');
@@ -3095,31 +3108,52 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     const docs = invSnap?.docs || [];
 
-    const matched = docs.filter(doc => {
-      const d = doc.data() as any;
+    const scoreMatch = (d: any): number => {
       const invCode = String(d.materialCode || d.maTP || '').trim().toUpperCase();
       const invBatch = String(d.batchNumber || d.batch || '').trim().toUpperCase();
       const invLsx = String(d.lsx || d.LSX || '').trim().toUpperCase();
       const invLot = String(d.lot || d.Lot || '').trim().toUpperCase();
+      const invLoc = String(d.location || d.viTri || '').trim().toUpperCase();
 
-      return invCode === materialCodeNorm &&
-        invBatch === batchNorm &&
-        (!lsxNorm || invLsx === lsxNorm) &&
-        (!lotNorm || invLot === lotNorm);
+      const codeOk = invCode === materialCodeNorm || invCode.slice(0, 7) === materialCode7;
+      const batchOk =
+        invBatch === batchNorm ||
+        invBatch.startsWith(batchNorm + '-') ||
+        batchNorm.startsWith(invBatch + '-');
+      if (!codeOk || !batchOk) return 0;
+
+      let score = 1;
+      if (invCode === materialCodeNorm) score += 2;
+      if (invBatch === batchNorm) score += 2;
+      if (lsxNorm && invLsx === lsxNorm) score += 1;
+      if (lotNorm && invLot === lotNorm) score += 1;
+      if (oldLoc && invLoc === oldLoc) score += 3;
+      else if (invLoc.startsWith('TEMP')) score += 1;
+      return score;
+    };
+
+    let bestScore = 0;
+    docs.forEach(doc => {
+      const s = scoreMatch(doc.data() as any);
+      if (s > bestScore) bestScore = s;
     });
+    const toUpdate = bestScore > 0
+      ? docs.filter(doc => scoreMatch(doc.data() as any) === bestScore)
+      : [];
 
-    if (!matched.length) {
-      throw new Error(`Không tìm thấy FG Inventory tương ứng để cập nhật vị trí (batch: ${material.batchNumber}).`);
+    if (!toUpdate.length) {
+      throw new Error(`Không tìm thấy FG Inventory tương ứng (batch: ${material.batchNumber}).`);
     }
 
     const firestoreBatch = this.firestore.firestore.batch();
-    matched.forEach(doc => {
+    toUpdate.forEach(doc => {
       firestoreBatch.update(doc.ref, {
         location: newLocation,
         updatedAt: new Date()
       });
     });
     await firestoreBatch.commit();
+    return toUpdate.length > 1 ? `(đã cập nhật ${toUpdate.length} dòng tồn)` : '';
   }
 
 }

@@ -104,13 +104,28 @@ export function buildPalletLabel(levelLabel: string, palletNo: number): string {
  * vd. slot=C1.4A, qr=F1-111 → C1.4A-F1-111
  */
 export function composeStorageLocation(shelfSlot: string, palletQrCode: string): string {
-  const slot = normalizeStorageLocation(shelfSlot).replace(/-+$/, '');
+  let slot = normalizeStorageLocation(shelfSlot).replace(/-+$/, '');
   const qr = normalizePalletQrCode(palletQrCode);
+  // Nếu "shelf" thực chất là mã QR / chuỗi lặp từ bug cũ → bỏ, chỉ giữ QR
+  if (slot && !isValidStorageShelfSlot(slot)) {
+    slot = extractShelfSlot(slot);
+  }
   if (!slot) return qr;
   if (!qr) return slot;
   if (slot.endsWith(`-${qr}`) || slot.endsWith(qr)) return slot;
   // Temp-1 + F1-111 → Temp-1-F1-111; kệ C1.4A + F1-111 → C1.4A-F1-111
   return `${slot}-${qr}`;
+}
+
+/** true nếu là Temp / ô kệ A|B|C (không phải mã QR pallet thuần). */
+export function isValidStorageShelfSlot(raw: string): boolean {
+  const s = normalizeStorageLocation(raw);
+  if (!s) return false;
+  if (/^TEMP-[123]$/i.test(s) || s === 'TEMPORARY') return true;
+  if (/^ASM3[+_-]?/i.test(s)) {
+    return isValidStorageShelfSlot(s.replace(/^ASM3[+_-]?/i, ''));
+  }
+  return /^[ABC]\d+\.\d+[ABC]?$/i.test(s) || !!parseStorageSlotLocation(s)?.palletLabel;
 }
 
 /** Chuẩn hóa mã QR pallet (giữ dấu -, bỏ khoảng trắng). */
@@ -148,13 +163,33 @@ export function extractShelfSlot(location: string): string {
   if (parsed?.palletLabel) return parsed.palletLabel;
   if (parsed?.label) return parsed.label;
   const raw = normalizeStorageLocation(location);
+  if (!raw) return '';
+
   const tempM = raw.match(/^(TEMP-[123]|TEMPORARY)(?:-|$)/i);
   if (tempM) {
     const t = tempM[1].toUpperCase();
     if (t === 'TEMPORARY') return 'Temp-1';
     return `Temp-${t.replace('TEMP-', '')}`;
   }
-  return raw;
+
+  // ASM3+C1.4A-F1-111 → lấy phần kệ sau prefix
+  const asm3 = raw.match(/^ASM3[+_-]?(.+)$/i);
+  if (asm3) {
+    const inner = extractShelfSlot(asm3[1]);
+    return inner ? `ASM3+${inner.replace(/^ASM3[+_-]?/i, '')}` : '';
+  }
+
+  // Chỉ chấp nhận dạng kệ A/B/C — không trả về mã QR thuần (F1-0044) kẻo bị ghép dồn
+  if (/^[ABC]\d+/i.test(raw)) {
+    const shelfOnly = raw.match(/^([ABC]\d+\.\d+[ABC]?|[ABC]\d+\.\d+)/i);
+    if (shelfOnly) {
+      const parsedAgain = parseStorageSlotLocation(shelfOnly[1]);
+      return parsedAgain?.palletLabel || parsedAgain?.label || shelfOnly[1];
+    }
+    return raw;
+  }
+
+  return '';
 }
 
 /** Khách khu A — kệ A1..A4 + phần còn lại A5/A6 */

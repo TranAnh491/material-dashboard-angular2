@@ -96,6 +96,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Search and filter
   searchTerm: string = '';
   private maTpSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Kết quả tìm Firestore ngoài cửa sổ 30 ngày (mã TP / lô) — giữ để lọc cột không mất dữ liệu */
+  private remoteSearchItems: FgOutItem[] | null = null;
+  isLoadingMaterials: boolean = false;
+  materialsLoadHint: string = '';
   
   // Factory filter
   selectedFactory: string = 'ASM1';
@@ -641,48 +645,73 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // Load materials from Firebase — snapshot backup hôm qua (toàn bộ collection) + delta hôm nay
-  // (theo updatedAt — bắt cả dòng mới nhập/sửa có exportDate cũ). .get() khi mở tab / sau xuất / Refresh
+  // Load materials — chỉ cửa sổ 30 ngày (exportDate) + delta hôm nay; lô cũ tìm on-demand
   loadMaterialsFromFirebase(): void {
-    void this.fgDailyBackup.loadMergedDocs('fg-out', 'fg-out').then((merged) => {
-      const docs = merged.docs.map((d) => ({ id: d.id, ...(d.data as any) }));
-      this.materials = docs.map((data) => ({
-          ...data,
-          factory: data.factory || 'ASM1',
-          shipment: data.shipment || '',
-          pallet: data.pallet || '',
-          xp: data.xp || '',
-          batchNumber: data.batchNumber || '',
-          lsx: data.lsx || '',
-          lot: data.lot || '',
-          location: data.location || '',
-          updateCount: data.updateCount || 1,
-          pushNo: data.pushNo || '000',
-          approved: data.approved || false,
-          approvedBy: data.approvedBy || '',
-          approvedAt: data.approvedAt
-            ? (typeof data.approvedAt?.toDate === 'function'
-                ? data.approvedAt.toDate()
-                : data.approvedAt?.seconds != null
-                  ? new Date(data.approvedAt.seconds * 1000)
-                  : (data.approvedAt instanceof Date ? data.approvedAt : new Date(data.approvedAt)))
-            : undefined,
-          mergeCarton: data.mergeCarton || '',
-          exportDate: data.exportDate ? new Date(data.exportDate.seconds * 1000) : new Date()
-        }));
+    this.isLoadingMaterials = true;
+    this.materialsLoadHint = 'Đang tải 30 ngày gần nhất...';
+    this.cdr.markForCheck();
 
-        this.sortMaterials();
+    void this.loadFgOutRollingWindow()
+      .then(() => {
+        this.isLoadingMaterials = false;
+        this.materialsLoadHint = '';
         this.applyFilters();
-        const maTpKey = this.extractMaTpSearchKey(this.searchTerm);
+        const trimmed = (this.searchTerm || '').trim().toUpperCase();
+        const maTpKey = this.extractMaTpSearchKey(trimmed);
+        const batchKey = this.extractBatchLotSearchKey(trimmed);
         if (maTpKey) {
           void this.searchExportsByMaTp(maTpKey);
+        } else if (batchKey) {
+          void this.searchExportsByBatchLot(batchKey);
         }
         this.loadAvailableShipments();
         this.loadLocationsSubject.next();
         this.cdr.markForCheck();
-      }).catch((e) => {
+      })
+      .catch((e) => {
         console.error('loadMaterialsFromFirebase failed', e);
+        this.isLoadingMaterials = false;
+        this.materialsLoadHint = 'Không tải được dữ liệu. Bấm Làm mới hoặc tìm theo lô.';
+        this.cdr.markForCheck();
       });
+  }
+
+  /** Query fg-out theo exportDate (30 ngày) + cập nhật hôm nay theo updatedAt. */
+  private async loadFgOutRollingWindow(): Promise<void> {
+    const start = this.getFgOutRollingWindowStart();
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const rangeSnap = await firstValueFrom(
+      this.firestore
+        .collection('fg-out', (ref) =>
+          ref.where('exportDate', '>=', start).where('exportDate', '<=', end).limit(2500)
+        )
+        .get()
+    );
+
+    let deltaSnap: any = null;
+    try {
+      deltaSnap = await firstValueFrom(
+        this.firestore
+          .collection('fg-out', (ref) => ref.where('updatedAt', '>=', todayStart).limit(800))
+          .get()
+      );
+    } catch (deltaErr) {
+      console.warn('fg-out updatedAt delta skipped:', deltaErr);
+    }
+
+    const byId = new Map<string, FgOutItem>();
+    (rangeSnap?.docs || []).forEach((doc) => {
+      byId.set(doc.id, this.mapFgOutDoc(doc.id, doc.data()));
+    });
+    (deltaSnap?.docs || []).forEach((doc) => {
+      byId.set(doc.id, this.mapFgOutDoc(doc.id, doc.data()));
+    });
+    this.materials = Array.from(byId.values());
+    this.readTracker.track('fg-out', 'fg-out-rolling-30d', byId.size);
   }
 
   // Load Customer Code Mapping — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng Firestore
@@ -1444,8 +1473,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         const invLot = this.invNormLot(d);
         const stock = this.invTon(d);
         const location = String(d?.location ?? d?.viTri ?? '').trim();
-        // Chỉ hiển thị các mã TP đang tồn kho.
-        if (stock <= 0) return;
+        // Khi tìm theo lô: vẫn hiện cả tồn 0; theo mã TP: chỉ dòng còn tồn
+        if (!batchFilter && stock <= 0) return;
 
         // Lọc mã TP nếu đang có (ưu tiên match chính xác nếu user chọn full mã > 7 ký tự)
         const targetExact = targetMaterial && targetMaterial.length > 7 ? targetMaterial : '';
@@ -1455,7 +1484,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
           if (!invCode.startsWith(materialPrefix)) return;
         }
 
-        // Lọc batch nếu user nhập
+        // Lọc batch exact (kể cả 5492(4))
         if (batchFilter) {
           if (invBatch !== batchFilter) return;
         }
@@ -1637,31 +1666,44 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Apply search filters — 4–5 ký tự: Shipment; mã TP (P/T/M/L + 6 số): lọc theo 7 ký tự đầu
+  // Apply search filters — 4–5 ký tự: Shipment; mã TP; lô/batch exact (vd 5492(4))
   applyFilters(): void {
     if (this.historyMode) return; // Đang xem History: không ghi đè
     const trimmed = (this.searchTerm || '').trim().toUpperCase();
     if (trimmed.length < 4) {
+      this.remoteSearchItems = null;
       this.filteredMaterials = [];
       this.displayRows = [];
       return;
     }
 
     const maTpKey = this.extractMaTpSearchKey(trimmed);
-    // 6 ký tự và không phải mã TP → không tìm (tránh nhầm shipment/mã)
-    if (!maTpKey && trimmed.length === 6) {
+    const batchLotKey = this.extractBatchLotSearchKey(trimmed);
+
+    // 6 ký tự và không phải mã TP / lô → không tìm (tránh nhầm shipment/mã)
+    if (!maTpKey && !batchLotKey && trimmed.length === 6) {
+      this.remoteSearchItems = null;
       this.filteredMaterials = [];
       this.displayRows = [];
+      return;
+    }
+
+    // Đang có kết quả remote → lọc cột trên tập đó
+    if (this.remoteSearchItems && (maTpKey || batchLotKey)) {
+      this.applyColumnFiltersAndBuildDisplay(this.remoteSearchItems);
       return;
     }
 
     const baseFiltered = this.materials.filter(material => {
       const ship = String(material.shipment ?? '').toUpperCase();
       const code = String(material.materialCode ?? '').toUpperCase();
+      const batch = String(material.batchNumber ?? '').toUpperCase();
+      const lot = String(material.lot ?? '').toUpperCase();
       let matchesSearch = false;
       if (maTpKey) {
-        // Mã TP: so khớp 7 ký tự đầu (P002052 khớp P002052_X1)
         matchesSearch = code.slice(0, 7) === maTpKey;
+      } else if (batchLotKey) {
+        matchesSearch = batch === batchLotKey || lot === batchLotKey;
       } else if (trimmed.length >= 4 && trimmed.length <= 5) {
         matchesSearch = ship.includes(trimmed);
       } else if (trimmed.length >= 7) {
@@ -1672,8 +1714,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         const materialFactory = material.factory || 'ASM1';
         if (materialFactory !== this.selectedFactory) return false;
       }
-      // Tìm theo mã TP: không khóa cửa sổ 30 ngày — lấy hết dòng đã load của mã đó
-      if (!maTpKey) {
+      // Mã TP / lô: không khóa cửa sổ 30 ngày trên dữ liệu đã có trong memory
+      if (!maTpKey && !batchLotKey) {
         const exportDate = new Date(material.exportDate);
         if (exportDate < this.startDate || exportDate > this.endDate) return false;
       }
@@ -1689,6 +1731,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (t.length < 7) return null;
     const head = t.slice(0, 7);
     return /^[PTML]\d{6}$/.test(head) ? head : null;
+  }
+
+  /**
+   * Lô/batch tìm exact: có dấu ngoặc (5492(4)) hoặc dài hơn shipment (>5) và không phải mã TP.
+   * Shipment giữ 4–5 ký tự không ngoặc.
+   */
+  private extractBatchLotSearchKey(term: string): string | null {
+    const t = String(term || '').trim().toUpperCase();
+    if (t.length < 4) return null;
+    if (this.extractMaTpSearchKey(t)) return null;
+    if (/[()]/.test(t)) return t;
+    if (t.length > 5) return t;
+    return null;
   }
 
   /**
@@ -1717,7 +1772,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
         byId.set(doc.id, this.mapFgOutDoc(doc.id, d));
       });
 
-      // Gộp thêm dòng local (vừa nhập chưa kịp vào kết quả query / cùng mã)
       this.materials.forEach((m) => {
         const code = String(m.materialCode || '').trim().toUpperCase();
         if (code.slice(0, 7) !== key) return;
@@ -1730,12 +1784,79 @@ export class FgOutComponent implements OnInit, OnDestroy {
         items = items.filter((m) => (m.factory || 'ASM1') === this.selectedFactory);
       }
 
+      this.remoteSearchItems = items;
       this.applyColumnFiltersAndBuildDisplay(items);
       this.cdr.markForCheck();
     } catch (err) {
       console.error('searchExportsByMaTp failed', err);
-      // Fallback: lọc trên dữ liệu đã load
+      this.remoteSearchItems = null;
       this.applyFilters();
+    }
+  }
+
+  /**
+   * Tìm phiếu xuất theo lô/batch exact (vd 5492(4)) — query Firestore, không giới hạn 30 ngày.
+   */
+  private async searchExportsByBatchLot(rawKey: string): Promise<void> {
+    const key = this.extractBatchLotSearchKey(rawKey) || String(rawKey || '').trim().toUpperCase();
+    if (!key || key.length < 4) return;
+    if (this.historyMode) this.exitHistoryMode();
+
+    this.materialsLoadHint = `Đang tìm lô ${key}...`;
+    this.cdr.markForCheck();
+
+    try {
+      const [byBatchSnap, byLotSnap] = await Promise.all([
+        firstValueFrom(
+          this.firestore
+            .collection('fg-out', (ref) => ref.where('batchNumber', '==', key).limit(500))
+            .get()
+        ),
+        firstValueFrom(
+          this.firestore
+            .collection('fg-out', (ref) => ref.where('lot', '==', key).limit(500))
+            .get()
+        )
+      ]);
+
+      const byId = new Map<string, FgOutItem>();
+      const ingest = (docs: typeof byBatchSnap.docs) => {
+        (docs || []).forEach((doc) => {
+          const d = doc.data() as any;
+          const batch = String(d.batchNumber || '').trim().toUpperCase();
+          const lot = String(d.lot || '').trim().toUpperCase();
+          if (batch !== key && lot !== key) return;
+          byId.set(doc.id, this.mapFgOutDoc(doc.id, d));
+        });
+      };
+      ingest(byBatchSnap?.docs || []);
+      ingest(byLotSnap?.docs || []);
+
+      this.materials.forEach((m) => {
+        const batch = String(m.batchNumber || '').trim().toUpperCase();
+        const lot = String(m.lot || '').trim().toUpperCase();
+        if (batch !== key && lot !== key) return;
+        if (m.id) byId.set(m.id, m);
+        else byId.set(`local-${batch}-${lot}-${m.shipment}-${m.quantity}`, m);
+      });
+
+      let items = Array.from(byId.values());
+      if (this.selectedFactory) {
+        items = items.filter((m) => (m.factory || 'ASM1') === this.selectedFactory);
+      }
+
+      this.remoteSearchItems = items;
+      this.applyColumnFiltersAndBuildDisplay(items);
+      this.materialsLoadHint = items.length
+        ? `Lô ${key}: ${items.length} dòng`
+        : `Không có phiếu xuất cho lô ${key}. Thử mở rộng thời gian (Lọc theo thời gian) hoặc kiểm tra lại mã lô.`;
+      this.cdr.markForCheck();
+    } catch (err) {
+      console.error('searchExportsByBatchLot failed', err);
+      this.remoteSearchItems = null;
+      this.materialsLoadHint = 'Lỗi tìm lô. Thử lại hoặc lọc theo thời gian rồi tìm trong 30 ngày đã tải.';
+      this.applyFilters();
+      this.cdr.markForCheck();
     }
   }
 
@@ -1805,7 +1926,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.filteredMaterials = baseFiltered.filter(material => {
       if (this.colFilterShipment && String(material.shipment ?? '').trim() !== this.colFilterShipment) return false;
       if (this.colFilterPallet && String(material.pallet ?? '').trim() !== this.colFilterPallet) return false;
-      if (this.colFilterBatch && String(material.batchNumber ?? '').trim() !== this.colFilterBatch) return false;
+      if (
+        this.colFilterBatch &&
+        String(material.batchNumber ?? '').trim().toUpperCase() !== String(this.colFilterBatch).trim().toUpperCase()
+      ) {
+        return false;
+      }
       if (this.colFilterMaterialCode && String(material.materialCode ?? '').trim() !== this.colFilterMaterialCode) return false;
       return true;
     });
@@ -2104,6 +2230,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   onColumnFilterChange(): void {
+    if (this.remoteSearchItems) {
+      this.applyColumnFiltersAndBuildDisplay(this.remoteSearchItems);
+      return;
+    }
     this.applyFilters();
   }
 
@@ -2112,7 +2242,24 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.colFilterBatch = '';
     this.colFilterPallet = '';
     this.colFilterShipment = '';
-    this.applyFilters();
+    this.onColumnFilterChange();
+  }
+
+  /** Gõ lô ở hàng lọc cột Excel → tìm exact (vd 5492(4)). */
+  onBatchColFilterTyped(): void {
+    const v = String(this.colFilterBatch || '').trim().toUpperCase();
+    this.colFilterBatch = v;
+    if (!v) {
+      this.onColumnFilterChange();
+      return;
+    }
+    const batchKey = this.extractBatchLotSearchKey(v);
+    if (batchKey) {
+      this.searchTerm = batchKey;
+      void this.searchExportsByBatchLot(batchKey);
+      return;
+    }
+    this.onColumnFilterChange();
   }
 
   getTotalQty(): number {
@@ -2128,7 +2275,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return sum;
   }
 
-  // Search — 4–5 ký tự: Shipment; mã TP (P/T/M/L + 6 số): query danh sách xuất
+  trackByDisplayRow = (_: number, row: FgOutDisplayRow): string => {
+    if (row.type === 'detail') {
+      return `d-${row.material.id || row.matIdx}-${row.material.batchNumber}-${row.material.materialCode}`;
+    }
+    if (row.type === 'subtotal') {
+      return `s-${row.shipment}-${row.materialCode}-${row.pallet || ''}`;
+    }
+    return `p-${row.pallet}-${row.shipment || ''}`;
+  };
+
+  // Search — 4–5: Shipment; mã TP; lô exact (5492(4))
   onSearchChange(event: any): void {
     this.searchTerm = event.target.value.toUpperCase();
     event.target.value = this.searchTerm;
@@ -2140,6 +2297,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
 
     if (trimmed.length === 0) {
+      this.remoteSearchItems = null;
+      this.materialsLoadHint = '';
       this.applyFilters();
       return;
     }
@@ -2152,7 +2311,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const batchKey = this.extractBatchLotSearchKey(trimmed);
+    if (batchKey) {
+      this.maTpSearchTimer = setTimeout(() => {
+        void this.searchExportsByBatchLot(batchKey);
+      }, 300);
+      return;
+    }
+
     if (trimmed.length >= 4) {
+      this.remoteSearchItems = null;
       this.applyFilters();
     }
   }
@@ -3480,8 +3648,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Lọc theo ngày chỉ trong dữ liệu đã load (tối đa 30 ngày).
-   * Dữ liệu cũ hơn: More → Tải FG-OUT Report.
+   * Lọc theo ngày trong dữ liệu đã load (30 ngày).
+   * Tìm lô cũ hơn: nhập lô vào ô tìm (vd 5492(4)) — query Firestore, không cần popup tồn kho.
    */
   applyTimeRangeFilter(): void {
     const rollStart = this.getFgOutRollingWindowStart();
@@ -3508,8 +3676,21 @@ export class FgOutComponent implements OnInit, OnDestroy {
     }
     this.startDate = s;
     this.endDate = e;
-    this.applyFilters();
     this.showTimeRangeDialog = false;
+
+    const trimmed = (this.searchTerm || '').trim().toUpperCase();
+    const batchKey = this.extractBatchLotSearchKey(trimmed);
+    const maTpKey = this.extractMaTpSearchKey(trimmed);
+    if (batchKey) {
+      void this.searchExportsByBatchLot(batchKey);
+      return;
+    }
+    if (maTpKey) {
+      void this.searchExportsByMaTp(maTpKey);
+      return;
+    }
+    this.remoteSearchItems = null;
+    this.applyFilters();
   }
 
   /** Chọn nhanh; days = 0 → đủ 30 ngày tối đa (không tải toàn bộ DB) */

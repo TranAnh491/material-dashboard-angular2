@@ -684,7 +684,8 @@
               <i class="material-icons">close</i>
             </button>
           </div>
-          <div class="location-result" *ngIf="confirmReceiptData.location && !isMultiplePallet && palletQrValue">
+          <div class="location-result"
+               *ngIf="confirmReceiptData.location && !isMultiplePallet && palletQrValue && !!locationScannerValue">
             <i class="material-icons">check_circle</i>
             <span>Vị trí đã lưu: <strong>{{ confirmReceiptData.location }}</strong></span>
           </div>
@@ -692,7 +693,7 @@
       </div>
 
       <!-- Multiple Pallet Section -->
-      <div class="multiple-pallet-section">
+      <div class="multiple-pallet-section" *ngIf="!locationUpdateOnlyMode">
         <div class="multiple-pallet-checkbox" (click)="toggleMultiplePallet(); $event.stopPropagation()">
           <i class="material-icons">{{ isMultiplePallet ? 'check_box' : 'check_box_outline_blank' }}</i>
           <span>Nhập nhiều pallet (chia số lượng)</span>
@@ -763,6 +764,10 @@
             <span>ASM3</span>
           </label>
         </div>
+        <p class="location-update-banner" *ngIf="locationUpdateOnlyMode">
+          Cập nhật vị trí: scan <strong>QR pallet</strong> (không bắt buộc) → chọn
+          <strong>Temp-1/2/3</strong> hoặc <strong>Sơ đồ lưu trữ</strong> → Done.
+        </p>
         <p class="fg-asm3-hint" *ngIf="fgInUseAsm3">Vị trí sơ đồ sẽ lưu dạng <strong>ASM3+</strong> + mã kệ</p>
         <p class="multi-location-active-hint" *ngIf="isMultiplePallet && multiLocationRows.length">
           Đang chọn dòng <strong>#{{ activeLocationRowIndex + 1 }}</strong>
@@ -772,7 +777,7 @@
           <button type="button"
                   class="location-temp-btn"
                   *ngFor="let t of tempQuickLocations"
-                  [class.selected]="(isMultiplePallet ? (multiLocationRows[activeLocationRowIndex]?.location || '') : confirmReceiptData.location) === t"
+                  [class.selected]="getTempZoneBadge(isMultiplePallet ? (multiLocationRows[activeLocationRowIndex]?.location || '') : confirmReceiptData.location) === t.replace('Temp-','')"
                   (click)="applyQuickTempLocation(t)">
             {{ t }}
           </button>
@@ -782,9 +787,11 @@
           </button>
         </div>
 
-        <div class="location-result" *ngIf="!isMultiplePallet && confirmReceiptData.location">
-          <i class="material-icons">check_circle</i>
-          <span>Vị trí đã lưu: <strong>{{ confirmReceiptData.location }}</strong></span>
+        <div class="location-result" *ngIf="!isMultiplePallet && confirmReceiptData.location && !!locationScannerValue"
+             [class.location-result--temp]="isTemporaryLocation(confirmReceiptData.location)"
+             [class.location-result--ok]="!isTemporaryLocation(confirmReceiptData.location)">
+          <i class="material-icons">{{ isTemporaryLocation(confirmReceiptData.location) ? 'info' : 'check_circle' }}</i>
+          <span>Vị trí: <strong>{{ confirmReceiptData.location }}</strong></span>
         </div>
       </div>
 
@@ -796,15 +803,15 @@
           Cần ô kệ A/B/C + mã QR pallet + số lượng (tối đa {{ maxMultiLocations }})
         </span>
         <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && !confirmReceiptData.location">
-          {{ locationUpdateOnlyMode ? 'Chọn vị trí trên Sơ đồ lưu trữ' : 'Cần chọn vị trí kệ' }}
+          {{ locationUpdateOnlyMode ? 'Chọn Temp-1/2/3 hoặc Sơ đồ lưu trữ' : 'Cần chọn vị trí kệ' }}
         </span>
         <span *ngIf="isAllFieldsConfirmed() && !isMultiplePallet && confirmReceiptData.location && !canLockReceipt()">
           {{ locationUpdateOnlyMode
-            ? 'Cần vị trí thật + mã QR pallet đi kèm'
+            ? 'Chọn Temp hoặc ô kệ trên sơ đồ để Done'
             : 'Cần scan QR pallet (vd. F1-111) — mã nằm cuối vị trí' }}
         </span>
         <span *ngIf="canLockReceipt()">
-          {{ locationUpdateOnlyMode ? 'Sẵn sàng chuyển vị trí!' : 'Sẵn sàng khóa phiếu!' }}
+          {{ locationUpdateOnlyMode ? 'Sẵn sàng cập nhật vị trí!' : 'Sẵn sàng khóa phiếu!' }}
         </span>
       </div>
     </div>

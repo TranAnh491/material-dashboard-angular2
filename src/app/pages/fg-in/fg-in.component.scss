@@ -2013,6 +2013,19 @@ mat-checkbox {
         border-radius: 6px;
         margin-bottom: 0;
 
+        &--temp {
+          background: #fff8e1;
+          border-color: #ffcc80;
+
+          .material-icons { color: #ef6c00; }
+          span { color: #e65100; }
+        }
+
+        &--ok {
+          background: #e8f5e9;
+          border-color: #a5d6a7;
+        }
+
         .material-icons {
           color: #4caf50;
           font-size: 20px;
@@ -2072,6 +2085,17 @@ mat-checkbox {
         margin: -4px 0 10px;
         font-size: 12px;
         color: #1565c0;
+      }
+
+      .location-update-banner {
+        margin: 0 0 10px;
+        padding: 10px 12px;
+        background: #fff3e0;
+        border: 1px solid #ffb74d;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #e65100;
+        line-height: 1.45;
       }
 
       .location-quick-row {

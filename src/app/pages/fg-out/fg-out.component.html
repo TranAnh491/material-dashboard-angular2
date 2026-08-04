@@ -31,8 +31,12 @@
                  class="custom-input search-input-uppercase" 
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
-                 placeholder="4–5 ký tự: Shipment · Mã TP: P + 6 số (VD: P002052)">
+                 placeholder="Shipment 4–5 · Mã TP P002052 · Lô exact 5492(4)">
         </div>
+        <span class="load-hint" *ngIf="isLoadingMaterials || materialsLoadHint">
+          <i class="material-icons" *ngIf="isLoadingMaterials">sync</i>
+          {{ materialsLoadHint || 'Đang tải...' }}
+        </span>
         <div class="shipment-box" *ngIf="filteredMaterials.length">
           <span class="shipment-box-label">Shipment:</span>
           <span class="shipment-box-value">{{ displayedShipmentsText }}</span>
@@ -192,10 +196,13 @@
             <th></th>
             <th></th>
             <th class="batch-col">
-              <select class="col-filter-select" [(ngModel)]="colFilterBatch" (ngModelChange)="onColumnFilterChange()">
-                <option value="">-- TẤT CẢ --</option>
-                <option *ngFor="let v of colFilterOptionsBatch" [value]="v">{{ v }}</option>
-              </select>
+              <input type="text"
+                     class="col-filter-input"
+                     [(ngModel)]="colFilterBatch"
+                     (keyup.enter)="onBatchColFilterTyped()"
+                     (blur)="onBatchColFilterTyped()"
+                     placeholder="Lô 5492(4)"
+                     style="text-transform: uppercase">
             </th>
             <th>
               <select class="col-filter-select" [(ngModel)]="colFilterMaterialCode" (ngModelChange)="onColumnFilterChange()">
@@ -210,7 +217,7 @@
           </tr>
         </thead>
         <tbody>
-          <ng-container *ngFor="let row of displayRows; let i = index">
+          <ng-container *ngFor="let row of displayRows; let i = index; trackBy: trackByDisplayRow">
             <!-- Dòng chi tiết -->
             <tr *ngIf="row.type === 'detail'" class="detail-row"
                 [ngClass]="getPalletRowClass(row)"
@@ -389,6 +396,22 @@
               <td colspan="9"></td>
             </tr>
           </ng-container>
+          <tr *ngIf="!isLoadingMaterials && displayRows.length === 0" class="excel-empty-row">
+            <td colspan="22" class="excel-empty-cell">
+              <div class="excel-empty">
+                <i class="material-icons">table_chart</i>
+                <p *ngIf="!(searchTerm || '').trim()">
+                  Bảng kiểu Excel — nhập <strong>Shipment</strong> (4–5 ký tự),
+                  <strong>Mã TP</strong> (P002052) hoặc <strong>Lô exact</strong> (5492(4)) để hiện dữ liệu.
+                </p>
+                <p *ngIf="(searchTerm || '').trim()">
+                  Không có dòng khớp «{{ searchTerm }}».
+                  Thử <strong>Lọc theo thời gian</strong> rồi tìm lại, hoặc kiểm tra đúng mã lô (kể cả phần trong ngoặc).
+                </p>
+                <p class="excel-empty-sub" *ngIf="materialsLoadHint">{{ materialsLoadHint }}</p>
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -512,8 +535,15 @@
       </div>
 
       <div *ngIf="!batchInventoryPopupLoading" class="batch-inv-results">
-        <div *ngIf="batchInventoryPopupRows.length === 0" class="text-center" style="padding: 12px; color: #666;">
-          Không có dữ liệu tồn kho
+        <div *ngIf="batchInventoryPopupRows.length === 0" class="text-center batch-inv-empty-hint">
+          <p style="margin: 0 0 8px; color: #555;">
+            Không còn tồn kho (hoặc chưa có dòng tồn) cho điều kiện này.
+          </p>
+          <p style="margin: 0; font-size: 12px; color: #777; line-height: 1.45;">
+            Để xem <strong>lịch sử xuất</strong>: đóng popup → nhập đúng lô vào ô tìm
+            (vd <code>5492(4)</code>) hoặc hàng lọc BATCH · có thể dùng
+            <strong>Lọc theo thời gian</strong> rồi tìm lại. Không phải lỗi «không có lô».
+          </p>
         </div>
 
         <table *ngIf="batchInventoryPopupRows.length > 0" class="batch-inv-inner-table">
@@ -666,7 +696,9 @@
         </div>
       </div>
       <p class="time-range-hint" style="font-size: 12px; color: #666; margin: 8px 0 0 0;">
-        Chỉ lọc trong <strong>30 ngày</strong> đã tải. Dữ liệu cũ hơn: <strong>More → Tải FG-OUT Report</strong>.
+        Khung này lọc trong <strong>30 ngày</strong> đã tải trên máy.
+        Lô cũ hơn (vd <strong>5492(4)</strong>): nhập đúng lô vào ô tìm phía trên — hệ thống query thẳng, không cần đủ trong khung.
+        Báo cáo Excel cũ: <strong>More → Tải FG-OUT Report</strong>.
       </p>
       <!-- Nút chọn nhanh -->
       <div class="quick-range-btns">
