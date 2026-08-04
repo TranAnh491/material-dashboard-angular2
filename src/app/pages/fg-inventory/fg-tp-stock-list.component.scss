@@ -325,6 +325,12 @@ $tp-muted: #64748b;
   position: fixed;
   inset: 0;
   z-index: 1200;
+
+  &.tp-modal--above-storage {
+    // Sơ đồ lưu trữ (stg-modal) dùng z-index 3000 — modal kết quả check
+    // phải nổi lên trên khi mở cùng lúc, nếu không sẽ bị che khuất.
+    z-index: 3100;
+  }
   display: flex;
   align-items: center;
   justify-content: center;

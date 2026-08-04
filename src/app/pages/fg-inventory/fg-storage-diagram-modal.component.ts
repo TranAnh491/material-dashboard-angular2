@@ -10,6 +10,7 @@ import {
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import {
+  buildActualStorageZones,
   buildStorageZones,
   extractPalletQrCode,
   getCartonPerPallet,
@@ -48,12 +49,13 @@ export class FgStorageDiagramModalComponent implements OnChanges {
   @Output() closed = new EventEmitter<void>();
   @Output() pickedLocation = new EventEmitter<string>();
   @Output() moved = new EventEmitter<{ count: number; toLocation: string }>();
-  @Output() checkRequested = new EventEmitter<void>();
 
   readonly storageRules = STORAGE_LAYOUT_RULES;
   readonly tempLocations = ['Temp-1', 'Temp-2', 'Temp-3'] as const;
 
   storageZones: StorageZoneView[] = [];
+  /** false = sơ đồ gốc (mô phỏng theo quy tắc); true = check — show khách thực tế + tô sai. */
+  showActualPlacement = false;
   storageSearchInput = '';
   storageSearchMessage = '';
   private storageHighlightedSlots = new Set<string>();
@@ -76,6 +78,7 @@ export class FgStorageDiagramModalComponent implements OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['open'] && this.open) {
       this.resetInteraction();
+      this.showActualPlacement = false;
       this.rebuildZones();
       if (this.currentCustomer) {
         setTimeout(() => this.scrollToCurrentCustomer(), 120);
@@ -145,12 +148,28 @@ export class FgStorageDiagramModalComponent implements OnChanges {
   }
 
   rebuildZones(): void {
-    const rows =
-      this.cartonRows?.length
-        ? this.cartonRows
-        : this.aggregateCartonRows(this.inventoryLines || []);
-    this.storageZones = buildStorageZones(rows);
+    if (this.mode !== 'pick' && this.showActualPlacement) {
+      // Check — đọc location thực tế từng dòng để show đúng khách đang thực sự ở đó + tô sai.
+      this.storageZones = buildActualStorageZones(this.inventoryLines || []);
+    } else {
+      // Sơ đồ gốc — mô phỏng phân bổ theo quy tắc (không phụ thuộc location thực tế).
+      const rows =
+        this.cartonRows?.length
+          ? this.cartonRows
+          : this.aggregateCartonRows(this.inventoryLines || []);
+      this.storageZones = buildStorageZones(rows);
+    }
     this.cdr.markForCheck();
+  }
+
+  toggleActualPlacement(): void {
+    if (this.mode === 'pick') return;
+    this.showActualPlacement = !this.showActualPlacement;
+    this.rebuildZones();
+  }
+
+  isMultiCustomerLevel(lv: StorageLevelSlot): boolean {
+    return String(lv?.customer || '').includes(' + ');
   }
 
   private aggregateCartonRows(
@@ -219,11 +238,11 @@ export class FgStorageDiagramModalComponent implements OnChanges {
                 const palletsHtml = (lv.pallets || [])
                   .map(
                     (pl) =>
-                      `<span class="pl">${escape(pl.slotLetter || String(pl.palletNo))}</span>`
+                      `<span class="pl${pl.wrong ? ' wrong' : ''}">${escape(pl.slotLetter || String(pl.palletNo))}</span>`
                   )
                   .join('');
-                return `<div class="lv${isSample ? ' sample' : ''}">
-                  <div class="lv-h"><b>${escape(lv.label)}</b><span>${escape(kh)}</span></div>
+                return `<div class="lv${isSample ? ' sample' : ''}${lv.wrong ? ' wrong' : ''}">
+                  <div class="lv-h"><b>${escape(lv.label)}</b><span>${escape(kh)}${lv.wrong ? ' ⚠' : ''}</span></div>
                   <div class="pls">${palletsHtml}</div>
                 </div>`;
               })
@@ -263,6 +282,7 @@ export class FgStorageDiagramModalComponent implements OnChanges {
   .levels { display: flex; flex-direction: column; gap: 1mm; margin-top: 1mm; }
   .lv { border: 1px solid #bae6fd; border-radius: 1mm; padding: 0.8mm 1mm; }
   .lv.sample { background: #fef9c3; border-color: #facc15; }
+  .lv.wrong { background: #fef2f2; border-color: #dc2626; }
   .lv-h { display: flex; justify-content: space-between; gap: 1mm; font-size: 7pt; }
   .lv-h b { font-weight: 800; }
   .pls { display: flex; gap: 0.6mm; margin-top: 0.6mm; }
@@ -270,6 +290,7 @@ export class FgStorageDiagramModalComponent implements OnChanges {
     flex: 1; text-align: center; border: 1px solid #7dd3fc; border-radius: 0.6mm;
     font-size: 7pt; font-weight: 800; padding: 0.4mm 0;
   }
+  .pl.wrong { background: #fee2e2; border-color: #dc2626; }
   .rack-meta { text-align: center; font-size: 6.5pt; color: #64748b; margin-top: 1mm; }
   @page { size: A4 portrait; margin: 8mm; }
   @media print {
@@ -538,6 +559,9 @@ export class FgStorageDiagramModalComponent implements OnChanges {
         line.editHistory = history;
       }
       await batch.commit();
+      // Đã update location tại chỗ (cùng reference với inventoryLines của parent) —
+      // vẽ lại sơ đồ ngay từ dữ liệu đang có, khỏi đọc lại Firestore.
+      this.rebuildZones();
       this.moved.emit({ count: ids.length, toLocation: toLabel });
       this.panelMessage = `Đã dời ${ids.length} dòng → ${toLabel}`;
       this.isMoving = false;

@@ -458,8 +458,12 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  async onStorageMoved(): Promise<void> {
-    await this.loadData();
+  /**
+   * Modal đã update location trực tiếp trên các object trong inventoryDetailLines
+   * (cùng reference) và tự rebuildZones() — khỏi loadData() lại (đỡ đọc lại ~5000 doc).
+   */
+  onStorageMoved(): void {
+    this.cdr.markForCheck();
   }
 
   shortKh(name: string): string {

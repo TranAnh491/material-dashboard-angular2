@@ -10,6 +10,8 @@ export interface StoragePalletSlot {
   carton: number;
   capacityCarton: number;
   utilizationPct: number;
+  /** Sai quy tắc kệ (khách không thuộc khu, hoặc mâm có 2+ khách) — chỉ có ở sơ đồ thực tế. */
+  wrong?: boolean;
 }
 
 export interface StorageLevelSlot {
@@ -23,6 +25,8 @@ export interface StorageLevelSlot {
   /** Mỗi mâm 3 vị trí: A1.1A … A1.1C */
   pallets: StoragePalletSlot[];
   cartonPerPallet: number;
+  /** Sai quy tắc kệ — chỉ có ở sơ đồ thực tế. */
+  wrong?: boolean;
 }
 
 export interface StorageRackView {
@@ -553,12 +557,8 @@ function filterCartonsForRacks(
   return out;
 }
 
-export function buildStorageZones(
-  rows: Array<{ customer: string; carton: number }>
-): StorageZoneView[] {
-  const allCartons = buildCustomerCartonMap(rows);
-
-  const zones: Array<{ key: string; title: string; subtitle: string }> = [
+function getZoneMetaList(): Array<{ key: string; title: string; subtitle: string }> {
+  return [
     {
       key: 'A',
       title: 'Khu A',
@@ -586,8 +586,18 @@ export function buildStorageZones(
       subtitle: 'C7–C9 · mặc định 18 ct/pallet'
     }
   ];
+}
 
-  return zones.map((z) => {
+/**
+ * Sơ đồ MÔ PHỎNG — phân bổ carton theo tổng số/khách, theo đúng quy tắc kệ
+ * (dùng khi chọn vị trí cho hàng mới, không có location thực tế).
+ */
+export function buildStorageZones(
+  rows: Array<{ customer: string; carton: number }>
+): StorageZoneView[] {
+  const allCartons = buildCustomerCartonMap(rows);
+
+  return getZoneMetaList().map((z) => {
     const defs = racksForZone(z.key);
     const cartons = filterCartonsForRacks(allCartons, defs);
     return {
@@ -598,6 +608,109 @@ export function buildStorageZones(
         z.key === 'A'
           ? allocateZoneA(defs, cartons)
           : allocateOneCustomerPerLevel(defs, cartons)
+    };
+  });
+}
+
+/**
+ * Sơ đồ THỰC TẾ — đọc location từng dòng FG Inventory, hiển thị đúng khách
+ * đang thực sự để ở từng mâm/ô, và đánh dấu `wrong` nếu sai quy tắc kệ
+ * (khách không thuộc khu, hoặc 1 mâm có 2+ khách).
+ */
+export function buildActualStorageZones(lines: StorageInventoryLine[]): StorageZoneView[] {
+  const levelCustomerCarton = new Map<string, Map<string, number>>();
+  const palletCustomerCarton = new Map<string, Map<string, number>>();
+
+  const addCarton = (
+    map: Map<string, Map<string, number>>,
+    key: string,
+    customer: string,
+    carton: number
+  ) => {
+    const inner = map.get(key) || new Map<string, number>();
+    inner.set(customer, (inner.get(customer) || 0) + carton);
+    map.set(key, inner);
+  };
+
+  for (const line of lines) {
+    const ton = Number(line.ton) || 0;
+    if (ton <= 0) continue;
+    const parsed = parseStorageSlotLocation(line.location);
+    if (!parsed || !KNOWN_RACK_IDS.has(parsed.rackId)) continue;
+
+    const customer = String(line.customer || '').trim() || 'Không xác định';
+    const carton = Number(line.carton) > 0 ? Number(line.carton) : Math.max(1, Math.ceil(ton / 100));
+
+    addCarton(levelCustomerCarton, parsed.label, customer, carton);
+    if (parsed.palletLabel) {
+      addCarton(palletCustomerCarton, parsed.palletLabel, customer, carton);
+    }
+  }
+
+  const levels: StorageLevelSlot[] = [];
+  for (const rack of RACK_DEFS) {
+    for (let lv = 1; lv <= LEVELS_PER_RACK; lv++) {
+      const slot = emptyLevel(rack.id, lv);
+      const custMap = levelCustomerCarton.get(slot.label);
+
+      if (custMap?.size) {
+        const customers = [...custMap.keys()];
+        const levelTotal = [...custMap.values()].reduce((s, v) => s + v, 0);
+        const isWrong =
+          customers.length > 1 || customers.some((c) => !isCustomerAllowedOnSlot(c, rack.id, lv));
+        slot.customer = customers.join(' + ');
+        slot.wrong = isWrong;
+
+        let explicitUsed = 0;
+        for (const p of slot.pallets) {
+          const pMap = palletCustomerCarton.get(p.label);
+          if (!pMap?.size) continue;
+          const pCarton = [...pMap.values()].reduce((s, v) => s + v, 0);
+          p.carton = Math.min(pCarton, p.capacityCarton);
+          p.utilizationPct =
+            p.capacityCarton > 0 ? Math.min(100, Math.round((p.carton / p.capacityCarton) * 100)) : 0;
+          p.wrong = isWrong;
+          explicitUsed += pCarton;
+        }
+
+        // Dòng chỉ ghi mâm (không rõ ô A/B/C) — đổ phần còn lại vào pallet trống theo thứ tự.
+        let remaining = Math.max(0, levelTotal - explicitUsed);
+        for (const p of slot.pallets) {
+          if (remaining <= 0) break;
+          if (palletCustomerCarton.get(p.label)?.size) continue;
+          const free = p.capacityCarton - p.carton;
+          if (free <= 0) continue;
+          const put = Math.min(remaining, free);
+          p.carton += put;
+          p.utilizationPct =
+            p.capacityCarton > 0 ? Math.min(100, Math.round((p.carton / p.capacityCarton) * 100)) : 0;
+          p.wrong = isWrong;
+          remaining -= put;
+        }
+
+        slot.carton = slot.pallets.reduce((s, p) => s + p.carton, 0);
+        slot.utilizationPct =
+          slot.capacityCarton > 0 ? Math.min(100, Math.round((slot.carton / slot.capacityCarton) * 100)) : 0;
+      } else {
+        const sampleDisplay = getSampleDisplayForSlot(rack.id, lv);
+        if (sampleDisplay) slot.customer = sampleDisplay;
+      }
+
+      levels.push(slot);
+    }
+  }
+
+  return getZoneMetaList().map((z) => {
+    const defs = racksForZone(z.key);
+    return {
+      key: z.key,
+      title: z.title,
+      subtitle: z.subtitle,
+      racks: defs.map((rack) => {
+        const view = buildRackView(rack, levels);
+        if (rack.zone === 'A') view.primaryCustomer = '';
+        return view;
+      })
     };
   });
 }

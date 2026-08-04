@@ -13,8 +13,10 @@
         </button>
         <button type="button" class="stg-btn stg-btn--outline"
                 *ngIf="mode !== 'pick'"
-                (click)="checkRequested.emit()">
-          <i class="material-icons">fact_check</i> Check vị trí
+                (click)="toggleActualPlacement()"
+                [title]="showActualPlacement ? 'Quay lại sơ đồ gốc theo quy tắc' : 'Xem khách thực tế đang để ở từng mâm + tô sai vị trí'">
+          <i class="material-icons">{{ showActualPlacement ? 'grid_view' : 'fact_check' }}</i>
+          {{ showActualPlacement ? 'Sơ đồ gốc' : 'Check vị trí' }}
         </button>
         <button type="button" class="stg-modal__close" (click)="close()" title="Đóng">
           <i class="material-icons">close</i>
@@ -32,6 +34,10 @@
         tầng2: <strong>{{ storageRules.maxCartonPerPalletBcL2 }} ct</strong>/PL.
         <span *ngIf="mode === 'pick'"> — <b>Bấm ô A/B/C</b> để chọn vị trí kệ.</span>
         <span *ngIf="mode === 'move'"> — Bấm ô → tick LOT → <b>Dời</b> → bấm ô đích (hoặc search mã QR pallet).</span>
+        <span *ngIf="mode !== 'pick' && !showActualPlacement"> — Đây là <b>sơ đồ gốc</b> theo quy tắc kệ. Bấm <b>Check vị trí</b> để xem khách thực tế.</span>
+        <span *ngIf="showActualPlacement"> — Sơ đồ theo <b>dữ liệu thực tế</b> (location từng dòng tồn);
+          <b class="stg-lead-wrong">ô viền đỏ ⚠</b> là sai quy định (khách sai khu, hoặc 1 mâm 2+ khách).
+          Mâm nhiều khách: rê chuột vào ô để xem chi tiết.</span>
       </p>
 
       <div class="stg-current-kh" *ngIf="currentCustomer">
@@ -89,13 +95,15 @@
                        [class.stg-level--hit]="isStorageSlotHighlighted(lv.label) || isAnyPalletHighlighted(lv)"
                        [class.stg-level--current]="isCurrentCustomerLevel(lv)"
                        [class.stg-level--sample]="isSampleLevel(lv)"
-                       [title]="lv.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + lv.carton + '/' + lv.capacityCarton + ' ct'">
+                       [class.stg-level--wrong]="lv.wrong"
+                       [title]="lv.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + lv.carton + '/' + lv.capacityCarton + ' ct' + (lv.wrong ? ' · ⚠ SAI VỊ TRÍ' : '')">
                     <div class="stg-level__head">
                       <span class="stg-level__label">{{ lv.label }}</span>
+                      <i class="material-icons stg-level__warn" *ngIf="lv.wrong">warning</i>
                       <span class="stg-level__kh"
                             [class.stg-level__kh--empty]="!lv.customer"
                             [class.stg-level__kh--sample]="isSampleLevel(lv)">
-                        {{ lv.customer ? shortKh(lv.customer) : '—' }}
+                        {{ isMultiCustomerLevel(lv) ? (lv.customer.split(' + ').length + ' KH') : (lv.customer ? shortKh(lv.customer) : '—') }}
                       </span>
                     </div>
                     <div class="stg-pallets">
@@ -107,11 +115,12 @@
                               [class.stg-pallet--selected]="isPalletSelected(pl.label)"
                               [class.stg-pallet--source]="isPalletMoveSource(pl.label)"
                               [class.stg-pallet--current]="isCurrentCustomerLevel(lv)"
+                              [class.stg-pallet--wrong]="pl.wrong"
                               [class.stg-pallet--clickable]="mode === 'pick' || mode === 'move'"
-                              [title]="pl.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + pl.carton + '/' + pl.capacityCarton + ' ct'"
+                              [title]="pl.label + (lv.customer ? ' · ' + lv.customer : '') + ' · ' + pl.carton + '/' + pl.capacityCarton + ' ct' + (pl.wrong ? ' · ⚠ SAI VỊ TRÍ' : '')"
                               (click)="onPalletClick(pl, lv)">
                         <span class="stg-pallet__id">{{ pl.slotLetter || ('PL' + pl.palletNo) }}</span>
-                        <span class="stg-pallet__kh">{{ lv.customer ? shortKh(lv.customer) : '—' }}</span>
+                        <span class="stg-pallet__kh">{{ isMultiCustomerLevel(lv) ? (lv.customer.split(' + ').length + ' KH') : (lv.customer ? shortKh(lv.customer) : '—') }}</span>
                         <span class="stg-pallet__cap">{{ pl.carton }}/{{ pl.capacityCarton }}</span>
                       </button>
                     </div>

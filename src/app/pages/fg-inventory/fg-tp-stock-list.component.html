@@ -186,8 +186,7 @@
   [cartonRows]="storageCartonRows"
   [currentCustomer]="filterCustomer"
   (closed)="closeStorageDiagramModal()"
-  (moved)="onStorageMoved()"
-  (checkRequested)="runStorageLocationCheck()">
+  (moved)="onStorageMoved()">
 </app-fg-storage-diagram-modal>
 
 <!-- Danh mục mã hóa KH -->
@@ -250,7 +249,7 @@
 </div>
 
 <!-- Kết quả Check vị trí -->
-<div class="tp-modal tp-modal--wide" *ngIf="showStorageCheckModal" (click)="closeStorageCheckModal()">
+<div class="tp-modal tp-modal--wide tp-modal--above-storage" *ngIf="showStorageCheckModal" (click)="closeStorageCheckModal()">
   <div class="tp-modal__panel tp-modal__panel--storage" (click)="$event.stopPropagation()">
     <div class="tp-modal__header">
       <h3>

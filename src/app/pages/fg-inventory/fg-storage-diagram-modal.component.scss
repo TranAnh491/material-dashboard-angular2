@@ -90,6 +90,10 @@ $stg-sky: #38bdf8;
   color: $stg-muted;
 }
 
+.stg-lead-wrong {
+  color: #dc2626;
+}
+
 .stg-current-kh {
   display: flex;
   flex-wrap: wrap;
@@ -349,6 +353,12 @@ $stg-sky: #38bdf8;
     background: #fefce8;
     border-color: #eab308;
   }
+
+  &--wrong {
+    background: #fef2f2;
+    border-color: #dc2626;
+    box-shadow: inset 0 0 0 1px #dc2626;
+  }
 }
 
 .stg-level__head {
@@ -356,6 +366,12 @@ $stg-sky: #38bdf8;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+}
+
+.stg-level__warn {
+  font-size: 0.85rem !important;
+  color: #dc2626;
+  flex-shrink: 0;
 }
 
 .stg-level__label {
@@ -433,6 +449,11 @@ $stg-sky: #38bdf8;
   &--current {
     background: #dcfce7;
     border-color: #16a34a;
+  }
+
+  &--wrong {
+    background: #fee2e2 !important;
+    border-color: #dc2626 !important;
   }
 }
 
