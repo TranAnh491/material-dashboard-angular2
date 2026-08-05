@@ -63,9 +63,8 @@ export class TabPermissionService {
     // Factory-specific permissions dựa trên quyền truy cập nhà máy
     // CHỈ cho phép khi có quyền truy cập RÕ RÀNG là true
     const factoryPermissions = {
-      // Inbound tabs
-      'inbound-asm1': factoryAccess.canAccessASM1 === true, // Chỉ cho phép khi TRUE rõ ràng
-      'inbound-asm2': factoryAccess.canAccessASM2 === true, // Chỉ cho phép khi TRUE rõ ràng
+      // Inbound tab — trang gộp dùng chung ASM1 + ASM2
+      'inbound': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'danh-muc-nvl-tp': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       
       // Outbound tabs
@@ -155,9 +154,8 @@ export class TabPermissionService {
     { key: 'work-order-status', name: 'Work Order' },
     { key: 'shipment', name: 'Shipment' },
     
-    // Inbound tabs
-    { key: 'inbound-asm1', name: 'RM1 Inbound' },
-    { key: 'inbound-asm2', name: 'RM2 Inbound' },
+    // Inbound tab (gộp ASM1 + ASM2)
+    { key: 'inbound', name: 'RM Inbound' },
 
     // Outbound tabs
     { key: 'outbound-asm1', name: 'RM1 Outbound' },

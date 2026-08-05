@@ -356,7 +356,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/report', title: 'Report', icon: 'analytics', category: 'Report' },
     { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Report' },
     // ASM1 RM
-    { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },
+    { path: '/inbound', title: 'RM Inbound', icon: 'arrow_downward', category: 'ASM1 RM' },
     { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'arrow_upward', category: 'ASM1 RM' },
     { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'inventory', category: 'ASM1 RM' },
     { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'assessment', category: 'ASM1 RM' },
@@ -366,7 +366,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', category: 'Quality' },
 
     // ASM2 RM
-    { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'arrow_downward', category: 'ASM2 RM' },
     { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'arrow_upward', category: 'ASM2 RM' },
     { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'inventory', category: 'ASM2 RM' },
     { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'assessment', category: 'ASM2 RM' },
@@ -499,7 +498,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/report': 'Báo cáo và phân tích',
       '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
       '/pd-control': 'Giám sát điều khiển sản xuất',
-      '/inbound-asm1': 'Nhập kho nguyên liệu ASM1',
+      '/inbound': 'Nhập kho nguyên liệu (ASM1 & ASM2)',
       '/outbound-asm1': 'Xuất kho nguyên liệu ASM1',
       '/materials-asm1': 'Quản lý tồn kho nguyên liệu ASM1',
       '/inventory-overview-asm1': 'Xem tổng quan tồn kho RM1',
@@ -508,7 +507,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/qc': 'Kiểm tra chất lượng nguyên liệu',
       '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
       '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
-      '/inbound-asm2': 'Nhập kho nguyên liệu ASM2',
       '/outbound-asm2': 'Xuất kho nguyên liệu ASM2',
       '/materials-asm2': 'Quản lý tồn kho nguyên liệu ASM2',
       '/inventory-overview-asm2': 'Xem tổng quan tồn kho RM2',

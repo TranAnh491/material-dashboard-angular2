@@ -269,8 +269,12 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/inbound-asm2';
     }
 
+    isInboundPage(): boolean {
+      return this.currentAppPath() === '/inbound';
+    }
+
     isInboundAsmPage(): boolean {
-      return this.isInboundAsm1Page() || this.isInboundAsm2Page();
+      return this.isInboundPage() || this.isInboundAsm1Page() || this.isInboundAsm2Page();
     }
 
     isOutboundAsm1Page(): boolean {
@@ -356,6 +360,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/qc-traceability',
       '/settings',
       '/rm1-delivery',
+      '/inbound',
       '/inbound-asm1',
       '/inbound-asm2',
       '/outbound-asm1',

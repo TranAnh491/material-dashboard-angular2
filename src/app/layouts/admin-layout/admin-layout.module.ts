@@ -48,8 +48,6 @@ import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-ord
 
 import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
 import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
-import { InboundASM1Component } from '../../pages/inbound-asm1/inbound-asm1.component';
-import { InboundASM2Component } from '../../pages/inbound-asm2/inbound-asm2.component';
 import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
 import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 import { EquipmentComponent } from '../../pages/equipment/equipment.component';
@@ -133,8 +131,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
 
     MaterialsASM1Component,
     MaterialsASM2Component,
-    InboundASM1Component,
-    InboundASM2Component,
     OutboundASM1Component,
     OutboundASM2Component,
     DocumentsComponent,

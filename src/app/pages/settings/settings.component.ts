@@ -40,8 +40,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'work-order-status', name: 'Work Order', category: 'Chính' },
     { key: 'shipment', name: 'Shipment', category: 'Chính' },
 
+    // RM Inbound — trang gộp dùng chung ASM1 + ASM2
+    { key: 'inbound', name: 'RM Inbound (ASM1 + ASM2)', category: 'RM ASM1' },
+
     // ASM1 RM tabs
-    { key: 'inbound-asm1', name: 'RM1 Inbound', category: 'RM ASM1' },
     { key: 'outbound-asm1', name: 'RM1 Outbound', category: 'RM ASM1' },
     { key: 'materials-asm1', name: 'RM1 Inventory', category: 'RM ASM1' },
     { key: 'inventory-overview-asm1', name: 'RM1 Overview', category: 'RM ASM1' },
@@ -49,7 +51,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'danh-muc-nvl-tp', name: 'Danh mục NVL & TP', category: 'RM ASM1' },
 
     // ASM2 RM tabs
-    { key: 'inbound-asm2', name: 'RM2 Inbound', category: 'RM ASM2' },
     { key: 'outbound-asm2', name: 'RM2 Outbound', category: 'RM ASM2' },
     { key: 'materials-asm2', name: 'RM2 Inventory', category: 'RM ASM2' },
     { key: 'inventory-overview-asm2', name: 'RM2 Overview', category: 'RM ASM2' },

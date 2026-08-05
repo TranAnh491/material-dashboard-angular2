@@ -107,14 +107,15 @@ export class TabPermissionGuard implements CanActivate {
       '/work-order-status': 'work-order-status',
       '/shipment': 'shipment',
       
+      // RM Inbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
+      '/inbound': 'inbound',
+
       // ASM1 routes
-      '/inbound-asm1': 'inbound-asm1',
       '/outbound-asm1': 'outbound-asm1',
       '/materials-asm1': 'materials-asm1',
       '/inventory-overview-asm1': 'inventory-overview-asm1',
-      
+
       // ASM2 routes
-      '/inbound-asm2': 'inbound-asm2',
       '/danh-muc-nvl-tp': 'danh-muc-nvl-tp',
       '/outbound-asm2': 'outbound-asm2',
       '/materials-asm2': 'materials-asm2',

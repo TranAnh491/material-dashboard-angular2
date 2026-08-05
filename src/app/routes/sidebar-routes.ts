@@ -17,7 +17,7 @@ export const ROUTES: RouteInfo[] = [
     icon: 'inventory', 
     class: 'asm1-rm-parent',
     children: [
-      { path: '/inbound-asm1', title: 'RM1 Inbound', icon: 'IB', class: '' },
+      { path: '/inbound', title: 'RM Inbound', icon: 'IB', class: '' },
       { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'OB', class: '' },
       { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'IV', class: '' },
       { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'IO', class: '' },
@@ -30,7 +30,6 @@ export const ROUTES: RouteInfo[] = [
     icon: 'inventory', 
     class: 'asm2-rm-parent',
     children: [
-      { path: '/inbound-asm2', title: 'RM2 Inbound', icon: 'IB', class: '' },
       { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'OB', class: '' },
       { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'IV', class: '' },
       { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'IO', class: '' }

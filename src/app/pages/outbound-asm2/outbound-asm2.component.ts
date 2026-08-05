@@ -799,7 +799,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       setTimeout(() => {
         this.focusScannerInput();
         console.log('📍 Auto-focused scanner input for Employee ID step');
-      }, 500);
+      }, 0);
     });
   }
   
@@ -836,7 +836,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         setTimeout(() => {
           this.focusScannerInput();
           console.log('📍 Auto-focused scanner input for material scanning');
-        }, 500);
+        }, 0);
         
         console.log('🎯 Professional scanning setup complete - Ready for material scanning');
       } else {
@@ -874,11 +874,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
   
-  // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
+  // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi đang trong luồng scan
+  // (setup modal LSX/NV, hoặc đang scan mã hàng) — fallback khi ô .scanner-input lỡ mất
+  // focus (PDA bắn ký tự quá nhanh, trước khi setTimeout focus kịp chạy).
   onGlobalKeydown(event: KeyboardEvent): void {
-    // Chỉ xử lý khi setup modal đang mở và không phải từ input field
-    if (!this.showScanningSetupModal) return;
-    
+    if (!this.showScanningSetupModal && !this.isBatchScanningMode) return;
+
     const target = event.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
     
@@ -2206,11 +2207,13 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.scanningSetupStep = 'lsx';
     
     // 🔧 TỰ ĐỘNG FOCUS: Tự động focus vào scanner input để có thể scan ngay
+    // (0ms thay vì 500ms — PDA scan rất nhanh, delay dài khiến ký tự scan bị mất
+    // vì ô nhập chưa kịp có focus khi máy quét đã bắn dữ liệu)
     this.isScannerInputActive = true; // Enable scanner input
     setTimeout(() => {
-    this.focusScannerInput();
-    }, 500);
-    
+      this.focusScannerInput();
+    }, 0);
+
     console.log('✅ Professional scanning setup modal opened - Auto-focused for scanning');
   }
 

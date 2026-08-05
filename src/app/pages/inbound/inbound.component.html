@@ -6,13 +6,22 @@
         <div class="topbar__brand">
           <img src="assets/img/rmin.png" alt="" class="topbar__logo">
           <div class="topbar__titles">
-            <div class="topbar__title">INBOUND ASM1</div>
+            <div class="topbar__title">INBOUND {{ selectedFactory }}</div>
             <div class="topbar__subtitle">Materials inbound</div>
           </div>
         </div>
       </div>
 
       <div class="topbar__right">
+        <div class="factory-switcher">
+          <button type="button"
+                  class="factory-switcher__btn"
+                  *ngFor="let f of factoryOptions"
+                  [class.active]="selectedFactory === f"
+                  (click)="setFactory(f)">
+            {{ f }}
+          </button>
+        </div>
         <button type="button" class="icon-btn" title="Back" (click)="goBack()">
           <i class="material-icons">arrow_back</i>
         </button>
@@ -203,7 +212,7 @@
     <div class="loading-container" *ngIf="isLoading">
       <div class="loading-spinner">
         <i class="material-icons spinning">refresh</i>
-        <span>Đang tải dữ liệu ASM1...</span>
+        <span>Đang tải dữ liệu {{ selectedFactory }}...</span>
       </div>
     </div>
     
@@ -384,8 +393,10 @@
           <tr *ngFor="let material of batchTableRows; let i = index; trackBy: trackByMaterial" 
               [class.received-row]="material.isReceived"
                               >
-            <td class="factory-cell factory-asm1">
-              ASM1
+            <td class="factory-cell"
+                [class.factory-asm1]="(material.factory || selectedFactory) === 'ASM1'"
+                [class.factory-asm2]="(material.factory || selectedFactory) === 'ASM2'">
+              {{ material.factory || selectedFactory }}
             </td>
             <td class="row-header">{{i + 1}}</td>
             <td class="date-cell">{{formatDate(material.importDate)}}</td>

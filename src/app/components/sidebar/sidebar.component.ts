@@ -92,10 +92,9 @@ export class SidebarComponent implements OnInit, OnDestroy {
     // Danh sách các path được phép trên mobile
     const allowedMobilePaths = [
       '/pd-control',
-      '/inbound-asm1',        // Tab 4
+      '/inbound',             // RM Inbound (gộp ASM1 + ASM2)
       '/outbound-asm1',       // Tab 5
       '/materials-asm1',      // Tab 6
-      '/inbound-asm2',        // Tab 8
       '/outbound-asm2',       // Tab 9
       '/materials-asm2',      // Tab 10
       '/location',           // Tab 17
