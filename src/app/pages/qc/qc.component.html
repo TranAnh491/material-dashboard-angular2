@@ -924,6 +924,7 @@
         <button class="menu-option-btn" (click)="openDownloadModal(); closeMoreMenu()"><i class="material-icons">download</i><span>Tải về</span></button>
         <button class="menu-option-btn" (click)="openSampleCatalogModal()"><i class="material-icons">science</i><span>Lấy Mẫu</span></button>
         <button class="menu-option-btn" (click)="loadQCReport(); closeMoreMenu()"><i class="material-icons">description</i><span>IQC report</span></button>
+        <button class="menu-option-btn" (click)="openProductivityReport()"><i class="material-icons">insights</i><span>Productivity</span></button>
         <button class="menu-option-btn" (click)="openOutboundQcRuleModal()"><i class="material-icons">policy</i><span>QC rule</span></button>
         <button class="menu-option-btn" (click)="openIqcPermissionModal()"><i class="material-icons">vpn_key</i><span>Quyền</span></button>
         <button class="menu-option-btn" (click)="sendQcReportNow()"><i class="material-icons">send</i><span>Gửi Report</span></button>
@@ -1244,6 +1245,78 @@
     </div>
     <div class="modal-footer">
       <button class="close-modal-btn" (click)="closeReportModal()"><i class="material-icons">close</i> Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Productivity Report Modal -->
+<div class="modal-overlay" *ngIf="showProductivityModal" (click)="closeProductivityModal()">
+  <div class="modal-content report-modal-content" style="width: 1100px" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3><i class="material-icons">insights</i> Productivity — Số mã PASS theo ngày / nhân viên ({{ selectedFactory }})</h3>
+      <button class="close-btn" (click)="closeProductivityModal()"><i class="material-icons">close</i></button>
+    </div>
+    <div class="modal-body">
+      <div class="date-selector-group">
+        <div class="date-selector-item">
+          <label class="date-label"><i class="material-icons">calendar_today</i> Tháng</label>
+          <select [(ngModel)]="productivityMonth" class="date-select" (change)="loadProductivityReport()">
+            <option value="01">Tháng 1</option><option value="02">Tháng 2</option><option value="03">Tháng 3</option>
+            <option value="04">Tháng 4</option><option value="05">Tháng 5</option><option value="06">Tháng 6</option>
+            <option value="07">Tháng 7</option><option value="08">Tháng 8</option><option value="09">Tháng 9</option>
+            <option value="10">Tháng 10</option><option value="11">Tháng 11</option><option value="12">Tháng 12</option>
+          </select>
+        </div>
+        <div class="date-selector-item">
+          <label class="date-label"><i class="material-icons">event</i> Năm</label>
+          <select [(ngModel)]="productivityYear" class="date-select" (change)="loadProductivityReport()">
+            <option *ngFor="let year of getYearOptions()" [value]="year">{{ year }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="report-actions" *ngIf="!isLoadingProductivity && productivityRows.length > 0">
+        <button class="download-btn" (click)="downloadProductivityExcel()">
+          <i class="material-icons">download</i> Tải Excel
+        </button>
+      </div>
+
+      <div class="report-content" *ngIf="!isLoadingProductivity">
+        <table class="report-table productivity-table" *ngIf="productivityRows.length > 0">
+          <thead>
+            <tr>
+              <th>Mã nhân viên</th>
+              <th *ngFor="let day of productivityDays">{{ day }}</th>
+              <th class="productivity-total-col">Tổng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of productivityRows">
+              <td>{{ row.employeeId }}</td>
+              <td *ngFor="let c of row.counts" [class.productivity-zero]="c === 0" [class.productivity-count]="c > 0">
+                {{ c > 0 ? c : '—' }}
+              </td>
+              <td class="productivity-total-col">{{ row.total }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="productivity-total-row">
+              <td>Tổng</td>
+              <td *ngFor="let t of productivityDayTotals">{{ t > 0 ? t : '—' }}</td>
+              <td class="productivity-total-col">{{ productivityGrandTotal }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="empty-report" *ngIf="productivityRows.length === 0">
+          <i class="material-icons">info</i><p>Không có dữ liệu PASS trong tháng đã chọn</p>
+        </div>
+      </div>
+      <div class="loading-report" *ngIf="isLoadingProductivity">
+        <i class="material-icons rotating">sync</i><p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="close-modal-btn" (click)="closeProductivityModal()"><i class="material-icons">close</i> Đóng</button>
     </div>
   </div>
 </div>

@@ -183,6 +183,18 @@ export class QCComponent implements OnInit, OnDestroy {
   outboundQcRuleSaving = false;
   showReportModal: boolean = false;
   showIqcPermissionModal: boolean = false;
+  // More → Productivity: số mã PASS mỗi ngày theo từng ID nhân viên (bảng pivot: nhân viên x ngày)
+  showProductivityModal: boolean = false;
+  isLoadingProductivity: boolean = false;
+  productivityMonth: string = '';
+  productivityYear: string = '';
+  /** Các ngày trong tháng đã chọn (1..daysInMonth) — dùng làm cột. */
+  productivityDays: number[] = [];
+  /** Mỗi dòng: 1 nhân viên, counts[i] = số mã PASS vào ngày productivityDays[i]. */
+  productivityRows: Array<{ employeeId: string; counts: number[]; total: number }> = [];
+  /** Tổng theo từng ngày (dòng cuối bảng). */
+  productivityDayTotals: number[] = [];
+  productivityGrandTotal: number = 0;
   showSendReportStatusModal: boolean = false;
   showTodayCheckedModal: boolean = false;
   showPendingQCModal: boolean = false;
@@ -3834,6 +3846,105 @@ export class QCComponent implements OnInit, OnDestroy {
   closeReportModal(): void {
     this.showReportModal = false;
     this.qcReports = [];
+  }
+
+  // More → Productivity: số mã PASS mỗi ngày theo từng ID nhân viên
+  openProductivityReport(): void {
+    this.showProductivityModal = true;
+    this.showMoreMenu = false;
+    const now = new Date();
+    this.productivityMonth = String(now.getMonth() + 1).padStart(2, '0');
+    this.productivityYear = String(now.getFullYear());
+    void this.loadProductivityReport();
+  }
+
+  closeProductivityModal(): void {
+    this.showProductivityModal = false;
+    this.productivityRows = [];
+    this.productivityDays = [];
+    this.productivityDayTotals = [];
+    this.productivityGrandTotal = 0;
+  }
+
+  async loadProductivityReport(): Promise<void> {
+    if (!this.productivityMonth || !this.productivityYear) return;
+    this.isLoadingProductivity = true;
+    try {
+      const year = parseInt(this.productivityYear, 10);
+      const month = parseInt(this.productivityMonth, 10);
+      const from = new Date(year, month - 1, 1);
+      const to = new Date(year, month, 1);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .where('iqcStatus', '==', 'PASS')
+      ).get().toPromise();
+
+      // employeeId -> counts[dayIndex]
+      const matrix = new Map<string, number[]>();
+      (snapshot?.docs || []).forEach(doc => {
+        const data = doc.data() as any;
+        const checkedAt = this.parseFirestoreDate(data?.qcCheckedAt) || this.parseFirestoreDate(data?.updatedAt);
+        if (!checkedAt || checkedAt < from || checkedAt >= to) return;
+
+        const employeeId = String(data?.qcCheckedBy || '').trim() || 'N/A';
+        const dayIndex = checkedAt.getDate() - 1;
+        if (!matrix.has(employeeId)) {
+          matrix.set(employeeId, new Array(daysInMonth).fill(0));
+        }
+        matrix.get(employeeId)![dayIndex]++;
+      });
+
+      const dayTotals = new Array(daysInMonth).fill(0);
+      const rows = Array.from(matrix.entries())
+        .map(([employeeId, counts]) => {
+          counts.forEach((c, i) => { dayTotals[i] += c; });
+          return { employeeId, counts, total: counts.reduce((a, b) => a + b, 0) };
+        })
+        .sort((a, b) => b.total - a.total || a.employeeId.localeCompare(b.employeeId));
+
+      this.productivityDays = days;
+      this.productivityRows = rows;
+      this.productivityDayTotals = dayTotals;
+      this.productivityGrandTotal = rows.reduce((a, r) => a + r.total, 0);
+
+      console.log(`✅ Loaded productivity report: ${this.productivityRows.length} nhân viên`);
+    } catch (error) {
+      console.error('❌ Error loading productivity report:', error);
+      alert('❌ Lỗi khi tải báo cáo năng suất');
+    } finally {
+      this.isLoadingProductivity = false;
+    }
+  }
+
+  downloadProductivityExcel(): void {
+    if (!this.productivityRows.length) {
+      alert('⚠️ Không có dữ liệu để tải');
+      return;
+    }
+    import('xlsx')
+      .then((XLSX) => {
+        const header = ['Mã nhân viên', ...this.productivityDays.map(d => `Ngày ${String(d).padStart(2, '0')}`), 'Tổng'];
+        const wsData: any[][] = [header];
+
+        this.productivityRows.forEach(row => {
+          wsData.push([row.employeeId, ...row.counts, row.total]);
+        });
+
+        wsData.push(['Tổng', ...this.productivityDayTotals, this.productivityGrandTotal]);
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Productivity');
+        const fileName = `Productivity_${this.selectedFactory}_${this.productivityMonth}_${this.productivityYear}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+      })
+      .catch((e) => {
+        console.error('downloadProductivityExcel error', e);
+        alert('❌ Lỗi khi xuất Excel.');
+      });
   }
 
   // Show pending QC materials modal
