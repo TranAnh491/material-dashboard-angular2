@@ -1,4 +1,4 @@
-/* Outbound ASM1 — mobile WMS shell (blue / white / gray, industrial) */
+/* Outbound (ASM1/ASM2) — mobile WMS shell (blue / white / gray, industrial) */
 $ob-blue: #2563eb;
 $ob-blue-soft: #eff6ff;
 $ob-ink: #0f172a;
@@ -46,6 +46,26 @@ $ob-r-sm: 10px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.ob-m-header__row2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ob-m-header__factory-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: $ob-muted;
+}
+
+.ob-m-header__row2 .factory-switcher__btn {
+  min-width: 56px;
+  min-height: 36px;
+  font-size: 13px !important;
 }
 
 .ob-m-header__center {
@@ -978,6 +998,38 @@ $ob-r-sm: 10px;
 
   &:active {
     background: #f1f5f9;
+  }
+}
+
+.ob-m-sheet__row--factory {
+  cursor: default;
+  justify-content: space-between;
+
+  .factory-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid $ob-line;
+    border-radius: 8px;
+
+    .factory-switcher__btn {
+      border: none;
+      background: transparent;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: $ob-ink;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+
+      &.active {
+        background: $ob-blue;
+        color: #ffffff;
+      }
+    }
   }
 }
 

@@ -2,8 +2,19 @@
 <div class="inventory-overview-container">
   <!-- Header -->
   <div class="header">
-    <h4>RM1 INVENTORY OVERVIEW</h4>
-    <p class="subtitle">Xem toàn bộ tồn kho RM1</p>
+    <h4>{{ selectedFactory }} INVENTORY OVERVIEW</h4>
+    <p class="subtitle">Xem toàn bộ tồn kho {{ selectedFactory }}</p>
+    <div class="factory-switcher-row">
+      <div class="factory-switcher">
+        <button type="button"
+                class="factory-switcher__btn"
+                *ngFor="let f of factoryOptions"
+                [class.active]="selectedFactory === f"
+                (click)="setFactory(f)">
+          {{ f }}
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Control Bar -->
@@ -186,7 +197,7 @@
   <!-- Start State -->
   <div class="empty-state start-state" *ngIf="!isInventoryLoaded && !isLoading">
     <i class="material-icons">inventory_2</i>
-    <h3>RM1 Inventory Overview</h3>
+    <h3>RM2 Inventory Overview</h3>
     <p>Bấm <strong>Refresh</strong> để tải toàn bộ tồn kho. Mở tab không đọc Firebase (tiết kiệm reads).</p>
     <button class="refresh-btn" (click)="refreshData()" [disabled]="isLoading">
       <i class="material-icons">refresh</i>

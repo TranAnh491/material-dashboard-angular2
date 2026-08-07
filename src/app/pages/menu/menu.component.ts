@@ -20,9 +20,8 @@ export class MenuComponent implements OnInit, OnDestroy {
   filteredByCategory: Record<string, MenuTabView[]> = {
     Main: [],
     Production: [],
-    'ASM1 RM': [],
+    'RM': [],
     Quality: [],
-    'ASM2 RM': [],
     'ASM FG': [],
     Tools: [],
     Admin: []
@@ -80,23 +79,19 @@ export class MenuComponent implements OnInit, OnDestroy {
     // Production
     { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', iconImage: 'assets/img/analytics.png', category: 'Production' },
     
-    // ASM1 RM
-    { path: '/inbound', title: 'RM Inbound', icon: 'download', iconImage: 'assets/img/rmin.png', category: 'ASM1 RM' },
-    { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'upload', iconImage: 'assets/img/rmout.png', category: 'ASM1 RM' },
-    { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'warehouse', iconImage: 'assets/img/rminventory.png', category: 'ASM1 RM' },
-    { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'bar_chart', iconImage: 'assets/img/stocktaking.png', category: 'ASM1 RM' },
-    { path: '/bag-history', title: 'Control Batch', icon: 'history', iconImage: 'assets/img/traceback.png', category: 'ASM1 RM' },
-    { path: '/label', title: 'Label', icon: 'local_offer', iconImage: 'assets/img/label.png', category: 'ASM1 RM' },
+    // RM — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)
+    { path: '/inbound', title: 'RM Inbound', icon: 'download', iconImage: 'assets/img/rmin.png', category: 'RM' },
+    { path: '/outbound', title: 'RM Outbound', icon: 'upload', iconImage: 'assets/img/rmout.png', category: 'RM' },
+    { path: '/materials', title: 'RM Inventory', icon: 'warehouse', iconImage: 'assets/img/rminventory.png', category: 'RM' },
+    { path: '/inventory-overview', title: 'RM Overview', icon: 'bar_chart', iconImage: 'assets/img/stocktaking.png', category: 'RM' },
+    { path: '/bag-history', title: 'Control Batch', icon: 'history', iconImage: 'assets/img/traceback.png', category: 'RM' },
+    { path: '/label', title: 'Label', icon: 'local_offer', iconImage: 'assets/img/label.png', category: 'RM' },
 
     // Quality
     { path: '/qc', title: 'Quality', icon: 'verified', iconImage: 'assets/img/qc.png', category: 'Quality' },
     { path: '/nhiet-do', title: 'Nhiệt Độ', icon: 'thermostat', iconImage: 'assets/img/qc.png', category: 'Quality' },
     { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', iconImage: 'assets/img/traceback.png', category: 'Quality' },
-    // ASM2 RM
-    { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'upload', iconImage: 'assets/img/rmout.png', category: 'ASM2 RM' },
-    { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'warehouse', iconImage: 'assets/img/rminventory.png', category: 'ASM2 RM' },
-    { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'bar_chart', iconImage: 'assets/img/stocktaking.png', category: 'ASM2 RM' },
-    
+
     // ASM FG
     { path: '/fg-in', title: 'FG In', icon: 'input', iconImage: 'assets/img/fgin.png', category: 'ASM FG' },
     { path: '/fg-out', title: 'FG Out', icon: 'output', iconImage: 'assets/img/fgout.png', category: 'ASM FG' },
@@ -112,6 +107,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Tools' },
     { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
     { path: '/stock-check', title: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png', category: 'Tools' },
+    { path: '/bieu-mau', title: 'Biểu mẫu', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Tools' },
     
     // Admin & Reports
     { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', iconImage: 'assets/img/sxxk.png', category: 'Admin' },
@@ -214,9 +210,8 @@ export class MenuComponent implements OnInit, OnDestroy {
 
     const next: Record<string, MenuTabView[]> = {
       Main: [],
-      'ASM1 RM': [],
+      'RM': [],
       Quality: [],
-      'ASM2 RM': [],
       'ASM FG': [],
       Tools: [],
       Report: [],
@@ -239,17 +234,14 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
     '/pd-control': 'Giám sát điều khiển sản xuất',
     '/inbound': 'Nhập kho nguyên liệu (ASM1 & ASM2)',
-    '/outbound-asm1': 'Xuất kho nguyên liệu ASM1',
-    '/materials-asm1': 'Quản lý tồn kho nguyên liệu ASM1',
-    '/inventory-overview-asm1': 'Xem tổng quan tồn kho RM1',
+    '/outbound': 'Xuất kho nguyên liệu (ASM1 & ASM2)',
+    '/materials': 'Quản lý tồn kho nguyên liệu (ASM1 & ASM2)',
+    '/inventory-overview': 'Xem tổng quan tồn kho (ASM1 & ASM2)',
     '/bag-history': 'Kiểm soát batch và bịch xuất',
     '/label': 'In tem nhãn nguyên liệu',
     '/qc': 'Kiểm tra chất lượng nguyên liệu',
     '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
     '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
-    '/outbound-asm2': 'Xuất kho nguyên liệu ASM2',
-    '/materials-asm2': 'Quản lý tồn kho nguyên liệu ASM2',
-    '/inventory-overview-asm2': 'Xem tổng quan tồn kho RM2',
     '/fg-in': 'Nhập thành phẩm vào kho',
     '/fg-out': 'Xuất thành phẩm',
     '/fg-check': 'Kiểm tra thành phẩm trước khi xuất',
@@ -261,6 +253,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
     '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
     '/stock-check': 'Kiểm kê và đối chiếu tồn kho',
+    '/bieu-mau': 'Phiếu xuất kho / Stock Out Note',
     '/sxxk': 'Quản lý sản xuất xuất khẩu',
     '/scrap': 'Quản lý phế liệu',
     '/checklist': 'An toàn và chất lượng',
@@ -280,9 +273,8 @@ export class MenuComponent implements OnInit, OnDestroy {
     const byCategory: Record<string, string> = {
       Main: 'Quản lý vận hành và giao hàng',
       Production: 'Giám sát sản xuất',
-      'ASM1 RM': 'Nhập — xuất — tồn RM1',
+      'RM': 'Nhập — xuất — tồn nguyên liệu (ASM1 & ASM2)',
       Quality: 'Kiểm soát chất lượng',
-      'ASM2 RM': 'Nhập — xuất — tồn RM2',
       'ASM FG': 'Quản lý thành phẩm',
       Report: 'Báo cáo và phân tích',
       Tools: 'Công cụ hỗ trợ vận hành',

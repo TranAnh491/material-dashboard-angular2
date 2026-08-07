@@ -28,6 +28,42 @@
   }
 }
 
+// Factory Switcher (chuyển đổi ASM1 ⇄ ASM2)
+.factory-switcher-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.factory-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #000000;
+
+  .factory-switcher__btn {
+    border: none;
+    background: transparent;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #000000;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background: #eeeeee;
+    }
+
+    &.active {
+      background: #000000;
+      color: #ffffff;
+    }
+  }
+}
+
 // Control Bar
 .control-bar {
   background: #ffffff;

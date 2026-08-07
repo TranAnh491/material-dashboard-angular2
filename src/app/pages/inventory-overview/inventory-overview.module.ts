@@ -1,25 +1,31 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterModule, Routes } from '@angular/router';
 import { AngularFireModule } from '@angular/fire/compat';
 import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 
-import { InventoryOverviewASM1Component } from './inventory-overview-asm1.component';
+import { InventoryOverviewComponent } from './inventory-overview.component';
 import { SharedModule } from '../../shared/shared.module';
+
+const routes: Routes = [
+  { path: '', component: InventoryOverviewComponent }
+];
 
 @NgModule({
   declarations: [
-    InventoryOverviewASM1Component
+    InventoryOverviewComponent
   ],
   imports: [
     CommonModule,
     FormsModule,
+    RouterModule.forChild(routes),
     AngularFireModule,
     AngularFirestoreModule,
     SharedModule
   ],
   exports: [
-    InventoryOverviewASM1Component
+    InventoryOverviewComponent
   ]
 })
-export class InventoryOverviewASM1Module { }
+export class InventoryOverviewModule { }

@@ -109,17 +109,15 @@ export class TabPermissionGuard implements CanActivate {
       
       // RM Inbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
       '/inbound': 'inbound',
+      // RM Inventory Overview — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
+      '/inventory-overview': 'inventory-overview',
 
-      // ASM1 routes
-      '/outbound-asm1': 'outbound-asm1',
-      '/materials-asm1': 'materials-asm1',
-      '/inventory-overview-asm1': 'inventory-overview-asm1',
+      // RM Outbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
+      '/outbound': 'outbound',
+      // RM Inventory (Materials) — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
+      '/materials': 'materials',
 
-      // ASM2 routes
       '/danh-muc-nvl-tp': 'danh-muc-nvl-tp',
-      '/outbound-asm2': 'outbound-asm2',
-      '/materials-asm2': 'materials-asm2',
-      '/inventory-overview-asm2': 'inventory-overview-asm2',
       '/bag-history': 'bag-history',
       
       // ASM FG routes
@@ -137,6 +135,7 @@ export class TabPermissionGuard implements CanActivate {
       '/layout-warehouse': 'layout-warehouse',
       '/layout-warehouse-asm3': 'layout-warehouse-asm3',
       '/stock-check': 'stock-check',
+      '/bieu-mau': 'bieu-mau',
       '/label': 'label',
       '/index': 'index',
       '/sxxk': 'sxxk',

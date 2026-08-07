@@ -1,0 +1,154 @@
+<div class="bm-page">
+  <div class="bm-toolbar no-print">
+    <button type="button" class="bm-btn" (click)="goToMenu()">
+      <i class="material-icons">home</i>
+      Về Menu
+    </button>
+    <h1>Biểu mẫu</h1>
+    <button type="button" class="bm-btn bm-btn--primary" (click)="printForm()">
+      <i class="material-icons">print</i>
+      In phiếu
+    </button>
+  </div>
+
+  <div class="bm-preview-wrap">
+    <article class="stock-out-note" id="stockOutNotePrint">
+      <!-- Header -->
+      <header class="son-header">
+        <div class="son-header__brand">
+          <img class="son-logo" [src]="getLogoSrc()" alt="AIRSPEED" />
+          <div class="son-company">AIRSPEED MANUFACTURING VIET NAM</div>
+        </div>
+        <div class="son-header__title">
+          <div class="son-title-vi">PHIẾU XUẤT KHO</div>
+          <div class="son-title-en">STOCK OUT NOTE</div>
+        </div>
+        <table class="son-meta-box">
+          <tr>
+            <th>Mã quản lý</th>
+            <td>{{ formMeta.managementCode }}</td>
+          </tr>
+          <tr>
+            <th>Phiên bản</th>
+            <td>{{ formMeta.version }}</td>
+          </tr>
+          <tr>
+            <th>Ngày tháng năm / Date</th>
+            <td>{{ formMeta.issuedDate }}</td>
+          </tr>
+        </table>
+      </header>
+
+      <!-- Info grid -->
+      <section class="son-info">
+        <div class="son-info__row">
+          <div class="son-field">
+            <span class="son-label">Số phiếu xuất / No.:</span>
+            <span class="son-value">{{ header.voucherNo }}</span>
+          </div>
+          <div class="son-field">
+            <span class="son-label">Ngày xuất kho / Date of output:</span>
+            <span class="son-value">{{ header.outputDate }}</span>
+          </div>
+          <div class="son-field">
+            <span class="son-label">Kho / Warehouse:</span>
+            <span class="son-value">{{ header.warehouse }}</span>
+          </div>
+        </div>
+        <div class="son-info__row">
+          <div class="son-field">
+            <span class="son-label">Mã sản phẩm / Product code:</span>
+            <span class="son-value">{{ header.productCode }}</span>
+          </div>
+          <div class="son-field">
+            <span class="son-label">Loại xuất kho / Dispatching type:</span>
+            <span class="son-value">{{ header.dispatchType }}</span>
+          </div>
+          <div class="son-field">
+            <span class="son-label">Bộ phận nhận / Receiving Dept:</span>
+            <span class="son-value">{{ header.receivingDept }}</span>
+          </div>
+        </div>
+        <div class="son-info__row">
+          <div class="son-field">
+            <span class="son-label">Số LSX / Production order:</span>
+            <span class="son-value">{{ header.productionOrder }}</span>
+          </div>
+          <div class="son-field son-field--wide">
+            <span class="son-label">Ghi chú / Remark:</span>
+            <span class="son-value">{{ header.remark }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lines table -->
+      <table class="son-table">
+        <thead>
+          <tr>
+            <th>STT<br /><span>/ No.</span></th>
+            <th>Số PO<br /><span>/ PO No.</span></th>
+            <th>Mã vật liệu<br /><span>/ Materials code</span></th>
+            <th>Tên vật liệu<br /><span>/ Materials name</span></th>
+            <th>Đơn vị<br /><span>/ Unit</span></th>
+            <th>Số lượng<br /><span>/ Quantity</span></th>
+            <th>Thực xuất<br /><span>/ Quantity</span></th>
+            <th>Mã loại<br />NXK</th>
+            <th>Mã vị trí</th>
+            <th>Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let line of lines">
+            <td class="c">{{ line.stt }}</td>
+            <td>{{ line.poNumber }}</td>
+            <td class="c">{{ line.materialCode }}</td>
+            <td class="l">{{ line.materialName }}</td>
+            <td class="c">{{ line.unit }}</td>
+            <td class="r">{{ formatQty(line.quantity) }}</td>
+            <td class="r">{{ formatQty(line.actualQuantity) }}</td>
+            <td class="c">{{ line.nxkCode }}</td>
+            <td class="c">{{ line.locationCode }}</td>
+            <td>{{ line.remark }}</td>
+          </tr>
+          <!-- blank rows for form look -->
+          <tr *ngFor="let _ of [1,2,3,4,5,6,7,8]">
+            <td>&nbsp;</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Signatures -->
+      <footer class="son-sign">
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Nhân viên kho</div>
+          <div class="son-sign__en">/ WH Staff</div>
+        </div>
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Quản lý kho</div>
+          <div class="son-sign__en">/ WH Manager</div>
+        </div>
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Người nhận</div>
+          <div class="son-sign__en">/ Receiver</div>
+        </div>
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Kế toán</div>
+          <div class="son-sign__en">/ Accountant</div>
+        </div>
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Giám đốc</div>
+          <div class="son-sign__en">/ Director</div>
+        </div>
+      </footer>
+    </article>
+  </div>
+</div>

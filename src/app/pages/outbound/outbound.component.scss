@@ -1,6 +1,6 @@
-// Tối ưu hóa RM1 Outbound - Chữ đen, nền trắng, size 13, không hiệu ứng
+// Tối ưu hóa RM Outbound - Chữ đen, nền trắng, size 13, không hiệu ứng
 
-// Global CSS — chỉ áp dụng cho layout desktop (Excel). Mobile `.ob-m-page` dùng outbound-asm1-mobile.scss.
+// Global CSS — chỉ áp dụng cho layout desktop (Excel). Mobile `.ob-m-page` dùng outbound-mobile.scss.
 .main-content:not(.ob-m-page) * {
   font-size: 13px !important;
   color: #000000 !important;
@@ -559,14 +559,49 @@
   
 }
 
-.excel-header h4 { 
-  margin: 0; 
-  font-size: 18px; 
-  font-weight: normal; 
-  color: #000000; 
+.excel-header h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: normal;
+  color: #000000;
   font-family: inherit;
   flex: 1;
   text-align: center;
+}
+
+.factory-switcher-row {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.factory-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #000000;
+
+  .factory-switcher__btn {
+    border: none;
+    background: transparent;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #000000;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background: #eeeeee;
+    }
+
+    &.active {
+      background: #000000;
+      color: #ffffff;
+    }
+  }
 }
 
 .excel-body { 
@@ -890,6 +925,10 @@
     color: #b71c1c !important;
     margin-left: 8px !important;
     background: transparent !important;
+  }
+
+  .factory-switcher-row {
+    margin-left: auto !important;
   }
 
   &__btn {
@@ -3034,13 +3073,49 @@
         font-size: 20px;
       }
     }
+
+    .modal-header__factory-badge {
+      background: rgba(255, 255, 255, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-right: auto;
+      margin-left: 12px;
+    }
   }
-  
+
   .modal-body {
     padding: 24px;
   }
-  
+
   .scan-step {
+    .factory-choice-section {
+      display: flex;
+      gap: 12px;
+
+      .factory-choice-btn {
+        flex: 1;
+        padding: 20px;
+        border: 2px solid #ff9800;
+        border-radius: 10px;
+        background: #fff;
+        color: #f57c00;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+
+        &:hover {
+          background: #ff9800;
+          color: #fff;
+        }
+      }
+    }
+
     .step-header {
       display: flex;
       align-items: flex-start;

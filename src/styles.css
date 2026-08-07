@@ -64,13 +64,13 @@ html, body {
   background: #ffffff !important;
 }
 
-/* Outbound ASM1 — mobile WMS: ẩn navbar cố định + nút Home nổi (trùng với header/bottom nav trong trang) */
-body.ob-asm1-mobile-layout app-navbar nav.navbar {
+/* Outbound (ASM1/ASM2) — mobile WMS: ẩn navbar cố định + nút Home nổi (trùng với header/bottom nav trong trang) */
+body.ob-outbound-mobile-layout app-navbar nav.navbar {
   display: none !important;
 }
 
-body.ob-asm1-mobile-layout .btn-home,
-body.ob-asm1-mobile-layout button.btn-home {
+body.ob-outbound-mobile-layout .btn-home,
+body.ob-outbound-mobile-layout button.btn-home {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -80,14 +80,14 @@ body.ob-asm1-mobile-layout button.btn-home {
   opacity: 0 !important;
 }
 
-body.ob-asm1-mobile-layout .navbar-toggler {
+body.ob-outbound-mobile-layout .navbar-toggler {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
 }
 
 /* Neo Home toàn cục (navbar) — bắt thêm theo title */
-body.ob-asm1-mobile-layout button[title='Về Menu'] {
+body.ob-outbound-mobile-layout button[title='Về Menu'] {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;

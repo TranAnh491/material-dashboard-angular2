@@ -40,20 +40,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'work-order-status', name: 'Work Order', category: 'Chính' },
     { key: 'shipment', name: 'Shipment', category: 'Chính' },
 
-    // RM Inbound — trang gộp dùng chung ASM1 + ASM2
-    { key: 'inbound', name: 'RM Inbound (ASM1 + ASM2)', category: 'RM ASM1' },
-
-    // ASM1 RM tabs
-    { key: 'outbound-asm1', name: 'RM1 Outbound', category: 'RM ASM1' },
-    { key: 'materials-asm1', name: 'RM1 Inventory', category: 'RM ASM1' },
-    { key: 'inventory-overview-asm1', name: 'RM1 Overview', category: 'RM ASM1' },
-    { key: 'bag-history', name: 'Control Batch', category: 'RM ASM1' },
-    { key: 'danh-muc-nvl-tp', name: 'Danh mục NVL & TP', category: 'RM ASM1' },
-
-    // ASM2 RM tabs
-    { key: 'outbound-asm2', name: 'RM2 Outbound', category: 'RM ASM2' },
-    { key: 'materials-asm2', name: 'RM2 Inventory', category: 'RM ASM2' },
-    { key: 'inventory-overview-asm2', name: 'RM2 Overview', category: 'RM ASM2' },
+    // RM tabs — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)
+    { key: 'inbound', name: 'RM Inbound (ASM1 + ASM2)', category: 'RM' },
+    { key: 'outbound', name: 'RM Outbound (ASM1 + ASM2)', category: 'RM' },
+    { key: 'materials', name: 'RM Inventory (ASM1 + ASM2)', category: 'RM' },
+    { key: 'inventory-overview', name: 'RM Overview (ASM1 + ASM2)', category: 'RM' },
+    { key: 'bag-history', name: 'Control Batch', category: 'RM' },
+    { key: 'danh-muc-nvl-tp', name: 'Danh mục NVL & TP', category: 'RM' },
 
     // ASM FG tabs
     { key: 'fg-in', name: 'FG In', category: 'FG' },
@@ -70,6 +63,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'layout-warehouse-asm3', name: 'Layout Warehouse ASM3', category: 'Khác' },
     { key: 'manage', name: 'Manage', category: 'Khác' },
     { key: 'stock-check', name: 'Stock Check', category: 'Khác' },
+    { key: 'bieu-mau', name: 'Biểu mẫu', category: 'Khác' },
     { key: 'label', name: 'Label', category: 'Khác' },
     { key: 'index', name: 'Bonded Report', category: 'Khác' },
     { key: 'sxxk', name: 'SXXK', category: 'Khác' },
@@ -1012,7 +1006,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return null;
   }
 
-  /** Nhóm availableTabs theo category (Chính / RM ASM1 / RM ASM2 / FG / Khác) — dùng cho popup quyền tab. */
+  /** Nhóm availableTabs theo category (Chính / RM / FG / Khác) — dùng cho popup quyền tab. */
   private _tabCategoriesCache: Array<{ category: string; tabs: Array<{ key: string; name: string; category: string }> }> | null = null;
   get tabCategories(): Array<{ category: string; tabs: Array<{ key: string; name: string; category: string }> }> {
     if (this._tabCategoriesCache) return this._tabCategoriesCache;

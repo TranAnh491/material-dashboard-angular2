@@ -67,15 +67,13 @@ export class TabPermissionService {
       'inbound': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'danh-muc-nvl-tp': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       
-      // Outbound tabs
-      'outbound-asm1': factoryAccess.canAccessASM1 === true,
-      'outbound-asm2': factoryAccess.canAccessASM2 === true,
-      
-      // Inventory tabs
-      'materials-asm1': factoryAccess.canAccessASM1 === true,
-      'materials-asm2': factoryAccess.canAccessASM2 === true,
-      'inventory-overview-asm1': factoryAccess.canAccessASM1 === true,
-      'inventory-overview-asm2': factoryAccess.canAccessASM2 === true,
+      // Outbound tab — trang gộp dùng chung ASM1 + ASM2
+      'outbound': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
+
+      // Inventory (Materials) tab — trang gộp dùng chung ASM1 + ASM2
+      'materials': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
+      // Inventory Overview tab — trang gộp dùng chung ASM1 + ASM2
+      'inventory-overview': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'bag-history': factoryAccess.canAccessASM1 === true,
       
       // Location tab - chỉ cho phép khi có quyền truy cập ASM1
@@ -157,15 +155,14 @@ export class TabPermissionService {
     // Inbound tab (gộp ASM1 + ASM2)
     { key: 'inbound', name: 'RM Inbound' },
 
-    // Outbound tabs
-    { key: 'outbound-asm1', name: 'RM1 Outbound' },
-    { key: 'outbound-asm2', name: 'RM2 Outbound' },
-    
-    // Inventory tabs
-    { key: 'materials-asm1', name: 'RM1 Inventory' },
-    { key: 'materials-asm2', name: 'RM2 Inventory' },
-    { key: 'inventory-overview-asm1', name: 'RM1 Inventory Overview' },
-    { key: 'inventory-overview-asm2', name: 'RM2 Inventory Overview' },
+    // Outbound tab (gộp ASM1 + ASM2)
+    { key: 'outbound', name: 'RM Outbound' },
+
+
+    // Inventory (Materials) tab (gộp ASM1 + ASM2)
+    { key: 'materials', name: 'RM Inventory' },
+    // Inventory Overview tab (gộp ASM1 + ASM2)
+    { key: 'inventory-overview', name: 'RM Inventory Overview' },
     { key: 'bag-history', name: 'Control Batch' },
     
     // ASM FG tabs
@@ -183,6 +180,7 @@ export class TabPermissionService {
 
     // Other tabs
     { key: 'stock-check', name: 'Stock Check' },
+    { key: 'bieu-mau', name: 'Biểu mẫu' },
     { key: 'label', name: 'Label' },
     { key: 'index', name: 'Bonded Report' },
     { key: 'sxxk', name: 'SXXK' },

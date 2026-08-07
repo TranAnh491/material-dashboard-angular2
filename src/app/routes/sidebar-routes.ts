@@ -11,28 +11,17 @@ export const ROUTES: RouteInfo[] = [
   { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
-  { 
-    path: '', 
-    title: 'ASM1 RM', 
-    icon: 'inventory', 
+  {
+    path: '',
+    title: 'RM',
+    icon: 'inventory',
     class: 'asm1-rm-parent',
     children: [
       { path: '/inbound', title: 'RM Inbound', icon: 'IB', class: '' },
-      { path: '/outbound-asm1', title: 'RM1 Outbound', icon: 'OB', class: '' },
-      { path: '/materials-asm1', title: 'RM1 Inventory', icon: 'IV', class: '' },
-      { path: '/inventory-overview-asm1', title: 'RM1 Overview', icon: 'IO', class: '' },
+      { path: '/outbound', title: 'RM Outbound', icon: 'OB', class: '' },
+      { path: '/materials', title: 'RM Inventory', icon: 'IV', class: '' },
+      { path: '/inventory-overview', title: 'RM Overview', icon: 'IO', class: '' },
       { path: '/bag-history', title: 'Control Batch', icon: 'H', class: '' }
-    ]
-  },
-  { 
-    path: '', 
-    title: 'ASM2 RM', 
-    icon: 'inventory', 
-    class: 'asm2-rm-parent',
-    children: [
-      { path: '/outbound-asm2', title: 'RM2 Outbound', icon: 'OB', class: '' },
-      { path: '/materials-asm2', title: 'RM2 Inventory', icon: 'IV', class: '' },
-      { path: '/inventory-overview-asm2', title: 'RM2 Overview', icon: 'IO', class: '' }
     ]
   },
   { 
@@ -61,7 +50,8 @@ export const ROUTES: RouteInfo[] = [
       { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', class: 'material-child-icon' },
       { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
       { path: '/label', title: 'Label', icon: 'label', class: 'material-child-icon' },
-      { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: 'material-child-icon' }
+      { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: 'material-child-icon' },
+      { path: '/bieu-mau', title: 'Biểu mẫu', icon: 'description', class: 'material-child-icon' }
     ]
   },
   {

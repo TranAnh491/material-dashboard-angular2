@@ -3522,3 +3522,71 @@ $asm1-toolbar-h: 36px;
   }
 }
 
+// ── Factory switcher (ASM1 ⇄ ASM2) ──────────────────────────────────────────
+.factory-switcher-row {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  margin: 4px 0;
+}
+
+.factory-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #000000;
+
+  .factory-switcher__btn {
+    border: none;
+    background: transparent;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #000000;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background: #eeeeee;
+    }
+
+    &.active {
+      background: #000000;
+      color: #ffffff;
+    }
+  }
+}
+
+// ── Search type toggle (Mã / PO / Vị trí) ───────────────────────────────────
+.search-type-btn {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #ddd;
+  color: #000;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+
+  &:hover {
+    background: #f1f5f9;
+  }
+
+  &.is-disabled,
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .material-icons {
+    font-size: 18px;
+    margin: 0;
+  }
+}
+

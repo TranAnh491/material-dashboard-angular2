@@ -93,10 +93,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
     const allowedMobilePaths = [
       '/pd-control',
       '/inbound',             // RM Inbound (gộp ASM1 + ASM2)
-      '/outbound-asm1',       // Tab 5
-      '/materials-asm1',      // Tab 6
-      '/outbound-asm2',       // Tab 9
-      '/materials-asm2',      // Tab 10
+      '/outbound',            // RM Outbound (gộp ASM1 + ASM2)
+      '/materials',           // RM Inventory (gộp ASM1 + ASM2)
       '/location',           // Tab 17
       '/stock-check',        // Tab 18
       '/bag-history',
@@ -112,7 +110,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
         return null;
       }
       
-      // Nếu là route có children (như ASM1 RM, ASM2 RM, ASM1 FG)
+      // Nếu là route có children (như RM, ASM FG)
       if (menuItem.children && menuItem.children.length > 0) {
         // Lọc children chỉ giữ lại những tab được phép
         const filteredChildren = menuItem.children.filter(child => 

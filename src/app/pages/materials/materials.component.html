@@ -1,10 +1,9 @@
-<app-tab-back-button variant="floating"></app-tab-back-button>
 <div class="main-content">
   <!-- Excel-like Container -->
   <div class="excel-container">
     <!-- Report Title -->
     <div class="excel-header">
-      <h4>📦 INVENTORY ASM2</h4>
+      <h4>📦 INVENTORY {{ selectedFactory }}</h4>
       <!-- Consolidation Status Message -->
       <div class="consolidation-message" *ngIf="showConsolidationMessage" [class.success]="consolidationMessage.includes('✅')" [class.info]="consolidationMessage.includes('ℹ️')">
         <i class="material-icons">{{consolidationMessage.includes('✅') ? 'check_circle' : 'info'}}</i>
@@ -23,125 +22,268 @@
     <!-- Excel Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- More Button - Opens Popup -->
-        <button type="button" class="more-btn" (click)="openMorePopup()">
-          <i class="material-icons">more_vert</i>
-          More
+        <!-- Mobile Menu Button -->
+        <div class="mobile-menu-btn" (click)="toggleMobileMenu()">
+          <i class="material-icons">menu</i>
+        </div>
+
+        <!-- Back -->
+        <button class="more-btn" type="button" (click)="goBack()" title="Quay lại">
+          <i class="material-icons">arrow_back</i>
+          <span class="btn-label">Back</span>
         </button>
-        
-        <!-- Negative Stock Counter Box -->
+
+        <!-- Về Menu -->
+        <button class="more-btn" type="button" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i>
+          <span class="btn-label">Menu</span>
+        </button>
+
+        <!-- More — mở popup -->
+        <button class="more-btn" type="button" (click)="openMorePopup()">
+          <i class="material-icons">more_vert</i>
+          <span class="btn-label">More</span>
+        </button>
+
+        <!-- Factory switcher: ASM1 ⇄ ASM2 -->
+        <div class="factory-switcher-row">
+          <div class="factory-switcher">
+            <button type="button"
+                    class="factory-switcher__btn"
+                    *ngFor="let f of factoryOptions"
+                    [class.active]="selectedFactory === f"
+                    (click)="setFactory(f)">
+              {{ f }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Desktop Stats Boxes -->
+        <div class="desktop-stats-section">
+          <!-- Negative Stock Counter Box -->
         <div class="negative-stock-counter-box" 
-             *ngIf="(negativeStockCount$ | async) > 0"
-             [title]="'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm'">
-          <i class="material-icons">warning</i>
-          <span>Mã âm: {{ (negativeStockCount$ | async) }}</span>
+             [class.has-negative]="(negativeStockCount$ | async) > 0"
+             [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
+          <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
+          <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
         </div>
         
-        <!-- Total Counter Box -->
+        <!-- Total Counter Box - Clickable to filter negative stock -->
         <div class="total-counter-box clickable" 
              (click)="toggleNegativeStockFilter()"
              [class.active-filter]="showOnlyNegativeStock"
-             [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả' : 'Click để chỉ hiển thị mã âm'">
+             [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
           <i class="material-icons">inventory_2</i>
           <span>Tổng: {{ filteredInventory.length }} mã</span>
         </div>
         
-        <!-- Total Stock Counter Box -->
-        <div class="total-stock-counter-box">
+          <!-- Total Stock Counter Box -->
+        <div class="total-stock-counter-box" 
+             [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
           <i class="material-icons">assessment</i>
           <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
         </div>
+        </div>
         
+        
+
+        
+        <!-- Mobile Search Section - Always visible on mobile -->
+        <div class="mobile-search-section">
+          <label class="search-location-toggle" title="Tick để tìm theo vị trí kho">
+            <input type="checkbox" [(ngModel)]="searchByLocation" (change)="onSearchByLocationChange()" />
+            <i class="material-icons">place</i>
+            <span class="search-location-toggle__label">Location</span>
+          </label>
+          <label class="search-location-toggle" title="Tick để tìm theo khách hàng (Danh mục NVLKH)">
+            <input type="checkbox" [(ngModel)]="searchByCustomer" (change)="onSearchByCustomerChange()" />
+            <i class="material-icons">groups</i>
+            <span class="search-location-toggle__label">KH</span>
+          </label>
+          <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
+            <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
+            <i class="material-icons">visibility</i>
+            <span class="search-location-toggle__label">Hiện KH</span>
+          </label>
+          <!-- Search Type Selector (Mã / PO) -->
+          <button type="button" class="search-type-btn"
+                  (click)="cycleSearchType()"
+                  [disabled]="searchByLocation || searchByCustomer"
+                  [class.is-disabled]="searchByLocation || searchByCustomer"
+                  [title]="(searchByLocation || searchByCustomer) ? 'Bỏ tick Location/KH để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
+            <i class="material-icons">{{ searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place' }}</i>
+            {{ searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí' }}
+          </button>
+          <!-- Search Box -->
+          <div class="search-box">
+            <input type="text"
+                   [placeholder]="searchInputPlaceholder"
+                   [(ngModel)]="searchTerm"
+                   (input)="onSearchInput($event)"
+                   (keyup)="onSearchKeyUp($event)"
+                   class="search-input"
+                   [disabled]="isLoading">
+
+            <!-- Clear search button -->
+            <button class="clear-search-btn" 
+                    *ngIf="searchTerm" 
+                    (click)="clearSearch()" 
+                    title="Xóa tìm kiếm">
+              <i class="material-icons">clear</i>
+          </button>
+            
+            <!-- Search warning -->
+            <div class="search-warning" *ngIf="searchTerm && !isLocationSearchActive && searchTerm.length < 3">
+              <i class="material-icons">info</i>
+              Cần ít nhất 3 ký tự
+            </div>
+          </div>
+          <button type="button"
+                  class="more-btn tem-le-btn"
+                  (click)="openTemLePopup()"
+                  title="Tách tem lẻ từ tem hiện tại">
+            <i class="material-icons">call_split</i>
+            Tem Lẽ
+          </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-reprint-btn"
+                  (click)="openTemInLaiPopup()"
+                  title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
+            <i class="material-icons">print</i>
+            In Lại Tem
+          </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-thung-btn"
+                  (click)="openTemThungPopup()"
+                  title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
+            <i class="material-icons">inventory_2</i>
+            In Tem Thùng
+          </button>
+        </div>
+        
+        <!-- Mobile Stats Section - Individual boxes on mobile -->
+        <div class="mobile-stats-section">
+          <!-- Negative Stock Counter Box -->
+          <div class="negative-stock-counter-box" 
+               [class.has-negative]="(negativeStockCount$ | async) > 0"
+               [title]="(negativeStockCount$ | async) > 0 ? 'Có ' + (negativeStockCount$ | async) + ' mã hàng có tồn kho âm. Tồn kho âm được chấp nhận và hiển thị đầy đủ.' : 'Không có mã hàng nào có tồn kho âm'">
+            <i class="material-icons">{{ (negativeStockCount$ | async) > 0 ? 'warning' : 'check_circle' }}</i>
+            <span>{{ (negativeStockCount$ | async) > 0 ? 'Mã âm: ' + (negativeStockCount$ | async) : 'Tồn kho OK' }}</span>
+          </div>
+          
+          <!-- Total Counter Box - Clickable to filter negative stock -->
+          <div class="total-counter-box clickable" 
+               (click)="toggleNegativeStockFilter()"
+               [class.active-filter]="showOnlyNegativeStock"
+               [title]="showOnlyNegativeStock ? 'Click để hiển thị tất cả mã hàng' : 'Click để chỉ hiển thị mã hàng có tồn kho âm'">
+            <i class="material-icons">inventory_2</i>
+            <span>Tổng: {{ filteredInventory.length }} mã</span>
+          </div>
+          
+          <!-- Total Stock Counter Box -->
+          <div class="total-stock-counter-box" 
+               [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
+            <i class="material-icons">assessment</i>
+            <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+          </div>
+        </div>
+        
+        <!-- Desktop Search Section -->
+        <div class="desktop-search-section">
         <label class="search-location-toggle" title="Tick để tìm theo vị trí kho">
           <input type="checkbox" [(ngModel)]="searchByLocation" (change)="onSearchByLocationChange()" />
           <i class="material-icons">place</i>
-          <span>Location</span>
+          <span class="search-location-toggle__label">Location</span>
         </label>
-
         <label class="search-location-toggle" title="Tick để tìm theo khách hàng (Danh mục NVLKH)">
           <input type="checkbox" [(ngModel)]="searchByCustomer" (change)="onSearchByCustomerChange()" />
           <i class="material-icons">groups</i>
-          <span>KH</span>
+          <span class="search-location-toggle__label">KH</span>
         </label>
-
         <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
           <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
           <i class="material-icons">visibility</i>
-          <span>Hiện KH</span>
+          <span class="search-location-toggle__label">Hiện KH</span>
         </label>
-
         <!-- Search Type Selector (Mã / PO) -->
-        <button class="search-type-btn"
+        <button type="button" class="search-type-btn"
                 (click)="cycleSearchType()"
                 [disabled]="searchByLocation || searchByCustomer"
                 [class.is-disabled]="searchByLocation || searchByCustomer"
                 [title]="(searchByLocation || searchByCustomer) ? 'Bỏ tick Location/KH để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
-          <i class="material-icons">{{searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place'}}</i>
-          {{searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí'}}
+          <i class="material-icons">{{ searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place' }}</i>
+          <span class="btn-label">{{ searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí' }}</span>
         </button>
+        <div class="search-box">
+          <input type="text"
+                 [placeholder]="searchInputPlaceholder"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 class="search-input"
+                 [disabled]="isLoading">
+          
+          <!-- Clear search button -->
+          <button class="clear-search-btn" 
+                  *ngIf="searchTerm" 
+                  (click)="clearSearch()" 
+                  title="Xóa tìm kiếm">
+            <i class="material-icons">clear</i>
+          </button>
+          
+          <!-- Search warning -->
+          <div class="search-warning" *ngIf="searchTerm && !isLocationSearchActive && searchTerm.length < 3">
+            <i class="material-icons">info</i>
+            Cần ít nhất 3 ký tự
+            </div>
+          </div>
+          <button type="button"
+                  class="more-btn tem-le-btn"
+                  (click)="openTemLePopup()"
+                  title="Tách tem lẻ từ tem hiện tại">
+            <i class="material-icons">call_split</i>
+            <span class="btn-label">Tem lẻ</span>
+          </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-reprint-btn"
+                  (click)="openTemInLaiPopup()"
+                  title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
+            <i class="material-icons">print</i>
+            <span class="btn-label">In lại</span>
+          </button>
+          <button type="button"
+                  class="more-btn tem-le-btn tem-thung-btn"
+                  (click)="openTemThungPopup()"
+                  title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
+            <i class="material-icons">inventory_2</i>
+            <span class="btn-label">Tem thùng</span>
+          </button>
+        </div>
         
-        <!-- Search Box -->
-        <input type="text"
-               [placeholder]="searchInputPlaceholder"
-               [(ngModel)]="searchTerm"
-               (input)="onSearchInput($event)"
-               class="search-input"
-               [disabled]="isLoading">
-
-        <button type="button"
-                class="more-btn tem-le-btn"
-                (click)="openTemLePopup()"
-                title="Tách tem lẻ từ tem hiện tại">
-          <i class="material-icons">call_split</i>
-          Tem Lẽ
-        </button>
-        <button type="button"
-                class="more-btn tem-le-btn tem-reprint-btn"
-                (click)="openTemInLaiPopup()"
-                title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
-          <i class="material-icons">print</i>
-          In Lại Tem
-        </button>
-        <button type="button"
-                class="more-btn tem-le-btn tem-thung-btn"
-                (click)="openTemThungPopup()"
-                title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
-          <i class="material-icons">inventory_2</i>
-          In Tem Thùng
-        </button>
-        
-        <button class="clear-search-btn" 
-                *ngIf="searchTerm" 
-                (click)="clearSearch()" 
-                title="Xóa">
-          <i class="material-icons">clear</i>
-        </button>
-        
-        <button class="more-btn kk-check-btn"
-                type="button"
-                (click)="openKkCheckPopup()"
-                title="Kiểm tra tiến độ Kiểm Kê (KK)">
-          <i class="material-icons">fact_check</i>
-          Kiểm Kê
-        </button>
-
-        <button class="download-search-btn"
-                (click)="downloadSearchResultsExcel()"
-                [disabled]="isDownloadingSearch || !filteredInventory?.length"
-                title="Tải Excel toàn bộ kết quả đang search">
-          <i class="material-icons" [class.rotating]="isDownloadingSearch">{{ isDownloadingSearch ? 'sync' : 'download' }}</i>
-          {{ isDownloadingSearch ? 'Đang tải...' : 'Tải về' }}
-        </button>
-
-        <!-- Reset Button -->
-        <button
-          class="reset-btn"
-          (click)="resetZeroStock()"
-          [disabled]="isResetting || isDeletingResetLowStock"
-          title="Xóa tồn = 0, sau đó chọn xóa các mã tồn &lt; 1">
-          <i class="material-icons" [class.rotating]="isResetting">{{ isResetting ? 'sync' : 'restart_alt' }}</i>
-          {{ isResetting ? 'Đang xóa...' : 'Reset' }}
-        </button>
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="more-btn kk-check-btn"
+                  type="button"
+                  (click)="openKkCheckPopup()"
+                  title="Kiểm tra tiến độ Kiểm Kê (KK)">
+            <i class="material-icons">fact_check</i>
+            <span class="btn-label">Kiểm Kê</span>
+          </button>
+          <button class="download-search-btn"
+                  (click)="downloadSearchResultsExcel()"
+                  [disabled]="isDownloadingSearch || !filteredInventory?.length"
+                  title="Tải Excel toàn bộ kết quả đang search">
+            <i class="material-icons" [class.rotating]="isDownloadingSearch">{{ isDownloadingSearch ? 'sync' : 'download' }}</i>
+            <span class="btn-label">{{ isDownloadingSearch ? 'Đang tải...' : 'Tải về' }}</span>
+          </button>
+          <button class="reset-btn" 
+                  (click)="resetZeroStock()" 
+                  [disabled]="isResetting || isDeletingResetLowStock"
+                  title="Xóa tồn = 0, sau đó chọn xóa các mã tồn &lt; 1">
+            <i class="material-icons" [class.rotating]="isResetting">{{ isResetting ? 'sync' : 'restart_alt' }}</i>
+            {{ isResetting ? 'Đang xóa...' : 'Reset' }}
+          </button>
+        </div>
         
         <!-- Catalog Ready Icon -->
         <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
@@ -154,7 +296,7 @@
     <div class="loading-container" *ngIf="isLoading">
       <div class="loading-spinner">
         <i class="material-icons rotating">sync</i>
-        <span>Đang tải dữ liệu ASM2...</span>
+        <span>Đang tải dữ liệu {{ selectedFactory }}...</span>
         <!-- 🚀 OPTIMIZATION: Add progress bar for search -->
         <div class="search-progress" *ngIf="isSearching">
           <div class="progress-bar">
@@ -224,7 +366,7 @@
                    (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
                    (change)="updateOpeningStock(material)" 
                    min="0" 
-                   step="0.0001" 
+                   step="0.1" 
                    placeholder="Nhập tồn đầu">
           </div>
           
@@ -245,7 +387,7 @@
                    [(ngModel)]="material.xt" 
                    (change)="updateXT(material)" 
                    min="0" 
-                   step="0.0001" 
+                   step="0.1" 
                    placeholder="Nhập XT">
           </div>
           
@@ -274,12 +416,6 @@
                       [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
                 <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
               </button>
-              <button class="scan-btn"
-                      *ngIf="isLocationColumnUnlocked"
-                      (click)="scanLocationQR(material)"
-                      title="Scan QR để thay đổi vị trí">
-                <i class="material-icons">qr_code_scanner</i>
-              </button>
             </div>
           </div>
           
@@ -306,8 +442,7 @@
           
           <div class="info-row">
             <span class="label">Standard Packing:</span>
-            <span class="value readonly-metric"
-                  title="Chỉ đọc từ catalog — không sửa tại đây">
+            <span class="value readonly-metric" title="Chỉ đọc — sửa ở Danh mục NVL">
               {{ getStandardPacking(material.materialCode) }}
             </span>
           </div>
@@ -469,7 +604,7 @@
                      (keyup.enter)="finishEditingOpeningStock(material)"
                      (keyup.escape)="cancelEditingOpeningStock(material)"
                      min="0" 
-                     step="0.0001" 
+                     step="0.1" 
                      placeholder="Nhập tồn đầu">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">{{formatNumber(material.quantity)}}</td>
@@ -489,7 +624,7 @@
                        (blur)="updateExportedAmount(material)"
                        (keyup.enter)="updateExportedAmount(material)"
                        min="0" 
-                       step="0.0001"
+                       step="0.1"
                        placeholder="0">
               </ng-container>
             </td>
@@ -510,7 +645,7 @@
                      (keyup.enter)="finishEditingXT(material)"
                      (keyup.escape)="cancelEditingXT(material)"
                      min="0" 
-                     step="0.0001" 
+                     step="0.1" 
                      placeholder="Nhập số lượng XT">
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
@@ -532,14 +667,8 @@
                      (keydown.enter)="onLocationKeyEnter(material, $event)"
                      placeholder="Vị trí">
             </td>
-            <td class="change-cell">
-              <button class="scan-change-btn"
-                      *ngIf="isLocationColumnUnlocked"
-                      (click)="scanLocationQR(material)"
-                      title="Scan QR để thay đổi vị trí">
-                Scan
-              </button>
-              <span *ngIf="!isLocationColumnUnlocked" class="change-locked-label" title="Mở khóa cột Vị trí để scan">Khóa</span>
+            <td class="change-cell change-cell-locked">
+              <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
             </td>
             <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
@@ -560,7 +689,7 @@
                      title="Lưu ý từ inbound">
             </td>
             <td class="standard-packing-cell readonly-cell"
-                title="Chỉ đọc — không sửa Standard Packing tại đây">
+                title="Chỉ đọc — sửa ở Danh mục NVL">
               <span class="standard-packing-value">
                 {{ getStandardPacking(material.materialCode) }}
               </span>
@@ -617,15 +746,15 @@
               </button>
             </td>
             <td class="delete-cell">
-              <button class="delete-btn" 
+              <button class="delete-btn"
                       *ngIf="canDelete"
                       (click)="deleteInventoryItem(material)"
-                      title="Xóa item này khỏi ASM2 Inventory">
+                      [title]="'Xóa item này khỏi ' + selectedFactory + ' Inventory'">
                 <i class="material-icons">delete</i>
               </button>
             </td>
-            <td class="factory-cell factory-asm2">
-              ASM2
+            <td class="factory-cell factory-asm1">
+              {{ material.factory }}
             </td>
           </tr>
         </tbody>
@@ -635,24 +764,23 @@
       <div class="empty-state" *ngIf="!searchTerm && filteredInventory.length === 0 && !isLoading">
         <div class="empty-state-content">
           <i class="material-icons">search</i>
-          <h3>🔍 Tìm kiếm ASM2 Inventory</h3>
-          <p>Nhập từ khóa để tìm kiếm materials trong ASM2 inventory</p>
-          
-          <!-- Search Suggestions -->
+          <h3>🔍 Tìm kiếm {{ selectedFactory }} Inventory</h3>
+          <p>Nhập mã hàng để tìm kiếm materials trong {{ selectedFactory }} inventory</p>
+
+          <!-- Search Suggestions - chỉ mã hàng -->
           <div class="search-suggestions">
-            <h5>💡 Gợi ý tìm kiếm:</h5>
+            <h5>💡 Gợi ý: nhập mã hàng (ví dụ B018694)</h5>
             <div class="suggestion-tags">
               <span class="suggestion-tag" (click)="searchTerm = 'B018694'; onSearchInput({target: {value: 'B018694'}})">B018694</span>
-              <span class="suggestion-tag" (click)="searchTerm = 'PO123'; onSearchInput({target: {value: 'PO123'}})">PO123</span>
-              <span class="suggestion-tag" (click)="searchTerm = 'Location A'; onSearchInput({target: {value: 'Location A'}})">Location A</span>
+              <span class="suggestion-tag" (click)="searchTerm = 'A'; onSearchInput({target: {value: 'A'}})">A</span>
             </div>
           </div>
-          
+
           <!-- Quick Stats -->
           <div class="quick-stats">
             <div class="stat-item">
               <i class="material-icons">factory</i>
-              <span>ASM2 Factory</span>
+              <span>{{ selectedFactory }} Factory</span>
             </div>
             <div class="stat-item">
               <i class="material-icons">inventory</i>
@@ -671,16 +799,15 @@
         <div class="no-results-content">
           <i class="material-icons">search_off</i>
           <h4>🔍 Không tìm thấy kết quả</h4>
-          <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>" trong ASM2</p>
-          
-          <!-- Search Tips -->
+          <p>Không tìm thấy materials nào cho "<strong>{{searchTerm}}</strong>" trong {{ selectedFactory }}</p>
+
+          <!-- Search Tips - chỉ tìm theo mã hàng -->
           <div class="search-tips">
             <h6>💡 Mẹo tìm kiếm:</h6>
             <ul>
-              <li>Kiểm tra chính tả</li>
-              <li>Thử tìm kiếm với ít ký tự hơn</li>
-              <li>Kiểm tra factory filter (ASM2)</li>
-              <li>Thử tìm kiếm theo PO number</li>
+              <li>Chỉ tìm theo mã hàng (ví dụ B018694)</li>
+              <li>Kiểm tra chính tả hoặc thử ít ký tự hơn</li>
+              <li>Kiểm tra factory filter ({{ selectedFactory }})</li>
             </ul>
           </div>
         </div>
@@ -691,7 +818,7 @@
         <div class="loading-content">
           <i class="material-icons rotating">sync</i>
           <h4>🔍 Đang tìm kiếm...</h4>
-          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong ASM2 inventory</p>
+          <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong {{ selectedFactory }} inventory</p>
         </div>
       </div>
     </div>
@@ -714,7 +841,7 @@
       </div>
 
       <input
-        id="tem-le-scan-input-asm2"
+        id="tem-le-scan-input-asm1"
         type="text"
         class="editable-input"
         style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
@@ -735,7 +862,7 @@
       <div class="tem-le-row" style="margin-top: 12px;">
         <div class="tem-le-label">Số lượng cần tách</div>
         <input type="number"
-               id="tem-le-split-qty-asm2"
+               id="tem-le-split-qty-asm1"
                class="editable-input"
                style="max-width: 200px;"
                [(ngModel)]="temLeSplitQty"
@@ -780,7 +907,7 @@
         Chọn dòng cần in, nhập <strong>số tem</strong>. Tem in <strong>57×32mm</strong> (cùng format cột QR) — chỉ Mã, PO, IMD (không QTY/BAG).
       </p>
       <input
-        id="tem-thung-code-input-asm2"
+        id="tem-thung-code-input-asm1"
         type="text"
         class="editable-input"
         style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
@@ -858,7 +985,7 @@
         Tem in 57×32mm (cùng format cột QR).
       </p>
       <input
-        id="tem-thung-column-qty-input-asm2"
+        id="tem-thung-column-qty-input-asm1"
         type="number"
         class="editable-input"
         style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
@@ -907,7 +1034,7 @@
         nhưng chỉ lấy các dòng kho có <strong>IMD trước 01/04/2026</strong>. Các mã đã in sẽ được đánh dấu và lần sau sẽ <strong>bỏ qua</strong>.
       </p>
       <input
-        id="tem-inlai-lsx-input-asm2"
+        id="tem-inlai-lsx-input-asm1"
         type="text"
         class="editable-input"
         style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
@@ -925,7 +1052,7 @@
       <div class="tem-inlai-toolbar">
         <button type="button" class="popup-action-btn" (click)="triggerPrintedCodesImport()" title="Import file (cột A) danh sách mã đã in">+</button>
         <input
-          id="tem-inlai-import-file-asm2"
+          id="tem-inlai-import-file-asm1"
           type="file"
           accept=".xlsx,.xls,.csv"
           style="display:none"
@@ -984,17 +1111,18 @@
 
     <div class="modal-body">
       <p class="tem-xuat-hint">
-        Scan <strong>LSX</strong>. Tồn theo mã trong PXK (Firebase). Không in mã <strong>R*</strong> và nhóm <strong>Rule Bag OFF</strong>. So Mã + PO, Standard Packing, FIFO IMD.
-        Sau tem xuất, nếu dòng tồn (IMD) của mã trong PXK <strong>còn dư</strong> sau khi trừ lượng PXK → thêm <strong>tem TỒN</strong> (nhãn &quot;TỒN&quot;, cùng format QR như in trên dòng).
+        Scan <strong>LSX</strong>. Đọc PXK rồi <strong>tải tồn từ Firebase theo từng mã trong PXK</strong> (không dùng ô tìm kiếm trên bảng).
+        So Mã + PO, tách tem theo <strong>Standard Packing</strong> (FIFO theo IMD). <strong>Không in</strong> mã <strong>R*</strong> và mã nhóm <strong>Rule Bag OFF</strong>.
+        Sau tem xuất, nếu từng dòng tồn (IMD) của mã trong PXK <strong>còn dư</strong> sau khi trừ lượng PXK → thêm <strong>tem TỒN</strong> (nhãn &quot;TỒN&quot; trên tem, cùng format QR như in trên dòng).
       </p>
       <input
-        id="tem-xuat-lsx-input-asm2"
+        id="tem-xuat-lsx-input-asm1"
         type="text"
         class="editable-input"
         style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:13px;"
         [(ngModel)]="temXuatLsxInput"
         (keyup.enter)="onTemXuatLsxEnter()"
-        placeholder="Scan LSX (vd: LHLSX0326/0012)..."
+        placeholder="Scan LSX (vd: KZLSX0326/0089)..."
         autocomplete="off"
         [disabled]="temXuatBusy"
       />
@@ -1173,12 +1301,12 @@
 <div class="modal-overlay" *ngIf="showMorePopup" (click)="closeMorePopup()">
   <div class="modal-content more-popup-content" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h3>⚙️ More Options — ASM2</h3>
+      <h3>⚙️ More Options — {{ selectedFactory }}</h3>
       <button type="button" class="close-btn" (click)="closeMorePopup()">
         <i class="material-icons">close</i>
       </button>
     </div>
-    
+
     <div class="modal-body more-popup-body">
       <div class="popup-section">
         <h4 class="popup-section-title">🖨️ In tem</h4>
@@ -1190,100 +1318,95 @@
         </div>
       </div>
 
-      <!-- Export/Import Section -->
       <div class="popup-section">
         <h4 class="popup-section-title">📥 Export/Import</h4>
         <div class="popup-actions">
-          <button class="popup-action-btn" (click)="exportToExcel(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="exportToExcel(); closeMorePopup()">
             <i class="material-icons">file_download</i>
             <span>Export to Excel</span>
           </button>
-          <button class="popup-action-btn" (click)="downloadStockTemplate(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="downloadStockTemplate(); closeMorePopup()">
             <i class="material-icons">description</i>
             <span>Download Inventory Template</span>
           </button>
-          <button class="popup-action-btn" (click)="importCurrentStock(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="importCurrentStock(); closeMorePopup()">
             <i class="material-icons">file_upload</i>
             <span>Import Inventory (Tồn đầu)</span>
           </button>
-          <button class="popup-action-btn" (click)="goToDanhMucNvlTp(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="goToDanhMucNvlTp(); closeMorePopup()">
             <i class="material-icons">manage_search</i>
             <span>Danh mục NVL (Mã, Tên, ĐVT, KH, Standard Packing)</span>
           </button>
         </div>
       </div>
-      
-      <!-- Reports Section -->
+
       <div class="popup-section">
         <h4 class="popup-section-title">📊 Reports</h4>
         <div class="popup-actions">
-          <button class="popup-action-btn" (click)="downloadFIFOReportASM2(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="downloadFIFOReport(); closeMorePopup()">
             <i class="material-icons">assessment</i>
-            <span>Download FIFO Report ASM2</span>
+            <span>Download FIFO Report {{ selectedFactory }}</span>
           </button>
         </div>
       </div>
-      
-      <!-- Inventory Actions Section -->
+
       <div class="popup-section">
         <h4 class="popup-section-title">📦 Inventory Actions</h4>
         <div class="popup-actions">
-          <button class="popup-action-btn" type="button" (click)="toggleQtyBagRule()">
+          <button type="button" class="popup-action-btn" (click)="toggleQtyBagRule()">
             <i class="material-icons">{{ qtyBagRuleEnabled ? 'toggle_on' : 'toggle_off' }}</i>
             <span>QTY BAG rule: {{ qtyBagRuleEnabled ? 'ON' : 'OFF' }}</span>
           </button>
-          <button class="popup-action-btn" type="button" (click)="openRuleBagPopup()">
+          <button type="button" class="popup-action-btn" (click)="openRuleBagPopup()">
             <i class="material-icons">tune</i>
             <span>Rule Bag</span>
           </button>
-          <button class="popup-action-btn" (click)="loadInventoryFromFirebase(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="loadInventoryFromFirebase(); closeMorePopup()">
             <i class="material-icons">cloud_download</i>
             <span>Load toàn bộ inventory</span>
           </button>
           <button
-            class="popup-action-btn"
             type="button"
+            class="popup-action-btn"
             [disabled]="isSnapshottingBagHistory"
             (click)="openSnapshotCodesModal()"
           >
             <i class="material-icons">history</i>
             <span>{{ isSnapshottingBagHistory ? 'Đang ghi snapshot TỒN…' : 'Ghi snapshot TỒN → Lịch sử bịch' }}</span>
           </button>
-          <button class="popup-action-btn warning-action" (click)="consolidateAllInventory(); closeMorePopup()">
+          <button type="button" class="popup-action-btn warning-action" (click)="consolidateAllInventory(); closeMorePopup()">
             <i class="material-icons">merge_type</i>
             <span>Gộp dòng trùng lặp</span>
           </button>
-          <button class="popup-action-btn delete-action" (click)="resetAllStock(); closeMorePopup()">
+          <button type="button" class="popup-action-btn delete-action" (click)="resetAllStock(); closeMorePopup()">
             <i class="material-icons">delete_forever</i>
-            <span>Reset Stock (Xóa toàn bộ tồn kho)</span>
+            <span>Reset Stock {{ selectedFactory }} (Xóa toàn bộ tồn kho)</span>
           </button>
         </div>
       </div>
-      
-      <!-- Debug Section -->
+
       <div class="popup-section">
         <h4 class="popup-section-title">🐛 Debug Tools</h4>
         <div class="popup-actions">
-          <button class="popup-action-btn" (click)="debugInventoryMatching(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="debugInventoryMatching(); closeMorePopup()">
             <i class="material-icons">bug_report</i>
             <span>Debug Inventory Matching</span>
           </button>
-          <button class="popup-action-btn" (click)="testFIFOLogic('TEST001', 'PO001'); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="testFIFOLogic('TEST001', 'PO001'); closeMorePopup()">
             <i class="material-icons">bug_report</i>
             <span>Test FIFO Logic</span>
           </button>
-          <button class="popup-action-btn" (click)="testOutboundData(); closeMorePopup()">
+          <button type="button" class="popup-action-btn" (click)="testOutboundData(); closeMorePopup()">
             <i class="material-icons">bug_report</i>
             <span>Test Outbound Data</span>
           </button>
         </div>
       </div>
-      
-      <!-- Fix Section -->
+
       <div class="popup-section">
         <h4 class="popup-section-title">🔧 Fix Tools</h4>
         <div class="popup-actions">
-          <button class="popup-action-btn delete-action" (click)="fixProblematicBatchNumbers(); closeMorePopup()">
+          <button type="button" class="popup-action-btn delete-action" (click)="fixProblematicBatchNumbers(); closeMorePopup()">
             <i class="material-icons">build</i>
             <span>Sửa batchNumber lỗi</span>
           </button>
@@ -1516,7 +1639,7 @@
 <app-storage-unit-picker
   [visible]="showStorageUnitPicker"
   [materialCode]="storageUnitPickerMaterialCode"
-  [factory]="FACTORY"
+  [factory]="selectedFactory"
   [saving]="isSavingStorageUnit"
   (closed)="closeStorageUnitPicker()"
   (confirmed)="onStorageUnitConfirmed($event)">

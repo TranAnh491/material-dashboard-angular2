@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
-import { Subject } from 'rxjs';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
@@ -13,6 +13,8 @@ import { RmBagHistoryService, InboundBagScanSummary } from '../../services/rm-ba
 import { InboundTbhdCheckService, INBOUND_TBHD_CHECK_FROM_DATE } from '../../services/inbound-tbhd-check.service';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
+import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 
 type TbhdCheckBatchRow = {
   batchNumber: string;
@@ -108,8 +110,8 @@ export class InboundComponent implements OnInit, OnDestroy {
   filteredMaterials: InboundMaterial[] = [];
   
   // Factory switcher (RM: chỉ ASM1/ASM2, không có TOTAL/ASM3)
-  selectedFactory: string = 'ASM1';
-  readonly factoryOptions = ['ASM1', 'ASM2'];
+  selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
+  readonly factoryOptions: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
   availableFactories: string[] = ['ASM1', 'ASM2'];
   
   // Time range filter
@@ -250,7 +252,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private router: Router,
     private route: ActivatedRoute,
-    private location: Location
+    private location: Location,
+    private authService: FirebaseAuthService
   ) {}
 
   goToMenu(): void {
@@ -261,8 +264,12 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.location.back();
   }
 
+  private isValidFactory(f: string | null | undefined): f is 'ASM1' | 'ASM2' {
+    return f === 'ASM1' || f === 'ASM2';
+  }
+
   /** Đổi nhà máy đang xem (ASM1 ⇄ ASM2) — đồng bộ URL query param rồi tải lại data. */
-  setFactory(factory: string): void {
+  setFactory(factory: 'ASM1' | 'ASM2'): void {
     if (this.selectedFactory === factory) return;
     this.selectedFactory = factory;
     this.router.navigate([], {
@@ -278,12 +285,20 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.loadPermissions();
 
     const factoryParam = this.route.snapshot.queryParamMap.get('factory');
-    if (factoryParam && this.factoryOptions.includes(factoryParam)) {
+    if (this.isValidFactory(factoryParam)) {
       this.selectedFactory = factoryParam;
+    } else {
+      // Không có ?factory= trên URL — mặc định theo nhân viên đang đăng nhập
+      // (1 số NV ưu tiên ASM2, còn lại mặc định ASM1).
+      firstValueFrom(this.authService.currentUser)
+        .then(user => {
+          this.selectedFactory = getDefaultRmFactory(user?.employeeId);
+        })
+        .catch(() => {});
     }
     this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
       const f = params.get('factory');
-      if (f && this.factoryOptions.includes(f) && f !== this.selectedFactory) {
+      if (this.isValidFactory(f) && f !== this.selectedFactory) {
         this.selectedFactory = f;
         this.loadMaterials();
       }

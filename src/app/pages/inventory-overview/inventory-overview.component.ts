@@ -1,10 +1,13 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Router, ActivatedRoute } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { Subject, Subscription } from 'rxjs';
+import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
+import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 
 
 interface InventoryOverviewItem {
@@ -13,7 +16,7 @@ interface InventoryOverviewItem {
   materialName?: string; // Thêm materialName
   poNumber: string;
   quantity: number;
-  openingStock: number; // Thêm openingStock để giống RM1 Inventory
+  openingStock: number; // Thêm openingStock để giống Materials Inventory
   exported: number;
   xt: number;
   location: string;
@@ -37,21 +40,26 @@ interface LinkQFileInfo {
   processedItems: number;
   skippedItems: number;
   userId?: string;
+  factory?: string; // 🔧 ADD: Factory để phân biệt ASM1/ASM2
   // Add actual LinkQ data storage
   linkQData?: { [materialCode: string]: number };
 }
 
 @Component({
-  selector: 'app-inventory-overview-asm1',
-  templateUrl: './inventory-overview-asm1.component.html',
-  styleUrls: ['./inventory-overview-asm1.component.scss']
+  selector: 'app-inventory-overview',
+  templateUrl: './inventory-overview.component.html',
+  styleUrls: ['./inventory-overview.component.scss']
 })
-export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
+export class InventoryOverviewComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   /** 🔧 FIX: hủy listener cũ trước khi tạo mới — tránh chồng listener khi loadInventoryOverview()
    *  bị gọi lại (permission check, timeout fallback, refresh thủ công). */
   private inventorySub?: Subscription;
-  
+
+  // Factory switcher (RM chỉ có ASM1/ASM2, không có TOTAL)
+  selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
+  readonly factoryOptions: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
+
   // Data
   inventoryItems: InventoryOverviewItem[] = [];
   filteredItems: InventoryOverviewItem[] = [];
@@ -98,11 +106,39 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     private factoryAccessService: FactoryAccessService,
     private tabPermissionService: TabPermissionService,
     private cdr: ChangeDetectorRef,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private router: Router,
+    private route: ActivatedRoute,
+    private authService: FirebaseAuthService
   ) {}
 
+  private isValidFactory(f: string | null | undefined): f is 'ASM1' | 'ASM2' {
+    return f === 'ASM1' || f === 'ASM2';
+  }
+
   ngOnInit(): void {
-    console.log('🚀 InventoryOverviewASM1Component initialized');
+    console.log('🚀 InventoryOverviewComponent initialized');
+
+    const factoryParam = this.route.snapshot.queryParamMap.get('factory');
+    if (this.isValidFactory(factoryParam)) {
+      this.selectedFactory = factoryParam;
+    } else {
+      // Không có ?factory= trên URL — mặc định theo nhân viên đang đăng nhập
+      // (1 số NV ưu tiên ASM2, còn lại mặc định ASM1).
+      firstValueFrom(this.authService.currentUser)
+        .then(user => {
+          this.selectedFactory = getDefaultRmFactory(user?.employeeId);
+        })
+        .catch(() => {});
+    }
+    this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      const f = params.get('factory');
+      if (this.isValidFactory(f) && f !== this.selectedFactory) {
+        this.selectedFactory = f;
+        this.onFactoryChanged();
+      }
+    });
+
     this.checkPermissions();
   }
 
@@ -111,17 +147,45 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  /** Đổi nhà máy đang xem (ASM1 ⇄ ASM2) — đồng bộ URL query param rồi tải lại data. */
+  setFactory(factory: 'ASM1' | 'ASM2'): void {
+    if (this.selectedFactory === factory) return;
+    this.selectedFactory = factory;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { factory },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.onFactoryChanged();
+  }
+
+  /** Reset state gắn với factory cũ (LinkQ, lịch sử file) và tải lại data nếu đã từng load. */
+  private onFactoryChanged(): void {
+    this.clearLinkQData();
+    this.linkQFiles = [];
+    this.linkQFileHistoryLoaded = false;
+    this.isMoreActionsDropdownOpen = false;
+    this.isGroupByDropdownOpen = false;
+    if (this.isInventoryLoaded) {
+      this.loadInventoryOverview();
+    } else {
+      this.inventoryItems = [];
+      this.filteredItems = [];
+    }
+  }
+
   // Check user permissions
   private async checkPermissions(): Promise<void> {
     try {
-      console.log('🔐 Checking permissions for inventory-overview-asm1...');
-      
+      console.log('🔐 Checking permissions for inventory-overview...');
+
       // Use canAccessTab method instead of checkTabPermission
-      this.tabPermissionService.canAccessTab('inventory-overview-asm1').subscribe(
+      this.tabPermissionService.canAccessTab('inventory-overview').subscribe(
         (hasAccess: boolean) => {
           this.hasAccess = hasAccess;
-          console.log(`🔐 Tab permission result for 'inventory-overview-asm1': ${this.hasAccess}`);
-          
+          console.log(`🔐 Tab permission result for 'inventory-overview': ${this.hasAccess}`);
+
           if (!this.hasAccess) {
             console.warn('⚠️ User does not have access to this tab');
           }
@@ -138,8 +202,8 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   }
 
   // Load inventory overview data
-  // QUAN TRỌNG: Lấy dữ liệu từ TẤT CẢ các collection để đảm bảo RM1 Inventory Overview 
-  // hiển thị chính xác những gì có trong RM1 Inventory (không dư, không thiếu)
+  // QUAN TRỌNG: Lấy dữ liệu từ TẤT CẢ các collection để đảm bảo Inventory Overview
+  // hiển thị chính xác những gì có trong Inventory (không dư, không thiếu)
   private async loadInventoryOverview(): Promise<void> {
     // Remove permission check for debugging
     // if (!this.hasAccess) return;
@@ -149,17 +213,17 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
     
     try {
       // 🔧 FIX: .get() chỉ khi bấm Refresh — không auto-load khi mở tab.
-      console.log('🔍 Lấy dữ liệu từ collection inventory-materials với filter factory == ASM1...');
+      console.log(`🔍 Lấy dữ liệu từ collection inventory-materials với filter factory == ${this.selectedFactory}...`);
       this.inventorySub?.unsubscribe();
       this.inventorySub = undefined;
 
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
 
       const docs = snapshot?.docs || [];
-      this.readTracker.track('inventory-overview-asm1', 'inventory-materials', docs.length);
-      console.log(`✅ Loaded ${docs.length} ASM1 documents (one-time read)`);
+      this.readTracker.track('inventory-overview', 'inventory-materials', docs.length);
+      console.log(`✅ Loaded ${docs.length} ${this.selectedFactory} documents (one-time read)`);
 
       if (docs.length === 0) {
         this.inventoryItems = [];
@@ -253,7 +317,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         const exported = data.exported || 0;
         const xt = data.xt || 0;
         
-        // Tính toán current stock giống hệt như RM1 Inventory
+        // Tính toán current stock giống hệt như Materials Inventory
         const currentStock = openingStock + quantity - exported - xt;
         
         // Debug cho mã B001627
@@ -282,7 +346,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           type: data.type || '',
           currentStock: currentStock,
           isNegative: currentStock < 0,
-          factory: data.factory || 'ASM1', // Thêm factory
+          factory: data.factory || this.selectedFactory, // Thêm factory
           importDate: data.importDate || '', // Thêm importDate
           batchNumber: data.batchNumber || '', // Thêm batchNumber
           // 🔧 SỬA LỖI: Xử lý LinkQ data trong real-time update
@@ -338,7 +402,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       this.inventoryItems = items;
       this.filteredItems = [...items];
       
-      console.log(`✅ Real-time update: ${items.length} ASM1 inventory items từ collection inventory-materials`);
+      console.log(`✅ Real-time update: ${items.length} ${this.selectedFactory} inventory items từ collection inventory-materials`);
       console.log(`📊 Negative stock items: ${items.filter(item => item.isNegative).length}`);
       
       // Log negative stock items specifically
@@ -536,7 +600,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           type: item.type,
           currentStock: item.currentStock,
           isNegative: item.currentStock < 0,
-          factory: item.factory || 'ASM1', // Thêm factory
+          factory: item.factory || this.selectedFactory, // Thêm factory
           importDate: item.importDate || '', // Thêm importDate
           batchNumber: item.batchNumber || '', // Thêm batchNumber
           // Copy LinkQ data
@@ -815,7 +879,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       ws['!cols'] = colWidths;
 
       // Add worksheet to workbook
-      const sheetName = this.groupByType === 'po' ? 'RM1_Inventory_PO' : 'RM1_Inventory_Material';
+      const sheetName = this.groupByType === 'po' ? `${this.selectedFactory}_Inventory_PO` : `${this.selectedFactory}_Inventory_Material`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
       // Generate filename
@@ -856,7 +920,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           'Tồn kho': item.currentStock,
           'Vị trí': item.location || '-',
           'Loại hình': item.type || '',
-          'Factory': item.factory || 'ASM1',
+          'Factory': item.factory || this.selectedFactory,
           'Ngày nhập': item.importDate ? (typeof item.importDate === 'string' ? item.importDate : (item.importDate instanceof Date ? item.importDate.toLocaleDateString('vi-VN') : String(item.importDate))) : '-',
           'Batch': item.batchNumber || '',
           'Trạng thái': item.isNegative ? 'Tồn kho âm' : 'Bình thường'
@@ -896,12 +960,12 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
       ws['!cols'] = colWidths;
 
       // Add worksheet to workbook
-      const sheetName = 'RM1_Inventory_Full_Report';
+      const sheetName = `${this.selectedFactory}_Inventory_Full_Report`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
       // Generate filename
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const filename = `RM1_Inventory_Full_Report_${timestamp}.xlsx`;
+      const filename = `${this.selectedFactory}_Inventory_Full_Report_${timestamp}.xlsx`;
 
       // Save file
       XLSX.writeFile(wb, filename);
@@ -1589,8 +1653,18 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Load LinkQ file history from Firebase
   private async loadLinkQFileHistory(): Promise<void> {
     try {
-      console.log('📥 Loading LinkQ file history...');
-      const snapshot = await this.firestore.collection('linkQFiles').ref.orderBy('uploadDate', 'desc').limit(10).get();
+      console.log(`📥 Loading LinkQ file history for ${this.selectedFactory}...`);
+      const snapshot = await this.firestore.collection('linkQFiles', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+           .orderBy('uploadDate', 'desc')
+           .limit(10)
+      ).get().toPromise();
+      
+      if (!snapshot) {
+        this.linkQFiles = [];
+        return;
+      }
+      
       this.linkQFiles = snapshot.docs.map(doc => {
         const data = doc.data() as any;
         return {
@@ -1601,6 +1675,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
           processedItems: data.processedItems || 0,
           skippedItems: data.skippedItems || 0,
           userId: data.userId || '',
+          factory: data.factory || this.selectedFactory,
           // Add actual LinkQ data storage
           linkQData: data.linkQData || {}
         } as LinkQFileInfo;
@@ -1658,7 +1733,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Save LinkQ file info to Firebase
   private async saveLinkQFileToFirebase(fileName: string, totalItems: number, processedItems: number, skippedItems: number): Promise<void> {
     try {
-      console.log('📤 Saving LinkQ file info to Firebase...');
+      console.log(`📤 Saving LinkQ file info to Firebase for ${this.selectedFactory}...`);
       const newDocRef = await this.firestore.collection('linkQFiles').add({
         fileName: fileName,
         uploadDate: new Date(),
@@ -1666,6 +1741,7 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
         processedItems: processedItems,
         skippedItems: skippedItems,
         userId: 'current_user_id', // Replace with actual user ID
+        factory: this.selectedFactory, // 🔧 ADD: Phân biệt factory
         // Add actual LinkQ data storage
         linkQData: Object.fromEntries(this.linkQData)
       });
@@ -1735,10 +1811,12 @@ export class InventoryOverviewASM1Component implements OnInit, OnDestroy {
   // Delete old LinkQ files from Firebase
   private async deleteOldLinkQFiles(): Promise<void> {
     try {
-      console.log('🗑️ Deleting old LinkQ files...');
-      const snapshot = await this.firestore.collection('linkQFiles').ref.get();
-      
-      if (snapshot.size > 0) {
+      console.log(`🗑️ Deleting old LinkQ files for ${this.selectedFactory}...`);
+      const snapshot = await this.firestore.collection('linkQFiles', ref =>
+        ref.where('factory', '==', this.selectedFactory)
+      ).get().toPromise();
+
+      if (snapshot && snapshot.size > 0) {
         const deletePromises = snapshot.docs.map(doc => doc.ref.delete());
         await Promise.all(deletePromises);
         console.log(`🗑️ Deleted ${snapshot.size} old LinkQ files`);

@@ -1,9 +1,11 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Router, ActivatedRoute } from '@angular/router';
+import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import * as XLSX from 'xlsx';
+import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 import { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
@@ -17,6 +19,29 @@ import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
 
+
+/** Một dòng scan trong phiên xuất BS */
+export interface BsScanLine {
+  materialCode: string;
+  po: string;
+  imd: string;
+  qty: number;
+  rawQr: string;
+}
+
+/** Một dòng vật tư cần xuất Bổ Sung, đọc từ pxk-bs-data */
+export interface BsPendingItem {
+  docId: string;
+  lsx: string;
+  factory: string;
+  lineIndex: number;
+  materialCode: string;
+  po: string;
+  quantity: number;
+  unit: string;
+  tenVatTu?: string;
+  done?: boolean;
+}
 
 export interface OutboundMaterial {
   id?: string;
@@ -33,9 +58,9 @@ export interface OutboundMaterial {
   exportedBy: string;
   batch?: string;
       batchNumber?: string; // Batch number từ QR code
-  /** Bịch quét (i/tổng từ QR phần 4) */
+  /** Bịch quét (i/tổng từ QR phần 4, VD: 3/10) */
   bagBatch?: string;
-  /** Cột Bag: số bịch + tách VD `5(T1)` */
+  /** Cột Bag: số bịch hiện tại, có hậu tố tách VD `5(T1)` */
   bagNumberDisplay?: string;
   scanMethod?: string;
   notes?: string;
@@ -44,19 +69,23 @@ export interface OutboundMaterial {
   productionOrder?: string; // Lệnh sản xuất
   employeeId?: string; // Mã nhân viên
   importDate?: string; // Ngày nhập từ QR code để so sánh chính xác với inventory
-  /** UI-only: highlight bag trùng khi search theo mã hàng */
+  /** UI-only: đánh dấu bag bị trùng giữa nhiều LSX khi search theo mã hàng */
   bagDuplicate?: boolean;
+  /** Dòng xem nhanh từ pending scan (mobile, phiên batch), không có bản ghi Firestore */
+  pendingPreview?: boolean;
+
 }
 
 @Component({
-  selector: 'app-outbound-asm2',
-  templateUrl: './outbound-asm2.component.html',
-  styleUrls: ['./outbound-asm2.component.scss', './lsx-filter-styles.scss']
+  selector: 'app-outbound',
+  templateUrl: './outbound.component.html',
+  styleUrls: ['./outbound.component.scss', './lsx-filter-styles.scss', './outbound-mobile.scss']
 })
-export class OutboundASM2Component implements OnInit, OnDestroy {
+export class OutboundComponent implements OnInit, OnDestroy {
   materials: OutboundMaterial[] = [];
   filteredMaterials: OutboundMaterial[] = [];
-  selectedFactory: string = 'ASM2';
+  selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
+  readonly factoryOptions: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
   currentPage: number = 1;
   itemsPerPage: number = 50;
   totalPages: number = 1;
@@ -112,17 +141,16 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Production Order Filter properties
   selectedProductionOrder: string = '';
   searchProductionOrder: string = '';
-  /** Search theo mã hàng / QR — đồng bộ Outbound ASM1 */
+  /** Search theo mã hàng / QR (Material|PO|...|IMD...): hiển thị lịch sử xuất trong khoảng ngày; highlight bag trùng (Control Batch). */
   materialSearchMode: 'lsx' | 'material' = 'lsx';
-  materialSearchParsed: { materialCode: string; poNumber?: string; imdKey?: string; bagNumberDisplay?: string } | null =
-    null;
+  materialSearchParsed: { materialCode: string; poNumber?: string; imdKey?: string; bagNumberDisplay?: string } | null = null;
   materialSearchLoading = false;
   materialSearchError = '';
   availableProductionOrders: string[] = [];
   
   // Professional Scanning Modal properties
   showScanningSetupModal: boolean = false;
-  scanningSetupStep: 'lsx' | 'employee' = 'lsx';
+  scanningSetupStep: 'factory' | 'lsx' | 'employee' = 'factory';
 
   private isValidLsxCode(lsx: string): boolean {
     const s = (lsx ?? '').trim().toUpperCase();
@@ -135,15 +163,44 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Dropdown management
   isDropdownOpen: boolean = false;
 
+  // QC rule (IQC Status chặn xuất) — More → QC rule
   showQcRuleModal = false;
   qcRuleModalEnabled = false;
   qcRuleModalText = '';
   qcRuleSaving = false;
   private qcRuleEnabledActive = false;
   private qcRuleBlockedList: string[] = [];
+  /** Ẩn nút Home nổi / toggler navbar toàn cục khi đang ở Outbound mobile (styles.css) */
+  private readonly outboundMobileBodyClass = 'ob-outbound-mobile-layout';
   
   // REMOVED: inventoryMaterials - Không cần tính stock để scan nhanh
   
+  // ── Xuất BS (Bổ Sung) ────────────────────────────────────────────────────
+  exportMode: 'NL' | 'BS' = 'NL';
+  bsItems: BsPendingItem[] = [];
+  bsLoading = false;
+  bsError = '';
+
+  // Scan dialog
+  bsScanOpen = false;
+  bsScanItem: BsPendingItem | null = null;
+  bsScanInput = '';
+  bsScanLines: BsScanLine[] = [];
+  bsScanError = '';
+  bsSaving = false;
+
+  get bsScanTotal(): number {
+    return this.bsScanLines.reduce((s, l) => s + l.qty, 0);
+  }
+
+  /** Mobile WMS shell — expandable cards + bottom nav (mockup-aligned) */
+  showMobileMoreSheet = false;
+  showMobileFilterSheet = false;
+  /** Sheet lịch sử scan tem trong phiên (theo LSX đang batch) */
+  showMobileLsxHistorySheet = false;
+  mobileMaterialExpanded: { [key: string]: boolean } = {};
+  mobileBottomTab: 'home' | 'outbound' | 'history' | 'location' | 'bs' = 'outbound';
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -153,19 +210,23 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private rmBagHistory: RmBagHistoryService,
     private outboundQcRule: OutboundQcRuleService,
+    private router: Router,
+    private route: ActivatedRoute,
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
     private readTracker: ReadTrackerService,
-    private nvlCatalog: NvlCatalogFullService
+    private nvlCatalog: NvlCatalogFullService,
+    private authService: FirebaseAuthService
   ) {}
 
   /** Tập mã được phép quét Tem Thùng để xuất kho — load 1 lần từ cache dùng chung (không thêm read). */
   private allowExportByCartonSet: Set<string> = new Set();
 
+  /** Cập nhật Người soạn WO theo tên zalo_links của NV scan xuất. */
   private syncWorkOrderCreatedByAfterExport(lsx?: string, employeeId?: string): void {
     const po = (lsx || this.batchProductionOrder || '').trim();
     const emp = (employeeId || this.batchEmployeeId || '').trim();
     if (!po || !emp || emp === 'BS') return;
-    void this.woOutboundCreatedBy.syncFromOutboundScan('ASM2', po, emp);
+    void this.woOutboundCreatedBy.syncFromOutboundScan(this.selectedFactory, po, emp);
   }
 
   private syncWorkOrderCreatedByFromPendingScans(): void {
@@ -183,7 +244,28 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   }
   
   ngOnInit(): void {
-    console.log('🏭 Outbound ASM2 component initialized');
+    console.log('🏭 Outbound component initialized');
+
+    const factoryParam = this.route.snapshot.queryParamMap.get('factory');
+    if (this.isValidFactory(factoryParam)) {
+      this.selectedFactory = factoryParam;
+    } else {
+      // Không có ?factory= trên URL — mặc định theo nhân viên đang đăng nhập
+      // (1 số NV ưu tiên ASM2, còn lại mặc định ASM1).
+      firstValueFrom(this.authService.currentUser)
+        .then(user => {
+          this.selectedFactory = getDefaultRmFactory(user?.employeeId);
+        })
+        .catch(() => {});
+    }
+    this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      const f = params.get('factory');
+      if (this.isValidFactory(f) && f !== this.selectedFactory) {
+        this.selectedFactory = f;
+        this.onFactoryChanged();
+      }
+    });
+
     this.detectMobileDevice();
     this.setupDefaultDateRange();
     this.restorePendingFromStorage();
@@ -191,18 +273,56 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     console.log('⏸️ Ready - waiting for LSX search to load data');
     // REMOVED: loadMaterials() - Chỉ load khi user nhập LSX
     // REMOVED: loadInventoryMaterials() - Không cần tính stock để scan nhanh
-    
+
     // Add click outside listener to close dropdown
     document.addEventListener('click', this.onDocumentClick.bind(this));
-    
+
     // Add window resize listener for mobile detection
     window.addEventListener('resize', this.onWindowResize.bind(this));
-    
-    // 🔧 GLOBAL SCANNER LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
+
+    // 🔧 GLOBAL SCANNER LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở hoặc đang scan
     document.addEventListener('keydown', (event) => this.onGlobalKeydown(event));
 
     void this.refreshOutboundQcRuleCache();
     void this.loadAllowExportByCartonSet();
+  }
+
+  /** Đổi nhà máy đang xem (ASM1 ⇄ ASM2) — đồng bộ URL query param rồi tải lại data. */
+  setFactory(factory: 'ASM1' | 'ASM2'): void {
+    if (this.selectedFactory === factory) return;
+    this.selectedFactory = factory;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { factory },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.onFactoryChanged();
+  }
+
+  private isValidFactory(f: string | null | undefined): f is 'ASM1' | 'ASM2' {
+    return f === 'ASM1' || f === 'ASM2';
+  }
+
+  /** Reset state gắn với factory cũ (search, batch scan đang dở, BS list, QC rule cache) khi đổi nhà máy. */
+  private onFactoryChanged(): void {
+    // Đổi nhà máy giữa chừng 1 phiên scan batch dở dang là không an toàn (LSX/NV đã scan thuộc factory cũ)
+    // → reset về trạng thái sạch, không âm thầm mang dữ liệu chưa lưu sang factory khác.
+    if (this.isBatchScanningMode || this.isProductionOrderScanned || this.isEmployeeIdScanned || this.pendingScanData.length > 0) {
+      this.resetScanningData();
+    }
+    this.showScanningSetupModal = false;
+    this.materials = [];
+    this.filteredMaterials = [];
+    this.availableProductionOrders = [];
+    this.selectedProductionOrder = '';
+    this.searchProductionOrder = '';
+    this.materialSearchParsed = null;
+    this.materialSearchError = '';
+    this.bsItems = [];
+    this.bsError = '';
+    this.closeBsScanDialog();
+    void this.refreshOutboundQcRuleCache();
   }
 
   private async loadAllowExportByCartonSet(): Promise<void> {
@@ -215,7 +335,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
 
   private async refreshOutboundQcRuleCache(): Promise<void> {
     try {
-      const doc = await this.outboundQcRule.loadRule('ASM2');
+      const doc = await this.outboundQcRule.loadRule(this.selectedFactory);
       this.qcRuleEnabledActive = doc.enabled === true;
       this.qcRuleBlockedList = this.outboundQcRule.parseBlockedList(doc.blockedStatusesText);
     } catch (e) {
@@ -226,7 +346,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   async openQcRuleModal(): Promise<void> {
     this.closeDropdown();
     try {
-      const doc = await this.outboundQcRule.loadRule('ASM2');
+      const doc = await this.outboundQcRule.loadRule(this.selectedFactory);
       this.qcRuleModalEnabled = doc.enabled === true;
       this.qcRuleModalText = doc.blockedStatusesText || '';
     } catch (e) {
@@ -245,7 +365,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   async saveQcRuleFromModal(): Promise<void> {
     this.qcRuleSaving = true;
     try {
-      await this.outboundQcRule.saveRule('ASM2', {
+      await this.outboundQcRule.saveRule(this.selectedFactory, {
         enabled: this.qcRuleModalEnabled,
         blockedStatusesText: this.qcRuleModalText
       });
@@ -268,11 +388,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.showOnlyToday = this.startDate === todayIso && this.endDate === todayIso;
     this.hidePreviousDayHistory = false;
 
-    console.log('📅 Date range set to current year:', {
-      startDate: this.startDate,
-      endDate: this.endDate,
-      showOnlyToday: this.showOnlyToday
-    });
+    console.log('📅 Date range set to current year:', { startDate: this.startDate, endDate: this.endDate, showOnlyToday: this.showOnlyToday });
   }
   
   onDateRangeChange(): void {
@@ -305,6 +421,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.startDate = today.toISOString().split('T')[0];
     this.endDate = today.toISOString().split('T')[0];
     this.hidePreviousDayHistory = true;
+    // “Hôm nay” = xem tất cả mã phát sinh hôm nay, không phụ thuộc LSX đang chọn
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
     this.materialSearchMode = 'lsx';
@@ -357,7 +474,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     const day = d.toISOString().split('T')[0];
     return day >= startIso && day <= endIso;
   }
-
+  
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
@@ -372,6 +489,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     
     // Remove window resize listener
     window.removeEventListener('resize', this.onWindowResize.bind(this));
+
+    document.body.classList.remove(this.outboundMobileBodyClass);
   }
 
   // 📱 Mobile Detection
@@ -412,6 +531,19 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       console.log(`📱 Device: ${this.isMobile ? 'Mobile' : 'Desktop'} - Chỉ dùng Scanner`);
     } else {
       console.log(`📱 Device detection: ${this.isMobile ? 'Mobile' : 'Desktop'}, keeping: ${this.selectedScanMethod}`);
+    }
+
+    this.syncOutboundMobileBodyClass();
+  }
+
+  private syncOutboundMobileBodyClass(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (this.isMobile) {
+      document.body.classList.add(this.outboundMobileBodyClass);
+    } else {
+      document.body.classList.remove(this.outboundMobileBodyClass);
     }
   }
 
@@ -486,8 +618,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
 
       let match = findMatch(toWoList(snapExact));
 
-      // Bước 2: Nếu không tìm thấy, thử query theo năm/tháng trích từ mã LSX
+      // Bước 2: Nếu không tìm thấy (khác hoa/thường hoặc format), thử query theo năm/tháng từ LSX
       if (!match) {
+        // Lấy năm và tháng từ mã LSX (vd: KZLSX0326/... → tháng 3, năm 2026)
         const dateMatch = lsxNorm.match(/(\d{2})(\d{2})/);
         if (dateMatch) {
           const month = parseInt(dateMatch[1], 10);
@@ -503,12 +636,24 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         }
       }
 
-      // Bước 3: Fallback - query toàn bộ factory (không limit)
+      // Bước 3: Fallback - query factory không giới hạn (tốn hơn nhưng chắc chắn)
       if (!match) {
         const snapAll = await this.firestore.collection('work-orders', ref =>
           ref.where('factory', '==', this.selectedFactory)
         ).get().toPromise();
         match = findMatch(toWoList(snapAll));
+      }
+
+      // Bước 4: Fallback toàn bộ - bỏ filter factory (để tìm được LSX thuộc factory khác như SAMPLE1)
+      if (!match) {
+        const snapNoFactory = await this.firestore.collection('work-orders', ref =>
+          ref.where('productionOrder', '==', lsxTrim).limit(10)
+        ).get().toPromise();
+        match = findMatch(toWoList(snapNoFactory));
+      }
+      if (!match) {
+        const snapGlobal = await this.firestore.collection('work-orders').get().toPromise();
+        match = findMatch(toWoList(snapGlobal));
       }
 
       if (!match) {
@@ -534,10 +679,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       alert('⚠️ Vui lòng nhập lệnh sản xuất!');
       return;
     }
-
+    
     const searchTerm = this.searchProductionOrder.trim().toUpperCase();
     console.log(`🔍 Searching for Production Order: ${searchTerm}`);
 
+    // Nếu không phải LSX -> coi như search mã hàng/QR và hiển thị thẳng xuống bảng
     if (!this.isValidLsxCode(searchTerm)) {
       await this.searchByMaterialInput(this.searchProductionOrder.trim());
       return;
@@ -546,34 +692,33 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.materialSearchMode = 'lsx';
     this.materialSearchParsed = null;
     this.materialSearchError = '';
-
-    const foundLSX = this.availableProductionOrders.find(
-      lsx => lsx.toUpperCase() === searchTerm || lsx.toUpperCase().includes(searchTerm)
+    
+    // 🔧 TÌM KIẾM KHÔNG PHÂN BIỆT CHỮ HOA/THƯỜNG
+    // Tìm trong availableProductionOrders để khớp chính xác
+    const foundLSX = this.availableProductionOrders.find(lsx => 
+      lsx.toUpperCase() === searchTerm || lsx.toUpperCase().includes(searchTerm)
     );
-
+    
     console.log(`📋 Available LSX list (${this.availableProductionOrders.length}):`, this.availableProductionOrders);
-
+    
     if (foundLSX) {
-      this.selectedProductionOrder = foundLSX;
+      this.selectedProductionOrder = foundLSX; // Dùng LSX gốc từ DB
       console.log(`✅ Found matching LSX: ${foundLSX}`);
     } else {
+      // Không tìm thấy - vẫn thử search để xem có dữ liệu không
       this.selectedProductionOrder = this.searchProductionOrder.trim();
       console.log(`⚠️ No exact match in available list. Searching with: ${this.selectedProductionOrder}`);
       console.log(`💡 Tip: Available LSX in DB:`, this.availableProductionOrders.slice(0, 5));
     }
-
-    this.loadMaterials();
+    
+    this.loadMaterials(); // Load data for this LSX (không kiểm tra trạng thái khi search)
   }
 
-  private parseMaterialSearchInput(raw: string): {
-    materialCode: string;
-    poNumber?: string;
-    imdKey?: string;
-    bagNumberDisplay?: string;
-  } | null {
+  private parseMaterialSearchInput(raw: string): { materialCode: string; poNumber?: string; imdKey?: string; bagNumberDisplay?: string } | null {
     const t = (raw || '').trim();
     if (!t) return null;
 
+    // Format chuẩn QR: Material|PO|Qty|IMD (IMD có thể kèm bag)
     const clean = t.replace(/\s*\|\s*/g, '|');
     const parts = clean.split('|').map(p => p.trim()).filter(Boolean);
     if (parts.length >= 1 && /^[A-Z]\d{6,}$/i.test(parts[0])) {
@@ -586,6 +731,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       return { materialCode, poNumber, imdKey, bagNumberDisplay };
     }
 
+    // Nhập trực tiếp mã hàng (B + 6 số...)
     const m = t.match(/[A-Z]\d{6,}/);
     if (m) {
       return { materialCode: m[0].toUpperCase() };
@@ -611,10 +757,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     try {
       const start = this.startDate;
       const end = this.endDate;
-      const factory = this.selectedFactory;
       const snap = await this.firestore
         .collection('outbound-materials', ref => {
-          let q: any = ref.where('factory', '==', factory).where('materialCode', '==', parsed.materialCode).limit(10000);
+          let q: any = ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', parsed.materialCode).limit(10000);
           if (parsed.poNumber) {
             q = q.where('poNumber', '==', parsed.poNumber);
           }
@@ -625,6 +770,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
 
       const rows: OutboundMaterial[] = (snap?.docs || []).map((d: any) => {
         const data = d.data();
+        // giả lập cấu trúc snapshotChanges() để dùng lại mapOutboundDocToMaterial
         return this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => data } } });
       });
 
@@ -650,7 +796,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         }).trim();
 
       const groupKeyOf = (it: OutboundMaterial): string => {
-        const fac = String(it.factory || factory).trim();
+        const fac = String(it.factory || this.selectedFactory).trim();
         const mc = String(it.materialCode || '').trim().toUpperCase();
         const po = String(it.poNumber || '').trim();
         const imd = String(it.importDate || '').trim();
@@ -700,7 +846,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.materialSearchError = '';
     this.loadMaterials();
   }
-
+  
+  // Clear Production Order filter (hide all data)
   clearProductionOrderFilter(): void {
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
@@ -708,16 +855,379 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.materialSearchParsed = null;
     this.materialSearchError = '';
     console.log('🔄 Clearing Production Order filter - hiding all data');
-    this.loadMaterials();
+    this.loadMaterials(); // Reload to hide all
   }
-
+  
+  // Display only first 7 characters of employee ID
   getDisplayEmployeeId(employeeId: string): string {
     if (!employeeId) return 'N/A';
     return employeeId.length > 7 ? employeeId.substring(0, 7) : employeeId;
   }
 
-  trackByIndex(index: number, _: unknown): number {
-    return index;
+  trackByIndex(index: number, _: any): number { return index; }
+
+  // ── Mobile WMS UI (layout only; logic unchanged) ─────────────────────────
+  mobileMaterialKey(m: OutboundMaterial): string {
+    const t = m.createdAt instanceof Date ? m.createdAt.getTime() : 0;
+    return m.id || `${m.materialCode}|${m.poNumber}|${t}`;
+  }
+
+  toggleMobileMaterialExpand(m: OutboundMaterial): void {
+    const k = this.mobileMaterialKey(m);
+    this.mobileMaterialExpanded[k] = !this.mobileMaterialExpanded[k];
+  }
+
+  isMobileMaterialExpanded(m: OutboundMaterial): boolean {
+    return !!this.mobileMaterialExpanded[this.mobileMaterialKey(m)];
+  }
+
+  getMobileKpiLsx(): string {
+    const raw =
+      (this.batchProductionOrder || '').trim() ||
+      (this.selectedProductionOrder || '').trim() ||
+      (this.searchProductionOrder || '').trim();
+    if (!raw) {
+      return '—';
+    }
+    return raw.length > 18 ? raw.slice(0, 16) + '…' : raw;
+  }
+
+  getMobileKpiScannedQty(): number {
+    if (this.isBatchScanningMode && this.pendingScanData?.length) {
+      return this.pendingScanData.reduce((s, x) => s + (Number(x?.quantity) || 0), 0);
+    }
+    return this.filteredMaterials.reduce((s, m) => s + (Number(m.exportQuantity) || 0), 0);
+  }
+
+  /** Phiên batch: số dòng chờ Done; ngoài batch: số dòng đang hiển thị */
+  getMobileKpiPendingCount(): number {
+    if (this.isBatchScanningMode) {
+      return this.pendingScanData.length;
+    }
+    return this.filteredMaterials.length;
+  }
+
+  focusMobileScanner(): void {
+    this.mobileBottomTab = 'outbound';
+    setTimeout(() => {
+      const el = document.querySelector('.ob-m .scanner-input') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 0);
+  }
+
+  /** Giữ hành vi cũ: cuộn tới danh sách (gọi từ chỗ khác nếu cần). */
+  scrollMobileToMaterials(): void {
+    this.mobileBottomTab = 'outbound';
+    document.getElementById('ob-m-materials')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  mobileNavOutbound(): void {
+    this.mobileBottomTab = 'outbound';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.focusMobileScanner();
+  }
+
+  goMobileMenu(): void {
+    this.mobileBottomTab = 'home';
+    this.router.navigate(['/menu']);
+  }
+
+  // ── Xuất BS methods ─────────────────────────────────────────────────────
+
+  switchExportMode(mode: 'NL' | 'BS'): void {
+    this.exportMode = mode;
+    if (mode === 'BS') {
+      this.mobileBottomTab = 'bs';
+      void this.loadBsItems();
+    } else {
+      this.mobileBottomTab = 'outbound';
+    }
+  }
+
+  async loadBsItems(): Promise<void> {
+    this.bsLoading = true;
+    this.bsError = '';
+    this.bsItems = [];
+    try {
+      const snap = await this.firestore
+        .collection('pxk-bs-data', ref => ref.where('factory', '==', this.selectedFactory))
+        .get().toPromise();
+      if (!snap || snap.empty) { this.bsLoading = false; return; }
+      const items: BsPendingItem[] = [];
+      for (const doc of snap.docs) {
+        const data = doc.data() as any;
+        const lines: any[] = data.lines || [];
+        lines.forEach((line: any, idx: number) => {
+          if (line.done) return;
+          items.push({
+            docId: doc.id,
+            lsx: data.lsx || '',
+            factory: data.factory || this.selectedFactory,
+            lineIndex: idx,
+            materialCode: line.materialCode || '',
+            po: line.po || '',
+            quantity: Number(line.quantity) || 0,
+            unit: line.unit || '',
+            tenVatTu: line.tenVatTu || '',
+            done: false
+          });
+        });
+      }
+      items.sort((a, b) => a.lsx.localeCompare(b.lsx) || a.materialCode.localeCompare(b.materialCode));
+      this.bsItems = items;
+    } catch (e: any) {
+      this.bsError = 'Không tải được danh sách Xuất BS.';
+      console.error('[BS] loadBsItems error', e);
+    } finally {
+      this.bsLoading = false;
+    }
+  }
+
+  async deleteBsItem(item: BsPendingItem): Promise<void> {
+    if (!confirm(`Xoá khỏi danh sách BS?\n${item.materialCode} | PO: ${item.po} | LSX: ${item.lsx}`)) return;
+    try {
+      const docSnap = await this.firestore.collection('pxk-bs-data').doc(item.docId).get().toPromise();
+      if (docSnap && docSnap.exists) {
+        const data = docSnap.data() as any;
+        const lines: any[] = [...(data.lines || [])];
+        if (lines[item.lineIndex]) {
+          lines[item.lineIndex] = { ...lines[item.lineIndex], done: true };
+        }
+        await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
+      }
+      this.bsItems = this.bsItems.filter(
+        b => !(b.docId === item.docId && b.lineIndex === item.lineIndex)
+      );
+    } catch (e: any) {
+      alert('❌ Lỗi xoá: ' + (e?.message || e));
+    }
+  }
+
+  openBsScanDialog(item: BsPendingItem): void {
+    this.bsScanItem = item;
+    this.bsScanLines = [];
+    this.bsScanInput = '';
+    this.bsScanError = '';
+    this.bsSaving = false;
+    this.bsScanOpen = true;
+    setTimeout(() => {
+      const el = document.getElementById('bs-scan-input');
+      if (el) el.focus();
+    }, 100);
+  }
+
+  closeBsScanDialog(): void {
+    this.bsScanOpen = false;
+    this.bsScanItem = null;
+    this.bsScanLines = [];
+    this.bsScanInput = '';
+    this.bsScanError = '';
+  }
+
+  onBsScanKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      const val = (this.bsScanInput || '').trim();
+      this.bsScanInput = '';
+      if (val) this.processBsScan(val);
+      event.preventDefault();
+    }
+  }
+
+  processBsScan(raw: string): void {
+    const item = this.bsScanItem;
+    if (!item) return;
+
+    // QR format: materialCode|PO|qty|IMD-bag/total
+    const parts = raw.split('|');
+    if (parts.length < 3) {
+      this.bsScanError = `❌ QR không đúng định dạng. Mong đợi: Mã|PO|SL|IMD`;
+      return;
+    }
+
+    const strippedBs = stripTemThungMarker(parts[0] || '');
+    if (strippedBs.isTemThung && !this.allowExportByCartonSet.has(strippedBs.materialCode.trim().toUpperCase())) {
+      this.bsScanError = `❌ Mã ${strippedBs.materialCode} không nằm trong danh mục Xuất thùng — không thể xuất bằng Tem Thùng.`;
+      return;
+    }
+    const scannedCode = strippedBs.materialCode.trim().toUpperCase();
+    const scannedPo   = (parts[1] || '').trim();
+    const scannedQty  = parseFloat((parts[2] || '').replace(/,/g, '')) || 0;
+    const part4       = (parts[3] || '').trim();
+
+    // Extract IMD (before '-') from part4
+    const dashIdx = part4.lastIndexOf('-');
+    const scannedImd = dashIdx >= 0 ? part4.slice(0, dashIdx).trim() : part4.trim();
+
+    // Validate mã
+    if (scannedCode !== item.materialCode.toUpperCase().trim()) {
+      this.bsScanError = `❌ Sai mã hàng. Scan: "${scannedCode}" — Cần: "${item.materialCode}"`;
+      return;
+    }
+
+    // Validate PO (normalize spaces)
+    const normPo      = (scannedPo).replace(/\s+/g, '').toUpperCase();
+    const normItemPo  = (item.po || '').replace(/\s+/g, '').toUpperCase();
+    if (normPo !== normItemPo) {
+      this.bsScanError = `❌ Sai PO. Scan: "${scannedPo}" — Cần: "${item.po}"`;
+      return;
+    }
+
+    if (scannedQty <= 0) {
+      this.bsScanError = `❌ Số lượng scan không hợp lệ: ${scannedQty}`;
+      return;
+    }
+
+    this.bsScanError = '';
+    this.bsScanLines.push({
+      materialCode: scannedCode,
+      po: scannedPo,
+      imd: scannedImd,
+      qty: scannedQty,
+      rawQr: raw
+    });
+  }
+
+  removeBsScanLine(idx: number): void {
+    this.bsScanLines.splice(idx, 1);
+  }
+
+  async doneBsScan(): Promise<void> {
+    const item = this.bsScanItem;
+    if (!item || this.bsSaving || this.bsScanLines.length === 0) return;
+    this.bsSaving = true;
+    try {
+      const exportDate = new Date();
+
+      // 1. Ghi từng scan vào outbound-materials và trừ tồn kho
+      for (const line of this.bsScanLines) {
+        await this.firestore.collection('outbound-materials').add({
+          factory: this.selectedFactory,
+          materialCode: line.materialCode,
+          poNumber: line.po,
+          exportQuantity: line.qty,
+          unit: item.unit,
+          productionOrder: item.lsx,
+          importDate: line.imd,
+          exportDate,
+          createdAt: exportDate,
+          bsExport: true,
+          employeeId: 'BS'
+        });
+        await this.updateInventoryExported(line.materialCode, line.po, line.qty, line.imd);
+      }
+
+      // 2. Đánh dấu done trong pxk-bs-data
+      const docSnap = await this.firestore.collection('pxk-bs-data').doc(item.docId).get().toPromise();
+      if (docSnap && docSnap.exists) {
+        const data = docSnap.data() as any;
+        const lines: any[] = [...(data.lines || [])];
+        if (lines[item.lineIndex]) {
+          lines[item.lineIndex] = { ...lines[item.lineIndex], done: true };
+        }
+        await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
+      }
+
+      // 3. Ẩn khỏi danh sách local
+      this.bsItems = this.bsItems.filter(
+        b => !(b.docId === item.docId && b.lineIndex === item.lineIndex)
+      );
+
+      const totalScanned = this.bsScanTotal;
+      this.closeBsScanDialog();
+      alert(`✅ Đã xuất BS: ${item.materialCode} | ${totalScanned.toLocaleString('vi-VN')} ${item.unit}`);
+    } catch (e: any) {
+      console.error('[BS] doneBsScan error', e);
+      this.bsScanError = '❌ Lỗi khi ghi xuất: ' + (e?.message || e);
+    } finally {
+      this.bsSaving = false;
+    }
+  }
+
+  mobileNavHistory(): void {
+    this.openMobileLsxHistorySheet();
+  }
+
+  mobileNavLocation(): void {
+    this.mobileBottomTab = 'location';
+    void this.router.navigate(['/location']);
+  }
+
+  getMobileNotifyCount(): number {
+    const n = this.pendingScanData?.length ?? 0;
+    return n > 99 ? 99 : n;
+  }
+
+  clearMobileScannerBuffer(): void {
+    this.scannerBuffer = '';
+  }
+
+  openMobileFilterSheet(): void {
+    this.closeMobileMoreSheet();
+    this.closeMobileLsxHistorySheet();
+    this.showMobileFilterSheet = true;
+    this.closeDropdown();
+  }
+
+  closeMobileFilterSheet(): void {
+    this.showMobileFilterSheet = false;
+  }
+
+  openMobileMoreSheet(): void {
+    this.mobileBottomTab = 'outbound';
+    this.closeMobileFilterSheet();
+    this.closeMobileLsxHistorySheet();
+    this.showMobileMoreSheet = true;
+    this.closeDropdown();
+  }
+
+  closeMobileMoreSheet(): void {
+    this.showMobileMoreSheet = false;
+  }
+
+  getMobileMaterialCardSubtitle(m: OutboundMaterial): string {
+    const n = (m.notes ?? '').trim();
+    if (n) {
+      return n;
+    }
+    const po = (m.poNumber ?? '').trim();
+    return po ? `PO ${po}` : '—';
+  }
+
+  getMobileMaterialQtyLine(m: OutboundMaterial): string {
+    const u = (m.unit ?? '').trim() || 'PCS';
+    const q = Number(m.exportQuantity);
+    const qStr = Number.isFinite(q) ? String(q) : '0';
+    return `${qStr} ${u}`;
+  }
+
+  runMobileSheetAction(
+    action: 'refresh' | 'excel' | 'add' | 'monthly' | 'cleanup' | 'qc' | 'filter'
+  ): void {
+    this.closeMobileMoreSheet();
+    switch (action) {
+      case 'refresh':
+        this.loadMaterials();
+        break;
+      case 'excel':
+        void this.exportToExcel();
+        break;
+      case 'add':
+        void this.addMaterial();
+        break;
+      case 'monthly':
+        void this.downloadMonthlyHistory();
+        break;
+      case 'cleanup':
+        void this.cleanupData();
+        break;
+      case 'qc':
+        void this.openQcRuleModal();
+        break;
+      case 'filter':
+        this.openMobileFilterSheet();
+        break;
+    }
   }
 
   // BAG number (i) từ bagBatch dạng "i/tổng" (có thể nhiều giá trị nối bằng dấu phẩy).
@@ -739,6 +1249,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     return nums.length ? nums.join(', ') : '—';
   }
 
+  /** Cột Bag: ưu tiên `bagNumberDisplay` (VD 5(T1)), không có thì suy từ bagBatch. */
   getOutboundBagColumnDisplay(material: { bagNumberDisplay?: string; bagBatch?: string }): string {
     const d = (material.bagNumberDisplay ?? '').trim();
     if (d) {
@@ -776,11 +1287,26 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   // Professional Scanning Setup Modal Methods
   closeScanningSetupModal(): void {
     this.showScanningSetupModal = false;
-    this.scanningSetupStep = 'lsx';
+    this.scanningSetupStep = 'factory';
     this.isScannerInputActive = false; // Reset scanner input state
     console.log('❌ Professional scanning setup modal closed');
   }
-  
+
+  /** Bước 0 bắt buộc: xác nhận nhà máy đang thao tác trước khi cho quét LSX. */
+  confirmFactoryForScan(factory: 'ASM1' | 'ASM2'): void {
+    if (this.selectedFactory !== factory) {
+      this.selectedFactory = factory;
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { factory },
+        queryParamsHandling: 'merge',
+        replaceUrl: true
+      });
+    }
+    this.scanningSetupStep = 'lsx';
+    setTimeout(() => this.focusScannerInput(), 0);
+  }
+
   // Handle LSX scan in modal (auto-detect from scanner input)
   onLSXScanned(lsx: string): void {
     if (!lsx || !lsx.trim()) return;
@@ -874,10 +1400,11 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
   
-  // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi đang trong luồng scan
-  // (setup modal LSX/NV, hoặc đang scan mã hàng) — fallback khi ô .scanner-input lỡ mất
-  // focus (PDA bắn ký tự quá nhanh, trước khi setTimeout focus kịp chạy).
+  // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
   onGlobalKeydown(event: KeyboardEvent): void {
+    // Xử lý khi setup modal đang mở (LSX/NV) HOẶC đang trong phiên scan batch (mã hàng) —
+    // fallback khi ô .scanner-input lỡ mất focus (PDA bắn ký tự quá nhanh, trước khi
+    // setTimeout focus kịp chạy) — không phải từ input field khác.
     if (!this.showScanningSetupModal && !this.isBatchScanningMode) return;
 
     const target = event.target as HTMLElement;
@@ -919,12 +1446,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     const hasLSX = !!(this.selectedProductionOrder && this.selectedProductionOrder.trim());
     const todayIso = new Date().toISOString().split('T')[0];
     const isTodayRange = this.startDate === todayIso && this.endDate === todayIso;
-    const factory = this.selectedFactory;
 
+    // Nếu không chọn LSX nhưng đang ở chế độ “Hôm nay” → load tất cả mã hôm nay
     if (!hasLSX && isTodayRange) {
       this.isLoading = true;
       this.errorMessage = '';
-      console.log(`📦 Loading all ${factory} outbound materials for TODAY (no LSX filter)...`);
+      console.log(`📦 Loading all ${this.selectedFactory} outbound materials for TODAY (no LSX filter)...`);
 
       const start = this.startDate || todayIso;
       const end = this.endDate || todayIso;
@@ -935,8 +1462,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       // listener mỗi lần loadMaterials() được gọi lại (sau mỗi lần scan/đổi filter/refresh).
       // Lọc theo exportDate ngay trên Firestore thay vì tải hết rồi lọc ở client.
       this.firestore
-        .collection('outbound-materials', ref =>
-          ref.where('factory', '==', factory)
+        .collection('outbound-materials', (ref) =>
+          ref.where('factory', '==', this.selectedFactory)
              .where('exportDate', '>=', startOfDay)
              .where('exportDate', '<=', endOfDay)
              .limit(3000)
@@ -945,7 +1472,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (snapshot) => {
-            this.readTracker.track('outbound-asm2', 'outbound-materials', snapshot.docs.length);
+            this.readTracker.track('outbound', 'outbound-materials', snapshot.docs.length);
             const materialsAll = snapshot.docs.map((d: any) =>
               this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })
             );
@@ -963,8 +1490,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             this.isLoading = false;
             this.cdr.detectChanges();
           },
-          error: (error: Error) => {
-            console.error(`❌ Error loading ${factory} outbound materials (today view):`, error);
+          error: (error) => {
+            console.error(`❌ Error loading ${this.selectedFactory} outbound materials (today view):`, error);
             this.errorMessage = 'Lỗi khi tải dữ liệu: ' + error.message;
             this.isLoading = false;
           }
@@ -972,6 +1499,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       return;
     }
 
+    // Không chọn LSX và không phải “Hôm nay” → ẩn dữ liệu
     if (!hasLSX) {
       console.log('⏸️ No LSX selected - hiding data');
       this.materials = [];
@@ -979,126 +1507,134 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       this.isLoading = false;
       return;
     }
-
+    
     this.isLoading = true;
     this.errorMessage = '';
     console.log(`📦 Loading materials for LSX: ${this.selectedProductionOrder}...`);
-
+    
+    // 🔧 MOBILE OPTIMIZATION: Chỉ load records của LSX được chọn
+    // Bỏ orderBy để tránh cần composite index, sẽ sort ở client-side
     // 🔧 FIX: .get() thay vì .snapshotChanges() — tránh chồng listener khi loadMaterials()
     // được gọi lại (sau mỗi lần scan/đổi filter/refresh không hủy subscription cũ).
-    this.firestore
-      .collection('outbound-materials', ref =>
-        ref
-          .where('factory', '==', factory)
-          .where('productionOrder', '==', this.selectedProductionOrder)
-          .limit(100)
-      )
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (snapshot) => {
-          this.readTracker.track('outbound-asm2', 'outbound-materials', snapshot.docs.length);
-          const materials = snapshot.docs.map((d: any) =>
-            this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })
-          );
-
-          console.log(`📦 Loaded ${materials.length} total materials from outbound-materials collection`);
-
-          if (materials.length > 0) {
-            this.availableProductionOrders = [...new Set(
-              materials
-                .filter(m => m.productionOrder && m.productionOrder.trim() !== '')
-                .map(m => m.productionOrder)
-            )].sort((a, b) => {
-              const aTime = materials.find(m => m.productionOrder === a)?.createdAt?.getTime() || 0;
-              const bTime = materials.find(m => m.productionOrder === b)?.createdAt?.getTime() || 0;
-              return bTime - aTime;
-            });
-
-            console.log(
-              `📋 Available Production Orders: ${this.availableProductionOrders.length}`,
-              this.availableProductionOrders
-            );
-          }
-
-          if (this.selectedProductionOrder) {
-            const matchingMaterials = materials.filter(m => {
-              const materialLSX = (m.productionOrder || '').toUpperCase();
-              const selectedLSX = (this.selectedProductionOrder || '').toUpperCase();
-              return materialLSX.includes(selectedLSX) || materialLSX === selectedLSX;
-            });
-            console.log(
-              `🔍 Search for LSX "${this.selectedProductionOrder}": Found ${matchingMaterials.length} matching materials`
-            );
-            if (matchingMaterials.length > 0) {
-              console.log(
-                `📋 Sample matching materials:`,
-                matchingMaterials.slice(0, 3).map(m => ({
-                  lsx: m.productionOrder,
-                  material: m.materialCode,
-                  date: m.exportDate
-                }))
-              );
-            }
-          }
-
-          this.materials = materials
-            .sort((a, b) => {
-              const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
-              if (updatedCompare !== 0) return updatedCompare;
-              const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
-              if (dateCompare !== 0) return dateCompare;
-              return b.createdAt.getTime() - a.createdAt.getTime();
-            })
-            .filter(material => {
-              if (this.startDate && this.endDate) {
-                const exportDate = material.exportDate.toISOString().split('T')[0];
-                return exportDate >= this.startDate && exportDate <= this.endDate;
-              }
-
-              if (this.hidePreviousDayHistory) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const exportDate = new Date(material.exportDate);
-                exportDate.setHours(0, 0, 0, 0);
-                if (exportDate < today) return false;
-              }
-
-              return true;
-            })
-            .slice(0, this.DISPLAY_LIMIT);
-
-          this.filteredMaterials = [...this.materials];
-          this.updatePagination();
-          this.isLoading = false;
-
-          console.log(`✅ Loaded ${materials.length} total, displaying ${this.materials.length} ASM2 materials`);
-
-          const recentMaterials = materials.filter(m => {
-            const now = new Date();
-            const materialTime = m.createdAt;
-            const timeDiff = now.getTime() - materialTime.getTime();
-            return timeDiff < 60000;
+    this.firestore.collection('outbound-materials', ref =>
+      ref.where('factory', '==', this.selectedFactory)
+         .where('productionOrder', '==', this.selectedProductionOrder)
+         .limit(100)
+    ).get()
+    .pipe(takeUntil(this.destroy$))
+    .subscribe({
+      next: (snapshot) => {
+        this.readTracker.track('outbound', 'outbound-materials', snapshot.docs.length);
+        // 🔧 TỐI ƯU HÓA: Xử lý batch thay vì từng record để tăng tốc độ
+        const materials = snapshot.docs.map((d: any) =>
+          this.mapOutboundDocToMaterial({ payload: { doc: { id: d.id, data: () => d.data() } } })
+        );
+        
+        console.log(`📦 Loaded ${materials.length} total materials from outbound-materials collection`);
+        
+        // 🔧 TỐI ƯU HÓA: Xử lý tất cả trong một lần để tăng tốc độ
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        // 🔧 NGUYÊN TẮC MỚI: Không hiển thị LSX nào khi mở màn hình, chỉ show khi lọc
+        if (materials.length > 0) {
+          // Lấy danh sách tất cả LSX có sẵn để tạo dropdown
+          this.availableProductionOrders = [...new Set(
+            materials
+              .filter(m => m.productionOrder && m.productionOrder.trim() !== '')
+              .map(m => m.productionOrder)
+          )].sort((a, b) => {
+            // Sort LSX theo thời gian tạo (mới nhất trước)
+            const aTime = materials.find(m => m.productionOrder === a)?.createdAt?.getTime() || 0;
+            const bTime = materials.find(m => m.productionOrder === b)?.createdAt?.getTime() || 0;
+            return bTime - aTime;
           });
-          if (recentMaterials.length > 0) {
-            console.log(
-              `🆕 Found ${recentMaterials.length} recently added materials:`,
-              recentMaterials.map(m => ({
-                materialCode: m.materialCode,
-                createdAt: m.createdAt,
-                scanMethod: m.scanMethod
-              }))
-            );
-          }
-
-          this.cdr.detectChanges();
-        },
-        error: (error: Error) => {
-          console.error('❌ Error loading ASM2 outbound materials:', error);
-          this.errorMessage = 'Lỗi khi tải dữ liệu: ' + error.message;
-          this.isLoading = false;
+          
+          console.log(`📋 Available Production Orders: ${this.availableProductionOrders.length}`, this.availableProductionOrders);
         }
-      });
+        
+        // 🔧 DEBUG: Log trước khi filter
+        if (this.selectedProductionOrder) {
+          const matchingMaterials = materials.filter(m => {
+            const materialLSX = (m.productionOrder || '').toUpperCase();
+            const selectedLSX = (this.selectedProductionOrder || '').toUpperCase();
+            return materialLSX.includes(selectedLSX) || materialLSX === selectedLSX;
+          });
+          console.log(`🔍 Search for LSX "${this.selectedProductionOrder}": Found ${matchingMaterials.length} matching materials`);
+          if (matchingMaterials.length > 0) {
+            console.log(`📋 Sample matching materials:`, matchingMaterials.slice(0, 3).map(m => ({
+              lsx: m.productionOrder,
+              material: m.materialCode,
+              date: m.exportDate
+            })));
+          }
+        }
+        
+        // 🔧 OPTIMIZATION: Đã query đúng LSX rồi, không cần filter nữa
+        this.materials = materials
+          .sort((a, b) => {
+            // Sort by latest updated time first (newest first)
+            const updatedCompare = b.updatedAt.getTime() - a.updatedAt.getTime();
+            if (updatedCompare !== 0) return updatedCompare;
+            
+            // If same updated time, sort by export date (newest first)
+            const dateCompare = b.exportDate.getTime() - a.exportDate.getTime();
+            if (dateCompare !== 0) return dateCompare;
+            
+            // If same date, sort by creation time (newest first)
+            return b.createdAt.getTime() - a.createdAt.getTime();
+          })
+          .filter(material => {
+            // Filter by date range if specified
+            if (this.startDate && this.endDate) {
+              const exportDate = material.exportDate.toISOString().split('T')[0];
+              return exportDate >= this.startDate && exportDate <= this.endDate;
+            }
+            
+            // Auto-hide previous day's scan history
+            if (this.hidePreviousDayHistory) {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const exportDate = new Date(material.exportDate);
+              exportDate.setHours(0, 0, 0, 0);
+              if (exportDate < today) return false;
+            }
+            
+            return true;
+          })
+          .slice(0, this.DISPLAY_LIMIT); // vẫn giới hạn khi xem theo LSX
+        
+        this.filteredMaterials = [...this.materials];
+        this.updatePagination();
+        this.isLoading = false;
+        
+        // 🔧 TỐI ƯU HÓA: Chỉ log một lần thay vì nhiều lần
+        console.log(`✅ Loaded ${materials.length} total, displaying ${this.materials.length} ${this.selectedFactory} materials`);
+        
+        // Debug: Check if new data was added
+        const recentMaterials = materials.filter(m => {
+          const now = new Date();
+          const materialTime = m.createdAt;
+          const timeDiff = now.getTime() - materialTime.getTime();
+          return timeDiff < 60000; // Within last minute
+        });
+        if (recentMaterials.length > 0) {
+          console.log(`🆕 Found ${recentMaterials.length} recently added materials:`, recentMaterials.map(m => ({
+            materialCode: m.materialCode,
+            createdAt: m.createdAt,
+            scanMethod: m.scanMethod
+          })));
+        }
+        
+        // Force change detection to update UI
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error(`❌ Error loading ${this.selectedFactory} outbound materials:`, error);
+        this.errorMessage = 'Lỗi khi tải dữ liệu: ' + error.message;
+        this.isLoading = false;
+      }
+    });
   }
   
 
@@ -1112,6 +1648,91 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
     return this.filteredMaterials.slice(startIndex, endIndex);
+  }
+
+  /**
+   * Mobile + đang phiên batch scan hàng: danh sách vật tư chỉ hiện đúng 1 dòng = tem vừa quét (mới nhất trong pending).
+   * Các trường hợp khác giữ phân trang như cũ.
+   */
+  getMobileListMaterials(): OutboundMaterial[] {
+    if (this.isMobile && this.isBatchScanningMode) {
+      if (!this.pendingScanData.length) {
+        return [];
+      }
+      const last = this.pendingScanData[this.pendingScanData.length - 1];
+      return [this.mapPendingScanToOutboundPreview(last)];
+    }
+    return this.getPaginatedMaterials();
+  }
+
+  /** Dòng đếm dưới tiêu đề danh sách (mobile batch vs mặc định) */
+  getMobileListCountLabel(): string {
+    if (this.isMobile && this.isBatchScanningMode) {
+      const n = this.pendingScanData.length;
+      if (n <= 0) {
+        return '0 tem trong phiên';
+      }
+      return `${n} tem · hiển thị mã mới nhất`;
+    }
+    return `${this.filteredMaterials.length} dòng`;
+  }
+
+  /** Có hiện phân trang dưới danh sách (mobile batch chỉ 1 dòng preview → ẩn) */
+  showMobileMaterialPagination(): boolean {
+    if (this.isMobile && this.isBatchScanningMode) {
+      return false;
+    }
+    return this.totalPages > 1;
+  }
+
+  private mapPendingScanToOutboundPreview(item: any): OutboundMaterial {
+    const st =
+      item?.scanTime instanceof Date
+        ? item.scanTime
+        : item?.scanTime
+          ? new Date(item.scanTime)
+          : new Date();
+    return {
+      materialCode: String(item?.materialCode ?? '').trim(),
+      poNumber: String(item?.poNumber ?? '').trim(),
+      quantity: Number(item?.quantity) || 1,
+      unit: 'PCS',
+      exportQuantity: Number(item?.quantity) || 1,
+      exportDate: st,
+      location: String(item?.location ?? 'N/A'),
+      exportedBy: '',
+      importDate: item?.importDate != null ? String(item.importDate) : undefined,
+      bagBatch: item?.bagBatch,
+      bagNumberDisplay: item?.bagNumberDisplay,
+      productionOrder: String(item?.productionOrder ?? '').trim(),
+      employeeId: String(item?.employeeId ?? '').trim(),
+      createdAt: st,
+      updatedAt: st,
+      scanCount: item?.scanCount ?? 1,
+      scanMethod: item?.scanMethod || 'SCANNER',
+      pendingPreview: true
+    };
+  }
+
+  getMobileHistoryLsxLabel(): string {
+    const s = (this.batchProductionOrder || this.selectedProductionOrder || '').trim();
+    return s || '—';
+  }
+
+  getMobileLsxHistoryRows(): any[] {
+    return [...this.pendingScanData].reverse();
+  }
+
+  openMobileLsxHistorySheet(): void {
+    this.mobileBottomTab = 'history';
+    this.closeMobileMoreSheet();
+    this.closeMobileFilterSheet();
+    this.showMobileLsxHistorySheet = true;
+  }
+
+  closeMobileLsxHistorySheet(): void {
+    this.showMobileLsxHistorySheet = false;
+    this.mobileBottomTab = 'outbound';
   }
   
 
@@ -1161,10 +1782,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     };
     try {
       await this.firestore.collection('outbound-materials').add(newMaterial);
-      console.log('✅ ASM2 outbound material added');
+      console.log(`✅ ${this.selectedFactory} outbound material added`);
       this.loadMaterials();
     } catch (error) {
-      console.error('❌ Error adding ASM2 outbound material:', error);
+      console.error(`❌ Error adding ${this.selectedFactory} outbound material:`, error);
       this.errorMessage = 'Lỗi thêm material: ' + error.message;
     }
   }
@@ -1175,9 +1796,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       material.updatedAt = new Date();
       material.factory = this.selectedFactory;
       await this.firestore.collection('outbound-materials').doc(material.id).update(material);
-      console.log('✅ ASM2 outbound material updated:', material.materialCode);
+      console.log(`✅ ${this.selectedFactory} outbound material updated:`, material.materialCode);
     } catch (error) {
-      console.error('❌ Error updating ASM2 outbound material:', error);
+      console.error(`❌ Error updating ${this.selectedFactory} outbound material:`, error);
       this.errorMessage = 'Lỗi cập nhật: ' + error.message;
     }
   }
@@ -1187,18 +1808,19 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     if (!confirm(`Xóa outbound material ${material.materialCode}?`)) return;
     try {
       await this.firestore.collection('outbound-materials').doc(material.id).delete();
-      console.log('✅ ASM2 outbound material deleted:', material.materialCode);
+      console.log(`✅ ${this.selectedFactory} outbound material deleted:`, material.materialCode);
       this.loadMaterials();
     } catch (error) {
-      console.error('❌ Error deleting ASM1 outbound material:', error);
+      console.error(`❌ Error deleting ${this.selectedFactory} outbound material:`, error);
       this.errorMessage = 'Lỗi xóa: ' + error.message;
     }
   }
   
   // Export tất cả dữ liệu (không giới hạn 50 dòng)
   async exportToExcel(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
-      console.log('📊 Exporting TẤT CẢ ASM2 outbound data to Excel...');
+      console.log(`📊 Exporting TẤT CẢ ${this.selectedFactory} outbound data to Excel...`);
       
       // Load tất cả dữ liệu từ Firebase
       const snapshot = await this.firestore.collection('outbound-materials', ref => 
@@ -1281,12 +1903,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       worksheet['!cols'] = colWidths;
       
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM2_Outbound');
-      
-      const fileName = `ASM2_Outbound_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.utils.book_append_sheet(workbook, worksheet, `${this.selectedFactory}_Outbound`);
+
+      const fileName = `${this.selectedFactory}_Outbound_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(workbook, fileName);
-      
-      console.log('✅ ASM2 outbound data exported to Excel');
+
+      console.log(`✅ ${this.selectedFactory} outbound data exported to Excel`);
       alert(`✅ Đã xuất ${exportData.length} records ra file Excel`);
     } catch (error) {
       console.error('❌ Export error:', error);
@@ -1299,6 +1921,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
 
   // Download monthly history - Tải lịch sử outbound theo tháng
   async downloadMonthlyHistory(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       // Hiện popup chọn tháng
       const monthYear = prompt(
@@ -1328,10 +1951,10 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       ).get().toPromise();
       
       if (!querySnapshot || querySnapshot.empty) {
-        alert(`📭 Không có dữ liệu outbound ASM2`);
+        alert(`📭 Không có dữ liệu outbound ${this.selectedFactory}`);
         return;
       }
-      
+
       // Filter theo date range ở client-side
       const filteredDocs = querySnapshot.docs.filter(doc => {
         const data = doc.data() as any;
@@ -1339,9 +1962,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         if (!exportDate) return false;
         return exportDate >= startDate && exportDate <= endDate;
       });
-      
+
       if (filteredDocs.length === 0) {
-        alert(`📭 Không có dữ liệu outbound ASM2 trong tháng ${monthYear}`);
+        alert(`📭 Không có dữ liệu outbound ${this.selectedFactory} trong tháng ${monthYear}`);
         return;
       }
       
@@ -1364,7 +1987,6 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           'Material Code': data.materialCode || '',
           'PO Number': data.poNumber || '',
           'Batch': data.importDate || 'N/A',
-          'Bịch': data.bagBatch || '',
           'Export Quantity': data.exportQuantity || 0,
           'Unit': data.unit || '',
           'Export Date': data.exportDate?.toDate().toLocaleDateString('vi-VN', {
@@ -1390,7 +2012,6 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         { wch: 15 },  // Material Code
         { wch: 15 },  // PO Number
         { wch: 12 },  // Batch
-        { wch: 10 },  // Bịch
         { wch: 12 },  // Export Quantity
         { wch: 8 },   // Unit
         { wch: 20 },  // Export Date
@@ -1405,7 +2026,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Monthly_History');
       
-      const fileName = `ASM2_Outbound_History_${monthYear}.xlsx`;
+      const fileName = `${this.selectedFactory}_Outbound_History_${monthYear}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       
       console.log(`✅ Monthly history exported: ${fileName}`);
@@ -1422,6 +2043,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   
   // Cleanup old data (move to archive or delete)
   async cleanupData(): Promise<void> {
+    const XLSX = await import('xlsx');
     try {
       const confirmCleanup = confirm(
         '⚠️ CẢNH BÁO: Thao tác này sẽ xóa dữ liệu cũ trên Firebase!\n\n' +
@@ -1472,7 +2094,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       const worksheet = XLSX.utils.json_to_sheet(oldData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Old_Data_Backup');
-      const backupFileName = `ASM2_Outbound_Backup_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const backupFileName = `${this.selectedFactory}_Outbound_Backup_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(workbook, backupFileName);
       
       console.log(`✅ Backup saved: ${backupFileName}`);
@@ -1502,7 +2124,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   
   // Camera QR Scanner methods using QRScannerModalComponent (same as RM1 inventory)
   startCameraScanning(): void {
-    console.log('🎯 Starting QR scanner for Outbound ASM2...');
+    console.log(`🎯 Starting QR scanner for Outbound ${this.selectedFactory}...`);
     console.log('📱 Mobile device:', this.isMobile);
     console.log('📱 Selected scan method:', this.selectedScanMethod);
     console.log('📱 Current scan step:', this.currentScanStep);
@@ -1689,6 +2311,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       for (const scanItem of this.pendingScanData) {
         const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
         const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate;
+        const bagNumberDisplay = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
         const outboundData: OutboundMaterial = {
           factory: this.selectedFactory,
           materialCode: scanItem.materialCode,
@@ -1703,7 +2326,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           batch: imdStored,
           batchNumber: imdStored,
           bagBatch: scanItem.bagBatch || p.bagFractionLabel,
-          bagNumberDisplay: scanItem.bagNumberDisplay || p.bagNumberDisplay || undefined,
+          ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
           scanMethod: 'CAMERA', // 🔧 CAMERA ONLY: Đánh dấu rõ ràng là camera
           notes: `Auto-scanned export - ${scanItem.scanTime.toISOString()}`,
           createdAt: new Date(),
@@ -1866,7 +2489,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         this.lastScannedData = {
           materialCode: parts[0].trim(),
           poNumber: parts[1].trim(),
-          quantity: parseFloat(parts[2]) || 0,
+          quantity: parseInt(parts[2]) || 0,
           importDate: parts.length >= 4 ? parts[3].trim() : null // Bây giờ là batch number: 26082025
         };
         
@@ -1900,7 +2523,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             this.lastScannedData = {
               materialCode: jsonData.materialCode.toString().trim(),
               poNumber: jsonData.poNumber.toString().trim(),
-              quantity: parseFloat(jsonData.quantity) || parseFloat(jsonData.unitNumber) || 0
+              quantity: parseInt(jsonData.quantity) || parseInt(jsonData.unitNumber) || 0
             };
             
             console.log('✅ Parsed QR data (JSON format):', this.lastScannedData);
@@ -1921,7 +2544,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
             this.lastScannedData = {
               materialCode: materialCodeMatch[0],
               poNumber: poMatch[0],
-              quantity: parseFloat(numberMatch[0]) || 0
+              quantity: parseInt(numberMatch[0]) || 0
             };
             
             console.log('✅ Parsed QR data (pattern extraction):', this.lastScannedData);
@@ -2094,7 +2717,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
     console.log('✅ New outbound record created with ID:', docRef.id);
     this.syncWorkOrderCreatedByAfterExport();
-
+    
     // Verify data was saved correctly
     const savedDoc = await docRef.get();
     const savedData = savedDoc.data() as any;
@@ -2202,18 +2825,19 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     this.currentScanStep = 'batch';
     this.pendingScanData = [];
     
-    // Show professional scanning setup modal
+    // Show professional scanning setup modal — luôn bắt đầu bằng bước chọn nhà máy,
+    // bắt buộc xác nhận ASM1/ASM2 trước khi được quét LSX (không dùng ngầm định factory
+    // đang chọn ở header, tránh thao tác nhầm nhà máy).
     this.showScanningSetupModal = true;
-    this.scanningSetupStep = 'lsx';
-    
+    this.scanningSetupStep = 'factory';
+
     // 🔧 TỰ ĐỘNG FOCUS: Tự động focus vào scanner input để có thể scan ngay
-    // (0ms thay vì 500ms — PDA scan rất nhanh, delay dài khiến ký tự scan bị mất
-    // vì ô nhập chưa kịp có focus khi máy quét đã bắn dữ liệu)
+    // (0ms — tránh mất ký tự đầu do PDA bắn dữ liệu quá nhanh, trước khi ô nhập kịp có focus)
     this.isScannerInputActive = true; // Enable scanner input
     setTimeout(() => {
       this.focusScannerInput();
     }, 0);
-
+    
     console.log('✅ Professional scanning setup modal opened - Auto-focused for scanning');
   }
 
@@ -2315,8 +2939,8 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       
       if (consolidatedMap.has(key)) {
         // ✅ TRÙNG ĐẦY ĐỦ 6 TRƯỜNG:
-        // - Không cộng dồn quantity/exportQuantity
-        // - Chỉ tăng scanCount
+        // - Không cộng dồn quantity/exportQuantity (quantity đã là tổng theo scan)
+        // - Chỉ cộng dồn scanCount = số lần scan
         const existing = consolidatedMap.get(key);
         existing.scanCount = (existing.scanCount || 1) + (scanItem.scanCount || 1);
         existing.updatedAt = scanItem.scanTime;
@@ -2342,6 +2966,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         // ❌ KHÁC ÍT NHẤT 1 TRƯỜNG → Tạo dòng mới
         const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
         const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate || null;
+        const bagNumberDisplay = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
         consolidatedMap.set(key, {
           factory: this.selectedFactory,
           materialCode: scanItem.materialCode,
@@ -2357,7 +2982,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           employeeId: scanItem.employeeId,
           batchNumber: imdStored,
           bagBatch: scanItem.bagBatch || p.bagFractionLabel,
-          bagNumberDisplay: scanItem.bagNumberDisplay || p.bagNumberDisplay || undefined,
+          ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
           scanMethod: 'CAMERA',
           notes: `Batch scan - ${scanItem.productionOrder}`,
           importDate: imdStored,
@@ -2398,7 +3023,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate);
       if (groupedUpdates.has(key)) {
         const existing = groupedUpdates.get(key);
-        // Không cộng dồn quantity
+        // Không cộng dồn quantity (chỉ cộng số lần scan/bags nếu có)
         existing.quantity = existing.quantity ?? scanItem.quantity;
         existing.exportedBagsDelta = (existing.exportedBagsDelta || 0) + (scanItem.exportedBagsDelta || 0);
         if (bb) {
@@ -2413,6 +3038,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           materialCode: scanItem.materialCode,
           poNumber: scanItem.poNumber,
           quantity: scanItem.quantity,
+          // exportQuantity trong inventory update lấy từ quantity, không cộng dồn
           importDate: scanItem.importDate,
           exportedBagsDelta: scanItem.exportedBagsDelta || 0,
           bagBatch: bb || ''
@@ -2525,10 +3151,6 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       // 4. Nếu không nhận diện được, thử xử lý theo độ dài
       if (!this.isProductionOrderScanned && !this.isEmployeeIdScanned) {
         if (scannedTrim.length > 10) {
-          if (!this.isValidLsxCode(scannedTrim)) {
-            this.showScanError('Sai LSX. LSX phải bắt đầu bằng KZLSX hoặc LHLSX');
-            return;
-          }
           this.checkWorkOrderKittingStatus(scannedTrim).then(ok => {
             if (!ok) return;
             this.batchProductionOrder = scannedTrim;
@@ -2658,9 +3280,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
   }
 
   // Persistence helpers safeguard
-  private   restorePendingFromStorage(): void {
+  private restorePendingFromStorage(): void {
     try {
-      const raw = localStorage.getItem('rm2OutboundPending');
+      const raw = localStorage.getItem('rm1OutboundPending');
       if (raw) {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) {
@@ -2671,9 +3293,9 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     } catch {}
   }
 
-  private   savePendingToStorage(): void {
+  private savePendingToStorage(): void {
     try {
-      localStorage.setItem('rm2OutboundPending', JSON.stringify(this.pendingScanData));
+      localStorage.setItem('rm1OutboundPending', JSON.stringify(this.pendingScanData));
     } catch {}
   }
 
@@ -2742,8 +3364,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           }
         }
         
-        // Update inventory — dùng atomic increment để tránh race khi scan nhanh nhiều tem cùng dòng
-        // (đọc currentExported rồi ghi lại khiến mọi lần đều thấy cùng snapshot → chỉ cộng được một bước).
+        // Update inventory — atomic increment (tránh race khi nhiều scan cùng lúc cùng một dòng tồn).
         const data = targetDoc.data() as any;
         const currentExported = Number(data.exported) || 0;
         const newExported = currentExported + exportQuantity;
@@ -2761,7 +3382,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         const remainingB = Math.max(0, totalB - newExpBags);
         
         console.log(
-          `🔄 Updating inventory doc ${targetDoc.id}: exported += ${exportQuantity} (atomic; snapshot was ${currentExported} → ~${newExported} nếu không scan song song)`
+          `🔄 Updating inventory doc ${targetDoc.id}: exported += ${exportQuantity} (atomic; snapshot was ${currentExported} → ~${newExported})`
         );
         
         const payload: Record<string, unknown> = {
@@ -2774,13 +3395,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         await this.firestore.collection('inventory-materials').doc(targetDoc.id).update(payload);
 
         if (exportedBagsDelta > 0) {
-          const fac = this.selectedFactory;
           const imd = imdForRow || this.normalizeImportDate(data.importDate);
           const p = this.rmBagHistory.parseQrPart4(importDate);
           const bagNumberDisplay = (p.bagNumberDisplay || '').trim();
           await this.rmBagHistory.log({
             event: 'XUẤT',
-            factory: fac,
+            factory: this.selectedFactory,
             materialCode,
             poNumber,
             imd,
@@ -2795,7 +3415,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
           });
           await this.rmBagHistory.log({
             event: 'TỒN',
-            factory: fac,
+            factory: this.selectedFactory,
             materialCode,
             poNumber,
             imd,
@@ -2821,6 +3441,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
   }
   
+  /** Phần 4 QR: DDMMYYYY, DDMMYYYY-i/tổng, có thể (T1) tách bịch — khớp IMD kho; có i/tổng → +1 bịch. */
   private parseImdFromQrPart4(part4: string | null | undefined): { imdKey: string; bagDelta: number } {
     const p = this.rmBagHistory.parseQrPart4(part4);
     if (p.imdKey) {
@@ -2901,6 +3522,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       });
   }
 
+  /** Parse và ghi pending — có kiểm QC rule (IQC) trên inventory khớp vật tư. */
   private async processBatchMaterialScanAsync(scannedData: string): Promise<void> {
     if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
       this.showScanError('Phải scan LSX và mã nhân viên trước!');
@@ -2919,7 +3541,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
         isTemThung = stripped.isTemThung;
         materialCode = stripped.materialCode;
         poNumber = parts[1].trim();
-        quantity = parseFloat(parts[2]) || 1;
+        quantity = parseInt(parts[2], 10) || 1;
         if (parts.length >= 4) importDate = parts[3].trim();
       }
     } else {
@@ -2938,6 +3560,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
       return;
     }
 
+    // Rule: Không được trùng bộ 3 (Mã hàng + Số PO + IMD)
     const imdKey = (importDate ?? '').trim();
     const isDuplicate = this.pendingScanData.some(item =>
       String(item?.materialCode ?? '').trim() === materialCode &&
@@ -2950,7 +3573,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
 
     const qc = await this.outboundQcRule.shouldBlockOutbound(
-      'ASM2',
+      this.selectedFactory,
       this.qcRuleEnabledActive,
       this.qcRuleBlockedList,
       materialCode,
@@ -2965,7 +3588,7 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     }
 
     // Kiểm tra vị trí hiện tại của mã hàng — nếu bắt đầu bằng IQC thì cảnh báo
-    await this.checkAndWarnIqcLocation(materialCode, poNumber, importDate, 'ASM2');
+    await this.checkAndWarnIqcLocation(materialCode, poNumber, importDate, this.selectedFactory);
 
     const p = this.rmBagHistory.parseQrPart4(importDate);
     const exportedBagsDelta = p.bagDelta;
@@ -2988,8 +3611,12 @@ export class OutboundASM2Component implements OnInit, OnDestroy {
     };
     this.pendingScanData = [...this.pendingScanData, scanItem];
     this.savePendingToStorage();
+    this.cdr.markForCheck();
   }
 
+  /**
+   * Kiểm tra mã hàng đang ở vị trí IQC khi xuất kho — cảnh báo ngay cho nhân viên đang scan.
+   */
   private async checkAndWarnIqcLocation(
     materialCode: string,
     poNumber: string,

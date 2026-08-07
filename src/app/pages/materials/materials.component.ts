@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
-import { Subject, BehaviorSubject } from 'rxjs';
+import { Subject, BehaviorSubject, Subscription, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
@@ -13,6 +13,8 @@ import { ExcelImportService } from '../../services/excel-import.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { TemXuatKhoService, PxkLineExport } from '../../services/tem-xuat-kho.service';
 import { LabelReprintFlagService } from '../../services/label-reprint-flag.service';
+import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 import { MaterialsDashboardService } from '../../services/materials-dashboard.service';
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
@@ -101,16 +103,14 @@ type ResetLowStockRow = {
 };
 
 @Component({
-  selector: 'app-materials-asm1',
-  templateUrl: './materials-asm1.component.html',
-  styleUrls: ['./materials-asm1.component.scss']
+  selector: 'app-materials',
+  templateUrl: './materials.component.html',
+  styleUrls: ['./materials.component.scss']
 })
-export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit {
-  // Fixed factory for ASM1
-  readonly FACTORY = 'ASM1';
-  private readonly STOCKCHECK_SYNC_ONCE_KEY = 'materials-asm1:sync-stockcheck-location:2026-03-16_to_2026-03-18:done';
-  private readonly LOCATION_REMAP_ONCE_KEY = 'materials-asm1:remap-location:ZR22_ZR15_ZL26:done';
-  private readonly LOCATION_REMAP_ONCE_KEY_2 = 'materials-asm1:remap-location:ZL14_ZL16_ZL17:done';
+export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
+  /** Nhà máy đang xem (ASM1 ⇄ ASM2) — đổi qua factory-switcher trên UI, đồng bộ với query param `factory`. */
+  selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
+  readonly factoryOptions: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
 
   // 🔧 LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
   // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN Material + PO
@@ -174,7 +174,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   
   // Search and filter — mã hàng hoặc vị trí (tick Location)
   searchTerm = '';
-  searchType: 'material' = 'material';
+  searchType: 'material' | 'po' | 'location' = 'material';
   searchByLocation = false;
   /** Tìm theo khách hàng (Danh mục NVLKH) — loại trừ lẫn nhau với searchByLocation. */
   searchByCustomer = false;
@@ -211,18 +211,25 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   /** QTY BAG rule: ON = multiple of Standard Packing; OFF = legacy free input */
   qtyBagRuleEnabled = true;
-  private readonly QTY_BAG_RULE_KEY = 'materials-asm1:qty-bag-rule-enabled:v1';
+  /** localStorage key theo factory đang chọn — mỗi nhà máy có Rule Bag riêng (nguồn thật ở Firestore, đây chỉ là cache). */
+  private get QTY_BAG_RULE_KEY(): string {
+    return `materials-${this.selectedFactory}:qty-bag-rule-enabled:v1`;
+  }
 
   /** Rule Bag: 4 ký tự đầu mã — khi master QTY BAG rule ON, chỉ nhóm prefix ON mới bắt bội số SP */
   showRuleBagPopup = false;
   ruleBagPrefixes: string[] = [];
   private qtyBagRuleByPrefix: Record<string, boolean> = {};
-  private readonly QTY_BAG_RULE_BY_PREFIX_KEY = 'materials-asm1:qty-bag-rule-by-prefix:v1';
+  private get QTY_BAG_RULE_BY_PREFIX_KEY(): string {
+    return `materials-${this.selectedFactory}:qty-bag-rule-by-prefix:v1`;
+  }
 
   /** Đầu mã thêm tay (không cần load inventory), lưu localStorage */
   ruleBagManualPrefixes: string[] = [];
   ruleBagNewPrefixInput = '';
-  private readonly RULE_BAG_MANUAL_PREFIXES_KEY = 'materials-asm1:rule-bag-manual-prefixes:v1';
+  private get RULE_BAG_MANUAL_PREFIXES_KEY(): string {
+    return `materials-${this.selectedFactory}:rule-bag-manual-prefixes:v1`;
+  }
 
   /** Đồng bộ QTY BAG + Rule Bag cho mọi máy qua Firestore */
   private readonly QTY_BAG_FIRESTORE_COLLECTION = 'materials-qty-bag-rules';
@@ -328,7 +335,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private nvlkhCatalog: NvlkhCatalogService,
     private readTracker: ReadTrackerService,
-    private location: Location
+    private location: Location,
+    private authService: FirebaseAuthService
   ) {}
 
   getStorageUnitLabel(material: InventoryMaterial): string {
@@ -381,7 +389,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (!materialCode) return;
     this.isSavingStorageUnit = true;
     try {
-      await this.dvLuuTruCatalog.assignStorageUnit(materialCode, size, this.FACTORY);
+      await this.dvLuuTruCatalog.assignStorageUnit(materialCode, size, this.selectedFactory);
       this.storageUnitCatalogMap.set(materialCode, size);
       const applySize = (list: InventoryMaterial[]) => {
         list.forEach(m => {
@@ -463,8 +471,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   private buildReprintFlagItemFromInventoryRow(m: InventoryMaterial): { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string } {
     const imdKey = this.getImdKeyForMaterial(m);
-    const docId = this.labelReprintFlags.buildDocId('ASM1', m.materialCode, m.poNumber || '', imdKey);
-    return { docId, factory: 'ASM1', materialCode: m.materialCode, poNumber: m.poNumber || '', imdKey };
+    const factory = this.selectedFactory as 'ASM1' | 'ASM2';
+    const docId = this.labelReprintFlags.buildDocId(factory, m.materialCode, m.poNumber || '', imdKey);
+    return { docId, factory, materialCode: m.materialCode, poNumber: m.poNumber || '', imdKey };
   }
 
   openTemLePopup(): void {
@@ -497,13 +506,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   private buildTemInLaiPrintedDocId(materialCode: string): string {
     const mc = this.normalizeMaterialCodeUpper(materialCode);
-    return `ASM1__${mc}`.replace(/[\/\\\s]+/g, '_').slice(0, 200);
+    return `${this.selectedFactory}__${mc}`.replace(/[\/\\\s]+/g, '_').slice(0, 200);
   }
 
   private async loadTemInLaiPrintedCodes(): Promise<void> {
     try {
       const snap = await this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION, (ref) =>
-        ref.where('factory', '==', 'ASM1').limit(5000)
+        ref.where('factory', '==', this.selectedFactory).limit(5000)
       ).get().toPromise();
       this.temInLaiPrintedCodes.clear();
       if (snap && !snap.empty) {
@@ -764,14 +773,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     for (const code of uniq) {
       try {
         const snap = await this.firestore.collection('inventory-materials', (ref) =>
-          ref.where('factory', '==', this.FACTORY).where('materialCode', '==', code).limit(2000)
+          ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', code).limit(2000)
         ).get().toPromise();
         if (!snap || snap.empty) continue;
         for (const doc of snap.docs) {
           const d = doc.data() as any;
           out.push({
             id: doc.id,
-            factory: d.factory || this.FACTORY,
+            factory: d.factory || this.selectedFactory,
             importDate: this.parseImportDate(d.importDate),
             receivedDate: d.receivedDate?.toDate?.() || undefined,
             batchNumber: this.resolveRawImd(d),
@@ -817,7 +826,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.temInLaiItems = [];
     try {
       await this.loadTemInLaiPrintedCodes();
-      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx('ASM1', raw);
+      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx(this.selectedFactory, raw);
       if (!pxkRaw.length) {
         this.temInLaiError = 'Không tìm thấy PXK cho LSX này. Kiểm tra đã import PXK.';
         return;
@@ -863,7 +872,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       await this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(this.buildTemInLaiPrintedDocId(mc)).set(
         {
-          factory: 'ASM1',
+          factory: this.selectedFactory,
           materialCode: mc,
           source: 'manual',
           updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
@@ -930,7 +939,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           batch.set(
             ref,
             {
-              factory: 'ASM1',
+              factory: this.selectedFactory,
               materialCode: mc,
               source: 'import',
               updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
@@ -1040,7 +1049,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       }
 
       const fakeMaterial: InventoryMaterial = {
-        factory: this.FACTORY,
+        factory: this.selectedFactory,
         importDate: new Date(),
         batchNumber: '',
         materialCode: 'REPRINT',
@@ -1068,7 +1077,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         batch.set(
           ref,
           {
-            factory: 'ASM1',
+            factory: this.selectedFactory,
             materialCode: mc,
             source: 'print',
             lastLsx: lsx || null,
@@ -1166,7 +1175,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       ];
 
       const fakeMaterial: InventoryMaterial = {
-        factory: this.FACTORY,
+        factory: this.selectedFactory,
         importDate: new Date(),
         batchNumber: '',
         materialCode: parsed.materialCode,
@@ -1280,7 +1289,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       try {
         const querySnapshot = await this.firestore
           .collection('inventory-materials', (ref) =>
-            ref.where('factory', '==', this.FACTORY).where('materialCode', '==', code).limit(150)
+            ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', code).limit(150)
           )
           .get()
           .toPromise();
@@ -1302,7 +1311,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     const material = {
       id: doc.id,
       ...data,
-      factory: this.FACTORY,
+      factory: this.selectedFactory,
       importDate: this.parseImportDate(data.importDate),
       batchNumber: this.resolveRawImd(data),
       receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
@@ -1589,7 +1598,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
     this.temXuatBusy = true;
     try {
-      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx('ASM1', raw);
+      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx(this.selectedFactory, raw);
       if (!pxkRaw.length) {
         this.temXuatError =
           'Không tìm thấy PXK cho LSX này. Kiểm tra đã import PXK (Work Order / pxk-import-data).';
@@ -1749,7 +1758,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // qrImages đã là thứ tự in cuối cùng (LSX -> Mã -> XUẤT -> tem -> TỒN -> tem)
 
       const fakeMaterial: InventoryMaterial = {
-        factory: this.FACTORY,
+        factory: this.selectedFactory,
         importDate: new Date(),
         batchNumber: '',
         materialCode: 'PXK-EXPORT',
@@ -1777,7 +1786,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           const userEmail = (await this.afAuth.currentUser)?.email || '';
           await this.labelReprintFlags.markReprintedByDocId(
             Array.from(printedFlagItems.values()),
-            { reprintedBy: userEmail, source: `TEM_XUAT_KHO_REPRINT:${this.FACTORY}` }
+            { reprintedBy: userEmail, source: `TEM_XUAT_KHO_REPRINT:${this.selectedFactory}` }
           );
         } catch (e) {
           console.warn('⚠️ Không lưu được cờ in lại tem (bỏ qua):', e);
@@ -1803,6 +1812,26 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
   ngOnInit(): void {
     console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
+
+    const factoryParam = this.route.snapshot.queryParamMap.get('factory');
+    if (this.isValidFactory(factoryParam)) {
+      this.selectedFactory = factoryParam;
+    } else {
+      // Không có ?factory= trên URL — mặc định theo nhân viên đang đăng nhập
+      // (1 số NV ưu tiên ASM2, còn lại mặc định ASM1).
+      firstValueFrom(this.authService.currentUser)
+        .then(user => {
+          this.selectedFactory = getDefaultRmFactory(user?.employeeId);
+        })
+        .catch(() => {});
+    }
+    this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      const f = params.get('factory');
+      if (this.isValidFactory(f) && f !== this.selectedFactory) {
+        this.selectedFactory = f;
+        this.onFactoryChanged();
+      }
+    });
 
     this.loadPermissions();
     this.isLocationColumnUnlocked = this.locationUnlock.isUnlocked();
@@ -1835,304 +1864,50 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.loadRuleBagManualPrefixesFromStorage();
     this.subscribeQtyBagRulesFromFirestore();
 
-    // ✅ ONE-TIME JOB: Đồng bộ vị trí từ Stock Check (16-18/03/2026) theo Mã + PO + IMD
-    // Chạy đúng 1 lần, có flag trong localStorage để tránh chạy lại khi refresh.
-    setTimeout(() => {
-      this.syncLocationFromStockCheckSnapshot_20260316_18_once().catch(err =>
-        console.error('❌ [ASM1 one-time sync 2026-03-16..18] Error:', err)
-      );
-    }, 0);
-
-    // ✅ ONE-TIME JOB: Remap một số vị trí sai format (theo yêu cầu)
-    // ZR22 -> Z2.2(R), ZR15 -> Z1.5(R), ZL26 -> Z2.6(L)
-    setTimeout(() => {
-      this.remapLocationsOnce().catch(err =>
-        console.error('❌ [ASM1 one-time remap locations] Error:', err)
-      );
-    }, 0);
-    setTimeout(() => {
-      this.remapLocationsOnce2().catch(err =>
-        console.error('❌ [ASM1 one-time remap locations 2] Error:', err)
-      );
-    }, 0);
-    
-    console.log('✅ ASM1 Materials component initialized - Waiting for user search');
+    console.log('✅ Materials component initialized - Waiting for user search');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed (NO AUTO LOAD)');
   }
 
-  private normalizeKeyPart(v: any): string {
-    return (v ?? '').toString().trim().toUpperCase();
+  /** Đổi nhà máy đang xem (ASM1 ⇄ ASM2) — đồng bộ URL query param rồi tải lại data. */
+  setFactory(factory: 'ASM1' | 'ASM2'): void {
+    if (this.selectedFactory === factory) return;
+    this.selectedFactory = factory;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { factory },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.onFactoryChanged();
   }
 
-  private parseSnapshotDate(v: any): Date | null {
-    try {
-      if (!v) return null;
-      if (v instanceof Date) return v;
-      if (typeof v === 'string' || typeof v === 'number') {
-        const d = new Date(v);
-        return isNaN(d.getTime()) ? null : d;
-      }
-      if (typeof v === 'object' && typeof v.toDate === 'function') {
-        const d = v.toDate();
-        return d instanceof Date && !isNaN(d.getTime()) ? d : null;
-      }
-      return null;
-    } catch {
-      return null;
-    }
+  private isValidFactory(f: string | null | undefined): f is 'ASM1' | 'ASM2' {
+    return f === 'ASM1' || f === 'ASM2';
   }
 
-  private inInclusiveDateRange(d: Date, start: Date, end: Date): boolean {
-    const t = d.getTime();
-    return t >= start.getTime() && t <= end.getTime();
-  }
+  /** Reset state gắn với factory cũ (kết quả search, popup đang mở) khi đổi nhà máy — dữ liệu inventory là theo factory,
+   *  không được âm thầm hiển thị dữ liệu factory cũ dưới tên factory mới. */
+  private onFactoryChanged(): void {
+    this.clearSearch();
+    this.showMorePopup = false;
+    this.showResetLowStockPopup = false;
+    this.resetLowStockRows = [];
+    this.showConsolidationMessage = false;
 
-  /**
-   * ONE-TIME: dựa vào actualLocation trong stock-check-snapshot (ASM1),
-   * map theo (materialCode + poNumber + imd) và cập nhật inventory-materials.location.
-   * Áp dụng cho dateCheck 16-18/03/2026.
-   */
-  private async syncLocationFromStockCheckSnapshot_20260316_18_once(): Promise<void> {
-    if (typeof window === 'undefined') return;
-    if (localStorage.getItem(this.STOCKCHECK_SYNC_ONCE_KEY) === '1') return;
+    // Rule Bag / QTY BAG rule là cấu hình riêng theo factory (key localStorage + doc Firestore
+    // đều bao gồm selectedFactory) — xoá state cũ trước để tránh lộ rule của factory vừa rời đi,
+    // rồi nạp lại + resubscribe cho đúng factory vừa chọn.
+    this.qtyBagRuleByPrefix = {};
+    this.ruleBagManualPrefixes = [];
+    this.rebuildRuleBagPrefixList();
+    const savedRule = localStorage.getItem(this.QTY_BAG_RULE_KEY);
+    this.qtyBagRuleEnabled = savedRule === '0' || savedRule === '1' ? savedRule === '1' : true;
+    this.loadQtyBagRuleByPrefixFromStorage();
+    this.loadRuleBagManualPrefixesFromStorage();
+    this.rebuildRuleBagPrefixList();
+    this.subscribeQtyBagRulesFromFirestore();
 
-    const start = new Date('2026-03-16T00:00:00');
-    const end = new Date('2026-03-18T23:59:59');
-
-    console.log('🔄 [ASM1 one-time sync] Loading stock-check-snapshot materials...');
-    const snapshotDocId = `${this.FACTORY}_stock_check_current`;
-    const snapDoc = await this.firestore
-      .collection('stock-check-snapshot')
-      .doc(snapshotDocId)
-      .get()
-      .toPromise();
-
-    const snapData = snapDoc?.data() as any;
-    const snapMaterials: any[] = Array.isArray(snapData?.materials) ? snapData.materials : [];
-
-    if (!snapMaterials.length) {
-      console.log('ℹ️ [ASM1 one-time sync] No snapshot materials found, skipping.');
-      localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
-      return;
-    }
-
-    // Map key -> { location, at } (newest wins)
-    const latestByKey = new Map<string, { location: string; at: number }>();
-    let considered = 0;
-
-    for (const m of snapMaterials) {
-      const dateCheck = this.parseSnapshotDate(m?.dateCheck);
-      if (!dateCheck) continue;
-      if (!this.inInclusiveDateRange(dateCheck, start, end)) continue;
-
-      const loc = this.normalizeKeyPart(m?.actualLocation);
-      if (!loc) continue;
-
-      const code = this.normalizeKeyPart(m?.materialCode);
-      const po = this.normalizeKeyPart(m?.poNumber);
-      const imd = this.normalizeKeyPart(m?.imd);
-      if (!code || !po || !imd) continue;
-
-      const key = `${code}__${po}__${imd}`;
-      const at = dateCheck.getTime();
-      considered++;
-
-      const prev = latestByKey.get(key);
-      if (!prev || at >= prev.at) {
-        latestByKey.set(key, { location: loc, at });
-      }
-    }
-
-    if (!latestByKey.size) {
-      console.log('ℹ️ [ASM1 one-time sync] No matching items in 16-18/03/2026 with actualLocation, skipping.');
-      localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
-      return;
-    }
-
-    console.log(`🔍 [ASM1 one-time sync] Snapshot considered=${considered}, uniqueKeys=${latestByKey.size}. Loading inventory...`);
-    const invSnap = await this.firestore
-      .collection('inventory-materials', ref => ref.where('factory', '==', this.FACTORY))
-      .get()
-      .toPromise();
-
-    if (!invSnap || invSnap.empty) {
-      console.log('ℹ️ [ASM1 one-time sync] No inventory-materials found, skipping.');
-      localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
-      return;
-    }
-
-    const db = this.firestore.firestore;
-    let batch = db.batch();
-    let batchCount = 0;
-    let updated = 0;
-
-    const commitBatchIfNeeded = async (force = false) => {
-      if (batchCount === 0) return;
-      if (!force && batchCount < 450) return;
-      await batch.commit();
-      batch = db.batch();
-      batchCount = 0;
-    };
-
-    for (const doc of invSnap.docs) {
-      const data = doc.data() as any;
-      const code = this.normalizeKeyPart(data?.materialCode);
-      const po = this.normalizeKeyPart(data?.poNumber);
-      const imd = this.normalizeKeyPart(data?.imd);
-      if (!code || !po || !imd) continue;
-
-      const key = `${code}__${po}__${imd}`;
-      const target = latestByKey.get(key);
-      if (!target?.location) continue;
-
-      const currentLoc = this.normalizeKeyPart(data?.location);
-      if (currentLoc === target.location) continue;
-
-      const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
-      batch.set(
-        docRef,
-        {
-          location: target.location,
-          lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-          modifiedBy: 'stock-check-sync-2026-03-16_to_18'
-        },
-        { merge: true }
-      );
-      batchCount++;
-      updated++;
-      // Commit theo batch để tránh vượt giới hạn 500 ops
-      if (batchCount >= 450) {
-        await commitBatchIfNeeded(true);
-      }
-    }
-
-    // Commit any remaining
-    await commitBatchIfNeeded(true);
-
-    console.log(`✅ [ASM1 one-time sync] Updated inventory-materials location for ${updated} docs.`);
-    localStorage.setItem(this.STOCKCHECK_SYNC_ONCE_KEY, '1');
-  }
-
-  private async remapLocationsOnce(): Promise<void> {
-    if (typeof window === 'undefined') return;
-    if (localStorage.getItem(this.LOCATION_REMAP_ONCE_KEY) === '1') return;
-
-    const mappings: Array<{ from: string; to: string }> = [
-      { from: 'ZR22', to: 'Z2.2(R)' },
-      { from: 'ZR15', to: 'Z1.5(R)' },
-      { from: 'ZL26', to: 'Z2.6(L)' }
-    ];
-
-    console.log('🔄 [ASM1 one-time remap locations] Starting remap...', mappings);
-    let totalUpdated = 0;
-
-    for (const m of mappings) {
-      const from = this.normalizeKeyPart(m.from);
-      const to = this.normalizeKeyPart(m.to);
-      if (!from || !to) continue;
-
-      const snap = await this.firestore
-        .collection('inventory-materials', ref =>
-          ref.where('factory', '==', this.FACTORY).where('location', '==', from)
-        )
-        .get()
-        .toPromise();
-
-      if (!snap || snap.empty) continue;
-
-      const db = this.firestore.firestore;
-      let batch = db.batch();
-      let batchCount = 0;
-
-      for (const doc of snap.docs) {
-        const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
-        batch.set(
-          docRef,
-          {
-            location: to,
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy: 'materials-asm1-location-remap'
-          },
-          { merge: true }
-        );
-        batchCount++;
-        totalUpdated++;
-
-        if (batchCount >= 450) {
-          await batch.commit();
-          batch = db.batch();
-          batchCount = 0;
-        }
-      }
-
-      if (batchCount > 0) {
-        await batch.commit();
-      }
-    }
-
-    console.log(`✅ [ASM1 one-time remap locations] Updated ${totalUpdated} docs.`);
-    localStorage.setItem(this.LOCATION_REMAP_ONCE_KEY, '1');
-  }
-
-  private async remapLocationsOnce2(): Promise<void> {
-    if (typeof window === 'undefined') return;
-    if (localStorage.getItem(this.LOCATION_REMAP_ONCE_KEY_2) === '1') return;
-
-    const mappings: Array<{ from: string; to: string }> = [
-      { from: 'ZL14', to: 'Z1.4(L)' },
-      { from: 'ZL16', to: 'Z1.6(L)' },
-      { from: 'ZL17', to: 'Z1.7(L)' }
-    ];
-
-    console.log('🔄 [ASM1 one-time remap locations 2] Starting remap...', mappings);
-    let totalUpdated = 0;
-
-    for (const m of mappings) {
-      const from = this.normalizeKeyPart(m.from);
-      const to = this.normalizeKeyPart(m.to);
-      if (!from || !to) continue;
-
-      const snap = await this.firestore
-        .collection('inventory-materials', ref =>
-          ref.where('factory', '==', this.FACTORY).where('location', '==', from)
-        )
-        .get()
-        .toPromise();
-
-      if (!snap || snap.empty) continue;
-
-      const db = this.firestore.firestore;
-      let batch = db.batch();
-      let batchCount = 0;
-
-      for (const doc of snap.docs) {
-        const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
-        batch.set(
-          docRef,
-          {
-            location: to,
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy: 'materials-asm1-location-remap'
-          },
-          { merge: true }
-        );
-        batchCount++;
-        totalUpdated++;
-
-        if (batchCount >= 450) {
-          await batch.commit();
-          batch = db.batch();
-          batchCount = 0;
-        }
-      }
-
-      if (batchCount > 0) {
-        await batch.commit();
-      }
-    }
-
-    console.log(`✅ [ASM1 one-time remap locations 2] Updated ${totalUpdated} docs.`);
-    localStorage.setItem(this.LOCATION_REMAP_ONCE_KEY_2, '1');
+    this.cdr.markForCheck();
   }
 
   ngAfterViewInit(): void {
@@ -2166,29 +1941,29 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
     try {
       // Get all inventory materials from Firebase
-      const snapshot = await this.firestore.collection('inventory-materials', ref => 
-        ref.where('factory', '==', 'ASM1')
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
-      
+
       if (!snapshot || snapshot.empty) {
         console.log('ℹ️ No inventory stock data found in Firebase');
         alert('Không tìm thấy dữ liệu tồn kho trong Firebase');
         this.isLoading = false;
         return;
       }
-      
+
       console.log(`📊 Found ${snapshot.docs.length} inventory records in Firebase`);
-      
+
       const inventoryData: any[] = [];
-      
+
       snapshot.docs.forEach(doc => {
         const data = doc.data() as any;
-        
+
         // Create Excel row with all Firebase fields
         const excelRow = {
           'STT': inventoryData.length + 1,
           'ID': doc.id,
-          'Factory': data.factory || 'ASM1',
+          'Factory': data.factory || this.selectedFactory,
           'Mã hàng': data.materialCode || '',
           'Tên hàng': data.materialName || '',
           'PO': data.poNumber || '',
@@ -2258,11 +2033,11 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       worksheet['!cols'] = columnWidths;
       
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM1_Inventory_Firebase');
-      
+      XLSX.utils.book_append_sheet(workbook, worksheet, `${this.selectedFactory}_Inventory_Firebase`);
+
       // Generate filename with current date
       const currentDate = new Date().toISOString().split('T')[0];
-      const fileName = `ASM1_Inventory_Firebase_${currentDate}.xlsx`;
+      const fileName = `${this.selectedFactory}_Inventory_Firebase_${currentDate}.xlsx`;
       
       XLSX.writeFile(workbook, fileName);
       
@@ -2355,14 +2130,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // đọc lại toàn bộ mỗi khi doc đổi ở tab QC/Overview và vòng lặp ghi auto-location.
     try {
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', this.FACTORY)
+        ref.where('factory', '==', this.selectedFactory)
            .orderBy('importDate', 'desc')
            .limit(1000)
       ).get().toPromise();
 
       const docs = snapshot?.docs || [];
       console.log(`📦 Loaded ${docs.length} materials from Firebase`);
-      this.readTracker.track('materials-asm1', 'inventory-materials', docs.length);
+      this.readTracker.track('materials', 'inventory-materials', docs.length);
 
         // Auto-set location: E7 for R* + IQC PASS; F7 for B011/B013/B014* + IQC PASS
         const autoLocationBatch = this.firestore.firestore.batch();
@@ -2376,7 +2151,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             const material = {
               id: id,
               ...data,
-              factory: this.FACTORY, // Force ASM1
+              factory: this.selectedFactory, // Force ASM1
               importDate: this.parseImportDate(data.importDate),
               receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
               expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
@@ -2395,7 +2170,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               autoLocationBatch.update(doc.ref, {
                 location: newLoc,
                 lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-                modifiedBy: 'materials-asm1-auto-location'
+                modifiedBy: 'materials-auto-location'
               } as any);
               autoLocationCount++;
             }
@@ -2440,7 +2215,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             
             return material;
           })
-          .filter(material => material.factory === this.FACTORY); // Double check ASM1 only
+          .filter(material => material.factory === this.selectedFactory); // Double check ASM1 only
 
         if (autoLocationCount > 0) {
           autoLocationBatch
@@ -2536,7 +2311,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
     const ok = confirm(
-      `Ghi snapshot TỒN cho ${codes.length} mã đã nhập (${this.FACTORY}) vào rm-bag-history?\n\n` +
+      `Ghi snapshot TỒN cho ${codes.length} mã đã nhập (${this.selectedFactory}) vào rm-bag-history?\n\n` +
         `Chỉ các dòng inventory thuộc các mã này. Dữ liệu kho không bị xóa hay sửa.`
     );
     if (!ok) {
@@ -2546,7 +2321,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.isSnapshottingBagHistory = true;
     this.cdr.markForCheck();
     try {
-      const r = await this.rmBagHistory.snapshotTonFromInventoryToRmHistory(this.FACTORY, { materialCodes: codes });
+      const r = await this.rmBagHistory.snapshotTonFromInventoryToRmHistory(this.selectedFactory, { materialCodes: codes });
       const derivedLine =
         r.derivedFromStock > 0
           ? `\n• ${r.derivedFromStock} dòng ước tổng bịch từ (tồn kho ÷ LDV) vì totalBags trên doc = 0.`
@@ -2559,7 +2334,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           `Đợt: ${r.resetId}`
       );
     } catch (e: any) {
-      console.error('[materials-asm1] snapshot TỒN:', e);
+      console.error('[materials] snapshot TỒN:', e);
       alert(`❌ Lỗi: ${e?.message || String(e)}`);
     } finally {
       this.isSnapshottingBagHistory = false;
@@ -2641,7 +2416,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       const outboundSnapshot = await this.firestore.collection('outbound-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(5)
         .get();
       
@@ -2797,7 +2572,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     try {
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -2854,7 +2629,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     try {
       const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
@@ -3100,17 +2875,17 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  private static readonly CATALOG_LOCALSTORAGE_KEY = 'materials-asm1-catalog-cache-v1';
+  private static readonly CATALOG_LOCALSTORAGE_KEY = 'materials-catalog-cache-v1';
   private static readonly CATALOG_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 tiếng
 
   /** Đọc catalog từ localStorage (nếu còn hạn) — tránh đọc lại ~8-9 nghìn doc mỗi lần mở tab/reload. */
   private tryLoadCatalogFromLocalStorage(): boolean {
     try {
-      const raw = localStorage.getItem(MaterialsASM1Component.CATALOG_LOCALSTORAGE_KEY);
+      const raw = localStorage.getItem(MaterialsComponent.CATALOG_LOCALSTORAGE_KEY);
       if (!raw) return false;
       const parsed = JSON.parse(raw) as { items?: any[]; timestamp?: number };
       if (!parsed?.items?.length || !parsed.timestamp) return false;
-      if (Date.now() - parsed.timestamp >= MaterialsASM1Component.CATALOG_CACHE_TTL_MS) return false;
+      if (Date.now() - parsed.timestamp >= MaterialsComponent.CATALOG_CACHE_TTL_MS) return false;
 
       this.catalogCache.clear();
       parsed.items.forEach(item => {
@@ -3128,7 +2903,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       const items = Array.from(this.catalogCache.values());
       localStorage.setItem(
-        MaterialsASM1Component.CATALOG_LOCALSTORAGE_KEY,
+        MaterialsComponent.CATALOG_LOCALSTORAGE_KEY,
         JSON.stringify({ items, timestamp: Date.now() })
       );
     } catch (e) {
@@ -3184,7 +2959,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       }
     }
     if (reads > 0) {
-      this.readTracker.track('materials-asm1', 'materials', reads);
+      this.readTracker.track('materials', 'materials', reads);
     }
     this.catalogLoaded = this.catalogCache.size > 0;
   }
@@ -3357,7 +3132,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         console.log(`📊 Duplicate handling: ${duplicateCount} duplicates skipped, ${processedCount} unique items processed`);
 
         this.catalogLoaded = true;
-        this.readTracker.track('materials-asm1', collectionName, snapshot.size);
+        this.readTracker.track('materials', collectionName, snapshot.size);
         this.saveCatalogToLocalStorage();
         console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Firebase collection: ${collectionName}`);
         console.log(`📋 Catalog cache keys:`, Array.from(this.catalogCache.keys()));
@@ -3405,18 +3180,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     
     this.filteredInventory = this.inventoryMaterials.filter(material => {
       // Always filter by ASM1 only
-      if (material.factory !== this.FACTORY) {
+      if (material.factory !== this.selectedFactory) {
         return false;
       }
 
       if (this.searchTerm) {
         const term = this.searchTerm.trim().toUpperCase();
-        if (this.searchByLocation) {
-          const loc = String(material.location ?? (material as any).viTri ?? '').trim().toUpperCase();
-          if (!loc.includes(term)) return false;
-        } else if (this.searchByCustomer) {
+        if (this.searchByCustomer) {
           const customer = this.getCustomerForMaterial(material).toUpperCase();
           if (!customer.includes(term)) return false;
+        } else if (this.isLocationSearchActive) {
+          const loc = String(material.location ?? (material as any).viTri ?? '').trim().toUpperCase();
+          if (!loc.includes(term)) return false;
+        } else if (this.searchType === 'po') {
+          if (!material.poNumber?.toUpperCase().includes(term)) return false;
         } else if (!material.materialCode?.toUpperCase().includes(term)) {
           return false;
         }
@@ -3517,11 +3294,22 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     if (this.isLoading) return '🔍 Đang tải...';
     if (this.searchByLocation) return 'Vị trí (H12, TRA…)…';
     if (this.searchByCustomer) return 'Khách hàng (VD: Customer A, Shared)…';
+    if (this.searchType === 'po') return 'Tìm theo PO…';
     return 'Mã hàng…';
   }
 
+  /** true khi đang search theo vị trí — qua tick Location hoặc qua nút cycle Mã/PO/Vị trí. */
+  get isLocationSearchActive(): boolean {
+    return this.searchByLocation || this.searchType === 'location';
+  }
+
   onSearchByLocationChange(): void {
-    if (this.searchByLocation) this.searchByCustomer = false;
+    if (this.searchByLocation) {
+      this.searchType = 'location';
+      this.searchByCustomer = false;
+    } else if (this.searchType === 'location') {
+      this.searchType = 'material';
+    }
     this.clearSearch();
   }
 
@@ -3540,15 +3328,31 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
+  /** Đổi kiểu tìm kiếm (Mã hàng / PO). */
+  changeSearchType(type: 'material' | 'po' | 'location'): void {
+    this.searchType = type;
+    this.searchTerm = '';
+    this.applyFilters();
+  }
+
+  /** Bấm nút để chuyển vòng Mã ⇄ PO (bỏ qua khi đang tick Location/KH). */
+  cycleSearchType(): void {
+    if (this.searchByLocation || this.searchByCustomer) return;
+    const types: ('material' | 'po')[] = ['material', 'po'];
+    const currentIndex = types.indexOf(this.searchType as 'material' | 'po');
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % types.length;
+    this.changeSearchType(types[nextIndex]);
+  }
+
   // Clear search and reset to initial state
   clearSearch(): void {
     this.searchTerm = '';
     this.filteredInventory = [];
     this.inventoryMaterials = [];
-    
+
     // Reset negative stock filter
     this.showOnlyNegativeStock = false;
-    
+
     // Return to initial state - no data displayed
     console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
   }
@@ -3567,13 +3371,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       return;
     }
 
-    if (!this.searchByLocation && searchTerm.length < 3) {
+    if (!this.isLocationSearchActive && searchTerm.length < 3) {
       this.filteredInventory = [];
       console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
       return;
     }
 
-    if (this.searchByLocation && searchTerm.trim().length < 1) {
+    if (this.isLocationSearchActive && searchTerm.trim().length < 1) {
       this.filteredInventory = [];
       return;
     }
@@ -3586,13 +3390,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     try {
       let querySnapshot: { docs: any[]; empty: boolean } | undefined;
 
-      if (this.searchByLocation) {
+      if (this.isLocationSearchActive) {
         const normalizedLocation = searchTerm.trim().toUpperCase();
         console.log(`🔍 ASM1 Searching by location: "${normalizedLocation}" - Loading from Firebase...`);
         try {
           this.searchProgress = 25;
           querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-            ref.where('factory', '==', this.FACTORY)
+            ref.where('factory', '==', this.selectedFactory)
                .where('location', '==', normalizedLocation)
                .limit(200)
           ).get().toPromise();
@@ -3601,7 +3405,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             console.log(`🔍 ASM1 No exact location match, trying prefix search...`);
             this.searchProgress = 50;
             querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.FACTORY)
+              ref.where('factory', '==', this.selectedFactory)
                  .where('location', '>=', normalizedLocation)
                  .where('location', '<=', normalizedLocation + '\uf8ff')
                  .limit(200)
@@ -3612,7 +3416,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           if (msg.includes('index') || msg.includes('Index')) {
             this.searchProgress = 50;
             const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.FACTORY).limit(3000)
+              ref.where('factory', '==', this.selectedFactory).limit(3000)
             ).get().toPromise();
             if (allSnapshot && !allSnapshot.empty) {
               const filtered = allSnapshot.docs.filter((doc) =>
@@ -3650,11 +3454,50 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           for (let i = 0; i < matchingCodes.length; i += chunkSize) {
             const chunk = matchingCodes.slice(i, i + chunkSize);
             const snap = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.FACTORY).where('materialCode', 'in', chunk).limit(500)
+              ref.where('factory', '==', this.selectedFactory).where('materialCode', 'in', chunk).limit(500)
             ).get().toPromise();
             if (snap?.docs) allDocs.push(...snap.docs);
           }
           querySnapshot = { docs: allDocs, empty: allDocs.length === 0 };
+        }
+      } else if (this.searchType === 'po') {
+        console.log(`🔍 Searching by PO: "${searchTerm}"...`);
+        try {
+          this.searchProgress = 25;
+          querySnapshot = await this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory)
+               .where('poNumber', '>=', searchTerm)
+               .where('poNumber', '<=', searchTerm + '\uf8ff')
+               .limit(100)
+          ).get().toPromise();
+
+          if (!querySnapshot || querySnapshot.empty) {
+            console.log(`🔍 No pattern match for PO "${searchTerm}", trying exact match...`);
+            this.searchProgress = 50;
+            querySnapshot = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.selectedFactory)
+                 .where('poNumber', '==', searchTerm)
+                 .limit(100)
+            ).get().toPromise();
+          }
+        } catch (indexError: any) {
+          const msg = indexError?.message || '';
+          if (msg.includes('index') || msg.includes('Index')) {
+            this.searchProgress = 50;
+            const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
+              ref.where('factory', '==', this.selectedFactory).limit(3000)
+            ).get().toPromise();
+            if (allSnapshot && !allSnapshot.empty) {
+              const term = searchTerm.trim().toUpperCase();
+              const filtered = allSnapshot.docs.filter(doc => {
+                const po = (doc.data() as any).poNumber;
+                return po && String(po).toUpperCase().includes(term);
+              });
+              querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+            }
+          } else {
+            throw indexError;
+          }
         }
       } else {
         console.log(`🔍 ASM1 Searching for materialCode: "${searchTerm}" - Loading from Firebase...`);
@@ -3663,7 +3506,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         try {
           this.searchProgress = 25;
           querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-            ref.where('factory', '==', this.FACTORY)
+            ref.where('factory', '==', this.selectedFactory)
                .where('materialCode', '==', normalizedCode)
                .limit(50)
           ).get().toPromise();
@@ -3672,7 +3515,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             console.log(`🔍 ASM1 No exact match for "${normalizedCode}", trying pattern search...`);
             this.searchProgress = 50;
             querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.FACTORY)
+              ref.where('factory', '==', this.selectedFactory)
                  .where('materialCode', '>=', normalizedCode)
                  .where('materialCode', '<=', normalizedCode + '\uf8ff')
                  .limit(100)
@@ -3683,7 +3526,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           if (msg.includes('index') || msg.includes('Index')) {
             this.searchProgress = 50;
             const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.FACTORY).limit(3000)
+              ref.where('factory', '==', this.selectedFactory).limit(3000)
             ).get().toPromise();
             if (allSnapshot && !allSnapshot.empty) {
               const filtered = allSnapshot.docs.filter(doc => {
@@ -3711,7 +3554,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           const material = {
             id: doc.id,
             ...data,
-            factory: this.FACTORY, // Force ASM1
+            factory: this.selectedFactory, // Force ASM1
             location: String(data.location || data.viTri || '').trim().toUpperCase(),
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
@@ -3731,7 +3574,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             searchLocBatch.update(doc.ref, {
               location: newLoc,
               lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-              modifiedBy: 'materials-asm1-auto-location'
+              modifiedBy: 'materials-auto-location'
             } as any);
             searchLocWrites++;
           }
@@ -3757,7 +3600,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             .catch(err => console.warn('⚠️ [ASM1 search auto location] Batch update failed:', err));
         }
 
-        this.readTracker.track('materials-asm1', 'inventory-materials', querySnapshot.docs.length);
+        this.readTracker.track('materials', 'inventory-materials', querySnapshot.docs.length);
         await this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map(m => m.materialCode));
         this.applyCatalogToMaterials(this.inventoryMaterials);
         void this.applyStorageUnitsFromCatalog();
@@ -3978,7 +3821,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
               poNumber: m.poNumber || '',
               imdKey: this.getInventoryImdBaseKey(m) || this.getDisplayIMD(m),
               batchNumber: m.batchNumber || '',
-              factory: 'ASM1'
+              factory: this.selectedFactory
             });
             m.lastStatusAt = status.at;
             m.lastStatusKind = status.kind;
@@ -4076,7 +3919,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
       // Get all inventory materials
       const snapshot = await this.firestore.collection('inventory-materials', ref => 
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
 
       if (!snapshot || snapshot.empty) {
@@ -4282,10 +4125,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   loadPermissions(): void {
     console.log('🔍 DEBUG: loadPermissions called');
     
-    this.tabPermissionService.canAccessTab('materials-asm1')
+    this.tabPermissionService.canAccessTab('materials')
       .pipe(takeUntil(this.destroy$))
       .subscribe(canAccess => {
-        console.log(`🔍 DEBUG: Tab permission result for 'materials-asm1': ${canAccess}`);
+        console.log(`🔍 DEBUG: Tab permission result for 'materials': ${canAccess}`);
         
         // Set basic permissions based on tab access
         this.canView = canAccess;
@@ -4336,8 +4179,8 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
             data: { progress$: this.excelImportService.progress$ }
           });
 
-                      // Start import process with ASM1 filter and duplicate strategy
-            const result = await this.excelImportService.importStockFile(file, 50, 'ASM1', duplicateStrategy);
+                      // Start import process with selected factory filter and duplicate strategy
+            const result = await this.excelImportService.importStockFile(file, 50, this.selectedFactory, duplicateStrategy);
           
           const dialogResult = await dialogRef.afterClosed().toPromise();
           
@@ -4443,9 +4286,13 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   }
 
   /** Lắng nghe Firestore — mọi máy cập nhật khi có thay đổi */
+  /** Subscription hiện tại tới doc Rule Bag của factory đang chọn — huỷ + tạo lại khi đổi factory. */
+  private qtyBagRulesSub: Subscription | null = null;
+
   private subscribeQtyBagRulesFromFirestore(): void {
-    this.firestore
-      .doc(`${this.QTY_BAG_FIRESTORE_COLLECTION}/${this.FACTORY}`)
+    this.qtyBagRulesSub?.unsubscribe();
+    this.qtyBagRulesSub = this.firestore
+      .doc(`${this.QTY_BAG_FIRESTORE_COLLECTION}/${this.selectedFactory}`)
       .valueChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(data => {
@@ -4499,10 +4346,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       k => this.qtyBagRuleByPrefix[k] === false
     );
     this.firestore
-      .doc(`${this.QTY_BAG_FIRESTORE_COLLECTION}/${this.FACTORY}`)
+      .doc(`${this.QTY_BAG_FIRESTORE_COLLECTION}/${this.selectedFactory}`)
       .set(
         {
-          factory: this.FACTORY,
+          factory: this.selectedFactory,
           enabled: this.qtyBagRuleEnabled,
           prefixOff,
           manualPrefixes: [...this.ruleBagManualPrefixes],
@@ -4510,9 +4357,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         },
         { merge: true }
       )
-      .then(() => console.log(`✅ [${this.FACTORY}] QTY bag / Rule Bag đã đồng bộ lên Firestore`))
+      .then(() => console.log(`✅ [${this.selectedFactory}] QTY bag / Rule Bag đã đồng bộ lên Firestore`))
       .catch(err => {
-        console.error(`❌ [${this.FACTORY}] Lỗi đồng bộ Rule lên Firestore:`, err);
+        console.error(`❌ [${this.selectedFactory}] Lỗi đồng bộ Rule lên Firestore:`, err);
         alert('Không lưu được cài đặt Rule lên Firebase. Kiểm tra mạng hoặc quyền Firestore.');
       });
   }
@@ -4670,12 +4517,74 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     // Placeholder for auto-resize functionality
   }
 
-  downloadStockTemplate(): void {
-    console.log('Download stock template');
+  // Download template for importing inventory
+  async downloadStockTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
+    try {
+      console.log(`📥 Downloading inventory import template for ${this.selectedFactory}...`);
+
+      const templateData = [
+        {
+          'Mã hàng': 'B001003',
+          'PO Number': 'KZP00001/0001',
+          'Tồn đầu': 50,
+          'Số lượng': 100,
+          'Đơn vị': 'PCS',
+          'Vị trí': 'A1',
+          'Loại hình': 'Raw Material',
+          'Ngày nhập (dd/mm/yyyy)': '15/12/2025',
+          'Batch Number': '15122025',
+          'Standard Packing': 10,
+          'Ghi chú': 'Sample material 1'
+        },
+        {
+          'Mã hàng': 'P0123',
+          'PO Number': 'KZP00002/0002',
+          'Tồn đầu': 0,
+          'Số lượng': 200,
+          'Đơn vị': 'KG',
+          'Vị trí': 'B2',
+          'Loại hình': 'Raw Material',
+          'Ngày nhập (dd/mm/yyyy)': '15/12/2025',
+          'Batch Number': '15122025',
+          'Standard Packing': 20,
+          'Ghi chú': 'Sample material 2'
+        }
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+
+      worksheet['!cols'] = [
+        { wch: 15 },  // Mã hàng
+        { wch: 18 },  // PO Number
+        { wch: 12 },  // Tồn đầu
+        { wch: 12 },  // Số lượng
+        { wch: 10 },  // Đơn vị
+        { wch: 10 },  // Vị trí
+        { wch: 15 },  // Loại hình
+        { wch: 20 },  // Ngày nhập
+        { wch: 15 },  // Batch Number
+        { wch: 18 },  // Standard Packing
+        { wch: 20 }   // Ghi chú
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory_Template');
+
+      const fileName = `${this.selectedFactory}_Inventory_Import_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      console.log('✅ Inventory import template downloaded successfully');
+      alert(`✅ Đã tải template import tồn kho ${this.selectedFactory}!\n\n📁 File: ${fileName}\n\n💡 Hướng dẫn:\n- Điền thông tin theo mẫu\n- Import bằng nút "Import Inventory"`);
+
+    } catch (error) {
+      console.error('❌ Error downloading template:', error);
+      alert('❌ Lỗi khi tải template: ' + error.message);
+    }
   }
 
-  downloadFIFOReportASM1(): void {
-    console.log('Download FIFO report for ASM1');
+  downloadFIFOReport(): void {
+    console.log(`Download FIFO report for ${this.selectedFactory}`);
   }
 
   // Delete single inventory item
@@ -4694,8 +4603,15 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       alert('❌ Không thể xóa item: Không tìm thấy ID');
       return;
     }
-    
-    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ASM1 Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
+
+    // 🔧 SAFETY CHECK: Verify factory before delete to prevent cross-factory deletion
+    if (material.factory !== this.selectedFactory) {
+      console.error(`❌ SAFETY CHECK FAILED: Trying to delete ${material.factory} item from ${this.selectedFactory} component`);
+      alert(`❌ LỖI BẢO MẬT: Không thể xóa item từ ${material.factory} trong ${this.selectedFactory} component!`);
+      return;
+    }
+
+    if (confirm(`Xác nhận xóa item ${material.materialCode} khỏi ${this.selectedFactory} Inventory?\n\nPO: ${material.poNumber}\nVị trí: ${material.location}\nSố lượng: ${material.quantity} ${material.unit}`)) {
       console.log(`✅ User confirmed deletion of ${material.materialCode}`);
       
       try {
@@ -4729,22 +4645,22 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  // Delete all inventory for ASM1
+  // Delete all inventory for the currently selected factory
   async deleteAllInventory(): Promise<void> {
     try {
       // Confirm deletion with user
       const confirmDelete = confirm(
-        '⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ tồn kho ASM1?\n\n' +
+        `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ tồn kho ${this.selectedFactory}?\n\n` +
         'Thao tác này sẽ:\n' +
-        '• Xóa tất cả dữ liệu tồn kho ASM1\n' +
+        `• Xóa tất cả dữ liệu tồn kho ${this.selectedFactory}\n` +
         '• Không thể hoàn tác\n' +
         '• Cần import lại toàn bộ dữ liệu\n\n' +
         'Nhập "DELETE" để xác nhận:'
       );
-      
+
       if (!confirmDelete) return;
-      
-      const userInput = prompt('Nhập "DELETE" để xác nhận xóa toàn bộ tồn kho ASM1:');
+
+      const userInput = prompt(`Nhập "DELETE" để xác nhận xóa toàn bộ tồn kho ${this.selectedFactory}:`);
       if (userInput !== 'DELETE') {
         alert('❌ Xác nhận không đúng. Thao tác bị hủy.');
         return;
@@ -4752,20 +4668,20 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
       // Show loading
       this.isLoading = true;
-      
-      // Get all ASM1 inventory documents
+
+      // Get all inventory documents for the selected factory
       const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
+        ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
-      
+
       if (!inventoryQuery || inventoryQuery.empty) {
-        alert('✅ Không có dữ liệu tồn kho ASM1 để xóa.');
+        alert(`✅ Không có dữ liệu tồn kho ${this.selectedFactory} để xóa.`);
         this.isLoading = false;
         return;
       }
 
       const totalItems = inventoryQuery.docs.length;
-      console.log(`🗑️ Starting deletion of ${totalItems} ASM1 inventory items...`);
+      console.log(`🗑️ Starting deletion of ${totalItems} ${this.selectedFactory} inventory items...`);
       
       // Delete all documents in batches
       const batchSize = 500; // Firestore batch limit
@@ -4913,7 +4829,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
 
       const changedAt = new Date();
       await this.firestore.collection('material-location-history').add({
-        factory: this.FACTORY,
+        factory: this.selectedFactory,
         materialId: material.id,
         materialCode: material.materialCode,
         poNumber: material.poNumber || '',
@@ -5285,7 +5201,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       const outboundRef = this.firestore.collection('outbound-materials');
       const snapshot = await outboundRef
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .where('materialCode', '==', materialCode)
         .where('poNumber', '==', poNumber)
         .get();
@@ -5372,14 +5288,14 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       let snapshot: any;
       try {
         snapshot = await outboundRef.ref
-          .where('factory', '==', this.FACTORY)
+          .where('factory', '==', this.selectedFactory)
           .where('materialCode', '==', normCode)
           .where('poNumber', '==', normPo)
           .orderBy('exportDate', 'asc')
           .get();
       } catch {
         snapshot = await outboundRef.ref
-          .where('factory', '==', this.FACTORY)
+          .where('factory', '==', this.selectedFactory)
           .where('materialCode', '==', normCode)
           .where('poNumber', '==', normPo)
           .get();
@@ -5470,7 +5386,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         // Kiểm tra tất cả outbound records có material code này
         const allOutboundQuery = await this.firestore.collection('outbound-materials')
           .ref
-          .where('factory', '==', 'ASM1')
+          .where('factory', '==', this.selectedFactory)
           .where('materialCode', '==', material.materialCode)
           .limit(10)
           .get();
@@ -5614,7 +5530,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Kiểm tra collection outbound-materials
       const outboundSnapshot = await this.firestore.collection('outbound-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(10)
         .get();
       
@@ -5662,7 +5578,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       console.log('\n📦 === CHECKING OUTBOUND DATA ===');
       const outboundSnapshot = await this.firestore.collection('outbound-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(10)
         .get();
       
@@ -5686,7 +5602,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       console.log('\n📦 === CHECKING INVENTORY DATA ===');
       const inventorySnapshot = await this.firestore.collection('inventory-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(10)
         .get();
       
@@ -5874,7 +5790,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Check outbound data
       const outboundSnapshot = await this.firestore.collection('outbound-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(5)
         .get();
       
@@ -5921,7 +5837,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       const snapshot = await this.firestore.collection('inventory-materials')
         .ref
-        .where('factory', '==', this.FACTORY)
+        .where('factory', '==', this.selectedFactory)
         .orderBy('importDate', 'desc')
         .limit(1000)
         .get();
@@ -5934,7 +5850,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         return {
           id: id,
           ...data,
-          factory: this.FACTORY,
+          factory: this.selectedFactory,
           importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
           receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
           expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
@@ -5998,7 +5914,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Kiểm tra xem có dữ liệu outbound nào không
       const existingSnapshot = await this.firestore.collection('outbound-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(1)
         .get();
       
@@ -6010,7 +5926,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       // Tạo dữ liệu test cho mã hàng B024052
       const testData = [
         {
-          factory: 'ASM1',
+          factory: this.selectedFactory,
           materialCode: 'B024052',
           poNumber: 'KZP00525/0207',
           exportQuantity: 5,
@@ -6019,7 +5935,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
           notes: 'Test data - Auto generated'
         },
         {
-          factory: 'ASM1',
+          factory: this.selectedFactory,
           materialCode: 'B024052',
           poNumber: 'KZP00625/0070',
           exportQuantity: 3,
@@ -6444,7 +6360,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       console.log('🔍 Debug: Checking outbound data...');
       const outboundSnapshot = await this.firestore.collection('outbound-materials')
         .ref
-        .where('factory', '==', 'ASM1')
+        .where('factory', '==', this.selectedFactory)
         .limit(5)
         .get();
       
@@ -6799,7 +6715,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.kkCheckFilterMode = 'all';
     this.kkCheckSearchCode = '';
     this.kkCheckSearchLocation = '';
-    this.kkCheckSelectedFactory = this.FACTORY;
+    this.kkCheckSelectedFactory = this.selectedFactory;
   }
 
   closeKkCheckPopup(): void {
@@ -7452,7 +7368,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
   private async performResetInventory(): Promise<void> {
     console.log('📡 Querying all ASM1 materials from Firebase...');
     const snapshot = await this.firestore
-      .collection('inventory-materials', (ref) => ref.where('factory', '==', this.FACTORY))
+      .collection('inventory-materials', (ref) => ref.where('factory', '==', this.selectedFactory))
       .get()
       .toPromise();
 
@@ -7505,6 +7421,112 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       }
     } else {
       alert(`✅ Reset hoàn thành!\nĐã xóa ${deletedZero} mã tồn = 0.`);
+    }
+  }
+
+  // Reset ALL Stock - Delete ALL inventory items for the currently selected factory
+  // (for complete reset before new import). Hành động phá hủy dữ liệu — luôn xác nhận 2 lần
+  // và luôn nêu rõ đang xóa của nhà máy nào (quan trọng vì selectedFactory có thể đổi qua factory-switcher).
+  async resetAllStock(): Promise<void> {
+    const factory = this.selectedFactory;
+    try {
+      console.log(`🔍 Loading all ${factory} materials for reset...`);
+      const snapshot = await this.firestore.collection('inventory-materials', ref =>
+        ref.where('factory', '==', factory)
+      ).get().toPromise();
+
+      if (!snapshot || snapshot.empty) {
+        alert(`✅ Không có dữ liệu tồn kho nào trong ${factory}`);
+        return;
+      }
+
+      const totalItems = snapshot.docs.length;
+
+      // Show confirmation dialog with strong warning — luôn nêu rõ nhà máy đang chọn
+      const confirmed = confirm(
+        `⚠️ CẢNH BÁO: XÓA TOÀN BỘ TỒN KHO ${factory} ⚠️\n\n` +
+        `Tìm thấy ${totalItems} mã hàng trong ${factory}\n\n` +
+        `Bạn có CHẮC CHẮN muốn xóa TẤT CẢ tồn kho của nhà máy ${factory} không?\n\n` +
+        `🔴 Hành động này sẽ xóa toàn bộ dữ liệu!\n` +
+        `🔴 Không thể hoàn tác!\n` +
+        `🔴 Chỉ dùng khi muốn reset hoàn toàn trước khi import mới!\n\n` +
+        `Nhấn OK để tiếp tục hoặc Cancel để hủy.`
+      );
+
+      if (!confirmed) {
+        console.log('❌ User cancelled reset operation');
+        return;
+      }
+
+      // Second confirmation for extra safety — nhắc lại nhà máy 1 lần nữa
+      const doubleConfirmed = confirm(
+        `🔴 XÁC NHẬN LẦN CUỐI — NHÀ MÁY ${factory} 🔴\n\n` +
+        `Bạn THỰC SỰ muốn xóa ${totalItems} mã hàng của ${factory}?\n\n` +
+        `Đây là cơ hội cuối cùng để hủy bỏ!\n\n` +
+        `Nhấn OK để XÓA HOÀN TOÀN hoặc Cancel để giữ lại dữ liệu.`
+      );
+
+      if (!doubleConfirmed) {
+        console.log('❌ User cancelled reset operation at second confirmation');
+        return;
+      }
+
+      // 🔧 SAFETY: nếu user đổi factory (qua switcher) trong lúc dialog đang mở, hủy để tránh xóa nhầm nhà máy.
+      if (this.selectedFactory !== factory) {
+        alert('❌ Nhà máy đang chọn đã thay đổi trong lúc xác nhận. Thao tác bị hủy để tránh xóa nhầm dữ liệu.');
+        return;
+      }
+
+      console.log(`🗑️ Starting COMPLETE reset for ${factory}: ${totalItems} items to delete`);
+      this.isLoading = true;
+
+      // Delete all items in batches
+      const batchSize = 100;
+      let deletedCount = 0;
+      const allDocs = snapshot.docs;
+
+      for (let i = 0; i < allDocs.length; i += batchSize) {
+        const batch = this.firestore.firestore.batch();
+        const currentBatch = allDocs.slice(i, i + batchSize);
+
+        currentBatch.forEach(doc => {
+          const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
+          batch.delete(docRef);
+        });
+
+        await batch.commit();
+        deletedCount += currentBatch.length;
+
+        console.log(`✅ ${factory} Complete Reset batch ${Math.floor(i / batchSize) + 1} completed: ${deletedCount}/${totalItems}`);
+
+        // Small delay between batches
+        if (i + batchSize < allDocs.length) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+
+      console.log(`✅ Complete reset finished: ${deletedCount} items deleted`);
+
+      // Clear local data (chỉ khi vẫn đang xem đúng factory vừa xóa)
+      if (this.selectedFactory === factory) {
+        this.inventoryMaterials = [];
+        this.filteredInventory = [];
+        this.updateNegativeStockCount();
+        this.updateTotalStockCount();
+      }
+
+      this.isLoading = false;
+
+      alert(
+        `✅ Reset hoàn thành!\n\n` +
+        `Đã xóa ${deletedCount} mã hàng từ ${factory}\n\n` +
+        `Bạn có thể import dữ liệu mới ngay bây giờ.`
+      );
+
+    } catch (error) {
+      console.error(`❌ Error during ${factory} complete reset:`, error);
+      this.isLoading = false;
+      alert(`❌ Lỗi khi reset toàn bộ ${factory}: ${error.message}`);
     }
   }
 
@@ -8418,7 +8440,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
         'Last status': this.formatLastStatusDate(m.lastStatusAt),
         'Last status loại': m.lastStatusKind || '',
         'Người thực hiện': m.lastStatusBy && m.lastStatusBy !== '—' ? m.lastStatusBy : '',
-        'Factory': m.factory || 'ASM1',
+        'Factory': m.factory || this.selectedFactory,
         'Đơn vị': m.unit || '',
         'Hạn dùng': m.expiryDate
           ? m.expiryDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -8434,10 +8456,10 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       ];
 
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM1_Search');
+      XLSX.utils.book_append_sheet(workbook, worksheet, `${this.selectedFactory}_Search`);
       const date = new Date().toISOString().split('T')[0];
       const hint = (this.searchTerm || 'all').trim().slice(0, 24).replace(/[^\w\-.]/g, '_') || 'all';
-      const fileName = `ASM1_Search_${hint}_${date}.xlsx`;
+      const fileName = `${this.selectedFactory}_Search_${hint}_${date}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       alert(`✅ Đã tải ${exportData.length} dòng kết quả search.\n\nFile: ${fileName}`);
     } catch (error: any) {
@@ -8461,7 +8483,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       
       // Optimize data for smaller file size
       const exportData = this.filteredInventory.map(material => ({
-        'Factory': material.factory || 'ASM1',
+        'Factory': material.factory || this.selectedFactory,
         'Import Date': material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : 'N/A',
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
@@ -8513,9 +8535,9 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       worksheet['!cols'] = colWidths;
       
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'ASM1_Inventory');
-      
-      const fileName = `ASM1_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.utils.book_append_sheet(workbook, worksheet, `${this.selectedFactory}_Inventory`);
+
+      const fileName = `${this.selectedFactory}_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       
       console.log('✅ ASM1 inventory data exported to Excel');
@@ -8546,7 +8568,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
       ref.where('materialCode', '==', material.materialCode)
          .where('poNumber', '==', material.poNumber)
          .where('location', '==', material.location) // Thêm điều kiện vị trí để tránh nhân đôi
-         .where('factory', '==', 'ASM1')
+         .where('factory', '==', this.selectedFactory)
          .orderBy('exportDate', 'desc')
          .limit(10)
     ).get().subscribe(snapshot => {
@@ -8562,7 +8584,7 @@ export class MaterialsASM1Component implements OnInit, OnDestroy, AfterViewInit 
     this.firestore.collection('inventory-materials', ref => 
       ref.where('materialCode', '==', material.materialCode)
          .where('poNumber', '==', material.poNumber)
-         .where('factory', '==', 'ASM1')
+         .where('factory', '==', this.selectedFactory)
     ).get().subscribe(snapshot => {
       console.log(`📋 Found ${snapshot.docs.length} inventory records for ${material.materialCode} - ${material.poNumber}`);
       

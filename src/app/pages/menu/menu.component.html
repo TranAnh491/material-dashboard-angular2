@@ -67,11 +67,11 @@
     </div>
   </div>
 
-  <!-- ASM1 RM Group -->
+  <!-- RM Group -->
   <div class="menu-section">
-    <h5 class="menu-category-title">ASM1 RM</h5>
+    <h5 class="menu-category-title">RM</h5>
     <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['ASM1 RM']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
+      <div *ngFor="let tab of filteredByCategory['RM']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
           <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
         </div>
@@ -86,20 +86,6 @@
     <h5 class="menu-category-title">QUALITY</h5>
     <div class="menu-grid">
       <div *ngFor="let tab of filteredByCategory['Quality']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- ASM2 RM Group -->
-  <div class="menu-section">
-    <h5 class="menu-category-title">ASM2 RM</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['ASM2 RM']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
         <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
           <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
         </div>

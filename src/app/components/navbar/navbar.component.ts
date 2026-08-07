@@ -285,8 +285,16 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/outbound-asm2';
     }
 
+    isOutboundPage(): boolean {
+      return this.currentAppPath() === '/outbound';
+    }
+
     isOutboundAsmPage(): boolean {
-      return this.isOutboundAsm1Page() || this.isOutboundAsm2Page();
+      return this.isOutboundPage() || this.isOutboundAsm1Page() || this.isOutboundAsm2Page();
+    }
+
+    isMaterialsPage(): boolean {
+      return this.currentAppPath() === '/materials';
     }
 
     isShipmentPage(): boolean {
@@ -363,6 +371,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/inbound',
       '/inbound-asm1',
       '/inbound-asm2',
+      '/outbound',
       '/outbound-asm1',
       '/outbound-asm2',
       '/pd-control',
@@ -380,7 +389,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/label',
       '/equipment',
       '/xe-tai',
-      '/materials-asm1',
+      '/materials',
       '/danh-muc-nvl-tp'
     ]);
 

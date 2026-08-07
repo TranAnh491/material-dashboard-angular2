@@ -11,13 +11,7 @@ import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 
-import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
-import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
-import { InventoryOverviewASM1Component } from '../../pages/inventory-overview-asm1/inventory-overview-asm1.component';
-import { InventoryOverviewASM2Component } from '../../pages/inventory-overview-asm2/inventory-overview-asm2.component';
 import { DanhMucNvlTpComponent } from '../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp.component';
-import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
-import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 
 import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 
@@ -53,14 +47,11 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-dashboard',  component: MaterialsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fgs-dashboard',          component: FgsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'materials-asm1',       component: MaterialsASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'materials-asm2',       component: MaterialsASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'inventory-overview-asm1', component: InventoryOverviewASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'inventory-overview-asm2', component: InventoryOverviewASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'materials',            loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'inventory-overview',   loadChildren: () => import('../../pages/inventory-overview/inventory-overview.module').then(m => m.InventoryOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound',              loadChildren: () => import('../../pages/inbound/inbound.module').then(m => m.InboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'danh-muc-nvl-tp',      component: DanhMucNvlTpComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'outbound-asm1',        component: OutboundASM1Component, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'outbound-asm2',        component: OutboundASM2Component, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'outbound',             loadChildren: () => import('../../pages/outbound/outbound.module').then(m => m.OutboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'bag-history',          component: BagHistoryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pd-control',           loadChildren: () => import('../../pages/pd-control/pd-control.module').then(m => m.PdControlModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
@@ -68,6 +59,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'layout-warehouse-asm3', loadChildren: () => import('../../pages/layout-warehouse-asm3/layout-warehouse-asm3.module').then(m => m.LayoutWarehouseAsm3Module), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-in',                loadChildren: () => import('../../pages/fg-in/fg-in.module').then(m => m.FgInModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-out',               loadChildren: () => import('../../pages/fg-out/fg-out.module').then(m => m.FgOutModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'bieu-mau',             loadChildren: () => import('../../pages/bieu-mau/bieu-mau.module').then(m => m.BieuMauModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-check',             loadChildren: () => import('../../pages/fg-check/fg-check.module').then(m => m.FGCheckModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-inventory',         loadChildren: () => import('../../pages/fg-inventory/fg-inventory.module').then(m => m.FGInventoryModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-overview',          loadChildren: () => import('../../pages/fg-overview/fg-overview.module').then(m => m.FgOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },

@@ -40,16 +40,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatMenuModule } from '@angular/material/menu';
 import { SharedModule } from '../../shared/shared.module';
 import { ComponentsModule } from '../../components/components.module';
-import { InventoryOverviewASM1Module } from '../../pages/inventory-overview-asm1/inventory-overview-asm1.module';
-import { InventoryOverviewASM2Module } from '../../pages/inventory-overview-asm2/inventory-overview-asm2.module';
 
 // Các component materials mới
 import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 
-import { MaterialsASM1Component } from '../../pages/materials-asm1/materials-asm1.component';
-import { MaterialsASM2Component } from '../../pages/materials-asm2/materials-asm2.component';
-import { OutboundASM1Component } from '../../pages/outbound-asm1/outbound-asm1.component';
-import { OutboundASM2Component } from '../../pages/outbound-asm2/outbound-asm2.component';
 import { EquipmentComponent } from '../../pages/equipment/equipment.component';
 import { WarehouseManualComponent } from '../../pages/equipment/warehouse-manual.component';
 import { WarehouseTrainingQuizComponent } from '../../pages/equipment/warehouse-training-quiz.component';
@@ -111,8 +105,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
     DragDropModule,
     SharedModule,
     ComponentsModule,
-    InventoryOverviewASM1Module,
-    InventoryOverviewASM2Module,
     TruckScheduleSharedModule
   ],
   declarations: [
@@ -129,10 +121,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
     ShipmentComponent,
     WorkOrderStatusComponent,
 
-    MaterialsASM1Component,
-    MaterialsASM2Component,
-    OutboundASM1Component,
-    OutboundASM2Component,
     DocumentsComponent,
     StockCheckComponent,
     SettingsComponent,

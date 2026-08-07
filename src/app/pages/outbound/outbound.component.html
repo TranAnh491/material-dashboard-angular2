@@ -10,12 +10,24 @@
           <span class="ob-m-app-mark" aria-hidden="true">
             <i class="material-icons ob-m-app-mark__arrow">arrow_upward</i>
           </span>
-          <h1 class="ob-m-header__title">OUTBOUND ASM1</h1>
+          <h1 class="ob-m-header__title">OUTBOUND {{ selectedFactory }}</h1>
         </div>
         <button type="button" class="ob-m-header__iconbtn ob-m-header__bell" (click)="openMobileMoreSheet()" aria-label="Thông báo">
           <i class="material-icons">notifications_none</i>
           <span class="ob-m-header__badge-count" *ngIf="getMobileNotifyCount() > 0">{{ getMobileNotifyCount() }}</span>
         </button>
+      </div>
+      <div class="ob-m-header__row2">
+        <span class="ob-m-header__factory-label">Nhà máy:</span>
+        <div class="factory-switcher">
+          <button type="button"
+                  class="factory-switcher__btn"
+                  *ngFor="let f of factoryOptions"
+                  [class.active]="selectedFactory === f"
+                  (click)="setFactory(f)">
+            {{ f }}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -298,6 +310,18 @@
     <div class="ob-m-sheet-bg" *ngIf="showMobileMoreSheet" (click)="closeMobileMoreSheet()"></div>
     <div class="ob-m-sheet" *ngIf="showMobileMoreSheet" (click)="$event.stopPropagation()">
       <div class="ob-m-sheet__title">Thao tác</div>
+      <div class="ob-m-sheet__row ob-m-sheet__row--factory">
+        <span>Nhà máy:</span>
+        <div class="factory-switcher">
+          <button type="button"
+                  class="factory-switcher__btn"
+                  *ngFor="let f of factoryOptions"
+                  [class.active]="selectedFactory === f"
+                  (click)="setFactory(f)">
+            {{ f }}
+          </button>
+        </div>
+      </div>
       <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('filter')">
         <i class="material-icons">date_range</i> Lọc theo ngày
       </button>
@@ -325,7 +349,7 @@
 
   <div class="excel-container" *ngIf="!isMobile">
     <div class="excel-header">
-      <h4>📤 OUTBOUND ASM1</h4>
+      <h4>📤 OUTBOUND {{ selectedFactory }}</h4>
     </div>
 
     <!-- Mode toggle bar — always visible, separate from header and actions -->
@@ -347,6 +371,18 @@
         Xuất BS
       </button>
       <span *ngIf="exportMode==='BS'" class="export-mode-bar__hint">● Đang xem danh sách Xuất Bổ Sung</span>
+
+      <div class="factory-switcher-row">
+        <div class="factory-switcher">
+          <button type="button"
+                  class="factory-switcher__btn"
+                  *ngFor="let f of factoryOptions"
+                  [class.active]="selectedFactory === f"
+                  (click)="setFactory(f)">
+            {{ f }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Excel-like Actions -->
@@ -526,8 +562,8 @@
           </button>
         </div>
 
-        <!-- Factory Badge - 🔧 SỬA LỖI: Ẩn box ASM1 -->
-        <!-- <span class="factory-badge asm1-badge">ASM1</span> -->
+        <!-- Factory Badge - 🔧 SỬA LỖI: Ẩn box factory -->
+        <!-- <span class="factory-badge asm1-badge">{{ selectedFactory }}</span> -->
         
         <!-- Negative stock counter -->
         <!-- REMOVED: Negative stock counter - Không cần tính stock để scan nhanh -->
@@ -536,7 +572,7 @@
     <div class="loading-container" *ngIf="isLoading">
       <div class="loading-spinner">
         <i class="material-icons spinning">refresh</i>
-        <span>Đang tải dữ liệu ASM1...</span>
+        <span>Đang tải dữ liệu {{ selectedFactory }}...</span>
       </div>
     </div>
     <div class="error-message" *ngIf="errorMessage">
@@ -546,7 +582,7 @@
     <!-- ── Xuất BS list (desktop) ── -->
     <div class="bs-section" *ngIf="exportMode === 'BS' && !isMobile" style="padding:12px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <span style="font-weight:700;font-size:15px;color:#b71c1c">📦 Danh sách Xuất Bổ Sung (ASM1)</span>
+        <span style="font-weight:700;font-size:15px;color:#b71c1c">📦 Danh sách Xuất Bổ Sung ({{ selectedFactory }})</span>
         <button type="button" (click)="loadBsItems()" style="padding:3px 10px;border:1px solid #b71c1c;border-radius:4px;color:#b71c1c;cursor:pointer;background:transparent;font-size:12px">
           <i class="material-icons" style="font-size:14px;vertical-align:middle">refresh</i> Làm mới
         </button>
@@ -615,7 +651,7 @@
         <tbody>
           <tr *ngFor="let material of getPaginatedMaterials(); let i = index; trackBy: trackByIndex" [class.row-dup-bag]="material.bagDuplicate">
             <td class="factory-cell readonly-cell">
-              {{material.factory || 'ASM1'}}
+              {{material.factory || selectedFactory}}
             </td>
             <td class="index-cell readonly-cell">
               {{i + 1}}
@@ -680,13 +716,34 @@
     <div class="modal-overlay" (click)="closeScanningSetupModal()"></div>
     <div class="modal-content large-modal">
       <div class="modal-header">
-        <h3>Quét Xuất Kho - RM1 Outbound</h3>
+        <h3>Quét Xuất Kho</h3>
+        <span class="modal-header__factory-badge" *ngIf="scanningSetupStep !== 'factory'">{{ selectedFactory }}</span>
         <button class="close-btn" (click)="closeScanningSetupModal()">
           <i class="material-icons">close</i>
         </button>
       </div>
-      
+
       <div class="modal-body">
+        <!-- Step 0: Chọn nhà máy — bắt buộc trước khi quét, không dùng ngầm định -->
+        <div class="scan-step" *ngIf="scanningSetupStep === 'factory'">
+          <div class="step-header">
+            <div class="step-number">0</div>
+            <div class="step-title">
+              <h4>Chọn Nhà Máy</h4>
+              <p>Vui lòng chọn nhà máy đang thao tác trước khi bắt đầu quét</p>
+            </div>
+          </div>
+
+          <div class="factory-choice-section">
+            <button type="button"
+                    class="factory-choice-btn"
+                    *ngFor="let f of factoryOptions"
+                    (click)="confirmFactoryForScan(f)">
+              {{ f }}
+            </button>
+          </div>
+        </div>
+
         <!-- Step 1: Scan LSX -->
         <div class="scan-step" *ngIf="scanningSetupStep === 'lsx'">
           <div class="step-header">
@@ -832,7 +889,7 @@
   <div class="scan-review-modal" *ngIf="showQcRuleModal" (click)="closeQcRuleModal()">
     <div class="scan-review-content" style="max-width: 520px;" (click)="$event.stopPropagation()">
       <div class="scan-review-header">
-        <h3>QC rule — Outbound ASM1</h3>
+        <h3>QC rule — Outbound {{ selectedFactory }}</h3>
         <button class="close-btn" type="button" (click)="closeQcRuleModal()">
           <i class="material-icons">close</i>
         </button>

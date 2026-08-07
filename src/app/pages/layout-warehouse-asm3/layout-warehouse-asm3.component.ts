@@ -1038,8 +1038,12 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     const groupRef = this.lockGroups.get(this.selectedSlot.name);
     const targetName = groupRef || this.selectedSlot.name;
     const location = this.inventoryLocationFull.get(targetName) || targetName;
-    const path = this.isFgRow(this.selectedSlot.row) ? '/fg-inventory' : '/materials-asm1';
-    this.router.navigate([path], { queryParams: { location } });
+    if (this.isFgRow(this.selectedSlot.row)) {
+      this.router.navigate(['/fg-inventory'], { queryParams: { location } });
+    } else {
+      // Dãy A-G (NVL) luôn thuộc ASM1 — trang /materials (gộp ASM1+ASM2) cần thêm factory để mở đúng nhà máy.
+      this.router.navigate(['/materials'], { queryParams: { location, factory: 'ASM1' } });
+    }
   }
 
   openScanForSelectedSlot(): void {
