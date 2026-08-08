@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -435,6 +435,49 @@ exports.requestFgLotLsxOtpFn = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** RM Inventory More: OTP 4 số Zalo → ASP0106 cho import / xóa / đổi tồn. */
+exports.requestMaterialsInventoryOtpFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+        const { requestMaterialsInventoryOtp } = await Promise.resolve().then(() => __importStar(require('./materials-inventory-otp')));
+        await requestMaterialsInventoryOtp(admin.firestore(), {
+            requestedBy: typeof (data === null || data === void 0 ? void 0 : data.requestedBy) === 'string' ? data.requestedBy : '',
+            actionLabel: typeof (data === null || data === void 0 ? void 0 : data.actionLabel) === 'string' ? data.actionLabel : '',
+            factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory : ''
+        });
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** RM Inventory More: xác nhận OTP thao tác tồn kho. */
+exports.verifyMaterialsInventoryOtpFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof (data === null || data === void 0 ? void 0 : data.code) === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+        const { verifyMaterialsInventoryOtp } = await Promise.resolve().then(() => __importStar(require('./materials-inventory-otp')));
+        return await verifyMaterialsInventoryOtp(admin.firestore(), code);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có') || msg.includes('4 chữ số')
+            ? 'failed-precondition'
+            : 'internal', msg);
     }
 });
 /** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
@@ -1050,6 +1093,18 @@ exports.backupFgCollectionsDaily = functions
     .onRun(async () => {
     const { runFgDailyBackupJob } = await Promise.resolve().then(() => __importStar(require('./fg-daily-backup')));
     await runFgDailyBackupJob();
+});
+/**
+ * RM Inventory — danh mục Ẩn: mỗi ngày 02:00 (VN)
+ * gửi backup CSV các dòng đã Ẩn ≥ 30 ngày tới wh1@airspeedmfgvn.com rồi xóa.
+ */
+exports.purgeInventoryHiddenDaily = functions
+    .runWith({ secrets: [params_config_1.emailPass], timeoutSeconds: 300, memory: '512MB' })
+    .pubsub.schedule('0 2 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runInventoryHiddenPurgeJob } = await Promise.resolve().then(() => __importStar(require('./inventory-hidden-purge')));
+    await runInventoryHiddenPurgeJob(admin.firestore());
 });
 /**
  * Gọi sau mỗi lần deploy hosting để tự động gửi lệnh "F5 toàn bộ" cho mọi tab đang mở web —

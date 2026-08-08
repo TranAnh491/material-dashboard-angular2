@@ -447,6 +447,55 @@ export const requestFgLotLsxOtpFn = functions
     }
   });
 
+/** RM Inventory More: OTP 4 số Zalo → ASP0106 cho import / xóa / đổi tồn. */
+export const requestMaterialsInventoryOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { requestMaterialsInventoryOtp } = await import('./materials-inventory-otp');
+      await requestMaterialsInventoryOtp(admin.firestore(), {
+        requestedBy: typeof data?.requestedBy === 'string' ? data.requestedBy : '',
+        actionLabel: typeof data?.actionLabel === 'string' ? data.actionLabel : '',
+        factory: typeof data?.factory === 'string' ? data.factory : ''
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/** RM Inventory More: xác nhận OTP thao tác tồn kho. */
+export const verifyMaterialsInventoryOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+      const { verifyMaterialsInventoryOtp } = await import('./materials-inventory-otp');
+      return await verifyMaterialsInventoryOtp(admin.firestore(), code);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có') || msg.includes('4 chữ số')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
 export const verifyFgLotLsxOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })
@@ -1131,6 +1180,19 @@ export const backupFgCollectionsDaily = functions
   .onRun(async () => {
     const { runFgDailyBackupJob } = await import('./fg-daily-backup');
     await runFgDailyBackupJob();
+  });
+
+/**
+ * RM Inventory — danh mục Ẩn: mỗi ngày 02:00 (VN)
+ * gửi backup CSV các dòng đã Ẩn ≥ 30 ngày tới wh1@airspeedmfgvn.com rồi xóa.
+ */
+export const purgeInventoryHiddenDaily = functions
+  .runWith({ secrets: [emailPass], timeoutSeconds: 300, memory: '512MB' })
+  .pubsub.schedule('0 2 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runInventoryHiddenPurgeJob } = await import('./inventory-hidden-purge');
+    await runInventoryHiddenPurgeJob(admin.firestore());
   });
 
 /**
