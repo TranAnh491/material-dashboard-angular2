@@ -1,166 +1,6 @@
 <div class="main-content">
-  <!-- Giao diện mobile: menu module + drill-down nhóm (≤768px) -->
-  <div class="dash-mobile-app" *ngIf="isMobileLayout">
-    <header class="dash-mob-header">
-      <button type="button" class="dash-mob-iconbtn" (click)="goMenu()" aria-label="Menu đầy đủ">
-        <i class="material-icons">menu</i>
-      </button>
-      <div class="dash-mob-brand">
-        <span class="dash-mob-brand__title">Dashboard</span>
-        <span class="dash-mob-brand__sub">Tổng quan kho · module</span>
-      </div>
-      <button type="button" class="dash-mob-iconbtn dash-mob-iconbtn--bell" aria-label="Thông báo">
-        <i class="material-icons">notifications_none</i>
-        <span class="dash-mob-dot"></span>
-      </button>
-    </header>
-
-    <!-- Drill-down: danh sách một nhóm -->
-    <div class="dash-mob-drill" *ngIf="mobileDrillCategory">
-      <div class="dash-mob-drill__head">
-        <button type="button" class="dash-mob-iconbtn" (click)="closeMobileCategoryDrill()" aria-label="Quay lại">
-          <i class="material-icons">arrow_back</i>
-        </button>
-        <div class="dash-mob-drill__titles">
-          <h1 class="dash-mob-drill__title">{{ mobileDrillCategory }}</h1>
-          <p class="dash-mob-drill__sub">Chọn module để mở</p>
-        </div>
-      </div>
-      <div class="dash-mob-search dash-mob-search--drill" *ngIf="mobileSearchActive">
-        <i class="material-icons">search</i>
-        <input
-          type="search"
-          [(ngModel)]="mobileModuleSearch"
-          placeholder="Tìm trong nhóm..."
-          class="dash-mob-search__input"
-        />
-      </div>
-      <ul class="dash-mob-list">
-        <li *ngFor="let t of mobileTabsForCategory(mobileDrillCategory)">
-          <button type="button" class="dash-mob-list__row" (click)="navigateToTab(t.path)">
-            <span class="dash-mob-list__ico" [ngClass]="iconTintClass(t.category)">
-              <i class="material-icons">{{ t.icon }}</i>
-            </span>
-            <span class="dash-mob-list__text">
-              <span class="dash-mob-list__title">{{ t.title }}</span>
-              <span class="dash-mob-list__desc">{{ mobileCardDesc(t) }}</span>
-            </span>
-            <i class="material-icons dash-mob-list__chev">chevron_right</i>
-          </button>
-        </li>
-      </ul>
-    </div>
-
-    <!-- Trang chủ mobile: KPI + lưới theo nhóm -->
-    <div class="dash-mob-hub" *ngIf="!mobileDrillCategory">
-      <div class="dash-mob-hub__intro">
-        <h1 class="dash-mob-hub__title">Dashboard</h1>
-        <p class="dash-mob-hub__sub">KPI nhanh và truy cập module theo nhóm</p>
-      </div>
-
-      <div class="dash-mob-kpi-strip" aria-label="Tóm tắt nhanh">
-        <div class="dash-mob-kpi-pill">
-          <span class="dash-mob-kpi-pill__l">WO</span>
-          <strong>{{ workOrder }}</strong>
-        </div>
-        <div class="dash-mob-kpi-pill">
-          <span class="dash-mob-kpi-pill__l">Ship</span>
-          <strong>{{ shipment }}</strong>
-        </div>
-        <div class="dash-mob-kpi-pill">
-          <span class="dash-mob-kpi-pill__l">OTD</span>
-          <strong>100%</strong>
-        </div>
-        <div class="dash-mob-kpi-pill dash-mob-kpi-pill--factory">
-          <span class="dash-mob-kpi-pill__l">SX</span>
-          <select class="dash-mob-factory" [(ngModel)]="selectedFactory" (change)="onFactoryChange(selectedFactory)">
-            <option value="ASM1">ASM1</option>
-            <option value="ASM2">ASM2</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="dash-mob-search dash-mob-search--hub" *ngIf="mobileSearchActive">
-        <i class="material-icons">search</i>
-        <input
-          type="search"
-          [(ngModel)]="mobileModuleSearch"
-          placeholder="Tìm module..."
-          class="dash-mob-search__input"
-        />
-      </div>
-
-      <ul class="dash-mob-list dash-mob-list--search" *ngIf="mobileHasSearchQuery">
-        <li *ngFor="let t of mobileTabsFiltered()">
-          <button type="button" class="dash-mob-list__row" (click)="navigateToTab(t.path)">
-            <span class="dash-mob-list__ico" [ngClass]="iconTintClass(t.category)">
-              <i class="material-icons">{{ t.icon }}</i>
-            </span>
-            <span class="dash-mob-list__text">
-              <span class="dash-mob-list__title">{{ t.title }}</span>
-              <span class="dash-mob-list__desc">{{ t.category }}</span>
-            </span>
-            <i class="material-icons dash-mob-list__chev">chevron_right</i>
-          </button>
-        </li>
-        <li class="dash-mob-empty" *ngIf="mobileTabsFiltered().length === 0">Không tìm thấy module.</li>
-      </ul>
-
-      <ng-container *ngIf="!mobileHasSearchQuery">
-        <section class="dash-mob-section" *ngFor="let cat of mobileCategoriesVisible()">
-          <button type="button" class="dash-mob-section__head" (click)="openMobileCategoryDrill(cat)">
-            <span class="dash-mob-section__label">{{ cat }}</span>
-            <i class="material-icons">chevron_right</i>
-          </button>
-          <div class="dash-mob-grid">
-            <button
-              type="button"
-              class="dash-mob-card"
-              *ngFor="let t of mobileTabsForCategory(cat)"
-              (click)="navigateToTab(t.path)"
-            >
-              <span class="dash-mob-card__ico" [ngClass]="iconTintClass(cat)">
-                <i class="material-icons">{{ t.icon }}</i>
-              </span>
-              <span class="dash-mob-card__title">{{ t.title }}</span>
-              <span class="dash-mob-card__desc">{{ mobileCardDesc(t) }}</span>
-            </button>
-          </div>
-        </section>
-      </ng-container>
-    </div>
-
-    <nav class="dash-mob-bottomnav" aria-label="Điều hướng dưới">
-      <button
-        type="button"
-        class="dash-mob-bottomnav__btn"
-        [class.dash-mob-bottomnav__btn--active]="mobileNav === 'home' && !mobileDrillCategory"
-        (click)="setMobileNav('home')"
-      >
-        <i class="material-icons">home</i>
-        <span>Home</span>
-      </button>
-      <button
-        type="button"
-        class="dash-mob-bottomnav__btn"
-        [class.dash-mob-bottomnav__btn--active]="mobileNav === 'search'"
-        (click)="setMobileNav('search')"
-      >
-        <i class="material-icons">search</i>
-        <span>Search</span>
-      </button>
-      <button type="button" class="dash-mob-bottomnav__btn" (click)="setMobileNav('fav')">
-        <i class="material-icons">star_border</i>
-        <span>Menu</span>
-      </button>
-      <button type="button" class="dash-mob-bottomnav__btn" (click)="setMobileNav('profile')">
-        <i class="material-icons">person_outline</i>
-        <span>Profile</span>
-      </button>
-    </nav>
-  </div>
-
-  <div class="dash-desktop-shell" *ngIf="!isMobileLayout">
+  <!-- Desktop + Mobile (mobile chỉ hiện 3 widget phía dưới, ẩn phần còn lại) -->
+  <div class="dash-desktop-shell" [class.dash-desktop-shell--mobile-widgets]="isMobileLayout">
   <div class="container-fluid">
     <!-- Dashboard Header (like screenshot) -->
     <div class="dash-topbar">
@@ -174,7 +14,7 @@
         />
         <div class="dash-topbar__headlines">
           <div class="dash-topbar__title">Warehouse Dashboard</div>
-          <div class="dash-topbar__sub">Real-time overview of warehouse performance</div>
+          <div class="dash-topbar__sub">{{ isMobileLayout ? 'Work Order · FG Inbound · Putaway' : 'Real-time overview of warehouse performance' }}</div>
         </div>
       </div>
 
@@ -186,7 +26,7 @@
           height="36"
           alt="Company logo"
         />
-        <div class="dash-pill dash-pill--date" title="Date range (display)">
+        <div class="dash-pill dash-pill--date" *ngIf="!isMobileLayout" title="Date range (display)">
           <i class="material-icons">event</i>
           <span>{{ weekdays?.[0]?.date ? (weekdays[0].date | date:'dd/MM/yyyy') : '--/--/----' }} - {{ weekdays?.[weekdays.length-1]?.date ? (weekdays[weekdays.length-1].date | date:'dd/MM/yyyy') : '--/--/----' }}</span>
         </div>
@@ -206,15 +46,15 @@
     </div>
 
     <!-- Mobile Logout Button -->
-    <div class="mobile-logout-btn">
+    <div class="mobile-logout-btn" *ngIf="!isMobileLayout">
       <button class="btn-logout-mobile" (click)="logout()" title="Đăng xuất">
         <i class="material-icons">logout</i>
         <span>Đăng xuất</span>
       </button>
     </div>
     
-    <!-- KPI Cards Section - moved up close to navbar -->
-    <div class="dash-grid dash-grid--kpis">
+    <!-- KPI Cards Section - desktop only -->
+    <div class="dash-grid dash-grid--kpis" *ngIf="!isMobileLayout">
       <div class="card p-3 kpi-card kpi-card-workorder">
         <div class="d-flex justify-content-between align-items-center">
           <div>
@@ -460,8 +300,8 @@
       </article>
     </section>
 
-    <!-- Hàng gauge: Materials / FG / Turnover -->
-    <section class="dash-chart-row dash-grid dash-grid--triple" aria-label="Accuracy and turnover">
+    <!-- Hàng gauge: Materials / FG / Turnover — desktop only -->
+    <section class="dash-chart-row dash-grid dash-grid--triple" *ngIf="!isMobileLayout" aria-label="Accuracy and turnover">
 
       <!-- Materials Accuracy -->
       <article class="card card-chart chart-card chart-card-green dash-surface-card dash-widget--clickable" (click)="openAccuracyTurnoverEditModal()" title="Bấm để nhập/sửa data Accuracy &amp; Turnover">
@@ -518,8 +358,8 @@
       </article>
     </section>
 
-    <!-- Safety Stock + Rack warnings -->
-    <section class="dash-ops-row dash-grid dash-grid--double" aria-label="Safety stock and rack utilization">
+    <!-- Safety Stock + Rack warnings — desktop only -->
+    <section class="dash-ops-row dash-grid dash-grid--double" *ngIf="!isMobileLayout" aria-label="Safety stock and rack utilization">
       <div class="safety-stock-box card">
         <div class="box-header">
           <h5>
@@ -594,8 +434,8 @@
       </div>
     </section>
 
-    <!-- Details tables (bottom) -->
-    <section class="dash-detail-boards dashboard-status-boards dash-grid dash-grid--double" aria-label="Work order and shipment details">
+    <!-- Details tables (bottom) — desktop only -->
+    <section class="dash-detail-boards dashboard-status-boards dash-grid dash-grid--double" *ngIf="!isMobileLayout" aria-label="Work order and shipment details">
 
       <!-- Work Order Details -->
       <div class="card">

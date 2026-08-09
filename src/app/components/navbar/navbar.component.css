@@ -138,7 +138,9 @@
 .navbar.navbar--truck-pass-through,
 .navbar.navbar--truck-pass-through .container-fluid,
 .navbar.navbar--fg-inventory-pass-through,
-.navbar.navbar--fg-inventory-pass-through .container-fluid {
+.navbar.navbar--fg-inventory-pass-through .container-fluid,
+.navbar.navbar--materials-pass-through,
+.navbar.navbar--materials-pass-through .container-fluid {
   pointer-events: none;
 }
 

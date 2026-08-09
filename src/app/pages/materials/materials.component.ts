@@ -22,6 +22,7 @@ import { MaterialsInventoryUnlockService } from '../../services/materials-invent
 import { isAsm3OrWh3PrefixLocation } from '../layout-warehouse/layout-warehouse-location.util';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
+import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
@@ -131,12 +132,15 @@ type HiddenInventoryRow = {
 @Component({
   selector: 'app-materials',
   templateUrl: './materials.component.html',
-  styleUrls: ['./materials.component.scss']
+  styleUrls: ['./materials.component.scss', './materials-mobile.scss']
 })
 export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Nhà máy đang xem (ASM1 ⇄ ASM2) — đổi qua factory-switcher trên UI, đồng bộ với query param `factory`. */
   selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
   readonly factoryOptions: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
+
+  /** Mobile / PDA: giao diện chỉ xem tồn kho (không sửa bảng). */
+  isMobile = false;
 
   // 🔧 LOGIC MỚI: Cập nhật số lượng xuất từ Outbound theo Material + PO
   // - Mỗi dòng Inventory được cập nhật số lượng xuất DỰA TRÊN Material + PO
@@ -180,6 +184,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkCheckSelectedFactory: 'ASM1' | 'ASM2' | 'ASM3' = 'ASM1';
   kkCheckSearchCode = '';
   kkCheckSearchLocation = '';
+  /** Tăng khi hủy/đổi factory — bỏ kết quả Run cũ. */
+  private kkCheckRunId = 0;
+
+  /** Mobile KK: draft lượng chẵn (SP) theo id dòng. */
+  mobileKkSpDraft: Record<string, string> = {};
+  showMobileKkConfirm = false;
+  mobileKkConfirmBusy = false;
+  mobileKkConfirmMaterial: InventoryMaterial | null = null;
+  mobileKkConfirmSp = 0;
+
+  /** Mobile: đổi vị trí bằng scanner. */
+  showMobileLocScan = false;
+  mobileLocScanBusy = false;
+  mobileLocScanBuffer = '';
+  mobileLocScanMaterial: InventoryMaterial | null = null;
+
+  /** Mobile: sheet Chi tiết dòng tồn. */
+  showMobileDetail = false;
+  mobileDetailMaterial: InventoryMaterial | null = null;
   kkCatalogDate = new Date().toISOString().slice(0, 10);
   kkCatalogExporting = false;
   /** Ghi snapshot TỒN từ kho → rm-bag-history */
@@ -392,6 +415,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     private materialsInventoryUnlock: MaterialsInventoryUnlockService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private nvlkhCatalog: NvlkhCatalogService,
+    private nvlCatalogFull: NvlCatalogFullService,
     private readTracker: ReadTrackerService,
     private location: Location,
     private authService: FirebaseAuthService
@@ -1868,8 +1892,47 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.location.back();
   }
 
+  /** Bottom nav mobile Materials. */
+  goMobileTab(path: '/materials' | '/inbound' | '/outbound' | '/bag-history'): void {
+    if (path === '/materials') return;
+    this.router.navigate([path], {
+      queryParams: { factory: this.selectedFactory },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  focusMobileSearchForScan(): void {
+    const el = document.querySelector('.mat-m-search__input') as HTMLInputElement | null;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }
+
+  openMobileDetail(material: InventoryMaterial): void {
+    this.mobileDetailMaterial = material;
+    this.showMobileDetail = true;
+  }
+
+  closeMobileDetail(): void {
+    this.showMobileDetail = false;
+    this.mobileDetailMaterial = null;
+  }
+
+  getMobileStatusLabel(material: InventoryMaterial): string {
+    if (this.calculateCurrentStock(material) < 0) return 'Tồn âm';
+    if (material.kkChecked) return 'Đã KK';
+    return 'Đang hoạt động';
+  }
+
+  getMobileStatusClass(material: InventoryMaterial): string {
+    if (this.calculateCurrentStock(material) < 0) return 'mat-m-status--neg';
+    if (material.kkChecked) return 'mat-m-status--kk';
+    return 'mat-m-status--ok';
+  }
+
   ngOnInit(): void {
     console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
+    this.detectMobileDevice();
 
     const factoryParam = this.route.snapshot.queryParamMap.get('factory');
     if (this.isValidFactory(factoryParam)) {
@@ -1961,6 +2024,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showResetLowStockPopup = false;
     this.resetLowStockRows = [];
     this.showConsolidationMessage = false;
+    this.clearKkInlineBanner(true);
+    this.showKkCheckPopup = false;
+    this.cancelMobileLocationScan(true);
+    this.cancelMobileKkConfirm();
+    this.closeMobileDetail();
 
     // Rule Bag / QTY BAG rule là cấu hình riêng theo factory (key localStorage + doc Firestore
     // đều bao gồm selectedFactory) — xoá state cũ trước để tránh lộ rule của factory vừa rời đi,
@@ -1982,6 +2050,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => {
       this.autoResizeNotesColumn();
     }, 1000);
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.detectMobileDevice();
+  }
+
+  /** Detect mobile / PDA — dùng giao diện xem tồn đơn giản. */
+  private detectMobileDevice(): void {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera || '';
+    const ua = userAgent.toLowerCase();
+    const isMobileUserAgent = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|pda|handheld/i.test(ua);
+    const isMobileScreen = typeof window !== 'undefined' && window.innerWidth <= 768;
+    const isSmallScreen = typeof window !== 'undefined' && window.innerWidth <= 1024;
+    this.isMobile = isMobileUserAgent || isMobileScreen || isSmallScreen;
   }
 
   ngOnDestroy(): void {
@@ -3498,7 +3581,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         });
       } catch { /* ignore */ }
 
-      this.locationFilterOptions = Array.from(fromLoaded).sort((a, b) => a.localeCompare(b));
+      this.locationFilterOptions = Array.from(
+        new Set(
+          Array.from(fromLoaded)
+            .map((loc) => this.locationGroupKey(loc))
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
     } catch (e) {
       console.error('loadLocationFilterOptions', e);
       this.locationFilterOptions = [];
@@ -3583,7 +3672,48 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private docMatchesLocationSearch(data: any, normalizedLocation: string): boolean {
     const loc = String(data?.location ?? data?.viTri ?? '').trim().toUpperCase();
-    return loc.includes(normalizedLocation);
+    if (!loc) return false;
+    return this.locationMatchesGroup(loc, normalizedLocation);
+  }
+
+  /** Chỉ lấy chữ và số từ vị trí — bỏ . , - ( ) và ký tự khác. */
+  private locationAlnum(loc: string): string {
+    return String(loc || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  /**
+   * Nhóm vị trí để lọc:
+   * - Bắt đầu A–G → 3 ký tự chữ/số đầu
+   * - Từ H trở đi (và ký tự khác) → 4 ký tự chữ/số đầu
+   */
+  locationGroupKey(loc: string): string {
+    const alnum = this.locationAlnum(loc);
+    if (!alnum) return '';
+    const first = alnum.charAt(0);
+    const len = first >= 'A' && first <= 'G' ? 3 : 4;
+    return alnum.slice(0, len);
+  }
+
+  /** true nếu vị trí thuộc cùng nhóm với từ khóa tìm. */
+  private locationMatchesGroup(location: string, searchTerm: string): boolean {
+    const locKey = this.locationGroupKey(location);
+    const searchAlnum = this.locationAlnum(searchTerm);
+    if (!locKey || !searchAlnum) return false;
+    const searchKey = this.locationGroupKey(searchTerm);
+    if (searchAlnum.length >= searchKey.length) {
+      return locKey === searchKey;
+    }
+    return locKey.startsWith(searchAlnum);
+  }
+
+  /** Chuỗi locations ("A01, A01.2") có nhóm khớp từ khóa không. */
+  private locationsTextMatchesGroup(locationsText: string, searchTerm: string): boolean {
+    const parts = String(locationsText || '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter((x) => x && x !== '—');
+    if (!parts.length) return false;
+    return parts.some((loc) => this.locationMatchesGroup(loc, searchTerm));
   }
 
   // Perform search — mã hàng hoặc vị trí (tick Location)
@@ -3616,49 +3746,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
       if (this.isLocationSearchActive) {
         const normalizedLocation = searchTerm.trim().toUpperCase();
-        console.log(`🔍 ASM1 Searching by location: "${normalizedLocation}" - Loading from Firebase...`);
-        try {
-          this.searchProgress = 25;
-          querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-            ref.where('factory', '==', this.selectedFactory)
-               .where('location', '==', normalizedLocation)
-               .limit(200)
-          ).get().toPromise();
-
-          if (!querySnapshot || querySnapshot.empty) {
-            console.log(`🔍 ASM1 No exact location match, trying prefix search...`);
-            this.searchProgress = 50;
-            querySnapshot = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.selectedFactory)
-                 .where('location', '>=', normalizedLocation)
-                 .where('location', '<=', normalizedLocation + '\uf8ff')
-                 .limit(200)
-            ).get().toPromise();
-          }
-        } catch (indexError: any) {
-          const msg = indexError?.message || '';
-          if (msg.includes('index') || msg.includes('Index')) {
-            this.searchProgress = 50;
-            const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
-              ref.where('factory', '==', this.selectedFactory).limit(3000)
-            ).get().toPromise();
-            if (allSnapshot && !allSnapshot.empty) {
-              const filtered = allSnapshot.docs.filter((doc) =>
-                this.docMatchesLocationSearch(doc.data(), normalizedLocation)
-              );
-              querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
-            }
-          } else {
-            throw indexError;
-          }
-        }
-
-        if (querySnapshot && !querySnapshot.empty) {
-          const filtered = querySnapshot.docs.filter((doc) =>
-            this.docMatchesLocationSearch(doc.data(), normalizedLocation)
-          );
-          querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
-        }
+        const groupKey = this.locationGroupKey(normalizedLocation);
+        console.log(`🔍 ASM1 Searching by location group: "${normalizedLocation}" → "${groupKey}"`);
+        this.searchProgress = 30;
+        // Lọc theo nhóm (bỏ dấu) — phải đọc factory rồi match client-side
+        const allSnapshot = await this.firestore.collection('inventory-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory).limit(10000)
+        ).get().toPromise();
+        this.searchProgress = 70;
+        const filtered = (allSnapshot?.docs || []).filter((doc) =>
+          this.docMatchesLocationSearch(doc.data(), normalizedLocation)
+        );
+        querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
       } else if (this.searchByCustomer) {
         const term = searchTerm.trim().toUpperCase();
         console.log(`🔍 ASM1 Searching by customer (Danh mục NVLKH): "${term}"`);
@@ -5386,6 +5485,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async resolveKkOperatorId(): Promise<string | null> {
+    // Mobile Kiểm kê: không hỏi/scan mã NV — lấy từ phiên đăng nhập.
+    if (this.isMobile) {
+      return this.resolveKkOperatorFromSession();
+    }
     const raw = window.prompt('Quét mã nhân viên để kiểm kê.\nHệ thống chỉ lưu 7 ký tự đầu theo chuẩn ASP1234.');
     if (raw == null) return null;
     const normalized = String(raw).trim().toUpperCase().replace(/\s+/g, '');
@@ -5397,6 +5500,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return shortCode;
   }
 
+  /** Operator KK từ user đang login (không popup). */
+  private async resolveKkOperatorFromSession(): Promise<string> {
+    const unlocked = this.locationUnlock.getEmployeeId();
+    if (unlocked) return unlocked;
+    try {
+      const authUser = await firstValueFrom(this.authService.currentUser);
+      const emp = String(authUser?.employeeId || '').trim().toUpperCase();
+      if (/^ASP\d{4}$/.test(emp.slice(0, 7))) return emp.slice(0, 7);
+    } catch { /* ignore */ }
+    const user = await this.afAuth.currentUser;
+    if (!user) return 'UNKNOWN';
+    const email = String(user.email || '').trim().toUpperCase();
+    const asp = email.match(/ASP\d{4}/);
+    if (asp) return asp[0];
+    const name = String(user.displayName || '').trim();
+    if (name) return name.substring(0, 24);
+    return email.substring(0, 24) || 'UNKNOWN';
+  }
+
   onLocationKeyEnter(material: InventoryMaterial, event: KeyboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
@@ -5404,9 +5526,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Lưu riêng cột Vị trí lên inventory-materials + material-location-history. */
-  private async persistLocationChange(material: InventoryMaterial): Promise<void> {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
-    if (!material?.id) return;
+  private async persistLocationChange(
+    material: InventoryMaterial,
+    opts?: { bypassUnlock?: boolean; silent?: boolean }
+  ): Promise<boolean> {
+    if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
+    if (!material?.id) return false;
 
     const row = material as {
       __prevLocation?: string;
@@ -5420,9 +5545,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const newLocation = String(material.location ?? '').trim().toUpperCase();
     if (!newLocation) {
       alert('⚠️ Vui lòng nhập vị trí trước khi lưu.');
-      return;
+      return false;
     }
-    if (newLocation === fromLocation) return;
+    if (newLocation === fromLocation) {
+      if (!opts?.silent) {
+        alert('Vị trí không đổi.');
+      }
+      return false;
+    }
 
     const previousUiLocation = material.location;
     material.location = newLocation;
@@ -5453,7 +5583,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         fromLocation,
         toLocation: newLocation,
         changedBy: modifiedBy,
-        changeType: 'bulk',
+        changeType: opts?.bypassUnlock ? 'mobile-scan' : 'bulk',
         changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
       });
 
@@ -5465,13 +5595,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       row.locationManualOverride = true;
       row.modifiedBy = modifiedBy;
       console.log(`✅ [ASM1] Đã lưu vị trí ${material.materialCode}: ${fromLocation} → ${newLocation} (${modifiedBy})`);
-      alert(`✅ Đã lưu vị trí: ${newLocation}`);
+      if (!opts?.silent) {
+        alert(`✅ Đã lưu vị trí: ${newLocation}`);
+      }
       this.cdr.markForCheck();
+      return true;
     } catch (error) {
       material.location = previousUiLocation;
       console.error('[ASM1] persistLocationChange failed', error);
       alert('❌ Không lưu được vị trí lên tồn kho. Vui lòng thử lại hoặc báo IT.');
       this.cdr.markForCheck();
+      return false;
     }
   }
 
@@ -7314,6 +7448,221 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return material.kkChecked ? `Đã kiểm kê${who}${when}` : `Chưa kiểm kê${who ? ' — bỏ tick gần nhất' + who + when : ''}`;
   }
 
+  /** Draft SP trên mobile (ô Lượng chẵn bịch/cuộn). */
+  getMobileKkSpDraft(material: InventoryMaterial): string {
+    const id = String(material?.id || '');
+    if (id && this.mobileKkSpDraft[id] !== undefined) {
+      return this.mobileKkSpDraft[id];
+    }
+    const sp = this.getEffectiveStandardPacking(material);
+    return sp > 0 ? String(sp) : '';
+  }
+
+  setMobileKkSpDraft(material: InventoryMaterial, value: string | number | null): void {
+    const id = String(material?.id || '');
+    if (!id) return;
+    this.mobileKkSpDraft[id] = value === null || value === undefined ? '' : String(value);
+  }
+
+  /**
+   * Phân tích tồn theo lượng chẵn (SP) — cùng công thức cột BAG / tem chuẩn + lẻ.
+   */
+  getKkStockBreakdown(material: InventoryMaterial, standardPacking: number): {
+    stock: number;
+    sp: number;
+    bagCount: number;
+    fullCount: number;
+    fullQty: number;
+    oddBags: number;
+    oddQty: number;
+  } {
+    const sp = Math.max(0, Number(standardPacking) || 0);
+    const stock = this.calculateCurrentStock(material);
+    if (!sp || stock <= 0) {
+      return { stock, sp, bagCount: 0, fullCount: 0, fullQty: 0, oddBags: 0, oddQty: 0 };
+    }
+    const fullCount = Math.floor(stock / sp + 1e-9);
+    const oddQty = Math.round((stock - fullCount * sp) * 1e6) / 1e6;
+    const oddBags = oddQty > 1e-9 ? 1 : 0;
+    const bagCount = fullCount + oddBags;
+    return {
+      stock,
+      sp,
+      bagCount,
+      fullCount,
+      fullQty: fullCount * sp,
+      oddBags,
+      oddQty: oddBags ? oddQty : 0
+    };
+  }
+
+  get mobileKkConfirmBreakdown() {
+    if (!this.mobileKkConfirmMaterial || !(this.mobileKkConfirmSp > 0)) {
+      return null;
+    }
+    return this.getKkStockBreakdown(this.mobileKkConfirmMaterial, this.mobileKkConfirmSp);
+  }
+
+  /** Mobile: tick KK — nếu chưa có SP thì mở luôn bước nhập/xác nhận. */
+  onMobileKkTick(material: InventoryMaterial, checked: boolean): void {
+    if (!this.canEdit || !material?.id) return;
+    if (!checked) {
+      void this.toggleKk(material);
+      return;
+    }
+    const draft = this.getMobileKkSpDraft(material);
+    const sp = parseFloat(String(draft).replace(/,/g, '').trim());
+    if (sp > 0) {
+      this.openMobileKkConfirm(material);
+      return;
+    }
+    // Chưa có lượng chẵn — đánh dấu muốn KK, yêu cầu nhập SP
+    material.kkChecked = false;
+    this.cdr.markForCheck();
+    alert('Vui lòng nhập Lượng chẵn bịch/cuộn rồi bấm Xác nhận.');
+  }
+
+  openMobileKkConfirm(material: InventoryMaterial): void {
+    if (!this.canEdit || !material?.id || this.mobileKkConfirmBusy) return;
+    const raw = this.getMobileKkSpDraft(material);
+    const sp = parseFloat(String(raw).replace(/,/g, '').trim());
+    if (!Number.isFinite(sp) || sp <= 0) {
+      alert('Lượng chẵn bịch/cuộn phải > 0.');
+      return;
+    }
+    const stock = this.calculateCurrentStock(material);
+    if (stock <= 0) {
+      alert('Tồn kho phải > 0 để kiểm kê.');
+      return;
+    }
+    const code = String(material.materialCode || '').trim().toUpperCase();
+    const cat = this.catalogCache.get(code);
+    if (cat?.standardPackingLocked === true) {
+      alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL — không thể cập nhật từ Kiểm kê.');
+      return;
+    }
+    this.mobileKkConfirmMaterial = material;
+    this.mobileKkConfirmSp = sp;
+    this.showMobileKkConfirm = true;
+  }
+
+  cancelMobileKkConfirm(): void {
+    if (this.mobileKkConfirmBusy) return;
+    this.showMobileKkConfirm = false;
+    this.mobileKkConfirmMaterial = null;
+    this.mobileKkConfirmSp = 0;
+  }
+
+  /** Đồng ý popup: tick KK + ghi Standard Packing vào danh mục NVL. */
+  async confirmMobileKk(): Promise<void> {
+    const material = this.mobileKkConfirmMaterial;
+    const sp = this.mobileKkConfirmSp;
+    if (!material?.id || !(sp > 0) || this.mobileKkConfirmBusy) return;
+
+    this.mobileKkConfirmBusy = true;
+    try {
+      const code = String(material.materialCode || '').trim().toUpperCase();
+      const operator = await this.resolveKkOperatorFromSession();
+
+      // 1) Ghi Standard Packing → danh mục NVL (`materials`)
+      await this.nvlCatalogFull.update(code, { standardPacking: sp }, operator);
+      const existing = this.catalogCache.get(code) || { materialCode: code };
+      this.catalogCache.set(code, { ...existing, materialCode: code, standardPacking: sp });
+      material.standardPacking = sp;
+      // Đồng bộ các dòng cùng mã trên màn hình
+      const syncRows = [...this.inventoryMaterials, ...this.filteredInventory, ...this.displayedInventory];
+      syncRows.forEach((m) => {
+        if (String(m.materialCode || '').trim().toUpperCase() === code) {
+          m.standardPacking = sp;
+        }
+      });
+      this.setMobileKkSpDraft(material, String(sp));
+
+      // 2) Tick KK nếu chưa
+      if (!material.kkChecked) {
+        await this.toggleKk(material);
+      }
+
+      this.showMobileKkConfirm = false;
+      this.mobileKkConfirmMaterial = null;
+      this.mobileKkConfirmSp = 0;
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('❌ confirmMobileKk:', e);
+      alert('❌ Không lưu được Kiểm kê / Standard Packing. Vui lòng thử lại.');
+    } finally {
+      this.mobileKkConfirmBusy = false;
+    }
+  }
+
+  /** Mở sheet quét vị trí mới cho 1 dòng tồn. */
+  openMobileLocationScan(material: InventoryMaterial): void {
+    if (!material?.id || this.mobileLocScanBusy) return;
+    this.mobileLocScanMaterial = material;
+    this.mobileLocScanBuffer = '';
+    this.showMobileLocScan = true;
+    setTimeout(() => this.focusMobileLocScanInput(), 50);
+  }
+
+  cancelMobileLocationScan(force = false): void {
+    if (this.mobileLocScanBusy && !force) return;
+    this.mobileLocScanBusy = false;
+    this.showMobileLocScan = false;
+    this.mobileLocScanMaterial = null;
+    this.mobileLocScanBuffer = '';
+  }
+
+  private focusMobileLocScanInput(): void {
+    const el = document.getElementById('mat-m-loc-scan-input') as HTMLInputElement | null;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }
+
+  onMobileLocScanKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.submitMobileLocationScan();
+  }
+
+  /** Scanner bắn vị trí → cập nhật dòng đang chọn. */
+  async submitMobileLocationScan(): Promise<void> {
+    const material = this.mobileLocScanMaterial;
+    if (!material?.id || this.mobileLocScanBusy) return;
+
+    const newLoc = String(this.mobileLocScanBuffer || '')
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '');
+    if (!newLoc) {
+      alert('Vui lòng quét / nhập vị trí mới.');
+      setTimeout(() => this.focusMobileLocScanInput(), 0);
+      return;
+    }
+
+    this.mobileLocScanBusy = true;
+    try {
+      this.rememberLocationBeforeEdit(material);
+      const oldLoc = String(material.location || '').trim().toUpperCase();
+      material.location = newLoc;
+      const ok = await this.persistLocationChange(material, { bypassUnlock: true, silent: true });
+      if (ok) {
+        this.showMobileLocScan = false;
+        this.mobileLocScanMaterial = null;
+        this.mobileLocScanBuffer = '';
+        alert(`✅ ${material.materialCode}\n${oldLoc || '—'} → ${newLoc}`);
+      } else {
+        material.location = oldLoc;
+        this.mobileLocScanBuffer = '';
+        setTimeout(() => this.focusMobileLocScanInput(), 0);
+      }
+      this.cdr.markForCheck();
+    } finally {
+      this.mobileLocScanBusy = false;
+    }
+  }
+
   private normalizeTimestamp(v: unknown): Date | null {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -7323,8 +7672,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return null;
   }
 
-  openKkCheckPopup(): void {
-    this.showKkCheckPopup = true;
+  /** Bấm Kiểm Kê: chạy trên Inventory hiện tại (theo nhà máy đang chọn), không mở popup. */
+  runKkCheckOnInventory(): void {
+    if (this.kkCheckRunning) return;
+    this.showKkCheckPopup = false;
     this.kkCheckRan = false;
     this.kkCheckTotalRows = 0;
     this.kkCheckCheckedRows = 0;
@@ -7333,6 +7684,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkCheckSearchCode = '';
     this.kkCheckSearchLocation = '';
     this.kkCheckSelectedFactory = this.selectedFactory;
+    void this.runKkCheck();
+  }
+
+  /** Ẩn thanh KPI Kiểm Kê trên Inventory. */
+  clearKkInlineBanner(force = false): void {
+    if (this.kkCheckRunning && !force) return;
+    this.kkCheckRunId++;
+    this.kkCheckRunning = false;
+    this.kkCheckRan = false;
+    this.kkCheckTotalRows = 0;
+    this.kkCheckCheckedRows = 0;
+    this.kkCheckByMaterial = [];
+  }
+
+  /** @deprecated Dùng runKkCheckOnInventory — giữ tên cũ phòng chỗ gọi khác. */
+  openKkCheckPopup(): void {
+    this.runKkCheckOnInventory();
   }
 
   closeKkCheckPopup(): void {
@@ -7350,6 +7718,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkCheckFilterMode = 'all';
     this.kkCheckSearchCode = '';
     this.kkCheckSearchLocation = '';
+    void this.runKkCheck();
   }
 
   setKkCheckFilterMode(mode: 'all' | 'checked' | 'unchecked'): void {
@@ -7374,7 +7743,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkCheckByMaterial.filter((r) => r.remaining > 0).length;
   }
 
-  /** Danh sách mã hiển thị trong bảng theo bộ lọc trạng thái + tìm mã / vị trí. */
+  /** Danh sách mã hiển thị trong bảng theo bộ lọc trạng thái + tìm mã / vị trí (nhóm vị trí). */
   get kkCheckFilteredMaterials(): Array<{ materialCode: string; total: number; checked: number; remaining: number; locations: string }> {
     let rows = this.kkCheckByMaterial;
     if (this.kkCheckFilterMode === 'checked') {
@@ -7388,13 +7757,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       rows = rows.filter((r) => r.materialCode.includes(codeQ));
     }
     if (locQ) {
-      rows = rows.filter((r) => r.locations.toUpperCase().includes(locQ));
+      rows = rows.filter((r) => this.locationsTextMatchesGroup(r.locations, locQ));
     }
     return rows;
   }
 
-  /** Đọc toàn bộ tồn kho factory hiện tại → tính số dòng đã tick KK + breakdown theo mã B (B + 6 số). */
+  /** Tồn kho từ raw Firestore doc — cùng công thức calculateCurrentStock. */
+  private stockFromInventoryDoc(data: any): number {
+    const openingRaw = data?.openingStock;
+    const openingStockValue = openingRaw !== null && openingRaw !== undefined && openingRaw !== ''
+      ? Number(openingRaw) || 0
+      : 0;
+    return openingStockValue + (Number(data?.quantity) || 0) - (Number(data?.exported) || 0) - (Number(data?.xt) || 0);
+  }
+
+  /** Đọc tồn kho factory — chỉ mã có tồn > 0 → % đã KK = số mã đã tick đủ / tổng mã. */
   async runKkCheck(): Promise<void> {
+    const runId = ++this.kkCheckRunId;
     this.kkCheckRunning = true;
     try {
       const factory = this.kkCheckSelectedFactory;
@@ -7430,28 +7809,29 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           return !isAsm3OrWh3PrefixLocation(String(data.location || ''));
         });
       }
-      const bCodeRegex = /^B\d{6}$/;
+
+      if (runId !== this.kkCheckRunId) return;
+
+      // Chỉ lấy dòng có tồn > 0
+      docs = docs.filter((doc) => this.stockFromInventoryDoc(doc.data()) > 0);
+
       const byMaterial = new Map<string, { total: number; checked: number; locations: Set<string> }>();
-      let checkedCount = 0;
 
       docs.forEach((doc) => {
         const data = doc.data() as any;
-        const isChecked = data.kkChecked === true;
-        if (isChecked) checkedCount++;
-
         const code = String(data.materialCode || '').trim().toUpperCase();
-        if (bCodeRegex.test(code)) {
-          const entry = byMaterial.get(code) || { total: 0, checked: 0, locations: new Set<string>() };
-          entry.total++;
-          if (isChecked) entry.checked++;
-          const loc = String(data.location || '').trim().toUpperCase();
-          if (loc) entry.locations.add(loc);
-          byMaterial.set(code, entry);
-        }
+        if (!code) return;
+        const isChecked = data.kkChecked === true;
+        const entry = byMaterial.get(code) || { total: 0, checked: 0, locations: new Set<string>() };
+        entry.total++;
+        if (isChecked) entry.checked++;
+        const loc = String(data.location || '').trim().toUpperCase();
+        if (loc) entry.locations.add(loc);
+        byMaterial.set(code, entry);
       });
 
-      this.kkCheckTotalRows = docs.length;
-      this.kkCheckCheckedRows = checkedCount;
+      if (runId !== this.kkCheckRunId) return;
+
       this.kkCheckByMaterial = Array.from(byMaterial.entries())
         .map(([materialCode, v]) => ({
           materialCode,
@@ -7461,12 +7841,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           locations: Array.from(v.locations).sort().join(', ') || '—'
         }))
         .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+
+      // Tổng / đã KK theo SỐ MÃ (có tồn > 0), không theo dòng
+      this.kkCheckTotalRows = this.kkCheckByMaterial.length;
+      this.kkCheckCheckedRows = this.kkCheckByMaterial.filter((r) => r.remaining === 0).length;
       this.kkCheckRan = true;
     } catch (e) {
+      if (runId !== this.kkCheckRunId) return;
       console.error('❌ runKkCheck:', e);
       alert('❌ Lỗi khi chạy Kiểm Kê. Vui lòng thử lại.');
     } finally {
-      this.kkCheckRunning = false;
+      if (runId === this.kkCheckRunId) {
+        this.kkCheckRunning = false;
+      }
     }
   }
 

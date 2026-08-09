@@ -1,6 +1,208 @@
-<div class="main-content">
-  <!-- Excel-like Container -->
-  <div class="excel-container">
+<div class="main-content" [class.mat-m-page]="isMobile">
+
+  <!-- ═══ Mobile Materials — mock layout ═══ -->
+  <div class="mat-m" *ngIf="isMobile">
+    <header class="mat-m-header">
+      <div class="mat-m-header__row1">
+        <button type="button" class="mat-m-iconbtn" (click)="goToMenu()" aria-label="Menu">
+          <i class="material-icons">menu</i>
+        </button>
+        <h1 class="mat-m-title">Tồn kho</h1>
+        <button type="button" class="mat-m-factory-dd" (click)="toggleFactory()" [title]="'Đổi nhà máy (hiện: ' + selectedFactory + ')'">
+          <i class="material-icons">warehouse</i>
+          <span>{{ selectedFactory }}</span>
+          <i class="material-icons mat-m-factory-dd__caret">expand_more</i>
+        </button>
+        <button type="button" class="mat-m-iconbtn" (click)="focusMobileSearchForScan()" aria-label="Quét mã">
+          <i class="material-icons">qr_code_scanner</i>
+        </button>
+      </div>
+
+      <div class="mat-m-searchrow">
+        <div class="mat-m-search">
+          <i class="material-icons mat-m-search__ico">search</i>
+          <input type="text"
+                 class="mat-m-search__input"
+                 [placeholder]="isLoading ? 'Đang tìm…' : 'Tìm mã hàng…'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 [disabled]="isLoading"
+                 autocomplete="off"
+                 autocapitalize="characters" />
+          <button type="button"
+                  class="mat-m-search__clear"
+                  *ngIf="searchTerm"
+                  (click)="clearSearch()"
+                  aria-label="Xóa">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        <button type="button"
+                class="mat-m-filterbtn"
+                [class.active]="searchByLocation"
+                (click)="openLocationFilterPopup()"
+                aria-label="Lọc vị trí"
+                title="Lọc theo vị trí">
+          <i class="material-icons">tune</i>
+        </button>
+      </div>
+      <p class="mat-m-hint" *ngIf="searchTerm && !isLocationSearchActive && searchTerm.length < 3 && !isLoading">
+        Cần ít nhất 3 ký tự
+      </p>
+    </header>
+
+    <div class="mat-m-loading" *ngIf="isLoading">
+      <i class="material-icons mat-m-spin">sync</i>
+      <span>Đang tìm kiếm…</span>
+    </div>
+
+    <div class="mat-m-empty" *ngIf="!isLoading && !searchTerm">
+      <i class="material-icons">inventory_2</i>
+      <p>Nhập mã hàng để xem tồn kho</p>
+    </div>
+
+    <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 3 && filteredInventory.length === 0">
+      <i class="material-icons">search_off</i>
+      <p>Không tìm thấy mã trong {{ selectedFactory }}</p>
+    </div>
+
+    <div class="mat-m-list" *ngIf="!isLoading && displayedInventory.length > 0">
+      <div class="mat-m-summary">
+        <div class="mat-m-summary__cell">
+          <i class="material-icons">inventory_2</i>
+          <div>
+            <strong>{{ filteredInventory.length }} mã</strong>
+            <span>Tìm thấy</span>
+          </div>
+        </div>
+        <div class="mat-m-summary__divider" aria-hidden="true"></div>
+        <div class="mat-m-summary__cell">
+          <div>
+            <span class="mat-m-summary__label">Tổng tồn kho</span>
+            <strong>{{ (totalStockCount$ | async) | number:'1.0-0' }}</strong>
+            <span>Tồn</span>
+          </div>
+        </div>
+      </div>
+
+      <article class="mat-m-card"
+               *ngFor="let material of displayedInventory; trackBy: trackByFn"
+               [class.mat-m-card--neg]="calculateCurrentStock(material) < 0"
+               [class.mat-m-card--kk]="material.kkChecked">
+        <div class="mat-m-card__top">
+          <label class="mat-m-kk"
+                 [class.mat-m-kk--on]="material.kkChecked"
+                 [title]="getKkTitle(material)">
+            <input type="checkbox"
+                   [checked]="!!material.kkChecked"
+                   [disabled]="!canEdit"
+                   (change)="onMobileKkTick(material, $any($event.target).checked)" />
+            <span class="mat-m-kk__mark" aria-hidden="true">
+              <i class="material-icons">{{ material.kkChecked ? 'check' : '' }}</i>
+            </span>
+            <span class="mat-m-kk__txt">KK</span>
+          </label>
+
+          <div class="mat-m-card__main">
+            <div class="mat-m-card__titleline">
+              <span class="mat-m-card__code">{{ material.materialCode }}</span>
+              <span class="mat-m-status" [ngClass]="getMobileStatusClass(material)">{{ getMobileStatusLabel(material) }}</span>
+            </div>
+            <div class="mat-m-card__chips">
+              <span class="mat-m-chip" *ngIf="material.poNumber">PO {{ material.poNumber }}</span>
+              <span class="mat-m-chip mat-m-chip--loc" *ngIf="material.location">
+                <i class="material-icons">place</i>{{ material.location }}
+              </span>
+              <span class="mat-m-chip" *ngIf="getDisplayIMD(material) as imd">IMD {{ imd }}</span>
+            </div>
+          </div>
+
+          <div class="mat-m-stockbox"
+               [class.mat-m-stockbox--neg]="calculateCurrentStock(material) < 0">
+            <span class="mat-m-stockbox__label">Tồn kho</span>
+            <strong class="mat-m-stockbox__val">{{ formatNumber(calculateCurrentStock(material)) }}</strong>
+            <span class="mat-m-stockbox__sub">Chẵn bịch</span>
+          </div>
+        </div>
+
+        <div class="mat-m-card__actions">
+          <button type="button"
+                  class="mat-m-actbtn"
+                  (click)="openMobileLocationScan(material)"
+                  [disabled]="mobileLocScanBusy">
+            <i class="material-icons">swap_horiz</i>
+            Đổi vị trí
+          </button>
+          <button type="button" class="mat-m-actbtn" (click)="openMobileDetail(material)">
+            <i class="material-icons">info</i>
+            Chi tiết
+          </button>
+        </div>
+
+        <div class="mat-m-kk-sp" *ngIf="canEdit">
+          <div class="mat-m-kk-sp__head">
+            <i class="material-icons">inventory_2</i>
+            <span>Lượng chẵn bịch / cuộn</span>
+          </div>
+          <div class="mat-m-kk-sp__row">
+            <input type="number"
+                   class="mat-m-kk-sp__input"
+                   inputmode="decimal"
+                   min="0"
+                   step="any"
+                   [ngModel]="getMobileKkSpDraft(material)"
+                   (ngModelChange)="setMobileKkSpDraft(material, $event)"
+                   (keyup.enter)="openMobileKkConfirm(material)"
+                   placeholder="VD: 500" />
+            <button type="button"
+                    class="mat-m-kk-sp__btn"
+                    (click)="openMobileKkConfirm(material)"
+                    [disabled]="mobileKkConfirmBusy">
+              <i class="material-icons">check</i>
+              Xác nhận
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <div class="mat-m-footmeta">
+        Đã hiển thị {{ displayedInventory.length }} / {{ filteredInventory.length }} mã
+      </div>
+
+      <div class="mat-m-pager" *ngIf="totalPages > 1">
+        <button type="button" class="mat-m-pager__btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+          <i class="material-icons">chevron_left</i>
+        </button>
+        <span>{{ currentPage }} / {{ totalPages }}</span>
+        <button type="button" class="mat-m-pager__btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </div>
+    </div>
+
+    <nav class="mat-m-bottomnav" aria-label="Điều hướng dưới">
+      <button type="button" class="mat-m-bottomnav__btn mat-m-bottomnav__btn--active">
+        <i class="material-icons">inventory_2</i>
+        <span>Tồn kho</span>
+      </button>
+      <button type="button" class="mat-m-bottomnav__btn" (click)="goMobileTab('/inbound')">
+        <i class="material-icons">download</i>
+        <span>Nhập kho</span>
+      </button>
+      <button type="button" class="mat-m-bottomnav__btn" (click)="goMobileTab('/outbound')">
+        <i class="material-icons">upload</i>
+        <span>Xuất kho</span>
+      </button>
+      <button type="button" class="mat-m-bottomnav__btn" (click)="goMobileTab('/bag-history')">
+        <i class="material-icons">history</i>
+        <span>Lịch sử</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Excel-like Container (desktop) -->
+  <div class="excel-container" *ngIf="!isMobile">
     <!-- Report Title -->
     <div class="excel-header">
       <div class="excel-header__title-row">
@@ -23,6 +225,19 @@
                [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
             <i class="material-icons">assessment</i>
             <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+          </div>
+          <!-- Kiểm Kê inline KPI (không popup) -->
+          <div class="kk-inline-box" *ngIf="kkCheckRunning" title="Đang quét tiến độ Kiểm Kê">
+            <i class="material-icons rotating">sync</i>
+            <span>Đang KK {{ selectedFactory }}…</span>
+          </div>
+          <div class="kk-inline-box kk-inline-box--done" *ngIf="!kkCheckRunning && kkCheckRan"
+               [title]="'Tiến độ Kiểm Kê ' + selectedFactory + ': ' + (kkCheckCheckedRows) + '/' + kkCheckTotalRows + ' mã đã KK đủ'">
+            <i class="material-icons">fact_check</i>
+            <span>KK {{ kkCheckProgressPercent | number:'1.0-0' }}% · {{ kkCheckCheckedRows | number }}/{{ kkCheckTotalRows | number }} mã</span>
+            <button type="button" class="kk-inline-box__close" (click)="clearKkInlineBanner()" title="Đóng" aria-label="Đóng">
+              <i class="material-icons">close</i>
+            </button>
           </div>
         </div>
       </div>
@@ -238,10 +453,11 @@
         <div class="action-buttons">
           <button class="more-btn kk-check-btn"
                   type="button"
-                  (click)="openKkCheckPopup()"
-                  title="Kiểm tra tiến độ Kiểm Kê (KK)">
-            <i class="material-icons">fact_check</i>
-            <span class="btn-label">Kiểm Kê</span>
+                  (click)="runKkCheckOnInventory()"
+                  [disabled]="kkCheckRunning"
+                  title="Chạy tiến độ Kiểm Kê trên Inventory (theo nhà máy đang chọn)">
+            <i class="material-icons" [class.rotating]="kkCheckRunning">{{ kkCheckRunning ? 'sync' : 'fact_check' }}</i>
+            <span class="btn-label">{{ kkCheckRunning ? 'Đang KK...' : 'Kiểm Kê' }}</span>
           </button>
           <button class="download-search-btn"
                   (click)="downloadSearchResultsExcel()"
@@ -1121,8 +1337,188 @@
   </div>
 </div>
 
-<!-- Kiểm Kê — Tiến độ KK (full page) -->
-<div class="kk-pro-overlay" *ngIf="showKkCheckPopup">
+<!-- Mobile: Chi tiết dòng tồn -->
+<div class="modal-overlay mat-m-kk-overlay" *ngIf="showMobileDetail" (click)="closeMobileDetail()">
+  <div class="modal-content mat-m-kk-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Chi tiết tồn kho">
+    <header class="mat-m-kk-modal__header">
+      <div class="mat-m-kk-modal__brand">
+        <span class="mat-m-kk-modal__ico" aria-hidden="true">
+          <i class="material-icons">info</i>
+        </span>
+        <div>
+          <h3>Chi tiết</h3>
+          <p>Thông tin dòng tồn kho</p>
+        </div>
+      </div>
+      <button type="button" class="mat-m-kk-modal__close" (click)="closeMobileDetail()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+    <div class="mat-m-kk-modal__body" *ngIf="mobileDetailMaterial as m">
+      <div class="mat-m-kk-modal__codebox">
+        <span class="mat-m-kk-modal__code-label">Mã hàng</span>
+        <strong class="mat-m-kk-modal__code">{{ m.materialCode }}</strong>
+        <div class="mat-m-kk-modal__meta">
+          <span class="mat-m-chip mat-m-chip--factory">{{ selectedFactory }}</span>
+          <span class="mat-m-status" [ngClass]="getMobileStatusClass(m)">{{ getMobileStatusLabel(m) }}</span>
+        </div>
+      </div>
+      <ul class="mat-m-detail-list">
+        <li><span>PO</span><strong>{{ m.poNumber || '—' }}</strong></li>
+        <li><span>Vị trí</span><strong>{{ m.location || '—' }}</strong></li>
+        <li><span>IMD</span><strong>{{ getDisplayIMD(m) || '—' }}</strong></li>
+        <li><span>Tồn kho</span><strong>{{ formatNumber(calculateCurrentStock(m)) }}</strong></li>
+        <li><span>NK</span><strong>{{ formatNumber(m.quantity) }}</strong></li>
+        <li><span>Đã xuất</span><strong>{{ formatNumber(m.exported || 0) }}</strong></li>
+        <li><span>Lượng chẵn (SP)</span><strong>{{ formatNumber(getEffectiveStandardPacking(m) || 0) }}</strong></li>
+        <li><span>KK</span><strong>{{ m.kkChecked ? 'Đã kiểm' : 'Chưa kiểm' }}</strong></li>
+      </ul>
+    </div>
+    <footer class="mat-m-kk-modal__footer">
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="closeMobileDetail()">Đóng</button>
+      <button type="button"
+              class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary"
+              *ngIf="mobileDetailMaterial"
+              (click)="closeMobileDetail(); openMobileLocationScan(mobileDetailMaterial!)">
+        <i class="material-icons">swap_horiz</i>
+        Đổi vị trí
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Mobile: quét vị trí mới bằng scanner -->
+<div class="modal-overlay mat-m-kk-overlay" *ngIf="showMobileLocScan" (click)="cancelMobileLocationScan()">
+  <div class="modal-content mat-m-kk-modal mat-m-loc-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Đổi vị trí">
+    <header class="mat-m-kk-modal__header">
+      <div class="mat-m-kk-modal__brand">
+        <span class="mat-m-kk-modal__ico mat-m-kk-modal__ico--loc" aria-hidden="true">
+          <i class="material-icons">qr_code_scanner</i>
+        </span>
+        <div>
+          <h3>Đổi vị trí</h3>
+          <p>Quét barcode vị trí mới bằng scanner</p>
+        </div>
+      </div>
+      <button type="button" class="mat-m-kk-modal__close" (click)="cancelMobileLocationScan()" [disabled]="mobileLocScanBusy" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+
+    <div class="mat-m-kk-modal__body" *ngIf="mobileLocScanMaterial as m">
+      <div class="mat-m-kk-modal__codebox">
+        <span class="mat-m-kk-modal__code-label">Mã hàng</span>
+        <strong class="mat-m-kk-modal__code">{{ m.materialCode }}</strong>
+        <div class="mat-m-kk-modal__meta">
+          <span class="mat-m-chip" *ngIf="m.poNumber">PO {{ m.poNumber }}</span>
+          <span class="mat-m-chip mat-m-chip--loc" *ngIf="m.location">
+            <i class="material-icons">place</i>Hiện tại: {{ m.location }}
+          </span>
+          <span class="mat-m-chip" *ngIf="!m.location">Chưa có vị trí</span>
+        </div>
+      </div>
+
+      <label class="mat-m-loc-scan-label" for="mat-m-loc-scan-input">Vị trí mới</label>
+      <div class="mat-m-loc-scan-wrap">
+        <i class="material-icons">sensors</i>
+        <input
+          id="mat-m-loc-scan-input"
+          type="text"
+          class="mat-m-loc-scan-input"
+          [(ngModel)]="mobileLocScanBuffer"
+          (keydown)="onMobileLocScanKeydown($event)"
+          [disabled]="mobileLocScanBusy"
+          placeholder="Bắn scanner vào đây…"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+      </div>
+      <p class="mat-m-loc-scan-hint">Scanner sẽ tự Enter sau khi quét — mã chuyển sang vị trí mới ngay.</p>
+    </div>
+
+    <footer class="mat-m-kk-modal__footer">
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="cancelMobileLocationScan()" [disabled]="mobileLocScanBusy">Hủy</button>
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary" (click)="submitMobileLocationScan()" [disabled]="mobileLocScanBusy || !mobileLocScanBuffer.trim()">
+        <i class="material-icons">{{ mobileLocScanBusy ? 'sync' : 'check_circle' }}</i>
+        {{ mobileLocScanBusy ? 'Đang lưu…' : 'Lưu vị trí' }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Mobile: xác nhận Kiểm kê + Standard Packing -->
+<div class="modal-overlay mat-m-kk-overlay" *ngIf="showMobileKkConfirm" (click)="cancelMobileKkConfirm()">
+  <div class="modal-content mat-m-kk-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Xác nhận kiểm kê">
+    <header class="mat-m-kk-modal__header">
+      <div class="mat-m-kk-modal__brand">
+        <span class="mat-m-kk-modal__ico" aria-hidden="true">
+          <i class="material-icons">fact_check</i>
+        </span>
+        <div>
+          <h3>Xác nhận Kiểm kê</h3>
+          <p>Kiểm tra số liệu trước khi lưu</p>
+        </div>
+      </div>
+      <button type="button" class="mat-m-kk-modal__close" (click)="cancelMobileKkConfirm()" [disabled]="mobileKkConfirmBusy" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+
+    <div class="mat-m-kk-modal__body" *ngIf="mobileKkConfirmMaterial as m">
+      <div class="mat-m-kk-modal__codebox">
+        <span class="mat-m-kk-modal__code-label">Mã kiểm</span>
+        <strong class="mat-m-kk-modal__code">{{ m.materialCode }}</strong>
+        <div class="mat-m-kk-modal__meta">
+          <span class="mat-m-chip" *ngIf="m.poNumber">PO {{ m.poNumber }}</span>
+          <span class="mat-m-chip mat-m-chip--loc" *ngIf="m.location"><i class="material-icons">place</i>{{ m.location }}</span>
+          <span class="mat-m-chip" *ngIf="getDisplayIMD(m) as imd">IMD {{ imd }}</span>
+          <span class="mat-m-chip mat-m-chip--factory">{{ selectedFactory }}</span>
+        </div>
+      </div>
+
+      <div class="mat-m-kk-modal__grid" *ngIf="mobileKkConfirmBreakdown as b">
+        <div class="mat-m-kk-stat">
+          <span>Số bịch/cuộn</span>
+          <strong>{{ b.bagCount | number }}</strong>
+        </div>
+        <div class="mat-m-kk-stat">
+          <span>Tồn kho</span>
+          <strong>{{ formatNumber(b.stock) }}</strong>
+        </div>
+        <div class="mat-m-kk-stat mat-m-kk-stat--wide">
+          <span>Chẵn</span>
+          <strong>{{ b.fullCount | number }} bịch × {{ formatNumber(b.sp) }} = {{ formatNumber(b.fullQty) }}</strong>
+        </div>
+        <div class="mat-m-kk-stat mat-m-kk-stat--wide">
+          <span>Lẻ</span>
+          <strong *ngIf="b.oddBags > 0">{{ b.oddBags }} bịch — lượng tồn {{ formatNumber(b.oddQty) }}</strong>
+          <strong *ngIf="b.oddBags === 0">0</strong>
+        </div>
+        <div class="mat-m-kk-stat mat-m-kk-stat--accent mat-m-kk-stat--wide">
+          <span>Lượng chẵn (SP)</span>
+          <strong>{{ formatNumber(b.sp) }}</strong>
+        </div>
+      </div>
+
+      <p class="mat-m-kk-modal__note">
+        <i class="material-icons">info</i>
+        <span>Đồng ý sẽ tick KK và ghi <b>Standard Packing = {{ formatNumber(mobileKkConfirmSp) }}</b> vào Danh mục NVL.</span>
+      </p>
+    </div>
+
+    <footer class="mat-m-kk-modal__footer">
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="cancelMobileKkConfirm()" [disabled]="mobileKkConfirmBusy">Hủy</button>
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary" (click)="confirmMobileKk()" [disabled]="mobileKkConfirmBusy">
+        <i class="material-icons">{{ mobileKkConfirmBusy ? 'sync' : 'check_circle' }}</i>
+        {{ mobileKkConfirmBusy ? 'Đang lưu…' : 'Đồng ý' }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Kiểm Kê full-page popup: tắt — chạy inline trên Inventory -->
+<div class="kk-pro-overlay" *ngIf="false">
   <div class="kk-pro-page">
     <header class="kk-pro-header">
       <div class="kk-pro-header__left">
@@ -1131,7 +1527,7 @@
         </button>
         <div class="kk-pro-header__title">
           <h2>Kiểm Kê — Tiến độ KK</h2>
-          <p>Quét tồn kho và theo dõi tick KK theo mã <strong>B + 6 số</strong></p>
+          <p>Theo nhà máy đang chọn — chỉ mã có <strong>tồn &gt; 0</strong></p>
         </div>
       </div>
       <button type="button" class="kk-pro-icon-btn" (click)="closeKkCheckPopup()" [disabled]="kkCheckRunning" title="Đóng">
@@ -1157,7 +1553,7 @@
           <div class="kk-pro-search-group" *ngIf="kkCheckRan && kkCheckByMaterial.length > 0">
             <span class="kk-pro-toolbar-label">Tìm</span>
             <input type="text" class="kk-pro-search-input" placeholder="Mã NVL" [(ngModel)]="kkCheckSearchCode">
-            <input type="text" class="kk-pro-search-input" placeholder="Vị trí" [(ngModel)]="kkCheckSearchLocation">
+            <input type="text" class="kk-pro-search-input" placeholder="Vị trí (nhóm)" [(ngModel)]="kkCheckSearchLocation">
           </div>
           <div class="kk-pro-filters" *ngIf="kkCheckRan && kkCheckByMaterial.length > 0">
             <span class="kk-pro-toolbar-label">Trạng thái</span>
@@ -1188,7 +1584,7 @@
       <div class="kk-pro-idle" *ngIf="!kkCheckRan && !kkCheckRunning">
         <i class="material-icons">fact_check</i>
         <h3>Sẵn sàng quét Kiểm Kê</h3>
-        <p>Chọn nhà máy <strong>{{ kkCheckSelectedFactory }}</strong>, bấm <strong>Run</strong> để đọc toàn bộ tồn kho và thống kê tick KK.</p>
+        <p>Nhà máy <strong>{{ kkCheckSelectedFactory }}</strong> — bấm <strong>Run</strong> để tính % đã KK (mã có tồn &gt; 0).</p>
       </div>
 
       <div class="kk-pro-loading" *ngIf="kkCheckRunning">
@@ -1204,14 +1600,14 @@
             <div class="kk-pro-progress">
               <div class="kk-pro-progress__bar" [style.width.%]="kkCheckProgressPercent"></div>
             </div>
-            <span class="kk-pro-kpi__sub">{{ kkCheckCheckedRows | number }} / {{ kkCheckTotalRows | number }} dòng</span>
+            <span class="kk-pro-kpi__sub">{{ kkCheckCheckedRows | number }} / {{ kkCheckTotalRows | number }} mã</span>
           </div>
           <div class="kk-pro-kpi">
             <span class="kk-pro-kpi__label">Nhà máy</span>
             <span class="kk-pro-kpi__value kk-pro-kpi__value--sm">{{ kkCheckSelectedFactory }}</span>
           </div>
           <div class="kk-pro-kpi">
-            <span class="kk-pro-kpi__label">Mã B + 6 số</span>
+            <span class="kk-pro-kpi__label">Tổng mã (tồn &gt; 0)</span>
             <span class="kk-pro-kpi__value">{{ kkCheckByMaterial.length | number }}</span>
           </div>
           <div class="kk-pro-kpi kk-pro-kpi--success">
@@ -1265,7 +1661,7 @@
           </div>
           <p class="kk-pro-empty-filter" *ngIf="kkCheckFilteredMaterials.length === 0">Không có mã nào khớp bộ lọc.</p>
         </div>
-        <p class="kk-pro-no-data" *ngIf="kkCheckByMaterial.length === 0">Không tìm thấy mã dạng B + 6 số trong tồn kho {{ kkCheckSelectedFactory }}.</p>
+        <p class="kk-pro-no-data" *ngIf="kkCheckByMaterial.length === 0">Không có mã nào tồn &gt; 0 trong {{ kkCheckSelectedFactory }}.</p>
       </div>
     </div>
   </div>
@@ -1644,7 +2040,7 @@
         </span>
         <div>
           <h3>Lọc theo vị trí</h3>
-          <p class="more-popup-header__sub">Chọn vị trí hoặc nhập mã vị trí</p>
+          <p class="more-popup-header__sub">A–G: nhóm 3 ký tự · H trở đi: nhóm 4 ký tự (bỏ dấu . , - ( ))</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeLocationFilterPopup()" aria-label="Đóng">
@@ -1657,7 +2053,7 @@
         <input
           type="search"
           [(ngModel)]="locationFilterQuery"
-          placeholder="VD: H12, TRA, IQC…"
+          placeholder="VD: A01, H12A…"
           autocomplete="off"
           autofocus
           (keyup.enter)="applyLocationFilterFromInput()" />

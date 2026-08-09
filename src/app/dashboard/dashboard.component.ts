@@ -415,13 +415,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const isMobileUa = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|pda|handheld|mobile/i.test(
       ua.toLowerCase()
     );
-    const wasMobile = this.isMobileLayout;
     this.isMobileLayout = w <= 768 || (isMobileUa && w <= 1024);
     if (!this.isMobileLayout) {
       this.mobileDrillCategory = null;
       this.mobileSearchExpanded = false;
-    } else if (!wasMobile && this.isMobileLayout) {
-      this.router.navigate(['/menu']);
     }
     this.syncDashboardMobileBodyClass();
     this.cdr.markForCheck();
@@ -587,10 +584,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.updateMobileLayout();
-    if (this.isMobileLayout) {
-      this.router.navigate(['/menu']);
-      return;
-    }
+
     // Load selected factory from localStorage
     const savedFactory = localStorage.getItem('selectedFactory');
     if (savedFactory) {
@@ -599,17 +593,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     
     this.initializeCurrentWeek();
     this.loadDashboardData();
-    this.loadAccuracyTurnoverSettings();
-    this.refreshInterval = setInterval(() => this.refreshNonFirestoreDashboardData(), this.refreshTime);
-    
-    // Load Safety data for weekday colors - Copied from Chart tab
-    this.loadSafetyData();
-    
-    // Rack warnings: không đọc Firestore khi mở tab — chỉ 1 lần/ngày lúc 8:00 (nếu tab đang mở)
-    // hoặc khi bấm nút Chạy trên khung Rack Warnings (runRackWarningsManual).
-    this.scheduleRackWarningsDailyRun();
-
-    // Load IQC materials by week
     this.loadIQCByWeek();
 
     // Listen for factory changes from navbar
@@ -617,6 +600,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     // Listen for factory changes from localStorage (for cross-tab sync)
     window.addEventListener('storage', this.onStorageBound);
+
+    // Mobile: chỉ xem WO / FG Inbound / Putaway — bỏ charts + rack + accuracy
+    if (this.isMobileLayout) {
+      this.runWorkOrderStatus();
+      return;
+    }
+
+    this.loadAccuracyTurnoverSettings();
+    this.refreshInterval = setInterval(() => this.refreshNonFirestoreDashboardData(), this.refreshTime);
+    this.loadSafetyData();
+    this.scheduleRackWarningsDailyRun();
   }
 
   /**
@@ -632,6 +626,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     console.log('Dashboard received factory change:', this.selectedFactory);
     this.loadDashboardData();
     this.loadIQCByWeek();
+    if (this.isMobileLayout) {
+      this.runWorkOrderStatus();
+    }
   };
 
   private onStorageBound = (event: StorageEvent): void => {
@@ -639,6 +636,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.selectedFactory = event.newValue || 'ASM1';
       this.loadDashboardData();
       this.loadIQCByWeek();
+      if (this.isMobileLayout) {
+        this.runWorkOrderStatus();
+      }
     }
   };
 
@@ -844,7 +844,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     try {
       this.resetWorkOrderData();
       this.resetShipmentData();
-      this.createCharts();
+      if (!this.isMobileLayout) {
+        this.createCharts();
+      }
       this.loadFgInPendingWeeklyHeatmap();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -1933,6 +1935,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.woHeatmapWeekOffset = 0;
     this.loadDashboardData();
     this.loadIQCByWeek();
+    if (this.isMobileLayout) {
+      this.runWorkOrderStatus();
+    }
   }
 
   // Safety Stock Level methods - Copied from Chart tab

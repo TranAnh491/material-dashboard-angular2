@@ -14,8 +14,6 @@ export class MobileDetectionService {
 
   /** Các tab CHƯA có giao diện mobile/tablet thật sự (chỉ có bảng desktop, không đổi layout khi thu nhỏ). */
   readonly desktopOnlyTabPaths: string[] = [
-    '/dashboard',
-    '/bag-history',
     '/fg-overview',
     '/qc',
     '/qc-traceability',

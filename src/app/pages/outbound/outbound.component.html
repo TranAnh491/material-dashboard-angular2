@@ -10,7 +10,7 @@
           <span class="ob-m-app-mark" aria-hidden="true">
             <i class="material-icons ob-m-app-mark__arrow">arrow_upward</i>
           </span>
-          <h1 class="ob-m-header__title">OUTBOUND {{ selectedFactory }}</h1>
+          <h1 class="ob-m-header__title">Xuất nguyên liệu</h1>
         </div>
         <button type="button" class="ob-m-header__iconbtn ob-m-header__bell" (click)="openMobileMoreSheet()" aria-label="Thông báo">
           <i class="material-icons">notifications_none</i>
@@ -19,7 +19,7 @@
       </div>
       <div class="ob-m-header__row2">
         <span class="ob-m-header__factory-label">Nhà máy:</span>
-        <div class="factory-switcher">
+        <div class="factory-switcher ob-m-factory">
           <button type="button"
                   class="factory-switcher__btn"
                   *ngFor="let f of factoryOptions"
@@ -42,97 +42,86 @@
         {{ errorMessage }}
       </div>
 
-      <section class="ob-m-scan" *ngIf="exportMode === 'NL'">
-        <div class="ob-m-scan__row" [class.ob-m-scan__row--batch]="isBatchScanningMode">
-          <button type="button" class="ob-m-scan__start-side" *ngIf="!isBatchScanningMode" (click)="startBatchScanningMode()">
-            <i class="material-icons">qr_code_scanner</i>
-            <span>START</span>
+      <!-- Mobile NL: mock UI quét mã -->
+      <section class="ob-m-hero" *ngIf="exportMode === 'NL'">
+        <div class="ob-m-hero__card">
+          <button type="button" class="ob-m-hero__scan" (click)="onMobileQuetMaClick()" [disabled]="isSavingBatchData">
+            <span class="ob-m-hero__scan-circle" aria-hidden="true">
+              <i class="material-icons">qr_code_scanner</i>
+            </span>
+            <span class="ob-m-hero__scan-label">Quét mã</span>
           </button>
-          <div class="ob-m-scan__input-block" [class.ob-m-scan__input-block--grow]="isBatchScanningMode">
-            <div class="ob-m-scan__input-row">
-              <input
-                id="ob-m-scanner-input"
-                type="text"
-                #scannerInput
-                [(ngModel)]="scannerBuffer"
-                (keydown)="onScannerKeydown($event)"
-                (blur)="onScannerInputBlur()"
-                (focus)="mobileBottomTab = 'outbound'"
-                placeholder="Quét barcode/QR code"
-                aria-label="Quét barcode hoặc QR"
-                class="scanner-input ob-m-scan__input"
-                [class.active]="isScannerInputActive || showScanningSetupModal"
-                autocomplete="off"
-              />
-              <button type="button" class="ob-m-scan__clear" *ngIf="scannerBuffer && scannerBuffer.length" (click)="clearMobileScannerBuffer()" aria-label="Xóa">
-                <i class="material-icons">close</i>
-              </button>
-            </div>
+          <p class="ob-m-hero__hint">Đưa mã vạch / QR code vào vùng quét</p>
+
+          <div class="ob-m-hero__or"><span>Hoặc nhập tay</span></div>
+
+          <div class="ob-m-hero__manual">
+            <i class="material-icons ob-m-hero__manual-ico">search</i>
+            <input
+              type="text"
+              class="ob-m-hero__manual-input"
+              [(ngModel)]="searchProductionOrder"
+              (keyup.enter)="searchByProductionOrder()"
+              placeholder="Nhập mã vật tư hoặc quét mã hàng"
+              autocomplete="off"
+            />
+            <button type="button" class="ob-m-hero__manual-kb" (click)="focusMobileScanner()" title="Focus scanner" aria-label="Bàn phím scanner">
+              <i class="material-icons">keyboard</i>
+            </button>
           </div>
-        </div>
-        <div class="ob-m-scan__batch" *ngIf="isBatchScanningMode">
-          <div class="ob-m-scan__saving" *ngIf="isSavingBatchData">
-            <i class="material-icons ob-m-spin">sync</i>
-            <span>Đang cập nhật…</span>
+
+          <!-- Scanner ẩn / thu gọn khi đang phiên batch — PDA vẫn gõ vào đây -->
+          <div class="ob-m-hero__scanner-wrap" [class.ob-m-hero__scanner-wrap--on]="isBatchScanningMode">
+            <label class="ob-m-hero__scanner-lbl" *ngIf="isBatchScanningMode">Scanner phiên xuất</label>
+            <input
+              id="ob-m-scanner-input"
+              type="text"
+              #scannerInput
+              [(ngModel)]="scannerBuffer"
+              (keydown)="onScannerKeydown($event)"
+              (blur)="onScannerInputBlur()"
+              (focus)="mobileBottomTab = 'outbound'"
+              placeholder="Quét barcode/QR…"
+              aria-label="Quét barcode hoặc QR"
+              class="scanner-input ob-m-hero__scanner-input"
+              [class.active]="isScannerInputActive || showScanningSetupModal"
+              autocomplete="off"
+            />
           </div>
-          <ng-container *ngIf="!isSavingBatchData">
-            <div class="ob-m-scan__chiprow">
-              <span class="ob-m-chip-pill">
-                <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
-                <b>LSX</b>&nbsp;{{ batchProductionOrder || '…' }}
-              </span>
-              <span class="ob-m-chiprow__sep" aria-hidden="true">·</span>
-              <span class="ob-m-chip-pill">
-                <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
-                <b>NV</b>&nbsp;{{ batchEmployeeId || '…' }}
-              </span>
+
+          <div class="ob-m-hero__batch" *ngIf="isBatchScanningMode">
+            <div class="ob-m-scan__saving" *ngIf="isSavingBatchData">
+              <i class="material-icons ob-m-spin">sync</i>
+              <span>Đang cập nhật…</span>
             </div>
-            <div class="ob-m-scan__acts">
-              <button type="button" class="ob-m-btn ob-m-btn--ghost" (click)="showScanReview()" *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
-                <i class="material-icons">fact_check</i>
-                Review ({{ pendingScanData.length }})
-              </button>
-              <button type="button" class="ob-m-btn ob-m-btn--primary" (click)="stopBatchScanningMode()">
-                <i class="material-icons">done_all</i>
-                Done
-              </button>
-            </div>
-          </ng-container>
+            <ng-container *ngIf="!isSavingBatchData">
+              <div class="ob-m-scan__chiprow">
+                <span class="ob-m-chip-pill">
+                  <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
+                  <b>LSX</b>&nbsp;{{ batchProductionOrder || '…' }}
+                </span>
+                <span class="ob-m-chiprow__sep" aria-hidden="true">·</span>
+                <span class="ob-m-chip-pill">
+                  <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
+                  <b>NV</b>&nbsp;{{ batchEmployeeId || '…' }}
+                </span>
+              </div>
+              <div class="ob-m-scan__acts">
+                <button type="button" class="ob-m-btn ob-m-btn--ghost" (click)="showScanReview()" *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+                  <i class="material-icons">fact_check</i>
+                  Review ({{ pendingScanData.length }})
+                </button>
+                <button type="button" class="ob-m-btn ob-m-btn--primary" (click)="stopBatchScanningMode()">
+                  <i class="material-icons">done_all</i>
+                  Done
+                </button>
+              </div>
+            </ng-container>
+          </div>
         </div>
       </section>
 
-      <div class="ob-m-toolbar" *ngIf="!isBatchScanningMode">
-        <div class="ob-m-search">
-          <span class="ob-m-search__prefix" aria-hidden="true">
-            <i class="material-icons">search</i>
-          </span>
-          <input
-            type="text"
-            class="ob-m-search__input"
-            [(ngModel)]="searchProductionOrder"
-            (keyup.enter)="searchByProductionOrder()"
-            placeholder="Nhập LSX hoặc quét mã hàng"
-            title="Nhập LSX hoặc mã hàng rồi Enter"
-          />
-          <button type="button" class="ob-m-search__btn" (click)="focusMobileScanner()" title="Quét mã">
-            <i class="material-icons">qr_code_2</i>
-          </button>
-          <button type="button" class="ob-m-search__btn ob-m-search__btn--primary" (click)="searchByProductionOrder()" [disabled]="!searchProductionOrder || !searchProductionOrder.trim()" title="Tìm">
-            <i class="material-icons">search</i>
-          </button>
-        </div>
-        <button
-          type="button"
-          class="ob-m-toolbar__sidebtn"
-          *ngIf="selectedProductionOrder || materialSearchMode === 'material'"
-          (click)="clearProductionOrderFilter()"
-          title="Xóa lọc"
-        >
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-
-      <div class="lsx-material-inline ob-m-material-hint" *ngIf="materialSearchMode === 'material'">
+      <div class="lsx-material-inline ob-m-material-hint" *ngIf="exportMode === 'NL' && materialSearchMode === 'material'">
         <div class="lsx-material-inline__loading" *ngIf="materialSearchLoading">
           <i class="material-icons spinning">sync</i>
           <span>Đang lọc theo mã hàng…</span>
@@ -176,10 +165,10 @@
       </section>
 
       <section class="ob-m-list" id="ob-m-materials" *ngIf="exportMode === 'NL'">
-        <div class="ob-m-list__head">
-          <span class="ob-m-list__title">Danh sách vật tư</span>
+        <div class="ob-m-list__head ob-m-list__head--export">
+          <span class="ob-m-list__title">Danh sách xuất ({{ getMobileExportListCount() }})</span>
+          <span class="ob-m-list__total">Tổng: {{ getMobileExportTotalQty() | number:'1.0-2' }}</span>
         </div>
-        <p class="ob-m-list__count">{{ getMobileListCountLabel() }}</p>
         <div class="ob-m-colhead" *ngIf="getMobileListMaterials().length > 0">
           <span class="ob-m-colhead__ico" aria-hidden="true"></span>
           <span class="ob-m-colhead__mat">Mã vật tư</span>
@@ -188,12 +177,15 @@
           <span>Bag</span>
           <span>Bịch</span>
           <span class="ob-m-colhead__qty">Qty</span>
+          <span title="Chẵn / Lẻ">C/L</span>
           <span class="ob-m-colhead__chev" aria-hidden="true"></span>
         </div>
-        <p class="ob-m-empty" *ngIf="getMobileListMaterials().length === 0">
-          <ng-container *ngIf="isBatchScanningMode">Chưa có tem trong phiên. Quét tem Material|PO|SL|IMD để hiển thị mã mới nhất tại đây.</ng-container>
-          <ng-container *ngIf="!isBatchScanningMode">Chưa có dữ liệu. Tìm LSX hoặc bắt đầu scan.</ng-container>
-        </p>
+        <div class="ob-m-empty-state" *ngIf="getMobileListMaterials().length === 0">
+          <span class="ob-m-empty-state__ico" aria-hidden="true">
+            <i class="material-icons">inventory_2</i>
+          </span>
+          <p>Chưa có dữ liệu</p>
+        </div>
         <article
           class="ob-m-card"
           *ngFor="let material of getMobileListMaterials(); let i = index; trackBy: trackByIndex"
@@ -210,12 +202,18 @@
             <span class="ob-m-card__cell" [class.ob-m-card__cell--warn]="material.bagDuplicate">{{ getOutboundBagColumnDisplay(material) }}</span>
             <span class="ob-m-card__cell ob-m-card__cell--muted">{{ material.bagBatch || '—' }}</span>
             <span class="ob-m-card__cell ob-m-card__cell--qty">{{ getMobileMaterialQtyLine(material) }}</span>
+            <span class="ob-m-card__cell"
+                  [class.ob-m-card__cell--chan]="isPackChan(material)"
+                  [class.ob-m-card__cell--le]="isPackLe(material)">{{ packKindLabel(material) }}</span>
             <i class="material-icons ob-m-card__chev">{{ isMobileMaterialExpanded(material) ? 'expand_less' : 'chevron_right' }}</i>
           </button>
           <div class="ob-m-card__detail" *ngIf="isMobileMaterialExpanded(material)">
             <div class="ob-m-dl"><span>IMD</span><b>{{ material.importDate || '—' }}</b></div>
             <div class="ob-m-dl"><span>Bag</span><b [class.ob-m-dupwarn]="material.bagDuplicate">{{ getOutboundBagColumnDisplay(material) }}</b></div>
             <div class="ob-m-dl"><span>Bịch</span><b>{{ material.bagBatch || '—' }}</b></div>
+            <div class="ob-m-dl"><span>Chẵn</span><b>{{ isPackChan(material) ? 'Chẵn' : '—' }}</b></div>
+            <div class="ob-m-dl"><span>Lẻ</span><b>{{ isPackLe(material) ? 'Lẻ' : '—' }}</b></div>
+            <div class="ob-m-dl"><span>SP</span><b>{{ getStandardPacking(material.materialCode) || '—' }}</b></div>
             <div class="ob-m-dl"><span>Số lần quét</span><b>×{{ material.scanCount ?? 0 }}</b></div>
             <div class="ob-m-dl"><span>Ngày xuất</span><b>{{ material.createdAt | date:'dd/MM/yyyy HH:mm' }}</b></div>
             <div class="ob-m-dl"><span>NV</span><b>{{ getDisplayEmployeeId(material.employeeId) }}</b></div>
@@ -254,7 +252,7 @@
         <span>Trang chủ</span>
       </button>
       <button type="button" class="ob-m-nav__btn" [class.ob-m-nav__btn--on]="mobileBottomTab === 'outbound'" (click)="switchExportMode('NL')">
-        <i class="material-icons">upload</i>
+        <i class="material-icons">arrow_upward</i>
         <span>Xuất NL</span>
       </button>
       <button type="button" class="ob-m-nav__btn" [class.ob-m-nav__btn--on]="mobileBottomTab === 'bs'" (click)="switchExportMode('BS')">
@@ -642,6 +640,8 @@
             <th class="col-bag-number">Bag</th>
             <th class="col-bag-batch">Bịch</th>
             <th class="col-quantity">Xuất</th>
+            <th class="col-pack-chan" title="QTY = Standard Packing">Chẵn</th>
+            <th class="col-pack-le" title="QTY &lt; Standard Packing">Lẻ</th>
             <th class="col-scan-count">Số lần</th>
             <th class="col-employee">Mã nhân viên</th>
             <th class="col-production">Lệnh sản xuất</th>
@@ -676,6 +676,14 @@
             </td>
             <td class="number-cell readonly-cell">
               {{material.exportQuantity}}
+            </td>
+            <td class="pack-kind-cell readonly-cell" [class.pack-kind-cell--on]="isPackChan(material)">
+              <span *ngIf="isPackChan(material)" class="pack-badge pack-badge--chan">Chẵn</span>
+              <span *ngIf="!isPackChan(material)">—</span>
+            </td>
+            <td class="pack-kind-cell readonly-cell" [class.pack-kind-cell--on]="isPackLe(material)">
+              <span *ngIf="isPackLe(material)" class="pack-badge pack-badge--le">Lẻ</span>
+              <span *ngIf="!isPackLe(material)">—</span>
             </td>
             <td class="number-cell readonly-cell">
               {{ material.scanCount ?? 0 }}
@@ -806,6 +814,9 @@
                 </div>
                 <div class="scan-detail">
                   <strong>Số lượng:</strong> {{ item.quantity }} KG
+                  <span class="pack-badge pack-badge--chan" *ngIf="isPackChan(item)">Chẵn</span>
+                  <span class="pack-badge pack-badge--le" *ngIf="isPackLe(item)">Lẻ</span>
+                  <span class="pack-badge pack-badge--bypass" *ngIf="isAllowExportByCarton(item.materialCode)">Thùng</span>
                 </div>
                 <div class="scan-detail" *ngIf="item.importDate">
                   <strong>IMD:</strong> {{ item.importDate }}
@@ -861,6 +872,9 @@
             </div>
             <div class="scan-detail">
               <strong>Số lượng:</strong> {{ item.quantity }} KG
+              <span class="pack-badge pack-badge--chan" *ngIf="isPackChan(item)">Chẵn</span>
+              <span class="pack-badge pack-badge--le" *ngIf="isPackLe(item)">Lẻ</span>
+              <span class="pack-badge pack-badge--bypass" *ngIf="isAllowExportByCarton(item.materialCode)">Thùng</span>
             </div>
             <div class="scan-detail" *ngIf="item.importDate">
               <strong>IMD:</strong> {{ item.importDate }}

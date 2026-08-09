@@ -73,7 +73,8 @@ export interface OutboundMaterial {
   bagDuplicate?: boolean;
   /** Dòng xem nhanh từ pending scan (mobile, phiên batch), không có bản ghi Firestore */
   pendingPreview?: boolean;
-
+  /** Phân loại QTY vs Standard Packing: chẵn (=SP) / lẻ (<SP) — UI */
+  packKind?: 'chan' | 'le' | 'bypass' | 'over' | 'unknown';
 }
 
 @Component({
@@ -220,6 +221,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   /** Tập mã được phép quét Tem Thùng để xuất kho — load 1 lần từ cache dùng chung (không thêm read). */
   private allowExportByCartonSet: Set<string> = new Set();
+  /** Standard Packing theo mã (từ danh mục NVL) — dùng rule Chẵn/Lẻ khi quét. */
+  private standardPackingByCode = new Map<string, number>();
 
   /** Cập nhật Người soạn WO theo tên zalo_links của NV scan xuất. */
   private syncWorkOrderCreatedByAfterExport(lsx?: string, employeeId?: string): void {
@@ -327,10 +330,103 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   private async loadAllowExportByCartonSet(): Promise<void> {
     try {
-      this.allowExportByCartonSet = await this.nvlCatalog.loadAllowExportByCartonSet();
+      const items = await this.nvlCatalog.listAll();
+      this.allowExportByCartonSet = new Set(
+        items.filter((i) => i.allowExportByCarton).map((i) => i.materialCode)
+      );
+      const spMap = new Map<string, number>();
+      items.forEach((i) => {
+        const sp = Number(i.standardPacking) || 0;
+        if (i.materialCode && sp > 0) {
+          spMap.set(i.materialCode, sp);
+        }
+      });
+      this.standardPackingByCode = spMap;
     } catch (e) {
-      console.error('❌ Load Xuất thùng allowlist:', e);
+      console.error('❌ Load Xuất thùng / Standard Packing catalog:', e);
     }
+  }
+
+  /** Standard Packing trong danh mục NVL (0 = chưa có). */
+  getStandardPacking(materialCode: string | null | undefined): number {
+    const code = String(materialCode || '').trim().toUpperCase();
+    if (!code) return 0;
+    return this.standardPackingByCode.get(code) || 0;
+  }
+
+  isAllowExportByCarton(materialCode: string | null | undefined): boolean {
+    const code = String(materialCode || '').trim().toUpperCase();
+    return !!code && this.allowExportByCartonSet.has(code);
+  }
+
+  /**
+   * Chẵn = QTY bằng Standard Packing; Lẻ = QTY nhỏ hơn SP.
+   * Mã bật Xuất thùng → bypass; QTY > SP → over (không cho quét).
+   */
+  getPackKind(materialCode: string | null | undefined, qty: number): 'chan' | 'le' | 'bypass' | 'over' | 'unknown' {
+    const code = String(materialCode || '').trim().toUpperCase();
+    if (!code) return 'unknown';
+    if (this.allowExportByCartonSet.has(code)) return 'bypass';
+    const sp = this.standardPackingByCode.get(code) || 0;
+    if (sp <= 0) return 'unknown';
+    const q = Number(qty);
+    if (!(q > 0)) return 'unknown';
+    if (q > sp) return 'over';
+    if (q === sp) return 'chan';
+    return 'le';
+  }
+
+  isPackChan(material: { materialCode?: string; exportQuantity?: number; quantity?: number } | null | undefined): boolean {
+    if (!material) return false;
+    const qty = Number(material.exportQuantity ?? material.quantity) || 0;
+    return this.getPackKind(material.materialCode, qty) === 'chan';
+  }
+
+  isPackLe(material: { materialCode?: string; exportQuantity?: number; quantity?: number } | null | undefined): boolean {
+    if (!material) return false;
+    const qty = Number(material.exportQuantity ?? material.quantity) || 0;
+    return this.getPackKind(material.materialCode, qty) === 'le';
+  }
+
+  packKindLabel(material: { materialCode?: string; exportQuantity?: number; quantity?: number } | null | undefined): string {
+    if (!material) return '—';
+    const qty = Number(material.exportQuantity ?? material.quantity) || 0;
+    const kind = this.getPackKind(material.materialCode, qty);
+    switch (kind) {
+      case 'chan':
+        return 'Chẵn';
+      case 'le':
+        return 'Lẻ';
+      case 'bypass':
+        return 'Thùng';
+      case 'over':
+        return '>';
+      default:
+        return '—';
+    }
+  }
+
+  /**
+   * Rule quét: QTY ≤ Standard Packing (Chẵn =SP, Lẻ &lt;SP).
+   * Mã bật Xuất thùng trong danh mục → không áp dụng.
+   * @returns thông báo lỗi hoặc null nếu hợp lệ.
+   */
+  private validateScanQtyVsStandardPacking(materialCode: string, quantity: number): string | null {
+    const code = String(materialCode || '').trim().toUpperCase();
+    if (!code) return null;
+    if (this.allowExportByCartonSet.has(code)) return null;
+    const sp = this.standardPackingByCode.get(code) || 0;
+    if (sp <= 0) return null;
+    const q = Number(quantity);
+    if (!(q > 0)) return `Số lượng quét không hợp lệ: ${quantity}`;
+    if (q > sp) {
+      return (
+        `Số lượng quét ${q} lớn hơn Standard Packing (${sp}).\n` +
+        `Chỉ được quét Chẵn (=${sp}) hoặc Lẻ (<${sp}).\n` +
+        `Mã bật Xuất thùng trong danh mục thì không theo quy tắc này.`
+      );
+    }
+    return null;
   }
 
   private async refreshOutboundQcRuleCache(): Promise<void> {
@@ -910,7 +1006,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
   focusMobileScanner(): void {
     this.mobileBottomTab = 'outbound';
     setTimeout(() => {
-      const el = document.querySelector('.ob-m .scanner-input') as HTMLInputElement | null;
+      const el = document.querySelector(
+        '.ob-m .scanner-input, .ob-m .ob-m-hero__scanner-input'
+      ) as HTMLInputElement | null;
       el?.focus();
       el?.select();
     }, 0);
@@ -1075,6 +1173,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
     if (scannedQty <= 0) {
       this.bsScanError = `❌ Số lượng scan không hợp lệ: ${scannedQty}`;
+      return;
+    }
+
+    const packErr = this.validateScanQtyVsStandardPacking(scannedCode, scannedQty);
+    if (packErr) {
+      this.bsScanError = `❌ ${packErr}`;
       return;
     }
 
@@ -1675,6 +1779,35 @@ export class OutboundComponent implements OnInit, OnDestroy {
       return `${n} tem · hiển thị mã mới nhất`;
     }
     return `${this.filteredMaterials.length} dòng`;
+  }
+
+  /** Số dòng / tem trên danh sách xuất (mobile). */
+  getMobileExportListCount(): number {
+    if (this.isMobile && this.isBatchScanningMode) {
+      return this.pendingScanData.length;
+    }
+    return this.filteredMaterials.length;
+  }
+
+  /** Tổng QTY xuất trên danh sách mobile. */
+  getMobileExportTotalQty(): number {
+    if (this.isMobile && this.isBatchScanningMode) {
+      return this.pendingScanData.reduce((s, it) => s + (Number(it?.quantity) || 0), 0);
+    }
+    return this.filteredMaterials.reduce((s, m) => s + (Number(m.exportQuantity ?? m.quantity) || 0), 0);
+  }
+
+  /** Nút QUÉT MÃ lớn (mobile mock) — START phiên batch rồi focus scanner. */
+  onMobileQuetMaClick(): void {
+    this.mobileBottomTab = 'outbound';
+    if (this.exportMode !== 'NL') {
+      this.switchExportMode('NL');
+    }
+    if (!this.isBatchScanningMode) {
+      this.startBatchScanningMode();
+    } else {
+      this.focusMobileScanner();
+    }
   }
 
   /** Có hiện phân trang dưới danh sách (mobile batch chỉ 1 dòng preview → ẩn) */
@@ -2567,6 +2700,14 @@ export class OutboundComponent implements OnInit, OnDestroy {
       }
       this.lastScannedData.materialCode = strippedScan.materialCode;
 
+      const packErrCamera = this.validateScanQtyVsStandardPacking(
+        this.lastScannedData.materialCode,
+        this.lastScannedData.quantity
+      );
+      if (packErrCamera) {
+        throw new Error(packErrCamera);
+      }
+
       console.log('✅ Final parsed data:', this.lastScannedData);
       console.log('✅ Export quantity set to:', this.exportQuantity);
       
@@ -2825,11 +2966,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.currentScanStep = 'batch';
     this.pendingScanData = [];
     
-    // Show professional scanning setup modal — luôn bắt đầu bằng bước chọn nhà máy,
-    // bắt buộc xác nhận ASM1/ASM2 trước khi được quét LSX (không dùng ngầm định factory
-    // đang chọn ở header, tránh thao tác nhầm nhà máy).
+    // Dùng luôn nhà máy đã chọn trên header — không hỏi lại popup chọn ASM1/ASM2.
     this.showScanningSetupModal = true;
-    this.scanningSetupStep = 'factory';
+    this.scanningSetupStep = 'lsx';
 
     // 🔧 TỰ ĐỘNG FOCUS: Tự động focus vào scanner input để có thể scan ngay
     // (0ms — tránh mất ký tự đầu do PDA bắn dữ liệu quá nhanh, trước khi ô nhập kịp có focus)
@@ -2838,7 +2977,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.focusScannerInput();
     }, 0);
     
-    console.log('✅ Professional scanning setup modal opened - Auto-focused for scanning');
+    console.log(`✅ Scanning setup → LSX (factory header: ${this.selectedFactory})`);
   }
 
   async stopBatchScanningMode(): Promise<void> {
@@ -3557,6 +3696,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
     if (isTemThung && !this.allowExportByCartonSet.has(materialCode.trim().toUpperCase())) {
       this.showScanError(`Mã ${materialCode} không nằm trong danh mục Xuất thùng — không thể xuất bằng Tem Thùng.`);
+      return;
+    }
+
+    const packErr = this.validateScanQtyVsStandardPacking(materialCode, quantity);
+    if (packErr) {
+      this.showScanError(packErr);
       return;
     }
 

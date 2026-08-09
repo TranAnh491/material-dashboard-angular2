@@ -2834,6 +2834,54 @@ $asm1-toolbar-h: 36px;
     gap: 8px;
     min-width: 0;
   }
+
+  .kk-inline-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+    color: #1d4ed8;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    max-width: 100%;
+
+    .material-icons {
+      font-size: 18px;
+      color: #2563eb !important;
+    }
+
+    &--done {
+      background: #ecfdf5;
+      border-color: #6ee7b7;
+      color: #047857;
+
+      .material-icons {
+        color: #059669 !important;
+      }
+    }
+
+    &__close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 2px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: inherit;
+      line-height: 1;
+
+      .material-icons {
+        font-size: 16px;
+        color: inherit !important;
+      }
+    }
+  }
   
   .consolidation-message {
     display: flex;
