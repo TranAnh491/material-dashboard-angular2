@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
 import { ClientReloadService } from './services/client-reload.service';
+import { ForceLogoutService } from './services/force-logout.service';
 import { FirebaseAuthService } from './services/firebase-auth.service';
 
 /** Các tài khoản dùng chung/hệ thống — không bắt cập nhật email công ty. */
@@ -27,6 +28,7 @@ export class AppComponent implements OnInit {
 
   constructor(
     private clientReloadService: ClientReloadService,
+    private forceLogoutService: ForceLogoutService,
     private authService: FirebaseAuthService,
     private fns: AngularFireFunctions
   ) {}
@@ -36,6 +38,7 @@ export class AppComponent implements OnInit {
     this.clientReloadService.updateAvailable$.subscribe(available => {
       this.updateAvailable = available;
     });
+    this.forceLogoutService.startListening();
 
     this.authService.user$.subscribe(user => {
       if (!user) {

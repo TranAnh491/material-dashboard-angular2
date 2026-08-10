@@ -192,10 +192,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   rackWarningsLoading = false;
   criticalCount = 0;
   warningCount = 0;
-  /** Đã chạy rack warning ít nhất một lần (tự động 8h hoặc bấm nút). */
+  /** Đã đọc được cache rack warning ít nhất một lần. */
   rackWarningsLoaded = false;
-  private readonly RACK_WARNINGS_LAST_RUN_KEY = 'dashboard-rack-warnings-last-run-date';
-  private rackWarningsDailyTimer?: ReturnType<typeof setTimeout>;
 
   // IQC Materials by Week
   iqcWeekData: Array<{
@@ -610,7 +608,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadAccuracyTurnoverSettings();
     this.refreshInterval = setInterval(() => this.refreshNonFirestoreDashboardData(), this.refreshTime);
     this.loadSafetyData();
-    this.scheduleRackWarningsDailyRun();
+    void this.loadRackWarnings();
   }
 
   /**
@@ -647,7 +645,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       document.body.classList.remove(this.dashboardMobileBodyClass);
     }
     if (this.refreshInterval) clearInterval(this.refreshInterval);
-    if (this.rackWarningsDailyTimer) clearTimeout(this.rackWarningsDailyTimer);
     window.removeEventListener('factoryChanged', this.onFactoryChangedBound);
     window.removeEventListener('storage', this.onStorageBound);
     this.workOrdersSub?.unsubscribe();
@@ -2099,174 +2096,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadSafetyData();
   }
 
-  /** Bấm nút Chạy trên khung Rack Utilization Warnings — luôn đọc Firestore. */
-  runRackWarningsManual(): void {
-    void this.loadRackWarnings();
-  }
-
-  private getLocalDateKey(d = new Date()): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-
-  private hasRackWarningsRunToday(): boolean {
+  /**
+   * Bấm nút Chạy trên khung Rack Utilization Warnings — gọi Cloud Function tính lại NGAY
+   * và ghi vào cache chung (`dashboard-cache/rack-warnings`), rồi đọc lại cache đó.
+   * Việc tính (quét inventory-materials + materials) chỉ xảy ra 1 lần cho lần bấm này,
+   * dùng chung cho mọi máy khác — không nhân theo số người bấm/số máy mở tab.
+   */
+  async runRackWarningsManual(): Promise<void> {
+    this.rackWarningsLoading = true;
     try {
-      return localStorage.getItem(this.RACK_WARNINGS_LAST_RUN_KEY) === this.getLocalDateKey();
-    } catch {
-      return false;
+      const callable = this.fns.httpsCallable<undefined, { ok: boolean; count: number }>('recomputeRackWarningsFn');
+      await firstValueFrom(callable(undefined));
+    } catch (error) {
+      console.error('❌ recomputeRackWarningsFn failed', error);
     }
+    await this.loadRackWarnings();
   }
 
-  private markRackWarningsRunToday(): void {
-    try {
-      localStorage.setItem(this.RACK_WARNINGS_LAST_RUN_KEY, this.getLocalDateKey());
-    } catch {
-      /* ignore quota */
-    }
-  }
-
-  /** Tự chạy 1 lần/ngày lúc 8:00 sáng nếu tab Dashboard đang mở (hoặc ngay khi mở tab sau 8h). */
-  private scheduleRackWarningsDailyRun(): void {
-    if (this.hasRackWarningsRunToday()) {
-      return;
-    }
-
-    const now = new Date();
-    const runAt = new Date(now);
-    runAt.setHours(8, 0, 0, 0);
-
-    const runOnce = () => {
-      if (this.hasRackWarningsRunToday()) {
-        return;
-      }
-      void this.loadRackWarnings().then(() => this.markRackWarningsRunToday());
-    };
-
-    if (now.getTime() >= runAt.getTime()) {
-      runOnce();
-      return;
-    }
-
-    this.rackWarningsDailyTimer = setTimeout(runOnce, runAt.getTime() - now.getTime());
-  }
-  
-  // Load Rack Utilization Warnings
+  /**
+   * Đọc kết quả Rack Utilization Warnings đã được Cloud Function tính sẵn 1 lần/ngày lúc 8h
+   * (Asia/Ho_Chi_Minh) và lưu vào `dashboard-cache/rack-warnings` — xem functions/src/rack-warnings.ts.
+   * Luôn chỉ 1 read Firestore, bất kể máy nào mở Dashboard hay mở bao nhiều lần.
+   */
   async loadRackWarnings() {
     this.rackWarningsLoading = true;
-    
+
     try {
-      // Load inventory materials for ASM1
-      const inventorySnapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', 'ASM1')
-      ).get().toPromise();
-      this.readTracker.track('dashboard', 'inventory-materials', inventorySnapshot?.docs.length || 0);
+      const snap = await this.firestore.collection('dashboard-cache').doc('rack-warnings').get().toPromise();
+      this.readTracker.track('dashboard', 'dashboard-cache', 1);
 
-      const materials = inventorySnapshot.docs.map(doc => doc.data() as any);
+      const data = snap?.data() as { warnings?: typeof this.rackWarnings; criticalCount?: number; warningCount?: number } | undefined;
+      this.rackWarnings = data?.warnings || [];
+      this.criticalCount = data?.criticalCount || 0;
+      this.warningCount = data?.warningCount || 0;
+      this.rackWarningsLoaded = !!data;
 
-      // Load catalog for unit weights
-      const catalogSnapshot = await this.firestore.collection('materials').get().toPromise();
-      this.readTracker.track('dashboard', 'materials', catalogSnapshot?.docs.length || 0);
-      const catalogCache = new Map<string, any>();
-      
-      catalogSnapshot.docs.forEach(doc => {
-        const item = doc.data();
-        if (item['materialCode']) {
-          const code = item['materialCode'].toString().trim().toUpperCase();
-          catalogCache.set(code, {
-            unitWeight: item['unitWeight'] || item['unit_weight'] || 0
-          });
-        }
-      });
-      
-      // Calculate rack loading
-      const positionMap = new Map<string, { totalWeightKg: number, itemCount: number }>();
-      
-      materials.forEach(material => {
-        const location = material.location || '';
-        const position = this.normalizePosition(location);
-        
-        if (!position) return;
-        
-        // Calculate stock: openingStock + quantity - exported - xt
-        const openingStock = material.openingStock !== null && material.openingStock !== undefined 
-          ? material.openingStock 
-          : 0;
-        const stockQty = openingStock + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0);
-        
-        if (stockQty <= 0) return;
-        
-        const materialCode = material.materialCode?.toString().trim().toUpperCase();
-        const catalogItem = catalogCache.get(materialCode);
-        const unitWeightGram = catalogItem?.unitWeight || 0;
-        
-        if (unitWeightGram <= 0) return;
-        
-        const weightKg = (stockQty * unitWeightGram) / 1000;
-        
-        if (!positionMap.has(position)) {
-          positionMap.set(position, { totalWeightKg: 0, itemCount: 0 });
-        }
-        
-        const posData = positionMap.get(position)!;
-        posData.totalWeightKg += weightKg;
-        posData.itemCount++;
-      });
-      
-      // Find positions with warnings (>= 80%)
-      const warnings: typeof this.rackWarnings = [];
-      
-      positionMap.forEach((data, position) => {
-        // Max capacity logic from utilization tab:
-        // Positions ending with '1' have 5000kg, others have 1300kg
-        const maxCapacity = position.endsWith('1') ? 5000 : 1300;
-        const usage = (data.totalWeightKg / maxCapacity) * 100;
-        
-        if (usage >= 80) {
-          warnings.push({
-            position: position,
-            usage: usage,
-            currentLoad: data.totalWeightKg,
-            maxCapacity: maxCapacity,
-            status: usage >= 95 ? 'critical' : 'warning'
-          });
-        }
-      });
-      
-      // Sort by usage descending
-      warnings.sort((a, b) => b.usage - a.usage);
-      
-      this.rackWarnings = warnings;
-      this.rackWarningsLoaded = true;
-      
-      // Count critical and warning
-      this.criticalCount = warnings.filter(w => w.status === 'critical').length;
-      this.warningCount = warnings.filter(w => w.status === 'warning').length;
-      
-      console.log('📊 Rack warnings loaded:', warnings.length, `(${this.criticalCount} critical, ${this.warningCount} warning)`);
-      
+      console.log('📊 Rack warnings (cache):', this.rackWarnings.length, `(${this.criticalCount} critical, ${this.warningCount} warning)`);
     } catch (error) {
-      console.error('❌ Error loading rack warnings:', error);
+      console.error('❌ Error loading rack warnings cache', error);
     } finally {
       this.rackWarningsLoading = false;
       this.cdr.detectChanges();
     }
   }
-  
-  private normalizePosition(location: string): string {
-    if (!location) return '';
-    
-    const cleaned = location.replace(/[.,]/g, '').substring(0, 3).toUpperCase();
-    const validPattern = /^[A-G]\d{2}$/;
-    
-    if (!validPattern.test(cleaned)) {
-      return '';
-    }
-    
-    return cleaned;
-  }
-  
+
   getWarningStatusClass(status: 'warning' | 'critical'): string {
     return status === 'critical' ? 'status-critical' : 'status-warning';
   }

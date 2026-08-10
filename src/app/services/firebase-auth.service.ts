@@ -4,6 +4,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Observable, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { NotificationService } from './notification.service';
+import { markAuthSessionStarted } from './force-logout.service';
 
 export interface User {
   uid: string;
@@ -92,10 +93,11 @@ export class FirebaseAuthService {
       
       // User có trong settings, cập nhật thông tin đăng nhập
       await this.updateUserLoginInfo(credential.user);
-      
+
       // Lưu login history
       await this.saveLoginHistory(credential.user);
-      
+
+      markAuthSessionStarted();
       console.log('✅ Đăng nhập thành công:', credential.user.uid);
       return credential;
     } catch (error: any) {
@@ -121,6 +123,7 @@ export class FirebaseAuthService {
         await this.updateUserLoginInfo(credential.user);
         await this.saveLoginHistory(credential.user);
       }
+      markAuthSessionStarted();
       return credential;
     } catch (error) {
       console.error('❌ signInWithCustomToken thất bại:', error);
@@ -245,6 +248,7 @@ export class FirebaseAuthService {
         updatedAt: new Date()
       });
 
+      markAuthSessionStarted();
       console.log('✅ Tài khoản đặc biệt đã được tạo và đăng nhập thành công');
     } catch (error) {
       console.error('❌ Lỗi đăng nhập tài khoản đặc biệt:', error);

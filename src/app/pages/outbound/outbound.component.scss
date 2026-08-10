@@ -3122,6 +3122,47 @@
     padding: 24px;
   }
 
+  /* Ô nhận barcode PDA trong popup setup LSX / NV — phải focusable (không display:none) */
+  .setup-scanner-field {
+    margin-top: 8px;
+    margin-bottom: 8px;
+
+    &__lbl {
+      display: block;
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #495057;
+    }
+
+    &__input {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 52px;
+      padding: 12px 14px;
+      border: 2px solid #ff9800;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      background: #fff8e1;
+      color: #212529;
+
+      &:focus {
+        outline: none;
+        border-color: #ef6c00;
+        box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.25);
+        background: #fff;
+      }
+
+      &::placeholder {
+        color: #adb5bd;
+        font-weight: 500;
+        font-size: 14px;
+      }
+    }
+  }
+
   .scan-step {
     .factory-choice-section {
       display: flex;

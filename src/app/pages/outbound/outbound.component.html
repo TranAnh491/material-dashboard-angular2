@@ -70,8 +70,9 @@
             </button>
           </div>
 
-          <!-- Scanner ẩn / thu gọn khi đang phiên batch — PDA vẫn gõ vào đây -->
-          <div class="ob-m-hero__scanner-wrap" [class.ob-m-hero__scanner-wrap--on]="isBatchScanningMode">
+          <!-- Scanner phải focusable khi setup LSX/NV hoặc đang phiên batch — không dùng display:none lúc PDA quét -->
+          <div class="ob-m-hero__scanner-wrap"
+               [class.ob-m-hero__scanner-wrap--on]="isBatchScanningMode || showScanningSetupModal">
             <label class="ob-m-hero__scanner-lbl" *ngIf="isBatchScanningMode">Scanner phiên xuất</label>
             <input
               id="ob-m-scanner-input"
@@ -766,7 +767,7 @@
             <div class="scan-instruction-text">
               <i class="material-icons">qr_code_scanner</i>
               <p>Vui lòng quét mã lệnh sản xuất (LSX)</p>
-              <small>Hệ thống sẽ tự động chuyển sang bước tiếp theo sau khi quét</small>
+              <small>PDA: quét vào ô bên dưới — hệ thống tự chuyển bước sau Enter</small>
             </div>
           </div>
         </div>
@@ -791,9 +792,29 @@
             <div class="scan-instruction-text">
               <i class="material-icons">qr_code_scanner</i>
               <p>Vui lòng quét mã nhân viên</p>
-              <small>Hệ thống sẽ tự động bắt đầu scan hàng sau khi quét mã nhân viên</small>
+              <small>PDA: quét vào ô bên dưới — hệ thống tự bắt đầu scan hàng sau Enter</small>
             </div>
           </div>
+        </div>
+
+        <!-- Ô nhận scan PDA — luôn trong modal (không display:none), dùng chung bước LSX + NV -->
+        <div class="setup-scanner-field" *ngIf="scanningSetupStep === 'lsx' || scanningSetupStep === 'employee'">
+          <label class="setup-scanner-field__lbl" for="ob-setup-scanner-input">
+            {{ scanningSetupStep === 'lsx' ? 'Ô quét LSX' : 'Ô quét mã nhân viên' }}
+          </label>
+          <input
+            id="ob-setup-scanner-input"
+            type="text"
+            class="scanner-input setup-scanner-field__input"
+            [(ngModel)]="scannerBuffer"
+            (keydown)="onScannerKeydown($event)"
+            (blur)="onScannerInputBlur()"
+            [placeholder]="scanningSetupStep === 'lsx' ? 'Quét hoặc nhập LSX rồi Enter…' : 'Quét hoặc nhập mã NV rồi Enter…'"
+            autocomplete="off"
+            autocapitalize="characters"
+            inputmode="text"
+            enterkeyhint="done"
+          />
         </div>
         
         <!-- Pending Scan Data Section -->

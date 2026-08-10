@@ -75,6 +75,42 @@ export const notifyOutboundDuplicatesAt17 = functions
   });
 
 /**
+ * Dashboard: tính Rack Utilization Warnings 1 lần/ngày lúc 8h (Asia/Ho_Chi_Minh), lưu vào
+ * `dashboard-cache/rack-warnings`. Client (mọi máy) chỉ đọc doc này (1 read) thay vì mỗi máy
+ * tự quét lại inventory-materials + materials mỗi lần mở tab Dashboard.
+ */
+export const computeRackWarningsDaily = functions
+  .pubsub.schedule('0 8 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { computeAndCacheRackWarnings } = await import('./rack-warnings');
+    await computeAndCacheRackWarnings(admin.firestore());
+  });
+
+/** Nút "Chạy" trên Dashboard: tính lại ngay và cập nhật cache chung (1 lần, không nhân theo máy). */
+export const recomputeRackWarningsFn = functions.https.onCall(async (_data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+  }
+  const { computeAndCacheRackWarnings } = await import('./rack-warnings');
+  const warnings = await computeAndCacheRackWarnings(admin.firestore());
+  return { ok: true, count: warnings.length };
+});
+
+/**
+ * Buộc đăng xuất toàn bộ tài khoản web 1 lần/ngày lúc 6h (Asia/Ho_Chi_Minh).
+ * Chỉ ghi 1 timestamp vào `app-settings/force-logout` — client (ForceLogoutService) tự so sánh
+ * với thời điểm đăng nhập đã lưu, phiên nào đăng nhập trước mốc này sẽ tự đăng xuất + về /login.
+ */
+export const forceLogoutDaily = functions
+  .pubsub.schedule('0 6 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runForceLogoutDaily } = await import('./force-logout');
+    await runForceLogoutDaily(admin.firestore());
+  });
+
+/**
  * Nhiệt Độ: nhắc cập nhật biểu mẫu qua Zalo (T2–T7, không nhắc CN).
  * 8:55 / 9:25 / 9:55 và 14:55 / 15:25 / 15:55 — sau 2 lần nhắc → ASP0119, ASP1761, ASP0538.
  * Cấu hình NV: Firestore `nhiet-do-zalo-settings` (ASM1, ASM2).

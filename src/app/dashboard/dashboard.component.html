@@ -392,8 +392,8 @@
             class="refresh-btn"
             (click)="runRackWarningsManual()"
             [disabled]="rackWarningsLoading"
-            aria-label="Chạy rack warnings"
-            title="Chạy kiểm tra rack (đọc Firestore)">
+            aria-label="Tính lại rack warnings"
+            title="Tính lại ngay (mặc định tự tính 1 lần/ngày lúc 8:00, dùng chung cho mọi máy)">
             <i class="material-icons">play_arrow</i>
           </button>
         </div>
@@ -401,7 +401,7 @@
         <div class="warnings-summary" *ngIf="!rackWarningsLoading">
           <div *ngIf="!rackWarningsLoaded" class="all-clear rack-warn-idle">
             <i class="material-icons">schedule</i>
-            <span>Chưa chạy hôm nay — tự chạy lúc 8:00 hoặc bấm nút ▶</span>
+            <span>Chưa có dữ liệu — tự tính lúc 8:00 hoặc bấm nút ▶</span>
           </div>
 
           <div *ngIf="rackWarningsLoaded && rackWarnings.length === 0" class="all-clear">

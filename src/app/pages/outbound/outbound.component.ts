@@ -1429,7 +1429,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         this.focusScannerInput();
         console.log('📍 Auto-focused scanner input for Employee ID step');
-      }, 0);
+      }, 50);
     });
   }
   
@@ -1466,7 +1466,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.focusScannerInput();
           console.log('📍 Auto-focused scanner input for material scanning');
-        }, 0);
+        }, 50);
         
         console.log('🎯 Professional scanning setup complete - Ready for material scanning');
       } else {
@@ -1507,31 +1507,31 @@ export class OutboundComponent implements OnInit, OnDestroy {
   // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
   onGlobalKeydown(event: KeyboardEvent): void {
     // Xử lý khi setup modal đang mở (LSX/NV) HOẶC đang trong phiên scan batch (mã hàng) —
-    // fallback khi ô .scanner-input lỡ mất focus (PDA bắn ký tự quá nhanh, trước khi
-    // setTimeout focus kịp chạy) — không phải từ input field khác.
+    // fallback khi ô scanner lỡ mất focus (PDA bắn ký tự quá nhanh).
     if (!this.showScanningSetupModal && !this.isBatchScanningMode) return;
 
     const target = event.target as HTMLElement;
+    // Đã đang gõ vào ô scanner thật — để onScannerKeydown xử lý, tránh double-handle
+    if (target?.id === 'ob-setup-scanner-input' || target?.id === 'ob-m-scanner-input') return;
+    if (target?.classList?.contains('scanner-input')) return;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-    
-    // 🔧 ENHANCED: Xử lý tất cả keyboard input như scanner
+
     console.log('🔍 Global keyboard input detected:', event.key);
-    
-    // Chuyển focus về scanner input và xử lý
-    const scannerInput = document.querySelector('.scanner-input') as HTMLInputElement;
+
+    const scannerInput = this.resolveScannerInputEl();
     if (scannerInput) {
-      scannerInput.focus();
-      scannerInput.select(); // Clear existing text
-      
-      // Simulate typing the key
+      scannerInput.focus({ preventScroll: true });
       if (event.key.length === 1) {
-        scannerInput.value += event.key;
-        // Trigger input event
-        const inputEvent = new Event('input', { bubbles: true });
-        scannerInput.dispatchEvent(inputEvent);
+        // Không select() trước mỗi ký tự — PDA wedge sẽ mất chữ giữa chừng
+        this.scannerBuffer = (this.scannerBuffer || '') + event.key;
+        scannerInput.value = this.scannerBuffer;
+        event.preventDefault();
       } else if (event.key === 'Enter') {
-        // Process the scanned data
-        this.processScannerInput(scannerInput.value);
+        const value = scannerInput.value || this.scannerBuffer || '';
+        this.scannerBuffer = '';
+        scannerInput.value = '';
+        this.processScannerInput(value);
+        event.preventDefault();
       }
     }
   }
@@ -2970,12 +2970,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.showScanningSetupModal = true;
     this.scanningSetupStep = 'lsx';
 
-    // 🔧 TỰ ĐỘNG FOCUS: Tự động focus vào scanner input để có thể scan ngay
-    // (0ms — tránh mất ký tự đầu do PDA bắn dữ liệu quá nhanh, trước khi ô nhập kịp có focus)
-    this.isScannerInputActive = true; // Enable scanner input
-    setTimeout(() => {
-      this.focusScannerInput();
-    }, 0);
+    // Focus ô trong modal setup (PDA cần input thật, không display:none)
+    this.isScannerInputActive = true;
+    setTimeout(() => this.focusScannerInput(), 50);
+    setTimeout(() => this.focusScannerInput(), 200);
     
     console.log(`✅ Scanning setup → LSX (factory header: ${this.selectedFactory})`);
   }
@@ -3384,7 +3382,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
   onScannerKeydown(event: KeyboardEvent): void {
     const input = event.target as HTMLInputElement;
     if (event.key === 'Enter') {
-      const value = input.value || '';
+      const value = (input.value || this.scannerBuffer || '').trim();
+      this.scannerBuffer = '';
       input.value = '';
       this.processScannerInput(value);
       event.preventDefault();
@@ -3392,14 +3391,30 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   onScannerInputBlur(): void {
-    // Keep focus for continuous scanning
-    setTimeout(() => this.focusScannerInput(), 0);
+    // Chỉ giữ focus khi đang setup LSX/NV hoặc đang phiên scan batch
+    if (!this.showScanningSetupModal && !this.isBatchScanningMode) return;
+    setTimeout(() => this.focusScannerInput(), 50);
+  }
+
+  /** Ưu tiên ô trong modal setup (mobile PDA), rồi hero mobile, rồi desktop toolbar. */
+  private resolveScannerInputEl(): HTMLInputElement | null {
+    if (this.showScanningSetupModal) {
+      const setup = document.getElementById('ob-setup-scanner-input') as HTMLInputElement | null;
+      if (setup) return setup;
+    }
+    if (this.isMobile) {
+      const mobile = document.getElementById('ob-m-scanner-input') as HTMLInputElement | null;
+      if (mobile) return mobile;
+    }
+    return document.querySelector<HTMLInputElement>('.scanner-input');
   }
 
   private focusScannerInput(): void {
     try {
-      const el = document.querySelector<HTMLInputElement>('.scanner-input');
-      if (el) el.focus();
+      const el = this.resolveScannerInputEl();
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.select?.();
     } catch {}
   }
 
