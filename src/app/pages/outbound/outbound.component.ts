@@ -16,6 +16,7 @@ import { QRScannerService, QRScanResult } from '../../services/qr-scanner.servic
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
+import { TemXuatKhoService } from '../../services/tem-xuat-kho.service';
 import { stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
 
@@ -119,6 +120,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
   batchEmployeeId: string = '';
   isProductionOrderScanned: boolean = false;
   isEmployeeIdScanned: boolean = false;
+  /** Mã hàng trong PXK của LSX đang scan. Rỗng sau khi load = chưa có PXK → vẫn cho xuất. */
+  private batchPxkMaterialCodes = new Set<string>();
+  private batchPxkCachedLsx = '';
+  private batchPxkLoading: Promise<void> | null = null;
   
   // Scan queue to avoid losing scans during rapid input
   private isProcessingMaterialScan: boolean = false;
@@ -216,8 +221,53 @@ export class OutboundComponent implements OnInit, OnDestroy {
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
     private readTracker: ReadTrackerService,
     private nvlCatalog: NvlCatalogFullService,
-    private authService: FirebaseAuthService
+    private authService: FirebaseAuthService,
+    private temXuatKho: TemXuatKhoService
   ) {}
+
+  private clearBatchPxkCache(): void {
+    this.batchPxkMaterialCodes = new Set();
+    this.batchPxkCachedLsx = '';
+    this.batchPxkLoading = null;
+  }
+
+  /** Sau khi LSX hợp lệ (Kitting): lưu LSX và preload PXK để chặn mã không thuộc phiếu. */
+  private acceptBatchLsx(lsx: string): void {
+    const lsxTrim = String(lsx || '').trim();
+    this.batchProductionOrder = lsxTrim;
+    this.isProductionOrderScanned = true;
+    void this.ensureBatchPxkLoaded();
+  }
+
+  private async ensureBatchPxkLoaded(): Promise<void> {
+    const lsx = (this.batchProductionOrder || '').trim();
+    if (!lsx) return;
+    if (this.batchPxkCachedLsx === lsx) {
+      if (this.batchPxkLoading) await this.batchPxkLoading;
+      return;
+    }
+    this.batchPxkCachedLsx = lsx;
+    this.batchPxkMaterialCodes = new Set();
+    this.batchPxkLoading = this.temXuatKho
+      .loadPxkMaterialCodesForLsx(this.selectedFactory, lsx)
+      .then(codes => {
+        if (this.batchPxkCachedLsx === lsx) {
+          this.batchPxkMaterialCodes = codes;
+        }
+      })
+      .catch(err => {
+        console.warn('ensureBatchPxkLoaded failed:', err);
+        if (this.batchPxkCachedLsx === lsx) {
+          this.batchPxkMaterialCodes = new Set();
+        }
+      })
+      .finally(() => {
+        if (this.batchPxkCachedLsx === lsx) {
+          this.batchPxkLoading = null;
+        }
+      });
+    await this.batchPxkLoading;
+  }
 
   /** Tập mã được phép quét Tem Thùng để xuất kho — load 1 lần từ cache dùng chung (không thêm read). */
   private allowExportByCartonSet: Set<string> = new Set();
@@ -1421,8 +1471,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
     this.checkWorkOrderKittingStatus(lsxTrim).then(ok => {
       if (!ok) return;
-      this.batchProductionOrder = lsxTrim;
-      this.isProductionOrderScanned = true;
+      this.acceptBatchLsx(lsxTrim);
       this.scanningSetupStep = 'employee';
       console.log(`✅ LSX scanned: ${lsx} - Moving to employee scan`);
       this.scannerBuffer = '';
@@ -2271,6 +2320,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.batchEmployeeId = '';
       this.isProductionOrderScanned = false;
       this.isEmployeeIdScanned = false;
+      this.clearBatchPxkCache();
     }
     
     let title = 'Quét QR Code';
@@ -2377,6 +2427,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.isEmployeeIdScanned = false;
     this.batchProductionOrder = '';
     this.batchEmployeeId = '';
+    this.clearBatchPxkCache();
     this.pendingScanData = [];
     this.currentScanStep = 'batch';
     this.errorMessage = '';
@@ -2965,6 +3016,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
     this.pendingScanData = [];
+    this.clearBatchPxkCache();
     
     // Dùng luôn nhà máy đã chọn trên header — không hỏi lại popup chọn ASM1/ASM2.
     this.showScanningSetupModal = true;
@@ -3028,6 +3080,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         this.isScannerInputActive = false;
         this.scannerBuffer = '';
         this.pendingScanData = []; // Reset pending data
+        this.clearBatchPxkCache();
         this.savePendingToStorage();
         
         // Force UI update
@@ -3243,8 +3296,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         if (this.isValidLsxCode(scannedTrim)) {
           this.checkWorkOrderKittingStatus(scannedTrim).then(ok => {
             if (!ok) return;
-            this.batchProductionOrder = scannedTrim;
-            this.isProductionOrderScanned = true;
+            this.acceptBatchLsx(scannedTrim);
             console.log('✅ LSX scanned:', this.batchProductionOrder);
             this.showScanStatus();
             if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
@@ -3290,8 +3342,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         if (scannedTrim.length > 10) {
           this.checkWorkOrderKittingStatus(scannedTrim).then(ok => {
             if (!ok) return;
-            this.batchProductionOrder = scannedTrim;
-            this.isProductionOrderScanned = true;
+            this.acceptBatchLsx(scannedTrim);
             console.log('✅ LSX detected by length:', this.batchProductionOrder);
             this.showScanStatus();
             if (this.isProductionOrderScanned && this.isEmployeeIdScanned) {
@@ -3709,6 +3760,19 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.showScanError('Không thể đọc mã hàng từ dữ liệu scan!');
       return;
     }
+
+    // Chặn mã không thuộc PXK khi LSX đã có PXK (không có PXK thì vẫn cho xuất)
+    await this.ensureBatchPxkLoaded();
+    if (this.batchPxkMaterialCodes.size > 0) {
+      const codeKey = materialCode.trim().toUpperCase();
+      if (!this.batchPxkMaterialCodes.has(codeKey)) {
+        this.showScanError(
+          `Mã ${materialCode} không có trong PXK của LSX ${this.batchProductionOrder} — không cho xuất.`
+        );
+        return;
+      }
+    }
+
     if (isTemThung && !this.allowExportByCartonSet.has(materialCode.trim().toUpperCase())) {
       this.showScanError(`Mã ${materialCode} không nằm trong danh mục Xuất thùng — không thể xuất bằng Tem Thùng.`);
       return;

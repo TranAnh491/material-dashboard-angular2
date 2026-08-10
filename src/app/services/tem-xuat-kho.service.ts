@@ -61,6 +61,59 @@ export class TemXuatKhoService {
     return [];
   }
 
+  /**
+   * Tập mã hàng trong PXK theo LSX (validate scan xuất).
+   * Lấy mọi dòng có materialCode — không loại trừ mã kho như tem xuất kho.
+   * Rỗng = không có PXK / không có dòng.
+   */
+  async loadPxkMaterialCodesForLsx(factory: 'ASM1' | 'ASM2', lsxRaw: string): Promise<Set<string>> {
+    const variants = this.buildLsxVariants(factory, lsxRaw);
+    const codes = new Set<string>();
+    if (variants.length === 0) {
+      return codes;
+    }
+
+    const collect = (data: any): void => {
+      if (!data) return;
+      const rawLines = Array.isArray(data.lines) ? data.lines : [];
+      for (const ln of rawLines) {
+        const materialCode = String(ln?.materialCode ?? '').trim().toUpperCase();
+        if (materialCode) {
+          codes.add(materialCode);
+        }
+      }
+    };
+
+    for (const lsx of variants) {
+      const docId = `${factory}_${lsx.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const snap = await this.firestore.collection('pxk-import-data').doc(docId).get().toPromise();
+      if (snap?.exists) {
+        collect(snap.data());
+        if (codes.size > 0) {
+          return codes;
+        }
+      }
+    }
+
+    const FIRESTORE_IN = 10;
+    for (let i = 0; i < variants.length; i += FIRESTORE_IN) {
+      const chunk = variants.slice(i, i + FIRESTORE_IN);
+      const qSnap = await firstValueFrom(
+        this.firestore.collection('pxk-import-data', (ref) =>
+          ref.where('factory', '==', factory).where('lsx', 'in', chunk)
+        ).get()
+      );
+      for (const doc of qSnap.docs) {
+        collect(doc.data());
+      }
+      if (codes.size > 0) {
+        return codes;
+      }
+    }
+
+    return codes;
+  }
+
   private parsePxkDocLines(data: any): PxkLineExport[] {
     if (!data) {
       return [];
