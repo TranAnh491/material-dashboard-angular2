@@ -408,6 +408,23 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   uniqueKhNamesList: string[] = [];
   /** Map nhanh: materialKey7 -> tên KH (ưu tiên description không rỗng) */
   private khNameByMaterial7 = new Map<string, string>();
+  /** Map nhanh: customerCode -> tên KH */
+  private khNameByCustomerCode = new Map<string, string>();
+  /** Key các shipment code đã refresh fg-out/fg-check (tránh refetch mỗi lần search) */
+  private lastSecondaryCodesKey = '';
+  /** Tập mã đã từng load phụ — cho phép bỏ refetch khi search thu hẹp danh sách */
+  private loadedSecondaryNormCodes = new Set<string>();
+  private searchDebounceTimer: any = null;
+  /** Gom quantity/carton theo shipment|material — tránh filter toàn bảng mỗi CD */
+  private shipmentQtyByKey = new Map<string, number>();
+  private shipmentCartonByKey = new Map<string, number>();
+  /** Summary cards — tính 1 lần trong applyFilters */
+  summaryTotalShipments = 0;
+  summaryCompletedShipments = 0;
+  summaryMissingItemsShipments = 0;
+  summaryInProgressShipments = 0;
+  summaryPendingShipments = 0;
+  summaryDelayShipments = 0;
   /** Lọc bảng theo tên KH đã chọn (null = không lọc) */
   filterByCustomerName: string | null = null;
   showKhFilterDialog = false;
@@ -500,16 +517,25 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const now = new Date();
     this.setDateRangeToMonth(now.getFullYear(), now.getMonth());
 
-    // Load dữ liệu - FG Check dùng realtime để luôn khớp (vd: shipment 5176)
+    // Critical path: load shipments trước để bảng hiện sớm
     this.loadShipmentsFromFirebase();
-    this.loadCustomerMapping();
-    this.loadFGInventoryCacheOnce();
-    this.loadFGCheckStatus(); // Realtime: load và lắng nghe thay đổi từ fg-check
-    // fg-out carton check cache đã tự refresh sau mỗi lần applyFilters() (refreshFgOutCartonCheckCache)
-    // applyFilters() sẽ được gọi tự động trong loadShipmentsFromFirebase
+
+    // Companion data sau paint đầu — không chặn list
+    this.ngZone.runOutsideAngular(() => {
+      setTimeout(() => {
+        this.ngZone.run(() => {
+          this.loadCustomerMapping();
+          void this.loadFGInventoryCacheOnce();
+        });
+      }, 0);
+    });
   }
 
   ngOnDestroy(): void {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
     this.isPushing.clear();
@@ -565,8 +591,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         const nullRequestDateShipments = nullDateSnap.docs.map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
 
         this.shipments = [...firebaseShipments, ...nullRequestDateShipments];
-        this.autoHideShippedOlderThanOneDay(this.shipments);
+        this.loadedSecondaryNormCodes.clear();
+        this.lastSecondaryCodesKey = '';
         this.applyFilters();
+        // Auto-hide không chặn first paint
+        this.ngZone.runOutsideAngular(() => {
+          setTimeout(() => this.autoHideShippedOlderThanOneDay(this.shipments), 1200);
+        });
 
         // Restore scroll position if needed
         if (this.shouldRestoreScroll) {
@@ -634,6 +665,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   private refreshUniqueKhNamesList(): void {
     const set = new Set<string>();
     const map = new Map<string, string>();
+    const byCust = new Map<string, string>();
     for (const m of this.customerMappingItems) {
       const d = (m.description || '').trim();
       if (d) set.add(d);
@@ -647,19 +679,22 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           map.set(key7, '');
         }
       }
+
+      const cc = (m.customerCode || '').toString().trim().toUpperCase();
+      if (cc && d && !byCust.has(cc)) {
+        byCust.set(cc, d);
+      }
     }
     this.uniqueKhNamesList = Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
     this.khNameByMaterial7 = map;
+    this.khNameByCustomerCode = byCust;
   }
 
   // Lấy tên khách hàng từ mã khách (danh mục) – dùng cho Shipment Order
   getCustomerNameFromMapping(customerCode: string): string {
-    if (!customerCode || !this.customerMappingItems.length) return '';
+    if (!customerCode) return '';
     const code = (customerCode || '').toString().trim().toUpperCase();
-    const item = this.customerMappingItems.find(m =>
-      (m.customerCode || '').toString().trim().toUpperCase() === code
-    );
-    return item ? (item.description || '').trim() : '';
+    return (this.khNameByCustomerCode.get(code) || '').trim();
   }
 
   /** Tên KH theo mã TP (import danh mục: cột A = mã TP, cột B = tên KH → lưu materialCode + description) */
@@ -856,40 +891,45 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Get total shipments count (đếm số shipment duy nhất, bỏ dòng trùng)
   getTotalShipments(): number {
-    const uniqueShipments = new Set(this.filteredShipments.map(s => String(s.shipmentCode || '').trim().toUpperCase()));
-    return uniqueShipments.size;
+    return this.summaryTotalShipments;
   }
 
   // Get completed shipments count (status Đã Check)
   getCompletedShipments(): number {
-    return this.filteredShipments.filter(s => s.status === 'Đã Check').length;
+    return this.summaryCompletedShipments;
   }
 
   // Get count of unique material codes (mã TP) that have status "Chưa Đủ"
   getMissingItemsShipments(): number {
-    const materialCodesWithChuaDu = new Set<string>();
-    this.filteredShipments
-      .filter(s => s.status === 'Chưa Đủ')
-      .forEach(s => {
-        const code = String(s.materialCode || '').trim().toUpperCase();
-        if (code) materialCodesWithChuaDu.add(code);
-      });
-    return materialCodesWithChuaDu.size;
+    return this.summaryMissingItemsShipments;
   }
 
   // Get in progress shipments count
   getInProgressShipments(): number {
-    return this.filteredShipments.filter(s => s.status === 'Đang soạn').length;
+    return this.summaryInProgressShipments;
   }
 
   // Get pending shipments count
   getPendingShipments(): number {
-    return this.filteredShipments.filter(s => s.status === 'Chờ soạn').length;
+    return this.summaryPendingShipments;
   }
 
   // Get delay shipments count
   getDelayShipments(): number {
-    return this.filteredShipments.filter(s => s.status === 'Delay').length;
+    return this.summaryDelayShipments;
+  }
+
+  /** Debounce search — tránh applyFilters + refetch phụ mỗi phím */
+  onSearchInput(): void {
+    if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
+      this.applyFilters();
+    }, 250);
+  }
+
+  trackByShipmentId(index: number, shipment: ShipmentItem): string {
+    return shipment?.id || `${shipment?.shipmentCode || ''}|${shipment?.materialCode || ''}|${index}`;
   }
 
   // Set status filter from summary card click (null = clear filter)
@@ -1018,7 +1058,71 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       cur.status = this.pickShipmentGroupStatus(rowsByCode.get(code) || []);
     }
 
-    this.refreshFgOutCartonCheckCache();
+    this.rebuildSummaryCardCounts();
+    this.rebuildShipmentMaterialAggMaps();
+    this.maybeRefreshSecondaryCaches();
+  }
+
+  private rebuildSummaryCardCounts(): void {
+    const unique = new Set<string>();
+    const missingMats = new Set<string>();
+    let completed = 0;
+    let inProgress = 0;
+    let pending = 0;
+    let delay = 0;
+    for (const s of this.filteredShipments) {
+      const code = String(s.shipmentCode || '').trim().toUpperCase();
+      if (code) unique.add(code);
+      const st = String(s.status || '').trim();
+      if (st === 'Đã Check') completed++;
+      else if (st === 'Đang soạn') inProgress++;
+      else if (st === 'Chờ soạn') pending++;
+      else if (st === 'Delay') delay++;
+      if (st === 'Chưa Đủ') {
+        const mc = String(s.materialCode || '').trim().toUpperCase();
+        if (mc) missingMats.add(mc);
+      }
+    }
+    this.summaryTotalShipments = unique.size;
+    this.summaryCompletedShipments = completed;
+    this.summaryMissingItemsShipments = missingMats.size;
+    this.summaryInProgressShipments = inProgress;
+    this.summaryPendingShipments = pending;
+    this.summaryDelayShipments = delay;
+  }
+
+  private rebuildShipmentMaterialAggMaps(): void {
+    const qty = new Map<string, number>();
+    const carton = new Map<string, number>();
+    for (const s of this.shipments) {
+      const shipmentCode = String(s.shipmentCode || '').trim().toUpperCase();
+      const materialCode = String(s.materialCode || '').trim().toUpperCase();
+      if (!shipmentCode || !materialCode) continue;
+      const key = `${shipmentCode}|${materialCode}`;
+      qty.set(key, (qty.get(key) || 0) + (Number(s.quantity) || 0));
+      carton.set(key, (carton.get(key) || 0) + (Number(s.carton) || 0));
+    }
+    this.shipmentQtyByKey = qty;
+    this.shipmentCartonByKey = carton;
+  }
+
+  /** Chỉ refetch fg-out/fg-check khi có mã mới chưa load (search thu hẹp → bỏ qua). */
+  private maybeRefreshSecondaryCaches(force = false): void {
+    const codes = this.getVisibleShipmentCodesForFgOutQuery();
+    const norms = codes
+      .map((c) => this.normalizeShipmentCode(c))
+      .filter(Boolean);
+    const key = norms.slice().sort().join(String.fromCharCode(30));
+    if (!force && key === this.lastSecondaryCodesKey) {
+      return;
+    }
+    // empty list: vẫn cần clear cache phụ một lần
+    if (!force && norms.length > 0 && norms.every((n) => this.loadedSecondaryNormCodes.has(n))) {
+      this.lastSecondaryCodesKey = key;
+      return;
+    }
+    this.lastSecondaryCodesKey = key;
+    void this.refreshFgOutCartonCheckCache();
     void this.refreshFgCheckStatusForVisibleShipments();
   }
 
@@ -1061,14 +1165,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         batchNumber?: string;
       }> = [];
 
+      const batches: string[][] = [];
       for (let i = 0; i < codes.length; i += 10) {
-        const batch = codes.slice(i, i + 10);
-        const snap = await this.firestore.collection('fg-out', ref =>
-          ref.where('shipment', 'in', batch)
-        ).get().toPromise();
+        batches.push(codes.slice(i, i + 10));
+      }
+      const snaps = await Promise.all(
+        batches.map((batch) =>
+          this.firestore.collection('fg-out', (ref) => ref.where('shipment', 'in', batch)).get().toPromise()
+        )
+      );
+      for (const snap of snaps) {
         this.readTracker.track('shipment', 'fg-out', snap?.docs.length || 0);
-
-        snap?.docs.forEach(doc => {
+        snap?.docs.forEach((doc) => {
           const data = doc.data() as any;
           allItems.push({
             shipment: data.shipment || '',
@@ -1106,6 +1214,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.fgOutRawItemsByShipment = rawByShipment;
       this.fgOutStandardByCodeCache = standardByCode;
       this.fgOutCartonCheckReady = true;
+      for (const code of codes) {
+        const n = this.normalizeShipmentCode(code);
+        if (n) this.loadedSecondaryNormCodes.add(n);
+      }
       this.ngZone.run(() => this.cdr.markForCheck());
     } catch (error) {
       console.error('FG Out carton check error:', error);
@@ -1531,16 +1643,19 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     if (codes.length) {
       try {
+        const batches: string[][] = [];
         for (let i = 0; i < codes.length; i += 10) {
-          const batch = codes.slice(i, i + 10);
-          const snap = await this.firestore.collection('fg-check', ref =>
-            ref.where('shipment', 'in', batch)
-          ).get().toPromise();
+          batches.push(codes.slice(i, i + 10));
+        }
+        const snaps = await Promise.all(
+          batches.map((batch) =>
+            this.firestore.collection('fg-check', (ref) => ref.where('shipment', 'in', batch)).get().toPromise()
+          )
+        );
+        if (requestId !== this.fgCheckStatusRequestId) return;
+        for (const snap of snaps) {
           this.readTracker.track('shipment', 'fg-check', snap?.docs.length || 0);
-
-          if (requestId !== this.fgCheckStatusRequestId) return;
-
-          snap?.docs.forEach(doc => {
+          snap?.docs.forEach((doc) => {
             this.accumulateFGCheckDocInto(doc.data() as any, nextQty, nextCarton, nextMode);
           });
         }
@@ -1554,6 +1669,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     this.fgCheckScannedQty = nextQty;
     this.fgCheckScannedCarton = nextCarton;
     this.fgCheckModeByKey = nextMode;
+    for (const code of codes) {
+      const n = this.normalizeShipmentCode(code);
+      if (n) this.loadedSecondaryNormCodes.add(n);
+    }
     this.cdr.detectChanges();
   }
 
@@ -1598,13 +1717,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const key = `${shipmentCode}|${materialCode}`;
     const scannedQty = this.fgCheckScannedQty.get(key) || 0;
     if (scannedQty <= 0) return false;
-    const totalQuantity = this.shipments
-      .filter(s => {
-        const sCode = String(s.shipmentCode || '').trim().toUpperCase();
-        const mCode = String(s.materialCode || '').trim().toUpperCase();
-        return sCode === shipmentCode && mCode === materialCode;
-      })
-      .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    const totalQuantity = this.shipmentQtyByKey.get(key) || 0;
     return totalQuantity > 0 && totalQuantity === scannedQty;
   }
 
@@ -1640,13 +1753,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const key = `${shipmentCode}|${materialCode}`;
     const scannedCarton = this.fgCheckScannedCarton.get(key) || 0;
     if (scannedCarton <= 0) return false;
-    const totalCarton = this.shipments
-      .filter(s => {
-        const sCode = String(s.shipmentCode || '').trim().toUpperCase();
-        const mCode = String(s.materialCode || '').trim().toUpperCase();
-        return sCode === shipmentCode && mCode === materialCode;
-      })
-      .reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
+    const totalCarton = this.shipmentCartonByKey.get(key) || 0;
     return totalCarton > 0 && totalCarton === scannedCarton;
   }
 
@@ -1689,14 +1796,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const scannedQty = this.fgCheckScannedQty.get(key) || 0;
     const mode = this.fgCheckModeByKey.get(key) || 'pn-qty';
 
-    const sameGroup = (s: ShipmentItem) => {
-      const sCode = String(s.shipmentCode || '').trim().toUpperCase();
-      const mCode = String(s.materialCode || '').trim().toUpperCase();
-      return sCode === shipmentCode && mCode === materialCode;
-    };
-
     if (mode === 'pn') {
-      const totalCarton = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.carton) || 0), 0);
+      const totalCarton = this.shipmentCartonByKey.get(key) || 0;
       if (totalCarton <= 0) return scannedCarton > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
       if (scannedCarton > totalCarton) return { status: 'excess', value: null };
       if (scannedCarton === totalCarton) return { status: 'ok', value: null };
@@ -1704,7 +1805,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return { status: 'percentage', value: pct };
     }
 
-    const totalQuantity = this.shipments.filter(sameGroup).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+    const totalQuantity = this.shipmentQtyByKey.get(key) || 0;
     if (totalQuantity <= 0) {
       return scannedQty > 0 ? { status: 'excess', value: null } : { status: 'ok', value: null };
     }

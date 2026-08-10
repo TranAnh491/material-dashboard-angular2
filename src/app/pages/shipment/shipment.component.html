@@ -142,7 +142,7 @@
                            class="search-input"
                            placeholder="Tìm kiếm..."
                            [(ngModel)]="searchTerm"
-                           (input)="applyFilters()">
+                           (input)="onSearchInput()">
                     <i class="material-icons search-icon">search</i>
                   </div>
 
@@ -259,7 +259,7 @@
                   </td>
                 </tr>
           
-                    <ng-container *ngFor="let shipment of filteredShipments; let i = index">
+                    <ng-container *ngFor="let shipment of filteredShipments; let i = index; trackBy: trackByShipmentId">
                       <tr *ngIf="i === 0 || isFirstOfShipment(i)" class="shipment-group-header">
                         <td colspan="29">
                           <ng-container *ngIf="getShipmentGroupSummary(shipment) as g">

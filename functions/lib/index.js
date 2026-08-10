@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -100,6 +100,39 @@ exports.notifyOutboundDuplicatesAt17 = functions
     .onRun(async () => {
     const { runOutboundDupNotifyForSlot } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
     await runOutboundDupNotifyForSlot(admin.firestore(), '17');
+});
+/**
+ * Dashboard: tính Rack Utilization Warnings 1 lần/ngày lúc 8h (Asia/Ho_Chi_Minh), lưu vào
+ * `dashboard-cache/rack-warnings`. Client (mọi máy) chỉ đọc doc này (1 read) thay vì mỗi máy
+ * tự quét lại inventory-materials + materials mỗi lần mở tab Dashboard.
+ */
+exports.computeRackWarningsDaily = functions
+    .pubsub.schedule('0 8 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { computeAndCacheRackWarnings } = await Promise.resolve().then(() => __importStar(require('./rack-warnings')));
+    await computeAndCacheRackWarnings(admin.firestore());
+});
+/** Nút "Chạy" trên Dashboard: tính lại ngay và cập nhật cache chung (1 lần, không nhân theo máy). */
+exports.recomputeRackWarningsFn = functions.https.onCall(async (_data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const { computeAndCacheRackWarnings } = await Promise.resolve().then(() => __importStar(require('./rack-warnings')));
+    const warnings = await computeAndCacheRackWarnings(admin.firestore());
+    return { ok: true, count: warnings.length };
+});
+/**
+ * Buộc đăng xuất toàn bộ tài khoản web 1 lần/ngày lúc 6h (Asia/Ho_Chi_Minh).
+ * Chỉ ghi 1 timestamp vào `app-settings/force-logout` — client (ForceLogoutService) tự so sánh
+ * với thời điểm đăng nhập đã lưu, phiên nào đăng nhập trước mốc này sẽ tự đăng xuất + về /login.
+ */
+exports.forceLogoutDaily = functions
+    .pubsub.schedule('0 6 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runForceLogoutDaily } = await Promise.resolve().then(() => __importStar(require('./force-logout')));
+    await runForceLogoutDaily(admin.firestore());
 });
 /**
  * Nhiệt Độ: nhắc cập nhật biểu mẫu qua Zalo (T2–T7, không nhắc CN).

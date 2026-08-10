@@ -95,6 +95,10 @@ export interface WorkOrder {
   lastUpdated: Date;
   /** Thời điểm chuyển sang Kitting (nếu có) */
   kittingStartedAt?: Date;
+  /** Thời điểm chuyển sang Ready (nếu có) */
+  readyAt?: Date;
+  /** Thời điểm chuyển sang Done (nếu có) */
+  doneAt?: Date;
   // New fields for the updated format
   isUrgent?: boolean;
   missingMaterials?: string;

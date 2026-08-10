@@ -165,6 +165,24 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   isCheckingThieu = false;
   lsxWithThieuSet = new Set<string>();
   workOrderIdsWithThieu = new Set<string>(); // wo.id có Thiếu - dùng để tô đỏ LSX
+
+  /** Danh mục thống kê thời gian soạn: Kitting→Ready, Ready→Done (theo nhà máy đang chọn) */
+  prepDurationRows: Array<{
+    id: string;
+    productionOrder: string;
+    productCode: string;
+    createdBy: string;
+    status: string;
+    kittingToReadyMs: number | null;
+    readyToDoneMs: number | null;
+    kittingToReadyLabel: string;
+    readyToDoneLabel: string;
+  }> = [];
+  prepAvgKittingToReadyLabel = '—';
+  prepAvgReadyToDoneLabel = '—';
+  prepKittingToReadySampleCount = 0;
+  prepReadyToDoneSampleCount = 0;
+  showPrepCatalogDialog = false;
   
   // Form data for new work order
   newWorkOrder: Partial<WorkOrder> = {
@@ -858,6 +876,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       if (processedWo.kittingStartedAt && typeof processedWo.kittingStartedAt === 'object' && processedWo.kittingStartedAt !== null && 'toDate' in processedWo.kittingStartedAt) {
         processedWo.kittingStartedAt = (processedWo.kittingStartedAt as any).toDate();
       }
+      if (processedWo.readyAt && typeof processedWo.readyAt === 'object' && processedWo.readyAt !== null && 'toDate' in processedWo.readyAt) {
+        processedWo.readyAt = (processedWo.readyAt as any).toDate();
+      }
+      if (processedWo.doneAt && typeof processedWo.doneAt === 'object' && processedWo.doneAt !== null && 'toDate' in processedWo.doneAt) {
+        processedWo.doneAt = (processedWo.doneAt as any).toDate();
+      }
 
       if (processedWo.createdByFromOutbound) {
         processedWo.createdBy = String(processedWo.createdBy || '').trim();
@@ -1108,6 +1132,92 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.transferOrders = filtered.filter(wo => wo.status === WorkOrderStatus.TRANSFER).length;
     this.doneOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DONE).length;
     this.delayOrders = filtered.filter(wo => wo.status === WorkOrderStatus.DELAY).length;
+    this.rebuildPrepDurationCatalog();
+  }
+
+  private toPrepDate(value: any): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+    if (typeof value === 'object' && value !== null && typeof value.toDate === 'function') {
+      const d = value.toDate();
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  formatPrepDuration(ms: number | null | undefined): string {
+    if (ms == null || !Number.isFinite(ms) || ms < 0) return '—';
+    const totalMin = Math.round(ms / 60000);
+    if (totalMin < 1) return '< 1 phút';
+    if (totalMin < 60) return totalMin + ' phút';
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h < 48) return m > 0 ? (h + ' giờ ' + m + ' phút') : (h + ' giờ');
+    const d = Math.floor(h / 24);
+    const rh = h % 24;
+    return rh > 0 ? (d + ' ngày ' + rh + ' giờ') : (d + ' ngày');
+  }
+
+  /** Danh mục thời gian soạn theo nhà máy đang chọn (không phụ thuộc filter Done bảng chính). */
+  private rebuildPrepDurationCatalog(): void {
+    const factoryRows = this.workOrders.filter((wo) => this.woMatchesSelectedFactory(wo));
+    const kittingSamples: number[] = [];
+    const readySamples: number[] = [];
+
+    this.prepDurationRows = factoryRows
+      .map((wo) => {
+        const kittingAt = this.toPrepDate((wo as any).kittingStartedAt);
+        const readyAt = this.toPrepDate((wo as any).readyAt);
+        const doneAt = this.toPrepDate((wo as any).doneAt);
+
+        let kittingToReadyMs: number | null = null;
+        let readyToDoneMs: number | null = null;
+
+        if (kittingAt && readyAt && readyAt.getTime() >= kittingAt.getTime()) {
+          kittingToReadyMs = readyAt.getTime() - kittingAt.getTime();
+          kittingSamples.push(kittingToReadyMs);
+        }
+        if (readyAt && doneAt && doneAt.getTime() >= readyAt.getTime()) {
+          readyToDoneMs = doneAt.getTime() - readyAt.getTime();
+          readySamples.push(readyToDoneMs);
+        }
+
+        return {
+          id: wo.id || (wo.productionOrder + '-' + wo.productCode),
+          productionOrder: (wo.productionOrder || '').trim() || '—',
+          productCode: (wo.productCode || '').trim() || '—',
+          createdBy: (wo.createdBy || '').toString().trim() || '—',
+          status: this.getStatusText(wo.status || WorkOrderStatus.WAITING),
+          kittingToReadyMs,
+          readyToDoneMs,
+          kittingToReadyLabel: this.formatPrepDuration(kittingToReadyMs),
+          readyToDoneLabel: this.formatPrepDuration(readyToDoneMs)
+        };
+      })
+      .filter((r) => r.kittingToReadyMs != null || r.readyToDoneMs != null)
+      .sort((a, b) => {
+        const aKey = a.readyToDoneMs ?? a.kittingToReadyMs ?? 0;
+        const bKey = b.readyToDoneMs ?? b.kittingToReadyMs ?? 0;
+        return bKey - aKey;
+      });
+
+    this.prepKittingToReadySampleCount = kittingSamples.length;
+    this.prepReadyToDoneSampleCount = readySamples.length;
+    const avg = (arr: number[]) =>
+      arr.length ? arr.reduce((s, n) => s + n, 0) / arr.length : null;
+    this.prepAvgKittingToReadyLabel = this.formatPrepDuration(avg(kittingSamples));
+    this.prepAvgReadyToDoneLabel = this.formatPrepDuration(avg(readySamples));
+  }
+
+  openPrepCatalogDialog(): void {
+    this.rebuildPrepDurationCatalog();
+    this.showMoreDialog = false;
+    this.showPrepCatalogDialog = true;
+  }
+
+  closePrepCatalogDialog(): void {
+    this.showPrepCatalogDialog = false;
   }
 
   /** Đếm số LSX (đã import PXK) có So sánh Thiếu — chỉ chạy khi bấm thẻ Check. */
@@ -1598,6 +1708,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       if (newStatus === WorkOrderStatus.KITTING && oldStatus !== WorkOrderStatus.KITTING) {
         updatedWorkOrder.kittingStartedAt = now;
       }
+      if (newStatus === WorkOrderStatus.READY && oldStatus !== WorkOrderStatus.READY) {
+        updatedWorkOrder.readyAt = now;
+      }
+      if (newStatus === WorkOrderStatus.DONE && oldStatus !== WorkOrderStatus.DONE) {
+        updatedWorkOrder.doneAt = now;
+      }
       
       if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
         updatedWorkOrder.isCompleted = false;
@@ -1616,6 +1732,15 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       // Update the passed object only after Firebase succeeds
       workOrder.status = newStatus;
       workOrder.lastUpdated = now;
+      if (newStatus === WorkOrderStatus.KITTING && oldStatus !== WorkOrderStatus.KITTING) {
+        workOrder.kittingStartedAt = now;
+      }
+      if (newStatus === WorkOrderStatus.READY && oldStatus !== WorkOrderStatus.READY) {
+        workOrder.readyAt = now;
+      }
+      if (newStatus === WorkOrderStatus.DONE && oldStatus !== WorkOrderStatus.DONE) {
+        workOrder.doneAt = now;
+      }
       if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
         workOrder.isCompleted = false;
       }
@@ -1677,6 +1802,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     
     if (field === 'status' && processedValue === WorkOrderStatus.KITTING && workOrder.status !== WorkOrderStatus.KITTING) {
       updatedWorkOrder.kittingStartedAt = new Date();
+    }
+    if (field === 'status' && processedValue === WorkOrderStatus.READY && workOrder.status !== WorkOrderStatus.READY) {
+      updatedWorkOrder.readyAt = new Date();
+    }
+    if (field === 'status' && processedValue === WorkOrderStatus.DONE && workOrder.status !== WorkOrderStatus.DONE) {
+      updatedWorkOrder.doneAt = new Date();
     }
 
     // If updating status field and changing from DONE to other status, remove completed flag
@@ -3395,12 +3526,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
     
     // Mark as completed and hide from list
+    const now = new Date();
     workOrder.status = WorkOrderStatus.DONE;
     workOrder.isCompleted = true; // Add completed flag
     workOrder.isUrgent = false;
+    if (!workOrder.doneAt) {
+      workOrder.doneAt = now;
+    }
+    workOrder.lastUpdated = now;
     
     // Update all fields at once
-    const updatedWorkOrder = { ...workOrder, isCompleted: true, isUrgent: false };
+    const updatedWorkOrder = { ...workOrder, isCompleted: true, isUrgent: false, doneAt: workOrder.doneAt, lastUpdated: now };
     await this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder);
     
     // Update local array

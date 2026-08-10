@@ -67,6 +67,9 @@
             </div>
 
 
+
+
+
             <!-- Factory Selection -->
             <div class="row function-selection-row">
               <div class="col-md-12">
@@ -202,6 +205,10 @@
                               style="color: #607d8b;" title="Tải lịch sử PXK theo tháng">
                         <i class="material-icons">download</i> Tải PXK
                       </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openPrepCatalogDialog()"
+                              style="color: #0d9488; font-weight: 600;" title="Thống kê thời gian soạn Kitting→Ready, Ready→Done">
+                        <i class="material-icons">timer</i> Danh mục thời gian soạn
+                      </button>
                       <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
                               style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
                         <i class="material-icons">search</i> Search
@@ -239,6 +246,80 @@
                 </div>
                 <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
                   <button mat-raised-button type="button" (click)="showMoreDialog = false">
+                    <mat-icon>close</mat-icon> Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dialog: Danh mục thời gian soạn (mở từ MORE) -->
+            <div class="time-range-dialog-overlay" *ngIf="showPrepCatalogDialog" (click)="closePrepCatalogDialog()">
+              <div class="time-range-dialog prep-catalog-dialog" (click)="$event.stopPropagation()">
+                <div class="dialog-header">
+                  <h4>
+                    <i class="material-icons" style="vertical-align:middle;margin-right:6px;">timer</i>
+                    Danh mục thời gian soạn
+                  </h4>
+                  <button mat-icon-button type="button" (click)="closePrepCatalogDialog()" title="Đóng">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content prep-catalog-dialog-content">
+                  <p class="prep-catalog-desc">
+                    Thống kê thời gian lệnh sản xuất: <strong>Kitting → Ready</strong> và <strong>Ready → Done</strong>
+                    (nhà máy <strong>{{ selectedFactory }}</strong>). Chỉ các LSX đã ghi nhận đủ mốc thời gian mới xuất hiện.
+                  </p>
+
+                  <div class="prep-catalog-kpis">
+                    <div class="prep-kpi">
+                      <span class="prep-kpi__label">TB Kitting → Ready</span>
+                      <strong class="prep-kpi__value">{{ prepAvgKittingToReadyLabel }}</strong>
+                      <span class="prep-kpi__meta">{{ prepKittingToReadySampleCount }} LSX</span>
+                    </div>
+                    <div class="prep-kpi">
+                      <span class="prep-kpi__label">TB Ready → Done</span>
+                      <strong class="prep-kpi__value">{{ prepAvgReadyToDoneLabel }}</strong>
+                      <span class="prep-kpi__meta">{{ prepReadyToDoneSampleCount }} LSX</span>
+                    </div>
+                    <div class="prep-kpi">
+                      <span class="prep-kpi__label">Số LSX có dữ liệu</span>
+                      <strong class="prep-kpi__value">{{ prepDurationRows.length }}</strong>
+                      <span class="prep-kpi__meta">trong danh mục đang tải</span>
+                    </div>
+                  </div>
+
+                  <div class="prep-catalog-table-wrap" *ngIf="prepDurationRows.length; else prepCatalogEmptyDlg">
+                    <table class="prep-catalog-table">
+                      <thead>
+                        <tr>
+                          <th>LSX</th>
+                          <th>Mã TP</th>
+                          <th>Người soạn</th>
+                          <th>Trạng thái</th>
+                          <th>Kitting → Ready</th>
+                          <th>Ready → Done</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let row of prepDurationRows">
+                          <td [title]="row.productionOrder">{{ row.productionOrder }}</td>
+                          <td [title]="row.productCode">{{ row.productCode }}</td>
+                          <td>{{ row.createdBy }}</td>
+                          <td>{{ row.status }}</td>
+                          <td class="prep-dur">{{ row.kittingToReadyLabel }}</td>
+                          <td class="prep-dur">{{ row.readyToDoneLabel }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <ng-template #prepCatalogEmptyDlg>
+                    <div class="prep-catalog-empty">
+                      Chưa có LSX nào đủ mốc thời gian (cần đã qua Kitting rồi Ready, và/hoặc Ready rồi Done sau khi hệ thống bắt đầu ghi nhận).
+                    </div>
+                  </ng-template>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
+                  <button mat-raised-button type="button" (click)="closePrepCatalogDialog()">
                     <mat-icon>close</mat-icon> Đóng
                   </button>
                 </div>
