@@ -57,6 +57,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'layout-warehouse',     loadChildren: () => import('../../pages/layout-warehouse/layout-warehouse.module').then(m => m.LayoutWarehouseModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'layout-warehouse-asm3', loadChildren: () => import('../../pages/layout-warehouse-asm3/layout-warehouse-asm3.module').then(m => m.LayoutWarehouseAsm3Module), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'j-warehouse', loadChildren: () => import('../../pages/j-warehouse/j-warehouse.module').then(m => m.JWarehouseModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-in',                loadChildren: () => import('../../pages/fg-in/fg-in.module').then(m => m.FgInModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-out',               loadChildren: () => import('../../pages/fg-out/fg-out.module').then(m => m.FgOutModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'bieu-mau',             loadChildren: () => import('../../pages/bieu-mau/bieu-mau.module').then(m => m.BieuMauModule), canActivate: [AuthGuard, TabPermissionGuard] },

@@ -607,6 +607,11 @@
               </button>
             </div>
           </div>
+
+          <div class="info-row">
+            <span class="label">Pallet:</span>
+            <span class="value">{{ material.palletId || '—' }}</span>
+          </div>
           
           <div class="info-row">
             <span class="label">QTY BAG:</span>
@@ -700,6 +705,7 @@
                 <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
               </button>
             </th>
+            <th title="Mã pallet — gán từ Layout Warehouse ASM3">Pallet</th>
             <th>Change</th>
             <th>Loại Hình</th>
             <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
@@ -854,6 +860,9 @@
                      (focus)="rememberLocationBeforeEdit(material)"
                      (blur)="onLocationChange(material)"
                      placeholder="Mỗi vị trí 1 dòng"></textarea>
+            </td>
+            <td class="pallet-cell" [title]="material.palletId || 'Chưa gán pallet'">
+              {{ material.palletId || '—' }}
             </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>

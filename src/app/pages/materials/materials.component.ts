@@ -47,6 +47,8 @@ export interface InventoryMaterial {
   xt?: number; // Số lượng cần xuất (nhập tay)
   stock?: number;
   location: string;
+  /** Mã pallet (đồng bộ từ Layout ASM3 khi gán pallet vào vị trí). */
+  palletId?: string;
   type: string;
   expiryDate: Date;
   qualityCheck: boolean;
@@ -2127,6 +2129,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           'Tồn kho': (data.openingStock || 0) + (data.quantity || 0) - (data.exported || 0) - (data.xt || 0),
           'Đơn vị': data.unit || '',
           'Vị trí': data.location || '',
+          'Pallet': data.palletId || '',
           'Loại hình': data.type || '',
           'Expiry Date': data.expiryDate ? data.expiryDate.toDate().toLocaleDateString('vi-VN') : '',
           'Quality Check': data.qualityCheck ? 'Yes' : 'No',
@@ -3893,6 +3896,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             ...data,
             factory: this.selectedFactory, // Force ASM1
             location: String(data.location || data.viTri || '').trim().toUpperCase(),
+            palletId: String(data.palletId || '').trim().toUpperCase(),
             importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
             receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
             expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),

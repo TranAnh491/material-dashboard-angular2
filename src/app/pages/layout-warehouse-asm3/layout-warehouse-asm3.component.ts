@@ -1149,6 +1149,12 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return this.slotPallets.get(slot.name) || '';
   }
 
+  /** Ô đã có pallet gán (scan) — khác với isSlotOccupied (có thể chỉ có mã NVL theo location). */
+  hasAssignedPallet(slot: Asm3RackSlot | null): boolean {
+    if (!slot) return false;
+    return !!this.slotPallets.get(slot.name);
+  }
+
   /**
    * Nhảy qua tab tương ứng, tự tìm theo đúng chuỗi vị trí đã lưu trên Firestore: dãy A-G (NVL) →
    * Materials ASM1, dãy H, I, K, L (TP) → FG Inventory.
@@ -1157,7 +1163,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     if (!this.selectedSlot) return;
     const groupRef = this.lockGroups.get(this.selectedSlot.name);
     const targetName = groupRef || this.selectedSlot.name;
-    const location = this.inventoryLocationFull.get(targetName) || targetName;
+    const location = this.inventoryLocationFull.get(targetName) || this.materialsLocationToken(targetName) || targetName;
     if (this.isFgRow(this.selectedSlot.row)) {
       this.router.navigate(['/fg-inventory'], { queryParams: { location } });
     } else {
@@ -1176,7 +1182,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       alert('Vị trí đang bị khóa. Mở khóa trước khi gán pallet.');
       return;
     }
-    if (this.isSlotOccupied(this.selectedSlot)) {
+    if (this.hasAssignedPallet(this.selectedSlot)) {
       alert('Vị trí này đã có pallet. Mỗi vị trí chỉ được gán một pallet. Xóa pallet hiện tại trước khi gán mới.');
       return;
     }
@@ -1192,15 +1198,20 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   async submitScanPallet(): Promise<void> {
     if (!this.selectedSlot || this.isSavingPallet) return;
-    const code = this.scanPalletInput.trim().toUpperCase();
+    const code = this.normalizePalletCode(this.scanPalletInput);
     if (!code) return;
+
+    if (!/^P\d{4}$/.test(code)) {
+      alert('Mã pallet không hợp lệ. Chỉ cần nhập 4 số (vd: 1234 → P1234) hoặc quét đủ dạng P1234.');
+      return;
+    }
 
     const slotName = this.selectedSlot.name;
     if (this.isSlotLocked(this.selectedSlot)) {
       alert('Vị trí đang bị khóa. Không thể gán pallet.');
       return;
     }
-    if (this.isSlotOccupied(this.selectedSlot)) {
+    if (this.hasAssignedPallet(this.selectedSlot)) {
       alert('Vị trí này đã có pallet. Mỗi vị trí chỉ được gán một pallet.');
       return;
     }
@@ -1213,6 +1224,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
     this.isSavingPallet = true;
     try {
+      this.scanPalletInput = code;
       await this.firestore.collection(this.SLOT_PALLET_COLLECTION).doc(slotName).set({
         slotName,
         palletCode: code,
@@ -1224,12 +1236,16 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       this.showScanInput = false;
       this.scanPalletInput = '';
 
-      const synced = await this.syncInventoryLocationForPallet(code, slotName);
+      // 1) NVL đã có palletId này (có thể đang ở vị trí khác) → chuyển về ô này
+      let synced = await this.syncInventoryLocationForPallet(code, slotName);
+      // 2) NVL đang đứng ở ô này (location khớp) → ghi palletId
+      synced += await this.stampPalletIdOnMaterialsAtSlot(slotName, code);
+
       if (synced === 0) {
         alert(
-          `Đã gán pallet lên sơ đồ ${slotName}.\n\n` +
-            `Không tìm thấy mã NVL nào (ASM1/ASM2) gắn pallet "${code}" để cập nhật cột Vị trí.\n` +
-            `Kiểm tra palletId trên tab Materials.`
+          `Đã gán pallet "${code}" tại ${this.slotShortCode(this.selectedSlot)} trên sơ đồ.\n\n` +
+            `Chưa tìm thấy mã NVL (ASM1/ASM2) để ghi cột Pallet / Vị trí.\n` +
+            `Pallet vẫn được lưu trên sơ đồ; khi có NVL tại vị trí này có thể gán lại hoặc đồng bộ sau.`
         );
       } else {
         await this.loadInventoryLocations();
@@ -1240,6 +1256,23 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     } finally {
       this.isSavingPallet = false;
     }
+  }
+
+  /**
+   * Chuẩn hóa mã pallet: chỉ nhập 4 số → hiểu là P + 4 số (vd: 1234 → P1234).
+   * Nếu đã có dạng Pxxxx thì giữ nguyên (hoa).
+   */
+  private normalizePalletCode(raw: string): string {
+    const t = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!t) return '';
+    if (/^\d{4}$/.test(t)) return `P${t}`;
+    if (/^P\d{4}$/.test(t)) return t;
+    // Quét dư ký tự nhưng có cụm P + 4 số
+    const m = t.match(/P(\d{4})/);
+    if (m) return `P${m[1]}`;
+    // Chỉ lấy 4 số cuối nếu chuỗi toàn số dài hơn
+    if (/^\d+$/.test(t) && t.length >= 4) return `P${t.slice(-4)}`;
+    return t;
   }
 
   private findSlotByPallet(palletCode: string, excludeSlot?: string): string | null {
@@ -1310,6 +1343,126 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       }
     }
     return updated;
+  }
+
+  /**
+   * Ghi palletId (+ đảm bảo vị trí ngắn của ô) lên các dòng NVL đang đứng tại ô.
+   * Dùng khi gán pallet vào vị trí đã có mã hàng theo cột Vị trí.
+   */
+  private async stampPalletIdOnMaterialsAtSlot(slotName: string, palletCode: string): Promise<number> {
+    const code = palletCode.trim().toUpperCase();
+    const toLoc = this.materialsLocationToken(slotName);
+    if (!code || !toLoc) return 0;
+
+    let materials = this.rawSlotMaterials(slotName);
+    // Nếu map chưa có (vừa gán vị trí tay chưa reload), query theo location token
+    if (!materials.length) {
+      materials = await this.findMaterialsAtSlotByLocationQuery(slotName);
+    }
+    if (!materials.length) return 0;
+
+    let updated = 0;
+    for (const m of materials) {
+      try {
+        const snap = await this.firestore.collection(this.INVENTORY_COLLECTION).doc(m.docId).get().toPromise();
+        if (!snap?.exists) continue;
+        const data = snap.data() as {
+          factory?: string;
+          materialCode?: string;
+          poNumber?: string;
+          location?: string;
+          viTri?: string;
+          palletId?: string;
+        };
+        const factory = String(data.factory || '').trim().toUpperCase();
+        if (!this.SYNC_FACTORIES.includes(factory as 'ASM1' | 'ASM2')) continue;
+
+        const fromLocation = String(data.location || data.viTri || '').trim();
+        const nextLocation = this.buildNextMultiLocation(fromLocation, '', toLoc);
+        const prevPallet = String(data.palletId || '').trim().toUpperCase();
+        const prevNorm = joinMultiLocations(splitMultiLocations(fromLocation));
+        if (prevPallet === code && nextLocation === prevNorm) continue;
+
+        await this.firestore.collection(this.INVENTORY_COLLECTION).doc(m.docId).update({
+          location: nextLocation,
+          palletId: code,
+          updatedAt: new Date(),
+          lastModified: new Date(),
+          modifiedBy: 'layout-warehouse-asm3',
+          locationManualOverride: true
+        });
+        await this.firestore.collection(this.LOCATION_HISTORY_COLLECTION).add({
+          factory,
+          materialId: m.docId,
+          materialCode: data.materialCode || m.materialCode || '',
+          poNumber: data.poNumber || m.poNumber || '',
+          fromLocation: prevNorm,
+          toLocation: nextLocation,
+          palletId: code,
+          changedBy: 'layout-warehouse-asm3',
+          changeType: 'wh3-assign-pallet',
+          changedAt: new Date()
+        });
+        updated++;
+      } catch (err) {
+        console.error(`[LayoutWarehouseAsm3] stamp pallet failed for ${m.docId}`, err);
+      }
+    }
+    return updated;
+  }
+
+  private async findMaterialsAtSlotByLocationQuery(slotName: string): Promise<Asm3SlotMaterial[]> {
+    const short = this.materialsLocationToken(slotName);
+    const byId = new Map<string, Asm3SlotMaterial>();
+
+    for (const factory of this.SYNC_FACTORIES) {
+      for (const loc of [short, slotName]) {
+        if (!loc) continue;
+        try {
+          const snap = await this.firestore
+            .collection(this.INVENTORY_COLLECTION, (ref) =>
+              ref.where('factory', '==', factory).where('location', '==', loc).limit(200)
+            )
+            .get()
+            .toPromise();
+          (snap?.docs || []).forEach((doc) => {
+            const data = doc.data() as any;
+            byId.set(doc.id, {
+              materialCode: String(data.materialCode || '').trim().toUpperCase(),
+              poNumber: String(data.poNumber || '').trim(),
+              imd: String(data.importDate ?? data.batchNumber ?? '').trim(),
+              factory: String(data.factory || factory).trim().toUpperCase(),
+              docId: doc.id
+            });
+          });
+        } catch { /* ignore */ }
+      }
+
+      // Multiline location: quét factory rồi lọc token
+      try {
+        const snap = await this.firestore
+          .collection(this.INVENTORY_COLLECTION, (ref) =>
+            ref.where('factory', '==', factory).limit(5000)
+          )
+          .get()
+          .toPromise();
+        (snap?.docs || []).forEach((doc) => {
+          if (byId.has(doc.id)) return;
+          const data = doc.data() as any;
+          const tokens = splitMultiLocations(String(data.location || data.viTri || ''));
+          if (!tokens.some((t) => this.tokenMatchesSlot(t, slotName))) return;
+          byId.set(doc.id, {
+            materialCode: String(data.materialCode || '').trim().toUpperCase(),
+            poNumber: String(data.poNumber || '').trim(),
+            imd: String(data.importDate ?? data.batchNumber ?? '').trim(),
+            factory: String(data.factory || factory).trim().toUpperCase(),
+            docId: doc.id
+          });
+        });
+      } catch { /* ignore */ }
+    }
+
+    return Array.from(byId.values());
   }
 
   private async applyLocationMoveToDoc(

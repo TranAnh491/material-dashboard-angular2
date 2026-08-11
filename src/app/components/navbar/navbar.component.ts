@@ -331,7 +331,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
 
     isLayoutWarehousePage(): boolean {
       const p = this.currentAppPath();
-      return p === '/layout-warehouse' || p === '/layout-warehouse-asm3';
+      return p === '/layout-warehouse' || p === '/layout-warehouse-asm3' || p === '/j-warehouse';
     }
 
     isQcTraceabilityPage(): boolean {
@@ -385,6 +385,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/fg-location',
       '/layout-warehouse',
       '/layout-warehouse-asm3',
+      '/j-warehouse',
       '/report',
       '/label',
       '/equipment',

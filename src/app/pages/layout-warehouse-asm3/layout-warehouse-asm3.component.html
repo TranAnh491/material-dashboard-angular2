@@ -183,7 +183,8 @@
               <div class="wms-fields__row"><dt>Mã vị trí</dt><dd class="wms-fields__blue">{{ selectedSlot.name }}</dd></div>
               <div class="wms-fields__row"><dt>Dãy kệ</dt><dd>{{ selectedSlot.row }}</dd></div>
               <div class="wms-fields__row"><dt>Ô số</dt><dd>{{ selectedSlot.index }} / {{ SLOTS_PER_RACK }}</dd></div>
-              <div class="wms-fields__row" *ngIf="isSlotOccupied(selectedSlot)"><dt>Vị trí / Pallet</dt><dd class="wms-fields__blue">{{ slotDetailLabel(selectedSlot) }}</dd></div>
+              <div class="wms-fields__row" *ngIf="isSlotOccupied(selectedSlot)"><dt>Vị trí</dt><dd class="wms-fields__blue">{{ slotDetailLabel(selectedSlot) }}</dd></div>
+            <div class="wms-fields__row" *ngIf="hasAssignedPallet(selectedSlot)"><dt>Pallet</dt><dd class="wms-fields__blue">{{ palletAtSlot(selectedSlot) }}</dd></div>
               <div class="wms-fields__row" *ngIf="slotLockGroupLabel(selectedSlot)"><dt>Khóa chung với</dt><dd class="wms-fields__blue">{{ slotLockGroupLabel(selectedSlot) }}</dd></div>
               <div class="wms-fields__row"><dt>Trạng thái</dt>
                 <dd
@@ -216,8 +217,8 @@
             <div class="wms-detail__scan" *ngIf="showScanInput">
               <label for="wms-scan">Scan mã pallet</label>
               <div class="wms-scan-row">
-                <input id="wms-scan" #scanPalletInputRef type="text" [(ngModel)]="scanPalletInput"
-                  (keyup.enter)="submitScanPallet()" placeholder="Quét hoặc nhập..." [disabled]="isSavingPallet">
+              <input id="wms-scan" #scanPalletInputRef type="text" [(ngModel)]="scanPalletInput"
+                (keyup.enter)="submitScanPallet()" placeholder="Nhập 4 số (vd: 1234 → P1234)" [disabled]="isSavingPallet">
                 <button type="button" class="wms-btn wms-btn--primary wms-btn--icon" (click)="submitScanPallet()"
                   [disabled]="isSavingPallet || !scanPalletInput.trim()"><i class="material-icons">check</i></button>
               </div>
@@ -243,7 +244,7 @@
             <button type="button" class="wms-btn wms-btn--primary wms-btn--block"
               *ngIf="!isFgRow(selectedSlot.row)"
               (click)="openScanForSelectedSlot()"
-              [disabled]="isSlotOccupied(selectedSlot) || isSlotLocked(selectedSlot)">
+              [disabled]="hasAssignedPallet(selectedSlot) || isSlotLocked(selectedSlot)">
               <i class="material-icons">qr_code_scanner</i> Gán pallet
             </button>
             <p class="wms-fg-hint" *ngIf="isFgRow(selectedSlot.row)">
@@ -270,7 +271,7 @@
               <i class="material-icons">print</i> In tem
             </button>
             <button type="button" class="wms-btn wms-btn--outline" (click)="clearSlotPallet()"
-              *ngIf="isSlotOccupied(selectedSlot) && !slotLockGroupLabel(selectedSlot)"
+              *ngIf="hasAssignedPallet(selectedSlot) && !slotLockGroupLabel(selectedSlot)"
               [disabled]="isSlotLocked(selectedSlot)">
               <i class="material-icons">delete</i> Xóa pallet
             </button>

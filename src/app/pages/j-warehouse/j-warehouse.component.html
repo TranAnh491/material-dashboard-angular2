@@ -1,0 +1,141 @@
+<div class="jw">
+  <div class="jw-shell">
+    <header class="jw-header">
+      <div class="jw-header__brand">
+        <div class="jw-header__logo"><i class="material-icons">warehouse</i></div>
+        <div>
+          <strong class="jw-header__title">J Warehouse</strong>
+          <span class="jw-header__crumb">Sơ đồ kho · {{ LENGTH_M }}m × {{ WIDTH_M }}m</span>
+        </div>
+      </div>
+
+      <div class="jw-kpi-strip">
+        <div class="jw-kpi">
+          <strong class="jw-kpi__num">{{ LENGTH_M }}m</strong>
+          <span class="jw-kpi__lbl">Dài (A ↔ D)</span>
+        </div>
+        <div class="jw-kpi-divider"></div>
+        <div class="jw-kpi">
+          <strong class="jw-kpi__num">{{ WIDTH_M }}m</strong>
+          <span class="jw-kpi__lbl">Rộng (B ↔ C)</span>
+        </div>
+        <div class="jw-kpi-divider"></div>
+        <div class="jw-kpi">
+          <strong class="jw-kpi__num">1</strong>
+          <span class="jw-kpi__lbl">Kho</span>
+        </div>
+      </div>
+
+      <div class="jw-header__right">
+        <button type="button" class="jw-btn jw-btn--outline" (click)="goBack()">
+          <i class="material-icons">arrow_back</i> Back
+        </button>
+        <button type="button" class="jw-btn jw-btn--outline" (click)="goToMenu()">
+          <i class="material-icons">home</i> Về Menu
+        </button>
+      </div>
+    </header>
+
+    <div class="jw-workspace">
+      <section class="jw-map">
+        <div class="jw-map__toolbar">
+          <h2>Mặt bằng kho</h2>
+          <span class="jw-map__hint">Cạnh A–D đã gắn · chờ hướng dẫn bố trí bên trong</span>
+        </div>
+
+        <div class="jw-viewport">
+          <svg
+            class="jw-svg"
+            [attr.viewBox]="viewBox"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            [attr.aria-label]="'Sơ đồ J Warehouse ' + LENGTH_M + ' mét dài, ' + WIDTH_M + ' mét rộng'">
+            <!-- Nền sàn -->
+            <rect
+              class="jw-floor"
+              [attr.x]="floor.x"
+              [attr.y]="floor.y"
+              [attr.width]="floor.w"
+              [attr.height]="floor.h"
+              rx="4" />
+
+            <!-- Grid mỗi 5m -->
+            <g class="jw-grid" aria-hidden="true">
+              <line
+                *ngFor="let m of gridX"
+                [attr.x1]="meterX(m)"
+                [attr.y1]="floor.y"
+                [attr.x2]="meterX(m)"
+                [attr.y2]="floor.y + floor.h" />
+              <line
+                *ngFor="let m of gridY"
+                [attr.x1]="floor.x"
+                [attr.y1]="meterY(m)"
+                [attr.x2]="floor.x + floor.w"
+                [attr.y2]="meterY(m)" />
+            </g>
+
+            <!-- Viền tường -->
+            <rect
+              class="jw-wall"
+              [attr.x]="floor.x"
+              [attr.y]="floor.y"
+              [attr.width]="floor.w"
+              [attr.height]="floor.h"
+              rx="4" />
+
+            <!-- Nhãn cạnh: trái A, phải D, trên C, dưới B -->
+            <text class="jw-edge-label" [attr.x]="floor.x - 18" [attr.y]="floor.y + floor.h / 2">A</text>
+            <text class="jw-edge-label" [attr.x]="floor.x + floor.w + 18" [attr.y]="floor.y + floor.h / 2">D</text>
+            <text class="jw-edge-label" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y - 14">C</text>
+            <text class="jw-edge-label" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 22">B</text>
+
+            <!-- Kích thước dài A↔D -->
+            <g class="jw-dim">
+              <line
+                [attr.x1]="floor.x"
+                [attr.y1]="floor.y + floor.h + 40"
+                [attr.x2]="floor.x + floor.w"
+                [attr.y2]="floor.y + floor.h + 40" />
+              <text [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 56">{{ LENGTH_M }} m (A ↔ D)</text>
+            </g>
+
+            <!-- Kích thước rộng B↔C -->
+            <g class="jw-dim">
+              <line
+                [attr.x1]="floor.x + floor.w + 40"
+                [attr.y1]="floor.y"
+                [attr.x2]="floor.x + floor.w + 40"
+                [attr.y2]="floor.y + floor.h" />
+              <text
+                [attr.x]="floor.x + floor.w + 54"
+                [attr.y]="floor.y + floor.h / 2"
+                [attr.transform]="'rotate(90 ' + (floor.x + floor.w + 54) + ' ' + (floor.y + floor.h / 2) + ')'">
+                {{ WIDTH_M }} m (B ↔ C)
+              </text>
+            </g>
+
+            <text class="jw-center-note" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h / 2">
+              J Warehouse
+            </text>
+          </svg>
+        </div>
+      </section>
+
+      <aside class="jw-detail">
+        <h3>Thông tin kho</h3>
+        <dl class="jw-fields">
+          <div class="jw-fields__row"><dt>Tên</dt><dd>J Warehouse</dd></div>
+          <div class="jw-fields__row"><dt>Số kho</dt><dd>1</dd></div>
+          <div class="jw-fields__row"><dt>Dài</dt><dd class="jw-fields__accent">{{ LENGTH_M }} m (A ↔ D)</dd></div>
+          <div class="jw-fields__row"><dt>Rộng</dt><dd class="jw-fields__accent">{{ WIDTH_M }} m (B ↔ C)</dd></div>
+          <div class="jw-fields__row"><dt>Diện tích</dt><dd>{{ LENGTH_M * WIDTH_M | number }} m²</dd></div>
+          <div class="jw-fields__row"><dt>Cạnh</dt><dd>A · B · C · D</dd></div>
+        </dl>
+        <p class="jw-note">
+          Đây là khung mặt bằng cơ bản. Gửi tiếp hướng dẫn (cửa, dãy kệ, lối đi…) để bổ sung lên sơ đồ.
+        </p>
+      </aside>
+    </div>
+  </div>
+</div>

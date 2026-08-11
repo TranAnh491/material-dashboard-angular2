@@ -147,35 +147,35 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.loadPallets();
   }
 
-  // Get next pallet number
+  // Get next pallet number — dạng P + 4 số (P0001, P0002…), dãy dùng chung không theo F1/F2
   async getNextPalletNumber(): Promise<string> {
-    const prefix = this.selectedFactory === 'ASM1' ? 'F1' : 'F2';
-    
-    // Query chỉ dùng where, không dùng orderBy để tránh cần composite index
+    // Query toàn collection để lấy max Pxxxx (không phụ thuộc nhà máy)
     const snapshot = await this.firestore.collection('pallets', ref =>
-      ref.where('factory', '==', this.selectedFactory)
-         .limit(500)
+      ref.limit(5000)
     ).get().toPromise();
 
     let maxNumber = 0;
-    
+
     if (snapshot && !snapshot.empty) {
-      // Tìm số lớn nhất từ tất cả pallets
       snapshot.docs.forEach(doc => {
         const data = doc.data() as any;
-        const code = data.palletCode || '';
-        const match = code.match(/-(\d+)$/);
+        const code = String(data.palletCode || '').trim().toUpperCase();
+        const match = code.match(/^P(\d{1,4})$/);
         if (match) {
           const num = parseInt(match[1], 10);
-          if (num > maxNumber) {
+          if (Number.isFinite(num) && num > maxNumber) {
             maxNumber = num;
           }
         }
       });
     }
 
-    // Format with leading zeros (4 digits)
-    return `${prefix}-${(maxNumber + 1).toString().padStart(4, '0')}`;
+    const next = maxNumber + 1;
+    if (next > 9999) {
+      throw new Error('Đã hết dải mã pallet P0001–P9999.');
+    }
+
+    return `P${next.toString().padStart(4, '0')}`;
   }
 
   // Create new pallet
@@ -199,7 +199,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.loadPallets();
     } catch (error) {
       console.error('Error creating pallet:', error);
-      alert('Lỗi khi tạo pallet mới!');
+      alert('Lỗi khi tạo pallet mới: ' + ((error as Error)?.message || error));
     } finally {
       this.isCreating = false;
     }
@@ -311,21 +311,25 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.showPrintPreview = false;
   }
 
-  /** F1 = ASM1, F2 = ASM2 — hiển thị trên tem thay cho ASM1/ASM2 */
+  /** Prefixe trên tem 130×100: mã Pxxxx → P; mã cũ F1-/F2- → F1/F2 */
   getPalletFactoryPrefix(factory?: string, palletCode?: string): string {
+    const code = String(palletCode || '').trim().toUpperCase();
+    if (/^P\d{1,4}$/.test(code)) return 'P';
+    if (code.startsWith('F2')) return 'F2';
+    if (code.startsWith('F1')) return 'F1';
     const f = String(factory || '').trim().toUpperCase();
     if (f === 'ASM2') return 'F2';
     if (f === 'ASM1') return 'F1';
-    const code = String(palletCode || '').trim().toUpperCase();
-    if (code.startsWith('F2')) return 'F2';
-    return 'F1';
+    return 'P';
   }
 
-  /** Dòng số dưới QR (phần số sau dấu -, VD: F1-0123 → 0123) */
+  /** Dòng số dưới QR: P0001 → 0001; F1-0123 → 0123 */
   getPalletNumberLine(palletCode?: string): string {
-    const code = String(palletCode || '').trim();
-    const m = code.match(/-(\d+)$/);
-    if (m) return m[1];
+    const code = String(palletCode || '').trim().toUpperCase();
+    const pMatch = code.match(/^P(\d{1,4})$/);
+    if (pMatch) return pMatch[1].padStart(4, '0');
+    const dash = code.match(/-(\d+)$/);
+    if (dash) return dash[1];
     const digits = code.match(/(\d+)$/);
     return digits ? digits[1] : code;
   }

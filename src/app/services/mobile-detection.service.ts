@@ -34,6 +34,7 @@ export class MobileDetectionService {
     '/shorted-materials',
     '/layout-warehouse',
     '/layout-warehouse-asm3',
+    '/j-warehouse',
     '/danh-muc-nvl-tp',
     '/nhiet-do',
     '/report',

@@ -134,6 +134,7 @@ export class TabPermissionGuard implements CanActivate {
       '/location': 'location',
       '/layout-warehouse': 'layout-warehouse',
       '/layout-warehouse-asm3': 'layout-warehouse-asm3',
+      '/j-warehouse': 'j-warehouse',
       '/stock-check': 'stock-check',
       '/bieu-mau': 'bieu-mau',
       '/label': 'label',
