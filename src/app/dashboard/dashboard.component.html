@@ -584,77 +584,133 @@
   </div>
 </div>
 
-<!-- IQC Materials Modal -->
+<!-- Putaway Staging Modal -->
 <div class="modal-overlay" *ngIf="showIQCMaterialsModal" (click)="closeIQCMaterialsModal()">
-  <div class="modal-content iqc-materials-modal" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>
-        <i class="material-icons">inventory_2</i>
-        Putaway Staging Area
-      </h3>
-      <button class="close-btn" (click)="closeIQCMaterialsModal()">
+  <div class="modal-content iqc-materials-modal putaway-pro-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header putaway-pro-modal__header">
+      <div class="putaway-pro-modal__titles">
+        <h3>
+          <i class="material-icons">inventory_2</i>
+          Putaway Staging Area
+        </h3>
+        <p class="putaway-pro-modal__sub">
+          Hàng đang ở khu IQC / TRA (có tồn) — lọc theo trạng thái để ưu tiên cất kho ·
+          <strong>{{ selectedFactory }}</strong>
+        </p>
+      </div>
+      <button class="close-btn" type="button" (click)="closeIQCMaterialsModal()" aria-label="Đóng">
         <i class="material-icons">close</i>
       </button>
     </div>
-    
-    <div class="modal-body">
-      <div class="iqc-modal-actions">
-        <!-- Filter tabs -->
-        <div class="putaway-filter-tabs">
-          <button class="pf-tab" [class.pf-tab--active]="putawayFilterMode==='all'"
-                  (click)="putawayFilterMode='all'">Tất cả</button>
-          <button class="pf-tab pf-tab--pass" [class.pf-tab--active]="putawayFilterMode==='pass'"
-                  (click)="putawayFilterMode='pass'">
+
+    <div class="modal-body putaway-pro-modal__body">
+      <div class="putaway-pro-toolbar">
+        <div class="putaway-filter-tabs" role="tablist" aria-label="Lọc trạng thái Putaway">
+          <button type="button" class="pf-tab" [class.pf-tab--active]="putawayFilterMode==='all'"
+                  (click)="setPutawayFilterMode('all')">Tất cả</button>
+          <button type="button" class="pf-tab pf-tab--pass" [class.pf-tab--active]="putawayFilterMode==='pass'"
+                  (click)="setPutawayFilterMode('pass')">
             <span class="pf-dot pf-dot--pass"></span>Pass
+            <em class="pf-count">{{ putawayModalTotalPassSku }}</em>
           </button>
-          <button class="pf-tab pf-tab--not-pass" [class.pf-tab--active]="putawayFilterMode==='not-pass'"
-                  (click)="putawayFilterMode='not-pass'">
-            <span class="pf-dot pf-dot--not-pass"></span>Chưa Pass
+          <button type="button" class="pf-tab pf-tab--pending" [class.pf-tab--active]="putawayFilterMode==='pending'"
+                  (click)="setPutawayFilterMode('pending')">
+            <span class="pf-dot pf-dot--pending"></span>Waiting
+            <em class="pf-count">{{ putawayModalTotalPendingSku }}</em>
           </button>
-          <button class="pf-tab pf-tab--hold" [class.pf-tab--active]="putawayFilterMode==='hold'"
-                  (click)="putawayFilterMode='hold'">
+          <button type="button" class="pf-tab pf-tab--hold" [class.pf-tab--active]="putawayFilterMode==='confirm'"
+                  (click)="setPutawayFilterMode('confirm')">
             <span class="pf-dot pf-dot--hold"></span>Hold
+            <em class="pf-count">{{ putawayModalTotalHoldSku }}</em>
           </button>
-          <button class="pf-tab pf-tab--tra" [class.pf-tab--active]="putawayFilterMode==='tra'"
-                  (click)="putawayFilterMode='tra'">
+          <button type="button" class="pf-tab pf-tab--ng" [class.pf-tab--active]="putawayFilterMode==='ng'"
+                  (click)="setPutawayFilterMode('ng')">
+            <span class="pf-dot pf-dot--ng"></span>NG
+            <em class="pf-count">{{ putawayModalTotalNgSku }}</em>
+          </button>
+          <button type="button" class="pf-tab pf-tab--lock" [class.pf-tab--active]="putawayFilterMode==='lock'"
+                  (click)="setPutawayFilterMode('lock')">
+            <span class="pf-dot pf-dot--lock"></span>Lock
+            <em class="pf-count">{{ putawayModalTotalLockSku }}</em>
+          </button>
+          <button type="button" class="pf-tab pf-tab--tra" [class.pf-tab--active]="putawayFilterMode==='tra'"
+                  (click)="setPutawayFilterMode('tra')">
             <span class="pf-dot pf-dot--tra"></span>TRA
+            <em class="pf-count">{{ putawayModalTraSkuCount }}</em>
           </button>
-          <button class="pf-tab pf-tab--day" (click)="togglePutawaySortDay()">
+          <button type="button" class="pf-tab pf-tab--day" (click)="togglePutawaySortDay()" title="Sắp xếp theo số ngày trong IQC">
             <i class="material-icons" style="font-size:14px;vertical-align:middle;">
               {{ putawaySortByDay === 'asc' ? 'arrow_upward' : putawaySortByDay === 'desc' ? 'arrow_downward' : 'swap_vert' }}
             </i>
             Day
           </button>
         </div>
-        <span class="iqc-modal-actions__spacer"></span>
-        <button class="download-btn" (click)="downloadIQCMaterialsReport()"
-                [disabled]="iqcMaterialsLoading || putawayModalIsEmpty">
-          <i class="material-icons">download</i>
-          Excel
-        </button>
+
+        <div class="putaway-pro-toolbar__right">
+          <label class="putaway-search">
+            <i class="material-icons">search</i>
+            <input type="text"
+                   [(ngModel)]="putawaySearchTerm"
+                   placeholder="Tìm mã hàng / kho…"
+                   autocomplete="off" />
+          </label>
+          <button type="button" class="putaway-print-btn"
+                  (click)="printPutawayModal()"
+                  [disabled]="iqcMaterialsLoading || putawayModalDisplayRows.length === 0">
+            <i class="material-icons">print</i>
+            In
+          </button>
+          <button type="button" class="download-btn" (click)="downloadIQCMaterialsReport()"
+                  [disabled]="iqcMaterialsLoading || putawayModalDisplayRows.length === 0">
+            <i class="material-icons">download</i>
+            Excel
+          </button>
+        </div>
       </div>
-      
+
       <div class="iqc-loading" *ngIf="iqcMaterialsLoading">
         <i class="material-icons rotating">refresh</i>
-        <span>Đang tải dữ liệu...</span>
+        <span>Đang tải dữ liệu Putaway…</span>
       </div>
-      
+
       <div class="iqc-materials-content" *ngIf="!iqcMaterialsLoading">
-        <div class="no-materials" *ngIf="putawayModalIsEmpty">
-          <p *ngIf="putawayFilterMode === 'tra'">Không có mã hàng nào ở vị trí TRA (có tồn).</p>
-          <p *ngIf="putawayFilterMode === 'hold'">Không có mã hàng nào đang Hold (Chờ xác nhận / HOLD).</p>
-          <p *ngIf="putawayFilterMode !== 'tra' && putawayFilterMode !== 'hold'">Không có mã hàng nào khớp điều kiện Putaway (vị trí IQC, có tồn, có IQC status).</p>
+        <div class="putaway-status-summary" *ngIf="iqcMaterialsBySku.length || putawayTraMaterialsBySku.length">
+          <button type="button" class="pss-chip pss-chip--pass" (click)="setPutawayFilterMode('pass')">
+            <span class="pss-chip__dot"></span>Pass <strong>{{ putawayModalTotalPassSku }}</strong>
+          </button>
+          <button type="button" class="pss-chip pss-chip--pending" (click)="setPutawayFilterMode('pending')">
+            <span class="pss-chip__dot"></span>Waiting IQC <strong>{{ putawayModalTotalPendingSku }}</strong>
+          </button>
+          <button type="button" class="pss-chip pss-chip--hold" (click)="setPutawayFilterMode('confirm')">
+            <span class="pss-chip__dot"></span>Hold <strong>{{ putawayModalTotalHoldSku }}</strong>
+          </button>
+          <button type="button" class="pss-chip pss-chip--ng" (click)="setPutawayFilterMode('ng')">
+            <span class="pss-chip__dot"></span>NG <strong>{{ putawayModalTotalNgSku }}</strong>
+          </button>
+          <button type="button" class="pss-chip pss-chip--lock" (click)="setPutawayFilterMode('lock')">
+            <span class="pss-chip__dot"></span>Lock <strong>{{ putawayModalTotalLockSku }}</strong>
+          </button>
+          <button type="button" class="pss-chip pss-chip--tra" (click)="setPutawayFilterMode('tra')">
+            <span class="pss-chip__dot"></span>TRA <strong>{{ putawayModalTraSkuCount }}</strong>
+          </button>
         </div>
 
         <div class="putaway-modal-summary" *ngIf="!putawayModalIsEmpty">
-          <span><strong>{{ putawayModalDisplayRows.length }}</strong> / {{ putawayModalActiveSourceRows.length }} mã hàng</span>
-          <span class="putaway-modal-summary__tra" *ngIf="putawayFilterMode === 'tra'">
-            Vị trí: <strong>TRA</strong>
-          </span>
-          <ng-container *ngIf="putawayFilterMode !== 'tra'">
-            <span class="putaway-modal-summary__pass">Pass: <strong>{{ putawayModalTotalPassSku }}</strong></span>
-            <span class="putaway-modal-summary__hold">Hold: <strong>{{ putawayModalTotalHoldSku }}</strong></span>
-            <span class="putaway-modal-summary__not-pass">Chưa Pass: <strong>{{ putawayModalTotalNotPassSku }}</strong></span>
+          <span>Đang xem: <strong>{{ putawayFilterLabel }}</strong></span>
+          <span><strong>{{ putawayModalDisplayRows.length }}</strong> mã hàng</span>
+          <span class="putaway-modal-summary__hint">Day = số ngày trong IQC (không tính Chủ nhật). Kho = gợi ý nơi cất.</span>
+        </div>
+
+        <div class="no-materials" *ngIf="putawayModalIsEmpty">
+          <p *ngIf="putawaySearchTerm.trim()">Không tìm thấy mã khớp “{{ putawaySearchTerm }}” với bộ lọc {{ putawayFilterLabel }}.</p>
+          <ng-container *ngIf="!putawaySearchTerm.trim()">
+            <p *ngIf="putawayFilterMode === 'tra'">Không có mã hàng nào ở vị trí TRA (có tồn).</p>
+            <p *ngIf="putawayFilterMode === 'confirm'">Không có mã hàng đang Hold (Chờ xác nhận).</p>
+            <p *ngIf="putawayFilterMode === 'pending'">Không có mã hàng Waiting IQC (Chờ kiểm).</p>
+            <p *ngIf="putawayFilterMode === 'ng'">Không có mã hàng trạng thái NG.</p>
+            <p *ngIf="putawayFilterMode === 'lock'">Không có mã hàng trạng thái Lock.</p>
+            <p *ngIf="putawayFilterMode === 'pass'">Không có mã hàng Pass.</p>
+            <p *ngIf="putawayFilterMode === 'all'">Không có mã hàng khớp điều kiện Putaway (vị trí IQC/TRA, có tồn).</p>
           </ng-container>
         </div>
 
@@ -663,29 +719,49 @@
             <thead>
               <tr>
                 <th>STT</th>
-                <th>Mã hàng (SKU)</th>
-                <th>Kho</th>
+                <th>Mã hàng</th>
+                <th>TT chính</th>
+                <th>Kho cất</th>
                 <th class="col-num">Day</th>
-                <th class="col-num">Đã Pass</th>
+                <th class="col-num">Pass</th>
+                <th class="col-num">Waiting</th>
                 <th class="col-num">Hold</th>
-                <th class="col-num">Chưa Pass</th>
-                <th class="col-num">Tổng SKU</th>
-                <th class="col-num">Tồn kho</th>
+                <th class="col-num">NG</th>
+                <th class="col-num">Lock</th>
+                <th class="col-num">Tổng</th>
+                <th class="col-num">Tồn</th>
               </tr>
             </thead>
             <tbody>
               <tr
                 *ngFor="let row of putawayModalDisplayRows; let i = index"
+                [class.putaway-sku-row--has-ng]="(row.ngCount || 0) > 0 || (row.lockCount || 0) > 0"
                 [class.putaway-sku-row--has-not-pass]="row.notPassCount > 0 && row.passCount === 0"
                 [style.background]="row.passCount > 0 ? passRowBackground(row) : ''"
               >
                 <td>{{ i + 1 }}</td>
                 <td class="putaway-sku-code">{{ row.materialCode }}</td>
-                <td class="putaway-sku-kho" [class.putaway-sku-kho--asm3]="row.recommendedKho === 'ASM3'">{{ row.recommendedKho }}</td>
+                <td>
+                  <span class="pstatus-badge"
+                        [class.pstatus-badge--pass]="row.primaryStatus==='pass'"
+                        [class.pstatus-badge--pending]="row.primaryStatus==='pending'"
+                        [class.pstatus-badge--confirm]="row.primaryStatus==='confirm'"
+                        [class.pstatus-badge--ng]="row.primaryStatus==='ng'"
+                        [class.pstatus-badge--lock]="row.primaryStatus==='lock'"
+                        [class.pstatus-badge--tra]="row.primaryStatus==='tra'"
+                        [class.pstatus-badge--mixed]="row.primaryStatus==='mixed'">
+                    {{ putawayPrimaryStatusLabel(row) }}
+                  </span>
+                </td>
+                <td class="putaway-sku-kho"
+                    [class.putaway-sku-kho--asm3]="row.recommendedKho === 'ASM3'"
+                    [class.putaway-sku-kho--ng]="row.recommendedKho === 'Kho NG'">{{ row.recommendedKho }}</td>
                 <td class="col-num putaway-sku-day">{{ row.dayInIqc }}</td>
-                <td class="col-num putaway-sku-pass">{{ row.passCount }}</td>
-                <td class="col-num putaway-sku-hold">{{ row.holdCount > 0 ? row.holdCount : '' }}</td>
-                <td class="col-num putaway-sku-not-pass">{{ row.notPassCount > 0 ? row.notPassCount : '' }}</td>
+                <td class="col-num putaway-sku-pass">{{ row.passCount || '' }}</td>
+                <td class="col-num putaway-sku-pending">{{ row.pendingCount || '' }}</td>
+                <td class="col-num putaway-sku-hold">{{ row.holdCount || '' }}</td>
+                <td class="col-num putaway-sku-ng">{{ row.ngCount || '' }}</td>
+                <td class="col-num putaway-sku-lock">{{ row.lockCount || '' }}</td>
                 <td class="col-num">{{ row.totalSkuCount }}</td>
                 <td class="col-num">{{ row.totalStock | number:'1.0-2' }}</td>
               </tr>
@@ -694,7 +770,6 @@
         </div>
       </div>
     </div>
-
   </div>
 </div>
 

@@ -481,3 +481,27 @@ export function compareRackLetters(a: string, b: string): number {
   if (bi >= 0) return 1;
   return a.localeCompare(b, 'vi', { numeric: true });
 }
+
+/**
+ * Tách nhiều vị trí trong 1 ô Materials (xuống dòng / dấu phẩy / chấm phẩy).
+ * Không ghép liền thành 1 chuỗi — mỗi token là 1 vị trí riêng để search.
+ */
+export function splitMultiLocations(raw: string): string[] {
+  return String(raw || '')
+    .split(/[\n\r,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Gộp danh sách vị trí thành chuỗi lưu Firestore: mỗi vị trí 1 dòng. */
+export function joinMultiLocations(parts: string[]): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const u = String(p || '').trim().toUpperCase();
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+  }
+  return out.join('\n');
+}

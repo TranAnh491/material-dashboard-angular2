@@ -19,7 +19,7 @@ import { MaterialsDashboardService } from '../../services/materials-dashboard.se
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 import { MaterialsInventoryUnlockService } from '../../services/materials-inventory-unlock.service';
-import { isAsm3OrWh3PrefixLocation } from '../layout-warehouse/layout-warehouse-location.util';
+import { isAsm3OrWh3PrefixLocation, splitMultiLocations, joinMultiLocations } from '../layout-warehouse/layout-warehouse-location.util';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
@@ -3564,10 +3564,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           .toPromise();
         (snap?.docs || []).forEach((doc) => {
           const data = doc.data() as any;
-          const loc = String(data?.location ?? data?.viTri ?? '')
-            .trim()
-            .toUpperCase();
-          if (loc) fromLoaded.add(loc);
+          const rawLoc = String(data?.location ?? data?.viTri ?? '').trim();
+          splitMultiLocations(rawLoc).forEach((loc) => {
+            const u = loc.toUpperCase();
+            if (u) fromLoaded.add(u);
+          });
         });
       }
 
@@ -3576,8 +3577,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const raw = localStorage.getItem(`materials-${this.selectedFactory}:recent-locations:v1`);
         const recent = raw ? (JSON.parse(raw) as string[]) : [];
         (recent || []).forEach((r) => {
-          const loc = String(r || '').trim().toUpperCase();
-          if (loc) fromLoaded.add(loc);
+          splitMultiLocations(String(r || '')).forEach((loc) => {
+            const u = loc.toUpperCase();
+            if (u) fromLoaded.add(u);
+          });
         });
       } catch { /* ignore */ }
 
@@ -3671,14 +3674,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private docMatchesLocationSearch(data: any, normalizedLocation: string): boolean {
-    const loc = String(data?.location ?? data?.viTri ?? '').trim().toUpperCase();
-    if (!loc) return false;
-    return this.locationMatchesGroup(loc, normalizedLocation);
+    const tokens = splitMultiLocations(String(data?.location ?? data?.viTri ?? ''));
+    if (!tokens.length) return false;
+    return tokens.some((loc) => this.locationMatchesGroup(loc, normalizedLocation));
   }
 
-  /** Chỉ lấy chữ và số từ vị trí — bỏ . , - ( ) và ký tự khác. */
+  /** Chỉ lấy chữ và số từ vị trí — bỏ . , - ( ) và ký tự khác. Bỏ tiền tố WH3/ASM3 để search D32 khớp WH3-D32. */
   private locationAlnum(loc: string): string {
-    return String(loc || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let s = String(loc || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (s.startsWith('WH3')) s = s.slice(3);
+    else if (s.startsWith('ASM3')) s = s.slice(4);
+    return s;
   }
 
   /**
@@ -3706,14 +3712,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return locKey.startsWith(searchAlnum);
   }
 
-  /** Chuỗi locations ("A01, A01.2") có nhóm khớp từ khóa không. */
+  /** Chuỗi locations (xuống dòng hoặc "A01, A01.2") — khớp từng vị trí, không ghép liền. */
   private locationsTextMatchesGroup(locationsText: string, searchTerm: string): boolean {
-    const parts = String(locationsText || '')
-      .split(',')
-      .map((x) => x.trim())
-      .filter((x) => x && x !== '—');
+    const parts = splitMultiLocations(locationsText).filter((x) => x && x !== '—');
     if (!parts.length) return false;
     return parts.some((loc) => this.locationMatchesGroup(loc, searchTerm));
+  }
+
+  /** Hiển thị cột vị trí: mỗi vị trí một dòng. */
+  formatLocationDisplay(location: string | null | undefined): string {
+    const parts = splitMultiLocations(String(location || ''));
+    return parts.length ? parts.join('\n') : '-';
+  }
+
+  /** Chuẩn hóa trước khi lưu: UPPER từng token, nối bằng xuống dòng. */
+  private normalizeMultiLocationValue(raw: string): string {
+    return joinMultiLocations(splitMultiLocations(raw));
   }
 
   // Perform search — mã hàng hoặc vị trí (tick Location)
@@ -5539,10 +5553,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       locationManualOverride?: boolean;
       modifiedBy?: string;
     };
-    const fromLocation = String(row.__prevLocation ?? row.__locationAtLoad ?? '')
-      .trim()
-      .toUpperCase();
-    const newLocation = String(material.location ?? '').trim().toUpperCase();
+    const fromLocation = this.normalizeMultiLocationValue(
+      String(row.__prevLocation ?? row.__locationAtLoad ?? '')
+    );
+    const newLocation = this.normalizeMultiLocationValue(String(material.location ?? ''));
     if (!newLocation) {
       alert('⚠️ Vui lòng nhập vị trí trước khi lưu.');
       return false;
@@ -7838,7 +7852,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           total: v.total,
           checked: v.checked,
           remaining: v.total - v.checked,
-          locations: Array.from(v.locations).sort().join(', ') || '—'
+          locations: Array.from(v.locations).sort().join('\n') || '—'
         }))
         .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
 

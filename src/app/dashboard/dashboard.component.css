@@ -2041,24 +2041,177 @@
 
 .iqc-modal-actions__spacer { flex: 1; }
 
+/* ── Putaway pro modal ── */
+.putaway-pro-modal {
+  width: min(1280px, 96vw);
+  max-width: 96vw;
+}
+
+.putaway-pro-modal__header {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.putaway-pro-modal__titles {
+  min-width: 0;
+}
+
+.putaway-pro-modal__sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.putaway-pro-modal__body {
+  padding-top: 16px;
+}
+
+.putaway-pro-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.putaway-pro-toolbar__right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.putaway-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 200px;
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.putaway-search .material-icons {
+  font-size: 18px;
+  color: #94a3b8;
+}
+
+.putaway-search input {
+  border: none;
+  outline: none;
+  min-width: 140px;
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: #0f172a;
+  background: transparent;
+}
+
+.putaway-print-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.putaway-print-btn .material-icons { font-size: 17px; }
+.putaway-print-btn:hover:not(:disabled) { background: #f8fafc; border-color: #94a3b8; }
+.putaway-print-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.putaway-status-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.pss-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.pss-chip strong { font-size: 13px; }
+.pss-chip__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pss-chip--pass { background: rgba(72, 202, 228, 0.18); color: #0e7490; }
+.pss-chip--pass .pss-chip__dot { background: #48CAE4; }
+.pss-chip--pending { background: rgba(255, 255, 0, 0.28); color: #854d0e; }
+.pss-chip--pending .pss-chip__dot { background: #facc15; }
+.pss-chip--hold { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
+.pss-chip--hold .pss-chip__dot { background: #F97316; }
+.pss-chip--ng { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
+.pss-chip--ng .pss-chip__dot { background: #EF4444; }
+.pss-chip--lock { background: rgba(127, 29, 29, 0.1); color: #7f1d1d; }
+.pss-chip--lock .pss-chip__dot { background: #991b1b; }
+.pss-chip--tra { background: rgba(34, 197, 94, 0.12); color: #15803d; }
+.pss-chip--tra .pss-chip__dot { background: #22c55e; }
+
+.pstatus-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.pstatus-badge--pass { background: #cffafe; color: #0e7490; }
+.pstatus-badge--pending { background: #fef9c3; color: #854d0e; }
+.pstatus-badge--confirm { background: #ffedd5; color: #c2410c; }
+.pstatus-badge--ng { background: #fee2e2; color: #b91c1c; }
+.pstatus-badge--lock { background: #450a0a; color: #fecaca; }
+.pstatus-badge--tra { background: #dcfce7; color: #15803d; }
+.pstatus-badge--mixed { background: #e2e8f0; color: #334155; }
+
 /* ── Filter tabs ── */
 .putaway-filter-tabs {
   display: flex;
+  flex-wrap: wrap;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
+  background: #fff;
 }
 
 .pf-tab {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 14px;
+  padding: 7px 12px;
   background: #fff;
   border: none;
   border-right: 1px solid #e5e7eb;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: #6b7280;
   cursor: pointer;
   transition: background .15s, color .15s;
@@ -2067,11 +2220,25 @@
 .pf-tab:last-child { border-right: none; }
 .pf-tab:hover { background: #f9fafb; }
 
-.pf-tab--active { background: #f0fdf4; color: #15803d; }
+.pf-count {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: inherit;
+}
+
+.pf-tab--active { background: #ecfeff; color: #0e7490; }
+.pf-tab--active.pf-tab--pass { background: #ecfeff; color: #0e7490; }
+.pf-tab--active.pf-tab--pending { background: #fef9c3; color: #854d0e; }
 .pf-tab--active.pf-tab--not-pass { background: #fef2f2; color: #b91c1c; }
+.pf-tab--active.pf-tab--ng { background: #fef2f2; color: #b91c1c; }
+.pf-tab--active.pf-tab--lock { background: #450a0a; color: #fecaca; }
 .pf-tab--active.pf-tab--tra { background: #dcfce7; color: #15803d; }
 .pf-tab--active.pf-tab--hold { background: #fff7ed; color: #c2410c; }
-.pf-tab--day { color: #1e40af; font-weight: 600; }
+.pf-tab--day { color: #1e40af; font-weight: 700; }
 .pf-tab--day:hover { background: #eff6ff; }
 
 .pf-dot {
@@ -2080,8 +2247,11 @@
   flex-shrink: 0;
 }
 
-.pf-dot--pass     { background: #22c55e; }
+.pf-dot--pass     { background: #48CAE4; }
+.pf-dot--pending  { background: #facc15; }
 .pf-dot--not-pass { background: #ef4444; }
+.pf-dot--ng       { background: #EF4444; }
+.pf-dot--lock     { background: #991b1b; }
 .pf-dot--tra      { background: #22c55e; }
 .pf-dot--hold     { background: #f97316; }
 
@@ -2196,14 +2366,34 @@
   display: inline-block;
 }
 
+.putaway-sku-kho--ng {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-radius: 6px;
+  padding: 2px 8px;
+  display: inline-block;
+  font-weight: 800;
+}
+
 .putaway-sku-pass {
-  color: #059669;
-  font-weight: 600;
+  color: #0891b2;
+  font-weight: 700;
+}
+
+.putaway-sku-pending {
+  color: #a16207;
+  font-weight: 700;
 }
 
 .putaway-sku-hold {
   color: #c2410c;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.putaway-sku-ng,
+.putaway-sku-lock {
+  color: #dc2626;
+  font-weight: 700;
 }
 
 .putaway-sku-not-pass {
@@ -2212,7 +2402,11 @@
 }
 
 .putaway-sku-table tbody tr.putaway-sku-row--has-not-pass {
-  background: rgba(254, 226, 226, 0.5);
+  background: rgba(254, 249, 195, 0.45);
+}
+
+.putaway-sku-table tbody tr.putaway-sku-row--has-ng {
+  background: rgba(254, 226, 226, 0.55);
 }
 
 /* ── Cất NVL Dialog (nằm bên trong .iqc-materials-modal) ── */

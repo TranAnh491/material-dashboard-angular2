@@ -276,7 +276,7 @@ $mobile: 767px;
   min-height: 0;
   display: flex;
   gap: 16px;
-  padding: 14px 16px 0;
+  padding: 14px 16px 12px;
 }
 
 .wms-center {
@@ -737,6 +737,7 @@ $mobile: 767px;
   box-shadow: $shadow;
   overflow: hidden;
   min-height: 0;
+  align-self: stretch;
 
   &__nav {
     display: grid;
@@ -744,6 +745,14 @@ $mobile: 767px;
     gap: 8px;
     padding: 12px 12px 0;
     flex-shrink: 0;
+  }
+
+  &__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   &__quick {
@@ -790,7 +799,10 @@ $mobile: 767px;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     padding: 12px 16px 16px;
-    margin-top: auto;
+    flex-shrink: 0;
+    border-top: 1px solid $border;
+    background: $card;
+    z-index: 2;
 
     .wms-btn--primary { grid-column: 1 / -1; }
   }
@@ -858,8 +870,7 @@ $mobile: 767px;
 .wms-fields {
   margin: 0;
   padding: 8px 16px;
-  flex: 1;
-  overflow-y: auto;
+  flex: 0 0 auto;
 
   &__row {
     display: flex;
@@ -880,6 +891,65 @@ $mobile: 767px;
   &__green { color: $green; }
   &__muted { color: $muted; }
   &__red { color: #b91c1c; font-weight: 700; }
+}
+
+.wms-slot-materials {
+  margin: 12px 16px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  flex: none;
+  max-height: 220px;
+  overflow-y: auto;
+
+  &__title {
+    font-size: 12px;
+    font-weight: 700;
+    color: $text2;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: 8px;
+  }
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 6px 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      font-size: 13px;
+
+      strong {
+        color: $blue;
+        font-size: 14px;
+      }
+    }
+  }
+
+  &__meta {
+    color: $muted;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  &__empty {
+    margin: 0;
+    font-size: 13px;
+    color: $muted;
+    line-height: 1.4;
+  }
 }
 
 .wms-scan-row {
@@ -1065,8 +1135,8 @@ $mobile: 767px;
 }
 
 @media (max-width: 900px) {
-  .wms-workspace { flex-direction: column; padding: 10px 10px 0; }
-  .wms-detail { width: 100%; max-height: none; }
+  .wms-workspace { flex-direction: column; padding: 10px; }
+  .wms-detail { width: 100%; max-height: min(55vh, 520px); }
 }
 
 @media (max-width: $mobile) {

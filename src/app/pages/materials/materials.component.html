@@ -112,7 +112,7 @@
             <div class="mat-m-card__chips">
               <span class="mat-m-chip" *ngIf="material.poNumber">PO {{ material.poNumber }}</span>
               <span class="mat-m-chip mat-m-chip--loc" *ngIf="material.location">
-                <i class="material-icons">place</i>{{ material.location }}
+                <i class="material-icons">place</i><span class="location-text">{{ formatLocationDisplay(material.location) }}</span>
               </span>
               <span class="mat-m-chip" *ngIf="getDisplayIMD(material) as imd">IMD {{ imd }}</span>
             </div>
@@ -591,15 +591,14 @@
           <div class="info-row location-row">
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="value" *ngIf="!isLocationColumnUnlocked">{{ material.location || '-' }}</span>
-              <input *ngIf="isLocationColumnUnlocked"
-                     type="text"
-                     class="mobile-input location-input"
+              <span class="value location-text" *ngIf="!isLocationColumnUnlocked">{{ formatLocationDisplay(material.location) }}</span>
+              <textarea *ngIf="isLocationColumnUnlocked"
+                     class="mobile-input location-input location-textarea"
+                     rows="2"
                      [(ngModel)]="material.location"
                      (focus)="rememberLocationBeforeEdit(material)"
                      (blur)="onLocationChange(material)"
-                     (keydown.enter)="onLocationKeyEnter(material, $event)"
-                     placeholder="Nhập vị trí">
+                     placeholder="Mỗi vị trí 1 dòng"></textarea>
               <button type="button"
                       class="location-unlock-btn"
                       (click)="tryUnlockLocationColumn()"
@@ -847,15 +846,14 @@
                 [class.iqc-location]="isIQCLocation(material.location)"
                 [class.readonly-cell]="!isLocationColumnUnlocked"
                 [title]="isLocationColumnUnlocked ? 'Sửa vị trí (blur/Enter để lưu)' : 'Click ổ khóa ở cột Vị trí để mở sửa (mã Zalo OTP)'">
-              <span class="location-text" *ngIf="!isLocationColumnUnlocked">{{ material.location || '-' }}</span>
-              <input *ngIf="isLocationColumnUnlocked"
-                     type="text"
-                     class="editable-cell location-input"
+              <span class="location-text" *ngIf="!isLocationColumnUnlocked">{{ formatLocationDisplay(material.location) }}</span>
+              <textarea *ngIf="isLocationColumnUnlocked"
+                     class="editable-cell location-input location-textarea"
+                     rows="2"
                      [(ngModel)]="material.location"
                      (focus)="rememberLocationBeforeEdit(material)"
                      (blur)="onLocationChange(material)"
-                     (keydown.enter)="onLocationKeyEnter(material, $event)"
-                     placeholder="Vị trí">
+                     placeholder="Mỗi vị trí 1 dòng"></textarea>
             </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>

@@ -88,11 +88,15 @@ interface PutawayDayCol {
   total: number;
 }
 
-/** Popup Putaway: 1 dòng = 1 mã hàng (SKU), gom số SKU con đã/chưa Pass */
+/** Popup Putaway: 1 dòng = 1 mã hàng (SKU), gom theo từng trạng thái IQC */
 interface PutawayModalSkuRow {
   materialCode: string;
   passCount: number;
+  pendingCount: number;
   holdCount: number;
+  ngCount: number;
+  lockCount: number;
+  /** pending + ng + lock (giữ để tương thích sort / excel) */
   notPassCount: number;
   totalSkuCount: number;
   totalStock: number;
@@ -100,7 +104,11 @@ interface PutawayModalSkuRow {
   dayInIqc: number;
   /** Kho cần cất hàng — khách GNRAC (Danh mục NVLKH) → ASM3, còn lại → cùng nhà máy đang xem (ASM1/ASM2). */
   recommendedKho: string;
+  /** Trạng thái ưu tiên cao nhất của mã (để badge màu) */
+  primaryStatus: PutawayIqcStatusKind | 'tra' | 'mixed';
 }
+
+type PutawayModalFilterMode = 'all' | 'pass' | 'pending' | 'confirm' | 'ng' | 'lock' | 'tra';
 
 @Component({
   selector: 'app-dashboard',
@@ -216,9 +224,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   iqcMaterialsBySku: PutawayModalSkuRow[] = [];
   putawayTraMaterialsBySku: PutawayModalSkuRow[] = [];
   iqcMaterialsLoading: boolean = false;
-  /** 'all' | 'pass' | 'not-pass' | 'hold' | 'tra' */
-  putawayFilterMode: 'all' | 'pass' | 'not-pass' | 'hold' | 'tra' = 'all';
+  /** Lọc popup theo trạng thái đang có trên box Putaway */
+  putawayFilterMode: PutawayModalFilterMode = 'all';
   putawaySortByDay: 'none' | 'asc' | 'desc' = 'none';
+  putawaySearchTerm = '';
 
   togglePutawaySortDay(): void {
     if (this.putawaySortByDay === 'none' || this.putawaySortByDay === 'desc') {
@@ -226,6 +235,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     } else {
       this.putawaySortByDay = 'desc';
     }
+  }
+
+  setPutawayFilterMode(mode: PutawayModalFilterMode): void {
+    this.putawayFilterMode = mode;
   }
 
   refreshInterval: any;
@@ -2646,6 +2659,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.putawayTraMaterialsBySku = [];
     this.putawayFilterMode = 'all';
     this.putawaySortByDay = 'none';
+    this.putawaySearchTerm = '';
   }
 
   private parsePutawayInventoryDate(data: any): Date | null {
@@ -2741,13 +2755,37 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     });
 
-    const byCode = new Map<string, { passCount: number; holdCount: number; notPassCount: number; totalStock: number }>();
+    const byCode = new Map<
+      string,
+      {
+        passCount: number;
+        pendingCount: number;
+        holdCount: number;
+        ngCount: number;
+        lockCount: number;
+        totalStock: number;
+        primary: PutawayIqcStatusKind | null;
+      }
+    >();
     skuLines.forEach((line) => {
-      const bucket = byCode.get(line.materialCode) || { passCount: 0, holdCount: 0, notPassCount: 0, totalStock: 0 };
+      const bucket = byCode.get(line.materialCode) || {
+        passCount: 0,
+        pendingCount: 0,
+        holdCount: 0,
+        ngCount: 0,
+        lockCount: 0,
+        totalStock: 0,
+        primary: null as PutawayIqcStatusKind | null
+      };
       if (line.statusKind === 'pass') bucket.passCount += 1;
+      else if (line.statusKind === 'pending') bucket.pendingCount += 1;
       else if (line.statusKind === 'confirm') bucket.holdCount += 1;
-      else bucket.notPassCount += 1;
+      else if (line.statusKind === 'ng') bucket.ngCount += 1;
+      else if (line.statusKind === 'lock') bucket.lockCount += 1;
       bucket.totalStock += line.stock;
+      bucket.primary = bucket.primary
+        ? this.mergePutawayStatusKind(bucket.primary, line.statusKind)
+        : line.statusKind;
       byCode.set(line.materialCode, bucket);
     });
 
@@ -2756,15 +2794,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
         const d0 = earliestDate.get(materialCode) || today;
         const d0noon = new Date(d0); d0noon.setHours(0, 0, 0, 0);
         const daysDiff = this.countDaysNoSunday(d0noon, today);
+        const notPassCount = v.pendingCount + v.ngCount + v.lockCount;
+        const totalSkuCount = v.passCount + v.pendingCount + v.holdCount + v.ngCount + v.lockCount;
+        const activeKinds = [
+          v.passCount > 0,
+          v.pendingCount > 0,
+          v.holdCount > 0,
+          v.ngCount > 0,
+          v.lockCount > 0
+        ].filter(Boolean).length;
+        const primaryStatus: PutawayModalSkuRow['primaryStatus'] =
+          activeKinds > 1 ? 'mixed' : (v.primary || 'pending');
+        const recommendedKho =
+          v.ngCount > 0 || primaryStatus === 'ng'
+            ? 'Kho NG'
+            : this.resolveRecommendedKho(materialCode, customerMap, khoTypeResolver);
         return {
           materialCode,
           passCount: v.passCount,
+          pendingCount: v.pendingCount,
           holdCount: v.holdCount,
-          notPassCount: v.notPassCount,
-          totalSkuCount: v.passCount + v.holdCount + v.notPassCount,
+          ngCount: v.ngCount,
+          lockCount: v.lockCount,
+          notPassCount,
+          totalSkuCount,
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay (không tính Chủ Nhật)
-          recommendedKho: this.resolveRecommendedKho(materialCode, customerMap, khoTypeResolver),
+          recommendedKho,
+          primaryStatus
         };
       })
       .sort((a, b) => {
@@ -2827,13 +2884,37 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     });
 
-    const byCode = new Map<string, { passCount: number; holdCount: number; notPassCount: number; totalStock: number }>();
+    const byCode = new Map<
+      string,
+      {
+        passCount: number;
+        pendingCount: number;
+        holdCount: number;
+        ngCount: number;
+        lockCount: number;
+        totalStock: number;
+        primary: PutawayIqcStatusKind | null;
+      }
+    >();
     skuLines.forEach((line) => {
-      const bucket = byCode.get(line.materialCode) || { passCount: 0, holdCount: 0, notPassCount: 0, totalStock: 0 };
+      const bucket = byCode.get(line.materialCode) || {
+        passCount: 0,
+        pendingCount: 0,
+        holdCount: 0,
+        ngCount: 0,
+        lockCount: 0,
+        totalStock: 0,
+        primary: null as PutawayIqcStatusKind | null
+      };
       if (line.statusKind === 'pass') bucket.passCount += 1;
+      else if (line.statusKind === 'pending') bucket.pendingCount += 1;
       else if (line.statusKind === 'confirm') bucket.holdCount += 1;
-      else bucket.notPassCount += 1;
+      else if (line.statusKind === 'ng') bucket.ngCount += 1;
+      else if (line.statusKind === 'lock') bucket.lockCount += 1;
       bucket.totalStock += line.stock;
+      bucket.primary = bucket.primary
+        ? this.mergePutawayStatusKind(bucket.primary, line.statusKind)
+        : line.statusKind;
       byCode.set(line.materialCode, bucket);
     });
 
@@ -2843,15 +2924,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
         const d0noon = new Date(d0);
         d0noon.setHours(0, 0, 0, 0);
         const daysDiff = this.countDaysNoSunday(d0noon, today);
+        const notPassCount = v.pendingCount + v.ngCount + v.lockCount;
+        const totalSkuCount = v.passCount + v.pendingCount + v.holdCount + v.ngCount + v.lockCount;
         return {
           materialCode,
           passCount: v.passCount,
+          pendingCount: v.pendingCount,
           holdCount: v.holdCount,
-          notPassCount: v.notPassCount,
-          totalSkuCount: v.passCount + v.holdCount + v.notPassCount,
+          ngCount: v.ngCount,
+          lockCount: v.lockCount,
+          notPassCount,
+          totalSkuCount,
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,
           recommendedKho: this.resolveRecommendedKho(materialCode, customerMap, khoTypeResolver),
+          primaryStatus: 'tra' as const
         };
       })
       .sort((a, b) => {
@@ -2906,12 +2993,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + r.passCount, 0);
   }
 
+  get putawayModalTotalPendingSku(): number {
+    return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + (r.pendingCount || 0), 0);
+  }
+
   get putawayModalTotalNotPassSku(): number {
     return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + r.notPassCount, 0);
   }
 
   get putawayModalTotalHoldSku(): number {
     return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + (r.holdCount || 0), 0);
+  }
+
+  get putawayModalTotalNgSku(): number {
+    return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + (r.ngCount || 0), 0);
+  }
+
+  get putawayModalTotalLockSku(): number {
+    return (this.iqcMaterialsBySku || []).reduce((sum, r) => sum + (r.lockCount || 0), 0);
+  }
+
+  get putawayModalTraSkuCount(): number {
+    return (this.putawayTraMaterialsBySku || []).length;
   }
 
   get putawayModalActiveSourceRows(): PutawayModalSkuRow[] {
@@ -2921,23 +3024,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   get putawayModalIsEmpty(): boolean {
-    return this.putawayModalActiveSourceRows.length === 0;
+    return this.putawayModalDisplayRows.length === 0 && !this.iqcMaterialsLoading;
   }
 
-  /** Danh sách hiển thị trong modal theo filter + sort */
+  get putawayFilterLabel(): string {
+    switch (this.putawayFilterMode) {
+      case 'pass': return 'Pass';
+      case 'pending': return 'Waiting IQC';
+      case 'confirm': return 'Hold';
+      case 'ng': return 'NG';
+      case 'lock': return 'Lock';
+      case 'tra': return 'TRA';
+      default: return 'Tất cả';
+    }
+  }
+
+  putawayPrimaryStatusLabel(row: PutawayModalSkuRow): string {
+    if (row.primaryStatus === 'tra') return 'TRA';
+    if (row.primaryStatus === 'mixed') return 'Nhiều TT';
+    return this.putawayStatusShortLabel(row.primaryStatus);
+  }
+
+  /** Danh sách hiển thị trong modal theo filter + search + sort */
   get putawayModalDisplayRows(): PutawayModalSkuRow[] {
+    let rows: PutawayModalSkuRow[];
     if (this.putawayFilterMode === 'tra') {
-      return this.sortPutawayModalRows(this.putawayTraMaterialsBySku || []);
+      rows = this.putawayTraMaterialsBySku || [];
+    } else {
+      rows = this.iqcMaterialsBySku || [];
+      if (this.putawayFilterMode === 'pass') {
+        rows = rows.filter(r => r.passCount > 0);
+      } else if (this.putawayFilterMode === 'pending') {
+        rows = rows.filter(r => (r.pendingCount || 0) > 0);
+      } else if (this.putawayFilterMode === 'confirm') {
+        rows = rows.filter(r => (r.holdCount || 0) > 0);
+      } else if (this.putawayFilterMode === 'ng') {
+        rows = rows.filter(r => (r.ngCount || 0) > 0);
+      } else if (this.putawayFilterMode === 'lock') {
+        rows = rows.filter(r => (r.lockCount || 0) > 0);
+      }
     }
 
-    let rows = this.iqcMaterialsBySku || [];
-
-    if (this.putawayFilterMode === 'pass') {
-      rows = rows.filter(r => r.passCount > 0);
-    } else if (this.putawayFilterMode === 'not-pass') {
-      rows = rows.filter(r => r.notPassCount > 0);
-    } else if (this.putawayFilterMode === 'hold') {
-      rows = rows.filter(r => (r.holdCount || 0) > 0);
+    const q = (this.putawaySearchTerm || '').trim().toUpperCase();
+    if (q) {
+      rows = rows.filter(r => r.materialCode.includes(q) || (r.recommendedKho || '').toUpperCase().includes(q));
     }
 
     return this.sortPutawayModalRows(rows);
@@ -2963,10 +3093,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Màu nền xanh gradient theo tỷ lệ pass (đậm = nhiều pass, nhạt = ít) */
   passRowBackground(row: PutawayModalSkuRow): string {
     if (!row.passCount || !row.totalSkuCount) return '';
+    if ((row.ngCount || 0) > 0 || (row.lockCount || 0) > 0) return '';
     const ratio = row.passCount / row.totalSkuCount; // 0..1
-    // lightness: ratio=1 → 78%, ratio→0 → 94%
     const l = Math.round(94 - ratio * 16);
-    return `hsl(142, 72%, ${l}%)`;
+    return `hsl(187, 72%, ${l}%)`;
   }
 
   // Download IQC Materials Report
@@ -2982,19 +3112,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const excelData = rows.map((row, index) => ({
         STT: index + 1,
         'Mã hàng (SKU)': row.materialCode,
-        'Đã Pass': row.passCount,
+        Kho: row.recommendedKho,
+        Day: row.dayInIqc,
+        Pass: row.passCount,
+        'Waiting IQC': row.pendingCount || 0,
         Hold: row.holdCount || 0,
-        'Chưa Pass': row.notPassCount,
-        'Tổng SKU (PO+IMD)': row.totalSkuCount,
+        NG: row.ngCount || 0,
+        Lock: row.lockCount || 0,
+        'Tổng dòng (PO+IMD)': row.totalSkuCount,
         'Tồn kho': row.totalStock,
+        'Trạng thái chính': this.putawayPrimaryStatusLabel(row)
       }));
 
       const ws = XLSX.utils.json_to_sheet(excelData);
       XLSX.utils.book_append_sheet(wb, ws, 'Putaway_SKU');
 
       const date = new Date().toISOString().split('T')[0];
-      const traSuffix = this.putawayFilterMode === 'tra' ? '_TRA' : this.putawayFilterMode === 'hold' ? '_Hold' : '';
-      const filename = `Putaway_Staging_SKU_${this.selectedFactory}${traSuffix}_${date}.xlsx`;
+      const filename = `Putaway_Staging_SKU_${this.selectedFactory}_${this.putawayFilterMode}_${date}.xlsx`;
 
       XLSX.writeFile(wb, filename);
       console.log(`✅ Putaway SKU report downloaded: ${filename}`);
@@ -3003,6 +3137,118 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.error('❌ Error downloading IQC materials report:', error);
       alert(`❌ Lỗi khi tải báo cáo: ${error.message}`);
     }
+  }
+
+  /** In danh sách Putaway đang lọc (cửa sổ in riêng). */
+  printPutawayModal(): void {
+    const rows = this.putawayModalDisplayRows;
+    if (!rows.length) {
+      alert('Không có dữ liệu để in!');
+      return;
+    }
+
+    const esc = (v: unknown) =>
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const bodyRows = rows
+      .map((row, i) => {
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(row.materialCode)}</td>
+          <td>${esc(row.recommendedKho)}</td>
+          <td class="num">${esc(row.dayInIqc)}</td>
+          <td class="num c-pass">${row.passCount || ''}</td>
+          <td class="num c-pending">${row.pendingCount || ''}</td>
+          <td class="num c-hold">${row.holdCount || ''}</td>
+          <td class="num c-ng">${row.ngCount || ''}</td>
+          <td class="num c-lock">${row.lockCount || ''}</td>
+          <td class="num">${esc(row.totalSkuCount)}</td>
+          <td class="num">${esc(Number(row.totalStock).toFixed(2))}</td>
+          <td>${esc(this.putawayPrimaryStatusLabel(row))}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const now = new Date();
+    const printedAt = now.toLocaleString('vi-VN');
+    const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <title>Putaway Staging — ${esc(this.selectedFactory)} — ${esc(this.putawayFilterLabel)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 18px; font-size: 12px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .meta { color: #64748b; margin-bottom: 14px; line-height: 1.5; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+    .chip { border: 1px solid #e2e8f0; border-radius: 999px; padding: 4px 10px; font-weight: 700; font-size: 11px; }
+    .chip b { margin-left: 4px; }
+    .c-pass { color: #0891b2; }
+    .c-pending { color: #a16207; }
+    .c-hold { color: #c2410c; }
+    .c-ng, .c-lock { color: #dc2626; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+    th { background: #f1f5f9; font-size: 11px; text-transform: uppercase; letter-spacing: .02em; }
+    td.num, th.num { text-align: right; }
+    @media print {
+      body { margin: 8mm; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <button class="no-print" onclick="window.print()" style="margin-bottom:12px;padding:8px 14px;font-weight:700;cursor:pointer;">In</button>
+  <h1>Putaway Staging Area — ${esc(this.selectedFactory)}</h1>
+  <div class="meta">
+    Bộ lọc: <strong>${esc(this.putawayFilterLabel)}</strong>
+    ${this.putawaySearchTerm ? ` · Tìm: <strong>${esc(this.putawaySearchTerm)}</strong>` : ''}<br/>
+    In lúc: ${esc(printedAt)} · ${rows.length} mã hàng
+  </div>
+  <div class="chips">
+    <span class="chip">Pass <b class="c-pass">${this.putawayModalTotalPassSku}</b></span>
+    <span class="chip">Waiting <b class="c-pending">${this.putawayModalTotalPendingSku}</b></span>
+    <span class="chip">Hold <b class="c-hold">${this.putawayModalTotalHoldSku}</b></span>
+    <span class="chip">NG <b class="c-ng">${this.putawayModalTotalNgSku}</b></span>
+    <span class="chip">Lock <b class="c-lock">${this.putawayModalTotalLockSku}</b></span>
+    <span class="chip">TRA <b>${this.putawayModalTraSkuCount}</b></span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>STT</th>
+        <th>Mã hàng</th>
+        <th>Kho cất</th>
+        <th class="num">Day</th>
+        <th class="num">Pass</th>
+        <th class="num">Waiting</th>
+        <th class="num">Hold</th>
+        <th class="num">NG</th>
+        <th class="num">Lock</th>
+        <th class="num">Tổng</th>
+        <th class="num">Tồn</th>
+        <th>TT chính</th>
+      </tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  <script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 200); });</script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=800');
+    if (!w) {
+      alert('Không mở được cửa sổ in. Hãy cho phép popup rồi thử lại.');
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   }
 
   // Logout method for mobile
