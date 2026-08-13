@@ -194,6 +194,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapLoading = false;
   kkLocMapQuery = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
+  private kkLocMapRowCache = new Map<string, InventoryMaterial[]>();
 
   /** Popup Kiểm Kê: tiến độ tick KK toàn bộ tồn kho + theo từng mã B (B + 6 số) */
   showKkCheckPopup = false;
@@ -4934,6 +4935,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapLoading = false;
     this.kkLocMapQuery = '';
     this.kkLocMapBoxes = [];
+    this.kkLocMapRowCache.clear();
   }
 
   get kkLocMapFilteredBoxes(): Array<{ loc: string; checked: number; total: number }> {
@@ -4959,8 +4961,40 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   onKkLocBoxClick(box: { loc: string }): void {
     const loc = String(box?.loc || '').trim();
     if (!loc || loc === '—') return;
+    const rows = [...(this.kkLocMapRowCache.get(loc) || [])];
     this.closeKkLocMap();
-    this.applyLocationFilter(loc);
+    this.showKkLocMapRows(loc, rows);
+  }
+
+  /** Hiện đúng bộ mã đã dùng để đếm ô KK — tồn > 0, chưa KK lên đầu. */
+  private showKkLocMapRows(loc: string, rows: InventoryMaterial[]): void {
+    this.searchByLocation = true;
+    this.searchByCustomer = false;
+    this.searchByKk = false;
+    this.searchType = 'location';
+    this.searchTerm = loc;
+    this.showOnlyNegativeStock = false;
+    this.inventoryMaterials = rows.map((row) => ({ ...row }));
+    this.inventoryMaterials.sort((a, b) => {
+      const ak = this.isKkFlagOn(a.kkChecked) ? 1 : 0;
+      const bk = this.isKkFlagOn(b.kkChecked) ? 1 : 0;
+      if (ak !== bk) return ak - bk;
+      const codeCmp = this.compareMaterialCodesFIFO(
+        String(a.materialCode || ''),
+        String(b.materialCode || '')
+      );
+      if (codeCmp) return codeCmp;
+      return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+    });
+    this.filteredInventory = [...this.inventoryMaterials];
+    this.currentPage = 1;
+    this.updatePagination();
+    this.updateDisplayedInventory();
+    this.updateNegativeStockCount();
+    this.cdr.detectChanges();
+    if (this.filteredInventory.length) {
+      void this.refreshLastStatusForMaterials(this.filteredInventory);
+    }
   }
 
   async loadKkLocMap(): Promise<void> {
@@ -4975,6 +5009,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         .get()
         .toPromise();
 
+      this.kkLocMapRowCache.clear();
       const byLoc = new Map<string, Map<string, { rows: number; kk: number }>>();
       for (const doc of snap?.docs || []) {
         const data = doc.data() as any;
@@ -4986,6 +5021,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           ? [...new Set(tokens.map((t) => this.locationGroupKey(t) || '—'))]
           : ['—'];
         const kkOn = this.isKkFlagOn(data.kkChecked);
+        const material = this.mapKkInventoryDoc(doc);
+        material.kkChecked = kkOn;
         for (const loc of groups) {
           let codes = byLoc.get(loc);
           if (!codes) {
@@ -4996,6 +5033,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           cur.rows += 1;
           if (kkOn) cur.kk += 1;
           codes.set(code, cur);
+          const list = this.kkLocMapRowCache.get(loc) || [];
+          list.push({ ...material });
+          this.kkLocMapRowCache.set(loc, list);
         }
       }
 
