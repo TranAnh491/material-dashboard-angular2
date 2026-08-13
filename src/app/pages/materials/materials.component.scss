@@ -3404,6 +3404,139 @@ $asm1-toolbar-h: 36px;
   background: rgba(15, 23, 42, 0.48);
 }
 
+.kk-loc-map {
+  max-width: min(960px, 96vw);
+  width: min(960px, 96vw);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+  padding: 0;
+  max-height: min(92vh, 860px);
+  display: flex;
+  flex-direction: column;
+
+  &__body {
+    padding: 12px 16px 16px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    flex: 1;
+  }
+
+  &__toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+
+    .hidden-search {
+      flex: 1;
+    }
+  }
+
+  &__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  &__dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    &::before {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      background: #cbd5e1;
+    }
+
+    &--done::before { background: #10b981; }
+    &--partial::before { background: #f59e0b; }
+    &--none::before { background: #f87171; }
+  }
+
+  &__loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 36px 12px;
+    color: #475569;
+    font-weight: 700;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 8px;
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
+    padding: 2px;
+  }
+}
+
+.kk-loc-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 72px;
+  padding: 8px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  color: #0f172a;
+
+  strong {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+  }
+
+  &--done {
+    background: #ecfdf5;
+    border-color: #6ee7b7;
+
+    span { color: #047857; }
+  }
+
+  &--partial {
+    background: #fffbeb;
+    border-color: #fcd34d;
+
+    span { color: #b45309; }
+  }
+
+  &--none {
+    background: #fef2f2;
+    border-color: #fca5a5;
+
+    span { color: #b91c1c; }
+  }
+}
+
 .more-popup-content {
   max-width: 640px;
   width: min(94vw, 640px);

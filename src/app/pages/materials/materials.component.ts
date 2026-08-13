@@ -189,6 +189,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   resetLowStockRows: ResetLowStockRow[] = [];
   isDeletingResetLowStock = false;
   resetZeroDeletedCount = 0;
+  /** Popup sơ đồ KK theo vị trí (More → Kiểm tra KK). */
+  showKkLocMap = false;
+  kkLocMapLoading = false;
+  kkLocMapQuery = '';
+  kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
+
   /** Popup Kiểm Kê: tiến độ tick KK toàn bộ tồn kho + theo từng mã B (B + 6 số) */
   showKkCheckPopup = false;
   kkCheckRunning = false;
@@ -2060,6 +2066,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTickedMaterialsCache = [];
     this.clearKkInlineBanner(true);
     this.showKkCheckPopup = false;
+    this.closeKkLocMap();
     this.cancelMobileLocationScan(true);
     this.cancelMobileKkConfirm();
     this.closeMobileDetail();
@@ -4913,6 +4920,117 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openMorePopup(): void {
     this.showMorePopup = true;
+  }
+
+  openKkLocMapFromMore(): void {
+    this.closeMorePopup();
+    this.showKkLocMap = true;
+    this.kkLocMapQuery = '';
+    void this.loadKkLocMap();
+  }
+
+  closeKkLocMap(): void {
+    this.showKkLocMap = false;
+    this.kkLocMapLoading = false;
+    this.kkLocMapQuery = '';
+    this.kkLocMapBoxes = [];
+  }
+
+  get kkLocMapFilteredBoxes(): Array<{ loc: string; checked: number; total: number }> {
+    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    if (!q) return this.kkLocMapBoxes;
+    return this.kkLocMapBoxes.filter((b) => b.loc.includes(q));
+  }
+
+  get kkLocMapSummary(): { checked: number; total: number } {
+    return this.kkLocMapBoxes.reduce(
+      (acc, b) => ({ checked: acc.checked + b.checked, total: acc.total + b.total }),
+      { checked: 0, total: 0 }
+    );
+  }
+
+  kkLocBoxTone(box: { checked: number; total: number }): string {
+    if (!box.total) return 'empty';
+    if (box.checked >= box.total) return 'done';
+    if (box.checked <= 0) return 'none';
+    return 'partial';
+  }
+
+  onKkLocBoxClick(box: { loc: string }): void {
+    const loc = String(box?.loc || '').trim();
+    if (!loc || loc === '—') return;
+    this.closeKkLocMap();
+    this.applyLocationFilter(loc);
+  }
+
+  async loadKkLocMap(): Promise<void> {
+    this.kkLocMapLoading = true;
+    this.kkLocMapBoxes = [];
+    this.cdr.detectChanges();
+    try {
+      const snap = await this.firestore
+        .collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', this.selectedFactory).limit(10000)
+        )
+        .get()
+        .toPromise();
+
+      const byLoc = new Map<string, Map<string, { rows: number; kk: number }>>();
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as any;
+        if (this.stockFromInventoryDoc(data) <= 0) continue;
+        const code = String(data.materialCode || '').trim().toUpperCase();
+        if (!code) continue;
+        const tokens = splitMultiLocations(String(data.location || data.viTri || ''));
+        const groups = tokens.length
+          ? [...new Set(tokens.map((t) => this.locationGroupKey(t) || '—'))]
+          : ['—'];
+        const kkOn = this.isKkFlagOn(data.kkChecked);
+        for (const loc of groups) {
+          let codes = byLoc.get(loc);
+          if (!codes) {
+            codes = new Map();
+            byLoc.set(loc, codes);
+          }
+          const cur = codes.get(code) || { rows: 0, kk: 0 };
+          cur.rows += 1;
+          if (kkOn) cur.kk += 1;
+          codes.set(code, cur);
+        }
+      }
+
+      const boxes = Array.from(byLoc.entries()).map(([loc, codes]) => {
+        let checked = 0;
+        codes.forEach((v) => {
+          if (v.rows > 0 && v.kk >= v.rows) checked += 1;
+        });
+        return { loc, checked, total: codes.size };
+      });
+
+      const known = this.knownLocationGroups;
+      boxes.sort((a, b) => {
+        const ai = known.indexOf(a.loc);
+        const bi = known.indexOf(b.loc);
+        if (ai >= 0 || bi >= 0) {
+          if (ai < 0) return 1;
+          if (bi < 0) return -1;
+          return ai - bi;
+        }
+        if (a.loc === '—') return 1;
+        if (b.loc === '—') return -1;
+        return a.loc.localeCompare(b.loc, 'en', { numeric: true });
+      });
+
+      this.kkLocMapBoxes = boxes;
+      this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
+    } catch (e) {
+      console.error('❌ loadKkLocMap:', e);
+      this.kkLocMapBoxes = [];
+      alert('❌ Không tải được sơ đồ KK theo vị trí.');
+    } finally {
+      this.kkLocMapLoading = false;
+      this.cdr.detectChanges();
+    }
   }
 
   toggleQtyBagRule(): void {

@@ -475,6 +475,14 @@
         <div class="action-buttons">
           <button class="more-btn kk-check-btn"
                   type="button"
+                  (click)="openKkLocMapFromMore()"
+                  [disabled]="kkLocMapLoading"
+                  title="Sơ đồ vị trí — mã đã KK / tổng">
+            <i class="material-icons" [class.rotating]="kkLocMapLoading">{{ kkLocMapLoading ? 'sync' : 'grid_view' }}</i>
+            <span class="btn-label">Kiểm tra KK</span>
+          </button>
+          <button class="more-btn kk-check-btn"
+                  type="button"
                   (click)="runKkCheckOnInventory()"
                   [disabled]="kkCheckRunning"
                   title="Chạy tiến độ Kiểm Kê — xong sẽ hiện danh sách đang tick KK">
@@ -1915,6 +1923,67 @@
           </button>
         </div>
       </details>
+    </div>
+  </div>
+</div>
+
+<!-- Sơ đồ KK theo vị trí -->
+<div class="modal-overlay more-overlay" *ngIf="showKkLocMap" (click)="closeKkLocMap()">
+  <div class="modal-content kk-loc-map" (click)="$event.stopPropagation()" role="dialog" aria-label="Sơ đồ kiểm tra KK">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">grid_view</i>
+        </span>
+        <div>
+          <h3>Kiểm tra KK theo vị trí</h3>
+          <p class="more-popup-header__sub">
+            {{ selectedFactory }}
+            <span *ngIf="!kkLocMapLoading && kkLocMapBoxes.length">
+              · {{ kkLocMapSummary.checked }}/{{ kkLocMapSummary.total }} mã · {{ kkLocMapBoxes.length }} vị trí
+            </span>
+          </p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkLocMap()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body kk-loc-map__body">
+      <div class="kk-loc-map__toolbar">
+        <div class="hidden-search">
+          <i class="material-icons">search</i>
+          <input type="search" [(ngModel)]="kkLocMapQuery" placeholder="Lọc vị trí…" autocomplete="off" />
+        </div>
+        <button type="button" class="hidden-refresh-btn" (click)="loadKkLocMap()" [disabled]="kkLocMapLoading">
+          <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
+          Làm mới
+        </button>
+      </div>
+      <div class="kk-loc-map__legend">
+        <span class="kk-loc-map__dot kk-loc-map__dot--done">Đủ KK</span>
+        <span class="kk-loc-map__dot kk-loc-map__dot--partial">Đang KK</span>
+        <span class="kk-loc-map__dot kk-loc-map__dot--none">Chưa KK</span>
+      </div>
+      <div class="kk-loc-map__loading" *ngIf="kkLocMapLoading">
+        <i class="material-icons rotating">sync</i>
+        Đang đọc tồn kho {{ selectedFactory }}…
+      </div>
+      <div class="kk-loc-map__grid" *ngIf="!kkLocMapLoading">
+        <button
+          type="button"
+          class="kk-loc-box"
+          *ngFor="let box of kkLocMapFilteredBoxes"
+          [class.kk-loc-box--done]="kkLocBoxTone(box) === 'done'"
+          [class.kk-loc-box--partial]="kkLocBoxTone(box) === 'partial'"
+          [class.kk-loc-box--none]="kkLocBoxTone(box) === 'none'"
+          (click)="onKkLocBoxClick(box)"
+          [title]="box.loc + ': ' + box.checked + '/' + box.total + ' mã đã KK'">
+          <strong>{{ box.loc }}</strong>
+          <span>{{ box.checked }}/{{ box.total }}</span>
+        </button>
+        <p class="hidden-empty" *ngIf="!kkLocMapFilteredBoxes.length">Không có vị trí khớp.</p>
+      </div>
     </div>
   </div>
 </div>
