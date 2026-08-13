@@ -1,0 +1,13 @@
+<div class="jw-rack3d">
+  <div class="jw-rack3d__legend">
+    <span class="jw-rack3d__legend-item jw-rack3d__legend-item--empty">Trống</span>
+    <span class="jw-rack3d__legend-item jw-rack3d__legend-item--full">Có hàng</span>
+    <span class="jw-rack3d__legend-item jw-rack3d__legend-item--pick">Đang chọn</span>
+    <span class="jw-rack3d__hint">Kéo xoay · Cuộn phóng to · Click ô để chọn tầng/vị trí</span>
+  </div>
+  <div
+    #canvasHost
+    class="jw-rack3d__canvas"
+    (click)="onCanvasClick($event)">
+  </div>
+</div>

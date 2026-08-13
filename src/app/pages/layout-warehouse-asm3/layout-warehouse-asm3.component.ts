@@ -399,9 +399,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
   /**
    * Parse 1 token vị trí:
-   * - WH3-B1-F1-0138 → ô WH3-B1 + pallet F1-0138
-   * - WH3-B1 → ô WH3-B1
-   * - B1 / D32 → ô WH3-B1 / WH3-D32
+   * - ASM3-D45 / WH3-B1 / B1 / D32 → ô WH3-*
+   * - WH3-B1-F1-0138 / ASM3-D45-P0001 → ô + phần pallet (nếu có)
    */
   private parseInventoryLocationToken(
     location: string
@@ -409,16 +408,19 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     const raw = String(location || '').trim().toUpperCase();
     if (!raw) return null;
 
-    let m = raw.match(/^WH3-([A-IK-L])(\d{1,2})(?:-(.+))?$/);
-    if (!m) {
-      m = raw.match(/^([A-IK-L])(\d{1,2})$/);
-      if (!m) return null;
-    }
+    const m = raw.match(/^(?:WH3-|ASM3-)?([A-IK-L])(\d{1,2})(?:-(.+))?$/);
+    if (!m) return null;
     const row = m[1];
     const index = parseInt(m[2], 10);
     const palletNumber = (m[3] || '').trim();
     if (!this.rackLetters.includes(row) || index < 1 || index > this.SLOTS_PER_RACK) return null;
-    return { slotName: this.buildSlotName(row, index), row, palletNumber };
+    // Hậu tố kiểu P0001 / F1-0138 là mã pallet — không phải số ô
+    const palletOnly = palletNumber && (/^P\d{4}$/.test(palletNumber) || /^F[12]-/i.test(palletNumber));
+    return {
+      slotName: this.buildSlotName(row, index),
+      row,
+      palletNumber: palletOnly ? palletNumber : (palletNumber || '')
+    };
   }
 
   /**
@@ -1412,11 +1414,17 @@ export class LayoutWarehouseAsm3Component implements OnInit {
   }
 
   private async findMaterialsAtSlotByLocationQuery(slotName: string): Promise<Asm3SlotMaterial[]> {
-    const short = this.materialsLocationToken(slotName);
+    const short = this.shortCodeFromSlotName(slotName).toUpperCase();
+    const locCandidates = [
+      this.materialsLocationToken(slotName),
+      `${this.WAREHOUSE_SLOT_PREFIX}-${short}`,
+      short,
+      slotName
+    ].filter(Boolean);
     const byId = new Map<string, Asm3SlotMaterial>();
 
     for (const factory of this.SYNC_FACTORIES) {
-      for (const loc of [short, slotName]) {
+      for (const loc of locCandidates) {
         if (!loc) continue;
         try {
           const snap = await this.firestore
@@ -1485,16 +1493,22 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     const fromLocation = String(data.location || data.viTri || '').trim();
     const nextLocation = this.buildNextMultiLocation(fromLocation, fromSlotName, toLoc);
     const prevNorm = joinMultiLocations(splitMultiLocations(fromLocation));
-    if (!nextLocation || nextLocation === prevNorm) return false;
+    if (!nextLocation) return false;
+
+    const prevPallet = String(data.palletId || '').trim().toUpperCase();
+    const nextPallet = palletCode ? String(palletCode).trim().toUpperCase() : '';
+    const locationChanged = nextLocation !== prevNorm;
+    const palletChanged = !!(nextPallet && nextPallet !== prevPallet);
+    if (!locationChanged && !palletChanged) return false;
 
     const payload: Record<string, unknown> = {
-      location: nextLocation,
       updatedAt: new Date(),
       lastModified: new Date(),
       modifiedBy: 'layout-warehouse-asm3',
       locationManualOverride: true
     };
-    if (palletCode) payload.palletId = palletCode;
+    if (locationChanged) payload.location = nextLocation;
+    if (nextPallet) payload.palletId = nextPallet;
 
     await this.firestore.collection(this.INVENTORY_COLLECTION).doc(docId).update(payload);
     await this.firestore.collection(this.LOCATION_HISTORY_COLLECTION).add({
@@ -1503,7 +1517,7 @@ export class LayoutWarehouseAsm3Component implements OnInit {
       materialCode: data.materialCode || '',
       poNumber: data.poNumber || '',
       fromLocation: prevNorm,
-      toLocation: nextLocation,
+      toLocation: locationChanged ? nextLocation : prevNorm,
       changedBy: 'layout-warehouse-asm3',
       changeType: 'wh3-map',
       changedAt: new Date()
@@ -1511,29 +1525,75 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     return true;
   }
 
-  /** Token vị trí ngắn ghi sang Materials (VD: D32). */
+  /** Token vị trí ghi sang Materials — luôn dạng ASM3-D45 (pallet nằm cột palletId riêng). */
   private materialsLocationToken(slotName: string): string {
-    return this.shortCodeFromSlotName(slotName).trim().toUpperCase();
+    const short = this.shortCodeFromSlotName(slotName).trim().toUpperCase();
+    return short ? `ASM3-${short}` : '';
+  }
+
+  /** Token chỉ là mã pallet (không phải vị trí kệ). */
+  private isPalletOnlyToken(token: string): boolean {
+    const t = String(token || '').trim().toUpperCase();
+    return /^P\d{4}$/.test(t) || /^F[12]-\d{4}$/i.test(t);
   }
 
   private tokenMatchesSlot(token: string, slotName: string): boolean {
     const parsed = this.parseInventoryLocationToken(token);
-    if (parsed) return parsed.slotName === slotName;
+    if (parsed) return parsed.slotName === this.normalizeSlotName(slotName);
     const t = String(token || '').trim().toUpperCase();
     const short = this.shortCodeFromSlotName(slotName).toUpperCase();
-    return t === slotName.toUpperCase() || t === short;
+    const norm = this.normalizeSlotName(slotName).toUpperCase();
+    return (
+      t === norm ||
+      t === short ||
+      t === `WH3-${short}` ||
+      t === `ASM3-${short}`
+    );
   }
 
   /**
    * Cập nhật chuỗi đa vị trí khi chuyển ô trên sơ đồ.
-   * - Có fromSlot: thay token thuộc ô cũ bằng ô mới, giữ vị trí khác.
-   * - Không có fromSlot: ghi đè / gán vị trí mới (scan gán lần đầu).
+   * - Có fromSlot: thay token thuộc ô cũ bằng ô mới (ASM3-…), giữ vị trí khác.
+   * - Không có fromSlot: gán vị trí mới; bỏ token chỉ là mã pallet; gom D45/WH3-D45 → ASM3-D45.
    */
   private buildNextMultiLocation(rawLocation: string, fromSlotName: string, toToken: string): string {
     const to = String(toToken || '').trim().toUpperCase();
-    if (!to) return joinMultiLocations(splitMultiLocations(rawLocation));
+    if (!to) {
+      return joinMultiLocations(
+        splitMultiLocations(rawLocation).filter((t) => !this.isPalletOnlyToken(t))
+      );
+    }
 
-    const tokens = splitMultiLocations(rawLocation).map((t) => t.toUpperCase());
+    const toParsed = this.parseInventoryLocationToken(to);
+    const tokens = splitMultiLocations(rawLocation)
+      .map((t) => t.toUpperCase())
+      .filter((t) => !this.isPalletOnlyToken(t));
+
+    const normalizeSameSlot = (list: string[]): string[] => {
+      const out: string[] = [];
+      let hasTo = false;
+      for (const t of list) {
+        if (t === to) {
+          if (!hasTo) {
+            out.push(to);
+            hasTo = true;
+          }
+          continue;
+        }
+        const parsed = this.parseInventoryLocationToken(t);
+        if (toParsed && parsed && parsed.slotName === toParsed.slotName) {
+          if (!hasTo) {
+            out.push(to);
+            hasTo = true;
+          }
+          continue;
+        }
+        out.push(t);
+      }
+      if (!hasTo) out.push(to);
+      return out;
+    };
+
     if (fromSlotName) {
       let replaced = false;
       const next = tokens.map((t) => {
@@ -1543,15 +1603,12 @@ export class LayoutWarehouseAsm3Component implements OnInit {
         }
         return t;
       });
-      if (replaced) return joinMultiLocations(next);
-      return joinMultiLocations([...tokens, to]);
+      if (replaced) return joinMultiLocations(normalizeSameSlot(next));
+      return joinMultiLocations(normalizeSameSlot([...tokens, to]));
     }
 
     if (!tokens.length) return to;
-    if (tokens.some((t) => t === to || this.tokenMatchesSlot(t, `${this.WAREHOUSE_SLOT_PREFIX}-${to}`))) {
-      return joinMultiLocations(tokens);
-    }
-    return joinMultiLocations([...tokens, to]);
+    return joinMultiLocations(normalizeSameSlot(tokens));
   }
 
   private async findInventoryDocsForPallet(
@@ -1567,6 +1624,8 @@ export class LayoutWarehouseAsm3Component implements OnInit {
     };
 
     const fromShort = fromSlotName ? this.shortCodeFromSlotName(fromSlotName).toUpperCase() : '';
+    const fromAsm3 = fromShort ? `ASM3-${fromShort}` : '';
+    const fromWh3 = fromShort ? `${this.WAREHOUSE_SLOT_PREFIX}-${fromShort}` : '';
 
     for (const factory of this.SYNC_FACTORIES) {
       try {
@@ -1583,9 +1642,13 @@ export class LayoutWarehouseAsm3Component implements OnInit {
 
       const locationCandidates = [
         fromSlotName,
+        fromAsm3,
+        fromWh3,
         fromShort,
-        fromSlotName ? `${fromSlotName}-${palletCode}` : '',
+        fromAsm3 ? `${fromAsm3}-${palletCode}` : '',
+        fromWh3 ? `${fromWh3}-${palletCode}` : '',
         fromShort ? `${fromShort}-${palletCode}` : '',
+        // Doc cũ có thể ghi nhầm mã pallet vào cột location
         palletCode
       ].filter(Boolean) as string[];
 

@@ -12,8 +12,8 @@ import { LocationUnlockService } from '../../services/location-unlock.service';
       </div>
       <div class="dialog-content">
         <p class="hint">
-          Nhập mã nhân viên được phép. Zalo bot sẽ gửi mã 4 số. Phiên mở khóa có hiệu lực
-          <strong>10 phút</strong> hoặc hết khi tải lại trang (F5).
+          Nhập mã nhân viên được phép. Zalo bot sẽ gửi mã 4 số (dùng 1 lần trong 10 phút).
+          Sau khi xác nhận, cột Vị trí mở khóa <strong>4 tiếng</strong> hoặc hết khi tải lại trang (F5).
         </p>
         <label class="field-label">Mã nhân viên</label>
         <input

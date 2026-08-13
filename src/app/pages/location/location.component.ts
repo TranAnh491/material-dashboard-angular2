@@ -530,18 +530,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         await this.firestore.collection('location-rules').doc(this.editingLegacyRuleId).update(payload);
       } else {
         const existing = this.rules.find(r => r.materialCode === materialCode);
-        if (existing?.id) {
-          await this.firestore.collection('location-rules').doc(existing.id).update(payload);
-        } else {
-          await this.firestore.collection('location-rules').add({
-            ...payload,
+    if (existing?.id) {
+      await this.firestore.collection('location-rules').doc(existing.id).update(payload);
+    } else {
+      await this.firestore.collection('location-rules').add({
+        ...payload,
             createdAt: new Date()
-          });
-        }
+      });
+    }
       }
       await this.reloadLocationRulesFromFirestore();
       this.buildMaterialLocationRuleDisplayRows();
-      this.applyLocationRuleToSelectedMaterial();
+    this.applyLocationRuleToSelectedMaterial();
       alert('✅ Đã lưu rule cũ');
       this.clearLegacyRuleForm();
     } catch (e: unknown) {
@@ -559,15 +559,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isLegacyRulesSaving = true;
     this.cdr.markForCheck();
     try {
-      if (rule.id) {
-        await this.firestore.collection('location-rules').doc(rule.id).delete();
-      }
+    if (rule.id) {
+      await this.firestore.collection('location-rules').doc(rule.id).delete();
+    }
       if (this.editingLegacyRuleId === rule.id) {
         this.clearLegacyRuleForm();
       }
       await this.reloadLocationRulesFromFirestore();
       this.buildMaterialLocationRuleDisplayRows();
-      this.applyLocationRuleToSelectedMaterial();
+    this.applyLocationRuleToSelectedMaterial();
     } catch (e: unknown) {
       console.error('❌ deleteLegacyRule:', e);
       alert(`❌ Không xóa được rule: ${(e as Error)?.message || e}`);
@@ -1243,12 +1243,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       snap?.forEach(doc => {
         const parsed = this.parseLocationRulesFromDocs([{ id: doc.id, data: () => doc.data() }]);
         if (parsed[0]) {
-          const d = doc.data() as any;
-          fetched.push({
+        const d = doc.data() as any;
+        fetched.push({
             ...parsed[0],
-            createdAt: d.createdAt,
-            updatedAt: d.updatedAt
-          });
+          createdAt: d.createdAt,
+          updatedAt: d.updatedAt
+        });
         }
       });
 
@@ -1333,7 +1333,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   isLoadingLocationHistory = false;
 
   private readonly materialLocationHistoryCol = 'material-location-history';
-
+  
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -2474,8 +2474,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .qr-label--57 {
         width: 57mm;
         height: 32mm;
-        border: 1px solid #000;
-        display: flex;
+          border: 1px solid #000; 
+          display: flex; 
         align-items: stretch;
         background: #fff;
         overflow: hidden;
@@ -2483,34 +2483,34 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .qr-label--57 .qr-section {
         width: 30mm;
         height: 32mm;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
         border-right: 1px solid #ccc;
         flex-shrink: 0;
       }
       .qr-label--57 .qr-image {
         width: 28mm;
         height: 28mm;
-        object-fit: contain;
+                   object-fit: contain;
         display: block;
       }
       .qr-label--57 .location-section {
         flex: 1;
-        display: flex;
+            display: flex; 
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
+            align-items: center; 
+            justify-content: center;
         padding: 1mm 2mm;
         gap: 1mm;
         text-align: center;
       }
       .qr-label--57 .location-text {
         font-size: 16px;
-        font-weight: bold;
+              font-weight: bold; 
         line-height: 1.15;
         word-break: break-word;
-        color: #000;
+              color: #000;
       }
       .qr-label--57 .location-date {
         font-size: 10px;
@@ -2518,7 +2518,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       .loc-qr-print-actions {
         margin-top: 12px;
-        text-align: center;
+              text-align: center;
       }
       .loc-qr-print-actions button {
         margin: 0 6px;
@@ -2545,9 +2545,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       html, body {
         width: 130mm;
         height: 100mm;
-        margin: 0;
+                  margin: 0; 
         padding: 0;
-        font-family: Arial, sans-serif;
+                  font-family: Arial, sans-serif; 
         background: #fff;
       }
       .qr-label--130 {
@@ -2605,9 +2605,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .loc-qr-print-actions button {
         margin: 0 6px;
         padding: 8px 16px;
-        border: none;
+                  border: none; 
         border-radius: 4px;
-        cursor: pointer;
+                  cursor: pointer;
         background: #007bff;
         color: #fff;
       }
@@ -2820,7 +2820,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     suggestedLocations: string[];
     imd: string;
   } | null> {
-    const parts = qrCode.split('|');
+      const parts = qrCode.split('|');
       let materialCode = '';
       let poNumber = '';
       let imdKey = '';
@@ -2840,8 +2840,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         materialCode = qrCode.trim().substring(0, 7);
       }
 
-    if (!materialCode) {
-      alert('❌ Không thể đọc mã hàng từ QR code');
+      if (!materialCode) {
+        alert('❌ Không thể đọc mã hàng từ QR code');
       return null;
     }
 
@@ -2854,12 +2854,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .get()
         .toPromise();
 
-    if (!allMaterialsSnapshot || allMaterialsSnapshot.empty) {
-      alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
+      if (!allMaterialsSnapshot || allMaterialsSnapshot.empty) {
+        alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
       return null;
-    }
+      }
 
-    const relevantMaterials: any[] = [];
+      const relevantMaterials: any[] = [];
       const locationSet = new Set<string>();
       let matchedMaterial: any = null;
 
@@ -2907,10 +2907,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
-    if (!matchedMaterial) {
-      if (!poNumber) {
-        alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
-      } else {
+      if (!matchedMaterial) {
+        if (!poNumber) {
+          alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
+        } else {
         const imdLine = imdKey ? `\nIMD: ${imdKey}` : '';
         alert(
           `❌ Không tìm thấy material đúng theo Mã + PO${imdKey ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`
@@ -2932,22 +2932,22 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     suggestedLocations: string[],
     imd: string
   ): void {
-    this.foundMaterialsForStore = [matchedMaterial];
-    this.selectedMaterialForStore = matchedMaterial;
+      this.foundMaterialsForStore = [matchedMaterial];
+      this.selectedMaterialForStore = matchedMaterial;
     this.setLastScannedMaterialForMobile(matchedMaterial);
     this.scannedIMDForStore = imd || '';
-    this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
+      this.storeMaterialPOStock = matchedMaterial.stock ?? 0;
 
-    const stockByLoc = new Map<string, number>();
-    relevantMaterials.forEach(m => {
-      const loc = (m.location || '').trim();
-      if (!loc) return;
-      const current = stockByLoc.get(loc) ?? 0;
-      stockByLoc.set(loc, current + (m.stock ?? 0));
-    });
-    this.storeMaterialStockByLocation = Array.from(stockByLoc.entries())
-      .map(([location, stock]) => ({ location, stock }))
-      .sort((a, b) => a.location.localeCompare(b.location));
+      const stockByLoc = new Map<string, number>();
+      relevantMaterials.forEach(m => {
+        const loc = (m.location || '').trim();
+        if (!loc) return;
+        const current = stockByLoc.get(loc) ?? 0;
+        stockByLoc.set(loc, current + (m.stock ?? 0));
+      });
+      this.storeMaterialStockByLocation = Array.from(stockByLoc.entries())
+        .map(([location, stock]) => ({ location, stock }))
+        .sort((a, b) => a.location.localeCompare(b.location));
 
     this.suggestedLocations = suggestedLocations;
     void this.updateStoreMaterialFactoryInUse(matchedMaterial.materialCode);
@@ -3136,7 +3136,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.storeMaterialBatchQRInput = '';
       this.applyLocationRuleToSelectedMaterial();
       this.storeMaterialQRInput = '';
-
+      
       setTimeout(() => {
         const locationInput = document.querySelector('.location-input') as HTMLInputElement;
         locationInput?.focus();
@@ -3801,16 +3801,16 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const ruleExempt = this.isTargetRuleExempt(newLocationRaw, this.bulkUseAsm3);
       if (!ruleExempt) {
-        if (!this.validateViTriInput(newLocationRaw)) {
-          alert('❌ Vị trí mới không hợp lệ');
-          return;
-        }
-        const locationExists = this.locationItems.some(item =>
-          this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocationRaw)
-        );
-        if (!locationExists) {
-          alert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
-          return;
+      if (!this.validateViTriInput(newLocationRaw)) {
+        alert('❌ Vị trí mới không hợp lệ');
+        return;
+      }
+      const locationExists = this.locationItems.some(item =>
+        this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocationRaw)
+      );
+      if (!locationExists) {
+        alert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
+        return;
         }
       }
 

@@ -136,8 +136,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   woHeatmapDays: WoHeatmapDayCol[] = [];
   /** 6 cột T2–T7 riêng cho LSX Sample (Sample 1/Sample 2) — tách khỏi heatmap chính */
   woSampleHeatmapDays: WoHeatmapDayCol[] = [];
-  /** 0 = tuần hiện tại, -1 = tuần trước */
+  /** -1 = tuần trước, 0 = tuần này, +1 = tuần tới */
   woHeatmapWeekOffset = 0;
+  private readonly woHeatmapWeekOffsetMin = -1;
+  private readonly woHeatmapWeekOffsetMax = 1;
   /** Hiển thị tooltip heatmap — khớp `createdByPickerOptions` tab Work Order Status */
   private readonly woCreatedByLabels: Record<string, string> = {
     TÌNH: 'Tình',
@@ -1130,13 +1132,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const fmt = (d: Date) =>
       d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
     const range = `${fmt(monday)}–${fmt(saturday)}`;
-    return this.woHeatmapWeekOffset === 0
-      ? `Tuần này · ${range}`
-      : `Tuần trước · ${range}`;
+    if (this.woHeatmapWeekOffset < 0) return `Tuần trước · ${range}`;
+    if (this.woHeatmapWeekOffset > 0) return `Tuần tới · ${range}`;
+    return `Tuần này · ${range}`;
   }
 
-  toggleWoHeatmapWeek(): void {
-    this.woHeatmapWeekOffset = this.woHeatmapWeekOffset === 0 ? -1 : 0;
+  get woCanGoPrevWeek(): boolean {
+    return this.woHeatmapWeekOffset > this.woHeatmapWeekOffsetMin;
+  }
+
+  get woCanGoNextWeek(): boolean {
+    return this.woHeatmapWeekOffset < this.woHeatmapWeekOffsetMax;
+  }
+
+  shiftWoHeatmapWeek(delta: number): void {
+    const next = this.woHeatmapWeekOffset + delta;
+    if (next < this.woHeatmapWeekOffsetMin || next > this.woHeatmapWeekOffsetMax) return;
+    this.woHeatmapWeekOffset = next;
     this.refreshWoHeatmap();
     this.cdr.detectChanges();
   }

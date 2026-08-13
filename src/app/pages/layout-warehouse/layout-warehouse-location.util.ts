@@ -34,14 +34,15 @@ export function isAsm3PrefixLocation(loc: string): boolean {
 }
 
 /**
- * Vị trí thuộc kho ASM3 theo 1 trong 2 cách ghi đang tồn tại trong thực tế:
- * - "ASM3..." (quy ước cũ, dùng trong cột Vị trí ở Materials ASM1/ASM2)
- * - "WH3..." (tên ô thực tế trên sơ đồ kho ASM3, VD WH3-A1)
- * Dùng cho "Kiểm tra vị trí nhà máy": cả 2 tiền tố đều coi là đúng nhà máy ASM3.
+ * Vị trí thuộc kho ASM3 theo các cách ghi đang tồn tại trong thực tế:
+ * - "ASM3..." (cột Vị trí Materials ASM1/ASM2)
+ * - "WH3..." (ô sơ đồ kho ASM3, VD WH3-A1)
+ * - "F3-A1" / "F3A1" (mã cũ trước khi đổi F3 → WH3)
  */
 export function isAsm3OrWh3PrefixLocation(loc: string): boolean {
   const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
-  return raw.startsWith('ASM3') || raw.startsWith('WH3');
+  if (raw.startsWith('ASM3') || raw.startsWith('WH3')) return true;
+  return /^F3[-_]?[A-IK-L]\d{1,2}/.test(raw);
 }
 
 /** Bỏ tiền tố ASM3 (+ / - / dính liền). */

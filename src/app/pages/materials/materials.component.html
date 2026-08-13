@@ -112,7 +112,9 @@
             <div class="mat-m-card__chips">
               <span class="mat-m-chip" *ngIf="material.poNumber">PO {{ material.poNumber }}</span>
               <span class="mat-m-chip mat-m-chip--loc" *ngIf="material.location">
-                <i class="material-icons">place</i><span class="location-text">{{ formatLocationDisplay(material.location) }}</span>
+                <i class="material-icons">place</i>
+                <span class="location-text">{{ primaryLocationDisplay(material.location) }}</span>
+                <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">+{{ locationExtraCount(material.location) }}</span>
               </span>
               <span class="mat-m-chip" *ngIf="getDisplayIMD(material) as imd">IMD {{ imd }}</span>
             </div>
@@ -231,11 +233,13 @@
             <i class="material-icons rotating">sync</i>
             <span>Đang KK {{ selectedFactory }}…</span>
           </div>
-          <div class="kk-inline-box kk-inline-box--done" *ngIf="!kkCheckRunning && kkCheckRan"
-               [title]="'Tiến độ Kiểm Kê ' + selectedFactory + ': ' + (kkCheckCheckedRows) + '/' + kkCheckTotalRows + ' mã đã KK đủ'">
+          <div class="kk-inline-box kk-inline-box--done kk-inline-box--click" *ngIf="!kkCheckRunning && kkCheckRan"
+               (click)="openKkListFromBanner($event)"
+               role="button"
+               [title]="'Bấm để xem ' + kkTickedCountLabel + ' dòng đang tick KK'">
             <i class="material-icons">fact_check</i>
             <span>KK {{ kkCheckProgressPercent | number:'1.0-0' }}% · {{ kkCheckCheckedRows | number }}/{{ kkCheckTotalRows | number }} mã</span>
-            <button type="button" class="kk-inline-box__close" (click)="clearKkInlineBanner()" title="Đóng" aria-label="Đóng">
+            <button type="button" class="kk-inline-box__close" (click)="clearKkInlineBanner(); $event.stopPropagation()" title="Đóng" aria-label="Đóng">
               <i class="material-icons">close</i>
             </button>
           </div>
@@ -309,6 +313,15 @@
             <i class="material-icons">groups</i>
             <span>{{ searchByCustomer && searchTerm ? searchTerm : 'KH' }}</span>
           </button>
+          <button type="button"
+                  class="filter-chip"
+                  [class.active]="searchByKk"
+                  (click)="toggleKkCheckedFilter()"
+                  [disabled]="isLoading"
+                  title="Hiện các dòng đang tick KK">
+            <i class="material-icons">fact_check</i>
+            <span>{{ searchByKk ? ('KK · ' + filteredInventory.length) : 'KK' }}</span>
+          </button>
           <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
             <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
             <i class="material-icons">visibility</i>
@@ -317,9 +330,9 @@
           <!-- Search Type Selector (Mã / PO) -->
           <button type="button" class="search-type-btn"
                   (click)="cycleSearchType()"
-                  [disabled]="searchByLocation || searchByCustomer"
-                  [class.is-disabled]="searchByLocation || searchByCustomer"
-                  [title]="(searchByLocation || searchByCustomer) ? 'Bỏ tick Location/KH để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
+                  [disabled]="searchByLocation || searchByCustomer || searchByKk"
+                  [class.is-disabled]="searchByLocation || searchByCustomer || searchByKk"
+                  [title]="(searchByLocation || searchByCustomer || searchByKk) ? 'Bỏ lọc Location/KH/KK để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
             <i class="material-icons">{{ searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place' }}</i>
             {{ searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí' }}
           </button>
@@ -389,6 +402,15 @@
           <i class="material-icons">groups</i>
           <span class="btn-label">{{ searchByCustomer && searchTerm ? searchTerm : 'KH' }}</span>
         </button>
+        <button type="button"
+                class="filter-chip"
+                [class.active]="searchByKk"
+                (click)="toggleKkCheckedFilter()"
+                [disabled]="isLoading"
+                title="Hiện các dòng đang tick KK">
+          <i class="material-icons">fact_check</i>
+          <span class="btn-label">{{ searchByKk ? ('KK · ' + filteredInventory.length) : 'KK' }}</span>
+        </button>
         <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
           <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
           <i class="material-icons">visibility</i>
@@ -397,9 +419,9 @@
         <!-- Search Type Selector (Mã / PO) -->
         <button type="button" class="search-type-btn"
                 (click)="cycleSearchType()"
-                [disabled]="searchByLocation || searchByCustomer"
-                [class.is-disabled]="searchByLocation || searchByCustomer"
-                [title]="(searchByLocation || searchByCustomer) ? 'Bỏ tick Location/KH để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
+                [disabled]="searchByLocation || searchByCustomer || searchByKk"
+                [class.is-disabled]="searchByLocation || searchByCustomer || searchByKk"
+                [title]="(searchByLocation || searchByCustomer || searchByKk) ? 'Bỏ lọc Location/KH/KK để đổi Mã/PO' : ('Tìm theo: ' + (searchType === 'material' ? 'Mã hàng' : searchType === 'po' ? 'PO' : 'Vị trí'))">
           <i class="material-icons">{{ searchType === 'material' ? 'inventory' : searchType === 'po' ? 'receipt' : 'place' }}</i>
           <span class="btn-label">{{ searchType === 'material' ? 'Mã' : searchType === 'po' ? 'PO' : 'Vị trí' }}</span>
         </button>
@@ -455,7 +477,7 @@
                   type="button"
                   (click)="runKkCheckOnInventory()"
                   [disabled]="kkCheckRunning"
-                  title="Chạy tiến độ Kiểm Kê trên Inventory (theo nhà máy đang chọn)">
+                  title="Chạy tiến độ Kiểm Kê — xong sẽ hiện danh sách đang tick KK">
             <i class="material-icons" [class.rotating]="kkCheckRunning">{{ kkCheckRunning ? 'sync' : 'fact_check' }}</i>
             <span class="btn-label">{{ kkCheckRunning ? 'Đang KK...' : 'Kiểm Kê' }}</span>
           </button>
@@ -591,7 +613,10 @@
           <div class="info-row location-row">
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="value location-text" *ngIf="!isLocationColumnUnlocked">{{ formatLocationDisplay(material.location) }}</span>
+              <span class="value location-text" *ngIf="!isLocationColumnUnlocked">
+                {{ primaryLocationDisplay(material.location) }}
+                <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">+{{ locationExtraCount(material.location) }}</span>
+              </span>
               <textarea *ngIf="isLocationColumnUnlocked"
                      class="mobile-input location-input location-textarea"
                      rows="2"
@@ -705,7 +730,7 @@
                 <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
               </button>
             </th>
-            <th title="Mã pallet — gán từ Layout Warehouse ASM3">Pallet</th>
+            <th title="Số pallet — sửa sau khi mở khóa cột Vị trí">Pallet</th>
             <th>Change</th>
             <th>Loại Hình</th>
             <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
@@ -851,18 +876,44 @@
             <td class="location-cell"
                 [class.iqc-location]="isIQCLocation(material.location)"
                 [class.readonly-cell]="!isLocationColumnUnlocked"
-                [title]="isLocationColumnUnlocked ? 'Sửa vị trí (blur/Enter để lưu)' : 'Click ổ khóa ở cột Vị trí để mở sửa (mã Zalo OTP)'">
-              <span class="location-text" *ngIf="!isLocationColumnUnlocked">{{ formatLocationDisplay(material.location) }}</span>
-              <textarea *ngIf="isLocationColumnUnlocked"
+                [title]="isLocationColumnUnlocked ? 'Tick để chọn vị trí layout, hoặc nhập tay' : (locationExtraCount(material.location) > 0 ? 'Rê chuột để xem thêm vị trí' : 'Click ổ khóa ở cột Vị trí để mở sửa (mã Zalo OTP)')">
+              <div class="location-display" *ngIf="!isLocationColumnUnlocked">
+                <span class="location-text">{{ primaryLocationDisplay(material.location) }}</span>
+                <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">
+                  +{{ locationExtraCount(material.location) }}
+                </span>
+                <div class="location-popover" *ngIf="locationExtraCount(material.location) > 0" role="tooltip">
+                  <div class="location-popover__item" *ngFor="let loc of locationParts(material.location)">{{ loc }}</div>
+                </div>
+              </div>
+              <div class="location-edit-wrap" *ngIf="isLocationColumnUnlocked">
+                <input
+                  type="checkbox"
+                  class="location-pick-tick"
+                  [checked]="isLayoutLocPickerRow(material)"
+                  (click)="openLayoutLocPicker(material, $event)"
+                  title="Chọn vị trí từ layout ASM1 / ASM3 / J" />
+                <textarea
                      class="editable-cell location-input location-textarea"
                      rows="2"
                      [(ngModel)]="material.location"
                      (focus)="rememberLocationBeforeEdit(material)"
                      (blur)="onLocationChange(material)"
                      placeholder="Mỗi vị trí 1 dòng"></textarea>
+              </div>
             </td>
-            <td class="pallet-cell" [title]="material.palletId || 'Chưa gán pallet'">
-              {{ material.palletId || '—' }}
+            <td class="pallet-cell" [title]="isLocationColumnUnlocked ? 'Nhập số pallet rồi Enter/blur để lưu' : (material.palletId || 'Chưa gán pallet')">
+              <input
+                *ngIf="isLocationColumnUnlocked"
+                type="text"
+                class="editable-cell pallet-input"
+                [(ngModel)]="material.palletId"
+                (focus)="rememberPalletBeforeEdit(material)"
+                (blur)="onPalletBlur(material)"
+                (keydown.enter)="onPalletKeyEnter(material, $event)"
+                placeholder="P0001"
+                autocomplete="off" />
+              <ng-container *ngIf="!isLocationColumnUnlocked">{{ material.palletId || '—' }}</ng-container>
             </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
@@ -899,9 +950,9 @@
             </td>
             <td class="kk-cell">
               <input type="checkbox"
-                     [checked]="material.kkChecked"
+                     [checked]="!!material.kkChecked"
                      [disabled]="!canEdit"
-                     (change)="toggleKk(material)"
+                     (click)="onDesktopKkClick(material, $event)"
                      [title]="getKkTitle(material)">
             </td>
             <td class="status-cell">
@@ -958,7 +1009,15 @@
       </table>
 
       <!-- Empty State - Search First Approach -->
-      <div class="empty-state" *ngIf="!searchTerm && filteredInventory.length === 0 && !isLoading">
+      <div class="empty-state" *ngIf="searchByKk && filteredInventory.length === 0 && !isLoading">
+        <div class="empty-state-content">
+          <i class="material-icons">fact_check</i>
+          <h3>Không có dòng đang tick KK</h3>
+          <p>{{ selectedFactory }} — bấm KK lần nữa để tắt lọc.</p>
+        </div>
+      </div>
+
+      <div class="empty-state" *ngIf="!searchByKk && !searchTerm && filteredInventory.length === 0 && !isLoading">
         <div class="empty-state-content">
           <i class="material-icons">search</i>
           <h3>🔍 Tìm kiếm {{ selectedFactory }} Inventory</h3>
@@ -2037,6 +2096,70 @@
   </div>
 </div>
 
+<!-- Popup chọn vị trí layout (desktop, sau khi mở khóa) -->
+<div class="modal-overlay more-overlay" *ngIf="showLayoutLocPicker && layoutLocMaterial && !isMobile" (click)="closeLayoutLocPicker()">
+  <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí layout">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">view_module</i>
+        </span>
+        <div>
+          <h3>Chọn vị trí kệ</h3>
+          <p class="more-popup-header__sub">{{ layoutLocMaterial.materialCode }} · {{ layoutLocMaterial.poNumber || '—' }}</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeLayoutLocPicker()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body layout-loc-picker__body">
+      <div class="layout-loc-wh" role="tablist" aria-label="Kho layout">
+        <button
+          type="button"
+          class="layout-loc-wh__btn"
+          *ngFor="let wh of layoutWhOptions"
+          [class.layout-loc-wh__btn--on]="layoutLocWh === wh.id"
+          (click)="setLayoutLocWh(wh.id)">
+          {{ wh.label }}
+        </button>
+      </div>
+      <div class="layout-loc-groups">
+        <button
+          type="button"
+          class="layout-loc-group"
+          *ngFor="let g of layoutLocGroups"
+          [class.layout-loc-group--on]="layoutLocActiveGroup?.id === g.id"
+          (click)="setLayoutLocGroup(g.id)">
+          {{ g.label }}
+        </button>
+      </div>
+      <div class="hidden-search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="layoutLocQuery" placeholder="Lọc ô kệ…" autocomplete="off" />
+      </div>
+      <div class="layout-loc-slots">
+        <label class="layout-loc-slot" *ngFor="let slot of layoutLocFilteredSlots">
+          <input type="checkbox" [checked]="isLayoutLocSlotOn(slot)" (change)="toggleLayoutLocSlot(slot)" />
+          <span>{{ slot }}</span>
+        </label>
+        <p class="hidden-empty" *ngIf="!layoutLocFilteredSlots.length">Không có ô kệ khớp.</p>
+      </div>
+      <label class="layout-loc-pallet">
+        <span>Số pallet</span>
+        <input type="text" [(ngModel)]="layoutLocPalletDraft" placeholder="VD: P0001" autocomplete="off" />
+      </label>
+    </div>
+    <div class="filter-picker-footer">
+      <span class="layout-loc-count">Đã chọn {{ layoutLocSelected.size }}</span>
+      <button type="button" class="cancel-btn" (click)="closeLayoutLocPicker()">Đóng</button>
+      <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!layoutLocSelected.size">
+        <i class="material-icons">check</i> Done
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Popup lọc vị trí -->
 <div class="modal-overlay more-overlay" *ngIf="showLocationFilterPopup" (click)="closeLocationFilterPopup()">
   <div class="modal-content filter-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí">
@@ -2047,7 +2170,7 @@
         </span>
         <div>
           <h3>Lọc theo vị trí</h3>
-          <p class="more-popup-header__sub">A–G: nhóm 3 ký tự · H trở đi: nhóm 4 ký tự (bỏ dấu . , - ( ))</p>
+          <p class="more-popup-header__sub">WH3 · IQC · LOCKER · NG · TRA · A12 · Q1–Q3 · A–G 3 ký tự · H+ 4 ký tự</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeLocationFilterPopup()" aria-label="Đóng">

@@ -132,14 +132,25 @@
                 <i class="material-icons">refresh</i>
                 {{ woStatusLoading ? 'Đang tải...' : 'Run' }}
               </button>
-              <button
-                type="button"
-                class="dash-widget__pill dash-widget__pill--btn"
-                (click)="toggleWoHeatmapWeek()"
-                [attr.title]="woHeatmapWeekOffset === 0 ? 'Xem tuần trước' : 'Về tuần này'">
-                <span>{{ woWeekPillLabel }}</span>
-                <i class="material-icons">expand_more</i>
-              </button>
+              <div class="dash-widget__week-nav" role="group" aria-label="Chọn tuần Work Order">
+                <button
+                  type="button"
+                  class="dash-widget__week-nav-btn"
+                  (click)="shiftWoHeatmapWeek(-1)"
+                  [disabled]="!woCanGoPrevWeek"
+                  title="Tuần trước">
+                  <i class="material-icons">chevron_left</i>
+                </button>
+                <span class="dash-widget__pill"><span>{{ woWeekPillLabel }}</span></span>
+                <button
+                  type="button"
+                  class="dash-widget__week-nav-btn"
+                  (click)="shiftWoHeatmapWeek(1)"
+                  [disabled]="!woCanGoNextWeek"
+                  title="Tuần tới">
+                  <i class="material-icons">chevron_right</i>
+                </button>
+              </div>
             </div>
           </div>
         </header>

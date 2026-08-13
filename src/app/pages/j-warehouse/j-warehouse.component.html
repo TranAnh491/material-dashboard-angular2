@@ -5,30 +5,62 @@
         <div class="jw-header__logo"><i class="material-icons">warehouse</i></div>
         <div>
           <strong class="jw-header__title">J Warehouse</strong>
-          <span class="jw-header__crumb">Sơ đồ kho · {{ LENGTH_M }}m × {{ WIDTH_M }}m</span>
+          <span class="jw-header__crumb">{{ headerCrumb }}</span>
         </div>
       </div>
 
       <div class="jw-kpi-strip">
         <div class="jw-kpi">
-          <strong class="jw-kpi__num">{{ LENGTH_M }}m</strong>
-          <span class="jw-kpi__lbl">Dài (A ↔ D)</span>
+          <strong class="jw-kpi__num">{{ rackCount }}</strong>
+          <span class="jw-kpi__lbl">{{ t('kpi.racks') }}</span>
         </div>
         <div class="jw-kpi-divider"></div>
-        <div class="jw-kpi">
-          <strong class="jw-kpi__num">{{ WIDTH_M }}m</strong>
-          <span class="jw-kpi__lbl">Rộng (B ↔ C)</span>
-        </div>
+        <button type="button" class="jw-kpi jw-kpi--btn" (click)="openExtraPalletModal($event)" title="Nhập pallet ngoài">
+          <strong class="jw-kpi__num">{{ totalPalletsJ5 | number }}</strong>
+          <span class="jw-kpi__lbl">{{ t('kpi.totalPallets') }}</span>
+        </button>
         <div class="jw-kpi-divider"></div>
         <div class="jw-kpi">
-          <strong class="jw-kpi__num">1</strong>
-          <span class="jw-kpi__lbl">Kho</span>
+          <strong class="jw-kpi__num">{{ occupiedCount | number }}</strong>
+          <span class="jw-kpi__lbl">{{ t('kpi.assigned') }}</span>
         </div>
       </div>
 
       <div class="jw-header__right">
+        <div class="jw-draw-modes jw-lang-modes" role="tablist" [attr.aria-label]="lang === 'vi' ? 'Ngôn ngữ' : 'Language'">
+          <button
+            type="button"
+            class="jw-draw-mode"
+            *ngFor="let lo of langOptions"
+            role="tab"
+            [class.jw-draw-mode--on]="lang === lo.id"
+            [attr.aria-selected]="lang === lo.id"
+            (click)="setLang(lo.id, $event)">
+            {{ lo.label }}
+          </button>
+        </div>
+        <div class="jw-draw-modes jw-building-modes" role="tablist" aria-label="Xưởng hiển thị">
+          <button
+            type="button"
+            class="jw-draw-mode"
+            *ngFor="let bv of buildingViews"
+            role="tab"
+            [class.jw-draw-mode--on]="buildingView === bv.id"
+            [attr.aria-selected]="buildingView === bv.id"
+            (click)="setBuildingView(bv.id, $event)">
+            {{ bv.label }}
+          </button>
+        </div>
+        <button
+          type="button"
+          class="jw-btn jw-btn--outline"
+          [class.jw-btn--on]="show3D"
+          (click)="toggle3D($event)"
+          title="Bấm vào 1 kệ để xem mô hình 3D">
+          <i class="material-icons">view_in_ar</i> 3D
+        </button>
         <button type="button" class="jw-btn jw-btn--outline" (click)="goBack()">
-          <i class="material-icons">arrow_back</i> Back
+          <i class="material-icons">arrow_back</i> {{ t('btn.back') }}
         </button>
         <button type="button" class="jw-btn jw-btn--outline" (click)="goToMenu()">
           <i class="material-icons">home</i> Về Menu
@@ -37,105 +69,1231 @@
     </header>
 
     <div class="jw-workspace">
+      <aside class="jw-tools" aria-label="Công cụ bản vẽ">
+        <button
+          type="button"
+          class="jw-tools__btn"
+          *ngFor="let tool of mapTools"
+          [class.jw-tools__btn--on]="mapTool === tool.id"
+          [title]="t(tool.labelKey)"
+          (click)="setMapTool(tool.id, $event)">
+          <i class="material-icons">{{ tool.icon }}</i>
+          <span>{{ t(tool.labelKey) }}</span>
+        </button>
+        <button
+          type="button"
+          class="jw-tools__btn"
+          [title]="t('tool.print')"
+          (click)="printDrawing($event)">
+          <i class="material-icons">print</i>
+          <span>{{ t('tool.print') }}</span>
+        </button>
+      </aside>
+
       <section class="jw-map">
         <div class="jw-map__toolbar">
-          <h2>Mặt bằng kho</h2>
-          <span class="jw-map__hint">Cạnh A–D đã gắn · chờ hướng dẫn bố trí bên trong</span>
+          <div>
+            <div class="jw-map__title-row">
+              <h2>{{ drawModeTitle }}</h2>
+              <div class="jw-map__mode-row">
+                <div class="jw-draw-modes jw-building-modes jw-building-modes--toolbar" role="tablist" aria-label="Xưởng hiển thị">
+                  <button
+                    type="button"
+                    class="jw-draw-mode"
+                    *ngFor="let bv of buildingViews"
+                    role="tab"
+                    [class.jw-draw-mode--on]="buildingView === bv.id"
+                    [attr.aria-selected]="buildingView === bv.id"
+                    (click)="setBuildingView(bv.id, $event)">
+                    {{ bv.label }}
+                  </button>
+                </div>
+                <div class="jw-draw-modes jw-draw-modes--toolbar" role="tablist" aria-label="Loại bản vẽ" *ngIf="!workMode">
+                  <button
+                    type="button"
+                    class="jw-draw-mode"
+                    *ngFor="let id of drawModeIds"
+                    role="tab"
+                    [class.jw-draw-mode--on]="drawMode === id"
+                    [attr.aria-selected]="drawMode === id"
+                    (click)="setDrawMode(id, $event)">
+                    {{ drawModeLabel(id) }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="jw-map__tools" (click)="$event.stopPropagation()">
+            <button
+              type="button"
+              class="jw-btn jw-btn--work"
+              [class.jw-btn--on]="workMode"
+              (click)="toggleWorkMode($event)"
+              [title]="t('work.hint')">
+              <i class="material-icons">work</i> {{ t('btn.work') }}
+            </button>
+            <button
+              type="button"
+              class="jw-btn jw-btn--outline"
+              [disabled]="isDownloading"
+              (click)="downloadDrawing($event)"
+              title="Tải về bản vẽ + Thông tin kho (PNG)">
+              <i class="material-icons">download</i>
+              {{ isDownloading ? t('btn.downloading') : t('btn.download') }}
+            </button>
+            <div class="jw-zoom">
+              <button type="button" class="jw-icon-btn" (click)="onZoomBtn(-0.2, $event)" title="Thu nhỏ">
+                <i class="material-icons">remove</i>
+              </button>
+              <span>{{ (zoom * 100) | number:'1.0-0' }}%</span>
+              <button type="button" class="jw-icon-btn" (click)="onZoomBtn(0.2, $event)" title="Phóng to">
+                <i class="material-icons">add</i>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="jw-icon-btn"
+              (click)="resetZoom(); $event.stopPropagation()"
+              [title]="t('zoom.fit')">
+              <i class="material-icons">filter_center_focus</i>
+            </button>
+            <button
+              type="button"
+              class="jw-icon-btn"
+              (click)="toggleMapFullscreen($event)"
+              [title]="t('zoom.fullscreen')">
+              <i class="material-icons">open_in_full</i>
+            </button>
+          </div>
         </div>
 
-        <div class="jw-viewport">
-          <svg
-            class="jw-svg"
-            [attr.viewBox]="viewBox"
-            preserveAspectRatio="xMidYMid meet"
-            role="img"
-            [attr.aria-label]="'Sơ đồ J Warehouse ' + LENGTH_M + ' mét dài, ' + WIDTH_M + ' mét rộng'">
-            <!-- Nền sàn -->
-            <rect
-              class="jw-floor"
-              [attr.x]="floor.x"
-              [attr.y]="floor.y"
-              [attr.width]="floor.w"
-              [attr.height]="floor.h"
-              rx="4" />
+        <div
+          #mapViewport
+          class="jw-viewport"
+          [class.jw-viewport--pan]="mapTool === 'pan'"
+          [class.jw-viewport--panning]="isPanning"
+          (click)="onViewportClick($event)"
+          (wheel)="onViewportWheel($event)"
+          (pointerdown)="onViewportPointerDown($event)"
+          (pointermove)="onViewportPointerMove($event)"
+          (pointerup)="onViewportPointerUp()"
+          (pointercancel)="onViewportPointerUp()">
+          <div class="jw-zoom-space" [style.width.px]="viewBoxW * zoom" [style.height.px]="viewBoxH * zoom">
+              <svg
+                #planSvg
+                class="jw-svg"
+                [class.jw-svg--tech]="showTechDims"
+                [class.jw-svg--work]="workMode"
+                [attr.viewBox]="viewBox"
+                [attr.width]="viewBoxW * zoom"
+                [attr.height]="viewBoxH * zoom"
+                preserveAspectRatio="xMinYMin meet"
+                role="img"
+                [attr.aria-label]="drawModeTitle + ' J Warehouse ' + LENGTH_M + ' × ' + WIDTH_M + ' mét'">
+              <defs>
+                <marker id="jwDimArrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L9,4 L0,8 Z" fill="#000000" />
+                </marker>
+                <marker id="jwCabArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L8,4 L0,8 Z" fill="#000000" />
+                </marker>
+              </defs>
 
-            <!-- Grid mỗi 5m -->
-            <g class="jw-grid" aria-hidden="true">
-              <line
-                *ngFor="let m of gridX"
-                [attr.x1]="meterX(m)"
-                [attr.y1]="floor.y"
-                [attr.x2]="meterX(m)"
-                [attr.y2]="floor.y + floor.h" />
-              <line
-                *ngFor="let m of gridY"
-                [attr.x1]="floor.x"
-                [attr.y1]="meterY(m)"
-                [attr.x2]="floor.x + floor.w"
-                [attr.y2]="meterY(m)" />
-            </g>
+              <!-- Mặt D — đầu xưởng J4 / J5 (dùng chung) -->
+              <ng-template #faceDEnd let-isJ4="isJ4" let-tag="tag" let-edgeLabY="edgeLabY">
+                <g class="jw-face-d-end" aria-hidden="true">
+                  <line
+                    class="jw-face-d-end__wall"
+                    [attr.x1]="faceDWallX()"
+                    [attr.y1]="faceDMapY(0, isJ4)"
+                    [attr.x2]="faceDWallX()"
+                    [attr.y2]="faceDMapY(WIDTH_M, isJ4)" />
 
-            <!-- Viền tường -->
-            <rect
-              class="jw-wall"
-              [attr.x]="floor.x"
-              [attr.y]="floor.y"
-              [attr.width]="floor.w"
-              [attr.height]="floor.h"
-              rx="4" />
+                  <!-- Tủ điện — trong xưởng; icon trong ô, nhãn ngoài + mũi tên -->
+                  <rect
+                    class="jw-face-d-end__cab"
+                    [attr.x]="faceDInX(FACE_D_CAB_DEPTH_M)"
+                    [attr.y]="faceDMapY(faceDCabinetZone.y0, isJ4)"
+                    [attr.width]="faceDOutW(FACE_D_CAB_DEPTH_M)"
+                    [attr.height]="faceDMapH(faceDCabinetZone.y1 - faceDCabinetZone.y0, isJ4)" />
+                  <line
+                    class="jw-face-d-end__cab-leader"
+                    marker-end="url(#jwCabArrow)"
+                    [attr.x1]="faceDOutX(1.35)"
+                    [attr.y1]="faceDMapY(faceDCabMidY(), isJ4)"
+                    [attr.x2]="faceDCabOuterX()"
+                    [attr.y2]="faceDMapY(faceDCabMidY(), isJ4)" />
+                  <text
+                    class="jw-face-d-end__cab-label"
+                    [attr.x]="faceDOutX(1.42)"
+                    [attr.y]="faceDMapY(faceDCabMidY(), isJ4)">
+                    {{ t('faceD.cabinet') }}
+                  </text>
+                  <g
+                    [attr.transform]="
+                      'translate(' +
+                      faceDInX(FACE_D_CAB_DEPTH_M / 2) +
+                      ' ' +
+                      faceDMapY(faceDCabMidY(), isJ4) +
+                      ') scale(' +
+                      faceDCabIconScale(isJ4) +
+                      ') translate(-12 -12)'
+                    ">
+                    <path class="jw-face-d-end__cab-icon" [attr.d]="electricIconPath" />
+                  </g>
 
-            <!-- Nhãn cạnh: trái A, phải D, trên C, dưới B -->
-            <text class="jw-edge-label" [attr.x]="floor.x - 18" [attr.y]="floor.y + floor.h / 2">A</text>
-            <text class="jw-edge-label" [attr.x]="floor.x + floor.w + 18" [attr.y]="floor.y + floor.h / 2">D</text>
-            <text class="jw-edge-label" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y - 14">C</text>
-            <text class="jw-edge-label" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 22">B</text>
+                  <text
+                    class="jw-face-d-end__tag"
+                    [attr.x]="faceDEndTagX()"
+                    [attr.y]="faceDEndTagY(isJ4)">
+                    {{ tag }}
+                  </text>
 
-            <!-- Kích thước dài A↔D -->
-            <g class="jw-dim">
-              <line
-                [attr.x1]="floor.x"
-                [attr.y1]="floor.y + floor.h + 40"
-                [attr.x2]="floor.x + floor.w"
-                [attr.y2]="floor.y + floor.h + 40" />
-              <text [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 56">{{ LENGTH_M }} m (A ↔ D)</text>
-            </g>
+                  <g *ngFor="let ax of (isJ4 ? j4AxisXMarks : axisXMarks); trackBy: trackAxis">
+                    <line
+                      class="jw-axis__line"
+                      [attr.x1]="isJ4 ? j4X : floor.x + floor.w"
+                      [attr.y1]="faceDMapY(ax.yM || 0, isJ4)"
+                      [attr.x2]="faceDOutX(FACE_D_END_OUT_M) + 48"
+                      [attr.y2]="faceDMapY(ax.yM || 0, isJ4)" />
+                    <circle
+                      class="jw-axis__dot"
+                      [attr.cx]="faceDOutX(FACE_D_END_OUT_M) + 48"
+                      [attr.cy]="faceDMapY(ax.yM || 0, isJ4)"
+                      r="9" />
+                    <text
+                      class="jw-axis__id"
+                      [attr.x]="faceDOutX(FACE_D_END_OUT_M) + 48"
+                      [attr.y]="faceDMapY(ax.yM || 0, isJ4)">
+                      {{ ax.id }}
+                    </text>
+                  </g>
+                </g>
+              </ng-template>
 
-            <!-- Kích thước rộng B↔C -->
-            <g class="jw-dim">
-              <line
-                [attr.x1]="floor.x + floor.w + 40"
-                [attr.y1]="floor.y"
-                [attr.x2]="floor.x + floor.w + 40"
-                [attr.y2]="floor.y + floor.h" />
-              <text
-                [attr.x]="floor.x + floor.w + 54"
-                [attr.y]="floor.y + floor.h / 2"
-                [attr.transform]="'rotate(90 ' + (floor.x + floor.w + 54) + ' ' + (floor.y + floor.h / 2) + ')'">
-                {{ WIDTH_M }} m (B ↔ C)
-              </text>
-            </g>
+              <!-- Xưởng J4 — chung vách C với J5, cùng kích cỡ, chưa bố trí kệ/văn phòng/cầu thang -->
+              <g class="jw-j4" *ngIf="showJ4" aria-hidden="true">
+                <rect
+                  class="jw-j4__floor"
+                  [attr.x]="j4X"
+                  [attr.y]="j4Y"
+                  [attr.width]="j4W"
+                  [attr.height]="j4H" />
+                <line
+                  *ngFor="let m of gridX"
+                  class="jw-j4__grid-line"
+                  [attr.x1]="meterX(m)"
+                  [attr.y1]="j4Y"
+                  [attr.x2]="meterX(m)"
+                  [attr.y2]="j4Y + j4H" />
+                <line
+                  *ngFor="let m of gridY"
+                  class="jw-j4__grid-line"
+                  [attr.x1]="j4X"
+                  [attr.y1]="j4MeterY(m)"
+                  [attr.x2]="j4X + j4W"
+                  [attr.y2]="j4MeterY(m)" />
 
-            <text class="jw-center-note" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h / 2">
-              J Warehouse
-            </text>
-          </svg>
+                <!-- Khu J4: Y01–Y02 KHP · Y02–Y04 phế liệu · Y04–Y07 Kho Admin -->
+                <g *ngFor="let z of j4FloorZones; trackBy: trackFloorZone">
+                  <rect
+                    class="jw-floor-zone__body"
+                    [class.jw-floor-zone__body--solid]="z.id === 'j4-cold-storage'"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="j4MeterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
+                  <text
+                    class="jw-floor-zone__label"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 - 5">
+                    <tspan
+                      *ngFor="let line of z.labelLines; let i = index"
+                      [attr.x]="meterX(z.xM + z.wM / 2)"
+                      [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
+                      {{ line }}
+                    </tspan>
+                  </text>
+                  <text
+                    class="jw-floor-zone__meta"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 + 9 + (z.labelLines.length - 1) * 10">
+                    {{ z.wM | number:'1.0-2' }} × {{ z.hM | number:'1.0-2' }} m
+                  </text>
+                </g>
+
+                <!-- WC Nam J4 -->
+                <g class="jw-wc-zone" *ngIf="j4WcMaleZone as wc" aria-hidden="true">
+                  <rect
+                    class="jw-wc-zone__body"
+                    [attr.x]="meterX(wc.xM)"
+                    [attr.y]="j4MeterY(wc.yM)"
+                    [attr.width]="meterW(wc.wM)"
+                    [attr.height]="j4MeterY(wc.yM + wc.hM) - j4MeterY(wc.yM)" />
+                  <text
+                    class="jw-wc-zone__label"
+                    [attr.x]="meterX(wc.xM + wc.wM / 2)"
+                    [attr.y]="j4MeterY(wcInnerMidY(wc)) - 4">
+                    <tspan
+                      *ngFor="let line of wc.labelLines; let i = index"
+                      [attr.x]="meterX(wc.xM + wc.wM / 2)"
+                      [attr.dy]="i === 0 ? (-(wc.labelLines.length - 1) * 0.45 + 'em') : '0.95em'">
+                      {{ line }}
+                    </tspan>
+                  </text>
+                  <text
+                    class="jw-wc-zone__meta"
+                    *ngIf="!showTechDims"
+                    [attr.x]="meterX(wc.xM + wc.wM / 2)"
+                    [attr.y]="j4MeterY(wcInnerMidY(wc)) + 8">
+                    {{ wc.wM | number:'1.0-2' }}×{{ wc.hM | number:'1.0-2' }}m
+                  </text>
+                </g>
+
+                <!-- Kệ kho J4 — giống bố trí kệ J5, chỉ hiển thị hình ảnh (chưa gán pallet) — chỉ hiện ở Bản vẽ Đăng ký -->
+                <g class="jw-j4-racks" *ngIf="drawMode === 'dang-ky' && showDefaultAisles" aria-hidden="true">
+                  <rect
+                    *ngFor="let g of pairGaps"
+                    class="jw-pair-gap"
+                    [attr.x]="meterX(g.xM)"
+                    [attr.y]="j4MirrorTopY(g.yM, g.hM)"
+                    [attr.width]="meterW(g.wM)"
+                    [attr.height]="j4MirrorHeight(g.hM)" />
+                  <rect
+                    *ngFor="let g of blockGroupGaps"
+                    class="jw-block-group-gap"
+                    [attr.x]="meterX(g.xM)"
+                    [attr.y]="j4MirrorTopY(g.yM, g.hM)"
+                    [attr.width]="meterW(g.wM)"
+                    [attr.height]="j4MirrorHeight(g.hM)" />
+                  <rect
+                    *ngFor="let a of aisles"
+                    class="jw-aisle"
+                    [attr.x]="meterX(a.xM)"
+                    [attr.y]="j4MirrorTopY(a.yM, a.hM)"
+                    [attr.width]="meterW(a.wM)"
+                    [attr.height]="j4MirrorHeight(a.hM)" />
+
+                  <g *ngFor="let rack of racks; trackBy: trackRack">
+                    <rect
+                      class="jw-rack-outline"
+                      [class.jw-rack-outline--inner]="rack.isInner"
+                      [attr.x]="meterX(rack.xM)"
+                      [attr.y]="j4MirrorTopY(rack.yM, rack.hM)"
+                      [attr.width]="meterW(rack.wM)"
+                      [attr.height]="j4MirrorHeight(rack.hM)" />
+
+                    <g *ngFor="let block of rack.blocks; trackBy: trackBlock" class="jw-j4-rack-block">
+                      <rect
+                        class="jw-block__body"
+                        [attr.x]="meterX(block.xM)"
+                        [attr.y]="j4MirrorTopY(block.yM, block.hM)"
+                        [attr.width]="meterW(block.wM)"
+                        [attr.height]="j4MirrorHeight(block.hM)" />
+
+                      <ng-container *ngIf="blockPalletAlongX(block); else j4PalletLinesY">
+                        <line
+                          *ngFor="let p of [1, 2]"
+                          class="jw-block__pos-line"
+                          [attr.x1]="meterX(block.xM + p * blockPalletStep(block))"
+                          [attr.y1]="j4MirrorY(block.yM)"
+                          [attr.x2]="meterX(block.xM + p * blockPalletStep(block))"
+                          [attr.y2]="j4MirrorY(block.yM + block.hM)" />
+                      </ng-container>
+                      <ng-template #j4PalletLinesY>
+                        <line
+                          *ngFor="let p of [1, 2]"
+                          class="jw-block__pos-line"
+                          [attr.x1]="meterX(block.xM)"
+                          [attr.y1]="j4MirrorY(block.yM + p * blockPalletStep(block))"
+                          [attr.x2]="meterX(block.xM + block.wM)"
+                          [attr.y2]="j4MirrorY(block.yM + p * blockPalletStep(block))" />
+                      </ng-template>
+
+                      <text
+                        class="jw-block__label"
+                        [attr.x]="meterX(block.xM + block.wM / 2)"
+                        [attr.y]="j4MirrorY(block.yM + block.hM / 2)">
+                        <tspan
+                          *ngFor="let line of blockLabelLines(block.code); let i = index"
+                          [attr.x]="meterX(block.xM + block.wM / 2)"
+                          [attr.dy]="i === 0 ? (-(blockLabelLines(block.code).length - 1) * 0.45 + 'em') : '1.05em'">
+                          {{ line }}
+                        </tspan>
+                      </text>
+                    </g>
+                  </g>
+                </g>
+
+                <!-- Nền cao giống J5 (cùng vị trí trục), không có cầu thang -->
+                <rect
+                  class="jw-j4__raised"
+                  [attr.x]="meterX(raisedZone.xM)"
+                  [attr.y]="j4Y"
+                  [attr.width]="meterW(raisedZone.wM)"
+                  [attr.height]="j4H" />
+                <text
+                  class="jw-j4__raised-label"
+                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
+                  [attr.y]="j4Y + j4H / 2">
+                  {{ t('raised.label') }} {{ RAISED_LEVEL }}
+                </text>
+
+                <rect
+                  *ngIf="!hideSharedFaceC"
+                  class="jw-j4__wall"
+                  [attr.x]="j4X"
+                  [attr.y]="j4Y"
+                  [attr.width]="j4W"
+                  [attr.height]="j4H" />
+                <path
+                  *ngIf="hideSharedFaceC"
+                  class="jw-j4__wall"
+                  [attr.d]="
+                    'M ' + j4X + ' ' + (j4Y + j4H) +
+                    ' L ' + j4X + ' ' + j4Y +
+                    ' L ' + (j4X + j4W) + ' ' + j4Y +
+                    ' L ' + (j4X + j4W) + ' ' + (j4Y + j4H)
+                  " />
+
+                <!-- Cột theo lưới trục, đặt trên tường ngoài của J4 -->
+                <g class="jw-j4__columns" aria-hidden="true">
+                  <rect
+                    *ngFor="let ax of axisMarks; trackBy: trackAxis"
+                    class="jw-j4__column"
+                    [attr.x]="meterX(ax.xM || 0) - 4"
+                    [attr.y]="j4Y - 4"
+                    width="8"
+                    height="8" />
+                  <rect
+                    *ngFor="let ax of axisXMarks; trackBy: trackAxis"
+                    class="jw-j4__column"
+                    [attr.x]="j4X - 4"
+                    [attr.y]="j4MeterY(ax.yM || 0) - 4"
+                    width="8"
+                    height="8" />
+                  <rect
+                    *ngFor="let ax of axisXMarks; trackBy: trackAxis"
+                    class="jw-j4__column"
+                    [attr.x]="j4X + j4W - 4"
+                    [attr.y]="j4MeterY(ax.yM || 0) - 4"
+                    width="8"
+                    height="8" />
+                </g>
+
+                <!-- Số trục Y (dọc chiều dài 105m) — phía trên tường ngoài J4 -->
+                <g *ngFor="let ax of axisMarks; trackBy: trackAxis">
+                  <circle class="jw-axis__dot" [attr.cx]="meterX(ax.xM || 0)" [attr.cy]="j4Y - 48" r="9" />
+                  <text class="jw-axis__id" [attr.x]="meterX(ax.xM || 0)" [attr.y]="j4Y - 48">{{ ax.id }}</text>
+                </g>
+
+                <!-- Số trục X (chiều rộng 30m) — mặt A (trái J4) -->
+                <g *ngFor="let ax of j4AxisXMarks; trackBy: trackAxis">
+                  <circle class="jw-axis__dot" [attr.cx]="j4X - 48" [attr.cy]="j4MeterY(ax.yM || 0)" r="9" />
+                  <text class="jw-axis__id" [attr.x]="j4X - 48" [attr.y]="j4MeterY(ax.yM || 0)">{{ ax.id }}</text>
+                </g>
+
+                <!-- Cửa cuốn J4 — cạnh A; mặt D (Bản vẽ Đăng ký): X18–X21 -->
+                <g class="jw-feat jw-feat--roller" aria-hidden="true">
+                  <g *ngFor="let f of j4RollerDoors; trackBy: trackFeature">
+                    <rect
+                      class="jw-feat__body jw-feat__body--roller"
+                      [attr.x]="j4EdgeFeatureRect(f).x"
+                      [attr.y]="j4EdgeFeatureRect(f).y"
+                      [attr.width]="j4EdgeFeatureRect(f).w"
+                      [attr.height]="j4EdgeFeatureRect(f).h" />
+                    <line
+                      *ngFor="let k of [1,2,3,4,5]"
+                      class="jw-feat__roller-rib"
+                      [attr.x1]="j4EdgeFeatureRect(f).x + (j4EdgeFeatureRect(f).w * k) / 6"
+                      [attr.y1]="j4EdgeFeatureRect(f).y"
+                      [attr.x2]="j4EdgeFeatureRect(f).x + (j4EdgeFeatureRect(f).w * k) / 6"
+                      [attr.y2]="j4EdgeFeatureRect(f).y + j4EdgeFeatureRect(f).h" />
+                    <text
+                      class="jw-feat__label jw-feat__label--on-dark"
+                      [attr.x]="j4EdgeFeatureRect(f).x + j4EdgeFeatureRect(f).w / 2"
+                      [attr.y]="j4EdgeFeatureRect(f).y + j4EdgeFeatureRect(f).h / 2 - 4"
+                      [attr.transform]="
+                        'rotate(-90 ' +
+                        (j4EdgeFeatureRect(f).x + j4EdgeFeatureRect(f).w / 2) +
+                        ' ' +
+                        (j4EdgeFeatureRect(f).y + j4EdgeFeatureRect(f).h / 2) +
+                        ')'
+                      ">
+                      {{ featureLabel(f) }}
+                    </text>
+                    <text
+                      *ngIf="f.edge === 'D'"
+                      class="jw-feat__sub jw-feat__label--on-dark"
+                      [attr.x]="j4EdgeFeatureRect(f).x + j4EdgeFeatureRect(f).w / 2"
+                      [attr.y]="j4EdgeFeatureRect(f).y + j4EdgeFeatureRect(f).h / 2 + 8"
+                      [attr.transform]="
+                        'rotate(-90 ' +
+                        (j4EdgeFeatureRect(f).x + j4EdgeFeatureRect(f).w / 2) +
+                        ' ' +
+                        (j4EdgeFeatureRect(f).y + j4EdgeFeatureRect(f).h / 2) +
+                        ')'
+                      ">
+                      {{ f.j4SubLabel || featureSubLabel(f) }}
+                    </text>
+                  </g>
+                </g>
+
+                <text class="jw-j4__edge-label" [attr.x]="j4X + j4W / 2" [attr.y]="j4Y - 65">E</text>
+
+                <!-- Đầu xưởng J4 — mặt D -->
+                <ng-container
+                  *ngTemplateOutlet="
+                    faceDEnd;
+                    context: { isJ4: true, tag: t('endHead.j4'), edgeLabY: j4Y + j4H / 2 }
+                  " />
+              </g>
+
+              <rect
+                class="jw-floor"
+                [attr.x]="floor.x"
+                [attr.y]="floor.y"
+                [attr.width]="floor.w"
+                [attr.height]="floor.h" />
+
+              <g class="jw-grid" aria-hidden="true">
+                <line
+                  *ngFor="let m of gridX"
+                  [attr.x1]="meterX(m)"
+                  [attr.y1]="floor.y"
+                  [attr.x2]="meterX(m)"
+                  [attr.y2]="floor.y + floor.h" />
+                <line
+                  *ngFor="let m of gridY"
+                  [attr.x1]="floor.x"
+                  [attr.y1]="meterY(m)"
+                  [attr.x2]="floor.x + floor.w"
+                  [attr.y2]="meterY(m)" />
+              </g>
+
+              <!-- Khu vực Nhận nguyên liệu (vạch đứt, không phải vách cứng) -->
+              <g class="jw-floor-zone" aria-hidden="true">
+                <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
+                  <rect
+                    class="jw-floor-zone__body"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="meterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="meterH(z.hM)" />
+                  <text
+                    class="jw-floor-zone__label"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="meterY(z.yM + z.hM / 2) - 5">
+                    <tspan
+                      *ngFor="let line of z.labelLines; let i = index"
+                      [attr.x]="meterX(z.xM + z.wM / 2)"
+                      [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
+                      {{ line }}
+                    </tspan>
+                  </text>
+                  <text
+                    class="jw-floor-zone__meta"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="meterY(z.yM + z.hM / 2) + 9 + (z.labelLines.length - 1) * 10">
+                    {{ z.wM | number:'1.0-2' }} × {{ z.hM | number:'1.0-2' }} m
+                  </text>
+                </g>
+              </g>
+
+              <!-- WC Nữ J5 -->
+              <g class="jw-wc-zone" *ngIf="j5WcFemaleZone as wc" aria-hidden="true">
+                <rect
+                  class="jw-wc-zone__body"
+                  [attr.x]="meterX(wc.xM)"
+                  [attr.y]="meterY(wc.yM)"
+                  [attr.width]="meterW(wc.wM)"
+                  [attr.height]="meterH(wc.hM)" />
+                <ng-container *ngIf="wc.exit as exit">
+                  <rect
+                    class="jw-wc-zone__exit"
+                    [attr.x]="meterX(exit.xM)"
+                    [attr.y]="meterY(exit.yM)"
+                    [attr.width]="meterW(exit.wM)"
+                    [attr.height]="meterH(exit.hM)" />
+                  <line
+                    class="jw-wc-zone__exit-divider"
+                    [attr.x1]="meterX(exit.xM)"
+                    [attr.y1]="meterY(exit.yM + exit.hM)"
+                    [attr.x2]="meterX(exit.xM + exit.wM)"
+                    [attr.y2]="meterY(exit.yM + exit.hM)" />
+                  <text
+                    class="jw-wc-zone__exit-label"
+                    [attr.x]="meterX(exit.xM + exit.wM / 2)"
+                    [attr.y]="meterY(exit.yM + exit.hM / 2) + 3">
+                    {{ t('faceD.emergency') }}
+                  </text>
+                </ng-container>
+                <text
+                  class="jw-wc-zone__label"
+                  [attr.x]="meterX(wc.xM + wc.wM / 2)"
+                  [attr.y]="meterY(wcInnerMidY(wc)) - 4">
+                  <tspan
+                    *ngFor="let line of wc.labelLines; let i = index"
+                    [attr.x]="meterX(wc.xM + wc.wM / 2)"
+                    [attr.dy]="i === 0 ? (-(wc.labelLines.length - 1) * 0.45 + 'em') : '0.95em'">
+                    {{ line }}
+                  </tspan>
+                </text>
+                  <text
+                    class="jw-wc-zone__meta"
+                    *ngIf="!showTechDims"
+                    [attr.x]="meterX(wc.xM + wc.wM / 2)"
+                    [attr.y]="meterY(wcInnerMidY(wc)) + 8">
+                    {{ wc.wM | number:'1.0-2' }}×{{ wc.hM | number:'1.0-2' }}m
+                  </text>
+              </g>
+
+              <!-- Khu văn phòng sát cạnh B: WH Office | Kho mát xếp từ Y12 về trái · IQC tách riêng, sát cạnh A từ Y01 -->
+              <g class="jw-office" aria-hidden="true">
+                <rect
+                  class="jw-office__outline"
+                  [attr.x]="meterX(officeZone.xM)"
+                  [attr.y]="meterY(officeZone.yM)"
+                  [attr.width]="meterW(officeZone.wM)"
+                  [attr.height]="meterH(officeZone.hM)" />
+                <g *ngFor="let room of officeRooms; trackBy: trackOfficeRoom">
+                  <rect
+                    class="jw-office__room"
+                    [attr.x]="meterX(room.xM)"
+                    [attr.y]="meterY(room.yM)"
+                    [attr.width]="meterW(room.wM)"
+                    [attr.height]="meterH(room.hM)" />
+                  <text
+                    class="jw-office__label"
+                    [attr.x]="meterX(room.xM + room.wM / 2)"
+                    [attr.y]="meterY(room.yM + room.hM / 2)">
+                    {{ officeRoomLabel(room) }}
+                  </text>
+                  <text
+                    class="jw-office__meta"
+                    *ngIf="showTechDims && room.id === 'secured'"
+                    [attr.x]="meterX(room.xM + room.wM / 2)"
+                    [attr.y]="meterY(room.yM + room.hM / 2) + 16">
+                    {{ officeSecuredMetaLabel }}
+                  </text>
+                </g>
+              </g>
+
+              <!-- Lối đi giữa kệ R16 và Secured -->
+              <g class="jw-office-aisle" *ngIf="OFFICE_AISLE_M > 0" aria-hidden="true">
+                <line
+                  class="jw-office-aisle__dim-line"
+                  marker-start="url(#jwDimArrow)"
+                  marker-end="url(#jwDimArrow)"
+                  [attr.x1]="meterX(officeAisleDimXM)"
+                  [attr.y1]="meterY(OPEN_ZONE_Y_M)"
+                  [attr.x2]="meterX(officeAisleDimXM)"
+                  [attr.y2]="meterY(officeZone.yM)" />
+                <text
+                  class="jw-office-aisle__label"
+                  [attr.x]="meterX(officeAisleDimXM) + 12"
+                  [attr.y]="meterY(OPEN_ZONE_Y_M + OFFICE_AISLE_M / 2)">
+                  {{ officeAisleLabel }}
+                </text>
+              </g>
+
+              <!-- Nền cao Y15 → Y18 + bậc thang -->
+              <g class="jw-raised" aria-hidden="true">
+                <rect
+                  class="jw-raised__body"
+                  [attr.x]="meterX(raisedZone.xM)"
+                  [attr.y]="meterY(raisedZone.yM)"
+                  [attr.width]="meterW(raisedZone.wM)"
+                  [attr.height]="meterH(raisedZone.hM)" />
+                <rect
+                  class="jw-raised__edge"
+                  [attr.x]="meterX(raisedZone.xM)"
+                  [attr.y]="meterY(0)"
+                  [attr.width]="meterW(0.15)"
+                  [attr.height]="meterH(WIDTH_M)" />
+                <g *ngFor="let s of stairSteps; let i = index">
+                  <rect
+                    class="jw-raised__step"
+                    [attr.x]="meterX(s.xM)"
+                    [attr.y]="meterY(s.yM)"
+                    [attr.width]="meterW(s.wM)"
+                    [attr.height]="meterH(s.hM)" />
+                  <line
+                    class="jw-raised__step-line"
+                    [attr.x1]="meterX(s.xM)"
+                    [attr.y1]="meterY(s.yM)"
+                    [attr.x2]="meterX(s.xM)"
+                    [attr.y2]="meterY(s.yM + s.hM)" />
+                </g>
+                <!-- mũi tên lên nền -->
+                <polygon
+                  class="jw-raised__arrow"
+                  [attr.points]="
+                    meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 - 1.2) + ' ' +
+                    meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 + 1.2) + ' ' +
+                    meterX(raisedZone.xM + 0.9) + ',' + meterY(WIDTH_M / 2)
+                  " />
+                <text
+                  class="jw-raised__label"
+                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
+                  [attr.y]="meterY(WIDTH_M / 2)">
+                  {{ t('raised.label') }} {{ RAISED_LEVEL }}
+                </text>
+                <text
+                  class="jw-raised__meta"
+                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
+                  [attr.y]="meterY(WIDTH_M / 2) + 14">
+                  {{ raisedMetaLabel }}
+                </text>
+              </g>
+
+              <!-- Cửa cuốn ngoài layout (cạnh A + B) -->
+              <g class="jw-feat jw-feat--roller" aria-hidden="true">
+                <g *ngFor="let f of rollerDoors; trackBy: trackFeature">
+                  <rect
+                    class="jw-feat__body jw-feat__body--roller"
+                    [attr.x]="meterX(f.xM)"
+                    [attr.y]="meterY(f.yM)"
+                    [attr.width]="meterW(f.wM)"
+                    [attr.height]="meterH(f.hM)" />
+                  <!-- nếp cửa: ngang (cạnh B) / dọc (cạnh A) -->
+                  <ng-container *ngIf="f.edge === 'B'">
+                    <line
+                      *ngFor="let k of [1,2,3,4,5]"
+                      class="jw-feat__roller-rib"
+                      [attr.x1]="meterX(f.xM)"
+                      [attr.y1]="meterY(f.yM + (f.hM * k) / 6)"
+                      [attr.x2]="meterX(f.xM + f.wM)"
+                      [attr.y2]="meterY(f.yM + (f.hM * k) / 6)" />
+                  </ng-container>
+                  <ng-container *ngIf="f.edge === 'A' || f.edge === 'D'">
+                    <line
+                      *ngFor="let k of [1,2,3,4,5]"
+                      class="jw-feat__roller-rib"
+                      [attr.x1]="meterX(f.xM + (f.wM * k) / 6)"
+                      [attr.y1]="meterY(f.yM)"
+                      [attr.x2]="meterX(f.xM + (f.wM * k) / 6)"
+                      [attr.y2]="meterY(f.yM + f.hM)" />
+                  </ng-container>
+                  <text
+                    class="jw-feat__label jw-feat__label--on-dark"
+                    [attr.x]="meterX(f.xM + f.wM / 2)"
+                    [attr.y]="meterY(f.yM + f.hM / 2) - 4"
+                    [attr.transform]="
+                      f.edge === 'A' || f.edge === 'D'
+                        ? 'rotate(-90 ' +
+                          meterX(f.xM + f.wM / 2) +
+                          ' ' +
+                          meterY(f.yM + f.hM / 2) +
+                          ')'
+                        : null
+                    ">
+                    {{ featureLabel(f) }}
+                  </text>
+                  <text
+                    class="jw-feat__sub jw-feat__label--on-dark"
+                    [attr.x]="meterX(f.xM + f.wM / 2)"
+                    [attr.y]="meterY(f.yM + f.hM / 2) + 8"
+                    [attr.transform]="
+                      f.edge === 'A' || f.edge === 'D'
+                        ? 'rotate(-90 ' +
+                          meterX(f.xM + f.wM / 2) +
+                          ' ' +
+                          meterY(f.yM + f.hM / 2) +
+                          ')'
+                        : null
+                    ">
+                    {{ featureSubLabel(f) }}
+                  </text>
+                </g>
+              </g>
+
+              <g class="jw-aisles" *ngIf="showDefaultAisles" aria-hidden="true">
+                <!-- Khe 0.4m giữa R lẻ | R chẵn — nền trắng -->
+                <rect
+                  *ngFor="let g of pairGaps"
+                  class="jw-pair-gap"
+                  [attr.x]="meterX(g.xM)"
+                  [attr.y]="meterY(g.yM)"
+                  [attr.width]="meterW(g.wM)"
+                  [attr.height]="meterH(g.hM)" />
+
+                <!-- Lối 1.5m giữa block 4–5–6 và 1–2–3 trong mỗi dãy -->
+                <rect
+                  *ngFor="let g of blockGroupGaps"
+                  class="jw-block-group-gap"
+                  [attr.x]="meterX(g.xM)"
+                  [attr.y]="meterY(g.yM)"
+                  [attr.width]="meterW(g.wM)"
+                  [attr.height]="meterH(g.hM)" />
+
+                <rect
+                  *ngFor="let a of aisles"
+                  class="jw-aisle"
+                  [attr.x]="meterX(a.xM)"
+                  [attr.y]="meterY(a.yM)"
+                  [attr.width]="meterW(a.wM)"
+                  [attr.height]="meterH(a.hM)" />
+                <ng-container *ngIf="showTechDims">
+                  <text
+                    *ngIf="aisles.length"
+                    class="jw-aisle__label"
+                    [attr.x]="meterX(aisles[0].xM + aisles[0].wM / 2)"
+                    [attr.y]="meterY(aisles[0].yM + aisles[0].hM / 2)"
+                    [attr.transform]="
+                      isVerticalRackLayout
+                        ? 'rotate(-90 ' +
+                          meterX(aisles[0].xM + aisles[0].wM / 2) +
+                          ' ' +
+                          meterY(aisles[0].yM + aisles[0].hM / 2) +
+                          ')'
+                        : 'rotate(-90 ' +
+                          meterX(aisles[0].xM + aisles[0].wM / 2) +
+                          ' ' +
+                          meterY(aisles[0].yM + aisles[0].hM / 2) +
+                          ')'
+                    ">
+                    {{ rackPairAisleLabel }}
+                  </text>
+                </ng-container>
+              </g>
+
+              <g *ngFor="let rack of racks; trackBy: trackRack">
+                <rect
+                  class="jw-rack-outline"
+                  [class.jw-rack-outline--inner]="rack.isInner"
+                  [attr.x]="meterX(rack.xM)"
+                  [attr.y]="meterY(rack.yM)"
+                  [attr.width]="meterW(rack.wM)"
+                  [attr.height]="meterH(rack.hM)" />
+
+                <g
+                  *ngFor="let block of rack.blocks; trackBy: trackBlock"
+                  class="jw-block"
+                  [class.jw-block--selected]="isBlockSelected(block)"
+                  [class.jw-block--occupied]="blockOccupiedCount(block) > 0"
+                  (pointerdown)="onBlockPointerDown(block, $event)"
+                  (click)="onBlockClick($event)">
+                  <rect
+                    class="jw-block__body"
+                    [attr.x]="meterX(block.xM)"
+                    [attr.y]="meterY(block.yM)"
+                    [attr.width]="meterW(block.wM)"
+                    [attr.height]="meterH(block.hM)" />
+
+                  <ng-container *ngIf="blockPalletAlongX(block); else palletLinesY">
+                    <line
+                      *ngFor="let p of [1, 2]"
+                      class="jw-block__pos-line"
+                      [attr.x1]="meterX(block.xM + p * blockPalletStep(block))"
+                      [attr.y1]="meterY(block.yM)"
+                      [attr.x2]="meterX(block.xM + p * blockPalletStep(block))"
+                      [attr.y2]="meterY(block.yM + block.hM)" />
+                  </ng-container>
+                  <ng-template #palletLinesY>
+                    <line
+                      *ngFor="let p of [1, 2]"
+                      class="jw-block__pos-line"
+                      [attr.x1]="meterX(block.xM)"
+                      [attr.y1]="meterY(block.yM + p * blockPalletStep(block))"
+                      [attr.x2]="meterX(block.xM + block.wM)"
+                      [attr.y2]="meterY(block.yM + p * blockPalletStep(block))" />
+                  </ng-template>
+
+                  <text
+                    class="jw-block__label"
+                    [attr.x]="meterX(block.xM + block.wM / 2)"
+                    [attr.y]="meterY(block.yM + block.hM / 2)">
+                    <tspan
+                      *ngFor="let line of blockLabelLines(block.code); let i = index"
+                      [attr.x]="meterX(block.xM + block.wM / 2)"
+                      [attr.dy]="i === 0 ? (-(blockLabelLines(block.code).length - 1) * 0.45 + 'em') : '1.05em'">
+                      {{ line }}
+                    </tspan>
+                  </text>
+                </g>
+              </g>
+
+              <!-- Lưới trục Y (cạnh B): đường canh + chấm/số ngoài layout -->
+              <g class="jw-axis" aria-hidden="true">
+                <g *ngFor="let ax of axisMarks; trackBy: trackAxis">
+                  <line
+                    class="jw-axis__line"
+                    [attr.x1]="meterX(ax.xM || 0)"
+                    [attr.y1]="floor.y"
+                    [attr.x2]="meterX(ax.xM || 0)"
+                    [attr.y2]="floor.y + floor.h" />
+                  <circle
+                    class="jw-axis__dot"
+                    [attr.cx]="meterX(ax.xM || 0)"
+                    [attr.cy]="floor.y + floor.h + 48"
+                    r="9" />
+                  <text
+                    class="jw-axis__id"
+                    [attr.x]="meterX(ax.xM || 0)"
+                    [attr.y]="floor.y + floor.h + 48">
+                    {{ ax.id }}
+                  </text>
+                  <ng-container *ngIf="showTechDims && ax.spanAfterM != null">
+                    <text
+                      class="jw-axis__span"
+                      [attr.x]="meterX((ax.xM || 0) + ax.spanAfterM / 2)"
+                      [attr.y]="floor.y + floor.h + 68">
+                      {{ ax.spanAfterM === 7.5 ? '7.5' : ax.spanAfterM }}m
+                    </text>
+                  </ng-container>
+                </g>
+              </g>
+
+              <!-- Trục X cạnh A (ngoài layout, C→B) -->
+              <g class="jw-axis jw-axis--x" aria-hidden="true">
+                <g *ngFor="let ax of axisXMarks; trackBy: trackAxis">
+                  <line
+                    class="jw-axis__line"
+                    [attr.x1]="floor.x"
+                    [attr.y1]="meterY(ax.yM || 0)"
+                    [attr.x2]="floor.x + floor.w"
+                    [attr.y2]="meterY(ax.yM || 0)" />
+                  <circle
+                    class="jw-axis__dot"
+                    [attr.cx]="floor.x - 48"
+                    [attr.cy]="meterY(ax.yM || 0)"
+                    r="9" />
+                  <text
+                    class="jw-axis__id"
+                    [attr.x]="floor.x - 48"
+                    [attr.y]="meterY(ax.yM || 0)">
+                    {{ ax.id }}
+                  </text>
+                  <ng-container *ngIf="showTechDims && ax.spanAfterM != null">
+                    <text
+                      class="jw-axis__span jw-axis__span--x"
+                      [attr.x]="floor.x - 68"
+                      [attr.y]="meterY((ax.yM || 0) + ax.spanAfterM / 2)"
+                      [attr.transform]="
+                        'rotate(-90 ' +
+                        (floor.x - 68) +
+                        ' ' +
+                        meterY((ax.yM || 0) + ax.spanAfterM / 2) +
+                        ')'
+                      ">
+                      {{ ax.spanAfterM }}m
+                    </text>
+                  </ng-container>
+                </g>
+              </g>
+
+              <!-- Đầu xưởng J5 — mặt D -->
+              <ng-container
+                *ngTemplateOutlet="
+                  faceDEnd;
+                  context: { isJ4: false, tag: t('endHead.j5'), edgeLabY: floor.y + floor.h / 2 }
+                " />
+
+              <rect
+                *ngIf="!hideSharedFaceC"
+                class="jw-wall"
+                [attr.x]="floor.x"
+                [attr.y]="floor.y"
+                [attr.width]="floor.w"
+                [attr.height]="floor.h" />
+              <path
+                *ngIf="hideSharedFaceC"
+                class="jw-wall"
+                [attr.d]="
+                  'M ' + floor.x + ' ' + floor.y +
+                  ' L ' + floor.x + ' ' + (floor.y + floor.h) +
+                  ' L ' + (floor.x + floor.w) + ' ' + (floor.y + floor.h) +
+                  ' L ' + (floor.x + floor.w) + ' ' + floor.y
+                " />
+
+              <text class="jw-edge-label" [attr.x]="floor.x - 56" [attr.y]="floor.y + floor.h / 2">A</text>
+              <text class="jw-edge-label" *ngIf="!showJ4" [attr.x]="floor.x + floor.w + 58" [attr.y]="floor.y + floor.h / 2">D</text>
+              <text class="jw-edge-label" *ngIf="!hideSharedFaceC" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y - 12">C</text>
+              <text class="jw-edge-label" [attr.x]="floor.x - 56" [attr.y]="floor.y + floor.h + 22">B</text>
+
+              <g class="jw-dim" *ngIf="showTechDims">
+                <line
+                  class="jw-dim__line"
+                  marker-start="url(#jwDimArrow)"
+                  marker-end="url(#jwDimArrow)"
+                  [attr.x1]="floor.x"
+                  [attr.y1]="floor.y + floor.h + 88"
+                  [attr.x2]="floor.x + floor.w"
+                  [attr.y2]="floor.y + floor.h + 88" />
+                <text [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 104">{{ LENGTH_M }} m (A ↔ D)</text>
+              </g>
+
+              <g class="jw-dim" *ngIf="showTechDims">
+                <line
+                  class="jw-dim__line"
+                  marker-start="url(#jwDimArrow)"
+                  marker-end="url(#jwDimArrow)"
+                  [attr.x1]="floor.x + floor.w + 36"
+                  [attr.y1]="floor.y"
+                  [attr.x2]="floor.x + floor.w + 36"
+                  [attr.y2]="floor.y + floor.h" />
+                <text
+                  [attr.x]="floor.x + floor.w + 48"
+                  [attr.y]="floor.y + floor.h / 2"
+                  [attr.transform]="'rotate(90 ' + (floor.x + floor.w + 48) + ' ' + (floor.y + floor.h / 2) + ')'">
+                  {{ WIDTH_M }} m (B ↔ C)
+                </text>
+              </g>
+
+              <!-- Khoảng cách từ kệ R11 tới tường A -->
+              <g class="jw-dim" *ngIf="showTechDims && r11Block">
+                <line
+                  class="jw-dim__line"
+                  marker-start="url(#jwDimArrow)"
+                  marker-end="url(#jwDimArrow)"
+                  [attr.x1]="floor.x"
+                  [attr.y1]="meterY(r11Block.yM + r11Block.hM / 2)"
+                  [attr.x2]="meterX(r11Block.xM)"
+                  [attr.y2]="meterY(r11Block.yM + r11Block.hM / 2)" />
+                <text
+                  [attr.x]="meterX(r11Block.xM / 2)"
+                  [attr.y]="meterY(r11Block.yM + r11Block.hM / 2) - 6">
+                  {{ r11Block.xM | number:'1.2-2' }} m (A → R11)
+                </text>
+              </g>
+
+              <!-- Mũi tên độ rộng khu vực — mỗi loại 1 ví dụ -->
+              <g class="jw-dim jw-dim--zones" *ngIf="showTechDims" aria-hidden="true">
+                <g *ngFor="let d of techZoneWidthDims; trackBy: trackTechDim">
+                  <line
+                    class="jw-dim__line"
+                    [class.jw-dim__line--leader]="d.leader"
+                    [attr.marker-start]="d.leader ? null : 'url(#jwDimArrow)'"
+                    marker-end="url(#jwDimArrow)"
+                    [attr.x1]="d.leader ? techDimMapX(d.txM) : techDimMapX(d.x1M)"
+                    [attr.y1]="d.leader ? techDimMapY(d.tyM, d.isJ4) : techDimMapY(d.y1M, d.isJ4)"
+                    [attr.x2]="techDimMapX(d.x2M)"
+                    [attr.y2]="techDimMapY(d.y2M, d.isJ4)" />
+                  <text
+                    class="jw-dim__zone-label"
+                    [attr.x]="techDimMapX(d.txM)"
+                    [attr.y]="techDimMapY(d.tyM, d.isJ4)"
+                    [attr.transform]="
+                      d.rotate
+                        ? 'rotate(90 ' + techDimMapX(d.txM) + ' ' + techDimMapY(d.tyM, d.isJ4) + ')'
+                        : null
+                    ">
+                    {{ d.label }}
+                  </text>
+                </g>
+              </g>
+            </svg>
+          </div>
         </div>
       </section>
 
       <aside class="jw-detail">
-        <h3>Thông tin kho</h3>
-        <dl class="jw-fields">
-          <div class="jw-fields__row"><dt>Tên</dt><dd>J Warehouse</dd></div>
-          <div class="jw-fields__row"><dt>Số kho</dt><dd>1</dd></div>
-          <div class="jw-fields__row"><dt>Dài</dt><dd class="jw-fields__accent">{{ LENGTH_M }} m (A ↔ D)</dd></div>
-          <div class="jw-fields__row"><dt>Rộng</dt><dd class="jw-fields__accent">{{ WIDTH_M }} m (B ↔ C)</dd></div>
-          <div class="jw-fields__row"><dt>Diện tích</dt><dd>{{ LENGTH_M * WIDTH_M | number }} m²</dd></div>
-          <div class="jw-fields__row"><dt>Cạnh</dt><dd>A · B · C · D</dd></div>
-        </dl>
-        <p class="jw-note">
-          Đây là khung mặt bằng cơ bản. Gửi tiếp hướng dẫn (cửa, dãy kệ, lối đi…) để bổ sung lên sơ đồ.
-        </p>
+        <ng-container *ngIf="selectedBlock; else warehouseInfo">
+          <h3>{{ selectedBlock.code }}</h3>
+          <p class="jw-detail__sub">Dãy R{{ selectedBlock.rackNum }} · Block {{ selectedBlock.index }} · 4 tầng × ABC</p>
+
+          <ng-container *ngIf="workMode">
+          <div class="jw-level-tabs">
+            <button
+              type="button"
+              class="jw-level-tab"
+              *ngFor="let lv of LEVEL_LIST"
+              [class.jw-level-tab--on]="selectedLevel === lv"
+              (click)="selectLevel(lv)">
+              Tầng {{ lv }}
+            </button>
+          </div>
+
+          <div class="jw-pos-grid">
+            <button
+              type="button"
+              class="jw-pos-btn"
+              *ngFor="let pos of POS_LETTERS"
+              [class.jw-pos-btn--on]="selectedPos === pos"
+              [class.jw-pos-btn--filled]="!!palletAt(slotCode(selectedBlock.code, selectedLevel, pos))"
+              (click)="selectPos(pos)">
+              <span class="jw-pos-btn__code">{{ slotCode(selectedBlock.code, selectedLevel, pos) }}</span>
+              <span class="jw-pos-btn__pallet" *ngIf="palletAt(slotCode(selectedBlock.code, selectedLevel, pos)) as p">
+                {{ p }}
+              </span>
+              <span class="jw-pos-btn__empty" *ngIf="!palletAt(slotCode(selectedBlock.code, selectedLevel, pos))">Trống</span>
+            </button>
+          </div>
+
+          <dl class="jw-fields">
+            <div class="jw-fields__row"><dt>Vị trí</dt><dd class="jw-fields__accent">{{ selectedSlotCode }}</dd></div>
+            <div class="jw-fields__row"><dt>Pallet</dt><dd>{{ selectedPallet || '—' }}</dd></div>
+            <div class="jw-fields__row">
+              <dt>Block đã gán</dt>
+              <dd>{{ blockOccupiedCount(selectedBlock) }} / {{ LEVELS * PALLETS_PER_BLOCK }}</dd>
+            </div>
+          </dl>
+
+          <div class="jw-detail__scan" *ngIf="showScanInput">
+            <label for="jw-scan">Scan mã pallet</label>
+            <div class="jw-scan-row">
+              <input
+                id="jw-scan"
+                #scanPalletInputRef
+                type="text"
+                [(ngModel)]="scanPalletInput"
+                (keyup.enter)="submitScanPallet()"
+                placeholder="4 số → P1234"
+                [disabled]="isSavingPallet" />
+              <button
+                type="button"
+                class="jw-btn jw-btn--primary"
+                (click)="submitScanPallet()"
+                [disabled]="isSavingPallet || !scanPalletInput.trim()">
+                <i class="material-icons">check</i>
+              </button>
+            </div>
+            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="cancelScanPallet()">Hủy</button>
+          </div>
+
+          <div class="jw-detail__btns" *ngIf="!showScanInput">
+            <button
+              type="button"
+              class="jw-btn jw-btn--primary jw-btn--block"
+              (click)="openScanForSelectedSlot()"
+              [disabled]="!!selectedPallet">
+              <i class="material-icons">qr_code_scanner</i> Gán pallet
+            </button>
+            <button
+              type="button"
+              class="jw-btn jw-btn--outline jw-btn--block"
+              *ngIf="selectedPallet"
+              (click)="clearSelectedPallet()"
+              [disabled]="isClearingPallet">
+              <i class="material-icons">delete</i> Xóa pallet
+            </button>
+            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="clearSelection()">
+              Bỏ chọn
+            </button>
+          </div>
+          </ng-container>
+
+          <ng-container *ngIf="!workMode && showTechDims">
+              <dl class="jw-fields">
+                <div class="jw-fields__row"><dt>Dãy</dt><dd>R{{ selectedBlock.rackNum }}</dd></div>
+                <div class="jw-fields__row"><dt>Block</dt><dd>{{ selectedBlock.index }} / {{ BLOCKS_PER_RACK }}</dd></div>
+                <div class="jw-fields__row"><dt>Rộng (sâu kệ)</dt><dd>{{ selectedBlock.wM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>Dài block</dt><dd>{{ selectedBlock.hM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>Tọa độ X</dt><dd>{{ selectedBlock.xM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>Tọa độ Y</dt><dd>{{ selectedBlock.yM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>Số tầng</dt><dd>{{ LEVELS }}</dd></div>
+                <div class="jw-fields__row"><dt>Vị trí / tầng</dt><dd>A · B · C</dd></div>
+                <div class="jw-fields__row"><dt>Tổng vị trí</dt><dd>{{ LEVELS * PALLETS_PER_BLOCK }}</dd></div>
+                <div class="jw-fields__row"><dt>Đã gán</dt><dd>{{ blockOccupiedCount(selectedBlock) }}</dd></div>
+              </dl>
+              <div class="jw-detail__btns">
+                <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="clearSelection()">
+                  Bỏ chọn
+                </button>
+              </div>
+          </ng-container>
+
+          <ng-container *ngIf="!workMode && !showTechDims">
+            <p class="jw-note">{{ t('work.enableHint') }}</p>
+            <div class="jw-detail__btns">
+              <button type="button" class="jw-btn jw-btn--primary jw-btn--block" (click)="toggleWorkMode($event)">
+                <i class="material-icons">work</i> {{ t('btn.work') }}
+              </button>
+              <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="clearSelection()">
+                Bỏ chọn
+              </button>
+            </div>
+          </ng-container>
+        </ng-container>
+
+        <ng-template #warehouseInfo>
+          <ng-container *ngIf="workMode; else storeInfo">
+            <h3>{{ t('work.title') }}</h3>
+            <p class="jw-note">{{ t('work.hint') }}</p>
+          </ng-container>
+          <ng-template #storeInfo>
+          <button type="button" class="jw-detail__toggle" (click)="toggleInfoPanel($event)">
+            <h3>{{ t('info.title') }}</h3>
+            <i class="material-icons">{{ infoPanelOpen ? 'expand_more' : 'chevron_right' }}</i>
+          </button>
+          <dl class="jw-fields" *ngIf="infoPanelOpen">
+            <div class="jw-fields__row" *ngFor="let row of warehouseInfoRows">
+              <dt>{{ row.label }}</dt>
+              <dd *ngIf="!row.icon" [class.jw-fields__multiline]="row.multiline">{{ row.value }}</dd>
+              <dd *ngIf="row.icon === 'electric'" class="jw-fields__icon-dd" aria-label="Tủ điện">
+                <svg class="jw-electric-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path [attr.d]="electricIconPath" />
+                </svg>
+              </dd>
+            </div>
+            <div class="jw-fields__row" *ngIf="lastUpdated">
+              <dt>{{ t('info.updated') }}</dt>
+              <dd>{{ lastUpdated | date:'HH:mm:ss' }}</dd>
+            </div>
+          </dl>
+          </ng-template>
+        </ng-template>
       </aside>
+    </div>
+  </div>
+
+  <div class="jw-modal-backdrop" *ngIf="showExtraPalletModal" (click)="closeExtraPalletModal()">
+    <div class="jw-modal jw-modal--sm" role="dialog" (click)="$event.stopPropagation()">
+      <header class="jw-modal__head">
+        <h2 class="jw-modal__title">
+          <i class="material-icons">inventory_2</i> Pallet ngoài — J5
+        </h2>
+        <button type="button" class="jw-modal__close" (click)="closeExtraPalletModal()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </header>
+      <div class="jw-extra-form">
+        <label>
+          <span>Số pallet ở vị trí</span>
+          <input type="number" min="0" step="1" [(ngModel)]="extraPalletDraft.atLocation" />
+        </label>
+        <label>
+          <span>Nhận NVL</span>
+          <input type="number" min="0" step="1" [(ngModel)]="extraPalletDraft.nhanNvl" />
+        </label>
+        <label>
+          <span>Xuất TP</span>
+          <input type="number" min="0" step="1" [(ngModel)]="extraPalletDraft.xuatTp" />
+        </label>
+        <p class="jw-extra-form__sum">
+          Kệ {{ totalPalletsJ5Rack | number }}
+          + vị trí {{ extraPalletDraft.atLocation || 0 }}
+          + NVL {{ extraPalletDraft.nhanNvl || 0 }}
+          + TP {{ extraPalletDraft.xuatTp || 0 }}
+          = <strong>{{ extraPalletDraftTotal | number }}</strong>
+        </p>
+        <div class="jw-extra-form__btns">
+          <button type="button" class="jw-btn jw-btn--outline" (click)="closeExtraPalletModal()">Hủy</button>
+          <button type="button" class="jw-btn jw-btn--primary" (click)="saveExtraPallets($event)">Lưu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="jw-modal-backdrop" *ngIf="show3DModal && selectedBlock" (click)="close3DModal()">
+    <div class="jw-modal" role="dialog" (click)="$event.stopPropagation()">
+      <header class="jw-modal__head">
+        <h2 class="jw-modal__title">
+          <i class="material-icons">view_in_ar</i> Kệ {{ selectedBlock.code }} — Mô hình 3D
+        </h2>
+        <button type="button" class="jw-modal__close" (click)="close3DModal()" title="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </header>
+      <app-j-warehouse-rack-3d
+        class="jw-modal__rack3d"
+        [blockCode]="selectedBlock.code"
+        [occupancy]="selectedBlockOccupancy"
+        [selectedLevel]="selectedLevel"
+        [selectedPos]="selectedPos"
+        (slotPick)="onRack3dPick($event)">
+      </app-j-warehouse-rack-3d>
     </div>
   </div>
 </div>

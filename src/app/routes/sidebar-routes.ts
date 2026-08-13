@@ -72,7 +72,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', class: '' },
   { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
   { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
-  { path: '/settings', title: 'Settings', icon: 'settings', class: '' }
-  ,
-  { path: '/zalo', title: 'Zalo', icon: 'chat', class: '' }
+  { path: '/settings', title: 'Settings', icon: 'settings', class: '' },
+  { path: '/zalo', title: 'Zalo', icon: 'chat', class: '' },
+  { path: '/j-warehouse', title: 'J Warehouse', icon: 'warehouse', class: '' }
 ]; 

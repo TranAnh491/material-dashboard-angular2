@@ -5,14 +5,14 @@ import { BehaviorSubject, firstValueFrom } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class LocationUnlockService {
   static readonly ALLOWED_IDS = ['ASP0106', 'ASP0119', 'ASP0538', 'ASP1761'] as const;
-  static readonly UNLOCK_MS = 10 * 60 * 1000;
+  static readonly UNLOCK_MS = 4 * 60 * 60 * 1000;
 
   private unlockedEmployeeId: string | null = null;
   private unlockExpiresAt = 0;
   private expiryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly unlockedSubject = new BehaviorSubject<boolean>(false);
 
-  /** Theo dõi trạng thái mở khóa (hết hạn 10 phút hoặc F5 → false). */
+  /** Theo dõi trạng thái mở khóa (hết hạn 4 tiếng hoặc F5 → false). */
   readonly unlocked$ = this.unlockedSubject.asObservable();
 
   constructor(private fns: AngularFireFunctions) {}

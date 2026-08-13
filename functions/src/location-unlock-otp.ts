@@ -39,7 +39,8 @@ async function sendOtpToZalo(
     `Thời điểm: ${atStr}\n` +
     `Mã nhân viên: ${memberId}\n` +
     `Mã đăng nhập: ${code}\n` +
-    `Hiệu lực: 10 phút (một lần dùng)`;
+    `OTP: 10 phút (một lần dùng)\n` +
+    `Sau xác nhận: cột Vị trí mở khóa 4 tiếng`;
   const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
   const res = await fetch(url, {
     method: 'POST',
