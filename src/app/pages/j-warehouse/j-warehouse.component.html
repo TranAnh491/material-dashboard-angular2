@@ -56,7 +56,7 @@
           class="jw-btn jw-btn--outline"
           [class.jw-btn--on]="show3D"
           (click)="toggle3D($event)"
-          title="Bấm vào 1 kệ để xem mô hình 3D">
+          title="Xem toàn bộ kệ kho ở dạng 3D">
           <i class="material-icons">view_in_ar</i> 3D
         </button>
         <button type="button" class="jw-btn jw-btn--outline" (click)="goBack()">
@@ -191,8 +191,11 @@
                 role="img"
                 [attr.aria-label]="drawModeTitle + ' J Warehouse ' + LENGTH_M + ' × ' + WIDTH_M + ' mét'">
               <defs>
-                <marker id="jwDimArrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
-                  <path d="M0,0 L9,4 L0,8 Z" fill="#000000" />
+                <marker id="jwDimArrowSky" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L9,4 L0,8 Z" fill="#00a2e8" />
+                </marker>
+                <marker id="jwDimArrowGreen" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L9,4 L0,8 Z" fill="#16a34a" />
                 </marker>
                 <marker id="jwCabArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
                   <path d="M0,0 L8,4 L0,8 Z" fill="#000000" />
@@ -248,6 +251,22 @@
                     [attr.y]="faceDEndTagY(isJ4)">
                     {{ tag }}
                   </text>
+
+                  <g *ngIf="!isJ4" class="jw-face-d-end__factory">
+                    <line
+                      class="jw-face-d-end__factory-arrow"
+                      marker-end="url(#jwCabArrow)"
+                      [attr.x1]="faceDOutX(3.35)"
+                      [attr.y1]="faceDFactory3Y(false)"
+                      [attr.x2]="faceDOutX(4.9)"
+                      [attr.y2]="faceDFactory3Y(false)" />
+                    <text
+                      class="jw-face-d-end__factory-label"
+                      [attr.x]="faceDOutX(4.12)"
+                      [attr.y]="faceDFactory3Y(false) + 14">
+                      {{ t('faceD.factory3') }}
+                    </text>
+                  </g>
 
                   <g *ngFor="let ax of (isJ4 ? j4AxisXMarks : axisXMarks); trackBy: trackAxis">
                     <line
@@ -316,6 +335,7 @@
                   </text>
                   <text
                     class="jw-floor-zone__meta"
+                    *ngIf="!showTechDims"
                     [attr.x]="meterX(z.xM + z.wM / 2)"
                     [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 + 9 + (z.labelLines.length - 1) * 10">
                     {{ z.wM | number:'1.0-2' }} × {{ z.hM | number:'1.0-2' }} m
@@ -576,27 +596,11 @@
                 <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
                   <rect
                     class="jw-floor-zone__body"
+                    [class.jw-floor-zone__body--solid]="z.id === 'kho-mat-ext'"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
                     [attr.height]="meterH(z.hM)" />
-                  <text
-                    class="jw-floor-zone__label"
-                    [attr.x]="meterX(z.xM + z.wM / 2)"
-                    [attr.y]="meterY(z.yM + z.hM / 2) - 5">
-                    <tspan
-                      *ngFor="let line of z.labelLines; let i = index"
-                      [attr.x]="meterX(z.xM + z.wM / 2)"
-                      [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
-                      {{ line }}
-                    </tspan>
-                  </text>
-                  <text
-                    class="jw-floor-zone__meta"
-                    [attr.x]="meterX(z.xM + z.wM / 2)"
-                    [attr.y]="meterY(z.yM + z.hM / 2) + 9 + (z.labelLines.length - 1) * 10">
-                    {{ z.wM | number:'1.0-2' }} × {{ z.hM | number:'1.0-2' }} m
-                  </text>
                 </g>
               </g>
 
@@ -663,28 +667,93 @@
                     [attr.y]="meterY(room.yM)"
                     [attr.width]="meterW(room.wM)"
                     [attr.height]="meterH(room.hM)" />
-                  <text
-                    class="jw-office__label"
-                    [attr.x]="meterX(room.xM + room.wM / 2)"
-                    [attr.y]="meterY(room.yM + room.hM / 2)">
-                    {{ officeRoomLabel(room) }}
-                  </text>
-                  <text
-                    class="jw-office__meta"
-                    *ngIf="showTechDims && room.id === 'secured'"
-                    [attr.x]="meterX(room.xM + room.wM / 2)"
-                    [attr.y]="meterY(room.yM + room.hM / 2) + 16">
-                    {{ officeSecuredMetaLabel }}
-                  </text>
+                  <ng-container *ngIf="officeRoomDoorHingeXM(room) as hingeXM">
+                    <rect
+                      class="jw-office__door-gap"
+                      [attr.x]="meterX(hingeXM)"
+                      [attr.y]="meterY(room.yM) - 2"
+                      [attr.width]="meterW(officeRoomDoorWidth(room))"
+                      height="4" />
+                    <path
+                      class="jw-office__door-swing"
+                      [attr.d]="
+                        'M ' + meterX(hingeXM + officeRoomDoorWidth(room)) + ' ' + meterY(room.yM) +
+                        ' A ' + meterW(officeRoomDoorWidth(room)) + ' ' + meterW(officeRoomDoorWidth(room)) + ' 0 0 1 ' +
+                        meterX(hingeXM) + ' ' + meterY(room.yM + officeRoomDoorWidth(room))
+                      " />
+                    <line
+                      class="jw-office__door-leaf"
+                      [attr.x1]="meterX(hingeXM)"
+                      [attr.y1]="meterY(room.yM)"
+                      [attr.x2]="meterX(hingeXM)"
+                      [attr.y2]="meterY(room.yM + officeRoomDoorWidth(room))" />
+                    <text
+                      class="jw-office__door-label"
+                      *ngIf="showTechDims"
+                      [attr.x]="meterX(hingeXM + officeRoomDoorWidth(room) / 2)"
+                      [attr.y]="meterY(room.yM) + 11">
+                      {{ officeRoomDoorWidth(room) * 1000 }}
+                    </text>
+                  </ng-container>
+                  <ng-container *ngIf="room.id === 'secured'; else otherOfficeLabel">
+                    <text
+                      class="jw-office__label"
+                      [attr.x]="meterX(room.xM + room.wM / 2)"
+                      [attr.y]="meterY(room.yM + room.hM / 2)">
+                      {{ officeRoomLabel(room) }}
+                    </text>
+                  </ng-container>
+                  <ng-template #otherOfficeLabel>
+                    <text
+                      class="jw-office__label"
+                      *ngIf="room.label"
+                      [attr.x]="meterX(room.xM + room.wM / 2)"
+                      [attr.y]="meterY(room.yM + room.hM / 2)">
+                      {{ officeRoomLabel(room) }}
+                    </text>
+                  </ng-template>
+                </g>
+              </g>
+
+              <!-- Kệ trong Kho mát: ẩn trên bản vẽ kỹ thuật -->
+              <g class="jw-kho-mat" *ngIf="khoMatRows.length && !showTechDims" aria-hidden="true">
+                <g *ngFor="let row of khoMatRows; trackBy: trackKhoMatRow">
+                  <rect
+                    class="jw-kho-mat__row"
+                    [attr.x]="meterX(row.xM)"
+                    [attr.y]="meterY(row.yM)"
+                    [attr.width]="meterW(row.wM)"
+                    [attr.height]="meterH(row.hM)" />
+                  <g *ngFor="let block of row.blocks; trackBy: trackKhoMatBlock">
+                    <rect
+                      class="jw-kho-mat__block"
+                      [attr.x]="meterX(block.xM)"
+                      [attr.y]="meterY(block.yM)"
+                      [attr.width]="meterW(block.wM)"
+                      [attr.height]="meterH(block.hM)" />
+                    <text
+                      class="jw-kho-mat__label"
+                      [attr.x]="meterX(block.xM + block.wM / 2)"
+                      [attr.y]="meterY(block.yM + block.hM / 2)"
+                      [attr.transform]="
+                        'rotate(-90 ' +
+                        meterX(block.xM + block.wM / 2) +
+                        ' ' +
+                        meterY(block.yM + block.hM / 2) +
+                        ')'
+                      ">
+                      {{ block.code }}
+                    </text>
+                  </g>
                 </g>
               </g>
 
               <!-- Lối đi giữa kệ R16 và Secured -->
-              <g class="jw-office-aisle" *ngIf="OFFICE_AISLE_M > 0" aria-hidden="true">
+              <g class="jw-office-aisle" *ngIf="showTechDims && OFFICE_AISLE_M > 0" aria-hidden="true">
                 <line
                   class="jw-office-aisle__dim-line"
-                  marker-start="url(#jwDimArrow)"
-                  marker-end="url(#jwDimArrow)"
+                  marker-start="url(#jwDimArrowSky)"
+                  marker-end="url(#jwDimArrowSky)"
                   [attr.x1]="meterX(officeAisleDimXM)"
                   [attr.y1]="meterY(OPEN_ZONE_Y_M)"
                   [attr.x2]="meterX(officeAisleDimXM)"
@@ -729,10 +798,16 @@
                 <polygon
                   class="jw-raised__arrow"
                   [attr.points]="
-                    meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 - 1.2) + ' ' +
-                    meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 + 1.2) + ' ' +
+                    meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 - 0.7) + ' ' +
+                    meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 + 0.7) + ' ' +
                     meterX(raisedZone.xM + 0.9) + ',' + meterY(WIDTH_M / 2)
                   " />
+                <text
+                  class="jw-raised__zone-name"
+                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
+                  [attr.y]="meterY(2.2)">
+                  {{ t('raised.fgOutbound') }}
+                </text>
                 <text
                   class="jw-raised__label"
                   [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
@@ -808,8 +883,25 @@
                 </g>
               </g>
 
+              <!-- FGs inbound — giữa Y13–Y14, phía trên cửa cuốn, mũi tên chỉ lên -->
+              <g class="jw-fg-inbound" aria-hidden="true">
+                <line
+                  class="jw-fg-inbound__arrow"
+                  marker-end="url(#jwCabArrow)"
+                  [attr.x1]="fgInboundX()"
+                  [attr.y1]="fgInboundArrowY1()"
+                  [attr.x2]="fgInboundX()"
+                  [attr.y2]="fgInboundArrowY2()" />
+                <text
+                  class="jw-fg-inbound__label"
+                  [attr.x]="fgInboundX()"
+                  [attr.y]="fgInboundLabelY()">
+                  {{ t('faceB.fgInbound') }}
+                </text>
+              </g>
+
               <g class="jw-aisles" *ngIf="showDefaultAisles" aria-hidden="true">
-                <!-- Khe 0.4m giữa R lẻ | R chẵn — nền trắng -->
+                <!-- Khe 0.3m giữa R lẻ | R chẵn — nền trắng -->
                 <rect
                   *ngFor="let g of pairGaps"
                   class="jw-pair-gap"
@@ -834,28 +926,6 @@
                   [attr.y]="meterY(a.yM)"
                   [attr.width]="meterW(a.wM)"
                   [attr.height]="meterH(a.hM)" />
-                <ng-container *ngIf="showTechDims">
-                  <text
-                    *ngIf="aisles.length"
-                    class="jw-aisle__label"
-                    [attr.x]="meterX(aisles[0].xM + aisles[0].wM / 2)"
-                    [attr.y]="meterY(aisles[0].yM + aisles[0].hM / 2)"
-                    [attr.transform]="
-                      isVerticalRackLayout
-                        ? 'rotate(-90 ' +
-                          meterX(aisles[0].xM + aisles[0].wM / 2) +
-                          ' ' +
-                          meterY(aisles[0].yM + aisles[0].hM / 2) +
-                          ')'
-                        : 'rotate(-90 ' +
-                          meterX(aisles[0].xM + aisles[0].wM / 2) +
-                          ' ' +
-                          meterY(aisles[0].yM + aisles[0].hM / 2) +
-                          ')'
-                    ">
-                    {{ rackPairAisleLabel }}
-                  </text>
-                </ng-container>
               </g>
 
               <g *ngFor="let rack of racks; trackBy: trackRack">
@@ -1007,16 +1077,68 @@
                   ' L ' + (floor.x + floor.w) + ' ' + floor.y
                 " />
 
+              <!-- Dock Leveler — sát mặt D, gần tủ điện -->
+              <g class="jw-dock-leveler" *ngIf="!showJ4">
+                <g *ngFor="let d of dockLevelers; let i = index; trackBy: trackDockLeveler">
+                  <rect
+                    class="jw-dock-leveler__body"
+                    [attr.x]="meterX(d.xM)"
+                    [attr.y]="meterY(d.yM)"
+                    [attr.width]="meterW(d.wM)"
+                    [attr.height]="meterH(d.hM)" />
+                  <text
+                    class="jw-dock-leveler__label"
+                    [attr.x]="meterX(d.xM + d.wM / 2)"
+                    [attr.y]="meterY(d.yM + d.hM / 2) - 5"
+                    [attr.transform]="
+                      'rotate(-90 ' + meterX(d.xM + d.wM / 2) + ' ' + meterY(d.yM + d.hM / 2) + ')'
+                    ">
+                    Dock
+                  </text>
+                  <text
+                    class="jw-dock-leveler__label"
+                    [attr.x]="meterX(d.xM + d.wM / 2)"
+                    [attr.y]="meterY(d.yM + d.hM / 2) + 7"
+                    [attr.transform]="
+                      'rotate(-90 ' + meterX(d.xM + d.wM / 2) + ' ' + meterY(d.yM + d.hM / 2) + ')'
+                    ">
+                    Leveler
+                  </text>
+                </g>
+              </g>
+
               <text class="jw-edge-label" [attr.x]="floor.x - 56" [attr.y]="floor.y + floor.h / 2">A</text>
-              <text class="jw-edge-label" *ngIf="!showJ4" [attr.x]="floor.x + floor.w + 58" [attr.y]="floor.y + floor.h / 2">D</text>
+              <text class="jw-edge-label" *ngIf="!showJ4" [attr.x]="floor.x + floor.w + 58 + meterW(1)" [attr.y]="floor.y + floor.h / 2">D</text>
               <text class="jw-edge-label" *ngIf="!hideSharedFaceC" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y - 12">C</text>
               <text class="jw-edge-label" [attr.x]="floor.x - 56" [attr.y]="floor.y + floor.h + 22">B</text>
 
-              <g class="jw-dim" *ngIf="showTechDims">
+              <!-- Nhãn khu vực vẽ sau WC / nền cao / trục để không bị che -->
+              <g class="jw-floor-zone jw-floor-zone--labels" aria-hidden="true">
+                <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
+                  <ng-container *ngIf="!(showTechDims && z.id === 'shipping-area')">
+                    <text
+                      class="jw-floor-zone__label"
+                      *ngFor="let line of z.labelLines; let i = index"
+                      [attr.x]="meterX(z.xM + z.wM / 2)"
+                      [attr.y]="meterY(z.yM + z.hM / 2) + (i - (z.labelLines.length - 1) / 2) * 14">
+                      {{ line }}
+                    </text>
+                  </ng-container>
+                  <text
+                    class="jw-floor-zone__meta"
+                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'shipping-area' && !showTechDims"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="meterY(z.yM + z.hM / 2) + 9 + (z.labelLines.length - 1) * 10">
+                    {{ z.wM | number:'1.0-3' }} × {{ z.hM | number:'1.0-2' }} m
+                  </text>
+                </g>
+              </g>
+
+              <g class="jw-dim jw-dim--sky" *ngIf="showTechDims">
                 <line
                   class="jw-dim__line"
-                  marker-start="url(#jwDimArrow)"
-                  marker-end="url(#jwDimArrow)"
+                  marker-start="url(#jwDimArrowSky)"
+                  marker-end="url(#jwDimArrowSky)"
                   [attr.x1]="floor.x"
                   [attr.y1]="floor.y + floor.h + 88"
                   [attr.x2]="floor.x + floor.w"
@@ -1024,11 +1146,11 @@
                 <text [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 104">{{ LENGTH_M }} m (A ↔ D)</text>
               </g>
 
-              <g class="jw-dim" *ngIf="showTechDims">
+              <g class="jw-dim jw-dim--sky" *ngIf="showTechDims">
                 <line
                   class="jw-dim__line"
-                  marker-start="url(#jwDimArrow)"
-                  marker-end="url(#jwDimArrow)"
+                  marker-start="url(#jwDimArrowSky)"
+                  marker-end="url(#jwDimArrowSky)"
                   [attr.x1]="floor.x + floor.w + 36"
                   [attr.y1]="floor.y"
                   [attr.x2]="floor.x + floor.w + 36"
@@ -1042,30 +1164,33 @@
               </g>
 
               <!-- Khoảng cách từ kệ R11 tới tường A -->
-              <g class="jw-dim" *ngIf="showTechDims && r11Block">
+              <g class="jw-dim jw-dim--sky" *ngIf="showTechDims && r11Block">
                 <line
                   class="jw-dim__line"
-                  marker-start="url(#jwDimArrow)"
-                  marker-end="url(#jwDimArrow)"
+                  marker-start="url(#jwDimArrowSky)"
+                  marker-end="url(#jwDimArrowSky)"
                   [attr.x1]="floor.x"
-                  [attr.y1]="meterY(r11Block.yM + r11Block.hM / 2)"
+                  [attr.y1]="meterY(r11AisleDimYM)"
                   [attr.x2]="meterX(r11Block.xM)"
-                  [attr.y2]="meterY(r11Block.yM + r11Block.hM / 2)" />
+                  [attr.y2]="meterY(r11AisleDimYM)" />
                 <text
                   [attr.x]="meterX(r11Block.xM / 2)"
-                  [attr.y]="meterY(r11Block.yM + r11Block.hM / 2) - 6">
+                  [attr.y]="meterY(r11AisleDimYM) - 6">
                   {{ r11Block.xM | number:'1.2-2' }} m (A → R11)
                 </text>
               </g>
 
               <!-- Mũi tên độ rộng khu vực — mỗi loại 1 ví dụ -->
               <g class="jw-dim jw-dim--zones" *ngIf="showTechDims" aria-hidden="true">
-                <g *ngFor="let d of techZoneWidthDims; trackBy: trackTechDim">
+                <g
+                  *ngFor="let d of techZoneWidthDims; trackBy: trackTechDim"
+                  [class.jw-dim--sky]="techDimTone(d) === 'sky'"
+                  [class.jw-dim--green]="techDimTone(d) === 'green'">
                   <line
                     class="jw-dim__line"
                     [class.jw-dim__line--leader]="d.leader"
-                    [attr.marker-start]="d.leader ? null : 'url(#jwDimArrow)'"
-                    marker-end="url(#jwDimArrow)"
+                    [attr.marker-start]="d.leader ? null : techDimMarker(d)"
+                    [attr.marker-end]="techDimMarker(d)"
                     [attr.x1]="d.leader ? techDimMapX(d.txM) : techDimMapX(d.x1M)"
                     [attr.y1]="d.leader ? techDimMapY(d.tyM, d.isJ4) : techDimMapY(d.y1M, d.isJ4)"
                     [attr.x2]="techDimMapX(d.x2M)"
@@ -1276,11 +1401,11 @@
     </div>
   </div>
 
-  <div class="jw-modal-backdrop" *ngIf="show3DModal && selectedBlock" (click)="close3DModal()">
+  <div class="jw-modal-backdrop" *ngIf="show3DModal" (click)="close3DModal()">
     <div class="jw-modal" role="dialog" (click)="$event.stopPropagation()">
       <header class="jw-modal__head">
         <h2 class="jw-modal__title">
-          <i class="material-icons">view_in_ar</i> Kệ {{ selectedBlock.code }} — Mô hình 3D
+          <i class="material-icons">view_in_ar</i> Toàn bộ kệ kho J5 — Mô hình 3D
         </h2>
         <button type="button" class="jw-modal__close" (click)="close3DModal()" title="Đóng">
           <i class="material-icons">close</i>
@@ -1288,10 +1413,9 @@
       </header>
       <app-j-warehouse-rack-3d
         class="jw-modal__rack3d"
-        [blockCode]="selectedBlock.code"
-        [occupancy]="selectedBlockOccupancy"
-        [selectedLevel]="selectedLevel"
-        [selectedPos]="selectedPos"
+        mode="warehouse"
+        [warehouseRacks]="racks"
+        [slotPallets]="slotPallets"
         (slotPick)="onRack3dPick($event)">
       </app-j-warehouse-rack-3d>
     </div>

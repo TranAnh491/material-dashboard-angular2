@@ -40,6 +40,14 @@
         </div>
         <button type="button"
                 class="mat-m-filterbtn"
+                (click)="openGanPallet()"
+                [disabled]="ganPalletBusy"
+                aria-label="Gán pallet"
+                title="Gán pallet">
+          <i class="material-icons">widgets</i>
+        </button>
+        <button type="button"
+                class="mat-m-filterbtn"
                 [class.active]="searchByLocation"
                 (click)="openLocationFilterPopup()"
                 aria-label="Lọc vị trí"
@@ -60,6 +68,10 @@
     <div class="mat-m-empty" *ngIf="!isLoading && !searchTerm">
       <i class="material-icons">inventory_2</i>
       <p>Nhập mã hàng để xem tồn kho</p>
+      <button type="button" class="mat-m-empty__act" (click)="openGanPallet()" [disabled]="ganPalletBusy">
+        <i class="material-icons">widgets</i>
+        Gán pallet
+      </button>
     </div>
 
     <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 3 && filteredInventory.length === 0">
@@ -473,6 +485,14 @@
         
         <!-- Action Buttons -->
         <div class="action-buttons">
+          <button class="more-btn kk-check-btn"
+                  type="button"
+                  (click)="openGanPallet()"
+                  [disabled]="ganPalletBusy"
+                  title="Gán pallet — scan pallet, kho, vị trí, mã hàng">
+            <i class="material-icons">widgets</i>
+            <span class="btn-label">Gán pallet</span>
+          </button>
           <button class="more-btn kk-check-btn"
                   type="button"
                   (click)="openKkLocMapFromMore()"
@@ -1923,6 +1943,158 @@
           </button>
         </div>
       </details>
+    </div>
+  </div>
+</div>
+
+<!-- Gán pallet -->
+<div class="modal-overlay"
+     [class.more-overlay]="!isMobile"
+     [class.mat-m-kk-overlay]="isMobile"
+     *ngIf="showGanPallet"
+     (click)="closeGanPallet()">
+  <div class="modal-content gan-pallet"
+       [class.gan-pallet--m]="isMobile"
+       (click)="$event.stopPropagation()"
+       role="dialog"
+       aria-label="Gán pallet">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">widgets</i>
+        </span>
+        <div>
+          <h3>Gán pallet</h3>
+          <p class="more-popup-header__sub">{{ selectedFactory }} · Bước {{ ganPalletStep }}/5 · Dừng = lưu</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeGanPallet()" [disabled]="ganPalletBusy" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="gan-pallet__steps" aria-hidden="true">
+      <span *ngFor="let s of [1,2,3,4,5]" class="gan-pallet__dot" [class.gan-pallet__dot--on]="ganPalletStep === s" [class.gan-pallet__dot--done]="ganPalletStep > s"></span>
+    </div>
+
+    <div class="gan-pallet__chips" *ngIf="isGanPalletCodeOk() || ganPalletWh || ganPalletLocPreview || ganPalletPending.length">
+      <button type="button" class="gan-pallet__chip" *ngIf="isGanPalletCodeOk()" (click)="ganPalletGoStep(1)" [disabled]="ganPalletBusy">{{ ganPalletCode }}</button>
+      <button type="button" class="gan-pallet__chip" *ngIf="ganPalletWh" (click)="ganPalletGoStep(2)" [disabled]="ganPalletBusy">{{ ganPalletWh }}</button>
+      <button type="button" class="gan-pallet__chip" *ngIf="ganPalletLocPreview" (click)="ganPalletGoStep(3)" [disabled]="ganPalletBusy">{{ ganPalletLocPreview }}</button>
+      <span class="gan-pallet__chip gan-pallet__chip--muted" *ngIf="ganPalletPending.length">Chờ {{ ganPalletPending.length }}</span>
+    </div>
+
+    <div class="modal-body gan-pallet__body">
+      <label class="gan-pallet__field" *ngIf="ganPalletStep === 1">
+        <span>Scan pallet (P hoặc F đầu)</span>
+        <input
+          id="gan-pallet-code"
+          type="text"
+          [(ngModel)]="ganPalletCode"
+          (input)="onGanPalletScanInput('code', $event)"
+          (keydown.enter)="onGanPalletCodeEnter($event)"
+          (keydown.tab)="onGanPalletCodeEnter($event)"
+          placeholder="P0001 / F1-0138…"
+          autocomplete="off"
+          autocapitalize="characters"
+          enterkeyhint="next"
+          [disabled]="ganPalletBusy" />
+        <small>Scan xong tự nhảy sang chọn kho</small>
+      </label>
+
+      <div class="gan-pallet__field" *ngIf="ganPalletStep === 2">
+        <span>Chọn kho</span>
+        <div class="gan-pallet__wh">
+          <button type="button" [class.gan-pallet__wh--on]="ganPalletWh === 'ASM1'" (click)="setGanPalletWh('ASM1')" [disabled]="ganPalletBusy || !isGanPalletCodeOk()">ASM1</button>
+          <button type="button" [class.gan-pallet__wh--on]="ganPalletWh === 'ASM3'" (click)="setGanPalletWh('ASM3')" [disabled]="ganPalletBusy || !isGanPalletCodeOk()">ASM3</button>
+        </div>
+        <small>Bấm xong tự nhảy sang scan vị trí</small>
+      </div>
+
+      <label class="gan-pallet__field" *ngIf="ganPalletStep === 3">
+        <span>Scan vị trí {{ ganPalletWh === 'ASM3' ? '(tự thêm ASM3-)' : ganPalletWh === 'ASM1' ? '(không tiền tố)' : '' }}</span>
+        <input
+          id="gan-pallet-loc"
+          type="text"
+          [(ngModel)]="ganPalletLoc"
+          (input)="onGanPalletScanInput('loc', $event)"
+          (keydown.enter)="onGanPalletLocEnter($event)"
+          (keydown.tab)="onGanPalletLocEnter($event)"
+          [placeholder]="ganPalletWh === 'ASM3' ? 'D45 → ASM3-D45' : 'G44'"
+          autocomplete="off"
+          autocapitalize="characters"
+          enterkeyhint="next"
+          [disabled]="ganPalletBusy || !ganPalletWh" />
+        <small *ngIf="ganPalletWh && ganPalletLocPreview">Lưu: {{ ganPalletLocPreview }}</small>
+        <small *ngIf="!(ganPalletWh && ganPalletLocPreview)">Scan xong tự nhảy sang mã hàng</small>
+      </label>
+
+      <label class="gan-pallet__field" *ngIf="ganPalletStep === 4">
+        <span>Scan mã hàng</span>
+        <input
+          id="gan-pallet-material"
+          type="text"
+          [(ngModel)]="ganPalletMaterial"
+          (input)="onGanPalletScanInput('material', $event)"
+          (keydown.enter)="onGanPalletMaterialEnter($event)"
+          (keydown.tab)="onGanPalletMaterialEnter($event)"
+          placeholder="B018694"
+          autocomplete="off"
+          autocapitalize="characters"
+          enterkeyhint="next"
+          [disabled]="ganPalletBusy || ganPalletLookupBusy || !ganPalletLocPreview" />
+        <small>{{ ganPalletLookupBusy ? 'Đang tìm mã…' : 'Scan xong tự nhảy sang lượng' }}</small>
+      </label>
+
+      <ng-container *ngIf="ganPalletStep === 5">
+        <div class="gan-pallet__hit" *ngIf="ganPalletHit">
+          <strong>{{ ganPalletHit.materialCode }}</strong>
+          <span>PO {{ ganPalletHit.poNumber || '—' }}</span>
+          <span>Tồn {{ formatNumber(calculateCurrentStock(ganPalletHit)) }}</span>
+          <span>VT {{ primaryLocationDisplay(ganPalletHit.location) }}</span>
+        </div>
+        <label class="gan-pallet__field">
+          <span>Lượng gán vào pallet (nếu cần)</span>
+          <input
+            id="gan-pallet-qty"
+            type="number"
+            [(ngModel)]="ganPalletQty"
+            (keydown.enter)="onGanPalletQtyEnter($event)"
+            placeholder="Để trống = gán cả dòng"
+            min="0"
+            step="any"
+            inputmode="decimal"
+            enterkeyhint="done"
+            [disabled]="ganPalletBusy || !ganPalletHit" />
+          <small>Enter / Gán tiếp → scan mã tiếp theo. Dừng = lưu.</small>
+        </label>
+        <button type="button" class="gan-pallet__skip" (click)="ganPalletTiep()" [disabled]="ganPalletBusy || ganPalletLookupBusy || !ganPalletHit">
+          Bỏ qua lượng · gán cả dòng
+        </button>
+      </ng-container>
+
+      <p class="gan-pallet__err" *ngIf="ganPalletError">{{ ganPalletError }}</p>
+
+      <div class="gan-pallet__pending" *ngIf="ganPalletPending.length">
+        <div class="gan-pallet__pending-title">Chờ lưu ({{ ganPalletPending.length }})</div>
+        <div class="gan-pallet__pending-row" *ngFor="let row of ganPalletPending">
+          <strong>{{ row.material.materialCode }}</strong>
+          <span>{{ row.material.poNumber || '—' }}</span>
+          <span>{{ row.location }}</span>
+          <span>{{ row.palletId }}</span>
+          <span *ngIf="row.qty != null">× {{ row.qty }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="filter-picker-footer gan-pallet__foot">
+      <button type="button" class="cancel-btn" (click)="closeGanPallet()" [disabled]="ganPalletBusy">Hủy</button>
+      <button type="button" class="pushback-btn" (click)="ganPalletTiep()" [disabled]="ganPalletBusy || ganPalletLookupBusy || ganPalletStep < 4">
+        <i class="material-icons">add</i> Gán tiếp
+      </button>
+      <button type="button" class="pushback-btn" (click)="ganPalletDung()" [disabled]="ganPalletBusy">
+        <i class="material-icons">{{ ganPalletBusy ? 'sync' : 'save' }}</i>
+        {{ ganPalletBusy ? 'Đang lưu…' : 'Dừng' }}
+      </button>
     </div>
   </div>
 </div>

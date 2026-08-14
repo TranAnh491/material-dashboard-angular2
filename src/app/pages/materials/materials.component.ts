@@ -196,6 +196,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
   private kkLocMapRowCache = new Map<string, InventoryMaterial[]>();
 
+  /** Popup Gán pallet: scan pallet → kho → vị trí → mã (+ lượng) → Gán tiếp / Dừng. */
+  showGanPallet = false;
+  ganPalletBusy = false;
+  ganPalletLookupBusy = false;
+  ganPalletStep: 1 | 2 | 3 | 4 | 5 = 1;
+  ganPalletCode = '';
+  ganPalletWh: 'ASM1' | 'ASM3' | null = null;
+  ganPalletLoc = '';
+  ganPalletMaterial = '';
+  ganPalletQty = '';
+  ganPalletError = '';
+  ganPalletHit: InventoryMaterial | null = null;
+  ganPalletPending: Array<{
+    material: InventoryMaterial;
+    qty: number | null;
+    location: string;
+    palletId: string;
+  }> = [];
+
   /** Popup Kiểm Kê: tiến độ tick KK toàn bộ tồn kho + theo từng mã B (B + 6 số) */
   showKkCheckPopup = false;
   kkCheckRunning = false;
@@ -2068,6 +2087,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.clearKkInlineBanner(true);
     this.showKkCheckPopup = false;
     this.closeKkLocMap();
+    this.closeGanPallet();
     this.cancelMobileLocationScan(true);
     this.cancelMobileKkConfirm();
     this.closeMobileDetail();
@@ -4938,6 +4958,334 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapRowCache.clear();
   }
 
+  openGanPallet(): void {
+    this.showGanPallet = true;
+    this.ganPalletBusy = false;
+    this.ganPalletLookupBusy = false;
+    this.ganPalletStep = 1;
+    this.ganPalletCode = '';
+    this.ganPalletWh = null;
+    this.ganPalletLoc = '';
+    this.ganPalletMaterial = '';
+    this.ganPalletQty = '';
+    this.ganPalletError = '';
+    this.ganPalletHit = null;
+    this.ganPalletPending = [];
+    this.focusGanPalletField('gan-pallet-code');
+  }
+
+  closeGanPallet(): void {
+    if (this.ganPalletBusy) return;
+    this.showGanPallet = false;
+    this.ganPalletLookupBusy = false;
+    this.ganPalletStep = 1;
+    this.ganPalletCode = '';
+    this.ganPalletWh = null;
+    this.ganPalletLoc = '';
+    this.ganPalletMaterial = '';
+    this.ganPalletQty = '';
+    this.ganPalletError = '';
+    this.ganPalletHit = null;
+    this.ganPalletPending = [];
+  }
+
+  private focusGanPalletField(id: string): void {
+    const delay = this.isMobile ? 200 : 60;
+    setTimeout(() => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (!el || el.disabled) return;
+      el.focus();
+      el.select();
+    }, delay);
+  }
+
+  ganPalletGoStep(step: 1 | 2 | 3 | 4 | 5): void {
+    if (this.ganPalletBusy) return;
+    this.ganPalletError = '';
+    this.ganPalletStep = step;
+    this.cdr.detectChanges();
+    if (step === 1) this.focusGanPalletField('gan-pallet-code');
+    else if (step === 3) this.focusGanPalletField('gan-pallet-loc');
+    else if (step === 4) this.focusGanPalletField('gan-pallet-material');
+    else if (step === 5) this.focusGanPalletField('gan-pallet-qty');
+  }
+
+  onGanPalletScanInput(kind: 'code' | 'loc' | 'material', event?: Event): void {
+    const el = event?.target as HTMLInputElement | undefined;
+    const key = kind === 'code' ? 'ganPalletCode' : kind === 'loc' ? 'ganPalletLoc' : 'ganPalletMaterial';
+    const raw = String(el?.value ?? (this as any)[key] ?? '');
+    if (!/[\r\n]/.test(raw)) return;
+    const cleaned = raw.replace(/[\r\n]+/g, '').trim();
+    (this as any)[key] = cleaned;
+    if (el) el.value = cleaned;
+    if (kind === 'code') this.onGanPalletCodeEnter();
+    else if (kind === 'loc') this.onGanPalletLocEnter();
+    else this.onGanPalletMaterialEnter();
+  }
+
+  isGanPalletCodeOk(): boolean {
+    return /^[PF].+/i.test(String(this.ganPalletCode || '').trim());
+  }
+
+  private normalizeGanPalletCode(raw: string): string {
+    const s = String(raw || '').trim().toUpperCase();
+    const first = s.includes('|') ? s.split('|')[0].trim() : s;
+    return first;
+  }
+
+  get ganPalletLocPreview(): string {
+    return this.normalizeGanPalletLocation(this.ganPalletLoc, this.ganPalletWh);
+  }
+
+  private normalizeGanPalletLocation(raw: string, wh: 'ASM1' | 'ASM3' | null): string {
+    let loc = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!loc || !wh) return '';
+    if (loc.includes('|')) loc = loc.split('|')[0].trim().toUpperCase();
+    if (wh === 'ASM3') {
+      loc = loc.replace(/^WH3-/, '').replace(/^ASM3[+_-]?/, '');
+      if (!loc) return '';
+      const m = loc.match(/^([A-IK-L])(\d{1,2})$/);
+      if (m) return `ASM3-${m[1]}${Number(m[2])}`;
+      return loc.startsWith('ASM3') ? loc : `ASM3-${loc}`;
+    }
+    return loc;
+  }
+
+  onGanPalletCodeEnter(event?: Event): void {
+    event?.preventDefault();
+    const code = this.normalizeGanPalletCode(this.ganPalletCode);
+    this.ganPalletCode = code;
+    this.ganPalletError = '';
+    if (!this.isGanPalletCodeOk()) {
+      this.ganPalletError = 'Pallet phải bắt đầu bằng P hoặc F.';
+      this.ganPalletStep = 1;
+      return;
+    }
+    if (this.ganPalletWh) {
+      this.ganPalletStep = 3;
+      this.cdr.detectChanges();
+      this.focusGanPalletField('gan-pallet-loc');
+      return;
+    }
+    this.ganPalletStep = 2;
+    this.cdr.detectChanges();
+  }
+
+  setGanPalletWh(wh: 'ASM1' | 'ASM3'): void {
+    if (!this.isGanPalletCodeOk()) {
+      this.ganPalletError = 'Scan pallet trước (P… hoặc F…).';
+      this.ganPalletStep = 1;
+      this.cdr.detectChanges();
+      this.focusGanPalletField('gan-pallet-code');
+      return;
+    }
+    this.ganPalletCode = this.normalizeGanPalletCode(this.ganPalletCode);
+    this.ganPalletWh = wh;
+    this.ganPalletError = '';
+    this.ganPalletStep = 3;
+    this.cdr.detectChanges();
+    this.focusGanPalletField('gan-pallet-loc');
+  }
+
+  onGanPalletLocEnter(event?: Event): void {
+    event?.preventDefault();
+    if (!this.ganPalletLocPreview) {
+      this.ganPalletError = 'Nhập / scan vị trí.';
+      this.ganPalletStep = 3;
+      return;
+    }
+    this.ganPalletLoc = this.ganPalletLocPreview;
+    this.ganPalletError = '';
+    this.ganPalletStep = 4;
+    this.cdr.detectChanges();
+    this.focusGanPalletField('gan-pallet-material');
+  }
+
+  onGanPalletMaterialEnter(event?: Event): void {
+    event?.preventDefault();
+    void this.lookupGanPalletMaterial();
+  }
+
+  onGanPalletQtyEnter(event?: Event): void {
+    event?.preventDefault();
+    this.ganPalletTiep();
+  }
+
+  private async lookupGanPalletMaterial(): Promise<boolean> {
+    if (this.ganPalletLookupBusy) return false;
+    const code = this.parseGanPalletMaterialScan(this.ganPalletMaterial);
+    this.ganPalletMaterial = code;
+    this.ganPalletError = '';
+    this.ganPalletHit = null;
+    if (!code || code.length < 3) {
+      this.ganPalletError = 'Mã hàng tối thiểu 3 ký tự.';
+      return false;
+    }
+    if (!this.ganPalletLocPreview) {
+      this.ganPalletError = 'Chọn kho và scan vị trí trước.';
+      return false;
+    }
+    this.ganPalletLookupBusy = true;
+    try {
+      const snaps = await Promise.all(
+        (['ASM1', 'ASM2'] as const).map((factory) =>
+          this.firestore
+            .collection('inventory-materials', (ref) =>
+              ref.where('factory', '==', factory).where('materialCode', '==', code).limit(80)
+            )
+            .get()
+            .toPromise()
+        )
+      );
+      const docs = snaps.flatMap((s) => s?.docs || []);
+      const rows = docs
+        .map((doc) => {
+          const material = this.mapKkInventoryDoc(doc);
+          material.kkChecked = this.isKkFlagOn((doc.data() as any)?.kkChecked);
+          material.factory = String((doc.data() as any)?.factory || this.selectedFactory);
+          this.stampLocationAtLoad(material);
+          this.rememberLocationBeforeEdit(material);
+          this.rememberPalletBeforeEdit(material);
+          return material;
+        })
+        .filter((m) => this.calculateCurrentStock(m) > 0)
+        .sort((a, b) => {
+          const c = this.compareMaterialCodesFIFO(String(a.materialCode || ''), String(b.materialCode || ''));
+          if (c) return c;
+          return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+        });
+      if (!rows.length) {
+        this.ganPalletError = `Không tìm thấy mã ${code} còn tồn.`;
+        this.ganPalletStep = 4;
+        this.cdr.detectChanges();
+        this.focusGanPalletField('gan-pallet-material');
+        return false;
+      }
+      const qty = this.parseGanPalletQty();
+      const hit = qty != null ? rows.find((m) => this.calculateCurrentStock(m) + 1e-9 >= qty) : rows[0];
+      if (!hit) {
+        this.ganPalletError = `Không có dòng ${code} đủ tồn ${qty}.`;
+        return false;
+      }
+      this.ganPalletHit = hit;
+      this.ganPalletStep = 5;
+      this.cdr.detectChanges();
+      this.focusGanPalletField('gan-pallet-qty');
+      return true;
+    } catch (e) {
+      console.error('❌ lookupGanPalletMaterial', e);
+      this.ganPalletError = 'Lỗi khi tìm mã hàng.';
+      return false;
+    } finally {
+      this.ganPalletLookupBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private parseGanPalletMaterialScan(raw: string): string {
+    const s = String(raw || '').trim().toUpperCase();
+    if (!s) return '';
+    return (s.includes('|') ? s.split('|')[0] : s).trim().toUpperCase();
+  }
+
+  private parseGanPalletQty(): number | null {
+    const raw = String(this.ganPalletQty ?? '').trim().replace(/,/g, '');
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  }
+
+  ganPalletTiep(): void {
+    void this.addGanPalletPending().then((ok) => {
+      if (!ok) return;
+      this.ganPalletMaterial = '';
+      this.ganPalletQty = '';
+      this.ganPalletHit = null;
+      this.ganPalletError = '';
+      this.ganPalletStep = 4;
+      this.cdr.detectChanges();
+      this.focusGanPalletField('gan-pallet-material');
+    });
+  }
+
+  async ganPalletDung(): Promise<void> {
+    if (this.ganPalletHit || String(this.ganPalletMaterial || '').trim()) {
+      const ok = await this.addGanPalletPending();
+      if (!ok && !this.ganPalletPending.length) return;
+    }
+    if (!this.ganPalletPending.length) {
+      this.closeGanPallet();
+      return;
+    }
+    await this.saveGanPalletPending();
+  }
+
+  private async addGanPalletPending(): Promise<boolean> {
+    this.ganPalletError = '';
+    if (!this.isGanPalletCodeOk()) {
+      this.ganPalletError = 'Pallet phải bắt đầu bằng P hoặc F.';
+      return false;
+    }
+    const loc = this.ganPalletLocPreview;
+    if (!this.ganPalletWh || !loc) {
+      this.ganPalletError = 'Chọn kho và scan vị trí.';
+      return false;
+    }
+    if (!this.ganPalletHit) {
+      const found = await this.lookupGanPalletMaterial();
+      if (!found || !this.ganPalletHit) return false;
+    }
+    const hit = this.ganPalletHit;
+    if (!hit?.id) return false;
+    const qty = this.parseGanPalletQty();
+    const stock = this.calculateCurrentStock(hit);
+    if (qty != null && qty > stock + 1e-9) {
+      this.ganPalletError = `Lượng ${qty} vượt tồn ${this.formatNumber(stock)}.`;
+      return false;
+    }
+    if (this.ganPalletPending.some((p) => p.material.id === hit.id)) {
+      this.ganPalletError = `${hit.materialCode} đã nằm trong danh sách chờ lưu.`;
+      return false;
+    }
+    this.ganPalletPending.push({
+      material: hit,
+      qty,
+      location: loc,
+      palletId: this.normalizeGanPalletCode(this.ganPalletCode)
+    });
+    return true;
+  }
+
+  private async saveGanPalletPending(): Promise<void> {
+    if (this.ganPalletBusy) return;
+    this.ganPalletBusy = true;
+    this.ganPalletError = '';
+    this.cdr.detectChanges();
+    let ok = 0;
+    try {
+      for (const row of this.ganPalletPending) {
+        const mat = row.material;
+        if (!mat?.id) continue;
+        this.rememberLocationBeforeEdit(mat);
+        this.rememberPalletBeforeEdit(mat);
+        mat.location = row.location;
+        const locOk = await this.persistLocationChange(mat, { silent: true, bypassUnlock: true });
+        const palOk = await this.persistPalletChange(mat, row.palletId, { silent: true, bypassUnlock: true });
+        if (locOk || palOk) ok += 1;
+      }
+      const n = this.ganPalletPending.length;
+      this.ganPalletBusy = false;
+      this.closeGanPallet();
+      alert(ok ? `✅ Đã gán pallet ${ok}/${n} dòng.` : '❌ Không lưu được dòng nào.');
+    } catch (e) {
+      console.error('❌ saveGanPalletPending', e);
+      this.ganPalletBusy = false;
+      this.ganPalletError = 'Lỗi khi lưu. Thử lại.';
+      this.cdr.detectChanges();
+    }
+  }
+
   get kkLocMapFilteredBoxes(): Array<{ loc: string; checked: number; total: number }> {
     const q = (this.kkLocMapQuery || '').trim().toUpperCase();
     if (!q) return this.kkLocMapBoxes;
@@ -6408,9 +6756,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private async persistPalletChange(
     material: InventoryMaterial,
     raw: string,
-    opts?: { silent?: boolean }
+    opts?: { silent?: boolean; bypassUnlock?: boolean }
   ): Promise<boolean> {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) return false;
+    if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
     if (!material?.id) return false;
     const next = String(raw || '').trim().toUpperCase();
     const prev = String((material as { __prevPalletId?: string }).__prevPalletId ?? material.palletId ?? '').trim().toUpperCase();

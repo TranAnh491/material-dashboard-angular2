@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { JwRack } from './j-warehouse.component';
 
 export interface JwRack3dSlot {
   level: number;
@@ -23,19 +24,30 @@ export interface JwRack3dSlot {
 export interface JwRack3dPick {
   level: number;
   pos: string;
+  /** Chỉ có ở chế độ 'warehouse' — mã block chứa ô vừa bấm. */
+  blockCode?: string;
 }
 
-/** Mô hình 3D của 1 block kệ (4 tầng × A/B/C) — bấm vào ô để chọn tầng + vị trí. */
+/**
+ * Mô hình 3D kệ kho.
+ * - mode='block': 1 block (4 tầng × A/B/C) — dùng cho xem/gán pallet chi tiết.
+ * - mode='warehouse': toàn bộ dãy kệ, mỗi block đặt đúng vị trí thật (mét) — chỉ để xem/xoay, không cần chọn block trước.
+ */
 @Component({
   selector: 'app-j-warehouse-rack-3d',
   templateUrl: './j-warehouse-rack-3d.component.html',
   styleUrls: ['./j-warehouse-rack-3d.component.scss']
 })
 export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @Input() mode: 'block' | 'warehouse' = 'block';
   @Input() blockCode = '';
   @Input() occupancy: JwRack3dSlot[] = [];
   @Input() selectedLevel: number | null = null;
   @Input() selectedPos: string | null = null;
+
+  /** Chỉ dùng ở mode='warehouse'. */
+  @Input() warehouseRacks: JwRack[] = [];
+  @Input() slotPallets: Map<string, string> = new Map();
 
   @Output() slotPick = new EventEmitter<JwRack3dPick>();
 
@@ -67,17 +79,26 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     if (this.canvasHost?.nativeElement) {
       this.resizeObserver.observe(this.canvasHost.nativeElement);
     }
-    this.buildRack();
+    this.rebuild();
     this.animate();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.scene) return;
-    if (changes['blockCode'] || changes['occupancy']) {
-      this.buildRack();
+    if (changes['mode'] || changes['blockCode'] || changes['occupancy'] || changes['warehouseRacks']) {
+      this.rebuild();
+      return;
     }
-    if (changes['selectedLevel'] || changes['selectedPos'] || changes['occupancy']) {
+    if (changes['selectedLevel'] || changes['selectedPos'] || changes['slotPallets']) {
       this.updateSlotColors();
+    }
+  }
+
+  private rebuild(): void {
+    if (this.mode === 'warehouse') {
+      this.buildWarehouse();
+    } else {
+      this.buildRack();
     }
   }
 
@@ -115,11 +136,16 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     const mesh = hits[0].object as THREE.Mesh;
     const level = Number(mesh.userData['level']);
     const pos = String(mesh.userData['pos'] || '');
-    this.slotPick.emit({ level, pos });
+    const blockCode = mesh.userData['blockCode'] as string | undefined;
+    this.slotPick.emit(blockCode ? { level, pos, blockCode } : { level, pos });
   }
 
   private isOccupied(level: number, pos: string): boolean {
     return this.occupancy.some((o) => o.level === level && o.pos === pos && o.occupied);
+  }
+
+  private isWarehouseSlotOccupied(blockCode: string, level: number, pos: string): boolean {
+    return !!this.slotPallets.get(`${blockCode}-${level}${pos}`);
   }
 
   private initScene(): void {
@@ -168,22 +194,24 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.scene.add(floor);
   }
 
+  private disposeRackGroup(): void {
+    if (!this.scene || !this.rackGroup) return;
+    this.scene.remove(this.rackGroup);
+    this.rackGroup.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.geometry?.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat?.dispose();
+      }
+    });
+    this.slotMeshes.clear();
+  }
+
   private buildRack(): void {
     if (!this.scene) return;
-
-    if (this.rackGroup) {
-      this.scene.remove(this.rackGroup);
-      this.rackGroup.traverse((obj) => {
-        const mesh = obj as THREE.Mesh;
-        if (mesh.isMesh) {
-          mesh.geometry?.dispose();
-          const mat = mesh.material;
-          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-          else mat?.dispose();
-        }
-      });
-    }
-    this.slotMeshes.clear();
+    this.disposeRackGroup();
 
     const group = new THREE.Group();
     this.rackGroup = group;
@@ -233,7 +261,100 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     group.add(back);
 
     this.scene.add(group);
+    this.resetBlockCamera();
     this.updateSlotColors();
+  }
+
+  /**
+   * Toàn bộ dãy kệ trong kho — mỗi block đặt đúng vị trí thật (mét, trục X/Z sàn = xM/yM trên mặt bằng).
+   * Không vẽ trụ/tấm lưng (quá nặng khi nhân với hàng trăm block) — chỉ vẽ khối pallet để xem/xoay.
+   */
+  private buildWarehouse(): void {
+    if (!this.scene) return;
+    this.disposeRackGroup();
+
+    const group = new THREE.Group();
+    this.rackGroup = group;
+
+    const levelH = this.boxH;
+    const levelGap = this.gapY * 0.5;
+    const cellMargin = 0.94;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+
+    for (const rack of this.warehouseRacks) {
+      for (const block of rack.blocks) {
+        const alongX = block.wM >= block.hM;
+        const posCount = this.positions.length;
+        const cellW = alongX ? block.wM / posCount : block.wM;
+        const cellD = alongX ? block.hM : block.hM / posCount;
+
+        for (let li = 0; li < this.levels.length; li++) {
+          const level = this.levels[li];
+          const y = li * (levelH + levelGap) + levelH / 2;
+
+          this.positions.forEach((pos, i) => {
+            const cx = block.xM + (alongX ? i * cellW + cellW / 2 : cellW / 2);
+            const cz = block.yM + (alongX ? cellD / 2 : i * cellD + cellD / 2);
+            const occupied = this.isWarehouseSlotOccupied(block.code, level, pos);
+
+            const mesh = new THREE.Mesh(
+              new THREE.BoxGeometry(cellW * cellMargin, levelH, cellD * cellMargin),
+              new THREE.MeshStandardMaterial({
+                color: occupied ? 0x3b82f6 : 0xe2e8f0,
+                metalness: 0.04,
+                roughness: 0.86
+              })
+            );
+            mesh.position.set(cx, y, cz);
+            mesh.userData = { level, pos, blockCode: block.code };
+            group.add(mesh);
+            this.slotMeshes.set(`${block.code}-${level}${pos}`, mesh);
+          });
+        }
+
+        minX = Math.min(minX, block.xM);
+        maxX = Math.max(maxX, block.xM + block.wM);
+        minZ = Math.min(minZ, block.yM);
+        maxZ = Math.max(maxZ, block.yM + block.hM);
+      }
+    }
+
+    this.scene.add(group);
+    this.updateSlotColors();
+    if (Number.isFinite(minX)) {
+      this.frameWarehouseCamera(minX, maxX, minZ, maxZ);
+    }
+  }
+
+  /** Đặt camera đủ xa để nhìn hết toàn bộ kho, canh giữa vào tâm khu kệ. */
+  private frameWarehouseCamera(minX: number, maxX: number, minZ: number, maxZ: number): void {
+    if (!this.camera || !this.controls) return;
+    const cx = (minX + maxX) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const span = Math.max(maxX - minX, maxZ - minZ, 10);
+
+    this.camera.near = 0.1;
+    this.camera.far = span * 4 + 100;
+    this.camera.updateProjectionMatrix();
+
+    this.camera.position.set(cx - span * 0.15, span * 0.55, cz + span * 0.65);
+    this.controls.target.set(cx, 0, cz);
+    this.controls.update();
+  }
+
+  /** Đưa camera về vị trí mặc định khi xem 1 block (mode='block'). */
+  private resetBlockCamera(): void {
+    if (!this.camera || !this.controls) return;
+    this.camera.near = 0.1;
+    this.camera.far = 200;
+    this.camera.updateProjectionMatrix();
+    this.camera.position.set(6, 5, 8);
+    this.controls.target.set(0, 1.8, 0);
+    this.controls.update();
   }
 
   private addPost(group: THREE.Group, x: number, height: number): void {
@@ -247,11 +368,15 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateSlotColors(): void {
+    const isWarehouse = this.mode === 'warehouse';
     this.slotMeshes.forEach((mesh, key) => {
       const level = Number(mesh.userData['level']);
       const pos = String(mesh.userData['pos'] || '');
-      const occupied = this.isOccupied(level, pos);
-      const selected = this.selectedLevel === level && this.selectedPos === pos;
+      const blockCode = mesh.userData['blockCode'] as string | undefined;
+      const occupied = isWarehouse
+        ? this.isWarehouseSlotOccupied(blockCode || '', level, pos)
+        : this.isOccupied(level, pos);
+      const selected = !isWarehouse && this.selectedLevel === level && this.selectedPos === pos;
       const mat = mesh.material as THREE.MeshStandardMaterial;
       if (selected) {
         mat.color.setHex(0xf59e0b);

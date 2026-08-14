@@ -452,6 +452,59 @@ $accent-soft: #ccfbf1;
   shape-rendering: geometricPrecision;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
+
+  &--tech {
+    .jw-office__room,
+    .jw-office__outline,
+    .jw-wc-zone__body,
+    .jw-floor-zone__body {
+      stroke: #16a34a;
+    }
+
+    .jw-block__body,
+    .jw-kho-mat__block,
+    .jw-kho-mat__row {
+      stroke: #00a2e8;
+    }
+
+    .jw-dim--sky,
+    .jw-dim--sky text,
+    .jw-dim--sky .jw-dim__zone-label,
+    .jw-office-aisle__label,
+    .jw-aisle__label,
+    .jw-axis__span {
+      fill: #00a2e8;
+      stroke: none;
+    }
+
+    .jw-dim--green,
+    .jw-dim--green text,
+    .jw-dim--green .jw-dim__zone-label {
+      fill: #16a34a;
+      stroke: none;
+    }
+
+    .jw-dim--sky .jw-dim__zone-label,
+    .jw-dim--green .jw-dim__zone-label {
+      stroke: #ffffff;
+      stroke-width: 3.5px;
+      paint-order: stroke fill;
+    }
+
+    .jw-dim--sky .jw-dim__line,
+    .jw-office-aisle__dim-line {
+      stroke: #00a2e8;
+    }
+
+    .jw-dim--green .jw-dim__line {
+      stroke: #16a34a;
+    }
+
+    .jw-office__door-label {
+      fill: #16a34a;
+      stroke: none;
+    }
+  }
 }
 
 .jw-floor {
@@ -511,6 +564,23 @@ $accent-soft: #ccfbf1;
     fill: #000000;
     font-size: 10px;
     font-weight: 400;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+}
+
+.jw-dock-leveler {
+  &__body {
+    fill: #ffffff;
+    stroke: #000000;
+    stroke-width: 1.3;
+  }
+
+  &__label {
+    fill: #000000;
+    font-size: 8px;
+    font-weight: 600;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -586,6 +656,11 @@ $accent-soft: #ccfbf1;
     dominant-baseline: middle;
     pointer-events: none;
     letter-spacing: 0.02em;
+
+    &--above {
+      dominant-baseline: auto;
+      font-weight: 700;
+    }
   }
 
   &__dim {
@@ -603,6 +678,59 @@ $accent-soft: #ccfbf1;
     font-weight: 400;
     text-anchor: middle;
     dominant-baseline: auto;
+    pointer-events: none;
+  }
+
+  &__door-gap {
+    fill: #ffffff;
+    stroke: none;
+    pointer-events: none;
+  }
+
+  &__door-swing {
+    fill: none;
+    stroke: #16a34a;
+    stroke-width: 1;
+    pointer-events: none;
+  }
+
+  &__door-leaf {
+    stroke: #16a34a;
+    stroke-width: 1.2;
+    pointer-events: none;
+  }
+
+  &__door-label {
+    fill: #1d4ed8;
+    font-size: 8px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: auto;
+    pointer-events: none;
+  }
+}
+
+.jw-kho-mat {
+  &__row {
+    fill: none;
+    stroke: #94a3b8;
+    stroke-width: 0.6;
+    pointer-events: none;
+  }
+
+  &__block {
+    fill: #ffffff;
+    stroke: #000000;
+    stroke-width: 0.8;
+    pointer-events: none;
+  }
+
+  &__label {
+    fill: #000000;
+    font-size: 5px;
+    font-weight: 400;
+    text-anchor: middle;
+    dominant-baseline: middle;
     pointer-events: none;
   }
 }
@@ -652,6 +780,16 @@ $accent-soft: #ccfbf1;
     fill: #000000;
     opacity: 1;
     pointer-events: none;
+  }
+
+  &__zone-name {
+    fill: #000000;
+    font-size: 13px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    letter-spacing: 0.04em;
   }
 
   &__label {
@@ -925,6 +1063,38 @@ $accent-soft: #ccfbf1;
     text-anchor: middle;
     dominant-baseline: middle;
     letter-spacing: 0.08em;
+  }
+
+  &__factory-arrow {
+    fill: none;
+    stroke: #000000;
+    stroke-width: 1.2;
+  }
+
+  &__factory-label {
+    fill: #000000;
+    font-size: 11px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+}
+
+.jw-fg-inbound {
+  pointer-events: none;
+
+  &__arrow {
+    fill: none;
+    stroke: #000000;
+    stroke-width: 1.2;
+  }
+
+  &__label {
+    fill: #000000;
+    font-size: 11px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: alphabetic;
   }
 }
 
