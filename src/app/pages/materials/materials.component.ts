@@ -5292,6 +5292,41 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkLocMapBoxes.filter((b) => b.loc.includes(q));
   }
 
+  /** Nhóm vị trí KK theo chữ cái đầu (A, B, C, D…). */
+  kkLocFirstLetter(loc: string): string {
+    const raw = String(loc || '').trim().toUpperCase();
+    if (!raw || raw === '—') return '#';
+    const body = raw.replace(/^(ASM3-|WH3-)/, '');
+    const ch = body.charAt(0);
+    return ch || '#';
+  }
+
+  get kkLocMapGroupedBoxes(): Array<{
+    key: string;
+    boxes: Array<{ loc: string; checked: number; total: number }>;
+    checked: number;
+    total: number;
+  }> {
+    const buckets = new Map<string, Array<{ loc: string; checked: number; total: number }>>();
+    for (const box of this.kkLocMapFilteredBoxes) {
+      const key = this.kkLocFirstLetter(box.loc);
+      const list = buckets.get(key) || [];
+      list.push(box);
+      buckets.set(key, list);
+    }
+    return Array.from(buckets.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
+      .map(([key, boxes]) => {
+        boxes.sort((x, y) => x.loc.localeCompare(y.loc, 'en', { numeric: true }));
+        return {
+          key,
+          boxes,
+          checked: boxes.reduce((n, b) => n + b.checked, 0),
+          total: boxes.reduce((n, b) => n + b.total, 0)
+        };
+      });
+  }
+
   get kkLocMapSummary(): { checked: number; total: number } {
     return this.kkLocMapBoxes.reduce(
       (acc, b) => ({ checked: acc.checked + b.checked, total: acc.total + b.total }),

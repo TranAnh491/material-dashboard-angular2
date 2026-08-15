@@ -2141,20 +2141,28 @@
         <i class="material-icons rotating">sync</i>
         Đang đọc tồn kho {{ selectedFactory }}…
       </div>
-      <div class="kk-loc-map__grid" *ngIf="!kkLocMapLoading">
-        <button
-          type="button"
-          class="kk-loc-box"
-          *ngFor="let box of kkLocMapFilteredBoxes"
-          [class.kk-loc-box--done]="kkLocBoxTone(box) === 'done'"
-          [class.kk-loc-box--partial]="kkLocBoxTone(box) === 'partial'"
-          [class.kk-loc-box--none]="kkLocBoxTone(box) === 'none'"
-          (click)="onKkLocBoxClick(box)"
-          [title]="box.loc + ': ' + box.checked + '/' + box.total + ' mã đã KK'">
-          <strong>{{ box.loc }}</strong>
-          <span>{{ box.checked }}/{{ box.total }}</span>
-        </button>
-        <p class="hidden-empty" *ngIf="!kkLocMapFilteredBoxes.length">Không có vị trí khớp.</p>
+      <div class="kk-loc-map__groups" *ngIf="!kkLocMapLoading">
+        <section class="kk-loc-map__group" *ngFor="let group of kkLocMapGroupedBoxes">
+          <header class="kk-loc-map__group-head">
+            <strong>{{ group.key }}</strong>
+            <span>{{ group.checked }}/{{ group.total }} mã · {{ group.boxes.length }} vị trí</span>
+          </header>
+          <div class="kk-loc-map__grid">
+            <button
+              type="button"
+              class="kk-loc-box"
+              *ngFor="let box of group.boxes"
+              [class.kk-loc-box--done]="kkLocBoxTone(box) === 'done'"
+              [class.kk-loc-box--partial]="kkLocBoxTone(box) === 'partial'"
+              [class.kk-loc-box--none]="kkLocBoxTone(box) === 'none'"
+              (click)="onKkLocBoxClick(box)"
+              [title]="box.loc + ': ' + box.checked + '/' + box.total + ' mã đã KK'">
+              <strong>{{ box.loc }}</strong>
+              <span>{{ box.checked }}/{{ box.total }}</span>
+            </button>
+          </div>
+        </section>
+        <p class="hidden-empty" *ngIf="!kkLocMapGroupedBoxes.length">Không có vị trí khớp.</p>
       </div>
     </div>
   </div>
