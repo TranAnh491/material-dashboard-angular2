@@ -1,19 +1,26 @@
 <div class="jw-rack3d">
   <div class="jw-rack3d__legend">
     <ng-container *ngIf="mode === 'warehouse'; else blockLegend">
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--beam">Beam</span>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--shelf">Mâm</span>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--wall">Vách phòng</span>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--raised">Nền cao +0.9m</span>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--door">Cửa cuốn (lối ra vào)</span>
-      <span class="jw-rack3d__hint">Kéo xoay · Cuộn phóng to · Click mâm để chọn kệ</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--beam">{{ t3d('legend.beam') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--shelf">{{ t3d('legend.shelf') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--wall">{{ t3d('legend.wall') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--raised">{{ t3d('legend.raised') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--door">{{ t3d('legend.door') }}</span>
+      <span class="jw-rack3d__hint">{{ t3d('hint.warehouse') }}</span>
     </ng-container>
     <ng-template #blockLegend>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--empty">Trống</span>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--full">Có hàng</span>
-      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--pick">Đang chọn</span>
-      <span class="jw-rack3d__hint">Kéo xoay · Cuộn phóng to · Click ô để chọn tầng/vị trí</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--empty">{{ t3d('legend.empty') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--full">{{ t3d('legend.full') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--pick">{{ t3d('legend.pick') }}</span>
+      <span class="jw-rack3d__hint">{{ t3d('hint.block') }}</span>
     </ng-template>
+    <button
+      type="button"
+      class="jw-rack3d__download"
+      (click)="downloadPng('j-warehouse-3d-' + lang + '.png'); $event.stopPropagation()">
+      <i class="material-icons">download</i>
+      {{ t3d('btn.download3d') }}
+    </button>
   </div>
   <div
     #canvasHost

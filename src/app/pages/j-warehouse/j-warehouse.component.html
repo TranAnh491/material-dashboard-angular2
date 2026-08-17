@@ -7,6 +7,9 @@
           <strong class="jw-header__title">J Warehouse</strong>
           <span class="jw-header__crumb">{{ headerCrumb }}</span>
         </div>
+        <span class="jw-view-only-badge" *ngIf="viewOnly">
+          <i class="material-icons">visibility</i> {{ lang === 'vi' ? 'Chỉ xem' : 'View only' }}
+        </span>
       </div>
 
       <div class="jw-kpi-strip">
@@ -15,10 +18,14 @@
           <span class="jw-kpi__lbl">{{ t('kpi.racks') }}</span>
         </div>
         <div class="jw-kpi-divider"></div>
-        <button type="button" class="jw-kpi jw-kpi--btn" (click)="openExtraPalletModal($event)" title="Nhập pallet ngoài">
+        <button *ngIf="!viewOnly" type="button" class="jw-kpi jw-kpi--btn" (click)="openExtraPalletModal($event)" [title]="t('title.extraPallet')">
           <strong class="jw-kpi__num">{{ totalPalletsJ5 | number }}</strong>
           <span class="jw-kpi__lbl">{{ t('kpi.totalPallets') }}</span>
         </button>
+        <div *ngIf="viewOnly" class="jw-kpi">
+          <strong class="jw-kpi__num">{{ totalPalletsJ5 | number }}</strong>
+          <span class="jw-kpi__lbl">{{ t('kpi.totalPallets') }}</span>
+        </div>
         <div class="jw-kpi-divider"></div>
         <div class="jw-kpi">
           <strong class="jw-kpi__num">{{ occupiedCount | number }}</strong>
@@ -39,7 +46,7 @@
             {{ lo.label }}
           </button>
         </div>
-        <div class="jw-draw-modes jw-building-modes" role="tablist" aria-label="Xưởng hiển thị">
+        <div class="jw-draw-modes jw-building-modes" role="tablist" [attr.aria-label]="t('aria.building')">
           <button
             type="button"
             class="jw-draw-mode"
@@ -56,20 +63,22 @@
           class="jw-btn jw-btn--outline"
           [class.jw-btn--on]="show3D"
           (click)="toggle3D($event)"
-          title="Xem toàn bộ kệ kho ở dạng 3D">
+          [title]="t('title.3dView')">
           <i class="material-icons">view_in_ar</i> 3D
         </button>
-        <button type="button" class="jw-btn jw-btn--outline" (click)="goBack()">
-          <i class="material-icons">arrow_back</i> {{ t('btn.back') }}
-        </button>
-        <button type="button" class="jw-btn jw-btn--outline" (click)="goToMenu()">
-          <i class="material-icons">home</i> Về Menu
-        </button>
+        <ng-container *ngIf="!viewOnly">
+          <button type="button" class="jw-btn jw-btn--outline" (click)="goBack()">
+            <i class="material-icons">arrow_back</i> {{ t('btn.back') }}
+          </button>
+          <button type="button" class="jw-btn jw-btn--outline" (click)="goToMenu()">
+            <i class="material-icons">home</i> {{ t('btn.menu') }}
+          </button>
+        </ng-container>
       </div>
     </header>
 
     <div class="jw-workspace">
-      <aside class="jw-tools" aria-label="Công cụ bản vẽ">
+      <aside class="jw-tools" [attr.aria-label]="t('aria.tools')">
         <button
           type="button"
           class="jw-tools__btn"
@@ -94,9 +103,9 @@
         <div class="jw-map__toolbar">
           <div>
             <div class="jw-map__title-row">
-              <h2>{{ show3D ? 'Mô hình 3D — toàn bộ kệ kho' : drawModeTitle }}</h2>
+              <h2>{{ show3D ? t('title.3dModel') : drawModeTitle }}</h2>
               <div class="jw-map__mode-row" *ngIf="!show3D">
-                <div class="jw-draw-modes jw-building-modes jw-building-modes--toolbar" role="tablist" aria-label="Xưởng hiển thị">
+                <div class="jw-draw-modes jw-building-modes jw-building-modes--toolbar" role="tablist" [attr.aria-label]="t('aria.building')">
                   <button
                     type="button"
                     class="jw-draw-mode"
@@ -108,7 +117,7 @@
                     {{ bv.label }}
                   </button>
                 </div>
-                <div class="jw-draw-modes jw-draw-modes--toolbar" role="tablist" aria-label="Loại bản vẽ" *ngIf="!workMode">
+                <div class="jw-draw-modes jw-draw-modes--toolbar" role="tablist" [attr.aria-label]="t('aria.drawType')" *ngIf="!workMode">
                   <button
                     type="button"
                     class="jw-draw-mode"
@@ -125,6 +134,7 @@
           </div>
           <div class="jw-map__tools" (click)="$event.stopPropagation()">
             <button
+              *ngIf="!viewOnly"
               type="button"
               class="jw-btn jw-btn--work"
               [class.jw-btn--on]="workMode"
@@ -137,16 +147,16 @@
               class="jw-btn jw-btn--outline"
               [disabled]="isDownloading"
               (click)="downloadDrawing($event)"
-              title="Tải về bản vẽ + Thông tin kho (PNG)">
+              [title]="show3D ? t('title.download3d') : t('title.download2d')">
               <i class="material-icons">download</i>
               {{ isDownloading ? t('btn.downloading') : t('btn.download') }}
             </button>
             <div class="jw-zoom" *ngIf="!show3D">
-              <button type="button" class="jw-icon-btn" (click)="onZoomBtn(-0.2, $event)" title="Thu nhỏ">
+              <button type="button" class="jw-icon-btn" (click)="onZoomBtn(-0.2, $event)" [title]="t('zoom.out')">
                 <i class="material-icons">remove</i>
               </button>
               <span>{{ (zoom * 100) | number:'1.0-0' }}%</span>
-              <button type="button" class="jw-icon-btn" (click)="onZoomBtn(0.2, $event)" title="Phóng to">
+              <button type="button" class="jw-icon-btn" (click)="onZoomBtn(0.2, $event)" [title]="t('zoom.in')">
                 <i class="material-icons">add</i>
               </button>
             </div>
@@ -191,7 +201,7 @@
                 [attr.height]="viewBoxH * zoom"
                 preserveAspectRatio="xMinYMin meet"
                 role="img"
-                [attr.aria-label]="drawModeTitle + ' J Warehouse ' + LENGTH_M + ' × ' + WIDTH_M + ' mét'">
+                [attr.aria-label]="t('aria.map', { title: drawModeTitle, l: LENGTH_M, w: WIDTH_M })">
               <defs>
                 <marker id="jwDimArrowSky" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
                   <path d="M0,0 L9,4 L0,8 Z" fill="#00a2e8" />
@@ -1104,7 +1114,7 @@
                     [attr.transform]="
                       'rotate(-90 ' + meterX(d.xM + d.wM / 2) + ' ' + meterY(d.yM + d.hM / 2) + ')'
                     ">
-                    Leveler
+                    {{ t('dock.leveler') }}
                   </text>
                 </g>
               </g>
@@ -1216,8 +1226,10 @@
 
         <app-j-warehouse-rack-3d
           *ngIf="show3D"
+          #rack3d
           class="jw-map__rack3d"
           mode="warehouse"
+          [lang]="lang"
           [warehouseRacks]="racks"
           [khoMatRows]="khoMatRows"
           [rooms]="warehouse3dRooms"
@@ -1240,7 +1252,7 @@
       <aside class="jw-detail">
         <ng-container *ngIf="selectedBlock; else warehouseInfo">
           <h3>{{ selectedBlock.code }}</h3>
-          <p class="jw-detail__sub">Dãy R{{ selectedBlock.rackNum }} · Block {{ selectedBlock.index }} · 4 tầng × ABC</p>
+          <p class="jw-detail__sub">{{ t('detail.rackBlock', { n: selectedBlock.rackNum, i: selectedBlock.index }) }}</p>
 
           <ng-container *ngIf="workMode">
           <div class="jw-level-tabs">
@@ -1250,7 +1262,7 @@
               *ngFor="let lv of LEVEL_LIST"
               [class.jw-level-tab--on]="selectedLevel === lv"
               (click)="selectLevel(lv)">
-              Tầng {{ lv }}
+              {{ t('detail.level', { n: lv }) }}
             </button>
           </div>
 
@@ -1266,21 +1278,21 @@
               <span class="jw-pos-btn__pallet" *ngIf="palletAt(slotCode(selectedBlock.code, selectedLevel, pos)) as p">
                 {{ p }}
               </span>
-              <span class="jw-pos-btn__empty" *ngIf="!palletAt(slotCode(selectedBlock.code, selectedLevel, pos))">Trống</span>
+              <span class="jw-pos-btn__empty" *ngIf="!palletAt(slotCode(selectedBlock.code, selectedLevel, pos))">{{ t('detail.empty') }}</span>
             </button>
           </div>
 
           <dl class="jw-fields">
-            <div class="jw-fields__row"><dt>Vị trí</dt><dd class="jw-fields__accent">{{ selectedSlotCode }}</dd></div>
-            <div class="jw-fields__row"><dt>Pallet</dt><dd>{{ selectedPallet || '—' }}</dd></div>
+            <div class="jw-fields__row"><dt>{{ t('detail.slot') }}</dt><dd class="jw-fields__accent">{{ selectedSlotCode }}</dd></div>
+            <div class="jw-fields__row"><dt>{{ t('detail.pallet') }}</dt><dd>{{ selectedPallet || '—' }}</dd></div>
             <div class="jw-fields__row">
-              <dt>Block đã gán</dt>
+              <dt>{{ t('detail.blockAssigned') }}</dt>
               <dd>{{ blockOccupiedCount(selectedBlock) }} / {{ LEVELS * PALLETS_PER_BLOCK }}</dd>
             </div>
           </dl>
 
           <div class="jw-detail__scan" *ngIf="showScanInput">
-            <label for="jw-scan">Scan mã pallet</label>
+            <label for="jw-scan">{{ t('detail.scan') }}</label>
             <div class="jw-scan-row">
               <input
                 id="jw-scan"
@@ -1288,7 +1300,7 @@
                 type="text"
                 [(ngModel)]="scanPalletInput"
                 (keyup.enter)="submitScanPallet()"
-                placeholder="4 số → P1234"
+                [attr.placeholder]="t('detail.scanPlaceholder')"
                 [disabled]="isSavingPallet" />
               <button
                 type="button"
@@ -1298,7 +1310,7 @@
                 <i class="material-icons">check</i>
               </button>
             </div>
-            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="cancelScanPallet()">Hủy</button>
+            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="cancelScanPallet()">{{ t('btn.cancel') }}</button>
           </div>
 
           <div class="jw-detail__btns" *ngIf="!showScanInput">
@@ -1307,7 +1319,7 @@
               class="jw-btn jw-btn--primary jw-btn--block"
               (click)="openScanForSelectedSlot()"
               [disabled]="!!selectedPallet">
-              <i class="material-icons">qr_code_scanner</i> Gán pallet
+              <i class="material-icons">qr_code_scanner</i> {{ t('btn.assignPallet') }}
             </button>
             <button
               type="button"
@@ -1315,42 +1327,42 @@
               *ngIf="selectedPallet"
               (click)="clearSelectedPallet()"
               [disabled]="isClearingPallet">
-              <i class="material-icons">delete</i> Xóa pallet
+              <i class="material-icons">delete</i> {{ t('btn.removePallet') }}
             </button>
             <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="clearSelection()">
-              Bỏ chọn
+              {{ t('btn.clearSelect') }}
             </button>
           </div>
           </ng-container>
 
           <ng-container *ngIf="!workMode && showTechDims">
               <dl class="jw-fields">
-                <div class="jw-fields__row"><dt>Dãy</dt><dd>R{{ selectedBlock.rackNum }}</dd></div>
-                <div class="jw-fields__row"><dt>Block</dt><dd>{{ selectedBlock.index }} / {{ BLOCKS_PER_RACK }}</dd></div>
-                <div class="jw-fields__row"><dt>Rộng (sâu kệ)</dt><dd>{{ selectedBlock.wM | number:'1.2-2' }}m</dd></div>
-                <div class="jw-fields__row"><dt>Dài block</dt><dd>{{ selectedBlock.hM | number:'1.2-2' }}m</dd></div>
-                <div class="jw-fields__row"><dt>Tọa độ X</dt><dd>{{ selectedBlock.xM | number:'1.2-2' }}m</dd></div>
-                <div class="jw-fields__row"><dt>Tọa độ Y</dt><dd>{{ selectedBlock.yM | number:'1.2-2' }}m</dd></div>
-                <div class="jw-fields__row"><dt>Số tầng</dt><dd>{{ LEVELS }}</dd></div>
-                <div class="jw-fields__row"><dt>Vị trí / tầng</dt><dd>A · B · C</dd></div>
-                <div class="jw-fields__row"><dt>Tổng vị trí</dt><dd>{{ LEVELS * PALLETS_PER_BLOCK }}</dd></div>
-                <div class="jw-fields__row"><dt>Đã gán</dt><dd>{{ blockOccupiedCount(selectedBlock) }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.row') }}</dt><dd>R{{ selectedBlock.rackNum }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.block') }}</dt><dd>{{ selectedBlock.index }} / {{ BLOCKS_PER_RACK }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.width') }}</dt><dd>{{ selectedBlock.wM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.blockLen') }}</dt><dd>{{ selectedBlock.hM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.coordX') }}</dt><dd>{{ selectedBlock.xM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.coordY') }}</dt><dd>{{ selectedBlock.yM | number:'1.2-2' }}m</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.levelCount') }}</dt><dd>{{ LEVELS }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.slotsPerLevel') }}</dt><dd>A · B · C</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.totalSlots') }}</dt><dd>{{ LEVELS * PALLETS_PER_BLOCK }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.assigned') }}</dt><dd>{{ blockOccupiedCount(selectedBlock) }}</dd></div>
               </dl>
               <div class="jw-detail__btns">
                 <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="clearSelection()">
-                  Bỏ chọn
+                  {{ t('btn.clearSelect') }}
                 </button>
               </div>
           </ng-container>
 
           <ng-container *ngIf="!workMode && !showTechDims">
-            <p class="jw-note">{{ t('work.enableHint') }}</p>
+            <p class="jw-note" *ngIf="!viewOnly">{{ t('work.enableHint') }}</p>
             <div class="jw-detail__btns">
-              <button type="button" class="jw-btn jw-btn--primary jw-btn--block" (click)="toggleWorkMode($event)">
+              <button *ngIf="!viewOnly" type="button" class="jw-btn jw-btn--primary jw-btn--block" (click)="toggleWorkMode($event)">
                 <i class="material-icons">work</i> {{ t('btn.work') }}
               </button>
               <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="clearSelection()">
-                Bỏ chọn
+                {{ t('btn.clearSelect') }}
               </button>
             </div>
           </ng-container>
@@ -1370,7 +1382,7 @@
             <div class="jw-fields__row" *ngFor="let row of warehouseInfoRows">
               <dt>{{ row.label }}</dt>
               <dd *ngIf="!row.icon" [class.jw-fields__multiline]="row.multiline">{{ row.value }}</dd>
-              <dd *ngIf="row.icon === 'electric'" class="jw-fields__icon-dd" aria-label="Tủ điện">
+              <dd *ngIf="row.icon === 'electric'" class="jw-fields__icon-dd" [attr.aria-label]="t('info.cabinet')">
                 <svg class="jw-electric-icon" viewBox="0 0 24 24" aria-hidden="true">
                   <path [attr.d]="electricIconPath" />
                 </svg>
@@ -1391,35 +1403,32 @@
     <div class="jw-modal jw-modal--sm" role="dialog" (click)="$event.stopPropagation()">
       <header class="jw-modal__head">
         <h2 class="jw-modal__title">
-          <i class="material-icons">inventory_2</i> Pallet ngoài — J5
+          <i class="material-icons">inventory_2</i> {{ t('extra.title') }}
         </h2>
-        <button type="button" class="jw-modal__close" (click)="closeExtraPalletModal()" title="Đóng">
+        <button type="button" class="jw-modal__close" (click)="closeExtraPalletModal()" [title]="t('title.close')">
           <i class="material-icons">close</i>
         </button>
       </header>
       <div class="jw-extra-form">
         <label>
-          <span>Số pallet ở vị trí</span>
+          <span>{{ t('extra.atLocation') }}</span>
           <input type="number" min="0" step="1" [(ngModel)]="extraPalletDraft.atLocation" />
         </label>
         <label>
-          <span>Nhận NVL</span>
+          <span>{{ t('extra.receiveRm') }}</span>
           <input type="number" min="0" step="1" [(ngModel)]="extraPalletDraft.nhanNvl" />
         </label>
         <label>
-          <span>Xuất TP</span>
+          <span>{{ t('extra.shipFg') }}</span>
           <input type="number" min="0" step="1" [(ngModel)]="extraPalletDraft.xuatTp" />
         </label>
         <p class="jw-extra-form__sum">
-          Kệ {{ totalPalletsJ5Rack | number }}
-          + vị trí {{ extraPalletDraft.atLocation || 0 }}
-          + NVL {{ extraPalletDraft.nhanNvl || 0 }}
-          + TP {{ extraPalletDraft.xuatTp || 0 }}
+          {{ extraPalletSummaryText }}
           = <strong>{{ extraPalletDraftTotal | number }}</strong>
         </p>
         <div class="jw-extra-form__btns">
-          <button type="button" class="jw-btn jw-btn--outline" (click)="closeExtraPalletModal()">Hủy</button>
-          <button type="button" class="jw-btn jw-btn--primary" (click)="saveExtraPallets($event)">Lưu</button>
+          <button type="button" class="jw-btn jw-btn--outline" (click)="closeExtraPalletModal()">{{ t('btn.cancel') }}</button>
+          <button type="button" class="jw-btn jw-btn--primary" (click)="saveExtraPallets($event)">{{ t('btn.save') }}</button>
         </div>
       </div>
     </div>

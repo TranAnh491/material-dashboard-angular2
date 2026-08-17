@@ -89,6 +89,24 @@ $accent-soft: #ccfbf1;
   }
 }
 
+.jw-view-only-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+
+  i {
+    font-size: 14px;
+  }
+}
+
 .jw-draw-modes {
   display: flex;
   flex-wrap: wrap;

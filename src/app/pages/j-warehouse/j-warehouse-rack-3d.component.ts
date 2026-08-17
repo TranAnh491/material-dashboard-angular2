@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { JwKhoMatRow, JwRack } from './j-warehouse.component';
+import { JwKhoMatRow, JwLang, JwRack } from './j-warehouse.component';
 
 export interface JwRack3dSlot {
   level: number;
@@ -57,6 +57,7 @@ export interface JwRack3dPick {
 })
 export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() mode: 'block' | 'warehouse' = 'block';
+  @Input() lang: JwLang = 'vi';
   @Input() blockCode = '';
   @Input() occupancy: JwRack3dSlot[] = [];
   @Input() selectedLevel: number | null = null;
@@ -121,6 +122,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
       changes['blockCode'] ||
       changes['occupancy'] ||
       changes['warehouseRacks'] ||
+      changes['lang'] ||
       changes['floorLengthM'] ||
       changes['floorWidthM'] ||
       changes['rackHeightM']
@@ -181,6 +183,53 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.slotPick.emit(blockCode ? { level, pos, blockCode } : { level, pos });
   }
 
+  t3d(key: string): string {
+    const dict: Record<JwLang, Record<string, string>> = {
+      vi: {
+        'door.roller': 'Cửa cuốn',
+        'legend.beam': 'Beam',
+        'legend.shelf': 'Mâm',
+        'legend.wall': 'Vách phòng',
+        'legend.raised': 'Nền cao +0.9m',
+        'legend.door': 'Cửa cuốn (lối ra vào)',
+        'hint.warehouse': 'Kéo xoay · Cuộn phóng to · Click mâm để chọn kệ',
+        'legend.empty': 'Trống',
+        'legend.full': 'Có hàng',
+        'legend.pick': 'Đang chọn',
+        'hint.block': 'Kéo xoay · Cuộn phóng to · Click ô để chọn tầng/vị trí',
+        'btn.download3d': 'Tải hình 3D'
+      },
+      en: {
+        'door.roller': 'Roller door',
+        'legend.beam': 'Beam',
+        'legend.shelf': 'Shelf',
+        'legend.wall': 'Room walls',
+        'legend.raised': 'Raised floor +0.9m',
+        'legend.door': 'Roller door (entry/exit)',
+        'hint.warehouse': 'Drag to rotate · Scroll to zoom · Click a shelf to select',
+        'legend.empty': 'Empty',
+        'legend.full': 'Occupied',
+        'legend.pick': 'Selected',
+        'hint.block': 'Drag to rotate · Scroll to zoom · Click a slot to select',
+        'btn.download3d': 'Download 3D'
+      }
+    };
+    return dict[this.lang]?.[key] || dict.vi[key] || key;
+  }
+
+  /** Xuất ảnh PNG góc nhìn 3D hiện tại. */
+  downloadPng(filename = 'j-warehouse-3d.png'): boolean {
+    if (!this.renderer || !this.scene || !this.camera) return false;
+    this.renderer.render(this.scene, this.camera);
+    const url = this.renderer.domElement.toDataURL('image/png');
+    if (!url || url === 'data:,') return false;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    return true;
+  }
+
   private isOccupied(level: number, pos: string): boolean {
     return this.occupancy.some((o) => o.level === level && o.pos === pos && o.occupied);
   }
@@ -197,7 +246,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 400);
     this.camera.position.set(6, 5, 8);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = this.mode !== 'warehouse';
@@ -606,7 +655,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
         thresh.position.set(x, 0.04, W - 0.5);
         env.add(thresh);
 
-        const sprite = this.makeLabelSprite(door.label || 'Cửa cuốn');
+        const sprite = this.makeLabelSprite(door.label || this.t3d('door.roller'));
         sprite.position.set(x, doorH + 0.45, W - 1.2);
         sprite.scale.set(3.6, 0.85, 1);
         env.add(sprite);
@@ -647,7 +696,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
       thresh.position.set(isA ? 0.5 : L - 0.5, 0.04, z);
       env.add(thresh);
 
-      const sprite = this.makeLabelSprite(door.label || 'Cửa cuốn');
+      const sprite = this.makeLabelSprite(door.label || this.t3d('door.roller'));
       sprite.position.set(isA ? 1.2 : L - 1.2, doorH + 0.45, z);
       sprite.scale.set(3.6, 0.85, 1);
       env.add(sprite);

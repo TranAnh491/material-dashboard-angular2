@@ -1,6 +1,6 @@
 import { Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
 import { Location } from '@angular/common';
-import { Router } from '@angular/router';
+import { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 
 export interface JwBlock {
@@ -242,7 +242,60 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'info.exportTp': 'Xuất TP',
     'info.totalJ5': 'Tổng pallet J5',
     'info.updated': 'Cập nhật',
-    'alert.exportError': 'Lỗi khi xuất ảnh bản vẽ.'
+    'alert.exportError': 'Lỗi khi xuất ảnh bản vẽ.',
+    'btn.menu': 'Về Menu',
+    'btn.save': 'Lưu',
+    'btn.cancel': 'Hủy',
+    'btn.clearSelect': 'Bỏ chọn',
+    'btn.assignPallet': 'Gán pallet',
+    'btn.removePallet': 'Xóa pallet',
+    'btn.download3d': 'Tải hình 3D',
+    'title.3dModel': 'Mô hình 3D — toàn bộ kệ kho',
+    'title.3dView': 'Xem toàn bộ kệ kho ở dạng 3D',
+    'title.extraPallet': 'Nhập pallet ngoài',
+    'title.download2d': 'Tải về bản vẽ + Thông tin kho (PNG)',
+    'title.download3d': 'Tải hình mô hình 3D (PNG)',
+    'title.close': 'Đóng',
+    'aria.building': 'Xưởng hiển thị',
+    'aria.tools': 'Công cụ bản vẽ',
+    'aria.drawType': 'Loại bản vẽ',
+    'zoom.out': 'Thu nhỏ',
+    'zoom.in': 'Phóng to',
+    'aria.map': '{{title}} J Warehouse {{l}} × {{w}} mét',
+    'detail.rackBlock': 'Dãy R{{n}} · Block {{i}} · 4 tầng × ABC',
+    'detail.level': 'Tầng {{n}}',
+    'detail.empty': 'Trống',
+    'detail.slot': 'Vị trí',
+    'detail.pallet': 'Pallet',
+    'detail.blockAssigned': 'Block đã gán',
+    'detail.scan': 'Scan mã pallet',
+    'detail.scanPlaceholder': '4 số → P1234',
+    'detail.row': 'Dãy',
+    'detail.block': 'Block',
+    'detail.width': 'Rộng (sâu kệ)',
+    'detail.blockLen': 'Dài block',
+    'detail.coordX': 'Tọa độ X',
+    'detail.coordY': 'Tọa độ Y',
+    'detail.levelCount': 'Số tầng',
+    'detail.slotsPerLevel': 'Vị trí / tầng',
+    'detail.totalSlots': 'Tổng vị trí',
+    'detail.assigned': 'Đã gán',
+    'extra.title': 'Pallet ngoài — J5',
+    'extra.atLocation': 'Số pallet ở vị trí',
+    'extra.receiveRm': 'Nhận NVL',
+    'extra.shipFg': 'Xuất TP',
+    'extra.summary': 'Kệ {{rack}} + vị trí {{loc}} + NVL {{rm}} + TP {{fg}} =',
+    'dock.leveler': 'Leveler',
+    'alert.slotHasPallet': 'Vị trí này đã có pallet. Xóa pallet hiện tại trước khi gán mới.',
+    'alert.invalidPallet': 'Mã pallet không hợp lệ. Chỉ cần nhập 4 số (vd: 1234 → P1234) hoặc quét đủ dạng P1234.',
+    'alert.slotOnePallet': 'Vị trí này đã có pallet. Mỗi vị trí chỉ được gán một pallet.',
+    'alert.palletDuplicate': 'Pallet "{{code}}" đã được gán tại {{slot}}. Mỗi pallet chỉ được gán một vị trí.',
+    'alert.palletSavedNoInv': 'Đã gán pallet "{{code}}" tại {{slot}} trên sơ đồ.\n\nChưa tìm thấy mã NVL (ASM1/ASM2) để ghi cột Pallet / Vị trí.\nPallet vẫn được lưu trên sơ đồ.',
+    'alert.savePalletFail': 'Lỗi khi lưu pallet. Vui lòng thử lại.',
+    'alert.clearPalletFail': 'Lỗi khi xóa pallet. Vui lòng thử lại.',
+    'alert.confirmClearPallet': 'Xóa pallet "{{code}}" khỏi vị trí {{slot}}?',
+    'alert.resetLayout': 'Khôi phục layout kệ mặc định? Thay đổi chưa lưu sẽ mất.',
+    'alert.deleteBlock': 'Xóa block {{code}}?'
   },
   en: {
     'drawMode.kyThuat': 'Technical Drawing',
@@ -318,7 +371,60 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'info.exportTp': 'FG shipped',
     'info.totalJ5': 'Total pallets J5',
     'info.updated': 'Updated',
-    'alert.exportError': 'Failed to export drawing image.'
+    'alert.exportError': 'Failed to export drawing image.',
+    'btn.menu': 'Menu',
+    'btn.save': 'Save',
+    'btn.cancel': 'Cancel',
+    'btn.clearSelect': 'Deselect',
+    'btn.assignPallet': 'Assign pallet',
+    'btn.removePallet': 'Remove pallet',
+    'btn.download3d': 'Download 3D',
+    'title.3dModel': '3D model — full warehouse',
+    'title.3dView': 'View the full warehouse in 3D',
+    'title.extraPallet': 'Enter extra pallets',
+    'title.download2d': 'Download drawing + warehouse info (PNG)',
+    'title.download3d': 'Download 3D image (PNG)',
+    'title.close': 'Close',
+    'aria.building': 'Buildings',
+    'aria.tools': 'Drawing tools',
+    'aria.drawType': 'Drawing type',
+    'zoom.out': 'Zoom out',
+    'zoom.in': 'Zoom in',
+    'aria.map': '{{title}} J Warehouse {{l}} × {{w}} meters',
+    'detail.rackBlock': 'Row R{{n}} · Block {{i}} · 4 levels × ABC',
+    'detail.level': 'Level {{n}}',
+    'detail.empty': 'Empty',
+    'detail.slot': 'Location',
+    'detail.pallet': 'Pallet',
+    'detail.blockAssigned': 'Assigned in block',
+    'detail.scan': 'Scan pallet code',
+    'detail.scanPlaceholder': '4 digits → P1234',
+    'detail.row': 'Row',
+    'detail.block': 'Block',
+    'detail.width': 'Width (rack depth)',
+    'detail.blockLen': 'Block length',
+    'detail.coordX': 'X coordinate',
+    'detail.coordY': 'Y coordinate',
+    'detail.levelCount': 'Levels',
+    'detail.slotsPerLevel': 'Slots / level',
+    'detail.totalSlots': 'Total slots',
+    'detail.assigned': 'Assigned',
+    'extra.title': 'Extra pallets — J5',
+    'extra.atLocation': 'Pallets at location',
+    'extra.receiveRm': 'RM received',
+    'extra.shipFg': 'FG shipped',
+    'extra.summary': 'Racks {{rack}} + location {{loc}} + RM {{rm}} + FG {{fg}} =',
+    'dock.leveler': 'Leveler',
+    'alert.slotHasPallet': 'This slot already has a pallet. Remove it before assigning a new one.',
+    'alert.invalidPallet': 'Invalid pallet code. Enter 4 digits (e.g. 1234 → P1234) or scan the full P1234 code.',
+    'alert.slotOnePallet': 'This slot already has a pallet. Each slot can hold only one pallet.',
+    'alert.palletDuplicate': 'Pallet "{{code}}" is already assigned at {{slot}}. Each pallet can be assigned to only one slot.',
+    'alert.palletSavedNoInv': 'Pallet "{{code}}" was assigned at {{slot}} on the layout.\n\nNo RM code (ASM1/ASM2) was found to update Pallet / Location.\nThe pallet is still saved on the layout.',
+    'alert.savePalletFail': 'Failed to save pallet. Please try again.',
+    'alert.clearPalletFail': 'Failed to remove pallet. Please try again.',
+    'alert.confirmClearPallet': 'Remove pallet "{{code}}" from slot {{slot}}?',
+    'alert.resetLayout': 'Restore the default rack layout? Unsaved changes will be lost.',
+    'alert.deleteBlock': 'Delete block {{code}}?'
   }
 };
 
@@ -509,6 +615,14 @@ export class JWarehouseComponent implements OnInit {
   layoutEditMode = false;
   layoutDirty = false;
   layoutCustomized = false;
+
+  /** Link xem công khai (không đăng nhập) — chỉ xem, khoá mọi thao tác chỉnh sửa/gán pallet. */
+  viewOnly = false;
+  /**
+   * "Pallet ngoài" (Pallet ở vị trí / Nhận NVL / Xuất TP) chỉ lưu localStorage trên từng trình duyệt,
+   * nên link xem công khai không đọc được. Tạm hiển thị tổng cố định theo yêu cầu; nhắn lại để cập nhật số này.
+   */
+  private readonly VIEW_ONLY_TOTAL_PALLETS_J5 = 2524;
 
   get rollerDoors(): JwPlanFeature[] {
     return this.edgeFeatures.filter((f) => {
@@ -853,6 +967,12 @@ export class JWarehouseComponent implements OnInit {
   }
 
   private get warehouseInfoExtraPalletRows(): Array<{ label: string; value: string }> {
+    if (this.viewOnly) {
+      return [
+        { label: this.t('info.palletsOnRack'), value: String(this.totalPalletsJ5Rack) },
+        { label: this.t('info.totalJ5'), value: String(this.totalPalletsJ5) }
+      ];
+    }
     return [
       { label: this.t('info.palletsOnRack'), value: String(this.totalPalletsJ5Rack) },
       { label: this.t('info.atLocation'), value: String(this.extraPalletAtLocation) },
@@ -1249,9 +1369,19 @@ export class JWarehouseComponent implements OnInit {
     );
   }
 
+  get extraPalletSummaryText(): string {
+    return this.t('extra.summary', {
+      rack: this.totalPalletsJ5Rack,
+      loc: this.extraPalletDraft.atLocation || 0,
+      rm: this.extraPalletDraft.nhanNvl || 0,
+      fg: this.extraPalletDraft.xuatTp || 0
+    });
+  }
+
   @ViewChild('scanPalletInputRef') scanPalletInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('planSvg') planSvg?: ElementRef<SVGSVGElement>;
   @ViewChild('mapViewport') mapViewport?: ElementRef<HTMLElement>;
+  @ViewChild('rack3d') rack3d?: { downloadPng: (filename: string) => boolean };
 
   private layoutDrag: {
     kind: JwLayoutDragKind;
@@ -1326,6 +1456,7 @@ export class JWarehouseComponent implements OnInit {
 
   /** Tổng pallet J5 = kệ + pallet vị trí + nhận NVL + xuất TP */
   get totalPalletsJ5(): number {
+    if (this.viewOnly) return this.VIEW_ONLY_TOTAL_PALLETS_J5;
     return (
       this.totalPalletsJ5Rack +
       this.extraPalletAtLocation +
@@ -1395,15 +1526,27 @@ export class JWarehouseComponent implements OnInit {
 
   constructor(
     private router: Router,
+    private route: ActivatedRoute,
     private location: Location,
     private firestore: AngularFirestore
   ) {}
 
   ngOnInit(): void {
+    this.viewOnly = this.resolveViewOnly();
     this.loadLang();
     this.loadSavedLayout();
     this.loadExtraPallets();
     void this.loadSlotPallets();
+  }
+
+  /** Duyệt lên toàn bộ route cha để tìm data.viewOnly — không phụ thuộc chiến lược kế thừa data của Router. */
+  private resolveViewOnly(): boolean {
+    let snap: ActivatedRouteSnapshot | null = this.route.snapshot;
+    while (snap) {
+      if (snap.data && snap.data['viewOnly']) return true;
+      snap = snap.parent;
+    }
+    return false;
   }
 
   private loadLang(): void {
@@ -1417,6 +1560,7 @@ export class JWarehouseComponent implements OnInit {
 
   openExtraPalletModal(event?: Event): void {
     event?.stopPropagation();
+    if (this.viewOnly) return;
     this.extraPalletDraft = {
       atLocation: this.extraPalletAtLocation,
       nhanNvl: this.extraNhanNvl,
@@ -1432,6 +1576,7 @@ export class JWarehouseComponent implements OnInit {
 
   saveExtraPallets(event?: Event): void {
     event?.stopPropagation();
+    if (this.viewOnly) return;
     this.extraPalletAtLocation = this.normalizeExtraCount(this.extraPalletDraft.atLocation);
     this.extraNhanNvl = this.normalizeExtraCount(this.extraPalletDraft.nhanNvl);
     this.extraXuatTp = this.normalizeExtraCount(this.extraPalletDraft.xuatTp);
@@ -1475,6 +1620,7 @@ export class JWarehouseComponent implements OnInit {
 
   toggleWorkMode(event?: Event): void {
     event?.stopPropagation();
+    if (this.viewOnly) return;
     this.workMode = !this.workMode;
     this.layoutEditMode = false;
     this.layoutDrag = null;
@@ -1488,6 +1634,7 @@ export class JWarehouseComponent implements OnInit {
 
   toggleLayoutEdit(event?: Event): void {
     event?.stopPropagation();
+    if (this.viewOnly) return;
     this.layoutEditMode = !this.layoutEditMode;
     this.layoutDrag = null;
     if (this.layoutEditMode) {
@@ -1528,7 +1675,7 @@ export class JWarehouseComponent implements OnInit {
 
   resetLayout(event?: Event): void {
     event?.stopPropagation();
-    if (!confirm('Khôi phục layout kệ mặc định? Thay đổi chưa lưu sẽ mất.')) return;
+    if (!confirm(this.t('alert.resetLayout'))) return;
     try {
       localStorage.removeItem(this.LAYOUT_STORAGE_KEY);
     } catch {
@@ -1617,7 +1764,7 @@ export class JWarehouseComponent implements OnInit {
     event?.stopPropagation();
     if (!this.layoutEditMode || !this.selectedBlock) return;
     const code = this.selectedBlock.code;
-    if (!confirm(`Xóa block ${code}?`)) return;
+    if (!confirm(this.t('alert.deleteBlock', { code }))) return;
 
     const rack = this.racks.find((r) => r.num === this.selectedBlock!.rackNum);
     if (!rack) return;
@@ -2038,9 +2185,14 @@ export class JWarehouseComponent implements OnInit {
     this.setZoom(delta);
   }
 
-  /** Xuất bản vẽ đang xem + Thông tin kho thành file PNG. */
+  /** Xuất bản vẽ đang xem + Thông tin kho thành file PNG (2D) hoặc ảnh mô hình 3D. */
   downloadDrawing(event?: Event): void {
     event?.stopPropagation();
+    if (this.show3D) {
+      const ok = this.rack3d?.downloadPng(`j-warehouse-3d-${this.lang}.png`);
+      if (!ok) alert(this.t('alert.exportError'));
+      return;
+    }
     const svg = this.planSvg?.nativeElement;
     if (!svg || this.isDownloading) return;
     this.isDownloading = true;
@@ -2172,9 +2324,10 @@ export class JWarehouseComponent implements OnInit {
   }
 
   openScanForSelectedSlot(): void {
+    if (this.viewOnly) return;
     if (!this.selectedBlock) return;
     if (this.selectedPallet) {
-      alert('Vị trí này đã có pallet. Xóa pallet hiện tại trước khi gán mới.');
+      alert(this.t('alert.slotHasPallet'));
       return;
     }
     this.showScanInput = true;
@@ -2188,24 +2341,25 @@ export class JWarehouseComponent implements OnInit {
   }
 
   async submitScanPallet(): Promise<void> {
+    if (this.viewOnly) return;
     if (!this.selectedBlock || this.isSavingPallet) return;
     const code = this.normalizePalletCode(this.scanPalletInput);
     if (!code) return;
 
     if (!/^P\d{4}$/.test(code)) {
-      alert('Mã pallet không hợp lệ. Chỉ cần nhập 4 số (vd: 1234 → P1234) hoặc quét đủ dạng P1234.');
+      alert(this.t('alert.invalidPallet'));
       return;
     }
 
     const slot = this.selectedSlotCode;
     if (this.palletAt(slot)) {
-      alert('Vị trí này đã có pallet. Mỗi vị trí chỉ được gán một pallet.');
+      alert(this.t('alert.slotOnePallet'));
       return;
     }
 
     const duplicateSlot = this.findSlotByPallet(code);
     if (duplicateSlot) {
-      alert(`Pallet "${code}" đã được gán tại ${duplicateSlot}. Mỗi pallet chỉ được gán một vị trí.`);
+      alert(this.t('alert.palletDuplicate', { code, slot: duplicateSlot }));
       return;
     }
 
@@ -2224,26 +2378,23 @@ export class JWarehouseComponent implements OnInit {
 
       const synced = await this.syncInventoryForPallet(code, slot);
       if (synced === 0) {
-        alert(
-          `Đã gán pallet "${code}" tại ${slot} trên sơ đồ.\n\n` +
-            `Chưa tìm thấy mã NVL (ASM1/ASM2) để ghi cột Pallet / Vị trí.\n` +
-            `Pallet vẫn được lưu trên sơ đồ.`
-        );
+        alert(this.t('alert.palletSavedNoInv', { code, slot }));
       }
     } catch (e) {
       console.error('[JWarehouse] submitScanPallet failed', e);
-      alert('Lỗi khi lưu pallet. Vui lòng thử lại.');
+      alert(this.t('alert.savePalletFail'));
     } finally {
       this.isSavingPallet = false;
     }
   }
 
   async clearSelectedPallet(): Promise<void> {
+    if (this.viewOnly) return;
     if (!this.selectedBlock || this.isClearingPallet) return;
     const slot = this.selectedSlotCode;
     const code = this.palletAt(slot);
     if (!code) return;
-    if (!confirm(`Xóa pallet "${code}" khỏi vị trí ${slot}?`)) return;
+    if (!confirm(this.t('alert.confirmClearPallet', { code, slot }))) return;
 
     this.isClearingPallet = true;
     try {
@@ -2253,7 +2404,7 @@ export class JWarehouseComponent implements OnInit {
       this.lastUpdated = new Date();
     } catch (e) {
       console.error('[JWarehouse] clearSelectedPallet failed', e);
-      alert('Lỗi khi xóa pallet. Vui lòng thử lại.');
+      alert(this.t('alert.clearPalletFail'));
     } finally {
       this.isClearingPallet = false;
     }

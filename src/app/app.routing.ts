@@ -12,6 +12,12 @@ const routes: Routes =[
     component: LoginComponent
   },
   {
+    // Link xem layout J Warehouse — công khai, không cần đăng nhập, chỉ xem (không sửa được gì)
+    path: 'j-warehouse-view',
+    data: { viewOnly: true },
+    loadChildren: () => import('./pages/j-warehouse/j-warehouse.module').then(m => m.JWarehouseModule)
+  },
+  {
     path: '',
     redirectTo: 'menu',
     pathMatch: 'full',
