@@ -120,6 +120,20 @@ type ResetLowStockRow = {
   selected: boolean;
 };
 
+/** Dòng kết quả tìm trong popup Dời kho (search theo mã pallet hoặc vị trí). */
+type DoiKhoRow = {
+  id: string;
+  materialCode: string;
+  poNumber: string;
+  location: string;
+  palletId: string;
+  stock: number;
+  selected: boolean;
+};
+
+/** Kho đích khi Dời kho — tiền tố gắn vào đầu Vị trí. */
+type DoiKhoWh = 'J5' | 'WH3';
+
 type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock';
 
 type MaterialsOtpAction =
@@ -195,6 +209,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapQuery = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
   private kkLocMapRowCache = new Map<string, InventoryMaterial[]>();
+
+  /**
+   * Popup Dời kho: hiển thị vị trí dạng ô lưới như "Kiểm tra KK" (đếm pallet/mã theo vị trí) →
+   * bấm 1 ô để xem chi tiết các pallet đang lưu ở đó → tick chọn (1 hoặc nhiều vị trí, có thể
+   * duyệt qua lại) → "Dời Kho" → chọn J5/WH3 → thêm tiền tố vào đầu Vị trí, giữ nguyên mã pallet.
+   */
+  showDoiKho = false;
+  doiKhoBusy = false;
+  doiKhoLoading = false;
+  doiKhoQuery = '';
+  /** 'grid' = lưới vị trí, 'detail' = danh sách pallet của 1 vị trí, 'wh' = chọn kho đích. */
+  doiKhoView: 'grid' | 'detail' | 'wh' = 'grid';
+  doiKhoBoxes: Array<{ loc: string; count: number }> = [];
+  private doiKhoRowCache = new Map<string, DoiKhoRow[]>();
+  doiKhoActiveLoc = '';
+  doiKhoActiveRows: DoiKhoRow[] = [];
+  /** Trong bước 'detail': xem theo mã (danh sách phẳng) hay theo pallet (gom mã theo từng pallet). */
+  doiKhoDetailMode: 'code' | 'pallet' = 'code';
+  /** Pallet đang mở (chỉ dùng khi doiKhoDetailMode === 'pallet'). */
+  doiKhoActivePalletId: string | null = null;
 
   /** Popup Gán pallet: scan pallet → kho → vị trí → mã (+ lượng) → Gán tiếp / Dừng. */
   showGanPallet = false;
@@ -9314,6 +9348,330 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showResetLowStockPopup = false;
     this.resetLowStockRows = [];
     this.resetZeroDeletedCount = 0;
+  }
+
+  /** Nhãn kho hiển thị ở cột WH — chỉ có khi Vị trí đã được "Dời kho" (tiền tố J5-/WH3- ở đầu). */
+  locationWhTag(location: string | null | undefined): string {
+    const raw = String(location || '').trim().toUpperCase();
+    if (raw.startsWith('J5-')) return 'J5';
+    if (raw.startsWith('WH3-')) return 'WH3';
+    return '';
+  }
+
+  /** Bỏ tiền tố J5-/WH3- cũ (nếu có) trước khi gắn tiền tố mới — tránh dính chồng khi Dời kho nhiều lần. */
+  private stripDoiKhoWhPrefix(location: string): string {
+    const raw = String(location || '').trim();
+    const m = /^(J5|WH3)-(.+)$/i.exec(raw);
+    return m ? m[2] : raw;
+  }
+
+  openDoiKho(): void {
+    if (!this.isLocationColumnUnlocked && !this.canEdit) {
+      this.tryUnlockLocationColumn();
+      return;
+    }
+    this.showDoiKho = true;
+    this.doiKhoQuery = '';
+    this.doiKhoView = 'grid';
+    this.doiKhoActiveLoc = '';
+    this.doiKhoActiveRows = [];
+    void this.loadDoiKhoLocMap();
+  }
+
+  closeDoiKho(): void {
+    if (this.doiKhoBusy) return;
+    this.showDoiKho = false;
+    this.doiKhoQuery = '';
+    this.doiKhoBoxes = [];
+    this.doiKhoRowCache.clear();
+    this.doiKhoView = 'grid';
+    this.doiKhoActiveLoc = '';
+    this.doiKhoActiveRows = [];
+    this.doiKhoDetailMode = 'code';
+    this.doiKhoActivePalletId = null;
+  }
+
+  /** Đọc tồn kho {{selectedFactory}} (tồn > 0), gom theo vị trí — 1 ô = 1 vị trí, số = số pallet/mã đang lưu ở đó. */
+  async loadDoiKhoLocMap(): Promise<void> {
+    this.doiKhoLoading = true;
+    this.doiKhoBoxes = [];
+    this.doiKhoRowCache.clear();
+    this.cdr.detectChanges();
+    try {
+      const snap = await this.firestore
+        .collection('inventory-materials', (ref) => ref.where('factory', '==', this.selectedFactory).limit(10000))
+        .get()
+        .toPromise();
+
+      const byLoc = new Map<string, DoiKhoRow[]>();
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as any;
+        const stock = this.stockFromInventoryDoc(data);
+        if (stock <= 0) continue;
+        const rawLocation = String(data.location || data.viTri || '').trim().toUpperCase();
+        const tokens = splitMultiLocations(rawLocation);
+        const groups = tokens.length ? [...new Set(tokens.map((t) => this.locationGroupKey(t) || '—'))] : ['—'];
+        const row: DoiKhoRow = {
+          id: doc.id,
+          materialCode: String(data.materialCode || '').trim(),
+          poNumber: String(data.poNumber || '').trim(),
+          location: rawLocation,
+          palletId: String(data.palletId || '').trim().toUpperCase(),
+          stock,
+          selected: false
+        };
+        for (const loc of groups) {
+          const list = byLoc.get(loc) || [];
+          list.push(row);
+          byLoc.set(loc, list);
+        }
+      }
+
+      const boxes = Array.from(byLoc.entries()).map(([loc, rows]) => ({ loc, count: rows.length }));
+      const known = this.knownLocationGroups;
+      boxes.sort((a, b) => {
+        const ai = known.indexOf(a.loc);
+        const bi = known.indexOf(b.loc);
+        if (ai >= 0 || bi >= 0) {
+          if (ai < 0) return 1;
+          if (bi < 0) return -1;
+          return ai - bi;
+        }
+        if (a.loc === '—') return 1;
+        if (b.loc === '—') return -1;
+        return a.loc.localeCompare(b.loc, 'en', { numeric: true });
+      });
+
+      this.doiKhoBoxes = boxes;
+      this.doiKhoRowCache = byLoc;
+    } catch (e) {
+      console.error('❌ loadDoiKhoLocMap:', e);
+      this.doiKhoBoxes = [];
+      alert('❌ Không tải được sơ đồ vị trí để dời kho.');
+    } finally {
+      this.doiKhoLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Lọc ô vị trí theo vị trí HOẶC mã pallet/mã hàng chứa trong ô đó — gõ mã pallet sẽ nhảy ra đúng ô đang chứa nó. */
+  get doiKhoFilteredBoxes(): Array<{ loc: string; count: number }> {
+    const q = this.doiKhoQuery.trim().toUpperCase();
+    if (!q) return this.doiKhoBoxes;
+    return this.doiKhoBoxes.filter((b) => {
+      if (b.loc.includes(q)) return true;
+      const rows = this.doiKhoRowCache.get(b.loc) || [];
+      return rows.some((r) => r.palletId.includes(q) || r.materialCode.toUpperCase().includes(q));
+    });
+  }
+
+  get doiKhoGroupedBoxes(): Array<{ key: string; boxes: Array<{ loc: string; count: number }>; count: number }> {
+    const buckets = new Map<string, Array<{ loc: string; count: number }>>();
+    for (const box of this.doiKhoFilteredBoxes) {
+      const key = this.kkLocFirstLetter(box.loc);
+      const list = buckets.get(key) || [];
+      list.push(box);
+      buckets.set(key, list);
+    }
+    return Array.from(buckets.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
+      .map(([key, boxes]) => {
+        boxes.sort((x, y) => x.loc.localeCompare(y.loc, 'en', { numeric: true }));
+        return { key, boxes, count: boxes.reduce((n, b) => n + b.count, 0) };
+      });
+  }
+
+  /** Tô màu ô vị trí theo số dòng đã tick chọn ở vị trí đó (không phải trạng thái KK). */
+  doiKhoBoxTone(box: { loc: string; count: number }): string {
+    const rows = this.doiKhoRowCache.get(box.loc) || [];
+    if (!rows.length) return 'none';
+    const selectedCount = rows.filter((r) => r.selected).length;
+    if (selectedCount <= 0) return 'none';
+    if (selectedCount >= rows.length) return 'done';
+    return 'partial';
+  }
+
+  /** Bấm 1 ô vị trí — xem chi tiết các pallet/mã đang lưu ở đó. */
+  openDoiKhoBox(box: { loc: string }): void {
+    this.doiKhoActiveLoc = box.loc;
+    this.doiKhoActiveRows = this.doiKhoRowCache.get(box.loc) || [];
+    this.doiKhoDetailMode = 'code';
+    this.doiKhoActivePalletId = null;
+    this.doiKhoView = 'detail';
+  }
+
+  backToDoiKhoGrid(): void {
+    this.doiKhoView = 'grid';
+    this.doiKhoActiveLoc = '';
+    this.doiKhoActiveRows = [];
+    this.doiKhoDetailMode = 'code';
+    this.doiKhoActivePalletId = null;
+  }
+
+  /** Chuyển giữa "Xem theo mã" (danh sách phẳng) và "Xem theo pallet" (gom theo pallet) trong 1 vị trí. */
+  setDoiKhoDetailMode(mode: 'code' | 'pallet'): void {
+    this.doiKhoDetailMode = mode;
+    this.doiKhoActivePalletId = null;
+  }
+
+  get doiKhoActiveAllSelected(): boolean {
+    return this.doiKhoActiveRows.length > 0 && this.doiKhoActiveRows.every((r) => r.selected);
+  }
+
+  /** Gom các dòng của vị trí đang mở theo mã pallet — mỗi pallet 1 box. */
+  get doiKhoPalletBoxes(): Array<{ palletId: string; count: number }> {
+    const buckets = new Map<string, number>();
+    for (const row of this.doiKhoActiveRows) {
+      const key = row.palletId || '—';
+      buckets.set(key, (buckets.get(key) || 0) + 1);
+    }
+    return Array.from(buckets.entries())
+      .map(([palletId, count]) => ({ palletId, count }))
+      .sort((a, b) => a.palletId.localeCompare(b.palletId, 'en', { numeric: true }));
+  }
+
+  /** Tô màu box pallet theo số dòng đã tick trong pallet đó. */
+  doiKhoPalletBoxTone(box: { palletId: string }): string {
+    const rows = this.doiKhoActiveRows.filter((r) => (r.palletId || '—') === box.palletId);
+    if (!rows.length) return 'none';
+    const selectedCount = rows.filter((r) => r.selected).length;
+    if (selectedCount <= 0) return 'none';
+    if (selectedCount >= rows.length) return 'done';
+    return 'partial';
+  }
+
+  openDoiKhoPallet(palletId: string): void {
+    this.doiKhoActivePalletId = palletId;
+  }
+
+  backToDoiKhoPalletGrid(): void {
+    this.doiKhoActivePalletId = null;
+  }
+
+  /** Các dòng mã hàng thuộc pallet đang mở, trong vị trí hiện tại. */
+  get doiKhoActivePalletRows(): DoiKhoRow[] {
+    if (!this.doiKhoActivePalletId) return [];
+    return this.doiKhoActiveRows.filter((r) => (r.palletId || '—') === this.doiKhoActivePalletId);
+  }
+
+  get doiKhoActivePalletAllSelected(): boolean {
+    const rows = this.doiKhoActivePalletRows;
+    return rows.length > 0 && rows.every((r) => r.selected);
+  }
+
+  toggleAllDoiKhoActivePallet(checked: boolean): void {
+    this.doiKhoActivePalletRows.forEach((r) => (r.selected = checked));
+  }
+
+  toggleAllDoiKhoActive(checked: boolean): void {
+    this.doiKhoActiveRows.forEach((r) => (r.selected = checked));
+  }
+
+  /** Tổng số pallet/mã đang tick — cộng dồn qua mọi vị trí đã xem, không chỉ vị trí đang mở. */
+  get doiKhoSelectedCount(): number {
+    let n = 0;
+    this.doiKhoRowCache.forEach((rows) => rows.forEach((r) => { if (r.selected) n++; }));
+    return n;
+  }
+
+  private collectDoiKhoSelectedRows(): DoiKhoRow[] {
+    const out: DoiKhoRow[] = [];
+    const seen = new Set<string>();
+    this.doiKhoRowCache.forEach((rows) =>
+      rows.forEach((r) => {
+        if (r.selected && !seen.has(r.id)) {
+          seen.add(r.id);
+          out.push(r);
+        }
+      })
+    );
+    return out;
+  }
+
+  /** Bấm "Dời Kho" — chuyển sang bước chọn kho đích J5 / WH3. */
+  startDoiKhoChooseWh(): void {
+    if (this.doiKhoSelectedCount === 0) {
+      alert('Chưa chọn mã/pallet nào để dời kho.');
+      return;
+    }
+    this.doiKhoView = 'wh';
+  }
+
+  cancelDoiKhoChooseWh(): void {
+    this.doiKhoView = this.doiKhoActiveLoc ? 'detail' : 'grid';
+  }
+
+  /** Chọn J5 hoặc WH3 — ghi tiền tố vào đầu Vị trí, giữ nguyên mã pallet. */
+  async confirmDoiKho(wh: DoiKhoWh): Promise<void> {
+    if (!this.isLocationColumnUnlocked && !this.canEdit) {
+      this.tryUnlockLocationColumn();
+      return;
+    }
+    const selected = this.collectDoiKhoSelectedRows();
+    if (selected.length === 0) return;
+    const confirmed = confirm(
+      `📦 Dời ${selected.length} mã/pallet sang kho ${wh}?\n\n` +
+        `Vị trí sẽ được thêm tiền tố "${wh}-" ở đầu. Mã pallet giữ nguyên.`
+    );
+    if (!confirmed) return;
+
+    this.doiKhoBusy = true;
+    try {
+      const modifiedBy = await this.resolveLocationOperatorId();
+      const batchSize = 50;
+      for (let i = 0; i < selected.length; i += batchSize) {
+        const chunk = selected.slice(i, i + batchSize);
+        const batch = this.firestore.firestore.batch();
+        chunk.forEach((row) => {
+          const bareLocation = this.stripDoiKhoWhPrefix(row.location);
+          const newLocation = `${wh}-${bareLocation}`;
+          const docRef = this.firestore.collection('inventory-materials').doc(row.id).ref;
+          batch.update(docRef, {
+            location: newLocation,
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy,
+            locationManualOverride: true
+          });
+          const historyRef = this.firestore.collection('material-location-history').doc().ref;
+          batch.set(historyRef, {
+            factory: this.selectedFactory,
+            materialId: row.id,
+            materialCode: row.materialCode,
+            poNumber: row.poNumber || '',
+            fromLocation: row.location,
+            toLocation: newLocation,
+            changedBy: modifiedBy,
+            changeType: 'doi-kho',
+            changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+          });
+        });
+        await batch.commit();
+        if (i + batchSize < selected.length) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+      const idSet = new Set(selected.map((r) => r.id));
+      this.inventoryMaterials.forEach((m) => {
+        if (!m.id || !idSet.has(m.id)) return;
+        m.location = `${wh}-${this.stripDoiKhoWhPrefix(m.location)}`;
+        m.lastStatusAt = new Date();
+        m.lastStatusKind = 'Change location';
+        m.lastStatusBy = modifiedBy;
+      });
+      this.applyFilters();
+      alert(`✅ Đã dời ${selected.length} mã/pallet sang kho ${wh}.`);
+      this.doiKhoView = 'grid';
+      this.doiKhoActiveLoc = '';
+      this.doiKhoActiveRows = [];
+      void this.loadDoiKhoLocMap();
+    } catch (error: any) {
+      console.error('❌ Error during Dời kho:', error);
+      alert(`❌ Lỗi khi dời kho: ${error?.message || error}`);
+    } finally {
+      this.doiKhoBusy = false;
+      this.cdr.markForCheck();
+    }
   }
 
   /** Reset: (1) ẩn tồn = 0, (2) popup chọn ẩn các mã tồn < 1. */

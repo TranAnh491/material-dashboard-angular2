@@ -8,7 +8,7 @@
         <h3><i class="material-icons">badge</i> Xác nhận nhân viên</h3>
       </div>
       <div class="modal-body emp-scan-body">
-        <p class="emp-scan-hint">Scan mã nhân viên để sử dụng chức năng Location.</p>
+        <p class="emp-scan-hint">Scan hoặc nhập mã nhân viên để sử dụng Location.</p>
         <div class="emp-scan-format">Định dạng: <strong>ASP + 4 số</strong> — VD: ASP0106</div>
         <div class="emp-scan-input-wrap">
           <i class="material-icons">qr_code_scanner</i>
@@ -17,17 +17,24 @@
             type="text"
             [(ngModel)]="employeeScanInput"
             (ngModelChange)="onEmployeeScanChange($event)"
-            (keydown)="onEmpScanKeydown($event)"
-            placeholder="Đưa thẻ vào máy scan..."
+            (keyup.enter)="confirmEmployee()"
+            placeholder="Scan thẻ hoặc nhập mã..."
             maxlength="7"
             autocomplete="off"
             autofocus
             #empScanInputRef
           />
         </div>
+        <button
+          type="button"
+          class="emp-scan-confirm-btn"
+          (click)="confirmEmployee()"
+          [disabled]="!employeeScanInput.trim()">
+          Xác nhận
+        </button>
         <div class="emp-scan-only-note">
           <i class="material-icons">info</i>
-          Vui lòng sử dụng máy scan thẻ nhân viên
+          Thời gian dời kho: có thể scan hoặc nhập tay mã nhân viên / vị trí.
         </div>
         <div class="emp-scan-error" *ngIf="employeeScanError">{{ employeeScanError }}</div>
       </div>
@@ -942,8 +949,8 @@
       <!-- Step 1: Scan location (scanner only) -->
       <div *ngIf="bulkStep === 'scan-location'" class="bulk-step">
         <div class="step-title">
-          <h4>Bước 1: Scan vị trí ({{ selectedFactory || '...' }})</h4>
-          <p class="step-desc">Chỉ dùng scanner. Nhấn Enter sau khi scan.</p>
+          <h4>Bước 1: Scan hoặc nhập vị trí ({{ selectedFactory || '...' }})</h4>
+          <p class="step-desc">Scan hoặc nhập tay vị trí, rồi nhấn Enter / tìm.</p>
         </div>
 
         <div class="scan-input-container">
@@ -952,7 +959,7 @@
             id="bulkAsm1LocationInput"
             [(ngModel)]="bulkScanLocationInput"
             (keyup.enter)="processBulkAsm1Location()"
-            placeholder="Scan vị trí..."
+            placeholder="Scan hoặc nhập vị trí..."
             class="scan-input"
             [disabled]="isBulkLoading">
           <button class="scan-btn" (click)="processBulkAsm1Location()" [disabled]="isBulkLoading || !bulkScanLocationInput.trim()">
@@ -1027,7 +1034,7 @@
 
         <div class="target-section">
           <div class="target-header">
-            <span class="target-label">Scan vị trí mới</span>
+            <span class="target-label">Scan hoặc nhập vị trí mới</span>
             <div class="target-toggles">
               <label class="skip-toggle">
                 <input
@@ -1050,7 +1057,7 @@
               id="bulkAsm1NewLocationInput"
               [(ngModel)]="bulkNewLocationInput"
               (keyup.enter)="onBulkLocationEnter()"
-              placeholder="Scan vị trí mới..."
+              placeholder="Scan hoặc nhập vị trí mới..."
               class="scan-input"
               [disabled]="isBulkLoading || skipBulkNewLocation">
             <button class="scan-btn" type="button" (click)="focusBulkPalletInput()" [disabled]="isBulkLoading || skipBulkNewLocation" title="Nhảy sang ô pallet">
@@ -1234,7 +1241,7 @@
 
         <div class="store-scan-block">
           <div class="store-scan-block__head">
-            <label for="targetLocationInput">Scan vị trí mới</label>
+            <label for="targetLocationInput">Scan hoặc nhập vị trí mới</label>
             <div class="store-scan-block__toggles">
               <label class="store-multi-location-chk">
                 <input type="checkbox" [(ngModel)]="storeMaterialUseAsm3" (ngModelChange)="onStoreMaterialAsm3Change()">
@@ -1513,7 +1520,7 @@
       <!-- Step 1: Scan Current Location -->
       <div *ngIf="moveShelfStep === 'scan-location'" class="move-shelf-step">
         <div class="step-title">
-          <h4>Bước 1: Scan vị trí cần dời</h4>
+          <h4>Bước 1: Scan hoặc nhập vị trí cần dời</h4>
         </div>
         
         <div class="scan-input-container">
@@ -1592,7 +1599,7 @@
       <!-- Step 3: Scan New Location -->
       <div *ngIf="moveShelfStep === 'scan-new-location'" class="move-shelf-step">
         <div class="step-title">
-          <h4>Bước 3: Scan vị trí mới</h4>
+          <h4>Bước 3: Scan hoặc nhập vị trí mới</h4>
           <p class="step-description">
             Dời <strong>{{ moveShelfSelectedItems.size }}</strong> mã hàng từ <strong>{{ moveShelfCurrentLocation }}</strong>
           </p>

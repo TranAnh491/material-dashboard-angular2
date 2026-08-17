@@ -4677,6 +4677,75 @@ $asm1-toolbar-h: 36px;
   width: 94%;
 }
 
+.doi-kho-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+
+  i {
+    font-size: 18px;
+  }
+}
+
+.doi-kho-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 12px;
+  width: fit-content;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.doi-kho-mode-toggle__btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+
+  &--on {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
+}
+
+.doi-kho-pallet-grid {
+  margin-bottom: 12px;
+}
+
+.doi-kho-wh-picker {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+
+.doi-kho-wh-btn {
+  flex: 1;
+  justify-content: center;
+  min-height: 56px;
+  font-size: 15px;
+}
+
+.wh-cell {
+  font-weight: 600;
+  color: #0f766e;
+}
+
 .reset-low-stock-hint {
   margin: 0 0 12px;
   font-size: 13px;

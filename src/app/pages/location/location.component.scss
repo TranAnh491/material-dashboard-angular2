@@ -2706,6 +2706,27 @@ body.location-mobile-tab {
   }
 }
 
+.emp-scan-confirm-btn {
+  align-self: stretch;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &:not(:disabled):hover {
+    background: #1d4ed8;
+  }
+}
+
 .emp-scan-only-note {
   display: flex;
   align-items: center;

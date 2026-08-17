@@ -165,8 +165,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   employeeScanError = '';
   /** Mã nhân viên đang dùng tab (ASP + 4 số) */
   activeEmployeeId = '';
-  /** Thời điểm ký tự cuối được nhập — dùng để phân biệt scan vs gõ tay */
-  private lastEmpKeyTime = 0;
 
   @ViewChild('empScanInputRef') empScanInputRef?: ElementRef<HTMLInputElement>;
 
@@ -184,37 +182,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Auto STT counter
   nextStt = 1;
 
-  /**
-   * Phân biệt scan vs gõ tay:
-   * Scanner gửi toàn bộ ký tự liên tiếp nhanh (< 100ms/ký tự).
-   * Nếu ký tự tiếp theo đến sau > 150ms khi input đã có dữ liệu
-   * → gõ tay → xoá input và báo lỗi.
-   */
-  onEmpScanKeydown(event: KeyboardEvent): void {
-    const SCAN_SPEED_MS = 150;
-    const now = Date.now();
-    const gap = now - this.lastEmpKeyTime;
-
-    // Phím hệ thống: luôn cho phép
-    if (['Backspace', 'Delete', 'Enter', 'Tab', 'Shift',
-         'Control', 'Alt', 'Meta', 'CapsLock'].includes(event.key)) {
-      this.lastEmpKeyTime = now;
-      return;
-    }
-
-    // Nếu input đang có dữ liệu VÀ gap quá chậm → gõ tay → chặn + reset
-    if (this.employeeScanInput.length > 0 && gap > SCAN_SPEED_MS) {
-      event.preventDefault();
-      this.employeeScanInput = '';
-      this.employeeScanError = 'Vui lòng sử dụng máy scan thẻ nhân viên.';
-      this.lastEmpKeyTime = 0;
-      return;
-    }
-
-    this.lastEmpKeyTime = now;
-  }
-
-  /** Gọi mỗi khi scanner ghi vào input — tự confirm khi đủ 7 ký tự hợp lệ */
+  /** Gọi mỗi khi scanner/gõ tay ghi vào input — tự confirm khi đủ 7 ký tự hợp lệ */
   onEmployeeScanChange(value: string): void {
     const raw = (value || '').trim().toUpperCase();
     this.employeeScanInput = raw;
@@ -271,7 +239,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       const el = this.empScanInputRef?.nativeElement;
       if (el) {
         el.focus();
-        this.lastEmpKeyTime = 0;
         return;
       }
       if (retry < 8) {
