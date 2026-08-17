@@ -1,12 +1,19 @@
 <div class="jw-rack3d">
   <div class="jw-rack3d__legend">
-    <span class="jw-rack3d__legend-item jw-rack3d__legend-item--empty">Trống</span>
-    <span class="jw-rack3d__legend-item jw-rack3d__legend-item--full">Có hàng</span>
-    <span class="jw-rack3d__legend-item jw-rack3d__legend-item--pick">Đang chọn</span>
-    <span class="jw-rack3d__hint">
-      Kéo xoay · Cuộn phóng to
-      <ng-container *ngIf="mode === 'block'"> · Click ô để chọn tầng/vị trí</ng-container>
-    </span>
+    <ng-container *ngIf="mode === 'warehouse'; else blockLegend">
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--beam">Beam</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--shelf">Mâm</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--wall">Vách phòng</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--raised">Nền cao +0.9m</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--door">Cửa cuốn (lối ra vào)</span>
+      <span class="jw-rack3d__hint">Kéo xoay · Cuộn phóng to · Click mâm để chọn kệ</span>
+    </ng-container>
+    <ng-template #blockLegend>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--empty">Trống</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--full">Có hàng</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--pick">Đang chọn</span>
+      <span class="jw-rack3d__hint">Kéo xoay · Cuộn phóng to · Click ô để chọn tầng/vị trí</span>
+    </ng-template>
   </div>
   <div
     #canvasHost

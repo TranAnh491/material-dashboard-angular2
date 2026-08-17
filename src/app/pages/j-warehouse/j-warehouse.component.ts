@@ -463,6 +463,8 @@ export class JWarehouseComponent implements OnInit {
   readonly OFFICE_SECURED_W_M = 18.6;
   readonly OFFICE_KHOMAT_EXT_W_M = 10;
   readonly OFFICE_H_M = 7;
+  /** Nhãn Secured WH dịch về phía mặt C 1.5m (không dịch phòng). */
+  readonly OFFICE_SECURED_SHIFT_C_M = 1.5;
   readonly officeRooms: JwOfficeRoom[] = this.buildOfficeRooms();
   readonly officeZone = this.buildOfficeZone();
   /** Lối đi còn lại giữa hết dãy kệ và mép văn phòng */
@@ -629,6 +631,70 @@ export class JWarehouseComponent implements OnInit {
       const wrapAt = z.id === 'shipping-area' ? 20 : 12;
       return { ...z, label, labelLines: label ? this.wrapLabel(label, wrapAt) : [] };
     });
+  }
+
+  /** Phòng có vách cứng — dùng cho mô hình 3D. */
+  get warehouse3dRooms(): Array<{ id: string; label: string; xM: number; yM: number; wM: number; hM: number }> {
+    const rooms = this.officeRooms.map((r) => ({
+      id: r.id,
+      label: this.officeRoomLabel(r),
+      xM: r.xM,
+      yM: r.yM,
+      wM: r.wM,
+      hM: r.hM
+    }));
+    const ext = this.khoMatExtZone;
+    if (ext.wM > 0 && ext.hM > 0) {
+      rooms.push({
+        id: 'kho-mat-ext',
+        label: this.t('zone.khoMatExt'),
+        xM: ext.xM,
+        yM: ext.yM,
+        wM: ext.wM,
+        hM: ext.hM
+      });
+    }
+    const wc = this.j5WcFemaleZone;
+    rooms.push({
+      id: wc.id,
+      label: wc.label,
+      xM: wc.xM,
+      yM: wc.yM,
+      wM: wc.wM,
+      hM: wc.hM
+    });
+    return rooms;
+  }
+
+  /** Cửa cuốn 3D — 1 mặt A, 3 mặt D, 1 mặt B (Y13–Y14). */
+  get warehouse3dRollers(): Array<{
+    edge: 'A' | 'B' | 'D';
+    xM?: number;
+    yM?: number;
+    spanM: number;
+    label?: string;
+  }> {
+    return this.edgeFeatures
+      .filter(
+        (f) =>
+          f.kind === 'roller' &&
+          (f.edge === 'A' || f.edge === 'D' || f.id === 'roller-y13-y14')
+      )
+      .map((f) =>
+        f.edge === 'B'
+          ? {
+              edge: 'B' as const,
+              xM: f.xM,
+              spanM: f.wM,
+              label: f.subLabel || this.t('door.roller')
+            }
+          : {
+              edge: f.edge as 'A' | 'D',
+              yM: f.yM,
+              spanM: f.hM,
+              label: f.subLabel || this.t('door.roller')
+            }
+      );
   }
 
   get drawModeTitle(): string {
@@ -882,20 +948,12 @@ export class JWarehouseComponent implements OnInit {
     return this.drawMode === 'dang-ky' && this.showJ4;
   }
 
-  /** Bật xem 3D — mở luôn mô hình 3D toàn bộ dãy kệ J5 để kéo xoay xem chi tiết. */
+  /** Bật xem 3D — toàn bộ layout đổi sang mô hình 3D kệ kho (không popup). */
   show3D = false;
-  show3DModal = false;
 
   toggle3D(event?: Event): void {
     event?.stopPropagation();
     this.show3D = !this.show3D;
-    this.show3DModal = this.show3D;
-  }
-
-  close3DModal(event?: Event): void {
-    event?.stopPropagation();
-    this.show3DModal = false;
-    this.show3D = false;
   }
 
   get selectedBlockOccupancy(): Array<{ level: number; pos: JwPos; occupied: boolean }> {
@@ -1423,7 +1481,6 @@ export class JWarehouseComponent implements OnInit {
     this.showScanInput = false;
     if (this.workMode) {
       this.drawMode = 'kho';
-      this.show3DModal = false;
     } else {
       this.clearSelection();
     }

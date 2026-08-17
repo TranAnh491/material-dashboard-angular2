@@ -106,6 +106,8 @@ interface PutawayModalSkuRow {
   recommendedKho: string;
   /** Trạng thái ưu tiên cao nhất của mã (để badge màu) */
   primaryStatus: PutawayIqcStatusKind | 'tra' | 'mixed';
+  /** Inbound = tồn kho toàn nhà máy → mã chưa từng xuất */
+  neverExported: boolean;
 }
 
 type PutawayModalFilterMode = 'all' | 'pass' | 'pending' | 'confirm' | 'ng' | 'lock' | 'tra';
@@ -2833,7 +2835,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,   // Day 1 = nhập hôm nay (không tính Chủ Nhật)
           recommendedKho,
-          primaryStatus
+          primaryStatus,
+          neverExported: false
         };
       })
       .sort((a, b) => {
@@ -2950,7 +2953,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           totalStock: v.totalStock,
           dayInIqc: daysDiff + 1,
           recommendedKho: this.resolveRecommendedKho(materialCode, customerMap, khoTypeResolver),
-          primaryStatus: 'tra' as const
+          primaryStatus: 'tra' as const,
+          neverExported: false
         };
       })
       .sort((a, b) => {
@@ -2958,6 +2962,113 @@ export class DashboardComponent implements OnInit, OnDestroy {
         if (b.totalStock !== a.totalStock) return b.totalStock - a.totalStock;
         return a.materialCode.localeCompare(b.materialCode);
       });
+  }
+
+  private inventoryOnHand(data: any): number {
+    const openingStock =
+      data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+    const quantity = Number(data.quantity) || 0;
+    const exported = Number(data.exported) || 0;
+    const xt = Number(data.xt) || 0;
+    return openingStock + quantity - exported - xt;
+  }
+
+  private chunkStrings(items: string[], size: number): string[][] {
+    const out: string[][] = [];
+    for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+    return out;
+  }
+
+  /**
+   * Lượng nhập inbound (theo mã) vs tồn kho toàn nhà máy.
+   * Bằng nhau → chưa xuất kho lần nào.
+   */
+  private async enrichPutawayNeverExported(
+    factory: string,
+    stagingDocs: any[],
+    ...rowLists: PutawayModalSkuRow[][]
+  ): Promise<void> {
+    const rows = rowLists.reduce((acc, list) => acc.concat(list || []), [] as PutawayModalSkuRow[]);
+    if (!rows.length) return;
+
+    const queryCodes = new Set<string>();
+    stagingDocs.forEach((doc: any) => {
+      const raw = String((doc.data?.() || doc.data || {}).materialCode || '').trim();
+      if (!raw) return;
+      queryCodes.add(raw);
+      const up = raw.toUpperCase();
+      if (up !== raw) queryCodes.add(up);
+    });
+    rows.forEach((r) => {
+      if (r.materialCode) queryCodes.add(r.materialCode);
+    });
+
+    const codes = Array.from(queryCodes);
+    const [inboundMap, stockMap] = await Promise.all([
+      this.fetchInboundQtyByMaterialCodes(factory, codes),
+      this.fetchInventoryStockByMaterialCodes(factory, codes)
+    ]);
+
+    const almostEq = (a: number, b: number) => Math.abs(a - b) < 0.01;
+    rows.forEach((row) => {
+      const inboundQty = inboundMap.get(row.materialCode) || 0;
+      const stockQty = stockMap.get(row.materialCode) || 0;
+      row.neverExported = inboundQty > 0 && stockQty > 0 && almostEq(inboundQty, stockQty);
+    });
+  }
+
+  private async fetchInboundQtyByMaterialCodes(factory: string, codes: string[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (!codes.length) return map;
+    const snaps = await Promise.all(
+      this.chunkStrings(codes, 10).map((chunk) =>
+        this.firestore
+          .collection('inbound-materials', (ref) =>
+            ref.where('factory', '==', factory).where('materialCode', 'in', chunk)
+          )
+          .get()
+          .toPromise()
+          .catch(() => null)
+      )
+    );
+    for (const snap of snaps) {
+      if (!snap?.docs?.length) continue;
+      for (const doc of snap.docs) {
+        const data = doc.data() as any;
+        const code = String(data.materialCode || '').toUpperCase().trim();
+        if (!code) continue;
+        map.set(code, (map.get(code) || 0) + (Number(data.quantity) || 0));
+      }
+    }
+    return map;
+  }
+
+  private async fetchInventoryStockByMaterialCodes(factory: string, codes: string[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (!codes.length) return map;
+    const snaps = await Promise.all(
+      this.chunkStrings(codes, 10).map((chunk) =>
+        this.firestore
+          .collection('inventory-materials', (ref) =>
+            ref.where('factory', '==', factory).where('materialCode', 'in', chunk)
+          )
+          .get()
+          .toPromise()
+          .catch(() => null)
+      )
+    );
+    for (const snap of snaps) {
+      if (!snap?.docs?.length) continue;
+      for (const doc of snap.docs) {
+        const data = doc.data() as any;
+        const code = String(data.materialCode || '').toUpperCase().trim();
+        if (!code) continue;
+        const stock = this.inventoryOnHand(data);
+        if (stock <= 0) continue;
+        map.set(code, (map.get(code) || 0) + stock);
+      }
+    }
+    return map;
   }
 
   // Load Putaway popup: 1 mã hàng = 1 SKU, xếp theo Pass / Chưa Pass
@@ -2989,6 +3100,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
       this.iqcMaterialsBySku = docs.length > 0 ? this.buildPutawayModalSkuRows(docs, customerMap, khoTypeResolver) : [];
       this.putawayTraMaterialsBySku = traDocs.length > 0 ? this.buildPutawayTraModalSkuRows(traDocs, customerMap, khoTypeResolver) : [];
+      await this.enrichPutawayNeverExported(factory, [...docs, ...traDocs], this.iqcMaterialsBySku, this.putawayTraMaterialsBySku);
 
       console.log('📊 Putaway modal SKU rows:', this.iqcMaterialsBySku.length, 'TRA:', this.putawayTraMaterialsBySku.length);
       this.cdr.detectChanges();
@@ -3133,6 +3245,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         Lock: row.lockCount || 0,
         'Tổng dòng (PO+IMD)': row.totalSkuCount,
         'Tồn kho': row.totalStock,
+        'Thông tin': row.neverExported ? 'Chưa xuất kho lần nào' : '',
         'Trạng thái chính': this.putawayPrimaryStatusLabel(row)
       }));
 
@@ -3180,6 +3293,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           <td class="num c-lock">${row.lockCount || ''}</td>
           <td class="num">${esc(row.totalSkuCount)}</td>
           <td class="num">${esc(Number(row.totalStock).toFixed(2))}</td>
+          <td>${row.neverExported ? 'Chưa xuất kho lần nào' : ''}</td>
           <td>${esc(this.putawayPrimaryStatusLabel(row))}</td>
         </tr>`;
       })
@@ -3244,6 +3358,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         <th class="num">Lock</th>
         <th class="num">Tổng</th>
         <th class="num">Tồn</th>
+        <th>Thông tin</th>
         <th>TT chính</th>
       </tr>
     </thead>

@@ -94,8 +94,8 @@
         <div class="jw-map__toolbar">
           <div>
             <div class="jw-map__title-row">
-              <h2>{{ drawModeTitle }}</h2>
-              <div class="jw-map__mode-row">
+              <h2>{{ show3D ? 'Mô hình 3D — toàn bộ kệ kho' : drawModeTitle }}</h2>
+              <div class="jw-map__mode-row" *ngIf="!show3D">
                 <div class="jw-draw-modes jw-building-modes jw-building-modes--toolbar" role="tablist" aria-label="Xưởng hiển thị">
                   <button
                     type="button"
@@ -141,7 +141,7 @@
               <i class="material-icons">download</i>
               {{ isDownloading ? t('btn.downloading') : t('btn.download') }}
             </button>
-            <div class="jw-zoom">
+            <div class="jw-zoom" *ngIf="!show3D">
               <button type="button" class="jw-icon-btn" (click)="onZoomBtn(-0.2, $event)" title="Thu nhỏ">
                 <i class="material-icons">remove</i>
               </button>
@@ -151,6 +151,7 @@
               </button>
             </div>
             <button
+              *ngIf="!show3D"
               type="button"
               class="jw-icon-btn"
               (click)="resetZoom(); $event.stopPropagation()"
@@ -168,6 +169,7 @@
         </div>
 
         <div
+          *ngIf="!show3D"
           #mapViewport
           class="jw-viewport"
           [class.jw-viewport--pan]="mapTool === 'pan'"
@@ -699,7 +701,7 @@
                     <text
                       class="jw-office__label"
                       [attr.x]="meterX(room.xM + room.wM / 2)"
-                      [attr.y]="meterY(room.yM + room.hM / 2)">
+                      [attr.y]="meterY(room.yM + room.hM / 2 - OFFICE_SECURED_SHIFT_C_M)">
                       {{ officeRoomLabel(room) }}
                     </text>
                   </ng-container>
@@ -1211,6 +1213,28 @@
             </svg>
           </div>
         </div>
+
+        <app-j-warehouse-rack-3d
+          *ngIf="show3D"
+          class="jw-map__rack3d"
+          mode="warehouse"
+          [warehouseRacks]="racks"
+          [khoMatRows]="khoMatRows"
+          [rooms]="warehouse3dRooms"
+          [raisedZone]="raisedZone"
+          [raisedHeightM]="0.9"
+          [stairSteps]="stairSteps"
+          [rollerDoors]="warehouse3dRollers"
+          [floorLengthM]="LENGTH_M"
+          [floorWidthM]="WIDTH_M"
+          [rackHeightM]="RACK_HEIGHT_M"
+          [khoMatHeightM]="KHO_MAT_HEIGHT_M"
+          [khoMatLevels]="KHO_MAT_LEVELS"
+          [selectedLevel]="selectedLevel"
+          [selectedPos]="selectedPos"
+          [selectedBlockCode]="selectedBlock?.code || null"
+          (slotPick)="onRack3dPick($event)">
+        </app-j-warehouse-rack-3d>
       </section>
 
       <aside class="jw-detail">
@@ -1398,26 +1422,6 @@
           <button type="button" class="jw-btn jw-btn--primary" (click)="saveExtraPallets($event)">Lưu</button>
         </div>
       </div>
-    </div>
-  </div>
-
-  <div class="jw-modal-backdrop" *ngIf="show3DModal" (click)="close3DModal()">
-    <div class="jw-modal" role="dialog" (click)="$event.stopPropagation()">
-      <header class="jw-modal__head">
-        <h2 class="jw-modal__title">
-          <i class="material-icons">view_in_ar</i> Toàn bộ kệ kho J5 — Mô hình 3D
-        </h2>
-        <button type="button" class="jw-modal__close" (click)="close3DModal()" title="Đóng">
-          <i class="material-icons">close</i>
-        </button>
-      </header>
-      <app-j-warehouse-rack-3d
-        class="jw-modal__rack3d"
-        mode="warehouse"
-        [warehouseRacks]="racks"
-        [slotPallets]="slotPallets"
-        (slotPick)="onRack3dPick($event)">
-      </app-j-warehouse-rack-3d>
     </div>
   </div>
 </div>

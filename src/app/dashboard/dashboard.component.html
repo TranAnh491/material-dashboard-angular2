@@ -709,7 +709,7 @@
         <div class="putaway-modal-summary" *ngIf="!putawayModalIsEmpty">
           <span>Đang xem: <strong>{{ putawayFilterLabel }}</strong></span>
           <span><strong>{{ putawayModalDisplayRows.length }}</strong> mã hàng</span>
-          <span class="putaway-modal-summary__hint">Day = số ngày trong IQC (không tính Chủ nhật). Kho = gợi ý nơi cất.</span>
+          <span class="putaway-modal-summary__hint">Day = số ngày trong IQC (không tính Chủ nhật). Kho = gợi ý nơi cất. Cột Thông tin: inbound = tồn kho → chưa xuất lần nào.</span>
         </div>
 
         <div class="no-materials" *ngIf="putawayModalIsEmpty">
@@ -741,6 +741,7 @@
                 <th class="col-num">Lock</th>
                 <th class="col-num">Tổng</th>
                 <th class="col-num">Tồn</th>
+                <th>Thông tin</th>
               </tr>
             </thead>
             <tbody>
@@ -775,6 +776,9 @@
                 <td class="col-num putaway-sku-lock">{{ row.lockCount || '' }}</td>
                 <td class="col-num">{{ row.totalSkuCount }}</td>
                 <td class="col-num">{{ row.totalStock | number:'1.0-2' }}</td>
+                <td class="putaway-sku-info">
+                  <span *ngIf="row.neverExported" class="putaway-never-export">Chưa xuất kho lần nào</span>
+                </td>
               </tr>
             </tbody>
           </table>
