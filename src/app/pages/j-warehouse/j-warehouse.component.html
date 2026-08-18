@@ -66,6 +66,14 @@
           [title]="t('title.3dView')">
           <i class="material-icons">view_in_ar</i> 3D
         </button>
+        <button
+          type="button"
+          class="jw-btn jw-btn--outline"
+          [class.jw-btn--on]="showUtilization"
+          (click)="toggleUtilization($event)"
+          [title]="t('title.utilization')">
+          <i class="material-icons">grid_view</i> {{ t('btn.utilization') }}
+        </button>
         <ng-container *ngIf="!viewOnly">
           <button type="button" class="jw-btn jw-btn--outline" (click)="goBack()">
             <i class="material-icons">arrow_back</i> {{ t('btn.back') }}
@@ -103,8 +111,8 @@
         <div class="jw-map__toolbar">
           <div>
             <div class="jw-map__title-row">
-              <h2>{{ show3D ? t('title.3dModel') : drawModeTitle }}</h2>
-              <div class="jw-map__mode-row" *ngIf="!show3D">
+              <h2>{{ showUtilization ? t('util.title') : show3D ? t('title.3dModel') : drawModeTitle }}</h2>
+              <div class="jw-map__mode-row" *ngIf="!show3D && !showUtilization">
                 <div class="jw-draw-modes jw-building-modes jw-building-modes--toolbar" role="tablist" [attr.aria-label]="t('aria.building')">
                   <button
                     type="button"
@@ -147,11 +155,12 @@
               class="jw-btn jw-btn--outline"
               [disabled]="isDownloading"
               (click)="downloadDrawing($event)"
+              *ngIf="!showUtilization"
               [title]="show3D ? t('title.download3d') : t('title.download2d')">
               <i class="material-icons">download</i>
               {{ isDownloading ? t('btn.downloading') : t('btn.download') }}
             </button>
-            <div class="jw-zoom" *ngIf="!show3D">
+            <div class="jw-zoom" *ngIf="!show3D && !showUtilization">
               <button type="button" class="jw-icon-btn" (click)="onZoomBtn(-0.2, $event)" [title]="t('zoom.out')">
                 <i class="material-icons">remove</i>
               </button>
@@ -161,7 +170,7 @@
               </button>
             </div>
             <button
-              *ngIf="!show3D"
+              *ngIf="!show3D && !showUtilization"
               type="button"
               class="jw-icon-btn"
               (click)="resetZoom(); $event.stopPropagation()"
@@ -179,7 +188,7 @@
         </div>
 
         <div
-          *ngIf="!show3D"
+          *ngIf="!show3D && !showUtilization"
           #mapViewport
           class="jw-viewport"
           [class.jw-viewport--pan]="mapTool === 'pan'"
@@ -1224,29 +1233,91 @@
           </div>
         </div>
 
-        <app-j-warehouse-rack-3d
-          *ngIf="show3D"
-          #rack3d
-          class="jw-map__rack3d"
-          mode="warehouse"
-          [lang]="lang"
-          [warehouseRacks]="racks"
-          [khoMatRows]="khoMatRows"
-          [rooms]="warehouse3dRooms"
-          [raisedZone]="raisedZone"
-          [raisedHeightM]="0.9"
-          [stairSteps]="stairSteps"
-          [rollerDoors]="warehouse3dRollers"
-          [floorLengthM]="LENGTH_M"
-          [floorWidthM]="WIDTH_M"
-          [rackHeightM]="RACK_HEIGHT_M"
-          [khoMatHeightM]="KHO_MAT_HEIGHT_M"
-          [khoMatLevels]="KHO_MAT_LEVELS"
-          [selectedLevel]="selectedLevel"
-          [selectedPos]="selectedPos"
-          [selectedBlockCode]="selectedBlock?.code || null"
-          (slotPick)="onRack3dPick($event)">
-        </app-j-warehouse-rack-3d>
+        <div class="jw-util" *ngIf="showUtilization" (click)="$event.stopPropagation()">
+          <div class="jw-util__top">
+            <div class="jw-util__card">
+              <span class="jw-util__card-label">{{ t('util.space') }}</span>
+              <strong class="jw-util__card-value">
+                {{ utilOccupiedOnRacks | number }} / {{ utilCapacityOnRacks | number }}
+                <em>({{ utilSpacePct | number:'1.0-1' }}%)</em>
+              </strong>
+            </div>
+            <div class="jw-util__legend" aria-hidden="true">
+              <span>{{ t('util.space') }}</span>
+              <i class="jw-util__swatch jw-util__swatch--gt70"></i>{{ t('util.legend70') }}
+              <i class="jw-util__swatch jw-util__swatch--lt70"></i>{{ t('util.legend45') }}
+              <i class="jw-util__swatch jw-util__swatch--lt45"></i>{{ t('util.legend25') }}
+              <i class="jw-util__swatch jw-util__swatch--gt0"></i>{{ t('util.legendLt25') }}
+              <i class="jw-util__swatch jw-util__swatch--empty"></i>{{ t('util.legendEmpty') }}
+            </div>
+          </div>
+
+          <div class="jw-util__groups" *ngIf="utilRackGroups.length">
+            <button
+              type="button"
+              class="jw-util__group"
+              *ngFor="let g of utilRackGroups; let i = index"
+              [class.jw-util__group--on]="i === utilGroupIndex"
+              (click)="setUtilGroup(i, $event)">
+              <span>{{ t('util.racks', { from: g.from, to: g.to }) }}</span>
+              <em>{{ g.pct | number:'1.0-1' }}%</em>
+            </button>
+          </div>
+
+          <label class="jw-util__watch">
+            <input type="checkbox" checked disabled />
+            {{ t('util.watch') }}
+          </label>
+
+          <div class="jw-util__grid-wrap" *ngIf="utilGridColumns.length; else utilEmpty">
+            <table class="jw-util__grid">
+              <thead>
+                <tr>
+                  <th class="jw-util__corner" rowspan="2">{{ t('util.level') }}</th>
+                  <th *ngFor="let span of utilRackSpans" [attr.colspan]="span.cols">R{{ span.num }}</th>
+                </tr>
+                <tr>
+                  <th *ngFor="let col of utilGridColumns" [title]="col.label">{{ col.block.index }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let lv of UTIL_LEVELS_TOP_DOWN; let ri = index">
+                  <th>{{ lv }}</th>
+                  <td
+                    *ngFor="let col of utilGridColumns"
+                    class="jw-util__cell"
+                    [class.jw-util__cell--empty]="col.cells[ri].band === 'empty'"
+                    [class.jw-util__cell--gt0]="col.cells[ri].band === 'gt0'"
+                    [class.jw-util__cell--lt45]="col.cells[ri].band === 'lt45'"
+                    [class.jw-util__cell--lt70]="col.cells[ri].band === 'lt70'"
+                    [class.jw-util__cell--gt70]="col.cells[ri].band === 'gt70'"
+                    [class.jw-util__cell--on]="selectedBlock?.code === col.block.code && selectedLevel === lv"
+                    (click)="onUtilCellClick(col, col.cells[ri], $event)">
+                    {{ col.cells[ri].occupied }}/{{ col.cells[ri].capacity }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ng-template #utilEmpty>
+            <p class="jw-util__empty">{{ t('util.empty') }}</p>
+          </ng-template>
+        </div>
+
+        <!--
+          Không khai báo <app-j-warehouse-rack-3d> tĩnh ở đây nữa — three.js sẽ bị gộp chung vào
+          chunk J Warehouse và tải ngay cả khi không bấm 3D (mở trang rất chậm/đôi khi treo).
+          Component 3D được tạo động (import() theo yêu cầu) trong toggle3D() — xem j-warehouse.component.ts.
+        -->
+        <div
+          class="jw-map__rack3d-wrap"
+          [class.jw-map__rack3d-wrap--hidden]="!(show3D && !showUtilization)">
+          <div class="jw-map__rack3d-loading" *ngIf="rack3dLoading">
+            <i class="material-icons rotating">sync</i>
+            {{ lang === 'vi' ? 'Đang tải mô hình 3D…' : 'Loading 3D model…' }}
+          </div>
+          <div #rack3dHost class="jw-map__rack3d"></div>
+        </div>
       </section>
 
       <aside class="jw-detail">

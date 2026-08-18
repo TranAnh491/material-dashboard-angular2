@@ -11,9 +11,10 @@ import {
   SimpleChanges,
   ViewChild
 } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { JwKhoMatRow, JwLang, JwRack } from './j-warehouse.component';
+import type { JwKhoMatRow, JwLang, JwRack } from './j-warehouse.component';
 
 export interface JwRack3dSlot {
   level: number;
@@ -52,6 +53,8 @@ export interface JwRack3dPick {
  */
 @Component({
   selector: 'app-j-warehouse-rack-3d',
+  standalone: true,
+  imports: [CommonModule],
   templateUrl: './j-warehouse-rack-3d.component.html',
   styleUrls: ['./j-warehouse-rack-3d.component.scss']
 })

@@ -233,13 +233,11 @@
               <td>{{row.material.factory || 'ASM1'}}</td>
               <td class="row-header">{{i + 1}}</td>
               <td class="shipment-cell">
-                <input *ngIf="row.renderShipmentCell"
-                       type="text"
+                <input type="text"
                        class="editable-input"
                        [(ngModel)]="row.material.shipment"
                        (change)="onMaterialFieldChange(row.material)"
                        placeholder="Shipment">
-                <span *ngIf="!row.renderShipmentCell">{{row.material.shipment || ''}}</span>
               </td>
               <td>
                 <input type="text"

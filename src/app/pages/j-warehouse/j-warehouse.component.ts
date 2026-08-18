@@ -1,7 +1,18 @@
-import { Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
+import {
+  Component,
+  ComponentRef,
+  ElementRef,
+  NgZone,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  ViewContainerRef
+} from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { Subscription } from 'rxjs';
+import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
 
 export interface JwBlock {
   /** VD: R11 */
@@ -252,6 +263,20 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'btn.download3d': 'Tải hình 3D',
     'title.3dModel': 'Mô hình 3D — toàn bộ kệ kho',
     'title.3dView': 'Xem toàn bộ kệ kho ở dạng 3D',
+    'btn.utilization': 'Lấp đầy',
+    'title.utilization': 'Xem tỷ lệ lấp đầy kệ (heatmap)',
+    'util.title': 'Tỷ lệ lấp đầy kệ',
+    'util.space': 'Space utilization',
+    'util.watch': 'Xem theo tỷ lệ lấp đầy',
+    'util.legend70': '>70%',
+    'util.legend45': '>45%',
+    'util.legend25': '>25%',
+    'util.legendLt25': '<25%',
+    'util.legendGt0': '>0%',
+    'util.legendEmpty': '0%',
+    'util.racks': 'R{{from}}–R{{to}}',
+    'util.level': 'Tầng',
+    'util.empty': 'Chưa có dữ liệu kệ.',
     'title.extraPallet': 'Nhập pallet ngoài',
     'title.download2d': 'Tải về bản vẽ + Thông tin kho (PNG)',
     'title.download3d': 'Tải hình mô hình 3D (PNG)',
@@ -381,6 +406,20 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'btn.download3d': 'Download 3D',
     'title.3dModel': '3D model — full warehouse',
     'title.3dView': 'View the full warehouse in 3D',
+    'btn.utilization': 'Utilization',
+    'title.utilization': 'Show rack utilization heatmap',
+    'util.title': 'Rack utilization',
+    'util.space': 'Space utilization',
+    'util.watch': 'Watch by utilization',
+    'util.legend70': '>70%',
+    'util.legend45': '>45%',
+    'util.legend25': '>25%',
+    'util.legendLt25': '<25%',
+    'util.legendGt0': '>0%',
+    'util.legendEmpty': '0%',
+    'util.racks': 'R{{from}}–R{{to}}',
+    'util.level': 'Level',
+    'util.empty': 'No rack data.',
     'title.extraPallet': 'Enter extra pallets',
     'title.download2d': 'Download drawing + warehouse info (PNG)',
     'title.download3d': 'Download 3D image (PNG)',
@@ -437,7 +476,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
   templateUrl: './j-warehouse.component.html',
   styleUrls: ['./j-warehouse.component.scss']
 })
-export class JWarehouseComponent implements OnInit {
+export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly LENGTH_M = 105;
   readonly WIDTH_M = 30;
 
@@ -924,6 +963,7 @@ export class JWarehouseComponent implements OnInit {
     } catch {
       /* ignore */
     }
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   /** Dòng thông tin kho — sidebar (đầy đủ). */
@@ -1070,10 +1110,232 @@ export class JWarehouseComponent implements OnInit {
 
   /** Bật xem 3D — toàn bộ layout đổi sang mô hình 3D kệ kho (không popup). */
   show3D = false;
+  /** Lưới occupancy theo tỷ lệ lấp đầy (heatmap). */
+  showUtilization = false;
+  utilGroupIndex = 0;
+  readonly UTIL_GROUP_SIZE = 5;
+  readonly UTIL_LEVELS_TOP_DOWN = [4, 3, 2, 1];
 
-  toggle3D(event?: Event): void {
+  /** true trong lúc đang tải chunk mô hình 3D (three.js) lần đầu. */
+  rack3dLoading = false;
+  private rack3dComponentRef?: ComponentRef<JWarehouseRack3dComponent>;
+  private rack3dSlotPickSub?: Subscription;
+
+  async toggle3D(event?: Event): Promise<void> {
     event?.stopPropagation();
     this.show3D = !this.show3D;
+    if (this.show3D) {
+      this.showUtilization = false;
+      await this.mountRack3d();
+    } else {
+      this.unmountRack3d();
+    }
+  }
+
+  /**
+   * Tải mô hình 3D (và thư viện three.js) theo yêu cầu — thay vì khai báo <app-j-warehouse-rack-3d>
+   * tĩnh trong template (khiến three.js bị gộp chung vào chunk J Warehouse, tải ngay cả khi không
+   * bấm 3D, làm trang mở rất chậm/đôi khi treo). Chỉ tải khi người dùng thực sự bấm nút 3D.
+   */
+  private async mountRack3d(): Promise<void> {
+    if (this.rack3dComponentRef) {
+      this.syncRack3dInputs();
+      return;
+    }
+    if (!this.rack3dHostRef) return;
+    this.rack3dLoading = true;
+    try {
+      const { JWarehouseRack3dComponent: Rack3dCtor } = await import('./j-warehouse-rack-3d.component');
+      if (!this.show3D) return; // người dùng đã tắt 3D trong lúc đang tải
+      this.rack3dHostRef.clear();
+      const ref = this.rack3dHostRef.createComponent(Rack3dCtor);
+      this.rack3dComponentRef = ref;
+      this.syncRack3dInputs();
+      this.rack3dSlotPickSub = ref.instance.slotPick.subscribe((pick) =>
+        this.onRack3dPick(pick as unknown as { level: number; pos: JwPos; blockCode?: string })
+      );
+      ref.changeDetectorRef.detectChanges();
+    } catch (err) {
+      console.error('[JWarehouse] Không tải được mô hình 3D', err);
+      this.show3D = false;
+      alert('❌ Không tải được mô hình 3D. Vui lòng kiểm tra mạng và thử lại.');
+    } finally {
+      this.rack3dLoading = false;
+    }
+  }
+
+  private unmountRack3d(): void {
+    this.rack3dSlotPickSub?.unsubscribe();
+    this.rack3dSlotPickSub = undefined;
+    this.rack3dComponentRef?.destroy();
+    this.rack3dComponentRef = undefined;
+    this.rack3dHostRef?.clear();
+  }
+
+  /** Đẩy input hiện tại của J Warehouse vào instance 3D đã tạo — thay cho template binding tự động. */
+  private syncRack3dInputs(): void {
+    const ref = this.rack3dComponentRef;
+    if (!ref) return;
+    const inst = ref.instance as unknown as Record<string, unknown>;
+    const changedKeys: string[] = [];
+    const setInput = (key: string, value: unknown) => {
+      if (inst[key] !== value) changedKeys.push(key);
+      inst[key] = value;
+    };
+    setInput('mode', 'warehouse');
+    setInput('lang', this.lang);
+    setInput('warehouseRacks', this.racks);
+    setInput('khoMatRows', this.khoMatRows);
+    setInput('rooms', this.warehouse3dRooms);
+    setInput('raisedZone', this.raisedZone);
+    setInput('raisedHeightM', 0.9);
+    setInput('stairSteps', this.stairSteps);
+    setInput('rollerDoors', this.warehouse3dRollers);
+    setInput('floorLengthM', this.LENGTH_M);
+    setInput('floorWidthM', this.WIDTH_M);
+    setInput('rackHeightM', this.RACK_HEIGHT_M);
+    setInput('khoMatHeightM', this.KHO_MAT_HEIGHT_M);
+    setInput('khoMatLevels', this.KHO_MAT_LEVELS);
+    setInput('selectedLevel', this.selectedLevel);
+    setInput('selectedPos', this.selectedPos);
+    setInput('selectedBlockCode', this.selectedBlock?.code || null);
+    if (changedKeys.length) {
+      const fakeChanges: Record<string, { firstChange: boolean; currentValue: unknown }> = {};
+      for (const k of changedKeys) fakeChanges[k] = { firstChange: false, currentValue: inst[k] };
+      ref.instance.ngOnChanges(fakeChanges as any);
+    }
+  }
+
+  toggleUtilization(event?: Event): void {
+    event?.stopPropagation();
+    this.showUtilization = !this.showUtilization;
+    if (this.showUtilization && this.show3D) {
+      this.show3D = false;
+      this.unmountRack3d();
+    }
+  }
+
+  get utilOccupiedOnRacks(): number {
+    let n = 0;
+    for (const rack of this.racks) {
+      for (const block of rack.blocks) n += this.blockOccupiedCount(block);
+    }
+    return n;
+  }
+
+  get utilCapacityOnRacks(): number {
+    return this.totalPalletsJ5Rack;
+  }
+
+  get utilSpacePct(): number {
+    const cap = this.utilCapacityOnRacks;
+    if (!cap) return 0;
+    return (this.utilOccupiedOnRacks / cap) * 100;
+  }
+
+  get utilRackGroups(): Array<{
+    from: number;
+    to: number;
+    occupied: number;
+    capacity: number;
+    pct: number;
+  }> {
+    const nums = this.racks.map((r) => r.num).sort((a, b) => a - b);
+    const groups: Array<{ from: number; to: number; occupied: number; capacity: number; pct: number }> = [];
+    for (let i = 0; i < nums.length; i += this.UTIL_GROUP_SIZE) {
+      const slice = nums.slice(i, i + this.UTIL_GROUP_SIZE);
+      const from = slice[0];
+      const to = slice[slice.length - 1];
+      let occupied = 0;
+      let capacity = 0;
+      for (const rack of this.racks) {
+        if (rack.num < from || rack.num > to) continue;
+        for (const block of rack.blocks) {
+          occupied += this.blockOccupiedCount(block);
+          capacity += this.palletsInBlock(block);
+        }
+      }
+      groups.push({
+        from,
+        to,
+        occupied,
+        capacity,
+        pct: capacity ? (occupied / capacity) * 100 : 0
+      });
+    }
+    return groups;
+  }
+
+  get utilActiveGroup(): { from: number; to: number; occupied: number; capacity: number; pct: number } | null {
+    const groups = this.utilRackGroups;
+    if (!groups.length) return null;
+    const i = Math.min(Math.max(this.utilGroupIndex, 0), groups.length - 1);
+    return groups[i];
+  }
+
+  get utilGridColumns(): Array<{
+    label: string;
+    rackNum: number;
+    block: JwBlock;
+    cells: Array<{ level: number; occupied: number; capacity: number; ratio: number; band: string }>;
+  }> {
+    const g = this.utilActiveGroup;
+    if (!g) return [];
+    const cols: Array<{
+      label: string;
+      rackNum: number;
+      block: JwBlock;
+      cells: Array<{ level: number; occupied: number; capacity: number; ratio: number; band: string }>;
+    }> = [];
+    const racks = this.racks
+      .filter((r) => r.num >= g.from && r.num <= g.to)
+      .sort((a, b) => a.num - b.num);
+    for (const rack of racks) {
+      const blocks = [...rack.blocks].sort((a, b) => a.index - b.index);
+      for (const block of blocks) {
+        const capLv = this.isShortBlock(block) ? 2 : this.PALLETS_PER_BLOCK;
+        const cells = this.UTIL_LEVELS_TOP_DOWN.map((level) => {
+          let occupied = 0;
+          const posList = this.isShortBlock(block) ? this.POS_LETTERS.slice(0, 2) : this.POS_LETTERS;
+          for (const pos of posList) {
+            if (this.palletAt(this.slotCode(block.code, level, pos))) occupied++;
+          }
+          const ratio = capLv ? occupied / capLv : 0;
+          return { level, occupied, capacity: capLv, ratio, band: this.utilBand(ratio) };
+        });
+        cols.push({ label: block.code, rackNum: rack.num, block, cells });
+      }
+    }
+    return cols;
+  }
+
+  get utilRackSpans(): Array<{ num: number; cols: number }> {
+    const spans: Array<{ num: number; cols: number }> = [];
+    for (const col of this.utilGridColumns) {
+      const last = spans[spans.length - 1];
+      if (last && last.num === col.rackNum) last.cols++;
+      else spans.push({ num: col.rackNum, cols: 1 });
+    }
+    return spans;
+  }
+
+  utilBand(ratio: number): string {
+    if (ratio <= 0) return 'empty';
+    if (ratio < 0.25) return 'gt0';
+    if (ratio < 0.45) return 'lt45';
+    if (ratio < 0.7) return 'lt70';
+    return 'gt70';
+  }
+
+  setUtilGroup(i: number, event?: Event): void {
+    event?.stopPropagation();
+    this.utilGroupIndex = i;
+  }
+
+  onUtilCellClick(col: { block: JwBlock }, cell: { level: number }, event?: Event): void {
+    event?.stopPropagation();
+    this.selectBlock(col.block, event);
+    this.selectedLevel = cell.level;
   }
 
   get selectedBlockOccupancy(): Array<{ level: number; pos: JwPos; occupied: boolean }> {
@@ -1099,6 +1361,7 @@ export class JWarehouseComponent implements OnInit {
     this.selectedPos = pick.pos;
     this.showScanInput = false;
     this.scanPalletInput = '';
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   /**
@@ -1381,7 +1644,7 @@ export class JWarehouseComponent implements OnInit {
   @ViewChild('scanPalletInputRef') scanPalletInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('planSvg') planSvg?: ElementRef<SVGSVGElement>;
   @ViewChild('mapViewport') mapViewport?: ElementRef<HTMLElement>;
-  @ViewChild('rack3d') rack3d?: { downloadPng: (filename: string) => boolean };
+  @ViewChild('rack3dHost', { read: ViewContainerRef, static: true }) rack3dHostRef?: ViewContainerRef;
 
   private layoutDrag: {
     kind: JwLayoutDragKind;
@@ -1528,7 +1791,8 @@ export class JWarehouseComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private location: Location,
-    private firestore: AngularFirestore
+    private firestore: AngularFirestore,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit(): void {
@@ -1537,6 +1801,20 @@ export class JWarehouseComponent implements OnInit {
     this.loadSavedLayout();
     this.loadExtraPallets();
     void this.loadSlotPallets();
+    // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
+    // của component này (template rất lớn), dù đa số trường hợp không kéo layout gì cả.
+    this.ngZone.runOutsideAngular(() => {
+      window.addEventListener('pointermove', this.onWindowPointerMove);
+      window.addEventListener('pointerup', this.onWindowPointerUp);
+      window.addEventListener('pointercancel', this.onWindowPointerUp);
+    });
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('pointermove', this.onWindowPointerMove);
+    window.removeEventListener('pointerup', this.onWindowPointerUp);
+    window.removeEventListener('pointercancel', this.onWindowPointerUp);
+    this.unmountRack3d();
   }
 
   /** Duyệt lên toàn bộ route cha để tìm data.viewOnly — không phụ thuộc chiến lược kế thừa data của Router. */
@@ -1840,8 +2118,13 @@ export class JWarehouseComponent implements OnInit {
     (event.target as Element | null)?.setPointerCapture?.(event.pointerId);
   }
 
-  @HostListener('window:pointermove', ['$event'])
-  onWindowPointerMove(event: PointerEvent): void {
+  /**
+   * Đăng ký thủ công (ngZone.runOutsideAngular) thay vì @HostListener('window:pointermove') —
+   * @HostListener trên window kích hoạt change detection ở MỌI lần di chuột trên toàn trang,
+   * kể cả khi không kéo gì (layoutDrag null gần như luôn luôn) — làm trang ì khi mở J Warehouse.
+   * Chỉ vào lại Angular zone khi thực sự có thay đổi cần cập nhật UI.
+   */
+  private onWindowPointerMove = (event: PointerEvent): void => {
     if (!this.layoutDrag) return;
     const pt = this.clientToMeter(event.clientX, event.clientY);
     if (!pt) return;
@@ -1849,60 +2132,63 @@ export class JWarehouseComponent implements OnInit {
     const dx = pt.xM - d.startXM;
     const dy = pt.yM - d.startYM;
     if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return;
-    this.layoutDragMoved = true;
 
-    if (d.kind === 'move') {
-      // Chỉ dãy kệ đang kéo (vd R1) — không đụng R2 cặp bên; giữ nguyên khoảng cách nội bộ
-      let dxUse = dx;
-      let dyUse = dy;
+    this.ngZone.run(() => {
+      this.layoutDragMoved = true;
 
-      const bounds = (ox: number, oy: number) => {
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
+      if (d.kind === 'move') {
+        // Chỉ dãy kệ đang kéo (vd R1) — không đụng R2 cặp bên; giữ nguyên khoảng cách nội bộ
+        let dxUse = dx;
+        let dyUse = dy;
+
+        const bounds = (ox: number, oy: number) => {
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          for (const item of d.rackBlocks) {
+            const x = item.origXM + ox;
+            const y = item.origYM + oy;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + item.block.wM);
+            maxY = Math.max(maxY, y + item.block.hM);
+          }
+          return { minX, minY, maxX, maxY };
+        };
+
+        let b = bounds(dxUse, dyUse);
+        if (b.minX < 0) dxUse -= b.minX;
+        if (b.minY < 0) dyUse -= b.minY;
+        b = bounds(dxUse, dyUse);
+        if (b.maxX > this.LENGTH_M) dxUse -= b.maxX - this.LENGTH_M;
+        if (b.maxY > this.WIDTH_M) dyUse -= b.maxY - this.WIDTH_M;
+
         for (const item of d.rackBlocks) {
-          const x = item.origXM + ox;
-          const y = item.origYM + oy;
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x + item.block.wM);
-          maxY = Math.max(maxY, y + item.block.hM);
+          item.block.xM = this.snap(item.origXM + dxUse);
+          item.block.yM = this.snap(item.origYM + dyUse);
         }
-        return { minX, minY, maxX, maxY };
-      };
-
-      let b = bounds(dxUse, dyUse);
-      if (b.minX < 0) dxUse -= b.minX;
-      if (b.minY < 0) dyUse -= b.minY;
-      b = bounds(dxUse, dyUse);
-      if (b.maxX > this.LENGTH_M) dxUse -= b.maxX - this.LENGTH_M;
-      if (b.maxY > this.WIDTH_M) dyUse -= b.maxY - this.WIDTH_M;
-
-      for (const item of d.rackBlocks) {
-        item.block.xM = this.snap(item.origXM + dxUse);
-        item.block.yM = this.snap(item.origYM + dyUse);
+      } else {
+        const item = d.rackBlocks[0];
+        if (!item) return;
+        item.block.wM = this.snap(Math.max(this.BLOCK_MIN_W_M, item.origWM + dx));
+        item.block.hM = this.snap(Math.max(this.BLOCK_MIN_H_M, item.origHM + dy));
+        this.clampBlock(item.block);
       }
-    } else {
-      const item = d.rackBlocks[0];
-      if (!item) return;
-      item.block.wM = this.snap(Math.max(this.BLOCK_MIN_W_M, item.origWM + dx));
-      item.block.hM = this.snap(Math.max(this.BLOCK_MIN_H_M, item.origHM + dy));
-      this.clampBlock(item.block);
-    }
-    const rack = this.racks.find((r) => r.num === d.block.rackNum);
-    if (rack) this.syncRackBounds(rack);
-  }
+      const rack = this.racks.find((r) => r.num === d.block.rackNum);
+      if (rack) this.syncRackBounds(rack);
+    });
+  };
 
-  @HostListener('window:pointerup')
-  @HostListener('window:pointercancel')
-  onWindowPointerUp(): void {
+  private onWindowPointerUp = (): void => {
     if (!this.layoutDrag) return;
     const moved = this.layoutDragMoved;
-    this.layoutDrag = null;
-    this.layoutDragMoved = false;
-    if (moved) this.markLayoutDirty();
-  }
+    this.ngZone.run(() => {
+      this.layoutDrag = null;
+      this.layoutDragMoved = false;
+      if (moved) this.markLayoutDirty();
+    });
+  };
 
   blockPalletStep(block: JwBlock): number {
     return this.round2(this.blockLengthM(block) / this.PALLETS_PER_BLOCK);
@@ -2067,18 +2353,21 @@ export class JWarehouseComponent implements OnInit {
     this.selectedLevel = level;
     this.showScanInput = false;
     this.scanPalletInput = '';
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   selectPos(pos: JwPos): void {
     this.selectedPos = pos;
     this.showScanInput = false;
     this.scanPalletInput = '';
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   clearSelection(): void {
     this.selectedBlock = null;
     this.showScanInput = false;
     this.scanPalletInput = '';
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   /** Chỉ bỏ chọn khi click nền sơ đồ — không xóa panel Work khi thả chuột trên block. */
@@ -2189,7 +2478,7 @@ export class JWarehouseComponent implements OnInit {
   downloadDrawing(event?: Event): void {
     event?.stopPropagation();
     if (this.show3D) {
-      const ok = this.rack3d?.downloadPng(`j-warehouse-3d-${this.lang}.png`);
+      const ok = this.rack3dComponentRef?.instance?.downloadPng(`j-warehouse-3d-${this.lang}.png`);
       if (!ok) alert(this.t('alert.exportError'));
       return;
     }

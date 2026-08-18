@@ -374,6 +374,213 @@ $accent-soft: #ccfbf1;
   }
 }
 
+.jw-util {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  overflow: auto;
+  background: #fff;
+
+  &__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__card {
+    min-width: 220px;
+    padding: 10px 14px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+  }
+
+  &__card-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #2563eb;
+    margin-bottom: 4px;
+  }
+
+  &__card-value {
+    display: block;
+    font-size: 20px;
+    font-weight: 800;
+    color: #0f172a;
+
+    em {
+      margin-left: 6px;
+      font-style: normal;
+      font-weight: 700;
+      color: #2563eb;
+    }
+  }
+
+  &__legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+
+    > span {
+      color: #2563eb;
+      margin-right: 4px;
+    }
+  }
+
+  &__swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid #cbd5e1;
+    margin-right: 2px;
+
+    &--gt70 { background: #15803d; border-color: #166534; }
+    &--lt70 { background: #4ade80; border-color: #22c55e; }
+    &--lt45 { background: #86efac; border-color: #4ade80; }
+    &--gt0 { background: #dcfce7; border-color: #bbf7d0; }
+    &--empty { background: #fff; }
+  }
+
+  &__groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 92px;
+    padding: 6px 10px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    cursor: pointer;
+    font: inherit;
+
+    span {
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    em {
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 700;
+      color: #2563eb;
+    }
+
+    &--on {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #fff;
+
+      em { color: #dbeafe; }
+    }
+  }
+
+  &__watch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  &__grid-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  &__grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 11px;
+
+    th, td {
+      border: 1px solid #e2e8f0;
+      text-align: center;
+      padding: 0;
+    }
+
+    thead th {
+      background: #1d4ed8;
+      color: #fff;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 5px 2px;
+      white-space: nowrap;
+    }
+
+    thead tr:last-child th {
+      background: #3b82f6;
+      font-weight: 700;
+      font-size: 10px;
+    }
+
+    tbody th {
+      width: 44px;
+      background: #eff6ff;
+      color: #1e3a8a;
+      font-weight: 800;
+      font-size: 13px;
+    }
+  }
+
+  &__corner {
+    width: 44px;
+    min-width: 44px;
+  }
+
+  &__cell {
+    height: 42px;
+    min-width: 36px;
+    cursor: pointer;
+    font-weight: 700;
+    color: #14532d;
+    user-select: none;
+
+    &--empty { background: #fff; color: #94a3b8; }
+    &--gt0 { background: #dcfce7; }
+    &--lt45 { background: #86efac; }
+    &--lt70 { background: #4ade80; }
+    &--gt70 { background: #15803d; color: #fff; }
+    &--on {
+      outline: 2px solid #1d4ed8;
+      outline-offset: -2px;
+    }
+
+    &:hover {
+      filter: brightness(0.96);
+    }
+  }
+
+  &__empty {
+    margin: 24px 0 0;
+    color: #64748b;
+    font-size: 13px;
+  }
+}
+
 .jw-layout-tools {
   display: flex;
   flex-wrap: wrap;
@@ -459,6 +666,47 @@ $accent-soft: #ccfbf1;
 
   &--pan { cursor: grab; }
   &--panning { cursor: grabbing; user-select: none; }
+}
+
+.jw-map__rack3d-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+
+  &--hidden {
+    display: none;
+  }
+}
+
+.jw-map__rack3d {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.jw-map__rack3d-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #f1f5f9;
+  color: $text2;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.jw-map__rack3d-loading .rotating {
+  animation: jw-rotate 1s linear infinite;
+}
+
+@keyframes jw-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .jw-zoom-space {
