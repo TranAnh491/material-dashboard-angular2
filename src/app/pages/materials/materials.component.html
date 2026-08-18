@@ -660,6 +660,7 @@
                      (blur)="onLocationChange(material)"
                      placeholder="Mỗi vị trí 1 dòng"></textarea>
               <button type="button"
+                      *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
                       class="location-unlock-btn"
                       (click)="tryUnlockLocationColumn()"
                       [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
@@ -670,7 +671,26 @@
 
           <div class="info-row">
             <span class="label">Pallet:</span>
-            <span class="value">{{ material.palletId || '—' }}</span>
+            <input *ngIf="isLocationColumnUnlocked"
+                   type="text"
+                   class="mobile-input"
+                   [(ngModel)]="material.palletId"
+                   (focus)="rememberPalletBeforeEdit(material)"
+                   (blur)="onPalletBlur(material)"
+                   (keydown.enter)="onPalletKeyEnter(material, $event)"
+                   placeholder="P0001" />
+            <span class="value" *ngIf="!isLocationColumnUnlocked">{{ material.palletId || '—' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">WH:</span>
+            <select *ngIf="isLocationColumnUnlocked"
+                    class="mobile-input"
+                    [ngModel]="locationWhTag(material.location)"
+                    (change)="onWhSelect(material, $any($event.target).value)">
+              <option value="">—</option>
+              <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
+            </select>
+            <span class="value" *ngIf="!isLocationColumnUnlocked">{{ locationWhTag(material.location) || '—' }}</span>
           </div>
           
           <div class="info-row">
@@ -756,17 +776,18 @@
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Số lượng cần xuất (nhập tay)">XT</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
-            <th class="location-header-cell" [title]="isLocationColumnUnlocked ? 'Đã mở khóa — click ổ khóa để khóa lại' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
+            <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Sửa tay vị trí rồi Enter/blur để lưu' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
               <span>Vị trí</span>
               <button type="button"
+                      *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
                       class="location-unlock-btn"
                       (click)="tryUnlockLocationColumn(); $event.stopPropagation()"
                       [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
                 <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
               </button>
             </th>
-            <th title="Số pallet — sửa sau khi mở khóa cột Vị trí">Pallet</th>
-            <th title="Kho đích sau khi Dời kho (J5 / WH3)">WH</th>
+            <th title="Số pallet — nhập rồi Enter/blur để lưu">Pallet</th>
+            <th title="Kho đích — chọn ASM3 hoặc J5">WH</th>
             <th>Change</th>
             <th>Loại Hình</th>
             <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
@@ -951,7 +972,17 @@
                 autocomplete="off" />
               <ng-container *ngIf="!isLocationColumnUnlocked">{{ material.palletId || '—' }}</ng-container>
             </td>
-            <td class="wh-cell">{{ locationWhTag(material.location) || '—' }}</td>
+            <td class="wh-cell" [title]="isLocationColumnUnlocked ? 'Chọn ASM3 hoặc J5' : (locationWhTag(material.location) || 'Chưa gán WH')">
+              <select
+                *ngIf="isLocationColumnUnlocked"
+                class="editable-cell wh-select"
+                [ngModel]="locationWhTag(material.location)"
+                (change)="onWhSelect(material, $any($event.target).value)">
+                <option value="">—</option>
+                <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
+              </select>
+              <ng-container *ngIf="!isLocationColumnUnlocked">{{ locationWhTag(material.location) || '—' }}</ng-container>
+            </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
             </td>

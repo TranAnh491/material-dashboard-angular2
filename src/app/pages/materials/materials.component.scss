@@ -4744,6 +4744,25 @@ $asm1-toolbar-h: 36px;
 .wh-cell {
   font-weight: 600;
   color: #0f766e;
+  min-width: 88px;
+}
+
+.wh-select {
+  width: 100%;
+  min-width: 72px;
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f766e;
+  text-align: center;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    background: #f8f9fa;
+  }
 }
 
 .reset-low-stock-hint {

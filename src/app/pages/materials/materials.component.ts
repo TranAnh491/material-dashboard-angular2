@@ -473,6 +473,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   canExport = false;
   canDelete = false;
 
+  /**
+   * Tạm: luôn mở sửa tay cột Vị trí / WH / Pallet (không OTP).
+   * Đặt `false` khi user báo lock lại như cũ.
+   */
+  readonly TEMP_UNLOCK_LOCATION_WH_PALLET = true;
+  /** Dropdown cột WH — chọn kho đích. */
+  readonly WH_SELECT_OPTIONS = ['ASM3', 'J5'] as const;
   /** Cột Vị trí: sửa tay sau khi xác thực OTP Zalo (4 tiếng, hết khi F5). */
   isLocationColumnUnlocked = false;
   showLayoutLocPicker = false;
@@ -2047,10 +2054,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.loadPermissions();
-    this.isLocationColumnUnlocked = this.locationUnlock.isUnlocked();
+    this.isLocationColumnUnlocked = this.TEMP_UNLOCK_LOCATION_WH_PALLET || this.locationUnlock.isUnlocked();
     this.locationUnlock.unlocked$.pipe(takeUntil(this.destroy$)).subscribe(unlocked => {
-      this.isLocationColumnUnlocked = unlocked;
-      if (!unlocked) this.closeLayoutLocPicker();
+      this.isLocationColumnUnlocked = this.TEMP_UNLOCK_LOCATION_WH_PALLET || unlocked;
+      if (!this.isLocationColumnUnlocked) this.closeLayoutLocPicker();
       this.cdr.markForCheck();
     });
     this.materialsInventoryUnlocked = this.materialsInventoryUnlock.isUnlocked();
@@ -6349,6 +6356,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Mở/khóa sửa tay cột Vị trí — OTP 4 số qua Zalo bot. */
   tryUnlockLocationColumn(): void {
+    if (this.TEMP_UNLOCK_LOCATION_WH_PALLET) return;
     if (this.locationUnlock.isUnlocked()) {
       this.locationUnlock.lock();
       this.closeLayoutLocPicker();
@@ -6820,6 +6828,27 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   onPalletBlur(material: InventoryMaterial): void {
     void this.persistPalletChange(material, String(material.palletId || ''));
+  }
+
+  onWhSelect(material: InventoryMaterial, value: string): void {
+    void this.commitWhChange(material, value);
+  }
+
+  private async commitWhChange(material: InventoryMaterial, raw: string): Promise<void> {
+    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
+    const next = String(raw || '').trim().toUpperCase();
+    if (next && next !== 'ASM3' && next !== 'J5') return;
+    const current = this.locationWhTag(material.location);
+    if (next === current) return;
+    this.rememberLocationBeforeEdit(material);
+    const bare = this.stripDoiKhoWhPrefix(String(material.location || '').trim());
+    if (!bare && next) {
+      alert('Nhập vị trí trước khi gán WH.');
+      this.cdr.markForCheck();
+      return;
+    }
+    material.location = next ? `${next}-${bare}` : bare;
+    await this.persistLocationChange(material);
   }
 
   private async persistPalletChange(
@@ -9350,18 +9379,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.resetZeroDeletedCount = 0;
   }
 
-  /** Nhãn kho hiển thị ở cột WH — chỉ có khi Vị trí đã được "Dời kho" (tiền tố J5-/WH3- ở đầu). */
+  /** Nhãn kho hiển thị ở cột WH — J5- → J5; ASM3-/WH3- → ASM3. */
   locationWhTag(location: string | null | undefined): string {
     const raw = String(location || '').trim().toUpperCase();
     if (raw.startsWith('J5-')) return 'J5';
-    if (raw.startsWith('WH3-')) return 'WH3';
+    if (raw.startsWith('ASM3-') || raw.startsWith('WH3-') || raw.startsWith('ASM3')) return 'ASM3';
     return '';
   }
 
-  /** Bỏ tiền tố J5-/WH3- cũ (nếu có) trước khi gắn tiền tố mới — tránh dính chồng khi Dời kho nhiều lần. */
+  /** Bỏ tiền tố J5-/WH3-/ASM3- cũ trước khi gắn tiền tố mới. */
   private stripDoiKhoWhPrefix(location: string): string {
     const raw = String(location || '').trim();
-    const m = /^(J5|WH3)-(.+)$/i.exec(raw);
+    const m = /^(J5|WH3|ASM3)-(.+)$/i.exec(raw);
     return m ? m[2] : raw;
   }
 
