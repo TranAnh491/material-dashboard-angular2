@@ -696,6 +696,31 @@ button.io-kpi {
   }
 }
 
+.io-status {
+  display: inline-block;
+  min-width: 52px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+
+  &--enough {
+    background: #f0fdf4;
+    color: $green;
+  }
+
+  &--du {
+    background: #fffbeb;
+    color: $orange;
+  }
+
+  &--thieu {
+    background: #fef2f2;
+    color: $red;
+  }
+}
+
 .io-pager {
   display: flex;
   align-items: center;

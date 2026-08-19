@@ -134,11 +134,26 @@
         <button
           type="button"
           class="io-seg__btn"
-          [class.io-seg__btn--on]="currentFilterMode === 'linkq-difference'"
-          [disabled]="!isLinkQDataLoaded"
-          (click)="setFilterMode('linkq-difference')"
-          [title]="isLinkQDataLoaded ? 'Chỉ mã lệch LinkQ' : 'Import LinkQ để lọc lệch'">
-          Mã lệch
+          *ngIf="isLinkQDataLoaded"
+          [class.io-seg__btn--on]="currentFilterMode === 'linkq-enough'"
+          (click)="setFilterMode('linkq-enough')">
+          Đủ
+        </button>
+        <button
+          type="button"
+          class="io-seg__btn"
+          *ngIf="isLinkQDataLoaded"
+          [class.io-seg__btn--on]="currentFilterMode === 'linkq-du'"
+          (click)="setFilterMode('linkq-du')">
+          Dư
+        </button>
+        <button
+          type="button"
+          class="io-seg__btn"
+          *ngIf="isLinkQDataLoaded"
+          [class.io-seg__btn--on]="currentFilterMode === 'linkq-thieu'"
+          (click)="setFilterMode('linkq-thieu')">
+          Thiếu
         </button>
       </div>
 
@@ -179,11 +194,27 @@
       </span>
     </div>
 
-    <button type="button" class="io-kpi" *ngIf="isLinkQDataLoaded" [class.io-kpi--orange]="linkQDifferenceCount > 0" [class.io-kpi--green]="linkQDifferenceCount === 0" (click)="setFilterMode('linkq-difference')">
-      <span class="io-kpi__icon"><i class="material-icons">sell</i></span>
+    <button type="button" class="io-kpi io-kpi--green" *ngIf="isLinkQDataLoaded" (click)="setFilterMode('linkq-enough')">
+      <span class="io-kpi__icon"><i class="material-icons">check_circle</i></span>
       <span class="io-kpi__body">
-        <span class="io-kpi__label">Mã lệch</span>
-        <span class="io-kpi__value">{{ linkQDifferenceCount | number }}</span>
+        <span class="io-kpi__label">Đủ</span>
+        <span class="io-kpi__value">{{ linkQEnoughCount | number }}</span>
+      </span>
+    </button>
+
+    <button type="button" class="io-kpi io-kpi--orange" *ngIf="isLinkQDataLoaded" (click)="setFilterMode('linkq-du')">
+      <span class="io-kpi__icon"><i class="material-icons">south_west</i></span>
+      <span class="io-kpi__body">
+        <span class="io-kpi__label">Dư</span>
+        <span class="io-kpi__value">{{ linkQSurplusCount | number }}</span>
+      </span>
+    </button>
+
+    <button type="button" class="io-kpi io-kpi--red" *ngIf="isLinkQDataLoaded" (click)="setFilterMode('linkq-thieu')">
+      <span class="io-kpi__icon"><i class="material-icons">north_east</i></span>
+      <span class="io-kpi__body">
+        <span class="io-kpi__label">Thiếu</span>
+        <span class="io-kpi__value">{{ linkQShortageCount | number }}</span>
       </span>
     </button>
 
@@ -228,6 +259,7 @@
             <th>Vị trí</th>
             <th *ngIf="isLinkQDataLoaded" class="io-th--num">LinkQ</th>
             <th *ngIf="isLinkQDataLoaded" class="io-th--num">So sánh</th>
+            <th *ngIf="isLinkQDataLoaded">Kết quả</th>
           </tr>
         </thead>
         <tbody>
@@ -251,12 +283,20 @@
             <td *ngIf="isLinkQDataLoaded" class="io-td--num">
               <span *ngIf="item.stockDifference !== undefined"
                     class="io-diff"
-                    [class.io-diff--zero]="item.stockDifference === 0"
-                    [class.io-diff--pos]="item.stockDifference > 0"
-                    [class.io-diff--neg]="item.stockDifference < 0">
+                    [class.io-diff--zero]="item.compareStatus === 'enough'"
+                    [class.io-diff--pos]="item.compareStatus === 'du'"
+                    [class.io-diff--neg]="item.compareStatus === 'thieu'">
                 {{ item.stockDifference > 0 ? '+' : '' }}{{ item.stockDifference | number:'1.0-3' }}
               </span>
               <span *ngIf="item.stockDifference === undefined" class="io-muted">—</span>
+            </td>
+            <td *ngIf="isLinkQDataLoaded">
+              <span class="io-status"
+                    [class.io-status--enough]="item.compareStatus === 'enough'"
+                    [class.io-status--du]="item.compareStatus === 'du'"
+                    [class.io-status--thieu]="item.compareStatus === 'thieu'">
+                {{ compareStatusLabel(item) }}
+              </span>
             </td>
           </tr>
         </tbody>

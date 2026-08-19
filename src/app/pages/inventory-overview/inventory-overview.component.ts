@@ -31,6 +31,9 @@ interface InventoryOverviewItem {
   linkQStock?: number;
   stockDifference?: number;
   hasDifference?: boolean;
+  /** LinkQ là gốc: enough = đủ, du = hệ thống nhiều hơn, thieu = hệ thống ít hơn / thiếu mã. */
+  compareStatus?: 'enough' | 'du' | 'thieu';
+  isLinkQOnly?: boolean;
 }
 
 interface LinkQFileInfo {
@@ -70,7 +73,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   searchTerm = '';
   
   // Filter mode states
-  currentFilterMode: 'all' | 'negative' | 'linkq-difference' = 'all';
+  currentFilterMode: 'all' | 'negative' | 'linkq-difference' | 'linkq-enough' | 'linkq-du' | 'linkq-thieu' = 'all';
   
   // Group by states
   groupByType: 'po' | 'material' = 'po';
@@ -82,6 +85,9 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   // LinkQ data
   linkQData: Map<string, number> = new Map(); // materialCode -> stock
   isLinkQDataLoaded = false;
+  linkQEnoughCount = 0;
+  linkQSurplusCount = 0;
+  linkQShortageCount = 0;
   
   // LinkQ file management
   linkQFiles: LinkQFileInfo[] = [];
@@ -378,29 +384,8 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
           hasDifference: undefined
         };
         
-        // Nếu có LinkQ data, tính toán comparison
-        if (this.isLinkQDataLoaded && this.linkQData.has(materialCode)) {
-          const linkQStock = this.linkQData.get(materialCode)!;
-          const roundedCurrentStock = Math.round(currentStock);
-          const roundedLinkQStock = Math.round(linkQStock);
-          
-          newItem.linkQStock = roundedLinkQStock;
-          newItem.stockDifference = roundedCurrentStock - roundedLinkQStock;
-          
-          // Chỉ hiện lệch > 1 hoặc < -1
-          const absDifference = Math.abs(newItem.stockDifference);
-          newItem.hasDifference = absDifference > 1;
-          
-          // Debug log cho một số items
-          if (materialCode === 'B001627' || materialCode === 'B001239') {
-            console.log(`🔍 REAL-TIME LINKQ ${materialCode}:`, {
-              currentStock: currentStock,
-              linkQStock: linkQStock,
-              stockDifference: newItem.stockDifference,
-              hasDifference: newItem.hasDifference
-            });
-          }
-        }
+        // Nếu có LinkQ data, tính toán comparison (LinkQ làm gốc)
+        this.applyCompareStatus(newItem);
         
         items.push(newItem);
         
@@ -508,18 +493,30 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     switch (this.currentFilterMode) {
       case 'negative':
         return 'Chỉ mã âm';
+      case 'linkq-enough':
+        return 'Đủ';
+      case 'linkq-du':
+        return 'Dư';
+      case 'linkq-thieu':
+        return 'Thiếu';
       case 'linkq-difference':
-        return 'Chỉ mã lệch LinkQ (>1)';
+        return 'Mã lệch';
       default:
         return 'Tất cả';
     }
   }
 
-  setFilterMode(mode: 'all' | 'negative' | 'linkq-difference'): void {
-    if (mode === 'linkq-difference' && !this.isLinkQDataLoaded) {
+  setFilterMode(mode: 'all' | 'negative' | 'linkq-difference' | 'linkq-enough' | 'linkq-du' | 'linkq-thieu'): void {
+    if (
+      (mode === 'linkq-difference' || mode === 'linkq-enough' || mode === 'linkq-du' || mode === 'linkq-thieu')
+      && !this.isLinkQDataLoaded
+    ) {
       return;
     }
     this.currentFilterMode = mode;
+    if (mode === 'linkq-enough' || mode === 'linkq-du' || mode === 'linkq-thieu' || mode === 'linkq-difference') {
+      this.groupByType = 'material';
+    }
     this.isMoreActionsDropdownOpen = false;
     this.applyFilters();
   }
@@ -548,6 +545,16 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     this.groupByType = type;
     this.isGroupByDropdownOpen = false;
     this.isMoreActionsDropdownOpen = false; // Close more actions dropdown too
+
+    if (
+      type === 'po' &&
+      (this.currentFilterMode === 'linkq-enough' ||
+        this.currentFilterMode === 'linkq-du' ||
+        this.currentFilterMode === 'linkq-thieu' ||
+        this.currentFilterMode === 'linkq-difference')
+    ) {
+      this.currentFilterMode = 'all';
+    }
     
     // 🔧 SỬA LỖI: Nếu có LinkQ data và chuyển sang group by material, 
     // cần đảm bảo comparison được tính toán lại
@@ -674,43 +681,114 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     let differenceCount = 0;
     
     groupedItems.forEach(item => {
+      this.applyCompareStatus(item);
+      if (item.hasDifference) {
+        differenceCount++;
+      }
       if (item.linkQStock !== undefined) {
-        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho hiện tại thành số chẵn
-        const roundedCurrentStock = Math.round(item.currentStock);
-        const roundedLinkQStock = Math.round(item.linkQStock);
-        
-        // Tính toán lại stockDifference dựa trên currentStock mới (đã được cộng dồn)
-        item.stockDifference = roundedCurrentStock - roundedLinkQStock;
-        
-        // Kiểm tra lại hasDifference - chỉ hiện các mã lệch lớn hơn 1 và -1
-        const absDifference = Math.abs(item.stockDifference);
-        item.hasDifference = absDifference > 1;
-        
-        // Debug log cho việc tính hasDifference
-        if (item.materialCode === 'B001627' || item.materialCode === 'B001239') {
-          console.log(`🔍 DEBUG HASDIFFERENCE ${item.materialCode}:`, {
-            currentStock: item.currentStock,
-            linkQStock: item.linkQStock,
-            stockDifference: item.stockDifference,
-            absDifference: absDifference,
-            hasDifference: item.hasDifference
-          });
-        }
-        
-        if (item.hasDifference) {
-          differenceCount++;
-        }
-        
         updatedCount++;
-        
-        // Log debug cho một số items đầu tiên
-        if (updatedCount <= 5) {
-          console.log(`🔍 Grouped ${item.materialCode}: Current=${item.currentStock}→${roundedCurrentStock}, LinkQ=${item.linkQStock}→${roundedLinkQStock}, Diff=${item.stockDifference}, HasDiff=${item.hasDifference}`);
-        }
       }
     });
     
     console.log(`✅ LinkQ comparison recalculated for grouped items: ${updatedCount} items processed, ${differenceCount} items have differences`);
+  }
+
+  /** LinkQ là gốc: so hệ thống với LinkQ → đủ / dư / thiếu. */
+  private applyCompareStatus(item: InventoryOverviewItem): void {
+    const code = String(item.materialCode || '').trim().toUpperCase();
+    const sys = Math.round(Number(item.currentStock) || 0);
+    const inLinkQ = this.linkQData.has(code);
+    if (!this.isLinkQDataLoaded) {
+      item.compareStatus = undefined;
+      return;
+    }
+    if (!inLinkQ) {
+      item.linkQStock = 0;
+      item.stockDifference = sys;
+      item.compareStatus = 'du';
+      item.hasDifference = Math.abs(sys) > 1;
+      return;
+    }
+    const lq = Math.round(Number(this.linkQData.get(code)) || 0);
+    item.linkQStock = lq;
+    item.stockDifference = sys - lq;
+    const abs = Math.abs(item.stockDifference);
+    if (abs <= 1) {
+      item.compareStatus = 'enough';
+      item.hasDifference = false;
+    } else if (item.stockDifference > 1) {
+      item.compareStatus = 'du';
+      item.hasDifference = true;
+    } else {
+      item.compareStatus = 'thieu';
+      item.hasDifference = true;
+    }
+  }
+
+  /** Thêm mã có trên LinkQ nhưng không có trong tồn kho (thiếu hoàn toàn). */
+  private mergeMissingLinkQCodes(grouped: InventoryOverviewItem[]): InventoryOverviewItem[] {
+    if (!this.isLinkQDataLoaded) {
+      grouped.forEach(item => this.applyCompareStatus(item));
+      return grouped;
+    }
+    const present = new Set(
+      grouped.map(item => String(item.materialCode || '').trim().toUpperCase()).filter(Boolean)
+    );
+    const extra: InventoryOverviewItem[] = [];
+    this.linkQData.forEach((stock, rawCode) => {
+      const code = String(rawCode || '').trim().toUpperCase();
+      if (!code || present.has(code)) {
+        return;
+      }
+      extra.push({
+        id: `linkq:${code}`,
+        materialCode: code,
+        poNumber: '',
+        quantity: 0,
+        openingStock: 0,
+        exported: 0,
+        xt: 0,
+        location: '',
+        type: '',
+        currentStock: 0,
+        isNegative: false,
+        linkQStock: Math.round(Number(stock) || 0),
+        stockDifference: undefined,
+        hasDifference: false,
+        compareStatus: undefined,
+        isLinkQOnly: true
+      });
+    });
+    const all = extra.length ? grouped.concat(extra) : grouped;
+    all.forEach(item => this.applyCompareStatus(item));
+    all.sort((a, b) => a.materialCode.localeCompare(b.materialCode, 'en', { numeric: true }));
+    return all;
+  }
+
+  private buildLinkQCompareRows(): InventoryOverviewItem[] {
+    const copies = this.inventoryItems.map(item => ({ ...item }));
+    return this.mergeMissingLinkQCodes(this.groupByMaterialCode(copies));
+  }
+
+  private updateLinkQStatusCounts(rows: InventoryOverviewItem[]): void {
+    let enough = 0;
+    let du = 0;
+    let thieu = 0;
+    for (const row of rows) {
+      if (row.compareStatus === 'enough') enough++;
+      else if (row.compareStatus === 'du') du++;
+      else if (row.compareStatus === 'thieu') thieu++;
+    }
+    this.linkQEnoughCount = enough;
+    this.linkQSurplusCount = du;
+    this.linkQShortageCount = thieu;
+  }
+
+  compareStatusLabel(item: InventoryOverviewItem): string {
+    if (item.compareStatus === 'enough') return 'Đủ';
+    if (item.compareStatus === 'du') return 'Dư';
+    if (item.compareStatus === 'thieu') return 'Thiếu';
+    return '—';
   }
 
   // Apply filters
@@ -726,6 +804,8 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       copy.linkQStock = item.linkQStock;
       copy.stockDifference = item.stockDifference;
       copy.hasDifference = item.hasDifference;
+      copy.compareStatus = item.compareStatus;
+      copy.isLinkQOnly = item.isLinkQOnly;
       
       // 🔧 SỬA LỖI: Đảm bảo currentStock được copy đúng
       copy.currentStock = item.currentStock;
@@ -736,46 +816,38 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     // 🔧 SỬA LỖI: Group by material TRƯỚC khi filter LinkQ difference
     // Để đảm bảo tất cả items có cùng mã hàng được cộng dồn trước khi filter
     if (this.groupByType === 'material') {
-      const beforeGroup = filtered.length;
       filtered = this.groupByMaterialCode(filtered);
-      console.log(`🔍 Material grouping (before filter): ${beforeGroup} → ${filtered.length} items`);
+      if (this.isLinkQDataLoaded) {
+        filtered = this.mergeMissingLinkQCodes(filtered);
+        this.updateLinkQStatusCounts(filtered);
+      }
+    } else if (this.isLinkQDataLoaded) {
+      filtered.forEach(item => this.applyCompareStatus(item));
+      this.updateLinkQStatusCounts(this.buildLinkQCompareRows());
+    } else {
+      this.linkQEnoughCount = 0;
+      this.linkQSurplusCount = 0;
+      this.linkQShortageCount = 0;
     }
     
     // Filter by current filter mode
     switch (this.currentFilterMode) {
       case 'negative':
         filtered = filtered.filter(item => item.isNegative);
-        console.log(`🔍 Negative filter: ${filtered.length} items`);
+        break;
+      case 'linkq-enough':
+        filtered = filtered.filter(item => item.compareStatus === 'enough');
+        break;
+      case 'linkq-du':
+        filtered = filtered.filter(item => item.compareStatus === 'du');
+        break;
+      case 'linkq-thieu':
+        filtered = filtered.filter(item => item.compareStatus === 'thieu');
         break;
       case 'linkq-difference':
-        if (this.isLinkQDataLoaded) {
-          // 🔧 SỬA LỖI: Chỉ hiện các dòng lệch từ số 1 và -1 (loại bỏ từ -1 đến 1)
-          const beforeFilter = filtered.length;
-          filtered = filtered.filter(item => {
-            if (item.stockDifference === undefined) return false;
-            const absDifference = Math.abs(item.stockDifference);
-            
-            // Debug cho B001627
-            if (item.materialCode === 'B001627') {
-              console.log(`🔍 DEBUG FILTER B001627:`, {
-                currentStock: item.currentStock,
-                linkQStock: item.linkQStock,
-                stockDifference: item.stockDifference,
-                absDifference: absDifference,
-                willShow: absDifference > 1
-              });
-            }
-            
-            return absDifference > 1; // Chỉ hiện lệch > 1 hoặc < -1
-          });
-          console.log(`🔍 LinkQ difference filter: ${beforeFilter} → ${filtered.length} items (only differences > 1 or < -1)`);
-        } else {
-          console.log('⚠️ LinkQ data not loaded, cannot filter by differences');
-        }
+        filtered = filtered.filter(item => item.compareStatus === 'du' || item.compareStatus === 'thieu');
         break;
       default:
-        // 'all' - no additional filtering
-        console.log(`🔍 All items filter: ${filtered.length} items`);
         break;
     }
     
@@ -907,29 +979,8 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     return this.inventoryItems.length;
   }
 
-  // Get LinkQ difference count — theo mã hàng đã gộp, không đếm từng dòng PO.
-  // LinkQ là tồn theo mã; so từng PO với LinkQ cả mã sẽ đẩy số lệch lên hàng nghìn.
   get linkQDifferenceCount(): number {
-    if (!this.isLinkQDataLoaded) return 0;
-
-    const stockByCode = new Map<string, number>();
-    for (const item of this.inventoryItems) {
-      const stock = (item.openingStock || 0) + (item.quantity || 0) - (item.exported || 0) - (item.xt || 0);
-      stockByCode.set(item.materialCode, (stockByCode.get(item.materialCode) || 0) + stock);
-    }
-
-    let count = 0;
-    stockByCode.forEach((stock, code) => {
-      const linkQ = this.linkQData.get(code);
-      if (linkQ === undefined) {
-        return;
-      }
-      const diff = Math.round(stock) - Math.round(linkQ);
-      if (Math.abs(diff) > 1) {
-        count++;
-      }
-    });
-    return count;
+    return this.linkQSurplusCount + this.linkQShortageCount;
   }
 
   // Export to Excel
@@ -1090,18 +1141,33 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     this.linkQData.clear();
     this.isLinkQDataLoaded = false;
     this.currentLinkQFileId = null;
+    this.linkQEnoughCount = 0;
+    this.linkQSurplusCount = 0;
+    this.linkQShortageCount = 0;
+    if (
+      this.currentFilterMode === 'linkq-enough' ||
+      this.currentFilterMode === 'linkq-du' ||
+      this.currentFilterMode === 'linkq-thieu' ||
+      this.currentFilterMode === 'linkq-difference'
+    ) {
+      this.currentFilterMode = 'all';
+    }
     
     // Clear LinkQ data from all items
     this.inventoryItems.forEach(item => {
       item.linkQStock = undefined;
       item.stockDifference = undefined;
       item.hasDifference = undefined;
+      item.compareStatus = undefined;
+      item.isLinkQOnly = undefined;
     });
     
     this.filteredItems.forEach(item => {
       item.linkQStock = undefined;
       item.stockDifference = undefined;
       item.hasDifference = undefined;
+      item.compareStatus = undefined;
+      item.isLinkQOnly = undefined;
     });
     
     console.log('✅ LinkQ data cleared');
@@ -1324,74 +1390,22 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
 
       console.log('📊 Downloading LinkQ comparison report...');
       
-      let comparisonData;
-      let colWidths;
-      let fileName;
-      
-      if (this.groupByType === 'material') {
-        // Export grouped by material code (no PO column)
-        comparisonData = this.filteredItems.map(item => {
-          const linkQStock = item.linkQStock || 0;
-          const stockDifference = item.currentStock - linkQStock;
-          const hasDifference = stockDifference > 1 || stockDifference < -1;
-          
-          return {
-            'Mã hàng': item.materialCode,
-            'Tồn kho hiện tại': item.currentStock,
-            'Tồn kho LinkQ': linkQStock,
-            'Chênh lệch': stockDifference,
-            'Có lệch': hasDifference ? 'Có' : 'Không',
-            'Ghi chú': hasDifference ? 
-              (stockDifference > 0 ? 'Hệ thống > LinkQ' : 'Hệ thống < LinkQ') : 
-              'Không có lệch'
-          };
-        });
-        
-        // Set column widths for material view
-        colWidths = [
-          { wch: 15 },  // Mã hàng
-          { wch: 18 },  // Tồn kho hiện tại
-          { wch: 18 },  // Tồn kho LinkQ
-          { wch: 15 },  // Chênh lệch
-          { wch: 12 },  // Có lệch
-          { wch: 25 }   // Ghi chú
-        ];
-        
-        fileName = `LinkQ_Comparison_Report_Material_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
-        
-      } else {
-        // Export by PO (original format with PO column)
-        comparisonData = this.filteredItems.map(item => {
-          const linkQStock = item.linkQStock || 0;
-          const stockDifference = item.currentStock - linkQStock;
-          const hasDifference = stockDifference > 1 || stockDifference < -1;
-          
-          return {
-            'Mã hàng': item.materialCode,
-            'PO': item.poNumber,
-            'Tồn kho hiện tại': item.currentStock,
-            'Tồn kho LinkQ': linkQStock,
-            'Chênh lệch': stockDifference,
-            'Có lệch': hasDifference ? 'Có' : 'Không',
-            'Ghi chú': hasDifference ? 
-              (stockDifference > 0 ? 'Hệ thống > LinkQ' : 'Hệ thống < LinkQ') : 
-              'Không có lệch'
-          };
-        });
-        
-        // Set column widths for PO view
-        colWidths = [
-          { wch: 15 },  // Mã hàng
-          { wch: 20 },  // PO
-          { wch: 18 },  // Tồn kho hiện tại
-          { wch: 18 },  // Tồn kho LinkQ
-          { wch: 15 },  // Chênh lệch
-          { wch: 12 },  // Có lệch
-          { wch: 25 }   // Ghi chú
-        ];
-        
-        fileName = `LinkQ_Comparison_Report_PO_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
-      }
+      const rows = this.buildLinkQCompareRows();
+      const comparisonData = rows.map(item => ({
+        'Mã hàng': item.materialCode,
+        'Tồn kho hệ thống': item.currentStock,
+        'Tồn kho LinkQ': item.linkQStock ?? 0,
+        'Chênh lệch (HT - LinkQ)': item.stockDifference ?? 0,
+        'Kết quả': this.compareStatusLabel(item)
+      }));
+      const colWidths = [
+        { wch: 15 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 12 }
+      ];
+      const fileName = `LinkQ_Comparison_${this.selectedFactory}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`;
       
       // Create workbook and worksheet
       const workbook = XLSX.utils.book_new();
@@ -1401,20 +1415,22 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       worksheet['!cols'] = colWidths;
       
       // Add worksheet to workbook
-      const sheetName = this.groupByType === 'material' ? 'So Sánh LinkQ (Theo Mã Hàng)' : 'So Sánh LinkQ (Theo PO)';
-      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'So sánh LinkQ');
       
       // Generate file and download
       XLSX.writeFile(workbook, fileName);
       
-      // Calculate summary statistics
-      const totalItems = comparisonData.length;
-      const itemsWithDifference = comparisonData.filter(item => item['Có lệch'] === 'Có').length;
-      const positiveDifferences = comparisonData.filter(item => item['Chênh lệch'] > 0).length;
-      const negativeDifferences = comparisonData.filter(item => item['Chênh lệch'] < 0).length;
-      
-      console.log(`✅ LinkQ comparison report downloaded successfully (${this.groupByType} view)`);
-      alert(`✅ Đã tải báo cáo so sánh LinkQ!\n\n📊 Thống kê (${this.groupByType === 'material' ? 'Theo Mã Hàng' : 'Theo PO'}):\n• Tổng mã hàng: ${totalItems}\n• Mã có lệch: ${itemsWithDifference}\n• Lệch dương: ${positiveDifferences}\n• Lệch âm: ${negativeDifferences}\n\n📁 File: ${fileName}`);
+      const enough = comparisonData.filter(item => item['Kết quả'] === 'Đủ').length;
+      const du = comparisonData.filter(item => item['Kết quả'] === 'Dư').length;
+      const thieu = comparisonData.filter(item => item['Kết quả'] === 'Thiếu').length;
+      alert(
+        `✅ Đã tải báo cáo so sánh LinkQ (LinkQ làm gốc)!\n\n` +
+        `• Tổng mã: ${comparisonData.length}\n` +
+        `• Đủ: ${enough}\n` +
+        `• Dư: ${du}\n` +
+        `• Thiếu: ${thieu}\n\n` +
+        `📁 File: ${fileName}`
+      );
       
     } catch (error) {
       console.error('❌ Error downloading comparison report:', error);
@@ -1611,107 +1627,19 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
 
   // Update stock comparison between current system and LinkQ
   private updateStockComparison(): void {
-    console.log('🔍 Starting stock comparison update...');
-    console.log(`📊 LinkQ data size: ${this.linkQData.size}`);
-    
-    let updatedCount = 0;
-    let differenceCount = 0;
-    
-    this.inventoryItems.forEach(item => {
-      const linkQStock = this.linkQData.get(item.materialCode);
-      
-      // Kiểm tra nếu có dữ liệu LinkQ
-      if (linkQStock !== undefined) {
-        // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho hiện tại thành số chẵn
-        const roundedCurrentStock = Math.round(item.currentStock);
-        const roundedLinkQStock = Math.round(linkQStock);
-        
-        item.linkQStock = roundedLinkQStock;
-        item.stockDifference = roundedCurrentStock - roundedLinkQStock;
-        
-        // 🔧 SỬA LỖI SO SÁNH: Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
-        // Bỏ qua các chênh lệch nhỏ từ -0.99 đến 0.99
-        const absDifference = Math.abs(item.stockDifference);
-        item.hasDifference = absDifference > 1;
-        
-        if (item.hasDifference) {
-          differenceCount++;
-        }
-        
-        updatedCount++;
-        
-        // Log debug cho một số items đầu tiên
-        if (updatedCount <= 5) {
-          console.log(`🔍 ${item.materialCode}: Current=${item.currentStock}→${roundedCurrentStock}, LinkQ=${linkQStock}→${roundedLinkQStock}, Diff=${item.stockDifference}, HasDiff=${item.hasDifference}`);
-        }
-      } else {
-        // Không có dữ liệu LinkQ
-        item.linkQStock = undefined;
-        item.stockDifference = undefined;
-        item.hasDifference = undefined;
-      }
-    });
-    
-    console.log(`✅ Stock comparison updated: ${updatedCount} items processed, ${differenceCount} items have differences`);
-    
-    // 🔧 SỬA LỖI: KHÔNG gọi applyFilters() ở đây để tránh mất dữ liệu LinkQ
-    // this.applyFilters(); // Commented out to prevent data loss
+    this.inventoryItems.forEach(item => this.applyCompareStatus(item));
+    this.groupByType = 'material';
+    this.applyFilters();
   }
 
   // Update stock comparison silently without triggering page reload
   private updateStockComparisonSilently(): void {
-    console.log('🔍 Starting silent stock comparison update...');
-    console.log(`📊 LinkQ data size: ${this.linkQData.size}`);
-    
-    // 🔧 DEBUG: Kiểm tra LinkQ data
     if (this.linkQData.size === 0) {
-      console.log('⚠️ WARNING: LinkQ data is empty! This means no LinkQ data was loaded.');
-      console.log('🔍 Checking if LinkQ data exists in Firebase...');
       return;
     }
-    
-    // Debug: Log first few LinkQ entries
-    const linkQEntries = Array.from(this.linkQData.entries()).slice(0, 5);
-    console.log('🔍 DEBUG: First few LinkQ entries:', linkQEntries);
-    
-    let updatedCount = 0;
-    let differenceCount = 0;
-    
-    // Update both inventoryItems and filteredItems to maintain consistency
-    [this.inventoryItems, this.filteredItems].forEach(itemsArray => {
-      itemsArray.forEach(item => {
-        const linkQStock = this.linkQData.get(item.materialCode);
-        
-        // Kiểm tra nếu có dữ liệu LinkQ
-        if (linkQStock !== undefined) {
-          // 🔧 LÀM TRÒN SỐ: Làm tròn số tồn kho hiện tại thành số chẵn
-          const roundedCurrentStock = Math.round(item.currentStock);
-          const roundedLinkQStock = Math.round(linkQStock);
-          
-          item.linkQStock = roundedLinkQStock;
-          item.stockDifference = roundedCurrentStock - roundedLinkQStock;
-          
-          // Chỉ tính lệch khi chênh lệch >= 1 hoặc <= -1
-          const absDifference = Math.abs(item.stockDifference);
-          item.hasDifference = absDifference > 1;
-          
-          if (item.hasDifference) {
-            differenceCount++;
-          }
-          
-          updatedCount++;
-        } else {
-          // Không có dữ liệu LinkQ
-          item.linkQStock = undefined;
-          item.stockDifference = undefined;
-          item.hasDifference = undefined;
-        }
-      });
-    });
-    
-    console.log(`✅ Silent stock comparison updated: ${updatedCount} items processed, ${differenceCount} items have differences`);
-    
-    // Force change detection without reloading data
+    this.inventoryItems.forEach(item => this.applyCompareStatus(item));
+    this.groupByType = 'material';
+    this.applyFilters();
     this.cdr.detectChanges();
   }
 
