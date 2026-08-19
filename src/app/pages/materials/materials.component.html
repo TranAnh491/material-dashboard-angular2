@@ -2242,7 +2242,9 @@
               <th>#</th>
               <th>Mã hàng</th>
               <th class="kk-loc-map__num">Tồn</th>
+              <th class="kk-loc-map__tick-col">Tick KK</th>
               <th>KK</th>
+              <th>Pallet</th>
               <th class="kk-loc-map__factory-col">
                 <span>Kho</span>
                 <select [(ngModel)]="kkLocMapWarehouseFilter" title="Lọc kho">
@@ -2254,17 +2256,37 @@
           </thead>
           <tbody>
             <tr *ngFor="let row of kkLocMapFilteredMaterials; let i = index"
-                [class.kk-loc-map__row--done]="row.remaining === 0"
-                (click)="onKkMaterialRowClick(row)">
-              <td>{{ i + 1 }}</td>
-              <td class="kk-loc-map__code">{{ row.materialCode }}</td>
-              <td class="kk-loc-map__num">{{ formatNumber(row.stock) }}</td>
-              <td>
+                [class.kk-loc-map__row--done]="row.remaining === 0">
+              <td (click)="onKkMaterialRowClick(row)">{{ i + 1 }}</td>
+              <td class="kk-loc-map__code" (click)="onKkMaterialRowClick(row)">{{ row.materialCode }}</td>
+              <td class="kk-loc-map__num" (click)="onKkMaterialRowClick(row)">{{ formatNumber(row.stock) }}</td>
+              <td class="kk-loc-map__tick-col" (click)="$event.stopPropagation()">
+                <input type="checkbox"
+                       class="kk-loc-map__tick"
+                       [checked]="row.remaining === 0 && row.totalLines > 0"
+                       [disabled]="!canEdit || kkLocMapBusy || kkLocMapLoading"
+                       (click)="$event.stopPropagation()"
+                       (change)="onKkByMaterialTick(row, $any($event.target).checked)"
+                       [title]="row.remaining === 0 ? 'Bỏ tick KK mọi dòng mã này' : 'Tick KK mọi dòng mã này'">
+              </td>
+              <td (click)="onKkMaterialRowClick(row)">
                 <span class="kk-loc-map__kk" [class.kk-loc-map__kk--done]="row.remaining === 0">
                   {{ row.checked }}/{{ row.totalLines }}
                 </span>
               </td>
-              <td class="kk-loc-map__factory">{{ kkWarehouseLabel(row.warehouse) }}</td>
+              <td class="kk-loc-map__pallet" (click)="$event.stopPropagation()">
+                <input type="text"
+                       class="kk-loc-map__pallet-input"
+                       [(ngModel)]="row.palletId"
+                       [placeholder]="row.palletMixed ? 'Nhiều pallet' : 'Số pallet'"
+                       [disabled]="!canEdit || kkLocMapBusy || kkLocMapLoading"
+                       (click)="$event.stopPropagation()"
+                       (keydown.enter)="onKkMaterialPalletEnter(row, $event)"
+                       (blur)="saveKkMaterialPallet(row)"
+                       autocomplete="off"
+                       spellcheck="false">
+              </td>
+              <td class="kk-loc-map__factory" (click)="onKkMaterialRowClick(row)">{{ kkWarehouseLabel(row.warehouse) }}</td>
             </tr>
           </tbody>
         </table>

@@ -3762,11 +3762,73 @@ $asm1-toolbar-h: 36px;
     }
 
     tbody tr {
-      cursor: pointer;
-
       &:hover {
         background: #f0fdfa;
       }
+    }
+
+    tbody td {
+      cursor: pointer;
+    }
+
+    .kk-loc-map__tick-col,
+    .kk-loc-map__pallet {
+      cursor: default;
+    }
+  }
+
+  &__tick-col {
+    width: 72px;
+    text-align: center;
+  }
+
+  &__tick {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #0f766e;
+    vertical-align: middle;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+  }
+
+  &__pallet {
+    min-width: 108px;
+  }
+
+  &__pallet-input {
+    width: 100%;
+    min-width: 88px;
+    height: 32px;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f766e;
+    background: #fff;
+    text-transform: uppercase;
+
+    &:focus {
+      outline: none;
+      border-color: #0f766e;
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+    }
+
+    &:disabled {
+      background: #f8fafc;
+      color: #94a3b8;
+    }
+
+    &::placeholder {
+      text-transform: none;
+      font-weight: 600;
+      color: #94a3b8;
     }
   }
 

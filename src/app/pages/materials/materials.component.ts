@@ -120,6 +120,19 @@ type ResetLowStockRow = {
   selected: boolean;
 };
 
+/** Dòng tổng hợp Kiểm tra KK theo mã hàng. */
+type KkLocMaterialRow = {
+  materialCode: string;
+  warehouse: 'D1' | 'J5' | 'ASM3';
+  stock: number;
+  checked: number;
+  totalLines: number;
+  remaining: number;
+  palletId: string;
+  palletMixed: boolean;
+  palletSaved: string;
+};
+
 /** Dòng kết quả tìm trong popup Dời kho (search theo mã pallet hoặc vị trí). */
 type DoiKhoRow = {
   id: string;
@@ -210,17 +223,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapView: 'location' | 'material' | null = null;
   kkLocMapWarehouseFilter: '' | 'D1' | 'J5' | 'ASM3' = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
-  kkLocMapByMaterial: Array<{
-    materialCode: string;
-    warehouse: 'D1' | 'J5' | 'ASM3';
-    stock: number;
-    checked: number;
-    totalLines: number;
-    remaining: number;
-  }> = [];
+  kkLocMapByMaterial: KkLocMaterialRow[] = [];
   private kkLocMapRowCache = new Map<string, InventoryMaterial[]>();
   private kkLocMapMaterialCache = new Map<string, InventoryMaterial[]>();
   private kkLocMapLoadId = 0;
+  kkLocMapBusy = false;
   readonly kkLocMapWarehouseOptions: Array<{ id: 'D1' | 'J5' | 'ASM3'; label: string }> = [
     { id: 'D1', label: 'D1' },
     { id: 'J5', label: 'J5' },
@@ -5024,6 +5031,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapRowCache.clear();
     this.kkLocMapMaterialCache.clear();
     this.kkLocMapLoadId++;
+    this.kkLocMapBusy = false;
   }
 
   setKkLocMapView(view: 'location' | 'material'): void {
@@ -5373,14 +5381,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkLocMapBoxes.filter((b) => b.loc.includes(q));
   }
 
-  get kkLocMapFilteredMaterials(): Array<{
-    materialCode: string;
-    warehouse: 'D1' | 'J5' | 'ASM3';
-    stock: number;
-    checked: number;
-    totalLines: number;
-    remaining: number;
-  }> {
+  get kkLocMapFilteredMaterials(): KkLocMaterialRow[] {
     let rows = this.kkLocMapByMaterial;
     const q = (this.kkLocMapQuery || '').trim().toUpperCase();
     if (q) rows = rows.filter((r) => r.materialCode.includes(q));
@@ -5433,6 +5434,182 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.detectChanges();
     if (this.filteredInventory.length) {
       void this.refreshLastStatusForMaterials(this.filteredInventory);
+    }
+  }
+
+  private palletSummaryOf(list: InventoryMaterial[]): { palletId: string; palletMixed: boolean } {
+    const ids = Array.from(
+      new Set(
+        list
+          .map((m) => String(m.palletId || '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+    );
+    if (ids.length === 1) return { palletId: ids[0], palletMixed: false };
+    if (ids.length === 0) return { palletId: '', palletMixed: false };
+    return { palletId: '', palletMixed: true };
+  }
+
+  private kkLinesForMaterialCode(materialCode: string): InventoryMaterial[] {
+    const code = String(materialCode || '').trim().toUpperCase();
+    const rows: InventoryMaterial[] = [];
+    this.kkLocMapMaterialCache.forEach((list, key) => {
+      if (key.endsWith(`|${code}`)) {
+        rows.push(...list);
+      }
+    });
+    return rows;
+  }
+
+  private syncKkMaterialRows(materialCode: string): void {
+    const code = String(materialCode || '').trim().toUpperCase();
+    this.kkLocMapByMaterial = this.kkLocMapByMaterial.map((row) => {
+      if (row.materialCode !== code) return row;
+      const key = `${row.warehouse}|${code}`;
+      const list = this.kkLocMapMaterialCache.get(key) || [];
+      const checked = list.filter((m) => this.isKkFlagOn(m.kkChecked)).length;
+      const pallet = this.palletSummaryOf(list);
+      return {
+        ...row,
+        checked,
+        remaining: Math.max(0, row.totalLines - checked),
+        palletId: pallet.palletMixed ? row.palletId : pallet.palletId,
+        palletMixed: pallet.palletMixed,
+        palletSaved: pallet.palletMixed ? row.palletSaved : pallet.palletId
+      };
+    });
+  }
+
+  /** Tick KK theo mã hàng — ghi tất cả dòng cùng mã (mọi kho trong factory đang xem). */
+  async onKkByMaterialTick(row: KkLocMaterialRow, checked: boolean): Promise<void> {
+    if (!this.canEdit || this.kkLocMapBusy) {
+      this.cdr.detectChanges();
+      return;
+    }
+    const next = !!checked;
+    const lines = this.kkLinesForMaterialCode(row.materialCode).filter((m) => !!m.id);
+    const targets = lines.filter((m) => this.isKkFlagOn(m.kkChecked) !== next);
+    if (!targets.length) {
+      this.syncKkMaterialRows(row.materialCode);
+      this.cdr.detectChanges();
+      return;
+    }
+    if (!next) {
+      const ok = confirm(`Bỏ tick KK mọi dòng mã ${row.materialCode}?\n(${targets.length} dòng)`);
+      if (!ok) {
+        this.cdr.detectChanges();
+        return;
+      }
+    }
+    const operator = next
+      ? await this.resolveKkOperatorId()
+      : await this.resolveKkOperatorFromSession();
+    if (!operator) {
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.kkLocMapBusy = true;
+    this.cdr.detectChanges();
+    const kkAt = new Date();
+    try {
+      const chunkSize = 400;
+      for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        const batch = this.firestore.firestore.batch();
+        for (const m of chunk) {
+          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
+            kkChecked: next,
+            kkBy: operator,
+            kkAt,
+            updatedAt: new Date()
+          });
+        }
+        await batch.commit();
+        if (next) {
+          const histBatch = this.firestore.firestore.batch();
+          for (const m of chunk) {
+            histBatch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
+              inventoryDocId: m.id,
+              factory: this.resolveKkFactoryForMaterial(m),
+              materialCode: String(m.materialCode || '').trim().toUpperCase(),
+              materialName: String(m.materialName || '').trim(),
+              poNumber: String(m.poNumber || '').trim(),
+              batchNumber: String(m.batchNumber || '').trim(),
+              location: String(m.location || '').trim().toUpperCase(),
+              quantity: Number(m.quantity) || 0,
+              stock: Number(this.calculateCurrentStock(m)) || 0,
+              unit: String(m.unit || '').trim(),
+              checkedBy: operator,
+              checkedAt: kkAt,
+              checkedDateKey: this.toDateKey(kkAt),
+              createdAt: new Date()
+            });
+          }
+          await histBatch.commit();
+        }
+      }
+      for (const m of targets) {
+        m.kkChecked = next;
+        m.kkBy = operator;
+        m.kkAt = kkAt;
+      }
+      this.syncKkMaterialRows(row.materialCode);
+    } catch (e) {
+      console.error('❌ onKkByMaterialTick:', e);
+      alert('❌ Không lưu được tick KK theo mã hàng.');
+    } finally {
+      this.kkLocMapBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  onKkMaterialPalletEnter(row: KkLocMaterialRow, event: Event): void {
+    (event.target as HTMLInputElement | null)?.blur();
+  }
+
+  /** Nhập pallet trên dòng theo mã — ghi mọi dòng cùng mã hàng. */
+  async saveKkMaterialPallet(row: KkLocMaterialRow): Promise<void> {
+    if (!this.canEdit || this.kkLocMapBusy) return;
+    const next = String(row.palletId || '').trim().toUpperCase();
+    row.palletId = next;
+    if (row.palletMixed && !next) return;
+    if (next === row.palletSaved && !row.palletMixed) return;
+
+    const lines = this.kkLinesForMaterialCode(row.materialCode).filter((m) => !!m.id);
+    if (!lines.length) return;
+
+    this.kkLocMapBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const modifiedBy = await this.resolveLocationOperatorId();
+      const chunkSize = 400;
+      for (let i = 0; i < lines.length; i += chunkSize) {
+        const chunk = lines.slice(i, i + chunkSize);
+        const batch = this.firestore.firestore.batch();
+        for (const m of chunk) {
+          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
+            palletId: next,
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy
+          });
+        }
+        await batch.commit();
+      }
+      for (const m of lines) {
+        m.palletId = next;
+        (m as { __prevPalletId?: string }).__prevPalletId = next;
+      }
+      row.palletSaved = next;
+      row.palletMixed = false;
+      this.syncKkMaterialRows(row.materialCode);
+    } catch (e) {
+      console.error('❌ saveKkMaterialPallet:', e);
+      alert('❌ Không lưu được số pallet.');
+    } finally {
+      this.kkLocMapBusy = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -5657,10 +5834,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const warehouseOrder: Record<string, number> = { D1: 0, J5: 1, ASM3: 2 };
       this.kkLocMapByMaterial = Array.from(byKey.values())
-        .map((v) => ({
-          ...v,
-          remaining: Math.max(0, v.totalLines - v.checked)
-        }))
+        .map((v) => {
+          const key = `${v.warehouse}|${v.materialCode}`;
+          const pallet = this.palletSummaryOf(this.kkLocMapMaterialCache.get(key) || []);
+          return {
+            ...v,
+            remaining: Math.max(0, v.totalLines - v.checked),
+            palletId: pallet.palletId,
+            palletMixed: pallet.palletMixed,
+            palletSaved: pallet.palletId
+          };
+        })
         .sort((a, b) => {
           const codeCmp = a.materialCode.localeCompare(b.materialCode, 'en', { numeric: true });
           if (codeCmp) return codeCmp;
