@@ -59,23 +59,23 @@
           
           <!-- LinkQ File History Section -->
           <div class="dropdown-divider" *ngIf="linkQFiles.length > 0"></div>
-          <div class="dropdown-header" *ngIf="linkQFiles.length > 0">
+          <div class="dropdown-header" *ngIf="latestLinkQFile">
             <i class="material-icons">history</i>
-            Lịch sử file gần nhất
+            Bản LinkQ gần nhất
           </div>
-          <a class="dropdown-item file-history-item" 
-             *ngFor="let file of linkQFiles.slice(0, 3); trackBy: trackByFile"
+          <a class="dropdown-item file-history-item"
+             *ngIf="latestLinkQFile"
              href="javascript:void(0)"
-             [class.current-file]="file.id === currentLinkQFileId"
-             (click)="loadLinkQFileData(file.id)">
+             [class.current-file]="true"
+             (click)="loadLinkQFileData(latestLinkQFile.id)">
             <div class="file-info">
-              <div class="file-name">{{ file.fileName }}</div>
+              <div class="file-name">{{ latestLinkQFile.fileName }}</div>
               <div class="file-details">
-                {{ file.uploadDate | date:'dd/MM/yyyy HH:mm' }} • 
-                {{ file.processedItems }}/{{ file.totalItems }} items
+                {{ latestLinkQFile.uploadDate | date:'dd/MM/yyyy HH:mm' }} ·
+                {{ latestLinkQFile.processedItems }}/{{ latestLinkQFile.totalItems }} mã
               </div>
             </div>
-            <i class="material-icons" *ngIf="file.id === currentLinkQFileId">check_circle</i>
+            <i class="material-icons">check_circle</i>
           </a>
           
           <div class="dropdown-divider" *ngIf="linkQFiles.length > 0"></div>
@@ -164,6 +164,13 @@
     <div class="summary-item" [class.has-negative]="negativeStockCount > 0">
       <span class="label">Mã âm:</span>
       <span class="value">{{ negativeStockCount }} mã</span>
+    </div>
+    
+    <div class="summary-item" *ngIf="latestLinkQFile">
+      <span class="label">LinkQ gần nhất:</span>
+      <span class="value" [title]="latestLinkQFile.fileName">
+        {{ latestLinkQFile.fileName }} · {{ latestLinkQFile.uploadDate | date:'dd/MM/yyyy HH:mm' }}
+      </span>
     </div>
     
     <div class="summary-item" *ngIf="isLinkQDataLoaded" [class.has-difference]="linkQDifferenceCount > 0">

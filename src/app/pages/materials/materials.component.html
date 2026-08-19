@@ -2139,21 +2139,34 @@
   </div>
 </div>
 
-<!-- Sơ đồ KK theo vị trí -->
+<!-- Sơ đồ KK theo vị trí / theo mã hàng -->
 <div class="modal-overlay more-overlay" *ngIf="showKkLocMap" (click)="closeKkLocMap()">
-  <div class="modal-content kk-loc-map" (click)="$event.stopPropagation()" role="dialog" aria-label="Sơ đồ kiểm tra KK">
+  <div class="modal-content kk-loc-map" [class.kk-loc-map--material]="kkLocMapView === 'material'" (click)="$event.stopPropagation()" role="dialog" aria-label="Kiểm tra KK">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
-          <i class="material-icons">grid_view</i>
+          <i class="material-icons">{{ kkLocMapView === 'material' ? 'view_list' : 'grid_view' }}</i>
         </span>
         <div>
-          <h3>Kiểm tra KK theo vị trí</h3>
+          <h3>
+            {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : 'Kiểm tra KK' }}
+          </h3>
           <p class="more-popup-header__sub">
-            {{ selectedFactory }}
-            <span *ngIf="!kkLocMapLoading && kkLocMapBoxes.length">
-              · {{ kkLocMapSummary.checked }}/{{ kkLocMapSummary.total }} mã · {{ kkLocMapBoxes.length }} vị trí
-            </span>
+            <ng-container *ngIf="!kkLocMapView">Chọn theo vị trí hoặc theo mã hàng</ng-container>
+            <ng-container *ngIf="kkLocMapView === 'location'">
+              {{ selectedFactory }}
+              <span *ngIf="!kkLocMapLoading && kkLocMapBoxes.length">
+                · {{ kkLocMapSummary.checked }}/{{ kkLocMapSummary.total }} mã · {{ kkLocMapBoxes.length }} vị trí
+              </span>
+            </ng-container>
+            <ng-container *ngIf="kkLocMapView === 'material'">
+              {{ selectedFactory }}
+              <span *ngIf="!kkLocMapLoading && kkLocMapByMaterial.length">
+                · {{ kkLocMapMaterialSummary.count | number }} mã
+                · tồn {{ formatNumber(kkLocMapMaterialSummary.stock) }}
+              </span>
+              <span *ngIf="kkLocMapLoading"> · Đang tải…</span>
+            </ng-container>
           </p>
         </div>
       </div>
@@ -2163,25 +2176,43 @@
     </div>
     <div class="modal-body kk-loc-map__body">
       <div class="kk-loc-map__toolbar">
-        <div class="hidden-search">
-          <i class="material-icons">search</i>
-          <input type="search" [(ngModel)]="kkLocMapQuery" placeholder="Lọc vị trí…" autocomplete="off" />
+        <div class="kk-loc-map__modes">
+          <button type="button"
+                  [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
+                  (click)="setKkLocMapView('location')"
+                  [disabled]="kkLocMapLoading">Theo vị trí</button>
+          <button type="button"
+                  [class.kk-loc-map__mode--on]="kkLocMapView === 'material'"
+                  (click)="setKkLocMapView('material')"
+                  [disabled]="kkLocMapLoading">Theo mã hàng</button>
         </div>
-        <button type="button" class="hidden-refresh-btn" (click)="loadKkLocMap()" [disabled]="kkLocMapLoading">
+        <div class="hidden-search" *ngIf="kkLocMapView">
+          <i class="material-icons">search</i>
+          <input type="search"
+                 [(ngModel)]="kkLocMapQuery"
+                 [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : 'Lọc vị trí…'"
+                 autocomplete="off" />
+        </div>
+        <button type="button" class="hidden-refresh-btn" *ngIf="kkLocMapView" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading">
           <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
           Làm mới
         </button>
       </div>
-      <div class="kk-loc-map__legend">
+      <div class="kk-loc-map__idle" *ngIf="!kkLocMapView && !kkLocMapLoading">
+        <i class="material-icons">fact_check</i>
+        <p>Chọn <strong>Theo vị trí</strong> hoặc <strong>Theo mã hàng</strong> để xem.</p>
+      </div>
+      <div class="kk-loc-map__legend" *ngIf="kkLocMapView === 'location'">
         <span class="kk-loc-map__dot kk-loc-map__dot--done">Đủ KK</span>
         <span class="kk-loc-map__dot kk-loc-map__dot--partial">Đang KK</span>
         <span class="kk-loc-map__dot kk-loc-map__dot--none">Chưa KK</span>
       </div>
       <div class="kk-loc-map__loading" *ngIf="kkLocMapLoading">
         <i class="material-icons rotating">sync</i>
-        Đang đọc tồn kho {{ selectedFactory }}…
+        <span *ngIf="kkLocMapView === 'location'">Đang đọc tồn kho {{ selectedFactory }}…</span>
+        <span *ngIf="kkLocMapView === 'material'">Đang đọc tồn kho theo mã hàng…</span>
       </div>
-      <div class="kk-loc-map__groups" *ngIf="!kkLocMapLoading">
+      <div class="kk-loc-map__groups" *ngIf="!kkLocMapLoading && kkLocMapView === 'location'">
         <section class="kk-loc-map__group" *ngFor="let group of kkLocMapGroupedBoxes">
           <header class="kk-loc-map__group-head">
             <strong>{{ group.key }}</strong>
@@ -2203,6 +2234,41 @@
           </div>
         </section>
         <p class="hidden-empty" *ngIf="!kkLocMapGroupedBoxes.length">Không có vị trí khớp.</p>
+      </div>
+      <div class="kk-loc-map__table-wrap" *ngIf="!kkLocMapLoading && kkLocMapView === 'material'">
+        <table class="kk-loc-map__table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Mã hàng</th>
+              <th class="kk-loc-map__num">Tồn</th>
+              <th>KK</th>
+              <th class="kk-loc-map__factory-col">
+                <span>Kho</span>
+                <select [(ngModel)]="kkLocMapWarehouseFilter" title="Lọc kho">
+                  <option value="">Tất cả</option>
+                  <option *ngFor="let w of kkLocMapWarehouseOptions" [value]="w.id">{{ w.label }}</option>
+                </select>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of kkLocMapFilteredMaterials; let i = index"
+                [class.kk-loc-map__row--done]="row.remaining === 0"
+                (click)="onKkMaterialRowClick(row)">
+              <td>{{ i + 1 }}</td>
+              <td class="kk-loc-map__code">{{ row.materialCode }}</td>
+              <td class="kk-loc-map__num">{{ formatNumber(row.stock) }}</td>
+              <td>
+                <span class="kk-loc-map__kk" [class.kk-loc-map__kk--done]="row.remaining === 0">
+                  {{ row.checked }}/{{ row.totalLines }}
+                </span>
+              </td>
+              <td class="kk-loc-map__factory">{{ kkWarehouseLabel(row.warehouse) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="hidden-empty" *ngIf="!kkLocMapFilteredMaterials.length">Không có mã hàng khớp bộ lọc.</p>
       </div>
     </div>
   </div>

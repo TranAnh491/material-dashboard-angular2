@@ -207,8 +207,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   showKkLocMap = false;
   kkLocMapLoading = false;
   kkLocMapQuery = '';
+  kkLocMapView: 'location' | 'material' | null = null;
+  kkLocMapWarehouseFilter: '' | 'D1' | 'J5' | 'ASM3' = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
+  kkLocMapByMaterial: Array<{
+    materialCode: string;
+    warehouse: 'D1' | 'J5' | 'ASM3';
+    stock: number;
+    checked: number;
+    totalLines: number;
+    remaining: number;
+  }> = [];
   private kkLocMapRowCache = new Map<string, InventoryMaterial[]>();
+  private kkLocMapMaterialCache = new Map<string, InventoryMaterial[]>();
+  private kkLocMapLoadId = 0;
+  readonly kkLocMapWarehouseOptions: Array<{ id: 'D1' | 'J5' | 'ASM3'; label: string }> = [
+    { id: 'D1', label: 'D1' },
+    { id: 'J5', label: 'J5' },
+    { id: 'ASM3', label: 'ASM3 / WH3' }
+  ];
 
   /**
    * Popup Dời kho: hiển thị vị trí dạng ô lưới như "Kiểm tra KK" (đếm pallet/mã theo vị trí) →
@@ -4988,15 +5005,38 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeMorePopup();
     this.showKkLocMap = true;
     this.kkLocMapQuery = '';
-    void this.loadKkLocMap();
+    this.kkLocMapView = null;
+    this.kkLocMapWarehouseFilter = '';
+    this.kkLocMapBoxes = [];
+    this.kkLocMapByMaterial = [];
+    this.kkLocMapRowCache.clear();
+    this.kkLocMapMaterialCache.clear();
   }
 
   closeKkLocMap(): void {
     this.showKkLocMap = false;
     this.kkLocMapLoading = false;
     this.kkLocMapQuery = '';
+    this.kkLocMapView = null;
+    this.kkLocMapWarehouseFilter = '';
     this.kkLocMapBoxes = [];
+    this.kkLocMapByMaterial = [];
     this.kkLocMapRowCache.clear();
+    this.kkLocMapMaterialCache.clear();
+    this.kkLocMapLoadId++;
+  }
+
+  setKkLocMapView(view: 'location' | 'material'): void {
+    if (this.kkLocMapView === view && !this.kkLocMapLoading) return;
+    this.kkLocMapView = view;
+    this.kkLocMapQuery = '';
+    if (view === 'location') void this.loadKkLocMap();
+    else void this.loadKkByMaterial();
+  }
+
+  refreshKkLocMap(): void {
+    if (this.kkLocMapView === 'material') void this.loadKkByMaterial();
+    else if (this.kkLocMapView === 'location') void this.loadKkLocMap();
   }
 
   openGanPallet(): void {
@@ -5333,6 +5373,69 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkLocMapBoxes.filter((b) => b.loc.includes(q));
   }
 
+  get kkLocMapFilteredMaterials(): Array<{
+    materialCode: string;
+    warehouse: 'D1' | 'J5' | 'ASM3';
+    stock: number;
+    checked: number;
+    totalLines: number;
+    remaining: number;
+  }> {
+    let rows = this.kkLocMapByMaterial;
+    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    if (q) rows = rows.filter((r) => r.materialCode.includes(q));
+    if (this.kkLocMapWarehouseFilter) {
+      rows = rows.filter((r) => r.warehouse === this.kkLocMapWarehouseFilter);
+    }
+    return rows;
+  }
+
+  get kkLocMapMaterialSummary(): { count: number; stock: number } {
+    return this.kkLocMapFilteredMaterials.reduce(
+      (acc, r) => ({ count: acc.count + 1, stock: acc.stock + r.stock }),
+      { count: 0, stock: 0 }
+    );
+  }
+
+  kkWarehouseLabel(warehouse: 'D1' | 'J5' | 'ASM3' | string): string {
+    if (warehouse === 'J5') return 'J5';
+    if (warehouse === 'ASM3') return 'ASM3 / WH3';
+    return 'D1';
+  }
+
+  /** Kho theo vị trí: J5- → J5; ASM3/WH3 → kho tạm; còn lại = D1 (vị trí cũ). */
+  private kkWarehouseFromLocation(location: string | null | undefined): 'D1' | 'J5' | 'ASM3' {
+    const tokens = splitMultiLocations(String(location || ''));
+    const first = (tokens[0] || String(location || '')).trim().toUpperCase();
+    if (!first) return 'D1';
+    if (first.startsWith('J5-')) return 'J5';
+    if (isAsm3OrWh3PrefixLocation(first)) return 'ASM3';
+    return 'D1';
+  }
+
+  onKkMaterialRowClick(row: { materialCode: string; warehouse: string }): void {
+    const key = `${row.warehouse}|${String(row.materialCode || '').trim().toUpperCase()}`;
+    const rows = [...(this.kkLocMapMaterialCache.get(key) || [])];
+    this.closeKkLocMap();
+    this.searchByLocation = false;
+    this.searchByCustomer = false;
+    this.searchByKk = false;
+    this.searchType = 'material';
+    this.searchTerm = String(row.materialCode || '').trim().toUpperCase();
+    this.showOnlyNegativeStock = false;
+    this.inventoryMaterials = rows.map((m) => ({ ...m }));
+    this.sortInventoryFIFO();
+    this.filteredInventory = [...this.inventoryMaterials];
+    this.currentPage = 1;
+    this.updatePagination();
+    this.updateDisplayedInventory();
+    this.updateNegativeStockCount();
+    this.cdr.detectChanges();
+    if (this.filteredInventory.length) {
+      void this.refreshLastStatusForMaterials(this.filteredInventory);
+    }
+  }
+
   /** Nhóm vị trí KK theo chữ cái đầu (A, B, C, D…). */
   kkLocFirstLetter(loc: string): string {
     const raw = String(loc || '').trim().toUpperCase();
@@ -5422,6 +5525,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async loadKkLocMap(): Promise<void> {
+    const loadId = ++this.kkLocMapLoadId;
     this.kkLocMapLoading = true;
     this.kkLocMapBoxes = [];
     this.cdr.detectChanges();
@@ -5432,6 +5536,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         )
         .get()
         .toPromise();
+      if (loadId !== this.kkLocMapLoadId) return;
 
       this.kkLocMapRowCache.clear();
       const byLoc = new Map<string, Map<string, { rows: number; kk: number }>>();
@@ -5485,15 +5590,93 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return a.loc.localeCompare(b.loc, 'en', { numeric: true });
       });
 
+      if (loadId !== this.kkLocMapLoadId) return;
       this.kkLocMapBoxes = boxes;
       this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
     } catch (e) {
+      if (loadId !== this.kkLocMapLoadId) return;
       console.error('❌ loadKkLocMap:', e);
       this.kkLocMapBoxes = [];
       alert('❌ Không tải được sơ đồ KK theo vị trí.');
     } finally {
-      this.kkLocMapLoading = false;
-      this.cdr.detectChanges();
+      if (loadId === this.kkLocMapLoadId) {
+        this.kkLocMapLoading = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
+  async loadKkByMaterial(): Promise<void> {
+    const loadId = ++this.kkLocMapLoadId;
+    this.kkLocMapLoading = true;
+    this.kkLocMapByMaterial = [];
+    this.cdr.detectChanges();
+    try {
+      const snap = await this.firestore
+        .collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', this.selectedFactory).limit(10000)
+        )
+        .get()
+        .toPromise();
+      if (loadId !== this.kkLocMapLoadId) return;
+
+      this.kkLocMapMaterialCache.clear();
+      const byKey = new Map<string, {
+        materialCode: string;
+        warehouse: 'D1' | 'J5' | 'ASM3';
+        stock: number;
+        checked: number;
+        totalLines: number;
+      }>();
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as any;
+        const stock = this.stockFromInventoryDoc(data);
+        if (stock <= 0) continue;
+        const materialCode = String(data.materialCode || '').trim().toUpperCase();
+        if (!materialCode) continue;
+        const warehouse = this.kkWarehouseFromLocation(String(data.location || data.viTri || ''));
+        const key = `${warehouse}|${materialCode}`;
+        const kkOn = this.isKkFlagOn(data.kkChecked);
+        const cur = byKey.get(key) || {
+          materialCode,
+          warehouse,
+          stock: 0,
+          checked: 0,
+          totalLines: 0
+        };
+        cur.stock += stock;
+        cur.totalLines += 1;
+        if (kkOn) cur.checked += 1;
+        byKey.set(key, cur);
+        const material = this.mapKkInventoryDoc(doc);
+        material.kkChecked = kkOn;
+        const list = this.kkLocMapMaterialCache.get(key) || [];
+        list.push(material);
+        this.kkLocMapMaterialCache.set(key, list);
+      }
+
+      const warehouseOrder: Record<string, number> = { D1: 0, J5: 1, ASM3: 2 };
+      this.kkLocMapByMaterial = Array.from(byKey.values())
+        .map((v) => ({
+          ...v,
+          remaining: Math.max(0, v.totalLines - v.checked)
+        }))
+        .sort((a, b) => {
+          const codeCmp = a.materialCode.localeCompare(b.materialCode, 'en', { numeric: true });
+          if (codeCmp) return codeCmp;
+          return (warehouseOrder[a.warehouse] ?? 9) - (warehouseOrder[b.warehouse] ?? 9);
+        });
+      this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
+    } catch (e) {
+      if (loadId !== this.kkLocMapLoadId) return;
+      console.error('❌ loadKkByMaterial:', e);
+      this.kkLocMapByMaterial = [];
+      alert('❌ Không tải được Kiểm tra KK theo mã hàng.');
+    } finally {
+      if (loadId === this.kkLocMapLoadId) {
+        this.kkLocMapLoading = false;
+        this.cdr.detectChanges();
+      }
     }
   }
 

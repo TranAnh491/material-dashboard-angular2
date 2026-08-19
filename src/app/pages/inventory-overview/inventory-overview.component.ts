@@ -142,7 +142,16 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     this.checkPermissions();
   }
 
+  get latestLinkQFile(): LinkQFileInfo | null {
+    return this.linkQFiles[0] || null;
+  }
+
+  private linkQDocId(): string {
+    return this.selectedFactory;
+  }
+
   ngOnDestroy(): void {
+    this.inventorySub?.unsubscribe();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -225,11 +234,14 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       this.readTracker.track('inventory-overview', 'inventory-materials', docs.length);
       console.log(`✅ Loaded ${docs.length} ${this.selectedFactory} documents (one-time read)`);
 
+      await this.restoreLatestLinkQFromFirebase();
+
       if (docs.length === 0) {
         this.inventoryItems = [];
         this.filteredItems = [];
         this.isInventoryLoaded = true;
         this.isLoading = false;
+        this.cdr.detectChanges();
         return;
       }
 
@@ -981,28 +993,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   // Refresh data
   refreshData(): void {
     console.log('🔄 Manual refresh requested');
-    
-    // If LinkQ data is loaded, ask user if they want to refresh
-    if (this.isLinkQDataLoaded) {
-      const shouldRefresh = confirm(
-        '⚠️ Bạn đang có dữ liệu LinkQ để so sánh.\n\n' +
-        'Nếu refresh, dữ liệu LinkQ sẽ bị mất và bạn cần load lại.\n\n' +
-        'Bạn có chắc muốn refresh không?\n\n' +
-        '• Nhấn OK để refresh (mất dữ liệu LinkQ)\n' +
-        '• Nhấn Cancel để giữ nguyên dữ liệu LinkQ'
-      );
-      
-      if (shouldRefresh) {
-        // Clear LinkQ data and refresh
-        this.clearLinkQData();
-        this.loadInventoryOverview();
-      } else {
-        console.log('⏸️ User cancelled refresh to preserve LinkQ data');
-      }
-    } else {
-      // No LinkQ data, safe to refresh
-      this.loadInventoryOverview();
-    }
+    this.loadInventoryOverview();
   }
 
   // Clear LinkQ data
@@ -1133,18 +1124,31 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
         if (!file) return;
         
         try {
-          // Read Excel file
           const data = await this.readLinkQExcelFile(file);
           console.log('📊 LinkQ Excel data read:', data);
-          
-          // Process LinkQ data
+
           await this.processLinkQData(data, file.name);
-          
-          // Update stock comparison silently to avoid page reload
-          this.updateStockComparisonSilently();
-          
-          // Show success message
-          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Dữ liệu cũ đã được ghi đè hoàn toàn\n🔍 Hệ thống sẽ so sánh với tồn kho hiện tại\n\n📊 Lưu ý: Tất cả số liệu đều được làm tròn thành số chẵn để so sánh chính xác\n\n⚠️ Kiểm tra console để xem chi tiết duplicate (nếu có)`);
+
+          if (this.linkQData.size === 0) {
+            alert(
+              '⚠️ Không đọc được mã hàng từ file.\n\n' +
+              'Template cần 2 cột ở hàng đầu:\n' +
+              '• Mã hàng\n' +
+              '• Tồn kho\n\n' +
+              'Tải lại "Template LinkQ" trong More, copy dữ liệu vào đúng 2 cột đó rồi import.'
+            );
+            return;
+          }
+
+          if (!this.isInventoryLoaded) {
+            await this.loadInventoryOverview();
+          } else {
+            this.updateStockComparisonSilently();
+            this.applyFilters();
+          }
+          this.cdr.detectChanges();
+
+          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 File: ${file.name}\n🕒 ${this.latestLinkQFile?.uploadDate ? this.latestLinkQFile.uploadDate.toLocaleString('vi-VN') : ''}\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Bản cũ của ${this.selectedFactory} đã bị xóa / ghi đè`);
           
         } catch (error) {
           console.error('❌ Error importing LinkQ data:', error);
@@ -1341,7 +1345,9 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          const jsonData = this.normalizeLinkQSheetRows(
+            XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+          );
           resolve(jsonData);
         } catch (error) {
           reject(error);
@@ -1350,6 +1356,67 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  /** Chuẩn hóa tên cột Excel (bỏ BOM, khoảng trắng). */
+  private normalizeLinkQSheetRows(rows: any[]): any[] {
+    return (rows || []).map((row) => {
+      const next: Record<string, unknown> = {};
+      Object.keys(row || {}).forEach((key) => {
+        const clean = String(key || '').replace(/^\uFEFF/, '').trim();
+        if (!clean) return;
+        next[clean] = row[key];
+      });
+      return next;
+    });
+  }
+
+  private mapLinkQRow(row: any): { materialCode: string; stock: number } {
+    const lookup = new Map<string, unknown>();
+    Object.keys(row || {}).forEach((key) => {
+      lookup.set(String(key).replace(/^\uFEFF/, '').trim().toLowerCase(), row[key]);
+    });
+    const pick = (...names: string[]) => {
+      for (const name of names) {
+        if (lookup.has(name)) return lookup.get(name);
+      }
+      return '';
+    };
+    const materialCode = String(
+      pick(
+        'mã hàng',
+        'ma hang',
+        'materialcode',
+        'mã',
+        'code',
+        'material',
+        'item',
+        'part',
+        'sku',
+        'product',
+        'item code',
+        'part number',
+        'material code',
+        'product code'
+      ) ?? ''
+    ).trim();
+    const stockRaw = pick(
+      'tồn kho',
+      'ton kho',
+      'stock',
+      'số lượng',
+      'so luong',
+      'quantity',
+      'qty',
+      'amount',
+      'total',
+      'available',
+      'on hand',
+      'inventory',
+      'balance'
+    );
+    const stock = parseFloat(String(stockRaw ?? '0').replace(/,/g, '')) || 0;
+    return { materialCode, stock };
   }
 
   // Process LinkQ data from Excel
@@ -1369,9 +1436,6 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       this.isLinkQDataLoaded = false;
       
       console.log('🧹 Cleared old LinkQ data, processing new import...');
-      
-      // Delete old LinkQ files from Firebase
-      await this.deleteOldLinkQFiles();
       
       // Debug: Log the first few rows to see actual column names
       if (data.length > 0) {
@@ -1395,36 +1459,9 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       const materialCodeCount = new Map<string, number>();
       
       data.forEach((row, index) => {
-        // Try multiple possible column names for material code
-        const materialCode = row['Mã hàng'] || 
-                            row['materialCode'] || 
-                            row['Mã'] || 
-                            row['Code'] || 
-                            row['Material'] || 
-                            row['Item'] ||
-                            row['Part'] ||
-                            row['SKU'] ||
-                            row['Product'] ||
-                            row['Item Code'] ||
-                            row['Part Number'] ||
-                            row['Material Code'] ||
-                            row['Product Code'] ||
-                            '';
-        
-        // Try multiple possible column names for stock/quantity
-        let stock = parseFloat(row['Tồn kho'] || 
-                                row['stock'] || 
-                                row['Stock'] || 
-                                row['Số lượng'] || 
-                                row['Quantity'] || 
-                                row['Qty'] ||
-                                row['Amount'] ||
-                                row['Total'] ||
-                                row['Available'] ||
-                                row['On Hand'] ||
-                                row['Inventory'] ||
-                                row['Balance'] ||
-                                '0') || 0;
+        const mapped = this.mapLinkQRow(row);
+        const materialCode = mapped.materialCode;
+        let stock = mapped.stock;
         
         // 🔧 LÀM TRÒN SỐ: Làm tròn số từ file LinkQ thành số chẵn
         stock = Math.round(stock);
@@ -1465,10 +1502,11 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
         }
       });
       
-      // Save file info to Firebase
-      await this.saveLinkQFileToFirebase(fileName, data.length, processedCount, skippedCount);
+      if (this.linkQData.size > 0) {
+        await this.saveLinkQFileToFirebase(fileName, data.length, processedCount, skippedCount);
+      }
       
-      this.isLinkQDataLoaded = true;
+      this.isLinkQDataLoaded = this.linkQData.size > 0;
       console.log(`✅ Processed ${processedCount} unique LinkQ items, skipped ${skippedCount} rows, found ${duplicateCount} duplicates`);
       console.log(`🔄 New LinkQ data has completely replaced old data and saved to Firebase`);
       
@@ -1650,109 +1688,106 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     console.log('=== END DEBUG ===');
   }
 
+  private mapLinkQFileDoc(id: string, data: any): LinkQFileInfo {
+    const upload = data?.uploadDate || data?.importedAt;
+    let uploadDate = new Date();
+    if (upload?.toDate) uploadDate = upload.toDate();
+    else if (upload instanceof Date) uploadDate = upload;
+    else if (typeof upload?.seconds === 'number') uploadDate = new Date(upload.seconds * 1000);
+    return {
+      id,
+      fileName: data.fileName || '',
+      uploadDate,
+      totalItems: data.totalItems || 0,
+      processedItems: data.processedItems || 0,
+      skippedItems: data.skippedItems || 0,
+      userId: data.userId || '',
+      factory: data.factory || this.selectedFactory,
+      linkQData: data.linkQData || {}
+    };
+  }
+
+  /** Đọc bản LinkQ gần nhất của nhà máy đang xem (1 doc / factory). */
+  private async restoreLatestLinkQFromFirebase(): Promise<void> {
+    await this.loadLinkQFileHistory();
+    const latest = this.latestLinkQFile;
+    if (!latest?.linkQData || Object.keys(latest.linkQData).length === 0) {
+      return;
+    }
+    this.linkQData.clear();
+    Object.entries(latest.linkQData).forEach(([materialCode, stock]) => {
+      this.linkQData.set(materialCode, Number(stock) || 0);
+    });
+    this.currentLinkQFileId = latest.id;
+    this.isLinkQDataLoaded = this.linkQData.size > 0;
+  }
+
   // Load LinkQ file history from Firebase
   private async loadLinkQFileHistory(): Promise<void> {
     try {
-      console.log(`📥 Loading LinkQ file history for ${this.selectedFactory}...`);
-      const snapshot = await this.firestore.collection('linkQFiles', ref =>
-        ref.where('factory', '==', this.selectedFactory)
-           .orderBy('uploadDate', 'desc')
-           .limit(10)
-      ).get().toPromise();
-      
-      if (!snapshot) {
-        this.linkQFiles = [];
+      console.log(`📥 Loading latest LinkQ file for ${this.selectedFactory}...`);
+      const canonical = await this.firestore.collection('linkQFiles').doc(this.linkQDocId()).get().toPromise();
+      if (canonical?.exists) {
+        this.linkQFiles = [this.mapLinkQFileDoc(canonical.id, canonical.data())];
+        this.linkQFileHistoryLoaded = true;
         return;
       }
-      
-      this.linkQFiles = snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        return {
-          id: doc.id,
-          fileName: data.fileName || '',
-          uploadDate: data.uploadDate?.toDate() || new Date(),
-          totalItems: data.totalItems || 0,
-          processedItems: data.processedItems || 0,
-          skippedItems: data.skippedItems || 0,
-          userId: data.userId || '',
-          factory: data.factory || this.selectedFactory,
-          // Add actual LinkQ data storage
-          linkQData: data.linkQData || {}
-        } as LinkQFileInfo;
-      });
-      console.log(`✅ Loaded ${this.linkQFiles.length} LinkQ file history items.`);
-      
-      // Auto-load the most recent LinkQ data if available
-      if (this.linkQFiles.length > 0) {
-        await this.autoLoadMostRecentLinkQData();
-      }
+
+      const snapshot = await this.firestore.collection('linkQFiles', ref =>
+        ref.where('factory', '==', this.selectedFactory).limit(20)
+      ).get().toPromise();
+      const rows = (snapshot?.docs || []).map((doc) => this.mapLinkQFileDoc(doc.id, doc.data()));
+      rows.sort((a, b) => b.uploadDate.getTime() - a.uploadDate.getTime());
+      this.linkQFiles = rows.slice(0, 1);
+      this.linkQFileHistoryLoaded = true;
     } catch (error) {
       console.error('❌ Error loading LinkQ file history:', error);
-      this.linkQFiles = []; // Clear history on error
+      this.linkQFiles = [];
     }
   }
 
   // Auto-load the most recent LinkQ data
   private async autoLoadMostRecentLinkQData(): Promise<void> {
     try {
-      const mostRecentFile = this.linkQFiles[0]; // First item is most recent due to orderBy desc
-      
-      if (mostRecentFile.linkQData && Object.keys(mostRecentFile.linkQData).length > 0) {
-        console.log(`🔄 Auto-loading most recent LinkQ data from: ${mostRecentFile.fileName}`);
-        console.log(`🔍 DEBUG: LinkQ data keys count: ${Object.keys(mostRecentFile.linkQData).length}`);
-        
-        // Restore LinkQ data
-        this.linkQData.clear();
-        Object.entries(mostRecentFile.linkQData).forEach(([materialCode, stock]) => {
-          this.linkQData.set(materialCode, stock as number);
-        });
-        
-        console.log(`🔍 DEBUG: Loaded ${this.linkQData.size} LinkQ items into memory`);
-        
-        // Set as current file
-        this.currentLinkQFileId = mostRecentFile.id;
-        
-        // Mark as loaded
-        this.isLinkQDataLoaded = true;
-        
-        // Update stock comparison silently to avoid page reload
-        this.updateStockComparisonSilently();
-        
-        console.log(`✅ Auto-loaded ${this.linkQData.size} LinkQ items from ${mostRecentFile.fileName}`);
-        console.log(`📊 Current file: ${mostRecentFile.fileName} (${mostRecentFile.processedItems} items)`);
-      } else {
-        console.log('⚠️ Most recent file has no LinkQ data to restore');
-        console.log(`🔍 DEBUG: mostRecentFile.linkQData:`, mostRecentFile.linkQData);
-        console.log(`🔍 DEBUG: Object.keys(mostRecentFile.linkQData):`, Object.keys(mostRecentFile.linkQData || {}));
-      }
+      await this.restoreLatestLinkQFromFirebase();
+      if (!this.isLinkQDataLoaded) return;
+      this.updateStockComparisonSilently();
+      this.applyFilters();
+      this.cdr.detectChanges();
     } catch (error) {
       console.error('❌ Error auto-loading most recent LinkQ data:', error);
     }
   }
 
-  // Save LinkQ file info to Firebase
+  // Save LinkQ file info to Firebase — 1 bản / nhà máy, ghi đè bản cũ
   private async saveLinkQFileToFirebase(fileName: string, totalItems: number, processedItems: number, skippedItems: number): Promise<void> {
     try {
-      console.log(`📤 Saving LinkQ file info to Firebase for ${this.selectedFactory}...`);
-      const newDocRef = await this.firestore.collection('linkQFiles').add({
-        fileName: fileName,
-        uploadDate: new Date(),
-        totalItems: totalItems,
-        processedItems: processedItems,
-        skippedItems: skippedItems,
-        userId: 'current_user_id', // Replace with actual user ID
-        factory: this.selectedFactory, // 🔧 ADD: Phân biệt factory
-        // Add actual LinkQ data storage
+      console.log(`📤 Saving latest LinkQ import for ${this.selectedFactory}...`);
+      const importedAt = new Date();
+      let userId = '';
+      try {
+        const user = await firstValueFrom(this.authService.currentUser);
+        userId = String(user?.employeeId || user?.email || '').trim();
+      } catch { /* ignore */ }
+
+      const payload = {
+        fileName,
+        uploadDate: importedAt,
+        importedAt,
+        totalItems,
+        processedItems,
+        skippedItems,
+        userId,
+        factory: this.selectedFactory,
         linkQData: Object.fromEntries(this.linkQData)
-      });
-      
-      // Set as current file
-      this.currentLinkQFileId = newDocRef.id;
-      
-      // Reload file history
-      await this.loadLinkQFileHistory();
-      
-      console.log(`✅ File info saved with ID: ${newDocRef.id}`);
+      };
+      const docId = this.linkQDocId();
+      await this.firestore.collection('linkQFiles').doc(docId).set(payload);
+      this.currentLinkQFileId = docId;
+      this.linkQFiles = [this.mapLinkQFileDoc(docId, payload)];
+      this.linkQFileHistoryLoaded = true;
+      await this.deleteOldLinkQFiles(docId);
+      console.log(`✅ Saved latest LinkQ import: ${fileName} at ${importedAt.toISOString()}`);
     } catch (error) {
       console.error('❌ Error saving LinkQ file info to Firebase:', error);
       throw error;
@@ -1808,24 +1843,20 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     return file.id;
   }
 
-  // Delete old LinkQ files from Firebase
-  private async deleteOldLinkQFiles(): Promise<void> {
+  // Delete leftover LinkQ files (bản cũ .add()), giữ lại đúng 1 bản đang dùng
+  private async deleteOldLinkQFiles(keepId: string): Promise<void> {
     try {
       console.log(`🗑️ Deleting old LinkQ files for ${this.selectedFactory}...`);
       const snapshot = await this.firestore.collection('linkQFiles', ref =>
         ref.where('factory', '==', this.selectedFactory)
       ).get().toPromise();
 
-      if (snapshot && snapshot.size > 0) {
-        const deletePromises = snapshot.docs.map(doc => doc.ref.delete());
-        await Promise.all(deletePromises);
-        console.log(`🗑️ Deleted ${snapshot.size} old LinkQ files`);
-      } else {
-        console.log('ℹ️ No old LinkQ files to delete');
-      }
+      const extras = (snapshot?.docs || []).filter((doc) => doc.id !== keepId);
+      if (extras.length === 0) return;
+      await Promise.all(extras.map((doc) => doc.ref.delete()));
+      console.log(`🗑️ Deleted ${extras.length} old LinkQ files`);
     } catch (error) {
       console.error('❌ Error deleting old LinkQ files:', error);
-      // Don't throw error, continue with new file import
     }
   }
 
@@ -1836,20 +1867,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     const materialCodeCount = new Map<string, { count: number, rows: number[] }>();
     
     data.forEach((row, index) => {
-      const materialCode = row['Mã hàng'] || 
-                          row['materialCode'] || 
-                          row['Mã'] || 
-                          row['Code'] || 
-                          row['Material'] || 
-                          row['Item'] ||
-                          row['Part'] ||
-                          row['SKU'] ||
-                          row['Product'] ||
-                          row['Item Code'] ||
-                          row['Part Number'] ||
-                          row['Material Code'] ||
-                          row['Product Code'] ||
-                          '';
+      const materialCode = this.mapLinkQRow(row).materialCode;
       
       if (materialCode && materialCode.toString().trim() !== '') {
         const trimmedCode = materialCode.toString().trim();
