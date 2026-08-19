@@ -697,11 +697,20 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   private applyCompareStatus(item: InventoryOverviewItem): void {
     const code = String(item.materialCode || '').trim().toUpperCase();
     const sys = Math.round(Number(item.currentStock) || 0);
-    const inLinkQ = this.linkQData.has(code);
     if (!this.isLinkQDataLoaded) {
       item.compareStatus = undefined;
       return;
     }
+    if (this.isSkippedLinkQCompareCode(code)) {
+      item.compareStatus = undefined;
+      item.hasDifference = false;
+      item.stockDifference = undefined;
+      if (this.linkQData.has(code)) {
+        item.linkQStock = Math.round(Number(this.linkQData.get(code)) || 0);
+      }
+      return;
+    }
+    const inLinkQ = this.linkQData.has(code);
     if (!inLinkQ) {
       item.linkQStock = 0;
       item.stockDifference = sys;
@@ -725,6 +734,12 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** B033… và R… không đưa vào kiểm tra so sánh LinkQ. */
+  private isSkippedLinkQCompareCode(code: string): boolean {
+    const c = String(code || '').trim().toUpperCase();
+    return c.startsWith('B033') || c.startsWith('R');
+  }
+
   /** Thêm mã có trên LinkQ nhưng không có trong tồn kho (thiếu hoàn toàn). */
   private mergeMissingLinkQCodes(grouped: InventoryOverviewItem[]): InventoryOverviewItem[] {
     if (!this.isLinkQDataLoaded) {
@@ -737,7 +752,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     const extra: InventoryOverviewItem[] = [];
     this.linkQData.forEach((stock, rawCode) => {
       const code = String(rawCode || '').trim().toUpperCase();
-      if (!code || present.has(code)) {
+      if (!code || present.has(code) || this.isSkippedLinkQCompareCode(code)) {
         return;
       }
       extra.push({
