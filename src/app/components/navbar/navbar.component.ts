@@ -297,6 +297,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/materials';
     }
 
+    isInventoryOverviewPage(): boolean {
+      return this.currentAppPath() === '/inventory-overview';
+    }
+
     isShipmentPage(): boolean {
       return this.currentAppPath() === '/shipment';
     }
@@ -391,7 +395,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/equipment',
       '/xe-tai',
       '/materials',
-      '/danh-muc-nvl-tp'
+      '/danh-muc-nvl-tp',
+      '/inventory-overview'
     ]);
 
     hasOwnNav(): boolean {

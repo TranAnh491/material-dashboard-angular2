@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
@@ -97,6 +98,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   // Pagination
   currentPage = 1;
   itemsPerPage = 100;
+  readonly pageSizeOptions = [50, 100, 200];
   
   // Permissions
   hasAccess = false;
@@ -109,8 +111,17 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     private readTracker: ReadTrackerService,
     private router: Router,
     private route: ActivatedRoute,
-    private authService: FirebaseAuthService
+    private authService: FirebaseAuthService,
+    private location: Location
   ) {}
+
+  goBack(): void {
+    this.location.back();
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
   private isValidFactory(f: string | null | undefined): f is 'ASM1' | 'ASM2' {
     return f === 'ASM1' || f === 'ASM2';
@@ -504,6 +515,15 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     }
   }
 
+  setFilterMode(mode: 'all' | 'negative' | 'linkq-difference'): void {
+    if (mode === 'linkq-difference' && !this.isLinkQDataLoaded) {
+      return;
+    }
+    this.currentFilterMode = mode;
+    this.isMoreActionsDropdownOpen = false;
+    this.applyFilters();
+  }
+
   // Toggle group by dropdown
   toggleGroupByDropdown(): void {
     this.isGroupByDropdownOpen = !this.isGroupByDropdownOpen;
@@ -828,6 +848,55 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     }
   }
 
+  setItemsPerPage(size: number): void {
+    const next = Number(size);
+    if (!this.pageSizeOptions.includes(next)) {
+      return;
+    }
+    this.itemsPerPage = next;
+    this.currentPage = 1;
+  }
+
+  goToVisiblePage(page: number | 'ellipsis'): void {
+    if (page === 'ellipsis') {
+      return;
+    }
+    this.changePage(page);
+  }
+
+  get showingFrom(): number {
+    if (!this.filteredItems.length) {
+      return 0;
+    }
+    return (this.currentPage - 1) * this.itemsPerPage + 1;
+  }
+
+  get showingTo(): number {
+    return Math.min(this.currentPage * this.itemsPerPage, this.filteredItems.length);
+  }
+
+  get visiblePages(): Array<number | 'ellipsis'> {
+    const total = this.totalPages;
+    const current = this.currentPage;
+    if (total <= 7) {
+      return Array.from({ length: Math.max(total, 0) }, (_, i) => i + 1);
+    }
+    const pages: Array<number | 'ellipsis'> = [1];
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+    if (start > 2) {
+      pages.push('ellipsis');
+    }
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (end < total - 1) {
+      pages.push('ellipsis');
+    }
+    pages.push(total);
+    return pages;
+  }
+
   // Get negative stock count
   get negativeStockCount(): number {
     return this.inventoryItems.filter(item => item.isNegative).length;
@@ -838,10 +907,29 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     return this.inventoryItems.length;
   }
 
-  // Get LinkQ difference count
+  // Get LinkQ difference count — theo mã hàng đã gộp, không đếm từng dòng PO.
+  // LinkQ là tồn theo mã; so từng PO với LinkQ cả mã sẽ đẩy số lệch lên hàng nghìn.
   get linkQDifferenceCount(): number {
     if (!this.isLinkQDataLoaded) return 0;
-    return this.inventoryItems.filter(item => item.hasDifference).length;
+
+    const stockByCode = new Map<string, number>();
+    for (const item of this.inventoryItems) {
+      const stock = (item.openingStock || 0) + (item.quantity || 0) - (item.exported || 0) - (item.xt || 0);
+      stockByCode.set(item.materialCode, (stockByCode.get(item.materialCode) || 0) + stock);
+    }
+
+    let count = 0;
+    stockByCode.forEach((stock, code) => {
+      const linkQ = this.linkQData.get(code);
+      if (linkQ === undefined) {
+        return;
+      }
+      const diff = Math.round(stock) - Math.round(linkQ);
+      if (Math.abs(diff) > 1) {
+        count++;
+      }
+    });
+    return count;
   }
 
   // Export to Excel
