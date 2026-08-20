@@ -1136,6 +1136,9 @@ export class InboundComponent implements OnInit, OnDestroy {
   private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
     try {
       if (!material.rollsOrBags || material.rollsOrBags <= 0) return;
+      // Hàng trả (batchNumber bắt đầu bằng TRA) không dùng để ghi đè Standard Packing —
+      // số lượng trả lại thường không phản ánh đúng lượng chẵn 1 bịch/cuộn gốc.
+      if (material.batchNumber?.toUpperCase().startsWith('TRA')) return;
       const standardPackingValue = material.rollsOrBags;
       const materialsDocRef = this.firestore.collection('materials').doc(material.materialCode).ref;
       await materialsDocRef.update({ standardPacking: standardPackingValue, updatedAt: new Date() });

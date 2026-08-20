@@ -259,12 +259,27 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkActiveProductType: string | null = null;
   private kkActiveTypeDraft: KkTypeRow | null = null;
   kkTypePage = 1;
-  readonly kkTypePageSize = 50;
-  /** Ô search mã nguyên liệu trong bảng chi tiết KK theo loại hàng. */
+  kkTypePageSize = 20;
+  readonly kkTypePageSizeOptions = [20, 50, 100];
+  /** Ô search mã / tên / pallet trong bảng chi tiết KK theo loại hàng. */
   kkTypeDetailQuery = '';
+  kkTypeSearchDraft = '';
+  kkTypeFilterLoc = '';
+  kkTypeFilterWh: '' | 'D1' | 'J5' | 'ASM3' = '';
+  kkTypeFilterRolls = '';
+  kkTypeShowExtraFilter = false;
+  /** Tick: cộng các mã đang ở kho WH3/ASM3 vào số liệu KK. Bỏ tick thì không tính. */
+  kkCountWh3 = true;
+  /** Lọc chỉ các dòng / loại còn chưa tick KK. */
+  kkFilterUncheckedOnly = false;
   private inboundNameCache = new Map<string, string>();
   readonly kkLocMapWarehouseOptions: Array<{ id: 'D1' | 'J5' | 'ASM3'; label: string }> = [
     { id: 'D1', label: 'D1' },
+    { id: 'J5', label: 'J5' },
+    { id: 'ASM3', label: 'ASM3 / WH3' }
+  ];
+  readonly kkWhSelectOptions: Array<{ id: '' | 'J5' | 'ASM3'; label: string }> = [
+    { id: '', label: 'D1' },
     { id: 'J5', label: 'J5' },
     { id: 'ASM3', label: 'ASM3 / WH3' }
   ];
@@ -5068,6 +5083,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapQuery = '';
     this.kkLocMapView = 'type';
     this.kkLocMapWarehouseFilter = '';
+    this.kkCountWh3 = true;
+    this.kkFilterUncheckedOnly = false;
     this.kkLocMapBoxes = [];
     this.kkLocMapByMaterial = [];
     this.kkLocMapByType = [];
@@ -5086,6 +5103,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapQuery = '';
     this.kkLocMapView = null;
     this.kkLocMapWarehouseFilter = '';
+    this.kkCountWh3 = true;
+    this.kkFilterUncheckedOnly = false;
     this.kkLocMapBoxes = [];
     this.kkLocMapByMaterial = [];
     this.kkLocMapByType = [];
@@ -5460,6 +5479,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkLocMapWarehouseFilter) {
       rows = rows.filter((r) => r.warehouse === this.kkLocMapWarehouseFilter);
     }
+    if (!this.kkCountWh3) {
+      rows = rows.filter((r) => r.warehouse !== 'ASM3');
+    }
+    if (this.kkFilterUncheckedOnly) {
+      rows = rows.filter((r) => r.remaining > 0);
+    }
     return rows;
   }
 
@@ -5568,6 +5593,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         };
       })
       .filter((v) => {
+        if (this.kkFilterUncheckedOnly && v.remaining <= 0) return false;
         if (!q) return true;
         return v.productType.toUpperCase().includes(q) || v.groupCodes.some((g) => g.includes(q));
       })
@@ -5619,10 +5645,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   get kkActiveTypeRow(): KkTypeRow | null {
     const name = this.kkActiveProductType;
     if (!name) return null;
-    const found = this.kkLocMapByType.find((r) => r.productType === name);
-    if (found) return found;
-    if (this.kkActiveTypeDraft?.productType === name) return this.kkActiveTypeDraft;
-    return this.buildEmptyKkTypeRow(name);
+    const found = this.kkLocMapByType.find((r) => r.productType === name)
+      || (this.kkActiveTypeDraft?.productType === name ? this.kkActiveTypeDraft : this.buildEmptyKkTypeRow(name));
+    return this.applyKkTypeRowLiveCounts(found);
+  }
+
+  private applyKkTypeRowLiveCounts(row: KkTypeRow): KkTypeRow {
+    const lines = this.kkCachedLinesForType(row.productType).filter((m) => this.calculateCurrentStock(m) > 0);
+    row.stock = lines.reduce((n, m) => n + this.calculateCurrentStock(m), 0);
+    row.totalLines = lines.length;
+    row.checked = lines.filter((m) => this.isKkFlagOn(m.kkChecked)).length;
+    row.remaining = Math.max(0, row.totalLines - row.checked);
+    return row;
   }
 
   kkTypeBoxTone(box: { checked: number; totalLines: number }): string {
@@ -5637,6 +5671,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = this.buildEmptyKkTypeRow(productType);
     this.kkTypePage = 1;
     this.kkTypeDetailQuery = '';
+    this.kkTypeSearchDraft = '';
+    this.kkTypeFilterLoc = '';
+    this.kkTypeFilterWh = '';
+    this.kkTypeFilterRolls = '';
+    this.kkTypeShowExtraFilter = false;
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
     void this.ensureKkTypeMaterialNames();
   }
@@ -5646,21 +5685,126 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkTypePage = 1;
     this.kkTypeDetailQuery = '';
+    this.kkTypeSearchDraft = '';
+    this.kkTypeFilterLoc = '';
+    this.kkTypeFilterWh = '';
+    this.kkTypeFilterRolls = '';
+    this.kkTypeShowExtraFilter = false;
   }
 
   get kkTypeDetailAll(): InventoryMaterial[] {
     return this.kkTypeDetailLines(this.kkActiveTypeRow);
   }
 
-  /** Lọc danh sách chi tiết (bảng) theo mã nguyên liệu — không ảnh hưởng số liệu tổng/in danh sách. */
+  /** Lọc danh sách chi tiết (bảng) theo mã / tên / pallet / vị trí / kho / cuộn / chưa KK. */
   get kkTypeDetailFiltered(): InventoryMaterial[] {
+    let rows = this.kkTypeDetailAll;
+    if (this.kkFilterUncheckedOnly) {
+      rows = rows.filter((m) => !this.isKkFlagOn(m.kkChecked));
+    }
+    const loc = this.kkTypeFilterLoc.trim().toUpperCase();
+    if (loc) {
+      rows = rows.filter((m) => String(m.location || '').trim().toUpperCase() === loc);
+    }
+    if (this.kkTypeFilterWh) {
+      rows = rows.filter((m) => this.kkWarehouseFromLocation(m.location) === this.kkTypeFilterWh);
+    }
+    if (this.kkTypeFilterRolls) {
+      rows = rows.filter((m) => this.getKkRollsText(m) === this.kkTypeFilterRolls);
+    }
     const q = this.kkTypeDetailQuery.trim().toUpperCase();
-    if (!q) return this.kkTypeDetailAll;
-    return this.kkTypeDetailAll.filter((m) => String(m.materialCode || '').toUpperCase().includes(q));
+    if (!q) return rows;
+    return rows.filter((m) => {
+      const code = String(m.materialCode || '').toUpperCase();
+      const pallet = String(m.palletId || '').toUpperCase();
+      const name = this.getKkMaterialName(m).toUpperCase();
+      return code.includes(q) || pallet.includes(q) || name.includes(q);
+    });
+  }
+
+  get kkTypeLocationOptions(): string[] {
+    const set = new Set<string>();
+    for (const m of this.kkTypeDetailAll) {
+      const loc = String(m.location || '').trim().toUpperCase();
+      if (loc) set.add(loc);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  }
+
+  get kkTypeRollsOptions(): string[] {
+    const set = new Set<string>();
+    for (const m of this.kkTypeDetailAll) {
+      const t = this.getKkRollsText(m);
+      if (t && t !== '—') set.add(t);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  }
+
+  applyKkTypeFilters(): void {
+    this.kkTypeDetailQuery = this.kkTypeSearchDraft;
+    this.kkTypePage = 1;
+  }
+
+  clearKkTypeFilters(): void {
+    this.kkTypeSearchDraft = '';
+    this.kkTypeDetailQuery = '';
+    this.kkTypeFilterLoc = '';
+    this.kkTypeFilterWh = '';
+    this.kkTypeFilterRolls = '';
+    this.kkTypePage = 1;
+  }
+
+  onKkTypeFilterChange(): void {
+    this.kkTypePage = 1;
+  }
+
+  onKkTypePageSizeChange(size: number): void {
+    const n = Number(size) || 20;
+    this.kkTypePageSize = n;
+    this.kkTypePage = 1;
+  }
+
+  get kkTypeShowingFrom(): number {
+    if (!this.kkTypeDetailFiltered.length) return 0;
+    return (this.kkTypePage - 1) * this.kkTypePageSize + 1;
+  }
+
+  get kkTypeShowingTo(): number {
+    return Math.min(this.kkTypePage * this.kkTypePageSize, this.kkTypeDetailFiltered.length);
+  }
+
+  get kkTypeVisiblePages(): Array<number | 'ellipsis'> {
+    const total = this.kkTypeDetailTotalPages;
+    const current = Math.min(Math.max(1, this.kkTypePage), total);
+    if (total <= 7) {
+      return Array.from({ length: Math.max(total, 1) }, (_, i) => i + 1);
+    }
+    if (current <= 4) {
+      return [1, 2, 3, 4, 5, 'ellipsis', total];
+    }
+    if (current >= total - 3) {
+      return [1, 'ellipsis', total - 4, total - 3, total - 2, total - 1, total];
+    }
+    return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total];
+  }
+
+  kkTypeGoToVisiblePage(page: number | 'ellipsis'): void {
+    if (page === 'ellipsis') return;
+    this.kkTypeGoToPage(page);
   }
 
   onKkTypeDetailQueryChange(): void {
     this.kkTypePage = 1;
+  }
+
+  onKkCountWh3Change(): void {
+    this.kkTypePage = 1;
+    this.cdr.detectChanges();
+  }
+
+  onKkFilterUncheckedChange(): void {
+    this.kkTypePage = 1;
+    this.cdr.detectChanges();
   }
 
   get kkTypeDetailTotalPages(): number {
@@ -5713,7 +5857,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const esc = (s: string) => this.escapeHtmlForPrint(s);
     const zone = this.kkLocMapWarehouseFilter
       ? this.kkWarehouseLabel(this.kkLocMapWarehouseFilter)
-      : 'Tất cả';
+      : (this.kkCountWh3 ? 'Tất cả' : 'Tất cả (không WH3/ASM3)');
     const groupText = row.groupCodes.length
       ? `${row.groupCodes[0]}${row.groupCodes.length > 1 ? ` · ${row.groupCodes.length} nhóm mã` : ''}`
       : '—';
@@ -6128,6 +6272,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   async saveKkDetailPallet(line: InventoryMaterial): Promise<void> {
     if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
     await this.persistPalletChange(line, String(line.palletId || ''), { silent: true, bypassUnlock: true });
+  }
+
+  kkLineWhValue(line: InventoryMaterial): '' | 'J5' | 'ASM3' {
+    const tag = this.locationWhTag(line.location);
+    return tag === 'J5' || tag === 'ASM3' ? tag : '';
+  }
+
+  async saveKkDetailWarehouse(line: InventoryMaterial, value: string): Promise<void> {
+    if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
+    await this.commitWhChange(line, value, { silent: true, bypassUnlock: true });
+    this.syncKkMaterialRows(String(line.materialCode || '').trim().toUpperCase());
+    this.syncKkTypeRows();
+    this.cdr.detectChanges();
   }
 
   getKkMaterialName(material: InventoryMaterial): string {
@@ -6637,7 +6794,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private kkCachedLinesForType(productType: string): InventoryMaterial[] {
-    const list = this.kkLocMapTypeCache.get(productType) || [];
+    let list = this.kkLocMapTypeCache.get(productType) || [];
+    if (!this.kkCountWh3) {
+      list = list.filter((m) => this.kkWarehouseFromLocation(m.location) !== 'ASM3');
+    }
     const zone = this.kkLocMapWarehouseFilter;
     if (!zone) return list;
     return list.filter((m) => this.kkWarehouseFromLocation(m.location) === zone);
@@ -8355,8 +8515,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     void this.commitWhChange(material, value);
   }
 
-  private async commitWhChange(material: InventoryMaterial, raw: string): Promise<void> {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
+  private async commitWhChange(
+    material: InventoryMaterial,
+    raw: string,
+    opts?: { silent?: boolean; bypassUnlock?: boolean }
+  ): Promise<void> {
+    if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return;
     const next = String(raw || '').trim().toUpperCase();
     if (next && next !== 'ASM3' && next !== 'J5') return;
     const current = this.locationWhTag(material.location);
@@ -8369,7 +8533,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     material.location = next ? `${next}-${bare}` : bare;
-    await this.persistLocationChange(material);
+    await this.persistLocationChange(material, {
+      silent: !!opts?.silent,
+      bypassUnlock: !!opts?.bypassUnlock
+    });
   }
 
   private async persistPalletChange(

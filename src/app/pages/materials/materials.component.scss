@@ -3783,6 +3783,33 @@ $asm1-toolbar-h: 36px;
     }
   }
 
+  &__opts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 5px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    cursor: pointer;
+    white-space: nowrap;
+
+    input {
+      margin: 0;
+    }
+  }
+
   &__hint {
     margin: 10px 12px 12px;
     font-size: 12px;
@@ -4324,6 +4351,118 @@ $asm1-toolbar-h: 36px;
   flex: 1;
 }
 
+.kk-type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+
+  &__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 220px;
+    min-width: 180px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+
+    i {
+      font-size: 18px;
+      color: #94a3b8;
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      background: transparent;
+    }
+  }
+
+  &__select {
+    height: 36px;
+    min-width: 130px;
+    padding: 0 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 13px;
+    color: #334155;
+  }
+
+  &__search-btn {
+    height: 36px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 8px;
+    background: #1e3a5f;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+
+    &:hover {
+      background: #163250;
+    }
+  }
+
+  &__clear {
+    height: 36px;
+    padding: 0 10px;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      color: #0f172a;
+    }
+  }
+
+  &__count {
+    margin-left: auto;
+    font-size: 12px;
+    color: #64748b;
+    white-space: nowrap;
+  }
+
+  &__more {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+
+    i {
+      font-size: 18px;
+    }
+
+    &--on {
+      background: #1e3a5f;
+      border-color: #1e3a5f;
+      color: #fff;
+    }
+  }
+}
+
 .kk-type-detail__bar {
   display: flex;
   flex-wrap: wrap;
@@ -4398,6 +4537,12 @@ $asm1-toolbar-h: 36px;
   }
 }
 
+.kk-type-wh-select {
+  min-width: 88px;
+  max-width: 120px;
+  font-size: 12px;
+}
+
 .kk-type-roll-cell {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -4410,6 +4555,79 @@ $asm1-toolbar-h: 36px;
 
   .pagination-info {
     font-size: 12px;
+  }
+}
+
+.kk-type-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 4px 2px;
+  flex-shrink: 0;
+
+  &__size {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #475569;
+
+    select {
+      height: 32px;
+      padding: 0 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+    }
+  }
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #fff;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+
+    i {
+      font-size: 18px;
+      line-height: 32px;
+    }
+
+    &:hover:not(:disabled) {
+      background: #f8fafc;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    &--on {
+      background: #1e3a5f;
+      border-color: #1e3a5f;
+      color: #fff;
+    }
+
+    &--dots {
+      border: none;
+      background: transparent;
+      min-width: 20px;
+      cursor: default;
+    }
   }
 }
 
@@ -4448,16 +4666,6 @@ $asm1-toolbar-h: 36px;
   min-height: 0;
   overflow: auto;
   display: block;
-}
-
-.kk-type-pager {
-  flex-direction: row;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  margin-top: 0;
-  padding: 8px 4px;
-  border-top: none;
-  gap: 8px;
 }
 
 .more-popup-content {
