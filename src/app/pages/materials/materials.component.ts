@@ -260,6 +260,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkActiveTypeDraft: KkTypeRow | null = null;
   kkTypePage = 1;
   readonly kkTypePageSize = 50;
+  /** Ô search mã nguyên liệu trong bảng chi tiết KK theo loại hàng. */
+  kkTypeDetailQuery = '';
+  private inboundNameCache = new Map<string, string>();
   readonly kkLocMapWarehouseOptions: Array<{ id: 'D1' | 'J5' | 'ASM3'; label: string }> = [
     { id: 'D1', label: 'D1' },
     { id: 'J5', label: 'J5' },
@@ -2382,6 +2385,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private stampLocationAtLoad(material: InventoryMaterial): void {
     (material as { __locationAtLoad?: string }).__locationAtLoad = String(material.location || '').trim().toUpperCase();
+    (material as { __prevPalletId?: string }).__prevPalletId = String(material.palletId || '').trim().toUpperCase();
+  }
+
+  /** Ưu tiên `location` (kể cả chuỗi rỗng đã xóa). Chỉ fallback `viTri` khi chưa có field location. */
+  private locationFromInventoryDoc(data: any): string {
+    if (data && Object.prototype.hasOwnProperty.call(data, 'location')) {
+      return String(data.location ?? '').trim().toUpperCase();
+    }
+    return String(data?.viTri ?? '').trim().toUpperCase();
+  }
+
+  private inventoryLocationWriteFields(location: string): Record<string, unknown> {
+    return { location, viTri: location };
   }
 
   /**
@@ -3957,7 +3973,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       id: doc.id,
       ...data,
       factory: data.factory || this.selectedFactory,
-      location: String(data.location || data.viTri || '').trim().toUpperCase(),
+      location: this.locationFromInventoryDoc(data),
       palletId: String(data.palletId || '').trim().toUpperCase(),
       importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
       receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
@@ -5559,7 +5575,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Đầu mã chung của cả loại (vd B006). Chỉ hiện khi mọi nhóm mã cùng prefix. */
-  private kkTypeSharedGroupPrefix(groupCodes: string[]): string {
+  kkTypeSharedGroupPrefix(groupCodes: string[]): string {
     const prefixes = (groupCodes || [])
       .map((raw) => {
         const c = String(raw || '').trim().toUpperCase();
@@ -5620,21 +5636,35 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveProductType = productType;
     this.kkActiveTypeDraft = this.buildEmptyKkTypeRow(productType);
     this.kkTypePage = 1;
+    this.kkTypeDetailQuery = '';
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
+    void this.ensureKkTypeMaterialNames();
   }
 
   backKkTypeBoxes(): void {
     this.kkActiveProductType = null;
     this.kkActiveTypeDraft = null;
     this.kkTypePage = 1;
+    this.kkTypeDetailQuery = '';
   }
 
   get kkTypeDetailAll(): InventoryMaterial[] {
     return this.kkTypeDetailLines(this.kkActiveTypeRow);
   }
 
+  /** Lọc danh sách chi tiết (bảng) theo mã nguyên liệu — không ảnh hưởng số liệu tổng/in danh sách. */
+  get kkTypeDetailFiltered(): InventoryMaterial[] {
+    const q = this.kkTypeDetailQuery.trim().toUpperCase();
+    if (!q) return this.kkTypeDetailAll;
+    return this.kkTypeDetailAll.filter((m) => String(m.materialCode || '').toUpperCase().includes(q));
+  }
+
+  onKkTypeDetailQueryChange(): void {
+    this.kkTypePage = 1;
+  }
+
   get kkTypeDetailTotalPages(): number {
-    return Math.max(1, Math.ceil(this.kkTypeDetailAll.length / this.kkTypePageSize));
+    return Math.max(1, Math.ceil(this.kkTypeDetailFiltered.length / this.kkTypePageSize));
   }
 
   get kkTypePageOptions(): number[] {
@@ -5642,7 +5672,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkTypeDetailPaged(): InventoryMaterial[] {
-    const all = this.kkTypeDetailAll;
+    const all = this.kkTypeDetailFiltered;
     const maxPage = Math.max(1, Math.ceil(all.length / this.kkTypePageSize));
     const page = Math.min(Math.max(1, this.kkTypePage), maxPage);
     const start = (page - 1) * this.kkTypePageSize;
@@ -5692,12 +5722,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return `<tr>
         <td class="c">${i + 1}</td>
         <td>${esc(String(m.materialCode || ''))}</td>
+        <td>${esc(this.getKkMaterialName(m))}</td>
         <td>${esc(String(m.poNumber || '—'))}</td>
         <td>${esc(this.getDisplayIMD(m) || '—')}</td>
         <td class="n">${esc(this.formatNumber(stock))}</td>
         <td>${esc(String(m.location || '—'))}</td>
         <td>${esc(this.kkWarehouseLabel(this.kkWarehouseFromLocation(m.location)))}</td>
         <td>${esc(String(m.palletId || '—'))}</td>
+        <td class="n">${esc(this.formatNumber(this.getEffectiveStandardPacking(m) || 0))}</td>
+        <td class="c">${esc(this.getKkRollsText(m))}</td>
         <td class="c">${m.kkChecked ? '☑' : '☐'}</td>
       </tr>`;
     }).join('');
@@ -5755,12 +5788,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       <tr>
         <th class="c">STT</th>
         <th>Mã hàng</th>
+        <th>Tên hàng</th>
         <th>PO</th>
         <th>IMD</th>
         <th class="c">Tồn kho</th>
         <th>Vị trí</th>
         <th>Kho</th>
         <th>Pallet</th>
+        <th class="c">Standard</th>
+        <th class="c">Cuộn</th>
         <th class="c">KK</th>
       </tr>
     </thead>
@@ -6038,7 +6074,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         for (const m of chunk) {
           const fromLocation = this.normalizeMultiLocationValue(String(m.location || ''));
           const payload: Record<string, unknown> = {
-            location: next,
+            ...this.inventoryLocationWriteFields(next),
             updatedAt: changedAt,
             lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
             modifiedBy,
@@ -6085,13 +6121,125 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Sửa vị trí 1 dòng chi tiết — không đổi ô vị trí ở dòng tổng. */
   async saveKkDetailLocation(line: InventoryMaterial): Promise<void> {
     if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
-    await this.persistLocationChange(line, { silent: true, bypassUnlock: true });
+    await this.persistLocationChange(line, { silent: true, bypassUnlock: true, allowEmpty: true });
   }
 
   /** Sửa pallet 1 dòng chi tiết — không đổi ô pallet ở dòng tổng. */
   async saveKkDetailPallet(line: InventoryMaterial): Promise<void> {
     if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
     await this.persistPalletChange(line, String(line.palletId || ''), { silent: true, bypassUnlock: true });
+  }
+
+  getKkMaterialName(material: InventoryMaterial): string {
+    const code = String(material?.materialCode || '').trim().toUpperCase();
+    if (!code) return '—';
+    const cat = this.catalogCache.get(code) || this.catalogCache.get(material.materialCode);
+    const catName = String(cat?.materialName || '').trim();
+    if (catName) return catName;
+    const rowName = String(material.materialName || '').trim();
+    if (rowName && rowName.toUpperCase() !== code) return rowName;
+    const inboundName = this.inboundNameCache.get(code);
+    if (inboundName) return inboundName;
+    return '—';
+  }
+
+  getKkRollsText(material: InventoryMaterial): string {
+    const b = this.getKkStockBreakdown(material, this.getEffectiveStandardPacking(material));
+    if (!b.sp) return '—';
+    if (b.bagCount <= 0) return '0';
+    if (b.oddBags) return `${b.fullCount}+1`;
+    return String(b.fullCount);
+  }
+
+  getKkRollsTitle(material: InventoryMaterial): string {
+    const b = this.getKkStockBreakdown(material, this.getEffectiveStandardPacking(material));
+    if (!b.sp) return 'Chưa có Standard Packing';
+    if (b.oddBags) {
+      return `${b.fullCount} cuộn chẵn × ${this.formatNumber(b.sp)} + 1 cuộn lẻ ${this.formatNumber(b.oddQty)}`;
+    }
+    return `${b.fullCount} cuộn × ${this.formatNumber(b.sp)}`;
+  }
+
+  private async ensureKkTypeMaterialNames(): Promise<void> {
+    try {
+      await this.ensureCatalogLoaded();
+      const codes = [...new Set(
+        this.kkTypeDetailAll.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
+      )];
+      const missing = codes.filter((c) => {
+        const cat = this.catalogCache.get(c);
+        if (String(cat?.materialName || '').trim()) return false;
+        return !this.inboundNameCache.has(c);
+      });
+      for (let i = 0; i < missing.length; i += 10) {
+        const chunk = missing.slice(i, i + 10);
+        try {
+          const snap = await this.firestore
+            .collection('inbound-materials', (ref) => ref.where('materialCode', 'in', chunk).limit(40))
+            .get()
+            .toPromise();
+          for (const doc of snap?.docs || []) {
+            const d = doc.data() as any;
+            const code = String(d.materialCode || '').trim().toUpperCase();
+            const name = String(d.materialName || d.name || '').trim();
+            if (code && name && !this.inboundNameCache.has(code)) {
+              this.inboundNameCache.set(code, name);
+            }
+          }
+        } catch {
+          /* ignore inbound lookup */
+        }
+      }
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.warn('[KK] ensureKkTypeMaterialNames:', e);
+    }
+  }
+
+  async saveKkTypeStandard(material: InventoryMaterial): Promise<void> {
+    if (!this.canEdit || this.kkLocMapBusy || !material) return;
+    const code = String(material.materialCode || '').trim().toUpperCase();
+    const sp = Math.max(0, Number(material.standardPacking) || 0);
+    if (!code) return;
+    const cat = this.catalogCache.get(code);
+    if (cat?.standardPackingLocked === true) {
+      alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL.');
+      material.standardPacking = this.getStandardPacking(code);
+      this.cdr.detectChanges();
+      return;
+    }
+    const prev = this.getStandardPacking(code) || Number(cat?.standardPacking) || 0;
+    if (Math.abs(sp - prev) < 1e-9) {
+      this.applyKkStandardToCode(code, sp);
+      return;
+    }
+    this.kkLocMapBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const operator = await this.resolveKkOperatorFromSession();
+      await this.nvlCatalogFull.update(code, { standardPacking: sp }, operator);
+      const existing = this.catalogCache.get(code) || { materialCode: code };
+      this.catalogCache.set(code, { ...existing, materialCode: code, standardPacking: sp });
+      this.applyKkStandardToCode(code, sp);
+    } catch (e) {
+      console.error('❌ saveKkTypeStandard:', e);
+      alert('❌ Không lưu được Standard Packing lên danh mục.');
+    } finally {
+      this.kkLocMapBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private applyKkStandardToCode(code: string, sp: number): void {
+    const apply = (m: InventoryMaterial) => {
+      if (String(m.materialCode || '').trim().toUpperCase() === code) {
+        m.standardPacking = sp;
+      }
+    };
+    this.kkLocMapTypeCache.forEach((list) => list.forEach(apply));
+    this.inventoryMaterials.forEach(apply);
+    this.filteredInventory.forEach(apply);
+    this.displayedInventory.forEach(apply);
   }
 
   async onKkDetailTick(line: InventoryMaterial, checked: boolean): Promise<void> {
@@ -6419,7 +6567,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (stock <= 0) continue;
         const materialCode = String(data.materialCode || '').trim().toUpperCase();
         if (!materialCode) continue;
-        const warehouse = this.kkWarehouseFromLocation(String(data.location || data.viTri || ''));
+        const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
         const groupCode = this.kkCatalog.groupCodeFromMaterial(materialCode);
         const productType = (groupCode && this.kkCatalogTypeMap.get(groupCode)) || 'Chưa gán danh mục';
         const kkOn = this.isKkFlagOn(data.kkChecked);
@@ -6612,10 +6760,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     row.location = next;
     if (!next) return;
     if (next === row.locationSaved) return;
-
     const lines = this.kkLinesForTypeRow(row);
     if (!lines.length) return;
+    await this.writeKkTypeLocations(row, next, lines);
+  }
 
+  async clearKkTypeLocations(row: KkTypeRow): Promise<void> {
+    if (!this.canEdit || this.kkLocMapBusy) return;
+    const lines = this.kkLinesForTypeRow(row).filter((m) => String(m.location || '').trim());
+    if (!lines.length) {
+      row.location = '';
+      row.locationSaved = '';
+      this.cdr.detectChanges();
+      return;
+    }
+    const ok = confirm(`Xóa vị trí mọi dòng loại hàng ${row.productType}?\n(${lines.length} dòng)`);
+    if (!ok) return;
+    await this.writeKkTypeLocations(row, '', lines);
+  }
+
+  private async writeKkTypeLocations(row: KkTypeRow, next: string, lines: InventoryMaterial[]): Promise<void> {
     this.kkLocMapBusy = true;
     this.cdr.detectChanges();
     try {
@@ -6628,7 +6792,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         for (const m of chunk) {
           const fromLocation = this.normalizeMultiLocationValue(String(m.location || ''));
           const payload: Record<string, unknown> = {
-            location: next,
+            ...this.inventoryLocationWriteFields(next),
             updatedAt: changedAt,
             lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
             modifiedBy,
@@ -6647,18 +6811,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
               fromLocation,
               toLocation: next,
               changedBy: modifiedBy,
-              changeType: 'kk-type-summary',
+              changeType: next ? 'kk-type-summary' : 'kk-type-clear',
               changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
             });
           }
         }
         await batch.commit();
       }
+      for (const m of lines) {
+        m.location = next;
+        const rowMeta = m as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
+        rowMeta.__prevLocation = next;
+        rowMeta.__locationAtLoad = next;
+        rowMeta.locationManualOverride = true;
+      }
+      row.location = next;
       row.locationSaved = next;
-      await this.loadKkByType();
     } catch (e) {
-      console.error('❌ saveKkTypeLocation:', e);
-      alert('❌ Không lưu được vị trí theo loại hàng.');
+      console.error('❌ writeKkTypeLocations:', e);
+      alert(next ? '❌ Không lưu được vị trí theo loại hàng.' : '❌ Không xóa được vị trí theo loại hàng.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -7785,7 +7956,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Lưu riêng cột Vị trí lên inventory-materials + material-location-history. */
   private async persistLocationChange(
     material: InventoryMaterial,
-    opts?: { bypassUnlock?: boolean; silent?: boolean }
+    opts?: { bypassUnlock?: boolean; silent?: boolean; allowEmpty?: boolean }
   ): Promise<boolean> {
     if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
     if (!material?.id) return false;
@@ -7800,7 +7971,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       String(row.__prevLocation ?? row.__locationAtLoad ?? '')
     );
     const newLocation = this.normalizeMultiLocationValue(String(material.location ?? ''));
-    if (!newLocation) {
+    if (!newLocation && !opts?.allowEmpty) {
       alert('⚠️ Vui lòng nhập vị trí trước khi lưu.');
       return false;
     }
@@ -7816,7 +7987,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const modifiedBy = await this.resolveLocationOperatorId();
     const updatePayload: Record<string, unknown> = {
-      location: newLocation,
+      ...this.inventoryLocationWriteFields(newLocation),
       updatedAt: new Date(),
       lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
       modifiedBy,
@@ -8209,7 +8380,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
     if (!material?.id) return false;
     const next = String(raw || '').trim().toUpperCase();
-    const prev = String((material as { __prevPalletId?: string }).__prevPalletId ?? material.palletId ?? '').trim().toUpperCase();
+    const prev = String((material as { __prevPalletId?: string }).__prevPalletId || '').trim().toUpperCase();
     if (next === prev) return true;
     const previousUi = material.palletId;
     material.palletId = next;

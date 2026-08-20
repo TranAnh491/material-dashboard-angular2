@@ -4187,6 +4187,45 @@ $asm1-toolbar-h: 36px;
   .kk-type-detail__table {
     display: block !important;
   }
+
+  &--detail {
+    .excel-header {
+      padding: 6px 12px;
+      gap: 4px;
+
+      h4 {
+        font-size: 15px;
+        padding: 0;
+      }
+    }
+
+    .kk-page__body {
+      padding: 6px 10px 8px;
+      gap: 6px;
+    }
+
+    .kk-type-detail {
+      gap: 6px;
+    }
+
+    .kk-type-detail__bar {
+      padding: 6px 8px;
+      gap: 6px;
+    }
+
+    .excel-table th,
+    .excel-table td {
+      padding: 3px 6px;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .excel-table .editable-cell {
+      padding: 2px 4px;
+      min-height: 22px;
+      font-size: 12px;
+    }
+  }
 }
 
 .kk-page__body {
@@ -4305,14 +4344,73 @@ $asm1-toolbar-h: 36px;
   color: #0f172a;
 }
 
+.kk-type-detail__clear-loc {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background: #ffe4e6;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 .kk-type-detail__groups {
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
-  max-width: 280px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.kk-type-detail__search {
+  max-width: 160px;
+}
+
+.kk-type-name-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.kk-type-std-cell {
+  min-width: 72px;
+  max-width: 88px;
+
+  .editable-cell {
+    width: 100%;
+    text-align: right;
+  }
+}
+
+.kk-type-roll-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.kk-type-pager--bar {
+  margin-left: auto;
+  padding: 0;
+  gap: 6px;
+
+  .pagination-info {
+    font-size: 12px;
+  }
 }
 
 .kk-type-print-btn {

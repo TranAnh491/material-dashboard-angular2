@@ -1,7 +1,7 @@
 <div class="main-content" [class.mat-m-page]="isMobile && !showKkLocMap">
 
   <!-- Kiểm tra KK — trang full, cùng khung Materials -->
-  <div class="kk-page excel-container" *ngIf="showKkLocMap">
+  <div class="kk-page excel-container" *ngIf="showKkLocMap" [class.kk-page--detail]="kkLocMapView === 'type' && !!kkActiveProductType">
     <div class="excel-header">
       <div class="excel-header__title-row">
         <h4>
@@ -267,8 +267,15 @@
                      [checked]="row.remaining === 0 && row.totalLines > 0"
                      [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
                      (change)="onKkByTypeTick(row, $any($event.target).checked)">
-              Tick KK cả loại
+              Tick KK tất cả
             </label>
+            <button type="button"
+                    class="kk-type-detail__clear-loc"
+                    (click)="clearKkTypeLocations(row)"
+                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                    title="Xóa vị trí mọi dòng của loại hàng đang chọn">
+              Xóa vị trí tất cả
+            </button>
             <input type="text"
                    class="kk-loc-map__pallet-input"
                    [(ngModel)]="row.location"
@@ -278,21 +285,18 @@
                    (blur)="saveKkTypeLocation(row)"
                    autocomplete="off"
                    spellcheck="false">
-            <span class="kk-type-detail__groups">{{ row.groupCodes[0] || '—' }}<ng-container *ngIf="row.groupCodes.length > 1"> · {{ row.groupCodes.length }} nhóm mã</ng-container></span>
-            <button type="button"
-                    class="kk-type-print-btn"
-                    (click)="printKkTypeList()"
-                    [disabled]="!kkTypeDetailAll.length"
-                    title="In danh sách loại hàng">
-              <i class="material-icons">print</i>
-              In danh sách
-            </button>
-          </div>
-          <ng-container *ngIf="kkActiveTypeRow">
-            <div class="pagination-container kk-type-pager">
-              <div class="pagination-info">
-                Trang {{ kkTypePage }} / {{ kkTypeDetailTotalPages }} — {{ kkTypeDetailPaged.length }} / {{ kkTypeDetailAll.length }} dòng ({{ kkTypePageSize }}/trang)
-              </div>
+            <span class="kk-type-detail__groups">
+              <ng-container *ngIf="kkTypeSharedGroupPrefix(row.groupCodes) as prefix">{{ prefix }} · </ng-container>
+              {{ row.groupCodes.length }} nhóm mã
+            </span>
+            <input type="search"
+                   class="kk-loc-map__pallet-input kk-type-detail__search"
+                   [(ngModel)]="kkTypeDetailQuery"
+                   (ngModelChange)="onKkTypeDetailQueryChange()"
+                   placeholder="Tìm mã…"
+                   autocomplete="off">
+            <div class="pagination-container kk-type-pager kk-type-pager--bar" *ngIf="kkTypeDetailFiltered.length">
+              <span class="pagination-info">{{ kkTypePage }}/{{ kkTypeDetailTotalPages }} · {{ kkTypeDetailFiltered.length }} dòng</span>
               <div class="pagination-controls">
                 <button type="button" class="page-btn" (click)="kkTypePrevPage()" [disabled]="kkTypePage <= 1">
                   <i class="material-icons">chevron_left</i>
@@ -305,18 +309,23 @@
                 </button>
               </div>
             </div>
+          </div>
+          <ng-container *ngIf="kkActiveTypeRow">
             <div class="table-container kk-type-detail__table">
               <table class="excel-table">
                 <thead>
                   <tr>
                     <th>STT</th>
                     <th>Mã hàng</th>
+                    <th>Tên hàng</th>
                     <th>PO</th>
                     <th>IMD</th>
                     <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
                     <th>Vị trí</th>
                     <th>Kho</th>
                     <th>Pallet</th>
+                    <th title="Standard Packing — nhập 1 ô thì cả mã đổi, đồng bộ danh mục">Standard</th>
+                    <th title="Số cuộn = tồn ÷ Standard; phần lẻ +1">Cuộn</th>
                     <th title="Đã kiểm kê">KK</th>
                   </tr>
                 </thead>
@@ -325,6 +334,7 @@
                       [class.iqc-row]="isIQCLocation(material.location)">
                     <td class="row-header">{{ kkTypeRowIndex(i) }}</td>
                     <td class="code-cell material-code-cell">{{ material.materialCode }}</td>
+                    <td class="kk-type-name-cell" [title]="getKkMaterialName(material)">{{ getKkMaterialName(material) }}</td>
                     <td class="po-cell">{{ material.poNumber || '—' }}</td>
                     <td class="date-cell">{{ getDisplayIMD(material) }}</td>
                     <td class="number-cell">{{ formatNumber(calculateCurrentStock(material)) }}</td>
@@ -334,6 +344,7 @@
                              [(ngModel)]="material.location"
                              placeholder="Vị trí"
                              [disabled]="!canEdit || kkLocMapBusy"
+                             (focus)="rememberLocationBeforeEdit(material)"
                              (keydown.enter)="$any($event.target).blur()"
                              (blur)="saveKkDetailLocation(material)"
                              autocomplete="off"
@@ -346,11 +357,26 @@
                              [(ngModel)]="material.palletId"
                              placeholder="Pallet"
                              [disabled]="!canEdit || kkLocMapBusy"
+                             (focus)="rememberPalletBeforeEdit(material)"
                              (keydown.enter)="$any($event.target).blur()"
                              (blur)="saveKkDetailPallet(material)"
                              autocomplete="off"
                              spellcheck="false">
                     </td>
+                    <td class="kk-type-std-cell">
+                      <input type="number"
+                             class="editable-cell"
+                             [ngModel]="getEffectiveStandardPacking(material) || ''"
+                             (ngModelChange)="material.standardPacking = $event === '' || $event === null ? 0 : +$event"
+                             (keydown.enter)="$any($event.target).blur()"
+                             (blur)="saveKkTypeStandard(material)"
+                             min="0"
+                             step="0.1"
+                             placeholder="SP"
+                             [disabled]="!canEdit || kkLocMapBusy"
+                             title="Nhập Standard — áp dụng mọi dòng cùng mã và danh mục NVL">
+                    </td>
+                    <td class="number-cell kk-type-roll-cell" [title]="getKkRollsTitle(material)">{{ getKkRollsText(material) }}</td>
                     <td class="kk-cell">
                       <input type="checkbox"
                              [checked]="!!material.kkChecked"
@@ -359,26 +385,13 @@
                     </td>
                   </tr>
                   <tr *ngIf="!kkTypeDetailAll.length">
-                    <td colspan="9" class="hidden-empty">Không có dòng tồn loại hàng này{{ kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '' }}.</td>
+                    <td colspan="12" class="hidden-empty">Không có dòng tồn loại hàng này{{ kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '' }}.</td>
+                  </tr>
+                  <tr *ngIf="kkTypeDetailAll.length && !kkTypeDetailFiltered.length">
+                    <td colspan="12" class="hidden-empty">Không có mã nào khớp "{{ kkTypeDetailQuery.trim() }}".</td>
                   </tr>
                 </tbody>
               </table>
-            </div>
-            <div class="pagination-container kk-type-pager" *ngIf="kkTypeDetailAll.length > kkTypePageSize">
-              <div class="pagination-info">
-                Trang {{ kkTypePage }} / {{ kkTypeDetailTotalPages }}
-              </div>
-              <div class="pagination-controls">
-                <button type="button" class="page-btn" (click)="kkTypePrevPage()" [disabled]="kkTypePage <= 1">
-                  <i class="material-icons">chevron_left</i>
-                </button>
-                <select class="page-selector" [ngModel]="kkTypePage" (ngModelChange)="kkTypeGoToPage(+$event)">
-                  <option *ngFor="let p of kkTypePageOptions" [ngValue]="p">{{ p }}</option>
-                </select>
-                <button type="button" class="page-btn" (click)="kkTypeNextPage()" [disabled]="kkTypePage >= kkTypeDetailTotalPages">
-                  <i class="material-icons">chevron_right</i>
-                </button>
-              </div>
             </div>
           </ng-container>
         </div>
