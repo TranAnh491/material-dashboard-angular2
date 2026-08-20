@@ -18,6 +18,13 @@ export class LoginComponent implements OnInit {
   loading = false;
   currentLanguage: 'en' | 'vi' = 'vi'; // Default to Vietnamese
 
+  unlockLoginAutofill(event: Event): void {
+    const el = event.target as HTMLInputElement | null;
+    if (el?.hasAttribute('readonly')) {
+      el.removeAttribute('readonly');
+    }
+  }
+
   onEmployeeIdInput(event: Event, formType: 'login' | 'signup'): void {
     const inputEl = event.target as HTMLInputElement;
     const raw = inputEl.value || '';
@@ -166,6 +173,7 @@ export class LoginComponent implements OnInit {
             this.currentLanguage === 'en' ? 'Admin login successful!' : 'Đăng nhập quản lý thành công!', 
             'success'
           );
+          this.clearLoginFields();
           this.navigateAfterLogin();
           return;
         }
@@ -184,6 +192,7 @@ export class LoginComponent implements OnInit {
             this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!',
             'success'
           );
+          this.clearLoginFields();
           this.navigateAfterLogin();
           return;
         }
@@ -202,6 +211,7 @@ export class LoginComponent implements OnInit {
           this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!', 
           'success'
         );
+        this.clearLoginFields();
         this.navigateAfterLogin();
       } catch (error: any) {
         this.showMessage(this.getErrorMessage(error), 'error');
@@ -317,6 +327,10 @@ export class LoginComponent implements OnInit {
     }
     
     return this.currentLanguage === 'en' ? 'An error occurred. Please try again!' : 'Có lỗi xảy ra, vui lòng thử lại!';
+  }
+
+  private clearLoginFields(): void {
+    this.loginForm.reset({ employeeId: '', password: '' });
   }
 
   private showMessage(message: string, type: 'success' | 'error'): void {

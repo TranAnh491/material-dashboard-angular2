@@ -172,7 +172,8 @@ type MaterialsOtpAction =
   | 'reset-all'
   | 'fix-batch'
   | 'snapshot'
-  | 'hidden-list';
+  | 'hidden-list'
+  | 'manual-on';
 
 type HiddenInventoryRow = {
   id: string;
@@ -414,6 +415,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   materialsOtpActionLabel = '';
   materialsInventoryUnlocked = false;
   private pendingMaterialsOtpAction: MaterialsOtpAction | null = null;
+  /** More → Manual ON/OFF: nhập tồn đầu / xuất tay. Mặc định OFF, mỗi nhà máy riêng. */
+  private manualStockEditByFactory: Record<'ASM1' | 'ASM2', boolean> = {
+    ASM1: false,
+    ASM2: false
+  };
 
   /** In Tùy Chỉnh dialog */
   showCustomPrintDialog = false;
@@ -5483,6 +5489,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   get kkTypeBoxes(): Array<{
     productType: string;
     groupCodes: string[];
+    sharedPrefix: string;
     stock: number;
     checked: number;
     totalLines: number;
@@ -5532,19 +5539,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       map.set(productType, cur);
     }
     return Array.from(map.values())
-      .map((v) => ({
-        productType: v.productType,
-        groupCodes: Array.from(v.groups).sort((a, b) => this.compareNhuaGroupCode(a, b)),
-        stock: v.stock,
-        checked: v.checked,
-        totalLines: v.totalLines,
-        remaining: v.remaining
-      }))
+      .map((v) => {
+        const groupCodes = Array.from(v.groups).sort((a, b) => this.compareNhuaGroupCode(a, b));
+        return {
+          productType: v.productType,
+          groupCodes,
+          sharedPrefix: this.kkTypeSharedGroupPrefix(groupCodes),
+          stock: v.stock,
+          checked: v.checked,
+          totalLines: v.totalLines,
+          remaining: v.remaining
+        };
+      })
       .filter((v) => {
         if (!q) return true;
         return v.productType.toUpperCase().includes(q) || v.groupCodes.some((g) => g.includes(q));
       })
       .sort((a, b) => this.compareKkTypeBox(a, b));
+  }
+
+  /** Đầu mã chung của cả loại (vd B006). Chỉ hiện khi mọi nhóm mã cùng prefix. */
+  private kkTypeSharedGroupPrefix(groupCodes: string[]): string {
+    const prefixes = (groupCodes || [])
+      .map((raw) => {
+        const c = String(raw || '').trim().toUpperCase();
+        const m = /^([ABR]\d{3})/.exec(c);
+        return m ? m[1] : '';
+      });
+    if (!prefixes.length || prefixes.some((p) => !p)) return '';
+    const first = prefixes[0];
+    return prefixes.every((p) => p === first) ? first : '';
   }
 
   /** Nhóm nhựa: B+6 trước (B001001 đầu), rồi A+6, rồi mã khác. */
@@ -6860,6 +6884,39 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showMorePopup = false;
   }
 
+  get isManualStockEditOn(): boolean {
+    return !!this.manualStockEditByFactory[this.selectedFactory];
+  }
+
+  /** Alias cột Đã xuất — chỉ gõ tay khi Manual ON. */
+  get isExportColumnUnlocked(): boolean {
+    return this.isManualStockEditOn;
+  }
+
+  toggleManualStockEdit(): void {
+    if (this.isManualStockEditOn) {
+      this.setManualStockEdit(false);
+      return;
+    }
+    this.pendingMaterialsOtpAction = 'manual-on';
+    this.materialsOtpActionLabel = `Bật Manual — tồn đầu / xuất tay (${this.selectedFactory})`;
+    this.closeMorePopup();
+    this.openMaterialsOtpModal();
+  }
+
+  private setManualStockEdit(on: boolean): void {
+    this.manualStockEditByFactory[this.selectedFactory] = on;
+    if (!on) {
+      this.inventoryMaterials.forEach((m) => {
+        m.isEditingOpeningStock = false;
+      });
+      this.filteredInventory.forEach((m) => {
+        m.isEditingOpeningStock = false;
+      });
+    }
+    this.cdr.markForCheck();
+  }
+
   /** Các thao tác More đổi tồn / import / xóa — cần OTP Zalo ASP0106 (phiên 10 phút). */
   runMoreSensitiveAction(action: MaterialsOtpAction, label: string): void {
     if (this.materialsInventoryUnlock.isUnlocked()) {
@@ -6982,6 +7039,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         break;
       case 'hidden-list':
         this.openHiddenInventoryPopupDirect();
+        break;
+      case 'manual-on':
+        this.setManualStockEdit(true);
         break;
       default:
         break;
@@ -9410,6 +9470,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Update opening stock quantity
   async updateOpeningStock(material: InventoryMaterial): Promise<void> {
+    if (!this.isManualStockEditOn) return;
     try {
       const openingStockDisplay = material.openingStock !== null ? material.openingStock : 'trống';
       console.log(`📝 Updating opening stock for ${material.materialCode} - PO ${material.poNumber}: ${openingStockDisplay}`);
@@ -9430,15 +9491,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  // Update exported amount (when unlocked) - Chỉ cho phép user có quyền Xóa
+  // Update exported amount (when Manual ON)
   updateExportedAmount(material: InventoryMaterial): void {
     console.log(`🔍 updateExportedAmount called for: ${material.materialCode} - PO ${material.poNumber}`);
     console.log(`🔍 Current material.exported value: ${material.exported}`);
     console.log(`🔍 Current material.id: ${material.id}`);
-    
-    // Kiểm tra quyền và trạng thái mở khóa
-    if (!this.canDelete) {
-      console.error('❌ User does not have delete permission to update exported amount');
+
+    if (!this.isManualStockEditOn) {
       return;
     }
     
@@ -9675,6 +9734,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Edit functions for Opening Stock
   startEditingOpeningStock(material: InventoryMaterial): void {
+    if (!this.isManualStockEditOn) return;
     material.isEditingOpeningStock = true;
   }
 

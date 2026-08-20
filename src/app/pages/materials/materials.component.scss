@@ -1569,6 +1569,15 @@
     background-color: #f8f9fa;
     border-color: #dee2e6;
   }
+
+  &--locked {
+    cursor: default;
+
+    &:hover {
+      background-color: transparent;
+      border-color: transparent;
+    }
+  }
 }
 
 // Giao diện phẳng cho cột Tồn đầu - giống hệt cột Vị trí

@@ -245,7 +245,7 @@
               (click)="selectKkTypeBox(box.productType)"
               [title]="box.productType">
               <strong>{{ box.productType }}</strong>
-              <span class="kk-type-box__code" *ngIf="box.groupCodes[0]">{{ box.groupCodes[0] }}</span>
+              <span class="kk-type-box__code" *ngIf="box.sharedPrefix">{{ box.sharedPrefix }}</span>
               <span *ngIf="kkLocMapWarehouseFilter">{{ box.checked }}/{{ box.totalLines }} KK</span>
               <span *ngIf="kkLocMapWarehouseFilter">tồn {{ formatNumber(box.stock) }}</span>
               <span class="kk-type-box__groups" *ngIf="box.groupCodes.length">{{ box.groupCodes.length }} nhóm mã</span>
@@ -993,13 +993,15 @@
           
           <div class="info-row">
             <span class="label">Tồn đầu:</span>
-            <input type="number" 
-                   class="mobile-input" 
+            <span class="value" *ngIf="!isManualStockEditOn">{{formatNumber(material.openingStock || 0)}}</span>
+            <input *ngIf="isManualStockEditOn"
+                   type="number"
+                   class="mobile-input"
                    [ngModel]="material.openingStock || ''"
-                   (ngModelChange)="material.openingStock = $event === '' ? null : +$event" 
-                   (change)="updateOpeningStock(material)" 
-                   min="0" 
-                   step="0.1" 
+                   (ngModelChange)="material.openingStock = $event === '' ? null : +$event"
+                   (change)="updateOpeningStock(material)"
+                   min="0"
+                   step="0.1"
                    placeholder="Nhập tồn đầu">
           </div>
           
@@ -1252,10 +1254,13 @@
               </ng-template>
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
-              <span *ngIf="!material.isEditingOpeningStock" 
-                    class="display-value" 
+              <span *ngIf="!material.isEditingOpeningStock"
+                    class="display-value"
+                    [class.display-value--locked]="!isManualStockEditOn"
                     (click)="startEditingOpeningStock(material)"
-                    [title]="'Click để sửa tồn đầu: ' + formatNumber(material.openingStock || 0)">
+                    [title]="isManualStockEditOn
+                      ? ('Click để sửa tồn đầu: ' + formatNumber(material.openingStock || 0))
+                      : 'Manual OFF — More → Manual ON (OTP Zalo ASP0106) để nhập tồn đầu'">
                 {{formatNumber(material.openingStock || 0)}}
               </span>
               <input *ngIf="material.isEditingOpeningStock"
@@ -1275,7 +1280,7 @@
             <td class="number-cell" 
                 [class.readonly-cell]="!isExportColumnUnlocked"
                 [class.editable-export-cell]="isExportColumnUnlocked"
-                [title]="isExportColumnUnlocked ? 'Click để sửa số lượng đã xuất' : 'Số lượng đã xuất từ RM1 outbound: ' + (material.exported || 0) + '\nTự động cập nhật và lưu trữ vĩnh viễn\nKể cả khi xóa dòng xuất ở outbound cũng không ảnh hưởng'">
+                [title]="isExportColumnUnlocked ? 'Click để sửa số lượng đã xuất' : 'Manual OFF — More → Manual ON (OTP Zalo ASP0106) để xuất tay. Hiện tại lấy từ RM1 outbound: ' + (material.exported || 0)">
               <ng-container *ngIf="!isExportColumnUnlocked">
                 {{formatNumber(material.exported || 0)}}
               </ng-container>
@@ -2200,6 +2205,7 @@
           <p class="more-popup-header__sub">
             RM Inventory · {{ selectedFactory }}
             <span class="more-otp-badge" *ngIf="materialsInventoryUnlocked">Đã mở khóa OTP</span>
+            <span class="more-otp-badge" *ngIf="isManualStockEditOn">Manual ON</span>
           </p>
         </div>
       </div>
@@ -2286,6 +2292,17 @@
       <section class="more-section">
         <div class="more-section__label">Inventory</div>
         <div class="more-grid">
+          <button type="button" class="more-tile" (click)="toggleManualStockEdit()">
+            <span class="more-tile__icon" [class.more-tile__icon--green]="isManualStockEditOn" [class.more-tile__icon--slate]="!isManualStockEditOn">
+              <i class="material-icons">{{ isManualStockEditOn ? 'toggle_on' : 'toggle_off' }}</i>
+            </span>
+            <span class="more-tile__text">
+              <strong>Manual</strong>
+              <small *ngIf="!isManualStockEditOn">OFF — khóa tồn đầu / xuất tay · bật cần OTP Zalo ASP0106</small>
+              <small *ngIf="isManualStockEditOn">ON — được nhập tồn đầu / xuất tay · bấm để tắt</small>
+            </span>
+            <i class="material-icons more-tile__chevron">{{ isManualStockEditOn ? 'toggle_on' : 'lock' }}</i>
+          </button>
           <button type="button" class="more-tile more-tile--accent" (click)="runMoreSensitiveAction('hidden-list', 'Danh mục Ẩn / Pushback — ' + selectedFactory)">
             <span class="more-tile__icon more-tile__icon--amber"><i class="material-icons">visibility_off</i></span>
             <span class="more-tile__text">
