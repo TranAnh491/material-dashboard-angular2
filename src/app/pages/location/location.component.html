@@ -378,6 +378,10 @@
             <i class="material-icons">location_on</i>
             Theo vị trí
           </button>
+          <button type="button" class="bulk-change-pallet-btn mobile" (click)="openBulkChangeByPalletModal()">
+            <i class="material-icons">inventory_2</i>
+            Theo Pallet
+          </button>
         </div>
 
         <div class="search-box loc-m-search">
@@ -541,6 +545,10 @@
               <i class="material-icons">location_on</i>
               Theo vị trí
             </button>
+            <button class="bulk-change-pallet-btn" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
+              <i class="material-icons">inventory_2</i>
+              Theo Pallet
+            </button>
             <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Materials">
               <i class="material-icons">refresh</i>
               Refresh
@@ -563,6 +571,10 @@
           <button class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
             <i class="material-icons">location_on</i>
             Theo vị trí
+          </button>
+          <button class="bulk-change-pallet-btn mobile" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
+            <i class="material-icons">inventory_2</i>
+            Theo Pallet
           </button>
         </div>
         
@@ -937,8 +949,9 @@
   <div class="modal-content bulk-change-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <h3>
-        <i class="material-icons">swap_calls</i>
-        Location ({{ selectedFactory || '...' }})
+        <i class="material-icons">{{ bulkSource === 'pallet' ? 'inventory_2' : 'swap_calls' }}</i>
+        <ng-container *ngIf="bulkSource === 'pallet'">Theo Pallet ({{ selectedFactory || '...' }})</ng-container>
+        <ng-container *ngIf="bulkSource !== 'pallet'">Location ({{ selectedFactory || '...' }})</ng-container>
       </h3>
       <button class="close-btn" (click)="closeBulkChangeLocationModal()">
         <i class="material-icons">close</i>
@@ -946,39 +959,73 @@
     </div>
 
     <div class="modal-body">
-      <!-- Step 1: Scan location (scanner only) -->
+      <!-- Step 1: Scan location or pallet -->
       <div *ngIf="bulkStep === 'scan-location'" class="bulk-step">
-        <div class="step-title">
-          <h4>Bước 1: Scan hoặc nhập vị trí ({{ selectedFactory || '...' }})</h4>
-          <p class="step-desc">Scan hoặc nhập tay vị trí, rồi nhấn Enter / tìm.</p>
-        </div>
+        <ng-container *ngIf="bulkSource !== 'pallet'">
+          <div class="step-title">
+            <h4>Bước 1: Scan hoặc nhập vị trí ({{ selectedFactory || '...' }})</h4>
+            <p class="step-desc">Scan hoặc nhập tay vị trí, rồi nhấn Enter / tìm.</p>
+          </div>
 
-        <div class="scan-input-container">
-          <input
-            type="text"
-            id="bulkAsm1LocationInput"
-            [(ngModel)]="bulkScanLocationInput"
-            (keyup.enter)="processBulkAsm1Location()"
-            placeholder="Scan hoặc nhập vị trí..."
-            class="scan-input"
-            [disabled]="isBulkLoading">
-          <button class="scan-btn" (click)="processBulkAsm1Location()" [disabled]="isBulkLoading || !bulkScanLocationInput.trim()">
-            <i class="material-icons">{{ isBulkLoading ? 'hourglass_empty' : 'search' }}</i>
-          </button>
-        </div>
+          <div class="scan-input-container">
+            <input
+              type="text"
+              id="bulkAsm1LocationInput"
+              [(ngModel)]="bulkScanLocationInput"
+              (keyup.enter)="processBulkAsm1Location()"
+              placeholder="Scan hoặc nhập vị trí..."
+              class="scan-input"
+              [disabled]="isBulkLoading">
+            <button class="scan-btn" (click)="processBulkAsm1Location()" [disabled]="isBulkLoading || !bulkScanLocationInput.trim()">
+              <i class="material-icons">{{ isBulkLoading ? 'hourglass_empty' : 'search' }}</i>
+            </button>
+          </div>
 
-        <div *ngIf="isBulkLoading" class="loading-indicator">
-          <div class="spinner"></div>
-          <span>Đang tải mã hàng theo vị trí...</span>
-        </div>
+          <div *ngIf="isBulkLoading" class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Đang tải mã hàng theo vị trí...</span>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="bulkSource === 'pallet'">
+          <div class="step-title">
+            <h4>Bước 1: Scan pallet</h4>
+            <p class="step-desc">Scan số pallet, rồi nhấn Enter. Chọn một hoặc toàn bộ mã trên pallet.</p>
+          </div>
+
+          <div class="scan-input-container">
+            <input
+              type="text"
+              id="bulkAsm1PalletInput"
+              [(ngModel)]="bulkScanPalletInput"
+              (keyup.enter)="processBulkByPallet()"
+              placeholder="Scan pallet..."
+              class="scan-input"
+              [disabled]="isBulkLoading"
+              autocomplete="off"
+              spellcheck="false">
+            <button class="scan-btn" (click)="processBulkByPallet()" [disabled]="isBulkLoading || !bulkScanPalletInput.trim()">
+              <i class="material-icons">{{ isBulkLoading ? 'hourglass_empty' : 'search' }}</i>
+            </button>
+          </div>
+
+          <div *ngIf="isBulkLoading" class="loading-indicator">
+            <div class="spinner"></div>
+            <span>Đang tải mã hàng theo pallet...</span>
+          </div>
+        </ng-container>
       </div>
 
       <!-- Step 2: Select items -->
       <div *ngIf="bulkStep === 'select-items'" class="bulk-step">
         <div class="step-title">
           <h4>Bước 2: Chọn mã hàng</h4>
-          <p class="step-desc">
+          <p class="step-desc" *ngIf="bulkSource !== 'pallet'">
             Vị trí: <strong>{{ bulkCurrentLocation }}</strong> |
+            Đã chọn: <strong>{{ bulkSelectedItems.size }}/{{ bulkItems.length }}</strong>
+          </p>
+          <p class="step-desc" *ngIf="bulkSource === 'pallet'">
+            Pallet: <strong>{{ bulkCurrentPallet }}</strong> |
             Đã chọn: <strong>{{ bulkSelectedItems.size }}/{{ bulkItems.length }}</strong>
           </p>
         </div>
@@ -1017,6 +1064,9 @@
                 <span class="item-imd" *ngIf="!item.importDateStr">IMD: —</span>
                 <span class="iqc-status-badge iqc-none" *ngIf="!item.iqcStatus">—</span>
               </div>
+              <div class="item-details" *ngIf="bulkSource === 'pallet' && item.location">
+                <span class="item-imd">Vị trí: {{ item.location }}</span>
+              </div>
               <div class="item-details" *ngIf="item.factoryInUse">
                 <span class="item-imd">Nhà máy sử dụng: {{ item.factoryInUse }}</span>
               </div>
@@ -1028,8 +1078,10 @@
       <!-- Step 3: Scan targets -->
       <div *ngIf="bulkStep === 'scan-targets'" class="bulk-step">
         <div class="step-title">
-          <h4>Bước 3: Chọn vị trí mới / pallet mới</h4>
-          <p class="step-desc">Mỗi phần có thể tick bỏ qua.</p>
+          <h4 *ngIf="bulkSource !== 'pallet'">Bước 3: Chọn vị trí mới / pallet mới</h4>
+          <h4 *ngIf="bulkSource === 'pallet'">Bước 3: Scan vị trí mới</h4>
+          <p class="step-desc" *ngIf="bulkSource !== 'pallet'">Mỗi phần có thể tick bỏ qua.</p>
+          <p class="step-desc" *ngIf="bulkSource === 'pallet'">Pallet <strong>{{ bulkCurrentPallet }}</strong> giữ nguyên. Scan vị trí mới rồi Done.</p>
         </div>
 
         <div class="target-section">
@@ -1044,7 +1096,7 @@
                   [disabled]="skipBulkNewLocation || isBulkLoading">
                 <span>ASM3</span>
               </label>
-              <label class="skip-toggle">
+              <label class="skip-toggle" *ngIf="bulkSource !== 'pallet'">
                 <input type="checkbox" [(ngModel)]="skipBulkNewLocation" (ngModelChange)="onSkipBulkLocationChange()">
                 <span>Bỏ qua</span>
               </label>
@@ -1060,14 +1112,17 @@
               placeholder="Scan hoặc nhập vị trí mới..."
               class="scan-input"
               [disabled]="isBulkLoading || skipBulkNewLocation">
-            <button class="scan-btn" type="button" (click)="focusBulkPalletInput()" [disabled]="isBulkLoading || skipBulkNewLocation" title="Nhảy sang ô pallet">
-              <i class="material-icons">arrow_forward</i>
+            <button class="scan-btn" type="button"
+                    (click)="bulkSource === 'pallet' ? confirmBulkChange() : focusBulkPalletInput()"
+                    [disabled]="isBulkLoading || skipBulkNewLocation || (bulkSource === 'pallet' && !canConfirmBulkTargets())"
+                    [title]="bulkSource === 'pallet' ? 'Done' : 'Nhảy sang ô pallet'">
+              <i class="material-icons">{{ bulkSource === 'pallet' ? 'check' : 'arrow_forward' }}</i>
             </button>
           </div>
           <p class="store-factory-warning" *ngIf="bulkFactoryMismatchWarning">{{ bulkFactoryMismatchWarning }}</p>
         </div>
 
-        <div class="target-section">
+        <div class="target-section" *ngIf="bulkSource !== 'pallet'">
           <div class="target-header">
             <span class="target-label">Scan pallet mới</span>
             <label class="skip-toggle">
@@ -1124,7 +1179,7 @@
       <button
         *ngIf="bulkStep === 'select-items'"
         class="btn btn-back"
-        (click)="bulkStep = 'scan-location'; bulkScanLocationInput = ''; bulkCurrentLocation = ''; bulkItems = []; bulkSelectedItems.clear();">
+        (click)="backBulkToScanStep()">
         <i class="material-icons">arrow_back</i>
         Quay lại
       </button>

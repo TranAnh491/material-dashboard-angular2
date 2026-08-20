@@ -57,6 +57,15 @@
                      (ngModelChange)="kkCountWh3 = $event; onKkCountWh3Change()">
               Tính WH3/ASM3
             </label>
+            <label class="kk-loc-map__opt"
+                   [class.kk-loc-map__opt--off]="!kkCountWh3"
+                   title="Chỉ hiện dòng đang ở kho WH3/ASM3">
+              <input type="checkbox"
+                     [ngModel]="kkWh3Only"
+                     [disabled]="!kkCountWh3"
+                     (ngModelChange)="kkWh3Only = $event; onKkWh3OnlyChange()">
+              Chỉ hiện ASM3
+            </label>
             <label class="kk-loc-map__opt" title="Chỉ hiện loại / dòng chưa tick KK">
               <input type="checkbox"
                      [ngModel]="kkFilterUncheckedOnly"
@@ -292,7 +301,7 @@
               <i class="material-icons">search</i>
               <input type="search"
                      [(ngModel)]="kkTypeSearchDraft"
-                     (keydown.enter)="applyKkTypeFilters()"
+                     (ngModelChange)="applyKkTypeFilters()"
                      placeholder="Tìm mã, tên hàng, pallet..."
                      autocomplete="off">
             </div>
@@ -316,6 +325,27 @@
             </select>
             <button type="button" class="kk-type-filter__search-btn" (click)="applyKkTypeFilters()">Tìm kiếm</button>
             <button type="button" class="kk-type-filter__clear" (click)="clearKkTypeFilters()">Xóa lọc</button>
+            <button type="button"
+                    class="kk-type-filter__tick-all"
+                    (click)="onKkByTypeTick(row, true)"
+                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                    title="Tick KK mọi dòng loại hàng đang chọn">
+              Tick toàn bộ với loại hàng
+            </button>
+            <button type="button"
+                    class="kk-type-filter__untick-all"
+                    (click)="onKkByTypeTick(row, false)"
+                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                    title="Bỏ tick KK mọi dòng loại hàng đang chọn">
+              Bỏ Tick toàn bộ với loại hàng
+            </button>
+            <button type="button"
+                    class="kk-type-filter__rename-pallet"
+                    (click)="renameKkTypePallet(row)"
+                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                    title="Đổi số pallet: nhập pallet hiện tại, rồi pallet mới">
+              Đổi số pallet
+            </button>
             <span class="kk-type-filter__count" *ngIf="kkTypeDetailFiltered.length">
               Hiển thị {{ kkTypeShowingFrom }} - {{ kkTypeShowingTo }} trong tổng số {{ kkTypeDetailFiltered.length | number }} dòng
             </span>
@@ -328,14 +358,6 @@
             </button>
           </div>
           <div class="kk-type-detail__bar" *ngIf="kkTypeShowExtraFilter && kkActiveTypeRow as row">
-            <label class="kk-type-detail__tick">
-              <input type="checkbox"
-                     class="kk-loc-map__tick"
-                     [checked]="row.remaining === 0 && row.totalLines > 0"
-                     [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                     (change)="onKkByTypeTick(row, $any($event.target).checked)">
-              Tick KK tất cả
-            </label>
             <button type="button"
                     class="kk-type-detail__clear-loc"
                     (click)="clearKkTypeLocations(row)"

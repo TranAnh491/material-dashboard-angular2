@@ -1254,9 +1254,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // ==================== BULK CHANGE LOCATION (ASM1) ====================
   showBulkChangeLocationModal = false;
+  bulkSource: 'location' | 'pallet' = 'location';
   bulkStep: 'scan-location' | 'select-items' | 'scan-targets' | 'complete' = 'scan-location';
   bulkScanLocationInput = '';
+  bulkScanPalletInput = '';
   bulkCurrentLocation = '';
+  bulkCurrentPallet = '';
   bulkItems: any[] = [];
   bulkSelectedItems: Set<string> = new Set();
   isBulkLoading = false;
@@ -3539,43 +3542,103 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // ==================== BULK CHANGE LOCATION (ASM1) METHODS ====================
-  openBulkChangeLocationModal(): void {
+  openBulkChangeLocationModal(source: 'location' | 'pallet' = 'location'): void {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
       return;
     }
     this.showBulkChangeLocationModal = true;
-    this.bulkStep = 'scan-location';
-    this.bulkScanLocationInput = '';
-    this.bulkCurrentLocation = '';
-    this.bulkItems = [];
-    this.bulkSelectedItems = new Set();
+    this.bulkSource = source;
+    this.resetBulkScanState();
     this.isBulkLoading = false;
     this.bulkNewLocationInput = '';
     this.bulkNewPalletInput = '';
     this.skipBulkNewLocation = false;
-    this.skipBulkNewPallet = false;
+    this.skipBulkNewPallet = source === 'pallet';
     this.bulkUseAsm3 = false;
 
     setTimeout(() => {
-      const input = document.getElementById('bulkAsm1LocationInput') as HTMLInputElement;
+      const id = source === 'pallet' ? 'bulkAsm1PalletInput' : 'bulkAsm1LocationInput';
+      const input = document.getElementById(id) as HTMLInputElement;
       if (input) input.focus();
     }, 150);
   }
 
-  closeBulkChangeLocationModal(): void {
-    this.showBulkChangeLocationModal = false;
+  openBulkChangeByPalletModal(): void {
+    this.openBulkChangeLocationModal('pallet');
+  }
+
+  private resetBulkScanState(): void {
     this.bulkStep = 'scan-location';
     this.bulkScanLocationInput = '';
+    this.bulkScanPalletInput = '';
     this.bulkCurrentLocation = '';
+    this.bulkCurrentPallet = '';
     this.bulkItems = [];
     this.bulkSelectedItems = new Set();
+  }
+
+  backBulkToScanStep(): void {
+    this.resetBulkScanState();
+    this.skipBulkNewPallet = this.bulkSource === 'pallet';
+    setTimeout(() => {
+      const id = this.bulkSource === 'pallet' ? 'bulkAsm1PalletInput' : 'bulkAsm1LocationInput';
+      const input = document.getElementById(id) as HTMLInputElement;
+      if (input) input.focus();
+    }, 80);
+  }
+
+  closeBulkChangeLocationModal(): void {
+    this.showBulkChangeLocationModal = false;
+    this.bulkSource = 'location';
+    this.resetBulkScanState();
     this.isBulkLoading = false;
     this.bulkNewLocationInput = '';
     this.bulkNewPalletInput = '';
     this.skipBulkNewLocation = false;
     this.skipBulkNewPallet = false;
     this.bulkUseAsm3 = false;
+  }
+
+  private normalizePalletScan(raw: string): string {
+    let s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (s.includes('|')) s = s.split('|')[0].trim();
+    return s.replace(/[^A-Z0-9.\-_]/g, '');
+  }
+
+  private mapInventoryDocsToBulkItems(snapshot: { forEach: (cb: (doc: any) => void) => void }): any[] {
+    const toDDMMYYYY = (dateValue: any): string => {
+      if (!dateValue) return '';
+      try {
+        const d: Date =
+          typeof dateValue?.toDate === 'function' ? dateValue.toDate() : new Date(dateValue);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('en-GB').split('/').join('');
+      } catch {
+        return '';
+      }
+    };
+    const items: any[] = [];
+    snapshot.forEach(doc => {
+      const data = doc.data() as any;
+      const openingStock = Number(data.openingStock) || 0;
+      const quantity = Number(data.quantity) || 0;
+      const exported = Number(data.exported) || 0;
+      const xt = Number(data.xt) || 0;
+      const stock = openingStock + quantity - exported - xt;
+      items.push({
+        id: doc.id,
+        materialCode: data.materialCode || '',
+        poNumber: data.poNumber || '',
+        importDateStr: toDDMMYYYY(data.importDate),
+        iqcStatus: data.iqcStatus || '',
+        stock,
+        location: data.location || '',
+        palletId: (data.palletId || '').toString().toUpperCase()
+      });
+    });
+    items.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
+    return items;
   }
 
   async processBulkAsm1Location(): Promise<void> {
@@ -3601,18 +3664,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkSelectedItems.clear();
 
     try {
-      const toDDMMYYYY = (dateValue: any): string => {
-        if (!dateValue) return '';
-        try {
-          const d: Date =
-            typeof dateValue?.toDate === 'function' ? dateValue.toDate() : new Date(dateValue);
-          if (Number.isNaN(d.getTime())) return '';
-          return d.toLocaleDateString('en-GB').split('/').join('');
-        } catch {
-          return '';
-        }
-      };
-
       const queryByLocation = async (location: string) => {
         return await this.firestore
           .collection('inventory-materials', ref =>
@@ -3645,37 +3696,68 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      // Nếu tìm thấy theo IQC+ thì hiển thị đúng vị trí đang dùng
       this.bulkCurrentLocation = usedLoc;
-
-      const items: any[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data() as any;
-        const openingStock = Number(data.openingStock) || 0;
-        const quantity = Number(data.quantity) || 0;
-        const exported = Number(data.exported) || 0;
-        const xt = Number(data.xt) || 0;
-        const stock = openingStock + quantity - exported - xt;
-        const importDateStr = toDDMMYYYY(data.importDate);
-        items.push({
-          id: doc.id,
-          materialCode: data.materialCode || '',
-          poNumber: data.poNumber || '',
-          importDateStr,
-          iqcStatus: data.iqcStatus || '',
-          stock,
-          location: data.location || '',
-          palletId: (data.palletId || '').toString().toUpperCase()
-        });
-      });
-
-      items.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || ''));
-      this.bulkItems = items;
+      this.bulkItems = this.mapInventoryDocsToBulkItems(snapshot);
       this.bulkStep = 'select-items';
-      void this.applyFactoryInUseToBulkItems(items);
+      void this.applyFactoryInUseToBulkItems(this.bulkItems);
     } catch (error) {
       console.error(`❌ Error loading ${this.selectedFactory} items by location:`, error);
       alert('❌ Lỗi khi tải mã hàng theo vị trí. Vui lòng thử lại.');
+    } finally {
+      this.isBulkLoading = false;
+    }
+  }
+
+  async processBulkByPallet(): Promise<void> {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      return;
+    }
+    const pallet = this.normalizePalletScan(this.bulkScanPalletInput);
+    if (!pallet) {
+      alert('⚠️ Vui lòng scan số pallet');
+      return;
+    }
+
+    this.isBulkLoading = true;
+    this.bulkCurrentPallet = pallet;
+    this.bulkItems = [];
+    this.bulkSelectedItems.clear();
+
+    try {
+      let docs: Array<{ id: string; data: () => any }> = [];
+      try {
+        const snap = await this.firestore
+          .collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory).where('palletId', '==', pallet)
+          )
+          .get()
+          .toPromise();
+        docs = snap?.docs || [];
+      } catch {
+        const snap = await this.firestore
+          .collection('inventory-materials', ref => ref.where('palletId', '==', pallet))
+          .get()
+          .toPromise();
+        docs = (snap?.docs || []).filter(d =>
+          String((d.data() as any)?.factory || '').toUpperCase() === this.selectedFactory
+        );
+      }
+
+      if (!docs.length) {
+        alert(`❌ Không tìm thấy mã hàng nào trên pallet: ${pallet}`);
+        this.isBulkLoading = false;
+        return;
+      }
+
+      this.bulkItems = this.mapInventoryDocsToBulkItems({ forEach: (cb) => docs.forEach(cb) });
+      this.bulkItems.forEach(i => this.bulkSelectedItems.add(i.id));
+      this.bulkStep = 'select-items';
+      void this.applyFactoryInUseToBulkItems(this.bulkItems);
+    } catch (error) {
+      console.error('❌ Error loading items by pallet:', error);
+      alert('❌ Lỗi khi tải mã hàng theo pallet. Vui lòng thử lại.');
     } finally {
       this.isBulkLoading = false;
     }
@@ -3707,7 +3789,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bulkNewLocationInput = '';
     this.bulkNewPalletInput = '';
     this.skipBulkNewLocation = false;
-    this.skipBulkNewPallet = false;
+    this.skipBulkNewPallet = this.bulkSource === 'pallet';
     this.bulkUseAsm3 = false;
 
     setTimeout(() => {
@@ -3823,7 +3905,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         const docRef = this.firestore.collection('inventory-materials').doc(id).ref;
         const updateData: any = {
           lastModified: new Date(),
-          modifiedBy: `bulk-change-location-${(this.selectedFactory || 'unknown').toLowerCase()}`
+          modifiedBy: this.bulkSource === 'pallet'
+            ? `bulk-change-pallet-${(this.selectedFactory || 'unknown').toLowerCase()}`
+            : `bulk-change-location-${(this.selectedFactory || 'unknown').toLowerCase()}`
         };
         if (!this.skipBulkNewLocation || !this.skipBulkNewPallet) {
           updateData.location = locationToSave;

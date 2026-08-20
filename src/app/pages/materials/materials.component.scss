@@ -3808,6 +3808,11 @@ $asm1-toolbar-h: 36px;
     input {
       margin: 0;
     }
+
+    &--off {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   }
 
   &__hint {
@@ -4427,6 +4432,53 @@ $asm1-toolbar-h: 36px;
 
     &:hover {
       color: #0f172a;
+    }
+  }
+
+  &__tick-all,
+  &__untick-all,
+  &__rename-pallet {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  &__tick-all {
+    border: none;
+    background: #0f766e;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      background: #0d9488;
+    }
+  }
+
+  &__untick-all {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+
+    &:hover:not(:disabled) {
+      background: #f8fafc;
+    }
+  }
+
+  &__rename-pallet {
+    border: 1px solid #fcd34d;
+    background: #fffbeb;
+    color: #92400e;
+
+    &:hover:not(:disabled) {
+      background: #fef3c7;
     }
   }
 

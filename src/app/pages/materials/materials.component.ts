@@ -270,6 +270,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeShowExtraFilter = false;
   /** Tick: cộng các mã đang ở kho WH3/ASM3 vào số liệu KK. Bỏ tick thì không tính. */
   kkCountWh3 = true;
+  /** Khi Tính WH3/ASM3: chỉ hiện dòng kho ASM3 / WH3. */
+  kkWh3Only = false;
   /** Lọc chỉ các dòng / loại còn chưa tick KK. */
   kkFilterUncheckedOnly = false;
   private inboundNameCache = new Map<string, string>();
@@ -3224,39 +3226,168 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private static readonly CATALOG_LOCALSTORAGE_KEY = 'materials-catalog-cache-v1';
+  private static readonly CATALOG_CACHE_KEY_V2 = 'materials-catalog-cache-v2';
+  private static readonly CATALOG_IDB_NAME = 'asm-materials-cache';
   private static readonly CATALOG_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 tiếng
+  private static readonly CATALOG_LS_MAX_CHARS = 3_200_000;
 
-  /** Đọc catalog từ localStorage (nếu còn hạn) — tránh đọc lại ~8-9 nghìn doc mỗi lần mở tab/reload. */
-  private tryLoadCatalogFromLocalStorage(): boolean {
+  /** Đọc catalog từ đĩa (IndexedDB / localStorage compact) — không tốn lượt đọc Firestore. */
+  private async hydrateCatalogFromDisk(): Promise<boolean> {
+    if (this.catalogCache.size > 0) return true;
+    const fromLs = this.tryApplyCatalogCachePayload(this.readCatalogCacheFromLocalStorage());
+    if (fromLs) return true;
+    const fromIdb = this.tryApplyCatalogCachePayload(await this.readCatalogCacheFromIdb());
+    return fromIdb;
+  }
+
+  private readCatalogCacheFromLocalStorage(): unknown {
     try {
-      const raw = localStorage.getItem(MaterialsComponent.CATALOG_LOCALSTORAGE_KEY);
-      if (!raw) return false;
-      const parsed = JSON.parse(raw) as { items?: any[]; timestamp?: number };
-      if (!parsed?.items?.length || !parsed.timestamp) return false;
-      if (Date.now() - parsed.timestamp >= MaterialsComponent.CATALOG_CACHE_TTL_MS) return false;
+      const v2 = localStorage.getItem(MaterialsComponent.CATALOG_CACHE_KEY_V2);
+      if (v2) return JSON.parse(v2);
+      const v1 = localStorage.getItem(MaterialsComponent.CATALOG_LOCALSTORAGE_KEY);
+      if (v1) return JSON.parse(v1);
+    } catch { /* ignore */ }
+    return null;
+  }
 
-      this.catalogCache.clear();
-      parsed.items.forEach(item => {
-        if (item?.materialCode) this.catalogCache.set(item.materialCode, item);
-      });
-      console.log(`📱 Loaded ${this.catalogCache.size} catalog items from localStorage`);
-      return this.catalogCache.size > 0;
-    } catch (e) {
-      console.warn('⚠️ Could not read catalog cache from localStorage:', e);
-      return false;
+  private tryApplyCatalogCachePayload(parsed: unknown): boolean {
+    if (!parsed || typeof parsed !== 'object') return false;
+    const p = parsed as { v?: number; t?: number; timestamp?: number; rows?: unknown[]; items?: any[] };
+    const ts = Number(p.t || p.timestamp || 0);
+    if (!ts || Date.now() - ts >= MaterialsComponent.CATALOG_CACHE_TTL_MS) return false;
+
+    this.catalogCache.clear();
+    if (Array.isArray(p.rows)) {
+      for (const row of p.rows) {
+        if (!Array.isArray(row) || !row[0]) continue;
+        const flags = Number(row[4] || 0);
+        this.catalogCache.set(String(row[0]), {
+          materialCode: String(row[0]),
+          materialName: String(row[1] || ''),
+          unit: String(row[2] || 'PCS'),
+          standardPacking: Number(row[3] || 0) || 0,
+          standardPackingLocked: (flags & 1) === 1,
+          isMsd: (flags & 2) === 2,
+          isEsd: (flags & 4) === 4
+        });
+      }
+    } else if (Array.isArray(p.items)) {
+      for (const item of p.items) {
+        const code = String(item?.materialCode || '').trim().toUpperCase();
+        if (code) this.catalogCache.set(code, item);
+      }
     }
+    if (this.catalogCache.size > 0) {
+      console.log(`📱 Loaded ${this.catalogCache.size} catalog items from disk cache`);
+      this.catalogLoaded = true;
+      return true;
+    }
+    return false;
+  }
+
+  private buildCatalogCachePayload(): { v: number; t: number; rows: Array<[string, string, string, number, number]> } {
+    const rows: Array<[string, string, string, number, number]> = [];
+    this.catalogCache.forEach((item, code) => {
+      const flags =
+        (item?.standardPackingLocked ? 1 : 0) |
+        (item?.isMsd ? 2 : 0) |
+        (item?.isEsd ? 4 : 0);
+      rows.push([
+        String(code || item?.materialCode || ''),
+        String(item?.materialName || ''),
+        String(item?.unit || 'PCS'),
+        Number(item?.standardPacking || 0) || 0,
+        flags
+      ]);
+    });
+    return { v: 2, t: Date.now(), rows };
+  }
+
+  private persistCatalogCache(): void {
+    if (!this.catalogCache.size) return;
+    const payload = this.buildCatalogCachePayload();
+    try {
+      localStorage.removeItem(MaterialsComponent.CATALOG_LOCALSTORAGE_KEY);
+    } catch { /* ignore */ }
+    try {
+      const json = JSON.stringify(payload);
+      if (json.length <= MaterialsComponent.CATALOG_LS_MAX_CHARS) {
+        localStorage.setItem(MaterialsComponent.CATALOG_CACHE_KEY_V2, json);
+      } else {
+        localStorage.removeItem(MaterialsComponent.CATALOG_CACHE_KEY_V2);
+      }
+    } catch {
+      try { localStorage.removeItem(MaterialsComponent.CATALOG_CACHE_KEY_V2); } catch { /* ignore */ }
+    }
+    void this.writeCatalogCacheToIdb(payload);
   }
 
   private saveCatalogToLocalStorage(): void {
-    try {
-      const items = Array.from(this.catalogCache.values());
-      localStorage.setItem(
-        MaterialsComponent.CATALOG_LOCALSTORAGE_KEY,
-        JSON.stringify({ items, timestamp: Date.now() })
-      );
-    } catch (e) {
-      console.warn('⚠️ Could not save catalog cache to localStorage:', e);
-    }
+    this.persistCatalogCache();
+  }
+
+  private catalogIdbOpen(): Promise<IDBDatabase | null> {
+    return new Promise((resolve) => {
+      try {
+        if (typeof indexedDB === 'undefined') {
+          resolve(null);
+          return;
+        }
+        const req = indexedDB.open(MaterialsComponent.CATALOG_IDB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  private async readCatalogCacheFromIdb(): Promise<unknown> {
+    const db = await this.catalogIdbOpen();
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction('kv', 'readonly');
+        const req = tx.objectStore('kv').get(MaterialsComponent.CATALOG_CACHE_KEY_V2);
+        req.onsuccess = () => {
+          resolve(req.result || null);
+          db.close();
+        };
+        req.onerror = () => {
+          db.close();
+          resolve(null);
+        };
+      } catch {
+        db.close();
+        resolve(null);
+      }
+    });
+  }
+
+  private async writeCatalogCacheToIdb(payload: unknown): Promise<void> {
+    const db = await this.catalogIdbOpen();
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+      try {
+        const tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(payload, MaterialsComponent.CATALOG_CACHE_KEY_V2);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          resolve();
+        };
+      } catch {
+        try { db.close(); } catch { /* ignore */ }
+        resolve();
+      }
+    });
   }
 
   private ingestCatalogDoc(doc: { id: string; data: () => unknown }): boolean {
@@ -3279,35 +3410,38 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return true;
   }
 
-  /** Chỉ đọc catalog `materials` cho mã đang search — không load ~9K doc khi mở tab. */
+  /** Chỉ đọc catalog `materials` cho mã đang xem — không load ~10K doc khi mở KK. */
   private async ensureCatalogForMaterialCodes(codes: string[]): Promise<void> {
+    if (this.catalogCache.size === 0) {
+      await this.hydrateCatalogFromDisk();
+    }
     const unique = [...new Set(codes.map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
     const missing = unique.filter(c => !this.catalogCache.has(c));
     if (missing.length === 0) {
-      this.catalogLoaded = true;
+      this.catalogLoaded = this.catalogCache.size > 0;
       return;
     }
     let reads = 0;
-    for (const code of missing) {
+    const fetchOne = async (code: string): Promise<void> => {
       try {
         const byId = await this.firestore.collection('materials').doc(code).get().toPromise();
         reads++;
-        if (byId?.exists && this.ingestCatalogDoc(byId)) {
-          continue;
-        }
+        if (byId?.exists && this.ingestCatalogDoc(byId)) return;
         const q = await this.firestore.collection('materials', ref =>
           ref.where('materialCode', '==', code).limit(1)
         ).get().toPromise();
         reads += q?.docs?.length || 0;
-        if (q && !q.empty) {
-          this.ingestCatalogDoc(q.docs[0]);
-        }
+        if (q && !q.empty) this.ingestCatalogDoc(q.docs[0]);
       } catch (e) {
         console.warn('[ASM1] ensureCatalogForMaterialCodes:', code, e);
       }
+    };
+    for (let i = 0; i < missing.length; i += 20) {
+      await Promise.all(missing.slice(i, i + 20).map(fetchOne));
     }
     if (reads > 0) {
       this.readTracker.track('materials', 'materials', reads);
+      this.persistCatalogCache();
     }
     this.catalogLoaded = this.catalogCache.size > 0;
   }
@@ -3336,177 +3470,58 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   // Load catalog from Firebase
   private async loadCatalogFromFirebase(): Promise<void> {
     this.isCatalogLoading = true;
-    console.log('📋 Loading catalog from Firebase...');
 
-    // 🚀 OPTIMIZATION: Check in-memory cache first
     if (this.catalogCache.size > 0) {
-      console.log('📚 Using cached catalog data');
       this.isCatalogLoading = false;
       this.catalogLoaded = true;
       return;
     }
 
-    // 🔧 FIX: Trước khi đọc lại toàn bộ ~8-9 nghìn doc từ Firestore, thử localStorage trước
-    // (dữ liệu catalog ít thay đổi, cache 12 tiếng là an toàn) — tránh mỗi lần mở tab/F5 lại
-    // tốn hàng nghìn lượt đọc.
-    if (this.tryLoadCatalogFromLocalStorage()) {
+    if (await this.hydrateCatalogFromDisk()) {
       this.isCatalogLoading = false;
       this.catalogLoaded = true;
       return;
     }
 
     try {
-      // THỬ NHIỀU COLLECTION NAMES - KIỂM TRA THỰC TẾ SỐ LƯỢNG DOCUMENTS
       let snapshot = null;
       let collectionName = '';
-      
-      // Thử collection 'materials' trước - KIỂM TRA THỰC TẾ
+
       try {
-        console.log('🔍 Trying collection: materials - checking actual document count...');
         snapshot = await this.firestore.collection('materials').get().toPromise();
-        if (snapshot && !snapshot.empty) {
-          collectionName = 'materials';
-          console.log('✅ Found catalog data in collection: materials');
-          console.log(`📊 ACTUAL Catalog snapshot size: ${snapshot.size} documents`);
-          
-          // Kiểm tra thêm: đếm documents có standardPacking field
-          let withStandardPacking = 0;
-          snapshot.docs.forEach(doc => {
-            const data = doc.data() as any;
-            if (data.standardPacking !== undefined && data.standardPacking !== null) {
-              withStandardPacking++;
-            }
-          });
-          console.log(`📊 Documents WITH standardPacking field: ${withStandardPacking}`);
-          console.log(`📊 Documents WITHOUT standardPacking field: ${snapshot.size - withStandardPacking}`);
-        } else {
-          console.log('⚠️ Collection "materials" exists but is empty');
-        }
+        if (snapshot && !snapshot.empty) collectionName = 'materials';
       } catch (e) {
         console.log('❌ Collection "materials" not found or error:', e);
       }
-      
-      // Nếu không có, thử collection 'catalog' (dự phòng)
+
       if (!snapshot || snapshot.empty) {
         try {
-          console.log('🔍 Trying collection: catalog (fallback)');
           snapshot = await this.firestore.collection('catalog').get().toPromise();
-          if (snapshot && !snapshot.empty) {
-            collectionName = 'catalog';
-            console.log('✅ Found catalog data in collection: catalog');
-            console.log(`📊 Catalog snapshot size: ${snapshot.size}`);
-          } else {
-            console.log('⚠️ Collection "catalog" exists but is empty');
-          }
-        } catch (e) {
-          console.log('❌ Collection "catalog" not found or error:', e);
-        }
+          if (snapshot && !snapshot.empty) collectionName = 'catalog';
+        } catch { /* ignore */ }
       }
-      
-      // Nếu không có, thử 'material-catalog'
+
       if (!snapshot || snapshot.empty) {
         try {
-          console.log('🔍 Trying collection: material-catalog');
           snapshot = await this.firestore.collection('material-catalog').get().toPromise();
-          if (snapshot && !snapshot.empty) {
-            collectionName = 'material-catalog';
-            console.log('✅ Found catalog data in collection: material-catalog');
-            console.log(`📊 Catalog snapshot size: ${snapshot.size}`);
-          } else {
-            console.log('⚠️ Collection "material-catalog" exists but is empty');
-          }
-        } catch (e) {
-          console.log('❌ Collection "material-catalog" not found or error:', e);
-        }
+          if (snapshot && !snapshot.empty) collectionName = 'material-catalog';
+        } catch { /* ignore */ }
       }
-      
+
       if (snapshot && !snapshot.empty) {
         this.catalogCache.clear();
-        
-        // Log first few documents to see structure
-        console.log('📄 Sample catalog documents:');
-        snapshot.docs.slice(0, 3).forEach((doc, index) => {
-          const data = doc.data() as any;
-          console.log(`  ${index + 1}. ${doc.id}:`, {
-            materialCode: data.materialCode,
-            materialName: data.materialName,
-            unit: data.unit,
-            standardPacking: data.standardPacking
-          });
-        });
-        
-        // Process all documents and add to cache - HANDLE DUPLICATES
         let processedCount = 0;
-        let duplicateCount = 0;
-        const processedCodes = new Set<string>();
-        
         snapshot.forEach(doc => {
-          const data = doc.data() as any;
-          console.log(`📝 Processing doc ${doc.id}:`, data);
-          
-          // Kiểm tra các field có thể có trong collection 'materials'
-          const materialCode = data.materialCode || data.code || data.material_code;
-          const materialName = data.materialName || data.name || data.material_name;
-          
-          if (materialCode && materialName) {
-            // Kiểm tra trùng lặp materialCode
-            if (processedCodes.has(materialCode)) {
-              duplicateCount++;
-              console.log(`⚠️ Duplicate materialCode ${materialCode} found in doc ${doc.id} - skipping`);
-              return; // Skip duplicate
-            }
-            
-            const catalogItem = {
-              materialCode: materialCode,
-              materialName: materialName,
-              unit: data.unit || data.unitOfMeasure || 'PCS',
-              standardPacking: data.standardPacking || data.packing || data.unitSize || 0,
-              standardPackingLocked: data.standardPackingLocked === true
-            };
-            
-            this.catalogCache.set(materialCode, catalogItem);
-            processedCodes.add(materialCode); // Mark as processed
-            processedCount++;
-            console.log(`✅ Added to cache: ${materialCode} ->`, catalogItem);
-          } else {
-            console.log(`⚠️ Skipping doc ${doc.id} - missing materialCode or materialName:`, {
-              materialCode: materialCode,
-              materialName: materialName,
-              availableFields: Object.keys(data)
-            });
-          }
+          if (this.ingestCatalogDoc(doc)) processedCount++;
         });
-        
-        console.log(`📊 Duplicate handling: ${duplicateCount} duplicates skipped, ${processedCount} unique items processed`);
 
         this.catalogLoaded = true;
         this.readTracker.track('materials', collectionName, snapshot.size);
-        this.saveCatalogToLocalStorage();
-        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Firebase collection: ${collectionName}`);
-        console.log(`📋 Catalog cache keys:`, Array.from(this.catalogCache.keys()));
-        console.log(`📊 Processed ${processedCount} documents`);
-        
-        if (duplicateCount > 0) {
-          console.log(`⚠️ WARNING: ${duplicateCount} duplicate materialCodes were skipped to avoid conflicts`);
-        }
-        
-        if (collectionName === 'materials') {
-          console.log('🎯 SUCCESS: Catalog loaded from "materials" collection with standardPacking field!');
-        }
-        
-        // Update any existing inventory items with catalog data
+        this.persistCatalogCache();
+        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from ${collectionName} (${processedCount} processed)`);
+
         if (this.inventoryMaterials.length > 0) {
-          this.inventoryMaterials.forEach(material => {
-            if (this.catalogCache.has(material.materialCode)) {
-              const catalogItem = this.catalogCache.get(material.materialCode)!;
-              material.materialName = catalogItem.materialName;
-              material.unit = catalogItem.unit;
-              // ✅ Cập nhật standardPacking nếu có
-              if (catalogItem.standardPacking) {
-                material.standardPacking = catalogItem.standardPacking;
-              }
-            }
-          });
+          this.applyCatalogToMaterials(this.inventoryMaterials);
           this.cdr.detectChanges();
         }
       } else {
@@ -5084,6 +5099,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapView = 'type';
     this.kkLocMapWarehouseFilter = '';
     this.kkCountWh3 = true;
+    this.kkWh3Only = false;
     this.kkFilterUncheckedOnly = false;
     this.kkLocMapBoxes = [];
     this.kkLocMapByMaterial = [];
@@ -5104,6 +5120,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapView = null;
     this.kkLocMapWarehouseFilter = '';
     this.kkCountWh3 = true;
+    this.kkWh3Only = false;
     this.kkFilterUncheckedOnly = false;
     this.kkLocMapBoxes = [];
     this.kkLocMapByMaterial = [];
@@ -5479,9 +5496,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkLocMapWarehouseFilter) {
       rows = rows.filter((r) => r.warehouse === this.kkLocMapWarehouseFilter);
     }
-    if (!this.kkCountWh3) {
-      rows = rows.filter((r) => r.warehouse !== 'ASM3');
-    }
+    rows = rows.filter((r) => this.kkMatchesWh3Mode(r.warehouse));
     if (this.kkFilterUncheckedOnly) {
       rows = rows.filter((r) => r.remaining > 0);
     }
@@ -5798,6 +5813,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onKkCountWh3Change(): void {
+    if (!this.kkCountWh3) this.kkWh3Only = false;
+    this.kkTypePage = 1;
+    this.cdr.detectChanges();
+  }
+
+  onKkWh3OnlyChange(): void {
+    if (this.kkWh3Only) this.kkCountWh3 = true;
     this.kkTypePage = 1;
     this.cdr.detectChanges();
   }
@@ -5857,7 +5879,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const esc = (s: string) => this.escapeHtmlForPrint(s);
     const zone = this.kkLocMapWarehouseFilter
       ? this.kkWarehouseLabel(this.kkLocMapWarehouseFilter)
-      : (this.kkCountWh3 ? 'Tất cả' : 'Tất cả (không WH3/ASM3)');
+      : (this.kkWh3Only ? 'Chỉ ASM3 / WH3' : (this.kkCountWh3 ? 'Tất cả' : 'Tất cả (không WH3/ASM3)'));
     const groupText = row.groupCodes.length
       ? `${row.groupCodes[0]}${row.groupCodes.length > 1 ? ` · ${row.groupCodes.length} nhóm mã` : ''}`
       : '—';
@@ -6274,6 +6296,74 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     await this.persistPalletChange(line, String(line.palletId || ''), { silent: true, bypassUnlock: true });
   }
 
+  /** Đổi số pallet: nhập pallet hiện tại → pallet mới, áp cho loại hàng đang mở. */
+  async renameKkTypePallet(row: KkTypeRow): Promise<void> {
+    if (!this.canEdit || this.kkLocMapBusy || !row) return;
+    const fromRaw = window.prompt('Nhập số pallet hiện tại:');
+    if (fromRaw == null) return;
+    const from = String(fromRaw).trim().toUpperCase();
+    if (!from) {
+      alert('Chưa nhập số pallet hiện tại.');
+      return;
+    }
+
+    const toRaw = window.prompt('Nhập số pallet mới:');
+    if (toRaw == null) return;
+    const to = String(toRaw).trim().toUpperCase();
+    if (!to) {
+      alert('Chưa nhập số pallet mới.');
+      return;
+    }
+    if (from === to) {
+      alert('Số pallet không đổi.');
+      return;
+    }
+
+    const lines = this.kkLinesForTypeRow(row).filter(
+      (m) => String(m.palletId || '').trim().toUpperCase() === from && !!m.id
+    );
+    if (!lines.length) {
+      alert(`Không có dòng pallet ${from} trong loại hàng này.`);
+      return;
+    }
+    if (!confirm(`Đổi pallet ${from} → ${to}?\n${lines.length} dòng loại ${row.productType}`)) return;
+
+    this.kkLocMapBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const modifiedBy = await this.resolveLocationOperatorId();
+      const chunkSize = 400;
+      for (let i = 0; i < lines.length; i += chunkSize) {
+        const chunk = lines.slice(i, i + chunkSize);
+        const batch = this.firestore.firestore.batch();
+        for (const m of chunk) {
+          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
+            palletId: to,
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy
+          });
+        }
+        await batch.commit();
+      }
+      const ids = new Set(lines.map((m) => m.id));
+      const stamp = (m: InventoryMaterial) => {
+        if (!ids.has(m.id)) return;
+        m.palletId = to;
+        (m as { __prevPalletId?: string }).__prevPalletId = to;
+      };
+      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+      alert(`✅ Đã đổi pallet ${from} → ${to} (${lines.length} dòng).`);
+    } catch (e) {
+      console.error('❌ renameKkTypePallet:', e);
+      alert('❌ Không đổi được số pallet.');
+    } finally {
+      this.kkLocMapBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   kkLineWhValue(line: InventoryMaterial): '' | 'J5' | 'ASM3' {
     const tag = this.locationWhTag(line.location);
     return tag === 'J5' || tag === 'ASM3' ? tag : '';
@@ -6319,10 +6409,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async ensureKkTypeMaterialNames(): Promise<void> {
     try {
-      await this.ensureCatalogLoaded();
       const codes = [...new Set(
         this.kkTypeDetailAll.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
       )];
+      await this.ensureCatalogForMaterialCodes(codes);
+      this.applyCatalogToMaterials(this.kkTypeDetailAll);
       const missing = codes.filter((c) => {
         const cat = this.catalogCache.get(c);
         if (String(cat?.materialName || '').trim()) return false;
@@ -6377,6 +6468,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.nvlCatalogFull.update(code, { standardPacking: sp }, operator);
       const existing = this.catalogCache.get(code) || { materialCode: code };
       this.catalogCache.set(code, { ...existing, materialCode: code, standardPacking: sp });
+      this.persistCatalogCache();
       this.applyKkStandardToCode(code, sp);
     } catch (e) {
       console.error('❌ saveKkTypeStandard:', e);
@@ -6793,11 +6885,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
+  private kkMatchesWh3Mode(warehouse: 'D1' | 'J5' | 'ASM3' | string): boolean {
+    if (this.kkWh3Only) return warehouse === 'ASM3';
+    if (!this.kkCountWh3) return warehouse !== 'ASM3';
+    return true;
+  }
+
   private kkCachedLinesForType(productType: string): InventoryMaterial[] {
     let list = this.kkLocMapTypeCache.get(productType) || [];
-    if (!this.kkCountWh3) {
-      list = list.filter((m) => this.kkWarehouseFromLocation(m.location) !== 'ASM3');
-    }
+    list = list.filter((m) => this.kkMatchesWh3Mode(this.kkWarehouseFromLocation(m.location)));
     const zone = this.kkLocMapWarehouseFilter;
     if (!zone) return list;
     return list.filter((m) => this.kkWarehouseFromLocation(m.location) === zone);

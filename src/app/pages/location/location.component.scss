@@ -76,6 +76,7 @@
 // Buttons
 .store-material-btn,
 .bulk-change-location-btn,
+.bulk-change-pallet-btn,
 .change-location-btn,
 .change-location-btn-desktop,
 .move-shelf-btn,
@@ -104,6 +105,12 @@
   background: #1976d2;
   color: #fff;
   border-color: #1976d2;
+}
+
+.bulk-change-pallet-btn {
+  background: #c2410c;
+  color: #fff;
+  border-color: #c2410c;
 }
 
 .store-material-btn {
@@ -2464,7 +2471,8 @@ body.location-mobile-tab {
   margin-bottom: 12px;
 
   .store-material-btn,
-  .bulk-change-location-btn {
+  .bulk-change-location-btn,
+  .bulk-change-pallet-btn {
     width: 100%;
     padding: 14px 16px;
     font-size: 15px;
