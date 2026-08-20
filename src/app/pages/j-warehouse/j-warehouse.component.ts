@@ -219,6 +219,8 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.j4NonConforming': 'Khu vực hàng không phù hợp',
     'zone.j4ColdStorage': 'Kho Mát',
     'zone.khoMatExt': 'Kho mát mở rộng',
+    'zone.khoHoaChat': 'Kho hóa chất',
+    'zone.khoEsd': 'Khu vực ESD',
     'zone.vpKho': 'VP Kho',
     'zone.shipping': 'Khu xuất hàng',
     'raised.label': 'NỀN CAO',
@@ -362,6 +364,8 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.j4NonConforming': 'Non-conforming goods area',
     'zone.j4ColdStorage': 'Secured WH',
     'zone.khoMatExt': 'Secured WH Extension',
+    'zone.khoHoaChat': 'Chemical warehouse',
+    'zone.khoEsd': 'ESD area',
     'zone.vpKho': 'Office',
     'zone.shipping': 'Shipping area',
     'raised.label': 'RAISED FLOOR',
@@ -598,7 +602,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   /**
    * Khu sát B — neo từ Y12, phải → trái:
-   * VP Kho 4m + VP Kho 4m + Kho mát 18.6×7m + Kho mát mở rộng 10×7m.
+   * VP Kho 4m + VP Kho 4m + Kho mát 18.6×7m + Kho mát mở rộng 10×7m
+   * (trong đó: kho hóa chất 1.5m về mặt A + khu ESD 4m + phần còn lại).
    * IQC 7.15×6.25m tách riêng, sát cạnh A từ Y01.
    */
   readonly OFFICE_ANCHOR_AXIS = 'Y12';
@@ -607,6 +612,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly OFFICE_IQC_H_M = 6.25;
   readonly OFFICE_SECURED_W_M = 18.6;
   readonly OFFICE_KHOMAT_EXT_W_M = 10;
+  /** Phòng hóa chất — tách từ kho mát mở rộng, rộng 1.5m về phía mặt A. */
+  readonly OFFICE_CHEM_W_M = 1.5;
+  /** Khu ESD — trong kho mát mở rộng, cạnh kho hóa chất, rộng 4m. */
+  readonly OFFICE_ESD_W_M = 4;
   readonly OFFICE_H_M = 7;
   /** Nhãn Secured WH dịch về phía mặt C 1.5m (không dịch phòng). */
   readonly OFFICE_SECURED_SHIFT_C_M = 1.5;
@@ -709,7 +718,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const iqc = this.officeRooms.find((r) => r.id === 'iqc');
     if (iqc) this.pushCadHeightAlongLeft(raw, 'office-iqc-h', iqc, false);
     const ext = this.khoMatExtZone;
-    this.pushCadWidthAlongB(raw, 'kho-mat-ext-w', ext, false);
+    this.pushCadWidthAlongB(raw, 'kho-hoa-chat-w', this.khoHoaChatZone, false);
+    this.pushCadWidthAlongB(raw, 'kho-esd-w', this.khoEsdZone, false);
+    this.pushCadWidthAlongB(raw, 'kho-mat-ext-w', this.khoMatExtRemainZone, false);
     this.pushCadHeightAlongLeft(raw, 'kho-mat-ext-h', ext, false);
     const inspect = this.floorZones.find((z) => z.id === 'incoming-inspect');
     if (inspect) this.pushCadWidthAlongB(raw, 'inspect-w', inspect, false);
@@ -781,9 +792,30 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   get floorZones(): JwFloorZone[] {
     return this.floorZoneDefs.map((z) => {
       const label = z.labelKey ? this.t(z.labelKey) : '';
-      const wrapAt = z.id === 'shipping-area' ? 20 : 12;
+      const wrapAt =
+        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 20 : z.id === 'kho-esd' ? 8 : 12;
       return { ...z, label, labelLines: label ? this.wrapLabel(label, wrapAt) : [] };
     });
+  }
+
+  floorZoneIsSolid(z: JwFloorZone): boolean {
+    return z.id === 'kho-mat-ext' || z.id === 'kho-hoa-chat';
+  }
+
+  floorZoneLabelXM(z: JwFloorZone): number {
+    if (z.id === 'kho-mat-ext') {
+      const restW = this.round2(z.wM - this.OFFICE_ESD_W_M);
+      return this.round2(z.xM + this.OFFICE_ESD_W_M + restW / 2);
+    }
+    return this.round2(z.xM + z.wM / 2);
+  }
+
+  floorZoneLabelYM(z: JwFloorZone): number {
+    return this.round2(z.yM + z.hM / 2);
+  }
+
+  floorZoneLabelRotate(z: JwFloorZone): boolean {
+    return z.id === 'kho-hoa-chat';
   }
 
   /** Phòng có vách cứng — dùng cho mô hình 3D. */
@@ -796,7 +828,18 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       wM: r.wM,
       hM: r.hM
     }));
-    const ext = this.khoMatExtZone;
+    const chem = this.khoHoaChatZone;
+    if (chem.wM > 0 && chem.hM > 0) {
+      rooms.push({
+        id: 'kho-hoa-chat',
+        label: this.t('zone.khoHoaChat'),
+        xM: chem.xM,
+        yM: chem.yM,
+        wM: chem.wM,
+        hM: chem.hM
+      });
+    }
+    const ext = this.khoMatExtInnerZone;
     if (ext.wM > 0 && ext.hM > 0) {
       rooms.push({
         id: 'kho-mat-ext',
@@ -3253,7 +3296,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     ];
   }
 
-  /** Kho mát mở rộng 10×7m — nét liền, ghi "Kho mát mở rộng", không hatch nền. */
+  /** Kho mát mở rộng 10×7m — nét liền; bên trong tách kho hóa chất 1.5m (về mặt A) + khu ESD 4m. */
   get khoMatExtZone(): { xM: number; yM: number; wM: number; hM: number } {
     const secured = this.securedOfficeRoom;
     if (!secured) return { xM: 0, yM: 0, wM: 0, hM: 0 };
@@ -3262,6 +3305,52 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       yM: secured.yM,
       wM: this.OFFICE_KHOMAT_EXT_W_M,
       hM: secured.hM
+    };
+  }
+
+  /** Phòng hóa chất 1.5×7m — mép kho mát mở rộng hướng về mặt A. */
+  get khoHoaChatZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const ext = this.khoMatExtZone;
+    return {
+      xM: ext.xM,
+      yM: ext.yM,
+      wM: this.OFFICE_CHEM_W_M,
+      hM: ext.hM
+    };
+  }
+
+  /** Khu ESD 4×7m — cạnh kho hóa chất, nằm trong kho mát mở rộng. */
+  get khoEsdZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const chem = this.khoHoaChatZone;
+    return {
+      xM: this.round2(chem.xM + chem.wM),
+      yM: chem.yM,
+      wM: this.OFFICE_ESD_W_M,
+      hM: chem.hM
+    };
+  }
+
+  /** Kho mát mở rộng còn lại sau khi tách kho hóa chất (gồm khu ESD). */
+  get khoMatExtInnerZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const ext = this.khoMatExtZone;
+    const chem = this.khoHoaChatZone;
+    return {
+      xM: this.round2(chem.xM + chem.wM),
+      yM: ext.yM,
+      wM: this.round2(Math.max(0, ext.wM - chem.wM)),
+      hM: ext.hM
+    };
+  }
+
+  /** Phần kho mát mở rộng bên phải khu ESD. */
+  get khoMatExtRemainZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const inner = this.khoMatExtInnerZone;
+    const esd = this.khoEsdZone;
+    return {
+      xM: this.round2(esd.xM + esd.wM),
+      yM: inner.yM,
+      wM: this.round2(Math.max(0, inner.xM + inner.wM - (esd.xM + esd.wM))),
+      hM: inner.hM
     };
   }
 
@@ -3346,6 +3435,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     Omit<JwFloorZone, 'label' | 'labelLines'> & { labelKey: string }
   > {
     const khoMatExt = this.khoMatExtZone;
+    const khoHoaChat = this.khoHoaChatZone;
+    const khoEsd = this.khoEsdZone;
+    const khoMatInner = this.khoMatExtInnerZone;
     const incomingInspectX0 = this.OFFICE_IQC_W_M;
     const incomingInspectWM = khoMatExt.xM - incomingInspectX0;
 
@@ -3360,13 +3452,31 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: khoMatExt.hM
       },
       {
-        /** Kho mát mở rộng 10×7m — nét liền, ghi Kho mát mở rộng, không hatch. */
+        /** Kho mát mở rộng còn lại (sau kho hóa chất) — nét liền, gồm khu ESD bên trong. */
         id: 'kho-mat-ext',
         labelKey: 'zone.khoMatExt',
-        xM: khoMatExt.xM,
-        yM: khoMatExt.yM,
-        wM: khoMatExt.wM,
-        hM: khoMatExt.hM
+        xM: khoMatInner.xM,
+        yM: khoMatInner.yM,
+        wM: khoMatInner.wM,
+        hM: khoMatInner.hM
+      },
+      {
+        /** Phòng hóa chất 1.5m — hướng về mặt A, nét liền. */
+        id: 'kho-hoa-chat',
+        labelKey: 'zone.khoHoaChat',
+        xM: khoHoaChat.xM,
+        yM: khoHoaChat.yM,
+        wM: khoHoaChat.wM,
+        hM: khoHoaChat.hM
+      },
+      {
+        /** Khu ESD 4m — cạnh kho hóa chất, nằm trong kho mát mở rộng. */
+        id: 'kho-esd',
+        labelKey: 'zone.khoEsd',
+        xM: khoEsd.xM,
+        yM: khoEsd.yM,
+        wM: khoEsd.wM,
+        hM: khoEsd.hM
       },
       {
         /** Nhận nguyên liệu: 6×16m, lùi vào sau WC Nữ (3.5m sát cạnh A) */

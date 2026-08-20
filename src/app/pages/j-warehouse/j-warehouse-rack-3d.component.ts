@@ -774,16 +774,16 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   private roomWallStyle(id?: string): 'glass' | 'half' | 'solid' {
     const s = id || '';
     if (s.startsWith('vp-kho')) return 'glass';
-    if (s === 'iqc' || s === 'secured' || s === 'kho-mat-ext') return 'half';
+    if (s === 'iqc' || s === 'secured' || s === 'kho-mat-ext' || s === 'kho-hoa-chat') return 'half';
     return 'solid';
   }
 
   private isWhiteFloorRoom(id?: string): boolean {
     const s = id || '';
-    return s === 'iqc' || s === 'secured' || s === 'kho-mat-ext' || s.startsWith('vp-kho');
+    return s === 'iqc' || s === 'secured' || s === 'kho-mat-ext' || s === 'kho-hoa-chat' || s.startsWith('vp-kho');
   }
 
-  /** Bỏ vách chung giữa 2 phòng Office (VP Kho). */
+  /** Bỏ vách chung giữa 2 phòng Office (VP Kho) và giữa kho hóa chất / kho mát mở rộng. */
   private officeSharedWallKeys(): Set<string> {
     const keys = new Set<string>();
     const offices = this.rooms.filter((r) => (r.id || '').startsWith('vp-kho'));
@@ -792,6 +792,12 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
         const shared = this.sharedRectEdgeKey(offices[i], offices[j]);
         if (shared) keys.add(shared);
       }
+    }
+    const chem = this.rooms.find((r) => r.id === 'kho-hoa-chat');
+    const ext = this.rooms.find((r) => r.id === 'kho-mat-ext');
+    if (chem && ext) {
+      const shared = this.sharedRectEdgeKey(chem, ext);
+      if (shared) keys.add(shared);
     }
     return keys;
   }

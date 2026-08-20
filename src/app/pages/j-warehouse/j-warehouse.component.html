@@ -617,7 +617,8 @@
                 <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
                   <rect
                     class="jw-floor-zone__body"
-                    [class.jw-floor-zone__body--solid]="z.id === 'kho-mat-ext'"
+                    [class.jw-floor-zone__body--solid]="floorZoneIsSolid(z)"
+                    [class.jw-floor-zone__body--esd]="z.id === 'kho-esd'"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -1140,16 +1141,19 @@
                     <text
                       class="jw-floor-zone__label"
                       *ngFor="let line of z.labelLines; let i = index"
-                      [attr.x]="meterX(z.xM + z.wM / 2)"
-                      [attr.y]="meterY(z.yM + z.hM / 2) + (i - (z.labelLines.length - 1) / 2) * 14">
+                      [attr.x]="meterX(floorZoneLabelXM(z))"
+                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * 14"
+                      [attr.transform]="floorZoneLabelRotate(z)
+                        ? ('rotate(-90 ' + meterX(floorZoneLabelXM(z)) + ' ' + meterY(floorZoneLabelYM(z)) + ')')
+                        : null">
                       {{ line }}
                     </text>
                   </ng-container>
                   <text
                     class="jw-floor-zone__meta"
-                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'shipping-area' && !showTechDims"
-                    [attr.x]="meterX(z.xM + z.wM / 2)"
-                    [attr.y]="meterY(z.yM + z.hM / 2) + 9 + (z.labelLines.length - 1) * 10">
+                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'kho-hoa-chat' && z.id !== 'shipping-area' && !showTechDims"
+                    [attr.x]="meterX(floorZoneLabelXM(z))"
+                    [attr.y]="meterY(floorZoneLabelYM(z)) + 9 + (z.labelLines.length - 1) * 10">
                     {{ z.wM | number:'1.0-3' }} × {{ z.hM | number:'1.0-2' }} m
                   </text>
                 </g>
