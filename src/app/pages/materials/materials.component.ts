@@ -7679,12 +7679,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isMobile) {
       return this.resolveKkOperatorFromSession();
     }
-    const raw = window.prompt('Quét mã nhân viên để kiểm kê.\nHệ thống chỉ lưu 7 ký tự đầu theo chuẩn ASP1234.');
+    const raw = window.prompt('Quét hoặc nhập mã nhân viên để kiểm kê.\nChỉ cần 4 số (vd: 0106), hệ thống tự thêm ASP.');
     if (raw == null) return null;
     const normalized = String(raw).trim().toUpperCase().replace(/\s+/g, '');
-    const shortCode = normalized.slice(0, 7);
+    const shortCode = /^\d{4}$/.test(normalized)
+      ? `ASP${normalized}`
+      : normalized.slice(0, 7);
     if (!/^ASP\d{4}$/.test(shortCode)) {
-      alert('Mã nhân viên không đúng định dạng. Vui lòng scan theo chuẩn ASP + 4 số.');
+      alert('Mã nhân viên không đúng. Nhập 4 số (vd: 0106) hoặc quét ASP + 4 số.');
       return null;
     }
     return shortCode;
