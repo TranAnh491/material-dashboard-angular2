@@ -7734,12 +7734,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return email.substring(0, 24) || 'UNKNOWN';
   }
 
+  /** Nhớ mã NV đã nhập cho Kiểm kê — chỉ hỏi 1 lần, các lần tick KK sau trong cùng phiên (tới khi tải lại trang) dùng lại. */
+  private kkOperatorIdCache: string | null = null;
+
   private async resolveKkOperatorId(): Promise<string | null> {
     // Mobile Kiểm kê: không hỏi/scan mã NV — lấy từ phiên đăng nhập.
     if (this.isMobile) {
       return this.resolveKkOperatorFromSession();
     }
-    const raw = window.prompt('Quét hoặc nhập mã nhân viên để kiểm kê.\nChỉ cần 4 số (vd: 0106), hệ thống tự thêm ASP.');
+    if (this.kkOperatorIdCache) return this.kkOperatorIdCache;
+    const raw = window.prompt('Quét hoặc nhập mã nhân viên để kiểm kê.\nChỉ cần 4 số (vd: 0106), hệ thống tự thêm ASP.\n(Chỉ hỏi 1 lần cho tới khi tải lại trang.)');
     if (raw == null) return null;
     const normalized = String(raw).trim().toUpperCase().replace(/\s+/g, '');
     const shortCode = /^\d{4}$/.test(normalized)
@@ -7749,6 +7753,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       alert('Mã nhân viên không đúng. Nhập 4 số (vd: 0106) hoặc quét ASP + 4 số.');
       return null;
     }
+    this.kkOperatorIdCache = shortCode;
     return shortCode;
   }
 
