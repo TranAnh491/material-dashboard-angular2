@@ -57,7 +57,7 @@
                      [class.card-checking]="isCheckingThieu"
                      (click)="runThieuCheck()"
                      style="cursor: pointer;"
-                     [matTooltip]="isCheckingThieu ? 'Đang kiểm tra...' : (checkCount > 0 ? 'Cảnh báo: ' + checkCount + ' LSX bị thiếu (So sánh). Chọn Transfer/Done sẽ yêu cầu pass vượt quyền.' : 'Bấm để kiểm tra LSX Thiếu (tải PXK + outbound theo LSX đang lọc)')">
+                     [matTooltip]="isCheckingThieu ? 'Đang kiểm tra...' : (checkCount > 0 ? 'Cảnh báo: ' + checkCount + ' LSX bị thiếu (So sánh). Chọn Transfer/Done sẽ gửi OTP Zalo ASP0106 cho từng LSX.' : 'Bấm để kiểm tra LSX Thiếu (tải PXK + outbound theo LSX đang lọc)')">
                   <div class="card-header">
                     <p class="card-category">Check{{ isCheckingThieu ? '...' : '' }}</p>
                     <h3 class="card-title">{{checkCount}}</h3>
@@ -629,8 +629,8 @@
                               <option value="waiting">Waiting</option>
                               <option value="kitting" [disabled]="isStatusOptionDisabled(wo, 'kitting')" [title]="isStatusOptionDisabled(wo, 'kitting') ? 'Chỉ chọn Kitting khi đang Waiting' : ''">Kitting</option>
                               <option value="ready" [disabled]="isStatusOptionDisabled(wo, 'ready')" [title]="isStatusOptionDisabled(wo, 'ready') ? 'Chỉ chọn Ready khi đang Kitting' : ''">Ready</option>
-                              <option value="transfer" [disabled]="isStatusOptionDisabled(wo, 'transfer')" [title]="isStatusOptionDisabled(wo, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : '')">Transfer</option>
-                              <option value="done" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Done</option>
+                              <option value="transfer" [disabled]="isStatusOptionDisabled(wo, 'transfer')" [title]="isStatusOptionDisabled(wo, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - cần OTP Zalo ASP0106 cho LSX này' : '')">Transfer</option>
+                              <option value="done" [title]="isTransferDisabledForWorkOrder(wo) ? 'LSX bị thiếu - cần OTP Zalo ASP0106 cho LSX này' : ''">Done</option>
                               <option value="delay">Delay</option>
                             </select>
                             <span *ngIf="!canEdit()" style="font-size: 10px; color: #666;">{{wo.status || 'Chưa có'}}</span>
@@ -1038,8 +1038,8 @@
           <button mat-stroked-button (click)="onScanStatusSelect('waiting')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'waiting')">Waiting</button>
           <button mat-stroked-button (click)="onScanStatusSelect('kitting')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'kitting')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'kitting') ? 'Chỉ chọn Kitting khi đang Waiting' : ''">Kitting</button>
           <button mat-stroked-button (click)="onScanStatusSelect('ready')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'ready')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'ready') ? 'Chỉ chọn Ready khi đang Kitting' : ''">Ready</button>
-          <button mat-stroked-button (click)="onScanStatusSelect('transfer')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : '')">Transfer</button>
-          <button mat-stroked-button (click)="onScanStatusSelect('done')" [matTooltip]="isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - bấm chọn sẽ yêu cầu pass vượt quyền' : ''">Done</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('transfer')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - cần OTP Zalo ASP0106 cho LSX này' : '')">Transfer</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('done')" [matTooltip]="isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - cần OTP Zalo ASP0106 cho LSX này' : ''">Done</button>
           <button mat-stroked-button (click)="onScanStatusSelect('delay')">Delay</button>
         </div>
         <div class="dialog-actions" style="margin-top: 16px;">
@@ -1450,6 +1450,61 @@
   <!-- Status changed popup (auto-hide after 0.5s) -->
   <div *ngIf="showStatusChangedPopup" class="status-changed-popup" role="status" aria-live="polite">
     Đã đổi tình trạng từ <strong>{{statusChangedFromLabel}}</strong> qua <strong>{{statusChangedToLabel}}</strong>
+  </div>
+
+  <!-- OTP vượt quyền PXK lệch — Zalo ASP0106, mỗi LSX một mã -->
+  <div class="time-range-dialog-overlay" *ngIf="showPxkBypassOtpModal" (click)="closePxkBypassOtpModal()">
+    <div class="time-range-dialog pxk-bypass-otp-dialog" (click)="$event.stopPropagation()" role="dialog" aria-label="OTP vượt quyền PXK">
+      <div class="dialog-header">
+        <h4><mat-icon>lock</mat-icon> Vượt quyền PXK lệch</h4>
+        <button mat-icon-button type="button" (click)="closePxkBypassOtpModal()"
+                [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying" aria-label="Đóng">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p class="pxk-bypass-otp-hint">
+          LSX này đang lệch PXK. Không còn nhập mật khẩu chung.
+          Cần mã 4 số gửi Zalo tới <strong>ASP0106</strong> — chỉ dùng cho LSX này.
+        </p>
+        <p class="pxk-bypass-otp-target" *ngIf="pxkBypassOtpLsx">
+          <span>LSX:</span> <strong>{{ pxkBypassOtpLsx }}</strong>
+          <ng-container *ngIf="pxkBypassOtpNextStatusLabel">
+            &nbsp;·&nbsp; Tình trạng: <strong>{{ pxkBypassOtpNextStatusLabel }}</strong>
+          </ng-container>
+        </p>
+        <ng-container *ngIf="pxkBypassOtpStep === 2">
+          <label class="pxk-bypass-otp-label">Mã từ Zalo (4 số)</label>
+          <input
+            type="text"
+            class="pxk-bypass-otp-input"
+            [(ngModel)]="pxkBypassOtpCode"
+            maxlength="4"
+            inputmode="numeric"
+            placeholder="0000"
+            [disabled]="pxkBypassOtpVerifying"
+            (keyup.enter)="verifyPxkBypassOtp()">
+        </ng-container>
+        <p class="pxk-bypass-otp-error" *ngIf="pxkBypassOtpError">{{ pxkBypassOtpError }}</p>
+        <p class="pxk-bypass-otp-info" *ngIf="pxkBypassOtpInfo">{{ pxkBypassOtpInfo }}</p>
+        <div class="dialog-actions" style="margin-top: 16px;">
+          <button mat-button type="button" (click)="closePxkBypassOtpModal()"
+                  [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying">Hủy</button>
+          <button mat-button type="button" *ngIf="pxkBypassOtpStep === 2"
+                  (click)="pxkBypassOtpStep = 1; pxkBypassOtpCode = ''; pxkBypassOtpError = ''"
+                  [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying">Gửi lại mã</button>
+          <button mat-raised-button color="primary" type="button" *ngIf="pxkBypassOtpStep === 1"
+                  (click)="sendPxkBypassOtp()" [disabled]="pxkBypassOtpSending">
+            {{ pxkBypassOtpSending ? 'Đang gửi…' : 'Gửi mã Zalo' }}
+          </button>
+          <button mat-raised-button color="primary" type="button" *ngIf="pxkBypassOtpStep === 2"
+                  (click)="verifyPxkBypassOtp()"
+                  [disabled]="pxkBypassOtpVerifying || pxkBypassOtpCode.trim().length !== 4">
+            {{ pxkBypassOtpVerifying ? 'Đang xác nhận…' : 'Xác nhận' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   </div>

@@ -532,6 +532,64 @@ export const verifyMaterialsInventoryOtpFn = functions
     }
   });
 
+/** Work Order: OTP 4 số Zalo → ASP0106 để vượt quyền PXK lệch, mỗi LSX một mã. */
+export const requestWoPxkBypassOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { requestWoPxkBypassOtp } = await import('./wo-pxk-bypass-otp');
+      await requestWoPxkBypassOtp(admin.firestore(), {
+        lsx: typeof data?.lsx === 'string' ? data.lsx : '',
+        requestedBy: typeof data?.requestedBy === 'string' ? data.requestedBy : '',
+        nextStatus: typeof data?.nextStatus === 'string' ? data.nextStatus : '',
+        factory: typeof data?.factory === 'string' ? data.factory : ''
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Work Order: xác nhận OTP vượt quyền PXK lệch theo đúng LSX. */
+export const verifyWoPxkBypassOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    const lsx = typeof data?.lsx === 'string' ? data.lsx.trim().slice(0, 40) : '';
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    if (!lsx) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu LSX.');
+    }
+    try {
+      const { verifyWoPxkBypassOtp } = await import('./wo-pxk-bypass-otp');
+      return await verifyWoPxkBypassOtp(admin.firestore(), code, lsx);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') ||
+          msg.includes('hết hạn') ||
+          msg.includes('Chưa có') ||
+          msg.includes('4 chữ số') ||
+          msg.includes('không khớp')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
 export const verifyFgLotLsxOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })

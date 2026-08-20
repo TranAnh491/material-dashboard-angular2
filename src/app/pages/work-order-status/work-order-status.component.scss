@@ -4142,4 +4142,54 @@ textarea.mat-input-element {
   }
 }
 
+.pxk-bypass-otp-dialog {
+  max-width: 440px;
+  width: 92vw;
+}
+
+.pxk-bypass-otp-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.pxk-bypass-otp-target {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.pxk-bypass-otp-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.pxk-bypass-otp-input {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 20px;
+  letter-spacing: 6px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.pxk-bypass-otp-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.pxk-bypass-otp-info {
+  margin: 10px 0 0;
+  color: #047857;
+  font-size: 13px;
+}
+
 

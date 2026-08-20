@@ -19,6 +19,7 @@ import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
+import { WoPxkBypassOtpService } from '../../services/wo-pxk-bypass-otp.service';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -282,6 +283,20 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private pxkIndexLsxKeys: string[] = [];
   private readonly PXK_INDEX_DOC = 'app-settings/pxk-import-lsx-index';
   isImportingPxk: boolean = false;
+  /** OTP vượt quyền PXK lệch — mỗi LSX một mã Zalo ASP0106 */
+  showPxkBypassOtpModal = false;
+  pxkBypassOtpStep: 1 | 2 = 1;
+  pxkBypassOtpCode = '';
+  pxkBypassOtpError = '';
+  pxkBypassOtpInfo = '';
+  pxkBypassOtpSending = false;
+  pxkBypassOtpVerifying = false;
+  pxkBypassOtpLsx = '';
+  pxkBypassOtpNextStatusLabel = '';
+  private pendingPxkBypassWo: WorkOrder | null = null;
+  private pendingPxkBypassStatus = '';
+  private pendingPxkBypassAction: 'status' | 'complete' | null = null;
+  private pxkBypassGrantedLsx = '';
   isClearingPxk: boolean = false;
   showPxkDownloadDialog: boolean = false;
   /** Popup trước khi chọn file import PXK (mô tả nguồn dữ liệu) */
@@ -332,7 +347,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private router: Router,
     private cdr: ChangeDetectorRef,
-    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService
+    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
+    private woPxkBypassOtp: WoPxkBypassOtpService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -1640,14 +1656,124 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     };
   }
 
-  readonly BYPASS_PASSWORD = '111';
+  private isPxkBypassGrantedFor(wo: WorkOrder): boolean {
+    const lsx = String(wo?.productionOrder || '').trim().toUpperCase();
+    return !!lsx && this.pxkBypassGrantedLsx === lsx;
+  }
 
-  /** Kiểm tra pass vượt quyền khi LSX thiếu - trả về true nếu được phép vượt */
-  async checkBypassPasswordForThieu(): Promise<boolean> {
-    const pass = prompt('LSX đang thiếu. Nhập mật khẩu vượt quyền để tiếp tục:');
-    if (pass === this.BYPASS_PASSWORD) return true;
-    alert('Mật khẩu không đúng. Không thể vượt quyền.');
-    return false;
+  private openPxkBypassOtpModal(
+    workOrder: WorkOrder,
+    nextStatus: string,
+    action: 'status' | 'complete'
+  ): void {
+    this.pendingPxkBypassWo = workOrder;
+    this.pendingPxkBypassStatus = nextStatus;
+    this.pendingPxkBypassAction = action;
+    this.pxkBypassOtpLsx = String(workOrder.productionOrder || '').trim().toUpperCase();
+    this.pxkBypassOtpNextStatusLabel = nextStatus === 'complete'
+      ? 'Done'
+      : (nextStatus || '').replace(/^./, (c) => c.toUpperCase());
+    this.showPxkBypassOtpModal = true;
+    this.pxkBypassOtpStep = 1;
+    this.pxkBypassOtpCode = '';
+    this.pxkBypassOtpError = '';
+    this.pxkBypassOtpInfo = '';
+    this.cdr.detectChanges();
+  }
+
+  closePxkBypassOtpModal(): void {
+    this.showPxkBypassOtpModal = false;
+    this.pendingPxkBypassWo = null;
+    this.pendingPxkBypassStatus = '';
+    this.pendingPxkBypassAction = null;
+    this.pxkBypassOtpCode = '';
+    this.pxkBypassOtpError = '';
+    this.pxkBypassOtpInfo = '';
+    this.pxkBypassOtpLsx = '';
+    this.pxkBypassOtpNextStatusLabel = '';
+    this.cdr.detectChanges();
+  }
+
+  private async getPxkBypassRequester(): Promise<string> {
+    try {
+      const user = await this.afAuth.currentUser;
+      const email = String(user?.email || '').trim().toUpperCase();
+      const asp = email.match(/ASP\d{4}/);
+      if (asp) return asp[0];
+      return (email || user?.uid || '').slice(0, 20);
+    } catch {
+      return '';
+    }
+  }
+
+  private extractCallableError(e: unknown): string {
+    const anyErr = e as { message?: string; details?: string };
+    const msg = String(anyErr?.message || anyErr?.details || e || 'Lỗi không xác định');
+    if (msg.includes('FirebaseError:') || msg.includes('cloud function')) {
+      const m = /(?:FirebaseError:\s*)?(?:\w+\/[\w-]+:\s*)?(.+)$/i.exec(msg);
+      return (m?.[1] || msg).trim();
+    }
+    return msg;
+  }
+
+  async sendPxkBypassOtp(): Promise<void> {
+    const lsx = this.pxkBypassOtpLsx;
+    if (!lsx) {
+      this.pxkBypassOtpError = 'Thiếu LSX.';
+      return;
+    }
+    this.pxkBypassOtpError = '';
+    this.pxkBypassOtpInfo = '';
+    this.pxkBypassOtpSending = true;
+    try {
+      const requestedBy = await this.getPxkBypassRequester();
+      await this.woPxkBypassOtp.requestOtp({
+        lsx,
+        requestedBy,
+        nextStatus: this.pxkBypassOtpNextStatusLabel,
+        factory: this.selectedFactory || ''
+      });
+      this.pxkBypassOtpStep = 2;
+      this.pxkBypassOtpInfo = `Đã gửi mã 4 số qua Zalo tới ASP0106 cho LSX ${lsx}.`;
+    } catch (e: unknown) {
+      this.pxkBypassOtpError = this.extractCallableError(e);
+    } finally {
+      this.pxkBypassOtpSending = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async verifyPxkBypassOtp(): Promise<void> {
+    this.pxkBypassOtpError = '';
+    if (this.pxkBypassOtpCode.trim().length !== 4) {
+      this.pxkBypassOtpError = 'Mã OTP phải gồm 4 chữ số.';
+      return;
+    }
+    const lsx = this.pxkBypassOtpLsx;
+    const wo = this.pendingPxkBypassWo;
+    const action = this.pendingPxkBypassAction;
+    const nextStatus = this.pendingPxkBypassStatus;
+    this.pxkBypassOtpVerifying = true;
+    try {
+      const ok = await this.woPxkBypassOtp.verifyOtp(this.pxkBypassOtpCode, lsx);
+      if (!ok) {
+        this.pxkBypassOtpError = 'Mã OTP không đúng.';
+        return;
+      }
+      this.pxkBypassGrantedLsx = lsx;
+      this.closePxkBypassOtpModal();
+      if (!wo) return;
+      if (action === 'complete') {
+        await this.completeWorkOrder(wo);
+      } else if (action === 'status' && nextStatus) {
+        await this.onStatusChange(wo, nextStatus);
+      }
+    } catch (e: unknown) {
+      this.pxkBypassOtpError = this.extractCallableError(e);
+    } finally {
+      this.pxkBypassOtpVerifying = false;
+      this.cdr.detectChanges();
+    }
   }
 
   /** Kiểm tra option có bị disable theo rule chuyển trạng thái không */
@@ -1689,12 +1815,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
     const blocked = await this.isThieuBlockedForWorkOrder(workOrder);
     if (blocked && (newStatusEnum === WorkOrderStatus.DONE || newStatusEnum === WorkOrderStatus.TRANSFER)) {
-      const bypass = await this.checkBypassPasswordForThieu();
-      if (!bypass) {
+      if (!this.isPxkBypassGrantedFor(workOrder)) {
         workOrder.status = oldStatus;
         this.cdr.detectChanges();
+        this.openPxkBypassOtpModal(workOrder, newStatus, 'status');
         return;
       }
+      this.pxkBypassGrantedLsx = '';
     }
     await this.updateWorkOrderStatus(workOrder, newStatusEnum);
   }
@@ -3513,8 +3640,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   async completeWorkOrder(workOrder: WorkOrder): Promise<void> {
     const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
     if (blocked) {
-      const bypass = await this.checkBypassPasswordForThieu();
-      if (!bypass) return;
+      if (!this.isPxkBypassGrantedFor(workOrder)) {
+        this.openPxkBypassOtpModal(workOrder, 'done', 'complete');
+        return;
+      }
+      this.pxkBypassGrantedLsx = '';
     }
     console.log('🔄 Bắt đầu hoàn thành work order:', workOrder.productCode, 'ID:', workOrder.id);
     
