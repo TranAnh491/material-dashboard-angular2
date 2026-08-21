@@ -6227,6 +6227,89 @@ $asm1-toolbar-h: 36px;
     color: #475569;
   }
 
+  &__ready {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+
+    i {
+      font-size: 22px;
+    }
+
+    &--on {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+
+    &--busy {
+      background: #ffedd5;
+      color: #9a3412;
+      border: 1px solid #fdba74;
+    }
+  }
+
+  &__card {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+
+    &--ok {
+      border-color: #6ee7b7;
+      background: #ecfdf5;
+    }
+
+    &--miss {
+      border-color: #fecaca;
+      background: #fef2f2;
+    }
+  }
+
+  &__card-top {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #334155;
+
+    strong {
+      font-size: 16px;
+      color: #0f172a;
+    }
+  }
+
+  &__card-qty {
+    margin-top: 4px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  &__card-kk {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #b45309;
+
+    &--on {
+      color: #047857;
+    }
+  }
+
+  &__pending {
+    margin: 6px 0 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #b45309;
+  }
+
   &__input-row {
     display: flex;
     gap: 8px;

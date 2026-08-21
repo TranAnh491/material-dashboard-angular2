@@ -3650,8 +3650,30 @@
     </div>
 
     <div class="kk-type-scan__body">
+      <div *ngIf="kkTypeScanStep === 'operator'" class="kk-type-scan__step">
+        <p class="kk-type-scan__hint">Bước 1: Nhập / scan mã nhân viên (chỉ 1 lần) — dùng để tick KK khi đủ số lượng</p>
+        <div class="kk-type-scan__input-row">
+          <input id="kkTypeScanOperatorInput"
+                 type="text"
+                 [(ngModel)]="kkTypeScanOperatorInput"
+                 (input)="onKkTypeScanNewline('operator', $event)"
+                 (keydown.enter)="submitKkTypeScanOperator($event)"
+                 placeholder="4 số (vd: 0106) hoặc ASP0106"
+                 autocomplete="off"
+                 autocapitalize="characters"
+                 enterkeyhint="next"
+                 spellcheck="false">
+          <button type="button" (click)="submitKkTypeScanOperator()" [disabled]="!kkTypeScanOperatorInput.trim()">
+            <i class="material-icons">arrow_forward</i>
+          </button>
+        </div>
+      </div>
+
       <div *ngIf="kkTypeScanStep === 'pallet'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">Bước 1: Scan số pallet — hệ thống lưu lại để gán cho các tem tiếp theo</p>
+        <p class="kk-type-scan__hint">
+          NV <strong>{{ kkTypeScanOperator || '—' }}</strong>
+          · Bước 2: Scan số pallet
+        </p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanPalletInput"
                  type="text"
@@ -3672,26 +3694,50 @@
       </div>
 
       <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
+        <div class="kk-type-scan__ready"
+             [class.kk-type-scan__ready--on]="kkTypeScanReady && !kkTypeScanBusy"
+             [class.kk-type-scan__ready--busy]="kkTypeScanBusy || !kkTypeScanReady">
+          <i class="material-icons">{{ kkTypeScanBusy || !kkTypeScanReady ? 'hourglass_empty' : 'check_circle' }}</i>
+          <strong>{{ kkTypeScanBusy || !kkTypeScanReady ? 'ĐANG GHI — chờ rồi scan tiếp' : 'SẴN SÀNG — scan tem tiếp' }}</strong>
+        </div>
         <p class="kk-type-scan__hint">
-          Đã lưu pallet <strong>{{ kkTypeScanPallet }}</strong>
+          Pallet <strong>{{ kkTypeScanPallet }}</strong>
+          · NV {{ kkTypeScanOperator }}
           · Đúng {{ kkTypeScanOkCount }}
-          · Bỏ qua {{ kkTypeScanSkipCount }}
           · Lệch {{ kkTypeScanMissCount }}
         </p>
+        <div class="kk-type-scan__card" *ngIf="kkTypeScanLast as last"
+             [class.kk-type-scan__card--ok]="last.ok"
+             [class.kk-type-scan__card--miss]="!last.ok">
+          <div class="kk-type-scan__card-top">
+            <strong>{{ last.code }}</strong>
+            <span>PO {{ last.po || '—' }}</span>
+          </div>
+          <div class="kk-type-scan__card-qty">
+            +{{ formatNumber(last.addQty) }}
+            → quét <b>{{ formatNumber(last.scanned) }}</b>
+            / tồn {{ formatNumber(last.stock) }}
+          </div>
+          <div class="kk-type-scan__card-kk" [class.kk-type-scan__card-kk--on]="last.kkOn">
+            {{ last.kkOn ? 'Đã tick KK' : 'Chưa đủ lượng — chưa tick KK' }}
+          </div>
+        </div>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanQrInput"
                  type="text"
                  [(ngModel)]="kkTypeScanQrInput"
                  (input)="onKkTypeScanNewline('code', $event)"
-                 (keydown.enter)="submitKkTypeScanCode()"
+                 (keydown.enter)="submitKkTypeScanCode($event)"
+                 (keydown.tab)="submitKkTypeScanCode($event)"
                  placeholder="Scan tem mã hàng (Mã|PO|SL|IMD)..."
                  autocomplete="off"
                  spellcheck="false"
-                 [disabled]="kkTypeScanBusy">
-          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || !kkTypeScanQrInput.trim()">
+                 enterkeyhint="done">
+          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="!kkTypeScanQrInput.trim()">
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
         </div>
+        <p class="kk-type-scan__pending" *ngIf="kkTypeScanPending">Đã nhận tem chờ — sẽ ghi ngay khi sẵn sàng</p>
         <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToPallet()" [disabled]="kkTypeScanBusy">
           Đổi pallet
         </button>

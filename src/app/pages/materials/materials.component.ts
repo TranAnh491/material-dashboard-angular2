@@ -290,15 +290,29 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkTypePalletNotesSig = '';
   private kkTypePalletNotesCached = new Map<string, string>();
   showKkTypeScanModal = false;
-  kkTypeScanStep: 'pallet' | 'codes' = 'pallet';
+  kkTypeScanStep: 'operator' | 'pallet' | 'codes' = 'pallet';
+  kkTypeScanOperator = '';
+  kkTypeScanOperatorInput = '';
   kkTypeScanPallet = '';
   kkTypeScanPalletInput = '';
   kkTypeScanQrInput = '';
   kkTypeScanBusy = false;
+  kkTypeScanReady = true;
+  kkTypeScanPending = '';
   kkTypeScanOkCount = 0;
   kkTypeScanSkipCount = 0;
   kkTypeScanMissCount = 0;
   kkTypeScanLogs: Array<{ ok: boolean; skip?: boolean; text: string }> = [];
+  kkTypeScanLast: {
+    ok: boolean;
+    code: string;
+    po: string;
+    addQty: number;
+    scanned: number;
+    stock: number;
+    kkOn: boolean;
+    text: string;
+  } | null = null;
   showKkTypeReportMenu = false;
   kkTypeReportBusy = false;
   /** Tick: cộng các mã đang ở kho WH3/ASM3 vào số liệu KK. Bỏ tick thì không tính. */
@@ -6629,17 +6643,24 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   openKkTypeScanModal(row: KkTypeRow): void {
     if (!this.canEdit || this.kkLocMapBusy || !row) return;
     this.showKkTypeScanModal = true;
-    this.kkTypeScanStep = 'pallet';
+    this.kkTypeScanOperator = this.kkOperatorIdCache || '';
+    this.kkTypeScanOperatorInput = this.kkTypeScanOperator;
+    this.kkTypeScanStep = this.kkTypeScanOperator ? 'pallet' : 'operator';
     this.kkTypeScanPallet = '';
     this.kkTypeScanPalletInput = '';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanBusy = false;
+    this.kkTypeScanReady = true;
+    this.kkTypeScanPending = '';
     this.kkTypeScanOkCount = 0;
     this.kkTypeScanSkipCount = 0;
     this.kkTypeScanMissCount = 0;
     this.kkTypeScanLogs = [];
+    this.kkTypeScanLast = null;
     this.cdr.detectChanges();
-    setTimeout(() => this.focusKkTypeScanInput('kkTypeScanPalletInput'), 80);
+    setTimeout(() => this.focusKkTypeScanInput(
+      this.kkTypeScanStep === 'operator' ? 'kkTypeScanOperatorInput' : 'kkTypeScanPalletInput'
+    ), 80);
   }
 
   closeKkTypeScanModal(): void {
@@ -6649,7 +6670,32 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanPallet = '';
     this.kkTypeScanPalletInput = '';
     this.kkTypeScanQrInput = '';
+    this.kkTypeScanPending = '';
     this.kkTypeScanLogs = [];
+    this.kkTypeScanLast = null;
+  }
+
+  submitKkTypeScanOperator(event?: Event): void {
+    event?.preventDefault?.();
+    const el = (event?.target as HTMLInputElement | undefined)
+      || (document.getElementById('kkTypeScanOperatorInput') as HTMLInputElement | null);
+    const raw = String(el?.value ?? this.kkTypeScanOperatorInput ?? '')
+      .replace(/[\r\n\t]+/g, '')
+      .replace(/[\u0000-\u001F]/g, '')
+      .trim()
+      .toUpperCase();
+    const shortCode = /^\d{4}$/.test(raw) ? `ASP${raw}` : raw.slice(0, 7);
+    if (!/^ASP\d{4}$/.test(shortCode)) {
+      alert('Mã nhân viên không đúng. Nhập 4 số (vd: 0106) hoặc quét ASP + 4 số.');
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      return;
+    }
+    this.kkOperatorIdCache = shortCode;
+    this.kkTypeScanOperator = shortCode;
+    this.kkTypeScanOperatorInput = shortCode;
+    this.kkTypeScanStep = 'pallet';
+    this.cdr.detectChanges();
+    this.focusKkTypeScanInput('kkTypeScanPalletInput');
   }
 
   private focusKkTypeScanInput(id: string, retry = 0): void {
@@ -6664,16 +6710,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }, retry === 0 ? 0 : 50);
   }
 
-  onKkTypeScanNewline(kind: 'pallet' | 'code', event: Event): void {
+  onKkTypeScanNewline(kind: 'operator' | 'pallet' | 'code', event: Event): void {
     const el = event.target as HTMLInputElement | undefined;
     const raw = String(el?.value || '');
     if (!/[\r\n]/.test(raw)) return;
     const cleaned = raw.replace(/[\r\n]+/g, '').trim();
-    if (kind === 'pallet') this.kkTypeScanPalletInput = cleaned;
+    if (kind === 'operator') this.kkTypeScanOperatorInput = cleaned;
+    else if (kind === 'pallet') this.kkTypeScanPalletInput = cleaned;
     else this.kkTypeScanQrInput = cleaned;
     if (el) el.value = cleaned;
-    if (kind === 'pallet') this.submitKkTypeScanPallet(event);
-    else void this.submitKkTypeScanCode();
+    if (kind === 'operator') this.submitKkTypeScanOperator(event);
+    else if (kind === 'pallet') this.submitKkTypeScanPallet(event);
+    else void this.submitKkTypeScanCode(event);
   }
 
   kkTypeScanPalletLines(): InventoryMaterial[] {
@@ -6703,8 +6751,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanPalletInput = pallet;
     this.kkTypeScanStep = 'codes';
     this.kkTypeScanQrInput = '';
+    this.kkTypeScanReady = true;
+    this.kkTypeScanLast = null;
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanQrInput');
+    this.kkTypeScanBeep('ready');
   }
 
   backKkTypeScanToPallet(): void {
@@ -6737,11 +6788,49 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     else this.kkTypeScanMissCount += 1;
   }
 
-  async submitKkTypeScanCode(): Promise<void> {
-    if (this.kkTypeScanBusy || this.kkTypeScanStep !== 'codes') return;
-    const raw = String(this.kkTypeScanQrInput || '').replace(/[\r\n]+/g, '').trim();
+  private kkTypeScanBeep(kind: 'ready' | 'ok' | 'err'): void {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = kind === 'err' ? 220 : kind === 'ok' ? 880 : 660;
+      gain.gain.value = 0.08;
+      osc.start();
+      osc.stop(ctx.currentTime + (kind === 'ready' ? 0.12 : 0.08));
+      osc.onended = () => ctx.close();
+    } catch {
+      /* ignore audio */
+    }
+  }
+
+  private readKkTypeScanInput(id: string, fallback: string, event?: Event): string {
+    const el = (event?.target as HTMLInputElement | undefined)
+      || (document.getElementById(id) as HTMLInputElement | null);
+    return String(el?.value ?? fallback ?? '')
+      .replace(/[\r\n\t]+/g, '')
+      .replace(/[\u0000-\u001F]/g, '')
+      .trim();
+  }
+
+  async submitKkTypeScanCode(event?: Event): Promise<void> {
+    event?.preventDefault?.();
+    if (this.kkTypeScanStep !== 'codes') return;
+    const raw = this.readKkTypeScanInput('kkTypeScanQrInput', this.kkTypeScanQrInput, event);
     this.kkTypeScanQrInput = '';
+    const inputEl = document.getElementById('kkTypeScanQrInput') as HTMLInputElement | null;
+    if (inputEl) inputEl.value = '';
     if (!raw) return;
+
+    if (this.kkTypeScanBusy || !this.kkTypeScanReady) {
+      this.kkTypeScanPending = raw;
+      this.cdr.detectChanges();
+      return;
+    }
 
     if (!raw.includes('|') && /^[PF]/i.test(raw)) {
       this.kkTypeScanPalletInput = raw;
@@ -6756,12 +6845,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const addQty = this.parseKkScanQty(parsed.quantity);
     if (!code || !po || !imd) {
       this.pushKkTypeScanLog(false, 'QR thiếu Mã / PO / IMD');
+      this.kkTypeScanBeep('err');
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
     }
     if (!(addQty > 0)) {
       this.pushKkTypeScanLog(false, `${code || 'QR'} — thiếu số lượng trên tem`);
+      this.kkTypeScanBeep('err');
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
@@ -6770,6 +6861,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const row = this.kkActiveTypeRow;
     if (!row) {
       this.pushKkTypeScanLog(false, 'Chưa mở loại hàng');
+      this.kkTypeScanBeep('err');
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
@@ -6798,6 +6890,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (!match?.id) {
       this.pushKkTypeScanLog(false, `${code} · ${po} · ${imd} — không khớp`);
+      this.kkTypeScanBeep('err');
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
@@ -6806,12 +6899,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const alreadyKk = this.isKkFlagOn(match.kkChecked);
     const prevPallet = palletOf(match);
     const nextScanCount = this.roundKkQty(this.getKkScanCount(match) + addQty);
+    const stock = this.calculateCurrentStock(match);
+    const qtyEnough = nextScanCount + 1e-6 >= stock;
+    const willTickKk = !alreadyKk && qtyEnough;
+    const operator = this.kkTypeScanOperator || this.kkOperatorIdCache;
+    if (!operator) {
+      this.kkTypeScanStep = 'operator';
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      return;
+    }
 
     this.kkTypeScanBusy = true;
+    this.kkTypeScanReady = false;
     this.cdr.detectChanges();
     try {
-      const operator = await this.resolveKkOperatorId();
-      if (!operator) return;
       const kkAt = new Date();
       const payload: Record<string, unknown> = {
         palletId: pallet,
@@ -6820,13 +6922,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
         modifiedBy: operator
       };
-      if (!alreadyKk) {
+      if (willTickKk) {
         payload.kkChecked = true;
         payload.kkBy = operator;
         payload.kkAt = kkAt;
       }
       await this.firestore.collection('inventory-materials').doc(match.id).update(payload);
-      if (!alreadyKk) {
+      if (willTickKk) {
         await this.firestore.collection('inventory-kk-history').add({
           inventoryDocId: match.id,
           factory: this.resolveKkFactoryForMaterial(match),
@@ -6837,7 +6939,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           location: String(match.location || '').trim().toUpperCase(),
           palletId: pallet,
           quantity: Number(match.quantity) || 0,
-          stock: Number(this.calculateCurrentStock(match)) || 0,
+          stock: Number(stock) || 0,
           unit: String(match.unit || '').trim(),
           checkedBy: operator,
           checkedAt: kkAt,
@@ -6857,7 +6959,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         m.palletId = pallet;
         m.kkScanCount = nextScanCount;
         (m as { __prevPalletId?: string }).__prevPalletId = pallet;
-        if (!alreadyKk) {
+        if (willTickKk) {
           m.kkChecked = true;
           m.kkBy = operator;
           m.kkAt = kkAt;
@@ -6866,21 +6968,52 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
       this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
       this.syncKkTypeRows();
-      const stock = this.calculateCurrentStock(match);
       const palletLog = prevPallet && prevPallet !== pallet
         ? `pallet ${prevPallet} → ${pallet}`
         : `pallet ${pallet}`;
       const qtyLog = `+${this.formatNumber(addQty)} → quét ${this.formatNumber(nextScanCount)} / tồn ${this.formatNumber(stock)}`;
-      this.pushKkTypeScanLog(true, alreadyKk
-        ? `${code} · ${po} — ${qtyLog}${prevPallet !== pallet ? ` · ${palletLog}` : ''}`
-        : `${code} · ${po} · ${imd} → ${palletLog} + KK · ${qtyLog}`);
+      const kkLog = alreadyKk || willTickKk ? ' · đã KK' : ' · chưa đủ — chưa tick KK';
+      const text = `${code} · ${po} · ${qtyLog}${kkLog}${prevPallet !== pallet ? ` · ${palletLog}` : ''}`;
+      this.pushKkTypeScanLog(true, text);
+      this.kkTypeScanLast = {
+        ok: true,
+        code,
+        po,
+        addQty,
+        scanned: nextScanCount,
+        stock,
+        kkOn: alreadyKk || willTickKk,
+        text
+      };
+      this.kkTypeScanBeep('ok');
     } catch (e) {
       console.error('❌ submitKkTypeScanCode:', e);
       this.pushKkTypeScanLog(false, `${code} — không lưu được`);
+      this.kkTypeScanLast = {
+        ok: false,
+        code,
+        po,
+        addQty,
+        scanned: this.getKkScanCount(match),
+        stock,
+        kkOn: alreadyKk,
+        text: `${code} — không lưu được`
+      };
+      this.kkTypeScanBeep('err');
     } finally {
       this.kkTypeScanBusy = false;
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
+      const pending = this.kkTypeScanPending;
+      this.kkTypeScanPending = '';
+      if (pending) {
+        this.kkTypeScanQrInput = pending;
+        void this.submitKkTypeScanCode();
+        return;
+      }
+      this.kkTypeScanReady = true;
+      this.cdr.detectChanges();
+      this.kkTypeScanBeep('ready');
     }
   }
 
