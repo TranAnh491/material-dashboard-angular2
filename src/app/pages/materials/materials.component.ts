@@ -5940,6 +5940,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         <td class="c">${esc(this.getKkRollsText(m))}</td>
         <td class="n">${esc(this.formatNumber(this.getKkScanCount(m)))} / ${esc(this.formatNumber(stock))}</td>
         <td class="c">${m.kkChecked ? '☑' : '☐'}</td>
+        <td>${esc(this.getKkTypePalletNote(m) || '—')}</td>
       </tr>`;
     }).join('');
     const now = new Date().toLocaleString('vi-VN');
@@ -6007,6 +6008,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         <th class="c">Cuộn</th>
         <th class="c">Lần quét</th>
         <th class="c">KK</th>
+        <th>Ghi chú</th>
       </tr>
     </thead>
     <tbody>${rowsHtml}</tbody>
@@ -6054,6 +6056,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       'Cuộn': this.getKkRollsText(material),
       'Lần quét': this.getKkScanCount(material),
       'KK': kkOn ? 'Đã KK' : 'Chưa KK',
+      'Ghi chú': this.getKkTypePalletNote(material),
       'Người KK': String(material.kkBy || ''),
       'Thời gian KK': kkOn ? this.formatLastStatusDate(this.normalizeTimestamp(material.kkAt)) : ''
     };
@@ -6808,6 +6811,54 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (b.bagCount <= 0) return '0';
     if (b.oddBags) return `${b.fullCount}+1`;
     return String(b.fullCount);
+  }
+
+  getKkRollsCount(material: InventoryMaterial): number {
+    const b = this.getKkStockBreakdown(material, this.getEffectiveStandardPacking(material));
+    return Number(b.bagCount) || 0;
+  }
+
+  private kkLineIdentityKey(material: InventoryMaterial): string {
+    const code = String(material?.materialCode || '').trim().toUpperCase();
+    const po = String(material?.poNumber || '').trim().replace(/\s+/g, '').toUpperCase();
+    const imd = String(this.getDisplayIMD(material) || '').trim().toUpperCase();
+    return `${code}|${po}|${imd}`;
+  }
+
+  /** Cùng mã + PO + IMD ở ≥ 2 pallet: "P001: 5 cuộn · P002: 3 cuộn". */
+  getKkTypePalletNote(material: InventoryMaterial): string {
+    const key = this.kkLineIdentityKey(material);
+    if (!key || key.startsWith('|')) return '';
+    return this.kkTypePalletNoteMap.get(key) || '';
+  }
+
+  get kkTypePalletNoteMap(): Map<string, string> {
+    const byKey = new Map<string, Map<string, number>>();
+    this.kkLocMapTypeCache.forEach((list) => {
+      for (const m of list) {
+        if (this.calculateCurrentStock(m) <= 0) continue;
+        const key = this.kkLineIdentityKey(m);
+        if (!key || key.startsWith('|')) continue;
+        const pallet = String(m.palletId || '').trim().toUpperCase() || '—';
+        const rolls = this.getKkRollsCount(m);
+        let palMap = byKey.get(key);
+        if (!palMap) {
+          palMap = new Map<string, number>();
+          byKey.set(key, palMap);
+        }
+        palMap.set(pallet, (palMap.get(pallet) || 0) + rolls);
+      }
+    });
+    const notes = new Map<string, string>();
+    byKey.forEach((palMap, key) => {
+      if (palMap.size < 2) return;
+      const text = Array.from(palMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
+        .map(([pallet, rolls]) => `${pallet}: ${rolls} cuộn`)
+        .join(' · ');
+      notes.set(key, text);
+    });
+    return notes;
   }
 
   getKkScanCount(material: InventoryMaterial): number {

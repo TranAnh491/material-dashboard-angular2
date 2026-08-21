@@ -425,6 +425,7 @@
                     <th title="Số cuộn = tồn ÷ Standard; phần lẻ +1">CUỘN</th>
                     <th title="Cộng dồn số lượng trên tem Scan — so với tồn kho">LẦN QUÉT</th>
                     <th title="Đã kiểm kê">KK</th>
+                    <th title="Cùng mã + PO + IMD ở nhiều pallet — số cuộn từng pallet">GHI CHÚ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -497,12 +498,13 @@
                              [disabled]="!canEdit || kkLocMapBusy"
                              (change)="onKkDetailTick(material, $any($event.target).checked)">
                     </td>
+                    <td class="kk-type-note-cell" [title]="getKkTypePalletNote(material)">{{ getKkTypePalletNote(material) || '—' }}</td>
                   </tr>
                   <tr *ngIf="!kkTypeDetailAll.length">
-                    <td colspan="13" class="hidden-empty">Không có dòng tồn loại hàng này{{ kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '' }}.</td>
+                    <td colspan="14" class="hidden-empty">Không có dòng tồn loại hàng này{{ kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '' }}.</td>
                   </tr>
                   <tr *ngIf="kkTypeDetailAll.length && !kkTypeDetailFiltered.length">
-                    <td colspan="13" class="hidden-empty">Không có dòng nào khớp bộ lọc.</td>
+                    <td colspan="14" class="hidden-empty">Không có dòng nào khớp bộ lọc.</td>
                   </tr>
                 </tbody>
               </table>
