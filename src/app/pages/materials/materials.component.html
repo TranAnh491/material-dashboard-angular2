@@ -3657,10 +3657,12 @@
                  type="text"
                  [(ngModel)]="kkTypeScanPalletInput"
                  (input)="onKkTypeScanNewline('pallet', $event)"
-                 (keydown.enter)="submitKkTypeScanPallet()"
+                 (keydown.enter)="submitKkTypeScanPallet($event)"
+                 (keydown.tab)="submitKkTypeScanPallet($event)"
                  placeholder="Scan pallet..."
                  autocomplete="off"
                  autocapitalize="characters"
+                 enterkeyhint="next"
                  spellcheck="false"
                  [disabled]="kkTypeScanBusy">
           <button type="button" (click)="submitKkTypeScanPallet()" [disabled]="kkTypeScanBusy || !kkTypeScanPalletInput.trim()">
