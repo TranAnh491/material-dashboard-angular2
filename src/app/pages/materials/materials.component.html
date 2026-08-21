@@ -13,7 +13,7 @@
         </h4>
         <div class="header-stats" *ngIf="kkLocMapView === 'type' && !kkLocMapLoading">
           <span *ngIf="!kkActiveProductType">{{ kkLocMapTypeSummary.count | number }} loại · tồn {{ formatNumber(kkLocMapTypeSummary.stock) }}</span>
-          <span *ngIf="kkActiveTypeRow">Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }}</span>
+          <span *ngIf="kkActiveTypeRow">Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }} · Tổng cuộn: {{ kkTypeFilteredRollsTotal | number }}</span>
         </div>
       </div>
       <div class="excel-actions">
@@ -313,12 +313,19 @@
                      autocomplete="off">
             </div>
             <div class="kk-type-rolls-total"
-                 *ngIf="kkTypeShowRollsTotalBox"
                  [title]="'Tổng số cuộn của ' + kkTypeDetailFiltered.length + ' dòng đang lọc'">
               <span class="kk-type-rolls-total__label">Tổng cuộn</span>
               <strong>{{ kkTypeFilteredRollsTotal | number }}</strong>
               <span class="kk-type-rolls-total__meta">{{ kkTypeDetailFiltered.length | number }} dòng</span>
             </div>
+            <button type="button"
+                    class="kk-type-filter__sort"
+                    [class.kk-type-filter__sort--on]="kkTypeSortQtyDesc"
+                    (click)="toggleKkTypeSortQty()"
+                    title="Sắp xếp theo số lượng từ cao đến thấp">
+              <i class="material-icons">arrow_downward</i>
+              Cao → thấp
+            </button>
             <select class="kk-type-filter__select"
                     [(ngModel)]="kkTypeFilterLoc"
                     (ngModelChange)="onKkTypeFilterChange()">
@@ -416,6 +423,7 @@
                     <th>PALLET</th>
                     <th title="Standard Packing — nhập 1 ô thì cả mã đổi, đồng bộ danh mục">STANDARD</th>
                     <th title="Số cuộn = tồn ÷ Standard; phần lẻ +1">CUỘN</th>
+                    <th title="Cộng dồn số lượng trên tem Scan — so với tồn kho">LẦN QUÉT</th>
                     <th title="Đã kiểm kê">KK</th>
                   </tr>
                 </thead>
@@ -475,6 +483,14 @@
                              title="Nhập Standard — áp dụng mọi dòng cùng mã và danh mục NVL">
                     </td>
                     <td class="number-cell kk-type-roll-cell" [title]="getKkRollsTitle(material)">{{ getKkRollsText(material) }}</td>
+                    <td class="number-cell kk-type-scan-count-cell"
+                        [class.kk-type-scan-count-cell--ok]="kkScanStockTone(material) === 'ok'"
+                        [class.kk-type-scan-count-cell--low]="kkScanStockTone(material) === 'low'"
+                        [class.kk-type-scan-count-cell--over]="kkScanStockTone(material) === 'over'"
+                        [title]="getKkScanCompareTitle(material)">
+                      {{ formatNumber(getKkScanCount(material)) }}
+                      <span class="kk-type-scan-count-cell__vs">/ {{ formatNumber(calculateCurrentStock(material)) }}</span>
+                    </td>
                     <td class="kk-cell">
                       <input type="checkbox"
                              [checked]="!!material.kkChecked"
@@ -483,10 +499,10 @@
                     </td>
                   </tr>
                   <tr *ngIf="!kkTypeDetailAll.length">
-                    <td colspan="12" class="hidden-empty">Không có dòng tồn loại hàng này{{ kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '' }}.</td>
+                    <td colspan="13" class="hidden-empty">Không có dòng tồn loại hàng này{{ kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '' }}.</td>
                   </tr>
                   <tr *ngIf="kkTypeDetailAll.length && !kkTypeDetailFiltered.length">
-                    <td colspan="12" class="hidden-empty">Không có dòng nào khớp bộ lọc.</td>
+                    <td colspan="13" class="hidden-empty">Không có dòng nào khớp bộ lọc.</td>
                   </tr>
                 </tbody>
               </table>

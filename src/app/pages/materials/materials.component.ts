@@ -76,6 +76,8 @@ export interface InventoryMaterial {
   standardPacking?: number;
   /** Đã kiểm kê (đếm tồn kho) — tick tay ở cột KK, riêng theo dòng (Mã + PO + IMD). */
   kkChecked?: boolean;
+  /** Số lượng cộng dồn từ tem Scan KK — so sánh với tồn kho. */
+  kkScanCount?: number;
   /** Tài khoản đã tick/bỏ tick KK gần nhất. */
   kkBy?: string;
   /** Thời điểm tick/bỏ tick KK gần nhất. */
@@ -268,6 +270,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeFilterLoc = '';
   kkTypeFilterWh: '' | KkWarehouse = '';
   kkTypeFilterRolls = '';
+  kkTypeSortQtyDesc = false;
   kkTypeShowExtraFilter = false;
   showKkTypeScanModal = false;
   kkTypeScanStep: 'pallet' | 'codes' = 'pallet';
@@ -4031,7 +4034,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       locationManualOverride: !!data.locationManualOverride,
       kkChecked: true,
       kkBy: data.kkBy || '',
-      kkAt: data.kkAt || null
+      kkAt: data.kkAt || null,
+      kkScanCount: Math.max(0, Number(data.kkScanCount) || 0)
     } as InventoryMaterial;
     this.stampLocationAtLoad(material);
     return material;
@@ -5706,6 +5710,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
+    this.kkTypeSortQtyDesc = false;
     this.kkTypeShowExtraFilter = false;
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
     void this.ensureKkTypeMaterialNames();
@@ -5720,6 +5725,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
+    this.kkTypeSortQtyDesc = false;
     this.kkTypeShowExtraFilter = false;
   }
 
@@ -5744,20 +5750,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       rows = rows.filter((m) => this.getKkRollsText(m) === this.kkTypeFilterRolls);
     }
     const q = this.kkTypeDetailQuery.trim().toUpperCase();
-    if (!q) return rows;
-    return rows.filter((m) => {
-      const code = String(m.materialCode || '').toUpperCase();
-      const pallet = String(m.palletId || '').toUpperCase();
-      const name = this.getKkMaterialName(m).toUpperCase();
-      return code.includes(q) || pallet.includes(q) || name.includes(q);
-    });
+    if (q) {
+      rows = rows.filter((m) => {
+        const code = String(m.materialCode || '').toUpperCase();
+        const pallet = String(m.palletId || '').toUpperCase();
+        const name = this.getKkMaterialName(m).toUpperCase();
+        return code.includes(q) || pallet.includes(q) || name.includes(q);
+      });
+    }
+    if (this.kkTypeSortQtyDesc) {
+      rows = [...rows].sort((a, b) => this.calculateCurrentStock(b) - this.calculateCurrentStock(a));
+    }
+    return rows;
   }
 
-  get kkTypeShowRollsTotalBox(): boolean {
-    return !!this.kkTypeDetailQuery.trim();
-  }
-
-  /** Tổng cuộn (ceil tồn÷SP, phần lẻ +1) của các dòng đang lọc khi search mã hàng. */
+  /** Tổng cuộn (ceil tồn÷SP, phần lẻ +1) của các dòng đang lọc. */
   get kkTypeFilteredRollsTotal(): number {
     return this.kkTypeDetailFiltered.reduce((sum, m) => {
       const b = this.getKkStockBreakdown(m, this.getEffectiveStandardPacking(m));
@@ -5794,6 +5801,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
+    this.kkTypeSortQtyDesc = false;
+    this.kkTypePage = 1;
+  }
+
+  toggleKkTypeSortQty(): void {
+    this.kkTypeSortQtyDesc = !this.kkTypeSortQtyDesc;
     this.kkTypePage = 1;
   }
 
@@ -5925,6 +5938,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         <td>${esc(String(m.palletId || '—'))}</td>
         <td class="n">${esc(this.formatNumber(this.getEffectiveStandardPacking(m) || 0))}</td>
         <td class="c">${esc(this.getKkRollsText(m))}</td>
+        <td class="n">${esc(this.formatNumber(this.getKkScanCount(m)))} / ${esc(this.formatNumber(stock))}</td>
         <td class="c">${m.kkChecked ? '☑' : '☐'}</td>
       </tr>`;
     }).join('');
@@ -5991,6 +6005,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         <th>Pallet</th>
         <th class="c">Standard</th>
         <th class="c">Cuộn</th>
+        <th class="c">Lần quét</th>
         <th class="c">KK</th>
       </tr>
     </thead>
@@ -6037,6 +6052,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       'Pallet': String(material.palletId || ''),
       'Standard': this.getEffectiveStandardPacking(material) || '',
       'Cuộn': this.getKkRollsText(material),
+      'Lần quét': this.getKkScanCount(material),
       'KK': kkOn ? 'Đã KK' : 'Chưa KK',
       'Người KK': String(material.kkBy || ''),
       'Thời gian KK': kkOn ? this.formatLastStatusDate(this.normalizeTimestamp(material.kkAt)) : ''
@@ -6266,7 +6282,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             kkChecked: next,
             kkBy: operator,
             kkAt,
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            ...(next ? {} : { kkScanCount: 0 })
           });
         }
         await batch.commit();
@@ -6297,6 +6314,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         m.kkChecked = next;
         m.kkBy = operator;
         m.kkAt = kkAt;
+        if (!next) m.kkScanCount = 0;
       }
       this.syncKkMaterialRows(row.materialCode);
     } catch (e) {
@@ -6627,8 +6645,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const code = String(parsed.materialCode || '').trim().toUpperCase();
     const po = String(parsed.po || '').trim();
     const imd = String(parsed.imd || '').trim();
+    const addQty = this.parseKkScanQty(parsed.quantity);
     if (!code || !po || !imd) {
       this.pushKkTypeScanLog(false, 'QR thiếu Mã / PO / IMD');
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
+    if (!(addQty > 0)) {
+      this.pushKkTypeScanLog(false, `${code || 'QR'} — thiếu số lượng trên tem`);
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
@@ -6672,12 +6697,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const alreadyKk = this.isKkFlagOn(match.kkChecked);
     const prevPallet = palletOf(match);
-    if (alreadyKk && prevPallet === pallet) {
-      this.pushKkTypeScanLog(false, `${code} · ${po} — đã KK + pallet ${pallet}`, true);
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-      return;
-    }
+    const nextScanCount = this.roundKkQty(this.getKkScanCount(match) + addQty);
 
     this.kkTypeScanBusy = true;
     this.cdr.detectChanges();
@@ -6687,6 +6707,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const kkAt = new Date();
       const payload: Record<string, unknown> = {
         palletId: pallet,
+        kkScanCount: nextScanCount,
         updatedAt: new Date(),
         lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
         modifiedBy: operator
@@ -6721,10 +6742,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         match.kkAt = kkAt;
       }
       match.palletId = pallet;
+      match.kkScanCount = nextScanCount;
       (match as { __prevPalletId?: string }).__prevPalletId = pallet;
       const stamp = (m: InventoryMaterial) => {
         if (m.id !== match.id) return;
         m.palletId = pallet;
+        m.kkScanCount = nextScanCount;
         (m as { __prevPalletId?: string }).__prevPalletId = pallet;
         if (!alreadyKk) {
           m.kkChecked = true;
@@ -6735,12 +6758,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
       this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
       this.syncKkTypeRows();
+      const stock = this.calculateCurrentStock(match);
       const palletLog = prevPallet && prevPallet !== pallet
         ? `pallet ${prevPallet} → ${pallet}`
         : `pallet ${pallet}`;
+      const qtyLog = `+${this.formatNumber(addQty)} → quét ${this.formatNumber(nextScanCount)} / tồn ${this.formatNumber(stock)}`;
       this.pushKkTypeScanLog(true, alreadyKk
-        ? `${code} · ${po} — ghi đè ${palletLog}`
-        : `${code} · ${po} · ${imd} → ${palletLog} + KK`);
+        ? `${code} · ${po} — ${qtyLog}${prevPallet !== pallet ? ` · ${palletLog}` : ''}`
+        : `${code} · ${po} · ${imd} → ${palletLog} + KK · ${qtyLog}`);
     } catch (e) {
       console.error('❌ submitKkTypeScanCode:', e);
       this.pushKkTypeScanLog(false, `${code} — không lưu được`);
@@ -6783,6 +6808,43 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (b.bagCount <= 0) return '0';
     if (b.oddBags) return `${b.fullCount}+1`;
     return String(b.fullCount);
+  }
+
+  getKkScanCount(material: InventoryMaterial): number {
+    return Math.max(0, Number(material?.kkScanCount) || 0);
+  }
+
+  private parseKkScanQty(raw: string): number {
+    const n = Number(String(raw || '').replace(/,/g, '').trim());
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return this.roundKkQty(n);
+  }
+
+  private roundKkQty(n: number): number {
+    return Math.round(n * 1e6) / 1e6;
+  }
+
+  kkScanStockTone(material: InventoryMaterial): '' | 'ok' | 'low' | 'over' {
+    const scanned = this.getKkScanCount(material);
+    if (scanned <= 0) return '';
+    const stock = this.calculateCurrentStock(material);
+    const d = scanned - stock;
+    if (Math.abs(d) < 1e-6) return 'ok';
+    return d < 0 ? 'low' : 'over';
+  }
+
+  getKkScanCompareTitle(material: InventoryMaterial): string {
+    const scanned = this.getKkScanCount(material);
+    const stock = this.calculateCurrentStock(material);
+    const tone = this.kkScanStockTone(material);
+    if (tone === 'ok') return `Đã quét ${this.formatNumber(scanned)} = tồn ${this.formatNumber(stock)}`;
+    if (tone === 'low') {
+      return `Đã quét ${this.formatNumber(scanned)} / tồn ${this.formatNumber(stock)} — thiếu ${this.formatNumber(stock - scanned)}`;
+    }
+    if (tone === 'over') {
+      return `Đã quét ${this.formatNumber(scanned)} / tồn ${this.formatNumber(stock)} — thừa ${this.formatNumber(scanned - stock)}`;
+    }
+    return `Chưa scan · tồn ${this.formatNumber(stock)}`;
   }
 
   getKkRollsTitle(material: InventoryMaterial): string {
@@ -7351,7 +7413,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             kkChecked: next,
             kkBy: operator,
             kkAt,
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            ...(next ? {} : { kkScanCount: 0 })
           });
         }
         await batch.commit();
@@ -7382,6 +7445,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         m.kkChecked = next;
         m.kkBy = operator;
         m.kkAt = kkAt;
+        if (!next) m.kkScanCount = 0;
       }
       this.syncKkTypeRows();
     } catch (e) {
@@ -10672,17 +10736,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     const kkAt = new Date();
+    const prevScanCount = this.getKkScanCount(material);
     material.kkChecked = next;
     material.kkBy = operator;
     material.kkAt = kkAt;
+    if (!next) material.kkScanCount = 0;
     this.cdr.markForCheck();
     try {
-      await this.firestore.collection('inventory-materials').doc(material.id).update({
+      const payload: Record<string, unknown> = {
         kkChecked: next,
         kkBy: operator,
         kkAt,
         updatedAt: new Date()
-      });
+      };
+      if (!next) payload.kkScanCount = 0;
+      await this.firestore.collection('inventory-materials').doc(material.id).update(payload);
       if (next) {
         await this.firestore.collection('inventory-kk-history').add({
           inventoryDocId: material.id,
@@ -10707,6 +10775,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (e) {
       console.error('❌ toggleKk:', e);
       material.kkChecked = !next;
+      material.kkScanCount = prevScanCount;
       this.cdr.markForCheck();
       alert('❌ Không lưu được trạng thái Kiểm kê.');
     }

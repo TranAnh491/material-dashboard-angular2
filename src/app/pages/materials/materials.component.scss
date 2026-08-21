@@ -4482,6 +4482,36 @@ $asm1-toolbar-h: 36px;
     }
   }
 
+  &__sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+
+    i {
+      font-size: 16px;
+    }
+
+    &:hover {
+      background: #f8fafc;
+    }
+
+    &--on {
+      border-color: #0f766e;
+      background: #f0fdfa;
+      color: #115e59;
+    }
+  }
+
   &__tick-all,
   &__untick-all,
   &__rename-pallet,
@@ -4656,6 +4686,34 @@ $asm1-toolbar-h: 36px;
 .kk-type-roll-cell {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.kk-type-scan-count-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+
+  &__vs {
+    margin-left: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  &--ok {
+    color: #0f766e;
+    background: #f0fdfa;
+  }
+
+  &--low {
+    color: #b45309;
+    background: #fffbeb;
+  }
+
+  &--over {
+    color: #b91c1c;
+    background: #fef2f2;
+  }
 }
 
 .kk-type-pager--bar {
