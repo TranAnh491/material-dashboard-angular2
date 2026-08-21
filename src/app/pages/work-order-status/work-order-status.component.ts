@@ -283,8 +283,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private pxkIndexLsxKeys: string[] = [];
   private readonly PXK_INDEX_DOC = 'app-settings/pxk-import-lsx-index';
   isImportingPxk: boolean = false;
-  /** OTP vượt quyền PXK lệch — mỗi LSX một mã Zalo ASP0106 */
+  /** OTP vượt quyền PXK lệch — mỗi LSX một mã Zalo ASP0106 (ASM1/ASM3/Sample 1); ASM2/Sample 2 dùng mật khẩu cố định. */
+  private readonly PXK_BYPASS_PASSCODE_FACTORIES = ['asm2', 'sample 2'];
+  private readonly PXK_BYPASS_PASSCODE = '6789';
   showPxkBypassOtpModal = false;
+  pxkBypassOtpMode: 'otp' | 'passcode' = 'otp';
   pxkBypassOtpStep: 1 | 2 = 1;
   pxkBypassOtpCode = '';
   pxkBypassOtpError = '';
@@ -1673,8 +1676,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.pxkBypassOtpNextStatusLabel = nextStatus === 'complete'
       ? 'Done'
       : (nextStatus || '').replace(/^./, (c) => c.toUpperCase());
+    const factory = String(workOrder.factory || this.selectedFactory || '').trim();
+    this.pxkBypassOtpMode = this.PXK_BYPASS_PASSCODE_FACTORIES.includes(this.normalizeFactoryName(factory))
+      ? 'passcode'
+      : 'otp';
     this.showPxkBypassOtpModal = true;
-    this.pxkBypassOtpStep = 1;
+    this.pxkBypassOtpStep = this.pxkBypassOtpMode === 'passcode' ? 2 : 1;
     this.pxkBypassOtpCode = '';
     this.pxkBypassOtpError = '';
     this.pxkBypassOtpInfo = '';
@@ -1750,9 +1757,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       return;
     }
     const lsx = this.pxkBypassOtpLsx;
-    const wo = this.pendingPxkBypassWo;
-    const action = this.pendingPxkBypassAction;
-    const nextStatus = this.pendingPxkBypassStatus;
     this.pxkBypassOtpVerifying = true;
     try {
       const ok = await this.woPxkBypassOtp.verifyOtp(this.pxkBypassOtpCode, lsx);
@@ -1760,19 +1764,48 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.pxkBypassOtpError = 'Mã OTP không đúng.';
         return;
       }
-      this.pxkBypassGrantedLsx = lsx;
-      this.closePxkBypassOtpModal();
-      if (!wo) return;
-      if (action === 'complete') {
-        await this.completeWorkOrder(wo);
-      } else if (action === 'status' && nextStatus) {
-        await this.onStatusChange(wo, nextStatus);
-      }
+      await this.grantPxkBypassAndProceed();
     } catch (e: unknown) {
       this.pxkBypassOtpError = this.extractCallableError(e);
     } finally {
       this.pxkBypassOtpVerifying = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  /** ASM2/Sample 2: mật khẩu cố định thay cho OTP Zalo. */
+  async confirmPxkBypassPasscode(): Promise<void> {
+    this.pxkBypassOtpError = '';
+    const code = this.pxkBypassOtpCode.trim();
+    if (code.length !== 4) {
+      this.pxkBypassOtpError = 'Mật khẩu phải gồm 4 chữ số.';
+      return;
+    }
+    if (code !== this.PXK_BYPASS_PASSCODE) {
+      this.pxkBypassOtpError = 'Mật khẩu không đúng.';
+      return;
+    }
+    this.pxkBypassOtpVerifying = true;
+    try {
+      await this.grantPxkBypassAndProceed();
+    } finally {
+      this.pxkBypassOtpVerifying = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async grantPxkBypassAndProceed(): Promise<void> {
+    const lsx = this.pxkBypassOtpLsx;
+    const wo = this.pendingPxkBypassWo;
+    const action = this.pendingPxkBypassAction;
+    const nextStatus = this.pendingPxkBypassStatus;
+    this.pxkBypassGrantedLsx = lsx;
+    this.closePxkBypassOtpModal();
+    if (!wo) return;
+    if (action === 'complete') {
+      await this.completeWorkOrder(wo);
+    } else if (action === 'status' && nextStatus) {
+      await this.onStatusChange(wo, nextStatus);
     }
   }
 

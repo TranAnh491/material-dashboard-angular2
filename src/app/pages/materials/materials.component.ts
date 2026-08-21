@@ -123,9 +123,10 @@ type ResetLowStockRow = {
 };
 
 /** Dòng tổng hợp Kiểm tra KK theo mã hàng. */
+type KkWarehouse = 'D1' | '00' | 'J5' | 'ASM3';
 type KkLocMaterialRow = {
   materialCode: string;
-  warehouse: 'D1' | 'J5' | 'ASM3';
+  warehouse: KkWarehouse;
   stock: number;
   checked: number;
   totalLines: number;
@@ -141,7 +142,7 @@ type KkLocMaterialRow = {
 type KkTypeRow = {
   productType: string;
   groupCodes: string[];
-  warehouse: 'D1' | 'J5' | 'ASM3';
+  warehouse: KkWarehouse;
   stock: number;
   checked: number;
   totalLines: number;
@@ -239,7 +240,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapLoading = false;
   kkLocMapQuery = '';
   kkLocMapView: 'location' | 'material' | 'type' | null = null;
-  kkLocMapWarehouseFilter: '' | 'D1' | 'J5' | 'ASM3' = '';
+  kkLocMapWarehouseFilter: '' | KkWarehouse = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
   kkLocMapByMaterial: KkLocMaterialRow[] = [];
   kkLocMapByType: KkTypeRow[] = [];
@@ -265,9 +266,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeDetailQuery = '';
   kkTypeSearchDraft = '';
   kkTypeFilterLoc = '';
-  kkTypeFilterWh: '' | 'D1' | 'J5' | 'ASM3' = '';
+  kkTypeFilterWh: '' | KkWarehouse = '';
   kkTypeFilterRolls = '';
   kkTypeShowExtraFilter = false;
+  showKkTypeScanModal = false;
+  kkTypeScanStep: 'pallet' | 'codes' = 'pallet';
+  kkTypeScanPallet = '';
+  kkTypeScanPalletInput = '';
+  kkTypeScanQrInput = '';
+  kkTypeScanBusy = false;
+  kkTypeScanOkCount = 0;
+  kkTypeScanSkipCount = 0;
+  kkTypeScanMissCount = 0;
+  kkTypeScanLogs: Array<{ ok: boolean; skip?: boolean; text: string }> = [];
+  showKkTypeReportMenu = false;
+  kkTypeReportBusy = false;
   /** Tick: cộng các mã đang ở kho WH3/ASM3 vào số liệu KK. Bỏ tick thì không tính. */
   kkCountWh3 = true;
   /** Khi Tính WH3/ASM3: chỉ hiện dòng kho ASM3 / WH3. */
@@ -275,13 +288,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Lọc chỉ các dòng / loại còn chưa tick KK. */
   kkFilterUncheckedOnly = false;
   private inboundNameCache = new Map<string, string>();
-  readonly kkLocMapWarehouseOptions: Array<{ id: 'D1' | 'J5' | 'ASM3'; label: string }> = [
+  readonly kkLocMapWarehouseOptions: Array<{ id: KkWarehouse; label: string }> = [
     { id: 'D1', label: 'D1' },
+    { id: '00', label: '00' },
     { id: 'J5', label: 'J5' },
     { id: 'ASM3', label: 'ASM3 / WH3' }
   ];
-  readonly kkWhSelectOptions: Array<{ id: '' | 'J5' | 'ASM3'; label: string }> = [
+  readonly kkWhSelectOptions: Array<{ id: '' | '00' | 'J5' | 'ASM3'; label: string }> = [
     { id: '', label: 'D1' },
+    { id: '00', label: '00' },
     { id: 'J5', label: 'J5' },
     { id: 'ASM3', label: 'ASM3 / WH3' }
   ];
@@ -5133,6 +5148,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapExpandedKey = null;
     this.kkActiveProductType = null;
     this.kkActiveTypeDraft = null;
+    this.showKkTypeReportMenu = false;
   }
 
   setKkLocMapView(view: 'location' | 'material' | 'type'): void {
@@ -5987,6 +6003,119 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     win.focus();
   }
 
+  private kkTypeReportZoneLabel(): string {
+    if (this.kkLocMapWarehouseFilter) return this.kkWarehouseLabel(this.kkLocMapWarehouseFilter);
+    if (this.kkWh3Only) return 'Chi ASM3 WH3';
+    if (!this.kkCountWh3) return 'Tat ca (khong WH3)';
+    return 'Tat ca';
+  }
+
+  private kkTypeReportFileDate(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private mapKkTypeLineToExcelRow(
+    productType: string,
+    material: InventoryMaterial,
+    stt: number
+  ): Record<string, unknown> {
+    const kkOn = this.isKkFlagOn(material.kkChecked);
+    return {
+      'Loại hàng': productType,
+      'STT': stt,
+      'Mã hàng': String(material.materialCode || ''),
+      'Tên hàng': this.getKkMaterialName(material),
+      'PO': String(material.poNumber || ''),
+      'IMD': this.getDisplayIMD(material) === 'N/A' ? '' : this.getDisplayIMD(material),
+      'Tồn kho': this.calculateCurrentStock(material),
+      'Vị trí': String(material.location || ''),
+      'Kho': this.kkWarehouseLabel(this.kkWarehouseFromLocation(material.location)),
+      'Pallet': String(material.palletId || ''),
+      'Standard': this.getEffectiveStandardPacking(material) || '',
+      'Cuộn': this.getKkRollsText(material),
+      'KK': kkOn ? 'Đã KK' : 'Chưa KK',
+      'Người KK': String(material.kkBy || ''),
+      'Thời gian KK': kkOn ? this.formatLastStatusDate(this.normalizeTimestamp(material.kkAt)) : ''
+    };
+  }
+
+  private async writeKkTypeExcel(
+    rows: Record<string, unknown>[],
+    sheetName: string,
+    fileKind: string
+  ): Promise<void> {
+    if (!rows.length) {
+      alert('Không có dữ liệu để tải báo cáo.');
+      return;
+    }
+    const XLSX = await import('xlsx');
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    const safeSheet = String(sheetName || 'KK').replace(/[\\/?*[\]]/g, ' ').slice(0, 31) || 'KK';
+    XLSX.utils.book_append_sheet(wb, ws, safeSheet);
+    const zone = this.kkTypeReportZoneLabel().replace(/[\\/:*?"<>|]+/g, '_');
+    const fileName = `KK_${this.selectedFactory}_${zone}_${fileKind}_${this.kkTypeReportFileDate()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  }
+
+  async exportKkTypeReport(kind: 'summary' | 'current' | 'all' | 'unchecked' | 'checked'): Promise<void> {
+    if (this.kkTypeReportBusy) return;
+    this.showKkTypeReportMenu = false;
+    this.kkTypeReportBusy = true;
+    this.cdr.detectChanges();
+    try {
+      if (kind === 'summary') {
+        const rows = this.kkTypeBoxes.map((box, i) => ({
+          'STT': i + 1,
+          'Loại hàng': box.productType,
+          'Đã KK': box.checked,
+          'Tổng mã': box.totalLines,
+          'Còn lại': box.remaining
+        }));
+        await this.writeKkTypeExcel(rows, 'Tong hop loai hang', 'TongHop');
+        return;
+      }
+      if (kind === 'current' && !this.kkActiveProductType) {
+        alert('Hãy mở một loại hàng trước.');
+        return;
+      }
+      const typeNames = kind === 'current' && this.kkActiveProductType
+        ? [this.kkActiveProductType]
+        : this.kkTypeBoxes.map((b) => b.productType);
+      const rows: Record<string, unknown>[] = [];
+      let stt = 0;
+      for (const productType of typeNames) {
+        let lines = kind === 'current'
+          ? this.kkTypeDetailAll
+          : this.kkCachedLinesForType(productType).filter((m) => this.calculateCurrentStock(m) > 0);
+        if (kind === 'checked') lines = lines.filter((m) => this.isKkFlagOn(m.kkChecked));
+        if (kind === 'unchecked') lines = lines.filter((m) => !this.isKkFlagOn(m.kkChecked));
+        for (const m of lines) {
+          stt += 1;
+          rows.push(this.mapKkTypeLineToExcelRow(productType, m, stt));
+        }
+      }
+      const names: Record<'current' | 'all' | 'unchecked' | 'checked', string> = {
+        current: 'ChiTietLoai',
+        all: 'ChiTietTatCa',
+        unchecked: 'ChuaKK',
+        checked: 'DaKK'
+      };
+      const sheet = kind === 'current' ? String(this.kkActiveProductType || 'Chi tiet') : 'Chi tiet';
+      await this.writeKkTypeExcel(rows, sheet, names[kind]);
+    } catch (e) {
+      console.error('❌ exportKkTypeReport:', e);
+      alert('❌ Không tải được báo cáo Excel.');
+    } finally {
+      this.kkTypeReportBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   private buildEmptyKkTypeRow(productType: string): KkTypeRow {
     const zone = this.kkLocMapWarehouseFilter || 'D1';
     return {
@@ -6005,17 +6134,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     };
   }
 
-  kkWarehouseLabel(warehouse: 'D1' | 'J5' | 'ASM3' | string): string {
+  kkWarehouseLabel(warehouse: KkWarehouse | string): string {
+    if (warehouse === '00') return '00';
     if (warehouse === 'J5') return 'J5';
     if (warehouse === 'ASM3') return 'ASM3 / WH3';
     return 'D1';
   }
 
-  /** Kho theo vị trí: J5- → J5; ASM3/WH3 → kho tạm; còn lại = D1 (vị trí cũ). */
-  kkWarehouseFromLocation(location: string | null | undefined): 'D1' | 'J5' | 'ASM3' {
+  /** Kho theo vị trí: 00- → 00; J5- → J5; ASM3/WH3 → kho tạm; còn lại = D1. */
+  kkWarehouseFromLocation(location: string | null | undefined): KkWarehouse {
     const tokens = splitMultiLocations(String(location || ''));
     const first = (tokens[0] || String(location || '')).trim().toUpperCase();
     if (!first) return 'D1';
+    if (first === '00' || first.startsWith('00-') || first.startsWith('00+')) return '00';
     if (first.startsWith('J5-')) return 'J5';
     if (isAsm3OrWh3PrefixLocation(first)) return 'ASM3';
     return 'D1';
@@ -6376,9 +6507,225 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  kkLineWhValue(line: InventoryMaterial): '' | 'J5' | 'ASM3' {
+  openKkTypeScanModal(row: KkTypeRow): void {
+    if (!this.canEdit || this.kkLocMapBusy || !row) return;
+    this.showKkTypeScanModal = true;
+    this.kkTypeScanStep = 'pallet';
+    this.kkTypeScanPallet = '';
+    this.kkTypeScanPalletInput = '';
+    this.kkTypeScanQrInput = '';
+    this.kkTypeScanBusy = false;
+    this.kkTypeScanOkCount = 0;
+    this.kkTypeScanSkipCount = 0;
+    this.kkTypeScanMissCount = 0;
+    this.kkTypeScanLogs = [];
+    this.cdr.detectChanges();
+    setTimeout(() => this.focusKkTypeScanInput('kkTypeScanPalletInput'), 80);
+  }
+
+  closeKkTypeScanModal(): void {
+    if (this.kkTypeScanBusy) return;
+    this.showKkTypeScanModal = false;
+    this.kkTypeScanStep = 'pallet';
+    this.kkTypeScanPallet = '';
+    this.kkTypeScanPalletInput = '';
+    this.kkTypeScanQrInput = '';
+    this.kkTypeScanLogs = [];
+  }
+
+  private focusKkTypeScanInput(id: string, retry = 0): void {
+    if (!this.showKkTypeScanModal) return;
+    setTimeout(() => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el && !el.disabled) {
+        el.focus();
+        return;
+      }
+      if (retry < 8) this.focusKkTypeScanInput(id, retry + 1);
+    }, retry === 0 ? 0 : 50);
+  }
+
+  onKkTypeScanNewline(kind: 'pallet' | 'code', event: Event): void {
+    const el = event.target as HTMLInputElement | undefined;
+    const raw = String(el?.value || '');
+    if (!/[\r\n]/.test(raw)) return;
+    const cleaned = raw.replace(/[\r\n]+/g, '').trim();
+    if (kind === 'pallet') this.kkTypeScanPalletInput = cleaned;
+    else this.kkTypeScanQrInput = cleaned;
+    if (el) el.value = cleaned;
+    if (kind === 'pallet') void this.submitKkTypeScanPallet();
+    else void this.submitKkTypeScanCode();
+  }
+
+  kkTypeScanPalletLines(): InventoryMaterial[] {
+    const row = this.kkActiveTypeRow;
+    const pallet = this.kkTypeScanPallet;
+    if (!row || !pallet) return [];
+    return this.kkLinesForTypeRow(row).filter(
+      (m) => String(m.palletId || '').trim().toUpperCase() === pallet && !!m.id
+    );
+  }
+
+  submitKkTypeScanPallet(): void {
+    const pallet = this.normalizeGanPalletCode(this.kkTypeScanPalletInput);
+    if (!pallet) {
+      alert('⚠️ Vui lòng scan số pallet');
+      return;
+    }
+    const row = this.kkActiveTypeRow;
+    if (!row) return;
+    const lines = this.kkLinesForTypeRow(row).filter(
+      (m) => String(m.palletId || '').trim().toUpperCase() === pallet && !!m.id
+    );
+    if (!lines.length) {
+      alert(`❌ Không có mã nào của loại hàng này trên pallet ${pallet}`);
+      this.kkTypeScanPalletInput = '';
+      this.focusKkTypeScanInput('kkTypeScanPalletInput');
+      return;
+    }
+    this.kkTypeScanPallet = pallet;
+    this.kkTypeScanPalletInput = pallet;
+    this.kkTypeScanStep = 'codes';
+    this.kkTypeScanQrInput = '';
+    this.cdr.detectChanges();
+    this.focusKkTypeScanInput('kkTypeScanQrInput');
+  }
+
+  backKkTypeScanToPallet(): void {
+    this.kkTypeScanStep = 'pallet';
+    this.kkTypeScanQrInput = '';
+    this.cdr.detectChanges();
+    this.focusKkTypeScanInput('kkTypeScanPalletInput');
+  }
+
+  private kkTypeScanPoMatch(a: string, b: string): boolean {
+    const x = String(a || '').trim().replace(/\s+/g, '');
+    const y = String(b || '').trim().replace(/\s+/g, '');
+    if (!y) return false;
+    return x === y;
+  }
+
+  private kkTypeScanImdMatch(scanned: string, inventory: string): boolean {
+    const a = String(scanned || '').trim();
+    const b = String(inventory || '').trim();
+    if (!a || a === 'N/A') return false;
+    if (!b || b === 'N/A') return false;
+    if (a === b) return true;
+    return a.startsWith(b) || b.startsWith(a);
+  }
+
+  private pushKkTypeScanLog(ok: boolean, text: string, skip = false): void {
+    this.kkTypeScanLogs = [{ ok, skip, text }, ...this.kkTypeScanLogs].slice(0, 20);
+    if (ok) this.kkTypeScanOkCount += 1;
+    else if (skip) this.kkTypeScanSkipCount += 1;
+    else this.kkTypeScanMissCount += 1;
+  }
+
+  async submitKkTypeScanCode(): Promise<void> {
+    if (this.kkTypeScanBusy || this.kkTypeScanStep !== 'codes') return;
+    const raw = String(this.kkTypeScanQrInput || '').replace(/[\r\n]+/g, '').trim();
+    this.kkTypeScanQrInput = '';
+    if (!raw) return;
+
+    if (!raw.includes('|') && /^[PF]/i.test(raw)) {
+      this.kkTypeScanPalletInput = raw;
+      this.submitKkTypeScanPallet();
+      return;
+    }
+
+    const parsed = this.parseInboundQrLabelDisplayFields(raw);
+    const code = String(parsed.materialCode || '').trim().toUpperCase();
+    const po = String(parsed.po || '').trim();
+    const imd = String(parsed.imd || '').trim();
+    if (!code || !po || !imd) {
+      this.pushKkTypeScanLog(false, 'QR thiếu Mã / PO / IMD');
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
+
+    const onPallet = this.kkTypeScanPalletLines();
+    const matches = onPallet.filter((m) =>
+      String(m.materialCode || '').trim().toUpperCase() === code &&
+      this.kkTypeScanPoMatch(String(m.poNumber || ''), po) &&
+      this.kkTypeScanImdMatch(imd, this.getDisplayIMD(m))
+    );
+    const match = matches.find((m) => !this.isKkFlagOn(m.kkChecked)) || matches[0];
+
+    if (!match) {
+      const row = this.kkActiveTypeRow;
+      const elsewhere = row
+        ? this.kkLinesForTypeRow(row).find((m) =>
+            String(m.materialCode || '').trim().toUpperCase() === code &&
+            this.kkTypeScanPoMatch(String(m.poNumber || ''), po) &&
+            this.kkTypeScanImdMatch(imd, this.getDisplayIMD(m))
+          )
+        : null;
+      this.pushKkTypeScanLog(
+        false,
+        elsewhere
+          ? `${code} · ${po} — không thuộc pallet ${this.kkTypeScanPallet}`
+          : `${code} · ${po} · ${imd} — không khớp`
+      );
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
+
+    if (this.isKkFlagOn(match.kkChecked)) {
+      this.pushKkTypeScanLog(false, `${code} · ${po} — đã KK`, true);
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
+
+    this.kkTypeScanBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const operator = await this.resolveKkOperatorId();
+      if (!operator) return;
+      const kkAt = new Date();
+      await this.firestore.collection('inventory-materials').doc(match.id!).update({
+        kkChecked: true,
+        kkBy: operator,
+        kkAt,
+        updatedAt: new Date()
+      });
+      await this.firestore.collection('inventory-kk-history').add({
+        inventoryDocId: match.id,
+        factory: this.resolveKkFactoryForMaterial(match),
+        materialCode: code,
+        materialName: String(match.materialName || '').trim(),
+        poNumber: String(match.poNumber || '').trim(),
+        batchNumber: String(match.batchNumber || '').trim(),
+        location: String(match.location || '').trim().toUpperCase(),
+        quantity: Number(match.quantity) || 0,
+        stock: Number(this.calculateCurrentStock(match)) || 0,
+        unit: String(match.unit || '').trim(),
+        checkedBy: operator,
+        checkedAt: kkAt,
+        checkedDateKey: this.toDateKey(kkAt),
+        createdAt: new Date(),
+        source: 'kk-type-scan'
+      });
+      match.kkChecked = true;
+      match.kkBy = operator;
+      match.kkAt = kkAt;
+      this.syncKkTypeRows();
+      this.pushKkTypeScanLog(true, `${code} · ${po} · ${imd}`);
+    } catch (e) {
+      console.error('❌ submitKkTypeScanCode:', e);
+      this.pushKkTypeScanLog(false, `${code} — không lưu được KK`);
+    } finally {
+      this.kkTypeScanBusy = false;
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+    }
+  }
+
+  kkLineWhValue(line: InventoryMaterial): '' | '00' | 'J5' | 'ASM3' {
     const tag = this.locationWhTag(line.location);
-    return tag === 'J5' || tag === 'ASM3' ? tag : '';
+    return tag === 'J5' || tag === 'ASM3' || tag === '00' ? tag : '';
   }
 
   async saveKkDetailWarehouse(line: InventoryMaterial, value: string): Promise<void> {
@@ -6703,7 +7050,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkLocMapMaterialCache.clear();
       const byKey = new Map<string, {
         materialCode: string;
-        warehouse: 'D1' | 'J5' | 'ASM3';
+        warehouse: KkWarehouse;
         stock: number;
         checked: number;
         totalLines: number;
@@ -6735,7 +7082,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.kkLocMapMaterialCache.set(key, list);
       }
 
-      const warehouseOrder: Record<string, number> = { D1: 0, J5: 1, ASM3: 2 };
+      const warehouseOrder: Record<string, number> = { D1: 0, '00': 1, J5: 2, ASM3: 3 };
       this.kkLocMapByMaterial = Array.from(byKey.values())
         .map((v) => {
           const key = `${v.warehouse}|${v.materialCode}`;
@@ -6788,7 +7135,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.detectChanges();
   }
 
-  setKkTypeZone(zone: '' | 'D1' | 'J5' | 'ASM3'): void {
+  setKkTypeZone(zone: '' | KkWarehouse): void {
     if (this.kkLocMapLoading) return;
     this.kkLocMapWarehouseFilter = zone;
     this.kkLocMapExpandedKey = null;
@@ -6817,7 +7164,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const byType = new Map<string, {
         productType: string;
         groups: Set<string>;
-        warehouse: 'D1' | 'J5' | 'ASM3';
+        warehouse: KkWarehouse;
         stock: number;
         checked: number;
         totalLines: number;
@@ -6897,7 +7244,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
-  private kkMatchesWh3Mode(warehouse: 'D1' | 'J5' | 'ASM3' | string): boolean {
+  private kkMatchesWh3Mode(warehouse: KkWarehouse | string): boolean {
     if (this.kkWh3Only) return warehouse === 'ASM3';
     if (!this.kkCountWh3) return warehouse !== 'ASM3';
     return true;
@@ -8630,7 +8977,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   ): Promise<void> {
     if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return;
     const next = String(raw || '').trim().toUpperCase();
-    if (next && next !== 'ASM3' && next !== 'J5') return;
+    if (next && next !== 'ASM3' && next !== 'J5' && next !== '00') return;
     const current = this.locationWhTag(material.location);
     if (next === current) return;
     this.rememberLocationBeforeEdit(material);
@@ -11178,15 +11525,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Nhãn kho hiển thị ở cột WH — J5- → J5; ASM3-/WH3- → ASM3. */
   locationWhTag(location: string | null | undefined): string {
     const raw = String(location || '').trim().toUpperCase();
+    if (raw === '00' || raw.startsWith('00-') || raw.startsWith('00+')) return '00';
     if (raw.startsWith('J5-')) return 'J5';
     if (raw.startsWith('ASM3-') || raw.startsWith('WH3-') || raw.startsWith('ASM3')) return 'ASM3';
     return '';
   }
 
-  /** Bỏ tiền tố J5-/WH3-/ASM3- cũ trước khi gắn tiền tố mới. */
+  /** Bỏ tiền tố J5-/WH3-/ASM3-/00- cũ trước khi gắn tiền tố mới. */
   private stripDoiKhoWhPrefix(location: string): string {
     const raw = String(location || '').trim();
-    const m = /^(J5|WH3|ASM3)-(.+)$/i.exec(raw);
+    const m = /^(J5|WH3|ASM3|00)-(.+)$/i.exec(raw);
     return m ? m[2] : raw;
   }
 

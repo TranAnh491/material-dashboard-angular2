@@ -1463,9 +1463,12 @@
         </button>
       </div>
       <div class="dialog-content">
-        <p class="pxk-bypass-otp-hint">
+        <p class="pxk-bypass-otp-hint" *ngIf="pxkBypassOtpMode === 'otp'">
           LSX này đang lệch PXK. Không còn nhập mật khẩu chung.
           Cần mã 4 số gửi Zalo tới <strong>ASP0106</strong> — chỉ dùng cho LSX này.
+        </p>
+        <p class="pxk-bypass-otp-hint" *ngIf="pxkBypassOtpMode === 'passcode'">
+          LSX này đang lệch PXK. Nhập mật khẩu để vượt quyền.
         </p>
         <p class="pxk-bypass-otp-target" *ngIf="pxkBypassOtpLsx">
           <span>LSX:</span> <strong>{{ pxkBypassOtpLsx }}</strong>
@@ -1474,7 +1477,7 @@
           </ng-container>
         </p>
         <ng-container *ngIf="pxkBypassOtpStep === 2">
-          <label class="pxk-bypass-otp-label">Mã từ Zalo (4 số)</label>
+          <label class="pxk-bypass-otp-label">{{ pxkBypassOtpMode === 'passcode' ? 'Mật khẩu (4 số)' : 'Mã từ Zalo (4 số)' }}</label>
           <input
             type="text"
             class="pxk-bypass-otp-input"
@@ -1483,14 +1486,14 @@
             inputmode="numeric"
             placeholder="0000"
             [disabled]="pxkBypassOtpVerifying"
-            (keyup.enter)="verifyPxkBypassOtp()">
+            (keyup.enter)="pxkBypassOtpMode === 'passcode' ? confirmPxkBypassPasscode() : verifyPxkBypassOtp()">
         </ng-container>
         <p class="pxk-bypass-otp-error" *ngIf="pxkBypassOtpError">{{ pxkBypassOtpError }}</p>
         <p class="pxk-bypass-otp-info" *ngIf="pxkBypassOtpInfo">{{ pxkBypassOtpInfo }}</p>
         <div class="dialog-actions" style="margin-top: 16px;">
           <button mat-button type="button" (click)="closePxkBypassOtpModal()"
                   [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying">Hủy</button>
-          <button mat-button type="button" *ngIf="pxkBypassOtpStep === 2"
+          <button mat-button type="button" *ngIf="pxkBypassOtpStep === 2 && pxkBypassOtpMode === 'otp'"
                   (click)="pxkBypassOtpStep = 1; pxkBypassOtpCode = ''; pxkBypassOtpError = ''"
                   [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying">Gửi lại mã</button>
           <button mat-raised-button color="primary" type="button" *ngIf="pxkBypassOtpStep === 1"
@@ -1498,7 +1501,7 @@
             {{ pxkBypassOtpSending ? 'Đang gửi…' : 'Gửi mã Zalo' }}
           </button>
           <button mat-raised-button color="primary" type="button" *ngIf="pxkBypassOtpStep === 2"
-                  (click)="verifyPxkBypassOtp()"
+                  (click)="pxkBypassOtpMode === 'passcode' ? confirmPxkBypassPasscode() : verifyPxkBypassOtp()"
                   [disabled]="pxkBypassOtpVerifying || pxkBypassOtpCode.trim().length !== 4">
             {{ pxkBypassOtpVerifying ? 'Đang xác nhận…' : 'Xác nhận' }}
           </button>

@@ -89,6 +89,16 @@
             <i class="material-icons">print</i>
             <span class="btn-label">In</span>
           </button>
+          <div class="kk-report" *ngIf="kkLocMapView === 'type'">
+            <button type="button"
+                    class="more-btn"
+                    (click)="showKkTypeReportMenu = true"
+                    [disabled]="kkLocMapLoading || kkTypeReportBusy"
+                    title="Tải báo cáo Excel lưu trữ">
+              <i class="material-icons">download</i>
+              <span class="btn-label">{{ kkTypeReportBusy ? 'Đang tải...' : 'Tải báo cáo' }}</span>
+            </button>
+          </div>
           <button type="button" class="more-btn" *ngIf="kkLocMapView" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading">
             <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
             <span class="btn-label">Làm mới</span>
@@ -350,6 +360,13 @@
                     title="Đổi số pallet: nhập pallet hiện tại, rồi pallet mới">
               Đổi số pallet
             </button>
+            <button type="button"
+                    class="kk-type-filter__scan"
+                    (click)="openKkTypeScanModal(row)"
+                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                    title="Scan pallet rồi scan hàng loạt mã để tick KK">
+              Scan
+            </button>
             <span class="kk-type-filter__count" *ngIf="kkTypeDetailFiltered.length">
               Hiển thị {{ kkTypeShowingFrom }} - {{ kkTypeShowingTo }} trong tổng số {{ kkTypeDetailFiltered.length | number }} dòng
             </span>
@@ -428,7 +445,7 @@
                               [ngModel]="kkLineWhValue(material)"
                               (ngModelChange)="saveKkDetailWarehouse(material, $event)"
                               [disabled]="!canEdit || kkLocMapBusy"
-                              title="Đổi kho D1 / J5 / ASM3">
+                              title="Đổi kho D1 / 00 / J5 / ASM3">
                         <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
                       </select>
                     </td>
@@ -3542,6 +3559,131 @@
           <i class="material-icons">history</i>
           Ghi snapshot
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay"
+     [class.more-overlay]="!isMobile"
+     *ngIf="showKkTypeReportMenu"
+     (click)="showKkTypeReportMenu = false">
+  <div class="modal-content kk-report-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Tải báo cáo KK">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">download</i>
+        </span>
+        <div>
+          <h3>Tải báo cáo Excel</h3>
+          <p class="more-popup-header__sub">{{ selectedFactory }} · lưu trữ KK theo loại hàng</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="showKkTypeReportMenu = false" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="kk-report-modal__body">
+      <button type="button" class="kk-report-modal__item" (click)="exportKkTypeReport('summary')" [disabled]="kkTypeReportBusy">
+        <strong>Tổng hợp các loại hàng</strong>
+        <span>Tên loại, đã KK / tổng mã, còn lại</span>
+      </button>
+      <button type="button"
+              class="kk-report-modal__item"
+              (click)="exportKkTypeReport('current')"
+              [disabled]="kkTypeReportBusy || !kkActiveProductType">
+        <strong>Chi tiết loại đang mở</strong>
+        <span>{{ kkActiveProductType || 'Hãy mở một loại hàng trước' }}</span>
+      </button>
+      <button type="button" class="kk-report-modal__item" (click)="exportKkTypeReport('all')" [disabled]="kkTypeReportBusy">
+        <strong>Chi tiết tất cả loại hàng</strong>
+        <span>Mọi dòng tồn theo zone đang chọn</span>
+      </button>
+      <button type="button" class="kk-report-modal__item" (click)="exportKkTypeReport('unchecked')" [disabled]="kkTypeReportBusy">
+        <strong>Dòng chưa KK</strong>
+        <span>Chỉ các dòng chưa tick kiểm kê</span>
+      </button>
+      <button type="button" class="kk-report-modal__item" (click)="exportKkTypeReport('checked')" [disabled]="kkTypeReportBusy">
+        <strong>Dòng đã KK</strong>
+        <span>Chỉ các dòng đã tick, kèm người KK</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay"
+     [class.more-overlay]="!isMobile"
+     *ngIf="showKkTypeScanModal"
+     (click)="closeKkTypeScanModal()">
+  <div class="modal-content kk-type-scan" (click)="$event.stopPropagation()" role="dialog" aria-label="Scan KK">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">qr_code_scanner</i>
+        </span>
+        <div>
+          <h3>Scan KK</h3>
+          <p class="more-popup-header__sub">{{ kkActiveProductType }} · {{ selectedFactory }}</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="kk-type-scan__body">
+      <div *ngIf="kkTypeScanStep === 'pallet'" class="kk-type-scan__step">
+        <p class="kk-type-scan__hint">Bước 1: Scan pallet</p>
+        <div class="kk-type-scan__input-row">
+          <input id="kkTypeScanPalletInput"
+                 type="text"
+                 [(ngModel)]="kkTypeScanPalletInput"
+                 (input)="onKkTypeScanNewline('pallet', $event)"
+                 (keydown.enter)="submitKkTypeScanPallet()"
+                 placeholder="Scan pallet..."
+                 autocomplete="off"
+                 autocapitalize="characters"
+                 spellcheck="false"
+                 [disabled]="kkTypeScanBusy">
+          <button type="button" (click)="submitKkTypeScanPallet()" [disabled]="kkTypeScanBusy || !kkTypeScanPalletInput.trim()">
+            <i class="material-icons">arrow_forward</i>
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
+        <p class="kk-type-scan__hint">
+          Pallet <strong>{{ kkTypeScanPallet }}</strong>
+          · {{ kkTypeScanPalletLines().length }} dòng
+          · Đúng {{ kkTypeScanOkCount }}
+          · Đã KK {{ kkTypeScanSkipCount }}
+          · Lệch {{ kkTypeScanMissCount }}
+        </p>
+        <div class="kk-type-scan__input-row">
+          <input id="kkTypeScanQrInput"
+                 type="text"
+                 [(ngModel)]="kkTypeScanQrInput"
+                 (input)="onKkTypeScanNewline('code', $event)"
+                 (keydown.enter)="submitKkTypeScanCode()"
+                 placeholder="Scan tem mã hàng (Mã|PO|SL|IMD)..."
+                 autocomplete="off"
+                 spellcheck="false"
+                 [disabled]="kkTypeScanBusy">
+          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || !kkTypeScanQrInput.trim()">
+            <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
+          </button>
+        </div>
+        <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToPallet()" [disabled]="kkTypeScanBusy">
+          Đổi pallet
+        </button>
+        <ul class="kk-type-scan__log" *ngIf="kkTypeScanLogs.length">
+          <li *ngFor="let log of kkTypeScanLogs"
+              [class.kk-type-scan__log--ok]="log.ok"
+              [class.kk-type-scan__log--skip]="log.skip"
+              [class.kk-type-scan__log--miss]="!log.ok && !log.skip">
+            {{ log.text }}
+          </li>
+        </ul>
       </div>
     </div>
   </div>

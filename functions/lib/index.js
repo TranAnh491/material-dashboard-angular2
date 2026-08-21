@@ -33,7 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.purgeInventoryHiddenDaily = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -509,6 +510,58 @@ exports.verifyMaterialsInventoryOtpFn = functions
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new functions.https.HttpsError(msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có') || msg.includes('4 chữ số')
+            ? 'failed-precondition'
+            : 'internal', msg);
+    }
+});
+/** Work Order: OTP 4 số Zalo → ASP0106 để vượt quyền PXK lệch, mỗi LSX một mã. */
+exports.requestWoPxkBypassOtpFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+        const { requestWoPxkBypassOtp } = await Promise.resolve().then(() => __importStar(require('./wo-pxk-bypass-otp')));
+        await requestWoPxkBypassOtp(admin.firestore(), {
+            lsx: typeof (data === null || data === void 0 ? void 0 : data.lsx) === 'string' ? data.lsx : '',
+            requestedBy: typeof (data === null || data === void 0 ? void 0 : data.requestedBy) === 'string' ? data.requestedBy : '',
+            nextStatus: typeof (data === null || data === void 0 ? void 0 : data.nextStatus) === 'string' ? data.nextStatus : '',
+            factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory : ''
+        });
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+    }
+});
+/** Work Order: xác nhận OTP vượt quyền PXK lệch theo đúng LSX. */
+exports.verifyWoPxkBypassOtpFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof (data === null || data === void 0 ? void 0 : data.code) === 'string' ? data.code.trim().slice(0, 8) : '';
+    const lsx = typeof (data === null || data === void 0 ? void 0 : data.lsx) === 'string' ? data.lsx.trim().slice(0, 40) : '';
+    if (!code) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    if (!lsx) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu LSX.');
+    }
+    try {
+        const { verifyWoPxkBypassOtp } = await Promise.resolve().then(() => __importStar(require('./wo-pxk-bypass-otp')));
+        return await verifyWoPxkBypassOtp(admin.firestore(), code, lsx);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('không đúng') ||
+            msg.includes('hết hạn') ||
+            msg.includes('Chưa có') ||
+            msg.includes('4 chữ số') ||
+            msg.includes('không khớp')
             ? 'failed-precondition'
             : 'internal', msg);
     }
