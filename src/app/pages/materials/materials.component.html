@@ -3633,7 +3633,7 @@
 
     <div class="kk-type-scan__body">
       <div *ngIf="kkTypeScanStep === 'pallet'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">Bước 1: Scan pallet</p>
+        <p class="kk-type-scan__hint">Bước 1: Scan số pallet — hệ thống lưu lại để gán cho các tem tiếp theo</p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanPalletInput"
                  type="text"
@@ -3653,10 +3653,9 @@
 
       <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
         <p class="kk-type-scan__hint">
-          Pallet <strong>{{ kkTypeScanPallet }}</strong>
-          · {{ kkTypeScanPalletLines().length }} dòng
+          Đã lưu pallet <strong>{{ kkTypeScanPallet }}</strong>
           · Đúng {{ kkTypeScanOkCount }}
-          · Đã KK {{ kkTypeScanSkipCount }}
+          · Bỏ qua {{ kkTypeScanSkipCount }}
           · Lệch {{ kkTypeScanMissCount }}
         </p>
         <div class="kk-type-scan__input-row">
