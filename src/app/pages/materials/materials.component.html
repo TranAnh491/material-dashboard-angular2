@@ -281,10 +281,7 @@
               (click)="selectKkTypeBox(box.productType)"
               [title]="box.productType">
               <strong>{{ box.productType }}</strong>
-              <span class="kk-type-box__code" *ngIf="box.sharedPrefix">{{ box.sharedPrefix }}</span>
               <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-              <span>tồn {{ formatNumber(box.stock) }}</span>
-              <span class="kk-type-box__groups" *ngIf="box.groupCodes.length">{{ box.groupCodes.length }} nhóm mã</span>
             </button>
           </div>
           <p class="hidden-empty" *ngIf="!kkTypeBoxes.length">
