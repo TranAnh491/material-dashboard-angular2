@@ -305,6 +305,13 @@
                      placeholder="Tìm mã, tên hàng, pallet..."
                      autocomplete="off">
             </div>
+            <div class="kk-type-rolls-total"
+                 *ngIf="kkTypeShowRollsTotalBox"
+                 [title]="'Tổng số cuộn của ' + kkTypeDetailFiltered.length + ' dòng đang lọc'">
+              <span class="kk-type-rolls-total__label">Tổng cuộn</span>
+              <strong>{{ kkTypeFilteredRollsTotal | number }}</strong>
+              <span class="kk-type-rolls-total__meta">{{ kkTypeDetailFiltered.length | number }} dòng</span>
+            </div>
             <select class="kk-type-filter__select"
                     [(ngModel)]="kkTypeFilterLoc"
                     (ngModelChange)="onKkTypeFilterChange()">

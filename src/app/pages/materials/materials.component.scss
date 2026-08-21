@@ -4393,6 +4393,53 @@ $asm1-toolbar-h: 36px;
     }
   }
 
+  .kk-type-rolls-total {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 92px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #99f6e4;
+    border-radius: 8px;
+    background: #f0fdfa;
+    line-height: 1.1;
+
+    &__label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #0f766e;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    strong {
+      font-size: 16px;
+      font-weight: 800;
+      color: #115e59;
+    }
+
+    &__meta {
+      display: none;
+    }
+  }
+
+  @media (min-width: 720px) {
+    .kk-type-rolls-total {
+      min-width: 118px;
+      height: auto;
+      min-height: 36px;
+      padding: 4px 12px;
+
+      &__meta {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        color: #0f766e;
+      }
+    }
+  }
+
   &__select {
     height: 36px;
     min-width: 130px;

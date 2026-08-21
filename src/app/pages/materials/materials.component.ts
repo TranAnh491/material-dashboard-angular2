@@ -5737,6 +5737,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  get kkTypeShowRollsTotalBox(): boolean {
+    return !!this.kkTypeDetailQuery.trim();
+  }
+
+  /** Tổng cuộn (ceil tồn÷SP, phần lẻ +1) của các dòng đang lọc khi search mã hàng. */
+  get kkTypeFilteredRollsTotal(): number {
+    return this.kkTypeDetailFiltered.reduce((sum, m) => {
+      const b = this.getKkStockBreakdown(m, this.getEffectiveStandardPacking(m));
+      return sum + (Number(b.bagCount) || 0);
+    }, 0);
+  }
+
   get kkTypeLocationOptions(): string[] {
     const set = new Set<string>();
     for (const m of this.kkTypeDetailAll) {
