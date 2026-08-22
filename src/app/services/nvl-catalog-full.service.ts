@@ -36,18 +36,29 @@ export interface OutboundQtyStats {
  * Đây là nguồn duy nhất cho tab quản lý Danh mục NVL & TP; Materials ASM1/ASM2 chỉ đọc (read-only)
  * để hiển thị Tên/ĐVT/Standard Packing trên bảng tồn kho.
  *
- * Cache 2 lớp (bộ nhớ + localStorage, TTL 6 tiếng) để mở tab không phải đọc lại toàn bộ
- * ~8-9 nghìn document mỗi lần — chỉ đọc lại khi hết hạn cache hoặc bấm "Làm mới".
+ * Cache 2 lớp (bộ nhớ + localStorage, 1 lần/ngày) để mở tab không phải đọc lại toàn bộ
+ * ~8-9 nghìn document mỗi lần — chỉ đọc lại khi sang ngày mới hoặc bấm "Cập nhật danh mục".
  */
 @Injectable({ providedIn: 'root' })
 export class NvlCatalogFullService {
   readonly collectionName = 'materials';
-  private static readonly CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+  private static readonly CACHE_TTL_MS = 24 * 60 * 60 * 1000;
   private static readonly LS_KEY = 'nvl-catalog-full-cache-v1';
 
   private cachedItems: NvlCatalogItem[] | null = null;
   private cachedAt = 0;
+  private cachedDateKey = '';
   private codesWithStockCache: Set<string> | null = null;
+
+  private todayKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  private dateKeyFromTs(ts: number): string {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
   constructor(private firestore: AngularFirestore) {}
 
@@ -56,16 +67,17 @@ export class NvlCatalogFullService {
   }
 
   async listAll(forceRefresh = false): Promise<NvlCatalogItem[]> {
-    const now = Date.now();
-    if (!forceRefresh && this.cachedItems && now - this.cachedAt < NvlCatalogFullService.CACHE_TTL_MS) {
+    const today = this.todayKey();
+    if (!forceRefresh && this.cachedItems && this.cachedDateKey === today) {
       return this.cachedItems;
     }
     if (!forceRefresh) {
       const fromLocalStorage = this.loadFromLocalStorage();
       if (fromLocalStorage) {
-        this.cachedItems = fromLocalStorage;
-        this.cachedAt = now;
-        return fromLocalStorage;
+        this.cachedItems = fromLocalStorage.items;
+        this.cachedAt = fromLocalStorage.timestamp;
+        this.cachedDateKey = today;
+        return fromLocalStorage.items;
       }
     }
 
@@ -98,6 +110,7 @@ export class NvlCatalogFullService {
   private setCache(items: NvlCatalogItem[]): void {
     this.cachedItems = items;
     this.cachedAt = Date.now();
+    this.cachedDateKey = this.todayKey();
     this.saveToLocalStorage(items);
   }
 
@@ -105,20 +118,27 @@ export class NvlCatalogFullService {
     try {
       localStorage.setItem(
         NvlCatalogFullService.LS_KEY,
-        JSON.stringify({ items, timestamp: this.cachedAt })
+        JSON.stringify({ items, timestamp: this.cachedAt, dateKey: this.cachedDateKey })
       );
     } catch {
       /* localStorage full/unavailable — bỏ qua, vẫn còn cache trong bộ nhớ */
     }
   }
 
-  private loadFromLocalStorage(): NvlCatalogItem[] | null {
+  private loadFromLocalStorage(): { items: NvlCatalogItem[]; timestamp: number } | null {
     try {
       const raw = localStorage.getItem(NvlCatalogFullService.LS_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { items: NvlCatalogItem[]; timestamp: number };
-      if (!parsed?.items || Date.now() - parsed.timestamp >= NvlCatalogFullService.CACHE_TTL_MS) return null;
-      return parsed.items.map(i => ({ ...i, updatedAt: i.updatedAt ? new Date(i.updatedAt) : undefined }));
+      const parsed = JSON.parse(raw) as { items: NvlCatalogItem[]; timestamp: number; dateKey?: string };
+      if (!parsed?.items) return null;
+      const ts = Number(parsed.timestamp) || 0;
+      if (!ts || Date.now() - ts >= NvlCatalogFullService.CACHE_TTL_MS) return null;
+      const cacheDay = parsed.dateKey || this.dateKeyFromTs(ts);
+      if (cacheDay !== this.todayKey()) return null;
+      return {
+        timestamp: ts,
+        items: parsed.items.map(i => ({ ...i, updatedAt: i.updatedAt ? new Date(i.updatedAt) : undefined }))
+      };
     } catch {
       return null;
     }
@@ -127,6 +147,7 @@ export class NvlCatalogFullService {
   private invalidateCache(): void {
     this.cachedItems = null;
     this.cachedAt = 0;
+    this.cachedDateKey = '';
     try {
       localStorage.removeItem(NvlCatalogFullService.LS_KEY);
     } catch {

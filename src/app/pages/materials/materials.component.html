@@ -1084,10 +1084,18 @@
             <i class="material-icons" [class.rotating]="isResetting">{{ isResetting ? 'sync' : 'restart_alt' }}</i>
             {{ isResetting ? 'Đang ẩn...' : 'Reset' }}
           </button>
+          <button type="button"
+                  class="more-btn catalog-refresh-btn"
+                  (click)="refreshNvlCatalogNow()"
+                  [disabled]="isCatalogLoading"
+                  title="Đọc lại Danh mục NVL ngay — cập nhật cột Standard Packing (mặc định 1 lần/ngày)">
+            <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
+            <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật danh mục' }}</span>
+          </button>
         </div>
         
         <!-- Catalog Ready Icon -->
-        <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded">
+        <div class="catalog-ready-icon" *ngIf="!isCatalogLoading && catalogLoaded" title="Danh mục NVL đã sẵn sàng (làm mới 1 lần/ngày)">
           <i class="material-icons">check_circle</i>
         </div>
       </div>
@@ -1350,7 +1358,7 @@
             <th *ngIf="showKhColumn">KH</th>
 
             <th>Lưu ý</th>
-            <th>Standard Packing</th>
+            <th title="Chỉ đọc từ Danh mục NVL — làm mới 1 lần/ngày, hoặc bấm Cập nhật danh mục">Standard Packing</th>
             <th title="Mã thuộc danh sách MSD/ESD — gán ở Inbound/Danh mục">MSD/ESD</th>
             <th title="Đã kiểm kê (đếm tồn kho)">KK</th>
             <th>Trạng thái</th>
@@ -2431,6 +2439,14 @@
               <small>Mã, tên, ĐVT, packing</small>
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+          <button type="button" class="more-tile" (click)="refreshNvlCatalogNow()" [disabled]="isCatalogLoading">
+            <span class="more-tile__icon more-tile__icon--green"><i class="material-icons">cloud_sync</i></span>
+            <span class="more-tile__text">
+              <strong>Cập nhật danh mục</strong>
+              <small>Làm mới Standard Packing từ Danh mục NVL ngay</small>
+            </span>
+            <i class="material-icons more-tile__chevron">{{ isCatalogLoading ? 'sync' : 'refresh' }}</i>
           </button>
           <button type="button" class="more-tile" (click)="openKkCatalogPopup()">
             <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">category</i></span>

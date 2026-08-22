@@ -429,6 +429,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   // Catalog cache for faster access
   private catalogCache = new Map<string, any>();
   public catalogLoaded = false;
+  /** Ngày (YYYY-MM-DD) lần tải danh mục NVL gần nhất — sang ngày mới thì đọc lại. */
+  private catalogLoadedDateKey = '';
   /** Tránh gọi song song loadCatalogFromFirebase + loadCatalogOnce (đọc ~9K doc 2 lần). */
   private catalogLoadPromise: Promise<void> | null = null;
   
@@ -2897,13 +2899,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return String(Math.ceil(stock / sp));
   }
 
-  /** Standard Packing: ưu tiên dòng, sau đó catalog. */
+  /** Standard Packing: đọc Danh mục NVL; chỉ fallback dòng tồn kho khi catalog chưa có. */
   getEffectiveStandardPacking(material: InventoryMaterial): number {
+    const fromCatalog = this.getStandardPacking(material.materialCode);
+    if (fromCatalog > 0) return fromCatalog;
     const row = Number(material.standardPacking);
-    if (row > 0 && Number.isFinite(row)) {
-      return row;
-    }
-    return this.getStandardPacking(material.materialCode);
+    if (row > 0 && Number.isFinite(row)) return row;
+    return 0;
   }
 
   /** Tổng số “ô bịch” = ceil(tồn kho / SP), dùng cho QR và Firebase khi đã khởi tạo. */
@@ -3287,12 +3289,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private static readonly CATALOG_LOCALSTORAGE_KEY = 'materials-catalog-cache-v1';
   private static readonly CATALOG_CACHE_KEY_V2 = 'materials-catalog-cache-v2';
   private static readonly CATALOG_IDB_NAME = 'asm-materials-cache';
-  private static readonly CATALOG_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 tiếng
+  private static readonly CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 ngày
   private static readonly CATALOG_LS_MAX_CHARS = 3_200_000;
+
+  private catalogTodayKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  private catalogDateKeyFromTs(ts: number): string {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
   /** Đọc catalog từ đĩa (IndexedDB / localStorage compact) — không tốn lượt đọc Firestore. */
   private async hydrateCatalogFromDisk(): Promise<boolean> {
-    if (this.catalogCache.size > 0) return true;
+    if (this.catalogCache.size > 0 && this.catalogLoadedDateKey === this.catalogTodayKey()) return true;
     const fromLs = this.tryApplyCatalogCachePayload(this.readCatalogCacheFromLocalStorage());
     if (fromLs) return true;
     const fromIdb = this.tryApplyCatalogCachePayload(await this.readCatalogCacheFromIdb());
@@ -3311,9 +3323,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private tryApplyCatalogCachePayload(parsed: unknown): boolean {
     if (!parsed || typeof parsed !== 'object') return false;
-    const p = parsed as { v?: number; t?: number; timestamp?: number; rows?: unknown[]; items?: any[] };
+    const p = parsed as { v?: number; t?: number; timestamp?: number; d?: string; rows?: unknown[]; items?: any[] };
     const ts = Number(p.t || p.timestamp || 0);
     if (!ts || Date.now() - ts >= MaterialsComponent.CATALOG_CACHE_TTL_MS) return false;
+    const cacheDay = String(p.d || '') || this.catalogDateKeyFromTs(ts);
+    if (cacheDay !== this.catalogTodayKey()) return false;
 
     this.catalogCache.clear();
     if (Array.isArray(p.rows)) {
@@ -3339,12 +3353,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.catalogCache.size > 0) {
       console.log(`📱 Loaded ${this.catalogCache.size} catalog items from disk cache`);
       this.catalogLoaded = true;
+      this.catalogLoadedDateKey = this.catalogTodayKey();
       return true;
     }
     return false;
   }
 
-  private buildCatalogCachePayload(): { v: number; t: number; rows: Array<[string, string, string, number, number]> } {
+  private buildCatalogCachePayload(): { v: number; t: number; d: string; rows: Array<[string, string, string, number, number]> } {
     const rows: Array<[string, string, string, number, number]> = [];
     this.catalogCache.forEach((item, code) => {
       const flags =
@@ -3359,7 +3374,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         flags
       ]);
     });
-    return { v: 2, t: Date.now(), rows };
+    return { v: 2, t: Date.now(), d: this.catalogTodayKey(), rows };
   }
 
   private persistCatalogCache(): void {
@@ -3508,90 +3523,95 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private applyCatalogToMaterials(materials: InventoryMaterial[]): void {
     for (const material of materials) {
       const code = String(material.materialCode || '').trim().toUpperCase();
-      if (!code || !this.catalogCache.has(code)) continue;
-      const catalogItem = this.catalogCache.get(code)!;
+      if (!code) continue;
+      const catalogItem = this.catalogCache.get(code);
+      if (!catalogItem) continue;
       material.materialName = catalogItem.materialName;
       material.unit = catalogItem.unit;
-      if (catalogItem.standardPacking) {
-        material.standardPacking = catalogItem.standardPacking;
-      }
+      material.standardPacking = Number(catalogItem.standardPacking) || 0;
     }
   }
 
-  /** Một promise chung — không đọc collection `materials` 2 lần khi mở tab. */
+  /** Một promise chung — không đọc collection `materials` 2 lần khi mở tab. Sang ngày mới thì đọc lại. */
   ensureCatalogLoaded(): Promise<void> {
-    if (!this.catalogLoadPromise) {
-      this.catalogLoadPromise = this.loadCatalogFromFirebase();
+    const today = this.catalogTodayKey();
+    if (this.catalogLoadPromise && (this.isCatalogLoading || this.catalogLoadedDateKey === today)) {
+      return this.catalogLoadPromise;
     }
+    this.catalogLoadPromise = this.loadCatalogFromFirebase(false);
     return this.catalogLoadPromise;
   }
 
-  // Load catalog from Firebase
-  private async loadCatalogFromFirebase(): Promise<void> {
+  /** Nút "Cập nhật danh mục" — đọc lại Danh mục NVL ngay, áp Standard Packing lên bảng. */
+  async refreshNvlCatalogNow(): Promise<void> {
+    if (this.isCatalogLoading) return;
+    this.closeMorePopup();
+    this.catalogLoadPromise = this.loadCatalogFromFirebase(true);
+    await this.catalogLoadPromise;
+    this.consolidationMessage = `✅ Đã cập nhật danh mục NVL (${this.catalogCache.size} mã) — cột Standard Packing đã làm mới`;
+    this.showConsolidationMessage = true;
+    this.cdr.detectChanges();
+  }
+
+  private fillCatalogCacheFromNvlItems(items: Array<{
+    materialCode: string;
+    materialName?: string;
+    unit?: string;
+    standardPacking?: number;
+    standardPackingLocked?: boolean;
+    isMsd?: boolean;
+    isEsd?: boolean;
+  }>): void {
+    this.catalogCache.clear();
+    for (const item of items) {
+      const materialCode = this.nvlCatalogFull.normalizeCode(item.materialCode);
+      if (!materialCode) continue;
+      this.catalogCache.set(materialCode, {
+        materialCode,
+        materialName: item.materialName || '',
+        unit: item.unit || 'PCS',
+        standardPacking: Number(item.standardPacking) || 0,
+        standardPackingLocked: item.standardPackingLocked === true,
+        isMsd: item.isMsd === true,
+        isEsd: item.isEsd === true
+      });
+    }
+  }
+
+  // Load catalog from Firebase (Danh mục NVL). forceRefresh = bỏ cache trong ngày.
+  private async loadCatalogFromFirebase(forceRefresh = false): Promise<void> {
     this.isCatalogLoading = true;
-
-    if (this.catalogCache.size > 0) {
-      this.isCatalogLoading = false;
-      this.catalogLoaded = true;
-      return;
-    }
-
-    if (await this.hydrateCatalogFromDisk()) {
-      this.isCatalogLoading = false;
-      this.catalogLoaded = true;
-      return;
-    }
+    this.cdr.markForCheck();
+    const today = this.catalogTodayKey();
 
     try {
-      let snapshot = null;
-      let collectionName = '';
-
-      try {
-        snapshot = await this.firestore.collection('materials').get().toPromise();
-        if (snapshot && !snapshot.empty) collectionName = 'materials';
-      } catch (e) {
-        console.log('❌ Collection "materials" not found or error:', e);
-      }
-
-      if (!snapshot || snapshot.empty) {
-        try {
-          snapshot = await this.firestore.collection('catalog').get().toPromise();
-          if (snapshot && !snapshot.empty) collectionName = 'catalog';
-        } catch { /* ignore */ }
-      }
-
-      if (!snapshot || snapshot.empty) {
-        try {
-          snapshot = await this.firestore.collection('material-catalog').get().toPromise();
-          if (snapshot && !snapshot.empty) collectionName = 'material-catalog';
-        } catch { /* ignore */ }
-      }
-
-      if (snapshot && !snapshot.empty) {
-        this.catalogCache.clear();
-        let processedCount = 0;
-        snapshot.forEach(doc => {
-          if (this.ingestCatalogDoc(doc)) processedCount++;
-        });
-
+      if (!forceRefresh && this.catalogCache.size > 0 && this.catalogLoadedDateKey === today) {
         this.catalogLoaded = true;
-        this.readTracker.track('materials', collectionName, snapshot.size);
-        this.persistCatalogCache();
-        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from ${collectionName} (${processedCount} processed)`);
-
-        if (this.inventoryMaterials.length > 0) {
-          this.applyCatalogToMaterials(this.inventoryMaterials);
-          this.cdr.detectChanges();
-        }
-      } else {
-        console.warn('❌ No catalog data found in any collection. Please check Firebase.');
-        this.catalogLoaded = true;
+        this.applyCatalogToMaterials(this.inventoryMaterials);
+        return;
       }
+
+      if (!forceRefresh && await this.hydrateCatalogFromDisk()) {
+        this.catalogLoaded = true;
+        this.catalogLoadedDateKey = today;
+        this.applyCatalogToMaterials(this.inventoryMaterials);
+        return;
+      }
+
+      const items = await this.nvlCatalogFull.listAll(forceRefresh);
+      this.fillCatalogCacheFromNvlItems(items);
+      this.catalogLoaded = true;
+      this.catalogLoadedDateKey = today;
+      this.readTracker.track('materials', 'materials', items.length);
+      this.persistCatalogCache();
+      this.applyCatalogToMaterials(this.inventoryMaterials);
+      console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Danh mục NVL`);
     } catch (error) {
       console.error('❌ Error loading catalog from Firebase:', error);
-      this.catalogLoaded = true;
+      this.catalogLoaded = this.catalogCache.size > 0;
     } finally {
       this.isCatalogLoading = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -4035,7 +4055,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         alert(`Không có dòng nào đang tick KK trên ${this.selectedFactory}.`);
       } else {
         void this.refreshLastStatusForMaterials(this.filteredInventory);
-        void this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode)).then(() => {
+        void this.ensureCatalogLoaded().then(() => {
           this.applyCatalogToMaterials(this.inventoryMaterials);
           void this.applyStorageUnitsFromCatalog();
           if (this.showKhColumn) void this.applyNvlkhFromCatalog();
@@ -4484,7 +4504,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
 
         this.readTracker.track('materials', 'inventory-materials', querySnapshot.docs.length);
-        await this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map(m => m.materialCode));
+        await this.ensureCatalogLoaded();
         this.applyCatalogToMaterials(this.inventoryMaterials);
         void this.applyStorageUnitsFromCatalog();
         if (this.showKhColumn) void this.applyNvlkhFromCatalog();
@@ -11091,11 +11111,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Get standard packing from catalog
   getStandardPacking(materialCode: string): number {
-    if (this.catalogCache.has(materialCode)) {
-      const catalogItem = this.catalogCache.get(materialCode);
-      return catalogItem?.standardPacking || 0;
-    }
-    return 0;
+    const code = String(materialCode || '').trim().toUpperCase();
+    const catalogItem = this.catalogCache.get(code);
+    return Number(catalogItem?.standardPacking) || 0;
   }
 
   /** Nhãn MSD/ESD theo mã (đọc từ danh mục NVL — gán sau ở Inbound/Danh mục). Rỗng nếu mã không thuộc danh sách nào. */
@@ -13071,21 +13089,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.catalogLoaded || this.inventoryMaterials.length === 0) {
       return;
     }
-    
-    console.log('🔄 Applying catalog data to inventory materials...');
-    
-    this.inventoryMaterials.forEach(material => {
-      if (this.catalogCache.has(material.materialCode)) {
-        const catalogData = this.catalogCache.get(material.materialCode)!;
-        material.standardPacking = catalogData.standardPacking;
-        material.materialName = catalogData.materialName;
-        material.unit = catalogData.unit;
-      }
-    });
-    
-    // Refresh display
-    this.filteredInventory = [...this.inventoryMaterials];
-    console.log('✅ Catalog data applied to inventory materials');
+    this.applyCatalogToMaterials(this.inventoryMaterials);
+    this.cdr.detectChanges();
   }
 
   // Gộp dòng tự động khi load toàn bộ inventory
