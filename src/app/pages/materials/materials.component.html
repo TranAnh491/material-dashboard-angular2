@@ -115,6 +115,15 @@
           <button type="button"
                   class="more-btn"
                   *ngIf="kkLocMapView"
+                  (click)="openKkPalletCheck()"
+                  [disabled]="kkPalletCheckBusy"
+                  title="Số pallet theo từng kho">
+            <i class="material-icons" [class.rotating]="kkPalletCheckBusy">{{ kkPalletCheckBusy ? 'sync' : 'widgets' }}</i>
+            <span class="btn-label">{{ kkPalletCheckBusy ? 'Đang đếm...' : 'Kiểm tra pallet' }}</span>
+          </button>
+          <button type="button"
+                  class="more-btn"
+                  *ngIf="kkLocMapView"
                   (click)="openKkCodeLookup()"
                   title="Tìm mã — xem tồn kho và loại hàng">
             <i class="material-icons">search</i>
@@ -328,6 +337,13 @@
                      (ngModelChange)="applyKkTypeFilters()"
                      placeholder="Tìm mã, tên hàng, pallet..."
                      autocomplete="off">
+              <button type="button"
+                      class="kk-type-filter__search-clear"
+                      *ngIf="kkTypeSearchDraft || kkTypeFilterLoc || kkTypeFilterWh || kkTypeFilterRolls || kkTypeSortQtyDesc"
+                      (click)="clearKkTypeFilters()"
+                      title="Xóa lọc">
+                <i class="material-icons">close</i>
+              </button>
             </div>
             <div class="kk-type-rolls-total"
                  [title]="'Tổng số cuộn của ' + kkTypeDetailFiltered.length + ' dòng đang lọc'">
@@ -361,67 +377,65 @@
               <option value="">Tất cả cuộn</option>
               <option *ngFor="let r of kkTypeRollsOptions" [ngValue]="r">{{ r }}</option>
             </select>
-            <button type="button" class="kk-type-filter__search-btn" (click)="applyKkTypeFilters()">Tìm kiếm</button>
-            <button type="button" class="kk-type-filter__clear" (click)="clearKkTypeFilters()">Xóa lọc</button>
-            <button type="button"
-                    class="kk-type-filter__tick-all"
-                    (click)="onKkByTypeTick(row, true)"
-                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                    title="Tick KK mọi dòng loại hàng đang chọn">
-              Tick toàn bộ với loại hàng
-            </button>
-            <button type="button"
-                    class="kk-type-filter__untick-all"
-                    (click)="onKkByTypeTick(row, false)"
-                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                    title="Bỏ tick KK mọi dòng loại hàng đang chọn">
-              Bỏ Tick toàn bộ với loại hàng
-            </button>
-            <button type="button"
-                    class="kk-type-filter__rename-pallet"
-                    (click)="renameKkTypePallet(row)"
-                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                    title="Đổi số pallet: nhập pallet hiện tại, rồi pallet mới">
-              Đổi số pallet
-            </button>
+            <div class="kk-type-filter__split">
+              <button type="button"
+                      class="kk-type-filter__tick-all"
+                      (click)="onKkByTypeTick(row, true)"
+                      [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                      title="Tick KK mọi dòng loại hàng đang chọn">
+                Tick KK
+              </button>
+              <button type="button"
+                      class="kk-type-filter__untick-all"
+                      (click)="onKkByTypeTick(row, false)"
+                      [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                      title="Bỏ tick KK mọi dòng loại hàng đang chọn">
+                Bỏ tick
+              </button>
+            </div>
+            <div class="kk-type-filter__split kk-type-filter__split--pallet">
+              <button type="button"
+                      class="kk-type-filter__rename-pallet"
+                      (click)="renameKkTypePallet(row)"
+                      [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                      title="Đổi số pallet: nhập pallet hiện tại, rồi pallet mới">
+                Đổi pallet
+              </button>
+              <button type="button"
+                      class="kk-type-filter__print-pallet"
+                      (click)="printKkTypePalletLabel(row)"
+                      [disabled]="kkLocMapBusy || kkTypePrintBusy || !row.totalLines"
+                      title="In tem pallet 100×100mm — tên rút gọn + QR">
+                {{ kkTypePrintBusy ? 'Đang in...' : 'In tem' }}
+              </button>
+            </div>
             <button type="button"
                     class="kk-type-filter__scan"
                     (click)="openKkTypeScanModal(row)"
                     [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                    title="Scan pallet rồi scan hàng loạt mã để tick KK">
+                    title="Scan pallet rồi scan mã hàng để tick KK">
               Scan
             </button>
+            <div class="kk-type-filter__split kk-type-filter__split--loc">
+              <button type="button"
+                      class="kk-type-detail__clear-loc"
+                      (click)="clearKkTypeLocations(row)"
+                      [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                      title="Xóa vị trí mọi dòng của loại hàng đang chọn">
+                Xóa vị trí
+              </button>
+              <input type="text"
+                     class="kk-type-filter__loc-input"
+                     [(ngModel)]="row.location"
+                     placeholder="Vị trí mới"
+                     [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                     (keydown.enter)="onKkTypeLocationEnter(row, $event)"
+                     (blur)="saveKkTypeLocation(row)"
+                     autocomplete="off"
+                     spellcheck="false">
+            </div>
             <span class="kk-type-filter__count" *ngIf="kkTypeDetailFiltered.length">
-              Hiển thị {{ kkTypeShowingFrom }} - {{ kkTypeShowingTo }} trong tổng số {{ kkTypeDetailFiltered.length | number }} dòng
-            </span>
-            <button type="button"
-                    class="kk-type-filter__more"
-                    [class.kk-type-filter__more--on]="kkTypeShowExtraFilter"
-                    (click)="kkTypeShowExtraFilter = !kkTypeShowExtraFilter">
-              <i class="material-icons">filter_list</i>
-              Bộ lọc
-            </button>
-          </div>
-          <div class="kk-type-detail__bar" *ngIf="kkTypeShowExtraFilter && kkActiveTypeRow as row">
-            <button type="button"
-                    class="kk-type-detail__clear-loc"
-                    (click)="clearKkTypeLocations(row)"
-                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                    title="Xóa vị trí mọi dòng của loại hàng đang chọn">
-              Xóa vị trí tất cả
-            </button>
-            <input type="text"
-                   class="kk-loc-map__pallet-input"
-                   [(ngModel)]="row.location"
-                   placeholder="Vị trí mới — cả loại hàng"
-                   [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                   (keydown.enter)="onKkTypeLocationEnter(row, $event)"
-                   (blur)="saveKkTypeLocation(row)"
-                   autocomplete="off"
-                   spellcheck="false">
-            <span class="kk-type-detail__groups">
-              <ng-container *ngIf="kkTypeSharedGroupPrefix(row.groupCodes) as prefix">{{ prefix }} · </ng-container>
-              {{ row.groupCodes.length }} nhóm mã
+              {{ kkTypeShowingFrom }}–{{ kkTypeShowingTo }}/{{ kkTypeDetailFiltered.length | number }}
             </span>
           </div>
           <ng-container *ngIf="kkActiveTypeRow">
@@ -803,21 +817,17 @@
             <i class="material-icons">assessment</i>
             <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
           </div>
-          <!-- Kiểm Kê inline KPI (không popup) -->
-          <div class="kk-inline-box" *ngIf="kkCheckRunning" title="Đang quét tiến độ Kiểm Kê">
-            <i class="material-icons rotating">sync</i>
-            <span>Đang KK {{ selectedFactory }}…</span>
-          </div>
-          <div class="kk-inline-box kk-inline-box--done kk-inline-box--click" *ngIf="!kkCheckRunning && kkCheckRan"
-               (click)="openKkListFromBanner($event)"
-               role="button"
-               [title]="'Bấm để xem ' + kkTickedCountLabel + ' dòng đang tick KK'">
-            <i class="material-icons">fact_check</i>
-            <span>KK {{ kkCheckProgressPercent | number:'1.0-0' }}% · {{ kkCheckCheckedRows | number }}/{{ kkCheckTotalRows | number }} mã</span>
-            <button type="button" class="kk-inline-box__close" (click)="clearKkInlineBanner(); $event.stopPropagation()" title="Đóng" aria-label="Đóng">
-              <i class="material-icons">close</i>
-            </button>
-          </div>
+          <button type="button"
+                  class="kk-inline-box"
+                  [class.kk-inline-box--done]="!kkCheckRunning && kkCheckRan"
+                  [disabled]="kkCheckRunning"
+                  (click)="runKkCheckOnInventory()"
+                  [title]="kkCheckRunning ? 'Đang tính tỷ lệ KK' : (kkCheckRan ? 'Bấm để tính lại tỷ lệ KK' : 'Tính tỷ lệ KK trên tồn kho')">
+            <i class="material-icons" [class.rotating]="kkCheckRunning">{{ kkCheckRunning ? 'sync' : 'fact_check' }}</i>
+            <span *ngIf="kkCheckRunning">Đang KK {{ selectedFactory }}…</span>
+            <span *ngIf="!kkCheckRunning && kkCheckRan">Tỷ lệ KK {{ kkCheckProgressPercent | number:'1.0-0' }}% · {{ kkCheckCheckedRows | number }}/{{ kkCheckTotalRows | number }} mã</span>
+            <span *ngIf="!kkCheckRunning && !kkCheckRan">Tỷ lệ KK</span>
+          </button>
         </div>
       </div>
       <!-- Consolidation Status Message -->
@@ -887,15 +897,6 @@
                   title="Lọc theo khách hàng">
             <i class="material-icons">groups</i>
             <span>{{ searchByCustomer && searchTerm ? searchTerm : 'KH' }}</span>
-          </button>
-          <button type="button"
-                  class="filter-chip"
-                  [class.active]="searchByKk"
-                  (click)="toggleKkCheckedFilter()"
-                  [disabled]="isLoading"
-                  title="Hiện các dòng đang tick KK">
-            <i class="material-icons">fact_check</i>
-            <span>{{ searchByKk ? ('KK · ' + filteredInventory.length) : 'KK' }}</span>
           </button>
           <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
             <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
@@ -976,15 +977,6 @@
                 title="Lọc theo khách hàng">
           <i class="material-icons">groups</i>
           <span class="btn-label">{{ searchByCustomer && searchTerm ? searchTerm : 'KH' }}</span>
-        </button>
-        <button type="button"
-                class="filter-chip"
-                [class.active]="searchByKk"
-                (click)="toggleKkCheckedFilter()"
-                [disabled]="isLoading"
-                title="Hiện các dòng đang tick KK">
-          <i class="material-icons">fact_check</i>
-          <span class="btn-label">{{ searchByKk ? ('KK · ' + filteredInventory.length) : 'KK' }}</span>
         </button>
         <label class="search-location-toggle" title="Hiện cột KH (tải Danh mục NVLKH)">
           <input type="checkbox" [(ngModel)]="showKhColumn" (change)="onShowKhColumnChange()" />
@@ -1067,17 +1059,9 @@
           <button class="more-btn kk-check-btn"
                   type="button"
                   (click)="openDoiKho()"
-                  title="Dời kho — chọn pallet/vị trí rồi chuyển sang J5 hoặc WH3">
+                  title="Dời kho — scan pallet, chọn J5 hoặc ASM3">
             <i class="material-icons">local_shipping</i>
             <span class="btn-label">Dời kho</span>
-          </button>
-          <button class="more-btn kk-check-btn"
-                  type="button"
-                  (click)="runKkCheckOnInventory()"
-                  [disabled]="kkCheckRunning"
-                  title="Chạy tiến độ Kiểm Kê — xong sẽ hiện danh sách đang tick KK">
-            <i class="material-icons" [class.rotating]="kkCheckRunning">{{ kkCheckRunning ? 'sync' : 'fact_check' }}</i>
-            <span class="btn-label">{{ kkCheckRunning ? 'Đang KK...' : 'Kiểm Kê' }}</span>
           </button>
           <button class="download-search-btn"
                   (click)="downloadSearchResultsExcel()"
@@ -3242,21 +3226,17 @@
   </div>
 </div>
 
-<!-- Dời kho: lưới vị trí kiểu Kiểm tra KK -> bấm 1 ô xem chi tiết pallet -> tick chọn -> chọn J5/WH3 -->
+<!-- Dời kho: scan pallet → chọn J5/ASM3 → Done. Mã pallet giữ nguyên. -->
 <div class="modal-overlay more-overlay" *ngIf="showDoiKho" (click)="closeDoiKho()">
-  <div class="modal-content kk-loc-map doi-kho-popup" (click)="$event.stopPropagation()" role="dialog" aria-label="Dời kho">
-    <div class="more-popup-header">
+  <div class="modal-content doi-kho-simple" (click)="$event.stopPropagation()" role="dialog" aria-label="Dời kho">
+    <div class="more-popup-header gan-pallet__head">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
           <i class="material-icons">local_shipping</i>
         </span>
         <div>
           <h3>Dời kho</h3>
-          <p class="more-popup-header__sub">
-            {{ selectedFactory }}
-            <span *ngIf="!doiKhoLoading && doiKhoBoxes.length"> · {{ doiKhoBoxes.length }} vị trí</span>
-            <span *ngIf="doiKhoSelectedCount"> · {{ doiKhoSelectedCount }} đã chọn</span>
-          </p>
+          <p class="more-popup-header__sub">{{ selectedFactory }} · pallet giữ nguyên</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeDoiKho()" aria-label="Đóng" [disabled]="doiKhoBusy">
@@ -3264,212 +3244,56 @@
       </button>
     </div>
 
-    <div class="modal-body kk-loc-map__body">
-      <!-- Bước 1: lưới vị trí -->
-      <ng-container *ngIf="doiKhoView === 'grid'">
-        <div class="kk-loc-map__toolbar">
-          <div class="hidden-search">
-            <i class="material-icons">search</i>
-            <input type="search" [(ngModel)]="doiKhoQuery" placeholder="Lọc vị trí hoặc mã pallet/mã hàng…" autocomplete="off" />
-          </div>
-          <button type="button" class="hidden-refresh-btn" (click)="loadDoiKhoLocMap()" [disabled]="doiKhoLoading">
-            <i class="material-icons" [class.rotating]="doiKhoLoading">refresh</i>
-            Làm mới
+    <div class="doi-kho-simple__body">
+      <label class="doi-kho-simple__field">
+        <span>Scan pallet</span>
+        <div class="doi-kho-simple__input-row">
+          <input id="doiKhoScanInput"
+                 type="text"
+                 [(ngModel)]="doiKhoScanInput"
+                 (keydown.enter)="submitDoiKhoPallet($event)"
+                 placeholder="Scan pallet..."
+                 autocomplete="off"
+                 autocapitalize="characters"
+                 enterkeyhint="next"
+                 spellcheck="false"
+                 [disabled]="doiKhoBusy || doiKhoLoading">
+          <button type="button"
+                  (click)="submitDoiKhoPallet()"
+                  [disabled]="doiKhoBusy || doiKhoLoading || !doiKhoScanInput.trim()">
+            <i class="material-icons">{{ doiKhoLoading ? 'hourglass_empty' : 'arrow_forward' }}</i>
           </button>
         </div>
-        <div class="kk-loc-map__legend">
-          <span class="kk-loc-map__dot kk-loc-map__dot--done">Đã chọn hết</span>
-          <span class="kk-loc-map__dot kk-loc-map__dot--partial">Chọn 1 phần</span>
-          <span class="kk-loc-map__dot kk-loc-map__dot--none">Chưa chọn</span>
-        </div>
-        <div class="kk-loc-map__loading" *ngIf="doiKhoLoading">
-          <i class="material-icons rotating">sync</i>
-          Đang đọc tồn kho {{ selectedFactory }}…
-        </div>
-        <div class="kk-loc-map__groups" *ngIf="!doiKhoLoading">
-          <section class="kk-loc-map__group" *ngFor="let group of doiKhoGroupedBoxes">
-            <header class="kk-loc-map__group-head">
-              <strong>{{ group.key }}</strong>
-              <span>{{ group.count }} pallet/mã · {{ group.boxes.length }} vị trí</span>
-            </header>
-            <div class="kk-loc-map__grid">
-              <button
-                type="button"
-                class="kk-loc-box"
-                *ngFor="let box of group.boxes"
-                [class.kk-loc-box--done]="doiKhoBoxTone(box) === 'done'"
-                [class.kk-loc-box--partial]="doiKhoBoxTone(box) === 'partial'"
-                [class.kk-loc-box--none]="doiKhoBoxTone(box) === 'none'"
-                (click)="openDoiKhoBox(box)"
-                [title]="box.loc + ': ' + box.count + ' pallet/mã'">
-                <strong>{{ box.loc }}</strong>
-                <span>{{ box.count }} pallet</span>
-              </button>
-            </div>
-          </section>
-          <p class="hidden-empty" *ngIf="!doiKhoGroupedBoxes.length">Không có vị trí khớp.</p>
-        </div>
-      </ng-container>
+      </label>
 
-      <!-- Bước 2: chi tiết 1 vị trí — xem theo mã hoặc theo pallet -->
-      <ng-container *ngIf="doiKhoView === 'detail'">
-        <button type="button" class="doi-kho-back-btn" (click)="backToDoiKhoGrid()">
-          <i class="material-icons">arrow_back</i> Về lưới vị trí
-        </button>
-        <p class="reset-low-stock-hint">
-          Vị trí <strong>{{ doiKhoActiveLoc }}</strong> — {{ doiKhoActiveRows.length }} pallet/mã đang lưu hàng.
-        </p>
+      <p class="doi-kho-simple__err" *ngIf="doiKhoError">{{ doiKhoError }}</p>
 
-        <div class="doi-kho-mode-toggle">
-          <button
-            type="button"
-            class="doi-kho-mode-toggle__btn"
-            [class.doi-kho-mode-toggle__btn--on]="doiKhoDetailMode === 'code'"
-            (click)="setDoiKhoDetailMode('code')">
-            Xem theo mã
-          </button>
-          <button
-            type="button"
-            class="doi-kho-mode-toggle__btn"
-            [class.doi-kho-mode-toggle__btn--on]="doiKhoDetailMode === 'pallet'"
-            (click)="setDoiKhoDetailMode('pallet')">
-            Xem theo pallet
-          </button>
+      <div class="doi-kho-simple__hit" *ngIf="doiKhoPallet && doiKhoRows.length">
+        <strong>{{ doiKhoPallet }}</strong>
+        <span>{{ doiKhoRows.length }} dòng · mã pallet giữ nguyên</span>
+      </div>
+
+      <div class="doi-kho-simple__field" *ngIf="doiKhoPallet && doiKhoRows.length">
+        <span>Chọn kho dời đến</span>
+        <div class="doi-kho-simple__wh">
+          <button type="button"
+                  [class.doi-kho-simple__wh--on]="doiKhoWh === 'J5'"
+                  (click)="doiKhoWh = 'J5'"
+                  [disabled]="doiKhoBusy">J5</button>
+          <button type="button"
+                  [class.doi-kho-simple__wh--on]="doiKhoWh === 'ASM3'"
+                  (click)="doiKhoWh = 'ASM3'"
+                  [disabled]="doiKhoBusy">ASM3</button>
         </div>
+      </div>
 
-        <!-- Xem theo mã: danh sách phẳng tất cả mã ở vị trí này -->
-        <ng-container *ngIf="doiKhoDetailMode === 'code'">
-          <div class="reset-low-stock-toolbar" *ngIf="doiKhoActiveRows.length">
-            <label class="reset-low-stock-select-all">
-              <input
-                type="checkbox"
-                [checked]="doiKhoActiveAllSelected"
-                (change)="toggleAllDoiKhoActive($any($event.target).checked)"
-              />
-              Chọn tất cả ở vị trí này
-            </label>
-            <span>{{ doiKhoSelectedCount }} đã chọn (tất cả vị trí)</span>
-          </div>
-          <div class="reset-low-stock-table-wrap">
-            <table class="reset-low-stock-table">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Mã hàng</th>
-                  <th>PO</th>
-                  <th>Pallet</th>
-                  <th>Tồn</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of doiKhoActiveRows">
-                  <td>
-                    <input type="checkbox" [(ngModel)]="row.selected" />
-                  </td>
-                  <td>{{ row.materialCode }}</td>
-                  <td>{{ row.poNumber || '—' }}</td>
-                  <td>{{ row.palletId || '—' }}</td>
-                  <td class="col-num">{{ row.stock | number:'1.0-4' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </ng-container>
-
-        <!-- Xem theo pallet: mỗi pallet 1 box -->
-        <ng-container *ngIf="doiKhoDetailMode === 'pallet' && !doiKhoActivePalletId">
-          <div class="kk-loc-map__grid doi-kho-pallet-grid">
-            <button
-              type="button"
-              class="kk-loc-box"
-              *ngFor="let box of doiKhoPalletBoxes"
-              [class.kk-loc-box--done]="doiKhoPalletBoxTone(box) === 'done'"
-              [class.kk-loc-box--partial]="doiKhoPalletBoxTone(box) === 'partial'"
-              [class.kk-loc-box--none]="doiKhoPalletBoxTone(box) === 'none'"
-              (click)="openDoiKhoPallet(box.palletId)"
-              [title]="box.palletId + ': ' + box.count + ' mã hàng'">
-              <strong>{{ box.palletId }}</strong>
-              <span>{{ box.count }} mã</span>
-            </button>
-          </div>
-          <p class="hidden-empty" *ngIf="!doiKhoPalletBoxes.length">Vị trí này chưa có pallet nào.</p>
-        </ng-container>
-
-        <!-- Xem theo pallet: đã bấm vào 1 pallet -> danh sách mã của pallet đó -->
-        <ng-container *ngIf="doiKhoDetailMode === 'pallet' && doiKhoActivePalletId">
-          <button type="button" class="doi-kho-back-btn" (click)="backToDoiKhoPalletGrid()">
-            <i class="material-icons">arrow_back</i> Về danh sách pallet
-          </button>
-          <div class="reset-low-stock-toolbar" *ngIf="doiKhoActivePalletRows.length">
-            <label class="reset-low-stock-select-all">
-              <input
-                type="checkbox"
-                [checked]="doiKhoActivePalletAllSelected"
-                (change)="toggleAllDoiKhoActivePallet($any($event.target).checked)"
-              />
-              Chọn tất cả pallet {{ doiKhoActivePalletId }}
-            </label>
-            <span>{{ doiKhoSelectedCount }} đã chọn (tất cả vị trí)</span>
-          </div>
-          <div class="reset-low-stock-table-wrap">
-            <table class="reset-low-stock-table">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Mã hàng</th>
-                  <th>PO</th>
-                  <th>Tồn</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of doiKhoActivePalletRows">
-                  <td>
-                    <input type="checkbox" [(ngModel)]="row.selected" />
-                  </td>
-                  <td>{{ row.materialCode }}</td>
-                  <td>{{ row.poNumber || '—' }}</td>
-                  <td class="col-num">{{ row.stock | number:'1.0-4' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </ng-container>
-
-        <div class="reset-low-stock-actions">
-          <button type="button" class="cancel-btn" (click)="closeDoiKho()" [disabled]="doiKhoBusy">
-            Đóng
-          </button>
-          <button
-            type="button"
-            class="delete-batch-btn doi-kho-go-btn"
-            (click)="startDoiKhoChooseWh()"
-            [disabled]="doiKhoBusy || doiKhoSelectedCount === 0">
-            <i class="material-icons">local_shipping</i>
-            Dời Kho ({{ doiKhoSelectedCount }})
-          </button>
-        </div>
-      </ng-container>
-
-      <!-- Bước 3: chọn kho đích -->
-      <ng-container *ngIf="doiKhoView === 'wh'">
-        <p class="reset-low-stock-hint">
-          Chọn kho đích cho <strong>{{ doiKhoSelectedCount }}</strong> mã/pallet đã chọn.
-          Vị trí sẽ được thêm tiền tố ở đầu, mã pallet giữ nguyên.
-        </p>
-        <div class="doi-kho-wh-picker">
-          <button type="button" class="pushback-btn doi-kho-wh-btn" [disabled]="doiKhoBusy" (click)="confirmDoiKho('J5')">
-            <i class="material-icons">{{ doiKhoBusy ? 'sync' : 'warehouse' }}</i> J5
-          </button>
-          <button type="button" class="pushback-btn doi-kho-wh-btn" [disabled]="doiKhoBusy" (click)="confirmDoiKho('WH3')">
-            <i class="material-icons">{{ doiKhoBusy ? 'sync' : 'warehouse' }}</i> WH3
-          </button>
-        </div>
-        <div class="reset-low-stock-actions">
-          <button type="button" class="cancel-btn" (click)="cancelDoiKhoChooseWh()" [disabled]="doiKhoBusy">
-            Quay lại
-          </button>
-        </div>
-      </ng-container>
+      <button type="button"
+              class="doi-kho-simple__done"
+              (click)="confirmDoiKho()"
+              [disabled]="doiKhoBusy || !doiKhoPallet || !doiKhoWh || !doiKhoRows.length">
+        <i class="material-icons">{{ doiKhoBusy ? 'sync' : 'check' }}</i>
+        {{ doiKhoBusy ? 'Đang dời…' : 'Done' }}
+      </button>
     </div>
   </div>
 </div>
@@ -3727,34 +3551,11 @@
       </div>
 
       <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
-        <div class="kk-type-scan__ready"
-             [class.kk-type-scan__ready--on]="kkTypeScanReady && !kkTypeScanBusy"
-             [class.kk-type-scan__ready--busy]="kkTypeScanBusy || !kkTypeScanReady">
-          <i class="material-icons">{{ kkTypeScanBusy || !kkTypeScanReady ? 'hourglass_empty' : 'check_circle' }}</i>
-          <strong>{{ kkTypeScanBusy || !kkTypeScanReady ? 'ĐANG GHI — chờ rồi scan tiếp' : 'SẴN SÀNG — scan tem tiếp' }}</strong>
-        </div>
         <p class="kk-type-scan__hint">
           Pallet <strong>{{ kkTypeScanPallet }}</strong>
-          · NV {{ kkTypeScanOperator }}
-          · Đúng {{ kkTypeScanOkCount }}
-          · Lệch {{ kkTypeScanMissCount }}
+          · NV {{ kkTypeScanOperator || '—' }}
+          · Scan mã hàng
         </p>
-        <div class="kk-type-scan__card" *ngIf="kkTypeScanLast as last"
-             [class.kk-type-scan__card--ok]="last.ok"
-             [class.kk-type-scan__card--miss]="!last.ok">
-          <div class="kk-type-scan__card-top">
-            <strong>{{ last.code }}</strong>
-            <span>PO {{ last.po || '—' }}</span>
-          </div>
-          <div class="kk-type-scan__card-qty">
-            +{{ formatNumber(last.addQty) }}
-            → quét <b>{{ formatNumber(last.scanned) }}</b>
-            / tồn {{ formatNumber(last.stock) }}
-          </div>
-          <div class="kk-type-scan__card-kk" [class.kk-type-scan__card-kk--on]="last.kkOn">
-            {{ last.kkOn ? 'Đã tick KK' : 'Chưa đủ lượng — chưa tick KK' }}
-          </div>
-        </div>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanQrInput"
                  type="text"
@@ -3762,16 +3563,76 @@
                  (input)="onKkTypeScanNewline('code', $event)"
                  (keydown.enter)="submitKkTypeScanCode($event)"
                  (keydown.tab)="submitKkTypeScanCode($event)"
-                 placeholder="Scan tem mã hàng (Mã|PO|SL|IMD)..."
+                 placeholder="Scan mã hàng..."
                  autocomplete="off"
                  spellcheck="false"
-                 enterkeyhint="done">
-          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="!kkTypeScanQrInput.trim()">
+                 enterkeyhint="done"
+                 [disabled]="kkTypeScanBusy">
+          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || !kkTypeScanQrInput.trim()">
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
         </div>
-        <p class="kk-type-scan__pending" *ngIf="kkTypeScanPending">Đã nhận tem chờ — sẽ ghi ngay khi sẵn sàng</p>
+
+        <div class="kk-type-scan__code" *ngIf="kkTypeScanMaterialCode">
+          <div class="kk-type-scan__code-head">
+            <div class="kk-type-scan__code-title">
+              <strong>{{ kkTypeScanMaterialCode }}</strong>
+              <span>Tổng cuộn <b>{{ kkTypeScanCodeRollsTotal | number }}</b>
+                · {{ kkTypeScanCodeRows.length | number }} dòng</span>
+            </div>
+            <label class="kk-type-scan__std">
+              Standard
+              <input type="number"
+                     [ngModel]="kkTypeScanStandardDraft"
+                     (ngModelChange)="kkTypeScanStandardDraft = $event === '' || $event === null ? '' : +$event"
+                     (keydown.enter)="$any($event.target).blur()"
+                     (blur)="saveKkTypeScanStandard()"
+                     min="0"
+                     step="0.1"
+                     [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
+            </label>
+            <button type="button"
+                    class="kk-type-scan__all-btn"
+                    [class.kk-type-scan__all-btn--on]="kkTypeScanAllTicked"
+                    (click)="onKkTypeScanTickAll(!kkTypeScanAllTicked)"
+                    [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
+              <i class="material-icons">{{ kkTypeScanAllTicked ? 'check_box' : 'check_box_outline_blank' }}</i>
+              Đủ toàn bộ
+            </button>
+          </div>
+          <div class="kk-type-scan__table-wrap" *ngIf="kkTypeScanCodeRows.length">
+            <table class="kk-type-scan__table">
+              <thead>
+                <tr>
+                  <th>PO</th>
+                  <th>IMD</th>
+                  <th>Lượng</th>
+                  <th>Cuộn</th>
+                  <th>KK</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let line of kkTypeScanCodeRows; trackBy: trackByFn"
+                    [class.kk-type-scan__row--on]="!!line.kkChecked"
+                    (click)="canEdit && !kkTypeScanBusy && onKkTypeScanRowTick(line, !line.kkChecked)">
+                  <td>{{ line.poNumber || '—' }}</td>
+                  <td>{{ getDisplayIMD(line) }}</td>
+                  <td class="n">{{ formatNumber(calculateCurrentStock(line)) }}</td>
+                  <td class="n">{{ getKkRollsText(line) }}</td>
+                  <td class="kk">
+                    <span class="kk-type-scan__kk-mark" [class.kk-type-scan__kk-mark--on]="!!line.kkChecked">
+                      <i class="material-icons">{{ line.kkChecked ? 'check_box' : 'check_box_outline_blank' }}</i>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="kk-type-scan__empty" *ngIf="!kkTypeScanCodeRows.length">Không có dòng tồn mã này trong loại hàng.</p>
+        </div>
+
         <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToPallet()" [disabled]="kkTypeScanBusy">
+          <i class="material-icons">swap_horiz</i>
           Đổi pallet
         </button>
         <ul class="kk-type-scan__log" *ngIf="kkTypeScanLogs.length">
@@ -3838,6 +3699,46 @@
         <p class="kk-code-lookup__meta" *ngIf="r.lines">{{ r.lines | number }} dòng tồn tại {{ selectedFactory }}</p>
         <p class="kk-code-lookup__empty" *ngIf="!r.lines">Không có dòng tồn kho mã này tại {{ selectedFactory }}.</p>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay"
+     [class.more-overlay]="!isMobile"
+     *ngIf="showKkPalletCheck"
+     (click)="closeKkPalletCheck()">
+  <div class="modal-content kk-pallet-check" (click)="$event.stopPropagation()" role="dialog" aria-label="Kiểm tra pallet">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">widgets</i>
+        </span>
+        <div>
+          <h3>Kiểm tra pallet</h3>
+          <p class="more-popup-header__sub">{{ selectedFactory }} · số pallet theo kho</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkPalletCheck()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="kk-pallet-check__body">
+      <div class="kk-pallet-check__loading" *ngIf="kkPalletCheckBusy">
+        <i class="material-icons rotating">sync</i>
+        Đang đếm pallet…
+      </div>
+      <ng-container *ngIf="!kkPalletCheckBusy">
+        <div class="kk-pallet-check__grid">
+          <div class="kk-pallet-check__card" *ngFor="let row of kkPalletCheckRows">
+            <span>{{ row.label }}</span>
+            <strong>{{ row.pallets | number }}</strong>
+            <small>{{ row.lines | number }} dòng
+              <ng-container *ngIf="row.noPallet"> · {{ row.noPallet | number }} chưa gán pallet</ng-container>
+            </small>
+          </div>
+        </div>
+        <p class="kk-pallet-check__total">Tổng <strong>{{ kkPalletCheckTotal | number }}</strong> pallet</p>
+      </ng-container>
     </div>
   </div>
 </div>

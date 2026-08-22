@@ -165,7 +165,7 @@ type DoiKhoRow = {
 };
 
 /** Kho đích khi Dời kho — tiền tố gắn vào đầu Vị trí. */
-type DoiKhoWh = 'J5' | 'WH3';
+type DoiKhoWh = 'J5' | 'ASM3';
 
 type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock';
 
@@ -297,24 +297,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeScanPalletInput = '';
   kkTypeScanQrInput = '';
   kkTypeScanBusy = false;
-  kkTypeScanReady = true;
-  kkTypeScanPending = '';
+  kkTypeScanMaterialCode = '';
+  kkTypeScanStandardDraft: number | '' = '';
   kkTypeScanOkCount = 0;
   kkTypeScanSkipCount = 0;
   kkTypeScanMissCount = 0;
   kkTypeScanLogs: Array<{ ok: boolean; skip?: boolean; text: string }> = [];
-  kkTypeScanLast: {
-    ok: boolean;
-    code: string;
-    po: string;
-    addQty: number;
-    scanned: number;
-    stock: number;
-    kkOn: boolean;
-    text: string;
-  } | null = null;
+  kkTypePrintBusy = false;
   showKkTypeReportMenu = false;
   showKkCodeLookup = false;
+  showKkPalletCheck = false;
+  kkPalletCheckBusy = false;
+  kkPalletCheckRows: Array<{ warehouse: KkWarehouse; label: string; pallets: number; lines: number; noPallet: number }> = [];
+  kkPalletCheckTotal = 0;
   kkCodeLookupInput = '';
   kkCodeLookupBusy = false;
   kkCodeLookupResult: {
@@ -346,24 +341,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   ];
 
   /**
-   * Popup Dời kho: hiển thị vị trí dạng ô lưới như "Kiểm tra KK" (đếm pallet/mã theo vị trí) →
-   * bấm 1 ô để xem chi tiết các pallet đang lưu ở đó → tick chọn (1 hoặc nhiều vị trí, có thể
-   * duyệt qua lại) → "Dời Kho" → chọn J5/WH3 → thêm tiền tố vào đầu Vị trí, giữ nguyên mã pallet.
+   * Popup Dời kho: scan pallet → chọn J5/ASM3 → Done.
+   * Đổi tiền tố vị trí sang kho mới, giữ nguyên mã pallet.
    */
   showDoiKho = false;
   doiKhoBusy = false;
   doiKhoLoading = false;
-  doiKhoQuery = '';
-  /** 'grid' = lưới vị trí, 'detail' = danh sách pallet của 1 vị trí, 'wh' = chọn kho đích. */
-  doiKhoView: 'grid' | 'detail' | 'wh' = 'grid';
-  doiKhoBoxes: Array<{ loc: string; count: number }> = [];
-  private doiKhoRowCache = new Map<string, DoiKhoRow[]>();
-  doiKhoActiveLoc = '';
-  doiKhoActiveRows: DoiKhoRow[] = [];
-  /** Trong bước 'detail': xem theo mã (danh sách phẳng) hay theo pallet (gom mã theo từng pallet). */
-  doiKhoDetailMode: 'code' | 'pallet' = 'code';
-  /** Pallet đang mở (chỉ dùng khi doiKhoDetailMode === 'pallet'). */
-  doiKhoActivePalletId: string | null = null;
+  doiKhoScanInput = '';
+  doiKhoPallet = '';
+  doiKhoWh: DoiKhoWh | null = null;
+  doiKhoRows: DoiKhoRow[] = [];
+  doiKhoError = '';
 
   /** Popup Gán pallet: scan pallet → kho → vị trí → mã (+ lượng) → Gán tiếp / Dừng. */
   showGanPallet = false;
@@ -5250,6 +5238,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveProductType = null;
     this.kkActiveTypeDraft = null;
     this.showKkTypeReportMenu = false;
+    this.showKkPalletCheck = false;
   }
 
   setKkLocMapView(view: 'location' | 'material' | 'type'): void {
@@ -5286,6 +5275,63 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   closeKkCodeLookup(): void {
     this.showKkCodeLookup = false;
+  }
+
+  openKkPalletCheck(): void {
+    this.showKkPalletCheck = true;
+    void this.loadKkPalletCheck();
+  }
+
+  closeKkPalletCheck(): void {
+    this.showKkPalletCheck = false;
+  }
+
+  async loadKkPalletCheck(): Promise<void> {
+    this.kkPalletCheckBusy = true;
+    this.kkPalletCheckRows = [];
+    this.kkPalletCheckTotal = 0;
+    this.cdr.detectChanges();
+    try {
+      const snap = await this.firestore
+        .collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', this.selectedFactory).limit(10000)
+        )
+        .get()
+        .toPromise();
+      const byWh = new Map<KkWarehouse, { pallets: Set<string>; lines: number; noPallet: number }>();
+      for (const w of this.kkLocMapWarehouseOptions) {
+        byWh.set(w.id, { pallets: new Set<string>(), lines: 0, noPallet: 0 });
+      }
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as any;
+        const stock = this.stockFromInventoryDoc(data);
+        if (stock <= 0) continue;
+        const warehouse = this.kkWarehouseFromLocation(String(data.location || data.viTri || ''));
+        const cur = byWh.get(warehouse);
+        if (!cur) continue;
+        cur.lines += 1;
+        const pallet = String(data.palletId || '').trim().toUpperCase();
+        if (!pallet) cur.noPallet += 1;
+        else cur.pallets.add(pallet);
+      }
+      this.kkPalletCheckRows = this.kkLocMapWarehouseOptions.map((w) => {
+        const cur = byWh.get(w.id)!;
+        return {
+          warehouse: w.id,
+          label: w.label,
+          pallets: cur.pallets.size,
+          lines: cur.lines,
+          noPallet: cur.noPallet
+        };
+      });
+      this.kkPalletCheckTotal = this.kkPalletCheckRows.reduce((n, r) => n + r.pallets, 0);
+    } catch (e) {
+      console.error('loadKkPalletCheck:', e);
+      alert('Không đếm được pallet theo kho.');
+    } finally {
+      this.kkPalletCheckBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   onKkCodeLookupInput(value: string): void {
@@ -6800,6 +6846,143 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  kkTypePalletLabelName(row: KkTypeRow | null): string {
+    if (!row) return '';
+    const codes = this.kkTypeUniqueMaterialCodes(row);
+    if (codes.length === 1) {
+      const code = codes[0];
+      const prefix = this.kkTypeCodePrefix(code);
+      const abbr = this.kkTypeCustomerAbbr(this.nvlkhCustomerMap.get(code) || this.getCustomerForMaterial({ materialCode: code } as InventoryMaterial));
+      if (prefix && abbr) return `${prefix}-${abbr}`;
+      return code;
+    }
+    return String(row.productType || '').trim();
+  }
+
+  private kkTypeUniqueMaterialCodes(row: KkTypeRow): string[] {
+    const set = new Set<string>();
+    const lines = this.kkActiveProductType === row.productType
+      ? this.kkTypeDetailAll
+      : this.kkLinesForTypeRow(row).filter((m) => this.calculateCurrentStock(m) > 0);
+    for (const m of lines) {
+      const code = String(m.materialCode || '').trim().toUpperCase();
+      if (code) set.add(code);
+    }
+    return Array.from(set);
+  }
+
+  private kkTypeCodePrefix(code: string): string {
+    const c = String(code || '').replace(/\s/g, '').toUpperCase();
+    const m = /^([ABR]\d{3})/.exec(c);
+    return m ? m[1] : (c.length >= 4 ? c.slice(0, 4) : c);
+  }
+
+  private kkTypeCustomerAbbr(customer: string): string {
+    const s = String(customer || '').trim();
+    if (!s || /^shared$/i.test(s)) return '';
+    const first = (s.split(/[\s/_-]+/).filter(Boolean)[0] || s).trim();
+    return first.slice(0, 8).toUpperCase();
+  }
+
+  async printKkTypePalletLabel(row: KkTypeRow): Promise<void> {
+    if (!row || this.kkTypePrintBusy) return;
+    try {
+      if (!this.nvlkhCustomerMap.size) {
+        this.nvlkhCustomerMap = await this.nvlkhCatalog.loadAllAsMap();
+      }
+    } catch {
+      /* in vẫn được nếu không có khách hàng */
+    }
+    const name = this.kkTypePalletLabelName(row);
+    if (!name) {
+      alert('Chưa có tên pallet để in.');
+      return;
+    }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+      return;
+    }
+    this.kkTypePrintBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const QRCode = await import('qrcode') as any;
+      const qrDataUrl = await QRCode.toDataURL(name, {
+        width: 640,
+        margin: 1,
+        color: { dark: '#000000', light: '#FFFFFF' }
+      });
+      const esc = (s: string) => this.escapeHtmlForPrint(s);
+      const typeName = String(row.productType || '').trim();
+      printWindow.document.open();
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${esc(name)}</title>
+  <style>
+    @page { size: 100mm 100mm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100mm;
+      height: 100mm;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      background: #fff;
+    }
+    .label {
+      width: 100mm;
+      height: 100mm;
+      padding: 5mm 4mm 4mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .name {
+      font-size: ${name.length > 14 ? '16pt' : '22pt'};
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-align: center;
+      line-height: 1.15;
+      word-break: break-word;
+      max-width: 92mm;
+    }
+    .qr img {
+      width: 58mm;
+      height: 58mm;
+      display: block;
+    }
+    .meta {
+      font-size: 8pt;
+      font-weight: 700;
+      text-align: center;
+      color: #222;
+    }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <div class="name">${esc(name)}</div>
+    <div class="qr"><img src="${qrDataUrl}" alt="QR"></div>
+    <div class="meta">${esc(typeName && typeName !== name ? typeName : 'Pallet label')} · ${esc(this.selectedFactory)}</div>
+  </div>
+  <script>
+    window.onload = function() { setTimeout(function() { window.print(); }, 250); };
+  </script>
+</body>
+</html>`);
+      printWindow.document.close();
+    } catch (e) {
+      console.error('❌ printKkTypePalletLabel:', e);
+      try { printWindow.close(); } catch { /* ignore */ }
+      alert('Không in được tem pallet.');
+    } finally {
+      this.kkTypePrintBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   openKkTypeScanModal(row: KkTypeRow): void {
     if (!this.canEdit || this.kkLocMapBusy || !row) return;
     this.showKkTypeScanModal = true;
@@ -6810,13 +6993,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanPalletInput = '';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanBusy = false;
-    this.kkTypeScanReady = true;
-    this.kkTypeScanPending = '';
+    this.kkTypeScanMaterialCode = '';
+    this.kkTypeScanStandardDraft = '';
     this.kkTypeScanOkCount = 0;
     this.kkTypeScanSkipCount = 0;
     this.kkTypeScanMissCount = 0;
     this.kkTypeScanLogs = [];
-    this.kkTypeScanLast = null;
     this.cdr.detectChanges();
     setTimeout(() => this.focusKkTypeScanInput(
       this.kkTypeScanStep === 'operator' ? 'kkTypeScanOperatorInput' : 'kkTypeScanPalletInput'
@@ -6830,9 +7012,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanPallet = '';
     this.kkTypeScanPalletInput = '';
     this.kkTypeScanQrInput = '';
-    this.kkTypeScanPending = '';
+    this.kkTypeScanMaterialCode = '';
+    this.kkTypeScanStandardDraft = '';
     this.kkTypeScanLogs = [];
-    this.kkTypeScanLast = null;
   }
 
   submitKkTypeScanOperator(event?: Event): void {
@@ -6911,8 +7093,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanPalletInput = pallet;
     this.kkTypeScanStep = 'codes';
     this.kkTypeScanQrInput = '';
-    this.kkTypeScanReady = true;
-    this.kkTypeScanLast = null;
+    this.kkTypeScanMaterialCode = '';
+    this.kkTypeScanStandardDraft = '';
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanQrInput');
     this.kkTypeScanBeep('ready');
@@ -6921,6 +7103,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   backKkTypeScanToPallet(): void {
     this.kkTypeScanStep = 'pallet';
     this.kkTypeScanQrInput = '';
+    this.kkTypeScanMaterialCode = '';
+    this.kkTypeScanStandardDraft = '';
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanPalletInput');
   }
@@ -6979,18 +7163,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async submitKkTypeScanCode(event?: Event): Promise<void> {
     event?.preventDefault?.();
-    if (this.kkTypeScanStep !== 'codes') return;
+    if (this.kkTypeScanStep !== 'codes' || this.kkTypeScanBusy) return;
     const raw = this.readKkTypeScanInput('kkTypeScanQrInput', this.kkTypeScanQrInput, event);
     this.kkTypeScanQrInput = '';
     const inputEl = document.getElementById('kkTypeScanQrInput') as HTMLInputElement | null;
     if (inputEl) inputEl.value = '';
     if (!raw) return;
-
-    if (this.kkTypeScanBusy || !this.kkTypeScanReady) {
-      this.kkTypeScanPending = raw;
-      this.cdr.detectChanges();
-      return;
-    }
 
     if (!raw.includes('|') && /^[PF]/i.test(raw)) {
       this.kkTypeScanPalletInput = raw;
@@ -6999,19 +7177,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     const parsed = this.parseInboundQrLabelDisplayFields(raw);
-    const code = String(parsed.materialCode || '').trim().toUpperCase();
-    const po = String(parsed.po || '').trim();
-    const imd = String(parsed.imd || '').trim();
-    const addQty = this.parseKkScanQty(parsed.quantity);
-    if (!code || !po || !imd) {
-      this.pushKkTypeScanLog(false, 'QR thiếu Mã / PO / IMD');
-      this.kkTypeScanBeep('err');
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-      return;
-    }
-    if (!(addQty > 0)) {
-      this.pushKkTypeScanLog(false, `${code || 'QR'} — thiếu số lượng trên tem`);
+    const code = String(parsed.materialCode || raw || '').trim().toUpperCase();
+    if (!code) {
+      this.pushKkTypeScanLog(false, 'QR thiếu mã hàng');
       this.kkTypeScanBeep('err');
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
@@ -7026,8 +7194,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
     }
-    const pallet = this.kkTypeScanPallet;
-    if (!pallet) {
+    if (!this.kkTypeScanPallet) {
       this.pushKkTypeScanLog(false, 'Chưa lưu số pallet');
       this.kkTypeScanStep = 'pallet';
       this.cdr.detectChanges();
@@ -7035,145 +7202,185 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const palletOf = (m: InventoryMaterial) => String(m.palletId || '').trim().toUpperCase();
-    const candidates = this.kkLinesForTypeRow(row).filter((m) =>
-      String(m.materialCode || '').trim().toUpperCase() === code &&
-      this.kkTypeScanPoMatch(String(m.poNumber || ''), po) &&
-      this.kkTypeScanImdMatch(imd, this.getDisplayIMD(m))
-    );
-    const needsWrite = (m: InventoryMaterial) =>
-      !this.isKkFlagOn(m.kkChecked) || palletOf(m) !== pallet;
-    const match =
-      candidates.find((m) => needsWrite(m) && !!palletOf(m) && palletOf(m) !== pallet) ||
-      candidates.find((m) => needsWrite(m)) ||
-      candidates[0];
-
-    if (!match?.id) {
-      this.pushKkTypeScanLog(false, `${code} · ${po} · ${imd} — không khớp`);
+    this.kkTypeScanMaterialCode = code;
+    const lines = this.kkTypeScanCodeRows;
+    const first = lines[0];
+    this.kkTypeScanStandardDraft = first ? (this.getEffectiveStandardPacking(first) || '') : '';
+    if (!lines.length) {
+      this.pushKkTypeScanLog(false, `${code} — không có dòng tồn`);
       this.kkTypeScanBeep('err');
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-      return;
+    } else {
+      this.pushKkTypeScanLog(true, `${code} · ${lines.length} dòng · ${this.kkTypeScanCodeRollsTotal} cuộn`);
+      this.kkTypeScanBeep('ok');
     }
+    this.cdr.detectChanges();
+    this.focusKkTypeScanInput('kkTypeScanQrInput');
+  }
 
-    const alreadyKk = this.isKkFlagOn(match.kkChecked);
-    const prevPallet = palletOf(match);
-    const nextScanCount = this.roundKkQty(this.getKkScanCount(match) + addQty);
-    const stock = this.calculateCurrentStock(match);
-    const qtyEnough = nextScanCount + 1e-6 >= stock;
-    const willTickKk = !alreadyKk && qtyEnough;
-    const operator = this.kkTypeScanOperator || this.kkOperatorIdCache;
-    if (!operator) {
-      this.kkTypeScanStep = 'operator';
+  get kkTypeScanCodeRows(): InventoryMaterial[] {
+    const row = this.kkActiveTypeRow;
+    const code = this.kkTypeScanMaterialCode;
+    if (!row || !code) return [];
+    return this.kkLinesForTypeRow(row)
+      .filter((m) =>
+        String(m.materialCode || '').trim().toUpperCase() === code &&
+        this.calculateCurrentStock(m) > 0
+      )
+      .sort((a, b) => {
+        const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+        if (po) return po;
+        return String(this.getDisplayIMD(a) || '').localeCompare(String(this.getDisplayIMD(b) || ''), 'en', { numeric: true });
+      });
+  }
+
+  get kkTypeScanCodeRollsTotal(): number {
+    return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.getKkRollsCount(m), 0);
+  }
+
+  get kkTypeScanAllTicked(): boolean {
+    const rows = this.kkTypeScanCodeRows;
+    return !!rows.length && rows.every((m) => this.isKkFlagOn(m.kkChecked));
+  }
+
+  async saveKkTypeScanStandard(): Promise<void> {
+    const first = this.kkTypeScanCodeRows[0];
+    if (!first) return;
+    first.standardPacking = Math.max(0, Number(this.kkTypeScanStandardDraft) || 0);
+    await this.saveKkTypeStandard(first);
+    this.kkTypeScanStandardDraft = this.getEffectiveStandardPacking(first) || '';
+    this.cdr.detectChanges();
+  }
+
+  async onKkTypeScanTickAll(checked: boolean): Promise<void> {
+    const rows = this.kkTypeScanCodeRows;
+    if (!rows.length) return;
+    await this.applyKkTypeScanTick(rows, !!checked);
+  }
+
+  async onKkTypeScanRowTick(line: InventoryMaterial, checked: boolean): Promise<void> {
+    if (!line) return;
+    await this.applyKkTypeScanTick([line], !!checked);
+  }
+
+  private async applyKkTypeScanTick(lines: InventoryMaterial[], checked: boolean): Promise<void> {
+    if (!this.canEdit || this.kkTypeScanBusy) return;
+    const next = !!checked;
+    const pallet = this.kkTypeScanPallet;
+    const targets = lines.filter((m) => !!m?.id && (
+      this.isKkFlagOn(m.kkChecked) !== next ||
+      (!!pallet && String(m.palletId || '').trim().toUpperCase() !== pallet)
+    ));
+    if (!targets.length) {
       this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
       return;
     }
+    if (!next) {
+      const ok = confirm(targets.length > 1
+        ? `Bỏ tick KK ${targets.length} dòng mã ${this.kkTypeScanMaterialCode}?`
+        : `Bỏ tick KK mã ${this.kkTypeScanMaterialCode}?`);
+      if (!ok) {
+        this.cdr.detectChanges();
+        return;
+      }
+    }
+    const operator = next
+      ? (this.kkTypeScanOperator || this.kkOperatorIdCache || await this.resolveKkOperatorId())
+      : await this.resolveKkOperatorFromSession();
+    if (!operator) {
+      if (next && !this.kkTypeScanOperator) {
+        this.kkTypeScanStep = 'operator';
+        this.cdr.detectChanges();
+        this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      }
+      return;
+    }
+    this.kkTypeScanOperator = operator;
+    this.kkOperatorIdCache = operator;
 
     this.kkTypeScanBusy = true;
-    this.kkTypeScanReady = false;
     this.cdr.detectChanges();
+    const kkAt = new Date();
     try {
-      const kkAt = new Date();
-      const payload: Record<string, unknown> = {
-        palletId: pallet,
-        kkScanCount: nextScanCount,
-        updatedAt: new Date(),
-        lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-        modifiedBy: operator
-      };
-      if (willTickKk) {
-        payload.kkChecked = true;
-        payload.kkBy = operator;
-        payload.kkAt = kkAt;
-      }
-      await this.firestore.collection('inventory-materials').doc(match.id).update(payload);
-      if (willTickKk) {
-        await this.firestore.collection('inventory-kk-history').add({
-          inventoryDocId: match.id,
-          factory: this.resolveKkFactoryForMaterial(match),
-          materialCode: code,
-          materialName: String(match.materialName || '').trim(),
-          poNumber: String(match.poNumber || '').trim(),
-          batchNumber: String(match.batchNumber || '').trim(),
-          location: String(match.location || '').trim().toUpperCase(),
-          palletId: pallet,
-          quantity: Number(match.quantity) || 0,
-          stock: Number(stock) || 0,
-          unit: String(match.unit || '').trim(),
-          checkedBy: operator,
-          checkedAt: kkAt,
-          checkedDateKey: this.toDateKey(kkAt),
-          createdAt: new Date(),
-          source: 'kk-type-scan'
-        });
-        match.kkChecked = true;
-        match.kkBy = operator;
-        match.kkAt = kkAt;
-      }
-      match.palletId = pallet;
-      match.kkScanCount = nextScanCount;
-      (match as { __prevPalletId?: string }).__prevPalletId = pallet;
-      const stamp = (m: InventoryMaterial) => {
-        if (m.id !== match.id) return;
-        m.palletId = pallet;
-        m.kkScanCount = nextScanCount;
-        (m as { __prevPalletId?: string }).__prevPalletId = pallet;
-        if (willTickKk) {
-          m.kkChecked = true;
-          m.kkBy = operator;
-          m.kkAt = kkAt;
+      const chunkSize = 400;
+      for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        const batch = this.firestore.firestore.batch();
+        for (const m of chunk) {
+          const payload: Record<string, unknown> = {
+            kkChecked: next,
+            kkBy: operator,
+            kkAt,
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy: operator
+          };
+          if (pallet) payload.palletId = pallet;
+          if (!next) payload.kkScanCount = 0;
+          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
         }
-      };
-      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
-      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+        await batch.commit();
+        if (next) {
+          const histBatch = this.firestore.firestore.batch();
+          for (const m of chunk) {
+            histBatch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
+              inventoryDocId: m.id,
+              factory: this.resolveKkFactoryForMaterial(m),
+              materialCode: String(m.materialCode || '').trim().toUpperCase(),
+              materialName: String(m.materialName || '').trim(),
+              poNumber: String(m.poNumber || '').trim(),
+              batchNumber: String(m.batchNumber || '').trim(),
+              location: String(m.location || '').trim().toUpperCase(),
+              palletId: pallet || String(m.palletId || '').trim(),
+              quantity: Number(m.quantity) || 0,
+              stock: Number(this.calculateCurrentStock(m)) || 0,
+              unit: String(m.unit || '').trim(),
+              checkedBy: operator,
+              checkedAt: kkAt,
+              checkedDateKey: this.toDateKey(kkAt),
+              createdAt: new Date(),
+              source: 'kk-type-scan'
+            });
+          }
+          await histBatch.commit();
+        }
+      }
+      for (const m of targets) {
+        m.kkChecked = next;
+        m.kkBy = operator;
+        m.kkAt = kkAt;
+        if (pallet) {
+          m.palletId = pallet;
+          (m as { __prevPalletId?: string }).__prevPalletId = pallet;
+        }
+        if (!next) m.kkScanCount = 0;
+        const stamp = (x: InventoryMaterial) => {
+          if (x.id !== m.id) return;
+          x.kkChecked = next;
+          x.kkBy = operator;
+          x.kkAt = kkAt;
+          if (pallet) {
+            x.palletId = pallet;
+            (x as { __prevPalletId?: string }).__prevPalletId = pallet;
+          }
+          if (!next) x.kkScanCount = 0;
+        };
+        this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+        this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+      }
       this.syncKkTypeRows();
-      const palletLog = prevPallet && prevPallet !== pallet
-        ? `pallet ${prevPallet} → ${pallet}`
-        : `pallet ${pallet}`;
-      const qtyLog = `+${this.formatNumber(addQty)} → quét ${this.formatNumber(nextScanCount)} / tồn ${this.formatNumber(stock)}`;
-      const kkLog = alreadyKk || willTickKk ? ' · đã KK' : ' · chưa đủ — chưa tick KK';
-      const text = `${code} · ${po} · ${qtyLog}${kkLog}${prevPallet !== pallet ? ` · ${palletLog}` : ''}`;
-      this.pushKkTypeScanLog(true, text);
-      this.kkTypeScanLast = {
-        ok: true,
-        code,
-        po,
-        addQty,
-        scanned: nextScanCount,
-        stock,
-        kkOn: alreadyKk || willTickKk,
-        text
-      };
+      this.pushKkTypeScanLog(true, next
+        ? `KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}${pallet ? ` · pallet ${pallet}` : ''}`
+        : `Bỏ KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}`);
       this.kkTypeScanBeep('ok');
     } catch (e) {
-      console.error('❌ submitKkTypeScanCode:', e);
-      this.pushKkTypeScanLog(false, `${code} — không lưu được`);
-      this.kkTypeScanLast = {
-        ok: false,
-        code,
-        po,
-        addQty,
-        scanned: this.getKkScanCount(match),
-        stock,
-        kkOn: alreadyKk,
-        text: `${code} — không lưu được`
-      };
+      console.error('❌ applyKkTypeScanTick:', e);
+      this.pushKkTypeScanLog(false, 'Không lưu được tick KK');
       this.kkTypeScanBeep('err');
+      alert('❌ Không lưu được tick KK.');
     } finally {
       this.kkTypeScanBusy = false;
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
-      const pending = this.kkTypeScanPending;
-      this.kkTypeScanPending = '';
-      if (pending) {
-        this.kkTypeScanQrInput = pending;
-        void this.submitKkTypeScanCode();
-        return;
-      }
-      this.kkTypeScanReady = true;
-      this.cdr.detectChanges();
-      this.kkTypeScanBeep('ready');
     }
   }
 
@@ -12114,251 +12321,106 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     this.showDoiKho = true;
-    this.doiKhoQuery = '';
-    this.doiKhoView = 'grid';
-    this.doiKhoActiveLoc = '';
-    this.doiKhoActiveRows = [];
-    void this.loadDoiKhoLocMap();
+    this.doiKhoScanInput = '';
+    this.doiKhoPallet = '';
+    this.doiKhoWh = null;
+    this.doiKhoRows = [];
+    this.doiKhoError = '';
+    this.doiKhoBusy = false;
+    this.doiKhoLoading = false;
+    setTimeout(() => {
+      const el = document.getElementById('doiKhoScanInput') as HTMLInputElement | null;
+      el?.focus();
+    }, 80);
   }
 
   closeDoiKho(): void {
     if (this.doiKhoBusy) return;
     this.showDoiKho = false;
-    this.doiKhoQuery = '';
-    this.doiKhoBoxes = [];
-    this.doiKhoRowCache.clear();
-    this.doiKhoView = 'grid';
-    this.doiKhoActiveLoc = '';
-    this.doiKhoActiveRows = [];
-    this.doiKhoDetailMode = 'code';
-    this.doiKhoActivePalletId = null;
+    this.doiKhoScanInput = '';
+    this.doiKhoPallet = '';
+    this.doiKhoWh = null;
+    this.doiKhoRows = [];
+    this.doiKhoError = '';
   }
 
-  /** Đọc tồn kho {{selectedFactory}} (tồn > 0), gom theo vị trí — 1 ô = 1 vị trí, số = số pallet/mã đang lưu ở đó. */
-  async loadDoiKhoLocMap(): Promise<void> {
+  async submitDoiKhoPallet(event?: Event): Promise<void> {
+    event?.preventDefault?.();
+    if (this.doiKhoBusy || this.doiKhoLoading) return;
+    const pallet = this.normalizeGanPalletCode(this.doiKhoScanInput);
+    this.doiKhoScanInput = pallet;
+    if (!pallet) {
+      this.doiKhoError = 'Vui lòng scan số pallet.';
+      return;
+    }
     this.doiKhoLoading = true;
-    this.doiKhoBoxes = [];
-    this.doiKhoRowCache.clear();
+    this.doiKhoError = '';
+    this.doiKhoPallet = '';
+    this.doiKhoRows = [];
+    this.doiKhoWh = null;
     this.cdr.detectChanges();
     try {
       const snap = await this.firestore
         .collection('inventory-materials', (ref) => ref.where('factory', '==', this.selectedFactory).limit(10000))
         .get()
         .toPromise();
-
-      const byLoc = new Map<string, DoiKhoRow[]>();
+      const rows: DoiKhoRow[] = [];
+      const seen = new Set<string>();
       for (const doc of snap?.docs || []) {
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;
-        const rawLocation = String(data.location || data.viTri || '').trim().toUpperCase();
-        const tokens = splitMultiLocations(rawLocation);
-        const groups = tokens.length ? [...new Set(tokens.map((t) => this.locationGroupKey(t) || '—'))] : ['—'];
-        const row: DoiKhoRow = {
+        const palletId = String(data.palletId || '').trim().toUpperCase();
+        if (palletId !== pallet) continue;
+        if (seen.has(doc.id)) continue;
+        seen.add(doc.id);
+        rows.push({
           id: doc.id,
           materialCode: String(data.materialCode || '').trim(),
           poNumber: String(data.poNumber || '').trim(),
-          location: rawLocation,
-          palletId: String(data.palletId || '').trim().toUpperCase(),
+          location: String(data.location || data.viTri || '').trim().toUpperCase(),
+          palletId,
           stock,
-          selected: false
-        };
-        for (const loc of groups) {
-          const list = byLoc.get(loc) || [];
-          list.push(row);
-          byLoc.set(loc, list);
-        }
+          selected: true
+        });
       }
-
-      const boxes = Array.from(byLoc.entries()).map(([loc, rows]) => ({ loc, count: rows.length }));
-      const known = this.knownLocationGroups;
-      boxes.sort((a, b) => {
-        const ai = known.indexOf(a.loc);
-        const bi = known.indexOf(b.loc);
-        if (ai >= 0 || bi >= 0) {
-          if (ai < 0) return 1;
-          if (bi < 0) return -1;
-          return ai - bi;
-        }
-        if (a.loc === '—') return 1;
-        if (b.loc === '—') return -1;
-        return a.loc.localeCompare(b.loc, 'en', { numeric: true });
-      });
-
-      this.doiKhoBoxes = boxes;
-      this.doiKhoRowCache = byLoc;
+      if (!rows.length) {
+        this.doiKhoError = `Không tìm thấy pallet ${pallet} trên ${this.selectedFactory}.`;
+        return;
+      }
+      this.doiKhoPallet = pallet;
+      this.doiKhoRows = rows;
     } catch (e) {
-      console.error('❌ loadDoiKhoLocMap:', e);
-      this.doiKhoBoxes = [];
-      alert('❌ Không tải được sơ đồ vị trí để dời kho.');
+      console.error('submitDoiKhoPallet:', e);
+      this.doiKhoError = 'Không tải được tồn kho để dời pallet.';
     } finally {
       this.doiKhoLoading = false;
       this.cdr.detectChanges();
+      setTimeout(() => {
+        const el = document.getElementById('doiKhoScanInput') as HTMLInputElement | null;
+        el?.focus();
+        el?.select();
+      }, 40);
     }
   }
 
-  /** Lọc ô vị trí theo vị trí HOẶC mã pallet/mã hàng chứa trong ô đó — gõ mã pallet sẽ nhảy ra đúng ô đang chứa nó. */
-  get doiKhoFilteredBoxes(): Array<{ loc: string; count: number }> {
-    const q = this.doiKhoQuery.trim().toUpperCase();
-    if (!q) return this.doiKhoBoxes;
-    return this.doiKhoBoxes.filter((b) => {
-      if (b.loc.includes(q)) return true;
-      const rows = this.doiKhoRowCache.get(b.loc) || [];
-      return rows.some((r) => r.palletId.includes(q) || r.materialCode.toUpperCase().includes(q));
-    });
-  }
-
-  get doiKhoGroupedBoxes(): Array<{ key: string; boxes: Array<{ loc: string; count: number }>; count: number }> {
-    const buckets = new Map<string, Array<{ loc: string; count: number }>>();
-    for (const box of this.doiKhoFilteredBoxes) {
-      const key = this.kkLocFirstLetter(box.loc);
-      const list = buckets.get(key) || [];
-      list.push(box);
-      buckets.set(key, list);
-    }
-    return Array.from(buckets.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
-      .map(([key, boxes]) => {
-        boxes.sort((x, y) => x.loc.localeCompare(y.loc, 'en', { numeric: true }));
-        return { key, boxes, count: boxes.reduce((n, b) => n + b.count, 0) };
-      });
-  }
-
-  /** Tô màu ô vị trí theo số dòng đã tick chọn ở vị trí đó (không phải trạng thái KK). */
-  doiKhoBoxTone(box: { loc: string; count: number }): string {
-    const rows = this.doiKhoRowCache.get(box.loc) || [];
-    if (!rows.length) return 'none';
-    const selectedCount = rows.filter((r) => r.selected).length;
-    if (selectedCount <= 0) return 'none';
-    if (selectedCount >= rows.length) return 'done';
-    return 'partial';
-  }
-
-  /** Bấm 1 ô vị trí — xem chi tiết các pallet/mã đang lưu ở đó. */
-  openDoiKhoBox(box: { loc: string }): void {
-    this.doiKhoActiveLoc = box.loc;
-    this.doiKhoActiveRows = this.doiKhoRowCache.get(box.loc) || [];
-    this.doiKhoDetailMode = 'code';
-    this.doiKhoActivePalletId = null;
-    this.doiKhoView = 'detail';
-  }
-
-  backToDoiKhoGrid(): void {
-    this.doiKhoView = 'grid';
-    this.doiKhoActiveLoc = '';
-    this.doiKhoActiveRows = [];
-    this.doiKhoDetailMode = 'code';
-    this.doiKhoActivePalletId = null;
-  }
-
-  /** Chuyển giữa "Xem theo mã" (danh sách phẳng) và "Xem theo pallet" (gom theo pallet) trong 1 vị trí. */
-  setDoiKhoDetailMode(mode: 'code' | 'pallet'): void {
-    this.doiKhoDetailMode = mode;
-    this.doiKhoActivePalletId = null;
-  }
-
-  get doiKhoActiveAllSelected(): boolean {
-    return this.doiKhoActiveRows.length > 0 && this.doiKhoActiveRows.every((r) => r.selected);
-  }
-
-  /** Gom các dòng của vị trí đang mở theo mã pallet — mỗi pallet 1 box. */
-  get doiKhoPalletBoxes(): Array<{ palletId: string; count: number }> {
-    const buckets = new Map<string, number>();
-    for (const row of this.doiKhoActiveRows) {
-      const key = row.palletId || '—';
-      buckets.set(key, (buckets.get(key) || 0) + 1);
-    }
-    return Array.from(buckets.entries())
-      .map(([palletId, count]) => ({ palletId, count }))
-      .sort((a, b) => a.palletId.localeCompare(b.palletId, 'en', { numeric: true }));
-  }
-
-  /** Tô màu box pallet theo số dòng đã tick trong pallet đó. */
-  doiKhoPalletBoxTone(box: { palletId: string }): string {
-    const rows = this.doiKhoActiveRows.filter((r) => (r.palletId || '—') === box.palletId);
-    if (!rows.length) return 'none';
-    const selectedCount = rows.filter((r) => r.selected).length;
-    if (selectedCount <= 0) return 'none';
-    if (selectedCount >= rows.length) return 'done';
-    return 'partial';
-  }
-
-  openDoiKhoPallet(palletId: string): void {
-    this.doiKhoActivePalletId = palletId;
-  }
-
-  backToDoiKhoPalletGrid(): void {
-    this.doiKhoActivePalletId = null;
-  }
-
-  /** Các dòng mã hàng thuộc pallet đang mở, trong vị trí hiện tại. */
-  get doiKhoActivePalletRows(): DoiKhoRow[] {
-    if (!this.doiKhoActivePalletId) return [];
-    return this.doiKhoActiveRows.filter((r) => (r.palletId || '—') === this.doiKhoActivePalletId);
-  }
-
-  get doiKhoActivePalletAllSelected(): boolean {
-    const rows = this.doiKhoActivePalletRows;
-    return rows.length > 0 && rows.every((r) => r.selected);
-  }
-
-  toggleAllDoiKhoActivePallet(checked: boolean): void {
-    this.doiKhoActivePalletRows.forEach((r) => (r.selected = checked));
-  }
-
-  toggleAllDoiKhoActive(checked: boolean): void {
-    this.doiKhoActiveRows.forEach((r) => (r.selected = checked));
-  }
-
-  /** Tổng số pallet/mã đang tick — cộng dồn qua mọi vị trí đã xem, không chỉ vị trí đang mở. */
-  get doiKhoSelectedCount(): number {
-    let n = 0;
-    this.doiKhoRowCache.forEach((rows) => rows.forEach((r) => { if (r.selected) n++; }));
-    return n;
-  }
-
-  private collectDoiKhoSelectedRows(): DoiKhoRow[] {
-    const out: DoiKhoRow[] = [];
-    const seen = new Set<string>();
-    this.doiKhoRowCache.forEach((rows) =>
-      rows.forEach((r) => {
-        if (r.selected && !seen.has(r.id)) {
-          seen.add(r.id);
-          out.push(r);
-        }
-      })
-    );
-    return out;
-  }
-
-  /** Bấm "Dời Kho" — chuyển sang bước chọn kho đích J5 / WH3. */
-  startDoiKhoChooseWh(): void {
-    if (this.doiKhoSelectedCount === 0) {
-      alert('Chưa chọn mã/pallet nào để dời kho.');
-      return;
-    }
-    this.doiKhoView = 'wh';
-  }
-
-  cancelDoiKhoChooseWh(): void {
-    this.doiKhoView = this.doiKhoActiveLoc ? 'detail' : 'grid';
-  }
-
-  /** Chọn J5 hoặc WH3 — ghi tiền tố vào đầu Vị trí, giữ nguyên mã pallet. */
-  async confirmDoiKho(wh: DoiKhoWh): Promise<void> {
+  /** Đổi tiền tố vị trí sang J5/ASM3 — mã pallet giữ nguyên. */
+  async confirmDoiKho(): Promise<void> {
     if (!this.isLocationColumnUnlocked && !this.canEdit) {
       this.tryUnlockLocationColumn();
       return;
     }
-    const selected = this.collectDoiKhoSelectedRows();
-    if (selected.length === 0) return;
+    const wh = this.doiKhoWh;
+    const selected = this.doiKhoRows.filter((r) => !!r.id);
+    if (!wh || !selected.length) return;
     const confirmed = confirm(
-      `📦 Dời ${selected.length} mã/pallet sang kho ${wh}?\n\n` +
-        `Vị trí sẽ được thêm tiền tố "${wh}-" ở đầu. Mã pallet giữ nguyên.`
+      `Dời ${selected.length} dòng pallet ${this.doiKhoPallet} sang kho ${wh}?\n\n` +
+        `Vị trí thêm tiền tố "${wh}-". Mã pallet giữ nguyên.`
     );
     if (!confirmed) return;
 
     this.doiKhoBusy = true;
+    this.cdr.detectChanges();
     try {
       const modifiedBy = await this.resolveLocationOperatorId();
       const batchSize = 50;
@@ -12371,6 +12433,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           const docRef = this.firestore.collection('inventory-materials').doc(row.id).ref;
           batch.update(docRef, {
             location: newLocation,
+            palletId: row.palletId,
             updatedAt: new Date(),
             lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
             modifiedBy,
@@ -12384,6 +12447,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             poNumber: row.poNumber || '',
             fromLocation: row.location,
             toLocation: newLocation,
+            palletId: row.palletId,
             changedBy: modifiedBy,
             changeType: 'doi-kho',
             changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
@@ -12398,19 +12462,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.inventoryMaterials.forEach((m) => {
         if (!m.id || !idSet.has(m.id)) return;
         m.location = `${wh}-${this.stripDoiKhoWhPrefix(m.location)}`;
+        m.palletId = this.doiKhoPallet;
         m.lastStatusAt = new Date();
         m.lastStatusKind = 'Change location';
         m.lastStatusBy = modifiedBy;
       });
       this.applyFilters();
-      alert(`✅ Đã dời ${selected.length} mã/pallet sang kho ${wh}.`);
-      this.doiKhoView = 'grid';
-      this.doiKhoActiveLoc = '';
-      this.doiKhoActiveRows = [];
-      void this.loadDoiKhoLocMap();
+      alert(`Đã dời ${selected.length} dòng pallet ${this.doiKhoPallet} sang kho ${wh}.`);
+      this.doiKhoBusy = false;
+      this.closeDoiKho();
     } catch (error: any) {
-      console.error('❌ Error during Dời kho:', error);
-      alert(`❌ Lỗi khi dời kho: ${error?.message || error}`);
+      console.error('confirmDoiKho:', error);
+      alert(`Lỗi khi dời kho: ${error?.message || error}`);
     } finally {
       this.doiKhoBusy = false;
       this.cdr.markForCheck();
