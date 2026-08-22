@@ -314,6 +314,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     text: string;
   } | null = null;
   showKkTypeReportMenu = false;
+  showKkCodeLookup = false;
+  kkCodeLookupInput = '';
+  kkCodeLookupBusy = false;
+  kkCodeLookupResult: {
+    code: string;
+    productType: string;
+    stock: number;
+    lines: number;
+    found: boolean;
+  } | null = null;
   kkTypeReportBusy = false;
   /** Tick: cộng các mã đang ở kho WH3/ASM3 vào số liệu KK. Bỏ tick thì không tính. */
   kkCountWh3 = true;
@@ -5203,6 +5213,100 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     else if (this.kkLocMapView === 'location') void this.loadKkLocMap();
     else if (this.kkLocMapView === 'type') {
       void this.loadKkCatalogForMap(true);
+    }
+  }
+
+  openKkCodeLookup(): void {
+    this.showKkCodeLookup = true;
+    this.kkCodeLookupBusy = false;
+    if (!this.kkCodeLookupResult) this.kkCodeLookupInput = '';
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      const el = document.getElementById('kkCodeLookupInput') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 80);
+  }
+
+  closeKkCodeLookup(): void {
+    this.showKkCodeLookup = false;
+  }
+
+  onKkCodeLookupInput(value: string): void {
+    this.kkCodeLookupInput = String(value || '').toUpperCase();
+  }
+
+  async submitKkCodeLookup(): Promise<void> {
+    const code = String(this.kkCodeLookupInput || '').trim().toUpperCase();
+    this.kkCodeLookupInput = code;
+    if (!code) {
+      this.kkCodeLookupResult = null;
+      return;
+    }
+    this.kkCodeLookupBusy = true;
+    this.kkCodeLookupResult = null;
+    this.cdr.detectChanges();
+    try {
+      if (!this.kkCatalogTypeMap.size) {
+        this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
+      }
+      const productType = this.productTypeOfMaterial(code) || 'Chưa gán danh mục';
+      let stock = 0;
+      let lines = 0;
+      this.kkLocMapTypeCache.forEach((list) => {
+        for (const m of list) {
+          if (String(m.materialCode || '').trim().toUpperCase() !== code) continue;
+          stock += this.calculateCurrentStock(m);
+          lines += 1;
+        }
+      });
+      if (!lines) {
+        this.kkLocMapMaterialCache.forEach((list) => {
+          for (const m of list) {
+            if (String(m.materialCode || '').trim().toUpperCase() !== code) continue;
+            stock += this.calculateCurrentStock(m);
+            lines += 1;
+          }
+        });
+      }
+      if (!lines) {
+        const snap = await this.firestore
+          .collection('inventory-materials', (ref) =>
+            ref.where('materialCode', '==', code).limit(200)
+          )
+          .get()
+          .toPromise();
+        const factory = String(this.selectedFactory || '').trim().toUpperCase();
+        const seen = new Set<string>();
+        for (const doc of snap?.docs || []) {
+          const data = doc.data() as any;
+          if (String(data.factory || '').trim().toUpperCase() !== factory) continue;
+          if (seen.has(doc.id)) continue;
+          seen.add(doc.id);
+          stock += this.stockFromInventoryDoc(data);
+          lines += 1;
+        }
+      }
+      this.kkCodeLookupResult = {
+        code,
+        productType,
+        stock,
+        lines,
+        found: lines > 0 || productType !== 'Chưa gán danh mục'
+      };
+    } catch (e) {
+      console.error('❌ submitKkCodeLookup:', e);
+      this.kkCodeLookupResult = {
+        code,
+        productType: '—',
+        stock: 0,
+        lines: 0,
+        found: false
+      };
+      alert('❌ Không tra được mã hàng.');
+    } finally {
+      this.kkCodeLookupBusy = false;
+      this.cdr.detectChanges();
     }
   }
 

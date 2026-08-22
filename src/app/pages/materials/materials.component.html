@@ -103,6 +103,14 @@
             <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
             <span class="btn-label">Làm mới</span>
           </button>
+          <button type="button"
+                  class="more-btn"
+                  *ngIf="kkLocMapView"
+                  (click)="openKkCodeLookup()"
+                  title="Tìm mã — xem tồn kho và loại hàng">
+            <i class="material-icons">search</i>
+            <span class="btn-label">Tìm mã</span>
+          </button>
         </div>
       </div>
     </div>
@@ -3749,6 +3757,61 @@
             {{ log.text }}
           </li>
         </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay"
+     [class.more-overlay]="!isMobile"
+     *ngIf="showKkCodeLookup"
+     (click)="closeKkCodeLookup()">
+  <div class="modal-content kk-code-lookup" (click)="$event.stopPropagation()" role="dialog" aria-label="Tìm mã hàng">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">search</i>
+        </span>
+        <div>
+          <h3>Tìm mã hàng</h3>
+          <p class="more-popup-header__sub">{{ selectedFactory }} · tồn kho và loại hàng</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkCodeLookup()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="kk-code-lookup__body">
+      <div class="kk-type-scan__input-row">
+        <input id="kkCodeLookupInput"
+               type="text"
+               [ngModel]="kkCodeLookupInput"
+               (ngModelChange)="onKkCodeLookupInput($event)"
+               (keydown.enter)="submitKkCodeLookup()"
+               placeholder="Nhập mã hàng..."
+               autocomplete="off"
+               autocapitalize="characters"
+               spellcheck="false"
+               [disabled]="kkCodeLookupBusy">
+        <button type="button" (click)="submitKkCodeLookup()" [disabled]="kkCodeLookupBusy || !kkCodeLookupInput.trim()">
+          <i class="material-icons">{{ kkCodeLookupBusy ? 'hourglass_empty' : 'search' }}</i>
+        </button>
+      </div>
+      <div class="kk-code-lookup__result" *ngIf="kkCodeLookupResult as r">
+        <div class="kk-code-lookup__row">
+          <span>Mã</span>
+          <strong>{{ r.code }}</strong>
+        </div>
+        <div class="kk-code-lookup__row">
+          <span>Loại hàng</span>
+          <strong>{{ r.productType }}</strong>
+        </div>
+        <div class="kk-code-lookup__row">
+          <span>Tồn kho</span>
+          <strong>{{ formatNumber(r.stock) }}</strong>
+        </div>
+        <p class="kk-code-lookup__meta" *ngIf="r.lines">{{ r.lines | number }} dòng tồn tại {{ selectedFactory }}</p>
+        <p class="kk-code-lookup__empty" *ngIf="!r.lines">Không có dòng tồn kho mã này tại {{ selectedFactory }}.</p>
       </div>
     </div>
   </div>
