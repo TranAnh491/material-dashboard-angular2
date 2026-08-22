@@ -131,7 +131,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   currentPage = 1;
   totalPages = 1;
-  readonly itemsPerPage = 8;
+  itemsPerPage = 10;
+  readonly pageSizeOptions = [10, 25, 50];
 
   /**
    * Người soạn: `value` phải trùng kết quả `normalizeCreatedBy(label)` (IN HOA có dấu)
@@ -152,6 +153,20 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   get displayedWorkOrders(): WorkOrder[] {
     const start = (this.currentPage - 1) * this.itemsPerPage;
     return this.filteredWorkOrders.slice(start, start + this.itemsPerPage);
+  }
+
+  /** trackBy cho *ngFor bảng Work Order — tránh Angular huỷ/tạo lại DOM của cả bảng mỗi lần đổi trang/lọc/sort. */
+  trackByWorkOrderId(_index: number, wo: WorkOrder): string {
+    return wo.id || wo.productionOrder || String(_index);
+  }
+
+  get paginationFrom(): number {
+    if (!this.filteredWorkOrders.length) return 0;
+    return (this.currentPage - 1) * this.itemsPerPage + 1;
+  }
+
+  get paginationTo(): number {
+    return Math.min(this.currentPage * this.itemsPerPage, this.filteredWorkOrders.length);
   }
   
   // Summary data
@@ -396,8 +411,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     // Factory access check disabled for work order tab - only applies to materials inventory
     this.selectedFactory = factory;
     console.log('🏭 Selected factory:', factory);
-    // Tải lại theo Năm/Tháng + Nhà máy (tránh chỉ lọc trên batch 500 WO đã load trước đó)
-    void this.loadWorkOrders();
+    // fetchWorkOrdersForCurrentFilters() không lọc theo factory ở tầng Firestore — this.workOrders
+    // đã chứa đủ mọi nhà máy trong khoảng ngày hiện tại, nên chỉ cần lọc lại trên bộ nhớ (tức thì,
+    // không cần đọc lại Firestore/PXK index/outbound overrides như loadWorkOrders() đầy đủ).
+    this.currentPage = 1;
+    this.applyFilters();
+    this.calculateSummary();
   }
 
   // Helper method to normalize factory names for comparison
@@ -1408,38 +1427,44 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         });
       }
 
-      const woFallbackSnap = await firstValueFrom(
-        this.firestore
-          .collection('work-orders', (ref) => ref.where('createdDate', '>=', this.woRecentCutoffDate()))
-          .get()
-      );
-      woFallbackSnap.docs.forEach((docSnap: any) => {
-        const d = docSnap.data() as WorkOrder;
-        const lsx = String(d.productionOrder || '').trim();
-        if (!this.storedLsxMatchesTarget(lsx, targetNorm, variants)) return;
+      // Work Orders: dùng lại danh sách đã tải sẵn trong bộ nhớ (cùng cutoff 50 ngày với loadWorkOrders)
+      // thay vì đọc lại toàn bộ collection work-orders mỗi lần tìm kiếm.
+      for (const wo of this.workOrders) {
+        const lsx = String(wo.productionOrder || '').trim();
+        if (!this.storedLsxMatchesTarget(lsx, targetNorm, variants)) continue;
         pushHit(
           'Work Orders',
           lsx,
-          `Nhà máy: ${d.factory || '—'} · ${d.year}/${d.month} · Trạng thái: ${d.status || '—'}`,
-          `wo|${docSnap.id}`
+          `Nhà máy: ${wo.factory || '—'} · ${wo.year}/${wo.month} · Trạng thái: ${wo.status || '—'}`,
+          `wo|${wo.id}`
         );
-      });
+      }
 
-      const pxkSnap = await firstValueFrom(this.firestore.collection('pxk-import-data').get());
-      pxkSnap.docs.forEach((docSnap: any) => {
-        const d = docSnap.data() as any;
-        const lsx = String(d?.lsx || '').trim();
-        if (!this.storedLsxMatchesTarget(lsx, targetNorm, variants)) return;
-        const lineCount = Array.isArray(d?.lines) ? d.lines.length : 0;
-        const importedAt = d?.importedAt?.toDate?.() || d?.importedAt;
-        const importedLabel = importedAt instanceof Date ? importedAt.toLocaleString('vi-VN') : '—';
-        pushHit(
-          'PXK import',
-          lsx,
-          `Nhà máy: ${d?.factory || '—'} · ${lineCount} dòng · Import: ${importedLabel}`,
-          `pxk|${docSnap.id}`
-        );
-      });
+      // PXK import: dò trước trong index LSX đã có sẵn trong bộ nhớ (pxkIndexLsxKeys), chỉ đọc
+      // Firestore cho đúng các LSX khớp — thay vì quét toàn bộ collection pxk-import-data.
+      const matchedPxkLsx = this.pxkIndexLsxKeys.filter((lsx) => this.storedLsxMatchesTarget(lsx, targetNorm, variants));
+      if (matchedPxkLsx.length > 0) {
+        const FIRESTORE_IN_MAX = 30;
+        for (let i = 0; i < matchedPxkLsx.length; i += FIRESTORE_IN_MAX) {
+          const chunk = matchedPxkLsx.slice(i, i + FIRESTORE_IN_MAX);
+          const pxkSnap = await firstValueFrom(
+            this.firestore.collection('pxk-import-data', (ref) => ref.where('lsx', 'in', chunk)).get()
+          );
+          pxkSnap.docs.forEach((docSnap: any) => {
+            const d = docSnap.data() as any;
+            const lsx = String(d?.lsx || '').trim();
+            const lineCount = Array.isArray(d?.lines) ? d.lines.length : 0;
+            const importedAt = d?.importedAt?.toDate?.() || d?.importedAt;
+            const importedLabel = importedAt instanceof Date ? importedAt.toLocaleString('vi-VN') : '—';
+            pushHit(
+              'PXK import',
+              lsx,
+              `Nhà máy: ${d?.factory || '—'} · ${lineCount} dòng · Import: ${importedLabel}`,
+              `pxk|${docSnap.id}`
+            );
+          });
+        }
+      }
 
       for (const variant of variants) {
         const scanSnap = await firstValueFrom(
@@ -1531,6 +1556,20 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
+  }
+
+  resetDashboardFilters(): void {
+    this.searchTerm = '';
+    this.statusFilter = 'all';
+    this.doneFilter = 'notCompleted';
+    this.onSearchChange();
+  }
+
+  onPageSizeChange(size: number | string): void {
+    const n = Number(size);
+    this.itemsPerPage = this.pageSizeOptions.includes(n) ? n : 10;
+    this.currentPage = 1;
+    this.updatePagination();
   }
 
 
@@ -4016,7 +4055,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     void this.ensurePxkLoadedForLsx(workOrder.productionOrder || '').then(() => this.cdr.markForCheck());
     const dialogRef = this.dialog.open(PrintOptionDialogComponent, {
       width: '400px',
-      data: { workOrder }
+      data: { workOrder },
+      enterAnimationDuration: '0ms',
+      exitAnimationDuration: '0ms'
     });
     dialogRef.afterClosed().subscribe((result: 'qr' | 'pxk') => {
       if (result === 'qr') this.generateQRCode(workOrder);
@@ -5768,113 +5809,129 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const isAsm1 = factoryFilter === 'ASM1';
     let qrImage = '';
     let qrImageLine = '';
-    try {
-      qrImage = await QRCode.toDataURL(lsx, { width: 120, margin: 1 });
-    } catch (e) {
-      console.warn('Không tạo được QR code:', e);
-    }
     const productionLineRaw = (workOrder.productionLine || '').trim();
     const lineNhan = productionLineRaw || '-';
-    try {
-      if (lineNhan !== '-') qrImageLine = await QRCode.toDataURL(lineNhan, { width: 120, margin: 1 });
-    } catch (e) {
-      console.warn('Không tạo được QR code Line:', e);
-    }
     const locationMap = new Map<string, string>();
     const iqcStatusMap = new Map<string, string>();
-    try {
-      const snapshot = await firstValueFrom(this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
-      ).get());
-      snapshot.docs.forEach((doc: any) => {
-        const d = doc.data() as any;
-        const mat = String(d.materialCode || '').trim().toUpperCase();
-        const po = String(d.poNumber || d.po || '').trim();
-        const loc = String(d.location || '').trim();
-        const iqc = String(d.iqcStatus || '').trim();
-        if (mat && po) {
-          const key = `${mat}|${po}`;
-          if (loc) locationMap.set(key, loc);
-          if (iqc) iqcStatusMap.set(key, iqc);
+    const scanQtyMap = new Map<string, number>();
+    const employeeIds = new Set<string>();
+    let nhanVienGiaoStr = '-';
+    let nhanVienNhanStr = '-';
+    const deliveryQtyMap = new Map<string, number>(); // materialCode|PO → checkQuantity
+
+    // 🚀 5 lượt đọc/tính độc lập (QR x2, tồn kho, lượng scan, delivery) — chạy song song
+    // thay vì await tuần tự từng cái, giảm mạnh thời gian chờ khi bấm "In PXK".
+    await Promise.all([
+      (async () => {
+        try {
+          qrImage = await QRCode.toDataURL(lsx, { width: 120, margin: 1 });
+        } catch (e) {
+          console.warn('Không tạo được QR code:', e);
         }
-      });
-    } catch (e) {
-      console.warn('Không load được vị trí / IQC từ inventory:', e);
-    }
+      })(),
+      (async () => {
+        try {
+          if (lineNhan !== '-') qrImageLine = await QRCode.toDataURL(lineNhan, { width: 120, margin: 1 });
+        } catch (e) {
+          console.warn('Không tạo được QR code Line:', e);
+        }
+      })(),
+      (async () => {
+        try {
+          const snapshot = await firstValueFrom(this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
+          ).get());
+          snapshot.docs.forEach((doc: any) => {
+            const d = doc.data() as any;
+            const mat = String(d.materialCode || '').trim().toUpperCase();
+            const po = String(d.poNumber || d.po || '').trim();
+            const loc = String(d.location || '').trim();
+            const iqc = String(d.iqcStatus || '').trim();
+            if (mat && po) {
+              const key = `${mat}|${po}`;
+              if (loc) locationMap.set(key, loc);
+              if (iqc) iqcStatusMap.set(key, iqc);
+            }
+          });
+        } catch (e) {
+          console.warn('Không load được vị trí / IQC từ inventory:', e);
+        }
+      })(),
+      (async () => {
+        try {
+          const woLsxNorm = this.normLsxForMatch(lsx);
+          const variants = this.collectLsxQueryVariants(lsx);
+          const outboundSnapshot = await firstValueFrom(
+            this.firestore.collection('outbound-materials', ref =>
+              ref.where('factory', '==', factoryFilter).where('productionOrder', 'in', variants)
+            ).get()
+          );
+          outboundSnapshot.docs.forEach((doc: any) => {
+            const d = doc.data() as any;
+            const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
+            if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
+            const empId = String(d.employeeId || d.exportedBy || '').trim();
+            if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
+            const mat = String(d.materialCode || '').trim().toUpperCase();
+            const po = String(d.poNumber || d.po || '').trim();
+            const exportQty = Number(d.exportQuantity || 0);
+            if (mat && po) {
+              const key = `${mat}|${po}`;
+              scanQtyMap.set(key, (scanQtyMap.get(key) || 0) + exportQty);
+            }
+          });
+        } catch (e) {
+          console.warn('Không load được Lượng Scan từ outbound:', e);
+        }
+      })(),
+      (async () => {
+        try {
+          const deliverySnapshot = await firstValueFrom(this.firestore.collection('rm1-delivery-records', ref =>
+            ref.where('lsx', '==', lsx)
+          ).get());
+          // Nếu không tìm thấy, thử normalize LSX
+          let deliveryDoc: any = null;
+          if (!deliverySnapshot.empty) {
+            deliveryDoc = deliverySnapshot.docs[0].data() as any;
+          } else {
+            // Thử tìm bằng cách normalize LSX (loại bỏ khoảng trắng, uppercase)
+            const normLsx = lsx.trim().toUpperCase();
+            const allDeliverySnap = await firstValueFrom(this.firestore.collection('rm1-delivery-records').get());
+            for (const doc of allDeliverySnap.docs) {
+              const d = doc.data() as any;
+              if ((d.lsx || '').trim().toUpperCase() === normLsx) {
+                deliveryDoc = d;
+                break;
+              }
+            }
+          }
+          if (deliveryDoc) {
+            nhanVienGiaoStr = (deliveryDoc.employeeName || deliveryDoc.employeeId || '').trim() || '-';
+            nhanVienNhanStr = (deliveryDoc.receiverEmployeeName || deliveryDoc.receiverEmployeeId || '').trim() || '-';
+            // Build delivery qty map từ pxkLines
+            (deliveryDoc.pxkLines || []).forEach((line: any) => {
+              const mat = String(line.materialCode || '').trim().toUpperCase();
+              const po  = String(line.poNumber || line.po || '').trim();
+              const qty = Number(line.checkQuantity ?? 0);
+              if (mat && po) {
+                const key = `${mat}|${po}`;
+                deliveryQtyMap.set(key, (deliveryQtyMap.get(key) || 0) + qty);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Không load được dữ liệu Delivery từ RM1 Delivery:', e);
+        }
+      })()
+    ]);
+
     const invKey = (materialCode: string, po: string): string =>
       `${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`;
     const getLocation = (materialCode: string, po: string): string =>
       locationMap.get(invKey(materialCode, po)) || '-';
     const getIqcStatus = (materialCode: string, po: string): string =>
       iqcStatusMap.get(invKey(materialCode, po)) || '';
-    const scanQtyMap = new Map<string, number>();
-    const employeeIds = new Set<string>();
-    try {
-      const woLsxNorm = this.normLsxForMatch(lsx);
-      const variants = this.collectLsxQueryVariants(lsx);
-      const outboundSnapshot = await firstValueFrom(
-        this.firestore.collection('outbound-materials', ref =>
-          ref.where('factory', '==', factoryFilter).where('productionOrder', 'in', variants)
-        ).get()
-      );
-      outboundSnapshot.docs.forEach((doc: any) => {
-        const d = doc.data() as any;
-        const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
-        if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
-        const empId = String(d.employeeId || d.exportedBy || '').trim();
-        if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
-        const mat = String(d.materialCode || '').trim().toUpperCase();
-        const po = String(d.poNumber || d.po || '').trim();
-        const exportQty = Number(d.exportQuantity || 0);
-        if (mat && po) {
-          const key = `${mat}|${po}`;
-          scanQtyMap.set(key, (scanQtyMap.get(key) || 0) + exportQty);
-        }
-      });
-    } catch (e) {
-      console.warn('Không load được Lượng Scan từ outbound:', e);
-    }
     const nhanVienSoanStr = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
-    let nhanVienGiaoStr = '-';
-    let nhanVienNhanStr = '-';
-    const deliveryQtyMap = new Map<string, number>(); // materialCode|PO → checkQuantity
-    try {
-      const deliverySnapshot = await firstValueFrom(this.firestore.collection('rm1-delivery-records', ref =>
-        ref.where('lsx', '==', lsx)
-      ).get());
-      // Nếu không tìm thấy, thử normalize LSX
-      let deliveryDoc: any = null;
-      if (!deliverySnapshot.empty) {
-        deliveryDoc = deliverySnapshot.docs[0].data() as any;
-      } else {
-        // Thử tìm bằng cách normalize LSX (loại bỏ khoảng trắng, uppercase)
-        const normLsx = lsx.trim().toUpperCase();
-        const allDeliverySnap = await firstValueFrom(this.firestore.collection('rm1-delivery-records').get());
-        for (const doc of allDeliverySnap.docs) {
-          const d = doc.data() as any;
-          if ((d.lsx || '').trim().toUpperCase() === normLsx) {
-            deliveryDoc = d;
-            break;
-          }
-        }
-      }
-      if (deliveryDoc) {
-        nhanVienGiaoStr = (deliveryDoc.employeeName || deliveryDoc.employeeId || '').trim() || '-';
-        nhanVienNhanStr = (deliveryDoc.receiverEmployeeName || deliveryDoc.receiverEmployeeId || '').trim() || '-';
-        // Build delivery qty map từ pxkLines
-        (deliveryDoc.pxkLines || []).forEach((line: any) => {
-          const mat = String(line.materialCode || '').trim().toUpperCase();
-          const po  = String(line.poNumber || line.po || '').trim();
-          const qty = Number(line.checkQuantity ?? 0);
-          if (mat && po) {
-            const key = `${mat}|${po}`;
-            deliveryQtyMap.set(key, (deliveryQtyMap.get(key) || 0) + qty);
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('Không load được dữ liệu Delivery từ RM1 Delivery:', e);
-    }
     const getDeliveryQty = (materialCode: string, po: string): number =>
       deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
     const getScanQty = (materialCode: string, po: string): number =>
@@ -6322,7 +6379,9 @@ ${nvlSxKsBoxHtml}
         height: '80vh',
         maxHeight: '80vh',
         data: dialogData,
-        panelClass: 'qr-scanner-modal'
+        panelClass: 'qr-scanner-modal',
+        enterAnimationDuration: '0ms',
+        exitAnimationDuration: '0ms'
       });
       
       dialogRef.afterClosed().subscribe(result => {
