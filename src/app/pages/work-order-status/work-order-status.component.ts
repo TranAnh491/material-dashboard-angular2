@@ -1125,8 +1125,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     });
     
     
-    // Sắp xếp: Ngày giao NVL (sớm trước), sau đó LSX
+    // Gấp lên đầu, rồi Ngày giao NVL (sớm trước), sau đó LSX
     this.filteredWorkOrders.sort((a, b) => {
+      const urgentA = a.isUrgent ? 1 : 0;
+      const urgentB = b.isUrgent ? 1 : 0;
+      if (urgentA !== urgentB) return urgentB - urgentA;
       const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
       const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : Number.MAX_SAFE_INTEGER;
       if (dateA !== dateB) return dateA - dateB;
@@ -1556,13 +1559,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
-  }
-
-  resetDashboardFilters(): void {
-    this.searchTerm = '';
-    this.statusFilter = 'all';
-    this.doneFilter = 'notCompleted';
-    this.onSearchChange();
   }
 
   onPageSizeChange(size: number | string): void {
@@ -3805,7 +3801,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.log('✅ Bỏ đánh dấu gấp cho work order:', workOrder.productCode);
     }
     
-    // Re-apply filters to re-sort the list with urgent items at the top
+    if (workOrder.isUrgent) {
+      this.currentPage = 1;
+    }
     this.applyFilters();
     this.calculateSummary();
   }

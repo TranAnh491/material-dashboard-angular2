@@ -285,9 +285,6 @@
                   <option value="completed">Hoàn thành</option>
                 </select>
               </label>
-              <button type="button" class="wo-reset" (click)="resetDashboardFilters()">
-                <i class="material-icons">refresh</i> ĐẶT LẠI BỘ LỌC
-              </button>
             </div>
 
 
@@ -447,7 +444,8 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr *ngFor="let wo of displayedWorkOrders; let i = index; trackBy: trackByWorkOrderId">
+                        <tr *ngFor="let wo of displayedWorkOrders; let i = index; trackBy: trackByWorkOrderId"
+                            [class.wo-row-urgent]="!!wo.isUrgent">
                           <td>{{ wo.factory || getWorkOrderDisplayFactory(wo) || '—' }}</td>
                           <td>{{wo.year}}</td>
                           <td>{{wo.month}}</td>
@@ -462,7 +460,10 @@
                           </td>
                           <td>{{wo.customer}}</td>
                           <td class="wo-urgent">
-                            <button type="button" class="wo-urgent-btn" [class.wo-urgent-btn--on]="!!wo.isUrgent" (click)="toggleUrgent(wo)" matTooltip="Đánh dấu gấp">!</button>
+                            <button type="button" class="wo-urgent-btn" [class.wo-urgent-btn--on]="!!wo.isUrgent" (click)="toggleUrgent(wo)" [matTooltip]="wo.isUrgent ? 'Bỏ đánh dấu gấp' : 'Đánh dấu gấp'">
+                              <i class="material-icons" *ngIf="wo.isUrgent">local_fire_department</i>
+                              <span *ngIf="!wo.isUrgent">!</span>
+                            </button>
                           </td>
                           <td>
                             <span class="wo-date">

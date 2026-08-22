@@ -4413,33 +4413,6 @@ textarea.mat-input-element {
   }
 }
 
-.wo-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #fff;
-  color: #111827;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  cursor: pointer;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  margin-left: 0;
-
-  .material-icons {
-    font-size: 16px;
-  }
-
-  &:hover {
-    background: #f9fafb;
-  }
-}
-
 .wo-table-card {
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -4474,6 +4447,14 @@ textarea.mat-input-element {
 
   tbody tr:hover td {
     background: #fafafa;
+  }
+
+  tbody tr.wo-row-urgent td {
+    background: #fee2e2;
+  }
+
+  tbody tr.wo-row-urgent:hover td {
+    background: #fecaca;
   }
 }
 
@@ -4518,6 +4499,14 @@ textarea.mat-input-element {
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  .material-icons {
+    font-size: 22px;
+    color: #ea580c;
+  }
 
   &--on {
     color: #dc2626;
@@ -4664,10 +4653,6 @@ textarea.mat-input-element {
 @media (max-width: 720px) {
   .wo-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .wo-reset {
-    margin-left: 0;
   }
 }
 
