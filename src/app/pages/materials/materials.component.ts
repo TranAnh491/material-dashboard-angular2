@@ -3550,6 +3550,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     await this.catalogLoadPromise;
     this.consolidationMessage = `✅ Đã cập nhật danh mục NVL (${this.catalogCache.size} mã) — cột Standard Packing đã làm mới`;
     this.showConsolidationMessage = true;
+    if (this.showKkLocMap) {
+      alert(this.consolidationMessage);
+    }
     this.cdr.detectChanges();
   }
 
@@ -3578,6 +3581,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  private applyCatalogToAllViews(): void {
+    this.applyCatalogToMaterials(this.inventoryMaterials);
+    this.kkLocMapTypeCache.forEach(list => this.applyCatalogToMaterials(list));
+    this.invalidateKkTypeViewCache();
+  }
+
+  private mergeNvlItemIntoCatalogCache(item: {
+    materialCode: string;
+    materialName?: string;
+    unit?: string;
+    standardPacking?: number;
+    standardPackingLocked?: boolean;
+    isMsd?: boolean;
+    isEsd?: boolean;
+  }): void {
+    const materialCode = this.nvlCatalogFull.normalizeCode(item.materialCode);
+    if (!materialCode) return;
+    const existing = this.catalogCache.get(materialCode) || { materialCode };
+    this.catalogCache.set(materialCode, {
+      ...existing,
+      materialCode,
+      materialName: item.materialName || existing.materialName || '',
+      unit: item.unit || existing.unit || 'PCS',
+      standardPacking: Number(item.standardPacking) || 0,
+      standardPackingLocked: item.standardPackingLocked === true,
+      isMsd: item.isMsd === true,
+      isEsd: item.isEsd === true
+    });
+  }
+
   // Load catalog from Firebase (Danh mục NVL). forceRefresh = bỏ cache trong ngày.
   private async loadCatalogFromFirebase(forceRefresh = false): Promise<void> {
     this.isCatalogLoading = true;
@@ -3587,25 +3620,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       if (!forceRefresh && this.catalogCache.size > 0 && this.catalogLoadedDateKey === today) {
         this.catalogLoaded = true;
-        this.applyCatalogToMaterials(this.inventoryMaterials);
+        this.applyCatalogToAllViews();
+        return;
+      }
+
+      // Ưu tiên cache Danh mục NVL (đã patch khi unlock) — không dùng disk Materials cũ.
+      const items = await this.nvlCatalogFull.listAll(forceRefresh);
+      if (items.length) {
+        this.fillCatalogCacheFromNvlItems(items);
+        this.catalogLoaded = true;
+        this.catalogLoadedDateKey = today;
+        if (forceRefresh) this.readTracker.track('materials', 'materials', items.length);
+        this.persistCatalogCache();
+        this.applyCatalogToAllViews();
+        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Danh mục NVL`);
         return;
       }
 
       if (!forceRefresh && await this.hydrateCatalogFromDisk()) {
         this.catalogLoaded = true;
         this.catalogLoadedDateKey = today;
-        this.applyCatalogToMaterials(this.inventoryMaterials);
-        return;
+        this.applyCatalogToAllViews();
       }
-
-      const items = await this.nvlCatalogFull.listAll(forceRefresh);
-      this.fillCatalogCacheFromNvlItems(items);
-      this.catalogLoaded = true;
-      this.catalogLoadedDateKey = today;
-      this.readTracker.track('materials', 'materials', items.length);
-      this.persistCatalogCache();
-      this.applyCatalogToMaterials(this.inventoryMaterials);
-      console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Danh mục NVL`);
     } catch (error) {
       console.error('❌ Error loading catalog from Firebase:', error);
       this.catalogLoaded = this.catalogCache.size > 0;
@@ -7315,12 +7351,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const sp = Math.max(0, Number(material.standardPacking) || 0);
     if (!code) return;
     const cat = this.catalogCache.get(code);
-    if (cat?.standardPackingLocked === true) {
-      alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL.');
-      material.standardPacking = this.getStandardPacking(code);
-      this.cdr.detectChanges();
-      return;
-    }
     const prev = this.getStandardPacking(code) || Number(cat?.standardPacking) || 0;
     if (Math.abs(sp - prev) < 1e-9) {
       this.applyKkStandardToCode(code, sp);
@@ -7329,10 +7359,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapBusy = true;
     this.cdr.detectChanges();
     try {
+      const live = await this.nvlCatalogFull.getByCode(code);
+      if (live) {
+        this.mergeNvlItemIntoCatalogCache(live);
+        this.persistCatalogCache();
+        if (live.standardPackingLocked === true) {
+          alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL.');
+          material.standardPacking = Number(live.standardPacking) || 0;
+          this.applyKkStandardToCode(code, Number(live.standardPacking) || 0);
+          return;
+        }
+      }
       const operator = await this.resolveKkOperatorFromSession();
       await this.nvlCatalogFull.update(code, { standardPacking: sp }, operator);
-      const existing = this.catalogCache.get(code) || { materialCode: code };
-      this.catalogCache.set(code, { ...existing, materialCode: code, standardPacking: sp });
+      this.mergeNvlItemIntoCatalogCache({
+        materialCode: code,
+        standardPacking: sp,
+        standardPackingLocked: false,
+        materialName: live?.materialName,
+        unit: live?.unit,
+        isMsd: live?.isMsd,
+        isEsd: live?.isEsd
+      });
       this.persistCatalogCache();
       this.applyKkStandardToCode(code, sp);
     } catch (e) {
@@ -11271,7 +11319,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const draft = this.getMobileKkSpDraft(material);
     const sp = parseFloat(String(draft).replace(/,/g, '').trim());
     if (sp > 0) {
-      this.openMobileKkConfirm(material);
+      void this.openMobileKkConfirm(material);
       return;
     }
     // Chưa có lượng chẵn — đánh dấu muốn KK, yêu cầu nhập SP
@@ -11280,7 +11328,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     alert('Vui lòng nhập Lượng chẵn bịch/cuộn rồi bấm Xác nhận.');
   }
 
-  openMobileKkConfirm(material: InventoryMaterial): void {
+  async openMobileKkConfirm(material: InventoryMaterial): Promise<void> {
     if (!this.canEdit || !material?.id || this.mobileKkConfirmBusy) return;
     const raw = this.getMobileKkSpDraft(material);
     const sp = parseFloat(String(raw).replace(/,/g, '').trim());
@@ -11294,10 +11342,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     const code = String(material.materialCode || '').trim().toUpperCase();
-    const cat = this.catalogCache.get(code);
-    if (cat?.standardPackingLocked === true) {
-      alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL — không thể cập nhật từ Kiểm kê.');
-      return;
+    try {
+      const live = await this.nvlCatalogFull.getByCode(code);
+      if (live) {
+        this.mergeNvlItemIntoCatalogCache(live);
+        this.persistCatalogCache();
+      }
+      if ((live || this.catalogCache.get(code))?.standardPackingLocked === true) {
+        alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL — không thể cập nhật từ Kiểm kê.');
+        return;
+      }
+    } catch (e) {
+      console.warn('openMobileKkConfirm lock check:', e);
     }
     this.mobileKkConfirmMaterial = material;
     this.mobileKkConfirmSp = sp;

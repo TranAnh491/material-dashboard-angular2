@@ -186,6 +186,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
   bsItems: BsPendingItem[] = [];
   bsLoading = false;
   bsError = '';
+  /** Lọc danh sách Xuất BS theo LSX / mã hàng / PO / tên vật tư (gõ để tìm thay vì phải vuốt hết danh sách). */
+  bsSearchQuery = '';
 
   // Scan dialog
   bsScanOpen = false;
@@ -197,6 +199,22 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   get bsScanTotal(): number {
     return this.bsScanLines.reduce((s, l) => s + l.qty, 0);
+  }
+
+  /** Danh sách BS sau khi lọc theo bsSearchQuery (LSX / mã hàng / PO / tên vật tư). */
+  get filteredBsItems(): BsPendingItem[] {
+    const q = this.bsSearchQuery.trim().toUpperCase();
+    if (!q) return this.bsItems;
+    return this.bsItems.filter(it =>
+      (it.lsx || '').toUpperCase().includes(q) ||
+      (it.materialCode || '').toUpperCase().includes(q) ||
+      (it.po || '').toUpperCase().includes(q) ||
+      (it.tenVatTu || '').toUpperCase().includes(q)
+    );
+  }
+
+  clearBsSearch(): void {
+    this.bsSearchQuery = '';
   }
 
   /** Mobile WMS shell — expandable cards + bottom nav (mockup-aligned) */

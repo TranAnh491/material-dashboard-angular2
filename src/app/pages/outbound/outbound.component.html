@@ -134,33 +134,51 @@
       </div>
 
       <!-- Mobile Xuất BS list -->
-      <section class="ob-m-list ob-m-bs-list" *ngIf="exportMode === 'BS'" style="padding:8px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="font-weight:700;color:#b71c1c;font-size:14px">📦 Xuất Bổ Sung</span>
-          <button type="button" (click)="loadBsItems()" style="padding:2px 8px;border:1px solid #b71c1c;border-radius:4px;color:#b71c1c;background:transparent;font-size:11px">Làm mới</button>
+      <section class="ob-m-bs" *ngIf="exportMode === 'BS'">
+        <div class="ob-m-bs__toolbar">
+          <span class="ob-m-bs__title">📦 Xuất Bổ Sung <b>({{ filteredBsItems.length }}/{{ bsItems.length }})</b></span>
+          <button type="button" class="ob-m-bs__refresh" (click)="loadBsItems()" [disabled]="bsLoading" aria-label="Làm mới">
+            <i class="material-icons" [class.spinning]="bsLoading">refresh</i>
+          </button>
         </div>
-        <div *ngIf="bsLoading" style="color:#888;padding:8px;text-align:center">Đang tải…</div>
-        <div *ngIf="!bsLoading && bsError" style="color:#b71c1c;padding:6px;font-size:12px">{{ bsError }}</div>
-        <div *ngIf="!bsLoading && !bsError && bsItems.length === 0" style="color:#888;padding:8px;text-align:center;font-size:13px">Không có mã nào cần xuất BS.</div>
-        <div *ngFor="let item of bsItems; let i = index"
-             style="border:1px solid #f8bbd9;border-radius:6px;padding:8px 10px;margin-bottom:8px;background:#fff5f5">
-          <div style="font-weight:700;font-size:14px;color:#b71c1c">{{ item.materialCode }}</div>
-          <div style="font-size:11px;color:#555;margin:2px 0">{{ item.tenVatTu }}</div>
-          <div style="font-size:12px;display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0">
-            <span><strong>LSX:</strong> {{ item.lsx }}</span>
-            <span><strong>PO:</strong> {{ item.po }}</span>
-            <span><strong>SL:</strong> {{ item.quantity | number }} {{ item.unit }}</span>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button type="button" (click)="openBsScanDialog(item)"
-                    style="flex:1;padding:5px 16px;background:#b71c1c;color:#fff;border:none;border-radius:4px;font-weight:600;font-size:13px;cursor:pointer">
-              Xuất kho
-            </button>
-            <button type="button" (click)="deleteBsItem(item)"
-                    style="padding:5px 10px;background:transparent;color:#888;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:13px"
-                    title="Xoá">
-              <i class="material-icons" style="font-size:16px;vertical-align:middle">delete</i>
-            </button>
+        <div class="ob-m-bs__search">
+          <i class="material-icons ob-m-bs__search-ico">search</i>
+          <input type="text"
+                 class="ob-m-bs__search-input"
+                 [(ngModel)]="bsSearchQuery"
+                 placeholder="Tìm theo LSX, mã hàng, PO…"
+                 autocomplete="off" />
+          <button type="button" class="ob-m-bs__search-clear" *ngIf="bsSearchQuery" (click)="clearBsSearch()" aria-label="Xoá tìm kiếm">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+
+        <div class="ob-m-bs__scroll">
+          <div *ngIf="bsLoading" class="ob-m-bs__state">Đang tải…</div>
+          <div *ngIf="!bsLoading && bsError" class="ob-m-bs__state ob-m-bs__state--err">{{ bsError }}</div>
+          <div *ngIf="!bsLoading && !bsError && bsItems.length === 0" class="ob-m-bs__state">Không có mã nào cần xuất BS.</div>
+          <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && filteredBsItems.length === 0" class="ob-m-bs__state">Không tìm thấy phiếu khớp "{{ bsSearchQuery }}".</div>
+
+          <div class="ob-m-bs__card" *ngFor="let item of filteredBsItems; trackBy: trackByIndex">
+            <div class="ob-m-bs__card-main">
+              <div class="ob-m-bs__code">{{ item.materialCode }}</div>
+              <div class="ob-m-bs__meta">
+                <span>{{ item.lsx }}</span>
+                <span aria-hidden="true">·</span>
+                <span>PO {{ item.po }}</span>
+                <span aria-hidden="true">·</span>
+                <span>{{ item.quantity | number }} {{ item.unit }}</span>
+              </div>
+              <div class="ob-m-bs__name" *ngIf="item.tenVatTu">{{ item.tenVatTu }}</div>
+            </div>
+            <div class="ob-m-bs__card-acts">
+              <button type="button" class="ob-m-bs__btn ob-m-bs__btn--go" (click)="openBsScanDialog(item)" title="Xuất kho">
+                <i class="material-icons">qr_code_scanner</i>
+              </button>
+              <button type="button" class="ob-m-bs__btn ob-m-bs__btn--del" (click)="deleteBsItem(item)" title="Xoá">
+                <i class="material-icons">delete_outline</i>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -579,52 +597,60 @@
       {{errorMessage}}
     </div>
     <!-- ── Xuất BS list (desktop) ── -->
-    <div class="bs-section" *ngIf="exportMode === 'BS' && !isMobile" style="padding:12px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <span style="font-weight:700;font-size:15px;color:#b71c1c">📦 Danh sách Xuất Bổ Sung ({{ selectedFactory }})</span>
-        <button type="button" (click)="loadBsItems()" style="padding:3px 10px;border:1px solid #b71c1c;border-radius:4px;color:#b71c1c;cursor:pointer;background:transparent;font-size:12px">
-          <i class="material-icons" style="font-size:14px;vertical-align:middle">refresh</i> Làm mới
+    <div class="bs-section" *ngIf="exportMode === 'BS' && !isMobile">
+      <div class="bs-section__toolbar">
+        <span class="bs-section__title">📦 Danh sách Xuất Bổ Sung ({{ selectedFactory }})</span>
+        <span class="bs-section__count">{{ filteredBsItems.length }}/{{ bsItems.length }}</span>
+        <div class="bs-section__search">
+          <i class="material-icons">search</i>
+          <input type="text" [(ngModel)]="bsSearchQuery" placeholder="Tìm theo LSX, mã hàng, PO, tên vật tư…" autocomplete="off">
+          <button type="button" *ngIf="bsSearchQuery" (click)="clearBsSearch()" title="Xoá tìm kiếm">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        <button type="button" class="bs-section__refresh" (click)="loadBsItems()" [disabled]="bsLoading">
+          <i class="material-icons" [class.spinning]="bsLoading">refresh</i> Làm mới
         </button>
       </div>
-      <div *ngIf="bsLoading" style="color:#888;padding:12px">Đang tải…</div>
-      <div *ngIf="!bsLoading && bsError" style="color:#b71c1c;padding:8px">{{ bsError }}</div>
-      <div *ngIf="!bsLoading && !bsError && bsItems.length === 0" style="color:#888;padding:12px">Không có mã nào cần xuất Bổ Sung.</div>
-      <table *ngIf="!bsLoading && bsItems.length > 0" style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="background:#fce4ec">
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:left">#</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:left">LSX</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:left">Mã hàng</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:left">Tên VT</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:left">PO</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:right">Lượng cần xuất</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:left">ĐVT</th>
-            <th style="padding:6px 8px;border:1px solid #f8bbd9;text-align:center">Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let item of bsItems; let i = index" style="border-bottom:1px solid #f8bbd9">
-            <td style="padding:5px 8px;border:1px solid #f8bbd9">{{ i + 1 }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9;font-family:monospace">{{ item.lsx }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9;font-weight:600">{{ item.materialCode }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9;font-size:11px;color:#555">{{ item.tenVatTu }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9">{{ item.po }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9;text-align:right;font-weight:600">{{ item.quantity | number }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9">{{ item.unit }}</td>
-            <td style="padding:5px 8px;border:1px solid #f8bbd9;text-align:center;display:flex;gap:6px;align-items:center;justify-content:center">
-              <button type="button" (click)="openBsScanDialog(item)"
-                      style="padding:3px 12px;background:#b71c1c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">
-                Xuất kho
-              </button>
-              <button type="button" (click)="deleteBsItem(item)"
-                      style="padding:3px 8px;background:transparent;color:#888;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:12px"
-                      title="Xoá khỏi danh sách BS">
-                <i class="material-icons" style="font-size:14px;vertical-align:middle">delete</i>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+
+      <div *ngIf="bsLoading" class="bs-section__state">Đang tải…</div>
+      <div *ngIf="!bsLoading && bsError" class="bs-section__state bs-section__state--err">{{ bsError }}</div>
+      <div *ngIf="!bsLoading && !bsError && bsItems.length === 0" class="bs-section__state">Không có mã nào cần xuất Bổ Sung.</div>
+      <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && filteredBsItems.length === 0" class="bs-section__state">Không tìm thấy phiếu khớp "{{ bsSearchQuery }}".</div>
+
+      <div class="bs-table-wrap" *ngIf="!bsLoading && filteredBsItems.length > 0">
+        <table class="bs-table">
+          <thead>
+            <tr>
+              <th class="bs-table__idx">#</th>
+              <th>LSX</th>
+              <th>Mã hàng</th>
+              <th>Tên VT</th>
+              <th>PO</th>
+              <th class="num">Lượng cần xuất</th>
+              <th>ĐVT</th>
+              <th class="center">Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of filteredBsItems; let i = index; trackBy: trackByIndex">
+              <td class="bs-table__idx">{{ i + 1 }}</td>
+              <td class="mono">{{ item.lsx }}</td>
+              <td class="strong">{{ item.materialCode }}</td>
+              <td class="muted">{{ item.tenVatTu }}</td>
+              <td>{{ item.po }}</td>
+              <td class="num strong">{{ item.quantity | number }}</td>
+              <td>{{ item.unit }}</td>
+              <td class="center">
+                <button type="button" class="bs-table__go" (click)="openBsScanDialog(item)">Xuất kho</button>
+                <button type="button" class="bs-table__del" (click)="deleteBsItem(item)" title="Xoá khỏi danh sách BS">
+                  <i class="material-icons">delete</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="excel-body" *ngIf="!isLoading && exportMode === 'NL'">

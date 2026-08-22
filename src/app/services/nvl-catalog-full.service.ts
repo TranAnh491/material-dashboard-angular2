@@ -91,6 +91,26 @@ export class NvlCatalogFullService {
     return items;
   }
 
+  /** Đọc 1 mã từ Firestore (không dùng cache) — để Materials biết Lock vừa unlock trên Danh mục NVL. */
+  async getByCode(materialCode: string): Promise<NvlCatalogItem | null> {
+    const code = this.normalizeCode(materialCode);
+    if (!code) return null;
+    const snap = await this.firestore.collection(this.collectionName).doc(code).get().toPromise();
+    if (!snap?.exists) {
+      const q = await this.firestore.collection(this.collectionName, ref =>
+        ref.where('materialCode', '==', code).limit(1)
+      ).get().toPromise();
+      const doc = q?.docs?.[0];
+      if (!doc) return null;
+      const item = this.mapDoc(doc.id, doc.data() as Record<string, unknown>);
+      this.patchCache(code, item);
+      return item;
+    }
+    const item = this.mapDoc(snap.id, snap.data() as Record<string, unknown>);
+    this.patchCache(code, item);
+    return item;
+  }
+
   private mapDoc(id: string, d: Record<string, unknown>): NvlCatalogItem {
     return {
       materialCode: String(d['materialCode'] || id).trim().toUpperCase(),
