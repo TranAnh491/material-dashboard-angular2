@@ -340,6 +340,11 @@
               (click)="selectKkTypeBox(box.productType)"
               [title]="box.productType">
               <strong>{{ box.productType }}</strong>
+              <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
+                <span class="kk-type-box__groups" *ngIf="prefixes.length">
+                  <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
+                </span>
+              </ng-container>
               <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
             </button>
           </div>

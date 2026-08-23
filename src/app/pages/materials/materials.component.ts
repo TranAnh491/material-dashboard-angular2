@@ -5926,6 +5926,29 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .sort((a, b) => this.compareKkTypeBox(a, b));
   }
 
+  /** Đầu mã hiện trên ô: B005001 / B000005 → B005; B001680 → B001. */
+  private kkTypePrefixFromGroup(raw: string): string {
+    const c = String(raw || '').trim().toUpperCase();
+    const six = /^([ABR])(\d{6})$/.exec(c);
+    if (six) {
+      const digits = six[2];
+      if (digits.startsWith('000')) return `${six[1]}${digits.slice(3)}`;
+      return `${six[1]}${digits.slice(0, 3)}`;
+    }
+    const three = /^([ABR]\d{3})/.exec(c);
+    return three ? three[1] : '';
+  }
+
+  /** Các đầu mã B+3 (vd B005, B002) hiện trên ô loại hàng. */
+  kkTypeGroupPrefixes(groupCodes: string[]): string[] {
+    const set = new Set<string>();
+    for (const raw of groupCodes || []) {
+      const prefix = this.kkTypePrefixFromGroup(raw);
+      if (prefix) set.add(prefix);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  }
+
   /** Đầu mã chung của cả loại (vd B006). Chỉ hiện khi mọi nhóm mã cùng prefix. */
   kkTypeSharedGroupPrefix(groupCodes: string[]): string {
     const prefixes = (groupCodes || [])
