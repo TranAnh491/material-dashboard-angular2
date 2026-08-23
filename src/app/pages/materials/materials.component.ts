@@ -5849,6 +5849,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       stock: number;
       checked: number;
       totalLines: number;
+      searchHit: boolean;
     }>();
     for (const e of this.kkCatalogEntries) {
       const cur = map.get(e.productType) || {
@@ -5856,7 +5857,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         groups: new Set<string>(),
         stock: 0,
         checked: 0,
-        totalLines: 0
+        totalLines: 0,
+        searchHit: false
       };
       cur.groups.add(e.groupCode);
       map.set(e.productType, cur);
@@ -5867,7 +5869,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         groups: new Set<string>(),
         stock: 0,
         checked: 0,
-        totalLines: 0
+        totalLines: 0,
+        searchHit: false
       };
       r.groupCodes.forEach((g) => cur.groups.add(g));
       map.set(r.productType, cur);
@@ -5878,6 +5881,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       let stock = 0;
       let checked = 0;
       let totalLines = 0;
+      let searchHit = false;
       for (const m of raw) {
         const wh = this.kkWarehouseFromLocation(m.location);
         if (!this.kkMatchesWh3Mode(wh)) continue;
@@ -5887,12 +5891,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         stock += lineStock;
         totalLines += 1;
         if (this.isKkFlagOn(m.kkChecked)) checked += 1;
+        if (q && !searchHit) {
+          const code = String(m.materialCode || '').toUpperCase();
+          const pallet = String(m.palletId || '').toUpperCase();
+          const name = this.getKkMaterialName(m).toUpperCase();
+          if (code.includes(q) || pallet.includes(q) || name.includes(q)) searchHit = true;
+        }
       }
       cur.stock = stock;
       cur.totalLines = totalLines;
       cur.checked = checked;
+      cur.searchHit = searchHit;
     });
     return Array.from(map.values())
+      .filter((v) => {
+        if (this.kkFilterUncheckedOnly && Math.max(0, v.totalLines - v.checked) <= 0) return false;
+        if (!q) return true;
+        return v.productType.toUpperCase().includes(q)
+          || Array.from(v.groups).some((g) => g.includes(q))
+          || v.searchHit;
+      })
       .map((v) => {
         const groupCodes = Array.from(v.groups).sort((a, b) => this.compareNhuaGroupCode(a, b));
         return {
@@ -5904,11 +5922,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           totalLines: v.totalLines,
           remaining: Math.max(0, v.totalLines - v.checked)
         };
-      })
-      .filter((v) => {
-        if (this.kkFilterUncheckedOnly && v.remaining <= 0) return false;
-        if (!q) return true;
-        return v.productType.toUpperCase().includes(q) || v.groupCodes.some((g) => g.includes(q));
       })
       .sort((a, b) => this.compareKkTypeBox(a, b));
   }
@@ -5989,8 +6002,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveProductType = productType;
     this.kkActiveTypeDraft = this.buildEmptyKkTypeRow(productType);
     this.kkTypePage = 1;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
+    this.kkTypeDetailQuery = this.kkLocMapQuery;
+    this.kkTypeSearchDraft = this.kkLocMapQuery;
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
@@ -6004,8 +6017,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveProductType = null;
     this.kkActiveTypeDraft = null;
     this.kkTypePage = 1;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
@@ -6038,6 +6049,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkCountWh3 ? 1 : 0,
       this.kkWh3Only ? 1 : 0,
       this.kkFilterUncheckedOnly ? 1 : 0,
+      (this.kkLocMapQuery || '').trim().toUpperCase(),
       this.kkTypeDetailQuery,
       this.kkTypeFilterLoc,
       this.kkTypeFilterWh,
@@ -6073,7 +6085,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkTypeFilterRolls) {
       rows = rows.filter((m) => this.getKkRollsText(m) === this.kkTypeFilterRolls);
     }
-    const q = this.kkTypeDetailQuery.trim().toUpperCase();
+    const q = (this.kkLocMapQuery || this.kkTypeDetailQuery || '').trim().toUpperCase();
     if (q) {
       rows = rows.filter((m) => {
         const code = String(m.materialCode || '').toUpperCase();
@@ -6107,13 +6119,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   applyKkTypeFilters(): void {
-    this.kkTypeDetailQuery = this.kkTypeSearchDraft;
+    this.kkTypeDetailQuery = this.kkTypeSearchDraft || this.kkLocMapQuery;
     this.kkTypePage = 1;
   }
 
+  onKkTypeUnifiedSearch(): void {
+    this.kkTypeSearchDraft = this.kkLocMapQuery;
+    this.kkTypeDetailQuery = this.kkLocMapQuery;
+    this.kkTypePage = 1;
+  }
+
+  clearKkTypeUnifiedSearch(): void {
+    this.kkLocMapQuery = '';
+    this.onKkTypeUnifiedSearch();
+  }
+
   clearKkTypeFilters(): void {
-    this.kkTypeSearchDraft = '';
-    this.kkTypeDetailQuery = '';
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
@@ -6983,8 +7004,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  openKkTypeScanModal(row: KkTypeRow): void {
-    if (!this.canEdit || this.kkLocMapBusy || !row) return;
+  openKkTypeScanModal(row?: KkTypeRow): void {
+    if (!this.canEdit || this.kkLocMapBusy) return;
+    if (row && !row.totalLines) return;
     this.showKkTypeScanModal = true;
     this.kkTypeScanOperator = this.kkOperatorIdCache || '';
     this.kkTypeScanOperatorInput = this.kkTypeScanOperator;
@@ -7067,10 +7089,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   kkTypeScanPalletLines(): InventoryMaterial[] {
-    const row = this.kkActiveTypeRow;
     const pallet = this.kkTypeScanPallet;
-    if (!row || !pallet) return [];
-    return this.kkLinesForTypeRow(row).filter(
+    if (!pallet) return [];
+    return this.kkScanScopeLines().filter(
       (m) => String(m.palletId || '').trim().toUpperCase() === pallet && !!m.id
     );
   }
@@ -7088,7 +7109,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       alert('⚠️ Vui lòng scan số pallet');
       return;
     }
-    if (!this.kkActiveTypeRow) return;
     this.kkTypeScanPallet = pallet;
     this.kkTypeScanPalletInput = pallet;
     this.kkTypeScanStep = 'codes';
@@ -7186,14 +7206,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const row = this.kkActiveTypeRow;
-    if (!row) {
-      this.pushKkTypeScanLog(false, 'Chưa mở loại hàng');
-      this.kkTypeScanBeep('err');
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-      return;
-    }
     if (!this.kkTypeScanPallet) {
       this.pushKkTypeScanLog(false, 'Chưa lưu số pallet');
       this.kkTypeScanStep = 'pallet';
@@ -7218,10 +7230,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkTypeScanCodeRows(): InventoryMaterial[] {
-    const row = this.kkActiveTypeRow;
     const code = this.kkTypeScanMaterialCode;
-    if (!row || !code) return [];
-    return this.kkLinesForTypeRow(row)
+    if (!code) return [];
+    return this.kkScanScopeLines()
       .filter((m) =>
         String(m.materialCode || '').trim().toUpperCase() === code &&
         this.calculateCurrentStock(m) > 0
@@ -8019,6 +8030,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const zone = this.kkLocMapWarehouseFilter;
     if (!zone) return list;
     return list.filter((m) => this.kkWarehouseFromLocation(m.location) === zone);
+  }
+
+  private kkScanScopeLines(): InventoryMaterial[] {
+    const row = this.kkActiveTypeRow;
+    if (row) return this.kkLinesForTypeRow(row);
+    const out: InventoryMaterial[] = [];
+    this.kkLocMapTypeCache.forEach((_, productType) => {
+      for (const m of this.kkCachedLinesForType(productType)) {
+        if (m.id) out.push(m);
+      }
+    });
+    return out;
   }
 
   private kkLinesForTypeRow(row: KkTypeRow): InventoryMaterial[] {

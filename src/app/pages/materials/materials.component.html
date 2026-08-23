@@ -73,11 +73,11 @@
               Chưa KK
             </label>
           </div>
-          <div class="search-box" *ngIf="kkLocMapView && !kkActiveProductType">
+          <div class="search-box" *ngIf="kkLocMapView === 'material' || kkLocMapView === 'location'">
             <input type="search"
                    class="search-input"
                    [(ngModel)]="kkLocMapQuery"
-                   [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : kkLocMapView === 'type' ? 'Lọc loại hàng…' : 'Lọc vị trí…'"
+                   [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : 'Lọc vị trí…'"
                    autocomplete="off">
           </div>
           <button type="button"
@@ -304,6 +304,29 @@
       </div>
 
       <div class="kk-loc-map__type" *ngIf="!kkLocMapLoading && kkLocMapView === 'type'">
+        <div class="kk-type-topbar">
+          <div class="kk-type-topbar__search">
+            <input type="search"
+                   [(ngModel)]="kkLocMapQuery"
+                   (ngModelChange)="onKkTypeUnifiedSearch()"
+                   placeholder="Tìm mã, tên hàng, pallet..."
+                   autocomplete="off">
+            <button type="button"
+                    class="kk-type-topbar__clear"
+                    *ngIf="kkLocMapQuery"
+                    (click)="clearKkTypeUnifiedSearch()"
+                    title="Xóa tìm">
+              <i class="material-icons">close</i>
+            </button>
+          </div>
+          <button type="button"
+                  class="kk-type-topbar__scan"
+                  (click)="openKkTypeScanModal()"
+                  [disabled]="!canEdit || kkLocMapBusy"
+                  title="Scan pallet rồi scan mã hàng để tick KK">
+            Scan
+          </button>
+        </div>
         <ng-container *ngIf="!kkActiveProductType">
           <div class="kk-type-grid">
             <button
@@ -330,21 +353,13 @@
 
         <div class="kk-type-detail" *ngIf="kkActiveProductType">
           <div class="kk-type-filter" *ngIf="kkActiveTypeRow as row">
-            <div class="kk-type-filter__search">
-              <i class="material-icons">search</i>
-              <input type="search"
-                     [(ngModel)]="kkTypeSearchDraft"
-                     (ngModelChange)="applyKkTypeFilters()"
-                     placeholder="Tìm mã, tên hàng, pallet..."
-                     autocomplete="off">
-              <button type="button"
-                      class="kk-type-filter__search-clear"
-                      *ngIf="kkTypeSearchDraft || kkTypeFilterLoc || kkTypeFilterWh || kkTypeFilterRolls || kkTypeSortQtyDesc"
-                      (click)="clearKkTypeFilters()"
-                      title="Xóa lọc">
-                <i class="material-icons">close</i>
-              </button>
-            </div>
+            <button type="button"
+                    class="kk-type-filter__search-clear"
+                    *ngIf="kkTypeFilterLoc || kkTypeFilterWh || kkTypeFilterRolls || kkTypeSortQtyDesc"
+                    (click)="clearKkTypeFilters()"
+                    title="Xóa lọc">
+              <i class="material-icons">close</i>
+            </button>
             <div class="kk-type-rolls-total"
                  [title]="'Tổng số cuộn của ' + kkTypeDetailFiltered.length + ' dòng đang lọc'">
               <span class="kk-type-rolls-total__label">Tổng cuộn</span>
@@ -409,13 +424,6 @@
                 {{ kkTypePrintBusy ? 'Đang in...' : 'In tem' }}
               </button>
             </div>
-            <button type="button"
-                    class="kk-type-filter__scan"
-                    (click)="openKkTypeScanModal(row)"
-                    [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
-                    title="Scan pallet rồi scan mã hàng để tick KK">
-              Scan
-            </button>
             <div class="kk-type-filter__split kk-type-filter__split--loc">
               <button type="button"
                       class="kk-type-detail__clear-loc"
@@ -3498,7 +3506,7 @@
         </span>
         <div>
           <h3>Scan KK</h3>
-          <p class="more-popup-header__sub">{{ kkActiveProductType }} · {{ selectedFactory }}</p>
+          <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
@@ -3628,7 +3636,7 @@
               </tbody>
             </table>
           </div>
-          <p class="kk-type-scan__empty" *ngIf="!kkTypeScanCodeRows.length">Không có dòng tồn mã này trong loại hàng.</p>
+          <p class="kk-type-scan__empty" *ngIf="!kkTypeScanCodeRows.length">Không có dòng tồn mã này{{ kkActiveProductType ? ' trong loại hàng' : '' }}.</p>
         </div>
 
         <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToPallet()" [disabled]="kkTypeScanBusy">
