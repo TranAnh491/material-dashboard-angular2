@@ -339,6 +339,12 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
           invalidItemsCount++;
           return; // Bỏ qua dòng này
         }
+
+        // Kho TIEUHUY không đưa vào so sánh tồn kho Overview
+        const location = String(data.location || data.viTri || '');
+        if (this.isTieuHuyLocation(location)) {
+          return;
+        }
         
         // Sử dụng đúng field names từ collection inventory-materials
         const quantity = data.quantity || 0;
@@ -738,6 +744,11 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   private isSkippedLinkQCompareCode(code: string): boolean {
     const c = String(code || '').trim().toUpperCase();
     return c.startsWith('B033') || c.startsWith('R');
+  }
+
+  private isTieuHuyLocation(location: string | null | undefined): boolean {
+    const u = String(location || '').trim().toUpperCase();
+    return u === 'TIEUHUY' || u.startsWith('TIEUHUY-') || u.replace(/[^A-Z0-9]/g, '') === 'TIEUHUY';
   }
 
   /** Thêm mã có trên LinkQ nhưng không có trong tồn kho (thiếu hoàn toàn). */

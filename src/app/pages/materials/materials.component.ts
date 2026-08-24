@@ -254,6 +254,31 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
   kkLocMapExpandedKey: string | null = null;
   showKkCatalogPopup = false;
+  showTieuHuyPopup = false;
+  tieuHuyImporting = false;
+  tieuHuyBusy = false;
+  tieuHuyFileName = '';
+  tieuHuyImportedCount = 0;
+  tieuHuyMatchedCount = 0;
+  tieuHuyUpdatedCount = 0;
+  tieuHuyQuery = '';
+  tieuHuyRows: Array<{
+    px: string;
+    materialCode: string;
+    poNumber: string;
+    fileQty: number | null;
+    currentStock: number;
+    linkQStock: number | null;
+    matched: boolean;
+    location: string;
+    palletId: string;
+    inventoryIds: string[];
+    selected: boolean;
+    done: '' | 'tieu-huy' | 'hidden';
+  }> = [];
+  private tieuHuyStockLines: InventoryMaterial[] = [];
+  private tieuHuyLinkQMap = new Map<string, number>();
+  private readonly tieuHuyWarehouseValue = 'TIEUHUY';
   kkCatalogEntries: KkCatalogEntry[] = [];
   kkCatalogQuery = '';
   kkCatalogLoading = false;
@@ -1105,7 +1130,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             exported: d.exported || 0,
             xt: d.xt || 0,
             stock: d.stock || 0,
-            location: d.location || '',
+            location: this.locationFromInventoryDoc(d) || d.location || '',
+            palletId: d.palletId || '',
             type: d.type || '',
             expiryDate: d.expiryDate?.toDate?.() || new Date(),
             qualityCheck: d.qualityCheck || false,
@@ -3656,7 +3682,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
       if (this.searchTerm) {
         const term = this.searchTerm.trim().toUpperCase();
-        if (this.searchByCustomer) {
+        if (this.isTieuHuySearchTerm(term)) {
+          if (!this.isTieuHuyLocation(String(material.location ?? (material as any).viTri ?? ''))) return false;
+        } else if (this.searchByCustomer) {
           const customer = this.getCustomerForMaterial(material).toUpperCase();
           if (!customer.includes(term)) return false;
         } else if (this.isLocationSearchActive) {
@@ -4157,11 +4185,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Nhóm cố định luôn hiện trong popup lọc vị trí. */
   private readonly knownLocationGroups = [
-    'WH3', 'IQC', 'LOCKER', 'NG', 'TRA', 'E7', 'F7', 'F62', 'A12', 'Q1', 'Q2', 'Q3'
+    'WH3', 'IQC', 'LOCKER', 'NG', 'TRA', 'E7', 'F7', 'F62', 'A12', 'Q1', 'Q2', 'Q3', 'TIEUHUY'
   ];
 
   /** IQC / LOCKER / NG / TRA / A12 / Q1–Q3 / kho WH3. */
   private locationSpecialGroup(loc: string): string | null {
+    if (this.isTieuHuyLocation(loc)) return 'TIEUHUY';
     if (isAsm3OrWh3PrefixLocation(loc)) return 'WH3';
     if (isIqcPrefixLocation(loc)) return 'IQC';
     if (isLockerPrefixLocation(loc)) return 'LOCKER';
@@ -4334,7 +4363,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       let querySnapshot: { docs: any[]; empty: boolean } | undefined;
 
-      if (this.isLocationSearchActive) {
+      if (this.isLocationSearchActive || this.isTieuHuySearchTerm(searchTerm)) {
         const normalizedLocation = searchTerm.trim().toUpperCase();
         const groupKey = this.locationGroupKey(normalizedLocation);
         console.log(`🔍 ASM1 Searching by location group: "${normalizedLocation}" → "${groupKey}"`);
@@ -8651,6 +8680,573 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     void this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'nvl' } });
   }
 
+  get tieuHuyFilteredRows(): typeof this.tieuHuyRows {
+    const q = String(this.tieuHuyQuery || '').trim().toUpperCase();
+    if (!q) return this.tieuHuyRows;
+    return this.tieuHuyRows.filter((r) =>
+      r.px.toUpperCase().includes(q) || r.materialCode.includes(q) || r.poNumber.includes(q)
+    );
+  }
+
+  get tieuHuySelectedCount(): number {
+    return this.tieuHuyRows.filter((r) => r.selected && this.canSelectTieuHuyRow(r)).length;
+  }
+
+  get tieuHuySelectableVisibleCount(): number {
+    return this.tieuHuyFilteredRows.filter((r) => this.canSelectTieuHuyRow(r)).length;
+  }
+
+  get tieuHuyAllVisibleSelected(): boolean {
+    const rows = this.tieuHuyFilteredRows.filter((r) => this.canSelectTieuHuyRow(r));
+    return rows.length > 0 && rows.every((r) => r.selected);
+  }
+
+  canSelectTieuHuyRow(row: typeof this.tieuHuyRows[number]): boolean {
+    return !!row && !row.done && row.inventoryIds.length > 0;
+  }
+
+  toggleTieuHuySelectAll(checked: boolean): void {
+    for (const row of this.tieuHuyFilteredRows) {
+      row.selected = checked && this.canSelectTieuHuyRow(row);
+    }
+  }
+
+  openTieuHuyPopup(): void {
+    this.closeMorePopup();
+    this.showTieuHuyPopup = true;
+    this.tieuHuyQuery = '';
+    this.restoreTieuHuyLastImport();
+    void this.lookupAndMatchTieuHuyRows().then(() => this.cdr.detectChanges());
+  }
+
+  closeTieuHuyPopup(): void {
+    if (this.tieuHuyImporting || this.tieuHuyBusy) return;
+    this.showTieuHuyPopup = false;
+  }
+
+  downloadTieuHuyTemplate(): void {
+    const ws = XLSX.utils.json_to_sheet([
+      { 'PX': 'PX001', 'Mã': 'B005001', 'PO': '4500123456', 'Lượng': 0 },
+      { 'PX': 'PX002', 'Mã': 'B002010', 'PO': '4500987654', 'Lượng': 0 }
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tieu huy');
+    XLSX.writeFile(wb, `Tieu_huy_template_${this.selectedFactory}.xlsx`);
+  }
+
+  importTieuHuyFromExcel(): void {
+    if (this.tieuHuyImporting || this.tieuHuyBusy) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (event: Event) => {
+      const file = (event.target as HTMLInputElement)?.files?.[0];
+      if (file) void this.processTieuHuyImportFile(file);
+    };
+    input.click();
+  }
+
+  private emptyTieuHuyRow(partial: {
+    px?: string;
+    materialCode: string;
+    poNumber: string;
+    fileQty?: number | null;
+    currentStock?: number;
+    linkQStock?: number | null;
+    matched?: boolean;
+    location?: string;
+    palletId?: string;
+    inventoryIds?: string[];
+    selected?: boolean;
+    done?: '' | 'tieu-huy' | 'hidden';
+  }): typeof this.tieuHuyRows[number] {
+    return {
+      px: this.normalizeTieuHuyPx(partial.px),
+      materialCode: String(partial.materialCode || '').trim().toUpperCase(),
+      poNumber: String(partial.poNumber || '').trim().toUpperCase(),
+      fileQty: partial.fileQty == null || !Number.isFinite(Number(partial.fileQty)) ? null : Number(partial.fileQty),
+      currentStock: Number(partial.currentStock) || 0,
+      linkQStock: partial.linkQStock == null || !Number.isFinite(Number(partial.linkQStock)) ? null : Number(partial.linkQStock),
+      matched: !!partial.matched,
+      location: String(partial.location || ''),
+      palletId: String(partial.palletId || ''),
+      inventoryIds: Array.isArray(partial.inventoryIds) ? partial.inventoryIds.filter(Boolean) : [],
+      selected: !!partial.selected,
+      done: partial.done === 'tieu-huy' || partial.done === 'hidden' ? partial.done : ''
+    };
+  }
+
+  private async processTieuHuyImportFile(file: File): Promise<void> {
+    this.tieuHuyImporting = true;
+    this.tieuHuyFileName = file.name;
+    this.tieuHuyUpdatedCount = 0;
+    this.cdr.detectChanges();
+    try {
+      const parsed = await this.parseTieuHuyExcel(file);
+      if (!parsed.length) {
+        alert('Không tìm thấy dòng hợp lệ. Cần cột Mã và PO.');
+        return;
+      }
+      this.tieuHuyRows = parsed.map((r) => this.emptyTieuHuyRow(r));
+      this.tieuHuyImportedCount = this.tieuHuyRows.length;
+      await this.lookupAndMatchTieuHuyRows();
+      this.saveTieuHuyLastImport();
+      alert(
+        `File tiêu hủy: ${this.tieuHuyImportedCount} mã.\n` +
+        `Trùng tồn kho (Mã + PO): ${this.tieuHuyMatchedCount} / ${this.tieuHuyImportedCount}.\n` +
+        `So sánh Lượng file với Tồn kho hiện tại, tick chọn rồi bấm Đưa vào kho tiêu hủy.\n` +
+        `Ẩn = ẩn mã đó 30 ngày.`
+      );
+    } catch (e: any) {
+      console.error('❌ processTieuHuyImportFile:', e);
+      alert('Lỗi khi đọc file tiêu hủy: ' + (e?.message || e));
+    } finally {
+      this.tieuHuyImporting = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private parseTieuHuyExcel(file: File): Promise<Array<{ px: string; materialCode: string; poNumber: string; fileQty: number | null }>> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const objects = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+          const byKey = new Map<string, { px: string; materialCode: string; poNumber: string; fileQty: number | null }>();
+          const merge = (mapped: { px: string; materialCode: string; poNumber: string; fileQty: number | null } | null) => {
+            if (!mapped) return;
+            const key = `${mapped.px}|${mapped.materialCode}|${mapped.poNumber}`;
+            const prev = byKey.get(key);
+            if (!prev) {
+              byKey.set(key, mapped);
+              return;
+            }
+            if (mapped.fileQty != null) {
+              prev.fileQty = (prev.fileQty || 0) + mapped.fileQty;
+            }
+          };
+          for (const row of objects) merge(this.mapTieuHuyExcelRow(row));
+          if (!byKey.size) {
+            const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+            for (let i = 0; i < matrix.length; i++) {
+              merge(this.mapTieuHuyExcelCells(matrix[i] || [], i === 0));
+            }
+          }
+          resolve(Array.from(byKey.values()));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  private mapTieuHuyExcelRow(row: Record<string, unknown>): { px: string; materialCode: string; poNumber: string; fileQty: number | null } | null {
+    let px = '';
+    let code = '';
+    let po = '';
+    let fileQty: number | null = null;
+    for (const [key, val] of Object.entries(row)) {
+      const kind = this.tieuHuyHeaderKind(key);
+      if (kind === 'px' && !px) px = this.normalizeTieuHuyPx(val);
+      else if (kind === 'code' && !code) code = this.normalizeTieuHuyCode(val);
+      else if (kind === 'po' && !po) po = this.normalizeTieuHuyPo(val);
+      else if (kind === 'qty' && fileQty == null) fileQty = this.parseTieuHuyQty(val);
+    }
+    if (!code || !po) {
+      const values = Object.values(row);
+      if (values.length >= 3) {
+        px = px || this.normalizeTieuHuyPx(values[0]);
+        code = code || this.normalizeTieuHuyCode(values[1]);
+        po = po || this.normalizeTieuHuyPo(values[2]);
+        if (fileQty == null) fileQty = this.parseTieuHuyQty(values[3]);
+      } else {
+        code = code || this.normalizeTieuHuyCode(values[0]);
+        po = po || this.normalizeTieuHuyPo(values[1]);
+        if (fileQty == null) fileQty = this.parseTieuHuyQty(values[2]);
+      }
+    }
+    if (!code || !po) return null;
+    return { px, materialCode: code, poNumber: po, fileQty };
+  }
+
+  private mapTieuHuyExcelCells(
+    line: unknown[],
+    maybeHeader: boolean
+  ): { px: string; materialCode: string; poNumber: string; fileQty: number | null } | null {
+    const head = this.foldVn(String(line[0] ?? '') + ' ' + String(line[1] ?? '') + ' ' + String(line[2] ?? ''));
+    if (maybeHeader && /px|ma|code|po/i.test(head)) {
+      return null;
+    }
+    let px = this.normalizeTieuHuyPx(line[0]);
+    let code = this.normalizeTieuHuyCode(line[1]);
+    let po = this.normalizeTieuHuyPo(line[2]);
+    let fileQty = this.parseTieuHuyQty(line[3]);
+    if (!code || !po) {
+      code = this.normalizeTieuHuyCode(line[0]);
+      po = this.normalizeTieuHuyPo(line[1]);
+      fileQty = this.parseTieuHuyQty(line[2]);
+      px = '';
+    }
+    if (!code || !po) return null;
+    return { px, materialCode: code, poNumber: po, fileQty };
+  }
+
+  private parseTieuHuyQty(raw: unknown): number | null {
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    const s = String(raw).replace(/,/g, '').trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private tieuHuyHeaderKind(header: string): 'px' | 'code' | 'po' | 'qty' | '' {
+    const s = this.foldVn(String(header || '')).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!s) return '';
+    if (s === 'px' || s.includes('phieu xuat') || s.includes('phieu x') || s === 'so px') return 'px';
+    if (/(^|\s)po(\s|$)/.test(s) || s.includes('purchase')) return 'po';
+    if (
+      s === 'sl' ||
+      s === 'qty' ||
+      s.includes('luong') ||
+      s.includes('quantity') ||
+      s.includes('so luong')
+    ) return 'qty';
+    if (s === 'ma' || s.includes('ma hang') || s.includes('material') || s.includes('item') || s === 'code' || s.includes('ma nvl')) return 'code';
+    return '';
+  }
+
+  private foldVn(s: string): string {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd');
+  }
+
+  private normalizeTieuHuyPx(raw: unknown): string {
+    let s = String(raw ?? '').trim();
+    if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');
+    return s;
+  }
+
+  private normalizeTieuHuyCode(raw: unknown): string {
+    return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  private normalizeTieuHuyPo(raw: unknown): string {
+    let s = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');
+    return s;
+  }
+
+  private tieuHuyPoMatch(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const da = a.replace(/\D/g, '');
+    const db = b.replace(/\D/g, '');
+    if (da && db && da === db) return true;
+    if (da && db && da.replace(/^0+/, '') === db.replace(/^0+/, '')) return true;
+    return false;
+  }
+
+  isTieuHuyLocation(location: string | null | undefined): boolean {
+    const u = String(location || '').trim().toUpperCase();
+    return u === 'TIEUHUY' || u.startsWith('TIEUHUY-') || u.replace(/[^A-Z0-9]/g, '') === 'TIEUHUY';
+  }
+
+  isTieuHuySearchTerm(term: string | null | undefined): boolean {
+    return this.locationCompact(String(term || '')) === 'TIEUHUY';
+  }
+
+  private tieuHuyStorageKey(): string {
+    return `materials-tieu-huy:${this.selectedFactory}`;
+  }
+
+  private saveTieuHuyLastImport(): void {
+    try {
+      localStorage.setItem(this.tieuHuyStorageKey(), JSON.stringify({
+        fileName: this.tieuHuyFileName,
+        importedCount: this.tieuHuyImportedCount,
+        matchedCount: this.tieuHuyMatchedCount,
+        updatedCount: this.tieuHuyUpdatedCount,
+        rows: this.tieuHuyRows,
+        at: Date.now()
+      }));
+    } catch { /* ignore quota */ }
+  }
+
+  private restoreTieuHuyLastImport(): void {
+    try {
+      const raw = localStorage.getItem(this.tieuHuyStorageKey());
+      if (!raw) return;
+      const data = JSON.parse(raw) as {
+        fileName?: string;
+        importedCount?: number;
+        matchedCount?: number;
+        updatedCount?: number;
+        rows?: Array<Partial<typeof this.tieuHuyRows[number]>>;
+      };
+      this.tieuHuyFileName = String(data.fileName || '');
+      this.tieuHuyImportedCount = Number(data.importedCount || 0);
+      this.tieuHuyMatchedCount = Number(data.matchedCount || 0);
+      this.tieuHuyUpdatedCount = Number(data.updatedCount || 0);
+      this.tieuHuyRows = Array.isArray(data.rows)
+        ? data.rows.map((r) => this.emptyTieuHuyRow({
+            px: String((r as any)?.px || ''),
+            materialCode: String(r?.materialCode || ''),
+            poNumber: String(r?.poNumber || ''),
+            fileQty: r?.fileQty,
+            currentStock: r?.currentStock,
+            linkQStock: r?.linkQStock,
+            matched: r?.matched,
+            location: r?.location,
+            palletId: r?.palletId,
+            inventoryIds: r?.inventoryIds,
+            selected: r?.selected,
+            done: r?.done
+          }))
+        : [];
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private async lookupAndMatchTieuHuyRows(): Promise<void> {
+    if (!this.tieuHuyRows.length) {
+      this.tieuHuyMatchedCount = 0;
+      this.tieuHuyStockLines = [];
+      return;
+    }
+    const codes = Array.from(new Set(this.tieuHuyRows.map((r) => r.materialCode).filter(Boolean)));
+    this.tieuHuyStockLines = await this.fetchTieuHuyStockByCodes(codes);
+    this.tieuHuyLinkQMap = await this.loadTieuHuyLinkQMap();
+    this.refreshTieuHuyMatchFromInventory();
+  }
+
+  private async loadTieuHuyLinkQMap(): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    const put = (code: string, stock: unknown) => {
+      const key = this.normalizeTieuHuyCode(code);
+      if (!key) return;
+      map.set(key, Math.round(Number(stock) || 0));
+    };
+    try {
+      const canonical = await this.firestore.collection('linkQFiles').doc(this.selectedFactory).get().toPromise();
+      let raw: Record<string, unknown> | null = null;
+      if (canonical?.exists) {
+        raw = ((canonical.data() as any)?.linkQData || null) as Record<string, unknown> | null;
+      } else {
+        const snap = await this.firestore.collection('linkQFiles', (ref) =>
+          ref.where('factory', '==', this.selectedFactory).limit(20)
+        ).get().toPromise();
+        const docs = [...(snap?.docs || [])].sort((a, b) => {
+          const da = (a.data() as any)?.uploadDate?.toMillis?.() || (a.data() as any)?.uploadDate?.seconds * 1000 || 0;
+          const db = (b.data() as any)?.uploadDate?.toMillis?.() || (b.data() as any)?.uploadDate?.seconds * 1000 || 0;
+          return db - da;
+        });
+        raw = ((docs[0]?.data() as any)?.linkQData || null) as Record<string, unknown> | null;
+      }
+      if (raw) {
+        for (const [code, stock] of Object.entries(raw)) put(code, stock);
+      }
+    } catch (e) {
+      console.warn('[TieuHuy] load LinkQ failed', e);
+    }
+    return map;
+  }
+
+  private async fetchTieuHuyStockByCodes(materialCodes: string[]): Promise<InventoryMaterial[]> {
+    const uniq = Array.from(new Set(materialCodes.map((x) => this.normalizeTieuHuyCode(x)).filter(Boolean)));
+    const out: InventoryMaterial[] = [];
+    const seen = new Set<string>();
+    const push = (m: InventoryMaterial) => {
+      if (!m?.id || seen.has(m.id)) return;
+      if (m.factory && m.factory !== this.selectedFactory) return;
+      seen.add(m.id);
+      out.push(m);
+    };
+    const parallel = 10;
+    for (let i = 0; i < uniq.length; i += parallel) {
+      const chunk = uniq.slice(i, i + parallel);
+      const parts = await Promise.all(chunk.map((code) => this.fetchInventoryRowsByMaterialCodes([code])));
+      for (const rows of parts) rows.forEach(push);
+    }
+    for (const m of this.inventoryMaterials || []) push(m);
+    return out;
+  }
+
+  private refreshTieuHuyMatchFromInventory(): void {
+    if (!this.tieuHuyRows.length) {
+      this.tieuHuyMatchedCount = 0;
+      return;
+    }
+    const stock = this.tieuHuyStockLines.length
+      ? this.tieuHuyStockLines
+      : (this.inventoryMaterials || []).filter((m) => !m.factory || m.factory === this.selectedFactory);
+    let matchedRows = 0;
+    for (const row of this.tieuHuyRows) {
+      if (row.done === 'hidden') {
+        row.matched = false;
+        row.currentStock = 0;
+        row.inventoryIds = [];
+        row.selected = false;
+        row.linkQStock = this.tieuHuyLinkQMap.has(row.materialCode)
+          ? this.tieuHuyLinkQMap.get(row.materialCode)!
+          : null;
+        continue;
+      }
+      const found = stock.filter((m) =>
+        this.normalizeTieuHuyCode(m.materialCode) === row.materialCode &&
+        this.tieuHuyPoMatch(this.normalizeTieuHuyPo(m.poNumber), row.poNumber)
+      );
+      const ids = found.map((m) => m.id).filter((id): id is string => !!id);
+      row.matched = ids.length > 0;
+      row.inventoryIds = ids;
+      row.currentStock = found.reduce((sum, m) => sum + this.calculateCurrentStock(m), 0);
+      row.linkQStock = this.tieuHuyLinkQMap.has(row.materialCode)
+        ? this.tieuHuyLinkQMap.get(row.materialCode)!
+        : null;
+      if (found.length) {
+        matchedRows += 1;
+        row.location = Array.from(new Set(found.map((m) => String(m.location || '').trim()).filter(Boolean))).join(', ');
+        row.palletId = Array.from(new Set(found.map((m) => String(m.palletId || '').trim()).filter(Boolean))).join(', ');
+      } else {
+        row.location = row.done === 'tieu-huy' ? this.tieuHuyWarehouseValue : '';
+        row.palletId = '';
+        row.selected = false;
+      }
+      if (!this.canSelectTieuHuyRow(row)) row.selected = false;
+    }
+    this.tieuHuyMatchedCount = matchedRows;
+  }
+
+  async applyTieuHuySelectedToWarehouse(): Promise<void> {
+    if (this.tieuHuyBusy || this.tieuHuyImporting) return;
+    const rows = this.tieuHuyRows.filter((r) => r.selected && this.canSelectTieuHuyRow(r));
+    const idSet = new Set<string>();
+    for (const row of rows) {
+      for (const id of row.inventoryIds) idSet.add(id);
+    }
+    if (!idSet.size) {
+      alert('Chọn mã đã khớp tồn kho trước khi đưa vào kho tiêu hủy.');
+      return;
+    }
+    const ok = confirm(
+      `Đưa ${rows.length} mã đã chọn (${idSet.size} dòng tồn kho) vào kho ${this.tieuHuyWarehouseValue}?`
+    );
+    if (!ok) return;
+    const lines = this.tieuHuyStockLines.filter((m) => m.id && idSet.has(m.id));
+    const missing = Array.from(idSet).filter((id) => !lines.some((m) => m.id === id));
+    const toWrite: InventoryMaterial[] = [
+      ...lines,
+      ...missing.map((id) => ({ id } as InventoryMaterial))
+    ];
+    this.tieuHuyBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const saved = await this.applyTieuHuyWarehouse(toWrite);
+      if (!saved) {
+        alert('Không chuyển được kho (lỗi lưu).');
+        return;
+      }
+      this.tieuHuyUpdatedCount += toWrite.length;
+      for (const row of rows) {
+        row.done = 'tieu-huy';
+        row.selected = false;
+        row.location = this.tieuHuyWarehouseValue;
+      }
+      for (const m of this.inventoryMaterials || []) {
+        if (m.id && idSet.has(m.id)) m.location = this.tieuHuyWarehouseValue;
+      }
+      this.saveTieuHuyLastImport();
+      alert(`Đã chuyển ${toWrite.length} dòng sang kho ${this.tieuHuyWarehouseValue}.`);
+    } finally {
+      this.tieuHuyBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async hideTieuHuyRow(row: typeof this.tieuHuyRows[number]): Promise<void> {
+    if (this.tieuHuyBusy || !row || row.done === 'hidden') return;
+    if (!this.canDelete) {
+      alert('❌ Bạn không có quyền ẩn item này. Vui lòng liên hệ admin để được cấp quyền.');
+      return;
+    }
+    if (!row.inventoryIds.length) {
+      alert('Mã này chưa khớp tồn kho nên không ẩn được.');
+      return;
+    }
+    const ok = confirm(
+      `Ẩn ${row.materialCode} / PO ${row.poNumber} trong ${this.hiddenRetentionDays} ngày?\n\n` +
+      `Tồn kho hiện tại: ${this.formatNumber(row.currentStock)}\n` +
+      `${row.inventoryIds.length} dòng sẽ vào Danh mục Ẩn.`
+    );
+    if (!ok) return;
+    this.tieuHuyBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const n = await this.hideInventoryDocsByIds(row.inventoryIds, 'manual');
+      const idSet = new Set(row.inventoryIds);
+      this.removeInventoryByIds(idSet);
+      this.tieuHuyStockLines = this.tieuHuyStockLines.filter((m) => !m.id || !idSet.has(m.id));
+      row.done = 'hidden';
+      row.selected = false;
+      row.matched = false;
+      row.currentStock = 0;
+      row.inventoryIds = [];
+      row.location = '';
+      row.palletId = '';
+      this.tieuHuyMatchedCount = this.tieuHuyRows.filter((r) => r.matched && r.done !== 'hidden').length;
+      this.saveTieuHuyLastImport();
+      alert(
+        n > 0
+          ? `Đã ẩn ${row.materialCode}. Xem lại trong More → Danh mục Ẩn (giữ ${this.hiddenRetentionDays} ngày).`
+          : `Không ẩn được ${row.materialCode}.`
+      );
+    } catch (e: any) {
+      console.error('❌ hideTieuHuyRow:', e);
+      alert('Lỗi khi ẩn: ' + (e?.message || e));
+    } finally {
+      this.tieuHuyBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async applyTieuHuyWarehouse(lines: InventoryMaterial[]): Promise<boolean> {
+    const warehouse = this.tieuHuyWarehouseValue;
+    try {
+      const modifiedBy = await this.resolveLocationOperatorId();
+      const chunkSize = 400;
+      for (let i = 0; i < lines.length; i += chunkSize) {
+        const chunk = lines.slice(i, i + chunkSize);
+        const batch = this.firestore.firestore.batch();
+        for (const m of chunk) {
+          if (!m.id) continue;
+          batch.update(this.firestore.collection('inventory-materials').doc(m.id).ref, {
+            ...this.inventoryLocationWriteFields(warehouse),
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy
+          });
+        }
+        await batch.commit();
+      }
+      for (const m of lines) {
+        m.location = warehouse;
+      }
+      return true;
+    } catch (e) {
+      console.error('❌ applyTieuHuyWarehouse:', e);
+      return false;
+    }
+  }
+
   openKkCatalogPopup(): void {
     this.closeMorePopup();
     this.showKkCatalogPopup = true;
@@ -12350,6 +12946,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = String(location || '').trim().toUpperCase();
     if (raw === '00' || raw.startsWith('00-') || raw.startsWith('00+')) return '00';
     if (raw.startsWith('J5-')) return 'J5';
+    if (raw === 'TIEUHUY' || raw.startsWith('TIEUHUY')) return 'TIEUHUY';
     if (raw.startsWith('ASM3-') || raw.startsWith('WH3-') || raw.startsWith('ASM3')) return 'ASM3';
     return '';
   }
@@ -12357,7 +12954,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Bỏ tiền tố J5-/WH3-/ASM3-/00- cũ trước khi gắn tiền tố mới. */
   private stripDoiKhoWhPrefix(location: string): string {
     const raw = String(location || '').trim();
-    const m = /^(J5|WH3|ASM3|00)-(.+)$/i.exec(raw);
+    const m = /^(J5|WH3|ASM3|00|TIEUHUY)-(.+)$/i.exec(raw);
     return m ? m[2] : raw;
   }
 

@@ -357,6 +357,9 @@
       <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('cleanup')">
         <i class="material-icons">cleaning_services</i> Làm sạch dữ liệu
       </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('import-px')">
+        <i class="material-icons">upload_file</i> Import PX
+      </button>
       <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('qc')">
         <i class="material-icons">policy</i> QC rule
       </button>
@@ -528,6 +531,10 @@
               Làm sạch dữ liệu
             </a>
 
+            <a class="dropdown-item" href="javascript:void(0)" (click)="openPxImportPopup()">
+              <i class="material-icons">upload_file</i>
+              Import PX
+            </a>
             <a class="dropdown-item" href="javascript:void(0)" (click)="openQcRuleModal()">
               <i class="material-icons">policy</i>
               QC rule
@@ -1058,5 +1065,80 @@
       </button>
     </div>
 
+  </div>
+</div>
+
+<div class="px-import-overlay" *ngIf="showPxImportPopup" (click)="closePxImportPopup()">
+  <div class="px-import-dialog" (click)="$event.stopPropagation()" role="dialog" aria-label="Import PX">
+    <div class="px-import-dialog__head">
+      <div>
+        <h3>Import PX</h3>
+        <p>File gồm LSX, Mã, PO, Lượng. Khớp tồn theo Mã + PO, IMD lấy lô cũ hơn rồi trừ outbound.</p>
+      </div>
+      <button type="button" class="px-import-dialog__x" (click)="closePxImportPopup()" [disabled]="pxImportBusy" aria-label="Đóng">×</button>
+    </div>
+
+    <div class="px-import-dialog__bar">
+      <button type="button" (click)="downloadPxImportTemplate()" [disabled]="pxImportBusy">Template</button>
+      <button type="button" (click)="pickPxImportFile()" [disabled]="pxImportBusy">
+        {{ pxImportBusy ? 'Đang xử lý…' : 'Chọn file' }}
+      </button>
+      <button type="button" (click)="rematchPxImportRows()" [disabled]="pxImportBusy || !pxImportRows.length">
+        Đối chiếu lại
+      </button>
+      <span class="px-import-dialog__file" *ngIf="pxImportFileName">{{ pxImportFileName }}</span>
+    </div>
+
+    <div class="px-import-dialog__sum" *ngIf="pxImportRows.length">
+      Khớp sẽ trừ: <b>{{ pxImportOkCount }}</b>
+      · Đã trừ: <b>{{ pxImportDoneCount }}</b>
+      · Không trừ được: <b>{{ pxImportFailCount }}</b>
+      — sửa Mã/PO/Lượng ở dòng đỏ rồi bấm Đối chiếu lại.
+    </div>
+    <div class="px-import-dialog__sum px-import-dialog__sum--empty" *ngIf="!pxImportRows.length">
+      Chưa có file. Tải template hoặc chọn Excel/CSV.
+    </div>
+
+    <div class="px-import-dialog__table" *ngIf="pxImportRows.length">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>LSX</th>
+            <th>Mã</th>
+            <th>PO</th>
+            <th>Lượng</th>
+            <th>Tồn</th>
+            <th>IMD</th>
+            <th>Kết quả</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of pxImportRows; let i = index"
+              [class.px-import-ok]="r.status === 'ok'"
+              [class.px-import-fail]="r.status === 'no-match' || r.status === 'short' || r.status === 'error'"
+              [class.px-import-done]="r.status === 'done'">
+            <td>
+              <input type="checkbox" [(ngModel)]="r.selected" name="pxSel{{i}}" [disabled]="pxImportBusy || r.status !== 'ok'" />
+            </td>
+            <td><input type="text" [(ngModel)]="r.lsx" name="pxLsx{{i}}" [disabled]="pxImportBusy || r.status === 'done'" /></td>
+            <td><input type="text" [(ngModel)]="r.materialCode" name="pxCode{{i}}" [disabled]="pxImportBusy || r.status === 'done'" /></td>
+            <td><input type="text" [(ngModel)]="r.poNumber" name="pxPo{{i}}" [disabled]="pxImportBusy || r.status === 'done'" /></td>
+            <td><input type="number" [(ngModel)]="r.qty" name="pxQty{{i}}" min="0" step="any" [disabled]="pxImportBusy || r.status === 'done'" /></td>
+            <td>{{ r.status === 'no-match' ? '—' : (r.available | number:'1.0-4') }}</td>
+            <td>{{ r.imd || '—' }}</td>
+            <td>{{ r.message }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="px-import-dialog__foot">
+      <button type="button" (click)="closePxImportPopup()" [disabled]="pxImportBusy">Đóng</button>
+      <button type="button" class="px-import-dialog__apply" (click)="applyPxImportSelected()"
+              [disabled]="pxImportBusy || pxImportSelectedOkCount === 0">
+        Trừ tồn {{ pxImportSelectedOkCount }} mã/PO
+      </button>
+    </div>
   </div>
 </div>

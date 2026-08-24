@@ -19,6 +19,7 @@ import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { TemXuatKhoService } from '../../services/tem-xuat-kho.service';
 import { stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
+import * as XLSX from 'xlsx';
 
 
 /** Một dòng scan trong phiên xuất BS */
@@ -42,6 +43,27 @@ export interface BsPendingItem {
   unit: string;
   tenVatTu?: string;
   done?: boolean;
+}
+
+export interface PxImportAlloc {
+  inventoryId: string;
+  imd: string;
+  qty: number;
+  available: number;
+  location: string;
+}
+
+export interface PxImportRow {
+  lsx: string;
+  materialCode: string;
+  poNumber: string;
+  qty: number;
+  imd: string;
+  available: number;
+  status: 'ok' | 'no-match' | 'short' | 'done' | 'error';
+  message: string;
+  selected: boolean;
+  allocations: PxImportAlloc[];
 }
 
 export interface OutboundMaterial {
@@ -176,6 +198,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
   qcRuleSaving = false;
   private qcRuleEnabledActive = false;
   private qcRuleBlockedList: string[] = [];
+  showPxImportPopup = false;
+  pxImportBusy = false;
+  pxImportFileName = '';
+  pxImportRows: PxImportRow[] = [];
+
   /** Ẩn nút Home nổi / toggler navbar toàn cục khi đang ở Outbound mobile (styles.css) */
   private readonly outboundMobileBodyClass = 'ob-outbound-mobile-layout';
   
@@ -1374,7 +1401,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   runMobileSheetAction(
-    action: 'refresh' | 'excel' | 'add' | 'monthly' | 'cleanup' | 'qc' | 'filter'
+    action: 'refresh' | 'excel' | 'add' | 'monthly' | 'cleanup' | 'qc' | 'filter' | 'import-px'
   ): void {
     this.closeMobileMoreSheet();
     switch (action) {
@@ -1395,6 +1422,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
         break;
       case 'qc':
         void this.openQcRuleModal();
+        break;
+      case 'import-px':
+        this.openPxImportPopup();
         break;
       case 'filter':
         this.openMobileFilterSheet();
@@ -3882,6 +3912,447 @@ export class OutboundComponent implements OnInit, OnDestroy {
       );
     } catch (e) {
       console.error('checkAndWarnIqcLocation error:', e);
+    }
+  }
+
+  get pxImportOkCount(): number {
+    return this.pxImportRows.filter((r) => r.status === 'ok').length;
+  }
+
+  get pxImportFailCount(): number {
+    return this.pxImportRows.filter((r) => r.status === 'no-match' || r.status === 'short' || r.status === 'error').length;
+  }
+
+  get pxImportDoneCount(): number {
+    return this.pxImportRows.filter((r) => r.status === 'done').length;
+  }
+
+  get pxImportSelectedOkCount(): number {
+    return this.pxImportRows.filter((r) => r.selected && r.status === 'ok').length;
+  }
+
+  openPxImportPopup(): void {
+    this.closeDropdown();
+    this.showPxImportPopup = true;
+  }
+
+  closePxImportPopup(): void {
+    if (this.pxImportBusy) return;
+    this.showPxImportPopup = false;
+  }
+
+  downloadPxImportTemplate(): void {
+    const ws = XLSX.utils.json_to_sheet([
+      { LSX: 'KZLSX0326/0001', 'Mã': 'B005001', PO: '4500123456', 'Lượng': 10 },
+      { LSX: 'KZLSX0326/0001', 'Mã': 'B002010', PO: '4500987654', 'Lượng': 5 }
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Import PX');
+    XLSX.writeFile(wb, `Import_PX_template_${this.selectedFactory}.xlsx`);
+  }
+
+  pickPxImportFile(): void {
+    if (this.pxImportBusy) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (ev: Event) => {
+      const file = (ev.target as HTMLInputElement)?.files?.[0];
+      if (file) void this.processPxImportFile(file);
+    };
+    input.click();
+  }
+
+  private async processPxImportFile(file: File): Promise<void> {
+    this.pxImportBusy = true;
+    this.pxImportFileName = file.name;
+    this.cdr.detectChanges();
+    try {
+      const parsed = await this.parsePxImportExcel(file);
+      if (!parsed.length) {
+        alert('Không đọc được dòng hợp lệ. File cần cột LSX, Mã, PO, Lượng.');
+        return;
+      }
+      this.pxImportRows = parsed;
+      await this.matchPxImportRows();
+    } catch (e: any) {
+      console.error('❌ processPxImportFile:', e);
+      alert('Lỗi đọc file Import PX: ' + (e?.message || e));
+    } finally {
+      this.pxImportBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private parsePxImportExcel(file: File): Promise<PxImportRow[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const objects = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+          const byKey = new Map<string, PxImportRow>();
+          const merge = (row: PxImportRow | null) => {
+            if (!row) return;
+            const key = `${row.lsx}|${row.materialCode}|${row.poNumber}`;
+            const prev = byKey.get(key);
+            if (!prev) {
+              byKey.set(key, row);
+              return;
+            }
+            prev.qty += row.qty;
+          };
+          for (const obj of objects) merge(this.mapPxImportExcelRow(obj));
+          if (!byKey.size) {
+            const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+            for (let i = 0; i < matrix.length; i++) {
+              merge(this.mapPxImportExcelCells(matrix[i] || [], i === 0));
+            }
+          }
+          resolve(Array.from(byKey.values()));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  private mapPxImportExcelRow(row: Record<string, unknown>): PxImportRow | null {
+    let lsx = '';
+    let code = '';
+    let po = '';
+    let qty: number | null = null;
+    for (const [key, val] of Object.entries(row)) {
+      const kind = this.pxImportHeaderKind(key);
+      if (kind === 'lsx' && !lsx) lsx = this.normalizePxImportLsx(val);
+      else if (kind === 'code' && !code) code = this.normalizePxImportCode(val);
+      else if (kind === 'po' && !po) po = this.normalizePxImportPo(val);
+      else if (kind === 'qty' && qty == null) qty = this.parsePxImportQty(val);
+    }
+    if (!lsx || !code || !po || qty == null || qty <= 0) {
+      const values = Object.values(row);
+      lsx = lsx || this.normalizePxImportLsx(values[0]);
+      code = code || this.normalizePxImportCode(values[1]);
+      po = po || this.normalizePxImportPo(values[2]);
+      if (qty == null) qty = this.parsePxImportQty(values[3]);
+    }
+    if (!lsx || !code || !po || qty == null || qty <= 0) return null;
+    return this.emptyPxImportRow(lsx, code, po, qty);
+  }
+
+  private mapPxImportExcelCells(line: unknown[], maybeHeader: boolean): PxImportRow | null {
+    const head = this.foldPxImportHeader(String(line[0] ?? '') + ' ' + String(line[1] ?? '') + ' ' + String(line[2] ?? ''));
+    if (maybeHeader && /lsx|ma|po|luong|qty/i.test(head)) return null;
+    const lsx = this.normalizePxImportLsx(line[0]);
+    const code = this.normalizePxImportCode(line[1]);
+    const po = this.normalizePxImportPo(line[2]);
+    const qty = this.parsePxImportQty(line[3]);
+    if (!lsx || !code || !po || qty == null || qty <= 0) return null;
+    return this.emptyPxImportRow(lsx, code, po, qty);
+  }
+
+  private emptyPxImportRow(lsx: string, materialCode: string, poNumber: string, qty: number): PxImportRow {
+    return {
+      lsx,
+      materialCode,
+      poNumber,
+      qty,
+      imd: '',
+      available: 0,
+      status: 'no-match',
+      message: '',
+      selected: false,
+      allocations: []
+    };
+  }
+
+  private pxImportHeaderKind(header: string): 'lsx' | 'code' | 'po' | 'qty' | '' {
+    const s = this.foldPxImportHeader(header);
+    if (!s) return '';
+    if (s === 'lsx' || s.includes('lenh sx') || s.includes('lenh san xuat') || s.includes('so lenh') || s.includes('production') || s.includes('work order')) {
+      return 'lsx';
+    }
+    if (/(^|\s)po(\s|$)/.test(s) || s.includes('purchase')) return 'po';
+    if (s === 'sl' || s === 'qty' || s.includes('luong') || s.includes('quantity') || s.includes('so luong')) return 'qty';
+    if (s === 'ma' || s.includes('ma hang') || s.includes('material') || s.includes('item') || s === 'code' || s.includes('ma nvl')) return 'code';
+    return '';
+  }
+
+  private foldPxImportHeader(s: string): string {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  private normalizePxImportLsx(raw: unknown): string {
+    return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  private normalizePxImportCode(raw: unknown): string {
+    return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  private normalizePxImportPo(raw: unknown): string {
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return String(Math.round(raw));
+    }
+    let s = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');
+    if (/e[+-]?\d+$/i.test(s)) {
+      const n = Number(s);
+      if (Number.isFinite(n)) return String(Math.round(n));
+    }
+    return s;
+  }
+
+  private parsePxImportQty(raw: unknown): number | null {
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    const n = Number(String(raw).replace(/,/g, '').trim());
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private pxImportPoMatch(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const da = a.replace(/\D/g, '');
+    const db = b.replace(/\D/g, '');
+    if (da && db && da === db) return true;
+    if (da && db && da.replace(/^0+/, '') === db.replace(/^0+/, '')) return true;
+    return false;
+  }
+
+  async rematchPxImportRows(): Promise<void> {
+    if (this.pxImportBusy) return;
+    this.pxImportBusy = true;
+    this.cdr.detectChanges();
+    try {
+      await this.matchPxImportRows();
+    } finally {
+      this.pxImportBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async matchPxImportRows(): Promise<void> {
+    const pending = this.pxImportRows.filter((r) => r.status !== 'done');
+    if (!pending.length) return;
+    const codes = Array.from(new Set(pending.map((r) => this.normalizePxImportCode(r.materialCode)).filter(Boolean)));
+    const lots = await this.fetchPxImportInventoryLots(codes);
+    for (const row of pending) {
+      row.lsx = this.normalizePxImportLsx(row.lsx);
+      row.materialCode = this.normalizePxImportCode(row.materialCode);
+      row.poNumber = this.normalizePxImportPo(row.poNumber);
+      row.qty = Number(row.qty) || 0;
+      const matchedLots = lots
+        .filter((lot) =>
+          this.normalizePxImportCode(lot.materialCode) === row.materialCode &&
+          this.pxImportPoMatch(this.normalizePxImportPo(lot.poNumber), row.poNumber)
+        )
+        .sort((a, b) => a.sortKey - b.sortKey);
+      const available = matchedLots.reduce((s, lot) => s + Math.max(0, lot.available), 0);
+      row.available = Math.round(available * 10000) / 10000;
+      row.allocations = [];
+      row.imd = '';
+      if (!matchedLots.length) {
+        row.status = 'no-match';
+        row.selected = false;
+        row.message = 'Không khớp Mã + PO trên tồn kho';
+        continue;
+      }
+      if (row.qty <= 0) {
+        row.status = 'no-match';
+        row.selected = false;
+        row.message = 'Lượng phải > 0';
+        continue;
+      }
+      let need = row.qty;
+      for (const lot of matchedLots) {
+        if (need <= 1e-9) break;
+        if (lot.available <= 1e-9) continue;
+        const take = Math.min(need, lot.available);
+        row.allocations.push({
+          inventoryId: lot.id,
+          imd: lot.imd,
+          qty: take,
+          available: lot.available,
+          location: lot.location
+        });
+        lot.available -= take;
+        need -= take;
+      }
+      row.imd = row.allocations.map((a) => a.imd).filter(Boolean).join(', ');
+      if (need > 1e-6) {
+        row.status = 'short';
+        row.selected = false;
+        row.message = `Thiếu tồn: cần ${row.qty}, còn ${row.available}`;
+      } else {
+        row.status = 'ok';
+        row.selected = true;
+        row.message = row.imd ? `IMD cũ hơn: ${row.imd}` : 'Khớp tồn kho';
+      }
+    }
+  }
+
+  private async fetchPxImportInventoryLots(codes: string[]): Promise<Array<{
+    id: string;
+    materialCode: string;
+    poNumber: string;
+    available: number;
+    imd: string;
+    location: string;
+    sortKey: number;
+  }>> {
+    const out: Array<{
+      id: string;
+      materialCode: string;
+      poNumber: string;
+      available: number;
+      imd: string;
+      location: string;
+      sortKey: number;
+    }> = [];
+    const uniq = Array.from(new Set(codes.filter(Boolean)));
+    const parallel = 10;
+    for (let i = 0; i < uniq.length; i += parallel) {
+      const chunk = uniq.slice(i, i + parallel);
+      const snaps = await Promise.all(chunk.map((code) =>
+        this.firestore.collection('inventory-materials', (ref) =>
+          ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', code).limit(2000)
+        ).get().toPromise()
+      ));
+      snaps.forEach((snap) => {
+        if (!snap || snap.empty) return;
+        snap.docs.forEach((doc) => {
+          const d = doc.data() as any;
+          const loc = String(d.location || '').toUpperCase();
+          if (loc === 'TIEUHUY' || loc.startsWith('TIEUHUY')) return;
+          const opening = d.openingStock != null ? Number(d.openingStock) : 0;
+          const available = opening + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+          const imd = this.normalizeImportDate(d.importDate) || String(d.importDate || '').trim();
+          out.push({
+            id: doc.id,
+            materialCode: String(d.materialCode || ''),
+            poNumber: String(d.poNumber || ''),
+            available,
+            imd,
+            location: String(d.location || ''),
+            sortKey: this.pxImportImdSortKey(imd, d.importDate)
+          });
+        });
+      });
+    }
+    return out;
+  }
+
+  private pxImportImdSortKey(imd: string, raw: unknown): number {
+    if (/^\d{8}$/.test(imd)) {
+      const dd = Number(imd.slice(0, 2));
+      const mm = Number(imd.slice(2, 4));
+      const yyyy = Number(imd.slice(4, 8));
+      const t = new Date(yyyy, mm - 1, dd).getTime();
+      if (Number.isFinite(t)) return t;
+    }
+    if (raw instanceof Date) return raw.getTime();
+    if (raw && typeof (raw as any).toDate === 'function') {
+      try { return (raw as any).toDate().getTime(); } catch { /* ignore */ }
+    }
+    if (raw && typeof (raw as any).seconds === 'number') return (raw as any).seconds * 1000;
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  async applyPxImportSelected(): Promise<void> {
+    if (this.pxImportBusy) return;
+    this.pxImportBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const keepUnselected = new Set(this.pxImportRows.filter((r) => r.status === 'ok' && !r.selected));
+      await this.matchPxImportRows();
+      keepUnselected.forEach((r) => {
+        if (r.status === 'ok') r.selected = false;
+      });
+    } catch (e: any) {
+      this.pxImportBusy = false;
+      this.cdr.detectChanges();
+      alert('Lỗi đối chiếu tồn: ' + (e?.message || e));
+      return;
+    }
+    const rows = this.pxImportRows.filter((r) => r.selected && r.status === 'ok' && r.allocations.length);
+    if (!rows.length) {
+      this.pxImportBusy = false;
+      this.cdr.detectChanges();
+      alert('Không có dòng khớp để trừ tồn. Sửa Mã/PO rồi bấm Đối chiếu lại.');
+      return;
+    }
+    const lineCount = rows.reduce((s, r) => s + r.allocations.length, 0);
+    if (!confirm(`Trừ tồn ${rows.length} mã/PO (${lineCount} dòng IMD, kho ${this.selectedFactory})?`)) {
+      this.pxImportBusy = false;
+      this.cdr.detectChanges();
+      return;
+    }
+    const exportedBy = this.batchEmployeeId || 'IMPORT-PX';
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const row of rows) {
+        try {
+          for (const alloc of row.allocations) {
+            const now = new Date();
+            await this.firestore.collection('outbound-materials').add({
+              factory: this.selectedFactory,
+              materialCode: row.materialCode,
+              poNumber: row.poNumber,
+              quantity: alloc.qty,
+              unit: 'PCS',
+              exportQuantity: alloc.qty,
+              scanCount: 1,
+              exportDate: now,
+              location: alloc.location || '',
+              exportedBy,
+              employeeId: exportedBy,
+              productionOrder: row.lsx,
+              batch: alloc.imd || null,
+              batchNumber: alloc.imd || null,
+              importDate: alloc.imd || null,
+              scanMethod: 'IMPORT-PX',
+              notes: `Import PX · LSX ${row.lsx}`,
+              createdAt: now,
+              updatedAt: now
+            } as OutboundMaterial);
+            await this.firestore.collection('inventory-materials').doc(alloc.inventoryId).update({
+              exported: firebase.default.firestore.FieldValue.increment(alloc.qty),
+              updatedAt: now
+            });
+          }
+          row.status = 'done';
+          row.selected = false;
+          row.message = `Đã trừ ${row.qty}` + (row.imd ? ` · IMD ${row.imd}` : '');
+          ok += 1;
+        } catch (e: any) {
+          row.status = 'error';
+          row.selected = false;
+          row.message = e?.message || 'Lỗi lưu outbound';
+          fail += 1;
+        }
+      }
+      this.loadMaterials();
+      alert(
+        `Import PX xong.\nĐã trừ: ${ok} mã/PO.\n` +
+        (fail ? `Lỗi lưu: ${fail}.\n` : '') +
+        `Không khớp / thiếu tồn: ${this.pxImportFailCount} — sửa tay rồi Đối chiếu lại.`
+      );
+    } finally {
+      this.pxImportBusy = false;
+      this.cdr.detectChanges();
     }
   }
 }

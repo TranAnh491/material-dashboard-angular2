@@ -2462,6 +2462,14 @@
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
+          <button type="button" class="more-tile" (click)="openTieuHuyPopup()">
+            <span class="more-tile__icon more-tile__icon--red"><i class="material-icons">delete_sweep</i></span>
+            <span class="more-tile__text">
+              <strong>Import file Tiêu hủy</strong>
+              <small>Khớp Mã + PO → chuyển kho TIEUHUY</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
         </div>
       </section>
 
@@ -2736,6 +2744,127 @@
         <i class="material-icons">{{ ganPalletBusy ? 'sync' : 'save' }}</i>
         {{ ganPalletBusy ? 'Đang lưu…' : 'Dừng' }}
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Import file Tiêu hủy -->
+<div class="modal-overlay more-overlay" *ngIf="showTieuHuyPopup" (click)="closeTieuHuyPopup()">
+  <div class="modal-content hidden-inventory-popup tieu-huy-popup" (click)="$event.stopPropagation()" role="dialog" aria-label="Import file Tiêu hủy">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">delete_sweep</i>
+        </span>
+        <div>
+          <h3>Import file Tiêu hủy</h3>
+          <p class="more-popup-header__sub">Import PX + Mã + PO (Lượng nếu có). Tick chọn rồi Đưa vào kho tiêu hủy. Ẩn = ẩn 30 ngày.</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeTieuHuyPopup()" aria-label="Đóng"
+              [disabled]="tieuHuyImporting || tieuHuyBusy">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body hidden-inventory-body">
+      <div class="tieu-huy-summary" *ngIf="tieuHuyImportedCount">
+        <strong>{{ tieuHuyMatchedCount }} / {{ tieuHuyImportedCount }}</strong>
+        mã tồn kho trùng file tiêu hủy
+        <span *ngIf="tieuHuyFileName"> · {{ tieuHuyFileName }}</span>
+        <span *ngIf="tieuHuyUpdatedCount"> · đã chuyển kho TIEUHUY: {{ tieuHuyUpdatedCount }} dòng</span>
+      </div>
+      <div class="tieu-huy-summary tieu-huy-summary--empty" *ngIf="!tieuHuyImportedCount">
+        Chưa import file. Tải template rồi Import Excel/CSV (cột PX, Mã, PO, Lượng nếu có).
+      </div>
+      <div class="hidden-toolbar">
+        <div class="hidden-search">
+          <i class="material-icons">search</i>
+          <input type="search" [(ngModel)]="tieuHuyQuery" placeholder="Tìm PX, mã, PO…" autocomplete="off" />
+          <button type="button" class="hidden-search__clear" *ngIf="tieuHuyQuery" (click)="tieuHuyQuery = ''" aria-label="Xóa">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+        <div class="hidden-toolbar__meta">
+          <span>{{ tieuHuyFilteredRows.length }} / {{ tieuHuyRows.length }}</span>
+          <button type="button" class="hidden-refresh-btn" (click)="downloadTieuHuyTemplate()" [disabled]="tieuHuyImporting || tieuHuyBusy">
+            <i class="material-icons">download</i>
+            Template
+          </button>
+          <button type="button" class="hidden-refresh-btn" (click)="importTieuHuyFromExcel()" [disabled]="tieuHuyImporting || tieuHuyBusy">
+            <i class="material-icons" [class.rotating]="tieuHuyImporting">{{ tieuHuyImporting ? 'sync' : 'file_upload' }}</i>
+            {{ tieuHuyImporting ? 'Đang xử lý...' : 'Import' }}
+          </button>
+        </div>
+      </div>
+      <div class="hidden-table-wrap" *ngIf="!tieuHuyImporting">
+        <table class="hidden-table" *ngIf="tieuHuyFilteredRows.length; else tieuHuyEmpty">
+          <thead>
+            <tr>
+              <th class="tieu-huy-check">
+                <input type="checkbox"
+                       [checked]="tieuHuyAllVisibleSelected"
+                       (change)="toggleTieuHuySelectAll($any($event.target).checked)"
+                       [disabled]="tieuHuyBusy || !tieuHuySelectableVisibleCount" />
+              </th>
+              <th>#</th>
+              <th>PX</th>
+              <th>Mã</th>
+              <th>PO</th>
+              <th>Lượng file</th>
+              <th>Tồn kho hiện tại</th>
+              <th>LinkQ</th>
+              <th>Khớp tồn</th>
+              <th>Vị trí</th>
+              <th>Pallet</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of tieuHuyFilteredRows; let i = index"
+                [class.tieu-huy-row--hit]="r.matched && !r.done"
+                [class.tieu-huy-row--done]="!!r.done">
+              <td class="tieu-huy-check">
+                <input type="checkbox"
+                       [(ngModel)]="r.selected"
+                       [disabled]="tieuHuyBusy || !canSelectTieuHuyRow(r)" />
+              </td>
+              <td>{{ i + 1 }}</td>
+              <td>{{ r.px || '—' }}</td>
+              <td><strong>{{ r.materialCode }}</strong></td>
+              <td>{{ r.poNumber }}</td>
+              <td class="tieu-huy-num">{{ r.fileQty == null ? '—' : formatNumber(r.fileQty) }}</td>
+              <td class="tieu-huy-num">{{ r.matched ? formatNumber(r.currentStock) : '—' }}</td>
+              <td class="tieu-huy-num">{{ r.linkQStock == null ? '—' : formatNumber(r.linkQStock) }}</td>
+              <td>{{ r.done === 'tieu-huy' ? 'Đã chuyển' : (r.done === 'hidden' ? 'Đã ẩn' : (r.matched ? 'Trùng' : 'Không')) }}</td>
+              <td>{{ r.location || '—' }}</td>
+              <td>{{ r.palletId || '—' }}</td>
+              <td>
+                <button type="button" class="tieu-huy-hide-btn" (click)="hideTieuHuyRow(r)"
+                        [disabled]="tieuHuyBusy || r.done === 'hidden' || !r.inventoryIds.length">
+                  Ẩn
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <ng-template #tieuHuyEmpty>
+          <div class="hidden-empty">
+            <i class="material-icons">delete_sweep</i>
+            <p *ngIf="!tieuHuyRows.length">Chưa có dữ liệu file tiêu hủy.</p>
+            <p *ngIf="tieuHuyRows.length">Không khớp “{{ tieuHuyQuery }}”.</p>
+          </div>
+        </ng-template>
+      </div>
+      <div *ngIf="tieuHuyImporting" class="hidden-empty">Đang đọc file và đối chiếu tồn kho…</div>
+      <div class="hidden-footer tieu-huy-footer">
+        <span class="tieu-huy-footer__sel">Đã chọn {{ tieuHuySelectedCount }}</span>
+        <button type="button" class="cancel-btn" (click)="closeTieuHuyPopup()" [disabled]="tieuHuyImporting || tieuHuyBusy">Đóng</button>
+        <button type="button" class="tieu-huy-apply-btn" (click)="applyTieuHuySelectedToWarehouse()"
+                [disabled]="tieuHuyImporting || tieuHuyBusy || tieuHuySelectedCount === 0">
+          <i class="material-icons">{{ tieuHuyBusy ? 'sync' : 'delete_sweep' }}</i>
+          Đưa vào kho tiêu hủy
+        </button>
+      </div>
     </div>
   </div>
 </div>
