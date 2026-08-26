@@ -51,6 +51,18 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   shipments: ShipmentItem[] = [];
   filteredShipments: ShipmentItem[] = [];
 
+  /**
+   * Phân trang theo NHÓM shipment (không theo dòng) — tránh cắt đôi 1 shipment
+   * giữa 2 trang. `displayedShipments` là danh sách dòng thực sự render ra bảng;
+   * mọi *ngFor trong template phải dùng danh sách này thay vì `filteredShipments`
+   * để tránh render hàng nghìn dòng DOM cùng lúc (nguyên nhân chính gây chậm).
+   */
+  displayedShipments: ShipmentItem[] = [];
+  currentPage = 1;
+  totalPages = 1;
+  groupsPerPage = 20;
+  readonly groupsPerPageOptions = [10, 20, 50, 100];
+
   /** UI: group header per shipmentCode */
   private shipmentGroupSummaryByCode: Map<
     string,
@@ -82,7 +94,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     batchNumber?: string;
   }>>();
   private fgOutStandardByCodeCache = new Map<string, number>();
-  
+  /** Chi tiết lệch carton theo mã TP, tính sẵn 1 lần mỗi khi refresh cache FG-Out
+   *  (thay vì tính lại trong template mỗi chu kỳ change detection — xem getCartonMismatchDetails). */
+  private fgOutMismatchDetailsByShipment = new Map<string, Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }>>();
+
   // FG Inventory cache
   fgInventoryCache: Map<string, number> = new Map();
   
@@ -717,6 +732,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   applyKhCustomerFilterFromDialog(): void {
     const v = (this.selectedKhInDialog || '').trim();
     this.filterByCustomerName = v ? v : null;
+    this.currentPage = 1;
     this.applyFilters();
     this.closeKhFilterDialog();
   }
@@ -724,6 +740,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   clearKhCustomerFilter(): void {
     this.filterByCustomerName = null;
     this.selectedKhInDialog = '';
+    this.currentPage = 1;
     this.applyFilters();
     this.closeKhFilterDialog();
   }
@@ -924,6 +941,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
     this.searchDebounceTimer = setTimeout(() => {
       this.searchDebounceTimer = null;
+      this.currentPage = 1;
       this.applyFilters();
     }, 250);
   }
@@ -932,9 +950,98 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return shipment?.id || `${shipment?.shipmentCode || ''}|${shipment?.materialCode || ''}|${index}`;
   }
 
+  /** Chỉ số dòng đầu tiên của `displayedShipments` bên trong `filteredShipments`
+   *  (dùng để suy ra chỉ số toàn cục cho isFirstOfShipment/isLastOfShipment/row-header). */
+  displayedShipmentsOffset = 0;
+  /** Chỉ số dòng bắt đầu (trong filteredShipments) của từng nhóm shipment, theo đúng thứ tự nhóm. */
+  private groupRowStart: number[] = [];
+  /** Số dòng của từng nhóm shipment, cùng thứ tự với groupRowStart. */
+  private groupRowCount: number[] = [];
+
+  /** Tính lại ranh giới các nhóm shipment (nhóm = các dòng liên tiếp cùng shipmentCode) trong filteredShipments đã sort. */
+  private rebuildGroupBoundaries(): void {
+    const starts: number[] = [];
+    const counts: number[] = [];
+    let prevCode: string | null = null;
+    this.filteredShipments.forEach((s, idx) => {
+      const code = this.normalizeShipmentCode(s.shipmentCode);
+      if (idx === 0 || code !== prevCode) {
+        starts.push(idx);
+        counts.push(1);
+      } else {
+        counts[counts.length - 1]++;
+      }
+      prevCode = code;
+    });
+    this.groupRowStart = starts;
+    this.groupRowCount = counts;
+  }
+
+  /** Tính lại totalPages theo số NHÓM shipment (không phải số dòng) và cập nhật displayedShipments. */
+  private updatePagination(): void {
+    this.rebuildGroupBoundaries();
+    this.totalPages = Math.max(1, Math.ceil(this.groupRowStart.length / this.groupsPerPage));
+    if (this.currentPage > this.totalPages) this.currentPage = this.totalPages;
+    if (this.currentPage < 1) this.currentPage = 1;
+    this.refreshDisplayedShipments();
+  }
+
+  /** Cắt filteredShipments theo trang hiện tại — luôn cắt trọn NHÓM shipment, không cắt giữa 1 shipment. */
+  private refreshDisplayedShipments(): void {
+    const totalGroups = this.groupRowStart.length;
+    const startGroupIdx = (this.currentPage - 1) * this.groupsPerPage;
+    const endGroupIdx = Math.min(startGroupIdx + this.groupsPerPage, totalGroups);
+    if (!totalGroups || startGroupIdx >= endGroupIdx) {
+      this.displayedShipments = [];
+      this.displayedShipmentsOffset = 0;
+      return;
+    }
+    const rowStart = this.groupRowStart[startGroupIdx];
+    const lastGroupIdx = endGroupIdx - 1;
+    const rowEnd = this.groupRowStart[lastGroupIdx] + this.groupRowCount[lastGroupIdx];
+    this.displayedShipmentsOffset = rowStart;
+    this.displayedShipments = this.filteredShipments.slice(rowStart, rowEnd);
+  }
+
+  goToPage(page: number): void {
+    const p = Math.max(1, Math.min(Math.floor(page) || 1, this.totalPages));
+    if (p === this.currentPage) return;
+    this.currentPage = p;
+    this.refreshDisplayedShipments();
+  }
+
+  nextPage(): void {
+    this.goToPage(this.currentPage + 1);
+  }
+
+  previousPage(): void {
+    this.goToPage(this.currentPage - 1);
+  }
+
+  onGroupsPerPageChange(size: number | string): void {
+    const n = Number(size);
+    this.groupsPerPage = this.groupsPerPageOptions.includes(n) ? n : 20;
+    this.currentPage = 1;
+    this.updatePagination();
+  }
+
+  get paginationGroupFrom(): number {
+    if (!this.groupRowStart.length) return 0;
+    return (this.currentPage - 1) * this.groupsPerPage + 1;
+  }
+
+  get paginationGroupTo(): number {
+    return Math.min(this.currentPage * this.groupsPerPage, this.groupRowStart.length);
+  }
+
+  get totalShipmentGroupsCount(): number {
+    return this.groupRowStart.length;
+  }
+
   // Set status filter from summary card click (null = clear filter)
   setStatusFilter(status: string | null): void {
     this.filterByStatus = this.filterByStatus === status ? null : status;
+    this.currentPage = 1;
     this.applyFilters();
   }
 
@@ -1057,6 +1164,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     for (const [code, cur] of this.shipmentGroupSummaryByCode.entries()) {
       cur.status = this.pickShipmentGroupStatus(rowsByCode.get(code) || []);
     }
+
+    this.updatePagination();
 
     this.rebuildSummaryCardCounts();
     this.rebuildShipmentMaterialAggMaps();
@@ -1196,23 +1305,52 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
       if (requestId !== this.fgOutCartonCheckRequestId) return;
 
+      // Bucket allItems theo mã shipment 1 lần duy nhất — tránh filter lại toàn bộ allItems
+      // cho mỗi shipment code (trước đây là O(codes × allItems), rất tốn khi nhiều shipment/dòng fg-out).
+      const itemsByShipment = new Map<string, typeof allItems>();
+      for (const it of allItems) {
+        const norm = this.normalizeShipmentCode(it.shipment);
+        if (!norm) continue;
+        let bucket = itemsByShipment.get(norm);
+        if (!bucket) {
+          bucket = [];
+          itemsByShipment.set(norm, bucket);
+        }
+        bucket.push(it);
+      }
+
+      // Tổng carton Shipment theo (shipmentCode, mã TP), tính sẵn 1 lần để so lệch bên dưới
+      // (thay vì quét lại toàn bộ filteredShipments cho từng shipment mỗi lần template render).
+      const shipCartonByMaterialPerCode = this.buildShipmentCartonByMaterialPerCode();
+
       const totals = new Map<string, number>();
       const rawByShipment = new Map<string, typeof allItems>();
+      const mismatchByShipment = new Map<string, Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }>>();
       for (const code of codes) {
         const norm = this.normalizeShipmentCode(code);
-        totals.set(
-          norm,
-          this.computeFgOutTotalCartonForShipment(code, allItems, standardByCode)
-        );
-        rawByShipment.set(
-          norm,
-          allItems.filter(it => this.normalizeShipmentCode(it.shipment) === norm && String(it.materialCode || '').trim())
-        );
+        const itemsForCode = itemsByShipment.get(norm) || [];
+        totals.set(norm, this.computeFgOutTotalCartonForShipment(itemsForCode, standardByCode));
+
+        const rawForCode = itemsForCode.filter(it => String(it.materialCode || '').trim());
+        rawByShipment.set(norm, rawForCode);
+
+        const fgMap = this.computeFgOutCartonByMaterialFromRows(rawForCode, standardByCode);
+        const shipMap = shipCartonByMaterialPerCode.get(norm) || new Map<string, number>();
+        const matCodes = new Set<string>([...shipMap.keys(), ...fgMap.keys()]);
+        const details: Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }> = [];
+        for (const mc of matCodes) {
+          const s = shipMap.get(mc) || 0;
+          const f = fgMap.get(mc) || 0;
+          if (s !== f) details.push({ materialCode: mc, shipmentCarton: s, fgOutCarton: f });
+        }
+        details.sort((a, b) => a.materialCode.localeCompare(b.materialCode, 'vi'));
+        mismatchByShipment.set(norm, details);
       }
 
       this.fgOutCartonTotalByShipment = totals;
       this.fgOutRawItemsByShipment = rawByShipment;
       this.fgOutStandardByCodeCache = standardByCode;
+      this.fgOutMismatchDetailsByShipment = mismatchByShipment;
       this.fgOutCartonCheckReady = true;
       for (const code of codes) {
         const n = this.normalizeShipmentCode(code);
@@ -1228,9 +1366,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Tổng carton FG Out — cùng cách đếm cột Carton trên tab FG Out. */
+  /**
+   * Tổng carton FG Out — cùng cách đếm cột Carton trên tab FG Out.
+   * `fgItems` phải là các dòng ĐÃ lọc sẵn theo đúng 1 shipment (xem refreshFgOutCartonCheckCache,
+   * nơi bucket theo shipment 1 lần thay vì filter lại mảng đầy đủ cho mỗi shipment).
+   */
   private computeFgOutTotalCartonForShipment(
-    shipmentCode: string,
     fgItems: Array<{
       shipment?: string;
       materialCode?: string;
@@ -1244,11 +1385,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }>,
     standardByCode: Map<string, number>
   ): number {
-    const normShip = this.normalizeShipmentCode(shipmentCode);
     const sorted = this.sortFgOutRowsLikeTable(
-      fgItems
-        .filter(it => this.normalizeShipmentCode(it.shipment) === normShip)
-        .filter(it => String(it.materialCode || '').trim())
+      fgItems.filter(it => String(it.materialCode || '').trim())
     );
 
     const displayRows = sorted.map((material, matIdx) => ({ material, matIdx }));
@@ -1300,23 +1438,37 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return (this.fgOutRawItemsByShipment.get(norm) || []).length > 0;
   }
 
-  /** Tổng carton Shipment theo từng mã TP (trong cùng shipmentCode). */
-  private getShipmentCartonByMaterial(shipment: ShipmentItem): Map<string, number> {
-    const norm = this.normalizeShipmentCode(shipment?.shipmentCode);
-    const map = new Map<string, number>();
+  /** Tổng carton Shipment theo từng (shipmentCode, mã TP) — quét filteredShipments 1 lần duy nhất
+   *  (thay vì quét lại toàn bộ mảng cho mỗi shipment mỗi lần template render). */
+  private buildShipmentCartonByMaterialPerCode(): Map<string, Map<string, number>> {
+    const perCode = new Map<string, Map<string, number>>();
     for (const s of this.filteredShipments) {
-      if (this.normalizeShipmentCode(s.shipmentCode) !== norm) continue;
-      const code = String(s.materialCode || '').trim().toUpperCase();
-      if (!code) continue;
-      map.set(code, (map.get(code) || 0) + (Number(s.carton) || 0));
+      const shipCode = this.normalizeShipmentCode(s.shipmentCode);
+      const matCode = String(s.materialCode || '').trim().toUpperCase();
+      if (!shipCode || !matCode) continue;
+      let inner = perCode.get(shipCode);
+      if (!inner) {
+        inner = new Map<string, number>();
+        perCode.set(shipCode, inner);
+      }
+      inner.set(matCode, (inner.get(matCode) || 0) + (Number(s.carton) || 0));
     }
-    return map;
+    return perCode;
   }
 
-  /** Tổng carton FG Out theo từng mã TP (cùng thuật toán đếm với tổng shipment). */
-  private computeFgOutCartonByMaterialForShipment(shipmentCode: string): Map<string, number> {
-    const norm = this.normalizeShipmentCode(shipmentCode);
-    const items = this.fgOutRawItemsByShipment.get(norm) || [];
+  /** Tổng carton FG Out theo từng mã TP (cùng thuật toán đếm với tổng shipment), từ các dòng đã lọc sẵn theo 1 shipment. */
+  private computeFgOutCartonByMaterialFromRows(
+    items: Array<{
+      shipment?: string;
+      materialCode?: string;
+      mergeCarton?: string;
+      pallet?: string;
+      lsx?: string;
+      exportDate?: Date | null;
+      batchNumber?: string;
+    }>,
+    standardByCode: Map<string, number>
+  ): Map<string, number> {
     const sorted = this.sortFgOutRowsLikeTable(items);
     const displayRows = sorted.map((material, matIdx) => ({ material, matIdx }));
     const mergeCartonFirstMatIdx = new Map<string, number>();
@@ -1328,7 +1480,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
     const byMaterial = new Map<string, number>();
     for (const r of displayRows) {
-      const count = this.getFgOutCartonCountForDetailRow(r.material, r.matIdx, mergeCartonFirstMatIdx, this.fgOutStandardByCodeCache);
+      const count = this.getFgOutCartonCountForDetailRow(r.material, r.matIdx, mergeCartonFirstMatIdx, standardByCode);
       const code = String(r.material.materialCode || '').trim().toUpperCase();
       byMaterial.set(code, (byMaterial.get(code) || 0) + count);
     }
@@ -1338,20 +1490,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   /**
    * Chi tiết từng mã TP lệch carton giữa Shipment và FG-Out — dùng khi hiển thị cảnh báo "Sai"
    * để chỉ rõ mã nào bị lệch, tránh báo "Sai" chung chung không biết sửa ở đâu.
+   * Tra map đã tính sẵn trong refreshFgOutCartonCheckCache (KHÔNG tính lại mỗi lần template render —
+   * trước đây gọi getShipmentCartonByMaterial() quét toàn bộ filteredShipments mỗi lần, rất chậm với danh sách lớn).
    */
   getCartonMismatchDetails(shipment: ShipmentItem): Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }> {
     if (!this.fgOutCartonCheckReady) return [];
-    const shipMap = this.getShipmentCartonByMaterial(shipment);
-    const fgMap = this.computeFgOutCartonByMaterialForShipment(shipment?.shipmentCode);
-    const codes = new Set<string>([...shipMap.keys(), ...fgMap.keys()]);
-    const result: Array<{ materialCode: string; shipmentCarton: number; fgOutCarton: number }> = [];
-    for (const code of codes) {
-      const s = shipMap.get(code) || 0;
-      const f = fgMap.get(code) || 0;
-      if (s !== f) result.push({ materialCode: code, shipmentCarton: s, fgOutCarton: f });
-    }
-    result.sort((a, b) => a.materialCode.localeCompare(b.materialCode, 'vi'));
-    return result;
+    const code = this.normalizeShipmentCode(shipment?.shipmentCode);
+    return this.fgOutMismatchDetailsByShipment.get(code) || [];
   }
 
   /** Status ưu tiên (Delay → … → Đã Ship) cho header nhóm shipment. */
@@ -1463,6 +1608,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return;
     }
     this.setDateRangeToMonth(year, monthIndex0);
+    this.currentPage = 1;
     this.applyFilters();
     this.showMonthViewDialog = false;
   }
@@ -1473,6 +1619,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Time range filter
   applyTimeRangeFilter(): void {
+    this.currentPage = 1;
     this.applyFilters();
     this.showTimeRangeDialog = false;
   }
@@ -2755,6 +2902,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   toggleShowHidden(): void {
     this.showHidden = !this.showHidden;
     console.log(`Show hidden shipments: ${this.showHidden}`);
+    this.currentPage = 1;
     this.applyFilters();
   }
 

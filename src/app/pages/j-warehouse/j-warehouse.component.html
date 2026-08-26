@@ -112,10 +112,10 @@
           <div>
             <div class="jw-map__title-row">
               <div>
-                <h2>{{ showUtilization ? t('util.title') : show3D ? t('title.3dModel') : drawModeTitle }}</h2>
+                <h2>{{ showUtilization ? t('util.title') : show3D ? (showCctv ? t('title.3dCamera') : t('title.3dModel')) : drawModeTitle }}</h2>
                 <p class="jw-cctv-hint" *ngIf="showCctv">
                   {{ t('cctv.count', { n: cctvCams.length, j5: cctvJ5Count, j4: cctvJ4Count, req: cctvRequiredCount }) }}
-                  — {{ t('cctv.hint') }}
+                  — {{ show3D ? t('cctv.hint3d') : t('cctv.hint') }}
                 </p>
               </div>
               <div class="jw-map__mode-row" *ngIf="!show3D && !showUtilization">

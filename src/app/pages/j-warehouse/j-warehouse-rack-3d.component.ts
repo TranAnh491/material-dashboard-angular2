@@ -14,7 +14,7 @@ import {
 import { CommonModule } from '@angular/common';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { JwKhoMatRow, JwLang, JwRack } from './j-warehouse.component';
+import type { JwCctvCam, JwKhoMatRow, JwLang, JwRack } from './j-warehouse.component';
 
 export interface JwRack3dSlot {
   level: number;
@@ -82,7 +82,14 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   @Input() khoMatHeightM = 3;
   @Input() khoMatLevels = 7;
 
+  /** Sơ đồ Camera — hiện camera + nón FOV; chọn 1 cam thì nhìn bằng góc của cam đó. */
+  @Input() showCctv = false;
+  @Input() cctvCams: JwCctvCam[] = [];
+  @Input() selectedCctvId: string | null = null;
+  @Input() selectedCctvLabel = '';
+
   @Output() slotPick = new EventEmitter<JwRack3dPick>();
+  @Output() cctvPick = new EventEmitter<string>();
 
   @ViewChild('canvasHost') canvasHost?: ElementRef<HTMLDivElement>;
 
@@ -100,6 +107,12 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   private pointer = new THREE.Vector2();
   private rackGroup?: THREE.Group;
   private envGroup?: THREE.Group;
+  private cctvGroup?: THREE.Group;
+  private cctvFovMats = new Map<string, THREE.MeshLambertMaterial>();
+  /** eye = nhìn xuyên camera đang chọn; overview = xoay mô hình, thấy nón phủ. */
+  cctvViewMode: 'eye' | 'overview' = 'eye';
+  private readonly cctvMountHM = 3.2;
+  private readonly cctvPitchDeg = 14;
 
   private readonly boxW = 1.4;
   private readonly boxH = 0.42;
@@ -133,6 +146,15 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
       this.rebuild();
       return;
     }
+    if (changes['showCctv'] || changes['cctvCams']) {
+      this.rebuildCctvLayer();
+    }
+    if (changes['showCctv'] || changes['selectedCctvId'] || changes['cctvCams']) {
+      if (changes['selectedCctvId'] && this.showCctv && this.selectedCctvId) {
+        this.cctvViewMode = 'eye';
+      }
+      this.applyCctvView();
+    }
     if (
       changes['selectedLevel'] ||
       changes['selectedPos'] ||
@@ -157,6 +179,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.controls?.dispose();
     this.disposeEnvGroup();
     this.disposeRackGroup();
+    this.disposeCctvGroup();
     this.renderer?.dispose();
     if (this.canvasHost?.nativeElement && this.renderer?.domElement.parentElement) {
       this.renderer.domElement.remove();
@@ -176,6 +199,16 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
+    if (this.cctvGroup && this.showCctv) {
+      const camHits = this.raycaster.intersectObjects(this.cctvGroup.children, true);
+      const camHit = camHits.find((h) => h.object.userData && h.object.userData['cctvId']);
+      if (camHit) {
+        this.cctvViewMode = 'eye';
+        this.cctvPick.emit(String(camHit.object.userData['cctvId']));
+        this.applyCctvView();
+        return;
+      }
+    }
     const hits = this.raycaster.intersectObjects(Array.from(this.slotMeshes.values()), false);
     if (!hits.length) return;
 
@@ -196,6 +229,13 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
         'legend.raised': 'Nền cao +0.9m',
         'legend.door': 'Cửa cuốn (lối ra vào)',
         'hint.warehouse': 'Kéo xoay · Cuộn phóng to · Click mâm để chọn kệ',
+        'legend.cam': 'Camera',
+        'legend.fov': 'Tầm phủ',
+        'cctv.overview': 'Tổng quan',
+        'cctv.eye': 'Góc camera',
+        'cctv.watching': 'Góc nhìn',
+        'hint.cctvOverview': 'Kéo xoay mô hình · Click camera để xem góc nhìn',
+        'hint.cctvEye': 'Đang nhìn xuyên camera — bấm Tổng quan để xoay mô hình',
         'legend.empty': 'Trống',
         'legend.full': 'Có hàng',
         'legend.pick': 'Đang chọn',
@@ -210,6 +250,13 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
         'legend.raised': 'Raised floor +0.9m',
         'legend.door': 'Roller door (entry/exit)',
         'hint.warehouse': 'Drag to rotate · Scroll to zoom · Click a shelf to select',
+        'legend.cam': 'Camera',
+        'legend.fov': 'Coverage',
+        'cctv.overview': 'Overview',
+        'cctv.eye': 'Camera view',
+        'cctv.watching': 'Viewpoint',
+        'hint.cctvOverview': 'Drag to orbit · Click a camera to see its view',
+        'hint.cctvEye': 'Looking through the camera — click Overview to orbit',
         'legend.empty': 'Empty',
         'legend.full': 'Occupied',
         'legend.pick': 'Selected',
@@ -315,6 +362,12 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   private disposeEnvGroup(): void {
     this.disposeGroup(this.envGroup);
     this.envGroup = undefined;
+  }
+
+  private disposeCctvGroup(): void {
+    this.disposeGroup(this.cctvGroup);
+    this.cctvGroup = undefined;
+    this.cctvFovMats.clear();
   }
 
   private buildRack(): void {
@@ -499,7 +552,8 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     }
 
     this.scene.add(group);
-    this.frameWarehouseCamera(0, L, 0, W);
+    this.rebuildCctvLayer();
+    this.applyCctvView();
   }
 
   /** Kệ trống: trụ + beam cam + mâm xanh, không vẽ hàng. */
@@ -977,6 +1031,211 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     });
   }
 
+  get selectedCctv(): JwCctvCam | null {
+    return this.cctvCams.find((c) => c.id === this.selectedCctvId) || this.cctvCams[0] || null;
+  }
+
+  get cctvHudText(): string {
+    const cam = this.selectedCctv;
+    if (!cam) return '';
+    const zone = this.selectedCctvLabel ? ` · ${this.selectedCctvLabel}` : '';
+    return `${cam.id}${zone} · ${cam.building.toUpperCase()} · FOV ${Math.round(cam.fovDeg)}°`;
+  }
+
+  setCctvViewMode(mode: 'eye' | 'overview', event?: Event): void {
+    event?.stopPropagation();
+    this.cctvViewMode = mode;
+    this.applyCctvView();
+  }
+
+  private rebuildCctvLayer(): void {
+    if (!this.scene) return;
+    this.disposeCctvGroup();
+    if (this.mode !== 'warehouse' || !this.showCctv || !this.cctvCams.length) return;
+
+    const group = new THREE.Group();
+    this.cctvGroup = group;
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+    const lensMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+    const bodyGeo = new THREE.BoxGeometry(0.22, 0.16, 0.28);
+    const lensGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.1, 12);
+    lensGeo.rotateX(Math.PI / 2);
+
+    for (const cam of this.cctvCams) {
+      const rig = new THREE.Group();
+      rig.position.copy(this.cctvWorldPos(cam));
+      rig.lookAt(this.cctvLookAt(cam, Math.max(2, cam.rangeM * 0.5)));
+
+      const fovMat = new THREE.MeshLambertMaterial({
+        color: 0xfbbf24,
+        transparent: true,
+        opacity: 0.16,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      this.cctvFovMats.set(cam.id, fovMat);
+      const vFov = this.cctvVerticalFovDeg(cam, 1.333);
+      const fovMesh = new THREE.Mesh(this.makeFovGeometry(cam.fovDeg, vFov, cam.rangeM), fovMat);
+      fovMesh.userData = { cctvId: cam.id, kind: 'fov' };
+      rig.add(fovMesh);
+
+      const outline = new THREE.LineSegments(
+        new THREE.EdgesGeometry(fovMesh.geometry),
+        new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.55 })
+      );
+      outline.userData = { cctvId: cam.id, kind: 'fov-line' };
+      rig.add(outline);
+
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.userData = { cctvId: cam.id, kind: 'body' };
+      rig.add(body);
+      const lens = new THREE.Mesh(lensGeo, lensMat);
+      lens.position.z = -0.18;
+      lens.userData = { cctvId: cam.id, kind: 'body' };
+      rig.add(lens);
+
+      const hit = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55, 12, 12),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hit.userData = { cctvId: cam.id, kind: 'hit' };
+      rig.add(hit);
+
+      const badge = this.makeCctvBadge(cam.num, cam.required);
+      badge.position.set(0, 0.28, 0);
+      badge.userData = { cctvId: cam.id, kind: 'badge' };
+      rig.add(badge);
+
+      rig.userData = { cctvId: cam.id };
+      group.add(rig);
+    }
+
+    this.scene.add(group);
+    this.updateCctvHighlight();
+  }
+
+  private makeCctvBadge(num: number, required?: boolean): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.arc(64, 64, 54, 0, Math.PI * 2);
+      ctx.fillStyle = required ? '#d97706' : '#0f766e';
+      ctx.fill();
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 56px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(num), 64, 68);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.7, 0.7, 1);
+    return sprite;
+  }
+
+  private makeFovGeometry(hFovDeg: number, vFovDeg: number, rangeM: number): THREE.BufferGeometry {
+    const hw = Math.tan((hFovDeg * Math.PI) / 360) * rangeM;
+    const hh = Math.tan((vFovDeg * Math.PI) / 360) * rangeM;
+    const o = new THREE.Vector3(0, 0, 0);
+    const c = [
+      new THREE.Vector3(-hw, hh, -rangeM),
+      new THREE.Vector3(hw, hh, -rangeM),
+      new THREE.Vector3(hw, -hh, -rangeM),
+      new THREE.Vector3(-hw, -hh, -rangeM)
+    ];
+    const pos: number[] = [];
+    const tri = (a: THREE.Vector3, b: THREE.Vector3, d: THREE.Vector3) => {
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z, d.x, d.y, d.z);
+    };
+    tri(o, c[0], c[1]);
+    tri(o, c[1], c[2]);
+    tri(o, c[2], c[3]);
+    tri(o, c[3], c[0]);
+    tri(c[0], c[3], c[2]);
+    tri(c[0], c[2], c[1]);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  private cctvWorldPos(cam: JwCctvCam): THREE.Vector3 {
+    return new THREE.Vector3(cam.xM, this.cctvMountHM, cam.yM);
+  }
+
+  private cctvLookAt(cam: JwCctvCam, dist: number): THREE.Vector3 {
+    const rad = (cam.headingDeg * Math.PI) / 180;
+    const pitch = (this.cctvPitchDeg * Math.PI) / 180;
+    return new THREE.Vector3(
+      cam.xM + Math.cos(rad) * dist * Math.cos(pitch),
+      this.cctvMountHM - Math.sin(pitch) * dist,
+      cam.yM + Math.sin(rad) * dist * Math.cos(pitch)
+    );
+  }
+
+  private cctvVerticalFovDeg(cam: JwCctvCam, aspect: number): number {
+    const h = (cam.fovDeg * Math.PI) / 180;
+    const a = Math.max(aspect, 0.5);
+    return (2 * Math.atan(Math.tan(h / 2) / a) * 180) / Math.PI;
+  }
+
+  private applyCctvView(): void {
+    this.updateCctvHighlight();
+    const cam = this.selectedCctv;
+    if (this.mode === 'warehouse' && this.showCctv && this.cctvViewMode === 'eye' && cam) {
+      this.lookThroughCctv(cam);
+      return;
+    }
+    this.restoreOverviewCamera();
+  }
+
+  private updateCctvHighlight(): void {
+    if (!this.cctvGroup) return;
+    const eye = this.showCctv && this.cctvViewMode === 'eye';
+    this.cctvGroup.children.forEach((obj) => {
+      const rig = obj as THREE.Group;
+      const id = String(rig.userData['cctvId'] || '');
+      const on = id === this.selectedCctvId;
+      rig.visible = !(eye && on);
+      const mat = this.cctvFovMats.get(id);
+      if (mat) {
+        mat.color.setHex(on ? 0xf59e0b : 0xfbbf24);
+        mat.opacity = on ? 0.28 : 0.12;
+      }
+    });
+  }
+
+  private lookThroughCctv(cam: JwCctvCam): void {
+    if (!this.camera || !this.controls) return;
+    const aspect = this.camera.aspect || 1.4;
+    this.camera.fov = this.cctvVerticalFovDeg(cam, aspect);
+    this.camera.near = 0.12;
+    this.camera.far = Math.max(120, cam.rangeM * 4 + 40);
+    this.camera.updateProjectionMatrix();
+    const pos = this.cctvWorldPos(cam);
+    const target = this.cctvLookAt(cam, Math.min(10, Math.max(4, cam.rangeM * 0.45)));
+    this.camera.position.copy(pos);
+    this.controls.target.copy(target);
+    this.controls.enabled = false;
+    this.controls.update();
+  }
+
+  private restoreOverviewCamera(): void {
+    if (!this.camera || !this.controls) return;
+    this.controls.enabled = true;
+    this.camera.fov = 42;
+    this.camera.updateProjectionMatrix();
+    this.controls.maxPolarAngle = Math.PI / 2.02;
+    this.frameWarehouseCamera(0, this.floorLengthM, 0, this.floorWidthM);
+  }
+
   private onResize(): void {
     const host = this.canvasHost?.nativeElement;
     if (!host || !this.camera || !this.renderer) return;
@@ -985,6 +1244,9 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    if (this.showCctv && this.cctvViewMode === 'eye' && this.selectedCctv) {
+      this.lookThroughCctv(this.selectedCctv);
+    }
   }
 
   private animate = (): void => {

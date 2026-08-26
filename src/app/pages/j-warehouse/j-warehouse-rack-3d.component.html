@@ -6,7 +6,25 @@
       <span class="jw-rack3d__legend-item jw-rack3d__legend-item--wall">{{ t3d('legend.wall') }}</span>
       <span class="jw-rack3d__legend-item jw-rack3d__legend-item--raised">{{ t3d('legend.raised') }}</span>
       <span class="jw-rack3d__legend-item jw-rack3d__legend-item--door">{{ t3d('legend.door') }}</span>
-      <span class="jw-rack3d__hint">{{ t3d('hint.warehouse') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--cam" *ngIf="showCctv">{{ t3d('legend.cam') }}</span>
+      <span class="jw-rack3d__legend-item jw-rack3d__legend-item--fov" *ngIf="showCctv">{{ t3d('legend.fov') }}</span>
+      <span class="jw-rack3d__hint">{{ showCctv ? (cctvViewMode === 'eye' ? t3d('hint.cctvEye') : t3d('hint.cctvOverview')) : t3d('hint.warehouse') }}</span>
+      <div class="jw-rack3d__cctv-modes" *ngIf="showCctv">
+        <button
+          type="button"
+          class="jw-rack3d__cctv-mode"
+          [class.jw-rack3d__cctv-mode--on]="cctvViewMode === 'overview'"
+          (click)="setCctvViewMode('overview', $event)">
+          {{ t3d('cctv.overview') }}
+        </button>
+        <button
+          type="button"
+          class="jw-rack3d__cctv-mode"
+          [class.jw-rack3d__cctv-mode--on]="cctvViewMode === 'eye'"
+          (click)="setCctvViewMode('eye', $event)">
+          {{ t3d('cctv.eye') }}
+        </button>
+      </div>
     </ng-container>
     <ng-template #blockLegend>
       <span class="jw-rack3d__legend-item jw-rack3d__legend-item--empty">{{ t3d('legend.empty') }}</span>
@@ -26,5 +44,10 @@
     #canvasHost
     class="jw-rack3d__canvas"
     (click)="onCanvasClick($event)">
+    <div class="jw-rack3d__cctv-hud" *ngIf="showCctv && cctvViewMode === 'eye' && selectedCctv">
+      <span class="jw-rack3d__cctv-hud-rec" aria-hidden="true"></span>
+      <strong>{{ t3d('cctv.watching') }}</strong>
+      <span>{{ cctvHudText }}</span>
+    </div>
   </div>
 </div>

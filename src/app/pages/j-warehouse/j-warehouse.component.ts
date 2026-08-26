@@ -282,6 +282,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'btn.removePallet': 'Xóa pallet',
     'btn.download3d': 'Tải hình 3D',
     'title.3dModel': 'Mô hình 3D — toàn bộ kệ kho',
+    'title.3dCamera': 'Mô hình 3D — góc nhìn camera',
     'title.3dView': 'Xem toàn bộ kệ kho ở dạng 3D',
     'btn.utilization': 'Lấp đầy',
     'title.utilization': 'Xem tỷ lệ lấp đầy kệ (heatmap)',
@@ -342,6 +343,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.resetLayout': 'Khôi phục layout kệ mặc định? Thay đổi chưa lưu sẽ mất.',
     'alert.deleteBlock': 'Xóa block {{code}}?',
     'cctv.hint': 'Kéo camera để đổi vị trí. Kéo núm vàng để xoay góc. Sao = camera bắt buộc (không xóa được).',
+    'cctv.hint3d': 'Chọn camera bên phải để xem góc nhìn 3D. Bấm Tổng quan để xoay mô hình và thấy tầm phủ.',
     'cctv.live': 'TRỰC TIẾP',
     'cctv.online': 'Online',
     'cctv.coverage': 'Tầm phủ',
@@ -469,6 +471,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'btn.removePallet': 'Remove pallet',
     'btn.download3d': 'Download 3D',
     'title.3dModel': '3D model — full warehouse',
+    'title.3dCamera': '3D model — camera viewpoint',
     'title.3dView': 'View the full warehouse in 3D',
     'btn.utilization': 'Utilization',
     'title.utilization': 'Show rack utilization heatmap',
@@ -529,6 +532,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.resetLayout': 'Restore the default rack layout? Unsaved changes will be lost.',
     'alert.deleteBlock': 'Delete block {{code}}?',
     'cctv.hint': 'Drag a camera to move it. Drag the yellow handle to rotate. Star = required camera (cannot delete).',
+    'cctv.hint3d': 'Select a camera on the right to see its 3D viewpoint. Click Overview to orbit and see coverage cones.',
     'cctv.live': 'LIVE',
     'cctv.online': 'Online',
     'cctv.coverage': 'Coverage',
@@ -923,7 +927,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.selectedCctvId = cam.id;
     this.selectedBlock = null;
     this.showScanInput = false;
-    if (focus) setTimeout(() => this.focusCctv(cam), 0);
+    if (this.show3D) this.syncRack3dInputs();
+    if (focus && !this.show3D) setTimeout(() => this.focusCctv(cam), 0);
   }
 
   onCctvMovePointerDown(cam: JwCctvCam, event: PointerEvent): void {
@@ -959,6 +964,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       /* ignore */
     }
     this.selectedCctvId = this.cctvCams.some((c) => c.id === keepId) ? keepId : this.cctvCams[0]?.id ?? null;
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   addCctv(building: 'j5' | 'j4', event?: Event): void {
@@ -1009,6 +1015,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.syncCctvNums();
     this.saveCctvLayout();
     this.selectedCctvId = keep?.id ?? this.visibleCctvCams[0]?.id ?? this.cctvCams[0]?.id ?? null;
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   private syncCctvNums(): void {
@@ -1658,6 +1665,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     } else {
       this.selectedCctvId = null;
     }
+    if (this.show3D) this.syncRack3dInputs();
   }
 
   /** Tách nhãn block xuống dòng nếu dài (VD R281 → R28 / 1). */
@@ -1779,8 +1787,17 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       const ref = this.rack3dHostRef.createComponent(Rack3dCtor);
       this.rack3dComponentRef = ref;
       this.syncRack3dInputs();
-      this.rack3dSlotPickSub = ref.instance.slotPick.subscribe((pick) =>
-        this.onRack3dPick(pick as unknown as { level: number; pos: JwPos; blockCode?: string })
+      this.rack3dSlotPickSub = new Subscription();
+      this.rack3dSlotPickSub.add(
+        ref.instance.slotPick.subscribe((pick) =>
+          this.onRack3dPick(pick as unknown as { level: number; pos: JwPos; blockCode?: string })
+        )
+      );
+      this.rack3dSlotPickSub.add(
+        ref.instance.cctvPick.subscribe((id) => {
+          const cam = this.cctvCams.find((c) => c.id === id);
+          if (cam) this.selectCctv(cam, undefined, false);
+        })
       );
       ref.changeDetectorRef.detectChanges();
     } catch (err) {
@@ -1827,6 +1844,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     setInput('selectedLevel', this.selectedLevel);
     setInput('selectedPos', this.selectedPos);
     setInput('selectedBlockCode', this.selectedBlock?.code || null);
+    setInput('showCctv', this.showCctv);
+    setInput('cctvCams', this.cctvCams);
+    setInput('selectedCctvId', this.selectedCctvId);
+    setInput('selectedCctvLabel', this.selectedCctvCam ? this.cctvCamLabel(this.selectedCctvCam) : '');
     if (changedKeys.length) {
       const fakeChanges: Record<string, { firstChange: boolean; currentValue: unknown }> = {};
       for (const k of changedKeys) fakeChanges[k] = { firstChange: false, currentValue: inst[k] };

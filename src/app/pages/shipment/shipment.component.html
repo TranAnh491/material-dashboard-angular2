@@ -259,8 +259,8 @@
                   </td>
                 </tr>
           
-                    <ng-container *ngFor="let shipment of filteredShipments; let i = index; trackBy: trackByShipmentId">
-                      <tr *ngIf="i === 0 || isFirstOfShipment(i)" class="shipment-group-header">
+                    <ng-container *ngFor="let shipment of displayedShipments; let i = index; trackBy: trackByShipmentId">
+                      <tr *ngIf="(i + displayedShipmentsOffset) === 0 || isFirstOfShipment(i + displayedShipmentsOffset)" class="shipment-group-header">
                         <td colspan="29">
                           <ng-container *ngIf="getShipmentGroupSummary(shipment) as g">
                           <div class="shipment-group-card">
@@ -326,11 +326,11 @@
                       </tr>
 
                       <tr
-                        [class.shipment-group-first]="i === 0 || isFirstOfShipment(i)"
-                        [class.shipment-group-last]="isLastOfShipment(i)"
+                        [class.shipment-group-first]="(i + displayedShipmentsOffset) === 0 || isFirstOfShipment(i + displayedShipmentsOffset)"
+                        [class.shipment-group-last]="isLastOfShipment(i + displayedShipmentsOffset)"
                         [class.checked-row]="isShipmentChecked(shipment)"
-                        [class.shipment-separator]="isFirstOfShipment(i)">
-            <td class="row-header">{{i + 1}}</td>
+                        [class.shipment-separator]="isFirstOfShipment(i + displayedShipmentsOffset)">
+            <td class="row-header">{{i + displayedShipmentsOffset + 1}}</td>
             
             <!-- Ngày Import -->
             <td>
@@ -573,6 +573,24 @@
                     </ng-container>
         </tbody>
       </table>
+
+      <div class="shipment-pager" *ngIf="totalShipmentGroupsCount > 0">
+        <span class="shipment-pager__info">
+          Hiển thị shipment {{ paginationGroupFrom }} - {{ paginationGroupTo }} / {{ totalShipmentGroupsCount }}
+        </span>
+        <div class="shipment-pager__controls">
+          <select class="shipment-pager__size" [ngModel]="groupsPerPage" (ngModelChange)="onGroupsPerPageChange($event)">
+            <option *ngFor="let n of groupsPerPageOptions" [ngValue]="n">{{ n }} shipment / trang</option>
+          </select>
+          <button type="button" class="shipment-pager__btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+            <i class="material-icons">chevron_left</i>
+          </button>
+          <span class="shipment-pager__page">{{ currentPage }} / {{ totalPages }}</span>
+          <button type="button" class="shipment-pager__btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+            <i class="material-icons">chevron_right</i>
+          </button>
+        </div>
+      </div>
               </div>
             </div>
           </div>
