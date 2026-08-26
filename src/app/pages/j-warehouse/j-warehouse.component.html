@@ -1283,7 +1283,7 @@
 
         <div
           class="jw-cctv-monitor"
-          *ngIf="(showCctv && !show3D && !showUtilization) ? selectedCctvCam : null as cam"
+          *ngIf="!cctvLiveHidden && (showCctv && !show3D && !showUtilization) ? selectedCctvCam : null as cam"
           (click)="$event.stopPropagation()">
           <div class="jw-cctv-monitor__head">
             <span class="jw-cctv-monitor__rec" aria-hidden="true"></span>
@@ -1291,6 +1291,13 @@
             <strong>{{ cam.id }}</strong>
             <span class="jw-cctv-monitor__star" *ngIf="cam.required" [title]="t('cctv.required')">★</span>
             <span class="jw-cctv-monitor__bldg">{{ cam.building | uppercase }}</span>
+            <button
+              type="button"
+              class="jw-cctv-monitor__close"
+              [title]="t('cctv.hideLive')"
+              (click)="hideCctvLive($event)">
+              <i class="material-icons">close</i>
+            </button>
           </div>
           <svg class="jw-cctv-monitor__view" [attr.viewBox]="cctvLiveViewBox(cam)" preserveAspectRatio="xMidYMid slice">
             <rect
@@ -1339,6 +1346,15 @@
             {{ t('cctv.watch') }} · {{ cctvCamLabel(cam) }}
           </div>
         </div>
+
+        <button
+          type="button"
+          class="jw-cctv-monitor-show"
+          *ngIf="cctvLiveHidden && showCctv && !show3D && !showUtilization && selectedCctvCam"
+          (click)="toggleCctvLive($event)">
+          <i class="material-icons">videocam</i>
+          {{ t('cctv.showLive') }}
+        </button>
 
         <div class="jw-util" *ngIf="showUtilization" (click)="$event.stopPropagation()">
           <div class="jw-util__top">
@@ -1502,8 +1518,12 @@
               </dd>
             </div>
             <div class="jw-fields__row">
-              <dt>{{ t('cctv.online') }}</dt>
-              <dd class="jw-fields__accent">{{ t('cctv.live') }}</dd>
+              <dt>{{ t('cctv.live') }}</dt>
+              <dd>
+                <button type="button" class="jw-btn jw-btn--outline" (click)="toggleCctvLive($event)">
+                  {{ cctvLiveHidden ? t('cctv.showLive') : t('cctv.hideLive') }}
+                </button>
+              </dd>
             </div>
           </dl>
           <div class="jw-detail__btns" *ngIf="canEditCctv">

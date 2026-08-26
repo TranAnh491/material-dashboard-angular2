@@ -350,6 +350,8 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'cctv.zone': 'Khu vực',
     'cctv.list': 'Danh sách camera',
     'cctv.watch': 'Đang theo dõi',
+    'cctv.hideLive': 'Ẩn',
+    'cctv.showLive': 'Hiện trực tiếp',
     'cctv.reset': 'Khôi phục vị trí camera',
     'cctv.resetConfirm': 'Khôi phục danh sách camera mặc định? Camera đã thêm/xóa và dấu sao sẽ mất.',
     'cctv.count': '{{n}} camera · J5: {{j5}} · J4: {{j4}} · bắt buộc: {{req}}',
@@ -535,6 +537,8 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'cctv.zone': 'Zone',
     'cctv.list': 'Camera list',
     'cctv.watch': 'Watching',
+    'cctv.hideLive': 'Hide',
+    'cctv.showLive': 'Show live view',
     'cctv.reset': 'Reset camera positions',
     'cctv.resetConfirm': 'Restore the default camera list? Added/removed cameras and stars will be lost.',
     'cctv.count': '{{n}} cameras · J5: {{j5}} · J4: {{j4}} · required: {{req}}',
@@ -662,6 +666,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private readonly LAYOUT_STORAGE_KEY = 'j-warehouse-layout-v14';
   private readonly CCTV_STORAGE_KEY = 'j-warehouse-cctv-v2';
   private readonly CCTV_STORAGE_KEY_V1 = 'j-warehouse-cctv-v1';
+  private readonly CCTV_LIVE_HIDDEN_KEY = 'j-warehouse-cctv-live-hidden-v1';
   private readonly EXTRA_PALLET_STORAGE_KEY = 'j-warehouse-extra-pallets-v1';
   private readonly LANG_STORAGE_KEY = 'j-warehouse-lang-v1';
   private readonly LAYOUT_SNAP_M = 0.05;
@@ -842,6 +847,18 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   get canEditCctv(): boolean {
     return this.showCctv;
+  }
+
+  toggleCctvLive(event?: Event): void {
+    event?.stopPropagation();
+    this.cctvLiveHidden = !this.cctvLiveHidden;
+    this.persistCctvLiveHidden();
+  }
+
+  hideCctvLive(event?: Event): void {
+    event?.stopPropagation();
+    this.cctvLiveHidden = true;
+    this.persistCctvLiveHidden();
   }
 
   cctvScreenX(cam: JwCctvCam): number {
@@ -1152,6 +1169,22 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       label: s.label ? String(s.label) : undefined,
       required: !!s.required
     };
+  }
+
+  private persistCctvLiveHidden(): void {
+    try {
+      localStorage.setItem(this.CCTV_LIVE_HIDDEN_KEY, this.cctvLiveHidden ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private loadCctvLiveHidden(): void {
+    try {
+      this.cctvLiveHidden = localStorage.getItem(this.CCTV_LIVE_HIDDEN_KEY) === '1';
+    } catch {
+      this.cctvLiveHidden = false;
+    }
   }
 
   private saveCctvLayout(): void {
@@ -2199,6 +2232,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   selectedBlock: JwBlock | null = null;
   selectedCctvId: string | null = null;
   cctvDraggingId: string | null = null;
+  cctvLiveHidden = false;
   selectedLevel = 1;
   selectedPos: JwPos = 'A';
 
@@ -2409,6 +2443,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.loadLang();
     this.loadSavedLayout();
     this.loadCctvLayout();
+    this.loadCctvLiveHidden();
     this.loadExtraPallets();
     void this.loadSlotPallets();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
