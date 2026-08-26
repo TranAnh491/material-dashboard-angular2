@@ -153,6 +153,24 @@ export interface JwWcZone {
   exit?: { xM: number; yM: number; wM: number; hM: number };
 }
 
+/** Camera CCTV trên sơ đồ — tọa độ mét theo xưởng (J5: y=0 mặt C; J4: y=0 mặt E). */
+export interface JwCctvCam {
+  id: string;
+  num: number;
+  building: 'j5' | 'j4';
+  xM: number;
+  yM: number;
+  /** 0° = +X (mặt D), 90° = +Y (J5: mặt B / J4: mặt C). */
+  headingDeg: number;
+  fovDeg: number;
+  rangeM: number;
+  labelKey: string;
+  /** Nhãn tùy chỉnh khi thêm camera mới. */
+  label?: string;
+  /** Camera quan trọng — bắt buộc phải có, không xóa được. */
+  required?: boolean;
+}
+
 /** Mũi tên kích thước khu vực trên bản vẽ kỹ thuật */
 export interface JwTechDim {
   id: string;
@@ -322,7 +340,47 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.clearPalletFail': 'Lỗi khi xóa pallet. Vui lòng thử lại.',
     'alert.confirmClearPallet': 'Xóa pallet "{{code}}" khỏi vị trí {{slot}}?',
     'alert.resetLayout': 'Khôi phục layout kệ mặc định? Thay đổi chưa lưu sẽ mất.',
-    'alert.deleteBlock': 'Xóa block {{code}}?'
+    'alert.deleteBlock': 'Xóa block {{code}}?',
+    'cctv.hint': 'Kéo camera để đổi vị trí. Kéo núm vàng để xoay góc. Sao = camera bắt buộc (không xóa được).',
+    'cctv.live': 'TRỰC TIẾP',
+    'cctv.online': 'Online',
+    'cctv.coverage': 'Tầm phủ',
+    'cctv.heading': 'Góc chiếu',
+    'cctv.building': 'Xưởng',
+    'cctv.zone': 'Khu vực',
+    'cctv.list': 'Danh sách camera',
+    'cctv.watch': 'Đang theo dõi',
+    'cctv.reset': 'Khôi phục vị trí camera',
+    'cctv.resetConfirm': 'Khôi phục danh sách camera mặc định? Camera đã thêm/xóa và dấu sao sẽ mất.',
+    'cctv.count': '{{n}} camera · J5: {{j5}} · J4: {{j4}} · bắt buộc: {{req}}',
+    'cctv.addJ5': 'Thêm J5',
+    'cctv.addJ4': 'Thêm J4',
+    'cctv.delete': 'Xóa camera',
+    'cctv.deleteConfirm': 'Xóa {{id}} khỏi {{bldg}}?',
+    'cctv.required': 'Bắt buộc',
+    'cctv.requiredHint': 'Đánh dấu camera quan trọng — bắt buộc phải có, không xóa được',
+    'cctv.requiredLocked': 'Camera có sao là bắt buộc, không thể xóa.',
+    'cctv.camCustom': 'Camera mới',
+    'cctv.cam01': 'IQC / cửa mặt A',
+    'cctv.cam02': 'Kiểm tra đầu vào',
+    'cctv.cam03': 'Kho hóa chất · ESD',
+    'cctv.cam04': 'Kho mát',
+    'cctv.cam05': 'VP Kho',
+    'cctv.cam06': 'Lối kệ Y02–Y06',
+    'cctv.cam07': 'Lối kệ Y07–Y11',
+    'cctv.cam08': 'Lối kệ Y12–Y15',
+    'cctv.cam09': 'Cửa cuốn FG inbound',
+    'cctv.cam10': 'Nền cao / xuất hàng',
+    'cctv.cam11': 'Dock / mặt D',
+    'cctv.cam12': 'Nhận NVL / WC Nữ',
+    'cctv.cam13': 'Hàng không phù hợp',
+    'cctv.cam14': 'Kho mát J4',
+    'cctv.cam15': 'Lối kệ Tây J4',
+    'cctv.cam16': 'Lối kệ giữa J4',
+    'cctv.cam17': 'Lối kệ Đông J4',
+    'cctv.cam18': 'Nền cao J4',
+    'cctv.cam19': 'Cửa cuốn mặt D J4',
+    'cctv.cam20': 'WC Nam / mặt A J4'
   },
   en: {
     'drawMode.kyThuat': 'Technical Drawing',
@@ -467,7 +525,47 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.clearPalletFail': 'Failed to remove pallet. Please try again.',
     'alert.confirmClearPallet': 'Remove pallet "{{code}}" from slot {{slot}}?',
     'alert.resetLayout': 'Restore the default rack layout? Unsaved changes will be lost.',
-    'alert.deleteBlock': 'Delete block {{code}}?'
+    'alert.deleteBlock': 'Delete block {{code}}?',
+    'cctv.hint': 'Drag a camera to move it. Drag the yellow handle to rotate. Star = required camera (cannot delete).',
+    'cctv.live': 'LIVE',
+    'cctv.online': 'Online',
+    'cctv.coverage': 'Coverage',
+    'cctv.heading': 'View angle',
+    'cctv.building': 'Building',
+    'cctv.zone': 'Zone',
+    'cctv.list': 'Camera list',
+    'cctv.watch': 'Watching',
+    'cctv.reset': 'Reset camera positions',
+    'cctv.resetConfirm': 'Restore the default camera list? Added/removed cameras and stars will be lost.',
+    'cctv.count': '{{n}} cameras · J5: {{j5}} · J4: {{j4}} · required: {{req}}',
+    'cctv.addJ5': 'Add J5',
+    'cctv.addJ4': 'Add J4',
+    'cctv.delete': 'Delete camera',
+    'cctv.deleteConfirm': 'Delete {{id}} from {{bldg}}?',
+    'cctv.required': 'Required',
+    'cctv.requiredHint': 'Mark as important — required camera, cannot be deleted',
+    'cctv.requiredLocked': 'Starred cameras are required and cannot be deleted.',
+    'cctv.camCustom': 'New camera',
+    'cctv.cam01': 'IQC / door A',
+    'cctv.cam02': 'Incoming inspection',
+    'cctv.cam03': 'Chemical · ESD',
+    'cctv.cam04': 'Cold storage',
+    'cctv.cam05': 'WH office',
+    'cctv.cam06': 'Rack aisle Y02–Y06',
+    'cctv.cam07': 'Rack aisle Y07–Y11',
+    'cctv.cam08': 'Rack aisle Y12–Y15',
+    'cctv.cam09': 'FG inbound shutter',
+    'cctv.cam10': 'Raised floor / shipping',
+    'cctv.cam11': 'Dock / face D',
+    'cctv.cam12': 'Receiving / WC Female',
+    'cctv.cam13': 'Non-conforming goods',
+    'cctv.cam14': 'J4 cold storage',
+    'cctv.cam15': 'J4 west rack aisle',
+    'cctv.cam16': 'J4 mid rack aisle',
+    'cctv.cam17': 'J4 east rack aisle',
+    'cctv.cam18': 'J4 raised floor',
+    'cctv.cam19': 'J4 face D shutter',
+    'cctv.cam20': 'J4 WC Male / door A'
   }
 };
 
@@ -562,6 +660,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private readonly LOCATION_HISTORY_COLLECTION = 'material-location-history';
   private readonly SYNC_FACTORIES = ['ASM1', 'ASM2'] as const;
   private readonly LAYOUT_STORAGE_KEY = 'j-warehouse-layout-v14';
+  private readonly CCTV_STORAGE_KEY = 'j-warehouse-cctv-v2';
+  private readonly CCTV_STORAGE_KEY_V1 = 'j-warehouse-cctv-v1';
   private readonly EXTRA_PALLET_STORAGE_KEY = 'j-warehouse-extra-pallets-v1';
   private readonly LANG_STORAGE_KEY = 'j-warehouse-lang-v1';
   private readonly LAYOUT_SNAP_M = 0.05;
@@ -641,6 +741,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Khu vực Nhận nguyên liệu: cách mặt A 1m, mặt C 6m, rộng 10×18m (vạch đứt, không phải vách cứng). */
   private readonly floorZoneDefs = this.buildFloorZoneDefs();
 
+  /** 20 camera CCTV — 12 J5 + 8 J4. Có thể kéo đổi vị trí / góc chiếu. */
+  cctvCams: JwCctvCam[] = this.buildCctvCams();
+
   readonly WC_EXIT_CLEARANCE_M = 1.5;
 
   /** Dãy kệ mặc định R1–R28 theo pitch; thêm R29 (chỉ R294–R296) sau lối 2.9m */
@@ -701,6 +804,441 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   get showTechDims(): boolean {
     return this.drawMode === 'ky-thuat';
+  }
+
+  get showCctv(): boolean {
+    return this.drawMode === 'camera';
+  }
+
+  get visibleCctvCams(): JwCctvCam[] {
+    return this.cctvCams.filter((c) => c.building === 'j5' || this.showJ4);
+  }
+
+  get selectedCctvCam(): JwCctvCam | null {
+    return this.cctvCams.find((c) => c.id === this.selectedCctvId) || null;
+  }
+
+  get cctvJ5Count(): number {
+    return this.cctvCams.filter((c) => c.building === 'j5').length;
+  }
+
+  get cctvJ4Count(): number {
+    return this.cctvCams.filter((c) => c.building === 'j4').length;
+  }
+
+  get cctvRequiredCount(): number {
+    return this.cctvCams.filter((c) => c.required).length;
+  }
+
+  cctvCamLabel(cam: JwCctvCam): string {
+    if (cam.label) return cam.label;
+    return this.t(cam.labelKey || 'cctv.camCustom');
+  }
+
+  cctvHeadingLabel(cam: JwCctvCam): string {
+    const d = ((Math.round(cam.headingDeg) % 360) + 360) % 360;
+    return `${d}°`;
+  }
+
+  get canEditCctv(): boolean {
+    return this.showCctv;
+  }
+
+  cctvScreenX(cam: JwCctvCam): number {
+    return this.meterX(cam.xM);
+  }
+
+  cctvScreenY(cam: JwCctvCam): number {
+    return cam.building === 'j4' ? this.j4MeterY(cam.yM) : this.meterY(cam.yM);
+  }
+
+  cctvAimX(cam: JwCctvCam): number {
+    const rad = (cam.headingDeg * Math.PI) / 180;
+    return this.cctvScreenX(cam) + this.meterW(cam.rangeM) * Math.cos(rad);
+  }
+
+  cctvAimY(cam: JwCctvCam): number {
+    const rad = (cam.headingDeg * Math.PI) / 180;
+    return this.cctvScreenY(cam) + this.meterW(cam.rangeM) * Math.sin(rad);
+  }
+
+  cctvFovPath(cam: JwCctvCam): string {
+    const cx = this.cctvScreenX(cam);
+    const cy = this.cctvScreenY(cam);
+    const range = this.meterW(cam.rangeM);
+    const start = ((cam.headingDeg - cam.fovDeg / 2) * Math.PI) / 180;
+    const end = ((cam.headingDeg + cam.fovDeg / 2) * Math.PI) / 180;
+    const x1 = cx + range * Math.cos(start);
+    const y1 = cy + range * Math.sin(start);
+    const x2 = cx + range * Math.cos(end);
+    const y2 = cy + range * Math.sin(end);
+    const large = cam.fovDeg > 180 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${range} ${range} 0 ${large} 1 ${x2} ${y2} Z`;
+  }
+
+  cctvLiveViewBox(cam: JwCctvCam): string {
+    const cx = this.cctvScreenX(cam);
+    const cy = this.cctvScreenY(cam);
+    const r = this.meterW(cam.rangeM);
+    const rad = (cam.headingDeg * Math.PI) / 180;
+    const vx = cx + Math.cos(rad) * r * 0.38;
+    const vy = cy + Math.sin(rad) * r * 0.38;
+    const s = r * 1.85;
+    return `${vx - s / 2} ${vy - s / 2} ${s} ${s}`;
+  }
+
+  trackCctv(_: number, cam: JwCctvCam): string {
+    return cam.id;
+  }
+
+  onCctvClick(cam: JwCctvCam, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (this.cctvSuppressClick) {
+      this.cctvSuppressClick = false;
+      return;
+    }
+    this.selectCctv(cam, event, false);
+  }
+
+  selectCctv(cam: JwCctvCam, event?: Event, focus = true): void {
+    event?.stopPropagation();
+    this.selectedCctvId = cam.id;
+    this.selectedBlock = null;
+    this.showScanInput = false;
+    if (focus) setTimeout(() => this.focusCctv(cam), 0);
+  }
+
+  onCctvMovePointerDown(cam: JwCctvCam, event: PointerEvent): void {
+    if (this.mapTool === 'pan' || event.button !== 0) return;
+    event.stopPropagation();
+    this.selectCctv(cam, event, false);
+    if (!this.canEditCctv) return;
+    const pt = this.clientToCctvMeter(cam, event.clientX, event.clientY);
+    if (!pt) return;
+    this.beginCctvDrag(cam, 'move', pt, event);
+  }
+
+  onCctvAimPointerDown(cam: JwCctvCam, event: PointerEvent): void {
+    if (this.mapTool === 'pan' || event.button !== 0 || !this.canEditCctv) return;
+    event.stopPropagation();
+    event.preventDefault();
+    this.selectCctv(cam, event, false);
+    const pt = this.clientToCctvMeter(cam, event.clientX, event.clientY);
+    if (!pt) return;
+    this.beginCctvDrag(cam, 'aim', pt, event);
+  }
+
+  resetCctvLayout(event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canEditCctv) return;
+    if (!confirm(this.t('cctv.resetConfirm'))) return;
+    const keepId = this.selectedCctvId;
+    this.cctvCams = this.buildCctvCams();
+    try {
+      localStorage.removeItem(this.CCTV_STORAGE_KEY);
+      localStorage.removeItem(this.CCTV_STORAGE_KEY_V1);
+    } catch {
+      /* ignore */
+    }
+    this.selectedCctvId = this.cctvCams.some((c) => c.id === keepId) ? keepId : this.cctvCams[0]?.id ?? null;
+  }
+
+  addCctv(building: 'j5' | 'j4', event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canEditCctv) return;
+    if (this.cctvCams.length >= 40) return;
+    if (building === 'j4' && this.buildingView !== 'j4-j5') {
+      this.setBuildingView('j4-j5');
+    }
+    const same = this.cctvCams.filter((c) => c.building === building).length;
+    const cam: JwCctvCam = {
+      id: 'CAM-tmp',
+      num: 0,
+      building,
+      xM: this.round2(Math.min(this.LENGTH_M - 2, 18 + (same % 8) * 10)),
+      yM: this.round2(Math.min(this.WIDTH_M - 2, 8 + Math.floor(same / 8) * 6)),
+      headingDeg: building === 'j4' ? 90 : 270,
+      fovDeg: 72,
+      rangeM: 18,
+      labelKey: 'cctv.camCustom',
+      required: false
+    };
+    this.cctvCams = [...this.cctvCams, cam];
+    this.syncCctvNums();
+    this.saveCctvLayout();
+    this.selectCctv(cam, event, true);
+  }
+
+  toggleCctvRequired(cam: JwCctvCam, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!this.canEditCctv) return;
+    cam.required = !cam.required;
+    this.saveCctvLayout();
+  }
+
+  removeCctv(cam: JwCctvCam, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!this.canEditCctv) return;
+    if (cam.required) {
+      alert(this.t('cctv.requiredLocked'));
+      return;
+    }
+    if (!confirm(this.t('cctv.deleteConfirm', { id: cam.id, bldg: cam.building.toUpperCase() }))) return;
+    const keep = this.selectedCctvId === cam.id ? null : this.cctvCams.find((c) => c.id === this.selectedCctvId);
+    this.cctvCams = this.cctvCams.filter((c) => c !== cam);
+    this.syncCctvNums();
+    this.saveCctvLayout();
+    this.selectedCctvId = keep?.id ?? this.visibleCctvCams[0]?.id ?? this.cctvCams[0]?.id ?? null;
+  }
+
+  private syncCctvNums(): void {
+    const sel = this.cctvCams.find((c) => c.id === this.selectedCctvId) || null;
+    this.cctvCams.forEach((c, i) => {
+      c.num = i + 1;
+      c.id = `CAM-${String(c.num).padStart(2, '0')}`;
+    });
+    if (sel) this.selectedCctvId = sel.id;
+  }
+
+  private focusCctv(cam: JwCctvCam): void {
+    const el = this.mapViewport?.nativeElement;
+    if (!el) return;
+    const x = this.cctvScreenX(cam) * this.zoom;
+    const y = (this.cctvScreenY(cam) - this.viewBoxMinY) * this.zoom;
+    el.scrollLeft = Math.max(0, x - el.clientWidth / 2);
+    el.scrollTop = Math.max(0, y - el.clientHeight / 2);
+  }
+
+  private beginCctvDrag(
+    cam: JwCctvCam,
+    kind: 'move' | 'aim',
+    pt: { xM: number; yM: number },
+    event: PointerEvent
+  ): void {
+    this.cctvDrag = {
+      kind,
+      cam,
+      origXM: cam.xM,
+      origYM: cam.yM,
+      origHeading: cam.headingDeg,
+      origRange: cam.rangeM,
+      startXM: pt.xM,
+      startYM: pt.yM
+    };
+    this.cctvDragMoved = false;
+    this.cctvDraggingId = cam.id;
+    this.cctvSuppressClick = false;
+    (event.target as Element | null)?.setPointerCapture?.(event.pointerId);
+  }
+
+  private applyCctvDrag(event: PointerEvent): void {
+    const d = this.cctvDrag;
+    if (!d) return;
+    const pt = this.clientToCctvMeter(d.cam, event.clientX, event.clientY);
+    if (!pt) return;
+    const dx = pt.xM - d.startXM;
+    const dy = pt.yM - d.startYM;
+    if (Math.abs(dx) < 0.02 && Math.abs(dy) < 0.02 && !this.cctvDragMoved) return;
+
+    this.ngZone.run(() => {
+      this.cctvDragMoved = true;
+      if (d.kind === 'move') {
+        d.cam.xM = this.snap(Math.max(0.4, Math.min(this.LENGTH_M - 0.4, d.origXM + dx)));
+        d.cam.yM = this.snap(Math.max(0.4, Math.min(this.WIDTH_M - 0.4, d.origYM + dy)));
+      } else {
+        const hx = pt.xM - d.cam.xM;
+        const hy = pt.yM - d.cam.yM;
+        const dist = Math.hypot(hx, hy);
+        if (dist < 0.3) return;
+        let deg = (Math.atan2(hy, hx) * 180) / Math.PI;
+        deg = ((Math.round(deg / 5) * 5) % 360 + 360) % 360;
+        d.cam.headingDeg = deg;
+        d.cam.rangeM = this.snap(Math.max(6, Math.min(40, dist)));
+      }
+    });
+  }
+
+  private endCctvDrag(): void {
+    if (!this.cctvDrag) return;
+    const moved = this.cctvDragMoved;
+    this.ngZone.run(() => {
+      this.cctvDrag = null;
+      this.cctvDraggingId = null;
+      this.cctvDragMoved = false;
+      if (moved) this.saveCctvLayout();
+    });
+    if (moved) this.cctvSuppressClick = true;
+  }
+
+  private clientToCctvMeter(cam: JwCctvCam, clientX: number, clientY: number): { xM: number; yM: number } | null {
+    const svg = this.planSvg?.nativeElement;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const p = pt.matrixTransform(ctm.inverse());
+    const xM = this.VIEW_X0_M + ((p.x - this.floor.x) / this.floor.w) * this.VIEW_LENGTH_M;
+    const yM =
+      cam.building === 'j4'
+        ? ((p.y - this.j4Y) / this.j4H) * this.WIDTH_M
+        : this.VIEW_Y0_M + ((p.y - this.floor.y) / this.floor.h) * this.VIEW_WIDTH_M;
+    return { xM, yM };
+  }
+
+  private loadCctvLayout(): void {
+    try {
+      const raw2 = localStorage.getItem(this.CCTV_STORAGE_KEY);
+      const raw1 = localStorage.getItem(this.CCTV_STORAGE_KEY_V1);
+      if (raw2) {
+        const parsed = JSON.parse(raw2) as {
+          version?: number;
+          cams?: Array<Partial<JwCctvCam>>;
+        };
+        if (parsed?.version === 2 && Array.isArray(parsed.cams) && parsed.cams.length) {
+          const cams = parsed.cams
+            .map((s, i) => this.hydrateCctvCam(s, i))
+            .filter((c): c is JwCctvCam => !!c);
+          if (cams.length) {
+            this.cctvCams = cams;
+            this.syncCctvNums();
+            return;
+          }
+        }
+      }
+      if (!raw1) return;
+      const saved = JSON.parse(raw1) as Array<{
+        id?: string;
+        xM?: number;
+        yM?: number;
+        headingDeg?: number;
+        fovDeg?: number;
+        rangeM?: number;
+      }>;
+      if (!Array.isArray(saved)) return;
+      const byId = new Map(saved.filter((s) => s?.id).map((s) => [s.id as string, s]));
+      for (const cam of this.cctvCams) {
+        const s = byId.get(cam.id);
+        if (!s) continue;
+        if (Number.isFinite(s.xM)) cam.xM = this.round2(Math.max(0.4, Math.min(this.LENGTH_M - 0.4, Number(s.xM))));
+        if (Number.isFinite(s.yM)) cam.yM = this.round2(Math.max(0.4, Math.min(this.WIDTH_M - 0.4, Number(s.yM))));
+        if (Number.isFinite(s.headingDeg)) cam.headingDeg = ((Math.round(Number(s.headingDeg)) % 360) + 360) % 360;
+        if (Number.isFinite(s.fovDeg)) cam.fovDeg = Math.max(30, Math.min(120, Number(s.fovDeg)));
+        if (Number.isFinite(s.rangeM)) cam.rangeM = this.round2(Math.max(6, Math.min(40, Number(s.rangeM))));
+      }
+    } catch (err) {
+      console.error('[JWarehouse] loadCctvLayout failed', err);
+    }
+  }
+
+  private hydrateCctvCam(s: Partial<JwCctvCam>, index: number): JwCctvCam | null {
+    const building = s.building === 'j4' || s.building === 'j5' ? s.building : null;
+    if (!building) return null;
+    const num = Number.isFinite(s.num) ? Number(s.num) : index + 1;
+    return {
+      id: s.id && String(s.id).trim() ? String(s.id) : `CAM-${String(num).padStart(2, '0')}`,
+      num,
+      building,
+      xM: this.round2(Math.max(0.4, Math.min(this.LENGTH_M - 0.4, Number(s.xM) || 52))),
+      yM: this.round2(Math.max(0.4, Math.min(this.WIDTH_M - 0.4, Number(s.yM) || 15))),
+      headingDeg: ((Math.round(Number(s.headingDeg) || 0) % 360) + 360) % 360,
+      fovDeg: Math.max(30, Math.min(120, Number(s.fovDeg) || 72)),
+      rangeM: this.round2(Math.max(6, Math.min(40, Number(s.rangeM) || 18))),
+      labelKey: s.labelKey && String(s.labelKey).trim() ? String(s.labelKey) : 'cctv.camCustom',
+      label: s.label ? String(s.label) : undefined,
+      required: !!s.required
+    };
+  }
+
+  private saveCctvLayout(): void {
+    try {
+      localStorage.setItem(
+        this.CCTV_STORAGE_KEY,
+        JSON.stringify({
+          version: 2,
+          cams: this.cctvCams.map((c) => ({
+            id: c.id,
+            num: c.num,
+            building: c.building,
+            xM: c.xM,
+            yM: c.yM,
+            headingDeg: c.headingDeg,
+            fovDeg: c.fovDeg,
+            rangeM: c.rangeM,
+            labelKey: c.labelKey,
+            label: c.label || undefined,
+            required: !!c.required
+          }))
+        })
+      );
+    } catch (err) {
+      console.error('[JWarehouse] saveCctvLayout failed', err);
+    }
+  }
+
+  private buildCctvCams(): JwCctvCam[] {
+    const aisleY = this.round2(this.OPEN_ZONE_Y_M + 0.3);
+    const roomY = this.round2(this.officeZone.yM - 0.35);
+    const y02 = this.axisXM('Y02');
+    const y04 = this.axisXM('Y04');
+    const y06 = this.axisXM('Y06');
+    const y07 = this.axisXM('Y07');
+    const y10 = this.axisXM('Y10');
+    const y11 = this.axisXM('Y11');
+    const y12 = this.axisXM('Y12');
+    const y13 = this.axisXM('Y13');
+    const y14 = this.axisXM('Y14');
+    const y15 = this.axisXM('Y15');
+    const y18 = this.axisXM('Y18');
+    const mid = (a: number, b: number) => this.round2((a + b) / 2);
+    const mk = (
+      num: number,
+      building: 'j5' | 'j4',
+      xM: number,
+      yM: number,
+      headingDeg: number,
+      fovDeg: number,
+      rangeM: number,
+      labelKey: string
+    ): JwCctvCam => ({
+      id: `CAM-${String(num).padStart(2, '0')}`,
+      num,
+      building,
+      xM: this.round2(xM),
+      yM: this.round2(yM),
+      headingDeg,
+      fovDeg,
+      rangeM,
+      labelKey,
+      required: false
+    });
+
+    return [
+      mk(1, 'j5', 3.2, 26.2, 25, 78, 14, 'cctv.cam01'),
+      mk(2, 'j5', mid(this.OFFICE_IQC_W_M, this.khoMatExtZone.xM), roomY, 90, 80, 13, 'cctv.cam02'),
+      mk(3, 'j5', this.khoHoaChatZone.xM + 2.2, roomY, 90, 80, 13, 'cctv.cam03'),
+      mk(4, 'j5', (this.securedOfficeRoom?.xM || 40) + 9, roomY, 90, 80, 14, 'cctv.cam04'),
+      mk(5, 'j5', y12 - 4, roomY, 90, 78, 12, 'cctv.cam05'),
+      mk(6, 'j5', mid(y02, y06), aisleY, 270, 72, 22, 'cctv.cam06'),
+      mk(7, 'j5', mid(y07, y11), aisleY, 270, 72, 22, 'cctv.cam07'),
+      mk(8, 'j5', mid(y12, y15), aisleY, 270, 72, 22, 'cctv.cam08'),
+      mk(9, 'j5', mid(y13, y14), 28.6, 270, 70, 16, 'cctv.cam09'),
+      mk(10, 'j5', mid(y15, y18), 15, 180, 78, 24, 'cctv.cam10'),
+      mk(11, 'j5', 103.2, 9.2, 180, 78, 22, 'cctv.cam11'),
+      mk(12, 'j5', 6.4, 14, 15, 78, 18, 'cctv.cam12'),
+      mk(13, 'j4', 3.8, 6.4, 270, 78, 14, 'cctv.cam13'),
+      mk(14, 'j4', mid(y04, y10), 7.2, 270, 78, 16, 'cctv.cam14'),
+      mk(15, 'j4', mid(y02, y06), 9.2, 90, 72, 22, 'cctv.cam15'),
+      mk(16, 'j4', mid(y07, y11), 9.2, 90, 72, 22, 'cctv.cam16'),
+      mk(17, 'j4', mid(y12, y15), 9.2, 90, 72, 22, 'cctv.cam17'),
+      mk(18, 'j4', mid(y15, y18), 15, 180, 78, 24, 'cctv.cam18'),
+      mk(19, 'j4', 103.2, 15, 180, 78, 22, 'cctv.cam19'),
+      mk(20, 'j4', 2.2, 26.4, 15, 78, 16, 'cctv.cam20')
+    ];
   }
 
   /**
@@ -1072,6 +1610,20 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.drawMode = mode;
     if (mode !== 'kho' && this.layoutEditMode) {
       this.layoutEditMode = false;
+    }
+    if (mode === 'camera') {
+      this.selectedBlock = null;
+      this.showScanInput = false;
+      if (this.buildingView !== 'j4-j5') {
+        this.setBuildingView('j4-j5');
+      }
+      const first = this.visibleCctvCams[0];
+      this.selectedCctvId = first?.id ?? null;
+      setTimeout(() => {
+        if (first) this.focusCctv(first);
+      }, 80);
+    } else {
+      this.selectedCctvId = null;
     }
   }
 
@@ -1645,6 +2197,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   selectedBlock: JwBlock | null = null;
+  selectedCctvId: string | null = null;
+  cctvDraggingId: string | null = null;
   selectedLevel = 1;
   selectedPos: JwPos = 'A';
 
@@ -1698,6 +2252,18 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     startYM: number;
   } | null = null;
   private layoutDragMoved = false;
+  private cctvDrag: {
+    kind: 'move' | 'aim';
+    cam: JwCctvCam;
+    origXM: number;
+    origYM: number;
+    origHeading: number;
+    origRange: number;
+    startXM: number;
+    startYM: number;
+  } | null = null;
+  private cctvDragMoved = false;
+  private cctvSuppressClick = false;
 
   get pairCount(): number {
     return this.racks.length / 2;
@@ -1842,6 +2408,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.viewOnly = this.resolveViewOnly();
     this.loadLang();
     this.loadSavedLayout();
+    this.loadCctvLayout();
     this.loadExtraPallets();
     void this.loadSlotPallets();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
@@ -2100,6 +2667,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   onBlockPointerDown(block: JwBlock, event: PointerEvent): void {
+    if (this.showCctv) return;
     if (this.mapTool === 'pan') return;
     event.stopPropagation();
     this.selectedBlock = block;
@@ -2168,6 +2736,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
    * Chỉ vào lại Angular zone khi thực sự có thay đổi cần cập nhật UI.
    */
   private onWindowPointerMove = (event: PointerEvent): void => {
+    if (this.cctvDrag) {
+      this.applyCctvDrag(event);
+      return;
+    }
     if (!this.layoutDrag) return;
     const pt = this.clientToMeter(event.clientX, event.clientY);
     if (!pt) return;
@@ -2224,6 +2796,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   };
 
   private onWindowPointerUp = (): void => {
+    if (this.cctvDrag) {
+      this.endCctvDrag();
+      return;
+    }
     if (!this.layoutDrag) return;
     const moved = this.layoutDragMoved;
     this.ngZone.run(() => {
@@ -2408,6 +2984,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   clearSelection(): void {
     this.selectedBlock = null;
+    this.selectedCctvId = null;
     this.showScanInput = false;
     this.scanPalletInput = '';
     if (this.show3D) this.syncRack3dInputs();
@@ -2418,6 +2995,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.mapTool === 'pan' && this.panMoved) return;
     const target = event.target as Element | null;
     if (target?.closest('.jw-block')) return;
+    if (target?.closest('.jw-cctv')) return;
+    if (this.showCctv) {
+      this.selectedBlock = null;
+      return;
+    }
     this.clearSelection();
   }
 

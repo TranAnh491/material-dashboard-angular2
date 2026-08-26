@@ -320,6 +320,7 @@ $accent-soft: #ccfbf1;
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 24px -18px rgba(15, 23, 42, 0.3);
   overflow: hidden;
+  position: relative;
 
   &__rack3d {
     flex: 1;
@@ -1917,5 +1918,381 @@ $accent-soft: #ccfbf1;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 4px;
+  }
+}
+
+.jw-cctv-hint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: $muted;
+  line-height: 1.35;
+  max-width: 520px;
+}
+
+.jw-cctv {
+  cursor: pointer;
+
+  &--edit {
+    .jw-cctv__hit {
+      cursor: grab;
+    }
+  }
+
+  &--dragging {
+    .jw-cctv__hit,
+    .jw-cctv__aim-handle,
+    .jw-cctv__aim-hit {
+      cursor: grabbing;
+    }
+  }
+
+  &__fov {
+    fill: rgba(14, 165, 233, 0.16);
+    stroke: rgba(14, 165, 233, 0.55);
+    stroke-width: 1.2;
+    pointer-events: none;
+  }
+
+  &__aim {
+    stroke: #f59e0b;
+    stroke-width: 2;
+    stroke-dasharray: 5 4;
+    pointer-events: none;
+  }
+
+  &__aim-hit {
+    fill: transparent;
+    cursor: grab;
+  }
+
+  &__aim-handle {
+    fill: #f59e0b;
+    stroke: #ffffff;
+    stroke-width: 2;
+    cursor: grab;
+  }
+
+  &__hit {
+    fill: transparent;
+  }
+
+  &__body {
+    fill: #0f766e;
+    stroke: #ffffff;
+    stroke-width: 2;
+    pointer-events: none;
+  }
+
+  &__num {
+    fill: #ffffff;
+    font-size: 9px;
+    font-weight: 800;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  &__star {
+    fill: #f59e0b;
+    font-size: 13px;
+    font-weight: 900;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    stroke: #fff;
+    stroke-width: 2.5;
+    paint-order: stroke fill;
+  }
+
+  &--required &__body {
+    fill: #b45309;
+  }
+
+  &--on.jw-cctv--required &__body {
+    fill: #d97706;
+  }
+
+  &--on {
+    .jw-cctv__fov {
+      fill: rgba(245, 158, 11, 0.28);
+      stroke: #d97706;
+      stroke-width: 2;
+    }
+
+    .jw-cctv__body {
+      fill: #d97706;
+    }
+  }
+}
+
+.jw-cctv-monitor {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  width: 280px;
+  background: #0b1220;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  box-shadow: 0 18px 40px -18px rgba(15, 23, 42, 0.7);
+  overflow: hidden;
+  color: #e2e8f0;
+  pointer-events: auto;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    background: #111827;
+
+    strong {
+      font-size: 12px;
+      color: #fff;
+    }
+  }
+
+  &__rec {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+    animation: jw-cctv-pulse 1.4s ease-out infinite;
+  }
+
+  &__live {
+    color: #fca5a5;
+  }
+
+  &__bldg {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 10px;
+  }
+
+  &__star {
+    color: #fbbf24;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &__view {
+    display: block;
+    width: 100%;
+    height: 148px;
+    background: #020617;
+  }
+
+  &__floor {
+    fill: #1e293b;
+    stroke: #64748b;
+    stroke-width: 2;
+  }
+
+  &__rack {
+    fill: #334155;
+    stroke: #94a3b8;
+    stroke-width: 0.8;
+  }
+
+  &__room {
+    fill: #164e63;
+    stroke: #22d3ee;
+    stroke-width: 1;
+  }
+
+  &__fov {
+    fill: rgba(251, 191, 36, 0.28);
+    stroke: #fbbf24;
+    stroke-width: 2;
+  }
+
+  &__cam {
+    fill: #f59e0b;
+    stroke: #fff;
+    stroke-width: 2;
+  }
+
+  &__foot {
+    padding: 7px 10px 9px;
+    font-size: 11px;
+    color: #cbd5e1;
+    background: #111827;
+  }
+}
+
+@keyframes jw-cctv-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.jw-detail--cctv {
+  width: 280px;
+}
+
+.jw-cctv-add {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+
+  .jw-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 6px 8px;
+    font-size: 11px;
+    i { font-size: 16px; }
+  }
+}
+
+.jw-cctv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+
+.jw-cctv-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  box-sizing: border-box;
+
+  &:hover {
+    border-color: #99f6e4;
+    background: #f0fdfa;
+  }
+
+  &--on {
+    border-color: #d97706;
+    background: #fffbeb;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+  }
+
+  &--required {
+    border-color: #fcd34d;
+  }
+
+  &__star {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #cbd5e1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+
+    i { font-size: 18px; }
+
+    &:hover {
+      background: #fff7ed;
+      color: #f59e0b;
+    }
+
+    &--on {
+      color: #d97706;
+    }
+
+    &--inline {
+      width: auto;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: inherit;
+      color: $muted;
+
+      &.jw-cctv-item__star--on {
+        color: #d97706;
+      }
+    }
+  }
+
+  &__num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0f766e;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  &--on &__num,
+  &--required &__num {
+    background: #d97706;
+  }
+
+  &__meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+
+    strong {
+      font-size: 12px;
+      font-weight: 800;
+      color: $text;
+    }
+
+    em {
+      font-style: normal;
+      font-size: 10px;
+      color: $muted;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  &__del {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    i { font-size: 16px; }
+
+    &:hover {
+      background: #fef2f2;
+      color: #dc2626;
+    }
+  }
+
+  &__dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
   }
 }

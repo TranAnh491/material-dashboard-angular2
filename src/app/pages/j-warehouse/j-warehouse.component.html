@@ -111,7 +111,13 @@
         <div class="jw-map__toolbar">
           <div>
             <div class="jw-map__title-row">
-              <h2>{{ showUtilization ? t('util.title') : show3D ? t('title.3dModel') : drawModeTitle }}</h2>
+              <div>
+                <h2>{{ showUtilization ? t('util.title') : show3D ? t('title.3dModel') : drawModeTitle }}</h2>
+                <p class="jw-cctv-hint" *ngIf="showCctv">
+                  {{ t('cctv.count', { n: cctvCams.length, j5: cctvJ5Count, j4: cctvJ4Count, req: cctvRequiredCount }) }}
+                  — {{ t('cctv.hint') }}
+                </p>
+              </div>
               <div class="jw-map__mode-row" *ngIf="!show3D && !showUtilization">
                 <div class="jw-draw-modes jw-building-modes jw-building-modes--toolbar" role="tablist" [attr.aria-label]="t('aria.building')">
                   <button
@@ -1233,7 +1239,104 @@
                   </text>
                 </g>
               </g>
+
+              <!-- 20 camera CCTV — J5 (12) + J4 (8) -->
+              <g class="jw-cctv-layer" *ngIf="showCctv">
+                <g
+                  *ngFor="let cam of visibleCctvCams; trackBy: trackCctv"
+                  class="jw-cctv"
+                  [class.jw-cctv--on]="selectedCctvId === cam.id"
+                  [class.jw-cctv--required]="cam.required"
+                  [class.jw-cctv--edit]="canEditCctv"
+                  [class.jw-cctv--dragging]="cctvDraggingId === cam.id">
+                  <path class="jw-cctv__fov" [attr.d]="cctvFovPath(cam)" />
+                  <line
+                    *ngIf="selectedCctvId === cam.id && canEditCctv"
+                    class="jw-cctv__aim"
+                    [attr.x1]="cctvScreenX(cam)"
+                    [attr.y1]="cctvScreenY(cam)"
+                    [attr.x2]="cctvAimX(cam)"
+                    [attr.y2]="cctvAimY(cam)" />
+                  <circle
+                    class="jw-cctv__hit"
+                    [attr.cx]="cctvScreenX(cam)"
+                    [attr.cy]="cctvScreenY(cam)"
+                    r="16"
+                    (pointerdown)="onCctvMovePointerDown(cam, $event)"
+                    (click)="onCctvClick(cam, $event)" />
+                  <circle class="jw-cctv__body" [attr.cx]="cctvScreenX(cam)" [attr.cy]="cctvScreenY(cam)" r="10" />
+                  <text class="jw-cctv__num" [attr.x]="cctvScreenX(cam)" [attr.y]="cctvScreenY(cam)">{{ cam.num }}</text>
+                  <text
+                    *ngIf="cam.required"
+                    class="jw-cctv__star"
+                    [attr.x]="cctvScreenX(cam) + 11"
+                    [attr.y]="cctvScreenY(cam) - 9">★</text>
+                  <ng-container *ngIf="selectedCctvId === cam.id && canEditCctv">
+                    <circle class="jw-cctv__aim-hit" [attr.cx]="cctvAimX(cam)" [attr.cy]="cctvAimY(cam)" r="14" (pointerdown)="onCctvAimPointerDown(cam, $event)" />
+                    <circle class="jw-cctv__aim-handle" [attr.cx]="cctvAimX(cam)" [attr.cy]="cctvAimY(cam)" r="7" (pointerdown)="onCctvAimPointerDown(cam, $event)" />
+                  </ng-container>
+                </g>
+              </g>
             </svg>
+          </div>
+        </div>
+
+        <div
+          class="jw-cctv-monitor"
+          *ngIf="(showCctv && !show3D && !showUtilization) ? selectedCctvCam : null as cam"
+          (click)="$event.stopPropagation()">
+          <div class="jw-cctv-monitor__head">
+            <span class="jw-cctv-monitor__rec" aria-hidden="true"></span>
+            <span class="jw-cctv-monitor__live">{{ t('cctv.live') }}</span>
+            <strong>{{ cam.id }}</strong>
+            <span class="jw-cctv-monitor__star" *ngIf="cam.required" [title]="t('cctv.required')">★</span>
+            <span class="jw-cctv-monitor__bldg">{{ cam.building | uppercase }}</span>
+          </div>
+          <svg class="jw-cctv-monitor__view" [attr.viewBox]="cctvLiveViewBox(cam)" preserveAspectRatio="xMidYMid slice">
+            <rect
+              *ngIf="cam.building === 'j5'"
+              class="jw-cctv-monitor__floor"
+              [attr.x]="floor.x"
+              [attr.y]="floor.y"
+              [attr.width]="floor.w"
+              [attr.height]="floor.h" />
+            <rect
+              *ngIf="cam.building === 'j4'"
+              class="jw-cctv-monitor__floor"
+              [attr.x]="j4X"
+              [attr.y]="j4Y"
+              [attr.width]="j4W"
+              [attr.height]="j4H" />
+            <ng-container *ngIf="cam.building === 'j5'">
+              <rect
+                *ngFor="let rack of racks; trackBy: trackRack"
+                class="jw-cctv-monitor__rack"
+                [attr.x]="meterX(rack.xM)"
+                [attr.y]="meterY(rack.yM)"
+                [attr.width]="meterW(rack.wM)"
+                [attr.height]="meterH(rack.hM)" />
+              <rect
+                *ngFor="let room of officeRooms; trackBy: trackOfficeRoom"
+                class="jw-cctv-monitor__room"
+                [attr.x]="meterX(room.xM)"
+                [attr.y]="meterY(room.yM)"
+                [attr.width]="meterW(room.wM)"
+                [attr.height]="meterH(room.hM)" />
+            </ng-container>
+            <ng-container *ngIf="cam.building === 'j4'">
+              <rect
+                *ngFor="let rack of racks; trackBy: trackRack"
+                class="jw-cctv-monitor__rack"
+                [attr.x]="meterX(rack.xM)"
+                [attr.y]="j4MirrorTopY(rack.yM, rack.hM)"
+                [attr.width]="meterW(rack.wM)"
+                [attr.height]="j4MirrorHeight(rack.hM)" />
+            </ng-container>
+            <path class="jw-cctv-monitor__fov" [attr.d]="cctvFovPath(cam)" />
+            <circle class="jw-cctv-monitor__cam" [attr.cx]="cctvScreenX(cam)" [attr.cy]="cctvScreenY(cam)" r="8" />
+          </svg>
+          <div class="jw-cctv-monitor__foot">
+            {{ t('cctv.watch') }} · {{ cctvCamLabel(cam) }}
           </div>
         </div>
 
@@ -1324,7 +1427,100 @@
         </div>
       </section>
 
-      <aside class="jw-detail">
+      <aside class="jw-detail" [class.jw-detail--cctv]="showCctv">
+        <ng-container *ngIf="showCctv; else jwDetailNormal">
+          <h3>{{ t('cctv.list') }}</h3>
+          <p class="jw-detail__sub">{{ t('cctv.count', { n: cctvCams.length, j5: cctvJ5Count, j4: cctvJ4Count, req: cctvRequiredCount }) }}</p>
+          <div class="jw-cctv-add" *ngIf="canEditCctv">
+            <button type="button" class="jw-btn jw-btn--outline" (click)="addCctv('j5', $event)">
+              <i class="material-icons">add</i> {{ t('cctv.addJ5') }}
+            </button>
+            <button type="button" class="jw-btn jw-btn--outline" (click)="addCctv('j4', $event)">
+              <i class="material-icons">add</i> {{ t('cctv.addJ4') }}
+            </button>
+          </div>
+          <div class="jw-cctv-list">
+            <div
+              class="jw-cctv-item"
+              *ngFor="let cam of visibleCctvCams; trackBy: trackCctv"
+              [class.jw-cctv-item--on]="selectedCctvId === cam.id"
+              [class.jw-cctv-item--required]="cam.required"
+              (click)="selectCctv(cam, $event)">
+              <button
+                type="button"
+                class="jw-cctv-item__star"
+                [class.jw-cctv-item__star--on]="cam.required"
+                [title]="t('cctv.requiredHint')"
+                (click)="toggleCctvRequired(cam, $event)">
+                <i class="material-icons">{{ cam.required ? 'star' : 'star_border' }}</i>
+              </button>
+              <span class="jw-cctv-item__num">{{ cam.num }}</span>
+              <span class="jw-cctv-item__meta">
+                <strong>{{ cam.id }}</strong>
+                <em>{{ cctvCamLabel(cam) }} · {{ cam.building | uppercase }}</em>
+              </span>
+              <button
+                type="button"
+                class="jw-cctv-item__del"
+                *ngIf="canEditCctv && !cam.required"
+                [title]="t('cctv.delete')"
+                (click)="removeCctv(cam, $event)">
+                <i class="material-icons">close</i>
+              </button>
+              <span class="jw-cctv-item__dot" [title]="t('cctv.online')"></span>
+            </div>
+          </div>
+          <dl class="jw-fields" *ngIf="selectedCctvCam as cam">
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.building') }}</dt>
+              <dd>{{ cam.building | uppercase }}</dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.zone') }}</dt>
+              <dd>{{ cctvCamLabel(cam) }}</dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.heading') }}</dt>
+              <dd>{{ cctvHeadingLabel(cam) }}</dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.coverage') }}</dt>
+              <dd>{{ cam.rangeM | number:'1.0-1' }}m · {{ cam.fovDeg }}°</dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.required') }}</dt>
+              <dd>
+                <button
+                  type="button"
+                  class="jw-cctv-item__star jw-cctv-item__star--inline"
+                  [class.jw-cctv-item__star--on]="cam.required"
+                  [title]="t('cctv.requiredHint')"
+                  (click)="toggleCctvRequired(cam, $event)">
+                  <i class="material-icons">{{ cam.required ? 'star' : 'star_border' }}</i>
+                  {{ cam.required ? t('cctv.required') : '—' }}
+                </button>
+              </dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.online') }}</dt>
+              <dd class="jw-fields__accent">{{ t('cctv.live') }}</dd>
+            </div>
+          </dl>
+          <div class="jw-detail__btns" *ngIf="canEditCctv">
+            <button
+              type="button"
+              class="jw-btn jw-btn--outline jw-btn--block"
+              *ngIf="selectedCctvCam && !selectedCctvCam.required"
+              (click)="removeCctv(selectedCctvCam, $event)">
+              <i class="material-icons">delete</i> {{ t('cctv.delete') }}
+            </button>
+            <p class="jw-note" *ngIf="selectedCctvCam?.required">{{ t('cctv.requiredLocked') }}</p>
+            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="resetCctvLayout($event)">
+              {{ t('cctv.reset') }}
+            </button>
+          </div>
+        </ng-container>
+        <ng-template #jwDetailNormal>
         <ng-container *ngIf="selectedBlock; else warehouseInfo">
           <h3>{{ selectedBlock.code }}</h3>
           <p class="jw-detail__sub">{{ t('detail.rackBlock', { n: selectedBlock.rackNum, i: selectedBlock.index }) }}</p>
@@ -1469,6 +1665,7 @@
             </div>
           </dl>
           </ng-template>
+        </ng-template>
         </ng-template>
       </aside>
     </div>
