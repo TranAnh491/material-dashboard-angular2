@@ -113,6 +113,8 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   cctvViewMode: 'eye' | 'overview' = 'eye';
   private readonly cctvMountHM = 3.2;
   private readonly cctvPitchDeg = 14;
+  private readonly cctvUp = new THREE.Vector3(0, 1, 0);
+  private readonly cctvLookMatrix = new THREE.Matrix4();
 
   private readonly boxW = 1.4;
   private readonly boxH = 0.42;
@@ -546,7 +548,8 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
           beamMat,
           shelfMat,
           postMat,
-          block.code
+          block.code,
+          'kho-mat'
         );
       }
     }
@@ -554,6 +557,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     this.scene.add(group);
     this.rebuildCctvLayer();
     this.applyCctvView();
+    this.updateSlotColors();
   }
 
   /** Kệ trống: trụ + beam cam + mâm xanh, không vẽ hàng. */
@@ -565,7 +569,8 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     beamMat: THREE.Material,
     shelfMat: THREE.Material,
     postMat: THREE.Material,
-    blockCode?: string
+    blockCode?: string,
+    slotKind: 'rack' | 'kho-mat' = 'rack'
   ): void {
     const pitch = heightM / Math.max(levelCount, 1);
     const beamH = 0.1;
@@ -613,11 +618,11 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
           shelfT,
           Math.max(0.12, block.hM - beamT * 2)
         ),
-        shelfMat
+        (shelfMat as THREE.MeshLambertMaterial).clone()
       );
       shelf.position.set(bx, yBeam + beamH / 2 + shelfT / 2, bz);
       if (blockCode) {
-        shelf.userData = { blockCode, level: li + 1, pos: 'A' };
+        shelf.userData = { blockCode, level: li + 1, pos: 'A', slotKind };
         this.slotMeshes.set(`${blockCode}-L${li + 1}`, shelf);
       }
       group.add(shelf);
@@ -1007,26 +1012,45 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     group.add(post);
   }
 
+  private warehouseSlotOccupied(blockCode: string, level: number, slotKind: string): boolean {
+    if (!this.slotPallets?.size) return false;
+    if (slotKind === 'kho-mat') return this.slotPallets.has(`${blockCode}-${level}`);
+    return ['A', 'B', 'C'].some((p) => this.slotPallets.has(`${blockCode}-${level}${p}`));
+  }
+
   private updateSlotColors(): void {
-    if (this.mode === 'warehouse') return;
     this.slotMeshes.forEach((mesh) => {
       const level = Number(mesh.userData['level']);
       const pos = String(mesh.userData['pos'] || '');
-      const occupied = this.isOccupied(level, pos);
-      const selected = this.selectedLevel === level && this.selectedPos === pos;
-      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const blockCode = String(mesh.userData['blockCode'] || '');
+      const slotKind = String(mesh.userData['slotKind'] || '');
+      const occupied =
+        this.mode === 'warehouse'
+          ? this.warehouseSlotOccupied(blockCode, level, slotKind)
+          : this.isOccupied(level, pos);
+      const selected =
+        this.mode === 'warehouse'
+          ? !!blockCode && blockCode === this.selectedBlockCode && this.selectedLevel === level
+          : this.selectedLevel === level && this.selectedPos === pos;
+      const mat = mesh.material as THREE.MeshLambertMaterial | THREE.MeshStandardMaterial;
       if (selected) {
         mat.color.setHex(0xf59e0b);
-        mat.emissive.setHex(0x92400e);
-        mat.emissiveIntensity = 0.25;
+        if ('emissive' in mat) {
+          mat.emissive.setHex(0x92400e);
+          mat.emissiveIntensity = 0.25;
+        }
       } else if (occupied) {
-        mat.color.setHex(0x3b82f6);
-        mat.emissive.setHex(0x1e3a8a);
-        mat.emissiveIntensity = 0.12;
+        mat.color.setHex(this.mode === 'warehouse' ? 0x1d4ed8 : 0x3b82f6);
+        if ('emissive' in mat) {
+          mat.emissive.setHex(0x1e3a8a);
+          mat.emissiveIntensity = 0.12;
+        }
       } else {
-        mat.color.setHex(0xe2e8f0);
-        mat.emissive.setHex(0x000000);
-        mat.emissiveIntensity = 0;
+        mat.color.setHex(this.mode === 'warehouse' ? 0x2563eb : 0xe2e8f0);
+        if ('emissive' in mat) {
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0;
+        }
       }
     });
   }
@@ -1063,8 +1087,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
 
     for (const cam of this.cctvCams) {
       const rig = new THREE.Group();
-      rig.position.copy(this.cctvWorldPos(cam));
-      rig.lookAt(this.cctvLookAt(cam, Math.max(2, cam.rangeM * 0.5)));
+      this.orientCctvRig(rig, cam);
 
       const fovMat = new THREE.MeshLambertMaterial({
         color: 0xfbbf24,
@@ -1170,14 +1193,31 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     return new THREE.Vector3(cam.xM, this.cctvMountHM, cam.yM);
   }
 
+  /**
+   * Hướng trên mặt bằng — cùng hệ với bản vẽ 2D:
+   * 0° = +X (mặt D), 90° = +Y/+Z (mặt B), 270° = −Y/−Z (mặt C).
+   *
+   * Nón FOV local nằm theo −Z (quy ước camera Three.js). Object3D.lookAt() lại
+   * hướng +Z tới target nên không dùng cho rig — phải dùng Matrix4.lookAt.
+   */
   private cctvLookAt(cam: JwCctvCam, dist: number): THREE.Vector3 {
     const rad = (cam.headingDeg * Math.PI) / 180;
     const pitch = (this.cctvPitchDeg * Math.PI) / 180;
+    const flat = Math.cos(pitch);
     return new THREE.Vector3(
-      cam.xM + Math.cos(rad) * dist * Math.cos(pitch),
+      cam.xM + Math.cos(rad) * dist * flat,
       this.cctvMountHM - Math.sin(pitch) * dist,
-      cam.yM + Math.sin(rad) * dist * Math.cos(pitch)
+      cam.yM + Math.sin(rad) * dist * flat
     );
+  }
+
+  /** Xoay rig theo quy ước camera (−Z nhìn tới target) cho khớp nón FOV với bản vẽ. */
+  private orientCctvRig(rig: THREE.Group, cam: JwCctvCam): void {
+    const pos = this.cctvWorldPos(cam);
+    const target = this.cctvLookAt(cam, Math.max(2, cam.rangeM * 0.5));
+    rig.position.copy(pos);
+    this.cctvLookMatrix.lookAt(pos, target, this.cctvUp);
+    rig.quaternion.setFromRotationMatrix(this.cctvLookMatrix);
   }
 
   private cctvVerticalFovDeg(cam: JwCctvCam, aspect: number): number {
@@ -1222,7 +1262,14 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     const pos = this.cctvWorldPos(cam);
     const target = this.cctvLookAt(cam, Math.min(10, Math.max(4, cam.rangeM * 0.45)));
     this.camera.position.copy(pos);
+    this.camera.up.copy(this.cctvUp);
+    this.camera.lookAt(target);
     this.controls.target.copy(target);
+    this.controls.minDistance = 0.2;
+    this.controls.maxDistance = 280;
+    this.controls.minPolarAngle = 0;
+    this.controls.maxPolarAngle = Math.PI;
+    this.controls.enableDamping = false;
     this.controls.enabled = false;
     this.controls.update();
   }
@@ -1230,9 +1277,12 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
   private restoreOverviewCamera(): void {
     if (!this.camera || !this.controls) return;
     this.controls.enabled = true;
+    this.controls.enableDamping = true;
+    this.controls.minPolarAngle = 0;
+    this.controls.maxPolarAngle = Math.PI / 2.02;
+    this.camera.up.copy(this.cctvUp);
     this.camera.fov = 42;
     this.camera.updateProjectionMatrix();
-    this.controls.maxPolarAngle = Math.PI / 2.02;
     this.frameWarehouseCamera(0, this.floorLengthM, 0, this.floorWidthM);
   }
 

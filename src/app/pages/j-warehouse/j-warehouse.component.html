@@ -743,8 +743,8 @@
                 </g>
               </g>
 
-              <!-- Kệ trong Kho mát: ẩn trên bản vẽ kỹ thuật -->
-              <g class="jw-kho-mat" *ngIf="khoMatRows.length && !showTechDims" aria-hidden="true">
+              <!-- Kệ trong Kho mát: 7 tầng, không chia A/B/C — ẩn trên bản vẽ kỹ thuật -->
+              <g class="jw-kho-mat" *ngIf="khoMatRows.length && !showTechDims">
                 <g *ngFor="let row of khoMatRows; trackBy: trackKhoMatRow">
                   <rect
                     class="jw-kho-mat__row"
@@ -752,7 +752,13 @@
                     [attr.y]="meterY(row.yM)"
                     [attr.width]="meterW(row.wM)"
                     [attr.height]="meterH(row.hM)" />
-                  <g *ngFor="let block of row.blocks; trackBy: trackKhoMatBlock">
+                  <g
+                    *ngFor="let block of row.blocks; trackBy: trackKhoMatBlock"
+                    class="jw-kho-mat__hit"
+                    [class.jw-kho-mat__hit--on]="isKhoMatBlockSelected(block)"
+                    [class.jw-kho-mat__hit--occupied]="khoMatOccupiedCount(block) > 0"
+                    (pointerdown)="onKhoMatPointerDown(block, $event)"
+                    (click)="onBlockClick($event)">
                     <rect
                       class="jw-kho-mat__block"
                       [attr.x]="meterX(block.xM)"
@@ -1382,7 +1388,7 @@
               *ngFor="let g of utilRackGroups; let i = index"
               [class.jw-util__group--on]="i === utilGroupIndex"
               (click)="setUtilGroup(i, $event)">
-              <span>{{ t('util.racks', { from: g.from, to: g.to }) }}</span>
+              <span>{{ g.khoMat ? t('util.khoMat') : t('util.racks', { from: g.from, to: g.to }) }}</span>
               <em>{{ g.pct | number:'1.0-1' }}%</em>
             </button>
           </div>
@@ -1397,14 +1403,14 @@
               <thead>
                 <tr>
                   <th class="jw-util__corner" rowspan="2">{{ t('util.level') }}</th>
-                  <th *ngFor="let span of utilRackSpans" [attr.colspan]="span.cols">R{{ span.num }}</th>
+                  <th *ngFor="let span of utilRackSpans" [attr.colspan]="span.cols">{{ span.label }}</th>
                 </tr>
                 <tr>
                   <th *ngFor="let col of utilGridColumns" [title]="col.label">{{ col.block.index }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let lv of UTIL_LEVELS_TOP_DOWN; let ri = index">
+                <tr *ngFor="let lv of utilGridLevels; let ri = index">
                   <th>{{ lv }}</th>
                   <td
                     *ngFor="let col of utilGridColumns"
@@ -1543,21 +1549,21 @@
         <ng-template #jwDetailNormal>
         <ng-container *ngIf="selectedBlock; else warehouseInfo">
           <h3>{{ selectedBlock.code }}</h3>
-          <p class="jw-detail__sub">{{ t('detail.rackBlock', { n: selectedBlock.rackNum, i: selectedBlock.index }) }}</p>
+          <p class="jw-detail__sub">{{ selectedIsKhoMat ? t('detail.khoMatBlock', { code: selectedBlock.code }) : t('detail.rackBlock', { n: selectedBlock.rackNum, i: selectedBlock.index }) }}</p>
 
           <ng-container *ngIf="workMode">
-          <div class="jw-level-tabs">
+          <div class="jw-level-tabs" [class.jw-level-tabs--7]="selectedIsKhoMat">
             <button
               type="button"
               class="jw-level-tab"
-              *ngFor="let lv of LEVEL_LIST"
+              *ngFor="let lv of selectedLevelList"
               [class.jw-level-tab--on]="selectedLevel === lv"
               (click)="selectLevel(lv)">
               {{ t('detail.level', { n: lv }) }}
             </button>
           </div>
 
-          <div class="jw-pos-grid">
+          <div class="jw-pos-grid" *ngIf="!selectedIsKhoMat">
             <button
               type="button"
               class="jw-pos-btn"
@@ -1573,12 +1579,23 @@
             </button>
           </div>
 
+          <div class="jw-pos-grid" *ngIf="selectedIsKhoMat">
+            <div
+              class="jw-pos-btn"
+              [class.jw-pos-btn--on]="true"
+              [class.jw-pos-btn--filled]="!!selectedPallet">
+              <span class="jw-pos-btn__code">{{ selectedSlotCode }}</span>
+              <span class="jw-pos-btn__pallet" *ngIf="selectedPallet">{{ selectedPallet }}</span>
+              <span class="jw-pos-btn__empty" *ngIf="!selectedPallet">{{ t('detail.empty') }}</span>
+            </div>
+          </div>
+
           <dl class="jw-fields">
             <div class="jw-fields__row"><dt>{{ t('detail.slot') }}</dt><dd class="jw-fields__accent">{{ selectedSlotCode }}</dd></div>
             <div class="jw-fields__row"><dt>{{ t('detail.pallet') }}</dt><dd>{{ selectedPallet || '—' }}</dd></div>
             <div class="jw-fields__row">
               <dt>{{ t('detail.blockAssigned') }}</dt>
-              <dd>{{ blockOccupiedCount(selectedBlock) }} / {{ LEVELS * PALLETS_PER_BLOCK }}</dd>
+              <dd>{{ blockOccupiedCount(selectedBlock) }} / {{ selectedBlockCapacity }}</dd>
             </div>
           </dl>
 
@@ -1628,15 +1645,15 @@
 
           <ng-container *ngIf="!workMode && showTechDims">
               <dl class="jw-fields">
-                <div class="jw-fields__row"><dt>{{ t('detail.row') }}</dt><dd>R{{ selectedBlock.rackNum }}</dd></div>
-                <div class="jw-fields__row"><dt>{{ t('detail.block') }}</dt><dd>{{ selectedBlock.index }} / {{ BLOCKS_PER_RACK }}</dd></div>
+                <div class="jw-fields__row" *ngIf="!selectedIsKhoMat"><dt>{{ t('detail.row') }}</dt><dd>R{{ selectedBlock.rackNum }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.block') }}</dt><dd>{{ selectedIsKhoMat ? selectedBlock.code : (selectedBlock.index + ' / ' + BLOCKS_PER_RACK) }}</dd></div>
                 <div class="jw-fields__row"><dt>{{ t('detail.width') }}</dt><dd>{{ selectedBlock.wM | number:'1.2-2' }}m</dd></div>
                 <div class="jw-fields__row"><dt>{{ t('detail.blockLen') }}</dt><dd>{{ selectedBlock.hM | number:'1.2-2' }}m</dd></div>
                 <div class="jw-fields__row"><dt>{{ t('detail.coordX') }}</dt><dd>{{ selectedBlock.xM | number:'1.2-2' }}m</dd></div>
                 <div class="jw-fields__row"><dt>{{ t('detail.coordY') }}</dt><dd>{{ selectedBlock.yM | number:'1.2-2' }}m</dd></div>
-                <div class="jw-fields__row"><dt>{{ t('detail.levelCount') }}</dt><dd>{{ LEVELS }}</dd></div>
-                <div class="jw-fields__row"><dt>{{ t('detail.slotsPerLevel') }}</dt><dd>A · B · C</dd></div>
-                <div class="jw-fields__row"><dt>{{ t('detail.totalSlots') }}</dt><dd>{{ LEVELS * PALLETS_PER_BLOCK }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.levelCount') }}</dt><dd>{{ selectedIsKhoMat ? KHO_MAT_LEVELS : LEVELS }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.slotsPerLevel') }}</dt><dd>{{ selectedIsKhoMat ? '1' : 'A · B · C' }}</dd></div>
+                <div class="jw-fields__row"><dt>{{ t('detail.totalSlots') }}</dt><dd>{{ selectedBlockCapacity }}</dd></div>
                 <div class="jw-fields__row"><dt>{{ t('detail.assigned') }}</dt><dd>{{ blockOccupiedCount(selectedBlock) }}</dd></div>
               </dl>
               <div class="jw-detail__btns">

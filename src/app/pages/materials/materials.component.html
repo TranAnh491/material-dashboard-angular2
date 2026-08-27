@@ -686,6 +686,14 @@
             <span>Tồn</span>
           </div>
         </div>
+        <div class="mat-m-summary__divider" aria-hidden="true"></div>
+        <div class="mat-m-summary__cell">
+          <div>
+            <span class="mat-m-summary__label">Tổng bag</span>
+            <strong>{{ (totalBagCount$ | async) | number:'1.0-0' }}</strong>
+            <span>Bịch</span>
+          </div>
+        </div>
       </div>
 
       <article class="mat-m-card"
@@ -829,6 +837,11 @@
                [title]="'Tổng số tồn kho của ' + filteredInventory.length + ' mã hàng đang được search'">
             <i class="material-icons">assessment</i>
             <span>Tổng tồn: {{ (totalStockCount$ | async) | number:'1.0-0' }}</span>
+          </div>
+          <div class="total-stock-counter-box"
+               [title]="'Tổng số bịch (BAG) của ' + filteredInventory.length + ' mã hàng đang được search — tính theo tồn kho ÷ Standard Packing'">
+            <i class="material-icons">inventory_2</i>
+            <span>Tổng bag: {{ (totalBagCount$ | async) | number:'1.0-0' }}</span>
           </div>
           <button type="button"
                   class="kk-inline-box"
@@ -1155,7 +1168,7 @@
           </div>
           <div class="info-row">
             <span class="label">BAG:</span>
-            <ng-container *ngIf="canEdit && !material.bagTrackingInitialized; else bagsMobileReadonlyOrAuto">
+            <ng-container *ngIf="canEdit && !getEffectiveStandardPacking(material) && !material.bagTrackingInitialized; else bagsMobileReadonlyOrAuto">
               <input
                 type="text"
                 class="mobile-input"
@@ -1418,8 +1431,8 @@
               {{getDisplayIMD(material)}}
             </td>
             <td class="batch-cell readonly-cell" [class.readonly-cell]="!canEdit" [class.duplicate-cell]="material.isDuplicate"
-                title="Số bịch — sau lần nhập đầu: tự tính từ tồn kho ÷ Standard Packing">
-              <ng-container *ngIf="canEdit && !material.bagTrackingInitialized; else bagsDesktopReadonlyOrAuto">
+                title="Số bịch — tự tính từ tồn kho ÷ Standard Packing (chỉ nhập tay khi chưa có Standard Packing)">
+              <ng-container *ngIf="canEdit && !getEffectiveStandardPacking(material) && !material.bagTrackingInitialized; else bagsDesktopReadonlyOrAuto">
                 <input
                   type="text"
                   class="editable-input"
@@ -1505,31 +1518,17 @@
             </td>
             <td class="location-cell"
                 [class.iqc-location]="isIQCLocation(material.location)"
-                [class.readonly-cell]="!isLocationColumnUnlocked"
-                [title]="isLocationColumnUnlocked ? 'Tick để chọn vị trí layout, hoặc nhập tay' : (locationExtraCount(material.location) > 0 ? 'Rê chuột để xem thêm vị trí' : 'Click ổ khóa ở cột Vị trí để mở sửa (mã Zalo OTP)')">
-              <div class="location-display" *ngIf="!isLocationColumnUnlocked">
-                <span class="location-text">{{ primaryLocationDisplay(material.location) }}</span>
+                title="Bấm để mở sơ đồ kho — chọn vị trí hoặc nhập tay trong popup">
+              <div class="location-display location-display--clickable"
+                   [class.location-display--on]="isLayoutLocPickerRow(material)"
+                   (click)="openLayoutLocPicker(material, $event)">
+                <span class="location-text">{{ primaryLocationDisplay(material.location) || '—' }}</span>
                 <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">
                   +{{ locationExtraCount(material.location) }}
                 </span>
                 <div class="location-popover" *ngIf="locationExtraCount(material.location) > 0" role="tooltip">
                   <div class="location-popover__item" *ngFor="let loc of locationParts(material.location)">{{ loc }}</div>
                 </div>
-              </div>
-              <div class="location-edit-wrap" *ngIf="isLocationColumnUnlocked">
-                <input
-                  type="checkbox"
-                  class="location-pick-tick"
-                  [checked]="isLayoutLocPickerRow(material)"
-                  (click)="openLayoutLocPicker(material, $event)"
-                  title="Chọn vị trí từ layout ASM1 / ASM3 / J" />
-                <textarea
-                     class="editable-cell location-input location-textarea"
-                     rows="2"
-                     [(ngModel)]="material.location"
-                     (focus)="rememberLocationBeforeEdit(material)"
-                     (blur)="onLocationChange(material)"
-                     placeholder="Mỗi vị trí 1 dòng"></textarea>
               </div>
             </td>
             <td class="pallet-cell" [title]="isLocationColumnUnlocked ? 'Nhập số pallet rồi Enter/blur để lưu' : (material.palletId || 'Chưa gán pallet')">
@@ -3131,7 +3130,7 @@
           <i class="material-icons">view_module</i>
         </span>
         <div>
-          <h3>Chọn vị trí kệ</h3>
+          <h3>Chọn vị trí kệ — Kho J</h3>
           <p class="more-popup-header__sub">{{ layoutLocMaterial.materialCode }} · {{ layoutLocMaterial.poNumber || '—' }}</p>
         </div>
       </div>
@@ -3140,16 +3139,6 @@
       </button>
     </div>
     <div class="modal-body layout-loc-picker__body">
-      <div class="layout-loc-wh" role="tablist" aria-label="Kho layout">
-        <button
-          type="button"
-          class="layout-loc-wh__btn"
-          *ngFor="let wh of layoutWhOptions"
-          [class.layout-loc-wh__btn--on]="layoutLocWh === wh.id"
-          (click)="setLayoutLocWh(wh.id)">
-          {{ wh.label }}
-        </button>
-      </div>
       <div class="layout-loc-groups">
         <button
           type="button"
@@ -3164,12 +3153,67 @@
         <i class="material-icons">search</i>
         <input type="search" [(ngModel)]="layoutLocQuery" placeholder="Lọc ô kệ…" autocomplete="off" />
       </div>
-      <div class="layout-loc-slots">
+
+      <!-- Sơ đồ kệ kho J: Block 1..6 × Tầng 4..1 × vị trí A/B/C -->
+      <div class="layout-j-diagram" *ngIf="isLayoutJDiagram && !layoutLocQuery">
+        <div class="layout-j-diagram__caption">
+          Sơ đồ {{ layoutLocActiveGroup?.label }} — bấm ô để chọn / bỏ chọn vị trí
+        </div>
+        <div class="layout-j-diagram__scroll">
+          <div class="layout-j-block" *ngFor="let b of layoutJRackDiagram">
+            <div class="layout-j-block__head">Block {{ b.block }}</div>
+            <div class="layout-j-level" *ngFor="let lv of b.levels">
+              <span class="layout-j-level__tag">T{{ lv.level }}</span>
+              <div class="layout-j-cells">
+                <button
+                  type="button"
+                  class="layout-j-cell"
+                  *ngFor="let c of lv.cells"
+                  [class.layout-j-cell--on]="isLayoutLocSlotOn(c.slot)"
+                  (click)="toggleLayoutLocSlot(c.slot)"
+                  [title]="c.slot">
+                  {{ c.pos }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="hidden-empty" *ngIf="!layoutJRackDiagram.length">Không dựng được sơ đồ dãy này.</p>
+        </div>
+      </div>
+
+      <div class="layout-loc-slots" *ngIf="!isLayoutJDiagram || layoutLocQuery">
         <label class="layout-loc-slot" *ngFor="let slot of layoutLocFilteredSlots">
           <input type="checkbox" [checked]="isLayoutLocSlotOn(slot)" (change)="toggleLayoutLocSlot(slot)" />
           <span>{{ slot }}</span>
         </label>
         <p class="hidden-empty" *ngIf="!layoutLocFilteredSlots.length">Không có ô kệ khớp.</p>
+      </div>
+
+      <div class="layout-loc-manual">
+        <span class="layout-loc-manual__label">Nhập tay vị trí mới</span>
+        <div class="layout-loc-manual__row">
+          <input type="text"
+                 [(ngModel)]="layoutLocManualDraft"
+                 (keydown.enter)="addLayoutLocManual()"
+                 placeholder="VD: F62, A12 — Enter để thêm"
+                 autocomplete="off" spellcheck="false" />
+          <button type="button" class="layout-loc-manual__add" (click)="addLayoutLocManual()" [disabled]="!layoutLocManualDraft.trim()">
+            <i class="material-icons">add</i> Thêm
+          </button>
+        </div>
+      </div>
+
+      <div class="layout-loc-chosen" *ngIf="layoutLocSelected.size">
+        <span class="layout-loc-chosen__head">
+          Đã chọn {{ layoutLocSelected.size }}
+          <button type="button" class="layout-loc-chosen__clear" (click)="clearLayoutLocSelected()">Xóa hết</button>
+        </span>
+        <span class="layout-loc-chosen__tag" *ngFor="let s of layoutLocSelected">
+          {{ s }}
+          <button type="button" (click)="toggleLayoutLocSlot(s)" aria-label="Bỏ chọn">
+            <i class="material-icons">close</i>
+          </button>
+        </span>
       </div>
       <label class="layout-loc-pallet">
         <span>Số pallet</span>
@@ -3179,7 +3223,7 @@
     <div class="filter-picker-footer">
       <span class="layout-loc-count">Đã chọn {{ layoutLocSelected.size }}</span>
       <button type="button" class="cancel-btn" (click)="closeLayoutLocPicker()">Đóng</button>
-      <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!layoutLocSelected.size">
+      <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!layoutLocSelected.size && !layoutLocManualDraft.trim()">
         <i class="material-icons">check</i> Done
       </button>
     </div>

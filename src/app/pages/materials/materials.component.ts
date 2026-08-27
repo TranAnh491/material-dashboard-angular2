@@ -31,7 +31,6 @@ import {
   LayoutWhPick,
   LayoutLocGroup,
   getLayoutLocationGroups,
-  isJWarehouseLocation,
   normalizeLayoutLocToken
 } from './layout-location-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
@@ -480,6 +479,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   // Total stock tracking
   private totalStockSubject = new BehaviorSubject<number>(0);
   public totalStockCount$ = this.totalStockSubject.asObservable();
+
+  // Total bag tracking (tổng số bịch của các mã đang search)
+  private totalBagSubject = new BehaviorSubject<number>(0);
+  public totalBagCount$ = this.totalBagSubject.asObservable();
   
   // Negative stock filter state
   showOnlyNegativeStock = false;
@@ -639,11 +642,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   isLocationColumnUnlocked = false;
   showLayoutLocPicker = false;
   layoutLocMaterial: InventoryMaterial | null = null;
-  layoutLocWh: LayoutWhPick = 'ASM1';
+  layoutLocWh: LayoutWhPick = 'J';
   layoutLocGroupId = '';
   layoutLocQuery = '';
   layoutLocSelected = new Set<string>();
   layoutLocPalletDraft = '';
+  /** Ô nhập tay vị trí mới trong popup (phân tách bằng dấu phẩy / xuống dòng). */
+  layoutLocManualDraft = '';
   readonly layoutWhOptions: Array<{ id: LayoutWhPick; label: string }> = [
     { id: 'ASM1', label: 'ASM1' },
     { id: 'ASM3', label: 'ASM3' },
@@ -1329,7 +1334,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!sp || sp <= 0) continue;
         const rowStock = Math.max(0, this.calculateCurrentStock(r));
         if (rowStock <= 0) continue;
-        const bagTotal = r.bagTrackingInitialized ? this.computeTotalBagsFromStock(r) : Math.floor(Number((r as any).totalBags ?? 0));
+        const bagTotal = this.effectiveTotalBags(r);
         if (!bagTotal || bagTotal < 1) continue;
         const imdKey = this.getImdKeyForMaterial(r);
         const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
@@ -1753,7 +1758,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!sp || sp <= 0) {
         throw new Error(`Thiếu Standard Packing (hoặc catalog) cho mã ${mat}.`);
       }
-      const bagTotal = Math.floor(Number(m.totalBags ?? 0));
+      const bagTotal = this.effectiveTotalBags(m);
       if (bagTotal <= 0) {
         const imdKey = this.getImdKeyForMaterial(m);
         throw new Error(`Thiếu BAG: ${mat} / PO ${po} / IMD ${imdKey}. Vui lòng nhập đủ cột BAG trước khi in.`);
@@ -1886,7 +1891,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (rem <= 1e-6) {
         continue;
       }
-      const bagTotal = Math.floor(Number(m.totalBags ?? 0));
+      const bagTotal = this.effectiveTotalBags(m);
       if (bagTotal <= 0) {
         continue;
       }
@@ -2932,9 +2937,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return Math.ceil(stock / sp);
   }
 
+  /**
+   * Số bịch hiệu lực cho cột BAG / QR / tem:
+   * có Standard Packing (catalog hoặc dòng) → tự tính ceil(tồn ÷ SP);
+   * chưa có SP → fallback về totalBags đã lưu.
+   */
+  effectiveTotalBags(material: InventoryMaterial): number {
+    if (this.getEffectiveStandardPacking(material) > 0) {
+      return this.computeTotalBagsFromStock(material);
+    }
+    return Math.floor(Number(material.totalBags ?? 0));
+  }
+
   /** Cập nhật totalBags trên model theo tồn (không ghi Firebase). */
   applyLocalDerivedBags(material: InventoryMaterial): void {
-    if (!material.bagTrackingInitialized) {
+    if (this.getEffectiveStandardPacking(material) <= 0) {
       return;
     }
     const derived = this.computeTotalBagsFromStock(material);
@@ -2942,45 +2959,47 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     material.bagInput = '';
   }
 
-  /** Hiển thị cột BAG khi đã auto: ví dụ 5 (4 bịch × 5 + 1 bịch 2). */
+  /**
+   * Hiển thị cột BAG:
+   *  - chẵn hết        → "20"     (20 bịch chẵn, không lẻ)
+   *  - chẵn + lẻ       → "20+1"   (20 bịch chẵn + 1 bịch lẻ)
+   *  - chỉ có lẻ       → "0+1"    (chưa đủ 1 bịch chẵn)
+   */
   getBagsBreakdownText(material: InventoryMaterial): string {
-    if (!material.bagTrackingInitialized) {
-      return material.totalBags != null && Number(material.totalBags) > 0
-        ? this.formatNumber(material.totalBags)
-        : '';
-    }
     const sp = this.getEffectiveStandardPacking(material);
     const stock = this.calculateCurrentStock(material);
     if (!sp || sp <= 0) {
-      return material.totalBags != null && Number(material.totalBags) > 0
-        ? this.formatNumber(material.totalBags)
-        : '—';
+      if (material.totalBags != null && Number(material.totalBags) > 0) {
+        return this.formatNumber(material.totalBags);
+      }
+      return material.bagTrackingInitialized ? '—' : '';
     }
     if (stock <= 0) {
       return '0';
     }
-    const totalUnits = Math.ceil(stock / sp);
     const fullCount = Math.floor(stock / sp);
     const partial = Math.round((stock - fullCount * sp) * 1e6) / 1e6;
-    if (partial <= 1e-9) {
-      return `${totalUnits} (${fullCount} bịch × ${sp})`;
-    }
-    return `${totalUnits} (${fullCount} bịch × ${sp} + 1 bịch ${partial})`;
+    return partial <= 1e-9 ? `${fullCount}` : `${fullCount}+1`;
   }
 
   getBagsBreakdownTitle(material: InventoryMaterial): string {
-    if (!material.bagTrackingInitialized) {
+    const sp = this.getEffectiveStandardPacking(material);
+    if (!sp || sp <= 0) {
       return '';
     }
-    const init = material.openingStockAtBagInit;
-    const initStr = init != null && Number.isFinite(init) ? String(init) : '—';
-    return `Tự tính từ tồn kho ÷ Standard Packing. Tồn khi khởi tạo bịch: ${initStr}`;
+    const stock = this.calculateCurrentStock(material);
+    if (stock <= 0) {
+      return `Tồn kho ${this.formatNumber(stock)} — chưa có bịch.`;
+    }
+    const fullCount = Math.floor(stock / sp);
+    const partial = Math.round((stock - fullCount * sp) * 1e6) / 1e6;
+    const base = `Tồn ${this.formatNumber(stock)} ÷ Standard Packing ${sp}`;
+    return partial <= 1e-9
+      ? `${base} = ${fullCount} bịch chẵn.`
+      : `${base} = ${fullCount} bịch chẵn + 1 bịch lẻ ${this.formatNumber(partial)}.`;
   }
 
   private appendDerivedTotalBagsIfNeeded(material: InventoryMaterial, updateData: any): void {
-    if (!material.bagTrackingInitialized) {
-      return;
-    }
     const sp = this.getEffectiveStandardPacking(material);
     if (!sp || sp <= 0) {
       return;
@@ -10149,22 +10168,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.canEdit) return;
     if (!material?.id) return;
 
-    if (material.bagTrackingInitialized) {
-      const sp = this.getEffectiveStandardPacking(material);
-      if (!sp || sp <= 0) {
-        return;
-      }
+    const sp = this.getEffectiveStandardPacking(material);
+
+    // Có Standard Packing → cột BAG tự tính ceil(tồn kho ÷ SP) và tự đồng bộ Firebase.
+    // Không cần nhập tay số bịch lần đầu nữa.
+    if (sp > 0) {
       const derived = this.computeTotalBagsFromStock(material);
+      const patch: any = { totalBags: derived, updatedAt: new Date() };
+      if (!material.bagTrackingInitialized) {
+        material.bagTrackingInitialized = true;
+        material.openingStockAtBagInit = this.calculateCurrentStock(material);
+        patch.bagTrackingInitialized = true;
+        patch.openingStockAtBagInit = material.openingStockAtBagInit;
+      }
       material.totalBags = derived;
       material.bagInput = '';
-      material.updatedAt = new Date();
+      material.updatedAt = patch.updatedAt;
       this.firestore
         .collection('inventory-materials')
         .doc(material.id)
-        .update({
-          totalBags: derived,
-          updatedAt: material.updatedAt
-        })
+        .update(patch)
         .then(() => {
           console.log(`✅ Synced totalBags (auto) for ${material.materialCode} - ${material.poNumber}: ${derived}`);
         })
@@ -10174,14 +10197,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const sp = this.getEffectiveStandardPacking(material);
-    if (!sp || sp <= 0) {
-      alert('❌ Cần Standard Packing > 0 (catalog hoặc dòng) để khởi tạo số bịch theo tồn kho.');
+    // Không có Standard Packing → không tự tính được; giữ nhập tay số bịch lần đầu.
+    if (material.bagTrackingInitialized) {
       return;
     }
     const stock = this.calculateCurrentStock(material);
     if (stock <= 0) {
-      alert('❌ Tồn kho phải > 0 trước khi khởi tạo số bịch.');
       return;
     }
 
@@ -10198,16 +10219,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const canonical = Math.ceil(stock / sp);
-    if (userBags !== canonical) {
-      console.warn(
-        `[BAG] Nhập ${userBags} nhưng tồn ${stock} ÷ SP ${sp} ⇒ ${canonical} bịch — lưu theo công thức.`
-      );
-    }
-
     material.bagTrackingInitialized = true;
     material.openingStockAtBagInit = stock;
-    material.totalBags = canonical;
+    material.totalBags = userBags;
     material.bagInput = '';
     material.updatedAt = new Date();
 
@@ -10217,12 +10231,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .update({
         bagTrackingInitialized: true,
         openingStockAtBagInit: stock,
-        totalBags: canonical,
+        totalBags: userBags,
         updatedAt: material.updatedAt
       })
       .then(() => {
         console.log(
-          `✅ Khởi tạo bịch (tồn đầu kỳ=${stock}, totalBags=${canonical}) ${material.materialCode} - ${material.poNumber}`
+          `✅ Khởi tạo bịch (tồn đầu kỳ=${stock}, totalBags=${userBags}) ${material.materialCode} - ${material.poNumber}`
         );
       })
       .catch(error => {
@@ -10231,7 +10245,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isTotalBagsValid(material: InventoryMaterial): boolean {
-    if (material.bagTrackingInitialized) {
+    if (this.getEffectiveStandardPacking(material) > 0) {
       return this.computeTotalBagsFromStock(material) >= 1;
     }
     return Math.floor(Number(material.totalBags ?? 0)) > 0;
@@ -10275,6 +10289,54 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return slots.filter((s) => s.toUpperCase().includes(q));
   }
 
+  /** Đang xem sơ đồ kệ kho J (không phải danh sách phẳng). */
+  get isLayoutJDiagram(): boolean {
+    return this.layoutLocWh === 'J';
+  }
+
+  /**
+   * Sơ đồ 1 dãy kệ kho J: nhóm ô kệ theo Block (1..6) rồi theo Tầng (4→1),
+   * mỗi ô là 1 vị trí A/B/C. Dùng để vẽ sơ đồ chọn vị trí trong popup.
+   */
+  get layoutJRackDiagram(): Array<{
+    block: number;
+    levels: Array<{ level: number; cells: Array<{ slot: string; pos: string }> }>;
+  }> {
+    if (this.layoutLocWh !== 'J') return [];
+    const group = this.layoutLocActiveGroup;
+    if (!group) return [];
+    const prefix = group.id; // vd "R1"
+    const byBlock = new Map<number, Map<number, Array<{ slot: string; pos: string }>>>();
+    for (const slot of group.slots) {
+      const rest = slot.slice(prefix.length); // vd "1-1A"
+      const dash = rest.indexOf('-');
+      if (dash < 0) continue;
+      const block = Number(rest.slice(0, dash));
+      const lvPos = rest.slice(dash + 1); // vd "1A"
+      const level = Number(lvPos[0]);
+      const pos = lvPos.slice(1);
+      if (!Number.isFinite(block) || !Number.isFinite(level)) continue;
+      if (!byBlock.has(block)) byBlock.set(block, new Map());
+      const lvMap = byBlock.get(block)!;
+      if (!lvMap.has(level)) lvMap.set(level, []);
+      lvMap.get(level)!.push({ slot, pos });
+    }
+    return Array.from(byBlock.keys())
+      .sort((a, b) => a - b)
+      .map((block) => ({
+        block,
+        levels: Array.from(byBlock.get(block)!.keys())
+          .sort((a, b) => b - a)
+          .map((level) => ({
+            level,
+            cells: byBlock
+              .get(block)!
+              .get(level)!
+              .sort((a, b) => a.pos.localeCompare(b.pos))
+          }))
+      }));
+  }
+
   isLayoutLocPickerRow(material: InventoryMaterial): boolean {
     return this.showLayoutLocPicker && this.layoutLocMaterial?.id === material.id;
   }
@@ -10292,9 +10354,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const parts = splitMultiLocations(material.location || '');
     this.layoutLocMaterial = material;
-    if (parts.some((p) => isJWarehouseLocation(p))) this.layoutLocWh = 'J';
-    else if (parts.some((p) => isAsm3OrWh3PrefixLocation(p))) this.layoutLocWh = 'ASM3';
-    else this.layoutLocWh = 'ASM1';
+    // Chỉ dùng kho J.
+    this.layoutLocWh = 'J';
     this.layoutLocSelected = new Set(
       parts.map((x) => normalizeLayoutLocToken(x, this.layoutLocWh)).filter(Boolean)
     );
@@ -10302,6 +10363,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const hit = groups.find((g) => g.slots.some((s) => this.layoutLocSelected.has(s.toUpperCase())));
     this.layoutLocGroupId = hit?.id || groups[0]?.id || '';
     this.layoutLocQuery = '';
+    this.layoutLocManualDraft = '';
     this.layoutLocPalletDraft = String(material.palletId || '').trim().toUpperCase();
     this.rememberLocationBeforeEdit(material);
     this.rememberPalletBeforeEdit(material);
@@ -10313,6 +10375,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocMaterial = null;
     this.layoutLocSelected = new Set();
     this.layoutLocPalletDraft = '';
+    this.layoutLocManualDraft = '';
+  }
+
+  /** Thêm vị trí nhập tay từ ô trong popup (phân tách bằng , ; hoặc xuống dòng). */
+  addLayoutLocManual(): void {
+    const raw = String(this.layoutLocManualDraft || '');
+    const tokens = raw
+      .split(/[\n,;]+/)
+      .map((x) => x.trim().toUpperCase())
+      .filter(Boolean);
+    for (const t of tokens) this.layoutLocSelected.add(t);
+    this.layoutLocManualDraft = '';
+  }
+
+  /** Bỏ chọn tất cả vị trí trong popup. */
+  clearLayoutLocSelected(): void {
+    this.layoutLocSelected = new Set();
   }
 
   setLayoutLocWh(wh: LayoutWhPick): void {
@@ -10341,9 +10420,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   async applyLayoutLocPicker(): Promise<void> {
     const material = this.layoutLocMaterial;
     if (!material) return;
+    // Gộp phần gõ tay chưa kịp bấm "Thêm".
+    if (this.layoutLocManualDraft.trim()) this.addLayoutLocManual();
     const locs = Array.from(this.layoutLocSelected);
     if (!locs.length) {
-      alert('Chọn ít nhất 1 vị trí kệ, hoặc Đóng.');
+      alert('Chọn ít nhất 1 vị trí, hoặc Đóng.');
       return;
     }
     material.location = joinMultiLocations(locs);
@@ -10560,10 +10641,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const totalStock = this.filteredInventory.reduce((sum, material) => {
       return sum + this.calculateCurrentStock(material);
     }, 0);
-    
+
     // Update the BehaviorSubject for reactive updates
     this.totalStockSubject.next(totalStock);
-    
+    this.totalBagSubject.next(
+      this.filteredInventory.reduce((sum, material) => sum + this.effectiveTotalBags(material), 0)
+    );
+
     return totalStock;
   }
 
@@ -11883,15 +11967,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private updateTotalStockCount(): void {
     if (!this.filteredInventory || this.filteredInventory.length === 0) {
       this.totalStockSubject.next(0);
+      this.totalBagSubject.next(0);
       return;
     }
-    
+
     const totalStock = this.filteredInventory.reduce((sum, material) => {
       return sum + this.calculateCurrentStock(material);
     }, 0);
-    
+
     this.totalStockSubject.next(totalStock);
-    console.log(`📊 Total stock count updated: ${totalStock}`);
+
+    const totalBags = this.filteredInventory.reduce((sum, material) => {
+      return sum + this.effectiveTotalBags(material);
+    }, 0);
+    this.totalBagSubject.next(totalBags);
+    console.log(`📊 Total stock count updated: ${totalStock} · bags: ${totalBags}`);
   }
 
 
@@ -12761,9 +12851,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      const bagTotal = material.bagTrackingInitialized
-        ? this.computeTotalBagsFromStock(material)
-        : Math.floor(Number(material.totalBags ?? 0));
+      const bagTotal = this.effectiveTotalBags(material);
       if (!bagTotal || bagTotal < 1) {
         alert('❌ Không thể in tem QR - thiếu BAG (Số bịch).');
         return;

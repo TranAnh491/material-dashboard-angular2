@@ -15,7 +15,7 @@ import { Subscription } from 'rxjs';
 import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
 
 export interface JwBlock {
-  /** VD: R11 */
+  /** VD: R11 hoặc A01-1 (kho mát) */
   code: string;
   rackNum: number;
   index: number;
@@ -23,6 +23,8 @@ export interface JwBlock {
   yM: number;
   wM: number;
   hM: number;
+  /** Kệ kho mát: 7 tầng, 1 vị trí/tầng, không chia A/B/C. */
+  kind?: 'kho-mat';
 }
 
 export interface JwRack {
@@ -112,9 +114,10 @@ export interface JwOfficeRoom {
   hM: number;
 }
 
-/** 1 block (3 tầng ngang) trong 1 dãy kệ Kho mát — VD "A01-1". */
+/** 1 block trong 1 dãy kệ Kho mát — VD "A01-1". 7 tầng, không chia A/B/C. */
 export interface JwKhoMatBlock {
   code: string;
+  index: number;
   xM: number;
   yM: number;
   wM: number;
@@ -296,6 +299,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'util.legendGt0': '>0%',
     'util.legendEmpty': '0%',
     'util.racks': 'R{{from}}–R{{to}}',
+    'util.khoMat': 'Kho mát',
     'util.level': 'Tầng',
     'util.empty': 'Chưa có dữ liệu kệ.',
     'title.extraPallet': 'Nhập pallet ngoài',
@@ -309,6 +313,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zoom.in': 'Phóng to',
     'aria.map': '{{title}} J Warehouse {{l}} × {{w}} mét',
     'detail.rackBlock': 'Dãy R{{n}} · Block {{i}} · 4 tầng × ABC',
+    'detail.khoMatBlock': 'Kho mát · {{code}} · 7 tầng',
     'detail.level': 'Tầng {{n}}',
     'detail.empty': 'Trống',
     'detail.slot': 'Vị trí',
@@ -485,6 +490,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'util.legendGt0': '>0%',
     'util.legendEmpty': '0%',
     'util.racks': 'R{{from}}–R{{to}}',
+    'util.khoMat': 'Cold storage',
     'util.level': 'Level',
     'util.empty': 'No rack data.',
     'title.extraPallet': 'Enter extra pallets',
@@ -498,6 +504,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zoom.in': 'Zoom in',
     'aria.map': '{{title}} J Warehouse {{l}} × {{w}} meters',
     'detail.rackBlock': 'Row R{{n}} · Block {{i}} · 4 levels × ABC',
+    'detail.khoMatBlock': 'Cold storage · {{code}} · 7 levels',
     'detail.level': 'Level {{n}}',
     'detail.empty': 'Empty',
     'detail.slot': 'Location',
@@ -625,6 +632,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly AISLE_M = 2.9;
   readonly POS_LETTERS: JwPos[] = ['A', 'B', 'C'];
   readonly LEVEL_LIST = [1, 2, 3, 4];
+  readonly KHO_MAT_LEVEL_LIST = [1, 2, 3, 4, 5, 6, 7];
 
   /** Số thanh đứng = số mâm + 1 */
   readonly UPRIGHT_COUNT = this.BLOCKS_PER_RACK + 1;
@@ -733,7 +741,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Lối đi còn lại giữa hết dãy kệ và mép văn phòng */
   readonly OFFICE_AISLE_M = this.round2(this.officeZone.yM - this.OPEN_ZONE_Y_M);
 
-  /** Kệ trong Kho mát: A01 rộng 1m, các dãy còn lại rộng 0.5m; sâu 1.5m, 3 block/dãy, cách nhau 0.8m, 7 tầng, cao 3m. */
+  /** Kệ trong Kho mát: A01 rộng 1m, các dãy còn lại rộng 0.5m; sâu 1.5m, 3 block/dãy, cách nhau 0.8m, 7 tầng (không A/B/C), cao 3m. */
   readonly KHO_MAT_BLOCK_W_M = 1;
   readonly KHO_MAT_BLOCK_W_NARROW_M = 0.5;
   readonly KHO_MAT_BLOCK_D_M = 1.5;
@@ -1844,6 +1852,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     setInput('selectedLevel', this.selectedLevel);
     setInput('selectedPos', this.selectedPos);
     setInput('selectedBlockCode', this.selectedBlock?.code || null);
+    setInput('slotPallets', this.slotPallets);
     setInput('showCctv', this.showCctv);
     setInput('cctvCams', this.cctvCams);
     setInput('selectedCctvId', this.selectedCctvId);
@@ -1869,11 +1878,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     for (const rack of this.racks) {
       for (const block of rack.blocks) n += this.blockOccupiedCount(block);
     }
+    for (const row of this.khoMatRows) {
+      for (const block of row.blocks) n += this.khoMatOccupiedCount(block);
+    }
     return n;
   }
 
   get utilCapacityOnRacks(): number {
-    return this.totalPalletsJ5Rack;
+    let extra = 0;
+    for (const row of this.khoMatRows) extra += row.blocks.length * this.KHO_MAT_LEVELS;
+    return this.totalPalletsJ5Rack + extra;
   }
 
   get utilSpacePct(): number {
@@ -1888,9 +1902,17 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     occupied: number;
     capacity: number;
     pct: number;
+    khoMat?: boolean;
   }> {
     const nums = this.racks.map((r) => r.num).sort((a, b) => a - b);
-    const groups: Array<{ from: number; to: number; occupied: number; capacity: number; pct: number }> = [];
+    const groups: Array<{
+      from: number;
+      to: number;
+      occupied: number;
+      capacity: number;
+      pct: number;
+      khoMat?: boolean;
+    }> = [];
     for (let i = 0; i < nums.length; i += this.UTIL_GROUP_SIZE) {
       const slice = nums.slice(i, i + this.UTIL_GROUP_SIZE);
       const from = slice[0];
@@ -1912,19 +1934,52 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         pct: capacity ? (occupied / capacity) * 100 : 0
       });
     }
+    if (this.khoMatRows.length) {
+      let occupied = 0;
+      let capacity = 0;
+      for (const row of this.khoMatRows) {
+        for (const block of row.blocks) {
+          const b = this.khoMatToBlock(block);
+          occupied += this.blockOccupiedCount(b);
+          capacity += this.palletsInBlock(b);
+        }
+      }
+      groups.push({
+        from: 0,
+        to: 0,
+        occupied,
+        capacity,
+        pct: capacity ? (occupied / capacity) * 100 : 0,
+        khoMat: true
+      });
+    }
     return groups;
   }
 
-  get utilActiveGroup(): { from: number; to: number; occupied: number; capacity: number; pct: number } | null {
+  get utilActiveGroup(): {
+    from: number;
+    to: number;
+    occupied: number;
+    capacity: number;
+    pct: number;
+    khoMat?: boolean;
+  } | null {
     const groups = this.utilRackGroups;
     if (!groups.length) return null;
     const i = Math.min(Math.max(this.utilGroupIndex, 0), groups.length - 1);
     return groups[i];
   }
 
+  get utilGridLevels(): number[] {
+    return this.utilActiveGroup?.khoMat
+      ? [...this.KHO_MAT_LEVEL_LIST].reverse()
+      : this.UTIL_LEVELS_TOP_DOWN;
+  }
+
   get utilGridColumns(): Array<{
     label: string;
     rackNum: number;
+    header: string;
     block: JwBlock;
     cells: Array<{ level: number; occupied: number; capacity: number; ratio: number; band: string }>;
   }> {
@@ -1933,9 +1988,23 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const cols: Array<{
       label: string;
       rackNum: number;
+      header: string;
       block: JwBlock;
       cells: Array<{ level: number; occupied: number; capacity: number; ratio: number; band: string }>;
     }> = [];
+    if (g.khoMat) {
+      this.khoMatRows.forEach((row, ri) => {
+        for (const block of row.blocks) {
+          const jb = this.khoMatToBlock(block);
+          const cells = this.utilGridLevels.map((level) => {
+            const occupied = this.palletAt(this.slotCode(jb.code, level, 'A')) ? 1 : 0;
+            return { level, occupied, capacity: 1, ratio: occupied, band: this.utilBand(occupied) };
+          });
+          cols.push({ label: block.code, rackNum: ri + 1, header: row.id, block: jb, cells });
+        }
+      });
+      return cols;
+    }
     const racks = this.racks
       .filter((r) => r.num >= g.from && r.num <= g.to)
       .sort((a, b) => a.num - b.num);
@@ -1952,18 +2021,18 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
           const ratio = capLv ? occupied / capLv : 0;
           return { level, occupied, capacity: capLv, ratio, band: this.utilBand(ratio) };
         });
-        cols.push({ label: block.code, rackNum: rack.num, block, cells });
+        cols.push({ label: block.code, rackNum: rack.num, header: `R${rack.num}`, block, cells });
       }
     }
     return cols;
   }
 
-  get utilRackSpans(): Array<{ num: number; cols: number }> {
-    const spans: Array<{ num: number; cols: number }> = [];
+  get utilRackSpans(): Array<{ num: number; cols: number; label: string }> {
+    const spans: Array<{ num: number; cols: number; label: string }> = [];
     for (const col of this.utilGridColumns) {
       const last = spans[spans.length - 1];
-      if (last && last.num === col.rackNum) last.cols++;
-      else spans.push({ num: col.rackNum, cols: 1 });
+      if (last && last.label === col.header) last.cols++;
+      else spans.push({ num: col.rackNum, cols: 1, label: col.header });
     }
     return spans;
   }
@@ -2001,13 +2070,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   onRack3dPick(pick: { level: number; pos: JwPos; blockCode?: string }): void {
     if (pick.blockCode) {
-      const block = this.racks
-        .flatMap((r) => r.blocks)
-        .find((b) => b.code === pick.blockCode);
-      if (block) this.selectedBlock = block;
+      const kho = this.findKhoMatBlock(pick.blockCode);
+      if (kho) {
+        this.selectedBlock = this.khoMatToBlock(kho);
+      } else {
+        const block = this.racks.flatMap((r) => r.blocks).find((b) => b.code === pick.blockCode);
+        if (block) this.selectedBlock = block;
+      }
     }
     this.selectedLevel = pick.level;
-    this.selectedPos = pick.pos;
+    this.selectedPos = this.selectedIsKhoMat ? 'A' : pick.pos;
     this.showScanInput = false;
     this.scanPalletInput = '';
     if (this.show3D) this.syncRack3dInputs();
@@ -2341,6 +2413,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   palletsInBlock(block: JwBlock): number {
+    if (block.kind === 'kho-mat') return this.KHO_MAT_LEVELS;
     return this.isShortBlock(block) ? this.PALLETS_SHORT_BLOCK : this.PALLETS_LONG_BLOCK;
   }
 
@@ -2419,6 +2492,47 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   blockPalletAlongX(block: JwBlock): boolean {
     return block.wM > block.hM;
+  }
+
+  get selectedIsKhoMat(): boolean {
+    return this.selectedBlock?.kind === 'kho-mat';
+  }
+
+  get selectedLevelList(): number[] {
+    return this.selectedIsKhoMat ? this.KHO_MAT_LEVEL_LIST : this.LEVEL_LIST;
+  }
+
+  get selectedBlockCapacity(): number {
+    return this.selectedBlock ? this.palletsInBlock(this.selectedBlock) : 0;
+  }
+
+  khoMatToBlock(block: JwKhoMatBlock): JwBlock {
+    return {
+      code: block.code,
+      rackNum: 0,
+      index: block.index,
+      xM: block.xM,
+      yM: block.yM,
+      wM: block.wM,
+      hM: block.hM,
+      kind: 'kho-mat'
+    };
+  }
+
+  findKhoMatBlock(code: string): JwKhoMatBlock | null {
+    for (const row of this.khoMatRows) {
+      const hit = row.blocks.find((b) => b.code === code);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  khoMatOccupiedCount(block: JwKhoMatBlock): number {
+    return this.blockOccupiedCount(this.khoMatToBlock(block));
+  }
+
+  isKhoMatBlockSelected(block: JwKhoMatBlock): boolean {
+    return this.selectedBlock?.kind === 'kho-mat' && this.selectedBlock.code === block.code;
   }
 
   get selectedSlotCode(): string {
@@ -2992,8 +3106,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       : this.BLOCK_LEN_M;
   }
 
-  /** R11-1A */
+  /** R11-1A · kho mát A01-1-3 (không A/B/C) */
   slotCode(blockCode: string, level: number, pos: JwPos): string {
+    if (this.findKhoMatBlock(blockCode)) return `${blockCode}-${level}`;
     return `${blockCode}-${level}${pos}`;
   }
 
@@ -3003,6 +3118,12 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   blockOccupiedCount(block: JwBlock): number {
     let n = 0;
+    if (block.kind === 'kho-mat' || this.findKhoMatBlock(block.code)) {
+      for (const lv of this.KHO_MAT_LEVEL_LIST) {
+        if (this.palletAt(`${block.code}-${lv}`)) n++;
+      }
+      return n;
+    }
     for (const lv of this.LEVEL_LIST) {
       for (const pos of this.POS_LETTERS) {
         if (this.palletAt(this.slotCode(block.code, lv, pos))) n++;
@@ -3022,6 +3143,14 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.selectedPos = 'A';
     this.showScanInput = false;
     this.scanPalletInput = '';
+    if (this.show3D) this.syncRack3dInputs();
+  }
+
+  onKhoMatPointerDown(block: JwKhoMatBlock, event: PointerEvent): void {
+    if (this.showCctv) return;
+    if (this.mapTool === 'pan') return;
+    event.stopPropagation();
+    this.selectBlock(this.khoMatToBlock(block), event);
   }
 
   selectLevel(level: number): void {
@@ -3051,6 +3180,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.mapTool === 'pan' && this.panMoved) return;
     const target = event.target as Element | null;
     if (target?.closest('.jw-block')) return;
+    if (target?.closest('.jw-kho-mat__hit')) return;
     if (target?.closest('.jw-cctv')) return;
     if (this.showCctv) {
       this.selectedBlock = null;
@@ -3345,6 +3475,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.lastUpdated = new Date();
       this.showScanInput = false;
       this.scanPalletInput = '';
+      if (this.show3D) this.syncRack3dInputs();
 
       const synced = await this.syncInventoryForPallet(code, slot);
       if (synced === 0) {
@@ -3372,6 +3503,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.slotPallets.delete(slot);
       this.slotPallets = new Map(this.slotPallets);
       this.lastUpdated = new Date();
+      if (this.show3D) this.syncRack3dInputs();
     } catch (e) {
       console.error('[JWarehouse] clearSelectedPallet failed', e);
       alert(this.t('alert.clearPalletFail'));
@@ -4033,6 +4165,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       for (let b = 0; b < this.KHO_MAT_BLOCKS_PER_ROW; b++) {
         blocks.push({
           code: `${rowId}-${b + 1}`,
+          index: b + 1,
           xM: colX,
           yM: this.round2(rowYM + b * blockD),
           wM: colW,

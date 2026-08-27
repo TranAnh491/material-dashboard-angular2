@@ -1369,6 +1369,18 @@
   max-width: 100%;
   vertical-align: middle;
   line-height: 1.2;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+
+  &:hover {
+    background: #f1f5f9;
+  }
+
+  &--on {
+    background: #ccfbf1;
+    outline: 1px solid #14b8a6;
+  }
 
   &:hover .location-popover,
   &:focus-within .location-popover {
@@ -6447,6 +6459,225 @@ $asm1-toolbar-h: 36px;
   font-weight: 700;
   color: #64748b;
   align-self: center;
+}
+
+/* ── Sơ đồ kệ kho J ── */
+.layout-j-diagram {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+
+  &__caption {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  &__scroll {
+    display: flex;
+    gap: 10px;
+    overflow: auto;
+    max-height: min(46vh, 380px);
+    padding-bottom: 4px;
+  }
+}
+
+.layout-j-block {
+  flex: 0 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &__head {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f766e;
+    text-align: center;
+  }
+}
+
+.layout-j-level {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &__tag {
+    font-size: 10px;
+    font-weight: 800;
+    color: #94a3b8;
+    width: 20px;
+    flex: 0 0 20px;
+  }
+}
+
+.layout-j-cells {
+  display: flex;
+  gap: 4px;
+}
+
+.layout-j-cell {
+  width: 34px;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+
+  &:hover {
+    border-color: #14b8a6;
+  }
+
+  &--on {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+  }
+}
+
+.layout-loc-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  &__label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  &__row {
+    display: flex;
+    gap: 6px;
+
+    input {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+  }
+
+  &__add {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid #14b8a6;
+    background: #ccfbf1;
+    color: #0f766e;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+
+    i { font-size: 16px; }
+
+    &:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.layout-loc-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+
+  &__head {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #64748b;
+    width: 100%;
+  }
+
+  &__clear {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #ef4444;
+    cursor: pointer;
+  }
+
+  &__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #ccfbf1;
+    border: 1px solid #14b8a6;
+    color: #0f766e;
+    border-radius: 999px;
+    padding: 3px 4px 3px 10px;
+    font-size: 12px;
+    font-weight: 800;
+
+    button {
+      display: inline-flex;
+      border: none;
+      background: transparent;
+      color: #0f766e;
+      cursor: pointer;
+      padding: 0;
+
+      i {
+        font-size: 15px;
+      }
+    }
+  }
+}
+
+.location-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f766e;
+  cursor: pointer;
+  margin-bottom: 3px;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    border-color: #14b8a6;
+    background: #f0fdfa;
+  }
+
+  &--on {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+  }
 }
 
 .filter-picker-body {
