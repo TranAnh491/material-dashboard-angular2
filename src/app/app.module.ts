@@ -2,7 +2,8 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
-import { RouterModule } from '@angular/router';
+import { RouteReuseStrategy, RouterModule } from '@angular/router';
+import { MaterialsRouteReuseStrategy } from './materials-route-reuse.strategy';
 import { AppRoutingModule } from './app.routing';
 import { ComponentsModule } from './components/components.module';
 import { AppComponent } from './app.component';
@@ -74,7 +75,9 @@ import { SanitizeHtmlPipe } from './pipes/sanitize-html.pipe';
     SanitizeHtmlPipe,
     // DocumentsComponent removed from here
   ],
-  providers: [],
+  providers: [
+    { provide: RouteReuseStrategy, useClass: MaterialsRouteReuseStrategy }
+  ],
   bootstrap: [AppComponent]
 })
 export class AppModule { }

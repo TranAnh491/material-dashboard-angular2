@@ -66,11 +66,18 @@ export class NvlCatalogFullService {
     return String(code || '').trim().toUpperCase();
   }
 
-  async listAll(forceRefresh = false): Promise<NvlCatalogItem[]> {
-    const today = this.todayKey();
-    if (!forceRefresh && this.cachedItems && this.cachedDateKey === today) {
+  /** Cache trong RAM — đọc đồng bộ, không JSON.parse / Firestore. */
+  peekCached(): NvlCatalogItem[] | null {
+    if (this.cachedItems && this.cachedDateKey === this.todayKey()) {
       return this.cachedItems;
     }
+    return null;
+  }
+
+  async listAll(forceRefresh = false): Promise<NvlCatalogItem[]> {
+    const today = this.todayKey();
+    const mem = !forceRefresh ? this.peekCached() : null;
+    if (mem) return mem;
     if (!forceRefresh) {
       const fromLocalStorage = this.loadFromLocalStorage();
       if (fromLocalStorage) {
@@ -157,7 +164,7 @@ export class NvlCatalogFullService {
       if (cacheDay !== this.todayKey()) return null;
       return {
         timestamp: ts,
-        items: parsed.items.map(i => ({ ...i, updatedAt: i.updatedAt ? new Date(i.updatedAt) : undefined }))
+        items: parsed.items
       };
     } catch {
       return null;

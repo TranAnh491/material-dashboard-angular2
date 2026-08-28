@@ -146,7 +146,10 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit() {
-    // Không cần this.runOnRouteChange() nữa
+    // Prefetch chunk Materials khi đang ở layout — lần bấm tab sau không chờ tải JS.
+    setTimeout(() => {
+      void import('../../pages/materials/materials.module');
+    }, 400);
   }
 
   updatePerfectScrollbar() {

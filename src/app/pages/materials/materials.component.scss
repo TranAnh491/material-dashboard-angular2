@@ -1372,6 +1372,7 @@
   cursor: pointer;
   border-radius: 6px;
   padding: 2px 4px;
+  pointer-events: auto;
 
   &:hover {
     background: #f1f5f9;
@@ -1460,9 +1461,47 @@
   font-size: 12px;
   color: #0f766e;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   vertical-align: middle;
+}
+
+.loc-col-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f766e;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    background: #f0fdfa;
+    border-color: #14b8a6;
+  }
+
+  &--empty {
+    color: #94a3b8;
+    font-weight: 600;
+  }
+
+  &--on {
+    background: #ccfbf1;
+    border-color: #14b8a6;
+    outline: 1px solid #14b8a6;
+  }
 }
 
 .location-header-cell {
@@ -2416,6 +2455,10 @@ $asm1-toolbar-h: 36px;
 
 .qr-btn:hover i {
   color: #333333;
+}
+
+.qr-btn--disabled {
+  opacity: 0.45;
 }
 
 // Mobile-first responsive design
@@ -3374,6 +3417,10 @@ $asm1-toolbar-h: 36px;
   align-items: center;
   justify-content: center;
   z-index: 10000;
+}
+
+.layout-loc-overlay {
+  z-index: 20000;
 }
 
 .modal-content {
@@ -6367,7 +6414,18 @@ $asm1-toolbar-h: 36px;
 
 .layout-loc-wh {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+
+  &--tag {
+    padding-top: 2px;
+  }
+
+  &--focus {
+    outline: 2px solid #14b8a6;
+    outline-offset: 2px;
+    border-radius: 12px;
+  }
 
   &__btn {
     flex: 1;
@@ -6441,6 +6499,11 @@ $asm1-toolbar-h: 36px;
   font-size: 13px;
   font-weight: 700;
   color: #334155;
+
+  &--focus input {
+    border-color: #14b8a6;
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2);
+  }
 
   input {
     flex: 1;

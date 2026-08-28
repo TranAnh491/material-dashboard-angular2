@@ -1150,10 +1150,11 @@
             <p class="po-number">PO: {{material.poNumber}}</p>
           </div>
           <div class="card-actions">
-            <button class="qr-btn" 
+            <button class="qr-btn"
+                    type="button"
                     (mousedown)="updateRollsOrBags(material); updateTotalBags(material)"
                     (click)="printQRCode(material)"
-                    [disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
+                    [class.qr-btn--disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
                     [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : 'Tạo QR code')">
               <i class="material-icons">qr_code</i>
             </button>
@@ -1231,17 +1232,12 @@
           <div class="info-row location-row">
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="value location-text" *ngIf="!isLocationColumnUnlocked">
-                {{ primaryLocationDisplay(material.location) }}
+              <button type="button"
+                      class="loc-col-btn"
+                      (click)="openLayoutLocPicker(material, $event, 'location')">
+                {{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}
                 <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">+{{ locationExtraCount(material.location) }}</span>
-              </span>
-              <textarea *ngIf="isLocationColumnUnlocked"
-                     class="mobile-input location-input location-textarea"
-                     rows="2"
-                     [(ngModel)]="material.location"
-                     (focus)="rememberLocationBeforeEdit(material)"
-                     (blur)="onLocationChange(material)"
-                     placeholder="Mỗi vị trí 1 dòng"></textarea>
+              </button>
               <button type="button"
                       *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
                       class="location-unlock-btn"
@@ -1254,26 +1250,21 @@
 
           <div class="info-row">
             <span class="label">Pallet:</span>
-            <input *ngIf="isLocationColumnUnlocked"
-                   type="text"
-                   class="mobile-input"
-                   [(ngModel)]="material.palletId"
-                   (focus)="rememberPalletBeforeEdit(material)"
-                   (blur)="onPalletBlur(material)"
-                   (keydown.enter)="onPalletKeyEnter(material, $event)"
-                   placeholder="P0001" />
-            <span class="value" *ngIf="!isLocationColumnUnlocked">{{ material.palletId || '—' }}</span>
+            <button type="button"
+                    class="loc-col-btn loc-col-btn--pallet"
+                    [class.loc-col-btn--empty]="!material.palletId"
+                    (click)="openLayoutLocPicker(material, $event, 'pallet')">
+              {{ material.palletId || 'Chọn pallet' }}
+            </button>
           </div>
           <div class="info-row">
             <span class="label">WH:</span>
-            <select *ngIf="isLocationColumnUnlocked"
-                    class="mobile-input"
-                    [ngModel]="locationWhTag(material.location)"
-                    (change)="onWhSelect(material, $any($event.target).value)">
-              <option value="">—</option>
-              <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
-            </select>
-            <span class="value" *ngIf="!isLocationColumnUnlocked">{{ locationWhTag(material.location) || '—' }}</span>
+            <button type="button"
+                    class="loc-col-btn loc-col-btn--wh"
+                    [class.loc-col-btn--empty]="!locationWhTag(material.location)"
+                    (click)="openLayoutLocPicker(material, $event, 'wh')">
+              {{ locationWhTag(material.location) || 'Chọn WH' }}
+            </button>
           </div>
           
           <div class="info-row">
@@ -1359,7 +1350,7 @@
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Số lượng cần xuất (nhập tay)">XT</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
-            <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Sửa tay vị trí rồi Enter/blur để lưu' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
+            <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Bấm ô vị trí để mở sơ đồ kho' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
               <span>Vị trí</span>
               <button type="button"
                       *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
@@ -1369,8 +1360,8 @@
                 <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
               </button>
             </th>
-            <th title="Số pallet — nhập rồi Enter/blur để lưu">Pallet</th>
-            <th title="Kho đích — chọn ASM3 hoặc J5">WH</th>
+            <th title="Bấm ô pallet để sửa số pallet">Pallet</th>
+            <th title="Bấm ô WH để chọn ASM3 hoặc J5">WH</th>
             <th>Change</th>
             <th>Loại Hình</th>
             <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
@@ -1393,10 +1384,11 @@
               [class.duplicate-row]="material.isDuplicate"
               [class.iqc-row]="isIQCLocation(material.location)">
             <td class="qr-cell">
-              <button class="qr-btn" 
+              <button class="qr-btn"
+                      type="button"
                       (mousedown)="updateRollsOrBags(material); updateTotalBags(material)"
                       (click)="printQRCode(material)"
-                      [disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
+                      [class.qr-btn--disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
                       [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : 'Tạo QR code')">
                 <i class="material-icons">qr_code</i>
               </button>
@@ -1519,41 +1511,33 @@
             <td class="location-cell"
                 [class.iqc-location]="isIQCLocation(material.location)"
                 title="Bấm để mở sơ đồ kho — chọn vị trí hoặc nhập tay trong popup">
-              <div class="location-display location-display--clickable"
-                   [class.location-display--on]="isLayoutLocPickerRow(material)"
-                   (click)="openLayoutLocPicker(material, $event)">
-                <span class="location-text">{{ primaryLocationDisplay(material.location) || '—' }}</span>
+              <button type="button"
+                      class="loc-col-btn location-display location-display--clickable"
+                      [class.location-display--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'location'"
+                      (click)="openLayoutLocPicker(material, $event, 'location')">
+                <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
                 <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">
                   +{{ locationExtraCount(material.location) }}
                 </span>
-                <div class="location-popover" *ngIf="locationExtraCount(material.location) > 0" role="tooltip">
-                  <div class="location-popover__item" *ngFor="let loc of locationParts(material.location)">{{ loc }}</div>
-                </div>
-              </div>
+              </button>
             </td>
-            <td class="pallet-cell" [title]="isLocationColumnUnlocked ? 'Nhập số pallet rồi Enter/blur để lưu' : (material.palletId || 'Chưa gán pallet')">
-              <input
-                *ngIf="isLocationColumnUnlocked"
-                type="text"
-                class="editable-cell pallet-input"
-                [(ngModel)]="material.palletId"
-                (focus)="rememberPalletBeforeEdit(material)"
-                (blur)="onPalletBlur(material)"
-                (keydown.enter)="onPalletKeyEnter(material, $event)"
-                placeholder="P0001"
-                autocomplete="off" />
-              <ng-container *ngIf="!isLocationColumnUnlocked">{{ material.palletId || '—' }}</ng-container>
+            <td class="pallet-cell" title="Bấm để sửa số pallet">
+              <button type="button"
+                      class="loc-col-btn loc-col-btn--pallet"
+                      [class.loc-col-btn--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'pallet'"
+                      [class.loc-col-btn--empty]="!material.palletId"
+                      (click)="openLayoutLocPicker(material, $event, 'pallet')">
+                {{ material.palletId || 'Chọn pallet' }}
+              </button>
             </td>
-            <td class="wh-cell" [title]="isLocationColumnUnlocked ? 'Chọn ASM3 hoặc J5' : (locationWhTag(material.location) || 'Chưa gán WH')">
-              <select
-                *ngIf="isLocationColumnUnlocked"
-                class="editable-cell wh-select"
-                [ngModel]="locationWhTag(material.location)"
-                (change)="onWhSelect(material, $any($event.target).value)">
-                <option value="">—</option>
-                <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
-              </select>
-              <ng-container *ngIf="!isLocationColumnUnlocked">{{ locationWhTag(material.location) || '—' }}</ng-container>
+            <td class="wh-cell" title="Bấm để chọn kho ASM3 hoặc J5">
+              <button type="button"
+                      class="loc-col-btn loc-col-btn--wh"
+                      [class.loc-col-btn--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'wh'"
+                      [class.loc-col-btn--empty]="!locationWhTag(material.location)"
+                      (click)="openLayoutLocPicker(material, $event, 'wh')">
+                {{ locationWhTag(material.location) || 'Chọn WH' }}
+              </button>
             </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
@@ -1627,7 +1611,6 @@
                 class="storage-unit-cell"
                 [class.storage-unit-cell--filled]="hasStorageUnit(material)"
                 [class.storage-unit-cell--empty]="!hasStorageUnit(material)"
-                [disabled]="hasStorageUnit(material)"
                 (click)="onStorageUnitCellClick(material)"
                 [title]="hasStorageUnit(material) ? 'Mã NVL đã có DV Lưu trữ — sửa tại Danh mục DV Lưu trữ' : 'Chọn size pallet theo mã NVL (mọi PO, IMD)'">
                 {{ hasStorageUnit(material) ? getStorageUnitLabel(material) : 'Chọn' }}
@@ -3121,16 +3104,16 @@
   </div>
 </div>
 
-<!-- Popup chọn vị trí layout (desktop, sau khi mở khóa) -->
-<div class="modal-overlay more-overlay" *ngIf="showLayoutLocPicker && layoutLocMaterial && !isMobile" (click)="closeLayoutLocPicker()">
+<!-- Popup chọn vị trí / pallet / WH -->
+<div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && layoutLocMaterial" (click)="closeLayoutLocPicker()">
   <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí layout">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
-          <i class="material-icons">view_module</i>
+          <i class="material-icons">{{ layoutLocFocus === 'pallet' ? 'widgets' : layoutLocFocus === 'wh' ? 'warehouse' : 'view_module' }}</i>
         </span>
         <div>
-          <h3>Chọn vị trí kệ — Kho J</h3>
+          <h3>{{ layoutLocFocus === 'pallet' ? 'Sửa pallet' : layoutLocFocus === 'wh' ? 'Chọn WH' : 'Chọn vị trí kệ' }}</h3>
           <p class="more-popup-header__sub">{{ layoutLocMaterial.materialCode }} · {{ layoutLocMaterial.poNumber || '—' }}</p>
         </div>
       </div>
@@ -3139,6 +3122,27 @@
       </button>
     </div>
     <div class="modal-body layout-loc-picker__body">
+      <div class="layout-loc-wh" [class.layout-loc-wh--focus]="layoutLocFocus === 'wh'">
+        <button
+          type="button"
+          class="layout-loc-wh__btn"
+          *ngFor="let opt of layoutWhOptions"
+          [class.layout-loc-wh__btn--on]="layoutLocWh === opt.id"
+          (click)="setLayoutLocWh(opt.id)">
+          {{ opt.label }}
+        </button>
+      </div>
+      <div class="layout-loc-wh layout-loc-wh--tag" [class.layout-loc-wh--focus]="layoutLocFocus === 'wh'">
+        <button type="button" class="layout-loc-wh__btn" [class.layout-loc-wh__btn--on]="!layoutLocWhTag" (click)="setLayoutLocWhTag('')">WH: —</button>
+        <button
+          type="button"
+          class="layout-loc-wh__btn"
+          *ngFor="let wh of WH_SELECT_OPTIONS"
+          [class.layout-loc-wh__btn--on]="layoutLocWhTag === wh"
+          (click)="setLayoutLocWhTag(wh)">
+          {{ wh }}
+        </button>
+      </div>
       <div class="layout-loc-groups">
         <button
           type="button"
@@ -3203,27 +3207,27 @@
         </div>
       </div>
 
-      <div class="layout-loc-chosen" *ngIf="layoutLocSelected.size">
+      <div class="layout-loc-chosen" *ngIf="layoutLocSelectedList.length">
         <span class="layout-loc-chosen__head">
-          Đã chọn {{ layoutLocSelected.size }}
+          Đã chọn {{ layoutLocSelectedList.length }}
           <button type="button" class="layout-loc-chosen__clear" (click)="clearLayoutLocSelected()">Xóa hết</button>
         </span>
-        <span class="layout-loc-chosen__tag" *ngFor="let s of layoutLocSelected">
+        <span class="layout-loc-chosen__tag" *ngFor="let s of layoutLocSelectedList">
           {{ s }}
           <button type="button" (click)="toggleLayoutLocSlot(s)" aria-label="Bỏ chọn">
             <i class="material-icons">close</i>
           </button>
         </span>
       </div>
-      <label class="layout-loc-pallet">
+      <label class="layout-loc-pallet" [class.layout-loc-pallet--focus]="layoutLocFocus === 'pallet'">
         <span>Số pallet</span>
-        <input type="text" [(ngModel)]="layoutLocPalletDraft" placeholder="VD: P0001" autocomplete="off" />
+        <input id="layout-loc-pallet-input" type="text" [(ngModel)]="layoutLocPalletDraft" placeholder="VD: P0001" autocomplete="off" />
       </label>
     </div>
     <div class="filter-picker-footer">
-      <span class="layout-loc-count">Đã chọn {{ layoutLocSelected.size }}</span>
+      <span class="layout-loc-count">Đã chọn {{ layoutLocSelectedList.length }}</span>
       <button type="button" class="cancel-btn" (click)="closeLayoutLocPicker()">Đóng</button>
-      <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!layoutLocSelected.size && !layoutLocManualDraft.trim()">
+      <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!canApplyLayoutLoc()">
         <i class="material-icons">check</i> Done
       </button>
     </div>

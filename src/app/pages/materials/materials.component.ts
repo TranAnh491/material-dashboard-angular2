@@ -31,6 +31,7 @@ import {
   LayoutWhPick,
   LayoutLocGroup,
   getLayoutLocationGroups,
+  isJWarehouseLocation,
   normalizeLayoutLocToken
 } from './layout-location-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
@@ -445,6 +446,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private catalogLoadedDateKey = '';
   /** Tránh gọi song song loadCatalogFromFirebase + loadCatalogOnce (đọc ~9K doc 2 lần). */
   private catalogLoadPromise: Promise<void> | null = null;
+  /** Cache danh mục sống sót khi Angular hủy component (rời tab). */
+  private static sharedCatalogCache = new Map<string, any>();
+  private static sharedCatalogDateKey = '';
   
   // Search and filter — mã hàng hoặc vị trí (tick Location)
   searchTerm = '';
@@ -649,6 +653,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   layoutLocPalletDraft = '';
   /** Ô nhập tay vị trí mới trong popup (phân tách bằng dấu phẩy / xuống dòng). */
   layoutLocManualDraft = '';
+  /** Phần popup đang mở từ cột nào — để focus đúng ô. */
+  layoutLocFocus: 'location' | 'pallet' | 'wh' = 'location';
+  /** Tiền tố WH ghi vào vị trí: ASM3- / J5-. */
+  layoutLocWhTag: '' | 'ASM3' | 'J5' = '';
   readonly layoutWhOptions: Array<{ id: LayoutWhPick; label: string }> = [
     { id: 'ASM1', label: 'ASM1' },
     { id: 'ASM3', label: 'ASM3' },
@@ -710,7 +718,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onStorageUnitCellClick(material: InventoryMaterial): void {
-    if (this.hasStorageUnit(material)) return;
+    if (this.hasStorageUnit(material)) {
+      alert('Mã NVL đã có DV Lưu trữ. Sửa tại Danh mục DV Lưu trữ.');
+      return;
+    }
     const code = this.getStorageMaterialKey(material);
     if (!code) {
       alert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
@@ -2228,7 +2239,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.markForCheck();
     });
 
-    // Chỉ setup search — không load inventory / catalog cho đến khi user search
+    // Chỉ setup search — không chặn UI để đọc danh mục / tồn kho.
+    this.restoreCatalogMemoryFast();
+    setTimeout(() => {
+      void this.hydrateCatalogFromDisk().then((ok) => {
+        if (ok) this.rememberSharedCatalog();
+      });
+    }, 0);
+
     console.log('🔍 Setting up search mechanism (search-first, no auto load)...');
     this.setupDebouncedSearch();
     this.inventoryMaterials = [];
@@ -3335,6 +3353,29 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
+  private restoreCatalogMemoryFast(): void {
+    const today = this.catalogTodayKey();
+    if (MaterialsComponent.sharedCatalogCache.size > 0 && MaterialsComponent.sharedCatalogDateKey === today) {
+      this.catalogCache = MaterialsComponent.sharedCatalogCache;
+      this.catalogLoaded = true;
+      this.catalogLoadedDateKey = today;
+      return;
+    }
+    const mem = this.nvlCatalogFull.peekCached();
+    if (mem?.length) {
+      this.fillCatalogCacheFromNvlItems(mem);
+      this.catalogLoaded = true;
+      this.catalogLoadedDateKey = today;
+      this.rememberSharedCatalog();
+    }
+  }
+
+  private rememberSharedCatalog(): void {
+    if (!this.catalogCache.size) return;
+    MaterialsComponent.sharedCatalogCache = this.catalogCache;
+    MaterialsComponent.sharedCatalogDateKey = this.catalogLoadedDateKey || this.catalogTodayKey();
+  }
+
   /** Đọc catalog từ đĩa (IndexedDB / localStorage compact) — không tốn lượt đọc Firestore. */
   private async hydrateCatalogFromDisk(): Promise<boolean> {
     if (this.catalogCache.size > 0 && this.catalogLoadedDateKey === this.catalogTodayKey()) return true;
@@ -3387,6 +3428,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`📱 Loaded ${this.catalogCache.size} catalog items from disk cache`);
       this.catalogLoaded = true;
       this.catalogLoadedDateKey = this.catalogTodayKey();
+      this.rememberSharedCatalog();
       return true;
     }
     return false;
@@ -3645,28 +3687,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Load catalog from Firebase (Danh mục NVL). forceRefresh = bỏ cache trong ngày.
+  // Không bật overlay "Đang tải danh mục" trừ khi user bấm Cập nhật danh mục.
   private async loadCatalogFromFirebase(forceRefresh = false): Promise<void> {
-    this.isCatalogLoading = true;
-    this.cdr.markForCheck();
+    if (forceRefresh) {
+      this.isCatalogLoading = true;
+      this.cdr.markForCheck();
+    }
     const today = this.catalogTodayKey();
 
     try {
-      if (!forceRefresh && this.catalogCache.size > 0 && this.catalogLoadedDateKey === today) {
-        this.catalogLoaded = true;
+      if (!forceRefresh && this.hydrateCatalogFromNvlMemoryOrShared()) {
         this.applyCatalogToAllViews();
         return;
       }
 
-      // Ưu tiên cache Danh mục NVL (đã patch khi unlock) — không dùng disk Materials cũ.
-      const items = await this.nvlCatalogFull.listAll(forceRefresh);
-      if (items.length) {
-        this.fillCatalogCacheFromNvlItems(items);
+      if (!forceRefresh && this.catalogCache.size > 0 && this.catalogLoadedDateKey === today) {
         this.catalogLoaded = true;
-        this.catalogLoadedDateKey = today;
-        if (forceRefresh) this.readTracker.track('materials', 'materials', items.length);
-        this.persistCatalogCache();
         this.applyCatalogToAllViews();
-        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Danh mục NVL`);
         return;
       }
 
@@ -3674,6 +3711,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.catalogLoaded = true;
         this.catalogLoadedDateKey = today;
         this.applyCatalogToAllViews();
+        return;
+      }
+
+      const items = await this.nvlCatalogFull.listAll(forceRefresh);
+      if (items.length) {
+        this.fillCatalogCacheFromNvlItems(items);
+        this.catalogLoaded = true;
+        this.catalogLoadedDateKey = today;
+        this.rememberSharedCatalog();
+        if (forceRefresh) this.readTracker.track('materials', 'materials', items.length);
+        this.persistCatalogCache();
+        this.applyCatalogToAllViews();
+        console.log(`✅ Loaded ${this.catalogCache.size} catalog items from Danh mục NVL`);
+        return;
       }
     } catch (error) {
       console.error('❌ Error loading catalog from Firebase:', error);
@@ -3682,6 +3733,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isCatalogLoading = false;
       this.cdr.detectChanges();
     }
+  }
+
+  private hydrateCatalogFromNvlMemoryOrShared(): boolean {
+    this.restoreCatalogMemoryFast();
+    return this.catalogLoaded && this.catalogLoadedDateKey === this.catalogTodayKey();
   }
 
   // Apply filters to inventory
@@ -4126,7 +4182,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         alert(`Không có dòng nào đang tick KK trên ${this.selectedFactory}.`);
       } else {
         void this.refreshLastStatusForMaterials(this.filteredInventory);
-        void this.ensureCatalogLoaded().then(() => {
+        void this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode)).then(() => {
           this.applyCatalogToMaterials(this.inventoryMaterials);
           void this.applyStorageUnitsFromCatalog();
           if (this.showKhColumn) void this.applyNvlkhFromCatalog();
@@ -4576,10 +4632,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
 
         this.readTracker.track('materials', 'inventory-materials', querySnapshot.docs.length);
-        await this.ensureCatalogLoaded();
         this.applyCatalogToMaterials(this.inventoryMaterials);
-        void this.applyStorageUnitsFromCatalog();
-        if (this.showKhColumn) void this.applyNvlkhFromCatalog();
+        void this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode)).then(() => {
+          this.applyCatalogToMaterials(this.inventoryMaterials);
+          this.applyCatalogToMaterials(this.filteredInventory);
+          void this.applyStorageUnitsFromCatalog();
+          if (this.showKhColumn) void this.applyNvlkhFromCatalog();
+          this.cdr.markForCheck();
+        });
 
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = [...this.inventoryMaterials];
@@ -10278,6 +10338,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return getLayoutLocationGroups(this.layoutLocWh);
   }
 
+  get layoutLocSelectedList(): string[] {
+    return Array.from(this.layoutLocSelected);
+  }
+
+  canApplyLayoutLoc(): boolean {
+    const material = this.layoutLocMaterial;
+    if (!material) return false;
+    if (this.layoutLocSelected.size > 0) return true;
+    if (String(this.layoutLocManualDraft || '').trim()) return true;
+    const palletNow = String(this.layoutLocPalletDraft || '').trim().toUpperCase();
+    const palletPrev = String(material.palletId || '').trim().toUpperCase();
+    if (palletNow !== palletPrev) return true;
+    return this.layoutLocWhTag !== this.locationWhTag(material.location);
+  }
+
   get layoutLocActiveGroup(): LayoutLocGroup | undefined {
     return this.layoutLocGroups.find((g) => g.id === this.layoutLocGroupId) || this.layoutLocGroups[0];
   }
@@ -10341,26 +10416,42 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.showLayoutLocPicker && this.layoutLocMaterial?.id === material.id;
   }
 
-  openLayoutLocPicker(material: InventoryMaterial, event?: Event): void {
+  openLayoutLocPicker(
+    material: InventoryMaterial,
+    event?: Event,
+    focus: 'location' | 'pallet' | 'wh' = 'location'
+  ): void {
     event?.preventDefault();
     event?.stopPropagation();
     if (!this.isLocationColumnUnlocked) {
-      this.tryUnlockLocationColumn();
-      return;
+      if (this.TEMP_UNLOCK_LOCATION_WH_PALLET) {
+        this.isLocationColumnUnlocked = true;
+      } else {
+        this.tryUnlockLocationColumn();
+        return;
+      }
     }
     if (this.isLayoutLocPickerRow(material)) {
-      this.closeLayoutLocPicker();
+      if (this.layoutLocFocus === focus) {
+        this.closeLayoutLocPicker();
+        return;
+      }
+      this.layoutLocFocus = focus;
+      this.cdr.detectChanges();
+      if (focus === 'pallet') this.focusLayoutLocPalletInput();
       return;
     }
     const parts = splitMultiLocations(material.location || '');
     this.layoutLocMaterial = material;
-    // Chỉ dùng kho J.
-    this.layoutLocWh = 'J';
+    this.layoutLocFocus = focus;
+    this.layoutLocWhTag = this.normalizeLayoutLocWhTag(this.locationWhTag(material.location));
+    this.layoutLocWh = this.inferLayoutWh(material.location);
     this.layoutLocSelected = new Set(
       parts.map((x) => normalizeLayoutLocToken(x, this.layoutLocWh)).filter(Boolean)
     );
     const groups = getLayoutLocationGroups(this.layoutLocWh);
-    const hit = groups.find((g) => g.slots.some((s) => this.layoutLocSelected.has(s.toUpperCase())));
+    const selectedUpper = new Set(Array.from(this.layoutLocSelected).map((s) => s.toUpperCase()));
+    const hit = groups.find((g) => g.slots.some((s) => selectedUpper.has(s.toUpperCase())));
     this.layoutLocGroupId = hit?.id || groups[0]?.id || '';
     this.layoutLocQuery = '';
     this.layoutLocManualDraft = '';
@@ -10368,6 +10459,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.rememberLocationBeforeEdit(material);
     this.rememberPalletBeforeEdit(material);
     this.showLayoutLocPicker = true;
+    this.cdr.detectChanges();
+    if (focus === 'pallet') this.focusLayoutLocPalletInput();
   }
 
   closeLayoutLocPicker(): void {
@@ -10376,6 +10469,48 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocSelected = new Set();
     this.layoutLocPalletDraft = '';
     this.layoutLocManualDraft = '';
+    this.layoutLocFocus = 'location';
+    this.layoutLocWhTag = '';
+    this.cdr.detectChanges();
+  }
+
+  private inferLayoutWh(location: string | null | undefined): LayoutWhPick {
+    const raw = String(location || '');
+    const tag = this.locationWhTag(raw);
+    if (tag === 'ASM3') return 'ASM3';
+    const parts = splitMultiLocations(raw);
+    if (parts.some((p) => isJWarehouseLocation(p) || /^R\d+/i.test(p))) return 'J';
+    if (tag === 'J5') return 'J';
+    return 'J';
+  }
+
+  private normalizeLayoutLocWhTag(tag: string): '' | 'ASM3' | 'J5' {
+    const t = String(tag || '').trim().toUpperCase();
+    if (t === 'ASM3' || t === 'J5') return t;
+    return '';
+  }
+
+  setLayoutLocWhTag(tag: string): void {
+    this.layoutLocWhTag = this.normalizeLayoutLocWhTag(tag);
+    if (this.layoutLocWhTag === 'ASM3') this.setLayoutLocWh('ASM3');
+    else if (this.layoutLocWhTag === 'J5') this.setLayoutLocWh('J');
+  }
+
+  private focusLayoutLocPalletInput(): void {
+    setTimeout(() => {
+      const el = document.getElementById('layout-loc-pallet-input') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 60);
+  }
+
+  private applyWhPrefixToLocs(locs: string[], tag: string): string[] {
+    const prefix = String(tag || '').trim().toUpperCase();
+    return locs.map((loc) => {
+      const bare = this.stripDoiKhoWhPrefix(loc);
+      if (!bare) return '';
+      return prefix ? `${prefix}-${bare}` : bare;
+    }).filter(Boolean);
   }
 
   /** Thêm vị trí nhập tay từ ô trong popup (phân tách bằng , ; hoặc xuống dòng). */
@@ -10385,7 +10520,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .split(/[\n,;]+/)
       .map((x) => x.trim().toUpperCase())
       .filter(Boolean);
-    for (const t of tokens) this.layoutLocSelected.add(t);
+    if (!tokens.length) return;
+    const next = new Set(this.layoutLocSelected);
+    for (const t of tokens) next.add(t);
+    this.layoutLocSelected = next;
     this.layoutLocManualDraft = '';
   }
 
@@ -10399,6 +10537,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const groups = getLayoutLocationGroups(wh);
     this.layoutLocGroupId = groups[0]?.id || '';
     this.layoutLocQuery = '';
+    if (wh === 'ASM3') this.layoutLocWhTag = 'ASM3';
+    else if (wh === 'J') this.layoutLocWhTag = this.layoutLocWhTag === 'ASM3' ? 'J5' : (this.layoutLocWhTag || 'J5');
   }
 
   setLayoutLocGroup(id: string): void {
@@ -10409,8 +10549,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   toggleLayoutLocSlot(slot: string): void {
     const key = String(slot || '').trim().toUpperCase();
     if (!key) return;
-    if (this.layoutLocSelected.has(key)) this.layoutLocSelected.delete(key);
-    else this.layoutLocSelected.add(key);
+    const next = new Set(this.layoutLocSelected);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.layoutLocSelected = next;
   }
 
   isLayoutLocSlotOn(slot: string): boolean {
@@ -10421,24 +10563,42 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const material = this.layoutLocMaterial;
     if (!material) return;
     // Gộp phần gõ tay chưa kịp bấm "Thêm".
-    if (this.layoutLocManualDraft.trim()) this.addLayoutLocManual();
+    if (String(this.layoutLocManualDraft || '').trim()) this.addLayoutLocManual();
     const locs = Array.from(this.layoutLocSelected);
-    if (!locs.length) {
-      alert('Chọn ít nhất 1 vị trí, hoặc Đóng.');
-      return;
-    }
-    material.location = joinMultiLocations(locs);
-    const locOk = await this.persistLocationChange(material, { silent: true });
     const pallet = String(this.layoutLocPalletDraft || '').trim().toUpperCase();
     const prevPallet = String(
       (material as { __prevPalletId?: string }).__prevPalletId ?? material.palletId ?? ''
     ).trim().toUpperCase();
-    const palOk =
-      pallet !== prevPallet ? await this.persistPalletChange(material, pallet, { silent: true }) : false;
-    this.closeLayoutLocPicker();
-    if (locOk || palOk) {
-      alert(`✅ Đã lưu vị trí: ${material.location}${pallet ? `\nPallet: ${pallet}` : ''}`);
+    const prevWh = this.locationWhTag(material.location);
+    const whChanged = this.layoutLocWhTag !== prevWh;
+
+    let locOk = false;
+    if (locs.length) {
+      material.location = joinMultiLocations(this.applyWhPrefixToLocs(locs, this.layoutLocWhTag));
+      locOk = await this.persistLocationChange(material, { silent: true });
+    } else if (whChanged) {
+      if (!String(material.location || '').trim()) {
+        alert('Nhập vị trí trước khi gán WH.');
+        return;
+      }
+      locOk = await this.commitWhChange(material, this.layoutLocWhTag, { silent: true, bypassUnlock: true });
     }
+
+    const palOk =
+      pallet !== prevPallet ? await this.persistPalletChange(material, pallet, { silent: true, bypassUnlock: true }) : false;
+
+    if (!locOk && !palOk) {
+      alert('Chọn vị trí, pallet hoặc WH rồi bấm Done.');
+      return;
+    }
+    const savedWh = this.layoutLocWhTag;
+    const savedLoc = material.location || '—';
+    this.closeLayoutLocPicker();
+    const bits: string[] = [];
+    if (locOk) bits.push(`Vị trí: ${savedLoc}`);
+    if (savedWh) bits.push(`WH: ${savedWh}`);
+    if (palOk || pallet) bits.push(`Pallet: ${pallet || '—'}`);
+    alert(`✅ Đã lưu\n${bits.join('\n')}`);
   }
 
   rememberPalletBeforeEdit(material: InventoryMaterial): void {
@@ -10463,21 +10623,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     material: InventoryMaterial,
     raw: string,
     opts?: { silent?: boolean; bypassUnlock?: boolean }
-  ): Promise<void> {
-    if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return;
+  ): Promise<boolean> {
+    if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
     const next = String(raw || '').trim().toUpperCase();
-    if (next && next !== 'ASM3' && next !== 'J5' && next !== '00') return;
+    if (next && next !== 'ASM3' && next !== 'J5' && next !== '00') return false;
     const current = this.locationWhTag(material.location);
-    if (next === current) return;
+    if (next === current) return false;
     this.rememberLocationBeforeEdit(material);
     const bare = this.stripDoiKhoWhPrefix(String(material.location || '').trim());
     if (!bare && next) {
       alert('Nhập vị trí trước khi gán WH.');
       this.cdr.markForCheck();
-      return;
+      return false;
     }
     material.location = next ? `${next}-${bare}` : bare;
-    await this.persistLocationChange(material, {
+    return this.persistLocationChange(material, {
       silent: !!opts?.silent,
       bypassUnlock: !!opts?.bypassUnlock
     });
@@ -12030,7 +12190,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Edit functions for Opening Stock
   startEditingOpeningStock(material: InventoryMaterial): void {
-    if (!this.isManualStockEditOn) return;
+    if (!this.isManualStockEditOn) {
+      alert('Tồn đầu đang khóa. Vào More → Manual ON (OTP Zalo ASP0106) để sửa.');
+      return;
+    }
     material.isEditingOpeningStock = true;
   }
 
@@ -12116,7 +12279,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   onDesktopKkClick(material: InventoryMaterial, event: Event): void {
     event.preventDefault();
     event.stopPropagation();
-    if (!this.canEdit || !material?.id) return;
+    if (!this.canEdit) {
+      alert('Bạn không có quyền tick KK trên tab này.');
+      return;
+    }
+    if (!material?.id) return;
     void this.toggleKk(material);
   }
 
