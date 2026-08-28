@@ -20,6 +20,7 @@ import { environment } from '../../../environments/environment';
 import { UserPermissionService } from '../../services/user-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
+import { WoCreatedByStaffService, WoCreatedByStaff } from '../../services/wo-created-by-staff.service';
 import { WoPxkBypassOtpService } from '../../services/wo-pxk-bypass-otp.service';
 import firebase from 'firebase/compat/app';
 
@@ -144,8 +145,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   /**
    * Người soạn: `value` phải trùng kết quả `normalizeCreatedBy(label)` (IN HOA có dấu)
    * thì mat-select mới hiển thị đúng sau khi lưu Firebase.
+   * Danh sách lấy từ Danh mục nhân viên (KHÁC); mặc định 9 người khi chưa tải xong.
    */
-  readonly createdByPickerOptions: ReadonlyArray<{ value: string; label: string }> = [
+  createdByPickerOptions: Array<{ value: string; label: string }> = [
     { value: 'TÌNH', label: 'Tình' },
     { value: 'TUẤN', label: 'Tuấn' },
     { value: 'VŨ', label: 'Vũ' },
@@ -156,6 +158,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     { value: 'ÂN', label: 'Ân' },
     { value: 'HOÀNG', label: 'Hoàng' },
   ];
+  staffCatalog: WoCreatedByStaff[] = [];
+  showStaffCatalogDialog = false;
+  staffCatalogDraft = '';
+  staffCatalogLoading = false;
+  staffCatalogSaving = false;
 
   get displayedWorkOrders(): WorkOrder[] {
     const start = (this.currentPage - 1) * this.itemsPerPage;
@@ -373,6 +380,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private router: Router,
     private cdr: ChangeDetectorRef,
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
+    private woCreatedByStaff: WoCreatedByStaffService,
     private woPxkBypassOtp: WoPxkBypassOtpService
   ) {
     // Generate years from current year - 2 to current year + 2
@@ -391,6 +399,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     // Load user department information and permissions
     this.loadUserDepartment();
     this.loadDeletePermission();
+    void this.loadCreatedByStaffCatalog();
     
     // Factory access disabled for work order tab - only applies to materials inventory
     // this.loadFactoryAccess();
@@ -1381,6 +1390,68 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   closePrepCatalogDialog(): void {
     this.showPrepCatalogDialog = false;
+  }
+
+  private syncCreatedByPickerFromCatalog(staff: WoCreatedByStaff[]): void {
+    this.staffCatalog = staff;
+    this.createdByPickerOptions = staff.map((s) => ({ value: s.value, label: s.name }));
+  }
+
+  async loadCreatedByStaffCatalog(forceRefresh = false): Promise<void> {
+    this.staffCatalogLoading = true;
+    try {
+      const staff = await this.woCreatedByStaff.loadStaff(forceRefresh);
+      this.syncCreatedByPickerFromCatalog(staff);
+    } catch (error) {
+      console.error('Error loading created-by staff catalog:', error);
+    } finally {
+      this.staffCatalogLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  openStaffCatalogDialog(): void {
+    this.showMoreDialog = false;
+    this.staffCatalogDraft = '';
+    this.showStaffCatalogDialog = true;
+    void this.loadCreatedByStaffCatalog(true);
+  }
+
+  closeStaffCatalogDialog(): void {
+    if (this.staffCatalogSaving) return;
+    this.showStaffCatalogDialog = false;
+    this.staffCatalogDraft = '';
+  }
+
+  async addStaffCatalogPerson(): Promise<void> {
+    const name = this.staffCatalogDraft.trim();
+    if (!name || this.staffCatalogSaving) return;
+    this.staffCatalogSaving = true;
+    try {
+      await this.woCreatedByStaff.addStaff(name);
+      this.staffCatalogDraft = '';
+      this.syncCreatedByPickerFromCatalog(await this.woCreatedByStaff.loadStaff());
+    } catch (error: any) {
+      alert(error?.message || 'Không thêm được nhân viên.');
+    } finally {
+      this.staffCatalogSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async deleteStaffCatalogPerson(staff: WoCreatedByStaff): Promise<void> {
+    if (!staff?.id || this.staffCatalogSaving) return;
+    if (!confirm(`Xóa nhân viên "${staff.name}" khỏi danh mục người soạn LSX?`)) return;
+    this.staffCatalogSaving = true;
+    try {
+      await this.woCreatedByStaff.deleteStaff(staff.id);
+      this.syncCreatedByPickerFromCatalog(await this.woCreatedByStaff.loadStaff());
+    } catch (error: any) {
+      alert(error?.message || 'Không xóa được nhân viên.');
+    } finally {
+      this.staffCatalogSaving = false;
+      this.cdr.markForCheck();
+    }
   }
 
   /** Đếm số LSX (đã import PXK) có So sánh Thiếu — chỉ chạy khi bấm thẻ Check. */
@@ -5085,7 +5156,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   getCreatedByDisplay(wo: WorkOrder): string {
     const v = String(wo.createdBy || '').trim();
-    return v || 'Chưa có';
+    if (!v) return 'Chưa có';
+    const key = v.toUpperCase();
+    const opt = this.createdByPickerOptions.find((o) => o.value === key);
+    return opt?.label || this.woCreatedByStaff.labelFor(v) || v;
   }
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */

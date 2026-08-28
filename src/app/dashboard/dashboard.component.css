@@ -501,7 +501,21 @@
   padding-top: 0;
 }
 
-.wo-heatmap .putaway-heatmap__cell {
+.wo-heatmap:not(.fg-in-heatmap) .putaway-heatmap__cell {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.wo-heatmap:not(.fg-in-heatmap) .putaway-heatmap__cell.wo-heatmap__cell:hover {
+  outline: 2px solid rgba(37, 99, 235, 0.75);
+  outline-offset: 1px;
+  z-index: 2;
+}
+
+.wo-heatmap.fg-in-heatmap .putaway-heatmap__cell {
   position: relative;
   width: 12px;
   height: 12px;
@@ -2041,6 +2055,131 @@
 .acc-turnover-btn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* Popup chỉnh LSX từ heatmap Work Order weekly */
+.wo-lsx-modal {
+  position: relative;
+  background: var(--dash-surface);
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+  max-width: 92%;
+  width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.wo-lsx-modal .modal-header .material-icons { color: #2563eb !important; }
+
+.wo-lsx-modal__hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.wo-lsx-modal__lsx {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--dash-text);
+  word-break: break-all;
+}
+
+.wo-lsx-status-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: capitalize;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.wo-lsx-status-badge.wo-heatmap__cell--done { color: #075985; }
+.wo-lsx-status-badge.wo-heatmap__cell--waiting { color: #854d0e; }
+.wo-lsx-status-badge.wo-heatmap__cell--kitting { color: #9a3412; }
+.wo-lsx-status-badge.wo-heatmap__cell--ready { color: #fff; }
+.wo-lsx-status-badge.wo-heatmap__cell--delay { color: #fff; }
+
+.wo-lsx-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 18px;
+  font-size: 12.5px;
+  color: var(--dash-muted);
+}
+
+.wo-lsx-modal__meta strong {
+  color: var(--dash-text);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.wo-lsx-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+
+.wo-lsx-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.wo-lsx-field > span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dash-muted);
+}
+
+.wo-lsx-field--full {
+  grid-column: 1 / -1;
+}
+
+.wo-lsx-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--dash-border-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--dash-text);
+  background: var(--dash-bg);
+}
+
+.wo-lsx-input--area {
+  height: auto;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 72px;
+}
+
+.wo-lsx-urgent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dash-text);
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .wo-lsx-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 .close-btn {

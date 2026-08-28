@@ -171,6 +171,7 @@
                       [ngClass]="'wo-heatmap__cell--' + c.kind"
                       [class.wo-heatmap__cell--giao-asm3]="c.giaoAsm3"
                       [attr.title]="c.tooltip"
+                      (click)="openWoLsxModal(c)"
                     >
                       <span *ngIf="c.giaoAsm3" class="wo-heatmap__asm3-dot" aria-hidden="true"></span>
                     </div>
@@ -201,6 +202,7 @@
                       [ngClass]="'wo-heatmap__cell--' + c.kind"
                       [class.wo-heatmap__cell--giao-asm3]="c.giaoAsm3"
                       [attr.title]="c.tooltip"
+                      (click)="openWoLsxModal(c)"
                     >
                       <span *ngIf="c.giaoAsm3" class="wo-heatmap__asm3-dot" aria-hidden="true"></span>
                     </div>
@@ -828,6 +830,107 @@
       <button type="button" class="acc-turnover-btn acc-turnover-btn--cancel" (click)="closeAccuracyTurnoverModal()" [disabled]="accuracyTurnoverSaving">Hủy</button>
       <button type="button" class="acc-turnover-btn acc-turnover-btn--save" (click)="saveAccuracyTurnover()" [disabled]="accuracyTurnoverSaving">
         {{ accuracyTurnoverSaving ? 'Đang lưu...' : 'Lưu' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup chỉnh LSX — bấm ô heatmap Work Order weekly -->
+<div class="modal-overlay" *ngIf="showWoLsxModal && woEditSource" (click)="closeWoLsxModal()">
+  <div class="modal-content wo-lsx-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <i class="material-icons">assignment</i>
+        Cập nhật LSX
+      </h3>
+      <button type="button" class="close-btn" (click)="closeWoLsxModal()" [disabled]="woEditSaving">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="wo-lsx-modal__hero">
+        <div class="wo-lsx-modal__lsx">{{ woEditSource.productionOrder || '—' }}</div>
+        <span class="wo-lsx-status-badge" [ngClass]="'wo-heatmap__cell--' + woHeatKindCss(woEditSource.status)">
+          {{ woEditSource.status || '—' }}
+        </span>
+      </div>
+      <div class="wo-lsx-modal__meta">
+        <span><strong>Mã TP</strong> {{ woEditSource.productCode || '—' }}</span>
+        <span><strong>Nhà máy</strong> {{ woEditSource.factory || '—' }}</span>
+        <span><strong>SL</strong> {{ woEditSource.quantity | number }}</span>
+        <span><strong>KH</strong> {{ woEditSource.customer || '—' }}</span>
+        <span><strong>Line</strong> {{ woEditSource.productionLine || '—' }}</span>
+      </div>
+
+      <div class="wo-lsx-form">
+        <label class="wo-lsx-field">
+          <span>Tình trạng</span>
+          <select class="wo-lsx-input" [(ngModel)]="woEditForm.status" [disabled]="woEditSaving">
+            <option value="waiting" [disabled]="isWoEditStatusDisabled('waiting')">Waiting</option>
+            <option value="kitting" [disabled]="isWoEditStatusDisabled('kitting')">Kitting</option>
+            <option value="ready" [disabled]="isWoEditStatusDisabled('ready')">Ready</option>
+            <option value="transfer" [disabled]="isWoEditStatusDisabled('transfer')">Transfer</option>
+            <option value="done" [disabled]="isWoEditStatusDisabled('done')">Done</option>
+            <option value="delay" [disabled]="isWoEditStatusDisabled('delay')">Delay</option>
+          </select>
+        </label>
+
+        <label class="wo-lsx-field">
+          <span>Ngày giao NVL</span>
+          <input type="date" class="wo-lsx-input" [(ngModel)]="woEditForm.deliveryDate" [disabled]="woEditSaving">
+        </label>
+
+        <label class="wo-lsx-field">
+          <span>Người soạn</span>
+          <select class="wo-lsx-input"
+                  [(ngModel)]="woEditForm.createdBy"
+                  [disabled]="woEditSaving || woEditCreatedByLocked"
+                  [title]="woEditCreatedByLocked ? ('Xuất kho: ' + (woEditSource.createdByMemberId || '')) : ''">
+            <option value="">CHỌN NGƯỜI</option>
+            <option *ngIf="woEditCreatedByIsCustom" [ngValue]="woEditSource.createdBy">{{ formatWoCreatedByLabel(woEditSource.createdBy) }}</option>
+            <option *ngFor="let opt of woCreatedByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </label>
+
+        <label class="wo-lsx-field">
+          <span>Đủ / Thiếu</span>
+          <select class="wo-lsx-input" [(ngModel)]="woEditForm.materialsStatus" [disabled]="woEditSaving">
+            <option value="">—</option>
+            <option value="sufficient">Đủ</option>
+            <option value="insufficient">Thiếu</option>
+          </select>
+        </label>
+
+        <label class="wo-lsx-field">
+          <span>Ngày nhận thông tin</span>
+          <input type="date" class="wo-lsx-input" [(ngModel)]="woEditForm.planReceivedDate" [disabled]="woEditSaving">
+        </label>
+
+        <label class="wo-lsx-field wo-lsx-field--check">
+          <span>Gấp</span>
+          <label class="wo-lsx-urgent">
+            <input type="checkbox" [(ngModel)]="woEditForm.isUrgent" [disabled]="woEditSaving">
+            Ưu tiên gấp
+          </label>
+        </label>
+
+        <label class="wo-lsx-field wo-lsx-field--full">
+          <span>NVL thiếu</span>
+          <input type="text" class="wo-lsx-input" [(ngModel)]="woEditForm.missingMaterials" placeholder="—" [disabled]="woEditSaving">
+        </label>
+
+        <label class="wo-lsx-field wo-lsx-field--full">
+          <span>Ghi chú</span>
+          <textarea class="wo-lsx-input wo-lsx-input--area" rows="3" [(ngModel)]="woEditForm.notes" [disabled]="woEditSaving"></textarea>
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-footer acc-turnover-footer">
+      <button type="button" class="acc-turnover-btn acc-turnover-btn--cancel" (click)="closeWoLsxModal()" [disabled]="woEditSaving">Hủy</button>
+      <button type="button" class="acc-turnover-btn acc-turnover-btn--save" (click)="saveWoLsxModal()" [disabled]="woEditSaving">
+        {{ woEditSaving ? 'Đang lưu...' : 'Lưu' }}
       </button>
     </div>
   </div>

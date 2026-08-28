@@ -154,6 +154,10 @@
                               style="color: #0d9488; font-weight: 600;" title="Thống kê thời gian soạn Kitting→Ready, Ready→Done">
                         <i class="material-icons">timer</i> Danh mục thời gian soạn
                       </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openStaffCatalogDialog()"
+                              style="color: #1565c0; font-weight: 600;" title="Thêm hoặc xóa nhân viên trong dropdown Người soạn LSX">
+                        <i class="material-icons">badge</i> Danh mục nhân viên
+                      </button>
                       <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
                               style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
                         <i class="material-icons">search</i> Search
@@ -265,6 +269,62 @@
                 </div>
                 <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
                   <button mat-raised-button type="button" (click)="closePrepCatalogDialog()">
+                    <mat-icon>close</mat-icon> Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dialog: Danh mục nhân viên (người soạn LSX) -->
+            <div class="time-range-dialog-overlay" *ngIf="showStaffCatalogDialog" (click)="closeStaffCatalogDialog()">
+              <div class="time-range-dialog staff-catalog-dialog" (click)="$event.stopPropagation()">
+                <div class="dialog-header">
+                  <h4>
+                    <i class="material-icons" style="vertical-align:middle;margin-right:6px;">badge</i>
+                    Danh mục nhân viên
+                  </h4>
+                  <button mat-icon-button type="button" (click)="closeStaffCatalogDialog()" title="Đóng" [disabled]="staffCatalogSaving">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content staff-catalog-dialog-content">
+                  <p class="prep-catalog-desc">
+                    Danh sách này dùng cho cột <strong>Người soạn</strong> khi chọn người soạn LSX.
+                    Thêm tên mới hoặc xóa tên không còn dùng.
+                  </p>
+
+                  <form class="staff-catalog-add" (submit)="$event.preventDefault(); addStaffCatalogPerson()">
+                    <input class="staff-catalog-add__input"
+                           type="text"
+                           [(ngModel)]="staffCatalogDraft"
+                           name="staffCatalogDraft"
+                           placeholder="Nhập tên nhân viên…"
+                           maxlength="40"
+                           [disabled]="staffCatalogSaving"
+                           autocomplete="off">
+                    <button type="submit" class="staff-catalog-add__btn"
+                            [disabled]="staffCatalogSaving || !staffCatalogDraft.trim()">
+                      <i class="material-icons">person_add</i>
+                      {{ staffCatalogSaving ? 'Đang lưu…' : 'Thêm' }}
+                    </button>
+                  </form>
+
+                  <div class="staff-catalog-loading" *ngIf="staffCatalogLoading">Đang tải danh mục…</div>
+                  <ul class="staff-catalog-list" *ngIf="!staffCatalogLoading">
+                    <li *ngIf="staffCatalog.length === 0" class="staff-catalog-empty">Chưa có nhân viên. Nhập tên rồi bấm Thêm.</li>
+                    <li *ngFor="let person of staffCatalog" class="staff-catalog-item">
+                      <span class="staff-catalog-item__name">{{ person.name }}</span>
+                      <button type="button" class="staff-catalog-item__del"
+                              (click)="deleteStaffCatalogPerson(person)"
+                              [disabled]="staffCatalogSaving"
+                              title="Xóa {{ person.name }}">
+                        <i class="material-icons">delete</i>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
+                  <button mat-raised-button type="button" (click)="closeStaffCatalogDialog()" [disabled]="staffCatalogSaving">
                     <mat-icon>close</mat-icon> Đóng
                   </button>
                 </div>

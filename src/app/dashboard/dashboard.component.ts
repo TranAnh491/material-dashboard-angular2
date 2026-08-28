@@ -10,6 +10,8 @@ import { FirebaseAuthService } from '../services/firebase-auth.service';
 import { ReadTrackerService } from '../services/read-tracker.service';
 import { NvlkhCatalogService } from '../services/nvlkh-catalog.service';
 import { LocationRuleCheckService, WarehouseType } from '../services/location-rule-check.service';
+import { MaterialLifecycleService } from '../services/material-lifecycle.service';
+import { WoCreatedByStaffService } from '../services/wo-created-by-staff.service';
 import * as XLSX from 'xlsx';
 
 interface WorkOrderStatusRow {
@@ -34,6 +36,8 @@ interface WoHeatmapCell {
   tooltip: string;
   /** Line WHE/WHD hoặc ghi chú ASM3 → chấm xanh giữa ô SKU */
   giaoAsm3?: boolean;
+  /** id document work-orders — bấm ô mở popup chỉnh LSX */
+  woId?: string;
 }
 
 interface WoHeatmapDayCol {
@@ -153,6 +157,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
     THỊNH: 'Thịnh',
     ÂN: 'Ân',
     HOÀNG: 'Hoàng',
+  };
+  woCreatedByPickerOptions: Array<{ value: string; label: string }> = [
+    { value: 'TÌNH', label: 'Tình' },
+    { value: 'TUẤN', label: 'Tuấn' },
+    { value: 'VŨ', label: 'Vũ' },
+    { value: 'PHÚC', label: 'Phúc' },
+    { value: 'TRÍ', label: 'Trí' },
+    { value: 'ĐÔNG', label: 'Đông' },
+    { value: 'THỊNH', label: 'Thịnh' },
+    { value: 'ÂN', label: 'Ân' },
+    { value: 'HOÀNG', label: 'Hoàng' },
+  ];
+
+  /** Popup chỉnh LSX khi bấm ô heatmap Work Order weekly */
+  showWoLsxModal = false;
+  woEditSaving = false;
+  woEditSource: WorkOrder | null = null;
+  woEditForm = {
+    status: '' as string,
+    deliveryDate: '',
+    createdBy: '',
+    missingMaterials: '',
+    materialsStatus: '' as string,
+    isUrgent: false,
+    planReceivedDate: '',
+    notes: ''
   };
   yesterdayOverdueCount: number = 0;
   /** Bảng chi tiết cuối dashboard: shipment 7 ngày sắp tới (cùng collection tab Shipment) */
@@ -416,7 +446,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private authService: FirebaseAuthService,
     private readTracker: ReadTrackerService,
     private nvlkhCatalog: NvlkhCatalogService,
-    private locationRuleCheck: LocationRuleCheckService
+    private locationRuleCheck: LocationRuleCheckService,
+    private materialService: MaterialLifecycleService,
+    private woCreatedByStaff: WoCreatedByStaffService
   ) { }
 
   @HostListener('window:resize')
@@ -609,6 +641,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.initializeCurrentWeek();
     this.loadDashboardData();
     this.loadIQCByWeek();
+    void this.loadWoCreatedByStaff();
 
     // Listen for factory changes from navbar
     window.addEventListener('factoryChanged', this.onFactoryChangedBound);
@@ -953,8 +986,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
             const createdDate = this.parseFirestoreDate(data.createdDate);
             const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
+            const planReceivedDate = this.parseFirestoreDate(data.planReceivedDate);
 
-            return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt };
+            return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt, planReceivedDate };
           });
 
           // Filter by factory only.
@@ -1216,10 +1250,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return m[kind] || kind;
   }
 
-  private formatWoCreatedByLabel(createdBy?: string): string {
+  formatWoCreatedByLabel(createdBy?: string): string {
     const key = String(createdBy ?? '').trim().toUpperCase();
     if (!key) return '—';
-    return this.woCreatedByLabels[key] || createdBy || '—';
+    const fromCatalog = this.woCreatedByPickerOptions.find((o) => o.value === key);
+    if (fromCatalog) return fromCatalog.label;
+    return this.woCreatedByStaff.labelFor(createdBy || '') || this.woCreatedByLabels[key] || createdBy || '—';
+  }
+
+  private async loadWoCreatedByStaff(): Promise<void> {
+    try {
+      const staff = await this.woCreatedByStaff.loadStaff();
+      this.woCreatedByPickerOptions.splice(
+        0,
+        this.woCreatedByPickerOptions.length,
+        ...staff.map((s) => ({ value: s.value, label: s.name }))
+      );
+      this.cdr.markForCheck();
+    } catch (error) {
+      console.error('Error loading WO created-by staff catalog:', error);
+    }
   }
 
   private formatWoKittingStartTime(wo: WorkOrder): string {
@@ -1271,12 +1321,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private buildWoHeatmapCell(wo: WorkOrder, kind: WoHeatKind): WoHeatmapCell {
     const giaoAsm3 = this.isWoAsm3Marked(wo);
     const asm3Label = this.formatWoAsm3TooltipSuffix(wo);
+    const woId = wo.id || '';
     if (kind !== 'kitting') {
       const sku = (wo.productCode || '').trim();
+      const lsx = (wo.productionOrder || '').trim();
       const base = this.woHeatKindLabel(kind);
       const parts = sku ? [`${sku} · ${base}`] : [base];
+      if (lsx) parts.push(`LSX: ${lsx}`);
       if (asm3Label) parts.push(asm3Label);
-      return { kind, tooltip: parts.join('\n'), giaoAsm3 };
+      return { kind, tooltip: parts.join('\n'), giaoAsm3, woId };
     }
     const sku = (wo.productCode || '—').trim();
     const lsx = (wo.productionOrder || '').trim();
@@ -1285,7 +1338,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     lines.push(`Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy)}`);
     lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
     if (asm3Label) lines.push(asm3Label);
-    return { kind, tooltip: lines.join('\n'), giaoAsm3 };
+    return { kind, tooltip: lines.join('\n'), giaoAsm3, woId };
   }
 
   /** Dựng 6 cột T2–T7 từ WO của `monday`, lọc theo `filterFn` (dùng chung cho heatmap chính + Sample). */
@@ -1323,6 +1376,185 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private rebuildWoHeatmap(monday: Date): void {
     this.woHeatmapDays = this.buildWoHeatmapDays(monday, (wo) => !this.isSampleFactory(wo.factory));
     this.woSampleHeatmapDays = this.buildWoHeatmapDays(monday, (wo) => this.isSampleFactory(wo.factory));
+  }
+
+  get woEditCreatedByLocked(): boolean {
+    return !!(this.woEditSource as any)?.createdByFromOutbound;
+  }
+
+  get woEditCreatedByIsCustom(): boolean {
+    const v = (this.woEditForm.createdBy || '').trim();
+    if (!v) return false;
+    return !this.woCreatedByPickerOptions.some((o) => o.value === v);
+  }
+
+  woHeatKindCss(status?: string): string {
+    const s = String(status || '').toLowerCase();
+    if (s === 'done' || s === 'waiting' || s === 'kitting' || s === 'ready' || s === 'delay') return s;
+    if (s === 'transfer') return 'ready';
+    return 'waiting';
+  }
+
+  openWoLsxModal(cell: WoHeatmapCell): void {
+    const woId = (cell?.woId || '').trim();
+    if (!woId) return;
+    const wo = this.workOrders.find((w) => w.id === woId);
+    if (!wo) {
+      alert('Không tìm thấy LSX này. Bấm Run để tải lại dữ liệu.');
+      return;
+    }
+    this.woEditSource = wo;
+    this.woEditForm = {
+      status: wo.status || WorkOrderStatus.WAITING,
+      deliveryDate: this.toDateInputValue(this.parseFirestoreDate(wo.deliveryDate)),
+      createdBy: String(wo.createdBy || '').trim(),
+      missingMaterials: wo.missingMaterials || '',
+      materialsStatus: wo.materialsStatus || '',
+      isUrgent: !!wo.isUrgent,
+      planReceivedDate: this.toDateInputValue(this.parseFirestoreDate(wo.planReceivedDate)),
+      notes: wo.notes || ''
+    };
+    this.showWoLsxModal = true;
+    void this.loadWoCreatedByStaff();
+  }
+
+  closeWoLsxModal(): void {
+    if (this.woEditSaving) return;
+    this.showWoLsxModal = false;
+    this.woEditSource = null;
+  }
+
+  isWoEditStatusDisabled(optionValue: string): boolean {
+    const current = (this.woEditSource?.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    if (optionValue === current) return false;
+    return !this.isWoStatusTransitionAllowed(current, optionValue as WorkOrderStatus).allowed;
+  }
+
+  async saveWoLsxModal(): Promise<void> {
+    const wo = this.woEditSource;
+    if (!wo?.id) return;
+
+    const nextStatus = (this.woEditForm.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    const currentStatus = (wo.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
+    const transition = this.isWoStatusTransitionAllowed(currentStatus, nextStatus);
+    if (!transition.allowed) {
+      alert(transition.message || 'Không được chuyển sang tình trạng này.');
+      return;
+    }
+
+    const now = new Date();
+    const payload: Partial<WorkOrder> = {
+      status: nextStatus,
+      deliveryDate: this.fromDateInputValue(this.woEditForm.deliveryDate) || wo.deliveryDate,
+      missingMaterials: (this.woEditForm.missingMaterials || '').trim(),
+      materialsComplete: this.woEditForm.materialsStatus === 'sufficient',
+      isUrgent: !!this.woEditForm.isUrgent,
+      planReceivedDate: this.fromDateInputValue(this.woEditForm.planReceivedDate) || wo.planReceivedDate,
+      notes: (this.woEditForm.notes || '').trim(),
+      lastUpdated: now
+    };
+
+    if (this.woEditForm.materialsStatus === 'sufficient' || this.woEditForm.materialsStatus === 'insufficient') {
+      payload.materialsStatus = this.woEditForm.materialsStatus;
+    } else {
+      payload.materialsStatus = '' as any;
+    }
+
+    if (!this.woEditCreatedByLocked) {
+      payload.createdBy = this.normalizeCreatedBy(this.woEditForm.createdBy);
+      payload.createdByFromOutbound = false;
+    }
+
+    if (nextStatus === WorkOrderStatus.KITTING && currentStatus !== WorkOrderStatus.KITTING) {
+      payload.kittingStartedAt = now;
+    }
+    if (nextStatus === WorkOrderStatus.READY && currentStatus !== WorkOrderStatus.READY) {
+      payload.readyAt = now;
+    }
+    if (nextStatus === WorkOrderStatus.DONE && currentStatus !== WorkOrderStatus.DONE) {
+      payload.doneAt = now;
+    }
+    if (currentStatus === WorkOrderStatus.DONE && nextStatus !== WorkOrderStatus.DONE) {
+      payload.isCompleted = false;
+    }
+
+    this.woEditSaving = true;
+    try {
+      await this.materialService.updateWorkOrder(wo.id, payload);
+      const idx = this.workOrders.findIndex((w) => w.id === wo.id);
+      if (idx !== -1) {
+        this.workOrders[idx] = { ...this.workOrders[idx], ...payload };
+      }
+      this.filteredWorkOrders = [...this.workOrders];
+      this.updateWorkOrderSummary();
+      this.updateWorkOrderStatus();
+      this.woEditSaving = false;
+      this.showWoLsxModal = false;
+      this.woEditSource = null;
+      this.cdr.markForCheck();
+    } catch (error: any) {
+      this.woEditSaving = false;
+      console.error('Error updating LSX from dashboard heatmap:', error);
+      alert(`Lỗi khi cập nhật LSX: ${error?.message || error}`);
+      this.cdr.markForCheck();
+    }
+  }
+
+  private toDateInputValue(d: Date | null): string {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private fromDateInputValue(value: string): Date | null {
+    const s = (value || '').trim();
+    if (!s) return null;
+    const parts = s.split('-').map((p) => Number(p));
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null;
+    const [y, m, d] = parts;
+    const date = new Date(y, m - 1, d);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  private normalizeCreatedBy(value: any): string {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const first = raw.split(/[,;\/|\n\r]+/)[0]?.trim() || '';
+    return first.replace(/\s+/g, ' ').toUpperCase();
+  }
+
+  /** Rule giống tab Work Order: Kitting từ Waiting, Ready từ Kitting, Transfer từ Ready. */
+  private isWoStatusTransitionAllowed(
+    current: WorkOrderStatus,
+    next: WorkOrderStatus
+  ): { allowed: boolean; message?: string } {
+    const rules: [WorkOrderStatus, WorkOrderStatus][] = [
+      [WorkOrderStatus.WAITING, WorkOrderStatus.KITTING],
+      [WorkOrderStatus.KITTING, WorkOrderStatus.READY],
+      [WorkOrderStatus.READY, WorkOrderStatus.TRANSFER]
+    ];
+    const rule = rules.find(([, to]) => to === next);
+    if (rule) {
+      const [requiredFrom] = rule;
+      if (current !== requiredFrom) {
+        const reqText =
+          requiredFrom === WorkOrderStatus.WAITING
+            ? 'Waiting'
+            : requiredFrom === WorkOrderStatus.KITTING
+              ? 'Kitting'
+              : 'Ready';
+        const nextText =
+          next === WorkOrderStatus.KITTING
+            ? 'Kitting'
+            : next === WorkOrderStatus.READY
+              ? 'Ready'
+              : 'Transfer';
+        return { allowed: false, message: `Chỉ được chọn ${nextText} khi tình trạng hiện tại là ${reqText}.` };
+      }
+    }
+    return { allowed: true };
   }
 
   private getYesterdayOverdueCount(today: Date): number {
