@@ -422,6 +422,7 @@
 
             <!-- Work Orders Table -->
             <div class="wo-table-card">
+                    <div class="wo-table-scroll">
                     <table class="wo-table">
                       <thead>
                         <tr>
@@ -530,6 +531,10 @@
                         </tr>
                       </tbody>
                     </table>
+                    <div *ngIf="filteredWorkOrders.length === 0" class="wo-empty">
+                      <p>Không tìm thấy work order theo bộ lọc đang chọn.</p>
+                    </div>
+                    </div>
                     
                     <div class="wo-pager" *ngIf="filteredWorkOrders.length > 0">
                       <span class="wo-pager__info">
@@ -539,18 +544,14 @@
                         <select class="wo-pager__size" [ngModel]="itemsPerPage" (ngModelChange)="onPageSizeChange($event)">
                           <option *ngFor="let n of pageSizeOptions" [ngValue]="n">Hiển thị {{ n }} / trang</option>
                         </select>
-                        <button type="button" class="wo-pager__btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+                        <button type="button" class="wo-pager__btn" (click)="previousPage()" [disabled]="currentPage <= 1" title="Trang trước">
                           <i class="material-icons">chevron_left</i>
                         </button>
-                        <span class="wo-pager__page">{{ currentPage }}</span>
-                        <button type="button" class="wo-pager__btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+                        <span class="wo-pager__page">Trang {{ currentPage }} / {{ totalPages }}</span>
+                        <button type="button" class="wo-pager__btn" (click)="nextPage()" [disabled]="currentPage >= totalPages" title="Trang sau">
                           <i class="material-icons">chevron_right</i>
                         </button>
                       </div>
-                    </div>
-                    
-                    <div *ngIf="filteredWorkOrders.length === 0" class="wo-empty">
-                      <p>Không tìm thấy work order theo bộ lọc đang chọn.</p>
                     </div>
             </div>
 
