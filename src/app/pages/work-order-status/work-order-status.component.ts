@@ -1,4 +1,5 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { MatDatepicker } from '@angular/material/datepicker';
 import { MAT_RIPPLE_GLOBAL_OPTIONS, RippleGlobalOptions } from '@angular/material/core';
 import { Router } from '@angular/router';
 import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
@@ -80,6 +81,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   selectedFunction: string | null = null;
   /** Popup MORE (thay cho Import Section inline) */
   showMoreDialog: boolean = false;
+
+  /** Lọc bảng theo Ngày giao NVL của đúng 1 ngày (nút Xem theo ngày). */
+  viewByDate: Date | null = null;
+  viewByDateDraft: Date = new Date();
+  @ViewChild('viewByDatePicker') viewByDatePicker?: MatDatepicker<Date>;
+  private viewByDateDidFetch = false;
 
   /** Tìm LSX đã từng có trên Firebase */
   showLsxSearchDialog = false;
@@ -417,6 +424,119 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.applyFilters();
     this.calculateSummary();
+  }
+
+  get viewByDateLabel(): string {
+    if (!this.viewByDate) return 'XEM THEO NGÀY';
+    return this.viewByDate.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  }
+
+  openViewByDatePicker(): void {
+    this.viewByDateDraft = this.viewByDate ? new Date(this.viewByDate) : new Date();
+    this.viewByDatePicker?.open();
+  }
+
+  async onViewByDatePicked(value: Date | null): Promise<void> {
+    if (!value) return;
+    this.viewByDate = value;
+    this.currentPage = 1;
+    const { start } = this.vnDayBounds(value);
+    if (start < this.woRecentCutoffDate()) {
+      this.isLoading = true;
+      this.viewByDateDidFetch = true;
+      try {
+        const extra = await this.fetchWorkOrdersForCalendarDay(value);
+        const byId = new Map<string, WorkOrder>();
+        for (const wo of this.workOrders) {
+          if (wo.id) byId.set(wo.id, wo);
+        }
+        for (const wo of extra) {
+          if (wo.id && !byId.has(wo.id)) byId.set(wo.id, wo);
+        }
+        this.processLoadedWorkOrders([...byId.values()]);
+        await Promise.all([
+          this.loadPxkPresenceFromIndex(),
+          this.applyOutboundCreatedByOverrides()
+        ]);
+      } catch (e) {
+        console.error('❌ Tải LSX theo ngày thất bại:', e);
+        this.applyFilters();
+        this.calculateSummary();
+      } finally {
+        this.isLoading = false;
+        this.cdr.markForCheck();
+      }
+      return;
+    }
+    this.applyFilters();
+    this.calculateSummary();
+  }
+
+  async clearViewByDate(): Promise<void> {
+    this.viewByDate = null;
+    this.currentPage = 1;
+    if (this.viewByDateDidFetch) {
+      this.viewByDateDidFetch = false;
+      await this.loadWorkOrders();
+      return;
+    }
+    this.applyFilters();
+    this.calculateSummary();
+  }
+
+  private vnDayBounds(d: Date): { start: Date; next: Date } {
+    const ymd = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const start = new Date(`${ymd}T00:00:00+07:00`);
+    const next = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return { start, next };
+  }
+
+  private asWorkOrderDate(value: unknown): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    if (typeof value === 'object' && typeof (value as { toDate?: () => Date }).toDate === 'function') {
+      const d = (value as { toDate: () => Date }).toDate();
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const parsed = new Date(value as string | number);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private workOrderMatchesViewDate(wo: WorkOrder, day: Date): boolean {
+    const delivery = this.asWorkOrderDate(wo.deliveryDate);
+    return !!delivery && this.isSameCalendarDayVn(delivery, day);
+  }
+
+  private async fetchWorkOrdersWhereRange(field: string, start: Date, next: Date): Promise<WorkOrder[]> {
+    try {
+      const app = this.getFirebaseV9App();
+      const db = getFirestore(app);
+      const q = query(
+        collection(db, 'work-orders'),
+        where(field, '>=', start),
+        where(field, '<', next)
+      );
+      const snap = await getDocs(q);
+      const out: WorkOrder[] = [];
+      snap.forEach((d) => out.push({ id: d.id, ...(d.data() as WorkOrder) }));
+      return out;
+    } catch (e) {
+      console.warn(`⚠️ Query work-orders theo ${field} thất bại:`, e);
+      return [];
+    }
+  }
+
+  private async fetchWorkOrdersForCalendarDay(day: Date): Promise<WorkOrder[]> {
+    const { start, next } = this.vnDayBounds(day);
+    const [byDelivery, byCreated] = await Promise.all([
+      this.fetchWorkOrdersWhereRange('deliveryDate', start, next),
+      this.fetchWorkOrdersWhereRange('createdDate', start, next)
+    ]);
+    const byId = new Map<string, WorkOrder>();
+    for (const wo of [...byDelivery, ...byCreated]) {
+      if (wo.id) byId.set(wo.id, wo);
+    }
+    return [...byId.values()];
   }
 
   // Helper method to normalize factory names for comparison
@@ -1113,6 +1233,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
       const matchesFactory = this.woMatchesSelectedFactory(wo);
 
+      const matchesViewDate = !this.viewByDate || this.workOrderMatchesViewDate(wo, this.viewByDate);
+
       // Apply done filter
       let matchesDoneFilter = true;
       if (this.doneFilter === 'notCompleted') {
@@ -1121,7 +1243,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         matchesDoneFilter = wo.isCompleted;
       }
 
-      return matchesSearch && matchesStatus && matchesFactory && matchesDoneFilter;
+      return matchesSearch && matchesStatus && matchesFactory && matchesDoneFilter && matchesViewDate;
     });
     
     

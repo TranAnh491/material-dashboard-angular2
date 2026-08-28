@@ -71,6 +71,20 @@
                   <i class="material-icons">qr_code_2</i> BAG
                 </button>
                 <button type="button" class="wo-tab" (click)="showMoreDialog = true">… KHÁC</button>
+                <button type="button" class="wo-tab" [class.wo-tab--on]="!!viewByDate"
+                        (click)="openViewByDatePicker()"
+                        [title]="viewByDate ? 'Đổi ngày xem LSX' : 'Chọn ngày để chỉ hiện LSX ngày đó'">
+                  <i class="material-icons">event</i> {{ viewByDateLabel }}
+                </button>
+                <button *ngIf="viewByDate" type="button" class="wo-tab wo-tab--date-clear"
+                        (click)="clearViewByDate()" title="Bỏ lọc ngày, hiện lại tất cả">
+                  <i class="material-icons">close</i>
+                </button>
+                <input class="wo-view-date-hidden" matInput
+                       [matDatepicker]="viewByDatePicker"
+                       [(ngModel)]="viewByDateDraft"
+                       (dateChange)="onViewByDatePicked($event.value)">
+                <mat-datepicker #viewByDatePicker></mat-datepicker>
               </div>
               <div class="wo-actions">
                 <button type="button" class="wo-action" (click)="selectFunction('view')">
@@ -532,7 +546,8 @@
                       </tbody>
                     </table>
                     <div *ngIf="filteredWorkOrders.length === 0" class="wo-empty">
-                      <p>Không tìm thấy work order theo bộ lọc đang chọn.</p>
+                      <p *ngIf="viewByDate">Không có LSX ngày {{ viewByDateLabel }}.</p>
+                      <p *ngIf="!viewByDate">Không tìm thấy work order theo bộ lọc đang chọn.</p>
                     </div>
                     </div>
                     

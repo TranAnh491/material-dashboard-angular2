@@ -4306,6 +4306,7 @@ textarea.mat-input-element {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  position: relative;
 }
 
 .wo-tab,
@@ -4351,6 +4352,19 @@ textarea.mat-input-element {
 .wo-tab--bag {
   color: #1d4ed8;
   border-color: #93c5fd;
+}
+
+.wo-tab--date-clear {
+  padding: 0 8px;
+  min-width: 36px;
+}
+
+.wo-view-date-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .wo-action--danger {
