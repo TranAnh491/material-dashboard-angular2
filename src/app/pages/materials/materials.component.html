@@ -1259,12 +1259,13 @@
           </div>
           <div class="info-row">
             <span class="label">WH:</span>
-            <button type="button"
-                    class="loc-col-btn loc-col-btn--wh"
-                    [class.loc-col-btn--empty]="!locationWhTag(material.location)"
-                    (click)="openLayoutLocPicker(material, $event, 'wh')">
-              {{ locationWhTag(material.location) || 'Chọn WH' }}
-            </button>
+            <select
+                    class="mobile-input"
+                    [ngModel]="locationWhTag(material.location)"
+                    (change)="onWhSelect(material, $any($event.target).value)">
+              <option value="">—</option>
+              <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
+            </select>
           </div>
           
           <div class="info-row">
@@ -1361,7 +1362,7 @@
               </button>
             </th>
             <th title="Bấm ô pallet để sửa số pallet">Pallet</th>
-            <th title="Bấm ô WH để chọn ASM3 hoặc J5">WH</th>
+            <th title="Chọn ASM3 hoặc J5">WH</th>
             <th>Change</th>
             <th>Loại Hình</th>
             <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
@@ -1530,14 +1531,14 @@
                 {{ material.palletId || 'Chọn pallet' }}
               </button>
             </td>
-            <td class="wh-cell" title="Bấm để chọn kho ASM3 hoặc J5">
-              <button type="button"
-                      class="loc-col-btn loc-col-btn--wh"
-                      [class.loc-col-btn--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'wh'"
-                      [class.loc-col-btn--empty]="!locationWhTag(material.location)"
-                      (click)="openLayoutLocPicker(material, $event, 'wh')">
-                {{ locationWhTag(material.location) || 'Chọn WH' }}
-              </button>
+            <td class="wh-cell" title="Chọn ASM3 hoặc J5">
+              <select
+                class="editable-cell wh-select"
+                [ngModel]="locationWhTag(material.location)"
+                (change)="onWhSelect(material, $any($event.target).value)">
+                <option value="">—</option>
+                <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
+              </select>
             </td>
             <td class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
@@ -3104,16 +3105,16 @@
   </div>
 </div>
 
-<!-- Popup chọn vị trí / pallet / WH -->
+<!-- Popup chọn vị trí kệ — chỉ Kho J -->
 <div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && layoutLocMaterial" (click)="closeLayoutLocPicker()">
-  <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí layout">
+  <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí Kho J">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
-          <i class="material-icons">{{ layoutLocFocus === 'pallet' ? 'widgets' : layoutLocFocus === 'wh' ? 'warehouse' : 'view_module' }}</i>
+          <i class="material-icons">{{ layoutLocFocus === 'pallet' ? 'widgets' : 'view_module' }}</i>
         </span>
         <div>
-          <h3>{{ layoutLocFocus === 'pallet' ? 'Sửa pallet' : layoutLocFocus === 'wh' ? 'Chọn WH' : 'Chọn vị trí kệ' }}</h3>
+          <h3>{{ layoutLocFocus === 'pallet' ? 'Sửa pallet' : 'Chọn vị trí kệ — Kho J' }}</h3>
           <p class="more-popup-header__sub">{{ layoutLocMaterial.materialCode }} · {{ layoutLocMaterial.poNumber || '—' }}</p>
         </div>
       </div>
@@ -3122,27 +3123,6 @@
       </button>
     </div>
     <div class="modal-body layout-loc-picker__body">
-      <div class="layout-loc-wh" [class.layout-loc-wh--focus]="layoutLocFocus === 'wh'">
-        <button
-          type="button"
-          class="layout-loc-wh__btn"
-          *ngFor="let opt of layoutWhOptions"
-          [class.layout-loc-wh__btn--on]="layoutLocWh === opt.id"
-          (click)="setLayoutLocWh(opt.id)">
-          {{ opt.label }}
-        </button>
-      </div>
-      <div class="layout-loc-wh layout-loc-wh--tag" [class.layout-loc-wh--focus]="layoutLocFocus === 'wh'">
-        <button type="button" class="layout-loc-wh__btn" [class.layout-loc-wh__btn--on]="!layoutLocWhTag" (click)="setLayoutLocWhTag('')">WH: —</button>
-        <button
-          type="button"
-          class="layout-loc-wh__btn"
-          *ngFor="let wh of WH_SELECT_OPTIONS"
-          [class.layout-loc-wh__btn--on]="layoutLocWhTag === wh"
-          (click)="setLayoutLocWhTag(wh)">
-          {{ wh }}
-        </button>
-      </div>
       <div class="layout-loc-groups">
         <button
           type="button"

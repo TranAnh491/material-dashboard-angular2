@@ -31,7 +31,6 @@ import {
   LayoutWhPick,
   LayoutLocGroup,
   getLayoutLocationGroups,
-  isJWarehouseLocation,
   normalizeLayoutLocToken
 } from './layout-location-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
@@ -654,14 +653,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Ô nhập tay vị trí mới trong popup (phân tách bằng dấu phẩy / xuống dòng). */
   layoutLocManualDraft = '';
   /** Phần popup đang mở từ cột nào — để focus đúng ô. */
-  layoutLocFocus: 'location' | 'pallet' | 'wh' = 'location';
-  /** Tiền tố WH ghi vào vị trí: ASM3- / J5-. */
-  layoutLocWhTag: '' | 'ASM3' | 'J5' = '';
-  readonly layoutWhOptions: Array<{ id: LayoutWhPick; label: string }> = [
-    { id: 'ASM1', label: 'ASM1' },
-    { id: 'ASM3', label: 'ASM3' },
-    { id: 'J', label: 'J' }
-  ];
+  layoutLocFocus: 'location' | 'pallet' = 'location';
   // canEditHSD = false; // Removed - HSD column deleted
 
   constructor(
@@ -10335,7 +10327,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get layoutLocGroups(): LayoutLocGroup[] {
-    return getLayoutLocationGroups(this.layoutLocWh);
+    return getLayoutLocationGroups('J');
   }
 
   get layoutLocSelectedList(): string[] {
@@ -10349,8 +10341,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (String(this.layoutLocManualDraft || '').trim()) return true;
     const palletNow = String(this.layoutLocPalletDraft || '').trim().toUpperCase();
     const palletPrev = String(material.palletId || '').trim().toUpperCase();
-    if (palletNow !== palletPrev) return true;
-    return this.layoutLocWhTag !== this.locationWhTag(material.location);
+    return palletNow !== palletPrev;
   }
 
   get layoutLocActiveGroup(): LayoutLocGroup | undefined {
@@ -10364,9 +10355,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return slots.filter((s) => s.toUpperCase().includes(q));
   }
 
-  /** Đang xem sơ đồ kệ kho J (không phải danh sách phẳng). */
+  /** Sơ đồ kệ kho J. */
   get isLayoutJDiagram(): boolean {
-    return this.layoutLocWh === 'J';
+    return true;
   }
 
   /**
@@ -10377,7 +10368,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     block: number;
     levels: Array<{ level: number; cells: Array<{ slot: string; pos: string }> }>;
   }> {
-    if (this.layoutLocWh !== 'J') return [];
     const group = this.layoutLocActiveGroup;
     if (!group) return [];
     const prefix = group.id; // vd "R1"
@@ -10419,7 +10409,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   openLayoutLocPicker(
     material: InventoryMaterial,
     event?: Event,
-    focus: 'location' | 'pallet' | 'wh' = 'location'
+    focus: 'location' | 'pallet' = 'location'
   ): void {
     event?.preventDefault();
     event?.stopPropagation();
@@ -10444,12 +10434,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const parts = splitMultiLocations(material.location || '');
     this.layoutLocMaterial = material;
     this.layoutLocFocus = focus;
-    this.layoutLocWhTag = this.normalizeLayoutLocWhTag(this.locationWhTag(material.location));
-    this.layoutLocWh = this.inferLayoutWh(material.location);
+    this.layoutLocWh = 'J';
     this.layoutLocSelected = new Set(
-      parts.map((x) => normalizeLayoutLocToken(x, this.layoutLocWh)).filter(Boolean)
+      parts.map((x) => normalizeLayoutLocToken(x, 'J')).filter(Boolean)
     );
-    const groups = getLayoutLocationGroups(this.layoutLocWh);
+    const groups = getLayoutLocationGroups('J');
     const selectedUpper = new Set(Array.from(this.layoutLocSelected).map((s) => s.toUpperCase()));
     const hit = groups.find((g) => g.slots.some((s) => selectedUpper.has(s.toUpperCase())));
     this.layoutLocGroupId = hit?.id || groups[0]?.id || '';
@@ -10470,30 +10459,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocPalletDraft = '';
     this.layoutLocManualDraft = '';
     this.layoutLocFocus = 'location';
-    this.layoutLocWhTag = '';
     this.cdr.detectChanges();
-  }
-
-  private inferLayoutWh(location: string | null | undefined): LayoutWhPick {
-    const raw = String(location || '');
-    const tag = this.locationWhTag(raw);
-    if (tag === 'ASM3') return 'ASM3';
-    const parts = splitMultiLocations(raw);
-    if (parts.some((p) => isJWarehouseLocation(p) || /^R\d+/i.test(p))) return 'J';
-    if (tag === 'J5') return 'J';
-    return 'J';
-  }
-
-  private normalizeLayoutLocWhTag(tag: string): '' | 'ASM3' | 'J5' {
-    const t = String(tag || '').trim().toUpperCase();
-    if (t === 'ASM3' || t === 'J5') return t;
-    return '';
-  }
-
-  setLayoutLocWhTag(tag: string): void {
-    this.layoutLocWhTag = this.normalizeLayoutLocWhTag(tag);
-    if (this.layoutLocWhTag === 'ASM3') this.setLayoutLocWh('ASM3');
-    else if (this.layoutLocWhTag === 'J5') this.setLayoutLocWh('J');
   }
 
   private focusLayoutLocPalletInput(): void {
@@ -10502,15 +10468,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       el?.focus();
       el?.select();
     }, 60);
-  }
-
-  private applyWhPrefixToLocs(locs: string[], tag: string): string[] {
-    const prefix = String(tag || '').trim().toUpperCase();
-    return locs.map((loc) => {
-      const bare = this.stripDoiKhoWhPrefix(loc);
-      if (!bare) return '';
-      return prefix ? `${prefix}-${bare}` : bare;
-    }).filter(Boolean);
   }
 
   /** Thêm vị trí nhập tay từ ô trong popup (phân tách bằng , ; hoặc xuống dòng). */
@@ -10530,15 +10487,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Bỏ chọn tất cả vị trí trong popup. */
   clearLayoutLocSelected(): void {
     this.layoutLocSelected = new Set();
-  }
-
-  setLayoutLocWh(wh: LayoutWhPick): void {
-    this.layoutLocWh = wh;
-    const groups = getLayoutLocationGroups(wh);
-    this.layoutLocGroupId = groups[0]?.id || '';
-    this.layoutLocQuery = '';
-    if (wh === 'ASM3') this.layoutLocWhTag = 'ASM3';
-    else if (wh === 'J') this.layoutLocWhTag = this.layoutLocWhTag === 'ASM3' ? 'J5' : (this.layoutLocWhTag || 'J5');
   }
 
   setLayoutLocGroup(id: string): void {
@@ -10569,34 +10517,24 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const prevPallet = String(
       (material as { __prevPalletId?: string }).__prevPalletId ?? material.palletId ?? ''
     ).trim().toUpperCase();
-    const prevWh = this.locationWhTag(material.location);
-    const whChanged = this.layoutLocWhTag !== prevWh;
 
     let locOk = false;
     if (locs.length) {
-      material.location = joinMultiLocations(this.applyWhPrefixToLocs(locs, this.layoutLocWhTag));
+      material.location = joinMultiLocations(locs);
       locOk = await this.persistLocationChange(material, { silent: true });
-    } else if (whChanged) {
-      if (!String(material.location || '').trim()) {
-        alert('Nhập vị trí trước khi gán WH.');
-        return;
-      }
-      locOk = await this.commitWhChange(material, this.layoutLocWhTag, { silent: true, bypassUnlock: true });
     }
 
     const palOk =
       pallet !== prevPallet ? await this.persistPalletChange(material, pallet, { silent: true, bypassUnlock: true }) : false;
 
     if (!locOk && !palOk) {
-      alert('Chọn vị trí, pallet hoặc WH rồi bấm Done.');
+      alert('Chọn vị trí Kho J hoặc pallet rồi bấm Done.');
       return;
     }
-    const savedWh = this.layoutLocWhTag;
     const savedLoc = material.location || '—';
     this.closeLayoutLocPicker();
     const bits: string[] = [];
     if (locOk) bits.push(`Vị trí: ${savedLoc}`);
-    if (savedWh) bits.push(`WH: ${savedWh}`);
     if (palOk || pallet) bits.push(`Pallet: ${pallet || '—'}`);
     alert(`✅ Đã lưu\n${bits.join('\n')}`);
   }
