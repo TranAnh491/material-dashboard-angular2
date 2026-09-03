@@ -148,9 +148,26 @@
             <span class="batch-timer" *ngIf="batchStartTime">{{ getBatchDuration() }} phút</span>
           </div>
 
-        <!-- Filters + Date Range -->
-        <div class="toolbar__filters mobile-hide" *ngIf="!selectedBatchView && !isBatchActive">
-          <div class="segmented" role="tablist" aria-label="Batch filters">
+        <!-- Filters + Date Range + Search lô hàng -->
+        <div class="toolbar__filters" *ngIf="!selectedBatchView && !isBatchActive">
+          <label class="batch-lot-search">
+            <i class="material-icons">search</i>
+            <input type="search"
+                   [(ngModel)]="batchSearchQuery"
+                   (ngModelChange)="onBatchSearchInput()"
+                   placeholder="Tìm lô hàng / DNNK…"
+                   title="Tìm theo mã lô, DNNK, nhà cung cấp, mã hàng hoặc PO — kể cả lô đã nhập / ngoài 7 ngày"
+                   autocomplete="off">
+            <button type="button"
+                    class="batch-lot-search__clear"
+                    *ngIf="hasBatchSearch"
+                    (click)="clearBatchSearch()"
+                    title="Xóa tìm kiếm">
+              <i class="material-icons">close</i>
+            </button>
+          </label>
+
+          <div class="segmented mobile-hide" role="tablist" aria-label="Batch filters">
             <button type="button"
                     class="segmented__btn"
                     [class.is-active]="filterReturnGoods"
@@ -171,7 +188,7 @@
             </button>
           </div>
 
-          <div class="date-range">
+          <div class="date-range mobile-hide">
             <button type="button" class="date-range__input" (click)="openDateRangePopover($event)" title="Chọn khung ngày">
               <i class="material-icons">date_range</i>
               <span>{{ dateRangeDisplay }}</span>
@@ -257,7 +274,8 @@
           </div>
         </div>
         <ng-template #noInboundBatches>
-          <div class="no-batches-msg">Không có lô hàng nhập nào trong khoảng thời gian này</div>
+          <div class="no-batches-msg" *ngIf="hasBatchSearch">Không tìm thấy lô hàng khớp “{{ batchSearchQuery }}”</div>
+          <div class="no-batches-msg" *ngIf="!hasBatchSearch">Không có lô hàng nhập nào trong khoảng thời gian này</div>
         </ng-template>
       </div>
 

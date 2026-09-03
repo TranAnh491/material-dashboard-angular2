@@ -137,6 +137,11 @@ export class InboundComponent implements OnInit, OnDestroy {
   filterReturnGoods: boolean = false; // Lọc hàng trả (batchNumber bắt đầu bằng TRA)
   filterNormalGoods: boolean = false; // Lọc hàng nhập (không phải TRA)
   filterDaNhap: boolean = false; // Chỉ hiện lô hàng đã nhập xong (receivedCount === count)
+
+  /** Ô tìm lô hàng trên danh sách box (mã lô / DNNK / NCC / mã hàng) */
+  batchSearchQuery = '';
+  batchSearchLoading = false;
+  private batchSearchTimer: ReturnType<typeof setTimeout> | null = null;
   
   // Sort filter
   sortBy: string = 'importDate'; // Default to Ngày nhập
@@ -333,7 +338,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.startDate = this.tempStartDate || '';
     this.endDate = this.tempEndDate || '';
     this.closeDateRangePopover();
-    this.applyFilters();
+    this.loadMaterials();
   }
 
   trackByMaterial(index: number, material: InboundMaterial): any {
@@ -483,6 +488,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
   
   ngOnDestroy(): void {
+    if (this.batchSearchTimer) clearTimeout(this.batchSearchTimer);
     this.destroyChart();
     this.destroy$.next();
     this.destroy$.complete();
@@ -523,6 +529,51 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('📦 Loading ASM1 inbound materials (all statuses)...');
     this.tryLoadFromCollection('inbound-materials');
   }
+
+  private mapInboundDoc(id: string, data: any): InboundMaterial {
+    const batchNumber = data?.batchNumber || '';
+    const qty = data?.quantity || 0;
+    let rollsOrBags = data?.rollsOrBags ?? 0;
+    let gwLdv = data?.gwLdv ?? 0;
+    if (batchNumber.toUpperCase().startsWith('TRA')) {
+      if (!rollsOrBags || rollsOrBags === 0) rollsOrBags = qty;
+      if (!gwLdv || gwLdv === 0) gwLdv = 1;
+    }
+    return {
+      id,
+      factory: data?.factory || this.selectedFactory,
+      importDate: data?.importDate?.toDate?.() || new Date(),
+      internalBatch: data?.internalBatch || '',
+      batchNumber,
+      materialCode: data?.materialCode || '',
+      poNumber: data?.poNumber || '',
+      quantity: qty,
+      unit: data?.unit || '',
+      location: data?.location || '',
+      type: data?.type || '',
+      iqcStatus: data?.iqcStatus || 'Chờ kiểm',
+      expiryDate: data?.expiryDate?.toDate?.() || null,
+      qualityCheck: data?.qualityCheck || false,
+      isReceived: data?.isReceived || false,
+      notes: data?.notes || '',
+      rollsOrBags,
+      supplier: data?.supplier || '',
+      gwLdv,
+      remarks: data?.remarks || '',
+      bagBatch: data?.bagBatch || '',
+      hasQRGenerated: data?.hasQRGenerated || false,
+      scannedQuantity: data?.scannedQuantity || 0,
+      scannedBagKeys: Array.isArray(data?.scannedBagKeys)
+        ? data.scannedBagKeys.map((x: unknown) => String(x))
+        : [],
+      cartonCount: Math.max(0, Math.floor(Number(data?.cartonCount ?? 0))),
+      storageUnitSize: (data?.storageUnitSize || '') as StorageUnitSize | '',
+      preScanInventoryPending: !!data?.preScanInventoryPending,
+      linkedInventoryDocId: data?.linkedInventoryDocId || undefined,
+      createdAt: data?.createdAt?.toDate?.() || data?.createdDate?.toDate?.() || new Date(),
+      updatedAt: data?.updatedAt?.toDate?.() || data?.lastUpdated?.toDate?.() || new Date()
+    } as InboundMaterial;
+  }
   
   private tryLoadFromCollection(collectionName: string): void {
     console.log(`🔍 Trying collection: ${collectionName}`);
@@ -551,60 +602,20 @@ export class InboundComponent implements OnInit, OnDestroy {
       )
       .get()
       .toPromise()
-      .then(snapshot => {
+      .then(async snapshot => {
         const docs = snapshot?.docs || [];
         console.log(`🔍 Raw snapshot from ${collectionName} contains ${docs.length} documents`);
-        if (docs.length === 0) {
+        let allMaterials = docs.map(doc => this.mapInboundDoc(doc.id, doc.data() as any));
+        try {
+          allMaterials = await this.mergeOpenLotMaterials(collectionName, allMaterials);
+        } catch (e) {
+          console.error('❌ Không tải được lô chưa nhận xong (ngoài khung ngày):', e);
+        }
+        if (allMaterials.length === 0) {
           console.log(`❌ No data in ${collectionName}, trying other collections...`);
           this.tryAlternativeCollections();
           return;
         }
-
-        const allMaterials = docs.map(doc => {
-          const data = doc.data() as any;
-          const batchNumber = data.batchNumber || '';
-          const qty = data.quantity || 0;
-          let rollsOrBags = data.rollsOrBags ?? 0;
-          let gwLdv = data.gwLdv ?? 0;
-          if (batchNumber.toUpperCase().startsWith('TRA')) {
-            if (!rollsOrBags || rollsOrBags === 0) rollsOrBags = qty;
-            if (!gwLdv || gwLdv === 0) gwLdv = 1;
-          }
-          return {
-            id: doc.id,
-            factory: data.factory || this.selectedFactory,
-            importDate: data.importDate?.toDate?.() || new Date(),
-            internalBatch: data.internalBatch || '',
-            batchNumber,
-            materialCode: data.materialCode || '',
-            poNumber: data.poNumber || '',
-            quantity: qty,
-            unit: data.unit || '',
-            location: data.location || '',
-            type: data.type || '',
-            iqcStatus: data.iqcStatus || 'Chờ kiểm',
-            expiryDate: data.expiryDate?.toDate?.() || null,
-            qualityCheck: data.qualityCheck || false,
-            isReceived: data.isReceived || false,
-            notes: data.notes || '',
-            rollsOrBags,
-            supplier: data.supplier || '',
-            gwLdv,
-            remarks: data.remarks || '',
-            bagBatch: data.bagBatch || '',
-            hasQRGenerated: data.hasQRGenerated || false,
-            scannedQuantity: data.scannedQuantity || 0,
-            scannedBagKeys: Array.isArray(data.scannedBagKeys)
-              ? data.scannedBagKeys.map((x: unknown) => String(x))
-              : [],
-            cartonCount: Math.max(0, Math.floor(Number(data.cartonCount ?? 0))),
-            storageUnitSize: (data.storageUnitSize || '') as StorageUnitSize | '',
-            preScanInventoryPending: !!data.preScanInventoryPending,
-            linkedInventoryDocId: data.linkedInventoryDocId || undefined,
-            createdAt: data.createdAt?.toDate?.() || data.createdDate?.toDate?.() || new Date(),
-            updatedAt: data.updatedAt?.toDate?.() || data.lastUpdated?.toDate?.() || new Date()
-          } as InboundMaterial;
-        });
         
         // Filter theo factory đang chọn
         const asm1Materials = allMaterials.filter(material => material.factory === this.selectedFactory);
@@ -670,6 +681,109 @@ export class InboundComponent implements OnInit, OnDestroy {
         void this.refreshTbhdAcknowledgedBatches();
       });
   }
+
+  /**
+   * Lô chưa nhận xong luôn phải có đủ dòng (cả đã nhận + chưa nhận) dù ngoài khung ngày.
+   * Tải dòng isReceived=false rồi lấy nguyên lô theo batchNumber.
+   */
+  private async mergeOpenLotMaterials(collectionName: string, existing: InboundMaterial[]): Promise<InboundMaterial[]> {
+    const byId = new Map<string, InboundMaterial>();
+    for (const m of existing) {
+      if (m.id) byId.set(m.id, m);
+    }
+
+    const pendingSnap = await this.firestore
+      .collection(collectionName, (ref) => ref.where('isReceived', '==', false).limit(2000))
+      .get()
+      .toPromise();
+
+    const openLots = new Set<string>();
+    for (const doc of pendingSnap?.docs || []) {
+      const mapped = this.mapInboundDoc(doc.id, doc.data() as any);
+      if (mapped.factory !== this.selectedFactory) continue;
+      const lot = String(mapped.batchNumber || '').trim();
+      if (!lot) continue;
+      openLots.add(lot);
+      if (mapped.id && !byId.has(mapped.id)) byId.set(mapped.id, mapped);
+    }
+
+    const lots = [...openLots];
+    for (let i = 0; i < lots.length; i += 10) {
+      const chunk = lots.slice(i, i + 10);
+      const snap = await this.firestore
+        .collection(collectionName, (ref) => ref.where('batchNumber', 'in', chunk).limit(1000))
+        .get()
+        .toPromise();
+      for (const doc of snap?.docs || []) {
+        const mapped = this.mapInboundDoc(doc.id, doc.data() as any);
+        if (mapped.factory !== this.selectedFactory) continue;
+        if (mapped.id && !byId.has(mapped.id)) byId.set(mapped.id, mapped);
+      }
+    }
+
+    if (openLots.size > 0) {
+      console.log(`📌 Giữ ${openLots.size} lô chưa nhận xong (không ẩn theo khung ngày):`, [...openLots].slice(0, 20));
+    }
+    return Array.from(byId.values());
+  }
+
+  private isOpenBatch(batch: { count: number; receivedCount: number }): boolean {
+    return (batch.count || 0) > 0 && (batch.receivedCount || 0) < batch.count;
+  }
+
+  /** Lô chưa nhận xong luôn hiện; khung ngày / Đã Nhập chỉ áp cho lô đã xong. */
+  private applyOpenLotVisibility<T extends { batchNumber: string; count: number; receivedCount: number; importDate: Date }>(
+    all: T[]
+  ): T[] {
+    const open = all.filter((b) => this.isOpenBatch(b));
+    let rest = all.filter((b) => !this.isOpenBatch(b));
+
+    if (!this.hasBatchSearch) {
+      if (this.startDate && this.endDate) {
+        const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
+        const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
+        rest = rest.filter((b) => {
+          const d = new Date(b.importDate);
+          return d >= start && d <= end;
+        });
+      }
+      if (this.statusFilter === 'received') {
+        rest = rest.filter((b) => b.receivedCount >= 1 && b.count > 0);
+        if (this.filterDaNhap) {
+          // rest đã là lô nhận đủ — giữ; lô chưa xong luôn nằm ở `open`
+        }
+      } else if (this.statusFilter === 'pending') {
+        rest = [];
+      }
+    }
+
+    const seen = new Set<string>();
+    const merged: T[] = [];
+    for (const b of [...open, ...rest]) {
+      if (seen.has(b.batchNumber)) continue;
+      seen.add(b.batchNumber);
+      merged.push(b);
+    }
+    merged.sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    return this.filterBatchesBySearch(merged);
+  }
+
+  private incompleteLotKeys(): Set<string> {
+    const agg = new Map<string, { count: number; received: number }>();
+    for (const m of this.materials) {
+      if (m.factory !== this.selectedFactory) continue;
+      const key = m.batchNumber || '';
+      const g = agg.get(key) || { count: 0, received: 0 };
+      g.count++;
+      if (m.isReceived) g.received++;
+      agg.set(key, g);
+    }
+    const keys = new Set<string>();
+    agg.forEach((g, key) => {
+      if (g.count > 0 && g.received < g.count) keys.add(key);
+    });
+    return keys;
+  }
   
   private tryAlternativeCollections(): void {
     console.log('🔄 Không có document trong query inbound-materials (orderBy createdAt). Kiểm tra Firebase Console: collection inbound-materials và field createdAt.');
@@ -681,8 +795,10 @@ export class InboundComponent implements OnInit, OnDestroy {
     let filtered = [...this.materials];
     filtered = filtered.filter(material => material.factory === this.selectedFactory);
 
-    // Date range filter
-    if (this.startDate && this.endDate) {
+    // Date range filter — lô chưa nhận xong không bị ẩn theo ngày
+    const openLots = this.incompleteLotKeys();
+    const viewingOneLot = !!this.selectedBatchView && !(this.currentBatchNumber && this.currentBatchNumber.trim() !== '');
+    if (!viewingOneLot && this.startDate && this.endDate) {
       const start = new Date(this.startDate);
       const end = new Date(this.endDate);
       end.setHours(23, 59, 59, 999);
@@ -690,17 +806,22 @@ export class InboundComponent implements OnInit, OnDestroy {
       const endDate = new Date(end);
       endDate.setHours(23, 59, 59, 999);
       filtered = filtered.filter(material => {
+        if (openLots.has(material.batchNumber || '')) return true;
         const materialDate = new Date(material.importDate);
         materialDate.setHours(0, 0, 0, 0);
         return materialDate >= start && materialDate <= endDate;
       });
-    } else if (this.startDate) {
+    } else if (!viewingOneLot && this.startDate) {
       const start = new Date(this.startDate);
-      filtered = filtered.filter(material => material.importDate >= start);
-    } else if (this.endDate) {
+      filtered = filtered.filter(material =>
+        openLots.has(material.batchNumber || '') || material.importDate >= start
+      );
+    } else if (!viewingOneLot && this.endDate) {
       const end = new Date(this.endDate);
       end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter(material => material.importDate <= end);
+      filtered = filtered.filter(material =>
+        openLots.has(material.batchNumber || '') || material.importDate <= end
+      );
     }
 
     // Batch type filter - Hàng Trả / Hàng Nhập
@@ -716,16 +837,21 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     }
     
-    // Status filter
-    if (this.statusFilter) {
+    // Status filter — khi đang xem 1 lô thì hiện đủ dòng; lô chưa xong không bị ẩn pending/received
+    if (this.statusFilter && !viewingOneLot) {
       switch (this.statusFilter) {
         case 'received':
-          // "Đã nhận": chỉ những dòng đã nhập & đã hoàn tất quét (không thuộc nhóm pre-scan)
-          filtered = filtered.filter(material => material.isReceived && !material.preScanInventoryPending);
+          filtered = filtered.filter(material =>
+            openLots.has(material.batchNumber || '') ||
+            (material.isReceived && !material.preScanInventoryPending)
+          );
           break;
         case 'pending':
-          // "Chưa nhận": bao gồm cả các dòng pre-scan (đã tạo inventory nhưng còn chờ quét tem)
-          filtered = filtered.filter(material => !material.isReceived || !!material.preScanInventoryPending);
+          filtered = filtered.filter(material =>
+            openLots.has(material.batchNumber || '') ||
+            !material.isReceived ||
+            !!material.preScanInventoryPending
+          );
           break;
         case 'all':
           break;
@@ -1923,11 +2049,6 @@ export class InboundComponent implements OnInit, OnDestroy {
       !(m.batchNumber && m.batchNumber.toUpperCase().startsWith('TRA')) &&
       !preScanKeys.has(m.batchNumber || '')
     );
-    if (this.startDate && this.endDate) {
-      const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
-      const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
-      source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
-    }
     source.forEach(m => {
       const key = m.batchNumber || '';
       if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
@@ -1935,16 +2056,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       g.count++;
       if (m.isReceived) g.receivedCount++;
     });
-    let result = Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
-    // Khi click "Đã nhận": hiện lô đã nhập đủ (30/30) và lô nhập chưa đủ (15/30) để xem lại
-    if (this.statusFilter === 'received') {
-      result = result.filter(b => b.receivedCount >= 1 && b.count > 0); // Có ít nhất 1 mã đã nhận
-      if (this.filterDaNhap) result = result.filter(b => b.receivedCount === b.count); // Checkbox "Đã Nhập": chỉ lô nhập xong
-    } else if (this.statusFilter === 'pending') {
-      result = result.filter(b => b.receivedCount < b.count); // Còn ít nhất 1 mã chưa nhận
-    }
-    // statusFilter === 'all' → giữ nguyên toàn bộ result
-    return result;
+    return this.applyOpenLotVisibility(Array.from(map.values()));
   }
 
   // Getter: Danh sách lô hàng trả (TRA), nhóm theo batchNumber
@@ -1956,11 +2068,6 @@ export class InboundComponent implements OnInit, OnDestroy {
       m.batchNumber && m.batchNumber.toUpperCase().startsWith('TRA') &&
       !preScanKeys.has(m.batchNumber || '')
     );
-    if (this.startDate && this.endDate) {
-      const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
-      const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
-      source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
-    }
     source.forEach(m => {
       const key = m.batchNumber || '';
       if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
@@ -1968,14 +2075,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       g.count++;
       if (m.isReceived) g.receivedCount++;
     });
-    let result = Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
-    if (this.statusFilter === 'received') {
-      result = result.filter(b => b.receivedCount >= 1 && b.count > 0);
-      if (this.filterDaNhap) result = result.filter(b => b.receivedCount === b.count);
-    } else if (this.statusFilter === 'pending') {
-      result = result.filter(b => b.receivedCount < b.count);
-    }
-    return result;
+    return this.applyOpenLotVisibility(Array.from(map.values()));
   }
 
   /** Lô có ít nhất một dòng đang chờ quét tem (đã tạo inventory pre-scan) */
@@ -1986,11 +2086,6 @@ export class InboundComponent implements OnInit, OnDestroy {
       m.factory === this.selectedFactory &&
       preScanKeys.has(m.batchNumber || '')
     );
-    if (this.startDate && this.endDate) {
-      const start = new Date(this.startDate); start.setHours(0, 0, 0, 0);
-      const end = new Date(this.endDate); end.setHours(23, 59, 59, 999);
-      source = source.filter(m => { const d = new Date(m.importDate); return d >= start && d <= end; });
-    }
     source.forEach(m => {
       const key = m.batchNumber || '';
       if (!map.has(key)) map.set(key, { batchNumber: key, count: 0, receivedCount: 0, importDate: new Date(m.importDate), supplier: m.supplier || '' });
@@ -1998,7 +2093,121 @@ export class InboundComponent implements OnInit, OnDestroy {
       g.count++;
       if (m.isReceived) g.receivedCount++;
     });
-    return Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime());
+    return this.filterBatchesBySearch(
+      Array.from(map.values()).sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime())
+    );
+  }
+
+  get hasBatchSearch(): boolean {
+    return !!(this.batchSearchQuery || '').trim();
+  }
+
+  onBatchSearchInput(): void {
+    if (this.batchSearchTimer) clearTimeout(this.batchSearchTimer);
+    const q = (this.batchSearchQuery || '').trim();
+    if (q.length < 2) {
+      this.batchSearchLoading = false;
+      return;
+    }
+    this.batchSearchTimer = setTimeout(() => {
+      void this.searchLotsFromFirestore(q);
+    }, 350);
+  }
+
+  clearBatchSearch(): void {
+    if (this.batchSearchTimer) clearTimeout(this.batchSearchTimer);
+    this.batchSearchQuery = '';
+    this.batchSearchLoading = false;
+  }
+
+  /** Tìm lô trên Firebase theo mã lô — không bị giới hạn 7 ngày createdAt. */
+  private async searchLotsFromFirestore(q: string): Promise<void> {
+    const needle = q.trim();
+    if (!needle || (this.batchSearchQuery || '').trim() !== needle) return;
+
+    const alreadyHas = this.materials.some((m) =>
+      m.factory === this.selectedFactory &&
+      String(m.batchNumber || '').toUpperCase().includes(needle.toUpperCase())
+    );
+    if (alreadyHas) return;
+
+    this.batchSearchLoading = true;
+    try {
+      const variants = Array.from(new Set([
+        needle,
+        needle.toUpperCase(),
+        needle.toLowerCase(),
+        `Lô ${needle}`,
+        `LO ${needle}`,
+        `DNNK${needle}`,
+        `DNNK ${needle}`
+      ]));
+      const snaps = await Promise.all([
+        ...variants.map((v) =>
+          firstValueFrom(
+            this.firestore.collection('inbound-materials', (ref) =>
+              ref.where('batchNumber', '==', v).limit(200)
+            ).get()
+          ).catch(() => null)
+        ),
+        firstValueFrom(
+          this.firestore.collection('inbound-materials', (ref) =>
+            ref.orderBy('batchNumber').startAt(needle).endAt(needle + '\uf8ff').limit(200)
+          ).get()
+        ).catch(() => null)
+      ]);
+
+      const byId = new Map(this.materials.filter((m) => m.id).map((m) => [m.id as string, m]));
+      let added = 0;
+      for (const snap of snaps) {
+        for (const doc of snap?.docs || []) {
+          const mapped = this.mapInboundDoc(doc.id, doc.data() as any);
+          if (mapped.factory && mapped.factory !== this.selectedFactory) continue;
+          const hay = [
+            mapped.batchNumber,
+            mapped.supplier,
+            mapped.materialCode,
+            mapped.poNumber,
+            mapped.internalBatch
+          ].join(' ').toUpperCase();
+          if (!hay.includes(needle.toUpperCase())) continue;
+          if (mapped.id && !byId.has(mapped.id)) {
+            byId.set(mapped.id, mapped);
+            this.materials.push(mapped);
+            added++;
+          }
+        }
+      }
+      if (added > 0) {
+        console.log(`🔍 Search lô "${needle}": thêm ${added} dòng từ Firebase (ngoài khung ngày đang tải)`);
+        this.applyFilters();
+      }
+    } catch (error) {
+      console.error('Error searching inbound lots:', error);
+    } finally {
+      this.batchSearchLoading = false;
+    }
+  }
+
+  /** Lọc box lô hàng theo mã lô / DNNK / NCC / mã hàng / PO. */
+  private filterBatchesBySearch<T extends { batchNumber: string; supplier?: string }>(batches: T[]): T[] {
+    const q = (this.batchSearchQuery || '').trim().toUpperCase();
+    if (!q) return batches;
+    const matchedLots = new Set<string>();
+    for (const m of this.materials) {
+      if (m.factory !== this.selectedFactory) continue;
+      const lot = m.batchNumber || '';
+      if (
+        lot.toUpperCase().includes(q) ||
+        String(m.supplier || '').toUpperCase().includes(q) ||
+        String(m.materialCode || '').toUpperCase().includes(q) ||
+        String(m.poNumber || '').toUpperCase().includes(q) ||
+        String((m as any).internalBatch || '').toUpperCase().includes(q)
+      ) {
+        matchedLots.add(lot);
+      }
+    }
+    return batches.filter((b) => matchedLots.has(b.batchNumber));
   }
 
   // Chọn lô hàng để xem bảng chi tiết
