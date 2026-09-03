@@ -983,6 +983,16 @@
             <i class="material-icons">inventory_2</i>
             In Tem Thùng
           </button>
+          <div class="kho-filter">
+            <button type="button"
+                    class="more-btn tem-le-btn kho-filter-btn"
+                    [class.active]="!!viewWarehouseFilter"
+                    (click)="openKhoPopup()"
+                    title="Xem theo kho">
+              <i class="material-icons">warehouse</i>
+              {{ viewWarehouseButtonLabel }}
+            </button>
+          </div>
         </div>
         
         
@@ -1062,6 +1072,16 @@
             <i class="material-icons">inventory_2</i>
             <span class="btn-label">Tem thùng</span>
           </button>
+          <div class="kho-filter">
+            <button type="button"
+                    class="more-btn tem-le-btn kho-filter-btn"
+                    [class.active]="!!viewWarehouseFilter"
+                    (click)="openKhoPopup()"
+                    title="Xem theo kho">
+              <i class="material-icons">warehouse</i>
+              <span class="btn-label">{{ viewWarehouseButtonLabel }}</span>
+            </button>
+          </div>
         </div>
         
         <!-- Action Buttons -->
@@ -3210,6 +3230,39 @@
       <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!canApplyLayoutLoc()">
         <i class="material-icons">check</i> Done
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup chọn kho -->
+<div class="modal-overlay more-overlay" *ngIf="showKhoPopup" (click)="closeKhoPopup()">
+  <div class="modal-content filter-picker-modal kho-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn kho">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">warehouse</i>
+        </span>
+        <div>
+          <h3>Chọn kho</h3>
+          <p class="more-popup-header__sub">Xem tồn theo kho khi cần</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKhoPopup()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body filter-picker-body kho-picker-body">
+      <button type="button"
+              class="kho-picker-item"
+              *ngFor="let o of viewWarehouseOptions"
+              [class.on]="viewWarehouseFilter === o.id"
+              (click)="setViewWarehouseFilter(o.id)">
+        <i class="material-icons">{{ o.icon }}</i>
+        <span>{{ o.label }}</span>
+      </button>
+    </div>
+    <div class="filter-picker-footer">
+      <button type="button" class="cancel-btn" (click)="closeKhoPopup()">Đóng</button>
     </div>
   </div>
 </div>

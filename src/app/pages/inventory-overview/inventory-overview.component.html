@@ -165,6 +165,15 @@
           Theo mã
         </button>
       </div>
+
+      <label class="io-count-ng"
+             *ngIf="isLinkQDataLoaded"
+             title="Bỏ tick thì không tính tồn ở Kho NG khi so sánh với LinkQ">
+        <input type="checkbox"
+               [ngModel]="countKhoNg"
+               (ngModelChange)="setCountKhoNg($event)">
+        Tính Kho NG
+      </label>
     </div>
   </section>
 

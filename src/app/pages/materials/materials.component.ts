@@ -31,7 +31,8 @@ import {
   LayoutWhPick,
   LayoutLocGroup,
   getLayoutLocationGroups,
-  normalizeLayoutLocToken
+  normalizeLayoutLocToken,
+  isJWarehouseLocation
 } from './layout-location-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
@@ -470,6 +471,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   isLoadingLocationFilterOptions = false;
   /** Hiện cột KH — mặc định tắt để không tải Danh mục NVLKH nếu không cần. */
   showKhColumn = false;
+  /** Lọc xem theo kho (J / ASM3 / 00 / NG). '' = Tất cả, không lọc. */
+  viewWarehouseFilter: '' | 'J' | 'ASM3' | '00' | 'NG' = '';
+  showKhoPopup = false;
+  readonly viewWarehouseOptions: Array<{ id: '' | 'J' | 'ASM3' | '00' | 'NG'; label: string; icon: string }> = [
+    { id: '', label: 'Tất cả', icon: 'apps' },
+    { id: 'J', label: 'Kho J', icon: 'warehouse' },
+    { id: 'ASM3', label: 'Kho ASM3', icon: 'domain' },
+    { id: '00', label: 'Kho 00', icon: 'inventory_2' },
+    { id: 'NG', label: 'Kho NG', icon: 'report' }
+  ];
   private searchSubject = new Subject<string>();
   
   // 🚀 OPTIMIZATION: Add loading states
@@ -2291,6 +2302,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Reset state gắn với factory cũ (kết quả search, popup đang mở) khi đổi nhà máy — dữ liệu inventory là theo factory,
    *  không được âm thầm hiển thị dữ liệu factory cũ dưới tên factory mới. */
   private onFactoryChanged(): void {
+    this.viewWarehouseFilter = '';
+    this.showKhoPopup = false;
     this.clearSearch();
     this.showMorePopup = false;
     this.showResetLowStockPopup = false;
@@ -3747,6 +3760,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return false;
       }
 
+      if (this.viewWarehouseFilter && !this.materialMatchesViewWarehouse(material)) {
+        return false;
+      }
+
       if (this.searchTerm) {
         const term = this.searchTerm.trim().toUpperCase();
         if (this.isTieuHuySearchTerm(term)) {
@@ -3778,6 +3795,154 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.updateDisplayedInventory();
     
     console.log('🔍 ASM1 filters applied. Items found:', this.filteredInventory.length);
+  }
+
+  get viewWarehouseButtonLabel(): string {
+    const found = this.viewWarehouseOptions.find((o) => o.id === this.viewWarehouseFilter);
+    return found?.id ? found.label : 'Kho';
+  }
+
+  openKhoPopup(): void {
+    this.showKhoPopup = true;
+  }
+
+  closeKhoPopup(): void {
+    this.showKhoPopup = false;
+  }
+
+  async setViewWarehouseFilter(id: '' | 'J' | 'ASM3' | '00' | 'NG'): Promise<void> {
+    this.viewWarehouseFilter = id;
+    this.showKhoPopup = false;
+    if (!id) {
+      if (this.searchTerm.trim()) {
+        await this.performSearch(this.searchTerm);
+      } else {
+        this.inventoryMaterials = [];
+        this.filteredInventory = [];
+        this.displayedInventory = [];
+        this.currentPage = 1;
+        this.updatePagination();
+        this.updateDisplayedInventory();
+        this.cdr.detectChanges();
+      }
+      return;
+    }
+    if (this.searchTerm.trim() && this.inventoryMaterials.length) {
+      this.applyViewWarehouseToCurrentList();
+      return;
+    }
+    await this.loadViewWarehouseInventory();
+  }
+
+  materialMatchesViewWarehouse(material: InventoryMaterial): boolean {
+    if (!this.viewWarehouseFilter) return true;
+    const loc = String(material?.location ?? (material as any)?.viTri ?? '');
+    const tokens = splitMultiLocations(loc);
+    const locs = tokens.length ? tokens : [loc];
+    return locs.some((token) => this.locationMatchesViewWarehouse(token, this.viewWarehouseFilter as 'J' | 'ASM3' | '00' | 'NG'));
+  }
+
+  private locationMatchesViewWarehouse(
+    location: string,
+    wh: 'J' | 'ASM3' | '00' | 'NG'
+  ): boolean {
+    const raw = String(location || '').trim().toUpperCase();
+    if (!raw) return false;
+    const stripped = this.stripDoiKhoWhPrefix(raw).toUpperCase();
+    if (wh === 'NG') {
+      return isNgPrefixLocation(raw) || isNgPrefixLocation(stripped);
+    }
+    if (wh === 'ASM3') {
+      return isAsm3OrWh3PrefixLocation(raw) || isAsm3OrWh3PrefixLocation(stripped);
+    }
+    if (wh === '00') {
+      return raw === '00' || raw.startsWith('00-') || raw.startsWith('00+')
+        || stripped === '00' || stripped.startsWith('00-') || stripped.startsWith('00+');
+    }
+    return raw.startsWith('J5-') || isJWarehouseLocation(raw) || isJWarehouseLocation(stripped);
+  }
+
+  private applyViewWarehouseToCurrentList(): void {
+    this.filteredInventory = this.inventoryMaterials.filter((m) => this.materialMatchesViewWarehouse(m));
+    this.sortInventoryFIFO();
+    this.markDuplicates();
+    this.currentPage = 1;
+    this.updatePagination();
+    this.updateDisplayedInventory();
+    this.cdr.detectChanges();
+  }
+
+  private async loadViewWarehouseInventory(): Promise<void> {
+    const wh = this.viewWarehouseFilter;
+    if (!wh) return;
+    this.isLoading = true;
+    this.isSearching = true;
+    this.searchProgress = 20;
+    try {
+      const factories: Array<'ASM1' | 'ASM2'> = wh === 'ASM3'
+        ? ['ASM1', 'ASM2']
+        : [this.selectedFactory];
+      const snaps = await Promise.all(
+        factories.map((factory) =>
+          this.firestore.collection('inventory-materials', (ref) =>
+            ref.where('factory', '==', factory).limit(10000)
+          ).get().toPromise()
+        )
+      );
+      this.searchProgress = 70;
+      const seen = new Set<string>();
+      const materials: InventoryMaterial[] = [];
+      for (const snap of snaps) {
+        for (const doc of snap?.docs || []) {
+          if (seen.has(doc.id)) continue;
+          const data = doc.data() as any;
+          const loc = String(data?.location || data?.viTri || '').trim().toUpperCase();
+          const probe = { location: loc } as InventoryMaterial;
+          if (!this.materialMatchesViewWarehouse(probe)) continue;
+          seen.add(doc.id);
+          const material = {
+            id: doc.id,
+            ...data,
+            factory: data.factory || this.selectedFactory,
+            location: loc,
+            palletId: String(data.palletId || '').trim().toUpperCase(),
+            importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
+            receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
+            expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
+            openingStock: data.openingStock || null,
+            xt: data.xt || 0,
+            source: data.source || 'manual',
+            iqcStatus: data.iqcStatus || undefined,
+            modifiedBy: data.modifiedBy || '',
+            locationManualOverride: !!data.locationManualOverride
+          } as InventoryMaterial;
+          this.stampLocationAtLoad(material);
+          materials.push(material);
+        }
+      }
+      this.readTracker.track('materials', 'inventory-materials', materials.length);
+      this.inventoryMaterials = materials;
+      this.applyCatalogToMaterials(this.inventoryMaterials);
+      this.filteredInventory = [...this.inventoryMaterials];
+      this.sortInventoryFIFO();
+      this.markDuplicates();
+      this.currentPage = 1;
+      this.updatePagination();
+      this.updateDisplayedInventory();
+      if (this.filteredInventory.length) {
+        void this.refreshLastStatusForMaterials(this.filteredInventory);
+      }
+    } catch (e) {
+      console.error('❌ loadViewWarehouseInventory:', e);
+      this.inventoryMaterials = [];
+      this.filteredInventory = [];
+      this.displayedInventory = [];
+    } finally {
+      this.isLoading = false;
+      this.isSearching = false;
+      this.searchProgress = 100;
+      this.cdr.detectChanges();
+    }
   }
 
   // Update pagination
@@ -4086,11 +4251,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   clearSearch(): void {
     this.searchTerm = '';
     this.searchByKk = false;
+    this.showOnlyNegativeStock = false;
+    if (this.viewWarehouseFilter) {
+      void this.loadViewWarehouseInventory();
+      return;
+    }
     this.filteredInventory = [];
     this.inventoryMaterials = [];
-
-    // Reset negative stock filter
-    this.showOnlyNegativeStock = false;
 
     // Return to initial state - no data displayed
     console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
@@ -4405,8 +4572,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     if (searchTerm.length === 0) {
-      this.filteredInventory = [];
       this.searchTerm = '';
+      if (this.viewWarehouseFilter) {
+        await this.loadViewWarehouseInventory();
+        return;
+      }
+      this.filteredInventory = [];
       this.inventoryMaterials = [];
       return;
     }
@@ -4634,7 +4805,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         });
 
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
-        this.filteredInventory = [...this.inventoryMaterials];
+        this.filteredInventory = this.viewWarehouseFilter
+          ? this.inventoryMaterials.filter((m) => this.materialMatchesViewWarehouse(m))
+          : [...this.inventoryMaterials];
         
         // KHÔNG gộp dòng khi search - chỉ gộp khi bấm nút "Gộp dòng trùng lặp"
         // this.consolidateInventoryData();

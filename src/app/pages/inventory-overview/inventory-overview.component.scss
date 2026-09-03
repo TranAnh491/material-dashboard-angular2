@@ -221,6 +221,30 @@ $purple: #7c3aed;
   margin-left: auto;
 }
 
+.io-count-ng {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid $line;
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+
+  input {
+    margin: 0;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+  }
+}
+
 .io-btn {
   display: inline-flex;
   align-items: center;

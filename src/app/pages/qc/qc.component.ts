@@ -424,11 +424,37 @@ export class QCComponent implements OnInit, OnDestroy {
 
   applyBoxDateModal(): void {
     if (!this.editingBoxKey) return;
+    const key = this.editingBoxKey;
     const from = this.boxModalFromStr ? new Date(this.boxModalFromStr + 'T00:00:00') : null;
     const to   = this.boxModalToStr   ? new Date(this.boxModalToStr   + 'T23:59:59') : null;
-    this.boxDateRanges[this.editingBoxKey] = { from, to };
+    this.boxDateRanges[key] = { from, to };
     this.showBoxDateModal = false;
     this.reloadBoxCounts();
+    this.refreshListForBoxKey(key);
+  }
+
+  /** Sau khi đổi khoảng ngày trên box, tải lại danh sách tương ứng. */
+  private refreshListForBoxKey(key: string): void {
+    if (key === 'ng') {
+      void this.showMonthlyStatusMaterials('NG');
+      return;
+    }
+    if (key === 'pass') {
+      void this.showMonthlyStatusMaterials('PASS');
+      return;
+    }
+    if (key === 'lock') {
+      void this.showMonthlyStatusMaterials('LOCK');
+      return;
+    }
+    if (!this.showIqcSearchResults) return;
+    if (key === 'pendingQC' && this.iqcHistoryContext === 'pendingQC') {
+      this.showPendingQCMaterials(false);
+    } else if (key === 'todayChecked' && this.iqcHistoryContext === 'todayChecked') {
+      this.showTodayCheckedMaterials(false);
+    } else if (key === 'pendingConfirm' && this.iqcHistoryContext === 'pendingConfirm') {
+      this.showPendingConfirmMaterials(false);
+    }
   }
 
   resetBoxDateModal(): void {
@@ -2423,13 +2449,6 @@ export class QCComponent implements OnInit, OnDestroy {
     });
   }
 
-  private getCurrentMonthRange(): { start: Date; end: Date } {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    return { start, end };
-  }
-
   // Load PASS / NG / LOCK counts với per-box date ranges
   // Tính broadest range → filter tại Firestore; sau đó lọc per-status trong memory (dataset nhỏ hơn nhiều)
   // Index cần: factory ASC + qcCheckedAt ASC  (xem firestore.indexes.json)
@@ -2511,14 +2530,18 @@ export class QCComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Show inline monthly list (no popup)
+  // Show inline list for PASS / NG / LOCK — dùng đúng khoảng ngày trên box (không cứng tháng hiện tại)
   async showMonthlyStatusMaterials(status: 'PASS' | 'NG' | 'LOCK'): Promise<void> {
     this.showTodayCheckedModal = false;
     this.showPendingQCModal = false;
     this.showPendingConfirmModal = false;
     this.priorityMaterialId = null; // avoid stale priority from another list
 
-    this.iqcResultsTitle = `${status} (tháng hiện tại)`;
+    const rangeKey = status === 'PASS' ? 'pass' : status === 'NG' ? 'ng' : 'lock';
+    const range = this.boxDateRanges[rangeKey] || { from: null, to: null };
+    const rangeLabel = this.formatBoxDateLabel(rangeKey);
+
+    this.iqcResultsTitle = `${status} (${rangeLabel})`;
     this.showIqcSearchResults = true;
     this.isSearchingIqcHistory = true;
     this.iqcHistoryError = '';
@@ -2529,39 +2552,42 @@ export class QCComponent implements OnInit, OnDestroy {
       status === 'NG' ? 'monthlyNg' :
       'monthlyLock';
 
-    const { start, end } = this.getCurrentMonthRange();
+    const inRange = (dt: Date | null): boolean => {
+      if (!dt) return false;
+      if (range.from && dt < range.from) return false;
+      if (range.to && dt > range.to) return false;
+      return true;
+    };
 
     try {
-      // Try more selective query first
+      // Query theo factory + qcCheckedAt (cùng cách đếm trên box) rồi lọc status trong memory
       let snapshot: any = null;
       try {
-        snapshot = await this.firestore.collection('inventory-materials', ref =>
-          ref.where('factory', '==', this.selectedFactory)
-             .where('iqcStatus', '==', status)
-             .limit(2000)
-        ).get().toPromise();
+        snapshot = await this.firestore.collection('inventory-materials', ref => {
+          let q: firebase.firestore.Query = ref.where('factory', '==', this.selectedFactory);
+          if (range.from) {
+            q = q.where('qcCheckedAt', '>=', firebase.firestore.Timestamp.fromDate(range.from));
+          }
+          if (range.to) {
+            q = q.where('qcCheckedAt', '<=', firebase.firestore.Timestamp.fromDate(range.to));
+          }
+          return q;
+        }).get().toPromise();
       } catch (e) {
-        // Fallback: filter in memory (avoid index issues)
+        // Fallback: tránh lỗi index — lấy theo factory rồi lọc ngày/status trong memory
         snapshot = await this.firestore.collection('inventory-materials', ref =>
           ref.where('factory', '==', this.selectedFactory)
              .limit(5000)
         ).get().toPromise();
       }
 
-      if (!snapshot || snapshot.empty) {
-        this.iqcHistoryResults = [];
-        this.isSearchingIqcHistory = false;
-        this.iqcHistoryError = '';
-        return;
-      }
-
-      const results = snapshot.docs
+      const results = (snapshot?.docs || [])
         .map((doc: any) => {
           const data = doc.data() as any;
           const eventTime =
             this.parseFirestoreDate(data?.qcCheckedAt) ||
             this.parseFirestoreDate(data?.updatedAt);
-          if (!eventTime || eventTime < start || eventTime >= end) return null;
+          if (!inRange(eventTime)) return null;
 
           const statusNorm = (data?.iqcStatus || '').toString().trim().toUpperCase();
           const qcCheckedBy = (data?.qcCheckedBy || '').toString();
@@ -2574,7 +2600,6 @@ export class QCComponent implements OnInit, OnDestroy {
             (!qcCheckedBy || qcCheckedBy.trim() === '');
 
           if (isAutoPass) return null;
-
           if (statusNorm !== status) return null;
 
           return {
@@ -2593,15 +2618,17 @@ export class QCComponent implements OnInit, OnDestroy {
 
       this.iqcHistoryResults = results;
       this.isSearchingIqcHistory = false;
-      this.iqcHistoryError = results.length === 0 ? `Không có dữ liệu ${status} trong tháng hiện tại` : '';
+      this.iqcHistoryError = results.length === 0
+        ? `Không có dữ liệu ${status} trong khoảng ${rangeLabel}`
+        : '';
 
       if (this.isSampleTakeEnabledForCurrentList()) {
         void this.refreshSampleTakenMarkersForPendingQc(this.iqcHistoryResults);
       }
     } catch (error) {
-      console.error(`❌ Error loading monthly ${status} list:`, error);
+      console.error(`❌ Error loading ${status} list:`, error);
       this.isSearchingIqcHistory = false;
-      this.iqcHistoryError = `Lỗi khi tải danh sách ${status} theo tháng`;
+      this.iqcHistoryError = `Lỗi khi tải danh sách ${status}`;
       this.iqcHistoryResults = [];
     }
   }

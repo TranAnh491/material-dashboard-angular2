@@ -9,6 +9,7 @@ import { TabPermissionService } from '../../services/tab-permission.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
+import { isNgPrefixLocation, splitMultiLocations } from '../layout-warehouse/layout-warehouse-location.util';
 
 
 interface InventoryOverviewItem {
@@ -88,6 +89,8 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   linkQEnoughCount = 0;
   linkQSurplusCount = 0;
   linkQShortageCount = 0;
+  /** Khi so sánh LinkQ: tick = cộng tồn Kho NG vào tồn hệ thống. */
+  countKhoNg = true;
   
   // LinkQ file management
   linkQFiles: LinkQFileInfo[] = [];
@@ -577,6 +580,9 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     const groupedMap = new Map<string, InventoryOverviewItem>();
     
     items.forEach(item => {
+      if (!this.countKhoNg && this.isKhoNgLocation(item.location)) {
+        return;
+      }
       if (groupedMap.has(item.materialCode)) {
         // Add quantities for same material code
         const existing = groupedMap.get(item.materialCode)!;
@@ -707,6 +713,12 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       item.compareStatus = undefined;
       return;
     }
+    if (!this.countKhoNg && this.isKhoNgLocation(item.location)) {
+      item.compareStatus = undefined;
+      item.hasDifference = false;
+      item.stockDifference = undefined;
+      return;
+    }
     if (this.isSkippedLinkQCompareCode(code)) {
       item.compareStatus = undefined;
       item.hasDifference = false;
@@ -749,6 +761,23 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   private isTieuHuyLocation(location: string | null | undefined): boolean {
     const u = String(location || '').trim().toUpperCase();
     return u === 'TIEUHUY' || u.startsWith('TIEUHUY-') || u.replace(/[^A-Z0-9]/g, '') === 'TIEUHUY';
+  }
+
+  /** Vị trí thuộc Kho NG (NG, NG-01, NG01…). */
+  private isKhoNgLocation(location: string | null | undefined): boolean {
+    const tokens = splitMultiLocations(String(location || ''));
+    const list = tokens.length ? tokens : [String(location || '')];
+    return list.some((token) => {
+      const raw = String(token || '').trim().toUpperCase();
+      if (!raw) return false;
+      const stripped = raw.replace(/^(J5|WH3|ASM3|00)[-+]/, '');
+      return isNgPrefixLocation(raw) || isNgPrefixLocation(stripped);
+    });
+  }
+
+  setCountKhoNg(value: boolean): void {
+    this.countKhoNg = !!value;
+    this.applyFilters();
   }
 
   /** Thêm mã có trên LinkQ nhưng không có trong tồn kho (thiếu hoàn toàn). */
