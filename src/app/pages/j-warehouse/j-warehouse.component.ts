@@ -15,7 +15,7 @@ import { Subscription } from 'rxjs';
 import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
 
 export interface JwBlock {
-  /** VD: R11 hoặc A01-1 (kho mát) */
+  /** VD: R11 hoặc S01-1 (kho mát) */
   code: string;
   rackNum: number;
   index: number;
@@ -114,7 +114,7 @@ export interface JwOfficeRoom {
   hM: number;
 }
 
-/** 1 block trong 1 dãy kệ Kho mát — VD "A01-1". 7 tầng, không chia A/B/C. */
+/** 1 block trong 1 dãy kệ Kho mát — VD "S01-1". 7 tầng, không chia A/B/C. */
 export interface JwKhoMatBlock {
   code: string;
   index: number;
@@ -124,7 +124,7 @@ export interface JwKhoMatBlock {
   hM: number;
 }
 
-/** 1 dãy kệ Kho mát — VD "A01", gồm 3 block xếp theo chiều sâu phòng. */
+/** 1 dãy kệ Kho mát — VD "S01", gồm 3 block xếp theo chiều sâu phòng. */
 export interface JwKhoMatRow {
   id: string;
   xM: number;
@@ -741,7 +741,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Lối đi còn lại giữa hết dãy kệ và mép văn phòng */
   readonly OFFICE_AISLE_M = this.round2(this.officeZone.yM - this.OPEN_ZONE_Y_M);
 
-  /** Kệ trong Kho mát: A01 rộng 1m, các dãy còn lại rộng 0.5m; sâu 1.5m, 3 block/dãy, cách nhau 0.8m, 7 tầng (không A/B/C), cao 3m. */
+  /** Kệ trong Kho mát: S01 rộng 1m, các dãy còn lại rộng 0.5m; sâu 1.5m, 3 block/dãy, cách nhau 0.8m, 7 tầng (không A/B/C), cao 3m. */
   readonly KHO_MAT_BLOCK_W_M = 1;
   readonly KHO_MAT_BLOCK_W_NARROW_M = 0.5;
   readonly KHO_MAT_BLOCK_D_M = 1.5;
@@ -3106,7 +3106,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       : this.BLOCK_LEN_M;
   }
 
-  /** R11-1A · kho mát A01-1-3 (không A/B/C) */
+  /** R11-1A · kho mát S01-1-3 (không A/B/C) */
   slotCode(blockCode: string, level: number, pos: JwPos): string {
     if (this.findKhoMatBlock(blockCode)) return `${blockCode}-${level}`;
     return `${blockCode}-${level}${pos}`;
@@ -4139,8 +4139,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   /**
    * Dãy kệ trong Kho mát — tính từ trái qua phải, đầy hết chiều dài phòng.
-   * A01 là dãy đơn, đứng riêng. Từ A02 trở đi, mỗi kệ có 2 mặt nên đi theo cặp sát nhau ngay
-   * trên 1 kệ (A02|A03, A04|A05…) — không có khe giữa 2 dãy trong cùng 1 cặp.
+   * S01 là dãy đơn, đứng riêng. Từ S02 trở đi, mỗi kệ có 2 mặt nên đi theo cặp sát nhau ngay
+   * trên 1 kệ (S02|S03, S04|S05…) — không có khe giữa 2 dãy trong cùng 1 cặp.
    * Khe 0.8m chỉ nằm GIỮA các kệ (đơn/cặp) để chừa lối đi. 3 block trong 1 dãy sát nhau, sát cạnh B.
    */
   private buildKhoMatRows(): JwKhoMatRow[] {
@@ -4160,7 +4160,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
     const makeRow = (colX: number, colW: number): JwKhoMatRow => {
       index++;
-      const rowId = `A${String(index).padStart(2, '0')}`;
+      const rowId = `S${String(index).padStart(2, '0')}`;
       const blocks: JwKhoMatBlock[] = [];
       for (let b = 0; b < this.KHO_MAT_BLOCKS_PER_ROW; b++) {
         blocks.push({

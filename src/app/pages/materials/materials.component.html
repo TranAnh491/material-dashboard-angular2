@@ -11,7 +11,7 @@
             · {{ selectedFactory }}
           </ng-container>
         </h4>
-        <div class="header-stats" *ngIf="kkLocMapView === 'type' && !kkLocMapLoading">
+        <div class="header-stats" *ngIf="kkLocMapView === 'type'">
           <span *ngIf="!kkActiveProductType">{{ kkLocMapTypeSummary.count | number }} loại · tồn {{ formatNumber(kkLocMapTypeSummary.stock) }}</span>
           <span *ngIf="kkActiveTypeRow">Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }} · Tổng cuộn: {{ kkTypeFilteredRollsTotal | number }}</span>
         </div>
@@ -143,11 +143,13 @@
         <span class="kk-loc-map__dot kk-loc-map__dot--partial">Đang KK</span>
         <span class="kk-loc-map__dot kk-loc-map__dot--none">Chưa KK</span>
       </div>
-      <div class="kk-loc-map__loading" *ngIf="kkLocMapLoading">
+      <div class="kk-loc-map__loading" *ngIf="kkLocMapLoading && kkLocMapView !== 'type'">
         <i class="material-icons rotating">sync</i>
-        <span *ngIf="kkLocMapView === 'location'">Đang đọc tồn kho {{ selectedFactory }}…</span>
-        <span *ngIf="kkLocMapView === 'material'">Đang đọc tồn kho theo mã hàng…</span>
-        <span *ngIf="kkLocMapView === 'type'">Đang đọc danh mục / tồn kho theo loại hàng…</span>
+        <span>{{ kkLocMapStatus || (kkLocMapView === 'location' ? ('Đang đọc tồn kho ' + selectedFactory + '…') : 'Đang đọc tồn kho theo mã hàng…') }}</span>
+      </div>
+      <div class="kk-loc-map__status" *ngIf="kkLocMapView === 'type' && kkLocMapStatus">
+        <i class="material-icons rotating">sync</i>
+        <span>{{ kkLocMapStatus }}</span>
       </div>
       <div class="kk-loc-map__groups" *ngIf="!kkLocMapLoading && kkLocMapView === 'location'">
         <section class="kk-loc-map__group" *ngFor="let group of kkLocMapGroupedBoxes">
@@ -263,11 +265,17 @@
                       <td>{{ line.poNumber || '—' }}</td>
                       <td>{{ getDisplayIMD(line) }}</td>
                       <td class="kk-loc-map__num">{{ formatNumber(calculateCurrentStock(line)) }}</td>
-                      <td class="kk-loc-map__loc">
-                        <input type="text" class="kk-loc-map__pallet-input" [(ngModel)]="line.location"
-                               placeholder="Vị trí" [disabled]="!canEdit || kkLocMapBusy"
-                               (keydown.enter)="$any($event.target).blur()" (blur)="saveKkDetailLocation(line)"
-                               autocomplete="off" spellcheck="false">
+                      <td class="kk-loc-map__loc" title="Bấm để nhập mã hoặc chọn vị trí Kho J">
+                        <button type="button"
+                                class="loc-col-btn location-display location-display--clickable"
+                                [class.location-display--on]="isLayoutLocPickerRow(line) && layoutLocFocus === 'location'"
+                                [disabled]="!canEdit || kkLocMapBusy"
+                                (click)="openKkLayoutLocPicker(line, $event)">
+                          <span class="location-text">{{ primaryLocationDisplay(line.location) || 'Chọn vị trí' }}</span>
+                          <span class="location-badge" *ngIf="locationExtraCount(line.location) > 0">
+                            +{{ locationExtraCount(line.location) }}
+                          </span>
+                        </button>
                       </td>
                       <td class="kk-loc-map__loc">
                         <select class="kk-loc-map__pallet-input"
@@ -303,7 +311,7 @@
         <p class="hidden-empty" *ngIf="!kkLocMapFilteredMaterials.length">Không có mã hàng khớp bộ lọc.</p>
       </div>
 
-      <div class="kk-loc-map__type" *ngIf="!kkLocMapLoading && kkLocMapView === 'type'">
+      <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type'">
         <div class="kk-type-topbar">
           <div class="kk-type-topbar__search">
             <input type="search"
@@ -328,28 +336,42 @@
           </button>
         </div>
         <ng-container *ngIf="!kkActiveProductType">
-          <div class="kk-type-grid">
-            <button
-              type="button"
-              class="kk-type-box"
-              *ngFor="let box of kkTypeBoxes"
-              [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
-              [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
-              [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
-              [class.kk-type-box--empty]="!box.totalLines"
-              (click)="selectKkTypeBox(box.productType)"
-              [title]="box.productType">
-              <strong>{{ box.productType }}</strong>
-              <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
-                <span class="kk-type-box__groups" *ngIf="prefixes.length">
-                  <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
-                </span>
-              </ng-container>
-              <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
+          <div class="kk-type-muc" *ngFor="let muc of kkTypeBoxGroups">
+            <button type="button"
+                    class="kk-type-muc__head"
+                    (click)="toggleKkTypeMuc(muc.category, $event)">
+              <i class="material-icons">{{ isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less' }}</i>
+              <strong>{{ muc.title }}</strong>
+              <span>{{ muc.boxes.length }} loại</span>
             </button>
+            <div class="kk-type-grid" *ngIf="!isKkTypeMucCollapsed(muc.category)">
+              <button
+                type="button"
+                class="kk-type-box"
+                *ngFor="let box of muc.boxes"
+                [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
+                [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
+                [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
+                [class.kk-type-box--empty]="!box.totalLines"
+                (click)="selectKkTypeBox(box.productType)"
+                (contextmenu)="openKkTypeHomeLocPicker($event, box)"
+                [title]="box.productType + ' — chuột phải để gán vị trí cất hàng'">
+                <strong>{{ box.productType }}</strong>
+                <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
+                  <span class="kk-type-box__groups" *ngIf="prefixes.length">
+                    <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
+                  </span>
+                </ng-container>
+                <span class="kk-type-box__foot">
+                  <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
+                  <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Cất vào: ' + loc">{{ loc }}</span>
+                </span>
+              </button>
+            </div>
           </div>
           <p class="hidden-empty" *ngIf="!kkTypeBoxes.length">
-            <ng-container *ngIf="!kkCatalogEntries.length">Chưa có danh mục KK. Vào More → Danh mục KK để import.</ng-container>
+            <ng-container *ngIf="!kkCatalogEntries.length && kkLocMapBusy">Đang tải danh mục KK…</ng-container>
+            <ng-container *ngIf="!kkCatalogEntries.length && !kkLocMapBusy">Chưa có danh mục KK. Vào More → Danh mục KK để import.</ng-container>
             <ng-container *ngIf="kkCatalogEntries.length && kkLocMapWarehouseFilter">Không có loại hàng tồn trong Zone này.</ng-container>
             <ng-container *ngIf="kkCatalogEntries.length && !kkLocMapWarehouseFilter">Không khớp bộ lọc.</ng-container>
           </p>
@@ -481,17 +503,19 @@
                     <td class="po-cell">{{ material.poNumber || '—' }}</td>
                     <td class="date-cell">{{ getDisplayIMD(material) }}</td>
                     <td class="number-cell">{{ formatNumber(calculateCurrentStock(material)) }}</td>
-                    <td class="location-cell">
-                      <input type="text"
-                             class="editable-cell"
-                             [(ngModel)]="material.location"
-                             placeholder="Vị trí"
-                             [disabled]="!canEdit || kkLocMapBusy"
-                             (focus)="rememberLocationBeforeEdit(material)"
-                             (keydown.enter)="$any($event.target).blur()"
-                             (blur)="saveKkDetailLocation(material)"
-                             autocomplete="off"
-                             spellcheck="false">
+                    <td class="location-cell"
+                        [class.iqc-location]="isIQCLocation(material.location)"
+                        title="Bấm để nhập mã hoặc chọn vị trí Kho J">
+                      <button type="button"
+                              class="loc-col-btn location-display location-display--clickable"
+                              [class.location-display--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'location'"
+                              [disabled]="!canEdit || kkLocMapBusy"
+                              (click)="openKkLayoutLocPicker(material, $event)">
+                        <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
+                        <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">
+                          +{{ locationExtraCount(material.location) }}
+                        </span>
+                      </button>
                     </td>
                     <td class="wh-cell">
                       <select class="editable-cell kk-type-wh-select"
@@ -3126,7 +3150,7 @@
 </div>
 
 <!-- Popup chọn vị trí kệ — chỉ Kho J -->
-<div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && layoutLocMaterial" (click)="closeLayoutLocPicker()">
+<div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && (layoutLocMaterial || layoutLocTypeAssign)" (click)="closeLayoutLocPicker()">
   <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí Kho J">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
@@ -3134,8 +3158,8 @@
           <i class="material-icons">{{ layoutLocFocus === 'pallet' ? 'widgets' : 'view_module' }}</i>
         </span>
         <div>
-          <h3>{{ layoutLocFocus === 'pallet' ? 'Sửa pallet' : 'Chọn vị trí kệ — Kho J' }}</h3>
-          <p class="more-popup-header__sub">{{ layoutLocMaterial.materialCode }} · {{ layoutLocMaterial.poNumber || '—' }}</p>
+          <h3>{{ layoutLocTypeAssign ? 'Gán vị trí cất hàng — Kho J' : (layoutLocFocus === 'pallet' ? 'Sửa pallet' : 'Chọn vị trí kệ — Kho J') }}</h3>
+          <p class="more-popup-header__sub">{{ layoutLocTypeAssign || ((layoutLocMaterial?.materialCode || '') + ' · ' + (layoutLocMaterial?.poNumber || '—')) }}</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeLayoutLocPicker()" aria-label="Đóng">
@@ -3143,45 +3167,118 @@
       </button>
     </div>
     <div class="modal-body layout-loc-picker__body">
+      <div class="layout-loc-top">
+        <div class="layout-loc-family">
+          <button
+            type="button"
+            class="layout-loc-family__btn"
+            [class.layout-loc-family__btn--on]="layoutLocFamily === 'R'"
+            (click)="setLayoutLocFamily('R')">
+            Dãy kệ R
+          </button>
+          <button
+            type="button"
+            class="layout-loc-family__btn layout-loc-family__btn--s"
+            [class.layout-loc-family__btn--on]="layoutLocFamily === 'S'"
+            (click)="setLayoutLocFamily('S')">
+            Dãy kệ S
+            <small>Kho mát</small>
+          </button>
+        </div>
+        <div class="layout-loc-filter">
+          <i class="material-icons">search</i>
+          <input type="search" [(ngModel)]="layoutLocQuery" placeholder="Lọc ô kệ…" autocomplete="off" />
+        </div>
+      </div>
       <div class="layout-loc-groups">
         <button
           type="button"
           class="layout-loc-group"
-          *ngFor="let g of layoutLocGroups"
+          [class.layout-loc-group--s]="layoutLocFamily === 'S'"
+          *ngFor="let g of layoutLocFamilyGroups"
           [class.layout-loc-group--on]="layoutLocActiveGroup?.id === g.id"
+          [class.layout-loc-group--rec]="isLayoutLocSRuleMatch(g.id)"
           (click)="setLayoutLocGroup(g.id)">
-          {{ g.label }}
+          <span>{{ g.label }}</span>
+          <small *ngIf="layoutLocSRuleLabel(g.id) as rule">{{ rule }}</small>
         </button>
       </div>
-      <div class="hidden-search">
-        <i class="material-icons">search</i>
-        <input type="search" [(ngModel)]="layoutLocQuery" placeholder="Lọc ô kệ…" autocomplete="off" />
-      </div>
 
-      <!-- Sơ đồ kệ kho J: Block 1..6 × Tầng 4..1 × vị trí A/B/C -->
+      <!-- Sơ đồ kệ kho J: bấm mâm để chọn -->
       <div class="layout-j-diagram" *ngIf="isLayoutJDiagram && !layoutLocQuery">
-        <div class="layout-j-diagram__caption">
-          Sơ đồ {{ layoutLocActiveGroup?.label }} — bấm ô để chọn / bỏ chọn vị trí
+        <div class="layout-j-diagram__caption" *ngIf="layoutJFocusBlock == null">
+          {{ layoutLocFamily === 'S' ? 'Dãy kệ S · Kho mát' : 'Dãy kệ R' }}
+          {{ layoutLocActiveGroup?.label }}
+          <ng-container *ngIf="layoutLocFamily === 'S' && layoutLocSRuleLabel(layoutLocActiveGroup?.id || '') as rule">
+            · {{ rule }}
+          </ng-container>
+          — {{ isLayoutJKhoMatGroup ? 'bấm mâm T1–T7 để chọn' : 'bấm mâm A/B/C để chọn' }}
         </div>
-        <div class="layout-j-diagram__scroll">
-          <div class="layout-j-block" *ngFor="let b of layoutJRackDiagram">
-            <div class="layout-j-block__head">Block {{ b.block }}</div>
-            <div class="layout-j-level" *ngFor="let lv of b.levels">
-              <span class="layout-j-level__tag">T{{ lv.level }}</span>
-              <div class="layout-j-cells">
-                <button
-                  type="button"
-                  class="layout-j-cell"
-                  *ngFor="let c of lv.cells"
-                  [class.layout-j-cell--on]="isLayoutLocSlotOn(c.slot)"
-                  (click)="toggleLayoutLocSlot(c.slot)"
-                  [title]="c.slot">
-                  {{ c.pos }}
-                </button>
-              </div>
+        <div class="layout-j-diagram__caption layout-j-diagram__caption--row" *ngIf="layoutJFocusBlockView as rack">
+          <button type="button" class="layout-j-back" (click)="setLayoutJFocusBlock(null)">
+            <i class="material-icons">arrow_back</i> Tất cả kệ
+          </button>
+          <span>
+            {{ layoutLocFamily === 'S' ? 'Dãy kệ S' : 'Dãy kệ R' }}
+            {{ layoutLocActiveGroup?.label }} · Block {{ rack.block }} — bấm mâm để chọn
+          </span>
+        </div>
+
+        <div class="layout-j-diagram__scroll" *ngIf="layoutJFocusBlock == null">
+          <div
+            class="layout-j-block"
+            *ngFor="let b of layoutJRackDiagram"
+            [class.layout-j-block--has]="layoutJBlockSelectedCount(b.block) > 0">
+            <button
+              type="button"
+              class="layout-j-block__head layout-j-block__head--btn"
+              *ngIf="!isLayoutJKhoMatGroup"
+              (click)="setLayoutJFocusBlock(b.block)"
+              title="Phóng to kệ để chọn mâm">Kệ {{ b.block }}</button>
+            <div class="layout-j-block__head" *ngIf="isLayoutJKhoMatGroup">Kệ {{ b.block }}</div>
+            <div class="layout-j-block__preview">
+              <button
+                type="button"
+                class="layout-j-level layout-j-level--pick"
+                *ngFor="let lv of b.levels"
+                [class.layout-j-level--on]="isLayoutJLevelOn(lv)"
+                [title]="lv.cells.length === 1 ? lv.cells[0].slot : ('Tầng ' + lv.level)"
+                (click)="toggleLayoutJLevel(lv)">
+                <span class="layout-j-level__tag">T{{ lv.level }}</span>
+                <span class="layout-j-cells">
+                  <span
+                    class="layout-j-cell layout-j-cell--mini"
+                    *ngFor="let c of lv.cells"
+                    [class.layout-j-cell--on]="isLayoutLocSlotOn(c.slot)"
+                    [title]="c.slot"
+                    (click)="toggleLayoutLocSlot(c.slot); $event.stopPropagation()">{{ isLayoutJKhoMatGroup ? 'Mâm' : c.pos }}</span>
+                </span>
+              </button>
             </div>
+            <span class="layout-j-block__hint">
+              {{ layoutJBlockSelectedCount(b.block) ? (layoutJBlockSelectedCount(b.block) + ' mâm đã chọn') : 'Bấm mâm để chọn' }}
+            </span>
           </div>
           <p class="hidden-empty" *ngIf="!layoutJRackDiagram.length">Không dựng được sơ đồ dãy này.</p>
+        </div>
+
+        <div class="layout-j-mam" *ngIf="layoutJFocusBlockView as rack">
+          <div class="layout-j-mam__row" *ngFor="let lv of rack.levels">
+            <span class="layout-j-mam__tag">Tầng {{ lv.level }}</span>
+            <div class="layout-j-mam__cells">
+              <button
+                type="button"
+                class="layout-j-mam__cell"
+                *ngFor="let c of lv.cells"
+                [class.layout-j-mam__cell--on]="isLayoutLocSlotOn(c.slot)"
+                (click)="toggleLayoutLocSlot(c.slot)"
+                [title]="c.slot">
+                <strong>{{ c.slot }}</strong>
+                <span *ngIf="!isLayoutJKhoMatGroup">Mâm {{ c.pos }}</span>
+                <span *ngIf="isLayoutJKhoMatGroup">Mâm T{{ lv.level }}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3219,7 +3316,7 @@
           </button>
         </span>
       </div>
-      <label class="layout-loc-pallet" [class.layout-loc-pallet--focus]="layoutLocFocus === 'pallet'">
+      <label class="layout-loc-pallet" *ngIf="!layoutLocTypeAssign" [class.layout-loc-pallet--focus]="layoutLocFocus === 'pallet'">
         <span>Số pallet</span>
         <input id="layout-loc-pallet-input" type="text" [(ngModel)]="layoutLocPalletDraft" placeholder="VD: P0001" autocomplete="off" />
       </label>

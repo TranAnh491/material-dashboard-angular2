@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
+import { firstValueFrom } from 'rxjs';
+import { timeout } from 'rxjs/operators';
 
 export interface KkCatalogEntry {
   id: string;
@@ -51,10 +53,12 @@ export class KkCatalogService {
       return this.cachedEntries;
     }
 
-    const snap = await this.firestore
-      .collection(this.collectionName, (ref) => ref.limit(10000))
-      .get()
-      .toPromise();
+    const snap = await firstValueFrom(
+      this.firestore
+        .collection(this.collectionName, (ref) => ref.limit(10000))
+        .get()
+        .pipe(timeout(30000))
+    );
 
     const items = (snap?.docs || [])
       .map((doc) => this.mapDoc(doc.id, doc.data() as Record<string, unknown>))
@@ -128,6 +132,52 @@ export class KkCatalogService {
     this.cachedEntries = null;
     this.cachedMap = null;
     return clean.length;
+  }
+
+  readonly homeLocCollectionName = 'kk-type-home-locs';
+  private cachedHomeLocs: Map<string, string> | null = null;
+
+  buildHomeLocDocId(productType: string): string {
+    const s = String(productType || '').trim().replace(/\//g, '_');
+    return s.slice(0, 700) || '_empty';
+  }
+
+  async loadHomeLocs(forceRefresh = false): Promise<Map<string, string>> {
+    if (!forceRefresh && this.cachedHomeLocs) return this.cachedHomeLocs;
+    const snap = await firstValueFrom(
+      this.firestore
+        .collection(this.homeLocCollectionName, (ref) => ref.limit(2000))
+        .get()
+        .pipe(timeout(20000))
+    );
+    const map = new Map<string, string>();
+    for (const doc of snap?.docs || []) {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      const productType = String(data['productType'] || doc.id || '').trim();
+      const location = String(data['location'] || '').trim();
+      if (productType && location) map.set(productType, location);
+    }
+    this.cachedHomeLocs = map;
+    return map;
+  }
+
+  async saveHomeLoc(productType: string, location: string): Promise<void> {
+    const type = String(productType || '').trim();
+    if (!type) return;
+    const loc = String(location || '').trim();
+    const ref = this.firestore.collection(this.homeLocCollectionName).doc(this.buildHomeLocDocId(type));
+    if (!this.cachedHomeLocs) this.cachedHomeLocs = new Map();
+    if (!loc) {
+      await ref.delete();
+      this.cachedHomeLocs.delete(type);
+      return;
+    }
+    await ref.set({
+      productType: type,
+      location: loc,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    this.cachedHomeLocs.set(type, loc);
   }
 
   private mapDoc(id: string, data: Record<string, unknown>): KkCatalogEntry {

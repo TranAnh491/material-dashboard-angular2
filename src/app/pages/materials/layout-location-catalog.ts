@@ -15,9 +15,91 @@ function rangeSlots(prefix: string, from: number, to: number): string[] {
   return out;
 }
 
-/** Token J warehouse: R11-1A (rack+block - tầng + A/B/C). Không nhầm kệ Quality R1(R). */
+/** Token J warehouse: R11-1A (kệ thường) hoặc S01-1-3 (kệ kho mát, 7 tầng, không A/B/C). */
 export function isJWarehouseLocation(loc: string): boolean {
-  return /^R\d+-\d[ABC]\b/i.test(String(loc || '').trim());
+  const raw = String(loc || '').trim().toUpperCase();
+  if (/^R\d+-\d[ABC]\b/.test(raw)) return true;
+  return /^S\d{2}-\d+-\d+\b/.test(raw);
+}
+
+/** Dãy kệ S trong kho mát J (18.6m): S01 rộng 1m, các dãy sau 0.5m, 3 block × 7 tầng. */
+export function listJKhoMatRowIds(): string[] {
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const roomEnd = 18.6;
+  const wideW = 1;
+  const narrowW = 0.5;
+  const gap = 0.8;
+  const ids: string[] = [];
+  let x = 0;
+  let isFirst = true;
+  while (round2(x + (isFirst ? wideW : narrowW)) <= roomEnd) {
+    ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
+    if (isFirst) {
+      x = round2(x + wideW + gap);
+      isFirst = false;
+      continue;
+    }
+    const secondX = round2(x + narrowW);
+    if (round2(secondX + narrowW) <= roomEnd) {
+      ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
+    }
+    x = round2(secondX + narrowW + gap);
+  }
+  return ids;
+}
+
+function jKhoMatSlotsForRow(rowId: string): string[] {
+  const slots: string[] = [];
+  for (let block = 1; block <= 3; block++) {
+    for (let lv = 1; lv <= 7; lv++) {
+      slots.push(`${rowId}-${block}-${lv}`);
+    }
+  }
+  return slots;
+}
+
+/** Quy định dãy S kho mát. Các dãy chưa ghi sẽ set sau. */
+export interface JKhoMatSRule {
+  from: number;
+  to: number;
+  code: string;
+  label: string;
+}
+
+export const J_KHO_MAT_S_RULES: JKhoMatSRule[] = [
+  { from: 1, to: 1, code: 'B018', label: 'Terminal' },
+  { from: 7, to: 10, code: 'B009', label: 'B009' },
+  { from: 11, to: 14, code: 'B016', label: 'B016' },
+  { from: 15, to: 16, code: 'B008', label: 'B008' }
+];
+
+export function jKhoMatSRowNum(id: string): number {
+  const m = /^S(\d{1,2})$/i.exec(String(id || '').trim());
+  return m ? Number(m[1]) : 0;
+}
+
+export function jKhoMatSRuleOfRow(id: string): JKhoMatSRule | null {
+  const n = jKhoMatSRowNum(id);
+  if (!n) return null;
+  return J_KHO_MAT_S_RULES.find((r) => n >= r.from && n <= r.to) || null;
+}
+
+export function jKhoMatSRuleLabel(id: string): string {
+  const rule = jKhoMatSRuleOfRow(id);
+  if (!rule) return '';
+  return rule.label === rule.code ? rule.code : `${rule.label} (${rule.code})`;
+}
+
+export function jKhoMatSFirstRowForPrefix(prefix: string): string {
+  const code = String(prefix || '').trim().toUpperCase();
+  const rule = J_KHO_MAT_S_RULES.find((r) => r.code === code);
+  if (!rule) return '';
+  return `S${String(rule.from).padStart(2, '0')}`;
+}
+
+export function jKhoMatSRowIdFromSlot(slot: string): string {
+  const m = /^(S\d{2})-/i.exec(String(slot || '').trim());
+  return m ? m[1].toUpperCase() : '';
 }
 
 /** Đưa vị trí ASM3 về dạng Materials: ASM3-D45. */
@@ -53,8 +135,14 @@ export function getLayoutLocationGroups(wh: LayoutWhPick): LayoutLocGroup[] {
           }
         }
       }
-      return { id: `R${rack}`, label: `Dãy R${rack}`, slots };
-    });
+      return { id: `R${rack}`, label: `R${rack}`, slots };
+    }).concat(
+      listJKhoMatRowIds().map((rowId) => ({
+        id: rowId,
+        label: rowId,
+        slots: jKhoMatSlotsForRow(rowId)
+      }))
+    );
   }
 
   const groups: LayoutLocGroup[] = [];
