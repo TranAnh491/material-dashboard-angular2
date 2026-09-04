@@ -124,7 +124,7 @@ export interface JwKhoMatBlock {
   hM: number;
 }
 
-/** 1 dãy kệ Kho mát — VD "S01", gồm 3 block xếp theo chiều sâu phòng. */
+/** 1 dãy kệ Kho mát — VD "S01". S01–S06 có 2 block; các dãy sau 3 block. */
 export interface JwKhoMatRow {
   id: string;
   xM: number;
@@ -741,7 +741,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Lối đi còn lại giữa hết dãy kệ và mép văn phòng */
   readonly OFFICE_AISLE_M = this.round2(this.officeZone.yM - this.OPEN_ZONE_Y_M);
 
-  /** Kệ trong Kho mát: S01 rộng 1m, các dãy còn lại rộng 0.5m; sâu 1.5m, 3 block/dãy, cách nhau 0.8m, 7 tầng (không A/B/C), cao 3m. */
+  /** Kệ trong Kho mát: dãy 0.5m; S01–S06 = 2 block, các dãy sau = 3 block; sâu 1.5m/block, cách 0.8m, 7 tầng, cao 3m. Số dãy từ phải qua trái. */
   readonly KHO_MAT_BLOCK_W_M = 1;
   readonly KHO_MAT_BLOCK_W_NARROW_M = 0.5;
   readonly KHO_MAT_BLOCK_D_M = 1.5;
@@ -4138,10 +4138,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Dãy kệ trong Kho mát — tính từ trái qua phải, đầy hết chiều dài phòng.
-   * S01 là dãy đơn, đứng riêng. Từ S02 trở đi, mỗi kệ có 2 mặt nên đi theo cặp sát nhau ngay
-   * trên 1 kệ (S02|S03, S04|S05…) — không có khe giữa 2 dãy trong cùng 1 cặp.
-   * Khe 0.8m chỉ nằm GIỮA các kệ (đơn/cặp) để chừa lối đi. 3 block trong 1 dãy sát nhau, sát cạnh B.
+   * Dãy kệ trong Kho mát — số 1 từ phải qua trái.
+   * S01–S06: 2 block sát cạnh B (bỏ kệ thứ 3). S07 trở đi: 3 block sát cạnh B. Khe 0.8m giữa các kệ.
    */
   private buildKhoMatRows(): JwKhoMatRow[] {
     const room = this.securedOfficeRoom;
@@ -4151,9 +4149,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const wideW = this.KHO_MAT_BLOCK_W_M;
     const narrowW = this.KHO_MAT_BLOCK_W_NARROW_M;
     const gap = this.KHO_MAT_GAP_M;
-    const rowDepth = this.round2(this.KHO_MAT_BLOCKS_PER_ROW * blockD);
-    const rowYM = this.round2(room.yM + room.hM - rowDepth);
-    const roomEndX = this.round2(room.xM + room.wM);
+    const maxBlocks = this.KHO_MAT_BLOCKS_PER_ROW;
+    const roomB = this.round2(room.yM + room.hM);
+    const roomStartX = this.round2(room.xM);
 
     const rows: JwKhoMatRow[] = [];
     let index = 0;
@@ -4161,8 +4159,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const makeRow = (colX: number, colW: number): JwKhoMatRow => {
       index++;
       const rowId = `S${String(index).padStart(2, '0')}`;
+      const blockCount = index <= 6 ? 2 : maxBlocks;
+      const rowDepth = this.round2(blockCount * blockD);
+      const rowYM = this.round2(roomB - rowDepth);
       const blocks: JwKhoMatBlock[] = [];
-      for (let b = 0; b < this.KHO_MAT_BLOCKS_PER_ROW; b++) {
+      for (let b = 0; b < blockCount; b++) {
         blocks.push({
           code: `${rowId}-${b + 1}`,
           index: b + 1,
@@ -4172,24 +4173,25 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
           hM: blockD
         });
       }
-      return { id: rowId, xM: colX, yM: rowYM, wM: colW, hM: rowDepth, blocks };
+      return {
+        id: rowId,
+        xM: colX,
+        yM: rowYM,
+        wM: colW,
+        hM: rowDepth,
+        blocks
+      };
     };
 
-    let x = room.xM;
-    let isFirstUnit = true;
-    while (this.round2(x + (isFirstUnit ? wideW : narrowW)) <= roomEndX) {
-      if (isFirstUnit) {
-        rows.push(makeRow(x, wideW));
-        x = this.round2(x + wideW + gap);
-        isFirstUnit = false;
-        continue;
+    let xRight = this.round2(room.xM + room.wM - wideW - gap);
+    while (this.round2(xRight - narrowW) >= roomStartX) {
+      const rightColX = this.round2(xRight - narrowW);
+      rows.push(makeRow(rightColX, narrowW));
+      const leftColX = this.round2(rightColX - narrowW);
+      if (leftColX >= roomStartX) {
+        rows.push(makeRow(leftColX, narrowW));
       }
-      rows.push(makeRow(x, narrowW));
-      const secondX = this.round2(x + narrowW);
-      if (this.round2(secondX + narrowW) <= roomEndX) {
-        rows.push(makeRow(secondX, narrowW));
-      }
-      x = this.round2(secondX + narrowW + gap);
+      xRight = this.round2(leftColX - gap);
     }
     return rows;
   }

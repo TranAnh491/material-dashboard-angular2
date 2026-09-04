@@ -22,7 +22,7 @@ export function isJWarehouseLocation(loc: string): boolean {
   return /^S\d{2}-\d+-\d+\b/.test(raw);
 }
 
-/** Dãy kệ S trong kho mát J (18.6m): S01 rộng 1m, các dãy sau 0.5m, 3 block × 7 tầng. */
+/** Dãy kệ S trong kho mát J (18.6m): 0.5m; S01–S06 = 2 block, các dãy sau = 3 block × 7 tầng. */
 export function listJKhoMatRowIds(): string[] {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const roomEnd = 18.6;
@@ -30,15 +30,9 @@ export function listJKhoMatRowIds(): string[] {
   const narrowW = 0.5;
   const gap = 0.8;
   const ids: string[] = [];
-  let x = 0;
-  let isFirst = true;
-  while (round2(x + (isFirst ? wideW : narrowW)) <= roomEnd) {
+  let x = round2(wideW + gap);
+  while (round2(x + narrowW) <= roomEnd) {
     ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
-    if (isFirst) {
-      x = round2(x + wideW + gap);
-      isFirst = false;
-      continue;
-    }
     const secondX = round2(x + narrowW);
     if (round2(secondX + narrowW) <= roomEnd) {
       ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
@@ -50,12 +44,19 @@ export function listJKhoMatRowIds(): string[] {
 
 function jKhoMatSlotsForRow(rowId: string): string[] {
   const slots: string[] = [];
-  for (let block = 1; block <= 3; block++) {
+  const blocks = jKhoMatBlocksForRow(rowId);
+  for (let block = 1; block <= blocks; block++) {
     for (let lv = 1; lv <= 7; lv++) {
       slots.push(`${rowId}-${block}-${lv}`);
     }
   }
   return slots;
+}
+
+/** S01–S06: 2 kệ; các dãy S còn lại: 3 kệ. */
+export function jKhoMatBlocksForRow(rowId: string): number {
+  const n = jKhoMatSRowNum(rowId);
+  return n >= 1 && n <= 6 ? 2 : 3;
 }
 
 /** Quy định dãy S kho mát. Các dãy chưa ghi sẽ set sau. */
@@ -67,10 +68,9 @@ export interface JKhoMatSRule {
 }
 
 export const J_KHO_MAT_S_RULES: JKhoMatSRule[] = [
-  { from: 1, to: 1, code: 'B018', label: 'Terminal' },
-  { from: 7, to: 10, code: 'B009', label: 'B009' },
-  { from: 11, to: 14, code: 'B016', label: 'B016' },
-  { from: 15, to: 16, code: 'B008', label: 'B008' }
+  { from: 6, to: 9, code: 'B009', label: 'B009' },
+  { from: 10, to: 13, code: 'B016', label: 'B016' },
+  { from: 14, to: 15, code: 'B008', label: 'B008' }
 ];
 
 export function jKhoMatSRowNum(id: string): number {
