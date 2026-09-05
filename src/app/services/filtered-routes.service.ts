@@ -110,6 +110,7 @@ export class FilteredRoutesService {
       '/outbound': 'outbound',
       // RM Inventory (Materials) — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
       '/materials': 'materials',
+      '/quan-ly-nguyen-lieu': 'materials',
 
       '/bag-history': 'bag-history',
       

@@ -95,6 +95,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
       '/inbound',             // RM Inbound (gộp ASM1 + ASM2)
       '/outbound',            // RM Outbound (gộp ASM1 + ASM2)
       '/materials',           // RM Inventory (gộp ASM1 + ASM2)
+      '/quan-ly-nguyen-lieu',
       '/location',           // Tab 17
       '/stock-check',        // Tab 18
       '/bag-history',

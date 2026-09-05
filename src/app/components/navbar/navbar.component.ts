@@ -395,6 +395,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/equipment',
       '/xe-tai',
       '/materials',
+      '/quan-ly-nguyen-lieu',
       '/danh-muc-nvl-tp',
       '/inventory-overview'
     ]);

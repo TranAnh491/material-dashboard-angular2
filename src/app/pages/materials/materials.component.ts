@@ -241,7 +241,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   resetLowStockRows: ResetLowStockRow[] = [];
   isDeletingResetLowStock = false;
   resetZeroDeletedCount = 0;
-  /** Popup sơ đồ KK theo vị trí (More → Kiểm tra KK). */
+  /** Trang Kiểm tra KK (tab Quản lý Nguyên Liệu). */
   showKkLocMap = false;
   kkLocMapLoading = false;
   kkLocMapStatus = '';
@@ -2215,6 +2215,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Tab riêng Kiểm tra KK — `/quan-ly-nguyen-lieu`. */
+  get isNguyenLieuPage(): boolean {
+    return this.router.url.split('?')[0].split('#')[0] === '/quan-ly-nguyen-lieu';
+  }
+
   goToMenu(): void {
     this.router.navigate(['/menu']);
   }
@@ -2313,7 +2318,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Đến từ tab khác (VD: Layout Warehouse ASM3 → "Xem chi tiết") kèm ?location=... → tự tìm theo vị trí đó.
     const locationParam = this.route.snapshot.queryParamMap.get('location');
-    if (locationParam) {
+    if (locationParam && !this.isNguyenLieuPage) {
       this.searchByLocation = true;
       this.searchTerm = locationParam;
       void this.performSearch(locationParam);
@@ -2328,6 +2333,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.loadQtyBagRuleByPrefixFromStorage();
     this.loadRuleBagManualPrefixesFromStorage();
     this.subscribeQtyBagRulesFromFirestore();
+
+    if (this.isNguyenLieuPage) {
+      this.enterKkLocMap();
+    }
 
     console.log('✅ Materials component initialized - Waiting for user search');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed (NO AUTO LOAD)');
@@ -2368,7 +2377,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTickedMaterialsCache = [];
     this.clearKkInlineBanner(true);
     this.showKkCheckPopup = false;
-    this.closeKkLocMap();
+    if (this.isNguyenLieuPage) {
+      this.enterKkLocMap();
+    } else {
+      this.closeKkLocMap();
+    }
     this.closeGanPallet();
     this.cancelMobileLocationScan(true);
     this.cancelMobileKkConfirm();
@@ -5508,6 +5521,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openKkLocMapFromMore(): void {
     this.closeMorePopup();
+    if (!this.isNguyenLieuPage) {
+      void this.router.navigate(['/quan-ly-nguyen-lieu'], {
+        queryParams: { factory: this.selectedFactory }
+      });
+      return;
+    }
+    this.enterKkLocMap();
+  }
+
+  /** Mở trang Kiểm tra KK (tab Quản lý Nguyên Liệu). */
+  enterKkLocMap(): void {
     this.showKkLocMap = true;
     this.kkLocMapQuery = '';
     this.kkLocMapView = 'type';
@@ -8350,6 +8374,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const loc = String(box?.loc || '').trim();
     if (!loc || loc === '—') return;
     const rows = [...(this.kkLocMapRowCache.get(loc) || [])];
+    if (this.isNguyenLieuPage) {
+      void this.router.navigate(['/materials'], {
+        queryParams: { factory: this.selectedFactory, location: loc }
+      });
+      return;
+    }
     this.closeKkLocMap();
     this.showKkLocMapRows(loc, rows);
   }

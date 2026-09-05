@@ -1,13 +1,13 @@
-<div class="main-content" [class.mat-m-page]="isMobile && !showKkLocMap">
+<div class="main-content" [class.mat-m-page]="isMobile && !showKkLocMap && !isNguyenLieuPage">
 
-  <!-- Kiểm tra KK — trang full, cùng khung Materials -->
-  <div class="kk-page excel-container" *ngIf="showKkLocMap" [class.kk-page--detail]="kkLocMapView === 'type' && !!kkActiveProductType">
+  <!-- Kiểm tra KK — trang full (tab Quản lý Nguyên Liệu, hoặc overlay từ RM Inventory) -->
+  <div class="kk-page excel-container" *ngIf="showKkLocMap || isNguyenLieuPage" [class.kk-page--detail]="kkLocMapView === 'type' && !!kkActiveProductType">
     <div class="excel-header">
       <div class="excel-header__title-row">
         <h4>
           <ng-container *ngIf="kkLocMapView === 'type' && kkActiveProductType">KK - {{ kkActiveProductType }} - {{ selectedFactory }}</ng-container>
           <ng-container *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
-            {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : kkLocMapView === 'type' ? 'Kiểm tra KK theo loại hàng' : 'Kiểm tra KK' }}
+            {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : kkLocMapView === 'type' ? 'Kiểm tra KK theo loại hàng' : 'Quản lý Nguyên Liệu' }}
             · {{ selectedFactory }}
           </ng-container>
         </h4>
@@ -18,9 +18,24 @@
       </div>
       <div class="excel-actions">
         <div class="action-controls-horizontal">
-          <button class="more-btn" type="button" (click)="kkActiveProductType ? backKkTypeBoxes() : closeKkLocMap()" title="Quay lại">
+          <button class="more-btn" type="button" *ngIf="kkActiveProductType" (click)="backKkTypeBoxes()" title="Quay lại">
             <i class="material-icons">arrow_back</i>
             <span class="btn-label">Quay lại</span>
+          </button>
+          <button class="more-btn" type="button" *ngIf="!kkActiveProductType && isNguyenLieuPage" (click)="goToMenu()" title="Về Menu">
+            <i class="material-icons">home</i>
+            <span class="btn-label">Menu</span>
+          </button>
+          <button class="more-btn" type="button" *ngIf="!kkActiveProductType && !isNguyenLieuPage" (click)="closeKkLocMap()" title="Quay lại">
+            <i class="material-icons">arrow_back</i>
+            <span class="btn-label">Quay lại</span>
+          </button>
+          <button type="button"
+                  class="factory-toggle-btn"
+                  (click)="toggleFactory()"
+                  [title]="'Đổi nhà máy (hiện: ' + selectedFactory + ')'">
+            <i class="material-icons">swap_horiz</i>
+            <span>{{ selectedFactory }}</span>
           </button>
           <div class="kk-loc-map__modes">
             <button type="button"
@@ -128,6 +143,13 @@
                   title="Tìm mã — xem tồn kho và loại hàng">
             <i class="material-icons">search</i>
             <span class="btn-label">Tìm mã</span>
+          </button>
+          <button type="button"
+                  class="more-btn"
+                  (click)="openKkCatalogPopup()"
+                  title="Import Nhóm mã (B+6 số) · Loại hàng">
+            <i class="material-icons">category</i>
+            <span class="btn-label">Danh mục KK</span>
           </button>
         </div>
       </div>
@@ -371,7 +393,7 @@
           </div>
           <p class="hidden-empty" *ngIf="!kkTypeBoxes.length">
             <ng-container *ngIf="!kkCatalogEntries.length && kkLocMapBusy">Đang tải danh mục KK…</ng-container>
-            <ng-container *ngIf="!kkCatalogEntries.length && !kkLocMapBusy">Chưa có danh mục KK. Vào More → Danh mục KK để import.</ng-container>
+            <ng-container *ngIf="!kkCatalogEntries.length && !kkLocMapBusy">Chưa có danh mục KK. Bấm Danh mục KK để import.</ng-container>
             <ng-container *ngIf="kkCatalogEntries.length && kkLocMapWarehouseFilter">Không có loại hàng tồn trong Zone này.</ng-container>
             <ng-container *ngIf="kkCatalogEntries.length && !kkLocMapWarehouseFilter">Không khớp bộ lọc.</ng-container>
           </p>
@@ -615,7 +637,7 @@
   </div>
 
   <!-- ═══ Mobile Materials — mock layout ═══ -->
-  <div class="mat-m" *ngIf="isMobile && !showKkLocMap">
+  <div class="mat-m" *ngIf="isMobile && !showKkLocMap && !isNguyenLieuPage">
     <header class="mat-m-header">
       <div class="mat-m-header__row1">
         <button type="button" class="mat-m-iconbtn" (click)="goToMenu()" aria-label="Menu">
@@ -838,7 +860,7 @@
   </div>
 
   <!-- Excel-like Container (desktop) -->
-  <div class="excel-container" *ngIf="!isMobile && !showKkLocMap">
+  <div class="excel-container" *ngIf="!isMobile && !showKkLocMap && !isNguyenLieuPage">
     <!-- Report Title -->
     <div class="excel-header">
       <div class="excel-header__title-row">
@@ -1122,9 +1144,9 @@
                   type="button"
                   (click)="openKkLocMapFromMore()"
                   [disabled]="kkLocMapLoading"
-                  title="Sơ đồ vị trí — mã đã KK / tổng">
-            <i class="material-icons" [class.rotating]="kkLocMapLoading">{{ kkLocMapLoading ? 'sync' : 'grid_view' }}</i>
-            <span class="btn-label">Kiểm tra KK</span>
+                  title="Mở tab Quản lý Nguyên Liệu — Kiểm tra KK">
+            <i class="material-icons">{{ kkLocMapLoading ? 'sync' : 'grid_view' }}</i>
+            <span class="btn-label">Quản lý NVL</span>
           </button>
           <button class="more-btn kk-check-btn"
                   type="button"

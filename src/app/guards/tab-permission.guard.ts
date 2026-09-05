@@ -116,6 +116,7 @@ export class TabPermissionGuard implements CanActivate {
       '/outbound': 'outbound',
       // RM Inventory (Materials) — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
       '/materials': 'materials',
+      '/quan-ly-nguyen-lieu': 'materials',
 
       '/danh-muc-nvl-tp': 'danh-muc-nvl-tp',
       '/bag-history': 'bag-history',

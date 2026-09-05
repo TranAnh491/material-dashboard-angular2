@@ -20,6 +20,7 @@ export const ROUTES: RouteInfo[] = [
       { path: '/inbound', title: 'RM Inbound', icon: 'IB', class: '' },
       { path: '/outbound', title: 'RM Outbound', icon: 'OB', class: '' },
       { path: '/materials', title: 'RM Inventory', icon: 'IV', class: '' },
+      { path: '/quan-ly-nguyen-lieu', title: 'Quản lý Nguyên Liệu', icon: 'QL', class: '' },
       { path: '/inventory-overview', title: 'RM Overview', icon: 'IO', class: '' },
       { path: '/bag-history', title: 'Control Batch', icon: 'H', class: '' }
     ]

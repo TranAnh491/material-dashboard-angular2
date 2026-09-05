@@ -48,6 +48,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'materials-dashboard',  component: MaterialsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fgs-dashboard',          component: FgsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials',            loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'quan-ly-nguyen-lieu',  loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inventory-overview',   loadChildren: () => import('../../pages/inventory-overview/inventory-overview.module').then(m => m.InventoryOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound',              loadChildren: () => import('../../pages/inbound/inbound.module').then(m => m.InboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'danh-muc-nvl-tp',      component: DanhMucNvlTpComponent, canActivate: [AuthGuard, TabPermissionGuard] },

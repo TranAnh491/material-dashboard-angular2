@@ -402,6 +402,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/inbound', title: 'RM Inbound', icon: 'arrow_downward', category: 'RM' },
     { path: '/outbound', title: 'RM Outbound', icon: 'arrow_upward', category: 'RM' },
     { path: '/materials', title: 'RM Inventory', icon: 'inventory', category: 'RM' },
+    { path: '/quan-ly-nguyen-lieu', title: 'Quản lý Nguyên Liệu', icon: 'fact_check', category: 'RM' },
     { path: '/inventory-overview', title: 'RM Overview', icon: 'assessment', category: 'RM' },
     { path: '/bag-history', title: 'Control Batch', icon: 'history', category: 'RM' },
 
@@ -538,6 +539,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/inbound': 'Nhập kho nguyên liệu (ASM1 & ASM2)',
       '/outbound': 'Xuất kho nguyên liệu (ASM1 & ASM2)',
       '/materials': 'Quản lý tồn kho nguyên liệu (ASM1 & ASM2)',
+      '/quan-ly-nguyen-lieu': 'Kiểm tra KK theo loại hàng, mã hàng và vị trí',
       '/inventory-overview': 'Xem tổng quan tồn kho (ASM1 & ASM2)',
       '/bag-history': 'Kiểm soát batch và bịch xuất',
       '/label': 'In tem nhãn nguyên liệu',
