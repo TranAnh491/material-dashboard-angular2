@@ -11,146 +11,185 @@
             · {{ selectedFactory }}
           </ng-container>
         </h4>
-        <div class="header-stats" *ngIf="kkLocMapView === 'type'">
+        <div class="header-stats" *ngIf="kkLocMapView === 'type' && !kkJOnly">
           <span *ngIf="!kkActiveProductType">{{ kkLocMapTypeSummary.count | number }} loại · tồn {{ formatNumber(kkLocMapTypeSummary.stock) }}</span>
           <span *ngIf="kkActiveTypeRow">Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }} · Tổng cuộn: {{ kkTypeFilteredRollsTotal | number }}</span>
         </div>
+        <div class="header-stats" *ngIf="kkLocMapView === 'type' && kkJOnly && kkActiveTypeRow">
+          <span>Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }} · Tổng cuộn: {{ kkTypeFilteredRollsTotal | number }}</span>
+        </div>
       </div>
       <div class="excel-actions">
-        <div class="action-controls-horizontal">
-          <button class="more-btn" type="button" *ngIf="kkActiveProductType" (click)="backKkTypeBoxes()" title="Quay lại">
-            <i class="material-icons">arrow_back</i>
-            <span class="btn-label">Quay lại</span>
-          </button>
-          <button class="more-btn" type="button" *ngIf="!kkActiveProductType && isNguyenLieuPage" (click)="goToMenu()" title="Về Menu">
-            <i class="material-icons">home</i>
-            <span class="btn-label">Menu</span>
-          </button>
-          <button class="more-btn" type="button" *ngIf="!kkActiveProductType && !isNguyenLieuPage" (click)="closeKkLocMap()" title="Quay lại">
-            <i class="material-icons">arrow_back</i>
-            <span class="btn-label">Quay lại</span>
-          </button>
-          <button type="button"
-                  class="factory-toggle-btn"
-                  (click)="toggleFactory()"
-                  [title]="'Đổi nhà máy (hiện: ' + selectedFactory + ')'">
-            <i class="material-icons">swap_horiz</i>
-            <span>{{ selectedFactory }}</span>
-          </button>
-          <div class="kk-loc-map__modes">
-            <button type="button"
-                    [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
-                    (click)="setKkLocMapView('location')"
-                    [disabled]="kkLocMapLoading">Theo vị trí</button>
-            <button type="button"
-                    [class.kk-loc-map__mode--on]="kkLocMapView === 'material'"
-                    (click)="setKkLocMapView('material')"
-                    [disabled]="kkLocMapLoading">Theo mã hàng</button>
-            <button type="button"
-                    [class.kk-loc-map__mode--on]="kkLocMapView === 'type'"
-                    (click)="setKkLocMapView('type')"
-                    [disabled]="kkLocMapLoading">Theo loại hàng</button>
+        <div class="kk-toolbar">
+          <div class="kk-toolbar__row kk-toolbar__row--nav">
+            <div class="kk-toolbar__left">
+              <button class="more-btn" type="button" *ngIf="kkActiveProductType" (click)="backKkTypeBoxes()" title="Quay lại">
+                <i class="material-icons">arrow_back</i>
+                <span class="btn-label">Quay lại</span>
+              </button>
+              <button class="more-btn" type="button" *ngIf="!kkActiveProductType && isNguyenLieuPage" (click)="goToMenu()" title="Về Menu">
+                <i class="material-icons">home</i>
+                <span class="btn-label">Menu</span>
+              </button>
+              <button class="more-btn" type="button" *ngIf="!kkActiveProductType && !isNguyenLieuPage" (click)="closeKkLocMap()" title="Quay lại">
+                <i class="material-icons">arrow_back</i>
+                <span class="btn-label">Quay lại</span>
+              </button>
+              <button type="button"
+                      class="factory-toggle-btn"
+                      (click)="toggleFactory()"
+                      [title]="'Đổi nhà máy (hiện: ' + selectedFactory + ')'">
+                <i class="material-icons">swap_horiz</i>
+                <span>{{ selectedFactory }}</span>
+              </button>
+              <div class="kk-loc-map__modes" *ngIf="!kkActiveProductType">
+                <button type="button"
+                        [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
+                        (click)="setKkLocMapView('location')"
+                        [disabled]="kkLocMapLoading">Theo vị trí</button>
+                <button type="button"
+                        [class.kk-loc-map__mode--on]="kkLocMapView === 'material'"
+                        (click)="setKkLocMapView('material')"
+                        [disabled]="kkLocMapLoading">Theo mã hàng</button>
+                <button type="button"
+                        [class.kk-loc-map__mode--on]="kkLocMapView === 'type'"
+                        (click)="setKkLocMapView('type')"
+                        [disabled]="kkLocMapLoading">Theo loại hàng</button>
+              </div>
+            </div>
+            <div class="kk-toolbar__actions">
+              <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView === 'type' && kkActiveProductType"
+                      (click)="printKkTypeList()"
+                      [disabled]="kkLocMapLoading || !kkTypeDetailAll.length"
+                      title="In danh sách loại hàng">
+                <i class="material-icons">print</i>
+                <span class="btn-label">In</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView === 'type'"
+                      (click)="showKkTypeReportMenu = true"
+                      [disabled]="kkLocMapLoading || kkTypeReportBusy"
+                      title="Tải báo cáo Excel lưu trữ">
+                <i class="material-icons">download</i>
+                <span class="btn-label">{{ kkTypeReportBusy ? 'Đang tải...' : 'Tải báo cáo' }}</span>
+              </button>
+              <button type="button" class="more-btn" *ngIf="kkLocMapView" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading">
+                <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
+                <span class="btn-label">Làm mới</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView"
+                      (click)="refreshNvlCatalogNow()"
+                      [disabled]="isCatalogLoading"
+                      title="Đọc lại Danh mục NVL — cập nhật Standard Packing và trạng thái Lock">
+                <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
+                <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật danh mục' }}</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView"
+                      (click)="openKkPalletCheck()"
+                      [disabled]="kkPalletCheckBusy"
+                      title="Số pallet theo từng kho">
+                <i class="material-icons" [class.rotating]="kkPalletCheckBusy">{{ kkPalletCheckBusy ? 'sync' : 'widgets' }}</i>
+                <span class="btn-label">{{ kkPalletCheckBusy ? 'Đang đếm...' : 'Kiểm tra pallet' }}</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView"
+                      (click)="openKkCodeLookup()"
+                      title="Tìm mã — xem tồn kho và loại hàng">
+                <i class="material-icons">search</i>
+                <span class="btn-label">Tìm mã</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
+                      (click)="openKkCatalogPopup()"
+                      title="Import Nhóm mã (B+6 số) · Loại hàng">
+                <i class="material-icons">category</i>
+                <span class="btn-label">Danh mục KK</span>
+              </button>
+            </div>
           </div>
-          <div class="kk-loc-map__zones" *ngIf="kkLocMapView === 'type'">
-            <span class="kk-loc-map__toolbar-label">Zone</span>
-            <button type="button"
-                    class="kk-loc-map__zone"
-                    [class.kk-loc-map__zone--on]="!kkLocMapWarehouseFilter"
-                    (click)="setKkTypeZone('')"
-                    [disabled]="kkLocMapLoading">Tất cả</button>
-            <button type="button"
-                    *ngFor="let w of kkLocMapWarehouseOptions"
-                    class="kk-loc-map__zone"
-                    [class.kk-loc-map__zone--on]="kkLocMapWarehouseFilter === w.id"
-                    (click)="setKkTypeZone(w.id)"
-                    [disabled]="kkLocMapLoading">{{ w.label }}</button>
+
+          <div class="kk-toolbar__row kk-toolbar__row--filters" *ngIf="kkLocMapView && !kkActiveProductType">
+            <div class="kk-loc-map__zones">
+              <span class="kk-loc-map__toolbar-label">Zone</span>
+              <button type="button"
+                      class="kk-loc-map__zone"
+                      [class.kk-loc-map__zone--on]="!kkLocMapWarehouseFilter && !kkJOnly"
+                      (click)="setKkTypeZone('')"
+                      [disabled]="kkLocMapLoading">Tất cả</button>
+              <button type="button"
+                      *ngFor="let w of kkLocMapWarehouseOptions"
+                      class="kk-loc-map__zone"
+                      [class.kk-loc-map__zone--on]="kkLocMapWarehouseFilter === w.id"
+                      [class.kk-loc-map__zone--j]="w.id === 'J'"
+                      (click)="setKkTypeZone(w.id)"
+                      [disabled]="kkLocMapLoading"
+                      [title]="w.id === 'J' ? ('Kho J gồm J5 và kệ R/S — ' + kkJMovedSummary.codes + ' mã') : (w.id === 'ASM3' ? 'ASM3 / WH3' : w.label)">
+                {{ w.label }}
+                <span class="kk-loc-map__zone-n" *ngIf="w.id === 'J'">{{ kkJMovedSummary.codes }}</span>
+              </button>
+            </div>
+            <div class="kk-loc-map__opts">
+              <ng-container *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'">
+                <label class="kk-loc-map__opt" title="Bỏ tick thì không tính các mã đang ở kho WH3/ASM3">
+                  <input type="checkbox"
+                         [ngModel]="kkCountWh3"
+                         (ngModelChange)="kkCountWh3 = $event; onKkCountWh3Change()">
+                  Tính WH3
+                </label>
+                <label class="kk-loc-map__opt"
+                       [class.kk-loc-map__opt--off]="!kkCountWh3"
+                       title="Chỉ hiện dòng đang ở kho WH3/ASM3">
+                  <input type="checkbox"
+                         [ngModel]="kkWh3Only"
+                         [disabled]="!kkCountWh3"
+                         (ngModelChange)="kkWh3Only = $event; onKkWh3OnlyChange()">
+                  Chỉ ASM3
+                </label>
+              </ng-container>
+              <button type="button"
+                      class="kk-loc-map__j-btn"
+                      [class.kk-loc-map__j-btn--on]="kkJOnly"
+                      (click)="toggleKkJOnly()"
+                      [disabled]="kkLocMapLoading"
+                      title="Chỉ hiện mã kho J (gồm J5 và kệ R/S)">
+                <i class="material-icons">warehouse</i>
+                Chỉ hiện kho J
+                <span class="kk-loc-map__j-btn-n">{{ kkJMovedSummary.codes }} mã</span>
+              </button>
+              <label class="kk-loc-map__opt"
+                     *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'"
+                     title="Chỉ hiện loại / dòng chưa tick KK">
+                <input type="checkbox"
+                       [ngModel]="kkFilterUncheckedOnly"
+                       (ngModelChange)="kkFilterUncheckedOnly = $event; onKkFilterUncheckedChange()">
+                Chưa KK
+              </label>
+            </div>
+            <div class="search-box" *ngIf="kkLocMapView === 'material' || kkLocMapView === 'location'">
+              <input type="search"
+                     class="search-input"
+                     [(ngModel)]="kkLocMapQuery"
+                     [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : 'Lọc vị trí…'"
+                     autocomplete="off">
+            </div>
           </div>
-          <div class="kk-loc-map__opts" *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'">
-            <label class="kk-loc-map__opt" title="Bỏ tick thì không tính các mã đang ở kho WH3/ASM3">
-              <input type="checkbox"
-                     [ngModel]="kkCountWh3"
-                     (ngModelChange)="kkCountWh3 = $event; onKkCountWh3Change()">
-              Tính WH3/ASM3
-            </label>
-            <label class="kk-loc-map__opt"
-                   [class.kk-loc-map__opt--off]="!kkCountWh3"
-                   title="Chỉ hiện dòng đang ở kho WH3/ASM3">
-              <input type="checkbox"
-                     [ngModel]="kkWh3Only"
-                     [disabled]="!kkCountWh3"
-                     (ngModelChange)="kkWh3Only = $event; onKkWh3OnlyChange()">
-              Chỉ hiện ASM3
-            </label>
-            <label class="kk-loc-map__opt" title="Chỉ hiện loại / dòng chưa tick KK">
-              <input type="checkbox"
-                     [ngModel]="kkFilterUncheckedOnly"
-                     (ngModelChange)="kkFilterUncheckedOnly = $event; onKkFilterUncheckedChange()">
-              Chưa KK
-            </label>
+
+          <div class="kk-j-banner" *ngIf="kkJOnly && !kkActiveProductType">
+            <i class="material-icons">inventory_2</i>
+            <div class="kk-j-banner__text">
+              <strong>{{ kkJMovedSummary.codes | number }} mã</strong>
+              đã được đổi vị trí sang kho J
+            </div>
+            <span class="kk-j-banner__meta">{{ kkJMovedSummary.lines | number }} dòng · tồn {{ formatNumber(kkJMovedSummary.stock) }}</span>
           </div>
-          <div class="search-box" *ngIf="kkLocMapView === 'material' || kkLocMapView === 'location'">
-            <input type="search"
-                   class="search-input"
-                   [(ngModel)]="kkLocMapQuery"
-                   [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : 'Lọc vị trí…'"
-                   autocomplete="off">
-          </div>
-          <button type="button"
-                  class="more-btn"
-                  *ngIf="kkLocMapView === 'type' && kkActiveProductType"
-                  (click)="printKkTypeList()"
-                  [disabled]="kkLocMapLoading || !kkTypeDetailAll.length"
-                  title="In danh sách loại hàng">
-            <i class="material-icons">print</i>
-            <span class="btn-label">In</span>
-          </button>
-          <div class="kk-report" *ngIf="kkLocMapView === 'type'">
-            <button type="button"
-                    class="more-btn"
-                    (click)="showKkTypeReportMenu = true"
-                    [disabled]="kkLocMapLoading || kkTypeReportBusy"
-                    title="Tải báo cáo Excel lưu trữ">
-              <i class="material-icons">download</i>
-              <span class="btn-label">{{ kkTypeReportBusy ? 'Đang tải...' : 'Tải báo cáo' }}</span>
-            </button>
-          </div>
-          <button type="button" class="more-btn" *ngIf="kkLocMapView" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading">
-            <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
-            <span class="btn-label">Làm mới</span>
-          </button>
-          <button type="button"
-                  class="more-btn"
-                  *ngIf="kkLocMapView"
-                  (click)="refreshNvlCatalogNow()"
-                  [disabled]="isCatalogLoading"
-                  title="Đọc lại Danh mục NVL — cập nhật Standard Packing và trạng thái Lock">
-            <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
-            <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật danh mục' }}</span>
-          </button>
-          <button type="button"
-                  class="more-btn"
-                  *ngIf="kkLocMapView"
-                  (click)="openKkPalletCheck()"
-                  [disabled]="kkPalletCheckBusy"
-                  title="Số pallet theo từng kho">
-            <i class="material-icons" [class.rotating]="kkPalletCheckBusy">{{ kkPalletCheckBusy ? 'sync' : 'widgets' }}</i>
-            <span class="btn-label">{{ kkPalletCheckBusy ? 'Đang đếm...' : 'Kiểm tra pallet' }}</span>
-          </button>
-          <button type="button"
-                  class="more-btn"
-                  *ngIf="kkLocMapView"
-                  (click)="openKkCodeLookup()"
-                  title="Tìm mã — xem tồn kho và loại hàng">
-            <i class="material-icons">search</i>
-            <span class="btn-label">Tìm mã</span>
-          </button>
-          <button type="button"
-                  class="more-btn"
-                  (click)="openKkCatalogPopup()"
-                  title="Import Nhóm mã (B+6 số) · Loại hàng">
-            <i class="material-icons">category</i>
-            <span class="btn-label">Danh mục KK</span>
-          </button>
         </div>
       </div>
     </div>
@@ -210,7 +249,9 @@
               <th>Vị trí</th>
               <th class="kk-loc-map__factory-col">
                 <span>Kho</span>
-                <select [(ngModel)]="kkLocMapWarehouseFilter" title="Lọc kho">
+                <select [(ngModel)]="kkLocMapWarehouseFilter"
+                        (ngModelChange)="onKkWarehouseFilterChange()"
+                        title="Lọc kho">
                   <option value="">Tất cả</option>
                   <option *ngFor="let w of kkLocMapWarehouseOptions" [value]="w.id">{{ w.label }}</option>
                 </select>
@@ -304,7 +345,7 @@
                                 [ngModel]="kkLineWhValue(line)"
                                 (ngModelChange)="saveKkDetailWarehouse(line, $event)"
                                 [disabled]="!canEdit || kkLocMapBusy"
-                                title="Đổi kho">
+                                title="Đổi kho D1 / 00 / J / ASM3">
                           <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
                         </select>
                       </td>
@@ -544,7 +585,7 @@
                               [ngModel]="kkLineWhValue(material)"
                               (ngModelChange)="saveKkDetailWarehouse(material, $event)"
                               [disabled]="!canEdit || kkLocMapBusy"
-                              title="Đổi kho D1 / 00 / J5 / ASM3">
+                              title="Đổi kho D1 / 00 / J / ASM3">
                         <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
                       </select>
                     </td>
@@ -1151,7 +1192,7 @@
           <button class="more-btn kk-check-btn"
                   type="button"
                   (click)="openDoiKho()"
-                  title="Dời kho — scan pallet, chọn J5 hoặc ASM3">
+                  title="Dời kho — scan pallet, chọn J hoặc ASM3">
             <i class="material-icons">local_shipping</i>
             <span class="btn-label">Dời kho</span>
           </button>
@@ -1330,7 +1371,7 @@
                     [ngModel]="locationWhTag(material.location)"
                     (change)="onWhSelect(material, $any($event.target).value)">
               <option value="">—</option>
-              <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
+              <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh.id">{{ wh.label }}</option>
             </select>
           </div>
           
@@ -1428,7 +1469,7 @@
               </button>
             </th>
             <th title="Bấm ô pallet để sửa số pallet">Pallet</th>
-            <th title="Chọn ASM3 hoặc J5">WH</th>
+            <th title="Chọn ASM3 hoặc J">WH</th>
             <th>Change</th>
             <th>Loại Hình</th>
             <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
@@ -1597,13 +1638,13 @@
                 {{ material.palletId || 'Chọn pallet' }}
               </button>
             </td>
-            <td class="wh-cell" title="Chọn ASM3 hoặc J5">
+            <td class="wh-cell" title="Chọn ASM3 hoặc J">
               <select
                 class="editable-cell wh-select"
                 [ngModel]="locationWhTag(material.location)"
                 (change)="onWhSelect(material, $any($event.target).value)">
                 <option value="">—</option>
-                <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh">{{ wh }}</option>
+                <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh.id">{{ wh.label }}</option>
               </select>
             </td>
             <td class="change-cell change-cell-locked">
@@ -3568,7 +3609,7 @@
   </div>
 </div>
 
-<!-- Dời kho: scan pallet → chọn J5/ASM3 → Done. Mã pallet giữ nguyên. -->
+<!-- Dời kho: scan pallet → chọn J/ASM3 → Done. Mã pallet giữ nguyên. -->
 <div class="modal-overlay more-overlay" *ngIf="showDoiKho" (click)="closeDoiKho()">
   <div class="modal-content doi-kho-simple" (click)="$event.stopPropagation()" role="dialog" aria-label="Dời kho">
     <div class="more-popup-header gan-pallet__head">
@@ -3619,9 +3660,9 @@
         <span>Chọn kho dời đến</span>
         <div class="doi-kho-simple__wh">
           <button type="button"
-                  [class.doi-kho-simple__wh--on]="doiKhoWh === 'J5'"
-                  (click)="doiKhoWh = 'J5'"
-                  [disabled]="doiKhoBusy">J5</button>
+                  [class.doi-kho-simple__wh--on]="doiKhoWh === 'J'"
+                  (click)="doiKhoWh = 'J'"
+                  [disabled]="doiKhoBusy">J</button>
           <button type="button"
                   [class.doi-kho-simple__wh--on]="doiKhoWh === 'ASM3'"
                   (click)="doiKhoWh = 'ASM3'"

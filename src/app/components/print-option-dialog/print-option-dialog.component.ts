@@ -30,10 +30,8 @@ export interface PrintOptionDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    button[mat-stroked-button] {
-      height: 48px;
-      mat-icon { margin-right: 12px; }
-    }
+    button[mat-stroked-button] { height: 48px; }
+    button[mat-stroked-button] mat-icon { margin-right: 12px; }
   `]
 })
 export class PrintOptionDialogComponent {

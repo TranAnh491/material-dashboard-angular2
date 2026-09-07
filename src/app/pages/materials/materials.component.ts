@@ -5,7 +5,9 @@ import { Subject, BehaviorSubject, Subscription, firstValueFrom } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged, timeout } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
-import { Html5Qrcode } from 'html5-qrcode';
+// Chỉ dùng làm kiểu — `import type` bị xóa khi biên dịch nên không kéo html5-qrcode
+// (~85 KB) vào chunk materials. Camera scan thực tế chỉ có ở tab Inbound (đã dynamic import).
+import type { Html5Qrcode } from 'html5-qrcode';
 import { MatDialog } from '@angular/material/dialog';
 import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
@@ -23,6 +25,7 @@ import {
   isAsm3OrWh3PrefixLocation,
   isIqcPrefixLocation,
   isLockerPrefixLocation,
+  isBoxPrefixLocation,
   isNgPrefixLocation,
   splitMultiLocations,
   joinMultiLocations
@@ -42,7 +45,8 @@ import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.servic
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { KkCatalogService, KkCatalogEntry } from '../../services/kk-catalog.service';
-import * as XLSX from 'xlsx';
+// xlsx (~nặng) chỉ dùng khi bấm nút xuất/nhập Excel — nạp động tại chỗ dùng
+// (`const XLSX = await import('xlsx')`), không nhồi vào chunk materials.
 import { ReadTrackerService } from '../../services/read-tracker.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
@@ -129,7 +133,7 @@ type ResetLowStockRow = {
 };
 
 /** Dòng tổng hợp Kiểm tra KK theo mã hàng. */
-type KkWarehouse = 'D1' | '00' | 'J5' | 'ASM3';
+type KkWarehouse = 'D1' | '00' | 'J' | 'ASM3';
 type KkLocMaterialRow = {
   materialCode: string;
   warehouse: KkWarehouse;
@@ -169,7 +173,7 @@ type DoiKhoRow = {
 };
 
 /** Kho đích khi Dời kho — tiền tố gắn vào đầu Vị trí. */
-type DoiKhoWh = 'J5' | 'ASM3';
+type DoiKhoWh = 'J' | 'ASM3';
 
 type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock';
 
@@ -316,6 +320,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     totalLines: number;
     remaining: number;
   }> = [];
+  /** Cache cho getter `kkTypeBoxGroups` — khoá theo `kkTypeBoxesSig` để không gom nhóm
+   * lại (Map mới + regex/normalize cho ~100 loại) mỗi lần change detection. */
+  private kkTypeBoxGroupsSig = ' ';
+  private kkTypeBoxGroupsCached: Array<{ category: string; title: string; boxes: typeof this.kkTypeBoxesCached }> = [];
   kkTypeMucCollapsed: Record<string, boolean> = {};
   kkActivePinSplit: '1-4' | '5-10' | null = null;
   kkActiveSourceProductType: string | null = null;
@@ -360,24 +368,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkCountWh3 = true;
   /** Khi Tính WH3/ASM3: chỉ hiện dòng kho ASM3 / WH3. */
   kkWh3Only = false;
+  /** Chỉ hiện mã / vị trí đã gán kệ kho J mới (Rxx-xA/B/C hoặc Sxx-x-x). */
+  kkJOnly = false;
+  private kkJMovedSig = '';
+  private kkJMovedCached = { codes: 0, lines: 0, stock: 0 };
   /** Lọc chỉ các dòng / loại còn chưa tick KK. */
   kkFilterUncheckedOnly = false;
   private inboundNameCache = new Map<string, string>();
   readonly kkLocMapWarehouseOptions: Array<{ id: KkWarehouse; label: string }> = [
     { id: 'D1', label: 'D1' },
     { id: '00', label: '00' },
-    { id: 'J5', label: 'J5' },
-    { id: 'ASM3', label: 'ASM3 / WH3' }
+    { id: 'J', label: 'Kho J' },
+    { id: 'ASM3', label: 'ASM3' }
   ];
-  readonly kkWhSelectOptions: Array<{ id: '' | '00' | 'J5' | 'ASM3'; label: string }> = [
+  readonly kkWhSelectOptions: Array<{ id: '' | '00' | 'J' | 'ASM3'; label: string }> = [
     { id: '', label: 'D1' },
     { id: '00', label: '00' },
-    { id: 'J5', label: 'J5' },
-    { id: 'ASM3', label: 'ASM3 / WH3' }
+    { id: 'J', label: 'J' },
+    { id: 'ASM3', label: 'ASM3' }
   ];
 
   /**
-   * Popup Dời kho: scan pallet → chọn J5/ASM3 → Done.
+   * Popup Dời kho: scan pallet → chọn J/ASM3 → Done.
    * Đổi tiền tố vị trí sang kho mới, giữ nguyên mã pallet.
    */
   showDoiKho = false;
@@ -451,13 +463,31 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return docs;
   }
 
-  /** Bỏ cache KK — gọi sau khi tick/bỏ tick KK hoặc khi người dùng bấm "Làm mới". */
+  /** Bỏ cache KK — gọi sau khi tick/bỏ tick KK hàng loạt hoặc khi người dùng bấm "Làm mới". */
   private invalidateKkInvSnapCache(factory?: string): void {
     if (factory) {
       this.kkInvSnapCache.delete(String(factory).trim().toUpperCase());
     } else {
       this.kkInvSnapCache.clear();
     }
+  }
+
+  /**
+   * Vá tại chỗ 1 dòng trong cache KK sau khi tick/bỏ tick một dòng — thay cho việc
+   * xoá cả cache (khiến lần Kiểm tra KK kế tiếp phải nạp lại 10k doc từ mạng).
+   * Doc trong cache chỉ được đọc qua `.id` / `.data()`, nên thay bằng shim là đủ.
+   */
+  private patchKkInvSnapCache(docId: string, patch: Record<string, unknown>): void {
+    const id = String(docId || '');
+    if (!id) return;
+    this.kkInvSnapCache.forEach((entry) => {
+      const idx = entry.docs.findIndex((d) => String(d?.id || '') === id);
+      if (idx < 0) return;
+      const prev = entry.docs[idx];
+      const base = typeof prev?.data === 'function' ? prev.data() : prev;
+      const merged = { ...base, ...patch };
+      entry.docs[idx] = { id, data: () => merged };
+    });
   }
 
   /** Mobile KK: draft lượng chẵn (SP) theo id dòng. */
@@ -700,7 +730,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   readonly TEMP_UNLOCK_LOCATION_WH_PALLET = true;
   /** Dropdown cột WH — chọn kho đích. */
-  readonly WH_SELECT_OPTIONS = ['ASM3', 'J5'] as const;
+  readonly WH_SELECT_OPTIONS = [
+    { id: 'ASM3', label: 'ASM3' },
+    { id: 'J', label: 'J' }
+  ] as const;
   /** Cột Vị trí: sửa tay sau khi xác thực OTP Zalo (4 tiếng, hết khi F5). */
   isLocationColumnUnlocked = false;
   showLayoutLocPicker = false;
@@ -3928,7 +3961,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return raw === '00' || raw.startsWith('00-') || raw.startsWith('00+')
         || stripped === '00' || stripped.startsWith('00-') || stripped.startsWith('00+');
     }
-    return raw.startsWith('J5-') || isJWarehouseLocation(raw) || isJWarehouseLocation(stripped);
+    return this.isJWarehouseToken(raw);
   }
 
   private applyViewWarehouseToCurrentList(): void {
@@ -4477,7 +4510,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isTieuHuyLocation(loc)) return 'TIEUHUY';
     if (isAsm3OrWh3PrefixLocation(loc)) return 'WH3';
     if (isIqcPrefixLocation(loc)) return 'IQC';
-    if (isLockerPrefixLocation(loc)) return 'LOCKER';
+    if (isLockerPrefixLocation(loc) || isLockerPrefixLocation(this.stripDoiKhoWhPrefix(loc))) return 'LOCKER';
+    if (isBoxPrefixLocation(loc) || isBoxPrefixLocation(this.stripDoiKhoWhPrefix(loc))) return 'BOX';
     if (isNgPrefixLocation(loc)) return 'NG';
     const c = this.locationCompact(loc);
     if (!c) return null;
@@ -4594,7 +4628,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Hiển thị 1 vị trí đầu trong cột (nhiều vị trí → hover xem thêm). */
   primaryLocationDisplay(location: string | null | undefined): string {
-    const parts = this.locationParts(location);
+    const parts = this.locationParts(location).map((p) => this.displayLocationToken(p));
     return parts.length ? parts[0] : '-';
   }
 
@@ -4605,13 +4639,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Chuỗi đầy đủ mọi vị trí (tooltip / textarea). */
   formatLocationDisplay(location: string | null | undefined): string {
-    const parts = this.locationParts(location);
+    const parts = this.locationParts(location).map((p) => this.displayLocationToken(p));
     return parts.length ? parts.join('\n') : '-';
+  }
+
+  /** Locker/BOX: hiện tên gốc, không kèm J5-/J-. */
+  private displayLocationToken(loc: string): string {
+    const raw = String(loc || '').trim();
+    const bare = this.stripDoiKhoWhPrefix(raw);
+    if (this.isLockerOrBoxToken(bare)) return bare.toUpperCase();
+    return raw;
   }
 
   /** Chuẩn hóa trước khi lưu: UPPER từng token, nối bằng xuống dòng. */
   private normalizeMultiLocationValue(raw: string): string {
-    return joinMultiLocations(splitMultiLocations(raw));
+    return joinMultiLocations(
+      splitMultiLocations(raw).map((t) => {
+        const token = String(t || '').trim().toUpperCase();
+        if (!token) return '';
+        const bare = this.stripDoiKhoWhPrefix(token);
+        return this.isLockerOrBoxToken(bare) ? bare.toUpperCase() : token;
+      }).filter(Boolean)
+    );
   }
 
   // Perform search — mã hàng hoặc vị trí (tick Location)
@@ -5538,6 +5587,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapWarehouseFilter = '';
     this.kkCountWh3 = true;
     this.kkWh3Only = false;
+    this.kkJOnly = false;
     this.kkFilterUncheckedOnly = false;
     this.kkLocMapBoxes = [];
     this.kkLocMapByMaterial = [];
@@ -5562,6 +5612,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapWarehouseFilter = '';
     this.kkCountWh3 = true;
     this.kkWh3Only = false;
+    this.kkJOnly = false;
     this.kkFilterUncheckedOnly = false;
     this.kkLocMapBoxes = [];
     this.kkLocMapByMaterial = [];
@@ -5647,7 +5698,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;
-        const warehouse = this.kkWarehouseFromLocation(String(data.location || data.viTri || ''));
+        const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
         const cur = byWh.get(warehouse);
         if (!cur) continue;
         cur.lines += 1;
@@ -6082,9 +6133,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkLocMapFilteredBoxes(): Array<{ loc: string; checked: number; total: number }> {
+    let boxes = this.kkLocMapBoxes;
+    if (this.kkJOnly || this.kkLocMapWarehouseFilter === 'J') {
+      boxes = boxes.filter((b) => this.kkWarehouseFromLocation(b.loc) === 'J');
+    } else if (this.kkLocMapWarehouseFilter) {
+      boxes = boxes.filter((b) => this.kkWarehouseFromLocation(b.loc) === this.kkLocMapWarehouseFilter);
+    }
     const q = (this.kkLocMapQuery || '').trim().toUpperCase();
-    if (!q) return this.kkLocMapBoxes;
-    return this.kkLocMapBoxes.filter((b) => b.loc.includes(q));
+    if (q) boxes = boxes.filter((b) => b.loc.includes(q));
+    return boxes;
   }
 
   get kkLocMapFilteredMaterials(): KkLocMaterialRow[] {
@@ -6140,6 +6197,50 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
   }
 
+  /** Số mã / dòng / tồn đang ở kệ kho J mới (không phụ thuộc bộ lọc đang bật). */
+  get kkJMovedSummary(): { codes: number; lines: number; stock: number } {
+    const sig = [
+      this.kkLocMapLoadId,
+      this.kkTypeCacheRev,
+      this.kkLocMapTypeCache.size,
+      this.kkLocMapMaterialCache.size,
+      this.kkLocMapRowCache.size
+    ].join('|');
+    if (sig === this.kkJMovedSig) return this.kkJMovedCached;
+    this.kkJMovedSig = sig;
+    this.kkJMovedCached = this.buildKkJMovedSummary();
+    return this.kkJMovedCached;
+  }
+
+  private buildKkJMovedSummary(): { codes: number; lines: number; stock: number } {
+    const codes = new Set<string>();
+    const seen = new Set<string>();
+    let lines = 0;
+    let stock = 0;
+    const add = (m: InventoryMaterial) => {
+      if (this.kkWarehouseFromLocation(m.location) !== 'J') return;
+      const qty = this.calculateCurrentStock(m);
+      if (qty <= 0) return;
+      const id = String(m.id || '');
+      if (id) {
+        if (seen.has(id)) return;
+        seen.add(id);
+      }
+      lines += 1;
+      stock += qty;
+      const code = String(m.materialCode || '').trim().toUpperCase();
+      if (code) codes.add(code);
+    };
+    if (this.kkLocMapTypeCache.size) {
+      this.kkLocMapTypeCache.forEach((list) => list.forEach(add));
+    } else if (this.kkLocMapMaterialCache.size) {
+      this.kkLocMapMaterialCache.forEach((list) => list.forEach(add));
+    } else {
+      this.kkLocMapRowCache.forEach((list) => list.forEach(add));
+    }
+    return { codes: codes.size, lines, stock };
+  }
+
   private invalidateKkTypeViewCache(): void {
     this.kkTypeCacheRev++;
     this.kkTypeBoxesSig = '';
@@ -6173,18 +6274,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       remaining: number;
     }>;
   }> {
+    // `kkTypeBoxes` đã tự cache theo `kkTypeBoxesSig`; nhóm mục chỉ phụ thuộc vào nó
+    // nên tái dùng kết quả cho tới khi chữ ký đổi — tránh gom nhóm lại mỗi CD tick.
+    const boxes = this.kkTypeBoxes;
+    if (this.kkTypeBoxGroupsSig === this.kkTypeBoxesSig) {
+      return this.kkTypeBoxGroupsCached;
+    }
     const map = new Map<string, typeof this.kkTypeBoxesCached>();
-    for (const box of this.kkTypeBoxes) {
+    for (const box of boxes) {
       const category = this.kkTypeCategoryOf(box.productType, box.groupCodes);
       const list = map.get(category) || [];
       list.push(box);
       map.set(category, list);
     }
-    return Array.from(map.entries()).map(([category, boxes]) => ({
+    this.kkTypeBoxGroupsCached = Array.from(map.entries()).map(([category, boxesInCat]) => ({
       category,
       title: this.kkTypeMucTitle(category),
-      boxes
+      boxes: boxesInCat
     }));
+    this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
+    return this.kkTypeBoxGroupsCached;
   }
 
   /** Gom loại hàng thành mục. Cùng đầu mã B+3 → một mục, các box nằm trong đó. */
@@ -6336,6 +6445,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkLocMapWarehouseFilter,
       this.kkCountWh3 ? 1 : 0,
       this.kkWh3Only ? 1 : 0,
+      this.kkJOnly ? 1 : 0,
       this.kkFilterUncheckedOnly ? 1 : 0,
       (this.kkLocMapQuery || '').trim().toUpperCase()
     ].join('|');
@@ -6429,6 +6539,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
     const built = Array.from(map.values())
       .filter((v) => {
+        if (this.kkJOnly && v.totalLines <= 0) return false;
         if (this.kkFilterUncheckedOnly && Math.max(0, v.totalLines - v.checked) <= 0) return false;
         if (!q) return true;
         return v.productType.toUpperCase().includes(q)
@@ -6646,7 +6757,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocWh = 'J';
     const existing = this.kkTypeHomeLocOf(productType);
     this.layoutLocSelected = new Set(
-      splitMultiLocations(existing).map((x) => normalizeLayoutLocToken(x, 'J')).filter(Boolean)
+      splitMultiLocations(existing).map((x) => this.displayLocationToken(normalizeLayoutLocToken(x, 'J'))).filter(Boolean)
     );
     const groups = getLayoutLocationGroups('J');
     const selectedUpper = new Set(Array.from(this.layoutLocSelected).map((s) => s.toUpperCase()));
@@ -6679,7 +6790,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const locs = Array.from(this.layoutLocSelected);
     const mismatch = this.layoutLocSRuleMismatchMessage(locs);
     if (mismatch && !confirm(mismatch)) return;
-    const joined = joinMultiLocations(locs);
+    const joined = this.normalizeMultiLocationValue(joinMultiLocations(locs));
     try {
       await this.kkCatalog.saveHomeLoc(productType, joined);
       if (joined) this.kkTypeHomeLocs.set(productType, joined);
@@ -6731,6 +6842,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkLocMapWarehouseFilter,
       this.kkCountWh3 ? 1 : 0,
       this.kkWh3Only ? 1 : 0,
+      this.kkJOnly ? 1 : 0,
       this.kkFilterUncheckedOnly ? 1 : 0,
       (this.kkLocMapQuery || '').trim().toUpperCase(),
       this.kkTypeDetailQuery,
@@ -6880,7 +6992,34 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onKkWh3OnlyChange(): void {
-    if (this.kkWh3Only) this.kkCountWh3 = true;
+    if (this.kkWh3Only) {
+      this.kkCountWh3 = true;
+      this.kkJOnly = false;
+      if (this.kkLocMapWarehouseFilter === 'J') this.kkLocMapWarehouseFilter = '';
+    }
+    this.kkTypePage = 1;
+    this.cdr.detectChanges();
+  }
+
+  onKkJOnlyChange(): void {
+    if (this.kkJOnly) {
+      this.kkWh3Only = false;
+      this.kkLocMapWarehouseFilter = 'J';
+    } else if (this.kkLocMapWarehouseFilter === 'J') {
+      this.kkLocMapWarehouseFilter = '';
+    }
+    this.kkTypePage = 1;
+    this.cdr.detectChanges();
+  }
+
+  toggleKkJOnly(): void {
+    this.kkJOnly = !this.kkJOnly;
+    this.onKkJOnlyChange();
+  }
+
+  onKkWarehouseFilterChange(): void {
+    this.kkJOnly = this.kkLocMapWarehouseFilter === 'J';
+    if (this.kkJOnly) this.kkWh3Only = false;
     this.kkTypePage = 1;
     this.cdr.detectChanges();
   }
@@ -6940,7 +7079,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const esc = (s: string) => this.escapeHtmlForPrint(s);
     const zone = this.kkLocMapWarehouseFilter
       ? this.kkWarehouseLabel(this.kkLocMapWarehouseFilter)
-      : (this.kkWh3Only ? 'Chỉ ASM3 / WH3' : (this.kkCountWh3 ? 'Tất cả' : 'Tất cả (không WH3/ASM3)'));
+      : (this.kkJOnly ? 'Chỉ kho J' : (this.kkWh3Only ? 'Chỉ ASM3 / WH3' : (this.kkCountWh3 ? 'Tất cả' : 'Tất cả (không WH3/ASM3)')));
     const groupText = row.groupCodes.length
       ? `${row.groupCodes[0]}${row.groupCodes.length > 1 ? ` · ${row.groupCodes.length} nhóm mã` : ''}`
       : '—';
@@ -7042,6 +7181,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private kkTypeReportZoneLabel(): string {
     if (this.kkLocMapWarehouseFilter) return this.kkWarehouseLabel(this.kkLocMapWarehouseFilter);
+    if (this.kkJOnly) return 'Chi kho J';
     if (this.kkWh3Only) return 'Chi ASM3 WH3';
     if (!this.kkCountWh3) return 'Tat ca (khong WH3)';
     return 'Tat ca';
@@ -7175,18 +7315,31 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   kkWarehouseLabel(warehouse: KkWarehouse | string): string {
     if (warehouse === '00') return '00';
-    if (warehouse === 'J5') return 'J5';
-    if (warehouse === 'ASM3') return 'ASM3 / WH3';
+    if (warehouse === 'J' || warehouse === 'J5') return 'J';
+    if (warehouse === 'ASM3') return 'ASM3';
     return 'D1';
   }
 
-  /** Kho theo vị trí: 00- → 00; J5- → J5; ASM3/WH3 → kho tạm; còn lại = D1. */
+  /** Token kho J: kệ R/S mới, tiền tố J5-/J-, hoặc locker/BOX (giữ nguyên tên). */
+  private isJWarehouseToken(loc: string): boolean {
+    const raw = String(loc || '').trim().toUpperCase();
+    if (!raw) return false;
+    if (this.isLockerOrBoxToken(raw)) return true;
+    if (raw === 'J' || raw === 'J5' || raw.startsWith('J5-') || raw.startsWith('J-')) return true;
+    if (isJWarehouseLocation(raw)) return true;
+    return isJWarehouseLocation(this.stripDoiKhoWhPrefix(raw).toUpperCase());
+  }
+
+  /** Kho theo vị trí: J5- và kệ J mới cùng là Kho J; 00- → 00; ASM3/WH3 → kho tạm; còn lại = D1. */
   kkWarehouseFromLocation(location: string | null | undefined): KkWarehouse {
     const tokens = splitMultiLocations(String(location || ''));
+    const list = tokens.length ? tokens : [String(location || '')];
+    for (const token of list) {
+      if (this.isJWarehouseToken(token)) return 'J';
+    }
     const first = (tokens[0] || String(location || '')).trim().toUpperCase();
     if (!first) return 'D1';
     if (first === '00' || first.startsWith('00-') || first.startsWith('00+')) return '00';
-    if (first.startsWith('J5-')) return 'J5';
     if (isAsm3OrWh3PrefixLocation(first)) return 'ASM3';
     return 'D1';
   }
@@ -8080,9 +8233,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  kkLineWhValue(line: InventoryMaterial): '' | '00' | 'J5' | 'ASM3' {
+  kkLineWhValue(line: InventoryMaterial): '' | '00' | 'J' | 'ASM3' {
     const tag = this.locationWhTag(line.location);
-    return tag === 'J5' || tag === 'ASM3' || tag === '00' ? tag : '';
+    return tag === 'J' || tag === 'ASM3' || tag === '00' ? tag : '';
   }
 
   async saveKkDetailWarehouse(line: InventoryMaterial, value: string): Promise<void> {
@@ -8139,7 +8292,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkActiveProductType || '',
       this.kkLocMapWarehouseFilter,
       this.kkCountWh3 ? 1 : 0,
-      this.kkWh3Only ? 1 : 0
+      this.kkWh3Only ? 1 : 0,
+      this.kkJOnly ? 1 : 0
     ].join('|');
     if (sig !== this.kkTypePalletNotesSig) {
       this.kkTypePalletNotesSig = sig;
@@ -8323,6 +8477,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Nhóm vị trí KK theo chữ cái đầu (A, B, C, D…). */
   kkLocFirstLetter(loc: string): string {
+    if (this.kkWarehouseFromLocation(loc) === 'J') {
+      const body = this.stripDoiKhoWhPrefix(String(loc || '')).trim().toUpperCase();
+      if (isJWarehouseLocation(body) || isJWarehouseLocation(String(loc || ''))) {
+        return body.startsWith('S') ? 'Kho J · S' : 'Kho J · R';
+      }
+      return 'Kho J';
+    }
     const raw = String(loc || '').trim().toUpperCase();
     if (!raw || raw === '—') return '#';
     const body = raw.replace(/^(ASM3-|WH3-)/, '');
@@ -8538,7 +8699,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (stock <= 0) continue;
         const materialCode = String(data.materialCode || '').trim().toUpperCase();
         if (!materialCode) continue;
-        const warehouse = this.kkWarehouseFromLocation(String(data.location || data.viTri || ''));
+        const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
         const key = `${warehouse}|${materialCode}`;
         const kkOn = this.isKkFlagOn(data.kkChecked);
         const cur = byKey.get(key) || {
@@ -8559,7 +8720,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.kkLocMapMaterialCache.set(key, list);
       }
 
-      const warehouseOrder: Record<string, number> = { D1: 0, '00': 1, J5: 2, ASM3: 3 };
+      const warehouseOrder: Record<string, number> = { D1: 0, '00': 1, J: 2, ASM3: 3 };
       this.kkLocMapByMaterial = Array.from(byKey.values())
         .map((v) => {
           const key = `${v.warehouse}|${v.materialCode}`;
@@ -8630,6 +8791,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   setKkTypeZone(zone: '' | KkWarehouse): void {
     this.kkLocMapWarehouseFilter = zone;
+    this.kkJOnly = zone === 'J';
+    if (this.kkJOnly) this.kkWh3Only = false;
     this.kkLocMapExpandedKey = null;
     this.kkTypePage = 1;
     this.invalidateKkTypeViewCache();
@@ -8735,6 +8898,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private kkMatchesWh3Mode(warehouse: KkWarehouse | string): boolean {
+    if (this.kkJOnly) return warehouse === 'J';
     if (this.kkWh3Only) return warehouse === 'ASM3';
     if (!this.kkCountWh3) return warehouse !== 'ASM3';
     return true;
@@ -9420,7 +9584,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showTieuHuyPopup = false;
   }
 
-  downloadTieuHuyTemplate(): void {
+  async downloadTieuHuyTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet([
       { 'PX': 'PX001', 'Mã': 'B005001', 'PO': '4500123456', 'Lượng': 0 },
       { 'PX': 'PX002', 'Mã': 'B002010', 'PO': '4500987654', 'Lượng': 0 }
@@ -9502,7 +9667,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private parseTieuHuyExcel(file: File): Promise<Array<{ px: string; materialCode: string; poNumber: string; fileQty: number | null }>> {
+  private async parseTieuHuyExcel(file: File): Promise<Array<{ px: string; materialCode: string; poNumber: string; fileQty: number | null }>> {
+    const XLSX = await import('xlsx');
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
@@ -9971,7 +10137,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  downloadKkCatalogTemplate(): void {
+  async downloadKkCatalogTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet([
       { 'Nhóm mã': 'B001680', 'Loại hàng': 'Ví dụ loại A' },
       { 'Nhóm mã': 'B017431', 'Loại hàng': 'Ví dụ loại B' }
@@ -10022,7 +10189,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private parseKkCatalogExcel(file: File): Promise<Array<{ groupCode: string; productType: string }>> {
+  private async parseKkCatalogExcel(file: File): Promise<Array<{ groupCode: string; productType: string }>> {
+    const XLSX = await import('xlsx');
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
@@ -11158,7 +11326,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocFocus = focus;
     this.layoutLocWh = 'J';
     this.layoutLocSelected = new Set(
-      parts.map((x) => normalizeLayoutLocToken(x, 'J')).filter(Boolean)
+      parts.map((x) => this.displayLocationToken(normalizeLayoutLocToken(x, 'J'))).filter(Boolean)
     );
     const groups = getLayoutLocationGroups('J');
     const selectedUpper = new Set(Array.from(this.layoutLocSelected).map((s) => s.toUpperCase()));
@@ -11216,7 +11384,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .filter(Boolean);
     if (!tokens.length) return;
     const next = new Set(this.layoutLocSelected);
-    for (const t of tokens) next.add(t);
+    for (const t of tokens) {
+      const loc = this.displayLocationToken(t) || t;
+      if (loc) next.add(loc);
+    }
     this.layoutLocSelected = next;
     this.layoutLocManualDraft = '';
   }
@@ -11308,7 +11479,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     let locOk = false;
     if (locs.length) {
-      material.location = joinMultiLocations(locs);
+      material.location = this.normalizeMultiLocationValue(joinMultiLocations(locs));
       locOk = await this.persistLocationChange(material, {
         silent: true,
         bypassUnlock: this.showKkLocMap
@@ -11357,9 +11528,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   ): Promise<boolean> {
     if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
     const next = String(raw || '').trim().toUpperCase();
-    if (next && next !== 'ASM3' && next !== 'J5' && next !== '00') return false;
+    if (next && next !== 'ASM3' && next !== 'J' && next !== 'J5' && next !== '00') return false;
     const current = this.locationWhTag(material.location);
-    if (next === current) return false;
+    if (next === current || (next === 'J' && current === 'J')) return false;
     this.rememberLocationBeforeEdit(material);
     const bare = this.stripDoiKhoWhPrefix(String(material.location || '').trim());
     if (!bare && next) {
@@ -11367,7 +11538,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.markForCheck();
       return false;
     }
-    material.location = next ? `${next}-${bare}` : bare;
+    material.location = this.composeLocationWithWh(next, material.location);
     return this.persistLocationChange(material, {
       silent: !!opts?.silent,
       bypassUnlock: !!opts?.bypassUnlock
@@ -13053,9 +13224,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       };
       if (!next) payload.kkScanCount = 0;
       await this.firestore.collection('inventory-materials').doc(material.id).update(payload);
-      // Cache KK theo factory giờ đã cũ (dòng vừa đổi trạng thái tick).
-      this.invalidateKkInvSnapCache(this.resolveKkFactoryForMaterial(material));
-      this.invalidateKkInvSnapCache(this.selectedFactory);
+      // Vá 1 dòng trong cache KK — không xoá cả cache (đỡ phải nạp lại 10k doc
+      // cho lần Kiểm tra KK kế tiếp, chính là lúc hay bị "đứng máy").
+      this.patchKkInvSnapCache(material.id, {
+        kkChecked: next,
+        kkBy: operator,
+        kkAt,
+        ...(next ? {} : { kkScanCount: 0 })
+      });
       if (next) {
         await this.firestore.collection('inventory-kk-history').add({
           inventoryDocId: material.id,
@@ -13927,20 +14103,55 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.resetZeroDeletedCount = 0;
   }
 
-  /** Nhãn kho hiển thị ở cột WH — J5- → J5; ASM3-/WH3- → ASM3. */
+  /** Nhãn kho hiển thị ở cột WH — J5-/kệ J → J; ASM3-/WH3- → ASM3. */
   locationWhTag(location: string | null | undefined): string {
     const raw = String(location || '').trim().toUpperCase();
     if (raw === '00' || raw.startsWith('00-') || raw.startsWith('00+')) return '00';
-    if (raw.startsWith('J5-')) return 'J5';
+    if (this.isJWarehouseToken(raw)) return 'J';
     if (raw === 'TIEUHUY' || raw.startsWith('TIEUHUY')) return 'TIEUHUY';
     if (raw.startsWith('ASM3-') || raw.startsWith('WH3-') || raw.startsWith('ASM3')) return 'ASM3';
     return '';
   }
 
-  /** Bỏ tiền tố J5-/WH3-/ASM3-/00- cũ trước khi gắn tiền tố mới. */
+  /** Prefix ghi vào location: kho J vẫn dùng J5- để khớp dữ liệu cũ. */
+  private whWritePrefix(wh: string): string {
+    const t = String(wh || '').trim().toUpperCase();
+    if (t === 'J' || t === 'J5') return 'J5';
+    return t;
+  }
+
+  /** Locker / BOX: không gắn J5- khi chọn kho J. */
+  private isLockerOrBoxToken(loc: string): boolean {
+    const raw = String(loc || '').trim();
+    const body = this.stripDoiKhoWhPrefix(raw);
+    return isLockerPrefixLocation(raw) || isLockerPrefixLocation(body)
+      || isBoxPrefixLocation(raw) || isBoxPrefixLocation(body);
+  }
+
+  /** Gắn tiền tố kho; locker/BOX khi kho J giữ nguyên tên. */
+  private composeLocationWithWh(wh: string, location: string): string {
+    const raw = String(location || '').trim();
+    const tokens = splitMultiLocations(raw);
+    const list = tokens.length ? tokens : [raw];
+    const nextWh = String(wh || '').trim().toUpperCase();
+    return joinMultiLocations(
+      list.map((token) => {
+        const bare = this.stripDoiKhoWhPrefix(String(token || '').trim());
+        if (!bare) return '';
+        if (!nextWh) return bare;
+        if ((nextWh === 'J' || nextWh === 'J5') && this.isLockerOrBoxToken(bare)) {
+          return bare.toUpperCase();
+        }
+        const prefix = this.whWritePrefix(nextWh);
+        return prefix ? `${prefix}-${bare}` : bare;
+      }).filter(Boolean)
+    );
+  }
+
+  /** Bỏ tiền tố J5-/J-/WH3-/ASM3-/00- cũ trước khi gắn tiền tố mới. */
   private stripDoiKhoWhPrefix(location: string): string {
     const raw = String(location || '').trim();
-    const m = /^(J5|WH3|ASM3|00|TIEUHUY)-(.+)$/i.exec(raw);
+    const m = /^(J5|J|WH3|ASM3|00|TIEUHUY)-(.+)$/i.exec(raw);
     return m ? m[2] : raw;
   }
 
@@ -14033,7 +14244,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  /** Đổi tiền tố vị trí sang J5/ASM3 — mã pallet giữ nguyên. */
+  /** Đổi tiền tố vị trí sang J/ASM3 — mã pallet giữ nguyên. */
   async confirmDoiKho(): Promise<void> {
     if (!this.isLocationColumnUnlocked && !this.canEdit) {
       this.tryUnlockLocationColumn();
@@ -14042,9 +14253,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const wh = this.doiKhoWh;
     const selected = this.doiKhoRows.filter((r) => !!r.id);
     if (!wh || !selected.length) return;
+    const prefix = this.whWritePrefix(wh);
     const confirmed = confirm(
       `Dời ${selected.length} dòng pallet ${this.doiKhoPallet} sang kho ${wh}?\n\n` +
-        `Vị trí thêm tiền tố "${wh}-". Mã pallet giữ nguyên.`
+        `Vị trí locker/BOX giữ nguyên tên. Vị trí khác thêm tiền tố "${prefix}-". Mã pallet giữ nguyên.`
     );
     if (!confirmed) return;
 
@@ -14057,8 +14269,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const chunk = selected.slice(i, i + batchSize);
         const batch = this.firestore.firestore.batch();
         chunk.forEach((row) => {
-          const bareLocation = this.stripDoiKhoWhPrefix(row.location);
-          const newLocation = `${wh}-${bareLocation}`;
+          const newLocation = this.composeLocationWithWh(wh, row.location);
           const docRef = this.firestore.collection('inventory-materials').doc(row.id).ref;
           batch.update(docRef, {
             location: newLocation,
@@ -14090,7 +14301,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const idSet = new Set(selected.map((r) => r.id));
       this.inventoryMaterials.forEach((m) => {
         if (!m.id || !idSet.has(m.id)) return;
-        m.location = `${wh}-${this.stripDoiKhoWhPrefix(m.location)}`;
+        m.location = this.composeLocationWithWh(wh, m.location);
         m.palletId = this.doiKhoPallet;
         m.lastStatusAt = new Date();
         m.lastStatusKind = 'Change location';

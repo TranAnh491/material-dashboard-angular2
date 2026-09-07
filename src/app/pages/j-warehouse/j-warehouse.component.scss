@@ -734,6 +734,11 @@ $accent-soft: #ccfbf1;
       stroke: #16a34a;
     }
 
+    .jw-office__room--open,
+    .jw-floor-zone__body--no-stroke {
+      stroke: none;
+    }
+
     .jw-block__body,
     .jw-kho-mat__block,
     .jw-kho-mat__row {
@@ -826,6 +831,10 @@ $accent-soft: #ccfbf1;
     &--esd {
       fill: #ecfdf5;
     }
+
+    &--no-stroke {
+      stroke: none;
+    }
   }
 
   &__label {
@@ -835,6 +844,16 @@ $accent-soft: #ccfbf1;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
+
+    &--band {
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+
+    &--chem {
+      font-size: 7.8px;
+      letter-spacing: 0.02em;
+    }
   }
 
   &__meta {
@@ -923,6 +942,10 @@ $accent-soft: #ccfbf1;
     fill: #ffffff;
     stroke: #000000;
     stroke-width: 1.5;
+
+    &--open {
+      stroke: none;
+    }
   }
 
   &__label {

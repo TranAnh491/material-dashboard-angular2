@@ -10,6 +10,12 @@ export function isLockerPrefixLocation(loc: string): boolean {
   return raw === 'LOCKER' || /^LOCKER(?:\+?\d+)$/.test(raw);
 }
 
+/** BOX, BOX-0001, BOX-12… — giữ nguyên tên, không gắn tiền tố kho. */
+export function isBoxPrefixLocation(loc: string): boolean {
+  const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
+  return raw === 'BOX' || /^BOX-\d+/.test(raw);
+}
+
 /** Gom mọi Locker+N về nhãn Locker (Live list / heatmap). */
 export function normalizeLockerLiveLocation(loc: string): string {
   return isLockerPrefixLocation(loc) ? 'Locker' : '';

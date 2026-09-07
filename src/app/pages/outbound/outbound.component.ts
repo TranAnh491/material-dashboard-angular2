@@ -6,7 +6,9 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
-import { Html5Qrcode } from 'html5-qrcode';
+// Chỉ dùng làm kiểu — `import type` bị xóa khi biên dịch nên không kéo html5-qrcode
+// vào chunk outbound (scanner này không được khởi tạo ở đây).
+import type { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
 import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';

@@ -22,22 +22,26 @@ export function isJWarehouseLocation(loc: string): boolean {
   return /^S\d{2}-\d+-\d+\b/.test(raw);
 }
 
-/** Dãy kệ S trong kho mát J (18.6m): 0.5m; S01–S06 = 2 block, các dãy sau = 3 block × 7 tầng. */
+/** Dãy kệ S trong kho mát J: 0.5m; S01–S06 = 2 block, các dãy sau = 3 block × 7 tầng. Kéo đến sát ESD. */
 export function listJKhoMatRowIds(): string[] {
   const round2 = (n: number) => Math.round(n * 100) / 100;
-  const roomEnd = 18.6;
+  const khoMatW = 18.6;
+  const extW = 10;
+  const chemW = 1.5;
+  const esdW = 2;
+  const totalW = khoMatW + extW - chemW - esdW;
   const wideW = 1;
   const narrowW = 0.5;
   const gap = 0.8;
   const ids: string[] = [];
-  let x = round2(wideW + gap);
-  while (round2(x + narrowW) <= roomEnd) {
+  let xRight = round2(totalW - wideW - gap);
+  while (round2(xRight - narrowW) >= 0) {
     ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
-    const secondX = round2(x + narrowW);
-    if (round2(secondX + narrowW) <= roomEnd) {
+    const leftColX = round2(xRight - narrowW * 2);
+    if (leftColX >= 0) {
       ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
     }
-    x = round2(secondX + narrowW + gap);
+    xRight = round2(leftColX - gap);
   }
   return ids;
 }

@@ -623,7 +623,7 @@
                 <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
                   <rect
                     class="jw-floor-zone__body"
-                    [class.jw-floor-zone__body--solid]="floorZoneIsSolid(z)"
+                    [class.jw-floor-zone__body--no-stroke]="isKhoMatBandFloorZone(z)"
                     [class.jw-floor-zone__body--esd]="z.id === 'kho-esd'"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
@@ -684,13 +684,14 @@
               <g class="jw-office" aria-hidden="true">
                 <rect
                   class="jw-office__outline"
-                  [attr.x]="meterX(officeZone.xM)"
-                  [attr.y]="meterY(officeZone.yM)"
-                  [attr.width]="meterW(officeZone.wM)"
-                  [attr.height]="meterH(officeZone.hM)" />
+                  [attr.x]="meterX(bFaceStripZone.xM)"
+                  [attr.y]="meterY(bFaceStripZone.yM)"
+                  [attr.width]="meterW(bFaceStripZone.wM)"
+                  [attr.height]="meterH(bFaceStripZone.hM)" />
                 <g *ngFor="let room of officeRooms; trackBy: trackOfficeRoom">
                   <rect
                     class="jw-office__room"
+                    [class.jw-office__room--open]="room.id === 'secured'"
                     [attr.x]="meterX(room.xM)"
                     [attr.y]="meterY(room.yM)"
                     [attr.width]="meterW(room.wM)"
@@ -1152,9 +1153,11 @@
                   <ng-container *ngIf="!(showTechDims && z.id === 'shipping-area')">
                     <text
                       class="jw-floor-zone__label"
+                      [class.jw-floor-zone__label--band]="z.id === 'kho-esd'"
+                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat'"
                       *ngFor="let line of z.labelLines; let i = index"
                       [attr.x]="meterX(floorZoneLabelXM(z))"
-                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * 14"
+                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * (z.id === 'kho-hoa-chat' ? 8.4 : 14)"
                       [attr.transform]="floorZoneLabelRotate(z)
                         ? ('rotate(-90 ' + meterX(floorZoneLabelXM(z)) + ' ' + meterY(floorZoneLabelYM(z)) + ')')
                         : null">
@@ -1163,7 +1166,7 @@
                   </ng-container>
                   <text
                     class="jw-floor-zone__meta"
-                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'kho-hoa-chat' && z.id !== 'shipping-area' && !showTechDims"
+                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'kho-hoa-chat' && z.id !== 'kho-esd' && z.id !== 'shipping-area' && !showTechDims"
                     [attr.x]="meterX(floorZoneLabelXM(z))"
                     [attr.y]="meterY(floorZoneLabelYM(z)) + 9 + (z.labelLines.length - 1) * 10">
                     {{ z.wM | number:'1.0-3' }} × {{ z.hM | number:'1.0-2' }} m

@@ -49,10 +49,10 @@
               "optimization": {
                 "scripts": true,
                 "styles": {
-                  "minify": false,
-                  "inlineCritical": false
+                  "minify": true,
+                  "inlineCritical": true
                 },
-                "fonts": false
+                "fonts": true
               },
               "outputHashing": "all",
               "sourceMap": false,

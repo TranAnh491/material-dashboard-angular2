@@ -5,6 +5,7 @@ import { Routes, RouterModule } from '@angular/router';
 
 import { AdminLayoutComponent } from './layouts/admin-layout/admin-layout.component';
 import { LoginComponent } from './pages/login/login.component';
+import { SelectivePreloadStrategy } from './services/selective-preload.strategy';
 
 const routes: Routes =[
   {
@@ -36,7 +37,8 @@ const routes: Routes =[
     CommonModule,
     BrowserModule,
     RouterModule.forRoot(routes,{
-       useHash: true
+       useHash: true,
+       preloadingStrategy: SelectivePreloadStrategy
     })
   ],
   exports: [

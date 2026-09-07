@@ -842,7 +842,7 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     return s === 'iqc' || s === 'secured' || s === 'kho-mat-ext' || s === 'kho-hoa-chat' || s.startsWith('vp-kho');
   }
 
-  /** Bỏ vách chung giữa 2 phòng Office (VP Kho) và giữa kho hóa chất / kho mát mở rộng. */
+  /** Bỏ vách chung giữa 2 phòng Office (VP Kho) và giữa hóa chất / kho mát mở rộng / Kho mát. */
   private officeSharedWallKeys(): Set<string> {
     const keys = new Set<string>();
     const offices = this.rooms.filter((r) => (r.id || '').startsWith('vp-kho'));
@@ -854,8 +854,13 @@ export class JWarehouseRack3dComponent implements AfterViewInit, OnChanges, OnDe
     }
     const chem = this.rooms.find((r) => r.id === 'kho-hoa-chat');
     const ext = this.rooms.find((r) => r.id === 'kho-mat-ext');
+    const secured = this.rooms.find((r) => r.id === 'secured');
     if (chem && ext) {
       const shared = this.sharedRectEdgeKey(chem, ext);
+      if (shared) keys.add(shared);
+    }
+    if (ext && secured) {
+      const shared = this.sharedRectEdgeKey(ext, secured);
       if (shared) keys.add(shared);
     }
     return keys;
