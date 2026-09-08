@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { MaterialLifecycleService } from '../../services/material-lifecycle.service';
 import { WorkOrder, WorkOrderStatus } from '../../models/material-lifecycle.model';
 import { Subject, firstValueFrom } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, timeout } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import * as QRCode from 'qrcode';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -5990,12 +5990,73 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     </div>`;
   }
 
+  private openPxkPrintWindow(lsx: string): Window | null {
+    const w = window.open('', '_blank');
+    if (!w) return null;
+    const safe = this.escapeHtmlForPrint(lsx || '');
+    w.document.write(
+      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>PXK ${safe}</title></head>` +
+      `<body style="font-family:Arial,sans-serif;padding:28px;color:#111;">Đang tải phiếu PXK ${safe}…</body></html>`
+    );
+    w.document.close();
+    return w;
+  }
+
+  private writePxkPrintWindow(w: Window | null, html: string): boolean {
+    if (!w || w.closed) return false;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    return true;
+  }
+
+  private async loadPxkLocationIqcMaps(
+    factory: string,
+    materialCodes: string[]
+  ): Promise<{ locationMap: Map<string, string>; iqcStatusMap: Map<string, string> }> {
+    const locationMap = new Map<string, string>();
+    const iqcStatusMap = new Map<string, string>();
+    const codes = [...new Set(
+      materialCodes.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean)
+    )];
+    for (let i = 0; i < codes.length; i += 10) {
+      const chunk = codes.slice(i, i + 10);
+      try {
+        const snapshot = await firstValueFrom(
+          this.firestore.collection('inventory-materials', (ref) =>
+            ref.where('factory', '==', factory).where('materialCode', 'in', chunk)
+          ).get().pipe(timeout(15000))
+        );
+        snapshot.docs.forEach((docSnap: any) => {
+          const d = docSnap.data() as any;
+          const mat = String(d.materialCode || '').trim().toUpperCase();
+          const po = String(d.poNumber || d.po || '').trim();
+          const loc = String(d.location || '').trim();
+          const iqc = String(d.iqcStatus || '').trim();
+          if (!mat || !po) return;
+          const key = `${mat}|${po}`;
+          if (loc) locationMap.set(key, loc);
+          if (iqc) iqcStatusMap.set(key, iqc);
+        });
+      } catch (e) {
+        console.warn('Không load vị trí / IQC cho nhóm mã PXK:', chunk, e);
+      }
+    }
+    return { locationMap, iqcStatusMap };
+  }
+
   async printPxk(workOrder: WorkOrder): Promise<void> {
-    try {
     const lsx = workOrder.productionOrder || '';
+    const printWin = this.openPxkPrintWindow(lsx);
+    if (!printWin) {
+      alert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này.');
+      return;
+    }
+    try {
     const hasPxk = await this.ensurePxkLoadedForLsx(lsx);
     const lines = this.getPxkLinesForLsx(lsx);
     if (!hasPxk || lines.length === 0) {
+      printWin.close();
       alert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
       return;
     }
@@ -6032,21 +6093,12 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       })(),
       (async () => {
         try {
-          const snapshot = await firstValueFrom(this.firestore.collection('inventory-materials', ref =>
-            ref.where('factory', '==', isAsm1 ? 'ASM1' : 'ASM2')
-          ).get());
-          snapshot.docs.forEach((doc: any) => {
-            const d = doc.data() as any;
-            const mat = String(d.materialCode || '').trim().toUpperCase();
-            const po = String(d.poNumber || d.po || '').trim();
-            const loc = String(d.location || '').trim();
-            const iqc = String(d.iqcStatus || '').trim();
-            if (mat && po) {
-              const key = `${mat}|${po}`;
-              if (loc) locationMap.set(key, loc);
-              if (iqc) iqcStatusMap.set(key, iqc);
-            }
-          });
+          const maps = await this.loadPxkLocationIqcMaps(
+            isAsm1 ? 'ASM1' : 'ASM2',
+            lines.map((l) => l.materialCode)
+          );
+          maps.locationMap.forEach((v, k) => locationMap.set(k, v));
+          maps.iqcStatusMap.forEach((v, k) => iqcStatusMap.set(k, v));
         } catch (e) {
           console.warn('Không load được vị trí / IQC từ inventory:', e);
         }
@@ -6087,17 +6139,6 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           let deliveryDoc: any = null;
           if (!deliverySnapshot.empty) {
             deliveryDoc = deliverySnapshot.docs[0].data() as any;
-          } else {
-            // Thử tìm bằng cách normalize LSX (loại bỏ khoảng trắng, uppercase)
-            const normLsx = lsx.trim().toUpperCase();
-            const allDeliverySnap = await firstValueFrom(this.firestore.collection('rm1-delivery-records').get());
-            for (const doc of allDeliverySnap.docs) {
-              const d = doc.data() as any;
-              if ((d.lsx || '').trim().toUpperCase() === normLsx) {
-                deliveryDoc = d;
-                break;
-              }
-            }
           }
           if (deliveryDoc) {
             nhanVienGiaoStr = (deliveryDoc.employeeName || deliveryDoc.employeeId || '').trim() || '-';
@@ -6219,8 +6260,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const lsxToLineMap = new Map<string, string>();
       try {
         const pxkSnap = await firstValueFrom(this.firestore.collection('pxk-import-data', ref =>
-          ref.where('factory', '==', factoryFilter)
-        ).get());
+          ref.where('factory', '==', factoryFilter).limit(300)
+        ).get().pipe(timeout(12000)));
         (pxkSnap?.docs || []).forEach((docSnap: any) => {
           const d = docSnap.data();
           const docLsx = String(d?.lsx || '').trim();
@@ -6382,15 +6423,12 @@ ${headerSection}
 ${nvlSxKsBoxHtml}
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;
-    const w = window.open('', '_blank');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    } else {
+    if (!this.writePxkPrintWindow(printWin, html)) {
       alert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này (hoặc bấm Ctrl+P để in trang hiện tại).');
     }
     } catch (err) {
       console.error('Lỗi khi in PXK:', err);
+      try { printWin.close(); } catch {}
       alert('Lỗi khi in PXK: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
     }
   }

@@ -528,7 +528,7 @@
                           <td>{{wo.productCode}}</td>
                           <td class="lsx-cell" [class.wo-lsx-pxk]="hasPxkForWorkOrder(wo)">{{wo.productionOrder}}</td>
                           <td class="wo-sl">
-                            <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="openPrintOptionDialog(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In QR / PXK'">
+                            <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="printPxk(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In PXK'">
                               <i class="material-icons">print</i>
                               In PXK
                             </button>

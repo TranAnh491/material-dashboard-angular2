@@ -113,6 +113,15 @@
               </button>
               <button type="button"
                       class="more-btn"
+                      *ngIf="kkLocMapView"
+                      (click)="toggleKkLive()"
+                      [class.kk-live-btn--on]="kkLiveActive"
+                      [title]="kkLiveActive ? 'Tắt danh sách KK live' : 'Hiện mã vừa tick KK, mới nhất trên đầu'">
+                <i class="material-icons" [class.rotating]="kkLiveLoading">{{ kkLiveLoading ? 'sync' : 'sensors' }}</i>
+                <span class="btn-label">{{ kkLiveActive ? ('Live (' + kkLiveRows.length + ')') : 'Live' }}</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
                       (click)="openKkCatalogPopup()"
                       title="Import Nhóm mã (B+6 số) · Loại hàng">
                 <i class="material-icons">category</i>
@@ -145,9 +154,11 @@
               <i class="material-icons" aria-hidden="true">search</i>
               <input type="search"
                      [(ngModel)]="kkLocMapQuery"
-                     (ngModelChange)="kkLocMapView === 'type' ? onKkTypeUnifiedSearch() : null"
+                     (ngModelChange)="onKkLocMapQueryChange($event)"
                      [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : 'Tìm mã, tên hàng, pallet…'"
-                     autocomplete="off">
+                     autocomplete="off"
+                     autocapitalize="characters"
+                     spellcheck="false">
               <button type="button"
                       class="kk-toolbar__search-clear"
                       *ngIf="kkLocMapQuery"
@@ -202,6 +213,49 @@
               đã được đổi vị trí sang kho J
             </div>
             <span class="kk-j-banner__meta">{{ kkJMovedSummary.lines | number }} dòng · tồn {{ formatNumber(kkJMovedSummary.stock) }}</span>
+          </div>
+          <div class="kk-wh-share" *ngIf="kkSearchWhShare as sh">
+            <span class="kk-wh-share__q">{{ sh.query }}</span>
+            <span class="kk-wh-share__item kk-wh-share__item--j">
+              Kho J mới <strong>{{ sh.jPct }}%</strong>
+              <em>{{ sh.jQty | number:'1.0-0' }} mã</em>
+            </span>
+            <span class="kk-wh-share__item kk-wh-share__item--d1">
+              D1 <strong>{{ sh.d1Pct }}%</strong>
+              <em>{{ sh.d1Qty | number:'1.0-0' }} mã</em>
+            </span>
+            <span class="kk-wh-share__item kk-wh-share__item--asm3">
+              ASM3 <strong>{{ sh.asm3Pct }}%</strong>
+              <em>{{ sh.asm3Qty | number:'1.0-0' }} mã</em>
+            </span>
+            <span class="kk-wh-share__item kk-wh-share__item--other" *ngIf="sh.otherQty > 0">
+              Kho khác <strong>{{ sh.otherPct }}%</strong>
+              <em>{{ sh.otherQty | number:'1.0-0' }} mã</em>
+            </span>
+            <span class="kk-wh-share__rest">
+              Còn D1 + ASM3 <strong>{{ sh.leftoverPct }}%</strong>
+              ({{ sh.leftoverQty | number:'1.0-0' }} / {{ sh.total | number:'1.0-0' }} mã)
+            </span>
+          </div>
+          <div class="kk-live-board" *ngIf="kkLiveActive">
+            <div class="kk-live-board__head">
+              <strong>KK live</strong>
+              <span>Mã vừa tick hôm nay · mới nhất trên đầu</span>
+              <span class="kk-live-board__n">{{ kkLiveRows.length }} mã</span>
+            </div>
+            <p class="kk-live-board__err" *ngIf="kkLiveError">{{ kkLiveError }}</p>
+            <p class="kk-live-board__empty" *ngIf="!kkLiveLoading && !kkLiveError && !kkLiveRows.length">Chưa có mã nào được tick KK hôm nay.</p>
+            <ol class="kk-live-board__list" *ngIf="kkLiveRows.length">
+              <li *ngFor="let row of kkLiveRows">
+                <span class="kk-live-board__code">{{ row.materialCode }}</span>
+                <span class="kk-live-board__meta">
+                  <em>{{ row.location || '—' }}</em>
+                  <span *ngIf="row.poNumber">PO {{ row.poNumber }}</span>
+                  <span>{{ row.checkedBy || '—' }}</span>
+                </span>
+                <time>{{ formatKkLiveTime(row.checkedAt) }}</time>
+              </li>
+            </ol>
           </div>
         </div>
       </div>
@@ -393,9 +447,11 @@
             <i class="material-icons" aria-hidden="true">search</i>
             <input type="search"
                    [(ngModel)]="kkLocMapQuery"
-                   (ngModelChange)="onKkTypeUnifiedSearch()"
+                   (ngModelChange)="onKkLocMapQueryChange($event)"
                    placeholder="Tìm mã, tên hàng, pallet..."
-                   autocomplete="off">
+                   autocomplete="off"
+                   autocapitalize="characters"
+                   spellcheck="false">
             <button type="button"
                     class="kk-type-topbar__clear"
                     *ngIf="kkLocMapQuery"

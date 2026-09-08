@@ -260,6 +260,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkLocMapTypeCache = new Map<string, InventoryMaterial[]>();
   private kkLocMapLoadId = 0;
   kkLocMapBusy = false;
+  kkLiveActive = false;
+  kkLiveLoading = false;
+  kkLiveError = '';
+  kkLiveRows: Array<{
+    materialCode: string;
+    location: string;
+    poNumber: string;
+    checkedBy: string;
+    checkedAt: Date;
+  }> = [];
+  /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
   /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
   kkLocMapExpandedKey: string | null = null;
   showKkCatalogPopup = false;
@@ -717,6 +728,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   
   // Lifecycle
   private destroy$ = new Subject<void>();
+  private kkLiveStop$ = new Subject<void>();
   
   // QR Scanner
   private html5QrCode: Html5Qrcode | null = null;
@@ -2419,6 +2431,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } else {
       this.closeKkLocMap();
     }
+    if (this.kkLiveActive) this.startKkLive();
     this.closeGanPallet();
     this.cancelMobileLocationScan(true);
     this.cancelMobileKkConfirm();
@@ -2463,8 +2476,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     this.stopScanning();
+    this.stopKkLive();
     this.destroy$.next();
     this.destroy$.complete();
+    this.kkLiveStop$.complete();
   }
 
   // Setup debounced search for better performance
@@ -5633,6 +5648,84 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveSourceProductType = null;
     this.showKkTypeReportMenu = false;
     this.showKkPalletCheck = false;
+    this.stopKkLive();
+  }
+
+  toggleKkLive(): void {
+    if (this.kkLiveActive) this.stopKkLive();
+    else this.startKkLive();
+  }
+
+  stopKkLive(): void {
+    this.kkLiveStop$.next();
+    this.kkLiveActive = false;
+    this.kkLiveLoading = false;
+    this.kkLiveError = '';
+    this.kkLiveRows = [];
+  }
+
+  startKkLive(): void {
+    this.kkLiveStop$.next();
+    this.kkLiveActive = true;
+    this.kkLiveLoading = true;
+    this.kkLiveError = '';
+    this.kkLiveRows = [];
+    const factory = this.selectedFactory;
+    const dateKey = this.toDateKey(new Date());
+    const listen = (ordered: boolean) => {
+      this.firestore
+        .collection('inventory-kk-history', (ref) => {
+          let q = ref.where('factory', '==', factory).where('checkedDateKey', '==', dateKey);
+          if (ordered) q = q.orderBy('checkedAt', 'desc');
+          return q.limit(200);
+        })
+        .valueChanges()
+        .pipe(takeUntil(this.destroy$), takeUntil(this.kkLiveStop$))
+        .subscribe({
+          next: (rows) => {
+            this.applyKkLiveHistory(rows || []);
+          },
+          error: (err) => {
+            console.error('❌ kk live:', err);
+            if (ordered) {
+              listen(false);
+              return;
+            }
+            this.kkLiveLoading = false;
+            this.kkLiveError = 'Không đọc được KK live.';
+            this.cdr.detectChanges();
+          }
+        });
+    };
+    listen(true);
+  }
+
+  private applyKkLiveHistory(rows: unknown[]): void {
+    const parsed = (rows as Array<Record<string, unknown>>).map((data) => {
+      const checkedAt = this.normalizeTimestamp(data?.checkedAt) || this.normalizeTimestamp(data?.createdAt);
+      return {
+        materialCode: String(data?.materialCode || '').trim().toUpperCase(),
+        location: String(data?.location || '').trim().toUpperCase(),
+        poNumber: String(data?.poNumber || '').trim(),
+        checkedBy: String(data?.checkedBy || '').trim(),
+        checkedAt: checkedAt || new Date(0)
+      };
+    }).filter((r) => !!r.materialCode);
+    parsed.sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime());
+    const byCode = new Map<string, typeof parsed[number]>();
+    for (const row of parsed) {
+      if (!byCode.has(row.materialCode)) byCode.set(row.materialCode, row);
+    }
+    this.kkLiveRows = Array.from(byCode.values());
+    this.kkLiveLoading = false;
+    this.kkLiveError = '';
+    this.cdr.detectChanges();
+  }
+
+  formatKkLiveTime(d: Date | null | undefined): string {
+    if (!d || Number.isNaN(d.getTime()) || !d.getTime()) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
   setKkLocMapView(view: 'location' | 'material' | 'type'): void {
@@ -6143,15 +6236,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } else if (this.kkLocMapWarehouseFilter) {
       boxes = boxes.filter((b) => this.kkWarehouseFromLocation(b.loc) === this.kkLocMapWarehouseFilter);
     }
-    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    const q = this.kkEffectiveSearchQuery();
     if (q) boxes = boxes.filter((b) => b.loc.includes(q));
     return boxes;
   }
 
   get kkLocMapFilteredMaterials(): KkLocMaterialRow[] {
     let rows = this.kkLocMapByMaterial;
-    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
-    if (q) rows = rows.filter((r) => r.materialCode.includes(q));
+    const q = this.kkEffectiveSearchQuery();
+    if (q) rows = rows.filter((r) => this.kkCodeMatchesSearch(r.materialCode, q));
     if (this.kkLocMapWarehouseFilter) {
       rows = rows.filter((r) => r.warehouse === this.kkLocMapWarehouseFilter);
     }
@@ -6178,19 +6271,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkLocMapCatalogEntries(): KkCatalogEntry[] {
-    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    const q = this.kkEffectiveSearchQuery();
     if (!q) return this.kkCatalogEntries;
     return this.kkCatalogEntries.filter((e) =>
-      e.groupCode.includes(q) || e.productType.toUpperCase().includes(q)
+      this.kkCodeMatchesSearch(e.groupCode, q) || e.productType.toUpperCase().includes(q)
     );
   }
 
   get kkLocMapFilteredTypes(): KkTypeRow[] {
-    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    const q = this.kkEffectiveSearchQuery();
     if (!q) return this.kkLocMapByType;
     return this.kkLocMapByType.filter((r) =>
       r.productType.toUpperCase().includes(q) ||
-      r.groupCodes.some((g) => g.includes(q))
+      r.groupCodes.some((g) => this.kkCodeMatchesSearch(g, q))
     );
   }
 
@@ -6452,7 +6545,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkWh3Only ? 1 : 0,
       this.kkJOnly ? 1 : 0,
       this.kkFilterUncheckedOnly ? 1 : 0,
-      (this.kkLocMapQuery || '').trim().toUpperCase()
+      this.kkEffectiveSearchQuery()
     ].join('|');
     if (sig === this.kkTypeBoxesSig) return;
     this.kkTypeBoxesSig = sig;
@@ -6468,7 +6561,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     totalLines: number;
     remaining: number;
   }> {
-    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    const q = this.kkEffectiveSearchQuery();
     const map = new Map<string, {
       productType: string;
       groups: Set<string>;
@@ -6519,6 +6612,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       let totalLines = 0;
       let searchHit = false;
       for (const m of raw) {
+        const code = String(m.materialCode || '').toUpperCase();
+        if (q && !searchHit) {
+          const pallet = String(m.palletId || '').toUpperCase();
+          const name = this.getKkMaterialName(m).toUpperCase();
+          if (this.kkCodeMatchesSearch(code, q) || pallet.includes(q) || name.includes(q)) searchHit = true;
+        }
         const wh = this.kkWarehouseFromLocation(m.location);
         if (!this.kkMatchesWh3Mode(wh)) continue;
         if (zone && wh !== zone) continue;
@@ -6527,12 +6626,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         stock += lineStock;
         totalLines += 1;
         if (this.isKkFlagOn(m.kkChecked)) checked += 1;
-        if (q && !searchHit) {
-          const code = String(m.materialCode || '').toUpperCase();
-          const pallet = String(m.palletId || '').toUpperCase();
-          const name = this.getKkMaterialName(m).toUpperCase();
-          if (code.includes(q) || pallet.includes(q) || name.includes(q)) searchHit = true;
-        }
       }
       if (q && !searchHit) {
         searchHit = Array.from(cur.sources).some((s) => s.toUpperCase().includes(q));
@@ -6544,14 +6637,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
     const built = Array.from(map.values())
       .filter((v) => {
-        if (this.kkJOnly && v.totalLines <= 0) return false;
-        if (this.kkFilterUncheckedOnly && Math.max(0, v.totalLines - v.checked) <= 0) return false;
-        if (!q) return true;
-        return v.productType.toUpperCase().includes(q)
-          || Array.from(v.groups).some((g) => g.includes(q))
+        const queryHit = !q ? true : (
+          v.productType.toUpperCase().includes(q)
+          || Array.from(v.groups).some((g) => this.kkCodeMatchesSearch(g, q))
           || v.searchHit
           || (this.isKkConnector110PType(v.productType, Array.from(v.groups))
-            && (/1\s*[-–]?\s*4P/.test(q) || /5\s*[-–]?\s*10P/.test(q)));
+            && (/1\s*[-–]?\s*4P/.test(q) || /5\s*[-–]?\s*10P/.test(q)))
+        );
+        if (!queryHit) return false;
+        if (q) return true;
+        if (this.kkJOnly && v.totalLines <= 0) return false;
+        if (this.kkFilterUncheckedOnly && Math.max(0, v.totalLines - v.checked) <= 0) return false;
+        return true;
       })
       .map((v) => {
         const groupCodes = Array.from(v.groups).sort((a, b) => this.compareNhuaGroupCode(a, b));
@@ -6576,6 +6673,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     boxes: Array<{
       productType: string;
       sourceProductType?: string;
+      sourceProductTypes?: string[];
       pinSplit?: '1-4' | '5-10';
       groupCodes: string[];
       sharedPrefix: string;
@@ -6585,7 +6683,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       remaining: number;
     }>
   ): typeof boxes {
-    const q = (this.kkLocMapQuery || '').trim().toUpperCase();
+    const q = this.kkEffectiveSearchQuery();
     const zone = this.kkLocMapWarehouseFilter;
     const out: typeof boxes = [];
     for (const box of boxes) {
@@ -6593,7 +6691,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         out.push({ ...box, sourceProductType: box.sourceProductType || box.productType });
         continue;
       }
-      const raw = this.kkLocMapTypeCache.get(box.productType) || [];
+      const sources = (box.sourceProductTypes && box.sourceProductTypes.length)
+        ? box.sourceProductTypes
+        : [box.sourceProductType || box.productType];
+      const raw: InventoryMaterial[] = [];
+      const seenRaw = new Set<string>();
+      for (const src of sources) {
+        for (const m of this.kkLocMapTypeCache.get(src) || []) {
+          const id = String(m.id || '');
+          if (id) {
+            if (seenRaw.has(id)) continue;
+            seenRaw.add(id);
+          }
+          raw.push(m);
+        }
+      }
       for (const split of ['1-4', '5-10'] as const) {
         if (q && /1\s*[-–]?\s*4P/.test(q) && !/5\s*[-–]?\s*10P/.test(q) && split !== '1-4') continue;
         if (q && /5\s*[-–]?\s*10P/.test(q) && split !== '5-10') continue;
@@ -6614,7 +6726,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (this.kkFilterUncheckedOnly && Math.max(0, totalLines - checked) <= 0) continue;
         out.push({
           productType: this.kkConnector110PSplitLabel(box.productType, split),
-          sourceProductType: box.productType,
+          sourceProductType: box.sourceProductType || box.productType,
+          sourceProductTypes: sources,
           pinSplit: split,
           groupCodes: box.groupCodes,
           sharedPrefix: box.sharedPrefix,
@@ -6849,7 +6962,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkWh3Only ? 1 : 0,
       this.kkJOnly ? 1 : 0,
       this.kkFilterUncheckedOnly ? 1 : 0,
-      (this.kkLocMapQuery || '').trim().toUpperCase(),
+      this.kkEffectiveSearchQuery(),
       this.kkTypeDetailQuery,
       this.kkTypeFilterLoc,
       this.kkTypeFilterWh,
@@ -6885,13 +6998,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkTypeFilterRolls) {
       rows = rows.filter((m) => this.getKkRollsText(m) === this.kkTypeFilterRolls);
     }
-    const q = (this.kkLocMapQuery || this.kkTypeDetailQuery || '').trim().toUpperCase();
+    const q = this.kkEffectiveSearchQuery(this.kkLocMapQuery || this.kkTypeDetailQuery);
     if (q) {
       rows = rows.filter((m) => {
-        const code = String(m.materialCode || '').toUpperCase();
         const pallet = String(m.palletId || '').toUpperCase();
         const name = this.getKkMaterialName(m).toUpperCase();
-        return code.includes(q) || pallet.includes(q) || name.includes(q);
+        return this.kkCodeMatchesSearch(String(m.materialCode || ''), q) || pallet.includes(q) || name.includes(q);
       });
     }
     if (this.kkTypeSortQtyDesc) {
@@ -6918,15 +7030,134 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   }
 
+  /** % đầu mã ở Kho J mới vs còn D1 / ASM3 khi search nhóm mã (không lọc Zone, không theo pcs). */
+  private kkSearchWhShareSig = '';
+  private kkSearchWhShareCached: {
+    query: string;
+    total: number;
+    jQty: number;
+    d1Qty: number;
+    asm3Qty: number;
+    otherQty: number;
+    leftoverQty: number;
+    jPct: number;
+    d1Pct: number;
+    asm3Pct: number;
+    otherPct: number;
+    leftoverPct: number;
+  } | null = null;
+
+  get kkSearchWhShare() {
+    const q = this.kkEffectiveSearchQuery();
+    if (!q || (this.kkLocMapView !== 'type' && this.kkLocMapView !== 'material')) {
+      return null;
+    }
+    const sig = [
+      q,
+      this.kkLocMapView,
+      this.kkTypeCacheRev,
+      this.kkLocMapTypeCache.size,
+      this.kkLocMapMaterialCache.size
+    ].join('|');
+    if (sig === this.kkSearchWhShareSig) return this.kkSearchWhShareCached;
+
+    const cache = this.kkLocMapView === 'material' ? this.kkLocMapMaterialCache : this.kkLocMapTypeCache;
+    const byCode = new Map<string, { j: boolean; d1: boolean; asm3: boolean; other: boolean }>();
+    cache.forEach((rows) => {
+      for (const m of rows) {
+        if (!this.kkLineMatchesSearchQuery(m, q)) continue;
+        if (this.calculateCurrentStock(m) <= 0) continue;
+        const code = String(m.materialCode || '').trim().toUpperCase();
+        if (!code) continue;
+        const rec = byCode.get(code) || { j: false, d1: false, asm3: false, other: false };
+        const wh = this.kkWarehouseFromLocation(String(m.location || ''));
+        if (wh === 'J') rec.j = true;
+        else if (wh === 'D1') rec.d1 = true;
+        else if (wh === 'ASM3') rec.asm3 = true;
+        else rec.other = true;
+        byCode.set(code, rec);
+      }
+    });
+    const total = byCode.size;
+    let jQty = 0;
+    let d1Qty = 0;
+    let asm3Qty = 0;
+    let otherQty = 0;
+    let leftoverQty = 0;
+    byCode.forEach((rec) => {
+      if (rec.j) jQty += 1;
+      if (rec.d1) d1Qty += 1;
+      if (rec.asm3) asm3Qty += 1;
+      if (rec.other && !rec.j && !rec.d1 && !rec.asm3) otherQty += 1;
+      if (rec.d1 || rec.asm3) leftoverQty += 1;
+    });
+    const pct = (part: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
+    const result = total <= 0 ? null : {
+      query: q,
+      total,
+      jQty,
+      d1Qty,
+      asm3Qty,
+      otherQty,
+      leftoverQty,
+      jPct: pct(jQty),
+      d1Pct: pct(d1Qty),
+      asm3Pct: pct(asm3Qty),
+      otherPct: pct(otherQty),
+      leftoverPct: pct(leftoverQty)
+    };
+    this.kkSearchWhShareSig = sig;
+    this.kkSearchWhShareCached = result;
+    return result;
+  }
+
+  /** Search only after 4+ characters; always uppercase. */
+  private kkEffectiveSearchQuery(raw?: string): string {
+    const q = String(raw ?? (this.kkLocMapQuery || '')).trim().toUpperCase();
+    return q.length >= 4 ? q : '';
+  }
+
+  /** 16580 matches B016580; optional leading A/B/R. */
+  private kkCodeMatchesSearch(code: string, q: string): boolean {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c || !q) return false;
+    if (c.includes(q)) return true;
+    const qDigits = /^\d+$/.test(q) ? q : (/^[ABR](\d+)$/.exec(q)?.[1] || '');
+    if (qDigits.length < 4) return false;
+    const cDigits = c.replace(/\D/g, '');
+    if (cDigits.includes(qDigits)) return true;
+    const stripped = qDigits.replace(/^0+/, '') || '0';
+    if (stripped.length >= 4 && stripped !== qDigits && cDigits.includes(stripped)) return true;
+    if (qDigits.length >= 5 && qDigits.length <= 6) {
+      const padded = this.kkCatalog.normalizeGroupCode(`B${qDigits}`);
+      if (padded && c.includes(padded)) return true;
+    }
+    return false;
+  }
+
+  /** Match material / group / prefix for KK search (ignores Zone filter). */
+  private kkLineMatchesSearchQuery(m: InventoryMaterial, q: string): boolean {
+    if (!q) return true;
+    if (this.kkCodeMatchesSearch(String(m.materialCode || ''), q)) return true;
+    if (String(m.palletId || '').toUpperCase().includes(q)) return true;
+    return this.getKkMaterialName(m).toUpperCase().includes(q);
+  }
+
   applyKkTypeFilters(): void {
     this.kkTypeDetailQuery = this.kkTypeSearchDraft || this.kkLocMapQuery;
     this.kkTypePage = 1;
+  }
+
+  onKkLocMapQueryChange(value: string): void {
+    this.kkLocMapQuery = String(value || '').toUpperCase();
+    if (this.kkLocMapView === 'type') this.onKkTypeUnifiedSearch();
   }
 
   onKkTypeUnifiedSearch(): void {
     this.kkTypeSearchDraft = this.kkLocMapQuery;
     this.kkTypeDetailQuery = this.kkLocMapQuery;
     this.kkTypePage = 1;
+    this.invalidateKkTypeViewCache();
   }
 
   clearKkTypeUnifiedSearch(): void {
@@ -8929,15 +9160,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private kkCachedLinesForType(productType: string): InventoryMaterial[] {
     this.ensureKkTypeBoxesCache();
+    const q = this.kkEffectiveSearchQuery(this.kkLocMapQuery || this.kkTypeDetailQuery);
     const boxExact = this.kkTypeBoxesCached.find((b) => b.productType === productType);
     const box = boxExact
-      || this.kkTypeBoxesCached.find((b) => !!b.sourceProductTypes?.includes(productType));
-    const sources = boxExact?.sourceProductTypes?.length
+      || this.kkTypeBoxesCached.find((b) => !!b.sourceProductTypes?.includes(productType))
+      || this.kkTypeBoxesCached.find((b) => b.sourceProductType === productType);
+    const sources = (boxExact?.sourceProductTypes?.length
       ? boxExact.sourceProductTypes
-      : [productType];
-    const split = box?.pinSplit
-      || (productType === this.kkActiveProductType ? this.kkActivePinSplit : null)
-      || null;
+      : null)
+      || (box?.sourceProductTypes?.length ? box.sourceProductTypes : null)
+      || [box?.sourceProductType || productType];
+    const split = q
+      ? null
+      : (box?.pinSplit
+        || (productType === this.kkActiveProductType ? this.kkActivePinSplit : null)
+        || null);
     const seen = new Set<string>();
     let list: InventoryMaterial[] = [];
     for (const src of sources) {
@@ -8950,10 +9187,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         list.push(m);
       }
     }
-    if (!list.length) list = this.kkLocMapTypeCache.get(productType) || [];
+    if (!list.length) {
+      list = this.kkLocMapTypeCache.get(productType)
+        || this.kkLocMapTypeCache.get(box?.sourceProductType || '')
+        || [];
+    }
     list = list.filter((m) => this.kkMatchesWh3Mode(this.kkWarehouseFromLocation(m.location)));
     const zone = this.kkLocMapWarehouseFilter;
-    if (zone) {
+    if (zone && !q) {
       list = list.filter((m) => this.kkWarehouseFromLocation(m.location) === zone);
     }
     if (split) {
