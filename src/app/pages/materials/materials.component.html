@@ -3269,10 +3269,8 @@
           [class.layout-loc-group--s]="layoutLocFamily === 'S'"
           *ngFor="let g of layoutLocFamilyGroups"
           [class.layout-loc-group--on]="layoutLocActiveGroup?.id === g.id"
-          [class.layout-loc-group--rec]="isLayoutLocSRuleMatch(g.id)"
           (click)="setLayoutLocGroup(g.id)">
           <span>{{ g.label }}</span>
-          <small *ngIf="layoutLocSRuleLabel(g.id) as rule">{{ rule }}</small>
         </button>
       </div>
 
@@ -3281,9 +3279,6 @@
         <div class="layout-j-diagram__caption" *ngIf="layoutJFocusBlock == null">
           {{ layoutLocFamily === 'S' ? 'Dãy kệ S · Kho mát' : 'Dãy kệ R' }}
           {{ layoutLocActiveGroup?.label }}
-          <ng-container *ngIf="layoutLocFamily === 'S' && layoutLocSRuleLabel(layoutLocActiveGroup?.id || '') as rule">
-            · {{ rule }}
-          </ng-container>
           — {{ isLayoutJKhoMatGroup ? 'bấm Kệ để chọn cả cột, hoặc bấm mâm T1–T7' : 'bấm mâm A/B/C để chọn' }}
         </div>
         <div class="layout-j-diagram__caption layout-j-diagram__caption--row" *ngIf="layoutJFocusBlockView as rack">

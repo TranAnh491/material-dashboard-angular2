@@ -7268,36 +7268,16 @@ $asm1-toolbar-h: 36px;
   cursor: pointer;
   line-height: 1.15;
 
-  small {
-    font-size: 9px;
-    font-weight: 800;
-    color: #64748b;
-    letter-spacing: 0.02em;
-  }
-
   &--on {
     background: #ccfbf1;
     border-color: #14b8a6;
     color: #0f766e;
-
-    small {
-      color: #0f766e;
-    }
   }
 
   &--s.layout-loc-group--on {
     background: #dbeafe;
     border-color: #3b82f6;
     color: #1d4ed8;
-
-    small {
-      color: #1d4ed8;
-    }
-  }
-
-  &--rec:not(.layout-loc-group--on) {
-    border-color: #f59e0b;
-    background: #fffbeb;
   }
 }
 

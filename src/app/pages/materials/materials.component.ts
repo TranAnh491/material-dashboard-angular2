@@ -6309,6 +6309,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isKkDauCotMuc(raw, groupCodes)) return 'ĐẦU CỐT';
     const bPrefix = this.kkTypeSharedBPrefix(groupCodes);
     if (bPrefix) return bPrefix;
+    if (/DAU\s*NOI/.test(this.foldKkTypeName(raw))) return 'Khác';
 
     const tokens = raw.split(/\s+/).filter(Boolean);
     const skip = new Set([
@@ -6333,11 +6334,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return head.length ? head.join(' ') : raw;
   }
 
-  private isKkDauNoiMuc(productType: string, groupCodes: string[] = []): boolean {
+  /** Mục Đầu nối: chỉ B007, B008, B009, B016. */
+  private isKkDauNoiMuc(_productType: string, groupCodes: string[] = []): boolean {
     const prefixes = this.kkTypeGroupPrefixes(groupCodes);
-    if (prefixes.includes('B009') || prefixes.includes('B016')) return true;
-    const fold = this.foldKkTypeName(productType);
-    return /DAU\s*NOI/.test(fold);
+    if (!prefixes.length) return false;
+    return prefixes.every((p) => p === 'B007' || p === 'B008' || p === 'B009' || p === 'B016');
   }
 
   private isKkDauCotMuc(productType: string, groupCodes: string[] = []): boolean {
@@ -11452,16 +11453,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocGroupId = id;
     this.layoutLocQuery = '';
     this.syncLayoutJFocusBlockFromSelection();
-  }
-
-  layoutLocSRuleLabel(groupId: string): string {
-    return jKhoMatSRuleLabel(groupId);
-  }
-
-  isLayoutLocSRuleMatch(groupId: string): boolean {
-    const prefix = this.layoutLocMaterialBPrefix();
-    const rule = jKhoMatSRuleOfRow(groupId);
-    return !!prefix && !!rule && rule.code === prefix;
   }
 
   private layoutLocMaterialBPrefix(): string {

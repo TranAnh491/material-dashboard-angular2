@@ -22,7 +22,7 @@ export function isJWarehouseLocation(loc: string): boolean {
   return /^S\d{2}-\d+-\d+\b/.test(raw);
 }
 
-/** Dãy kệ S trong kho mát J: 0.5m; S01 cách vách VP Kho 5.5m; mỗi dãy 3 block × 7 tầng. Kéo đến sát kho hóa chất. */
+/** Dãy kệ S trong kho mát J: 0.5m; S01 cách vách VP Kho 5.5m; S01–S02 = 2 block, các dãy sau = 3 block × 7 tầng. Kéo đến sát kho hóa chất. */
 export function listJKhoMatRowIds(): string[] {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const khoMatW = 18.6;
@@ -56,9 +56,10 @@ function jKhoMatSlotsForRow(rowId: string): string[] {
   return slots;
 }
 
-/** Mỗi dãy S: 3 kệ. */
+/** S01–S02: 2 kệ; các dãy S còn lại: 3 kệ. */
 export function jKhoMatBlocksForRow(rowId: string): number {
-  return 3;
+  const n = jKhoMatSRowNum(rowId);
+  return n >= 1 && n <= 2 ? 2 : 3;
 }
 
 /** Quy định dãy S kho mát. Các dãy chưa ghi sẽ set sau. */
