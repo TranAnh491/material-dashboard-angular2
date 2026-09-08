@@ -11279,6 +11279,35 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return n;
   }
 
+  layoutJBlockSlotCount(block: number): number {
+    const hit = this.layoutJRackDiagram.find((b) => b.block === block);
+    if (!hit) return 0;
+    let n = 0;
+    for (const lv of hit.levels) n += lv.cells.length;
+    return n;
+  }
+
+  isLayoutJBlockFullyOn(block: number): boolean {
+    const total = this.layoutJBlockSlotCount(block);
+    return total > 0 && this.layoutJBlockSelectedCount(block) >= total;
+  }
+
+  /** Chọn / bỏ chọn toàn bộ mâm của 1 kệ (Kệ 1/2/3). */
+  toggleLayoutJBlock(block: number): void {
+    const hit = this.layoutJRackDiagram.find((b) => b.block === block);
+    if (!hit) return;
+    const slots = hit.levels.flatMap((lv) => lv.cells.map((c) => String(c.slot || '').trim().toUpperCase())).filter(Boolean);
+    if (!slots.length) return;
+    const allOn = slots.every((s) => this.layoutLocSelected.has(s));
+    const next = new Set(this.layoutLocSelected);
+    if (allOn) {
+      for (const s of slots) next.delete(s);
+    } else {
+      for (const s of slots) next.add(s);
+    }
+    this.layoutLocSelected = next;
+  }
+
   isLayoutJLevelOn(lv: { cells: Array<{ slot: string }> }): boolean {
     return (lv?.cells || []).some((c) => this.isLayoutLocSlotOn(c.slot));
   }

@@ -126,7 +126,7 @@ export interface JwKhoMatBlock {
   hM: number;
 }
 
-/** 1 dãy kệ Kho mát — VD "S01". S01–S06 có 2 block; các dãy sau 3 block. */
+/** 1 dãy kệ Kho mát — VD "S01". Mỗi dãy 3 block. */
 export interface JwKhoMatRow {
   id: string;
   xM: number;
@@ -746,7 +746,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Lối đi còn lại giữa hết dãy kệ và mép văn phòng */
   readonly OFFICE_AISLE_M = this.round2(this.officeZone.yM - this.OPEN_ZONE_Y_M);
 
-  /** Kệ trong Kho mát: dãy 0.5m; S01–S06 = 2 block, các dãy sau = 3 block; sâu 1.5m/block, cách 0.8m, 7 tầng, cao 3m. Số dãy từ phải qua trái. */
+  /** Kệ trong Kho mát: dãy 0.5m; mỗi dãy 3 block; sâu 1.5m/block, cách 0.8m, 7 tầng, cao 3m. Số dãy từ phải qua trái. */
   readonly KHO_MAT_BLOCK_W_NARROW_M = 0.5;
   readonly KHO_MAT_BLOCK_D_M = 1.5;
   readonly KHO_MAT_BLOCKS_PER_ROW = 3;
@@ -4178,7 +4178,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     };
   }
 
-  /** Box ESD 2.5×3m — trong khe 5.5m, sát vách VP Kho, cùng sâu kệ S01 (cạnh B). */
+  /** Box ESD 2.5×3m — trong khe 5.5m, sát vách VP Kho (cạnh B). */
   get khoEsdZone(): { xM: number; yM: number; wM: number; hM: number } {
     const room = this.securedOfficeRoom;
     if (!room) return { xM: 0, yM: 0, wM: 0, hM: 0 };
@@ -4235,8 +4235,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   /**
    * Dãy kệ trong Kho mát — số 1 từ phải qua trái, đến sát kho hóa chất.
-   * S01 đưa ra cách vách VP Kho 5.5m. S01–S06: 2 block sát cạnh B (bỏ kệ thứ 3).
-   * S07 trở đi: 3 block sát cạnh B. Khe 0.8m giữa các kệ.
+   * S01 đưa ra cách vách VP Kho 5.5m. Mỗi dãy 3 block sát cạnh B. Khe 0.8m giữa các kệ.
    */
   private buildKhoMatRows(): JwKhoMatRow[] {
     const room = this.securedOfficeRoom;
@@ -4256,7 +4255,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const makeRow = (colX: number, colW: number): JwKhoMatRow => {
       index++;
       const rowId = `S${String(index).padStart(2, '0')}`;
-      const blockCount = index <= 6 ? 2 : maxBlocks;
+      const blockCount = maxBlocks;
       const rowDepth = this.round2(blockCount * blockD);
       const rowYM = this.round2(roomB - rowDepth);
       const blocks: JwKhoMatBlock[] = [];

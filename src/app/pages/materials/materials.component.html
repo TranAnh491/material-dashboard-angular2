@@ -3284,7 +3284,7 @@
           <ng-container *ngIf="layoutLocFamily === 'S' && layoutLocSRuleLabel(layoutLocActiveGroup?.id || '') as rule">
             · {{ rule }}
           </ng-container>
-          — {{ isLayoutJKhoMatGroup ? 'bấm mâm T1–T7 để chọn' : 'bấm mâm A/B/C để chọn' }}
+          — {{ isLayoutJKhoMatGroup ? 'bấm Kệ để chọn cả cột, hoặc bấm mâm T1–T7' : 'bấm mâm A/B/C để chọn' }}
         </div>
         <div class="layout-j-diagram__caption layout-j-diagram__caption--row" *ngIf="layoutJFocusBlockView as rack">
           <button type="button" class="layout-j-back" (click)="setLayoutJFocusBlock(null)">
@@ -3294,6 +3294,12 @@
             {{ layoutLocFamily === 'S' ? 'Dãy kệ S' : 'Dãy kệ R' }}
             {{ layoutLocActiveGroup?.label }} · Block {{ rack.block }} — bấm mâm để chọn
           </span>
+          <button
+            type="button"
+            class="layout-j-block__all"
+            (click)="toggleLayoutJBlock(rack.block)">
+            {{ isLayoutJBlockFullyOn(rack.block) ? 'Bỏ chọn cả kệ' : 'Chọn cả kệ' }}
+          </button>
         </div>
 
         <div class="layout-j-diagram__scroll" *ngIf="layoutJFocusBlock == null">
@@ -3307,7 +3313,16 @@
               *ngIf="!isLayoutJKhoMatGroup"
               (click)="setLayoutJFocusBlock(b.block)"
               title="Phóng to kệ để chọn mâm">Kệ {{ b.block }}</button>
-            <div class="layout-j-block__head" *ngIf="isLayoutJKhoMatGroup">Kệ {{ b.block }}</div>
+            <button
+              type="button"
+              class="layout-j-block__head layout-j-block__head--all"
+              *ngIf="isLayoutJKhoMatGroup"
+              [class.layout-j-block__head--on]="isLayoutJBlockFullyOn(b.block)"
+              (click)="toggleLayoutJBlock(b.block)"
+              title="Chọn cả 7 mâm của kệ này cho loại hàng">
+              Kệ {{ b.block }}
+              <small>{{ isLayoutJBlockFullyOn(b.block) ? 'Bỏ chọn cả kệ' : 'Chọn cả kệ' }}</small>
+            </button>
             <div class="layout-j-block__preview">
               <button
                 type="button"
@@ -3328,8 +3343,17 @@
               </button>
             </div>
             <span class="layout-j-block__hint">
-              {{ layoutJBlockSelectedCount(b.block) ? (layoutJBlockSelectedCount(b.block) + ' mâm đã chọn') : 'Bấm mâm để chọn' }}
+              {{ layoutJBlockSelectedCount(b.block)
+                ? (isLayoutJBlockFullyOn(b.block) ? 'Đã chọn cả kệ' : layoutJBlockSelectedCount(b.block) + ' mâm đã chọn')
+                : (isLayoutJKhoMatGroup ? 'Bấm Kệ để chọn cả cột' : 'Bấm mâm để chọn') }}
             </span>
+            <button
+              type="button"
+              class="layout-j-block__all"
+              *ngIf="!isLayoutJKhoMatGroup"
+              (click)="toggleLayoutJBlock(b.block)">
+              {{ isLayoutJBlockFullyOn(b.block) ? 'Bỏ chọn cả kệ' : 'Chọn cả kệ' }}
+            </button>
           </div>
           <p class="hidden-empty" *ngIf="!layoutJRackDiagram.length">Không dựng được sơ đồ dãy này.</p>
         </div>
