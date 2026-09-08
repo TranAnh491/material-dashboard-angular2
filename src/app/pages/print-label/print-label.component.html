@@ -33,16 +33,18 @@
 
 <div class="main-content" *ngIf="labelSessionVerified">
   <!-- Excel-like Container -->
-  <div class="excel-container">
+  <div class="excel-container pl-page">
     <!-- Excel-like Header: tiêu đề + box đếm cùng một hàng -->
-    <div class="excel-header">
+    <div class="excel-header pl-page__head">
       <div class="page-header">
         <div class="page-header-left">
-          <div class="page-title-row">
-            <i class="material-icons page-title-icon">content_paste</i>
-            <div class="page-title-text">
-              <div class="page-title">PRINT LABEL STATUS</div>
-              <div class="page-subtitle">Theo dõi trạng thái in tem nhãn sản xuất</div>
+          <div class="pl-page__brand">
+            <span class="pl-page__ico" aria-hidden="true">
+              <i class="material-icons">content_paste</i>
+            </span>
+            <div class="pl-page__titles">
+              <h4>PRINT LABEL STATUS</h4>
+              <p class="pl-page__sub">Theo dõi trạng thái in tem nhãn sản xuất</p>
             </div>
           </div>
         </div>
@@ -105,20 +107,25 @@
     <div class="excel-actions">
       <div class="action-controls">
         <div class="toolbar-row toolbar-row--actions">
+          <button class="custom-btn custom-btn--menu" type="button" (click)="goToMenu()" title="Về Menu">
+            <i class="material-icons">home</i>
+            Menu
+          </button>
+
           <button class="custom-btn btn-more" type="button" (click)="openMorePopup()">
             <i class="material-icons">more_vert</i>
-            <span>MORE</span>
+            <span>More</span>
             <i class="material-icons caret">expand_more</i>
           </button>
 
           <div class="search-wrap">
+            <i class="material-icons search-ico">search</i>
             <input type="text"
-                 placeholder="Tìm kiếm..."
+                 placeholder="Tìm IMD, mã tem, khách hàng…"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
                  class="custom-input search-input-uppercase"
                  title="Tìm theo: IMD (001), Mã tem, Khách hàng">
-            <i class="material-icons search-ico">search</i>
           </div>
 
           <div class="toolbar-icon-group">
@@ -130,10 +137,6 @@
             </button>
             <button class="icon-btn" type="button" (click)="openDownloadModal()" title="Tải xuống lịch sử">
               <i class="material-icons">download</i>
-            </button>
-            <button class="custom-btn custom-btn--menu" type="button" (click)="goToMenu()" title="Về Menu">
-              <i class="material-icons">home</i>
-              Về Menu
             </button>
           </div>
 
@@ -180,7 +183,7 @@
         </div>
         <div class="dialog-footer">
           <button class="btn btn-secondary" (click)="closeDeleteDialog()">Hủy</button>
-          <button class="btn" (click)="confirmDelete()" [disabled]="!deleteCode || !deletePassword" style="background: #ffffff; color: #000000; border: 2px solid #000000;">Xóa</button>
+          <button class="btn" (click)="confirmDelete()" [disabled]="!deleteCode || !deletePassword" style="background: #0f766e; color: #ffffff; border: 1px solid #0f766e;">Xóa</button>
         </div>
       </div>
     </div>
@@ -190,32 +193,32 @@
       <div class="print-label-data-pane" *ngIf="scheduleData.length > 0">
 
                 <div class="table-container">
-          <table class="excel-table" style="border: 2px solid #000000;">
+          <table class="excel-table">
             <thead class="sticky-header">
               <tr>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">IMD</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Năm</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Tháng</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">STT</th>
-                <th style="min-width: 80px; font-size: 10px; color: #000000; font-weight: bold;">Size Phôi</th>
-                <th style="min-width: 60px; font-size: 10px; color: #000000; font-weight: bold;">Gấp</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã tem</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Lượng Tem</th>
-                <th style="min-width: 50px; max-width: 70px; font-size: 10px; color: #000000; font-weight: bold;">Lượng phôi</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Mã Hàng</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">IMD</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Năm</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Tháng</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">STT</th>
+                <th style="min-width: 80px; font-size: 10px; color: #64748b; font-weight: 700;">Size Phôi</th>
+                <th style="min-width: 60px; font-size: 10px; color: #64748b; font-weight: 700;">Gấp</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Mã tem</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Lượng Tem</th>
+                <th style="min-width: 50px; max-width: 70px; font-size: 10px; color: #64748b; font-weight: 700;">Lượng phôi</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Mã Hàng</th>
 
-                <th style="font-size: 13px; color: #000000; font-weight: bold;">Lệnh sản xuất</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Khách hàng</th>
-                <th style="font-size: 13px; color: #000000; font-weight: bold;">Ngày nhận kế hoạch</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">YY</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">WW</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Line nhận</th>
-                <th style="min-width: 100px; font-size: 10px; color: #000000; font-weight: bold;">Người in</th>
-                <th style="min-width: 120px; font-size: 10px; color: #000000; font-weight: bold;">Tình trạng</th>
-                <th style="min-width: 140px; font-size: 10px; color: #000000; font-weight: bold;">Thời gian</th>
-                <th style="min-width: 150px; font-size: 10px; color: #000000; font-weight: bold;">Ghi chú</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">QR</th>
-                <th style="font-size: 10px; color: #000000; font-weight: bold;">Xóa</th>
+                <th style="font-size: 13px; color: #64748b; font-weight: 700;">Lệnh sản xuất</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Khách hàng</th>
+                <th style="font-size: 13px; color: #64748b; font-weight: 700;">Ngày nhận kế hoạch</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">YY</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">WW</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Line nhận</th>
+                <th style="min-width: 100px; font-size: 10px; color: #64748b; font-weight: 700;">Người in</th>
+                <th style="min-width: 120px; font-size: 10px; color: #64748b; font-weight: 700;">Tình trạng</th>
+                <th style="min-width: 140px; font-size: 10px; color: #64748b; font-weight: 700;">Thời gian</th>
+                <th style="min-width: 150px; font-size: 10px; color: #64748b; font-weight: 700;">Ghi chú</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">QR</th>
+                <th style="font-size: 10px; color: #64748b; font-weight: 700;">Xóa</th>
               </tr>
             </thead>
             <tbody>
@@ -224,12 +227,12 @@
                   [class.completed-row]="item.isCompleted"
                   [style.background]="item.isCompleted ? '#ffffff' : (i % 2 === 0 ? '#ffffff' : '#f8f9fa')"
                   [style.opacity]="item.isCompleted ? '0.7' : '1'"
-                  style="border-bottom: 2px solid #000000;">
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.importDate || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nam || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.thang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{i + 1}}</td>
-              <td style="border: 1px solid #000000;">
+                  style="border-bottom: 1px solid rgba(15, 23, 42, 0.10);">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.importDate || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.nam || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.thang || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{i + 1}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10);">
                   <select [(ngModel)]="item.sizePhoi" (change)="onFieldChange(item, 'sizePhoi')" 
                           [disabled]="!canEditField('sizePhoi')"
                           style="width: 100%; padding: 6px; border: none; background: transparent; font-size: 13px; text-align: center; cursor: pointer; outline: none; transition: all 0.2s ease; touch-action: manipulation; color: #000;" 
@@ -240,36 +243,36 @@
                   </select>
                   <span *ngIf="!canEditField('sizePhoi')" style="font-size: 10px; color: #000;">{{item.sizePhoi || 'Chưa có'}}</span>
               </td>
-              <td style="border: 1px solid #000000; text-align: center;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); text-align: center;">
                   <button mat-icon-button color="warning"
                           (click)="toggleUrgent(item)"
                           matTooltip="Đánh dấu gấp"
                           *ngIf="!item.isUrgent"
                           style="width: 36px; height: 36px; min-width: 36px; margin: 0 auto; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer;">
-                      <mat-icon style="font-size: 13px; width: 13px; height: 13px; color: #000000;">priority_high</mat-icon>
+                      <mat-icon style="font-size: 13px; width: 13px; height: 13px; color: #0f172a;">priority_high</mat-icon>
                   </button>
-                  <span *ngIf="item.isUrgent" style="color: #000000; font-size: 10px; display: block; text-align: center;">🔥</span>
+                  <span *ngIf="item.isUrgent" style="color: #0f172a; font-size: 10px; display: block; text-align: center;">🔥</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 13px; font-weight: 700; color: #0f172a;">
                 <span class="due-text" [ngClass]="'due-' + getDueState(item)">{{item.maTem || ''}}</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000; min-width: 50px; max-width: 70px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.maHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{formatNumberForDisplay(item.soLuongYeuCau)}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a; min-width: 50px; max-width: 70px;">{{formatNumberForDisplay(item.soLuongPhoi)}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.maHang || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 13px; font-weight: 700; color: #0f172a;">
                 <span class="due-text" [ngClass]="'due-' + getDueState(item)">{{item.lenhSanXuat || ''}}</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.khachHang || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.khachHang || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 13px; font-weight: 700; color: #0f172a;">
                 <span class="due-text" [ngClass]="'due-' + getDueState(item)">{{item.ngayNhanKeHoach || ''}}</span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || ''}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || ''}}</td>
-              <td style="border: 1px solid #000000; text-align: center; font-size: 13px; color: #000000;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.yy || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.ww || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.lineNhan || ''}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); text-align: center; font-size: 13px; color: #0f172a;">
                 {{ getNguoiInDisplay(item) }}
               </td>
-              <td class="tinh-trang-cell" style="border: 1px solid #000000; text-align: center;">
+              <td class="tinh-trang-cell" style="border: 1px solid rgba(15, 23, 42, 0.10); text-align: center;">
                   <!-- Pass: click chuyển Done -->
                   <span 
                     *ngIf="item.tinhTrang === 'Pass'"
@@ -311,14 +314,14 @@
               </td>
               <td
                 class="status-time-cell"
-                style="border: 1px solid #000000; text-align: center; font-size: 10px; color: #000000; cursor: pointer;"
+                style="border: 1px solid rgba(15, 23, 42, 0.10); text-align: center; font-size: 10px; color: #0f172a; cursor: pointer;"
                 (click)="openStatusHistoryModal(item)"
                 title="Click xem lịch sử ASP theo từng Tình trạng">
                   <span class="status-time">
                       {{ formatStatusUpdateTimeDisplay(item) }}
                   </span>
               </td>
-              <td style="border: 1px solid #000000;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10);">
                   <input 
                     type="text" 
                     [(ngModel)]="item.ghiChu" 
@@ -336,7 +339,7 @@
                 </td>
               
               <!-- Cột QR -->
-              <td style="text-align: center; border: 1px solid #000000;">
+              <td style="text-align: center; border: 1px solid rgba(15, 23, 42, 0.10);">
                 <button 
                   (click)="printQRLabel(item)"
                   title="In tem QR"
@@ -350,7 +353,7 @@
               </td>
 
               <!-- Cột Xóa -->
-              <td style="text-align: center; border: 1px solid #000000;">
+              <td style="text-align: center; border: 1px solid rgba(15, 23, 42, 0.10);">
                 <button 
                   (click)="deleteItem(item)"
                   title="Xóa item này"
@@ -365,24 +368,24 @@
               <!-- Done items section -->
               <ng-container *ngIf="showCompletedItems">
                 <ng-container *ngFor="let item of doneItems; let i = index">
-              <tr style="background: #e8f5e8; border-bottom: 2px solid #000000; opacity: 0.8;">
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.importDate || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.nam || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.thang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.stt || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.sizePhoi || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.maTem || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.soLuongYeuCau || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000; min-width: 50px; max-width: 70px;">{{item.soLuongPhoi || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.maHang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.lenhSanXuat || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.khachHang || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 13px; font-weight: bold; color: #000000;">{{item.ngayNhanKeHoach || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.yy || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ww || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.lineNhan || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000; text-align: center;">{{ getNguoiInDisplay(item) }}</td>
-              <td class="tinh-trang-cell" style="border: 1px solid #000000; font-size: 10px; text-align: center;">
+              <tr style="background: #e8f5e8; border-bottom: 1px solid rgba(15, 23, 42, 0.10); opacity: 0.8;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.importDate || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.nam || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.thang || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.stt || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.sizePhoi || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 13px; font-weight: 700; color: #0f172a;">{{item.maTem || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.soLuongYeuCau || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a; min-width: 50px; max-width: 70px;">{{item.soLuongPhoi || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.maHang || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 13px; font-weight: 700; color: #0f172a;">{{item.lenhSanXuat || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.khachHang || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 13px; font-weight: 700; color: #0f172a;">{{item.ngayNhanKeHoach || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.yy || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.ww || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.lineNhan || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a; text-align: center;">{{ getNguoiInDisplay(item) }}</td>
+              <td class="tinh-trang-cell" style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; text-align: center;">
                 <span 
                   *ngIf="item.tinhTrang === 'Pass'"
                   class="tinh-trang-badge"
@@ -412,9 +415,9 @@
                   {{ item.tinhTrang || '—' }}
                 </span>
               </td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.banVe || '-'}}</td>
-              <td style="border: 1px solid #000000; font-size: 10px; color: #000000;">{{item.ghiChu || '-'}}</td>
-              <td style="text-align: center; border: 1px solid #000000;">
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.banVe || '-'}}</td>
+              <td style="border: 1px solid rgba(15, 23, 42, 0.10); font-size: 10px; color: #0f172a;">{{item.ghiChu || '-'}}</td>
+              <td style="text-align: center; border: 1px solid rgba(15, 23, 42, 0.10);">
                 <button 
                   (click)="printQRLabel(item)"
                   title="In tem QR"
@@ -423,7 +426,7 @@
                   🖨️ QR
                 </button>
               </td>
-              <td style="text-align: center; border: 1px solid #000000; color: #4caf50;">
+              <td style="text-align: center; border: 1px solid rgba(15, 23, 42, 0.10); color: #4caf50;">
                 ✅ Done
               </td>
               </tr>
@@ -470,10 +473,12 @@
       margin: 0;
       height: 100vh;
       overflow: hidden;
+      background: #f1f5f9;
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
     .excel-container {
-      background: white;
+      background: #f1f5f9;
       border-radius: 0;
       box-shadow: none;
       margin: 0;
@@ -484,17 +489,52 @@
     }
     
     .excel-header {
-      background: #fff7ed;
-      color: #000;
-      padding: 21px 16px;
+      background: #ffffff;
+      color: #0f172a;
+      padding: 14px 20px 12px;
       text-align: left;
       margin: 0;
-      border-bottom: 1px solid #fed7aa;
-      min-height: 63px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+      min-height: 0;
       box-sizing: border-box;
       position: relative;
       z-index: 10;
       flex-shrink: 0;
+    }
+
+    .pl-page__brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .pl-page__ico {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: rgba(15, 118, 110, 0.12);
+      color: #0f766e;
+    }
+    .pl-page__ico .material-icons { font-size: 22px; line-height: 1; }
+    .pl-page__titles { min-width: 0; }
+    .pl-page__titles h4 {
+      margin: 0;
+      padding: 0;
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #0f172a;
+      text-transform: none;
+    }
+    .pl-page__sub {
+      margin: 2px 0 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
     }
     
     .page-header {
@@ -525,14 +565,14 @@
       pointer-events: auto;
     }
     .page-title-row { display:flex; align-items:flex-start; gap: 10px; }
-    .page-title-icon { font-size: 22px; color:#2563eb; margin-top: 2px; }
+    .page-title-icon { font-size: 22px; color:#0f766e; margin-top: 2px; }
     .page-title { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
     .page-subtitle { font-size: 11px; color:#6b7280; margin-top: 2px; }
     
     .excel-actions {
-      background: #ffffff;
-      padding: 12px 16px;
-      border-bottom: 1px solid #e5e7eb;
+      background: transparent;
+      padding: 10px 20px 12px;
+      border-bottom: none;
       flex-shrink: 0;
     }
     
@@ -569,19 +609,19 @@
     
     .custom-btn {
       background: #fff;
-      border: 1px solid #e5e7eb;
-      color: #111827;
-      padding: 7px 12px;
-      border-radius: 6px;
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      color: #334155;
+      padding: 0 12px;
+      border-radius: 9px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       transition: background 0.15s ease, border-color 0.15s ease;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-weight: 400;
+      font-weight: 700;
       box-shadow: none;
-      text-transform: uppercase;
+      text-transform: none;
       white-space: nowrap;
       flex: 0 0 auto;
       height: 34px;
@@ -589,51 +629,53 @@
     }
 
     .btn-more {
-      background: #2563eb;
-      color: #fff;
-      border-color: #2563eb;
-      padding: 7px 12px;
-      border-radius: 6px;
-      text-transform: uppercase;
+      background: #fff;
+      color: #334155;
+      border-color: rgba(15, 23, 42, 0.10);
+      padding: 0 12px;
+      border-radius: 9px;
+      text-transform: none;
     }
-    .btn-more .material-icons { color:#fff; font-size: 18px; }
+    .btn-more .material-icons { color:#64748b; font-size: 18px; }
     .btn-more .caret { font-size: 18px; margin-left: -2px; }
-    .btn-more:hover { background:#1d4ed8; border-color:#1d4ed8; }
+    .btn-more:hover { background:#f8fafc; border-color:#cbd5e1; color:#0f172a; }
+    .btn-more:hover .material-icons { color:#0f172a; }
     
     .custom-btn:hover {
-      background: #f9fafb;
-      border-color: #d1d5db;
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #0f172a;
     }
     
     .custom-btn.active {
-      background: #eef2ff;
-      color: #111827;
-      border-color: #c7d2fe;
+      background: rgba(15, 118, 110, 0.10);
+      color: #0f766e;
+      border-color: rgba(15, 118, 110, 0.28);
     }
 
     .custom-btn--iqc {
       background: #ffffff;
-      border-color: #e5e7eb;
-      color: #111827;
-      text-transform: uppercase;
+      border-color: rgba(15, 23, 42, 0.10);
+      color: #334155;
+      text-transform: none;
     }
 
     .custom-btn--print {
-      background: #2563eb;
-      border-color: #2563eb;
+      background: #0f766e;
+      border-color: #0f766e;
       color: #ffffff;
-      padding: 7px 12px;
+      padding: 0 12px;
     }
     .custom-btn--print i { color:#fff; }
-    .custom-btn--print:hover { background:#1d4ed8; border-color:#1d4ed8; }
+    .custom-btn--print:hover { background:#0d9488; border-color:#0d9488; }
 
     .custom-btn--menu {
       background: #ffffff;
-      border-color: #e5e7eb;
-      color: #111827;
+      border-color: rgba(15, 23, 42, 0.10);
+      color: #334155;
       text-transform: none;
     }
-    .custom-btn--menu .material-icons { font-size: 18px; }
+    .custom-btn--menu .material-icons { font-size: 18px; color: #64748b; }
     
     .dropdown-toggle::after {
       content: '';
@@ -694,34 +736,42 @@
       position: relative;
       display: flex;
       align-items: center;
-      flex: 1 1 140px;
-      min-width: 120px;
-      max-width: 220px;
+      flex: 1 1 220px;
+      min-width: 180px;
+      max-width: 420px;
+      height: 34px;
+      padding: 0 8px 0 10px;
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      border-radius: 999px;
+      background: #fff;
     }
 
     .search-wrap input {
       width: 100%;
-      padding-right: 30px !important;
-      height: 34px;
-      border-radius: 6px;
-      border: 1px solid #e5e7eb;
-      font-size: 12px;
+      padding-right: 4px !important;
+      padding-left: 4px !important;
+      height: 32px;
+      border-radius: 999px;
+      border: none;
+      outline: none;
+      font-size: 13px;
       text-transform: none;
       box-sizing: border-box;
+      background: transparent;
     }
     .search-ico {
-      position:absolute;
-      right: 8px;
+      position: static;
       font-size: 18px;
-      color:#9ca3af;
-      pointer-events:none;
+      color: #94a3b8;
+      pointer-events: none;
+      margin-right: 4px;
     }
 
     .icon-btn {
       width: 34px;
       height: 34px;
-      border-radius: 6px;
-      border: 1px solid #e5e7eb;
+      border-radius: 9px;
+      border: 1px solid rgba(15, 23, 42, 0.10);
       background: #ffffff;
       display: inline-flex;
       align-items: center;
@@ -732,9 +782,11 @@
       padding: 0;
       box-sizing: border-box;
     }
-    .icon-btn i { font-size: 18px; color:#111827; }
-    .icon-btn:hover { background:#f9fafb; border-color:#d1d5db; }
-    .icon-btn.active { background:#eef2ff; border-color:#c7d2fe; }
+    .icon-btn i { font-size: 18px; color:#64748b; }
+    .icon-btn:hover { background:#f8fafc; border-color:#cbd5e1; }
+    .icon-btn:hover i { color:#0f172a; }
+    .icon-btn.active { background: rgba(15, 118, 110, 0.10); border-color: rgba(15, 118, 110, 0.28); }
+    .icon-btn.active i { color: #0f766e; }
     
     .search-input-uppercase {
       width: 100%;
@@ -752,11 +804,11 @@
     }
 
     .more-popup-header {
-      background: #f5f1e6;
-      color: #000;
-      border-bottom: 1px solid #e5e7eb;
-      padding: 14px 16px;
-      border-radius: 14px 14px 0 0;
+      background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 18px 20px;
+      border-radius: 16px 16px 0 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -764,10 +816,10 @@
 
     .more-popup-title {
       margin: 0;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 14px;
+      font-weight: 700;
+      text-transform: none;
+      letter-spacing: -0.01em;
+      font-size: 17px;
     }
 
     .more-popup-header .close-btn {
@@ -777,7 +829,7 @@
       width: 36px;
       height: 36px;
       border-radius: 10px;
-      color: #000;
+      color: #64748b;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -803,14 +855,15 @@
     }
     
     .excel-body {
-      padding: 16px;
+      padding: 16px 20px 28px;
       text-align: center;
-      padding-bottom: 16px;
+      padding-bottom: 28px;
       flex: 1 1 auto;
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: auto;
+      background: #f1f5f9;
     }
 
     .print-label-data-pane {
@@ -830,8 +883,10 @@
       height: auto;
       overflow-x: auto;
       overflow-y: visible;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
     }
     
     .excel-table {
@@ -847,12 +902,12 @@
     }
     
     .excel-table th {
-      background: #fff7ed;
-      padding: 13.5px 9px;
+      background: #f8fafc;
+      padding: 12px 9px;
       text-align: center;
-      font-weight: 400;
-      color: #111827;
-      border: 1px solid #fed7aa !important;
+      font-weight: 700;
+      color: #64748b !important;
+      border: 1px solid rgba(15, 23, 42, 0.08) !important;
       position: sticky;
       top: 0;
       z-index: 10;
@@ -876,21 +931,22 @@
     }
     
     .excel-table tbody tr:hover {
-      background-color: #f5f1e6 !important;
+      background-color: #f8fafc !important;
     }
 
     .stat-card {
-      background: #ffffff;
-      border: 1px solid #e5e7eb;
-      color: #111827;
-      padding: 6px 8px;
-      border-radius: 9px;
+      background: #f8fafc;
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      color: #64748b;
+      padding: 0 12px;
+      border-radius: 999px;
       cursor: pointer;
       box-shadow: none;
       display: inline-flex;
       gap: 8px;
       align-items: center;
-      min-width: 88px;
+      min-width: 0;
+      height: 36px;
       justify-content: flex-start;
       transition: background 0.15s ease, border-color 0.15s ease;
       text-transform: none;
@@ -901,16 +957,17 @@
     }
 
     .logged-in-user-card {
-      background: #ffffff;
-      border: 1px solid #fed7aa;
-      color: #111827;
-      padding: 6px 8px;
-      border-radius: 9px;
+      background: rgba(15, 118, 110, 0.10);
+      border: 1px solid rgba(15, 118, 110, 0.28);
+      color: #0f766e;
+      padding: 0 12px;
+      border-radius: 999px;
       box-shadow: none;
       display: inline-flex;
       gap: 8px;
       align-items: center;
-      min-width: 96px;
+      min-width: 0;
+      height: 36px;
       justify-content: flex-start;
       flex: 0 0 auto;
       position: relative;
@@ -919,18 +976,19 @@
     }
 
     .logged-in-user-icon {
-      background: #ffedd5;
-      color: #c2410c;
+      background: rgba(15, 118, 110, 0.16);
+      color: #0f766e;
     }
 
     .stat-card:hover {
-      background: #f9fafb;
-      border-color: #d1d5db;
+      background: #fff;
+      border-color: #cbd5e1;
     }
 
     .stat-card.active {
-      background: #eef2ff;
-      border-color: #c7d2fe;
+      background: rgba(15, 118, 110, 0.12);
+      border-color: rgba(15, 118, 110, 0.35);
+      color: #0f766e;
     }
 
     .stat-icon {
@@ -970,16 +1028,17 @@
     }
 
     .stat-card--total .stat-icon {
-      background: #ecfeff;
+      background: rgba(15, 118, 110, 0.12);
+      color: #0f766e;
     }
 
     /* Pagination (bấm chuyển trang) */
     .pagination-card{
       margin-top: 0;
       background: #ffffff;
-      border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
       padding: 10px 12px;
       display:flex;
       align-items:center;
@@ -1016,17 +1075,17 @@
       margin-left: auto;
     }
     .page-btn{
-      width: 36px;
-      height: 36px;
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      border: 1px solid rgba(15, 23, 42, 0.10);
       background: #ffffff;
       cursor:pointer;
-      transition: all 0.2s ease;
+      transition: background 0.15s ease, border-color 0.15s ease;
       font-weight: 700;
       color: #0f172a;
     }
-    .page-btn:hover{ background:#f9fafb; transform: translateY(-1px); }
+    .page-btn:hover{ background:#f8fafc; border-color:#cbd5e1; }
     .page-btn:disabled{ opacity: 0.5; cursor: not-allowed; transform: none; }
     .page-meta{
       color: #64748b;
@@ -1345,9 +1404,9 @@
         <button 
           class="download-option-btn" 
           (click)="downloadAllHistory()"
-          style="background: #2196F3; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; display: flex; align-items: center; gap: 10px;"
-          onmouseover="this.style.background='#1976D2'; this.style.transform='scale(1.02)'"
-          onmouseout="this.style.background='#2196F3'; this.style.transform='scale(1)'">
+          style="background: #0f766e; color: white; padding: 12px 20px; border: none; border-radius: 9px; cursor: pointer; font-size: 14px; font-weight: 700; transition: background 0.15s ease; display: flex; align-items: center; gap: 10px;"
+          onmouseover="this.style.background='#0d9488'"
+          onmouseout="this.style.background='#0f766e'">
           <i class="material-icons">cloud_download</i>
           <span>Tải toàn bộ lịch sử</span>
         </button>
@@ -1355,9 +1414,9 @@
         <button 
           class="download-option-btn" 
           (click)="downloadFilteredHistory()"
-          style="background: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s ease; display: flex; align-items: center; gap: 10px;"
-          onmouseover="this.style.background='#45a049'; this.style.transform='scale(1.02)'"
-          onmouseout="this.style.background='#4CAF50'; this.style.transform='scale(1)'">
+          style="background: #ffffff; color: #0f172a; padding: 12px 20px; border: 1px solid rgba(15, 23, 42, 0.10); border-radius: 9px; cursor: pointer; font-size: 14px; font-weight: 700; transition: background 0.15s ease; display: flex; align-items: center; gap: 10px;"
+          onmouseover="this.style.background='#f8fafc'"
+          onmouseout="this.style.background='#ffffff'">
           <i class="material-icons">filter_list</i>
           <span>Tải theo bộ lọc hiện tại</span>
           <span *ngIf="currentStatusFilter" style="font-size: 12px; opacity: 0.9; margin-left: auto;">

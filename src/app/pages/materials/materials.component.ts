@@ -463,6 +463,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return docs;
   }
 
+  private yieldUi(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
   /** Bỏ cache KK — gọi sau khi tick/bỏ tick KK hàng loạt hoặc khi người dùng bấm "Làm mới". */
   private invalidateKkInvSnapCache(factory?: string): void {
     if (factory) {
@@ -5600,7 +5604,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
-    void this.loadKkCatalogForMap();
+    setTimeout(() => void this.loadKkCatalogForMap(), 0);
   }
 
   closeKkLocMap(): void {
@@ -8612,7 +8616,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.kkLocMapRowCache.clear();
       const byLoc = new Map<string, Map<string, { rows: number; kk: number }>>();
-      for (const doc of snap?.docs || []) {
+      const locDocs = snap?.docs || [];
+      for (let i = 0; i < locDocs.length; i++) {
+        if (i > 0 && i % 400 === 0) {
+          await this.yieldUi();
+          if (loadId !== this.kkLocMapLoadId) return;
+        }
+        const doc = locDocs[i];
         const data = doc.data() as any;
         if (this.stockFromInventoryDoc(data) <= 0) continue;
         const code = String(data.materialCode || '').trim().toUpperCase();
@@ -8693,7 +8703,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         checked: number;
         totalLines: number;
       }>();
-      for (const doc of snap?.docs || []) {
+      const matDocs = snap?.docs || [];
+      for (let i = 0; i < matDocs.length; i++) {
+        if (i > 0 && i % 400 === 0) {
+          await this.yieldUi();
+          if (loadId !== this.kkLocMapLoadId) return;
+        }
+        const doc = matDocs[i];
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;
@@ -8821,7 +8837,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         checked: number;
         totalLines: number;
       }>();
-      for (const doc of snap?.docs || []) {
+      const typeDocs = snap?.docs || [];
+      for (let i = 0; i < typeDocs.length; i++) {
+        if (i > 0 && i % 400 === 0) {
+          await this.yieldUi();
+          if (loadId !== this.kkLocMapLoadId) return;
+        }
+        const doc = typeDocs[i];
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;

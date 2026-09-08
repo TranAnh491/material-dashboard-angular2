@@ -205,7 +205,11 @@
           (pointermove)="onViewportPointerMove($event)"
           (pointerup)="onViewportPointerUp()"
           (pointercancel)="onViewportPointerUp()">
-          <div class="jw-zoom-space" [style.width.px]="viewBoxW * zoom" [style.height.px]="viewBoxH * zoom">
+          <div class="jw-plan-loading" *ngIf="!planReady">
+            <i class="material-icons rotating">sync</i>
+            {{ lang === 'vi' ? 'Đang tải sơ đồ…' : 'Loading plan…' }}
+          </div>
+          <div class="jw-zoom-space" *ngIf="planReady" [style.width.px]="viewBoxW * zoom" [style.height.px]="viewBoxH * zoom">
               <svg
                 #planSvg
                 class="jw-svg"
@@ -398,7 +402,7 @@
                 </g>
 
                 <!-- Kệ kho J4 — giống bố trí kệ J5, chỉ hiển thị hình ảnh (chưa gán pallet) — chỉ hiện ở Bản vẽ Đăng ký -->
-                <g class="jw-j4-racks" *ngIf="drawMode === 'dang-ky' && showDefaultAisles" aria-hidden="true">
+                <g class="jw-j4-racks" *ngIf="racksReady && drawMode === 'dang-ky' && showDefaultAisles" aria-hidden="true">
                   <rect
                     *ngFor="let g of pairGaps"
                     class="jw-pair-gap"
@@ -440,7 +444,7 @@
 
                       <ng-container *ngIf="blockPalletAlongX(block); else j4PalletLinesY">
                         <line
-                          *ngFor="let p of [1, 2]"
+                          *ngFor="let p of palletLineIdx"
                           class="jw-block__pos-line"
                           [attr.x1]="meterX(block.xM + p * blockPalletStep(block))"
                           [attr.y1]="j4MirrorY(block.yM)"
@@ -449,7 +453,7 @@
                       </ng-container>
                       <ng-template #j4PalletLinesY>
                         <line
-                          *ngFor="let p of [1, 2]"
+                          *ngFor="let p of palletLineIdx"
                           class="jw-block__pos-line"
                           [attr.x1]="meterX(block.xM)"
                           [attr.y1]="j4MirrorY(block.yM + p * blockPalletStep(block))"
@@ -462,9 +466,9 @@
                         [attr.x]="meterX(block.xM + block.wM / 2)"
                         [attr.y]="j4MirrorY(block.yM + block.hM / 2)">
                         <tspan
-                          *ngFor="let line of blockLabelLines(block.code); let i = index"
+                          *ngFor="let line of blockLabelLines(block.code); let i = index; let count = count"
                           [attr.x]="meterX(block.xM + block.wM / 2)"
-                          [attr.dy]="i === 0 ? (-(blockLabelLines(block.code).length - 1) * 0.45 + 'em') : '1.05em'">
+                          [attr.dy]="i === 0 ? (-(count - 1) * 0.45 + 'em') : '1.05em'">
                           {{ line }}
                         </tspan>
                       </text>
@@ -622,9 +626,9 @@
               <g class="jw-floor-zone" aria-hidden="true">
                 <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
                   <rect
+                    *ngIf="!isKhoMatDashedBox(z)"
                     class="jw-floor-zone__body"
                     [class.jw-floor-zone__body--no-stroke]="isKhoMatBandFloorZone(z)"
-                    [class.jw-floor-zone__body--esd]="z.id === 'kho-esd'"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -744,8 +748,21 @@
                 </g>
               </g>
 
+              <!-- Hóa chất / ESD / in tem — viền gạch đứt, vẽ sau phòng để không bị che -->
+              <g class="jw-floor-zone" aria-hidden="true">
+                <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
+                  <rect
+                    *ngIf="isKhoMatDashedBox(z)"
+                    class="jw-floor-zone__body"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="meterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="meterH(z.hM)" />
+                </g>
+              </g>
+
               <!-- Kệ trong Kho mát: 7 tầng, không chia A/B/C — ẩn trên bản vẽ kỹ thuật -->
-              <g class="jw-kho-mat" *ngIf="khoMatRows.length && !showTechDims">
+              <g class="jw-kho-mat" *ngIf="racksReady && khoMatRows.length && !showTechDims">
                 <g *ngFor="let row of khoMatRows; trackBy: trackKhoMatRow">
                   <rect
                     class="jw-kho-mat__row"
@@ -935,8 +952,8 @@
                 </text>
               </g>
 
-              <g class="jw-aisles" *ngIf="showDefaultAisles" aria-hidden="true">
-                <!-- Khe 0.3m giữa R lẻ | R chẵn — nền trắng -->
+              <g class="jw-aisles" *ngIf="racksReady && showDefaultAisles" aria-hidden="true">
+                <!-- Khe 0.4m giữa R lẻ | R chẵn — nền trắng -->
                 <rect
                   *ngFor="let g of pairGaps"
                   class="jw-pair-gap"
@@ -963,6 +980,7 @@
                   [attr.height]="meterH(a.hM)" />
               </g>
 
+              <g *ngIf="racksReady">
               <g *ngFor="let rack of racks; trackBy: trackRack">
                 <rect
                   class="jw-rack-outline"
@@ -988,7 +1006,7 @@
 
                   <ng-container *ngIf="blockPalletAlongX(block); else palletLinesY">
                     <line
-                      *ngFor="let p of [1, 2]"
+                      *ngFor="let p of palletLineIdx"
                       class="jw-block__pos-line"
                       [attr.x1]="meterX(block.xM + p * blockPalletStep(block))"
                       [attr.y1]="meterY(block.yM)"
@@ -997,7 +1015,7 @@
                   </ng-container>
                   <ng-template #palletLinesY>
                     <line
-                      *ngFor="let p of [1, 2]"
+                      *ngFor="let p of palletLineIdx"
                       class="jw-block__pos-line"
                       [attr.x1]="meterX(block.xM)"
                       [attr.y1]="meterY(block.yM + p * blockPalletStep(block))"
@@ -1010,13 +1028,14 @@
                     [attr.x]="meterX(block.xM + block.wM / 2)"
                     [attr.y]="meterY(block.yM + block.hM / 2)">
                     <tspan
-                      *ngFor="let line of blockLabelLines(block.code); let i = index"
+                      *ngFor="let line of blockLabelLines(block.code); let i = index; let count = count"
                       [attr.x]="meterX(block.xM + block.wM / 2)"
-                      [attr.dy]="i === 0 ? (-(blockLabelLines(block.code).length - 1) * 0.45 + 'em') : '1.05em'">
+                      [attr.dy]="i === 0 ? (-(count - 1) * 0.45 + 'em') : '1.05em'">
                       {{ line }}
                     </tspan>
                   </text>
                 </g>
+              </g>
               </g>
 
               <!-- Lưới trục Y (cạnh B): đường canh + chấm/số ngoài layout -->
@@ -1153,11 +1172,10 @@
                   <ng-container *ngIf="!(showTechDims && z.id === 'shipping-area')">
                     <text
                       class="jw-floor-zone__label"
-                      [class.jw-floor-zone__label--band]="z.id === 'kho-esd'"
-                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat'"
+                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat' || isKhoMatSideBox(z)"
                       *ngFor="let line of z.labelLines; let i = index"
                       [attr.x]="meterX(floorZoneLabelXM(z))"
-                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * (z.id === 'kho-hoa-chat' ? 8.4 : 14)"
+                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * ((z.id === 'kho-hoa-chat' || isKhoMatSideBox(z)) ? 8.4 : 14)"
                       [attr.transform]="floorZoneLabelRotate(z)
                         ? ('rotate(-90 ' + meterX(floorZoneLabelXM(z)) + ' ' + meterY(floorZoneLabelYM(z)) + ')')
                         : null">
@@ -1166,7 +1184,7 @@
                   </ng-container>
                   <text
                     class="jw-floor-zone__meta"
-                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'kho-hoa-chat' && z.id !== 'kho-esd' && z.id !== 'shipping-area' && !showTechDims"
+                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'kho-hoa-chat' && z.id !== 'kho-esd' && z.id !== 'khu-in-tem' && z.id !== 'shipping-area' && !showTechDims"
                     [attr.x]="meterX(floorZoneLabelXM(z))"
                     [attr.y]="meterY(floorZoneLabelYM(z)) + 9 + (z.labelLines.length - 1) * 10">
                     {{ z.wM | number:'1.0-3' }} × {{ z.hM | number:'1.0-2' }} m

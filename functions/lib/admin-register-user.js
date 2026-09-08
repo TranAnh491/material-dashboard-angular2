@@ -105,14 +105,36 @@ async function sendNewRegistrationWarehouseNotify(params) {
     const port = parseInt(params_config_1.emailSmtpPort.value().trim() || '587', 10) || 587;
     const fromRaw = params_config_1.emailFrom.value().trim();
     const from = fromRaw || user;
-    const { employeeId, department, registrantEmail, fullName } = params;
+    const { employeeId, department, registrantEmail, fullName, password, passwordEmail } = params;
     const to = WAREHOUSE_NOTIFY_NEW_REGISTRATION;
-    const subject = `[Warehouse] Đăng ký tài khoản mới — ${employeeId}`;
+    let mailStatusText;
+    let mailStatusHtml;
+    let subjectPrefix = '';
+    if (!passwordEmail) {
+        mailStatusText = 'Gửi email mật khẩu: KHÔNG (admin tạo trực tiếp, không có email nhân viên).';
+        mailStatusHtml = 'KHÔNG — admin tạo trực tiếp, không có email nhân viên.';
+    }
+    else if (passwordEmail.sent) {
+        mailStatusText = `Gửi email mật khẩu: ĐÃ GỬI tới ${passwordEmail.to} — ${passwordEmail.detail}`;
+        mailStatusHtml = `<span style="color:#137333">✅ ĐÃ GỬI</span> tới <strong>${esc(passwordEmail.to)}</strong> — ${esc(passwordEmail.detail)}`;
+    }
+    else {
+        subjectPrefix = '⚠️ CHƯA gửi được mật khẩu — ';
+        mailStatusText =
+            `Gửi email mật khẩu: THẤT BẠI tới ${passwordEmail.to} — ${passwordEmail.detail}\n` +
+                `=> Cần gửi lại mật khẩu cho nhân viên thủ công (mật khẩu ở dòng trên).`;
+        mailStatusHtml =
+            `<span style="color:#c5221f">⚠️ THẤT BẠI</span> tới <strong>${esc(passwordEmail.to)}</strong> — ${esc(passwordEmail.detail)}` +
+                `<br/><strong>Cần gửi lại mật khẩu cho nhân viên thủ công.</strong>`;
+    }
+    const subject = `[Warehouse] ${subjectPrefix}Đăng ký tài khoản mới — ${employeeId}`;
     const text = `Có tài khoản mới được đăng ký.\n\n` +
         `ID đăng nhập (ASP): ${employeeId}\n` +
         `Họ tên: ${fullName || '-'}\n` +
         `Bộ phận: ${department || '-'}\n` +
-        `Email nhận mật khẩu: ${registrantEmail}\n`;
+        `Email nhận mật khẩu: ${registrantEmail}\n` +
+        `Mật khẩu (6 số): ${password || '-'}\n` +
+        `${mailStatusText}\n`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p>Có tài khoản mới được đăng ký.</p>
 <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px" cellpadding="8" border="1">
@@ -120,8 +142,10 @@ async function sendNewRegistrationWarehouseNotify(params) {
 <tr><td>Họ tên</td><td>${esc(fullName || '-')}</td></tr>
 <tr><td>Bộ phận</td><td>${esc(department || '-')}</td></tr>
 <tr><td>Email nhận mật khẩu</td><td>${esc(registrantEmail)}</td></tr>
+<tr><td>Mật khẩu (6 số)</td><td><strong>${esc(password || '-')}</strong></td></tr>
+<tr><td>Gửi email mật khẩu</td><td>${mailStatusHtml}</td></tr>
 </table>
-<p style="color:#555;font-size:12px">Gửi tự động từ hệ thống Warehouse.</p>
+<p style="color:#555;font-size:12px">Gửi tự động từ hệ thống Warehouse. Email nội bộ — không chuyển tiếp ra ngoài.</p>
 </body></html>`;
     const transporter = nodemailer.createTransport({
         host,
@@ -149,6 +173,17 @@ async function sendRegistrationEmail(params) {
     const from = fromRaw || user;
     const { to, employeeId, password, department, fullName } = params;
     const subject = `[Warehouse] Tài khoản đăng ký — ${employeeId}`;
+    const botUrl = params_config_1.zaloBotAddUrl.value().trim();
+    const zaloOpenLineText = botUrl
+        ? `1. Mở chat với Zalo bot kho: ${botUrl}\n`
+        : `1. Mở chat với Zalo bot kho (liên hệ quản trị viên để lấy link).\n`;
+    const zaloText = `\nNhận thông báo & OTP qua Zalo (nên làm):\n` +
+        zaloOpenLineText +
+        `2. Nhắn bot đúng một tin: ${employeeId}\n` +
+        `Bot sẽ trả lời "Đã liên kết thành công" là xong. Từ đó bạn nhận OTP và thông báo kho qua Zalo.\n`;
+    const zaloOpenLineHtml = botUrl
+        ? `<li>Mở chat với Zalo bot kho: <a href="${esc(botUrl)}">${esc(botUrl)}</a></li>`
+        : `<li>Mở chat với Zalo bot kho (liên hệ quản trị viên để lấy link).</li>`;
     const text = `Xin chào,\n\n` +
         `Tài khoản ứng dụng kho đã được tạo.\n\n` +
         `Họ tên: ${fullName}\n` +
@@ -156,7 +191,8 @@ async function sendRegistrationEmail(params) {
         `Bộ phận: ${department || '-'}\n` +
         `Email này chỉ dùng để nhận thông tin (không nhập ở màn hình đăng nhập): ${to}\n` +
         `Mật khẩu (6 số): ${password}\n\n` +
-        `Đăng nhập app: nhập ID ${employeeId} và mật khẩu ở trên (không dùng email để đăng nhập).\n`;
+        `Đăng nhập app: nhập ID ${employeeId} và mật khẩu ở trên (không dùng email để đăng nhập).\n` +
+        zaloText;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p>Xin chào,</p>
 <p>Tài khoản ứng dụng kho đã được tạo.</p>
@@ -168,6 +204,12 @@ async function sendRegistrationEmail(params) {
 <tr><td>Mật khẩu (6 số)</td><td><strong>${esc(password)}</strong></td></tr>
 </table>
 <p><strong>Đăng nhập app:</strong> nhập ID <strong>${esc(employeeId)}</strong> và mật khẩu ở trên — <em>không</em> dùng email ở màn hình đăng nhập.</p>
+<p><strong>Nhận thông báo &amp; OTP qua Zalo</strong> (nên làm):</p>
+<ol style="font-family:sans-serif;font-size:14px">
+${zaloOpenLineHtml}
+<li>Nhắn bot đúng một tin: <strong>${esc(employeeId)}</strong></li>
+</ol>
+<p style="font-family:sans-serif;font-size:14px">Bot trả lời <em>"Đã liên kết thành công"</em> là xong.</p>
 <p style="color:#555;font-size:12px">Gửi tự động từ hệ thống Warehouse.</p>
 </body></html>`;
     const transporter = nodemailer.createTransport({
@@ -176,13 +218,18 @@ async function sendRegistrationEmail(params) {
         secure: port === 465,
         auth: { user, pass }
     });
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
         from,
         to,
         subject: subject.slice(0, 250),
         text,
         html
     });
+    return {
+        accepted: (info.accepted || []).map((x) => String(x)),
+        rejected: (info.rejected || []).map((x) => String(x)),
+        messageId: String(info.messageId || '')
+    };
 }
 /**
  * Tạo user Auth + Firestore, mật khẩu 6 số, gửi email (dùng chọn cho admin và đăng ký công khai).
@@ -209,25 +256,34 @@ async function createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw,
     }
     const password = generateSixDigitPassword();
     const uid = await createAspUserCore({ employeeId, fullName, department, email, password });
-    await sendRegistrationEmail({
-        to: email,
-        employeeId,
-        password,
-        department,
-        fullName
-    });
+    // Gửi email mật khẩu cho nhân viên — KHÔNG throw nếu SMTP lỗi (tài khoản đã tạo xong).
+    // Trạng thái gửi được báo về email kho + trả về cho client.
+    let passwordEmail;
+    try {
+        const info = await sendRegistrationEmail({ to: email, employeeId, password, department, fullName });
+        const accepted = info.accepted.includes(email) || info.accepted.length > 0;
+        passwordEmail = accepted
+            ? { sent: true, to: email, detail: `SMTP nhận lúc ${new Date().toISOString()} (messageId ${info.messageId || '-'})` }
+            : { sent: false, to: email, detail: `SMTP từ chối (rejected: ${info.rejected.join(', ') || 'không rõ'})` };
+    }
+    catch (e) {
+        console.error('sendRegistrationEmail failed', e);
+        passwordEmail = { sent: false, to: email, detail: `Lỗi SMTP: ${e instanceof Error ? e.message : String(e)}` };
+    }
     try {
         await sendNewRegistrationWarehouseNotify({
             employeeId,
             department,
             registrantEmail: email,
-            fullName
+            fullName,
+            password,
+            passwordEmail
         });
     }
     catch (e) {
         console.error('sendNewRegistrationWarehouseNotify failed', e);
     }
-    return { uid, email, employeeId };
+    return { uid, email, employeeId, passwordEmailSent: passwordEmail.sent, passwordEmailTo: email };
 }
 /**
  * Giải phóng email trước khi đăng ký mới:
@@ -336,6 +392,16 @@ async function createAspUserCore(params) {
         createdAt: new Date(),
         updatedAt: new Date()
     }, { merge: true });
+    // Chào mừng qua Zalo — chỉ khi nhân viên đã liên kết bot từ trước (best-effort).
+    try {
+        const { sendZaloToEmployee } = await Promise.resolve().then(() => __importStar(require('./zalo-notify.util')));
+        await sendZaloToEmployee(employeeId, `👋 Chào ${fullName}!\n` +
+            `Tài khoản kho ${employeeId} đã được tạo. Mật khẩu đã gửi vào email của bạn.\n` +
+            `Từ giờ bạn sẽ nhận OTP và thông báo kho qua Zalo tại đây.`);
+    }
+    catch (e) {
+        console.error('welcome zalo failed', e);
+    }
     return uid;
 }
 /**
@@ -362,7 +428,8 @@ async function createAspUserWithoutEmail(employeeIdRaw, departmentRaw, fullNameR
             employeeId,
             department,
             registrantEmail: '(không có — admin tạo trực tiếp)',
-            fullName
+            fullName,
+            password
         });
     }
     catch (e) {

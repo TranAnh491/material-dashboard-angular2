@@ -1,3 +1,90 @@
+// Print Label — cùng tone với tab Materials (KK)
+:host {
+  display: block;
+  background: #f1f5f9;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.pl-page {
+  --pl-bg: #f1f5f9;
+  --pl-surface: #ffffff;
+  --pl-text: #0f172a;
+  --pl-muted: #64748b;
+  --pl-border: rgba(15, 23, 42, 0.10);
+  --pl-accent: #0f766e;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--pl-text);
+
+  &.excel-container {
+    background: var(--pl-bg);
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+  }
+
+  .excel-header,
+  .pl-page__head {
+    background: var(--pl-surface);
+    border-bottom: 1px solid var(--pl-border);
+  }
+
+  .excel-header h4 {
+    font-size: 17px;
+    font-weight: 800 !important;
+    color: var(--pl-text) !important;
+    text-transform: none !important;
+  }
+
+  .custom-btn,
+  .icon-btn,
+  .btn-more {
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid var(--pl-border);
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .custom-btn--print {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+  }
+
+  .excel-table thead th {
+    background: #f8fafc !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    border-color: rgba(15, 23, 42, 0.08) !important;
+  }
+
+  .excel-table td {
+    border-color: rgba(15, 23, 42, 0.10) !important;
+    color: #0f172a;
+  }
+}
+
+.more-popup-content {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+}
+
+.more-popup-header {
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  color: #0f172a;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.more-popup-title {
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-size: 17px;
+  color: #0f172a;
+}
+
 // Print Label Component - Simplified CSS
 .print-label-container {
   padding: 20px;
@@ -15,26 +102,26 @@
 
   // CSS MẠNH NHẤT - Ghi đè tất cả
   * {
-    font-family: Arial, sans-serif !important;
+    font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
   }
 
-  /* UI đơn sắc: trắng/đen/be — không đậm, không đổ bóng */
+  /* UI Materials: slate + teal */
   .excel-actions {
-    background: #ffffff !important;
-    border-bottom: 1px solid #e5e7eb !important;
+    background: transparent !important;
+    border-bottom: none !important;
   }
 
   .excel-header h4 {
-    font-weight: 400 !important;
-    text-transform: uppercase !important;
+    font-weight: 800 !important;
+    text-transform: none !important;
   }
 
   .excel-table thead th {
-    font-weight: 400 !important;
+    font-weight: 700 !important;
     text-transform: uppercase !important;
-    background: #fff7ed !important;
-    padding: 13.5px 9px !important;
-    border-color: #fed7aa !important;
+    background: #f8fafc !important;
+    padding: 12px 9px !important;
+    border-color: rgba(15, 23, 42, 0.08) !important;
   }
 
   /* Override tất cả shadow / bold do inline style */
@@ -54,16 +141,16 @@
 
   // Excel header styling
   .excel-header {
-    background: #fff7ed !important;
-    border-bottom: 1px solid #fed7aa !important;
-    padding: 21px 24px;
+    background: #ffffff !important;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.10) !important;
+    padding: 14px 20px 12px;
     
     h4 {
       margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #000000 !important;
-      font-family: Arial, sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a !important;
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -81,9 +168,9 @@
         text-overflow: ellipsis !important;
         font-weight: bold !important;
           font-size: 10px !important;
-        color: #000000 !important;
-        background: #f9fafb !important;
-        border: 1px solid #e5e7eb !important;
+        color: #64748b !important;
+        background: #f8fafc !important;
+        border: 1px solid rgba(15, 23, 42, 0.08) !important;
         padding: 8px 4px !important;
         text-align: center !important;
         vertical-align: middle !important;
@@ -463,10 +550,10 @@ html .print-label-container,
 .print-label-container {
   .excel-header {
     background: #ffffff !important;
-    border-bottom: 2px solid #000000 !important;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.10) !important;
     
     h4 {
-      color: #000000 !important;
+      color: #0f172a !important;
     }
   }
 
@@ -590,27 +677,34 @@ html .print-label-container,
   min-height: 100vh !important;
 }
 
-// FORCE ALL TEXT IN TABLE TO BE BLACK
+// Table text — slate như Materials (không ép đen)
 :host ::ng-deep table,
 :host ::ng-deep table *,
 :host ::ng-deep table td,
-:host ::ng-deep table th,
 :host ::ng-deep table tr,
 :host ::ng-deep table td *,
-:host ::ng-deep table th *,
 :host ::ng-deep table tr *,
 :host ::ng-deep .schedules-table,
 :host ::ng-deep .schedules-table *,
 :host ::ng-deep .schedules-table td,
-:host ::ng-deep .schedules-table th,
 :host ::ng-deep .schedules-table tr,
 :host ::ng-deep .schedules-table td *,
-:host ::ng-deep .schedules-table th *,
 :host ::ng-deep .schedules-table tr * {
-  color: #000000 !important;
+  color: #0f172a !important;
 }
 
-// Force all form elements in table to have black text
+:host ::ng-deep table th,
+:host ::ng-deep table th *,
+:host ::ng-deep .schedules-table th,
+:host ::ng-deep .schedules-table th * {
+  color: #64748b !important;
+}
+
+:host ::ng-deep table th,
+:host ::ng-deep table td {
+  border-color: rgba(15, 23, 42, 0.10) !important;
+}
+
 :host ::ng-deep table input,
 :host ::ng-deep table select,
 :host ::ng-deep table textarea,
@@ -619,16 +713,12 @@ html .print-label-container,
 :host ::ng-deep .schedules-table select,
 :host ::ng-deep .schedules-table textarea,
 :host ::ng-deep .schedules-table button {
-  color: #000000 !important;
+  color: #0f172a !important;
 }
 
-// Force all spans and divs in table to have black text
-:host ::ng-deep table span,
-:host ::ng-deep table div,
-:host ::ng-deep .schedules-table span,
-:host ::ng-deep .schedules-table div {
-  color: #000000 !important;
-}
+:host ::ng-deep .due-future { color: #2563eb !important; }
+:host ::ng-deep .due-today { color: #f59e0b !important; }
+:host ::ng-deep .due-overdue { color: #ef4444 !important; }
 
 // ==================== MODAL STYLES ====================
 
@@ -655,10 +745,11 @@ html .print-label-container,
   overflow-y: auto;
   
   .dialog-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    color: #0f172a;
     padding: 20px;
     border-radius: 12px 12px 0 0;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.10);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -672,7 +763,7 @@ html .print-label-container,
     .close-btn {
       background: transparent;
       border: none;
-      color: white;
+      color: #64748b;
       cursor: pointer;
       padding: 4px;
       display: flex;
@@ -682,7 +773,8 @@ html .print-label-container,
       transition: background 0.2s;
       
       &:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: #f1f5f9;
+        color: #0f172a;
       }
     }
   }
@@ -715,8 +807,9 @@ html .print-label-container,
 
 .modal-content {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
@@ -728,10 +821,11 @@ html .print-label-container,
   width: 90%;
   
   .modal-header {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    color: #0f172a;
     padding: 20px;
-    border-radius: 8px 8px 0 0;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.10);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -746,12 +840,12 @@ html .print-label-container,
     }
     
     .close-btn {
-      background: rgba(255, 255, 255, 0.2);
+      background: #f1f5f9;
       border: none;
-      color: white;
+      color: #64748b;
       width: 36px;
       height: 36px;
-      border-radius: 50%;
+      border-radius: 10px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -759,7 +853,8 @@ html .print-label-container,
       transition: background 0.2s;
       
       &:hover {
-        background: rgba(255, 255, 255, 0.3);
+        background: #e2e8f0;
+        color: #0f172a;
       }
       
       i {
@@ -774,15 +869,16 @@ html .print-label-container,
 }
 
 .employee-verified-badge {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: rgba(15, 118, 110, 0.10);
+  color: #0f766e;
   padding: 12px 20px;
-  border-radius: 8px;
+  border-radius: 9px;
   margin-bottom: 20px;
   display: flex;
   align-items: center;
   gap: 10px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(15, 118, 110, 0.28);
+  box-shadow: none;
   
   i {
     font-size: 24px;
@@ -811,7 +907,7 @@ html .print-label-container,
     margin-bottom: 12px;
     
     i {
-      color: #10b981;
+      color: #0f766e;
       font-size: 24px;
     }
   }
@@ -827,18 +923,18 @@ html .print-label-container,
     
     &:focus {
       outline: none;
-      border-color: #10b981;
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+      border-color: #0f766e;
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
     }
   }
   
   .scan-submit-btn {
     width: 100%;
     padding: 12px 24px;
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    background: #0f766e;
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 9px;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
@@ -849,8 +945,9 @@ html .print-label-container,
     transition: transform 0.2s, box-shadow 0.2s;
     
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+      background: #0d9488;
+      transform: none;
+      box-shadow: none;
     }
     
     &:active {
@@ -970,15 +1067,15 @@ html .print-label-container,
 }
 
 .iqc-instructions {
-  background: #fffbeb;
-  border: 2px solid #fbbf24;
-  border-radius: 8px;
+    background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 12px;
   padding: 16px;
   margin-top: 20px;
   
   p {
     margin: 8px 0;
-    color: #92400e;
+    color: #64748b;
     font-size: 14px;
     display: flex;
     align-items: center;
@@ -993,18 +1090,18 @@ html .print-label-container,
     }
     
     i {
-      color: #f59e0b;
+      color: #0f766e;
       font-size: 18px;
     }
   }
 }
 
-.status-time-cell {
+    .status-time-cell {
   cursor: pointer;
   transition: background 0.15s ease;
 
   &:hover {
-    background: #fff7ed;
+    background: #f1f5f9;
   }
 }
 
@@ -1019,10 +1116,10 @@ html .print-label-container,
 }
 
 .status-history-modal-header {
-  background: #fff7ed;
+  background: #f8fafc;
   color: #111827;
   padding: 16px 20px;
-  border-bottom: 1px solid #fed7aa;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
   border-radius: 12px 12px 0 0;
   display: flex;
   align-items: center;
@@ -1085,7 +1182,7 @@ html .print-label-container,
   }
 
   th {
-    background: #fff7ed;
+    background: #f8fafc;
     font-weight: 600;
     white-space: nowrap;
   }
@@ -1121,12 +1218,12 @@ html .print-label-container,
 }
 
 .status-history-group-title {
-  background: #fff7ed;
+  background: #f8fafc;
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 700;
   color: #111827;
-  border-bottom: 1px solid #fed7aa;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
 }
 
 .status-history-group-rows {
@@ -1186,10 +1283,10 @@ html .print-label-container,
 }
 
 .tinh-trang-picker-header {
-  background: #fff7ed;
+  background: #f8fafc;
   color: #111827;
   padding: 16px 20px;
-  border-bottom: 1px solid #fed7aa;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
   border-radius: 12px 12px 0 0;
   display: flex;
   align-items: center;
@@ -1296,8 +1393,8 @@ html .print-label-container,
   text-overflow: ellipsis;
 
   &:hover {
-    background: #fff7ed;
-    border-color: #fb923c;
+    background: #f8fafc;
+    border-color: #0f766e;
   }
 
   &.is-current {
@@ -1335,35 +1432,35 @@ html .print-label-container,
   width: 100%;
   max-width: 400px;
   background: #fff;
-  border-radius: 12px;
-  border: 1px solid #fed7aa;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
   overflow: hidden;
 }
 
 .label-employee-gate-header {
-  background: #fff7ed;
+  background: #ffffff;
   padding: 20px 22px 14px;
   text-align: center;
-  border-bottom: 1px solid #fed7aa;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
 
   .material-icons {
     font-size: 36px;
-    color: #ea580c;
+    color: #0f766e;
     margin-bottom: 6px;
   }
 
   h3 {
     margin: 0 0 8px;
     font-size: 20px;
-    font-weight: 700;
-    color: #111827;
+    font-weight: 800;
+    color: #0f172a;
   }
 
   p {
     margin: 0;
     font-size: 13px;
-    color: #4b5563;
+    color: #64748b;
     line-height: 1.45;
   }
 }
@@ -1376,8 +1473,8 @@ html .print-label-container,
   width: 100%;
   box-sizing: border-box;
   padding: 12px 14px;
-  border: 2px solid #111827;
-  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 9px;
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -1386,8 +1483,8 @@ html .print-label-container,
   outline: none;
 
   &:focus {
-    border-color: #ea580c;
-    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
+    border-color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
   }
 }
 
@@ -1407,24 +1504,25 @@ html .print-label-container,
 .label-employee-gate-btn {
   flex: 1;
   padding: 10px 12px;
-  border: 2px solid #111827;
-  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 9px;
   background: #fff;
-  color: #111827;
+  color: #334155;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 
   &:hover {
-    background: #f9fafb;
+    background: #f8fafc;
   }
 
   &--primary {
-    background: #111827;
+    background: #0f766e;
     color: #fff;
+    border-color: #0f766e;
 
     &:hover {
-      background: #374151;
+      background: #0d9488;
     }
   }
 }

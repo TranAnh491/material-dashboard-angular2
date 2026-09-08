@@ -2,21 +2,26 @@
 
   <!-- Kiểm tra KK — trang full (tab Quản lý Nguyên Liệu, hoặc overlay từ RM Inventory) -->
   <div class="kk-page excel-container" *ngIf="showKkLocMap || isNguyenLieuPage" [class.kk-page--detail]="kkLocMapView === 'type' && !!kkActiveProductType">
-    <div class="excel-header">
-      <div class="excel-header__title-row">
-        <h4>
-          <ng-container *ngIf="kkLocMapView === 'type' && kkActiveProductType">KK - {{ kkActiveProductType }} - {{ selectedFactory }}</ng-container>
-          <ng-container *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
-            {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : kkLocMapView === 'type' ? 'Kiểm tra KK theo loại hàng' : 'Quản lý Nguyên Liệu' }}
-            · {{ selectedFactory }}
-          </ng-container>
-        </h4>
-        <div class="header-stats" *ngIf="kkLocMapView === 'type' && !kkJOnly">
-          <span *ngIf="!kkActiveProductType">{{ kkLocMapTypeSummary.count | number }} loại · tồn {{ formatNumber(kkLocMapTypeSummary.stock) }}</span>
-          <span *ngIf="kkActiveTypeRow">Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }} · Tổng cuộn: {{ kkTypeFilteredRollsTotal | number }}</span>
-        </div>
-        <div class="header-stats" *ngIf="kkLocMapView === 'type' && kkJOnly && kkActiveTypeRow">
-          <span>Tồn kho: {{ formatNumber(kkActiveTypeRow.stock) }} · Tổng cuộn: {{ kkTypeFilteredRollsTotal | number }}</span>
+    <div class="excel-header kk-page__head">
+      <div class="excel-header__title-row kk-page__hero">
+        <div class="kk-page__brand">
+          <span class="kk-page__ico" aria-hidden="true">
+            <i class="material-icons">{{ kkLocMapView === 'type' && kkActiveProductType ? 'category' : 'fact_check' }}</i>
+          </span>
+          <div class="kk-page__titles">
+            <h4>
+              <ng-container *ngIf="kkLocMapView === 'type' && kkActiveProductType">{{ kkActiveProductType }}</ng-container>
+              <ng-container *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
+                {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : kkLocMapView === 'type' ? 'Kiểm tra KK theo loại hàng' : 'Quản lý Nguyên Liệu' }}
+              </ng-container>
+            </h4>
+            <p class="kk-page__sub" *ngIf="kkLocMapView === 'type' && kkActiveProductType">
+              {{ selectedFactory }} · tick KK · đổi vị trí
+            </p>
+            <p class="kk-page__sub" *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
+              {{ selectedFactory }} · kiểm kê tồn kho nguyên liệu
+            </p>
+          </div>
         </div>
       </div>
       <div class="excel-actions">
@@ -136,6 +141,21 @@
                 <span class="kk-loc-map__zone-n" *ngIf="w.id === 'J'">{{ kkJMovedSummary.codes }}</span>
               </button>
             </div>
+            <div class="kk-toolbar__search">
+              <i class="material-icons" aria-hidden="true">search</i>
+              <input type="search"
+                     [(ngModel)]="kkLocMapQuery"
+                     (ngModelChange)="kkLocMapView === 'type' ? onKkTypeUnifiedSearch() : null"
+                     [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : 'Tìm mã, tên hàng, pallet…'"
+                     autocomplete="off">
+              <button type="button"
+                      class="kk-toolbar__search-clear"
+                      *ngIf="kkLocMapQuery"
+                      (click)="kkLocMapView === 'type' ? clearKkTypeUnifiedSearch() : (kkLocMapQuery = '')"
+                      title="Xóa tìm">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
             <div class="kk-loc-map__opts">
               <ng-container *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'">
                 <label class="kk-loc-map__opt" title="Bỏ tick thì không tính các mã đang ở kho WH3/ASM3">
@@ -172,13 +192,6 @@
                        (ngModelChange)="kkFilterUncheckedOnly = $event; onKkFilterUncheckedChange()">
                 Chưa KK
               </label>
-            </div>
-            <div class="search-box" *ngIf="kkLocMapView === 'material' || kkLocMapView === 'location'">
-              <input type="search"
-                     class="search-input"
-                     [(ngModel)]="kkLocMapQuery"
-                     [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : 'Lọc vị trí…'"
-                     autocomplete="off">
             </div>
           </div>
 
@@ -375,8 +388,9 @@
       </div>
 
       <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type'">
-        <div class="kk-type-topbar">
-          <div class="kk-type-topbar__search">
+          <div class="kk-type-topbar">
+          <div class="kk-type-topbar__search" *ngIf="kkActiveProductType">
+            <i class="material-icons" aria-hidden="true">search</i>
             <input type="search"
                    [(ngModel)]="kkLocMapQuery"
                    (ngModelChange)="onKkTypeUnifiedSearch()"
@@ -395,6 +409,7 @@
                   (click)="openKkTypeScanModal()"
                   [disabled]="!canEdit || kkLocMapBusy"
                   title="Scan pallet rồi scan mã hàng để tick KK">
+            <i class="material-icons">qr_code_scanner</i>
             Scan
           </button>
         </div>
@@ -450,12 +465,6 @@
                     title="Xóa lọc">
               <i class="material-icons">close</i>
             </button>
-            <div class="kk-type-rolls-total"
-                 [title]="'Tổng số cuộn của ' + kkTypeDetailFiltered.length + ' dòng đang lọc'">
-              <span class="kk-type-rolls-total__label">Tổng cuộn</span>
-              <strong>{{ kkTypeFilteredRollsTotal | number }}</strong>
-              <span class="kk-type-rolls-total__meta">{{ kkTypeDetailFiltered.length | number }} dòng</span>
-            </div>
             <button type="button"
                     class="kk-type-filter__sort"
                     [class.kk-type-filter__sort--on]="kkTypeSortQtyDesc"

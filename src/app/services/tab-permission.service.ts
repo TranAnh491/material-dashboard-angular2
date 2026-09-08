@@ -78,8 +78,6 @@ export class TabPermissionService {
       
       // Location tab - chỉ cho phép khi có quyền truy cập ASM1
       'location': factoryAccess.canAccessASM1 === true,
-      'layout-warehouse': factoryAccess.canAccessASM1 === true,
-      'layout-warehouse-asm3': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       'j-warehouse': factoryAccess.canAccessASM1 === true || factoryAccess.canAccessASM2 === true,
       
       // Materials Dashboard - cần quyền ít nhất 1 nhà máy
@@ -176,8 +174,6 @@ export class TabPermissionService {
     
     // Location tab
     { key: 'location', name: 'Materials' },
-    { key: 'layout-warehouse', name: 'Layout Warehouse' },
-    { key: 'layout-warehouse-asm3', name: 'Layout Warehouse ASM3' },
     { key: 'j-warehouse', name: 'J Warehouse' },
 
     // Other tabs

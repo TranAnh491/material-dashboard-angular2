@@ -84,6 +84,15 @@ interface IqcHeatmapWeekCol {
   cells: IqcHeatmapCell[];
 }
 
+/** Cột T2–T7 Materials Inbound: hiện số Waiting / Done như Putaway */
+interface RmInDayCol {
+  weekday: string;
+  label: string;
+  waiting: number;
+  done: number;
+  total: number;
+}
+
 /** Cột Day trong grid Day 1–Day >11 của Putaway Staging box */
 interface PutawayDayCol {
   dayLabel: string;   // 'Day 1' … 'Day >11'
@@ -195,6 +204,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }> = [];
   /** 6 cột T2–T7: mỗi ô = 1 mã TP (SKU) chờ nhập kho — FG Inbound */
   fgInHeatmapDays: FgInHeatmapDayCol[] = [];
+  /** 6 cột T2–T7 Materials Inbound: số Waiting / Done (không vẽ từng SKU) */
+  rmInDayGrid: RmInDayCol[] = [];
+  /** Box đảo FG Inbound ↔ Materials Inbound khi bấm */
+  inboundBoxMode: 'fg' | 'rm' = 'fg';
 
   // Factory selection
   selectedFactory: string = 'ASM1';
@@ -532,7 +545,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
       '/shipment': 'Kế hoạch và theo dõi giao hàng',
       '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-      '/layout-warehouse': 'Sơ đồ kho D — LayoutD',
       '/report': 'Báo cáo và phân tích',
       '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
       '/pd-control': 'Giám sát điều khiển sản xuất',
@@ -629,6 +641,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
   
   navigateToTab(path: string): void {
     this.router.navigate([path]);
+  }
+
+  toggleInboundBox(event?: Event): void {
+    event?.stopPropagation();
+    this.inboundBoxMode = this.inboundBoxMode === 'fg' ? 'rm' : 'fg';
+    this.cdr.detectChanges();
+  }
+
+  get inboundBoxTitle(): string {
+    return this.inboundBoxMode === 'fg' ? 'FG Inbound' : 'Materials Inbound';
+  }
+
+  get inboundBoxHint(): string {
+    return this.inboundBoxMode === 'fg'
+      ? 'Bấm để xem Materials Inbound'
+      : 'Bấm để xem FG Inbound';
+  }
+
+  get inboundHeatmapDays(): FgInHeatmapDayCol[] {
+    return this.fgInHeatmapDays;
   }
 
   ngOnInit() {
@@ -747,11 +779,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
             beginAtZero: false,
             min: yRange?.min,
             max: yRange?.max,
+            ticks: { color: 'rgba(15,23,42,0.55)' },
             grid: {
               display: false // Remove Y-axis grid lines
             }
           },
           x: {
+            ticks: { color: 'rgba(15,23,42,0.55)' },
             grid: {
               display: false // Remove X-axis grid lines
             }
@@ -897,6 +931,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.createCharts();
       }
       this.loadFgInPendingWeeklyHeatmap();
+      this.loadRmInboundWeeklyHeatmap();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
@@ -944,6 +979,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
    */
   private refreshNonFirestoreDashboardData(): void {
     this.loadFgInPendingWeeklyHeatmap();
+    this.loadRmInboundWeeklyHeatmap();
     this.createCharts();
   }
 
@@ -1949,6 +1985,86 @@ export class DashboardComponent implements OnInit, OnDestroy {
       );
   }
 
+  /**
+   * Materials Inbound: tuần T2–T7 theo importDate, cùng factory với dashboard.
+   * Waiting = chưa nhận, Done = đã nhận.
+   */
+  private loadRmInboundWeeklyHeatmap(): void {
+    const monday = this.getMondayOfWeekContaining(new Date());
+    const saturdayEnd = new Date(monday);
+    saturdayEnd.setDate(monday.getDate() + 5);
+    saturdayEnd.setHours(23, 59, 59, 999);
+
+    this.firestore
+      .collection('inbound-materials', ref =>
+        ref.where('importDate', '>=', monday).where('importDate', '<=', saturdayEnd).limit(5000)
+      )
+      .get()
+      .subscribe(
+        (snapshot) => {
+          this.readTracker.track('dashboard', 'inbound-materials', snapshot.docs.length);
+          const rows = snapshot.docs.map((doc) => {
+            const data = doc.data() as any;
+            return {
+              factory: data.factory || 'ASM1',
+              materialCode: String(data.materialCode || '').trim().toUpperCase(),
+              importDate: this.parseFgInImportDate(data),
+              isReceived: !!data.isReceived
+            };
+          });
+
+          const today = new Date();
+          const weekMonday = this.getMondayOfWeekContaining(today);
+          const vnDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+          this.rmInDayGrid = [];
+
+          for (let i = 0; i < 6; i++) {
+            const targetDate = new Date(weekMonday);
+            targetDate.setDate(weekMonday.getDate() + i);
+            const label = targetDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+
+            const forDay = rows.filter((r) => {
+              if (!r.importDate) return false;
+              if (!this.materialMatchesDashboardFactory(r.factory)) return false;
+              return r.importDate.toDateString() === targetDate.toDateString();
+            });
+
+            const skuMap = new Map<string, FgInHeatKind>();
+            for (const r of forDay) {
+              if (!r.materialCode) continue;
+              const kind: FgInHeatKind = r.isReceived ? 'cho-vi-tri' : 'chua-khoa';
+              const prev = skuMap.get(r.materialCode);
+              if (!prev || kind === 'chua-khoa') {
+                skuMap.set(r.materialCode, kind);
+              }
+            }
+
+            let waiting = 0;
+            let done = 0;
+            skuMap.forEach((kind) => {
+              if (kind === 'chua-khoa') waiting += 1;
+              else done += 1;
+            });
+
+            this.rmInDayGrid.push({
+              weekday: vnDays[i] ?? `D${i + 1}`,
+              label,
+              waiting,
+              done,
+              total: waiting + done
+            });
+          }
+
+          this.cdr.detectChanges();
+        },
+        (err) => {
+          console.error('Error loading inbound-materials for dashboard:', err);
+          this.rmInDayGrid = [];
+          this.cdr.detectChanges();
+        }
+      );
+  }
+
   private createCharts() {
     this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', this.matAccuracyThisMonth, '#22c55e');
     this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', this.fgAccuracyThisMonth, '#3b82f6');
@@ -2093,6 +2209,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               boxWidth: 10,
               boxHeight: 10,
               usePointStyle: true,
+              color: 'rgba(15,23,42,0.75)',
               font: { size: 11, weight: 'bold' as const, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
             }
           },

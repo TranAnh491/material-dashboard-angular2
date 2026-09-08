@@ -658,6 +658,21 @@ $accent-soft: #ccfbf1;
   &:hover { background: #f8fafc; color: $text2; }
 }
 
+.jw-plan-loading {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.jw-plan-loading .rotating {
+  animation: jw-rotate 1s linear infinite;
+}
+
 .jw-viewport {
   flex: 1;
   min-height: 0;
@@ -828,10 +843,6 @@ $accent-soft: #ccfbf1;
       stroke-width: 1.5;
     }
 
-    &--esd {
-      fill: #ecfdf5;
-    }
-
     &--no-stroke {
       stroke: none;
     }
@@ -844,11 +855,6 @@ $accent-soft: #ccfbf1;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
-
-    &--band {
-      font-size: 13px;
-      letter-spacing: 0.02em;
-    }
 
     &--chem {
       font-size: 7.8px;

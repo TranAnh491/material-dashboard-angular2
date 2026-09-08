@@ -22,19 +22,18 @@ export function isJWarehouseLocation(loc: string): boolean {
   return /^S\d{2}-\d+-\d+\b/.test(raw);
 }
 
-/** Dãy kệ S trong kho mát J: 0.5m; S01–S06 = 2 block, các dãy sau = 3 block × 7 tầng. Kéo đến sát ESD. */
+/** Dãy kệ S trong kho mát J: 0.5m; S01 cách vách VP Kho 5.5m; S01–S06 = 2 block, các dãy sau = 3 block × 7 tầng. Kéo đến sát kho hóa chất. */
 export function listJKhoMatRowIds(): string[] {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const khoMatW = 18.6;
   const extW = 10;
   const chemW = 1.5;
-  const esdW = 2;
-  const totalW = khoMatW + extW - chemW - esdW;
-  const wideW = 1;
+  const totalW = khoMatW + extW - chemW;
   const narrowW = 0.5;
   const gap = 0.8;
+  const s01FromVp = 5.5;
   const ids: string[] = [];
-  let xRight = round2(totalW - wideW - gap);
+  let xRight = round2(totalW - s01FromVp);
   while (round2(xRight - narrowW) >= 0) {
     ids.push(`S${String(ids.length + 1).padStart(2, '0')}`);
     const leftColX = round2(xRight - narrowW * 2);
@@ -117,6 +116,8 @@ export function normalizeLayoutLocToken(loc: string, wh?: LayoutWhPick): string 
   return raw;
 }
 
+let jLayoutGroupsCache: LayoutLocGroup[] | null = null;
+
 export function getLayoutLocationGroups(wh: LayoutWhPick): LayoutLocGroup[] {
   if (wh === 'ASM3') {
     return ASM3_ROWS.map((row) => ({
@@ -127,8 +128,9 @@ export function getLayoutLocationGroups(wh: LayoutWhPick): LayoutLocGroup[] {
   }
 
   if (wh === 'J') {
+    if (jLayoutGroupsCache) return jLayoutGroupsCache;
     const shortBlocks = new Set([1, 4]);
-    return Array.from({ length: 30 }, (_, r) => {
+    jLayoutGroupsCache = Array.from({ length: 28 }, (_, r) => {
       const rack = r + 1;
       const slots: string[] = [];
       for (let block = 1; block <= 6; block++) {
@@ -147,6 +149,7 @@ export function getLayoutLocationGroups(wh: LayoutWhPick): LayoutLocGroup[] {
         slots: jKhoMatSlotsForRow(rowId)
       }))
     );
+    return jLayoutGroupsCache;
   }
 
   const groups: LayoutLocGroup[] = [];

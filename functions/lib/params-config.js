@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deployReloadSecret = exports.qcMonthlyReportEmailTo = exports.qcPriorityEmailTo = exports.zaloBotToken = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
+exports.deployReloadSecret = exports.qcMonthlyReportEmailTo = exports.qcPriorityEmailTo = exports.zaloBotToken = exports.zaloBotAddUrl = exports.emailSmtpPort = exports.emailSmtpHost = exports.emailFrom = exports.emailTo = exports.emailPass = exports.emailUser = void 0;
 /**
  * SMTP cho Control Batch (email cảnh báo trùng xuất kho).
  *
@@ -27,6 +27,15 @@ exports.emailTo = (0, params_1.defineString)('EMAIL_TO', {
 exports.emailFrom = (0, params_1.defineString)('EMAIL_FROM', { default: '', description: 'From address; empty = EMAIL_USER' });
 exports.emailSmtpHost = (0, params_1.defineString)('EMAIL_SMTP_HOST', { default: 'smtp.gmail.com' });
 exports.emailSmtpPort = (0, params_1.defineString)('EMAIL_SMTP_PORT', { default: '587' });
+/**
+ * Link mở chat Zalo bot kho — chèn vào email hướng dẫn cho nhân viên mới.
+ * Lấy từ Zalo Bot console ("link chia sẻ bot"). Để trống thì email chỉ mô tả các bước.
+ * Set: functions/.env.<PROJECT_ID>  →  ZALO_BOT_ADD_URL=https://zalo.me/...
+ */
+exports.zaloBotAddUrl = (0, params_1.defineString)('ZALO_BOT_ADD_URL', {
+    default: '',
+    description: 'Link mở chat Zalo bot kho cho nhân viên mới'
+});
 /**
  * Zalo Bot Platform token (dùng để gửi tin nhắn bot).
  * Bí mật:

@@ -999,9 +999,9 @@ exports.adminUpdateUserProfileFn = functions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
 });
-/** Admin: đăng ký user — mật khẩu 6 số gửi email (Auth + Firestore + SMTP). */
+/** Admin: đăng ký user — mật khẩu 6 số gửi email (Auth + Firestore + SMTP) + Zalo welcome nếu đã liên kết. */
 exports.registerAspUserWithEmailFn = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
     var _a;
     if (!context.auth) {
@@ -1037,8 +1037,10 @@ exports.registerAspUserWithEmailFn = functions
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
 });
-/** Admin: đăng ký user không cần email — mật khẩu trả về cho admin (Auth + Firestore). */
-exports.registerAspUserWithoutEmailFn = functions.https.onCall(async (data, context) => {
+/** Admin: đăng ký user không cần email — mật khẩu trả về cho admin (Auth + Firestore) + Zalo welcome nếu đã liên kết. */
+exports.registerAspUserWithoutEmailFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
     var _a;
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -1074,7 +1076,7 @@ exports.registerAspUserWithoutEmailFn = functions.https.onCall(async (data, cont
  * Cảnh báo: có thể bị lạm dụng — nên bật App Check / giới hạn IP nếu cần.
  */
 exports.publicRegisterAspUserFn = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .https.onCall(async (data, _context) => {
     var _a;
     const employeeId = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';

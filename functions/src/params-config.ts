@@ -27,6 +27,16 @@ export const emailSmtpHost = defineString('EMAIL_SMTP_HOST', { default: 'smtp.gm
 export const emailSmtpPort = defineString('EMAIL_SMTP_PORT', { default: '587' });
 
 /**
+ * Link mở chat Zalo bot kho — chèn vào email hướng dẫn cho nhân viên mới.
+ * Lấy từ Zalo Bot console ("link chia sẻ bot"). Để trống thì email chỉ mô tả các bước.
+ * Set: functions/.env.<PROJECT_ID>  →  ZALO_BOT_ADD_URL=https://zalo.me/...
+ */
+export const zaloBotAddUrl = defineString('ZALO_BOT_ADD_URL', {
+  default: '',
+  description: 'Link mở chat Zalo bot kho cho nhân viên mới'
+});
+
+/**
  * Zalo Bot Platform token (dùng để gửi tin nhắn bot).
  * Bí mật:
  *   firebase functions:secrets:set ZALO_BOT_TOKEN

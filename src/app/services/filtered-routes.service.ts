@@ -125,7 +125,6 @@ export class FilteredRoutesService {
       
       // Other routes
       '/location': 'location',
-      '/layout-warehouse': 'layout-warehouse',
       '/stock-check': 'stock-check',
       '/bieu-mau': 'bieu-mau',
       '/label': 'label',

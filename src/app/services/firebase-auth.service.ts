@@ -295,7 +295,7 @@ export class FirebaseAuthService {
         'inbound', 'outbound',
         'materials', 'inventory-overview', 'bag-history',
         'fg-in', 'fg-out', 'fg-check', 'fg-inventory', 'fg-overview',
-        'location', 'layout-warehouse', 'manage', 'stock-check', 'label', 'index',
+        'location', 'manage', 'stock-check', 'label', 'index',
         'checklist', 'equipment', 'qc', 'rm1-delivery', 'settings'
       ];
 

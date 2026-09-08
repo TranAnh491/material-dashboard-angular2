@@ -1,4 +1,6 @@
 import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ComponentRef,
   ElementRef,
@@ -242,6 +244,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.khoMatExt': 'Kho mát mở rộng',
     'zone.khoHoaChat': 'Hóa chất',
     'zone.khoEsd': 'ESD',
+    'zone.inTem': 'Khu vực in tem',
     'zone.vpKho': 'VP Kho',
     'zone.shipping': 'Khu xuất hàng',
     'raised.label': 'NỀN CAO',
@@ -433,6 +436,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.khoMatExt': 'Secured WH Extension',
     'zone.khoHoaChat': 'Chemical',
     'zone.khoEsd': 'ESD',
+    'zone.inTem': 'Label printing area',
     'zone.vpKho': 'Office',
     'zone.shipping': 'Shipping area',
     'raised.label': 'RAISED FLOOR',
@@ -591,7 +595,8 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
 @Component({
   selector: 'app-j-warehouse',
   templateUrl: './j-warehouse.component.html',
-  styleUrls: ['./j-warehouse.component.scss']
+  styleUrls: ['./j-warehouse.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly LENGTH_M = 105;
@@ -601,8 +606,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly MARGIN_C_M = 0.5;
   /** Xếp dọc: dãy kệ sát mặt C cách 0.5m */
   readonly MARGIN_C_VERTICAL_M = 0.5;
-  /** Dãy kệ (từ R11) cách mặt A 11.7m — để R296 sát Y15, không đè. */
-  readonly RACK_START_M = 11.7;
+  /** Dãy kệ (từ R11) cách mặt A 10m. */
+  readonly RACK_START_M = 10;
   /**
    * Dãy kệ: sâu 1m; mâm lọt lòng 3.3m (block 1 & 4 = 2.2m); thanh đứng 0.1m.
    * Cách tường cạnh C: 0.5m. Dài kệ = 4×3.3 + 2×2.2 + 7×0.1 = 18.30m (+ lối 1.5m giữa nhóm block).
@@ -617,7 +622,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** @deprecated dùng BLOCK_SHORT_LEN_M */
   readonly BLOCK_1_LEN_M = this.BLOCK_SHORT_LEN_M;
   readonly UPRIGHT_M = 0.1;
-  readonly RACK_GAP_M = 0.3;
+  readonly RACK_GAP_M = 0.4;
   /** Xếp dọc: khoảng trống giữa 2 kệ trong 1 cặp (để R{n} và R{n+1} cách 1.5m). */
   readonly RACK_GAP_VERTICAL_M = 0.5;
   readonly BLOCKS_PER_RACK = 6;
@@ -655,7 +660,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.UPRIGHT_COUNT * this.UPRIGHT_M
   );
   readonly PALLET_M = this.round2(this.BLOCK_LEN_M / this.PALLETS_PER_BLOCK);
-  /** Cặp R1|R2: 1m + 0.3m khe + 1m */
+  /** Cặp R1|R2: 1m + 0.4m khe + 1m */
   readonly PAIR_DEPTH_M = this.RACK_DEPTH_M * 2 + this.RACK_GAP_M;
   readonly PAIR_PITCH_M = this.PAIR_DEPTH_M + this.AISLE_M;
 
@@ -675,7 +680,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private readonly INVENTORY_COLLECTION = 'inventory-materials';
   private readonly LOCATION_HISTORY_COLLECTION = 'material-location-history';
   private readonly SYNC_FACTORIES = ['ASM1', 'ASM2'] as const;
-  private readonly LAYOUT_STORAGE_KEY = 'j-warehouse-layout-v14';
+  private readonly LAYOUT_STORAGE_KEY = 'j-warehouse-layout-v15';
   private readonly CCTV_STORAGE_KEY = 'j-warehouse-cctv-v2';
   private readonly CCTV_STORAGE_KEY_V1 = 'j-warehouse-cctv-v1';
   private readonly CCTV_LIVE_HIDDEN_KEY = 'j-warehouse-cctv-live-hidden-v1';
@@ -694,6 +699,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly padT = 36;
   /** Chừa chỗ cửa cuốn ngoài cạnh B + chấm Y */
   readonly padB = 118;
+  readonly floor = { x: this.padL, y: this.padT, w: this.svgWidth, h: this.svgHeight };
+  readonly palletLineIdx = [1, 2];
 
   readonly gridX = Array.from(
     { length: Math.floor(this.VIEW_LENGTH_M / 5) - 1 },
@@ -720,7 +727,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /**
    * Khu sát B — neo từ Y12, phải → trái:
    * VP Kho 4m + VP Kho 4m + Kho mát 18.6×7m + Kho mát mở rộng 10×7m
-   * (trong đó: kho hóa chất 1.5m về mặt A + khu ESD 2m + phần còn lại).
+   * (trong đó: kho hóa chất 1.5m về mặt A + phần còn lại).
    * IQC 7.15×6.25m tách riêng, sát cạnh A từ Y01.
    */
   readonly OFFICE_ANCHOR_AXIS = 'Y12';
@@ -731,8 +738,6 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly OFFICE_KHOMAT_EXT_W_M = 10;
   /** Phòng hóa chất — tách từ kho mát mở rộng, rộng 1.5m về phía mặt A. */
   readonly OFFICE_CHEM_W_M = 1.5;
-  /** Khu ESD — trong kho mát mở rộng, cạnh kho hóa chất, rộng 2m. */
-  readonly OFFICE_ESD_W_M = 2;
   readonly OFFICE_H_M = 7;
   /** Nhãn Secured WH dịch về phía mặt C 1.5m (không dịch phòng). */
   readonly OFFICE_SECURED_SHIFT_C_M = 1.5;
@@ -742,11 +747,14 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly OFFICE_AISLE_M = this.round2(this.officeZone.yM - this.OPEN_ZONE_Y_M);
 
   /** Kệ trong Kho mát: dãy 0.5m; S01–S06 = 2 block, các dãy sau = 3 block; sâu 1.5m/block, cách 0.8m, 7 tầng, cao 3m. Số dãy từ phải qua trái. */
-  readonly KHO_MAT_BLOCK_W_M = 1;
   readonly KHO_MAT_BLOCK_W_NARROW_M = 0.5;
   readonly KHO_MAT_BLOCK_D_M = 1.5;
   readonly KHO_MAT_BLOCKS_PER_ROW = 3;
   readonly KHO_MAT_GAP_M = 0.8;
+  /** S01 đưa ra khỏi vách VP Kho 5.5m — trong khe đó: ESD 2.5×3m + in tem 2.5×3m. */
+  readonly KHO_MAT_S01_FROM_VP_M = 5.5;
+  readonly KHO_MAT_SIDE_BOX_W_M = 2.5;
+  readonly KHO_MAT_SIDE_BOX_H_M = 3;
   readonly KHO_MAT_LEVELS = 7;
   readonly KHO_MAT_HEIGHT_M = 3;
   readonly khoMatRows: JwKhoMatRow[] = this.buildKhoMatRows();
@@ -763,12 +771,12 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   readonly WC_EXIT_CLEARANCE_M = 1.5;
 
-  /** Dãy kệ mặc định R1–R28 theo pitch; thêm R29 (chỉ R294–R296) sau lối 2.9m */
-  readonly MAX_RACK_NUM = 30;
+  /** Dãy kệ mặc định R1–R28 theo pitch */
+  readonly MAX_RACK_NUM = 28;
 
   racks: JwRack[] = this.buildRacks();
   aisles: JwAisleRect[] = this.buildAisles();
-  /** Khe 0.3m giữa 2 dãy trong cùng cặp (R1|R2, R3|R4, …) */
+  /** Khe 0.4m giữa 2 dãy trong cùng cặp (R1|R2, R3|R4, …) */
   pairGaps: JwPairGapRect[] = this.buildPairGaps();
   /** Lối 1.5m giữa block 4–5–6 và 1–2–3 trong mỗi dãy kệ */
   blockGroupGaps: JwPairGapRect[] = this.buildBlockGroupGaps();
@@ -1090,6 +1098,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         d.cam.headingDeg = deg;
         d.cam.rangeM = this.snap(Math.max(6, Math.min(40, dist)));
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -1101,6 +1110,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.cctvDraggingId = null;
       this.cctvDragMoved = false;
       if (moved) this.saveCctvLayout();
+      this.cdr.markForCheck();
     });
     if (moved) this.cctvSuppressClick = true;
   }
@@ -1306,6 +1316,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const ext = this.khoMatExtZone;
     this.pushCadWidthAlongB(raw, 'kho-hoa-chat-w', this.khoHoaChatZone, false);
     this.pushCadWidthAlongB(raw, 'kho-esd-w', this.khoEsdZone, false);
+    this.pushCadWidthAlongB(raw, 'khu-in-tem-w', this.khuInTemZone, false);
     this.pushCadWidthAlongB(raw, 'kho-mat-ext-w', this.khoMatExtRemainZone, false);
     this.pushCadHeightAlongLeft(raw, 'kho-mat-ext-h', ext, false);
     const inspect = this.floorZones.find((z) => z.id === 'incoming-inspect');
@@ -1363,7 +1374,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.round2(b.yM + b.hM / 2 + 3);
   }
 
-  /** Block R286 (dãy R28, block 6) — mốc đo khoảng cách tới R296. */
+  /** Block R286 (dãy R28, block 6) — mốc đo khoảng cách tới Y15. */
   get r286Block(): JwBlock | null {
     const rack = this.racks.find((r) => r.num === 28);
     return rack?.blocks.find((b) => b.index === 6) || null;
@@ -1376,19 +1387,33 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   ];
 
   get floorZones(): JwFloorZone[] {
-    return this.floorZoneDefs.map((z) => {
+    const key = this.lang;
+    if (this.floorZonesMemo && this.floorZonesMemoKey === key) return this.floorZonesMemo;
+    this.floorZonesMemoKey = key;
+    this.floorZonesMemo = this.floorZoneDefs.map((z) => {
       if (z.id === 'kho-mat-ext') {
         return { ...z, label: '', labelLines: [] };
       }
       const label = z.labelKey ? this.t(z.labelKey) : '';
       const wrapAt =
-        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 4 : z.id === 'kho-esd' ? 8 : 12;
+        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 4 : this.isKhoMatSideBox(z) ? 8 : 12;
       return { ...z, label, labelLines: label ? this.wrapLabel(label, wrapAt) : [] };
     });
+    return this.floorZonesMemo;
   }
 
   isKhoMatBandFloorZone(z: JwFloorZone): boolean {
-    return z.id === 'kho-mat-ext' || z.id === 'kho-hoa-chat' || z.id === 'kho-esd';
+    return z.id === 'kho-mat-ext';
+  }
+
+  /** Box ESD / in tem trong khe 5.5m giữa vách VP Kho và S01. */
+  isKhoMatSideBox(z: { id: string }): boolean {
+    return z.id === 'kho-esd' || z.id === 'khu-in-tem';
+  }
+
+  /** Hóa chất, ESD, in tem — viền gạch đứt. */
+  isKhoMatDashedBox(z: { id: string }): boolean {
+    return z.id === 'kho-hoa-chat' || this.isKhoMatSideBox(z);
   }
 
   /** Cụm Kho hóa chất + ESD + kho mát mở rộng + Kho mát — một khối, không vách ngăn trong. */
@@ -1621,6 +1646,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     if (this.lang === next) return;
     this.lang = next;
+    this.floorZonesMemo = null;
+    this.j4FloorZonesMemo = null;
     try {
       localStorage.setItem(this.LANG_STORAGE_KEY, next);
     } catch {
@@ -1690,6 +1717,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     event?.preventDefault();
     if (this.drawMode === mode) return;
     this.drawMode = mode;
+    this.j4FloorZonesMemo = null;
     if (mode !== 'kho' && this.layoutEditMode) {
       this.layoutEditMode = false;
     }
@@ -1713,11 +1741,23 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Tách nhãn block xuống dòng nếu dài (VD R281 → R28 / 1). */
   blockLabelLines(code: string): string[] {
     const c = String(code || '').trim();
-    if (c.length <= 3) return [c];
-    return [c.slice(0, -1), c.slice(-1)];
+    const hit = this.blockLabelLinesCache.get(c);
+    if (hit) return hit;
+    const lines = c.length <= 3 ? [c] : [c.slice(0, -1), c.slice(-1)];
+    this.blockLabelLinesCache.set(c, lines);
+    return lines;
   }
 
   zoom = 1;
+  /** Trì hoãn vẽ SVG mặt bằng — để tab mở xong rồi mới render (tránh đứng UI). */
+  planReady = false;
+  /** Kệ/kho mát vẽ nhịp sau khung nhà — lần mở tab nhẹ hơn. */
+  racksReady = false;
+  private readonly blockLabelLinesCache = new Map<string, string[]>();
+  private floorZonesMemo: JwFloorZone[] | null = null;
+  private floorZonesMemoKey = '';
+  private j4FloorZonesMemo: JwFloorZone[] | null = null;
+  private j4FloorZonesMemoKey = '';
   mapTool: JwMapTool = 'overview';
   infoPanelOpen = true;
   isPanning = false;
@@ -1762,6 +1802,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     } else {
       this.resetZoom();
     }
+    this.cdr.markForCheck();
   }
 
   private fitZoomForBuildingView(): void {
@@ -1831,14 +1872,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.syncRack3dInputs();
       this.rack3dSlotPickSub = new Subscription();
       this.rack3dSlotPickSub.add(
-        ref.instance.slotPick.subscribe((pick) =>
-          this.onRack3dPick(pick as unknown as { level: number; pos: JwPos; blockCode?: string })
-        )
+        ref.instance.slotPick.subscribe((pick) => {
+          this.onRack3dPick(pick as unknown as { level: number; pos: JwPos; blockCode?: string });
+          this.cdr.markForCheck();
+        })
       );
       this.rack3dSlotPickSub.add(
         ref.instance.cctvPick.subscribe((id) => {
           const cam = this.cctvCams.find((c) => c.id === id);
           if (cam) this.selectCctv(cam, undefined, false);
+          this.cdr.markForCheck();
         })
       );
       ref.changeDetectorRef.detectChanges();
@@ -1848,6 +1891,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       alert('❌ Không tải được mô hình 3D. Vui lòng kiểm tra mạng và thử lại.');
     } finally {
       this.rack3dLoading = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -2311,6 +2355,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
    * Kho Mát chỉ hiện ở "Bản vẽ Đăng ký" — các bản vẽ còn lại không có.
    */
   get j4FloorZones(): JwFloorZone[] {
+    const key = `${this.lang}|${this.drawMode}`;
+    if (this.j4FloorZonesMemo && this.j4FloorZonesMemoKey === key) return this.j4FloorZonesMemo;
     const strip = this.j4OuterStripY();
     const stripH = this.round2(strip.y1 - strip.y0);
     const coldStorageX0 = this.round2(this.axisXM('Y04'));
@@ -2335,7 +2381,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: 7
       });
     }
-    return defs.map((z) => {
+    this.j4FloorZonesMemoKey = key;
+    this.j4FloorZonesMemo = defs.map((z) => {
       const label = this.t(z.labelKey);
       return {
         id: z.id,
@@ -2347,6 +2394,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: z.hM
       };
     });
+    return this.j4FloorZonesMemo;
   }
 
   /** Dải X16–X17 (X21–X22 trên J5) sát tường ngoài J4 */
@@ -2590,21 +2638,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return `0 ${this.viewBoxMinY} ${this.viewBoxW} ${this.viewBoxH}`;
   }
 
-  get floor() {
-    return {
-      x: this.padL,
-      y: this.padT,
-      w: this.svgWidth,
-      h: this.svgHeight
-    };
-  }
-
   constructor(
     private router: Router,
     private route: ActivatedRoute,
     private location: Location,
     private firestore: AngularFirestore,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -2614,13 +2654,27 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.loadCctvLayout();
     this.loadCctvLiveHidden();
     this.loadExtraPallets();
-    void this.loadSlotPallets();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
     // của component này (template rất lớn), dù đa số trường hợp không kéo layout gì cả.
     this.ngZone.runOutsideAngular(() => {
       window.addEventListener('pointermove', this.onWindowPointerMove);
       window.addEventListener('pointerup', this.onWindowPointerUp);
       window.addEventListener('pointercancel', this.onWindowPointerUp);
+      requestAnimationFrame(() => {
+        this.ngZone.run(() => {
+          this.planReady = true;
+          this.cdr.markForCheck();
+        });
+        requestAnimationFrame(() => {
+          this.ngZone.run(() => {
+            this.racksReady = true;
+            this.cdr.markForCheck();
+          });
+          setTimeout(() => {
+            void this.loadSlotPallets();
+          }, 0);
+        });
+      });
     });
   }
 
@@ -2996,6 +3050,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       }
       const rack = this.racks.find((r) => r.num === d.block.rackNum);
       if (rack) this.syncRackBounds(rack);
+      this.cdr.markForCheck();
     });
   };
 
@@ -3010,6 +3065,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.layoutDrag = null;
       this.layoutDragMoved = false;
       if (moved) this.markLayoutDirty();
+      this.cdr.markForCheck();
     });
   };
 
@@ -3520,6 +3576,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       alert(this.t('alert.savePalletFail'));
     } finally {
       this.isSavingPallet = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -3543,6 +3600,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       alert(this.t('alert.clearPalletFail'));
     } finally {
       this.isClearingPallet = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -3723,16 +3781,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Khoảng cách từ mép phải R286 tới mép trái R296 — lối đi 2.9m sau cặp kệ. */
+  /** Khoảng cách từ mép phải R286 tới Y15. */
   private pushR286ToY15Dim(out: JwTechDim[]): void {
     const block = this.r286Block;
     const rack28 = this.racks.find((r) => r.num === 28);
     if (!block || !rack28) return;
     const x1 = this.round2(rack28.xM + rack28.wM);
-    const rack29 = this.racks.find((r) => r.num === 29);
-    const x2 = rack29
-      ? this.round2(rack29.xM)
-      : this.round2(this.axisXM(this.RAISED_FROM_AXIS));
+    const x2 = this.round2(this.axisXM(this.RAISED_FROM_AXIS));
     const w = this.round2(x2 - x1);
     if (w < 0.2) return;
     const yLine = this.round2(block.yM + block.hM / 2);
@@ -3751,7 +3806,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Khe 0.3m giữa R3|R4 — nhãn ghi ngoài dãy, mũi tên dẫn vào khe tại R31. */
+  /** Khe 0.4m giữa R3|R4 — nhãn ghi ngoài dãy, mũi tên dẫn vào khe tại R31. */
   private pushPairGapDimAtR31(out: JwTechDim[]): void {
     const rack3 = this.racks.find((r) => r.num === 3);
     const b31 = rack3?.blocks.find((b) => b.index === 1);
@@ -4100,7 +4155,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     ];
   }
 
-  /** Kho mát mở rộng 10×7m — nét liền; bên trong tách kho hóa chất 1.5m (về mặt A) + khu ESD 2m. */
+  /** Kho mát mở rộng 10×7m — nét liền; bên trong tách kho hóa chất 1.5m (về mặt A). */
   get khoMatExtZone(): { xM: number; yM: number; wM: number; hM: number } {
     const secured = this.securedOfficeRoom;
     if (!secured) return { xM: 0, yM: 0, wM: 0, hM: 0 };
@@ -4123,18 +4178,32 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     };
   }
 
-  /** Khu ESD 2×7m — cạnh kho hóa chất, nằm trong kho mát mở rộng. */
+  /** Box ESD 2.5×3m — trong khe 5.5m, sát vách VP Kho, cùng sâu kệ S01 (cạnh B). */
   get khoEsdZone(): { xM: number; yM: number; wM: number; hM: number } {
-    const chem = this.khoHoaChatZone;
+    const room = this.securedOfficeRoom;
+    if (!room) return { xM: 0, yM: 0, wM: 0, hM: 0 };
+    const wM = this.KHO_MAT_SIDE_BOX_W_M;
+    const hM = this.KHO_MAT_SIDE_BOX_H_M;
     return {
-      xM: this.round2(chem.xM + chem.wM),
-      yM: chem.yM,
-      wM: this.OFFICE_ESD_W_M,
-      hM: chem.hM
+      xM: this.round2(room.xM + room.wM - wM),
+      yM: this.round2(room.yM + room.hM - hM),
+      wM,
+      hM
     };
   }
 
-  /** Kho mát mở rộng còn lại sau khi tách kho hóa chất (gồm khu ESD). */
+  /** Box in tem 2.5×3m — cạnh ESD, về phía S01. */
+  get khuInTemZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const esd = this.khoEsdZone;
+    return {
+      xM: this.round2(esd.xM - this.KHO_MAT_SIDE_BOX_W_M),
+      yM: esd.yM,
+      wM: this.KHO_MAT_SIDE_BOX_W_M,
+      hM: this.KHO_MAT_SIDE_BOX_H_M
+    };
+  }
+
+  /** Kho mát mở rộng còn lại sau khi tách kho hóa chất. */
   get khoMatExtInnerZone(): { xM: number; yM: number; wM: number; hM: number } {
     const ext = this.khoMatExtZone;
     const chem = this.khoHoaChatZone;
@@ -4146,16 +4215,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     };
   }
 
-  /** Phần kho mát mở rộng bên phải khu ESD. */
+  /** Kho mát mở rộng còn lại sau khi tách kho hóa chất. */
   get khoMatExtRemainZone(): { xM: number; yM: number; wM: number; hM: number } {
-    const inner = this.khoMatExtInnerZone;
-    const esd = this.khoEsdZone;
-    return {
-      xM: this.round2(esd.xM + esd.wM),
-      yM: inner.yM,
-      wM: this.round2(Math.max(0, inner.xM + inner.wM - (esd.xM + esd.wM))),
-      hM: inner.hM
-    };
+    return this.khoMatExtInnerZone;
   }
 
   /** Chỉ bao WH Office + khe + Kho mát (cụm sát Y12) — IQC đứng riêng sát cạnh A nên không tính vào đây. */
@@ -4172,21 +4234,21 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Dãy kệ trong Kho mát — số 1 từ phải qua trái, tiếp S20… đến sát khu ESD.
-   * S01–S06: 2 block sát cạnh B (bỏ kệ thứ 3). S07 trở đi: 3 block sát cạnh B. Khe 0.8m giữa các kệ.
+   * Dãy kệ trong Kho mát — số 1 từ phải qua trái, đến sát kho hóa chất.
+   * S01 đưa ra cách vách VP Kho 5.5m. S01–S06: 2 block sát cạnh B (bỏ kệ thứ 3).
+   * S07 trở đi: 3 block sát cạnh B. Khe 0.8m giữa các kệ.
    */
   private buildKhoMatRows(): JwKhoMatRow[] {
     const room = this.securedOfficeRoom;
     if (!room) return [];
 
     const blockD = this.KHO_MAT_BLOCK_D_M;
-    const wideW = this.KHO_MAT_BLOCK_W_M;
     const narrowW = this.KHO_MAT_BLOCK_W_NARROW_M;
     const gap = this.KHO_MAT_GAP_M;
     const maxBlocks = this.KHO_MAT_BLOCKS_PER_ROW;
     const roomB = this.round2(room.yM + room.hM);
-    const esd = this.khoEsdZone;
-    const roomStartX = esd.wM > 0 ? this.round2(esd.xM + esd.wM) : this.round2(room.xM);
+    const inner = this.khoMatExtInnerZone;
+    const roomStartX = inner.wM > 0 ? inner.xM : this.round2(room.xM);
 
     const rows: JwKhoMatRow[] = [];
     let index = 0;
@@ -4218,7 +4280,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       };
     };
 
-    let xRight = this.round2(room.xM + room.wM - wideW - gap);
+    let xRight = this.round2(room.xM + room.wM - this.KHO_MAT_S01_FROM_VP_M);
     while (this.round2(xRight - narrowW) >= roomStartX) {
       const rightColX = this.round2(xRight - narrowW);
       rows.push(makeRow(rightColX, narrowW));
@@ -4245,6 +4307,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const khoMatExt = this.khoMatExtZone;
     const khoHoaChat = this.khoHoaChatZone;
     const khoEsd = this.khoEsdZone;
+    const khuInTem = this.khuInTemZone;
     const khoMatInner = this.khoMatExtInnerZone;
     const incomingInspectX0 = this.OFFICE_IQC_W_M;
     const incomingInspectWM = khoMatExt.xM - incomingInspectX0;
@@ -4260,7 +4323,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: khoMatExt.hM
       },
       {
-        /** Kho mát mở rộng còn lại (sau kho hóa chất) — nét liền, gồm khu ESD bên trong. */
+        /** Kho mát mở rộng còn lại (sau kho hóa chất) — nét liền. */
         id: 'kho-mat-ext',
         labelKey: 'zone.khoMatExt',
         xM: khoMatInner.xM,
@@ -4278,13 +4341,22 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: khoHoaChat.hM
       },
       {
-        /** Khu ESD 2m — cạnh kho hóa chất, nằm trong kho mát mở rộng. */
+        /** Box ESD 2.5×3m — khe 5.5m sát vách VP Kho. */
         id: 'kho-esd',
         labelKey: 'zone.khoEsd',
         xM: khoEsd.xM,
         yM: khoEsd.yM,
         wM: khoEsd.wM,
         hM: khoEsd.hM
+      },
+      {
+        /** Box in tem 2.5×3m — cạnh ESD, về phía S01. */
+        id: 'khu-in-tem',
+        labelKey: 'zone.inTem',
+        xM: khuInTem.xM,
+        yM: khuInTem.yM,
+        wM: khuInTem.wM,
+        hM: khuInTem.hM
       },
       {
         /** Nhận nguyên liệu: 6×16m, lùi vào sau WC Nữ (3.5m sát cạnh A) */
@@ -4551,6 +4623,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       });
       this.slotPallets = map;
       this.lastUpdated = new Date();
+      this.cdr.markForCheck();
     } catch (e) {
       console.error('[JWarehouse] loadSlotPallets failed', e);
     }
@@ -4669,63 +4742,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       pairIndex++;
     }
 
-    this.appendRack29AtY15(list, pairIndex);
     return list;
-  }
-
-  /**
-   * Dãy R29 — chỉ block R294, R295, R296 (phía C).
-   * Đặt sau R28 đúng lối đi 2.9m (không neo sát Y15 — tránh khe dư 2.6m).
-   */
-  private appendRack29AtY15(list: JwRack[], pairIndex: number): void {
-    if (list.some((r) => r.num === 29)) return;
-    const last = list.find((r) => r.num === 28) || (list.length ? list[list.length - 1] : null);
-    if (!last) return;
-    const xM = this.round2(last.xM + last.wM + this.AISLE_M);
-    const raisedX0 = this.axisXM(this.RAISED_FROM_AXIS);
-    if (xM >= raisedX0) return;
-
-    const blocks = this.buildHorizontalRackBlocksCSideOnly(29, xM);
-    if (!blocks.length) return;
-    const yMin = Math.min(...blocks.map((b) => b.yM));
-    const yMax = Math.max(...blocks.map((b) => b.yM + b.hM));
-
-    list.push({
-      id: 'R29',
-      num: 29,
-      pairIndex,
-      isInner: true,
-      xM,
-      yM: yMin,
-      wM: this.RACK_DEPTH_M,
-      hM: this.round2(yMax - yMin),
-      blocks
-    });
-  }
-
-  /** Chỉ nhóm block 6–5–4 (phía C) — dùng cho R29 sát Y15. */
-  private buildHorizontalRackBlocksCSideOnly(rackNum: number, xM: number): JwBlock[] {
-    const blocks: JwBlock[] = [];
-    let yCursor = this.round2(this.MARGIN_C_M + this.UPRIGHT_M);
-    const group = [6, 5, 4];
-    for (let i = 0; i < group.length; i++) {
-      const blockIndex = group[i];
-      const hM = this.blockLenM(blockIndex);
-      blocks.push({
-        code: this.blockCode(rackNum, blockIndex),
-        rackNum,
-        index: blockIndex,
-        xM,
-        yM: yCursor,
-        wM: this.RACK_DEPTH_M,
-        hM
-      });
-      yCursor = this.round2(yCursor + hM);
-      if (i < group.length - 1) {
-        yCursor = this.round2(yCursor + this.UPRIGHT_M);
-      }
-    }
-    return blocks.sort((a, b) => a.index - b.index);
   }
 
   /** Block 6–5–4 (phía C), lối 1.5m, block 3–2–1 (phía B). */

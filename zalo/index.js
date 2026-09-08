@@ -331,23 +331,39 @@ exports.zaloWebhook = onRequest(
       }
     }
 
-    // Quick link: user sends "ASPxxxx" then confirms by /id
+    // Quick link 1 tin: user chỉ cần gửi "ASPxxxx" là liên kết ngay (không cần /link, /id).
+    // Link chỉ điều khiển nơi nhận thông báo, không phải xác thực app — nên bỏ bước /id.
     if (eventName === "message.text.received" && chatId && typeof text === "string") {
       const t = text.trim().toUpperCase();
       if (isValidEmployeeCode(t)) {
         try {
           const profile = await getLinkedProfile(chatId);
           if (profile?.memberId) {
+            if (profile.memberId === t) {
+              await sendText(chatId, `Bạn đã liên kết với mã ${t} rồi.`);
+            } else {
+              await sendText(chatId, `Chat này đang liên kết mã ${profile.memberId}. Liên hệ quản trị viên nếu cần đổi.`);
+            }
             res.status(200).json({ok: true});
             return;
           }
-          await db.collection("zalo_pending").doc(chatId).set(
-            {intent: "link_emp", step: "confirm", memberId: t, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+          const nameFromDir = await getEmployeeNameFromDirectory(t);
+          const name = nameFromDir || t;
+          await db.collection("zalo_links").doc(chatId).set(
+            {
+              chatId,
+              name,
+              memberId: t,
+              source: "zaloWebhook:quicklink",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
             {merge: true}
           );
-          await sendText(chatId, `Đã nhận mã ${t}. Vui lòng gõ: /id để xác nhận liên kết.`);
+          await db.collection("zalo_pending").doc(chatId).delete().catch(() => {});
+          await sendText(chatId, `Đã liên kết thành công.\nMã: ${t}\nTên: ${name}\nTừ giờ bạn nhận OTP và thông báo kho tại đây.`);
         } catch (e) {
-          logger.error("set pending link_emp failed", e);
+          logger.error("quick link failed", e);
+          await sendText(chatId, "Có lỗi khi liên kết. Vui lòng thử lại hoặc liên hệ quản trị viên.");
         }
         res.status(200).json({ok: true});
         return;

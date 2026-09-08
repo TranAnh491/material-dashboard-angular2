@@ -7,10 +7,8 @@
       <div class="dash-topbar__left">
         <img
           class="dash-topbar__logo"
-          src="assets/img/company-logo.svg"
-          width="48"
-          height="48"
-          alt="Company logo"
+          src="assets/img/logo.png"
+          alt="Airspeed Logo"
         />
         <div class="dash-topbar__headlines">
           <div class="dash-topbar__title">Warehouse Dashboard</div>
@@ -19,13 +17,6 @@
       </div>
 
       <div class="dash-topbar__right">
-        <img
-          class="dash-topbar__logo-right"
-          src="/assets/img/logo.png"
-          width="36"
-          height="36"
-          alt="Company logo"
-        />
         <div class="dash-pill dash-pill--date" *ngIf="!isMobileLayout" title="Date range (display)">
           <i class="material-icons">event</i>
           <span>{{ weekdays?.[0]?.date ? (weekdays[0].date | date:'dd/MM/yyyy') : '--/--/----' }} - {{ weekdays?.[weekdays.length-1]?.date ? (weekdays[weekdays.length-1].date | date:'dd/MM/yyyy') : '--/--/----' }}</span>
@@ -224,23 +215,23 @@
         </div>
       </article>
 
-      <article class="card dash-widget wo-chart-widget fg-in-widget dash-surface-card">
+      <article class="card dash-widget wo-chart-widget fg-in-widget dash-surface-card dash-widget--clickable" (click)="toggleInboundBox($event)" [attr.title]="inboundBoxHint">
         <header class="dash-widget__head">
           <div class="dash-widget__headrow">
             <div class="dash-widget__title dash-widget__title--with-icon">
               <span class="dash-widget__ico dash-widget__ico--sky" aria-hidden="true">
-                <i class="material-icons">local_shipping</i>
+                <i class="material-icons">{{ inboundBoxMode === 'fg' ? 'local_shipping' : 'arrow_downward' }}</i>
               </span>
-              <span class="dash-widget__title-text">FG Inbound</span>
+              <span class="dash-widget__title-text">{{ inboundBoxTitle }}</span>
             </div>
-            <div class="dash-widget__pill"><span>T2–T7 · weekly</span><i class="material-icons">expand_more</i></div>
+            <div class="dash-widget__pill"><span>T2–T7 · weekly</span><i class="material-icons">swap_horiz</i></div>
           </div>
         </header>
-        <div class="card-body card-body--wo-chart">
-          <div class="wo-chart-wrap wo-chart-wrap--heatmap">
-            <div class="wo-heatmap-inner" *ngIf="fgInHeatmapDays.length">
-              <div class="putaway-heatmap wo-heatmap fg-in-heatmap" aria-label="FG Inbound pending warehouse by weekday (T2–T7)">
-                <div *ngFor="let col of fgInHeatmapDays" class="putaway-heatmap__col">
+        <div class="card-body card-body--wo-chart" [class.card-body--putaway]="inboundBoxMode === 'rm'">
+          <div class="wo-chart-wrap wo-chart-wrap--heatmap" *ngIf="inboundBoxMode === 'fg'">
+            <div class="wo-heatmap-inner" *ngIf="inboundHeatmapDays.length">
+              <div class="putaway-heatmap wo-heatmap fg-in-heatmap" [attr.aria-label]="inboundBoxTitle + ' by weekday (T2–T7)'">
+                <div *ngFor="let col of inboundHeatmapDays" class="putaway-heatmap__col">
                   <div class="putaway-heatmap__head">
                     <span class="putaway-heatmap__week">{{ col.weekday }}</span>
                     <span class="wo-heatmap__date">{{ col.label }}</span>
@@ -261,7 +252,23 @@
                 <span><span class="wo-legend-dot fg-in-legend-dot fg-in-legend-dot--cho-vi-tri" aria-hidden="true"></span>Done</span>
               </div>
             </div>
-            <div *ngIf="!fgInHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
+            <div *ngIf="!inboundHeatmapDays.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
+          </div>
+          <div class="putaway-day-wrap" *ngIf="inboundBoxMode === 'rm'">
+            <div class="pdg-grid pdg-grid--6" *ngIf="rmInDayGrid.length" aria-label="Materials Inbound by weekday (T2–T7)">
+              <div *ngFor="let col of rmInDayGrid" class="pdg-col"
+                   [class.pdg-col--active]="col.total > 0"
+                   [attr.title]="col.weekday + ' ' + col.label">
+                <div class="pdg-col__head">{{ col.weekday }}</div>
+                <div class="pdg-cell pdg-cell--waiting" [class.pdg-cell--empty]="!col.waiting">{{ col.waiting || '' }}</div>
+                <div class="pdg-cell pdg-cell--done" [class.pdg-cell--empty]="!col.done">{{ col.done || '' }}</div>
+              </div>
+            </div>
+            <div *ngIf="!rmInDayGrid.length" class="text-center text-muted dash-empty-hint">Chưa có dữ liệu tuần.</div>
+            <div class="pdg-legend" *ngIf="rmInDayGrid.length">
+              <span class="pdg-legend__dot pdg-legend__dot--waiting"></span><span>Waiting</span>
+              <span class="pdg-legend__dot pdg-legend__dot--done"></span><span>Done</span>
+            </div>
           </div>
         </div>
       </article>
