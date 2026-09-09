@@ -22,6 +22,7 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
 import { WoCreatedByStaffService, WoCreatedByStaff } from '../../services/wo-created-by-staff.service';
 import { WoPxkBypassOtpService } from '../../services/wo-pxk-bypass-otp.service';
+import { PxkSkipKind, PxkSkipScanItem, WoPxkSkipCatalogService } from '../../services/wo-pxk-skip-catalog.service';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -163,6 +164,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   staffCatalogDraft = '';
   staffCatalogLoading = false;
   staffCatalogSaving = false;
+  showPxkSkipCatalogDialog = false;
+  pxkSkipScanCatalog: PxkSkipScanItem[] = [];
+  pxkSkipCatalogDraft = '';
+  pxkSkipCatalogKind: PxkSkipKind = 'code';
+  pxkSkipCatalogLoading = false;
+  pxkSkipCatalogSaving = false;
 
   get displayedWorkOrders(): WorkOrder[] {
     const start = (this.currentPage - 1) * this.itemsPerPage;
@@ -381,6 +388,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
     private woCreatedByStaff: WoCreatedByStaffService,
+    private woPxkSkipCatalog: WoPxkSkipCatalogService,
     private woPxkBypassOtp: WoPxkBypassOtpService
   ) {
     // Generate years from current year - 2 to current year + 2
@@ -400,6 +408,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.loadUserDepartment();
     this.loadDeletePermission();
     void this.loadCreatedByStaffCatalog();
+    void this.loadPxkSkipCatalog();
     
     // Factory access disabled for work order tab - only applies to materials inventory
     // this.loadFactoryAccess();
@@ -1417,6 +1426,78 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     void this.loadCreatedByStaffCatalog(true);
   }
 
+  openPxkSkipCatalogDialog(): void {
+    this.showMoreDialog = false;
+    this.pxkSkipCatalogDraft = '';
+    this.pxkSkipCatalogKind = 'code';
+    this.showPxkSkipCatalogDialog = true;
+    void this.loadPxkSkipCatalog(true);
+  }
+
+  closePxkSkipCatalogDialog(): void {
+    if (this.pxkSkipCatalogSaving) return;
+    this.showPxkSkipCatalogDialog = false;
+    this.pxkSkipCatalogDraft = '';
+  }
+
+  pxkSkipKindLabel(kind: PxkSkipKind): string {
+    return this.woPxkSkipCatalog.kindLabel(kind);
+  }
+
+  pxkSkipNote(item: PxkSkipScanItem): string {
+    return this.woPxkSkipCatalog.noteOf(item);
+  }
+
+  onPxkSkipDraftChange(raw: string): void {
+    this.pxkSkipCatalogDraft = String(raw || '').toUpperCase();
+    const v = this.woPxkSkipCatalog.normalizeValue(this.pxkSkipCatalogDraft);
+    if (v) this.pxkSkipCatalogKind = this.woPxkSkipCatalog.inferKind(v);
+  }
+
+  async loadPxkSkipCatalog(forceRefresh = false): Promise<void> {
+    this.pxkSkipCatalogLoading = true;
+    try {
+      this.pxkSkipScanCatalog = await this.woPxkSkipCatalog.load(forceRefresh);
+    } catch (error) {
+      console.error('Error loading PXK skip catalog:', error);
+    } finally {
+      this.pxkSkipCatalogLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async addPxkSkipCatalogItem(): Promise<void> {
+    const raw = this.pxkSkipCatalogDraft.trim();
+    if (!raw || this.pxkSkipCatalogSaving) return;
+    this.pxkSkipCatalogSaving = true;
+    try {
+      await this.woPxkSkipCatalog.add(raw, this.pxkSkipCatalogKind);
+      this.pxkSkipCatalogDraft = '';
+      this.pxkSkipCatalogKind = 'code';
+      this.pxkSkipScanCatalog = await this.woPxkSkipCatalog.load();
+    } catch (error: any) {
+      alert(error?.message || 'Không thêm được mã.');
+    } finally {
+      this.pxkSkipCatalogSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async removePxkSkipCatalogItem(item: PxkSkipScanItem): Promise<void> {
+    if (!item?.id || this.pxkSkipCatalogSaving) return;
+    if (!confirm(`Xóa ${item.value} khỏi danh mục không tính PXK?`)) return;
+    this.pxkSkipCatalogSaving = true;
+    try {
+      await this.woPxkSkipCatalog.remove(item.id);
+      this.pxkSkipScanCatalog = await this.woPxkSkipCatalog.load();
+    } catch (error: any) {
+      alert(error?.message || 'Không xóa được mã.');
+    } finally {
+      this.pxkSkipCatalogSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   closeStaffCatalogDialog(): void {
     if (this.staffCatalogSaving) return;
     this.showStaffCatalogDialog = false;
@@ -1504,23 +1585,21 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const lines = this.getPxkLinesForLsx(entry.lsx);
       const getScanQty = (mat: string, po: string) => scanMap?.get(`${String(mat || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
       const hasAnyScanData = lines.some(l => {
-        if (String(l.materialCode || '').trim().toUpperCase().charAt(0) === 'R') return false;
+        const code = String(l.materialCode || '').trim().toUpperCase();
+        if (this.isPxkAutoFullExportCode(code) || this.isPxkAlwaysFullExportCode(code)) return false;
         return getScanQty(l.materialCode, (l as any).po || (l as any).poNumber) > 0;
       });
       let hasThieu = false;
       for (const l of lines) {
         const matCode = String(l.materialCode || '').trim().toUpperCase();
         const maKho = String((l as any).maKho || '').trim().toUpperCase();
-        const isNvlSxOnly = maKho === 'NVL_SX';
-        const isR = matCode.charAt(0) === 'R';
-        const isB033 = matCode.startsWith('B033');
-        const isB030 = matCode.startsWith('B030');
+        const isNvlSxOnly = this.isPxkSkipWarehouse(maKho);
         const po = String((l as any).po || (l as any).poNumber || '').trim();
         let scanQty: number;
-        if (isNvlSxOnly) scanQty = Number(l.quantity) || 0;
-        else if ((isR || isB030 || isB033) && hasAnyScanData) scanQty = Number(l.quantity) || 0;
+        if (isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) scanQty = Number(l.quantity) || 0;
+        else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) scanQty = Number(l.quantity) || 0;
         else scanQty = getScanQty(l.materialCode, po);
-        if (isR) continue;
+        if (this.isPxkSkipThieuCode(matCode)) continue;
         const qtyPxk = Number(l.quantity) || 0;
         const soSanh = !hasAnyScanData && scanQty === 0 ? '' : getSoSanhForCheck(qtyPxk, scanQty);
         if (soSanh.startsWith('Thiếu')) { hasThieu = true; break; }
@@ -4960,6 +5039,24 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return result;
   }
 
+  /** R / B030 / B033 / B036004 + mã user thêm: PXK coi như xuất đủ, không bắt scan. */
+  private isPxkAutoFullExportCode(materialCode: string): boolean {
+    return this.woPxkSkipCatalog.isAutoFull(materialCode, this.pxkSkipScanCatalog);
+  }
+
+  /** Mã always (vd B036004): luôn điền xuất đủ, kể cả khi LSX chưa scan mã nào. */
+  private isPxkAlwaysFullExportCode(materialCode: string): boolean {
+    return this.woPxkSkipCatalog.isAlwaysFull(materialCode, this.pxkSkipScanCatalog);
+  }
+
+  private isPxkSkipThieuCode(materialCode: string): boolean {
+    return this.woPxkSkipCatalog.isSkipThieu(materialCode, this.pxkSkipScanCatalog);
+  }
+
+  private isPxkSkipWarehouse(maKho: string): boolean {
+    return this.woPxkSkipCatalog.isSkipWarehouse(maKho, this.pxkSkipScanCatalog);
+  }
+
   hasPxkForWorkOrder(wo: WorkOrder): boolean {
     const lsx = wo.productionOrder || '';
     if (!lsx) return false;
@@ -5179,25 +5276,26 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       if (diff < 0) return 'Thiếu';
       return 'Dư';
     };
-    const hasAnyScanData = lines.some(l => getScanQty(l.materialCode, l.po || (l as any).poNumber) > 0);
+    const hasAnyScanData = lines.some(l => {
+      const code = String(l.materialCode || '').trim().toUpperCase();
+      if (this.isPxkAutoFullExportCode(code)) return false;
+      return getScanQty(l.materialCode, l.po || (l as any).poNumber) > 0;
+    });
     for (const l of lines) {
       const matCode = String(l.materialCode || '').trim().toUpperCase();
       const maKho = String((l as any).maKho || '').trim().toUpperCase();
-      const isNvlSxOnly = maKho === 'NVL_SX';
-      const isR = matCode.charAt(0) === 'R';
-      const isB033 = matCode.startsWith('B033');
-      const isB030 = matCode.startsWith('B030');
+      const isNvlSxOnly = this.isPxkSkipWarehouse(maKho);
       const po = String((l as any).po || (l as any).poNumber || '').trim();
       let scanQty: number;
-      if (isNvlSxOnly) {
-        scanQty = Number(l.quantity) || 0; // Đã Giao
-      } else if ((isR || isB030 || isB033) && hasAnyScanData) {
+      if (isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) {
+        scanQty = Number(l.quantity) || 0; // Đã Giao / luôn đủ
+      } else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) {
         scanQty = Number(l.quantity) || 0; // Coi như đủ
       } else {
         scanQty = getScanQty(l.materialCode, po);
       }
       const qtyPxk = Number(l.quantity) || 0;
-      if (isR) continue; // R không tính thiếu
+      if (this.isPxkSkipThieuCode(matCode)) continue;
       const soSanh = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
       if (soSanh.startsWith('Thiếu')) return true;
     }
@@ -6190,7 +6288,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const tenTPDisplay = lines.length > 0 ? String((lines[0] as any).tenTP || '').trim() : '';
     const soPOKHDisplay = lines.map(l => String((l as any).soPOKH || '').trim()).find(v => v) || '';
     const phanTramHaoHutDisplay = lines.length > 0 ? String((lines[0] as any).phanTramHaoHut || '').trim() : '';
-    const hasAnyScanData = lines.some(l => getScanQty(l.materialCode, l.po) > 0);
+    const hasAnyScanData = lines.some(l => {
+      const code = String(l.materialCode || '').trim().toUpperCase();
+      if (this.isPxkAutoFullExportCode(code)) return false;
+      return getScanQty(l.materialCode, l.po) > 0;
+    });
     const hasAnyDeliveryData = lines.some(l => getDeliveryQty(l.materialCode, l.po) > 0);
     let sttCounter = 0;
     const rowsHtml = sortedLines.map((l) => {
@@ -6207,14 +6309,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const tongSLYCau = String((l as any).tongSLYCau || '').trim();
       const luongYeuCau = String((l as any).luongYeuCau || '').trim();
       const po = String(l.po || '').trim();
-      const isNvlSxOnly = maKho === 'NVL_SX';
-      const isR = matCode.charAt(0) === 'R';
-      const isB033 = matCode.startsWith('B033');
-      const isB030 = matCode.startsWith('B030');
+      const isNvlSxOnly = this.isPxkSkipWarehouse(maKho);
       let scanQty: number;
-      if (isNvlSxOnly) {
+      if (isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) {
         scanQty = Number(l.quantity) || 0;
-      } else if ((isR || isB030 || isB033) && hasAnyScanData) {
+      } else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) {
         scanQty = Number(l.quantity) || 0;
       } else {
         scanQty = getScanQty(l.materialCode, po);

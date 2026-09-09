@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.purgeInventoryHiddenDaily = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = void 0;
+exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -1181,6 +1181,40 @@ exports.backupFgCollectionsDaily = functions
     .onRun(async () => {
     const { runFgDailyBackupJob } = await Promise.resolve().then(() => __importStar(require('./fg-daily-backup')));
     await runFgDailyBackupJob();
+});
+/**
+ * Backup HÀNG TUẦN dữ liệu kho NVL (Inbound → Tồn → Outbound) ra Cloud Storage
+ * dạng NDJSON — Thứ Hai 03:00 (VN). Giữ 8 tuần gần nhất, gửi email tổng kết cho kho.
+ * Đường dẫn: rm-weekly-backups/<YYYY-MM-DD>/<collection>.ndjson (+ _manifest.json).
+ */
+exports.backupRmCollectionsWeekly = functions
+    .runWith({ secrets: [params_config_1.emailPass], timeoutSeconds: 540, memory: '2GB' })
+    .pubsub.schedule('0 3 * * 1')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runRmWeeklyBackupJob } = await Promise.resolve().then(() => __importStar(require('./rm-weekly-backup')));
+    await runRmWeeklyBackupJob();
+});
+/** Chạy backup NVL ngay (thủ công / test) — bảo vệ bằng secret ?secret=DEPLOY_RELOAD_SECRET. */
+exports.runRmBackupNow = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.deployReloadSecret], timeoutSeconds: 540, memory: '2GB' })
+    .https.onRequest(async (req, res) => {
+    var _a, _b, _c;
+    const provided = String((_c = (_a = req.query.secret) !== null && _a !== void 0 ? _a : (_b = req.body) === null || _b === void 0 ? void 0 : _b.secret) !== null && _c !== void 0 ? _c : '');
+    if (!provided || provided !== params_config_1.deployReloadSecret.value()) {
+        res.status(403).json({ ok: false, error: 'Forbidden' });
+        return;
+    }
+    try {
+        const { runRmWeeklyBackupJob } = await Promise.resolve().then(() => __importStar(require('./rm-weekly-backup')));
+        const r = await runRmWeeklyBackupJob();
+        res.status(200).json(Object.assign({ ok: true }, r));
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('runRmBackupNow failed:', msg);
+        res.status(500).json({ ok: false, error: msg });
+    }
 });
 /**
  * RM Inventory — danh mục Ẩn: mỗi ngày 02:00 (VN)

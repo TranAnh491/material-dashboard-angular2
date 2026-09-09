@@ -63,6 +63,19 @@ export class PxkBuildService {
     return parts.join('.');
   }
 
+  private isAutoFullExportCode(materialCode: string): boolean {
+    const c = String(materialCode || '').trim().toUpperCase();
+    if (!c) return false;
+    return c.charAt(0) === 'R'
+      || c.startsWith('B030')
+      || c.startsWith('B033')
+      || c.startsWith('B036004');
+  }
+
+  private isAlwaysFullExportCode(materialCode: string): boolean {
+    return String(materialCode || '').trim().toUpperCase().startsWith('B036004');
+  }
+
   async buildHtml(p: PxkBuildParams): Promise<string> {
     const { lsx, lines, workOrder, factory, scanQtyMap, deliveryQtyMap, locationMap } = p;
     const isAsm1 = factory.includes('ASM1') || factory === 'ASM1';
@@ -121,12 +134,10 @@ export class PxkBuildService {
       const tongSLYCau = String((l as any).tongSLYCau || '').trim();
       const po = String(l.po || '').trim();
       const isNvlSxOnly = maKho === 'NVL_SX';
-      const isR = matCode.charAt(0) === 'R';
-      const isB033 = matCode.startsWith('B033');
-      const isB030 = matCode.startsWith('B030');
+      const autoFull = this.isAutoFullExportCode(matCode);
       let scanQty: number;
-      if (isNvlSxOnly) scanQty = Number(l.quantity) || 0;
-      else if ((isR || isB030 || isB033) && hasAnyScanData) scanQty = Number(l.quantity) || 0;
+      if (isNvlSxOnly || this.isAlwaysFullExportCode(matCode)) scanQty = Number(l.quantity) || 0;
+      else if (autoFull && hasAnyScanData) scanQty = Number(l.quantity) || 0;
       else scanQty = getScanQty(l.materialCode, po);
       const qtyPxk = Number(l.quantity) || 0;
       const soSanhStr = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
@@ -146,7 +157,7 @@ export class PxkBuildService {
         <td style="border:1px solid #000;padding:6px;">${this.esc(maKho)}</td>
         <td class="col-vitri" style="border:1px solid #000;padding:6px;">${this.esc(getLocation(l.materialCode, l.po))}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.esc(loaiHinh)}</td>
-        <td class="col-luong-scan" data-scan-key="${matCode}|${po}" data-qty-pxk="${qtyPxk}" data-is-nvl-sx="${isNvlSxOnly?'1':'0'}" data-is-rb="${(isR||isB030||isB033)?'1':'0'}" style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(scanQtyStr)}</td>
+        <td class="col-luong-scan" data-scan-key="${matCode}|${po}" data-qty-pxk="${qtyPxk}" data-is-nvl-sx="${isNvlSxOnly?'1':'0'}" data-is-rb="${autoFull?'1':'0'}" style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(scanQtyStr)}</td>
         <td data-sosanh-key="${matCode}|${po}" style="border:1px solid #000;padding:6px;text-align:center;${soSanhColor}">${this.esc(soSanhStr)}</td>
         <td data-delivery-key="${matCode}|${po}" style="border:1px solid #000;padding:6px;text-align:right;">${this.esc(deliveryQtyStr)}</td>
         <td class="col-ghi-chu" style="border:1px solid #000;padding:6px;">${this.esc(String((l as any).ghiChu || ''))}</td>

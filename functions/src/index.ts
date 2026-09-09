@@ -1279,6 +1279,40 @@ export const backupFgCollectionsDaily = functions
   });
 
 /**
+ * Backup HÀNG TUẦN dữ liệu kho NVL (Inbound → Tồn → Outbound) ra Cloud Storage
+ * dạng NDJSON — Thứ Hai 03:00 (VN). Giữ 8 tuần gần nhất, gửi email tổng kết cho kho.
+ * Đường dẫn: rm-weekly-backups/<YYYY-MM-DD>/<collection>.ndjson (+ _manifest.json).
+ */
+export const backupRmCollectionsWeekly = functions
+  .runWith({ secrets: [emailPass], timeoutSeconds: 540, memory: '2GB' })
+  .pubsub.schedule('0 3 * * 1')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runRmWeeklyBackupJob } = await import('./rm-weekly-backup');
+    await runRmWeeklyBackupJob();
+  });
+
+/** Chạy backup NVL ngay (thủ công / test) — bảo vệ bằng secret ?secret=DEPLOY_RELOAD_SECRET. */
+export const runRmBackupNow = functions
+  .runWith({ secrets: [emailPass, deployReloadSecret], timeoutSeconds: 540, memory: '2GB' })
+  .https.onRequest(async (req, res) => {
+    const provided = String(req.query.secret ?? req.body?.secret ?? '');
+    if (!provided || provided !== deployReloadSecret.value()) {
+      res.status(403).json({ ok: false, error: 'Forbidden' });
+      return;
+    }
+    try {
+      const { runRmWeeklyBackupJob } = await import('./rm-weekly-backup');
+      const r = await runRmWeeklyBackupJob();
+      res.status(200).json({ ok: true, ...r });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('runRmBackupNow failed:', msg);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+/**
  * RM Inventory — danh mục Ẩn: mỗi ngày 02:00 (VN)
  * gửi backup CSV các dòng đã Ẩn ≥ 30 ngày tới wh1@airspeedmfgvn.com rồi xóa.
  */

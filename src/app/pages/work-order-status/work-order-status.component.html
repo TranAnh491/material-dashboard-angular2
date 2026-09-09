@@ -158,6 +158,10 @@
                               style="color: #1565c0; font-weight: 600;" title="Thêm hoặc xóa nhân viên trong dropdown Người soạn LSX">
                         <i class="material-icons">badge</i> Danh mục nhân viên
                       </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openPxkSkipCatalogDialog()"
+                              style="color: #0f766e; font-weight: 600;" title="Mã / đầu mã tự điền PXK, không cần scan">
+                        <i class="material-icons">playlist_add_check</i> Danh mục không tính PXK
+                      </button>
                       <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
                               style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
                         <i class="material-icons">search</i> Search
@@ -195,6 +199,89 @@
                 </div>
                 <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
                   <button mat-raised-button type="button" (click)="showMoreDialog = false">
+                    <mat-icon>close</mat-icon> Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dialog: Danh mục không tính PXK (mở từ KHÁC) -->
+            <div class="time-range-dialog-overlay" *ngIf="showPxkSkipCatalogDialog" (click)="closePxkSkipCatalogDialog()">
+              <div class="time-range-dialog pxk-skip-catalog-dialog" (click)="$event.stopPropagation()">
+                <div class="dialog-header">
+                  <h4>
+                    <i class="material-icons" style="vertical-align:middle;margin-right:6px;">playlist_add_check</i>
+                    Danh mục không tính PXK
+                  </h4>
+                  <button mat-icon-button type="button" (click)="closePxkSkipCatalogDialog()" title="Đóng" [disabled]="pxkSkipCatalogSaving">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content pxk-skip-catalog-content">
+                  <p class="prep-catalog-desc">
+                    Các <strong>mã</strong> / <strong>đầu mã</strong> / <strong>mã kho</strong> đang được tự điền xuất đủ trên PXK, không cần scan outbound.
+                    Thêm hoặc xóa khi cần.
+                  </p>
+
+                  <form class="pxk-skip-catalog-add" (submit)="$event.preventDefault(); addPxkSkipCatalogItem()">
+                    <input class="pxk-skip-catalog-add__input"
+                           type="text"
+                           [ngModel]="pxkSkipCatalogDraft"
+                           (ngModelChange)="onPxkSkipDraftChange($event)"
+                           name="pxkSkipCatalogDraft"
+                           placeholder="Nhập mã, đầu mã hoặc mã kho…"
+                           maxlength="40"
+                           [disabled]="pxkSkipCatalogSaving"
+                           autocomplete="off">
+                    <select class="pxk-skip-catalog-add__kind"
+                            [(ngModel)]="pxkSkipCatalogKind"
+                            name="pxkSkipCatalogKind"
+                            [disabled]="pxkSkipCatalogSaving">
+                      <option value="prefix">Đầu mã</option>
+                      <option value="code">Mã</option>
+                      <option value="warehouse">Mã kho</option>
+                    </select>
+                    <button type="submit" class="pxk-skip-catalog-add__btn"
+                            [disabled]="pxkSkipCatalogSaving || !pxkSkipCatalogDraft.trim()">
+                      <i class="material-icons">add</i>
+                      {{ pxkSkipCatalogSaving ? 'Đang lưu…' : 'Thêm' }}
+                    </button>
+                  </form>
+
+                  <div class="staff-catalog-loading" *ngIf="pxkSkipCatalogLoading">Đang tải danh mục…</div>
+                  <div class="pxk-skip-catalog-table-wrap" *ngIf="!pxkSkipCatalogLoading">
+                    <table class="prep-catalog-table pxk-skip-catalog-table">
+                      <thead>
+                        <tr>
+                          <th>Loại</th>
+                          <th>Mã / đầu mã</th>
+                          <th>Cách áp dụng</th>
+                          <th class="pxk-skip-catalog-actions-col">Xóa</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngIf="pxkSkipScanCatalog.length === 0">
+                          <td colspan="4" class="pxk-skip-catalog-empty">Chưa có mã. Nhập mã rồi bấm Thêm.</td>
+                        </tr>
+                        <tr *ngFor="let row of pxkSkipScanCatalog">
+                          <td>{{ pxkSkipKindLabel(row.kind) }}</td>
+                          <td class="pxk-skip-catalog-code">{{ row.value }}</td>
+                          <td>{{ pxkSkipNote(row) }}</td>
+                          <td class="pxk-skip-catalog-actions-col">
+                            <button type="button" class="staff-catalog-item__del"
+                                    (click)="removePxkSkipCatalogItem(row)"
+                                    [disabled]="pxkSkipCatalogSaving"
+                                    title="Xóa {{ row.value }}">
+                              <i class="material-icons">delete</i>
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
+                  <button mat-raised-button type="button" (click)="closePxkSkipCatalogDialog()" [disabled]="pxkSkipCatalogSaving">
                     <mat-icon>close</mat-icon> Đóng
                   </button>
                 </div>
