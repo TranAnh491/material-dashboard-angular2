@@ -75,6 +75,15 @@
               <button type="button"
                       class="more-btn"
                       *ngIf="kkLocMapView === 'type'"
+                      (click)="openKkTypeScanModal()"
+                      [disabled]="!canEdit || kkLocMapBusy"
+                      title="Scan pallet rồi scan mã hàng để tick KK">
+                <i class="material-icons">qr_code_scanner</i>
+                <span class="btn-label">Scan</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView === 'type'"
                       (click)="showKkTypeReportMenu = true"
                       [disabled]="kkLocMapLoading || kkTypeReportBusy"
                       title="Tải báo cáo Excel lưu trữ">
@@ -442,8 +451,8 @@
       </div>
 
       <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type'">
-          <div class="kk-type-topbar">
-          <div class="kk-type-topbar__search" *ngIf="kkActiveProductType">
+          <div class="kk-type-topbar" *ngIf="kkActiveProductType">
+          <div class="kk-type-topbar__search">
             <i class="material-icons" aria-hidden="true">search</i>
             <input type="search"
                    [(ngModel)]="kkLocMapQuery"
@@ -460,14 +469,6 @@
               <i class="material-icons">close</i>
             </button>
           </div>
-          <button type="button"
-                  class="kk-type-topbar__scan"
-                  (click)="openKkTypeScanModal()"
-                  [disabled]="!canEdit || kkLocMapBusy"
-                  title="Scan pallet rồi scan mã hàng để tick KK">
-            <i class="material-icons">qr_code_scanner</i>
-            Scan
-          </button>
         </div>
         <ng-container *ngIf="!kkActiveProductType">
           <div class="kk-type-muc" *ngFor="let muc of kkTypeBoxGroups">
@@ -1352,10 +1353,12 @@
                 placeholder="Nhập số bịch (lần đầu)">
             </ng-container>
             <ng-template #bagsMobileReadonlyOrAuto>
-              <span class="value readonly-metric"
-                    [title]="getBagsBreakdownTitle(material)">
+              <button type="button"
+                      class="bag-cell-btn"
+                      (click)="openBagStatusPopup(material, $event)"
+                      [title]="getBagsBreakdownTitle(material)">
                 {{ getBagsBreakdownText(material) }}
-              </span>
+              </button>
             </ng-template>
           </div>
           
@@ -1385,13 +1388,9 @@
           
           <div class="info-row">
             <span class="label">XT:</span>
-            <input type="number" 
-                   class="mobile-input" 
-                   [(ngModel)]="material.xt" 
-                   (change)="updateXT(material)" 
-                   min="0" 
-                   step="0.1" 
-                   placeholder="Nhập XT">
+            <button type="button" class="xt-cell-btn" (click)="openXtBagPopup(material, $event)">
+              {{ getXtCellText(material) }}
+            </button>
           </div>
           
           <div class="info-row">
@@ -1517,11 +1516,11 @@
             <th>Mã hàng</th>
             <th>PO</th>
                             <th>IMD</th>
-            <th title="Số bịch (gwLdv) dùng cho đuôi QR inbound">BAG</th>
+            <th title="Số bịch — bấm để xem bag còn tồn / đã xuất">BAG</th>
             <th>Tồn đầu</th>
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
-            <th title="Số lượng cần xuất (nhập tay)">XT</th>
+            <th title="Bấm để chọn bag cần xuất và lượng từng bag">XT</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
             <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Bấm ô vị trí để mở sơ đồ kho' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
               <span>Vị trí</span>
@@ -1608,9 +1607,12 @@
                   placeholder="Lần đầu">
               </ng-container>
               <ng-template #bagsDesktopReadonlyOrAuto>
-                <span [title]="getBagsBreakdownTitle(material)" style="font-size: 11px;">
+                <button type="button"
+                        class="bag-cell-btn"
+                        (click)="openBagStatusPopup(material, $event)"
+                        [title]="(getBagsBreakdownTitle(material) || 'Danh sách bag') + ' — bấm để xem bag còn tồn / đã xuất'">
                   {{ getBagsBreakdownText(material) }}
-                </span>
+                </button>
               </ng-template>
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
@@ -1656,25 +1658,14 @@
                        placeholder="0">
               </ng-container>
             </td>
-                        <!-- Cột "XT" - Số lượng cần xuất (nhập tay) -->
+                        <!-- Cột "XT" - Chọn bag cần xuất -->
             <td class="number-cell xt-column">
-              <span *ngIf="!material.isEditingXT" 
-                    class="display-value" 
-                    (click)="startEditingXT(material)"
-                    [title]="'Click để sửa XT: ' + formatNumber(material.xt || 0)">
-                {{formatNumber(material.xt || 0)}}
-              </span>
-              <input *ngIf="material.isEditingXT"
-                     type="number" 
-                     class="editable-cell" 
-                     [ngModel]="material.xt || ''"
-                     (ngModelChange)="material.xt = $event === '' ? null : +$event" 
-                     (blur)="finishEditingXT(material)"
-                     (keyup.enter)="finishEditingXT(material)"
-                     (keyup.escape)="cancelEditingXT(material)"
-                     min="0" 
-                     step="0.1" 
-                     placeholder="Nhập số lượng XT">
+              <button type="button"
+                      class="xt-cell-btn"
+                      (click)="openXtBagPopup(material, $event)"
+                      [title]="getXtCellText(material)">
+                {{ getXtCellText(material) }}
+              </button>
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [class.negative-stock-cell]="calculateCurrentStock(material) < 0"
@@ -1873,6 +1864,147 @@
           <p>Tìm kiếm "<strong>{{searchTerm}}</strong>" trong {{ selectedFactory }} inventory</p>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- BAG: còn tồn / đã xuất -->
+<div class="modal-overlay" *ngIf="showBagStatusPopup" (click)="closeBagBagPopups()">
+  <div class="modal-content bag-track-popup" (click)="$event.stopPropagation()" role="dialog" aria-label="Danh sách bag">
+    <div class="modal-header">
+      <h3>Bag còn tồn / đã xuất</h3>
+      <button type="button" class="close-btn" (click)="closeBagBagPopups()">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body" *ngIf="bagPopupMaterial as m">
+      <p class="bag-track-meta">
+        <strong>{{ m.materialCode }}</strong>
+        · PO {{ m.poNumber || '—' }}
+        · IMD {{ getDisplayIMD(m) }}
+        · {{ getBagsBreakdownText(m) }} bịch
+      </p>
+      <p class="tem-xuat-hint">Bag số mấy còn trong kho, bag số mấy đã xuất (theo outbound / QR).</p>
+      <p class="tem-le-error" *ngIf="bagPopupError">{{ bagPopupError }}</p>
+      <p class="tem-xuat-hint" *ngIf="bagPopupLoading">Đang tải danh sách bag…</p>
+      <p class="tem-xuat-hint" *ngIf="!bagPopupLoading && !bagPopupRows.length">
+        Chưa xác định được số bag. Cần Standard Packing hoặc tổng BAG của lô.
+      </p>
+      <div class="bag-track-table-wrap" *ngIf="!bagPopupLoading && bagPopupRows.length">
+        <table class="bag-track-table">
+          <thead>
+            <tr>
+              <th>Bag</th>
+              <th>Lượng</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of bagPopupRows" [class.bag-track-row--out]="row.status === 'exported'" [class.bag-track-row--xt]="row.status === 'xt'">
+              <td class="bag-track-no">#{{ row.bagNo }}</td>
+              <td>{{ formatNumber(row.qty) }}</td>
+              <td>
+                <span class="bag-track-tag" [attr.data-status]="row.status">
+                  {{ row.status === 'exported' ? 'Đã xuất' : row.status === 'xt' ? 'Đang XT' : 'Còn tồn' }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeBagBagPopups()">
+        <i class="material-icons">close</i>
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- XT: chọn bag + lượng -->
+<div class="modal-overlay" *ngIf="showXtBagPopup" (click)="closeBagBagPopups()">
+  <div class="modal-content bag-track-popup" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn XT bag">
+    <div class="modal-header">
+      <h3>XT theo bag</h3>
+      <button type="button" class="close-btn" (click)="closeBagBagPopups()" [disabled]="xtBagSaving">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body" *ngIf="bagPopupMaterial as m">
+      <p class="bag-track-meta">
+        <strong>{{ m.materialCode }}</strong>
+        · PO {{ m.poNumber || '—' }}
+        · IMD {{ getDisplayIMD(m) }}
+      </p>
+      <p class="tem-xuat-hint">Chọn bag còn tồn cần xuất và nhập lượng. Bag đã xuất không chọn lại được.</p>
+      <p class="tem-le-error" *ngIf="bagPopupError">{{ bagPopupError }}</p>
+      <p class="tem-xuat-hint" *ngIf="bagPopupLoading">Đang tải danh sách bag…</p>
+
+      <ng-container *ngIf="!bagPopupLoading && !bagPopupRows.length">
+        <p class="tem-xuat-hint">Chưa có danh sách bag — nhập số lượng XT như trước.</p>
+        <input type="number"
+               class="editable-input"
+               style="max-width:200px;"
+               [ngModel]="xtBagFallbackQty"
+               (ngModelChange)="xtBagFallbackQty = $event === '' || $event === null ? null : +$event"
+               min="0"
+               step="0.1"
+               placeholder="Nhập số lượng XT">
+      </ng-container>
+
+      <div class="bag-track-xt-toolbar" *ngIf="!bagPopupLoading && bagPopupRows.length">
+        <button type="button" class="bag-track-mini" (click)="selectAllRemainingXtBags()">Chọn bag còn tồn</button>
+        <button type="button" class="bag-track-mini bag-track-mini--ghost" (click)="clearXtBagSelection()">Bỏ chọn</button>
+        <span class="bag-track-sum">{{ getXtBagSelectedCount() }} bag · {{ formatNumber(getXtBagTotalQty()) }}</span>
+      </div>
+      <div class="bag-track-table-wrap" *ngIf="!bagPopupLoading && bagPopupRows.length">
+        <table class="bag-track-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Bag</th>
+              <th>Lượng XT</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of bagPopupRows" [class.bag-track-row--out]="row.exported">
+              <td>
+                <input type="checkbox"
+                       [checked]="row.selected"
+                       [disabled]="row.exported"
+                       (change)="toggleXtBagRow(row, $any($event.target).checked)">
+              </td>
+              <td class="bag-track-no">#{{ row.bagNo }}</td>
+              <td>
+                <input type="number"
+                       class="editable-input bag-track-qty"
+                       [ngModel]="row.qty"
+                       (ngModelChange)="onXtBagQtyChange(row, $event)"
+                       [disabled]="row.exported || !row.selected"
+                       min="0"
+                       step="0.1">
+              </td>
+              <td>
+                <span class="bag-track-tag" [attr.data-status]="row.exported ? 'exported' : (row.selected ? 'xt' : 'stock')">
+                  {{ row.exported ? 'Đã xuất' : (row.selected ? 'Đang XT' : 'Còn tồn') }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="cancel-btn" (click)="closeBagBagPopups()" [disabled]="xtBagSaving">
+        <i class="material-icons">cancel</i>
+        Hủy
+      </button>
+      <button type="button" class="save-btn" (click)="saveXtBagPopup()" [disabled]="xtBagSaving || bagPopupLoading">
+        <i class="material-icons">check</i>
+        {{ xtBagSaving ? 'Đang lưu…' : 'Lưu XT' }}
+      </button>
     </div>
   </div>
 </div>

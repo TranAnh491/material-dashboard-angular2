@@ -113,6 +113,8 @@ export interface InventoryMaterial {
   bagTrackingInitialized?: boolean;
   /** Tồn kho tại lần nhập bịch đầu tiên (tồn đầu kỳ bịch). */
   openingStockAtBagInit?: number;
+  /** XT theo từng bag: bag số nào, lượng bao nhiêu. */
+  xtBags?: InventoryXtBagPick[];
   
   // Edit states
   isEditingOpeningStock?: boolean;
@@ -120,6 +122,21 @@ export interface InventoryMaterial {
 
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface InventoryXtBagPick {
+  bagNo: number;
+  qty: number;
+}
+
+export type InventoryBagStatus = 'stock' | 'exported' | 'xt';
+
+export interface InventoryBagRow {
+  bagNo: number;
+  qty: number;
+  status: InventoryBagStatus;
+  selected?: boolean;
+  exported?: boolean;
 }
 
 type ResetLowStockRow = {
@@ -641,6 +658,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private get QTY_BAG_RULE_KEY(): string {
     return `materials-${this.selectedFactory}:qty-bag-rule-enabled:v1`;
   }
+
+  showBagStatusPopup = false;
+  showXtBagPopup = false;
+  bagPopupMaterial: InventoryMaterial | null = null;
+  bagPopupRows: InventoryBagRow[] = [];
+  bagPopupLoading = false;
+  bagPopupError = '';
+  xtBagSaving = false;
+  xtBagFallbackQty: number | null = null;
 
   /** Rule Bag: 4 ký tự đầu mã — khi master QTY BAG rule ON, chỉ nhóm prefix ON mới bắt bội số SP */
   showRuleBagPopup = false;
@@ -3141,6 +3167,265 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return partial <= 1e-9
       ? `${base} = ${fullCount} bịch chẵn.`
       : `${base} = ${fullCount} bịch chẵn + 1 bịch lẻ ${this.formatNumber(partial)}.`;
+  }
+
+  getXtCellText(material: InventoryMaterial): string {
+    const qty = Number(material.xt || 0);
+    const bags = this.normalizeXtBags(material);
+    if (qty <= 0 && bags.length === 0) return 'Chọn bag';
+    if (bags.length === 0) return this.formatNumber(qty);
+    const nos = bags.map((b) => `#${b.bagNo}`).join(', ');
+    return `${this.formatNumber(qty)} · ${nos}`;
+  }
+
+  getXtBagTotalQty(): number {
+    return this.bagPopupRows.reduce((sum, row) => {
+      if (!row.selected || row.exported) return sum;
+      return sum + (Number(row.qty) || 0);
+    }, 0);
+  }
+
+  getXtBagSelectedCount(): number {
+    return this.bagPopupRows.filter((r) => r.selected && !r.exported).length;
+  }
+
+  openBagStatusPopup(material: InventoryMaterial, event?: Event): void {
+    event?.stopPropagation();
+    this.showXtBagPopup = false;
+    this.bagPopupMaterial = material;
+    this.showBagStatusPopup = true;
+    void this.reloadBagPopupRows(material);
+  }
+
+  openXtBagPopup(material: InventoryMaterial, event?: Event): void {
+    event?.stopPropagation();
+    this.showBagStatusPopup = false;
+    this.bagPopupMaterial = material;
+    this.xtBagFallbackQty = Number(material.xt || 0) || null;
+    this.showXtBagPopup = true;
+    void this.reloadBagPopupRows(material);
+  }
+
+  closeBagBagPopups(force = false): void {
+    if (this.xtBagSaving && !force) return;
+    this.showBagStatusPopup = false;
+    this.showXtBagPopup = false;
+    this.bagPopupMaterial = null;
+    this.bagPopupRows = [];
+    this.bagPopupError = '';
+    this.xtBagFallbackQty = null;
+  }
+
+  toggleXtBagRow(row: InventoryBagRow, checked: boolean): void {
+    if (row.exported) return;
+    row.selected = checked;
+    if (checked && !(Number(row.qty) > 0)) {
+      row.qty = this.getBagDefaultQty(this.bagPopupMaterial!, row.bagNo, this.bagPopupRows.length);
+    }
+  }
+
+  onXtBagQtyChange(row: InventoryBagRow, raw: any): void {
+    const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
+    row.qty = Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  selectAllRemainingXtBags(): void {
+    for (const row of this.bagPopupRows) {
+      if (row.exported) continue;
+      row.selected = true;
+      if (!(Number(row.qty) > 0)) {
+        row.qty = this.getBagDefaultQty(this.bagPopupMaterial!, row.bagNo, this.bagPopupRows.length);
+      }
+    }
+  }
+
+  clearXtBagSelection(): void {
+    for (const row of this.bagPopupRows) {
+      if (!row.exported) row.selected = false;
+    }
+  }
+
+  async saveXtBagPopup(): Promise<void> {
+    const material = this.bagPopupMaterial;
+    if (!material || this.xtBagSaving) return;
+    this.xtBagSaving = true;
+    try {
+      if (this.bagPopupRows.length === 0) {
+        const qty = Number(this.xtBagFallbackQty || 0);
+        material.xtBags = [];
+        material.xt = qty > 0 ? qty : 0;
+      } else {
+        const picks = this.bagPopupRows
+          .filter((r) => r.selected && !r.exported && Number(r.qty) > 0)
+          .map((r) => ({ bagNo: r.bagNo, qty: Number(r.qty) }));
+        material.xtBags = picks;
+        material.xt = picks.reduce((s, p) => s + p.qty, 0);
+      }
+      await this.updateXT(material);
+      this.xtBagSaving = false;
+      this.closeBagBagPopups(true);
+    } catch (e: any) {
+      this.bagPopupError = e?.message || 'Không lưu được XT bag.';
+    } finally {
+      this.xtBagSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private normalizeXtBags(material: InventoryMaterial | null | undefined): InventoryXtBagPick[] {
+    const raw = material?.xtBags;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((x) => ({
+        bagNo: Math.floor(Number((x as any)?.bagNo ?? 0)),
+        qty: Number((x as any)?.qty ?? 0)
+      }))
+      .filter((x) => x.bagNo > 0 && x.qty > 0);
+  }
+
+  private getLotBagCount(material: InventoryMaterial): number {
+    const sp = this.getEffectiveStandardPacking(material);
+    const received = Number(material.openingStock || 0) + Number(material.quantity || 0);
+    const fromInit = Math.max(0, Math.floor(Number(material.openingBagsAtInit ?? 0)));
+    if (fromInit > 0) return fromInit;
+    if (sp > 0 && received > 0) return Math.max(1, Math.ceil(received / sp));
+    const remaining = this.computeTotalBagsFromStock(material);
+    const exported = Math.max(0, Math.floor(Number(material.exportedBags ?? 0)));
+    if (remaining + exported > 0) return remaining + exported;
+    const stored = Math.max(0, Math.floor(Number(material.totalBags ?? 0)));
+    return stored;
+  }
+
+  private getBagDefaultQty(material: InventoryMaterial, bagNo: number, total: number): number {
+    const sp = this.getEffectiveStandardPacking(material);
+    const received = Number(material.openingStock || 0) + Number(material.quantity || 0);
+    if (sp > 0 && received > 0 && total > 0) {
+      if (bagNo < total) return sp;
+      const rem = Math.round((received - (total - 1) * sp) * 1e6) / 1e6;
+      return rem > 1e-9 ? rem : sp;
+    }
+    if (sp > 0) return sp;
+    return 0;
+  }
+
+  private collectOutboundBagNos(data: Record<string, unknown>): number[] {
+    const nos = new Set<number>();
+    const addFrom = (raw: string) => {
+      const s = String(raw || '').trim();
+      if (!s) return;
+      for (const part of s.split(',')) {
+        const t = part.trim();
+        if (!t) continue;
+        const frac = /^(\d+)\s*\//.exec(t);
+        if (frac) {
+          const n = parseInt(frac[1], 10);
+          if (n > 0) nos.add(n);
+          continue;
+        }
+        const lead = /^(\d+)/.exec(t);
+        if (lead) {
+          const n = parseInt(lead[1], 10);
+          if (n > 0) nos.add(n);
+        }
+      }
+    };
+    const resolved = this.rmBagHistory.resolveControlBatchOutboundRowBagFields(data);
+    addFrom(resolved.bagDisplay);
+    addFrom(resolved.bichBatch);
+    addFrom(String(data['bagNumberDisplay'] ?? ''));
+    addFrom(String(data['bagBatch'] ?? ''));
+    const p4 = this.rmBagHistory.parseQrPart4(String(data['importDate'] ?? data['batchNumber'] ?? ''));
+    addFrom(p4.bagNumberDisplay);
+    addFrom(p4.bagFractionLabel);
+    return [...nos];
+  }
+
+  private async loadExportedBagNosForMaterial(material: InventoryMaterial): Promise<Set<number>> {
+    const nos = new Set<number>();
+    const batchKey = this.getInventoryImdBaseKey(material) || '';
+    const normCode = String(material.materialCode || '').trim();
+    const normPo = String(material.poNumber || '').trim();
+    if (!normCode) return nos;
+
+    let snapshot: any;
+    try {
+      snapshot = await this.firestore.collection('outbound-materials').ref
+        .where('factory', '==', this.selectedFactory)
+        .where('materialCode', '==', normCode)
+        .where('poNumber', '==', normPo)
+        .get();
+    } catch (e) {
+      console.warn('[BAG] outbound query failed:', e);
+      snapshot = null;
+    }
+
+    let unlabeled = 0;
+    if (snapshot && !snapshot.empty) {
+      snapshot.forEach((doc: any) => {
+        const data = doc.data() as Record<string, unknown>;
+        const imdKey = this.normalizeOutboundImdToKey(data);
+        if (batchKey && imdKey && imdKey !== batchKey) return;
+        const parsed = this.collectOutboundBagNos(data);
+        if (parsed.length) {
+          parsed.forEach((n) => nos.add(n));
+        } else {
+          unlabeled += 1;
+        }
+      });
+    }
+
+    const n = this.getLotBagCount(material);
+    if (unlabeled > 0 && n > 0) {
+      let filled = 0;
+      for (let i = 1; i <= n && filled < unlabeled; i++) {
+        if (!nos.has(i)) {
+          nos.add(i);
+          filled++;
+        }
+      }
+    }
+    if (nos.size === 0) {
+      const used = Math.max(0, Math.floor(Number(material.exportedBags ?? 0)));
+      for (let i = 1; i <= used; i++) nos.add(i);
+    }
+    return nos;
+  }
+
+  private async reloadBagPopupRows(material: InventoryMaterial): Promise<void> {
+    this.bagPopupLoading = true;
+    this.bagPopupError = '';
+    this.bagPopupRows = [];
+    this.cdr.markForCheck();
+    try {
+      const exported = await this.loadExportedBagNosForMaterial(material);
+      const xtMap = new Map(this.normalizeXtBags(material).map((x) => [x.bagNo, x.qty]));
+      let n = this.getLotBagCount(material);
+      const seenMax = Math.max(0, ...exported, ...xtMap.keys());
+      if (seenMax > n) n = seenMax;
+      if (n <= 0) {
+        this.bagPopupRows = [];
+        return;
+      }
+      const rows: InventoryBagRow[] = [];
+      for (let i = 1; i <= n; i++) {
+        const isExported = exported.has(i);
+        const xtQty = xtMap.get(i);
+        const defaultQty = this.getBagDefaultQty(material, i, n);
+        rows.push({
+          bagNo: i,
+          qty: xtQty != null ? xtQty : defaultQty,
+          status: isExported ? 'exported' : (xtQty != null ? 'xt' : 'stock'),
+          selected: !isExported && xtQty != null,
+          exported: isExported
+        });
+      }
+      this.bagPopupRows = rows;
+    } catch (e: any) {
+      this.bagPopupError = e?.message || 'Không tải được danh sách bag.';
+    } finally {
+      this.bagPopupLoading = false;
+      this.cdr.markForCheck();
+    }
   }
 
   private appendDerivedTotalBagsIfNeeded(material: InventoryMaterial, updateData: any): void {
@@ -11894,6 +12179,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (material.xt !== undefined && material.xt !== null) {
       updateData.xt = material.xt;
     }
+    updateData.xtBags = Array.isArray(material.xtBags) ? material.xtBags : [];
     
     if (material.location) {
       updateData.location = material.location;
@@ -13394,7 +13680,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Edit functions for XT
   startEditingXT(material: InventoryMaterial): void {
-    material.isEditingXT = true;
+    this.openXtBagPopup(material);
   }
 
   finishEditingXT(material: InventoryMaterial): void {
