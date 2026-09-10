@@ -26,6 +26,10 @@ $mat-nav-h: 68px;
   background: $mat-bg !important;
 }
 
+.mat-m--nl {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
 .mat-m-header {
   position: sticky;
   top: 0;
@@ -64,6 +68,9 @@ $mat-nav-h: 68px;
   padding: 0;
   cursor: pointer;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 
   .material-icons {
     font-size: 22px;
@@ -445,6 +452,11 @@ $mat-nav-h: 68px;
     }
   }
 
+  &--wh {
+    background: #ecfdf5 !important;
+    color: #047857 !important;
+  }
+
   &--factory {
     background: #1e3a8a !important;
     color: #fff !important;
@@ -532,6 +544,103 @@ $mat-nav-h: 68px;
     opacity: 0.55;
     cursor: default;
   }
+}
+
+.mat-m-nl-edit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: stretch;
+}
+
+.mat-m-nl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mat-m-nl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+
+  span {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $mat-muted !important;
+    line-height: 1.2;
+  }
+
+  strong {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 10px;
+    border-radius: 12px;
+    border: 1px solid $mat-line;
+    background: #f8fafc !important;
+    color: $mat-ink !important;
+    font-size: 13px;
+    font-weight: 800;
+    word-break: break-word;
+  }
+
+  .mat-m-actbtn,
+  .mat-m-nl-wh-select {
+    width: 100%;
+    height: 40px;
+    margin: 0;
+  }
+}
+
+.mat-m-nl-field--home strong {
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0;
+  color: #047857 !important;
+}
+
+.mat-m-nl-wh {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+
+  span {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $mat-muted !important;
+  }
+
+  select {
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid $mat-line;
+    background: #fff !important;
+    color: $mat-ink !important;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 0 10px;
+  }
+}
+
+.mat-m-nl-wh-select {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid $mat-line;
+  background: #fff !important;
+  color: $mat-ink !important;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 12px;
+  margin: 0 0 12px;
 }
 
 .mat-m-kk-sp {

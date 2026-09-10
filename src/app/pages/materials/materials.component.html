@@ -1,7 +1,7 @@
-<div class="main-content" [class.mat-m-page]="isMobile && !showKkLocMap && !isNguyenLieuPage">
+<div class="main-content" [class.mat-m-page]="isMobile && (isNguyenLieuPage || !showKkLocMap)">
 
-  <!-- Kiểm tra KK — trang full (tab Quản lý Nguyên Liệu, hoặc overlay từ RM Inventory) -->
-  <div class="kk-page excel-container" *ngIf="showKkLocMap || isNguyenLieuPage" [class.kk-page--detail]="kkLocMapView === 'type' && !!kkActiveProductType">
+  <!-- Kiểm tra KK — trang full (desktop). Mobile tab Quản lý NVL dùng layout riêng bên dưới. -->
+  <div class="kk-page excel-container" *ngIf="(showKkLocMap || isNguyenLieuPage) && !isMobile" [class.kk-page--detail]="kkLocMapView === 'type' && !!kkActiveProductType">
     <div class="excel-header kk-page__head">
       <div class="excel-header__title-row kk-page__hero">
         <div class="kk-page__brand">
@@ -739,6 +739,145 @@
             </footer>
           </ng-container>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Mobile Quản lý nguyên liệu: tìm mã → đổi vị trí / kho ═══ -->
+  <div class="mat-m mat-m--nl" *ngIf="isMobile && isNguyenLieuPage">
+    <header class="mat-m-header">
+      <div class="mat-m-header__row1">
+        <button type="button" class="mat-m-iconbtn" (click)="goToMenu()" aria-label="Menu">
+          <i class="material-icons">menu</i>
+        </button>
+        <h1 class="mat-m-title">Quản lý NVL</h1>
+        <button type="button" class="mat-m-factory-dd" (click)="toggleFactory()" [title]="'Đổi nhà máy (hiện: ' + selectedFactory + ')'">
+          <i class="material-icons">warehouse</i>
+          <span>{{ selectedFactory }}</span>
+          <i class="material-icons mat-m-factory-dd__caret">expand_more</i>
+        </button>
+        <button type="button" class="mat-m-iconbtn" (click)="focusMobileSearchForScan()" aria-label="Quét mã">
+          <i class="material-icons">qr_code_scanner</i>
+        </button>
+      </div>
+
+      <div class="mat-m-searchrow">
+        <div class="mat-m-search">
+          <i class="material-icons mat-m-search__ico">search</i>
+          <input type="text"
+                 class="mat-m-search__input"
+                 [placeholder]="isLoading ? 'Đang tìm…' : 'Tìm mã hàng…'"
+                 [(ngModel)]="searchTerm"
+                 (input)="onSearchInput($event)"
+                 (keyup)="onSearchKeyUp($event)"
+                 (keyup.enter)="runMobileNguyenLieuSearch()"
+                 [disabled]="isLoading"
+                 autocomplete="off"
+                 autocapitalize="characters" />
+          <button type="button"
+                  class="mat-m-search__clear"
+                  *ngIf="searchTerm"
+                  (click)="clearSearch()"
+                  aria-label="Xóa">
+            <i class="material-icons">close</i>
+          </button>
+        </div>
+      </div>
+      <p class="mat-m-hint" *ngIf="searchTerm && searchTerm.length < 3 && !isLoading">
+        Cần ít nhất 3 ký tự, hoặc Enter / quét mã
+      </p>
+    </header>
+
+    <div class="mat-m-loading" *ngIf="isLoading">
+      <i class="material-icons mat-m-spin">sync</i>
+      <span>Đang tìm kiếm…</span>
+    </div>
+
+    <div class="mat-m-empty" *ngIf="!isLoading && !searchTerm">
+      <i class="material-icons">search</i>
+      <p>Nhập hoặc quét mã hàng để đổi vị trí / kho</p>
+    </div>
+
+    <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 3 && filteredInventory.length === 0">
+      <i class="material-icons">search_off</i>
+      <p>Không tìm thấy mã trong {{ selectedFactory }}</p>
+    </div>
+
+    <div class="mat-m-list" *ngIf="!isLoading && displayedInventory.length > 0">
+      <div class="mat-m-summary">
+        <div class="mat-m-summary__cell">
+          <i class="material-icons">inventory_2</i>
+          <div>
+            <strong>{{ filteredInventory.length }} dòng</strong>
+            <span>Tìm thấy</span>
+          </div>
+        </div>
+        <div class="mat-m-summary__divider" aria-hidden="true"></div>
+        <div class="mat-m-summary__cell">
+          <div>
+            <span class="mat-m-summary__label">Tổng tồn</span>
+            <strong>{{ (totalStockCount$ | async) | number:'1.0-0' }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <article class="mat-m-card"
+               *ngFor="let material of displayedInventory; trackBy: trackByFn">
+        <div class="mat-m-card__top">
+          <div class="mat-m-card__main">
+            <div class="mat-m-card__titleline">
+              <span class="mat-m-card__code">{{ material.materialCode }}</span>
+            </div>
+            <div class="mat-m-card__chips">
+              <span class="mat-m-chip" *ngIf="material.poNumber">PO {{ material.poNumber }}</span>
+              <span class="mat-m-chip" *ngIf="getDisplayIMD(material) as imd">IMD {{ imd }}</span>
+            </div>
+          </div>
+          <div class="mat-m-stockbox">
+            <span class="mat-m-stockbox__label">Tồn kho</span>
+            <strong class="mat-m-stockbox__val">{{ formatNumber(calculateCurrentStock(material)) }}</strong>
+          </div>
+        </div>
+
+        <div class="mat-m-nl-grid">
+          <div class="mat-m-nl-field">
+            <span>Vị trí hiện tại</span>
+            <strong>{{ primaryLocationDisplay(material.location) || '—' }}</strong>
+          </div>
+          <div class="mat-m-nl-field mat-m-nl-field--home">
+            <span>Vị trí thiết lập</span>
+            <strong>{{ getKkHomeLocForMaterial(material) || 'Chưa gán' }}</strong>
+          </div>
+          <div class="mat-m-nl-field">
+            <span>Đổi vị trí</span>
+            <button type="button"
+                    class="mat-m-actbtn"
+                    (click)="openMobileLocationScan(material)"
+                    [disabled]="!canEdit || mobileLocScanBusy">
+              <i class="material-icons">swap_horiz</i>
+              Đổi vị trí
+            </button>
+          </div>
+          <div class="mat-m-nl-field">
+            <span>Kho</span>
+            <select class="mat-m-nl-wh-select"
+                    [ngModel]="kkLineWhValue(material)"
+                    (ngModelChange)="saveKkDetailWarehouse(material, $event)"
+                    [disabled]="!canEdit || kkLocMapBusy">
+              <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
+            </select>
+          </div>
+        </div>
+      </article>
+
+      <div class="mat-m-pager" *ngIf="totalPages > 1">
+        <button type="button" class="mat-m-pager__btn" (click)="previousPage()" [disabled]="currentPage <= 1">
+          <i class="material-icons">chevron_left</i>
+        </button>
+        <span>{{ currentPage }} / {{ totalPages }}</span>
+        <button type="button" class="mat-m-pager__btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+          <i class="material-icons">chevron_right</i>
+        </button>
       </div>
     </div>
   </div>
@@ -2446,9 +2585,20 @@
           <span class="mat-m-chip mat-m-chip--loc" *ngIf="m.location">
             <i class="material-icons">place</i>Hiện tại: {{ m.location }}
           </span>
+          <span class="mat-m-chip mat-m-chip--wh" *ngIf="isNguyenLieuPage && getKkHomeLocForMaterial(m)">
+            Cất vào: {{ getKkHomeLocForMaterial(m) }}
+          </span>
           <span class="mat-m-chip" *ngIf="!m.location">Chưa có vị trí</span>
         </div>
       </div>
+
+      <label class="mat-m-loc-scan-label" *ngIf="isNguyenLieuPage">Kho</label>
+      <select *ngIf="isNguyenLieuPage"
+              class="mat-m-nl-wh-select"
+              [(ngModel)]="mobileLocScanWh"
+              [disabled]="mobileLocScanBusy">
+        <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
+      </select>
 
       <label class="mat-m-loc-scan-label" for="mat-m-loc-scan-input">Vị trí mới</label>
       <div class="mat-m-loc-scan-wrap">
@@ -2466,7 +2616,7 @@
           spellcheck="false"
         />
       </div>
-      <p class="mat-m-loc-scan-hint">Scanner sẽ tự Enter sau khi quét — mã chuyển sang vị trí mới ngay.</p>
+      <p class="mat-m-loc-scan-hint">{{ isNguyenLieuPage ? 'Chọn kho rồi quét vị trí. Scanner tự Enter sẽ lưu ngay.' : 'Scanner sẽ tự Enter sau khi quét — mã chuyển sang vị trí mới ngay.' }}</p>
     </div>
 
     <footer class="mat-m-kk-modal__footer">

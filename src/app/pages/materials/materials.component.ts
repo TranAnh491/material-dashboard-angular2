@@ -539,6 +539,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   mobileLocScanBusy = false;
   mobileLocScanBuffer = '';
   mobileLocScanMaterial: InventoryMaterial | null = null;
+  mobileLocScanWh: '' | '00' | 'J' | 'ASM3' = '';
 
   /** Mobile: sheet Chi tiết dòng tồn. */
   showMobileDetail = false;
@@ -2323,6 +2324,37 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  /** PDA / Enter: tìm mã ngay, không đợi debounce 2s. */
+  runMobileNguyenLieuSearch(): void {
+    const term = String(this.searchTerm || '').trim().toUpperCase();
+    this.searchTerm = term;
+    if (!term) return;
+    void this.performSearch(term);
+  }
+
+  /** Vị trí cất hàng đã gán ngoài box loại hàng. */
+  getKkHomeLocForMaterial(material: InventoryMaterial | null | undefined): string {
+    const code = String(material?.materialCode || '').trim();
+    if (!code) return '';
+    const type = this.kkCatalog.productTypeOf(code, this.kkCatalogTypeMap);
+    const group = this.kkCatalog.groupCodeFromMaterial(code);
+    const canonical = type ? this.kkCanonicalTypeKey(type, group ? [group] : []) : '';
+    const loc = this.kkTypeHomeLocOf(canonical) || this.kkTypeHomeLocOf(type);
+    return loc ? this.primaryLocationDisplay(loc) : '';
+  }
+
+  private async ensureKkMobileCatalog(): Promise<void> {
+    try {
+      if (!this.kkCatalogTypeMap.size) {
+        this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
+      }
+      this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs();
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('ensureKkMobileCatalog:', e);
+    }
+  }
+
   focusMobileSearchForScan(): void {
     const el = document.querySelector('.mat-m-search__input') as HTMLInputElement | null;
     if (!el) return;
@@ -2420,8 +2452,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.loadRuleBagManualPrefixesFromStorage();
     this.subscribeQtyBagRulesFromFirestore();
 
-    if (this.isNguyenLieuPage) {
+    if (this.isNguyenLieuPage && !this.isMobile) {
       this.enterKkLocMap();
+    } else if (this.isNguyenLieuPage && this.isMobile) {
+      void this.ensureKkMobileCatalog();
     }
 
     console.log('✅ Materials component initialized - Waiting for user search');
@@ -2463,10 +2497,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTickedMaterialsCache = [];
     this.clearKkInlineBanner(true);
     this.showKkCheckPopup = false;
-    if (this.isNguyenLieuPage) {
+    if (this.isNguyenLieuPage && !this.isMobile) {
       this.enterKkLocMap();
     } else {
       this.closeKkLocMap();
+      if (this.isNguyenLieuPage && this.isMobile) void this.ensureKkMobileCatalog();
     }
     if (this.kkLiveActive) this.startKkLive();
     this.closeGanPallet();
@@ -14182,6 +14217,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!material?.id || this.mobileLocScanBusy) return;
     this.mobileLocScanMaterial = material;
     this.mobileLocScanBuffer = '';
+    this.mobileLocScanWh = this.kkLineWhValue(material);
     this.showMobileLocScan = true;
     setTimeout(() => this.focusMobileLocScanInput(), 50);
   }
@@ -14192,6 +14228,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showMobileLocScan = false;
     this.mobileLocScanMaterial = null;
     this.mobileLocScanBuffer = '';
+    this.mobileLocScanWh = '';
   }
 
   private focusMobileLocScanInput(): void {
@@ -14227,13 +14264,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       this.rememberLocationBeforeEdit(material);
       const oldLoc = String(material.location || '').trim().toUpperCase();
-      material.location = newLoc;
+      const locWithWh = this.isNguyenLieuPage
+        ? this.composeLocationWithWh(this.mobileLocScanWh, newLoc)
+        : newLoc;
+      material.location = locWithWh;
       const ok = await this.persistLocationChange(material, { bypassUnlock: true, silent: true });
       if (ok) {
         this.showMobileLocScan = false;
         this.mobileLocScanMaterial = null;
         this.mobileLocScanBuffer = '';
-        alert(`✅ ${material.materialCode}\n${oldLoc || '—'} → ${newLoc}`);
+        this.mobileLocScanWh = '';
+        const whNote = this.isNguyenLieuPage
+          ? `\nKho ${this.kkWarehouseLabel(this.kkWarehouseFromLocation(locWithWh))}`
+          : '';
+        alert(`✅ ${material.materialCode}\n${oldLoc || '—'} → ${locWithWh}${whNote}`);
       } else {
         material.location = oldLoc;
         this.mobileLocScanBuffer = '';

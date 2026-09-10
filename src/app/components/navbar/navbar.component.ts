@@ -294,7 +294,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
     }
 
     isMaterialsPage(): boolean {
-      return this.currentAppPath() === '/materials';
+      const p = this.currentAppPath();
+      return p === '/materials' || p === '/quan-ly-nguyen-lieu';
     }
 
     isInventoryOverviewPage(): boolean {
