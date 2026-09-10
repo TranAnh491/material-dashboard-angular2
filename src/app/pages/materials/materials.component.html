@@ -756,7 +756,7 @@
           <span>{{ selectedFactory }}</span>
           <i class="material-icons mat-m-factory-dd__caret">expand_more</i>
         </button>
-        <button type="button" class="mat-m-iconbtn" (click)="focusMobileSearchForScan()" aria-label="Quét mã">
+        <button type="button" class="mat-m-iconbtn" (click)="startNlSearchScan()" aria-label="Scan">
           <i class="material-icons">qr_code_scanner</i>
         </button>
       </div>
@@ -783,8 +783,18 @@
           </button>
         </div>
       </div>
+      <button type="button"
+              class="mat-m-nl-scanbtn"
+              (click)="startNlSearchScan()"
+              [disabled]="isLoading || isScanning">
+        <i class="material-icons">{{ nlScanDevice === 'pda' ? 'sensors' : 'qr_code_scanner' }}</i>
+        {{ nlScanDevice === 'pda' ? 'Scan (PDA)' : 'Scan' }}
+      </button>
+      <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
+        Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
+      </button>
       <p class="mat-m-hint" *ngIf="searchTerm && searchTerm.length < 3 && !isLoading">
-        Cần ít nhất 3 ký tự, hoặc Enter / quét mã
+        Cần ít nhất 3 ký tự, hoặc Scan / Enter
       </p>
     </header>
 
@@ -822,8 +832,21 @@
       </div>
 
       <article class="mat-m-card"
-               *ngFor="let material of displayedInventory; trackBy: trackByFn">
+               *ngFor="let material of displayedInventory; trackBy: trackByFn"
+               [class.mat-m-card--kk]="material.kkChecked">
         <div class="mat-m-card__top">
+          <label class="mat-m-kk"
+                 [class.mat-m-kk--on]="material.kkChecked"
+                 [title]="getKkTitle(material)">
+            <input type="checkbox"
+                   [checked]="!!material.kkChecked"
+                   [disabled]="!canEdit"
+                   (change)="onNlKkTick(material, $any($event.target).checked)" />
+            <span class="mat-m-kk__mark" aria-hidden="true">
+              <i class="material-icons">{{ material.kkChecked ? 'check' : '' }}</i>
+            </span>
+            <span class="mat-m-kk__txt">KK</span>
+          </label>
           <div class="mat-m-card__main">
             <div class="mat-m-card__titleline">
               <span class="mat-m-card__code">{{ material.materialCode }}</span>
@@ -2624,6 +2647,105 @@
       <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary" (click)="submitMobileLocationScan()" [disabled]="mobileLocScanBusy || !mobileLocScanBuffer.trim()">
         <i class="material-icons">{{ mobileLocScanBusy ? 'sync' : 'check_circle' }}</i>
         {{ mobileLocScanBusy ? 'Đang lưu…' : 'Lưu vị trí' }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Quản lý NVL mobile: chọn PDA hay điện thoại -->
+<div class="modal-overlay mat-m-kk-overlay" *ngIf="isNguyenLieuPage && isMobile && showNlDevicePicker">
+  <div class="modal-content mat-m-kk-modal" role="dialog" aria-label="Chọn thiết bị">
+    <header class="mat-m-kk-modal__header">
+      <div class="mat-m-kk-modal__brand">
+        <span class="mat-m-kk-modal__ico" aria-hidden="true">
+          <i class="material-icons">devices</i>
+        </span>
+        <div>
+          <h3>Bạn đang dùng thiết bị nào?</h3>
+          <p>Chọn cách quét mã trên tab này</p>
+        </div>
+      </div>
+    </header>
+    <div class="mat-m-kk-modal__body mat-m-nl-device">
+      <button type="button" class="mat-m-nl-devicebtn" (click)="chooseNlScanDevice('mobile')">
+        <i class="material-icons">smartphone</i>
+        <strong>Mobile</strong>
+        <span>Quét bằng camera điện thoại</span>
+      </button>
+      <button type="button" class="mat-m-nl-devicebtn" (click)="chooseNlScanDevice('pda')">
+        <i class="material-icons">scanner</i>
+        <strong>PDA</strong>
+        <span>Quét bằng máy scanner</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Quản lý NVL: camera -->
+<div class="modal-overlay mat-m-kk-overlay" *ngIf="showNlCamera" (click)="stopNlCamera()">
+  <div class="modal-content mat-m-kk-modal mat-m-loc-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Quét camera">
+    <header class="mat-m-kk-modal__header">
+      <div class="mat-m-kk-modal__brand">
+        <span class="mat-m-kk-modal__ico mat-m-kk-modal__ico--loc" aria-hidden="true">
+          <i class="material-icons">qr_code_scanner</i>
+        </span>
+        <div>
+          <h3>{{ nlCameraPurpose === 'location' ? 'Quét vị trí' : 'Quét mã hàng' }}</h3>
+          <p>Đưa tem vào khung hình</p>
+        </div>
+      </div>
+      <button type="button" class="mat-m-kk-modal__close" (click)="stopNlCamera()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+    <div class="mat-m-kk-modal__body">
+      <div id="nl-qr-reader" class="mat-m-nl-qr"></div>
+    </div>
+    <footer class="mat-m-kk-modal__footer">
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="stopNlCamera()">Hủy</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Quản lý NVL: PDA scanner -->
+<div class="modal-overlay mat-m-kk-overlay" *ngIf="showNlPdaScan" (click)="closeNlPdaScan()">
+  <div class="modal-content mat-m-kk-modal mat-m-loc-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Scan PDA">
+    <header class="mat-m-kk-modal__header">
+      <div class="mat-m-kk-modal__brand">
+        <span class="mat-m-kk-modal__ico mat-m-kk-modal__ico--loc" aria-hidden="true">
+          <i class="material-icons">sensors</i>
+        </span>
+        <div>
+          <h3>Scan mã hàng</h3>
+          <p>Bắn scanner PDA vào ô bên dưới</p>
+        </div>
+      </div>
+      <button type="button" class="mat-m-kk-modal__close" (click)="closeNlPdaScan()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </header>
+    <div class="mat-m-kk-modal__body">
+      <label class="mat-m-loc-scan-label" for="nl-pda-scan-input">Mã hàng</label>
+      <div class="mat-m-loc-scan-wrap">
+        <i class="material-icons">sensors</i>
+        <input
+          id="nl-pda-scan-input"
+          type="text"
+          class="mat-m-loc-scan-input"
+          [(ngModel)]="nlPdaBuffer"
+          (keydown)="onNlPdaScanKeydown($event)"
+          placeholder="Bắn scanner vào đây…"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+      </div>
+      <p class="mat-m-loc-scan-hint">Scanner tự Enter sau khi quét — hệ thống tìm mã ngay.</p>
+    </div>
+    <footer class="mat-m-kk-modal__footer">
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="closeNlPdaScan()">Hủy</button>
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary" (click)="applyNlSearchScan(nlPdaBuffer)" [disabled]="!nlPdaBuffer.trim()">
+        Tìm mã
       </button>
     </footer>
   </div>

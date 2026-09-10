@@ -541,6 +541,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   mobileLocScanMaterial: InventoryMaterial | null = null;
   mobileLocScanWh: '' | '00' | 'J' | 'ASM3' = '';
 
+  /** Quản lý NVL mobile: PDA (scanner) hay điện thoại (camera). */
+  nlScanDevice: 'mobile' | 'pda' | null = null;
+  showNlDevicePicker = false;
+  showNlCamera = false;
+  showNlPdaScan = false;
+  nlPdaBuffer = '';
+  nlCameraPurpose: 'search' | 'location' = 'search';
+  private nlScanLock = false;
+  private nlPendingAction: 'search' | 'location' | null = null;
+
   /** Mobile: sheet Chi tiết dòng tồn. */
   showMobileDetail = false;
   mobileDetailMaterial: InventoryMaterial | null = null;
@@ -2332,6 +2342,141 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     void this.performSearch(term);
   }
 
+  chooseNlScanDevice(device: 'mobile' | 'pda'): void {
+    this.nlScanDevice = device;
+    this.showNlDevicePicker = false;
+    const pending = this.nlPendingAction;
+    this.nlPendingAction = null;
+    this.cdr.markForCheck();
+    if (pending === 'search') this.startNlSearchScan();
+    else if (pending === 'location' && this.mobileLocScanMaterial) {
+      this.openMobileLocationScan(this.mobileLocScanMaterial);
+    }
+  }
+
+  openNlDevicePicker(): void {
+    this.showNlDevicePicker = true;
+  }
+
+  startNlSearchScan(): void {
+    if (!this.nlScanDevice) {
+      this.nlPendingAction = 'search';
+      this.showNlDevicePicker = true;
+      return;
+    }
+    if (this.nlScanDevice === 'pda') {
+      this.nlPdaBuffer = '';
+      this.showNlPdaScan = true;
+      setTimeout(() => this.focusNlPdaInput(), 50);
+      return;
+    }
+    void this.startNlCamera('search');
+  }
+
+  onNlKkTick(material: InventoryMaterial, checked: boolean): void {
+    if (!this.canEdit || !material?.id) return;
+    if (!!material.kkChecked === !!checked) return;
+    void this.toggleKk(material);
+  }
+
+  extractMaterialCodeFromScan(raw: string): string {
+    const t = String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    if (!t) return '';
+    if (t.includes('|')) {
+      return t.split('|').map((p) => p.trim()).find(Boolean) || '';
+    }
+    return t.split(/[\s,;]+/)[0] || t;
+  }
+
+  applyNlSearchScan(raw: string): void {
+    const code = this.extractMaterialCodeFromScan(raw);
+    if (!code) {
+      alert('Không đọc được mã hàng. Quét lại tem.');
+      return;
+    }
+    this.searchTerm = code;
+    this.showNlPdaScan = false;
+    this.nlPdaBuffer = '';
+    this.stopNlCamera();
+    void this.performSearch(code);
+  }
+
+  onNlPdaScanKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.applyNlSearchScan(this.nlPdaBuffer);
+  }
+
+  closeNlPdaScan(): void {
+    this.showNlPdaScan = false;
+    this.nlPdaBuffer = '';
+  }
+
+  private focusNlPdaInput(): void {
+    const el = document.getElementById('nl-pda-scan-input') as HTMLInputElement | null;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }
+
+  async startNlCamera(purpose: 'search' | 'location'): Promise<void> {
+    if (this.html5QrCode) {
+      const prev = this.html5QrCode;
+      this.html5QrCode = null;
+      try { await prev.stop(); } catch { /* ignore */ }
+    }
+    this.nlCameraPurpose = purpose;
+    this.nlScanLock = false;
+    this.showNlCamera = true;
+    this.isScanning = true;
+    this.cdr.markForCheck();
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode');
+      const elId = 'nl-qr-reader';
+      this.html5QrCode = new Html5Qrcode(elId);
+      const cameras = await Html5Qrcode.getCameras();
+      const back = (cameras || []).find((c) => /back|rear|environment/i.test(c.label));
+      const camId = back?.id || cameras?.[cameras.length - 1]?.id || cameras?.[0]?.id;
+      const config = { fps: 10, qrbox: { width: 240, height: 240 } };
+      const onOk = (text: string) => this.onNlCameraDecoded(text);
+      if (camId) {
+        await this.html5QrCode.start(camId, config, onOk, () => undefined);
+      } else {
+        await this.html5QrCode.start({ facingMode: 'environment' }, config, onOk, () => undefined);
+      }
+    } catch (e) {
+      console.error('startNlCamera:', e);
+      this.stopNlCamera();
+      alert('Không mở được camera. Kiểm tra quyền camera, hoặc chọn PDA để dùng scanner.');
+    }
+  }
+
+  private onNlCameraDecoded(text: string): void {
+    if (this.nlScanLock) return;
+    this.nlScanLock = true;
+    if (this.nlCameraPurpose === 'location') {
+      this.mobileLocScanBuffer = String(text || '').trim().toUpperCase().replace(/\s+/g, '');
+      this.stopNlCamera();
+      void this.submitMobileLocationScan();
+      return;
+    }
+    this.applyNlSearchScan(text);
+  }
+
+  stopNlCamera(): void {
+    const sc = this.html5QrCode;
+    this.html5QrCode = null;
+    this.isScanning = false;
+    this.showNlCamera = false;
+    this.nlScanLock = false;
+    if (sc) {
+      void sc.stop().catch(() => undefined);
+    }
+    this.cdr.markForCheck();
+  }
+
   /** Vị trí cất hàng đã gán ngoài box loại hàng. */
   getKkHomeLocForMaterial(material: InventoryMaterial | null | undefined): string {
     const code = String(material?.materialCode || '').trim();
@@ -2456,6 +2601,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.enterKkLocMap();
     } else if (this.isNguyenLieuPage && this.isMobile) {
       void this.ensureKkMobileCatalog();
+      this.showNlDevicePicker = true;
     }
 
     console.log('✅ Materials component initialized - Waiting for user search');
@@ -11027,11 +11173,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   stopScanning(): void {
-    if (this.html5QrCode) {
-      this.html5QrCode.stop();
-      this.html5QrCode = null;
-    }
-    this.isScanning = false;
+    this.stopNlCamera();
   }
 
   autoResizeNotesColumn(): void {
@@ -14215,9 +14357,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Mở sheet quét vị trí mới cho 1 dòng tồn. */
   openMobileLocationScan(material: InventoryMaterial): void {
     if (!material?.id || this.mobileLocScanBusy) return;
+    if (this.isNguyenLieuPage && !this.nlScanDevice) {
+      this.mobileLocScanMaterial = material;
+      this.mobileLocScanWh = this.kkLineWhValue(material);
+      this.nlPendingAction = 'location';
+      this.showNlDevicePicker = true;
+      return;
+    }
     this.mobileLocScanMaterial = material;
     this.mobileLocScanBuffer = '';
     this.mobileLocScanWh = this.kkLineWhValue(material);
+    if (this.isNguyenLieuPage && this.nlScanDevice === 'mobile') {
+      void this.startNlCamera('location');
+      return;
+    }
     this.showMobileLocScan = true;
     setTimeout(() => this.focusMobileLocScanInput(), 50);
   }
