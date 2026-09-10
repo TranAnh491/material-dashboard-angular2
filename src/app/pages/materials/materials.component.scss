@@ -292,6 +292,10 @@
   font-weight: 700;
 }
 
+.xt-le-cell-btn {
+  color: #c2410c;
+}
+
 .bag-track-popup {
   max-width: 720px;
   width: 96%;
@@ -5479,6 +5483,42 @@ $asm1-toolbar-h: 36px;
   gap: 10px;
   min-height: 0;
   flex: 1;
+}
+
+.kk-type-box-menu {
+  position: fixed;
+  z-index: 20050;
+  min-width: 200px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+}
+
+.kk-type-box-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+
+  .material-icons {
+    font-size: 18px;
+    color: #0f766e;
+  }
+
+  &:hover {
+    background: #f1f5f9;
+  }
 }
 
 .kk-type-topbar {

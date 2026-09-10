@@ -489,8 +489,8 @@
                 [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
                 [class.kk-type-box--empty]="!box.totalLines"
                 (click)="selectKkTypeBox(box.productType)"
-                (contextmenu)="openKkTypeHomeLocPicker($event, box)"
-                [title]="box.productType + ' — chuột phải để gán vị trí cất hàng'">
+                (contextmenu)="openKkTypeBoxMenu($event, box)"
+                [title]="box.productType + ' — chuột phải: gán vị trí hoặc in tên'">
                 <strong>{{ box.productType }}</strong>
                 <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
                   <span class="kk-type-box__groups" *ngIf="prefixes.length">
@@ -1392,6 +1392,12 @@
               {{ getXtCellText(material) }}
             </button>
           </div>
+          <div class="info-row">
+            <span class="label">Xuất lẻ:</span>
+            <button type="button" class="xt-cell-btn xt-le-cell-btn" (click)="openXtBagPopup(material, $event)">
+              {{ getXtLeCellText(material) }}
+            </button>
+          </div>
           
           <div class="info-row">
             <span class="label">Tồn kho:</span>
@@ -1521,7 +1527,8 @@
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Bấm để chọn bag cần xuất và lượng từng bag">XT</th>
-            <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">Tồn kho</th>
+            <th title="Xuất lẻ — có số thì xuất theo cột này, không cần đủ 1 bag">Xuất lẻ</th>
+            <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT (XT gồm xuất lẻ)">Tồn kho</th>
             <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Bấm ô vị trí để mở sơ đồ kho' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
               <span>Vị trí</span>
               <button type="button"
@@ -1667,9 +1674,17 @@
                 {{ getXtCellText(material) }}
               </button>
             </td>
+            <td class="number-cell xt-column">
+              <button type="button"
+                      class="xt-cell-btn xt-le-cell-btn"
+                      (click)="openXtBagPopup(material, $event)"
+                      title="Xuất lẻ — bấm để nhập. Có số thì xuất theo cột này, không cần đủ 1 bag">
+                {{ getXtLeCellText(material) }}
+              </button>
+            </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [class.negative-stock-cell]="calculateCurrentStock(material) < 0"
-                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' = ' + calculateCurrentStock(material)">
+                [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' (lẻ ' + (getXtLeTotal(material) || 0) + ') = ' + calculateCurrentStock(material)">
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
             <td class="location-cell"
@@ -1937,20 +1952,32 @@
         · PO {{ m.poNumber || '—' }}
         · IMD {{ getDisplayIMD(m) }}
       </p>
-      <p class="tem-xuat-hint">Chọn bag còn tồn cần xuất và nhập lượng. Bag đã xuất không chọn lại được.</p>
+      <p class="tem-xuat-hint">Tick bag để xuất đủ. Cột <strong>Xuất lẻ</strong> có số thì xuất đúng số đó, không cần đủ 1 bag.</p>
       <p class="tem-le-error" *ngIf="bagPopupError">{{ bagPopupError }}</p>
       <p class="tem-xuat-hint" *ngIf="bagPopupLoading">Đang tải danh sách bag…</p>
 
       <ng-container *ngIf="!bagPopupLoading && !bagPopupRows.length">
-        <p class="tem-xuat-hint">Chưa có danh sách bag — nhập số lượng XT như trước.</p>
-        <input type="number"
-               class="editable-input"
-               style="max-width:200px;"
-               [ngModel]="xtBagFallbackQty"
-               (ngModelChange)="xtBagFallbackQty = $event === '' || $event === null ? null : +$event"
-               min="0"
-               step="0.1"
-               placeholder="Nhập số lượng XT">
+        <p class="tem-xuat-hint">Chưa có danh sách bag — nhập XT hoặc Xuất lẻ. Cột Xuất lẻ có số thì xuất đúng số đó.</p>
+        <div class="bag-track-xt-toolbar">
+          <label class="tem-xuat-hint">XT
+            <input type="number"
+                   class="editable-input bag-track-qty"
+                   [ngModel]="xtBagFallbackQty"
+                   (ngModelChange)="xtBagFallbackQty = $event === '' || $event === null ? null : +$event"
+                   min="0"
+                   step="0.1"
+                   placeholder="XT">
+          </label>
+          <label class="tem-xuat-hint">Xuất lẻ
+            <input type="number"
+                   class="editable-input bag-track-qty"
+                   [ngModel]="xtBagFallbackLeQty"
+                   (ngModelChange)="xtBagFallbackLeQty = $event === '' || $event === null ? null : +$event"
+                   min="0"
+                   step="0.1"
+                   placeholder="Lẻ">
+          </label>
+        </div>
       </ng-container>
 
       <div class="bag-track-xt-toolbar" *ngIf="!bagPopupLoading && bagPopupRows.length">
@@ -1965,6 +1992,7 @@
               <th></th>
               <th>Bag</th>
               <th>Lượng XT</th>
+              <th title="Có số thì xuất theo cột này, không lấy lượng bag đủ">Xuất lẻ</th>
               <th>Trạng thái</th>
             </tr>
           </thead>
@@ -1987,8 +2015,18 @@
                        step="0.1">
               </td>
               <td>
-                <span class="bag-track-tag" [attr.data-status]="row.exported ? 'exported' : (row.selected ? 'xt' : 'stock')">
-                  {{ row.exported ? 'Đã xuất' : (row.selected ? 'Đang XT' : 'Còn tồn') }}
+                <input type="number"
+                       class="editable-input bag-track-qty"
+                       [ngModel]="row.leQty"
+                       (ngModelChange)="onXtBagLeQtyChange(row, $event)"
+                       [disabled]="row.exported"
+                       min="0"
+                       step="0.1"
+                       placeholder="Lẻ">
+              </td>
+              <td>
+                <span class="bag-track-tag" [attr.data-status]="row.exported ? 'exported' : ((row.leQty || 0) > 0 ? 'xt' : (row.selected ? 'xt' : 'stock'))">
+                  {{ row.exported ? 'Đã xuất' : ((row.leQty || 0) > 0 ? 'Xuất lẻ' : (row.selected ? 'Đang XT' : 'Còn tồn')) }}
                 </span>
               </td>
             </tr>
@@ -3409,6 +3447,22 @@
   </div>
 </div>
 
+<div class="kk-type-box-menu"
+     *ngIf="kkTypeBoxMenuVisible"
+     [style.left.px]="kkTypeBoxMenuX"
+     [style.top.px]="kkTypeBoxMenuY"
+     (click)="$event.stopPropagation()"
+     (contextmenu)="$event.preventDefault(); $event.stopPropagation()">
+  <button type="button" class="kk-type-box-menu__item" (click)="onKkTypeBoxMenuAssign()">
+    <i class="material-icons">place</i>
+    Gán vị trí
+  </button>
+  <button type="button" class="kk-type-box-menu__item" (click)="onKkTypeBoxMenuPrint()">
+    <i class="material-icons">print</i>
+    In tên nhóm hàng
+  </button>
+</div>
+
 <!-- Popup chọn vị trí kệ — chỉ Kho J -->
 <div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && (layoutLocMaterial || layoutLocTypeAssign)" (click)="closeLayoutLocPicker()">
   <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí Kho J">
@@ -3603,6 +3657,12 @@
     <div class="filter-picker-footer">
       <span class="layout-loc-count">Đã chọn {{ layoutLocSelectedList.length }}</span>
       <button type="button" class="cancel-btn" (click)="closeLayoutLocPicker()">Đóng</button>
+      <button type="button"
+              class="cancel-btn"
+              *ngIf="layoutLocTypeAssign"
+              (click)="printKkTypeNameLabelFromPicker()">
+        <i class="material-icons">print</i> In tên nhóm hàng
+      </button>
       <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!canApplyLayoutLoc()">
         <i class="material-icons">check</i> Done
       </button>

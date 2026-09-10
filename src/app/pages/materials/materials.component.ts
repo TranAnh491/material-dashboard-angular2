@@ -115,6 +115,8 @@ export interface InventoryMaterial {
   openingStockAtBagInit?: number;
   /** XT theo từng bag: bag số nào, lượng bao nhiêu. */
   xtBags?: InventoryXtBagPick[];
+  /** Tổng lượng xuất lẻ (không đủ 1 bag). */
+  xtLe?: number;
   
   // Edit states
   isEditingOpeningStock?: boolean;
@@ -127,6 +129,8 @@ export interface InventoryMaterial {
 export interface InventoryXtBagPick {
   bagNo: number;
   qty: number;
+  /** Có số thì xuất lẻ theo cột này, không lấy lượng bag đủ. */
+  leQty?: number;
 }
 
 export type InventoryBagStatus = 'stock' | 'exported' | 'xt';
@@ -137,6 +141,7 @@ export interface InventoryBagRow {
   status: InventoryBagStatus;
   selected?: boolean;
   exported?: boolean;
+  leQty?: number | null;
 }
 
 type ResetLowStockRow = {
@@ -667,6 +672,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   bagPopupError = '';
   xtBagSaving = false;
   xtBagFallbackQty: number | null = null;
+  xtBagFallbackLeQty: number | null = null;
 
   /** Rule Bag: 4 ký tự đầu mã — khi master QTY BAG rule ON, chỉ nhóm prefix ON mới bắt bội số SP */
   showRuleBagPopup = false;
@@ -796,6 +802,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   layoutLocTypeAssign: string | null = null;
   private layoutLocTypeAssignGroups: string[] = [];
   kkTypeHomeLocs = new Map<string, string>();
+  kkTypeBoxMenuVisible = false;
+  kkTypeBoxMenuX = 0;
+  kkTypeBoxMenuY = 0;
+  kkTypeBoxMenuBox: { productType: string; groupCodes?: string[] } | null = null;
+  private skipKkTypeBoxMenuClose = false;
   // canEditHSD = false; // Removed - HSD column deleted
 
   constructor(
@@ -2490,6 +2501,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.detectMobileDevice();
   }
 
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    if (this.skipKkTypeBoxMenuClose) return;
+    this.closeKkTypeBoxMenu();
+  }
+
   /** Detect mobile / PDA — dùng giao diện xem tồn đơn giản. */
   private detectMobileDevice(): void {
     const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera || '';
@@ -3170,23 +3187,50 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   getXtCellText(material: InventoryMaterial): string {
-    const qty = Number(material.xt || 0);
-    const bags = this.normalizeXtBags(material);
+    const bags = this.getXtFullBags(material);
+    const le = this.getXtLeTotal(material);
+    const qty = bags.length
+      ? bags.reduce((s, b) => s + (Number(b.qty) || 0), 0)
+      : Math.max(0, Number(material.xt || 0) - le);
     if (qty <= 0 && bags.length === 0) return 'Chọn bag';
     if (bags.length === 0) return this.formatNumber(qty);
     const nos = bags.map((b) => `#${b.bagNo}`).join(', ');
     return `${this.formatNumber(qty)} · ${nos}`;
   }
 
+  getXtLeCellText(material: InventoryMaterial): string {
+    const le = this.getXtLeTotal(material);
+    if (le <= 0) return '—';
+    const bags = this.normalizeXtBags(material).filter((b) => Number(b.leQty) > 0);
+    if (bags.length === 0) return this.formatNumber(le);
+    const nos = bags.map((b) => `#${b.bagNo}`).join(', ');
+    return `${this.formatNumber(le)} · ${nos}`;
+  }
+
+  private getXtFullBags(material: InventoryMaterial): InventoryXtBagPick[] {
+    return this.normalizeXtBags(material).filter((b) => !(Number(b.leQty) > 0));
+  }
+
+  getXtLeTotal(material: InventoryMaterial | null | undefined): number {
+    const fromBags = this.normalizeXtBags(material).reduce((s, b) => s + (Number(b.leQty) > 0 ? Number(b.leQty) : 0), 0);
+    if (fromBags > 0) return fromBags;
+    return Number(material?.xtLe || 0) || 0;
+  }
+
+  getXtRowEffectiveQty(row: InventoryBagRow): number {
+    if (row.exported) return 0;
+    const le = Number(row.leQty) || 0;
+    if (le > 0) return le;
+    if (row.selected) return Number(row.qty) || 0;
+    return 0;
+  }
+
   getXtBagTotalQty(): number {
-    return this.bagPopupRows.reduce((sum, row) => {
-      if (!row.selected || row.exported) return sum;
-      return sum + (Number(row.qty) || 0);
-    }, 0);
+    return this.bagPopupRows.reduce((sum, row) => sum + this.getXtRowEffectiveQty(row), 0);
   }
 
   getXtBagSelectedCount(): number {
-    return this.bagPopupRows.filter((r) => r.selected && !r.exported).length;
+    return this.bagPopupRows.filter((r) => this.getXtRowEffectiveQty(r) > 0).length;
   }
 
   openBagStatusPopup(material: InventoryMaterial, event?: Event): void {
@@ -3201,7 +3245,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     event?.stopPropagation();
     this.showBagStatusPopup = false;
     this.bagPopupMaterial = material;
-    this.xtBagFallbackQty = Number(material.xt || 0) || null;
+    const le = this.getXtLeTotal(material);
+    this.xtBagFallbackLeQty = le > 0 ? le : null;
+    const full = Math.max(0, Number(material.xt || 0) - le);
+    this.xtBagFallbackQty = full > 0 ? full : null;
     this.showXtBagPopup = true;
     void this.reloadBagPopupRows(material);
   }
@@ -3214,13 +3261,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bagPopupRows = [];
     this.bagPopupError = '';
     this.xtBagFallbackQty = null;
+    this.xtBagFallbackLeQty = null;
   }
 
   toggleXtBagRow(row: InventoryBagRow, checked: boolean): void {
     if (row.exported) return;
     row.selected = checked;
-    if (checked && !(Number(row.qty) > 0)) {
-      row.qty = this.getBagDefaultQty(this.bagPopupMaterial!, row.bagNo, this.bagPopupRows.length);
+    if (checked) {
+      row.leQty = null;
+      if (!(Number(row.qty) > 0)) {
+        row.qty = this.getBagDefaultQty(this.bagPopupMaterial!, row.bagNo, this.bagPopupRows.length);
+      }
     }
   }
 
@@ -3229,10 +3280,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     row.qty = Number.isFinite(n) && n > 0 ? n : 0;
   }
 
+  onXtBagLeQtyChange(row: InventoryBagRow, raw: any): void {
+    if (row.exported) return;
+    const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
+    row.leQty = Number.isFinite(n) && n > 0 ? n : null;
+    if (Number(row.leQty) > 0) row.selected = false;
+  }
+
   selectAllRemainingXtBags(): void {
     for (const row of this.bagPopupRows) {
       if (row.exported) continue;
       row.selected = true;
+      row.leQty = null;
       if (!(Number(row.qty) > 0)) {
         row.qty = this.getBagDefaultQty(this.bagPopupMaterial!, row.bagNo, this.bagPopupRows.length);
       }
@@ -3241,7 +3300,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   clearXtBagSelection(): void {
     for (const row of this.bagPopupRows) {
-      if (!row.exported) row.selected = false;
+      if (row.exported) continue;
+      row.selected = false;
+      row.leQty = null;
     }
   }
 
@@ -3251,14 +3312,24 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.xtBagSaving = true;
     try {
       if (this.bagPopupRows.length === 0) {
-        const qty = Number(this.xtBagFallbackQty || 0);
+        const full = Number(this.xtBagFallbackQty || 0);
+        const le = Number(this.xtBagFallbackLeQty || 0);
         material.xtBags = [];
-        material.xt = qty > 0 ? qty : 0;
+        material.xtLe = le > 0 ? le : 0;
+        material.xt = (full > 0 ? full : 0) + (le > 0 ? le : 0);
       } else {
         const picks = this.bagPopupRows
-          .filter((r) => r.selected && !r.exported && Number(r.qty) > 0)
-          .map((r) => ({ bagNo: r.bagNo, qty: Number(r.qty) }));
+          .filter((r) => this.getXtRowEffectiveQty(r) > 0)
+          .map((r) => {
+            const le = Number(r.leQty) || 0;
+            return {
+              bagNo: r.bagNo,
+              qty: this.getXtRowEffectiveQty(r),
+              ...(le > 0 ? { leQty: le } : {})
+            };
+          });
         material.xtBags = picks;
+        material.xtLe = picks.reduce((s, p) => s + (Number(p.leQty) > 0 ? Number(p.leQty) : 0), 0);
         material.xt = picks.reduce((s, p) => s + p.qty, 0);
       }
       await this.updateXT(material);
@@ -3276,11 +3347,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = material?.xtBags;
     if (!Array.isArray(raw)) return [];
     return raw
-      .map((x) => ({
-        bagNo: Math.floor(Number((x as any)?.bagNo ?? 0)),
-        qty: Number((x as any)?.qty ?? 0)
-      }))
-      .filter((x) => x.bagNo > 0 && x.qty > 0);
+      .map((x) => {
+        const bagNo = Math.floor(Number((x as any)?.bagNo ?? 0));
+        const leQty = Number((x as any)?.leQty ?? 0);
+        const qty = Number((x as any)?.qty ?? 0);
+        return {
+          bagNo,
+          qty,
+          ...(leQty > 0 ? { leQty } : {})
+        };
+      })
+      .filter((x) => x.bagNo > 0 && (x.qty > 0 || Number(x.leQty) > 0));
   }
 
   private getLotBagCount(material: InventoryMaterial): number {
@@ -3398,7 +3475,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.markForCheck();
     try {
       const exported = await this.loadExportedBagNosForMaterial(material);
-      const xtMap = new Map(this.normalizeXtBags(material).map((x) => [x.bagNo, x.qty]));
+      const xtMap = new Map(this.normalizeXtBags(material).map((x) => [x.bagNo, x]));
       let n = this.getLotBagCount(material);
       const seenMax = Math.max(0, ...exported, ...xtMap.keys());
       if (seenMax > n) n = seenMax;
@@ -3409,13 +3486,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const rows: InventoryBagRow[] = [];
       for (let i = 1; i <= n; i++) {
         const isExported = exported.has(i);
-        const xtQty = xtMap.get(i);
+        const pick = xtMap.get(i);
         const defaultQty = this.getBagDefaultQty(material, i, n);
+        const leQty = Number(pick?.leQty) > 0 ? Number(pick.leQty) : null;
+        const isFullXt = !isExported && !!pick && !(leQty > 0);
         rows.push({
           bagNo: i,
-          qty: xtQty != null ? xtQty : defaultQty,
-          status: isExported ? 'exported' : (xtQty != null ? 'xt' : 'stock'),
-          selected: !isExported && xtQty != null,
+          qty: isFullXt && pick?.qty ? pick.qty : defaultQty,
+          leQty,
+          status: isExported ? 'exported' : (pick ? 'xt' : 'stock'),
+          selected: isFullXt,
           exported: isExported
         });
       }
@@ -4947,11 +5027,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return parts.length ? parts.join('\n') : '-';
   }
 
-  /** Locker/BOX: hiện tên gốc, không kèm J5-/J-. */
+  /** Locker/BOX/TRA: hiện tên gốc, không kèm J5-/J-. */
   private displayLocationToken(loc: string): string {
     const raw = String(loc || '').trim();
     const bare = this.stripDoiKhoWhPrefix(raw);
-    if (this.isLockerOrBoxToken(bare)) return bare.toUpperCase();
+    if (this.isLockerOrBoxToken(bare) || this.isTraLocationToken(bare) || this.isTraLocationToken(raw)) {
+      return (bare || raw).toUpperCase();
+    }
+    if (/^(J5|J)-/i.test(raw)) return (bare || raw).toUpperCase();
     return raw;
   }
 
@@ -4962,7 +5045,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const token = String(t || '').trim().toUpperCase();
         if (!token) return '';
         const bare = this.stripDoiKhoWhPrefix(token);
-        return this.isLockerOrBoxToken(bare) ? bare.toUpperCase() : token;
+        if (this.isLockerOrBoxToken(bare) || this.isTraLocationToken(bare)) return bare.toUpperCase();
+        return token;
       }).filter(Boolean)
     );
   }
@@ -5652,6 +5736,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         baseMaterial.stock = materials.reduce((sum, m) => sum + (m.stock || 0), 0);
         baseMaterial.exported = materials.reduce((sum, m) => sum + (m.exported || 0), 0);
         baseMaterial.xt = materials.reduce((sum, m) => sum + (m.xt || 0), 0);
+        baseMaterial.xtLe = materials.reduce((sum, m) => sum + (m.xtLe || 0), 0);
         
         // Combine location field - gộp tất cả vị trí khác nhau
         const uniqueLocations = [...new Set(materials.map(m => m.location).filter(loc => loc))];
@@ -7148,9 +7233,103 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkTypeHomeLocs.get(String(productType || '').trim()) || '';
   }
 
-  openKkTypeHomeLocPicker(event: Event, box: { productType: string; groupCodes?: string[] }): void {
+  openKkTypeBoxMenu(event: MouseEvent, box: { productType: string; groupCodes?: string[] }): void {
     event.preventDefault();
     event.stopPropagation();
+    const productType = String(box?.productType || '').trim();
+    if (!productType) return;
+    this.kkTypeBoxMenuBox = { productType, groupCodes: box.groupCodes || [] };
+    this.kkTypeBoxMenuX = event.clientX;
+    this.kkTypeBoxMenuY = event.clientY;
+    this.kkTypeBoxMenuVisible = true;
+    this.skipKkTypeBoxMenuClose = true;
+    setTimeout(() => { this.skipKkTypeBoxMenuClose = false; }, 0);
+    this.cdr.detectChanges();
+  }
+
+  closeKkTypeBoxMenu(): void {
+    this.kkTypeBoxMenuVisible = false;
+    this.kkTypeBoxMenuBox = null;
+  }
+
+  onKkTypeBoxMenuAssign(): void {
+    const box = this.kkTypeBoxMenuBox;
+    this.closeKkTypeBoxMenu();
+    if (box) this.openKkTypeHomeLocPicker(box);
+  }
+
+  onKkTypeBoxMenuPrint(): void {
+    const box = this.kkTypeBoxMenuBox;
+    this.closeKkTypeBoxMenu();
+    if (!box?.productType) return;
+    this.printKkTypeNameLabel(box.productType);
+  }
+
+  printKkTypeNameLabelFromPicker(): void {
+    const productType = String(this.layoutLocTypeAssign || '').trim();
+    if (!productType) return;
+    this.printKkTypeNameLabel(productType);
+  }
+
+  /** Tem 57×32mm (cùng khổ Inbound) — chỉ tên nhóm hàng. */
+  printKkTypeNameLabel(productType: string): void {
+    const name = String(productType || '').trim();
+    if (!name) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      return;
+    }
+    const esc = (s: string) => this.escapeHtmlForPrint(s);
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><title>${esc(name)}</title>
+<style>
+  * { margin:0!important; padding:0!important; box-sizing:border-box!important; }
+  body {
+    font-family: Arial, sans-serif;
+    background: white!important;
+    overflow: hidden!important;
+    width: 57mm!important;
+    height: 32mm!important;
+  }
+  .label {
+    display: flex!important;
+    flex-direction: column!important;
+    justify-content: center!important;
+    align-items: center!important;
+    text-align: center!important;
+    width: 57mm!important;
+    height: 32mm!important;
+    padding: 2.5mm!important;
+    border: 1px solid #000!important;
+    page-break-inside: avoid!important;
+    box-sizing: border-box!important;
+    color: #000!important;
+  }
+  .name {
+    font-size: 18px!important;
+    font-weight: 800!important;
+    line-height: 1.2!important;
+    word-break: break-word!important;
+  }
+  @media print {
+    body { width:57mm!important; height:32mm!important; }
+    @page { margin:0!important; size: 57mm 32mm!important; padding:0!important; }
+    .label { width:57mm!important; height:32mm!important; }
+  }
+</style></head>
+<body>
+  <div class="label">
+    <div class="name">${esc(name)}</div>
+  </div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
+</body></html>`);
+    printWindow.document.close();
+  }
+
+  openKkTypeHomeLocPicker(box: { productType: string; groupCodes?: string[] }, event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
     const productType = String(box?.productType || '').trim();
     if (!productType) return;
     this.layoutLocTypeAssign = productType;
@@ -7841,11 +8020,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'D1';
   }
 
-  /** Token kho J: kệ R/S mới, tiền tố J5-/J-, hoặc locker/BOX (giữ nguyên tên). */
+  /** Token kho J: kệ R/S mới, tiền tố J5-/J-, locker/BOX, hoặc TRA (không cần J5-). */
   private isJWarehouseToken(loc: string): boolean {
     const raw = String(loc || '').trim().toUpperCase();
     if (!raw) return false;
     if (this.isLockerOrBoxToken(raw)) return true;
+    if (this.isTraLocationToken(raw)) return true;
     if (raw === 'J' || raw === 'J5' || raw.startsWith('J5-') || raw.startsWith('J-')) return true;
     if (isJWarehouseLocation(raw)) return true;
     return isJWarehouseLocation(this.stripDoiKhoWhPrefix(raw).toUpperCase());
@@ -12097,8 +12277,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!opts?.bypassUnlock && !this.isLocationColumnUnlocked && !this.canEdit) return false;
     const next = String(raw || '').trim().toUpperCase();
     if (next && next !== 'ASM3' && next !== 'J' && next !== 'J5' && next !== '00') return false;
-    const current = this.locationWhTag(material.location);
-    if (next === current || (next === 'J' && current === 'J')) return false;
     this.rememberLocationBeforeEdit(material);
     const bare = this.stripDoiKhoWhPrefix(String(material.location || '').trim());
     if (!bare && next) {
@@ -12106,7 +12284,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.markForCheck();
       return false;
     }
-    material.location = this.composeLocationWithWh(next, material.location);
+    const nextLoc = this.composeLocationWithWh(next, material.location);
+    if (this.normalizeMultiLocationValue(nextLoc) === this.normalizeMultiLocationValue(String(material.location || ''))) {
+      return false;
+    }
+    material.location = nextLoc;
     return this.persistLocationChange(material, {
       silent: !!opts?.silent,
       bypassUnlock: !!opts?.bypassUnlock
@@ -12179,6 +12361,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (material.xt !== undefined && material.xt !== null) {
       updateData.xt = material.xt;
     }
+    updateData.xtLe = Number(material.xtLe || 0) || 0;
     updateData.xtBags = Array.isArray(material.xtBags) ? material.xtBags : [];
     
     if (material.location) {
@@ -14682,11 +14865,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return '';
   }
 
-  /** Prefix ghi vào location: kho J vẫn dùng J5- để khớp dữ liệu cũ. */
+  /** Prefix ghi vào location: kho J không gắn J5- — giữ nguyên vị trí đã ghi. */
   private whWritePrefix(wh: string): string {
     const t = String(wh || '').trim().toUpperCase();
-    if (t === 'J' || t === 'J5') return 'J5';
+    if (t === 'J' || t === 'J5') return '';
     return t;
+  }
+
+  /** TRA / F62TRA: giữ nguyên tên, không gắn J5-. */
+  private isTraLocationToken(loc: string): boolean {
+    const c = this.locationCompact(this.stripDoiKhoWhPrefix(loc) || loc);
+    return c === 'TRA' || c === 'F62TRA' || c.startsWith('F62TRA') || c.endsWith('TRA');
   }
 
   /** Locker / BOX: không gắn J5- khi chọn kho J. */
@@ -14697,7 +14886,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       || isBoxPrefixLocation(raw) || isBoxPrefixLocation(body);
   }
 
-  /** Gắn tiền tố kho; locker/BOX khi kho J giữ nguyên tên. */
+  /** Gắn tiền tố kho; kho J giữ nguyên vị trí (không thêm J5-). */
   private composeLocationWithWh(wh: string, location: string): string {
     const raw = String(location || '').trim();
     const tokens = splitMultiLocations(raw);
@@ -14708,7 +14897,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const bare = this.stripDoiKhoWhPrefix(String(token || '').trim());
         if (!bare) return '';
         if (!nextWh) return bare;
-        if ((nextWh === 'J' || nextWh === 'J5') && this.isLockerOrBoxToken(bare)) {
+        if (nextWh === 'J' || nextWh === 'J5') {
           return bare.toUpperCase();
         }
         const prefix = this.whWritePrefix(nextWh);
@@ -14823,9 +15012,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const selected = this.doiKhoRows.filter((r) => !!r.id);
     if (!wh || !selected.length) return;
     const prefix = this.whWritePrefix(wh);
+    const locHint = prefix
+      ? `Vị trí locker/BOX giữ nguyên tên. Vị trí khác thêm tiền tố "${prefix}-".`
+      : 'Vị trí giữ nguyên như đang ghi, không thêm J5-.';
     const confirmed = confirm(
       `Dời ${selected.length} dòng pallet ${this.doiKhoPallet} sang kho ${wh}?\n\n` +
-        `Vị trí locker/BOX giữ nguyên tên. Vị trí khác thêm tiền tố "${prefix}-". Mã pallet giữ nguyên.`
+        `${locHint} Mã pallet giữ nguyên.`
     );
     if (!confirmed) return;
 
@@ -15675,6 +15867,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         baseMaterial.stock = group.reduce((sum, m) => sum + (m.stock || 0), 0);
         baseMaterial.exported = group.reduce((sum, m) => sum + (m.exported || 0), 0);
         baseMaterial.xt = group.reduce((sum, m) => sum + (m.xt || 0), 0);
+        baseMaterial.xtLe = group.reduce((sum, m) => sum + (m.xtLe || 0), 0);
         
         // Gộp location field
         const uniqueLocations = [...new Set(group.map(m => m.location).filter(loc => loc))];
@@ -15901,6 +16094,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         baseMaterial.stock = group.reduce((sum, m) => sum + (m.stock || 0), 0);
         baseMaterial.exported = group.reduce((sum, m) => sum + (m.exported || 0), 0);
         baseMaterial.xt = group.reduce((sum, m) => sum + (m.xt || 0), 0);
+        baseMaterial.xtLe = group.reduce((sum, m) => sum + (m.xtLe || 0), 0);
         
         // Gộp location field
         const uniqueLocations = [...new Set(group.map(m => m.location).filter(loc => loc))];
@@ -16046,6 +16240,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         'NK': m.quantity ?? 0,
         'Đã xuất': m.exported ?? 0,
         'XT': m.xt ?? 0,
+        'Xuất lẻ': m.xtLe ?? this.getXtLeTotal(m),
         'Tồn kho': this.calculateCurrentStock(m),
         'Vị trí': m.location || '',
         'Loại Hình': m.type || '',
@@ -16110,6 +16305,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         'Unit': material.unit || '',
         'Exported': material.exported || 0,
         'XT': material.xt || 0,
+        'Xuất lẻ': material.xtLe || this.getXtLeTotal(material),
         'Stock': (material.openingStock !== null ? material.openingStock : 0) + (material.quantity || 0) - (material.exported || 0) - (material.xt || 0),
         'Location': material.location || '',
         'Type': material.type || '',
