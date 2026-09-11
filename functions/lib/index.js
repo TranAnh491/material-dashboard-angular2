@@ -199,9 +199,9 @@ exports.sendControlBatchReportEmail = functions
         throw new functions.https.HttpsError(msg.includes('Thiếu cấu hình') ? 'failed-precondition' : 'internal', msg);
     }
 });
-/** QC: mã ưu tiên trong Chờ kiểm, từ CHỜ KIỂM → trạng thái khác → gửi mail QC_PRIORITY_EMAIL_TO. */
+/** QC: mã ưu tiên trong Chờ kiểm, từ CHỜ KIỂM → trạng thái khác → mail QC_PRIORITY_EMAIL_TO + Zalo khi PASS. */
 exports.sendQcPriorityResolvedEmailFn = functions
-    .runWith({ secrets: [params_config_1.emailPass] })
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -227,8 +227,10 @@ exports.sendQcPriorityResolvedEmailFn = functions
         newStatus,
         checkedBy
     };
+    const { sendQcPriorityResolvedEmail, sendQcPriorityResolvedZalo } = await Promise.resolve().then(() => __importStar(require('./qc-priority-email')));
+    // Zalo độc lập với email — chạy trước, best-effort, không để lỗi email chặn.
+    await sendQcPriorityResolvedZalo(payload).catch((e) => console.warn('QC ưu tiên: gửi Zalo thất bại', e));
     try {
-        const { sendQcPriorityResolvedEmail } = await Promise.resolve().then(() => __importStar(require('./qc-priority-email')));
         await sendQcPriorityResolvedEmail(payload);
         return { ok: true };
     }

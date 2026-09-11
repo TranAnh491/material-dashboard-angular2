@@ -84,7 +84,7 @@ export interface WorkOrder {
   productionLine: string;
   status: WorkOrderStatus;
   createdBy: string;
-  /** true khi Người soạn được gán từ người scan xuất kho (zalo_links). */
+  /** true khi Người soạn được gán từ người scan xuất kho (Settings / outbound). */
   createdByFromOutbound?: boolean;
   /** Mã nhân viên scan xuất (ASPxxxx). */
   createdByMemberId?: string;

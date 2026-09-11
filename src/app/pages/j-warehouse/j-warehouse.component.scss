@@ -1621,6 +1621,12 @@ $accent-soft: #ccfbf1;
     color: $muted;
   }
 
+  &__section {
+    margin: 18px 0 12px;
+    padding-top: 12px;
+    border-top: 1px solid $border;
+  }
+
   &__scan {
     margin-top: 12px;
 
@@ -2232,6 +2238,62 @@ $accent-soft: #ccfbf1;
 
 .jw-detail--cctv {
   width: 280px;
+}
+
+.jw-outlet {
+  cursor: pointer;
+
+  &--edit {
+    .jw-outlet__hit {
+      cursor: grab;
+    }
+  }
+
+  &--dragging {
+    .jw-outlet__hit {
+      cursor: grabbing;
+    }
+  }
+
+  &__hit {
+    fill: transparent;
+  }
+
+  &__body {
+    fill: #b45309;
+    stroke: #ffffff;
+    stroke-width: 1.6;
+    pointer-events: none;
+  }
+
+  &__hole,
+  &__slot {
+    fill: #fff7ed;
+    pointer-events: none;
+  }
+
+  &__num {
+    fill: #9a3412;
+    font-size: 8px;
+    font-weight: 800;
+    text-anchor: middle;
+    dominant-baseline: hanging;
+    pointer-events: none;
+  }
+
+  &--on &__body {
+    fill: #d97706;
+    stroke: #fde68a;
+    stroke-width: 2;
+  }
+}
+
+.jw-outlet-item__num {
+  background: #b45309;
+}
+
+.jw-cctv-item--on .jw-outlet-item__num {
+  background: #d97706;
 }
 
 .jw-cctv-add {

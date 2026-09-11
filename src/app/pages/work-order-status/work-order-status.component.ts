@@ -5211,9 +5211,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return Number.isFinite(d.getTime()) ? d.getTime() : 0;
   }
 
-  /** Ghi đè Người soạn theo người scan xuất kho + tên zalo_links (chỉ outbound LSX trên tab). */
+  /** Ghi đè Người soạn theo người scan xuất kho + tên Settings. */
   private async applyOutboundCreatedByOverrides(): Promise<void> {
-    const zalo = await this.woOutboundCreatedBy.getZaloNameMap();
+    const [settings, zalo] = await Promise.all([
+      this.woOutboundCreatedBy.getSettingsNameMap(),
+      this.woOutboundCreatedBy.getZaloNameMap()
+    ]);
     const asm1Lsx: string[] = [];
     const asm2Lsx: string[] = [];
     for (const wo of this.workOrders) {
@@ -5237,7 +5240,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const memberId = meta.lsxToMemberId.get(lsxNorm);
       if (!memberId) continue;
 
-      const name = zalo.get(memberId) || memberId;
+      const existing = String(wo.createdBy || '').trim();
+      if (existing && !wo.createdByFromOutbound) {
+        continue;
+      }
+
+      const name = settings.get(memberId) || zalo.get(memberId) || memberId;
       wo.createdBy = name;
       wo.createdByFromOutbound = true;
       wo.createdByMemberId = memberId;
@@ -5252,11 +5260,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   getCreatedByDisplay(wo: WorkOrder): string {
+    const memberId = this.woOutboundCreatedBy.normalizeMemberId(String(wo.createdByMemberId || wo.createdBy || ''));
     const v = String(wo.createdBy || '').trim();
-    if (!v) return 'Chưa có';
+    if (!v && !memberId) return 'Chưa có';
     const key = v.toUpperCase();
     const opt = this.createdByPickerOptions.find((o) => o.value === key);
-    return opt?.label || this.woCreatedByStaff.labelFor(v) || v;
+    if (opt) return opt.label;
+    const fromStaff = this.woCreatedByStaff.labelFor(v);
+    if (fromStaff && fromStaff !== v) return fromStaff;
+    return v || memberId || 'Chưa có';
   }
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */

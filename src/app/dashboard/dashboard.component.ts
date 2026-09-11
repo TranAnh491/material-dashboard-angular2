@@ -12,6 +12,7 @@ import { NvlkhCatalogService } from '../services/nvlkh-catalog.service';
 import { LocationRuleCheckService, WarehouseType } from '../services/location-rule-check.service';
 import { MaterialLifecycleService } from '../services/material-lifecycle.service';
 import { WoCreatedByStaffService } from '../services/wo-created-by-staff.service';
+import { WorkOrderOutboundCreatedByService } from '../services/work-order-outbound-created-by.service';
 import * as XLSX from 'xlsx';
 
 interface WorkOrderStatusRow {
@@ -155,6 +156,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   woHeatmapWeekOffset = 0;
   private readonly woHeatmapWeekOffsetMin = -1;
   private readonly woHeatmapWeekOffsetMax = 1;
+  /** Tên NV từ Settings (users.displayName) theo mã ASP scan xuất kho */
+  private settingsNameByMemberId = new Map<string, string>();
   /** Hiển thị tooltip heatmap — khớp `createdByPickerOptions` tab Work Order Status */
   private readonly woCreatedByLabels: Record<string, string> = {
     TÌNH: 'Tình',
@@ -462,7 +465,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private nvlkhCatalog: NvlkhCatalogService,
     private locationRuleCheck: LocationRuleCheckService,
     private materialService: MaterialLifecycleService,
-    private woCreatedByStaff: WoCreatedByStaffService
+    private woCreatedByStaff: WoCreatedByStaffService,
+    private woOutboundCreatedBy: WorkOrderOutboundCreatedByService
   ) { }
 
   @HostListener('window:resize')
@@ -1042,13 +1046,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
           console.log(`Loaded ${this.workOrders.length} work orders for ${this.selectedFactory} (last ${this.DASHBOARD_WO_RECENT_DAYS} days)`);
 
-          // Update summaries after loading data
-          this.updateWorkOrderSummary();
-          this.updateWorkOrderStatus();
-          this.createCharts();
-          this.woStatusLoaded = true;
-          this.woStatusLoading = false;
-          this.cdr.markForCheck();
+          void this.applyOutboundCreatedByOnDashboard().finally(() => {
+            this.updateWorkOrderSummary();
+            this.updateWorkOrderStatus();
+            this.createCharts();
+            this.woStatusLoaded = true;
+            this.woStatusLoading = false;
+            this.cdr.markForCheck();
+          });
         },
         error: (error) => {
           console.error('Error loading work orders from Firebase:', error);
@@ -1288,12 +1293,98 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return m[kind] || kind;
   }
 
-  formatWoCreatedByLabel(createdBy?: string): string {
+  formatWoCreatedByLabel(createdBy?: string, memberId?: string): string {
+    const mid = this.woOutboundCreatedBy.normalizeMemberId(memberId || createdBy || '');
+    const fromSettings = mid ? this.settingsNameByMemberId.get(mid) : '';
+    if (fromSettings) return fromSettings;
     const key = String(createdBy ?? '').trim().toUpperCase();
     if (!key) return '—';
     const fromCatalog = this.woCreatedByPickerOptions.find((o) => o.value === key);
     if (fromCatalog) return fromCatalog.label;
     return this.woCreatedByStaff.labelFor(createdBy || '') || this.woCreatedByLabels[key] || createdBy || '—';
+  }
+
+  private formatWoSoanTooltip(wo: WorkOrder): string | null {
+    const memberId = this.woOutboundCreatedBy.normalizeMemberId(
+      String((wo as any).createdByMemberId || '')
+    );
+    const name = this.formatWoCreatedByLabel(wo.createdBy, memberId);
+    if (!name || name === '—') return null;
+    if (memberId && name.toUpperCase() !== memberId) {
+      return `Người soạn: ${name} (${memberId})`;
+    }
+    if (memberId) return `Người soạn: ${memberId}`;
+    return `Người soạn: ${name}`;
+  }
+
+  /** WO trong 3 tuần heatmap (trước / này / tới) — lấy mã scan xuất kho. */
+  private collectHeatmapWeekWorkOrders(): WorkOrder[] {
+    const out: WorkOrder[] = [];
+    const seen = new Set<string>();
+    const todayMonday = this.getMondayOfWeekContaining(new Date());
+    for (let offset = this.woHeatmapWeekOffsetMin; offset <= this.woHeatmapWeekOffsetMax; offset++) {
+      const monday = new Date(todayMonday);
+      monday.setDate(todayMonday.getDate() + offset * 7);
+      for (let i = 0; i < 6; i++) {
+        const targetDate = new Date(monday);
+        targetDate.setDate(monday.getDate() + i);
+        for (const wo of this.getWorkOrdersForDeliveryDate(targetDate)) {
+          const id = String(wo.id || wo.productionOrder || '').trim();
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          out.push(wo);
+        }
+      }
+    }
+    return out;
+  }
+
+  private dashboardOutboundFactory(wo: WorkOrder): 'ASM1' | 'ASM2' {
+    const raw = String(wo.factory || this.selectedFactory || 'ASM1').trim().toUpperCase();
+    if (raw.includes('ASM2') || raw.includes('SAMPLE 2')) return 'ASM2';
+    return 'ASM1';
+  }
+
+  /** Gắn mã NV scan xuất kho + tên Settings lên WO của heatmap weekly. */
+  private async applyOutboundCreatedByOnDashboard(): Promise<void> {
+    const weekWos = this.collectHeatmapWeekWorkOrders();
+    const asm1Lsx: string[] = [];
+    const asm2Lsx: string[] = [];
+    for (const wo of weekWos) {
+      const lsx = String(wo.productionOrder || '').trim();
+      if (!lsx) continue;
+      (this.dashboardOutboundFactory(wo) === 'ASM2' ? asm2Lsx : asm1Lsx).push(lsx);
+    }
+
+    const [nameMap, memberAsm1, memberAsm2] = await Promise.all([
+      this.woOutboundCreatedBy.getSettingsNameMap(),
+      this.woOutboundCreatedBy.loadLatestMemberIdByLsx('ASM1', asm1Lsx),
+      this.woOutboundCreatedBy.loadLatestMemberIdByLsx('ASM2', asm2Lsx)
+    ]);
+    this.settingsNameByMemberId = nameMap;
+
+    for (const wo of this.workOrders) {
+      const lsxNorm = this.woOutboundCreatedBy.normLsxForMatch(wo.productionOrder || '');
+      const fromOutbound =
+        this.dashboardOutboundFactory(wo) === 'ASM2'
+          ? memberAsm2.get(lsxNorm)
+          : memberAsm1.get(lsxNorm);
+      const memberId = this.woOutboundCreatedBy.normalizeMemberId(
+        String(fromOutbound || (wo as any).createdByMemberId || wo.createdBy || '')
+      );
+      const isAsp = memberId.startsWith('ASP') && memberId.length === 7;
+      if (isAsp) {
+        (wo as any).createdByMemberId = memberId;
+        if (fromOutbound) {
+          (wo as any).createdByFromOutbound = true;
+        }
+        wo.createdBy = nameMap.get(memberId) || wo.createdBy || memberId;
+      } else if (wo.createdBy) {
+        const asId = this.woOutboundCreatedBy.normalizeMemberId(wo.createdBy);
+        const named = this.settingsNameByMemberId.get(asId);
+        if (named) wo.createdBy = named;
+      }
+    }
   }
 
   private async loadWoCreatedByStaff(): Promise<void> {
@@ -1360,12 +1451,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const giaoAsm3 = this.isWoAsm3Marked(wo);
     const asm3Label = this.formatWoAsm3TooltipSuffix(wo);
     const woId = wo.id || '';
+    const soanLine = this.formatWoSoanTooltip(wo);
     if (kind !== 'kitting') {
       const sku = (wo.productCode || '').trim();
       const lsx = (wo.productionOrder || '').trim();
       const base = this.woHeatKindLabel(kind);
       const parts = sku ? [`${sku} · ${base}`] : [base];
       if (lsx) parts.push(`LSX: ${lsx}`);
+      if (soanLine) parts.push(soanLine);
       if (asm3Label) parts.push(asm3Label);
       return { kind, tooltip: parts.join('\n'), giaoAsm3, woId };
     }
@@ -1373,7 +1466,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const lsx = (wo.productionOrder || '').trim();
     const lines = [sku];
     if (lsx) lines.push(`LSX: ${lsx}`);
-    lines.push(`Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy)}`);
+    lines.push(soanLine || `Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy, (wo as any).createdByMemberId)}`);
     lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
     if (asm3Label) lines.push(asm3Label);
     return { kind, tooltip: lines.join('\n'), giaoAsm3, woId };

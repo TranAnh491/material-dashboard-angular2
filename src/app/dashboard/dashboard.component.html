@@ -893,9 +893,9 @@
           <select class="wo-lsx-input"
                   [(ngModel)]="woEditForm.createdBy"
                   [disabled]="woEditSaving || woEditCreatedByLocked"
-                  [title]="woEditCreatedByLocked ? ('Xuất kho: ' + (woEditSource.createdByMemberId || '')) : ''">
+                  [title]="woEditCreatedByLocked ? ('Xuất kho: ' + (formatWoCreatedByLabel(woEditSource.createdBy, woEditSource.createdByMemberId) + (woEditSource.createdByMemberId ? ' · ' + woEditSource.createdByMemberId : ''))) : ''">
             <option value="">CHỌN NGƯỜI</option>
-            <option *ngIf="woEditCreatedByIsCustom" [ngValue]="woEditSource.createdBy">{{ formatWoCreatedByLabel(woEditSource.createdBy) }}</option>
+            <option *ngIf="woEditCreatedByIsCustom" [ngValue]="woEditSource.createdBy">{{ formatWoCreatedByLabel(woEditSource.createdBy, woEditSource.createdByMemberId) }}</option>
             <option *ngFor="let opt of woCreatedByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
           </select>
         </label>

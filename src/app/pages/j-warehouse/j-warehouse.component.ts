@@ -176,6 +176,16 @@ export interface JwCctvCam {
   required?: boolean;
 }
 
+/** Ổ điện trên sơ đồ camera — tọa độ mét theo xưởng. */
+export interface JwPowerOutlet {
+  id: string;
+  num: number;
+  building: 'j5' | 'j4';
+  xM: number;
+  yM: number;
+  label?: string;
+}
+
 /** Mũi tên kích thước khu vực trên bản vẽ kỹ thuật */
 export interface JwTechDim {
   id: string;
@@ -350,7 +360,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.confirmClearPallet': 'Xóa pallet "{{code}}" khỏi vị trí {{slot}}?',
     'alert.resetLayout': 'Khôi phục layout kệ mặc định? Thay đổi chưa lưu sẽ mất.',
     'alert.deleteBlock': 'Xóa block {{code}}?',
-    'cctv.hint': 'Kéo camera để đổi vị trí. Kéo núm vàng để xoay góc. Sao = camera bắt buộc (không xóa được).',
+    'cctv.hint': 'Kéo camera / ổ điện để đổi vị trí. Kéo núm vàng để xoay góc camera. Sao = camera bắt buộc (không xóa được).',
     'cctv.hint3d': 'Chọn camera bên phải để xem góc nhìn 3D. Bấm Tổng quan để xoay mô hình và thấy tầm phủ.',
     'cctv.live': 'TRỰC TIẾP',
     'cctv.online': 'Online',
@@ -392,7 +402,19 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'cctv.cam17': 'Lối kệ Đông J4',
     'cctv.cam18': 'Nền cao J4',
     'cctv.cam19': 'Cửa cuốn mặt D J4',
-    'cctv.cam20': 'WC Nam / mặt A J4'
+    'cctv.cam20': 'WC Nam / mặt A J4',
+    'outlet.list': 'Ổ điện',
+    'outlet.addJ5': 'Thêm ổ J5',
+    'outlet.addJ4': 'Thêm ổ J4',
+    'outlet.delete': 'Xóa ổ điện',
+    'outlet.deleteConfirm': 'Xóa {{id}} khỏi {{bldg}}?',
+    'outlet.custom': 'Ổ điện mới',
+    'outlet.pos': 'Vị trí',
+    'outlet.count': '{{n}} ổ điện · J5: {{j5}} · J4: {{j4}}',
+    'info.cameras': 'Số camera',
+    'info.camerasVal': '{{n}} camera (J5: {{j5}} · J4: {{j4}})\nCamera CCTV lắp trên sơ đồ J5 và J4',
+    'info.outlets': 'Số ổ điện',
+    'info.outletsVal': '{{n}} ổ điện (J5: {{j5}} · J4: {{j4}})\nỔ điện đã thêm trên sơ đồ camera'
   },
   en: {
     'drawMode.kyThuat': 'Technical Drawing',
@@ -542,7 +564,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.confirmClearPallet': 'Remove pallet "{{code}}" from slot {{slot}}?',
     'alert.resetLayout': 'Restore the default rack layout? Unsaved changes will be lost.',
     'alert.deleteBlock': 'Delete block {{code}}?',
-    'cctv.hint': 'Drag a camera to move it. Drag the yellow handle to rotate. Star = required camera (cannot delete).',
+    'cctv.hint': 'Drag a camera or outlet to move it. Drag the yellow handle to rotate a camera. Star = required camera (cannot delete).',
     'cctv.hint3d': 'Select a camera on the right to see its 3D viewpoint. Click Overview to orbit and see coverage cones.',
     'cctv.live': 'LIVE',
     'cctv.online': 'Online',
@@ -584,7 +606,19 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'cctv.cam17': 'J4 east rack aisle',
     'cctv.cam18': 'J4 raised floor',
     'cctv.cam19': 'J4 face D shutter',
-    'cctv.cam20': 'J4 WC Male / door A'
+    'cctv.cam20': 'J4 WC Male / door A',
+    'outlet.list': 'Power outlets',
+    'outlet.addJ5': 'Add J5 outlet',
+    'outlet.addJ4': 'Add J4 outlet',
+    'outlet.delete': 'Delete outlet',
+    'outlet.deleteConfirm': 'Delete {{id}} from {{bldg}}?',
+    'outlet.custom': 'New outlet',
+    'outlet.pos': 'Position',
+    'outlet.count': '{{n}} outlets · J5: {{j5}} · J4: {{j4}}',
+    'info.cameras': 'Cameras',
+    'info.camerasVal': '{{n}} cameras (J5: {{j5}} · J4: {{j4}})\nCCTV cameras placed on the J5 and J4 layout',
+    'info.outlets': 'Power outlets',
+    'info.outletsVal': '{{n}} outlets (J5: {{j5}} · J4: {{j4}})\nPower outlets added on the camera layout'
   }
 };
 
@@ -684,6 +718,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private readonly CCTV_STORAGE_KEY = 'j-warehouse-cctv-v2';
   private readonly CCTV_STORAGE_KEY_V1 = 'j-warehouse-cctv-v1';
   private readonly CCTV_LIVE_HIDDEN_KEY = 'j-warehouse-cctv-live-hidden-v1';
+  private readonly OUTLET_STORAGE_KEY = 'j-warehouse-outlets-v1';
   private readonly EXTRA_PALLET_STORAGE_KEY = 'j-warehouse-extra-pallets-v1';
   private readonly LANG_STORAGE_KEY = 'j-warehouse-lang-v1';
   private readonly LAYOUT_SNAP_M = 0.05;
@@ -768,6 +803,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   /** 20 camera CCTV — 12 J5 + 8 J4. Có thể kéo đổi vị trí / góc chiếu. */
   cctvCams: JwCctvCam[] = this.buildCctvCams();
+  /** Ổ điện trên sơ đồ camera — thêm thủ công, lưu localStorage. */
+  powerOutlets: JwPowerOutlet[] = [];
 
   readonly WC_EXIT_CLEARANCE_M = 1.5;
 
@@ -853,6 +890,38 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   get cctvRequiredCount(): number {
     return this.cctvCams.filter((c) => c.required).length;
+  }
+
+  get visiblePowerOutlets(): JwPowerOutlet[] {
+    return this.powerOutlets.filter((o) => o.building === 'j5' || this.showJ4);
+  }
+
+  get selectedPowerOutlet(): JwPowerOutlet | null {
+    return this.powerOutlets.find((o) => o.id === this.selectedOutletId) || null;
+  }
+
+  get outletJ5Count(): number {
+    return this.powerOutlets.filter((o) => o.building === 'j5').length;
+  }
+
+  get outletJ4Count(): number {
+    return this.powerOutlets.filter((o) => o.building === 'j4').length;
+  }
+
+  outletLabel(outlet: JwPowerOutlet): string {
+    return outlet.label || this.t('outlet.custom');
+  }
+
+  outletScreenX(outlet: JwPowerOutlet): number {
+    return this.meterX(outlet.xM);
+  }
+
+  outletScreenY(outlet: JwPowerOutlet): number {
+    return outlet.building === 'j4' ? this.j4MeterY(outlet.yM) : this.meterY(outlet.yM);
+  }
+
+  trackOutlet(_: number, outlet: JwPowerOutlet): string {
+    return outlet.id;
   }
 
   cctvCamLabel(cam: JwCctvCam): string {
@@ -941,6 +1010,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   selectCctv(cam: JwCctvCam, event?: Event, focus = true): void {
     event?.stopPropagation();
     this.selectedCctvId = cam.id;
+    this.selectedOutletId = null;
     this.selectedBlock = null;
     this.showScanInput = false;
     if (this.show3D) this.syncRack3dInputs();
@@ -1034,6 +1104,179 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.show3D) this.syncRack3dInputs();
   }
 
+  onOutletClick(outlet: JwPowerOutlet, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (this.outletSuppressClick) {
+      this.outletSuppressClick = false;
+      return;
+    }
+    this.selectOutlet(outlet, event, false);
+  }
+
+  selectOutlet(outlet: JwPowerOutlet, event?: Event, focus = true): void {
+    event?.stopPropagation();
+    this.selectedOutletId = outlet.id;
+    this.selectedCctvId = null;
+    this.selectedBlock = null;
+    this.showScanInput = false;
+  }
+
+  onOutletMovePointerDown(outlet: JwPowerOutlet, event: PointerEvent): void {
+    if (this.mapTool === 'pan' || event.button !== 0) return;
+    event.stopPropagation();
+    this.selectOutlet(outlet, event, false);
+    if (!this.canEditCctv) return;
+    const pt = this.clientToCctvMeter(outlet, event.clientX, event.clientY);
+    if (!pt) return;
+    this.beginOutletDrag(outlet, pt, event);
+  }
+
+  addOutlet(building: 'j5' | 'j4', event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canEditCctv) return;
+    if (this.powerOutlets.length >= 80) return;
+    if (building === 'j4' && this.buildingView !== 'j4-j5') {
+      this.setBuildingView('j4-j5');
+    }
+    const same = this.powerOutlets.filter((o) => o.building === building).length;
+    const outlet: JwPowerOutlet = {
+      id: 'OUT-tmp',
+      num: 0,
+      building,
+      xM: this.round2(Math.min(this.LENGTH_M - 2, 10 + (same % 10) * 8)),
+      yM: this.round2(Math.min(this.WIDTH_M - 2, 4 + Math.floor(same / 10) * 5))
+    };
+    this.powerOutlets = [...this.powerOutlets, outlet];
+    this.syncOutletNums();
+    this.saveOutletLayout();
+    this.selectOutlet(outlet, event, false);
+  }
+
+  removeOutlet(outlet: JwPowerOutlet, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!this.canEditCctv) return;
+    if (!confirm(this.t('outlet.deleteConfirm', { id: outlet.id, bldg: outlet.building.toUpperCase() }))) return;
+    const keep =
+      this.selectedOutletId === outlet.id ? null : this.powerOutlets.find((o) => o.id === this.selectedOutletId);
+    this.powerOutlets = this.powerOutlets.filter((o) => o !== outlet);
+    this.syncOutletNums();
+    this.saveOutletLayout();
+    this.selectedOutletId = keep?.id ?? this.visiblePowerOutlets[0]?.id ?? null;
+  }
+
+  private syncOutletNums(): void {
+    const sel = this.powerOutlets.find((o) => o.id === this.selectedOutletId) || null;
+    this.powerOutlets.forEach((o, i) => {
+      o.num = i + 1;
+      o.id = `OUT-${String(o.num).padStart(2, '0')}`;
+    });
+    if (sel) this.selectedOutletId = sel.id;
+  }
+
+  private beginOutletDrag(
+    outlet: JwPowerOutlet,
+    pt: { xM: number; yM: number },
+    event: PointerEvent
+  ): void {
+    this.outletDrag = {
+      outlet,
+      origXM: outlet.xM,
+      origYM: outlet.yM,
+      startXM: pt.xM,
+      startYM: pt.yM
+    };
+    this.outletDragMoved = false;
+    this.outletDraggingId = outlet.id;
+    this.outletSuppressClick = false;
+    (event.target as Element | null)?.setPointerCapture?.(event.pointerId);
+  }
+
+  private applyOutletDrag(event: PointerEvent): void {
+    const d = this.outletDrag;
+    if (!d) return;
+    const pt = this.clientToCctvMeter(d.outlet, event.clientX, event.clientY);
+    if (!pt) return;
+    const dx = pt.xM - d.startXM;
+    const dy = pt.yM - d.startYM;
+    if (Math.abs(dx) < 0.02 && Math.abs(dy) < 0.02 && !this.outletDragMoved) return;
+
+    this.ngZone.run(() => {
+      this.outletDragMoved = true;
+      d.outlet.xM = this.snap(Math.max(0.4, Math.min(this.LENGTH_M - 0.4, d.origXM + dx)));
+      d.outlet.yM = this.snap(Math.max(0.4, Math.min(this.WIDTH_M - 0.4, d.origYM + dy)));
+      this.cdr.markForCheck();
+    });
+  }
+
+  private endOutletDrag(): void {
+    if (!this.outletDrag) return;
+    const moved = this.outletDragMoved;
+    this.ngZone.run(() => {
+      this.outletDrag = null;
+      this.outletDraggingId = null;
+      this.outletDragMoved = false;
+      if (moved) this.saveOutletLayout();
+      this.cdr.markForCheck();
+    });
+    if (moved) this.outletSuppressClick = true;
+  }
+
+  private loadOutletLayout(): void {
+    try {
+      const raw = localStorage.getItem(this.OUTLET_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { version?: number; outlets?: Array<Partial<JwPowerOutlet>> };
+      if (!Array.isArray(parsed?.outlets)) return;
+      const outlets = parsed.outlets
+        .map((s, i) => this.hydrateOutlet(s, i))
+        .filter((o): o is JwPowerOutlet => !!o);
+      if (outlets.length) {
+        this.powerOutlets = outlets;
+        this.syncOutletNums();
+      }
+    } catch (err) {
+      console.error('[JWarehouse] loadOutletLayout failed', err);
+    }
+  }
+
+  private hydrateOutlet(s: Partial<JwPowerOutlet>, i: number): JwPowerOutlet | null {
+    const building = s.building === 'j4' ? 'j4' : 'j5';
+    const xM = Number(s.xM);
+    const yM = Number(s.yM);
+    if (!Number.isFinite(xM) || !Number.isFinite(yM)) return null;
+    return {
+      id: String(s.id || `OUT-${String(i + 1).padStart(2, '0')}`),
+      num: Number(s.num) || i + 1,
+      building,
+      xM: this.round2(Math.max(0.4, Math.min(this.LENGTH_M - 0.4, xM))),
+      yM: this.round2(Math.max(0.4, Math.min(this.WIDTH_M - 0.4, yM))),
+      label: s.label ? String(s.label) : undefined
+    };
+  }
+
+  private saveOutletLayout(): void {
+    try {
+      localStorage.setItem(
+        this.OUTLET_STORAGE_KEY,
+        JSON.stringify({
+          version: 1,
+          outlets: this.powerOutlets.map((o) => ({
+            id: o.id,
+            num: o.num,
+            building: o.building,
+            xM: o.xM,
+            yM: o.yM,
+            label: o.label || undefined
+          }))
+        })
+      );
+    } catch (err) {
+      console.error('[JWarehouse] saveOutletLayout failed', err);
+    }
+  }
+
   private syncCctvNums(): void {
     const sel = this.cctvCams.find((c) => c.id === this.selectedCctvId) || null;
     this.cctvCams.forEach((c, i) => {
@@ -1115,7 +1358,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (moved) this.cctvSuppressClick = true;
   }
 
-  private clientToCctvMeter(cam: JwCctvCam, clientX: number, clientY: number): { xM: number; yM: number } | null {
+  private clientToCctvMeter(
+    cam: { building: 'j5' | 'j4' },
+    clientX: number,
+    clientY: number
+  ): { xM: number; yM: number } | null {
     const svg = this.planSvg?.nativeElement;
     if (!svg) return null;
     const ctm = svg.getScreenCTM();
@@ -1667,7 +1914,30 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   private get warehouseInfoBaseRows(): Array<{ label: string; value: string; icon?: 'electric'; multiline?: boolean }> {
-    return [
+    const rows: Array<{ label: string; value: string; icon?: 'electric'; multiline?: boolean }> = [];
+    if (this.showCctv) {
+      rows.push(
+        {
+          label: this.t('info.cameras'),
+          value: this.t('info.camerasVal', {
+            n: this.cctvCams.length,
+            j5: this.cctvJ5Count,
+            j4: this.cctvJ4Count
+          }),
+          multiline: true
+        },
+        {
+          label: this.t('info.outlets'),
+          value: this.t('info.outletsVal', {
+            n: this.powerOutlets.length,
+            j5: this.outletJ5Count,
+            j4: this.outletJ4Count
+          }),
+          multiline: true
+        }
+      );
+    }
+    rows.push(
       { label: this.t('info.rackRows'), value: `R1–R${this.rackCount}` },
       { label: this.t('info.rackHeight'), value: `${this.RACK_HEIGHT_M}m` },
       {
@@ -1693,7 +1963,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       { label: this.t('info.raised'), value: `${this.RAISED_FROM_AXIS}–${this.RAISED_TO_AXIS}` },
       { label: this.t('info.cabinet'), value: '', icon: 'electric' },
       { label: this.t('info.levels'), value: String(this.LEVELS) }
-    ];
+    );
+    return rows;
   }
 
   private get warehouseInfoExtraPalletRows(): Array<{ label: string; value: string }> {
@@ -1729,11 +2000,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       }
       const first = this.visibleCctvCams[0];
       this.selectedCctvId = first?.id ?? null;
+      this.selectedOutletId = null;
       setTimeout(() => {
         if (first) this.focusCctv(first);
       }, 80);
     } else {
       this.selectedCctvId = null;
+      this.selectedOutletId = null;
     }
     if (this.show3D) this.syncRack3dInputs();
   }
@@ -2406,7 +2679,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   selectedBlock: JwBlock | null = null;
   selectedCctvId: string | null = null;
+  selectedOutletId: string | null = null;
   cctvDraggingId: string | null = null;
+  outletDraggingId: string | null = null;
   cctvLiveHidden = false;
   selectedLevel = 1;
   selectedPos: JwPos = 'A';
@@ -2473,6 +2748,15 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   } | null = null;
   private cctvDragMoved = false;
   private cctvSuppressClick = false;
+  private outletDrag: {
+    outlet: JwPowerOutlet;
+    origXM: number;
+    origYM: number;
+    startXM: number;
+    startYM: number;
+  } | null = null;
+  private outletDragMoved = false;
+  private outletSuppressClick = false;
 
   get pairCount(): number {
     return this.racks.length / 2;
@@ -2653,6 +2937,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.loadSavedLayout();
     this.loadCctvLayout();
     this.loadCctvLiveHidden();
+    this.loadOutletLayout();
     this.loadExtraPallets();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
     // của component này (template rất lớn), dù đa số trường hợp không kéo layout gì cả.
@@ -2998,6 +3283,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.applyCctvDrag(event);
       return;
     }
+    if (this.outletDrag) {
+      this.applyOutletDrag(event);
+      return;
+    }
     if (!this.layoutDrag) return;
     const pt = this.clientToMeter(event.clientX, event.clientY);
     if (!pt) return;
@@ -3057,6 +3346,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private onWindowPointerUp = (): void => {
     if (this.cctvDrag) {
       this.endCctvDrag();
+      return;
+    }
+    if (this.outletDrag) {
+      this.endOutletDrag();
       return;
     }
     if (!this.layoutDrag) return;
@@ -3260,6 +3553,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   clearSelection(): void {
     this.selectedBlock = null;
     this.selectedCctvId = null;
+    this.selectedOutletId = null;
     this.showScanInput = false;
     this.scanPalletInput = '';
     if (this.show3D) this.syncRack3dInputs();
@@ -3272,6 +3566,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (target?.closest('.jw-block')) return;
     if (target?.closest('.jw-kho-mat__hit')) return;
     if (target?.closest('.jw-cctv')) return;
+    if (target?.closest('.jw-outlet')) return;
     if (this.showCctv) {
       this.selectedBlock = null;
       return;

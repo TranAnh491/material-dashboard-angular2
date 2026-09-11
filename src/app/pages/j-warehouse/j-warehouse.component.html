@@ -1267,6 +1267,43 @@
                 </g>
               </g>
 
+              <!-- Ổ điện trên sơ đồ camera -->
+              <g class="jw-outlet-layer" *ngIf="showCctv">
+                <g
+                  *ngFor="let outlet of visiblePowerOutlets; trackBy: trackOutlet"
+                  class="jw-outlet"
+                  [class.jw-outlet--on]="selectedOutletId === outlet.id"
+                  [class.jw-outlet--edit]="canEditCctv"
+                  [class.jw-outlet--dragging]="outletDraggingId === outlet.id">
+                  <rect
+                    class="jw-outlet__hit"
+                    [attr.x]="outletScreenX(outlet) - 14"
+                    [attr.y]="outletScreenY(outlet) - 14"
+                    width="28"
+                    height="28"
+                    rx="4"
+                    (pointerdown)="onOutletMovePointerDown(outlet, $event)"
+                    (click)="onOutletClick(outlet, $event)" />
+                  <rect
+                    class="jw-outlet__body"
+                    [attr.x]="outletScreenX(outlet) - 11"
+                    [attr.y]="outletScreenY(outlet) - 11"
+                    width="22"
+                    height="22"
+                    rx="3" />
+                  <circle class="jw-outlet__hole" [attr.cx]="outletScreenX(outlet) - 4" [attr.cy]="outletScreenY(outlet) - 2" r="2.2" />
+                  <circle class="jw-outlet__hole" [attr.cx]="outletScreenX(outlet) + 4" [attr.cy]="outletScreenY(outlet) - 2" r="2.2" />
+                  <rect
+                    class="jw-outlet__slot"
+                    [attr.x]="outletScreenX(outlet) - 3.5"
+                    [attr.y]="outletScreenY(outlet) + 3"
+                    width="7"
+                    height="2.4"
+                    rx="1" />
+                  <text class="jw-outlet__num" [attr.x]="outletScreenX(outlet)" [attr.y]="outletScreenY(outlet) + 18">{{ outlet.num }}</text>
+                </g>
+              </g>
+
               <!-- 20 camera CCTV — J5 (12) + J4 (8) -->
               <g class="jw-cctv-layer" *ngIf="showCctv">
                 <g
@@ -1472,6 +1509,21 @@
 
       <aside class="jw-detail" [class.jw-detail--cctv]="showCctv">
         <ng-container *ngIf="showCctv; else jwDetailNormal">
+          <button type="button" class="jw-detail__toggle" (click)="toggleInfoPanel($event)">
+            <h3>{{ t('info.title') }}</h3>
+            <i class="material-icons">{{ infoPanelOpen ? 'expand_more' : 'chevron_right' }}</i>
+          </button>
+          <dl class="jw-fields" *ngIf="infoPanelOpen">
+            <div class="jw-fields__row" *ngFor="let row of warehouseInfoRows">
+              <dt>{{ row.label }}</dt>
+              <dd *ngIf="!row.icon" [class.jw-fields__multiline]="row.multiline">{{ row.value }}</dd>
+              <dd *ngIf="row.icon === 'electric'" class="jw-fields__icon-dd" [attr.aria-label]="t('info.cabinet')">
+                <svg class="jw-electric-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path [attr.d]="electricIconPath" />
+                </svg>
+              </dd>
+            </div>
+          </dl>
           <h3>{{ t('cctv.list') }}</h3>
           <p class="jw-detail__sub">{{ t('cctv.count', { n: cctvCams.length, j5: cctvJ5Count, j4: cctvJ4Count, req: cctvRequiredCount }) }}</p>
           <div class="jw-cctv-add" *ngIf="canEditCctv">
@@ -1564,6 +1616,52 @@
             <p class="jw-note" *ngIf="selectedCctvCam?.required">{{ t('cctv.requiredLocked') }}</p>
             <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="resetCctvLayout($event)">
               {{ t('cctv.reset') }}
+            </button>
+          </div>
+          <h3 class="jw-detail__section">{{ t('outlet.list') }}</h3>
+          <p class="jw-detail__sub">{{ t('outlet.count', { n: powerOutlets.length, j5: outletJ5Count, j4: outletJ4Count }) }}</p>
+          <div class="jw-cctv-add" *ngIf="canEditCctv">
+            <button type="button" class="jw-btn jw-btn--outline" (click)="addOutlet('j5', $event)">
+              <i class="material-icons">add</i> {{ t('outlet.addJ5') }}
+            </button>
+            <button type="button" class="jw-btn jw-btn--outline" (click)="addOutlet('j4', $event)">
+              <i class="material-icons">add</i> {{ t('outlet.addJ4') }}
+            </button>
+          </div>
+          <div class="jw-cctv-list">
+            <div
+              class="jw-cctv-item jw-outlet-item"
+              *ngFor="let outlet of visiblePowerOutlets; trackBy: trackOutlet"
+              [class.jw-cctv-item--on]="selectedOutletId === outlet.id"
+              (click)="selectOutlet(outlet, $event)">
+              <span class="jw-cctv-item__num jw-outlet-item__num">{{ outlet.num }}</span>
+              <span class="jw-cctv-item__meta">
+                <strong>{{ outlet.id }}</strong>
+                <em>{{ outletLabel(outlet) }} · {{ outlet.building | uppercase }}</em>
+              </span>
+              <button
+                type="button"
+                class="jw-cctv-item__del"
+                *ngIf="canEditCctv"
+                [title]="t('outlet.delete')"
+                (click)="removeOutlet(outlet, $event)">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
+          </div>
+          <dl class="jw-fields" *ngIf="selectedPowerOutlet as outlet">
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.building') }}</dt>
+              <dd>{{ outlet.building | uppercase }}</dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('outlet.pos') }}</dt>
+              <dd>{{ outlet.xM | number:'1.1-1' }}m · {{ outlet.yM | number:'1.1-1' }}m</dd>
+            </div>
+          </dl>
+          <div class="jw-detail__btns" *ngIf="canEditCctv && selectedPowerOutlet">
+            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="removeOutlet(selectedPowerOutlet, $event)">
+              <i class="material-icons">delete</i> {{ t('outlet.delete') }}
             </button>
           </div>
         </ng-container>

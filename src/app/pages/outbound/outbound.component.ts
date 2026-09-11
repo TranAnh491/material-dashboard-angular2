@@ -321,7 +321,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   /** Standard Packing theo mã (từ danh mục NVL) — dùng rule Chẵn/Lẻ khi quét. */
   private standardPackingByCode = new Map<string, number>();
 
-  /** Cập nhật Người soạn WO theo tên zalo_links của NV scan xuất. */
+  /** Cập nhật Người soạn WO theo tên Settings của NV scan xuất. */
   private syncWorkOrderCreatedByAfterExport(lsx?: string, employeeId?: string): void {
     const po = (lsx || this.batchProductionOrder || '').trim();
     const emp = (employeeId || this.batchEmployeeId || '').trim();
