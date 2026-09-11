@@ -1622,11 +1622,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  /** Chuẩn hóa LSX giống hasPxkThieuForLsx để so khớp */
+  /** Chuẩn hóa LSX để so khớp. KZLSX0826/0054 giữ nguyên — không rút thành 0826/0054. */
   private normLsxForMatch(s: string): string {
     const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-    const m = t.match(/(\d{4}[\/\-\.]\d+)/);
-    return m ? m[1].replace(/[-.]/g, '/') : t;
+    if (!t) return '';
+    const compact = t.replace(/[-.]/g, '/');
+    if (/^(KZ|LH)LSX/.test(compact)) return compact;
+    const m = compact.match(/(\d{4}\/\d+)/);
+    return m ? m[1] : compact;
   }
 
   openLsxSearchDialog(): void {
@@ -2260,7 +2263,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
     if (field === 'createdBy') {
       updatedWorkOrder.createdByFromOutbound = false;
-      updatedWorkOrder.createdByMemberId = undefined;
+      delete (updatedWorkOrder as any).createdByMemberId;
+      workOrder.createdBy = processedValue;
+      workOrder.createdByFromOutbound = false;
+      delete (workOrder as any).createdByMemberId;
     }
 
     if (field === 'productionLine') {
@@ -2284,15 +2290,30 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
     
     console.log(`💾 Saving to Firebase - Updated work order:`, updatedWorkOrder);
-    
-    this.materialService.updateWorkOrder(workOrder.id!, updatedWorkOrder)
+
+    const payload: Record<string, unknown> = { ...(updatedWorkOrder as unknown as Record<string, unknown>) };
+    delete payload.id;
+    Object.keys(payload).forEach((k) => {
+      if (payload[k] === undefined) delete payload[k];
+    });
+    if (field === 'createdBy') {
+      payload.createdByFromOutbound = false;
+      payload.createdByMemberId = firebase.firestore.FieldValue.delete();
+    }
+
+    this.materialService.updateWorkOrder(workOrder.id!, payload as Partial<WorkOrder>)
       .then(() => {
         console.log(`✅ Successfully updated work order ${workOrder.id} in Firebase`);
         
         // Update local array
         const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
         if (index !== -1) {
-          this.workOrders[index] = { ...this.workOrders[index], ...updatedWorkOrder };
+          const next = { ...this.workOrders[index], ...updatedWorkOrder };
+          if (field === 'createdBy') {
+            next.createdByFromOutbound = false;
+            delete (next as any).createdByMemberId;
+          }
+          this.workOrders[index] = next;
           this.applyFilters();
           this.calculateSummary();
           console.log(`✅ Updated local work order data`);

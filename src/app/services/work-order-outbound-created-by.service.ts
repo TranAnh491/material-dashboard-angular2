@@ -34,8 +34,11 @@ export class WorkOrderOutboundCreatedByService {
 
   normLsxForMatch(s: string): string {
     const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-    const m = t.match(/(\d{4}[\/\-\.]\d+)/);
-    return m ? m[1].replace(/[-.]/g, '/') : t;
+    if (!t) return '';
+    const compact = t.replace(/[-.]/g, '/');
+    if (/^(KZ|LH)LSX/.test(compact)) return compact;
+    const m = compact.match(/(\d{4}\/\d+)/);
+    return m ? m[1] : compact;
   }
 
   private parseExportDateMs(v: unknown): number {
