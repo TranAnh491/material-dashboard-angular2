@@ -1813,6 +1813,32 @@ $accent-soft: #ccfbf1;
   }
 }
 
+.jw-legend-socket {
+  width: 22px;
+  height: 22px;
+  display: block;
+
+  text {
+    fill: #000000;
+    font-size: 11px;
+    font-weight: 800;
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  &--power rect {
+    fill: #ea580c;
+    stroke: #ffffff;
+    stroke-width: 1.4;
+  }
+
+  &--net rect {
+    fill: #0f766e;
+    stroke: #ffffff;
+    stroke-width: 1.4;
+  }
+}
+
 .jw-note {
   margin: 16px 0 0;
   padding: 12px;
@@ -2260,32 +2286,46 @@ $accent-soft: #ccfbf1;
   }
 
   &__body {
-    fill: #b45309;
+    fill: #ea580c;
     stroke: #ffffff;
-    stroke-width: 1.6;
-    pointer-events: none;
-  }
-
-  &__hole,
-  &__slot {
-    fill: #fff7ed;
+    stroke-width: 1.2;
     pointer-events: none;
   }
 
   &__num {
-    fill: #9a3412;
-    font-size: 8px;
+    fill: #000000;
+    font-size: 7px;
     font-weight: 800;
     text-anchor: middle;
-    dominant-baseline: hanging;
+    dominant-baseline: central;
     pointer-events: none;
   }
 
   &--on &__body {
-    fill: #d97706;
-    stroke: #fde68a;
-    stroke-width: 2;
+    fill: #f97316;
+    stroke: #fed7aa;
+    stroke-width: 1.6;
   }
+
+  &--net {
+    .jw-outlet__body {
+      fill: #0f766e;
+    }
+
+    &.jw-outlet--on .jw-outlet__body {
+      fill: #14b8a6;
+      stroke: #99f6e4;
+      stroke-width: 1.6;
+    }
+  }
+}
+
+.jw-net-item__num {
+  background: #0f766e;
+}
+
+.jw-cctv-item--on .jw-net-item__num {
+  background: #14b8a6;
 }
 
 .jw-outlet-item__num {
@@ -2294,6 +2334,52 @@ $accent-soft: #ccfbf1;
 
 .jw-cctv-item--on .jw-outlet-item__num {
   background: #d97706;
+}
+
+.jw-outlet-hide-cams {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 7px 8px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  background: #fffbeb;
+  font-size: 12px;
+  font-weight: 600;
+  color: $text;
+  cursor: pointer;
+  user-select: none;
+
+  input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #d97706;
+    cursor: pointer;
+  }
+}
+
+.jw-outlet-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: $muted;
+
+  input {
+    width: 64px;
+    padding: 4px 6px;
+    border: 1px solid $border;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 700;
+    color: $text;
+    text-align: center;
+  }
 }
 
 .jw-cctv-add {

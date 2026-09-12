@@ -34,9 +34,36 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendZaloToEmployee = sendZaloToEmployee;
+exports.sendZaloFileToEmployee = sendZaloFileToEmployee;
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
-const ZALO_SEND_MESSAGE_URL = (token) => `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
+const ZALO_BOT_URL = (token, method) => `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/${method}`;
+async function readBotToken() {
+    try {
+        return params_config_1.zaloBotToken.value().trim();
+    }
+    catch (_a) {
+        return '';
+    }
+}
+async function resolveZaloChatId(memberId) {
+    var _a;
+    const token = await readBotToken();
+    if (!token || !memberId)
+        return null;
+    const linkSnap = await admin
+        .firestore()
+        .collection('zalo_links')
+        .where('memberId', '==', memberId)
+        .limit(1)
+        .get();
+    if (linkSnap.empty)
+        return null;
+    const chatId = String(((_a = linkSnap.docs[0].data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
+    if (!chatId)
+        return null;
+    return { token, chatId };
+}
 /**
  * Gửi một tin nhắn Zalo cho nhân viên theo mã ASP — chỉ khi nhân viên đã liên kết
  * bot (nhắn bot: /link → nhập mã ASPxxxx → /id, ghi vào `zalo_links`).
@@ -47,39 +74,18 @@ const ZALO_SEND_MESSAGE_URL = (token) => `https://bot-api.zaloplatforms.com/bot$
  * Hàm gọi phải khai báo secret ZALO_BOT_TOKEN trong `runWith({ secrets: [zaloBotToken] })`.
  */
 async function sendZaloToEmployee(memberIdRaw, text) {
-    var _a;
     try {
         const memberId = String(memberIdRaw || '').trim().toUpperCase();
         if (!memberId || !text) {
             return false;
         }
-        let token = '';
-        try {
-            token = params_config_1.zaloBotToken.value().trim();
-        }
-        catch (_b) {
-            token = '';
-        }
-        if (!token) {
+        const link = await resolveZaloChatId(memberId);
+        if (!link)
             return false;
-        }
-        const linkSnap = await admin
-            .firestore()
-            .collection('zalo_links')
-            .where('memberId', '==', memberId)
-            .limit(1)
-            .get();
-        if (linkSnap.empty) {
-            return false;
-        }
-        const chatId = String(((_a = linkSnap.docs[0].data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
-        if (!chatId) {
-            return false;
-        }
-        const res = await fetch(ZALO_SEND_MESSAGE_URL(token), {
+        const res = await fetch(ZALO_BOT_URL(link.token, 'sendMessage'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text })
+            body: JSON.stringify({ chat_id: link.chatId, text: text.slice(0, 2000) })
         });
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));
@@ -90,6 +96,44 @@ async function sendZaloToEmployee(memberIdRaw, text) {
     }
     catch (e) {
         console.error('sendZaloToEmployee failed', e);
+        return false;
+    }
+}
+/** Gửi file (xlsx/pdf…) qua Zalo bot. Thử sendFile rồi sendDocument. */
+async function sendZaloFileToEmployee(memberIdRaw, buf, filename, caption) {
+    try {
+        const memberId = String(memberIdRaw || '').trim().toUpperCase();
+        if (!memberId || !(buf === null || buf === void 0 ? void 0 : buf.length) || !filename)
+            return false;
+        const link = await resolveZaloChatId(memberId);
+        if (!link)
+            return false;
+        const mime = filename.toLowerCase().endsWith('.xlsx')
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'application/octet-stream';
+        const blob = new Blob([new Uint8Array(buf)], { type: mime });
+        const tryMethod = async (method) => {
+            const form = new FormData();
+            form.append('chat_id', link.chatId);
+            form.append('file', blob, filename);
+            if (caption)
+                form.append('caption', caption.slice(0, 2000));
+            const res = await fetch(ZALO_BOT_URL(link.token, method), { method: 'POST', body: form });
+            if (!res.ok) {
+                const body = await res.text().catch(() => '');
+                console.warn(`sendZaloFileToEmployee ${method} failed`, res.status, body.slice(0, 400));
+                return false;
+            }
+            return true;
+        };
+        if (await tryMethod('sendFile'))
+            return true;
+        if (await tryMethod('sendDocument'))
+            return true;
+        return false;
+    }
+    catch (e) {
+        console.error('sendZaloFileToEmployee failed', e);
         return false;
     }
 }

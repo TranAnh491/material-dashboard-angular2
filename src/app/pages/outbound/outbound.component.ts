@@ -45,6 +45,9 @@ export interface BsPendingItem {
   unit: string;
   tenVatTu?: string;
   done?: boolean;
+  /** Đã scan xuất (BS done hoặc có outbound-materials). */
+  exported?: boolean;
+  iqcStatus?: string;
 }
 
 export interface PxImportAlloc {
@@ -144,8 +147,16 @@ export class OutboundComponent implements OnInit, OnDestroy {
   batchEmployeeId: string = '';
   isProductionOrderScanned: boolean = false;
   isEmployeeIdScanned: boolean = false;
-  /** Mã hàng trong PXK của LSX đang scan. Rỗng sau khi load = chưa có PXK → vẫn cho xuất. */
-  private batchPxkMaterialCodes = new Set<string>();
+  /** Phiên NV khi mở tab Xuất kho: bắt buộc quét ASP, tự hết hạn 12:00 / 17:00 / 20:00 */
+  private static readonly OPERATOR_SESSION_KEY = 'rm-outbound-operator-session-v1';
+  operatorSessionId = '';
+  operatorSessionUntil: Date | null = null;
+  operatorSessionInput = '';
+  operatorSessionError = '';
+  private operatorExpiryTimer: any;
+  private readonly onOperatorVisibilityChange = () => this.checkOperatorSessionExpiry();
+  /** Mã + PO trong PXK của LSX đang scan. Scan xuất NL phải khớp cả hai; không có PXK thì từ chối. */
+  private batchPxkPairs: { code: string; po: string }[] = [];
   private batchPxkCachedLsx = '';
   private batchPxkLoading: Promise<void> | null = null;
   
@@ -171,6 +182,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
   // Production Order Filter properties
   selectedProductionOrder: string = '';
   searchProductionOrder: string = '';
+  /** Lọc nhanh danh sách lịch sử đang xem (không query lại). */
+  historyFilterPo = '';
+  historyFilterLsx = '';
+
+  onSearchProductionOrderChange(value: string): void {
+    this.searchProductionOrder = (value || '').toUpperCase();
+  }
   /** Search theo mã hàng / QR (Material|PO|...|IMD...): hiển thị lịch sử xuất trong khoảng ngày; highlight bag trùng (Control Batch). */
   materialSearchMode: 'lsx' | 'material' = 'lsx';
   materialSearchParsed: { materialCode: string; poNumber?: string; imdKey?: string; bagNumberDisplay?: string } | null = null;
@@ -230,16 +248,21 @@ export class OutboundComponent implements OnInit, OnDestroy {
     return this.bsScanLines.reduce((s, l) => s + l.qty, 0);
   }
 
-  /** Danh sách BS sau khi lọc theo bsSearchQuery (LSX / mã hàng / PO / tên vật tư). */
+  /** Danh sách BS: mặc định chỉ chưa xuất; khi search thì hiện cả phiếu đã xuất. */
   get filteredBsItems(): BsPendingItem[] {
     const q = this.bsSearchQuery.trim().toUpperCase();
-    if (!q) return this.bsItems;
-    return this.bsItems.filter(it =>
+    const source = q ? this.bsItems : this.bsItems.filter(it => !it.exported);
+    if (!q) return source;
+    return source.filter(it =>
       (it.lsx || '').toUpperCase().includes(q) ||
       (it.materialCode || '').toUpperCase().includes(q) ||
       (it.po || '').toUpperCase().includes(q) ||
       (it.tenVatTu || '').toUpperCase().includes(q)
     );
+  }
+
+  get bsPendingCount(): number {
+    return this.bsItems.filter(it => !it.exported).length;
   }
 
   clearBsSearch(): void {
@@ -273,12 +296,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
   ) {}
 
   private clearBatchPxkCache(): void {
-    this.batchPxkMaterialCodes = new Set();
+    this.batchPxkPairs = [];
     this.batchPxkCachedLsx = '';
     this.batchPxkLoading = null;
   }
 
-  /** Sau khi LSX hợp lệ (Kitting): lưu LSX và preload PXK để chặn mã không thuộc phiếu. */
+  /** Sau khi LSX hợp lệ (Kitting): lưu LSX và preload PXK để chặn sai mã / sai PO. */
   private acceptBatchLsx(lsx: string): void {
     const lsxTrim = String(lsx || '').trim();
     this.batchProductionOrder = lsxTrim;
@@ -294,18 +317,21 @@ export class OutboundComponent implements OnInit, OnDestroy {
       return;
     }
     this.batchPxkCachedLsx = lsx;
-    this.batchPxkMaterialCodes = new Set();
+    this.batchPxkPairs = [];
     this.batchPxkLoading = this.temXuatKho
-      .loadPxkMaterialCodesForLsx(this.selectedFactory, lsx)
-      .then(codes => {
+      .loadPxkScanPairsForLsx(this.selectedFactory, lsx)
+      .then(pairs => {
         if (this.batchPxkCachedLsx === lsx) {
-          this.batchPxkMaterialCodes = codes;
+          this.batchPxkPairs = pairs.map(p => ({
+            code: String(p.materialCode || '').trim().toUpperCase(),
+            po: this.normalizePxImportPo(p.po)
+          }));
         }
       })
       .catch(err => {
         console.warn('ensureBatchPxkLoaded failed:', err);
         if (this.batchPxkCachedLsx === lsx) {
-          this.batchPxkMaterialCodes = new Set();
+          this.batchPxkPairs = [];
         }
       })
       .finally(() => {
@@ -369,6 +395,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.detectMobileDevice();
     this.setupDefaultDateRange();
     this.restorePendingFromStorage();
+    this.restoreOperatorSession();
+    this.scheduleOperatorExpiryWatch();
+    document.addEventListener('visibilitychange', this.onOperatorVisibilityChange);
+    setTimeout(() => {
+      if (!this.hasOperatorSession) this.focusOperatorSessionInput();
+    }, 80);
     // 🔧 OPTIMIZATION: Không load materials khi khởi tạo - chỉ load khi search LSX
     console.log('⏸️ Ready - waiting for LSX search to load data');
     // REMOVED: loadMaterials() - Chỉ load khi user nhập LSX
@@ -408,15 +440,18 @@ export class OutboundComponent implements OnInit, OnDestroy {
   private onFactoryChanged(): void {
     // Đổi nhà máy giữa chừng 1 phiên scan batch dở dang là không an toàn (LSX/NV đã scan thuộc factory cũ)
     // → reset về trạng thái sạch, không âm thầm mang dữ liệu chưa lưu sang factory khác.
-    if (this.isBatchScanningMode || this.isProductionOrderScanned || this.isEmployeeIdScanned || this.pendingScanData.length > 0) {
+    if (this.isBatchScanningMode || this.isProductionOrderScanned || this.pendingScanData.length > 0) {
       this.resetScanningData();
     }
+    if (this.hasOperatorSession) this.applyOperatorToBatch();
     this.showScanningSetupModal = false;
     this.materials = [];
     this.filteredMaterials = [];
     this.availableProductionOrders = [];
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
+    this.historyFilterPo = '';
+    this.historyFilterLsx = '';
     this.materialSearchParsed = null;
     this.materialSearchError = '';
     this.bsItems = [];
@@ -617,6 +652,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
     // “Hôm nay” = xem tất cả mã phát sinh hôm nay, không phụ thuộc LSX đang chọn
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
+    this.historyFilterPo = '';
+    this.historyFilterLsx = '';
     this.materialSearchMode = 'lsx';
     this.materialSearchParsed = null;
     this.materialSearchError = '';
@@ -684,6 +721,158 @@ export class OutboundComponent implements OnInit, OnDestroy {
     window.removeEventListener('resize', this.onWindowResize.bind(this));
 
     document.body.classList.remove(this.outboundMobileBodyClass);
+    document.removeEventListener('visibilitychange', this.onOperatorVisibilityChange);
+    if (this.operatorExpiryTimer) {
+      clearTimeout(this.operatorExpiryTimer);
+      this.operatorExpiryTimer = null;
+    }
+  }
+
+  get hasOperatorSession(): boolean {
+    if (!this.operatorSessionId || !this.operatorSessionUntil) return false;
+    return Date.now() < this.operatorSessionUntil.getTime();
+  }
+
+  get operatorSessionUntilLabel(): string {
+    if (!this.operatorSessionUntil) return '';
+    const h = this.operatorSessionUntil.getHours();
+    const m = this.operatorSessionUntil.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  onOperatorSessionInputChange(value: string): void {
+    this.operatorSessionInput = String(value || '').toUpperCase();
+  }
+
+  onOperatorSessionScanned(raw: string): void {
+    this.operatorSessionError = '';
+    const id = this.parseAspEmployeeId(raw);
+    if (!id) {
+      this.operatorSessionError = 'Mã nhân viên không hợp lệ. Quét mã ASP + 4 số (ví dụ ASP0106).';
+      this.operatorSessionInput = '';
+      setTimeout(() => this.focusOperatorSessionInput(), 50);
+      return;
+    }
+    this.startOperatorSession(id);
+  }
+
+  private parseAspEmployeeId(raw: string): string {
+    const cleaned = String(raw || '').trim().toUpperCase().replace(/[\r\n]/g, '');
+    if (cleaned.length < 7) return '';
+    const empId = cleaned.substring(0, 7);
+    if (!/^ASP\d{4}$/.test(empId)) return '';
+    return empId;
+  }
+
+  private nextOperatorExpiry(from: Date = new Date()): Date {
+    const cutHours = [12, 17, 20];
+    for (const h of cutHours) {
+      const cut = new Date(from.getFullYear(), from.getMonth(), from.getDate(), h, 0, 0, 0);
+      if (from.getTime() < cut.getTime()) return cut;
+    }
+    return new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1, 12, 0, 0, 0);
+  }
+
+  private restoreOperatorSession(): void {
+    try {
+      const raw = sessionStorage.getItem(OutboundComponent.OPERATOR_SESSION_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { employeeId?: string; until?: number };
+      const id = this.parseAspEmployeeId(parsed?.employeeId || '');
+      const until = Number(parsed?.until || 0);
+      if (!id || !until || Date.now() >= until) {
+        sessionStorage.removeItem(OutboundComponent.OPERATOR_SESSION_KEY);
+        return;
+      }
+      this.operatorSessionId = id;
+      this.operatorSessionUntil = new Date(until);
+      this.applyOperatorToBatch();
+    } catch {
+      sessionStorage.removeItem(OutboundComponent.OPERATOR_SESSION_KEY);
+    }
+  }
+
+  private persistOperatorSession(): void {
+    if (!this.hasOperatorSession) {
+      sessionStorage.removeItem(OutboundComponent.OPERATOR_SESSION_KEY);
+      return;
+    }
+    sessionStorage.setItem(OutboundComponent.OPERATOR_SESSION_KEY, JSON.stringify({
+      employeeId: this.operatorSessionId,
+      until: this.operatorSessionUntil!.getTime()
+    }));
+  }
+
+  private startOperatorSession(employeeId: string): void {
+    this.operatorSessionId = employeeId;
+    this.operatorSessionUntil = this.nextOperatorExpiry(new Date());
+    this.operatorSessionInput = '';
+    this.operatorSessionError = '';
+    this.applyOperatorToBatch();
+    this.persistOperatorSession();
+    this.scheduleOperatorExpiryWatch();
+    this.cdr.detectChanges();
+  }
+
+  private applyOperatorToBatch(): void {
+    if (!this.operatorSessionId) return;
+    this.batchEmployeeId = this.operatorSessionId;
+    this.isEmployeeIdScanned = true;
+  }
+
+  private checkOperatorSessionExpiry(): void {
+    if (!this.operatorSessionId) return;
+    if (this.hasOperatorSession) {
+      this.scheduleOperatorExpiryWatch();
+      return;
+    }
+    this.endOperatorSession('expired');
+  }
+
+  private endOperatorSession(reason: 'expired' | 'manual' = 'expired'): void {
+    const hadSession = !!this.operatorSessionId;
+    this.operatorSessionId = '';
+    this.operatorSessionUntil = null;
+    this.operatorSessionInput = '';
+    this.operatorSessionError = '';
+    this.batchEmployeeId = '';
+    this.isEmployeeIdScanned = false;
+    this.showScanningSetupModal = false;
+    sessionStorage.removeItem(OutboundComponent.OPERATOR_SESSION_KEY);
+    if (this.operatorExpiryTimer) {
+      clearTimeout(this.operatorExpiryTimer);
+      this.operatorExpiryTimer = null;
+    }
+    this.cdr.detectChanges();
+    if (hadSession && reason === 'expired') {
+      alert('Hết phiên làm việc (12:00 / 17:00 / 20:00). Vui lòng quét lại mã nhân viên.');
+    }
+    setTimeout(() => this.focusOperatorSessionInput(), 80);
+  }
+
+  private scheduleOperatorExpiryWatch(): void {
+    if (this.operatorExpiryTimer) {
+      clearTimeout(this.operatorExpiryTimer);
+      this.operatorExpiryTimer = null;
+    }
+    if (!this.hasOperatorSession || !this.operatorSessionUntil) return;
+    const ms = Math.max(250, this.operatorSessionUntil.getTime() - Date.now());
+    this.operatorExpiryTimer = setTimeout(() => this.checkOperatorSessionExpiry(), Math.min(ms, 60_000));
+  }
+
+  private focusOperatorSessionInput(): void {
+    try {
+      const el = document.getElementById('ob-op-session-input') as HTMLInputElement | null;
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.select?.();
+    } catch {}
+  }
+
+  onOperatorGateBlur(): void {
+    setTimeout(() => {
+      if (!this.hasOperatorSession) this.focusOperatorSessionInput();
+    }, 180);
   }
 
   // 📱 Mobile Detection
@@ -1044,6 +1233,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
   clearProductionOrderFilter(): void {
     this.selectedProductionOrder = '';
     this.searchProductionOrder = '';
+    this.historyFilterPo = '';
+    this.historyFilterLsx = '';
     this.materialSearchMode = 'lsx';
     this.materialSearchParsed = null;
     this.materialSearchError = '';
@@ -1089,7 +1280,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     if (this.isBatchScanningMode && this.pendingScanData?.length) {
       return this.pendingScanData.reduce((s, x) => s + (Number(x?.quantity) || 0), 0);
     }
-    return this.filteredMaterials.reduce((s, m) => s + (Number(m.exportQuantity) || 0), 0);
+    return this.getHistoryViewMaterials().reduce((s, m) => s + (Number(m.exportQuantity) || 0), 0);
   }
 
   /** Phiên batch: số dòng chờ Done; ngoài batch: số dòng đang hiển thị */
@@ -1097,7 +1288,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     if (this.isBatchScanningMode) {
       return this.pendingScanData.length;
     }
-    return this.filteredMaterials.length;
+    return this.getHistoryViewMaterials().length;
   }
 
   focusMobileScanner(): void {
@@ -1154,7 +1345,6 @@ export class OutboundComponent implements OnInit, OnDestroy {
         const data = doc.data() as any;
         const lines: any[] = data.lines || [];
         lines.forEach((line: any, idx: number) => {
-          if (line.done) return;
           items.push({
             docId: doc.id,
             lsx: data.lsx || '',
@@ -1165,10 +1355,26 @@ export class OutboundComponent implements OnInit, OnDestroy {
             quantity: Number(line.quantity) || 0,
             unit: line.unit || '',
             tenVatTu: line.tenVatTu || '',
-            done: false
+            done: !!line.done,
+            exported: !!line.done,
+            iqcStatus: ''
           });
         });
       }
+
+      const [exportedKeys, iqcMap] = await Promise.all([
+        this.loadBsExportedKeys(items.map(it => it.lsx)),
+        this.loadBsIqcMap(items)
+      ]);
+
+      for (const it of items) {
+        if (!it.exported && exportedKeys.has(this.bsMatchKey(it.lsx, it.materialCode, it.po))) {
+          it.exported = true;
+        }
+        const iqc = iqcMap.get(this.bsMatPoKey(it.materialCode, it.po));
+        if (iqc) it.iqcStatus = iqc;
+      }
+
       items.sort((a, b) => a.lsx.localeCompare(b.lsx) || a.materialCode.localeCompare(b.materialCode));
       this.bsItems = items;
     } catch (e: any) {
@@ -1177,6 +1383,92 @@ export class OutboundComponent implements OnInit, OnDestroy {
     } finally {
       this.bsLoading = false;
     }
+  }
+
+  private bsMatchKey(lsx: string, materialCode: string, po: string): string {
+    const lsxN = this.woOutboundCreatedBy.normLsxForMatch(lsx);
+    const matN = String(materialCode || '').trim().toUpperCase();
+    const poN = String(po || '').replace(/\s+/g, '').toUpperCase();
+    return `${lsxN}|${matN}|${poN}`;
+  }
+
+  private bsMatPoKey(materialCode: string, po: string): string {
+    return `${String(materialCode || '').trim().toUpperCase()}|${String(po || '').replace(/\s+/g, '').toUpperCase()}`;
+  }
+
+  private async loadBsExportedKeys(lsxList: string[]): Promise<Set<string>> {
+    const unique = [...new Set(lsxList.map(s => String(s || '').trim()).filter(Boolean))];
+    const keys = new Set<string>();
+    if (unique.length === 0) return keys;
+    const FIRESTORE_IN_MAX = 30;
+    try {
+      for (let i = 0; i < unique.length; i += FIRESTORE_IN_MAX) {
+        const chunk = unique.slice(i, i + FIRESTORE_IN_MAX);
+        const snap = await this.firestore
+          .collection('outbound-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory).where('productionOrder', 'in', chunk)
+          )
+          .get()
+          .toPromise();
+        (snap?.docs || []).forEach(doc => {
+          const d = doc.data() as any;
+          keys.add(this.bsMatchKey(d.productionOrder, d.materialCode, d.poNumber || d.po));
+        });
+      }
+    } catch (e) {
+      console.warn('[BS] loadBsExportedKeys failed', e);
+    }
+    return keys;
+  }
+
+  private async loadBsIqcMap(items: BsPendingItem[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const byMatPo = new Map<string, string[]>();
+    const codes = [...new Set(items.map(it => String(it.materialCode || '').trim()).filter(Boolean))];
+    if (codes.length === 0) return out;
+    const parallel = 10;
+    try {
+      for (let i = 0; i < codes.length; i += parallel) {
+        const chunk = codes.slice(i, i + parallel);
+        const snaps = await Promise.all(chunk.map(code =>
+          this.firestore.collection('inventory-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', code).limit(400)
+          ).get().toPromise()
+        ));
+        snaps.forEach(snap => {
+          (snap?.docs || []).forEach(doc => {
+            const d = doc.data() as any;
+            const st = String(d.iqcStatus || '').trim();
+            if (!st) return;
+            const k = this.bsMatPoKey(d.materialCode, d.poNumber);
+            if (!byMatPo.has(k)) byMatPo.set(k, []);
+            byMatPo.get(k)!.push(st);
+          });
+        });
+      }
+    } catch (e) {
+      console.warn('[BS] loadBsIqcMap failed', e);
+    }
+    byMatPo.forEach((sts, k) => out.set(k, this.summarizeBsIqc(sts)));
+    return out;
+  }
+
+  private summarizeBsIqc(sts: string[]): string {
+    const uniq = [...new Set(sts.map(s => String(s || '').trim()).filter(Boolean))];
+    if (uniq.length === 0) return '';
+    const u = uniq.map(s => s.toUpperCase());
+    if (u.some(s => s === 'PASS' || s === 'PASSED')) {
+      return u.every(s => s === 'PASS' || s === 'PASSED') ? 'Pass' : uniq.join(' · ');
+    }
+    return uniq.length === 1 ? uniq[0] : uniq.join(' · ');
+  }
+
+  bsIqcClass(status?: string): string {
+    const u = String(status || '').trim().toUpperCase();
+    if (!u || u === '—') return '';
+    if (u === 'PASS' || u === 'PASSED' || u.includes('PASS')) return 'bs-iqc--pass';
+    if (u.includes('NG')) return 'bs-iqc--ng';
+    return 'bs-iqc--wait';
   }
 
   async deleteBsItem(item: BsPendingItem): Promise<void> {
@@ -1191,8 +1483,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
         }
         await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
       }
-      this.bsItems = this.bsItems.filter(
-        b => !(b.docId === item.docId && b.lineIndex === item.lineIndex)
+      this.bsItems = this.bsItems.map(b =>
+        b.docId === item.docId && b.lineIndex === item.lineIndex
+          ? { ...b, done: true, exported: true }
+          : b
       );
     } catch (e: any) {
       alert('❌ Lỗi xoá: ' + (e?.message || e));
@@ -1329,9 +1623,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
         await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
       }
 
-      // 3. Ẩn khỏi danh sách local
-      this.bsItems = this.bsItems.filter(
-        b => !(b.docId === item.docId && b.lineIndex === item.lineIndex)
+      // 3. Ẩn khỏi danh sách mặc định (vẫn tìm được khi search)
+      this.bsItems = this.bsItems.map(b =>
+        b.docId === item.docId && b.lineIndex === item.lineIndex
+          ? { ...b, done: true, exported: true }
+          : b
       );
 
       const totalScanned = this.bsScanTotal;
@@ -1522,9 +1818,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.checkWorkOrderKittingStatus(lsxTrim).then(ok => {
       if (!ok) return;
       this.acceptBatchLsx(lsxTrim);
+      this.scannerBuffer = '';
+      if (this.hasOperatorSession) {
+        this.applyOperatorToBatch();
+        this.showScanningSetupModal = false;
+        this.isBatchScanningMode = true;
+        this.currentScanStep = 'material';
+        setTimeout(() => this.focusScannerInput(), 50);
+        return;
+      }
       this.scanningSetupStep = 'employee';
       console.log(`✅ LSX scanned: ${lsx} - Moving to employee scan`);
-      this.scannerBuffer = '';
       setTimeout(() => {
         this.focusScannerInput();
         console.log('📍 Auto-focused scanner input for Employee ID step');
@@ -1605,11 +1909,24 @@ export class OutboundComponent implements OnInit, OnDestroy {
   
   // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
   onGlobalKeydown(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement;
+
+    if (!this.hasOperatorSession) {
+      if (target?.id === 'ob-op-session-input') return;
+      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        this.operatorSessionInput = (this.operatorSessionInput || '') + event.key.toUpperCase();
+        event.preventDefault();
+      } else if (event.key === 'Enter') {
+        this.onOperatorSessionScanned(this.operatorSessionInput);
+        event.preventDefault();
+      }
+      return;
+    }
+
     // Xử lý khi setup modal đang mở (LSX/NV) HOẶC đang trong phiên scan batch (mã hàng) —
     // fallback khi ô scanner lỡ mất focus (PDA bắn ký tự quá nhanh).
     if (!this.showScanningSetupModal && !this.isBatchScanningMode) return;
 
-    const target = event.target as HTMLElement;
     // Đã đang gõ vào ô scanner thật — để onScannerKeydown xử lý, tránh double-handle
     if (target?.id === 'ob-setup-scanner-input' || target?.id === 'ob-m-scanner-input') return;
     if (target?.classList?.contains('scanner-input')) return;
@@ -1843,14 +2160,57 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
 
   updatePagination(): void {
-    this.totalPages = Math.ceil(this.filteredMaterials.length / this.itemsPerPage);
+    this.totalPages = Math.ceil(this.getHistoryViewMaterials().length / this.itemsPerPage);
     if (this.currentPage > this.totalPages) { this.currentPage = 1; }
   }
   
   getPaginatedMaterials(): OutboundMaterial[] {
+    const list = this.getHistoryViewMaterials();
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
-    return this.filteredMaterials.slice(startIndex, endIndex);
+    return list.slice(startIndex, endIndex);
+  }
+
+  /** Lịch sử đang xem sau khi lọc PO / LSX (client). */
+  getHistoryViewMaterials(): OutboundMaterial[] {
+    const po = this.historyFilterPo.trim().toUpperCase();
+    const lsx = this.historyFilterLsx.trim().toUpperCase();
+    if (!po && !lsx) {
+      return this.filteredMaterials;
+    }
+    return this.filteredMaterials.filter(m => {
+      if (po && !String(m.poNumber || '').toUpperCase().includes(po)) {
+        return false;
+      }
+      if (lsx && !String(m.productionOrder || '').toUpperCase().includes(lsx)) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  onHistoryFilterChange(): void {
+    this.currentPage = 1;
+    this.updatePagination();
+    this.cdr.markForCheck();
+  }
+
+  getHistoryPoOptions(): string[] {
+    const s = new Set<string>();
+    for (const m of this.filteredMaterials) {
+      const p = String(m.poNumber || '').trim();
+      if (p) s.add(p);
+    }
+    return Array.from(s).sort();
+  }
+
+  getHistoryLsxOptions(): string[] {
+    const s = new Set<string>();
+    for (const m of this.filteredMaterials) {
+      const p = String(m.productionOrder || '').trim();
+      if (p) s.add(p);
+    }
+    return Array.from(s).sort();
   }
 
   /**
@@ -1877,7 +2237,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       }
       return `${n} tem · hiển thị mã mới nhất`;
     }
-    return `${this.filteredMaterials.length} dòng`;
+    return `${this.getHistoryViewMaterials().length} dòng`;
   }
 
   /** Số dòng / tem trên danh sách xuất (mobile). */
@@ -1885,7 +2245,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     if (this.isMobile && this.isBatchScanningMode) {
       return this.pendingScanData.length;
     }
-    return this.filteredMaterials.length;
+    return this.getHistoryViewMaterials().length;
   }
 
   /** Tổng QTY xuất trên danh sách mobile. */
@@ -1893,7 +2253,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     if (this.isMobile && this.isBatchScanningMode) {
       return this.pendingScanData.reduce((s, it) => s + (Number(it?.quantity) || 0), 0);
     }
-    return this.filteredMaterials.reduce((s, m) => s + (Number(m.exportQuantity ?? m.quantity) || 0), 0);
+    return this.getHistoryViewMaterials().reduce((s, m) => s + (Number(m.exportQuantity ?? m.quantity) || 0), 0);
   }
 
   /** Nút QUÉT MÃ lớn (mobile mock) — START phiên batch rồi focus scanner. */
@@ -2362,14 +2722,18 @@ export class OutboundComponent implements OnInit, OnDestroy {
     console.log('📱 Current scan step:', this.currentScanStep);
     
     // 🔧 SỬA LỖI: Khởi tạo batch mode nếu chưa có
+    if (!this.hasOperatorSession) {
+      this.focusOperatorSessionInput();
+      return;
+    }
     if (!this.isBatchScanningMode) {
       console.log('📱 Initializing batch scanning mode for camera');
       this.isBatchScanningMode = true;
       this.currentScanStep = 'batch';
       this.batchProductionOrder = '';
-      this.batchEmployeeId = '';
+      this.batchEmployeeId = this.operatorSessionId;
       this.isProductionOrderScanned = false;
-      this.isEmployeeIdScanned = false;
+      this.isEmployeeIdScanned = true;
       this.clearBatchPxkCache();
     }
     
@@ -2481,6 +2845,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.pendingScanData = [];
     this.currentScanStep = 'batch';
     this.errorMessage = '';
+    if (this.hasOperatorSession) this.applyOperatorToBatch();
     console.log('✅ All scanning data reset');
   }
   
@@ -2973,6 +3338,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
       console.log('❌ Scanner auto-export validation failed:', { lastScannedData: this.lastScannedData, exportQuantity: this.exportQuantity });
       return;
     }
+
+    const lsxMatchErr = await this.validateScanMatchesLsxPxk(
+      this.lastScannedData.materialCode,
+      this.lastScannedData.poNumber
+    );
+    if (lsxMatchErr) {
+      this.showScanError(lsxMatchErr);
+      this.lastScannedData = null;
+      this.exportQuantity = 0;
+      return;
+    }
     
     try {
       console.log('🚀 SCANNER: Auto-exporting scanned material...');
@@ -3057,12 +3433,16 @@ export class OutboundComponent implements OnInit, OnDestroy {
   // 🔧 SỬA LỖI: Scan đơn giản - 1 lần bấm là scan và ghi luôn
   startBatchScanningMode(): void {
     console.log('🚀 Starting professional scanning setup...');
+    if (!this.hasOperatorSession) {
+      this.focusOperatorSessionInput();
+      return;
+    }
     
     // Reset tất cả trạng thái
     this.batchProductionOrder = '';
-    this.batchEmployeeId = '';
+    this.batchEmployeeId = this.operatorSessionId;
     this.isProductionOrderScanned = false;
-    this.isEmployeeIdScanned = false;
+    this.isEmployeeIdScanned = true;
     this.isWaitingForMaterial = false;
     this.currentScanStep = 'batch';
     this.pendingScanData = [];
@@ -3492,6 +3872,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   onScannerInputBlur(): void {
+    if (!this.hasOperatorSession) {
+      setTimeout(() => this.focusOperatorSessionInput(), 50);
+      return;
+    }
     // Chỉ giữ focus khi đang setup LSX/NV hoặc đang phiên scan batch
     if (!this.showScanningSetupModal && !this.isBatchScanningMode) return;
     setTimeout(() => this.focusScannerInput(), 50);
@@ -3499,6 +3883,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   /** Ưu tiên ô trong modal setup (mobile PDA), rồi hero mobile, rồi desktop toolbar. */
   private resolveScannerInputEl(): HTMLInputElement | null {
+    if (!this.hasOperatorSession) {
+      return document.getElementById('ob-op-session-input') as HTMLInputElement | null;
+    }
     if (this.showScanningSetupModal) {
       const setup = document.getElementById('ob-setup-scanner-input') as HTMLInputElement | null;
       if (setup) return setup;
@@ -3520,6 +3907,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   private processScannerInput(scannedData: string): void {
+    if (!this.hasOperatorSession) {
+      this.onOperatorSessionScanned(scannedData);
+      return;
+    }
     // 🔧 SỬA LỖI: Nếu đang ở modal setup, xử lý riêng
     if (this.showScanningSetupModal) {
       if (this.scanningSetupStep === 'lsx') {
@@ -3777,6 +4168,29 @@ export class OutboundComponent implements OnInit, OnDestroy {
       });
   }
 
+  /** Scan xuất NL: mã + PO phải khớp PXK của LSX đang scan. Sai thì từ chối, không ghi nhận. */
+  private async validateScanMatchesLsxPxk(materialCode: string, poNumber: string): Promise<string | null> {
+    await this.ensureBatchPxkLoaded();
+    const lsx = (this.batchProductionOrder || '').trim();
+    if (!lsx) {
+      return 'Phải scan LSX trước khi xuất nguyên liệu.';
+    }
+    if (this.batchPxkPairs.length === 0) {
+      return `LSX ${lsx} chưa có PXK — không cho xuất.`;
+    }
+    const codeKey = materialCode.trim().toUpperCase();
+    const poKey = this.normalizePxImportPo(poNumber);
+    const linesForCode = this.batchPxkPairs.filter(p => p.code === codeKey);
+    if (linesForCode.length === 0) {
+      return `Sai mã hàng: ${materialCode} không có trong LSX ${lsx} — từ chối.`;
+    }
+    const poOk = linesForCode.some(p => p.po && this.pxImportPoMatch(p.po, poKey));
+    if (!poOk) {
+      return `Sai PO: mã ${materialCode} PO ${poNumber} không khớp LSX ${lsx} — từ chối.`;
+    }
+    return null;
+  }
+
   /** Parse và ghi pending — có kiểm QC rule (IQC) trên inventory khớp vật tư. */
   private async processBatchMaterialScanAsync(scannedData: string): Promise<void> {
     if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
@@ -3811,16 +4225,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Chặn mã không thuộc PXK khi LSX đã có PXK (không có PXK thì vẫn cho xuất)
-    await this.ensureBatchPxkLoaded();
-    if (this.batchPxkMaterialCodes.size > 0) {
-      const codeKey = materialCode.trim().toUpperCase();
-      if (!this.batchPxkMaterialCodes.has(codeKey)) {
-        this.showScanError(
-          `Mã ${materialCode} không có trong PXK của LSX ${this.batchProductionOrder} — không cho xuất.`
-        );
-        return;
-      }
+    const lsxMatchErr = await this.validateScanMatchesLsxPxk(materialCode, poNumber);
+    if (lsxMatchErr) {
+      this.showScanError(lsxMatchErr);
+      return;
     }
 
     if (isTemThung && !this.allowExportByCartonSet.has(materialCode.trim().toUpperCase())) {

@@ -30,6 +30,15 @@
           </select>
         </div>
 
+        <button
+          type="button"
+          class="dash-iconbtn"
+          (click)="sendKpiReportNow()"
+          [disabled]="kpiReportSending"
+          title="Gửi báo cáo KPI hôm nay &amp; mai (Zalo + email). Tự chạy 8:30 và 17:00 T2–T7.">
+          <i class="material-icons">{{ kpiReportSending ? 'hourglass_empty' : 'outgoing_mail' }}</i>
+        </button>
+
         <button type="button" class="dash-iconbtn dash-iconbtn--home" (click)="goMenu()" title="Về Menu">
           <i class="material-icons">home</i>
         </button>
@@ -868,6 +877,7 @@
         <span><strong>SL</strong> {{ woEditSource.quantity | number }}</span>
         <span><strong>KH</strong> {{ woEditSource.customer || '—' }}</span>
         <span><strong>Line</strong> {{ woEditSource.productionLine || '—' }}</span>
+        <span><strong>Kitting→Ready</strong> {{ formatWoKittingToReadyLabel(woEditSource) }}</span>
       </div>
 
       <div class="wo-lsx-form">

@@ -75,6 +75,52 @@ export const notifyOutboundDuplicatesAt17 = functions
   });
 
 /**
+ * Dashboard KPI: 8:30 và 17:00 T2–T7 (Asia/Ho_Chi_Minh).
+ * Đọc WO + Shipment hôm nay & mai, xuất Excel, gửi mail (EMAIL_TO) + Zalo (ASP0106).
+ */
+const runDashboardKpiReportJob = async (slot: '08' | '17') => {
+  const { runDashboardKpiReport } = await import('./dashboard-kpi-report');
+  await runDashboardKpiReport(admin.firestore(), slot);
+};
+
+export const notifyDashboardKpiReportMorning = functions
+  .runWith({ secrets: [emailPass, zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+  .pubsub.schedule('30 8 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    await runDashboardKpiReportJob('08');
+  });
+
+export const notifyDashboardKpiReportAfternoon = functions
+  .runWith({ secrets: [emailPass, zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+  .pubsub.schedule('0 17 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    await runDashboardKpiReportJob('17');
+  });
+
+/** Nút Dashboard: gửi ngay báo cáo KPI (cùng nội dung job tự động). */
+export const sendDashboardKpiReportManualFn = functions
+  .runWith({ secrets: [emailPass, zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+  .https.onCall(async (data: { slot?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const slot: '08' | '17' = data?.slot === '17' ? '17' : '08';
+    try {
+      const { runDashboardKpiReport } = await import('./dashboard-kpi-report');
+      const r = await runDashboardKpiReport(admin.firestore(), slot);
+      return { ok: true, fileName: r.fileName, emailOk: r.emailOk, zaloOk: r.zaloOk };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Không gửi') || msg.includes('Thiếu') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+/**
  * Dashboard: tính Rack Utilization Warnings 1 lần/ngày lúc 8h (Asia/Ho_Chi_Minh), lưu vào
  * `dashboard-cache/rack-warnings`. Client (mọi máy) chỉ đọc doc này (1 read) thay vì mỗi máy
  * tự quét lại inventory-materials + materials mỗi lần mở tab Dashboard.

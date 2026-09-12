@@ -148,6 +148,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Shipment (KPI + Details) không tự đọc Firestore nữa — chỉ đọc khi bấm Run. */
   shipmentDetailLoaded = false;
   shipmentDetailLoading = false;
+  kpiReportSending = false;
   /** 6 cột T2–T7, mỗi ô = 1 WO (màu theo trạng thái) — không gồm LSX Sample */
   woHeatmapDays: WoHeatmapDayCol[] = [];
   /** 6 cột T2–T7 riêng cho LSX Sample (Sample 1/Sample 2) — tách khỏi heatmap chính */
@@ -1028,9 +1029,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             const lastUpdated = this.parseFirestoreDate(data.lastUpdated);
             const createdDate = this.parseFirestoreDate(data.createdDate);
             const kittingStartedAt = this.parseFirestoreDate(data.kittingStartedAt);
+            const readyAt = this.parseFirestoreDate(data.readyAt);
             const planReceivedDate = this.parseFirestoreDate(data.planReceivedDate);
 
-            return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt, planReceivedDate };
+            return { id, ...data, deliveryDate, lastUpdated, createdDate, kittingStartedAt, readyAt, planReceivedDate };
           });
 
           // Filter by factory only.
@@ -1414,6 +1416,74 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Tổng phút làm việc Kitting→Ready: 8h–12h và 13h–20h (gồm ca tối 17h–20h). */
+  woKittingToReadyMinutes(wo: WorkOrder | null | undefined): number | null {
+    if (!wo) return null;
+    const start = this.parseFirestoreDate((wo as any).kittingStartedAt);
+    if (!start) return null;
+    const ready = this.parseFirestoreDate((wo as any).readyAt);
+    const status = String(wo.status || '').toLowerCase();
+    const end = ready || (status === 'kitting' ? new Date() : null);
+    if (!end) return null;
+    const ms = this.workingMsInShiftWindows(start, end);
+    if (!Number.isFinite(ms) || ms < 0) return null;
+    return Math.round(ms / 60000);
+  }
+
+  /**
+   * Chỉ cộng thời gian trong khung làm việc:
+   * 08:00–12:00 (sáng) và 13:00–20:00 (chiều 13–17 + tối 17–20). Nghỉ 12h–13h.
+   */
+  private workingMsInShiftWindows(start: Date, end: Date): number {
+    if (end.getTime() <= start.getTime()) return 0;
+    const windows = [
+      { h1: 8, m1: 0, h2: 12, m2: 0 },
+      { h1: 13, m1: 0, h2: 20, m2: 0 }
+    ];
+    let total = 0;
+    const day = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    while (day.getTime() <= last.getTime()) {
+      for (const w of windows) {
+        const ws = new Date(day.getFullYear(), day.getMonth(), day.getDate(), w.h1, w.m1, 0, 0).getTime();
+        const we = new Date(day.getFullYear(), day.getMonth(), day.getDate(), w.h2, w.m2, 0, 0).getTime();
+        const a = Math.max(startMs, ws);
+        const b = Math.min(endMs, we);
+        if (b > a) total += b - a;
+      }
+      day.setDate(day.getDate() + 1);
+    }
+    return total;
+  }
+
+  private formatWoWorkingDuration(mins: number): string {
+    const hours = mins / 60;
+    const hoursLabel =
+      Number.isInteger(hours) || Math.abs(hours - Math.round(hours)) < 0.05
+        ? `${Math.round(hours)} tiếng`
+        : `${hours.toFixed(1).replace(/\.0$/, '')} tiếng`;
+    return `${mins.toLocaleString('vi-VN')} phút · ${hoursLabel}`;
+  }
+
+  formatWoKittingToReadyLabel(wo: WorkOrder | null | undefined): string {
+    const mins = this.woKittingToReadyMinutes(wo);
+    if (mins == null) return '—';
+    const ready = wo ? this.parseFirestoreDate((wo as any).readyAt) : null;
+    const unit = this.formatWoWorkingDuration(mins);
+    return ready ? unit : `${unit} (đang kitting)`;
+  }
+
+  private formatWoKittingToReadyTooltip(wo: WorkOrder): string | null {
+    const mins = this.woKittingToReadyMinutes(wo);
+    if (mins == null) return null;
+    const ready = this.parseFirestoreDate((wo as any).readyAt);
+    const unit = this.formatWoWorkingDuration(mins);
+    if (ready) return `Kitting→Ready: ${unit}`;
+    return `Đang kitting: ${unit}`;
+  }
+
   /** Ghi chú WO khớp "Giao ASM3" / "ASM3" (không phân biệt hoa thường). */
   private isGiaoAsm3Notes(notes?: string): boolean {
     const n = (notes || '').trim().toLowerCase();
@@ -1452,6 +1522,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const asm3Label = this.formatWoAsm3TooltipSuffix(wo);
     const woId = wo.id || '';
     const soanLine = this.formatWoSoanTooltip(wo);
+    const kittingReadyLine = this.formatWoKittingToReadyTooltip(wo);
     if (kind !== 'kitting') {
       const sku = (wo.productCode || '').trim();
       const lsx = (wo.productionOrder || '').trim();
@@ -1459,6 +1530,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const parts = sku ? [`${sku} · ${base}`] : [base];
       if (lsx) parts.push(`LSX: ${lsx}`);
       if (soanLine) parts.push(soanLine);
+      if (kittingReadyLine) parts.push(kittingReadyLine);
       if (asm3Label) parts.push(asm3Label);
       return { kind, tooltip: parts.join('\n'), giaoAsm3, woId };
     }
@@ -1468,6 +1540,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (lsx) lines.push(`LSX: ${lsx}`);
     lines.push(soanLine || `Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy, (wo as any).createdByMemberId)}`);
     lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
+    lines.push(kittingReadyLine || 'Kitting→Ready: —');
     if (asm3Label) lines.push(asm3Label);
     return { kind, tooltip: lines.join('\n'), giaoAsm3, woId };
   }
@@ -2567,11 +2640,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadSafetyData();
   }
 
+  /** Gửi ngay báo cáo KPI (WO + Shipment hôm nay & mai) qua Zalo + email. Job tự chạy 8:30 và 17:00 T2–T7. */
+  async sendKpiReportNow(): Promise<void> {
+    if (this.kpiReportSending) return;
+    this.kpiReportSending = true;
+    this.cdr.markForCheck();
+    const hour = new Date().getHours();
+    const slot: '08' | '17' = hour >= 13 ? '17' : '08';
+    try {
+      const callable = this.fns.httpsCallable<{ slot: '08' | '17' }, { ok: boolean; fileName?: string }>(
+        'sendDashboardKpiReportManualFn'
+      );
+      const r = await firstValueFrom(callable({ slot }));
+      alert(r?.ok ? `Đã gửi báo cáo KPI (${r.fileName || 'Excel'}) qua email và Zalo.` : 'Không gửi được báo cáo.');
+    } catch (error) {
+      console.error('sendDashboardKpiReportManualFn failed', error);
+      alert('Không gửi được báo cáo KPI. Kiểm tra email/Zalo hoặc thử lại.');
+    } finally {
+      this.kpiReportSending = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   /**
    * Bấm nút Chạy trên khung Rack Utilization Warnings — gọi Cloud Function tính lại NGAY
-   * và ghi vào cache chung (`dashboard-cache/rack-warnings`), rồi đọc lại cache đó.
-   * Việc tính (quét inventory-materials + materials) chỉ xảy ra 1 lần cho lần bấm này,
-   * dùng chung cho mọi máy khác — không nhân theo số người bấm/số máy mở tab.
+   * và ghi vào cache chung (`dashboard-cache/rack-warnings`).
    */
   async runRackWarningsManual(): Promise<void> {
     this.rackWarningsLoading = true;

@@ -131,6 +131,14 @@
               </button>
               <button type="button"
                       class="more-btn"
+                      *ngIf="kkLocMapView"
+                      (click)="openKkIdReport()"
+                      title="Báo cáo KK theo ngày / khoảng thời gian — số mã mỗi ID đã tick">
+                <i class="material-icons">assignment_ind</i>
+                <span class="btn-label">KK Report</span>
+              </button>
+              <button type="button"
+                      class="more-btn"
                       (click)="openKkCatalogPopup()"
                       title="Import Nhóm mã (B+6 số) · Loại hàng">
                 <i class="material-icons">category</i>
@@ -1692,14 +1700,16 @@
             <th title="Xuất lẻ — có số thì xuất theo cột này, không cần đủ 1 bag">Xuất lẻ</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT (XT gồm xuất lẻ)">Tồn kho</th>
             <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Bấm ô vị trí để mở sơ đồ kho' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
-              <span>Vị trí</span>
-              <button type="button"
-                      *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
-                      class="location-unlock-btn"
-                      (click)="tryUnlockLocationColumn(); $event.stopPropagation()"
-                      [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
-                <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
-              </button>
+              <span class="location-header-cell__in">
+                <span>Vị trí</span>
+                <button type="button"
+                        *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
+                        class="location-unlock-btn"
+                        (click)="tryUnlockLocationColumn(); $event.stopPropagation()"
+                        [title]="isLocationColumnUnlocked ? 'Khóa cột Vị trí' : 'Mở khóa sửa Vị trí (mã Zalo OTP)'">
+                  <i class="material-icons">{{ isLocationColumnUnlocked ? 'lock_open' : 'lock' }}</i>
+                </button>
+              </span>
             </th>
             <th title="Bấm ô pallet để sửa số pallet">Pallet</th>
             <th title="Chọn ASM3 hoặc J">WH</th>
@@ -4413,6 +4423,114 @@
         <strong>Dòng đã KK</strong>
         <span>Chỉ các dòng đã tick, kèm người KK</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay"
+     [class.more-overlay]="!isMobile"
+     *ngIf="showKkIdReport"
+     (click)="closeKkIdReport()">
+  <div class="modal-content kk-id-report" (click)="$event.stopPropagation()" role="dialog" aria-label="KK Report">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">assignment_ind</i>
+        </span>
+        <div>
+          <h3>KK Report</h3>
+          <p class="more-popup-header__sub">{{ selectedFactory }} · số mã mỗi ID đã tick KK</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkIdReport()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+
+    <div class="kk-id-report__body">
+      <div class="kk-id-report__filters">
+        <div class="kk-id-report__modes">
+          <button type="button"
+                  class="kk-id-report__mode"
+                  [class.kk-id-report__mode--on]="kkIdReportMode === 'day'"
+                  (click)="setKkIdReportMode('day')">Theo ngày</button>
+          <button type="button"
+                  class="kk-id-report__mode"
+                  [class.kk-id-report__mode--on]="kkIdReportMode === 'range'"
+                  (click)="setKkIdReportMode('range')">Khoảng thời gian</button>
+        </div>
+        <label class="kk-id-report__date">
+          <span>{{ kkIdReportMode === 'range' ? 'Từ' : 'Ngày' }}</span>
+          <input type="date" [(ngModel)]="kkIdReportStart">
+        </label>
+        <label class="kk-id-report__date" *ngIf="kkIdReportMode === 'range'">
+          <span>Đến</span>
+          <input type="date" [(ngModel)]="kkIdReportEnd">
+        </label>
+        <button type="button" class="kk-id-report__run" (click)="loadKkIdReport()" [disabled]="kkIdReportLoading">
+          <i class="material-icons" [class.rotating]="kkIdReportLoading">{{ kkIdReportLoading ? 'sync' : 'search' }}</i>
+          {{ kkIdReportLoading ? 'Đang đọc…' : 'Xem' }}
+        </button>
+      </div>
+
+      <p class="kk-id-report__err" *ngIf="kkIdReportError">{{ kkIdReportError }}</p>
+
+      <div class="kk-id-report__kpis" *ngIf="!kkIdReportLoading && kkIdReportRows.length">
+        <div class="kk-id-report__kpi">
+          <span>ID</span>
+          <b>{{ kkIdReportTotalIds | number }}</b>
+        </div>
+        <div class="kk-id-report__kpi">
+          <span>Mã đã tick</span>
+          <b>{{ kkIdReportTotalCodes | number }}</b>
+        </div>
+        <div class="kk-id-report__kpi">
+          <span>Lần tick</span>
+          <b>{{ kkIdReportTotalTicks | number }}</b>
+        </div>
+      </div>
+
+      <div class="kk-id-report__table-wrap" *ngIf="!kkIdReportLoading && kkIdReportRows.length">
+        <table class="kk-id-report__table">
+          <colgroup>
+            <col class="kk-id-report__col-stt">
+            <col class="kk-id-report__col-id">
+            <col class="kk-id-report__col-num">
+            <col class="kk-id-report__col-num">
+            <col class="kk-id-report__col-date">
+            <col class="kk-id-report__col-date">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="kk-id-report__num">#</th>
+              <th>ID</th>
+              <th class="kk-id-report__num">Số mã</th>
+              <th class="kk-id-report__num">Lần tick</th>
+              <th>Lần đầu</th>
+              <th>Lần cuối</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ng-container *ngFor="let row of kkIdReportRows; let i = index">
+              <tr class="kk-id-report__row" (click)="toggleKkIdReportId(row.id)">
+                <td class="kk-id-report__num">{{ i + 1 }}</td>
+                <td class="kk-id-report__id">{{ row.id }}</td>
+                <td class="kk-id-report__num"><b>{{ row.uniqueCodes | number }}</b></td>
+                <td class="kk-id-report__num">{{ row.tickCount | number }}</td>
+                <td class="kk-id-report__date-cell">{{ formatLastStatusDate(row.firstAt) }}</td>
+                <td class="kk-id-report__date-cell">{{ formatLastStatusDate(row.lastAt) }}</td>
+              </tr>
+              <tr *ngIf="kkIdReportExpandedId === row.id" class="kk-id-report__codes-row">
+                <td colspan="6">
+                  <div class="kk-id-report__codes">
+                    <span *ngFor="let c of row.codes">{{ c }}</span>
+                  </div>
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

@@ -313,6 +313,32 @@ $ob-r-sm: 10px;
   border-top: 1px dashed $ob-line;
 }
 
+.ob-m-histbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.ob-m-histbar__input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid $ob-line;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: $ob-ink;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: #94a3b8;
+    font-weight: 600;
+  }
+}
+
 .ob-m-list__head--export {
   display: flex;
   align-items: baseline;
@@ -1591,6 +1617,29 @@ $ob-r-sm: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ob-m-bs__iqc {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #64748b;
+
+  b { font-weight: 800; }
+}
+
+.ob-m-bs__done {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ob-m-bs__card--done {
+  background: #f8fafc;
+  border-color: #e2e8f0;
 }
 
 .ob-m-bs__card-acts {

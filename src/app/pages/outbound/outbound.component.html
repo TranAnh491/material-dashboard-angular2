@@ -1,4 +1,30 @@
 <div class="main-content" [class.ob-m-page]="isMobile">
+  <div class="ob-op-gate" *ngIf="!hasOperatorSession">
+    <div class="ob-op-gate__card">
+      <div class="ob-op-gate__icon" aria-hidden="true">
+        <i class="material-icons">badge</i>
+      </div>
+      <h2 class="ob-op-gate__title">Quét mã nhân viên</h2>
+      <p class="ob-op-gate__desc">Phải quét mã nhân viên trước khi thao tác xuất kho.</p>
+      <p class="ob-op-gate__shift">Phiên tự hết hạn lúc 12:00, 17:00 và 20:00.</p>
+      <input
+        id="ob-op-session-input"
+        type="text"
+        class="ob-op-gate__input"
+        [(ngModel)]="operatorSessionInput"
+        (ngModelChange)="onOperatorSessionInputChange($event)"
+        (keydown.enter)="onOperatorSessionScanned(operatorSessionInput)"
+        (blur)="onOperatorGateBlur()"
+        placeholder="Quét mã ASP + 4 số"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+      />
+      <p class="ob-op-gate__err" *ngIf="operatorSessionError">{{ operatorSessionError }}</p>
+      <button type="button" class="ob-op-gate__menu" (click)="goMobileMenu()">Về Menu</button>
+    </div>
+  </div>
+
   <!-- ═══ Mobile: Apple-style WMS shell (logic unchanged) ═══ -->
   <div class="ob-m" *ngIf="isMobile">
     <header class="ob-m-header ob-m-header--mock">
@@ -28,6 +54,9 @@
             {{ f }}
           </button>
         </div>
+        <span class="ob-op-chip" *ngIf="hasOperatorSession" title="Phiên nhân viên">
+          {{ operatorSessionId }} · {{ operatorSessionUntilLabel }}
+        </span>
       </div>
     </header>
 
@@ -61,9 +90,11 @@
               type="text"
               class="ob-m-hero__manual-input"
               [(ngModel)]="searchProductionOrder"
+              (ngModelChange)="onSearchProductionOrderChange($event)"
               (keyup.enter)="searchByProductionOrder()"
-              placeholder="Nhập mã vật tư hoặc quét mã hàng"
+              placeholder="Tìm mã hoặc LSX"
               autocomplete="off"
+              autocapitalize="characters"
             />
             <button type="button" class="ob-m-hero__manual-kb" (click)="focusMobileScanner()" title="Focus scanner" aria-label="Bàn phím scanner">
               <i class="material-icons">keyboard</i>
@@ -136,7 +167,7 @@
       <!-- Mobile Xuất BS list -->
       <section class="ob-m-bs" *ngIf="exportMode === 'BS'">
         <div class="ob-m-bs__toolbar">
-          <span class="ob-m-bs__title">📦 Xuất Bổ Sung <b>({{ filteredBsItems.length }}/{{ bsItems.length }})</b></span>
+          <span class="ob-m-bs__title">📦 Xuất Bổ Sung <b>({{ filteredBsItems.length }}/{{ bsSearchQuery ? bsItems.length : bsPendingCount }})</b></span>
           <button type="button" class="ob-m-bs__refresh" (click)="loadBsItems()" [disabled]="bsLoading" aria-label="Làm mới">
             <i class="material-icons" [class.spinning]="bsLoading">refresh</i>
           </button>
@@ -146,7 +177,7 @@
           <input type="text"
                  class="ob-m-bs__search-input"
                  [(ngModel)]="bsSearchQuery"
-                 placeholder="Tìm theo LSX, mã hàng, PO…"
+                 placeholder="Tìm LSX, mã hàng, PO… (cả đã xuất)"
                  autocomplete="off" />
           <button type="button" class="ob-m-bs__search-clear" *ngIf="bsSearchQuery" (click)="clearBsSearch()" aria-label="Xoá tìm kiếm">
             <i class="material-icons">close</i>
@@ -156,10 +187,11 @@
         <div class="ob-m-bs__scroll">
           <div *ngIf="bsLoading" class="ob-m-bs__state">Đang tải…</div>
           <div *ngIf="!bsLoading && bsError" class="ob-m-bs__state ob-m-bs__state--err">{{ bsError }}</div>
-          <div *ngIf="!bsLoading && !bsError && bsItems.length === 0" class="ob-m-bs__state">Không có mã nào cần xuất BS.</div>
+          <div *ngIf="!bsLoading && !bsError && bsItems.length === 0 && !bsSearchQuery" class="ob-m-bs__state">Không có mã nào cần xuất BS.</div>
+          <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && bsPendingCount === 0 && !bsSearchQuery" class="ob-m-bs__state">Không có mã chưa xuất. Gõ tìm để xem phiếu đã xuất.</div>
           <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && filteredBsItems.length === 0" class="ob-m-bs__state">Không tìm thấy phiếu khớp "{{ bsSearchQuery }}".</div>
 
-          <div class="ob-m-bs__card" *ngFor="let item of filteredBsItems; trackBy: trackByIndex">
+          <div class="ob-m-bs__card" *ngFor="let item of filteredBsItems; trackBy: trackByIndex" [class.ob-m-bs__card--done]="item.exported">
             <div class="ob-m-bs__card-main">
               <div class="ob-m-bs__code">{{ item.materialCode }}</div>
               <div class="ob-m-bs__meta">
@@ -170,9 +202,13 @@
                 <span>{{ item.quantity | number }} {{ item.unit }}</span>
               </div>
               <div class="ob-m-bs__name" *ngIf="item.tenVatTu">{{ item.tenVatTu }}</div>
+              <div class="ob-m-bs__iqc">
+                IQC: <b [ngClass]="bsIqcClass(item.iqcStatus)">{{ item.iqcStatus || '—' }}</b>
+                <span class="ob-m-bs__done" *ngIf="item.exported">Đã xuất</span>
+              </div>
             </div>
             <div class="ob-m-bs__card-acts">
-              <button type="button" class="ob-m-bs__btn ob-m-bs__btn--go" (click)="openBsScanDialog(item)" title="Xuất kho">
+              <button type="button" class="ob-m-bs__btn ob-m-bs__btn--go" *ngIf="!item.exported" (click)="openBsScanDialog(item)" title="Xuất kho">
                 <i class="material-icons">qr_code_scanner</i>
               </button>
               <button type="button" class="ob-m-bs__btn ob-m-bs__btn--del" (click)="deleteBsItem(item)" title="Xoá">
@@ -184,6 +220,28 @@
       </section>
 
       <section class="ob-m-list" id="ob-m-materials" *ngIf="exportMode === 'NL'">
+        <div class="ob-m-histbar" *ngIf="!isBatchScanningMode">
+          <input type="text"
+                 class="ob-m-histbar__input"
+                 [(ngModel)]="historyFilterPo"
+                 (ngModelChange)="onHistoryFilterChange()"
+                 list="ob-m-hist-po-dl"
+                 placeholder="Lọc PO"
+                 autocomplete="off">
+          <input type="text"
+                 class="ob-m-histbar__input"
+                 [(ngModel)]="historyFilterLsx"
+                 (ngModelChange)="onHistoryFilterChange()"
+                 list="ob-m-hist-lsx-dl"
+                 placeholder="Lọc LSX"
+                 autocomplete="off">
+        </div>
+        <datalist id="ob-m-hist-po-dl">
+          <option *ngFor="let p of getHistoryPoOptions()" [value]="p"></option>
+        </datalist>
+        <datalist id="ob-m-hist-lsx-dl">
+          <option *ngFor="let l of getHistoryLsxOptions()" [value]="l"></option>
+        </datalist>
         <div class="ob-m-list__head ob-m-list__head--export">
           <span class="ob-m-list__title">Danh sách xuất ({{ getMobileExportListCount() }})</span>
           <span class="ob-m-list__total">Tổng: {{ getMobileExportTotalQty() | number:'1.0-2' }}</span>
@@ -296,6 +354,10 @@
         <input type="date" class="ob-m-filter-date" [(ngModel)]="startDate" (change)="onDateRangeChange()" title="Từ ngày" />
         <label class="ob-m-filter-label">Đến ngày</label>
         <input type="date" class="ob-m-filter-date" [(ngModel)]="endDate" (change)="onDateRangeChange()" title="Đến ngày" />
+        <label class="ob-m-filter-label">Lọc PO</label>
+        <input type="text" class="ob-m-filter-date" [(ngModel)]="historyFilterPo" (ngModelChange)="onHistoryFilterChange()" placeholder="PO" autocomplete="off" />
+        <label class="ob-m-filter-label">Lọc LSX</label>
+        <input type="text" class="ob-m-filter-date" [(ngModel)]="historyFilterLsx" (ngModelChange)="onHistoryFilterChange()" placeholder="LSX" autocomplete="off" />
       </div>
       <label class="ob-m-filter-toggle">
         <input type="checkbox" [(ngModel)]="hidePreviousDayHistory" (change)="toggleHidePreviousDayHistory()" />
@@ -407,82 +469,172 @@
 
     <!-- Excel-like Actions -->
     <div class="excel-actions" *ngIf="exportMode === 'NL'">
-        <div class="action-controls-horizontal">
-        <!-- Một hàng: ô quét QR + (khi batch) LSX + NV + Review/Done -->
-        <div class="outbound-scan-primary-row">
-          <div class="scanner-input-group">
-            <input type="text"
-                   #scannerInput
-                   [(ngModel)]="scannerBuffer"
-                   (keydown)="onScannerKeydown($event)"
-                   (blur)="onScannerInputBlur()"
-                   placeholder="Quét barcode/QR code..."
-                   class="scanner-input"
-                   [class.active]="isScannerInputActive || showScanningSetupModal"
-                   autocomplete="off">
-          </div>
+      <div class="ob-toolbar">
+        <div class="ob-toolbar__row ob-toolbar__row--scan">
+          <span class="ob-toolbar__tag">Quét</span>
+          <span class="ob-op-chip ob-op-chip--desk" *ngIf="hasOperatorSession" title="Phiên nhân viên">
+            {{ operatorSessionId }} · hết {{ operatorSessionUntilLabel }}
+          </span>
+          <input type="text"
+                 #scannerInput
+                 [(ngModel)]="scannerBuffer"
+                 (keydown)="onScannerKeydown($event)"
+                 (blur)="onScannerInputBlur()"
+                 placeholder="Quét barcode / QR…"
+                 class="scanner-input ob-toolbar__scan"
+                 [class.active]="isScannerInputActive || showScanningSetupModal"
+                 autocomplete="off">
 
-          <div class="batch-scan-inline"
-               *ngIf="isBatchScanningMode">
+          <ng-container *ngIf="isBatchScanningMode">
             <div class="saving-indicator-inline" *ngIf="isSavingBatchData">
               <i class="material-icons spinning">sync</i>
-              <span>Đang cập nhật dữ liệu...</span>
+              <span>Đang cập nhật…</span>
             </div>
             <ng-container *ngIf="!isSavingBatchData">
-              <div class="scan-status-inline">
-                <div class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
-                  <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
-                  <span>LSX: {{ batchProductionOrder || 'Chưa scan' }}</span>
-                </div>
-                <div class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
-                  <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
-                  <span>Nhân viên: {{ batchEmployeeId || 'Chưa scan' }}</span>
-                </div>
-              </div>
-              <div class="scan-buttons-inline">
-                <button type="button"
-                        class="review-btn-desktop"
-                        (click)="showScanReview()"
-                        title="Xem danh sách đã scan"
-                        *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
-                  <i class="material-icons">list</i>
-                  Review ({{ pendingScanData.length }})
-                </button>
-                <button type="button"
-                        class="done-btn-desktop"
-                        (click)="stopBatchScanningMode()"
-                        title="Hoàn thành và lưu tất cả">
-                  <i class="material-icons">done</i>
-                  Done ({{ pendingScanData.length }})
-                </button>
-              </div>
+              <span class="status-item-desktop" [class.scanned]="isProductionOrderScanned">
+                <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
+                LSX {{ batchProductionOrder || '…' }}
+              </span>
+              <span class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
+                <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
+                NV {{ batchEmployeeId || '…' }}
+              </span>
+              <button type="button"
+                      class="review-btn-desktop"
+                      (click)="showScanReview()"
+                      title="Xem danh sách đã scan"
+                      *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
+                <i class="material-icons">list</i>
+                Review ({{ pendingScanData.length }})
+              </button>
+              <button type="button"
+                      class="done-btn-desktop"
+                      (click)="stopBatchScanningMode()"
+                      title="Hoàn thành và lưu tất cả">
+                <i class="material-icons">done</i>
+                Done ({{ pendingScanData.length }})
+              </button>
             </ng-container>
+          </ng-container>
+
+          <button type="button"
+                  class="start-btn"
+                  *ngIf="!isBatchScanningMode"
+                  (click)="startBatchScanningMode()"
+                  title="Bắt đầu chế độ scan">
+            <i class="material-icons">play_arrow</i>
+            Start
+          </button>
+
+          <span class="ob-toolbar__spacer"></span>
+
+          <div class="dropdown" #dropdown>
+            <button class="more-btn" type="button" (click)="toggleDropdown()">
+              <i class="material-icons">more_vert</i>
+              More
+            </button>
+            <div class="dropdown-menu" [class.show]="isDropdownOpen">
+              <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
+                <i class="material-icons">download</i>
+                Export Tất Cả Dữ Liệu
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); closeDropdown()">
+                <i class="material-icons">add</i>
+                Thêm Material
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="downloadMonthlyHistory(); closeDropdown()">
+                <i class="material-icons">calendar_month</i>
+                Tải Dữ Liệu Theo Tháng
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="cleanupData(); closeDropdown()">
+                <i class="material-icons">cleaning_services</i>
+                Làm sạch dữ liệu
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="openPxImportPopup()">
+                <i class="material-icons">upload_file</i>
+                Import PX
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="openQcRuleModal()">
+                <i class="material-icons">policy</i>
+                QC rule
+              </a>
+            </div>
           </div>
+
+          <button type="button" class="refresh-btn" (click)="loadMaterials()">
+            <i class="material-icons">refresh</i>
+            Refresh
+          </button>
         </div>
 
-        <!-- LSX Search Box - Desktop and Mobile -->
-        <div class="lsx-search-box" *ngIf="!isBatchScanningMode">
-          <input type="text" 
-                 class="lsx-search-input"
+        <div class="ob-toolbar__row ob-toolbar__row--hist">
+          <span class="ob-toolbar__tag">Lịch sử</span>
+          <input type="text"
+                 class="ob-toolbar__q"
                  [(ngModel)]="searchProductionOrder"
+                 (ngModelChange)="onSearchProductionOrderChange($event)"
                  (keyup.enter)="searchByProductionOrder()"
-                 [placeholder]="'Nhập LSX hoặc quét mã hàng (B+6 số / QR: Material|PO|SL|IMD)'"
-                 title="Nhập LSX hoặc mã hàng rồi nhấn Enter">
-          <button class="search-btn" 
+                 placeholder="Tìm mã hàng hoặc LSX"
+                 title="Nhập LSX hoặc mã hàng rồi Enter"
+                 autocapitalize="characters">
+          <button type="button"
+                  class="search-btn"
                   (click)="searchByProductionOrder()"
                   [disabled]="!searchProductionOrder || !searchProductionOrder.trim()"
-                  title="Tìm kiếm LSX">
+                  title="Tìm lịch sử">
             <i class="material-icons">search</i>
           </button>
-          <button class="clear-search-btn" 
-                  *ngIf="selectedProductionOrder || materialSearchMode === 'material'"
+          <button type="button"
+                  class="clear-search-btn"
+                  *ngIf="selectedProductionOrder || materialSearchMode === 'material' || historyFilterPo || historyFilterLsx"
                   (click)="clearProductionOrderFilter()"
-                  title="Xóa và ẩn dữ liệu">
+                  title="Xóa bộ lọc">
             <i class="material-icons">clear</i>
           </button>
+
+          <input type="text"
+                 class="ob-toolbar__f"
+                 [(ngModel)]="historyFilterPo"
+                 (ngModelChange)="onHistoryFilterChange()"
+                 list="ob-hist-po-dl"
+                 placeholder="Lọc PO"
+                 title="Lọc lịch sử theo PO"
+                 autocomplete="off">
+          <input type="text"
+                 class="ob-toolbar__f ob-toolbar__f--lsx"
+                 [(ngModel)]="historyFilterLsx"
+                 (ngModelChange)="onHistoryFilterChange()"
+                 list="ob-hist-lsx-dl"
+                 placeholder="Lọc LSX"
+                 title="Lọc lịch sử theo LSX"
+                 autocomplete="off">
+
+          <input type="date"
+                 [(ngModel)]="startDate"
+                 (change)="onDateRangeChange()"
+                 class="date-input ob-toolbar__date"
+                 title="Từ ngày">
+          <span class="ob-toolbar__to">→</span>
+          <input type="date"
+                 [(ngModel)]="endDate"
+                 (change)="onDateRangeChange()"
+                 class="date-input ob-toolbar__date"
+                 title="Đến ngày">
+          <button type="button"
+                  class="today-btn"
+                  (click)="resetToToday()"
+                  title="Reset về ngày hôm nay">
+            <i class="material-icons">today</i>
+            Hôm nay
+          </button>
+          <label class="ob-toolbar__hide" title="Ẩn lịch sử ngày cũ">
+            <input type="checkbox"
+                   [(ngModel)]="hidePreviousDayHistory"
+                   (change)="toggleHidePreviousDayHistory()">
+            <span>Ẩn cũ</span>
+          </label>
         </div>
 
-        <!-- Khi search theo mã hàng: hiển thị loading/error ở đây, dữ liệu đổ xuống bảng -->
         <div class="lsx-material-inline" *ngIf="materialSearchMode === 'material'">
           <div class="lsx-material-inline__loading" *ngIf="materialSearchLoading">
             <i class="material-icons spinning">sync</i>
@@ -493,106 +645,18 @@
             <span>{{ materialSearchError }}</span>
           </div>
         </div>
-
-        <!-- Simple Start/Stop Controls -->
-        <div class="scan-controls" *ngIf="!isBatchScanningMode && !isMobile">
-          <button class="start-btn" 
-                  (click)="startBatchScanningMode()"
-                  title="Bắt đầu chế độ scan">
-            <i class="material-icons">play_arrow</i>
-            Start
-          </button>
+        <div class="ob-toolbar__meta" *ngIf="historyFilterPo || historyFilterLsx">
+          Lọc PO/LSX: {{ getHistoryViewMaterials().length }}/{{ filteredMaterials.length }} dòng
         </div>
-
-        <!-- More Dropdown -->
-        <div class="dropdown" #dropdown>
-          <button class="more-btn" type="button" (click)="toggleDropdown()">
-            <i class="material-icons">more_vert</i>
-            More
-          </button>
-          <div class="dropdown-menu" [class.show]="isDropdownOpen">
-            <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel(); closeDropdown()">
-              <i class="material-icons">download</i>
-              Export Tất Cả Dữ Liệu
-            </a>
-            
-            <a class="dropdown-item" href="javascript:void(0)" (click)="addMaterial(); closeDropdown()">
-              <i class="material-icons">add</i>
-              Thêm Material
-            </a>
-            
-            <a class="dropdown-item" href="javascript:void(0)" (click)="downloadMonthlyHistory(); closeDropdown()">
-              <i class="material-icons">calendar_month</i>
-              Tải Dữ Liệu Theo Tháng
-            </a>
-            
-            <a class="dropdown-item" href="javascript:void(0)" (click)="cleanupData(); closeDropdown()">
-              <i class="material-icons">cleaning_services</i>
-              Làm sạch dữ liệu
-            </a>
-
-            <a class="dropdown-item" href="javascript:void(0)" (click)="openPxImportPopup()">
-              <i class="material-icons">upload_file</i>
-              Import PX
-            </a>
-            <a class="dropdown-item" href="javascript:void(0)" (click)="openQcRuleModal()">
-              <i class="material-icons">policy</i>
-              QC rule
-            </a>
-          </div>
-        </div>
-        
-        
-        <!-- Refresh Button -->
-        <button class="refresh-btn" (click)="loadMaterials()">
-          <i class="material-icons">refresh</i>
-          Refresh
-        </button>
-
-        <!-- Date Range Selector -->
-        <div class="date-range-selector">
-          <input type="date" 
-                 [(ngModel)]="startDate" 
-                 (change)="onDateRangeChange()"
-                 class="date-input"
-                 title="Từ ngày">
-          <span class="date-separator">→</span>
-          <input type="date" 
-                 [(ngModel)]="endDate" 
-                 (change)="onDateRangeChange()"
-                 class="date-input"
-                 title="Đến ngày">
-          
-          <!-- Toggle for hiding previous day's scan history -->
-          <div class="history-toggle">
-            <label class="toggle-label">
-              <input type="checkbox" 
-                     [(ngModel)]="hidePreviousDayHistory"
-                     (change)="toggleHidePreviousDayHistory()"
-                     class="toggle-checkbox">
-              <span class="toggle-text">
-                <i class="material-icons">{{ hidePreviousDayHistory ? 'visibility_off' : 'visibility' }}</i>
-                {{ hidePreviousDayHistory ? 'Ẩn lịch sử cũ' : 'Hiện tất cả' }}
-              </span>
-            </label>
-          </div>
-          
-          <!-- Reset to today button -->
-          <button class="today-btn" 
-                  (click)="resetToToday()"
-                  title="Reset về ngày hôm nay">
-            <i class="material-icons">today</i>
-            Hôm nay
-          </button>
-        </div>
-
-        <!-- Factory Badge - 🔧 SỬA LỖI: Ẩn box factory -->
-        <!-- <span class="factory-badge asm1-badge">{{ selectedFactory }}</span> -->
-        
-        <!-- Negative stock counter -->
-        <!-- REMOVED: Negative stock counter - Không cần tính stock để scan nhanh -->
       </div>
+      <datalist id="ob-hist-po-dl">
+        <option *ngFor="let p of getHistoryPoOptions()" [value]="p"></option>
+      </datalist>
+      <datalist id="ob-hist-lsx-dl">
+        <option *ngFor="let l of getHistoryLsxOptions()" [value]="l"></option>
+      </datalist>
     </div>
+
     <div class="loading-container" *ngIf="isLoading">
       <div class="loading-spinner">
         <i class="material-icons spinning">refresh</i>
@@ -607,10 +671,10 @@
     <div class="bs-section" *ngIf="exportMode === 'BS' && !isMobile">
       <div class="bs-section__toolbar">
         <span class="bs-section__title">📦 Danh sách Xuất Bổ Sung ({{ selectedFactory }})</span>
-        <span class="bs-section__count">{{ filteredBsItems.length }}/{{ bsItems.length }}</span>
+        <span class="bs-section__count">{{ filteredBsItems.length }}/{{ bsSearchQuery ? bsItems.length : bsPendingCount }}</span>
         <div class="bs-section__search">
           <i class="material-icons">search</i>
-          <input type="text" [(ngModel)]="bsSearchQuery" placeholder="Tìm theo LSX, mã hàng, PO, tên vật tư…" autocomplete="off">
+          <input type="text" [(ngModel)]="bsSearchQuery" placeholder="Tìm LSX, mã hàng, PO… (cả đã xuất)" autocomplete="off">
           <button type="button" *ngIf="bsSearchQuery" (click)="clearBsSearch()" title="Xoá tìm kiếm">
             <i class="material-icons">close</i>
           </button>
@@ -622,7 +686,8 @@
 
       <div *ngIf="bsLoading" class="bs-section__state">Đang tải…</div>
       <div *ngIf="!bsLoading && bsError" class="bs-section__state bs-section__state--err">{{ bsError }}</div>
-      <div *ngIf="!bsLoading && !bsError && bsItems.length === 0" class="bs-section__state">Không có mã nào cần xuất Bổ Sung.</div>
+      <div *ngIf="!bsLoading && !bsError && bsItems.length === 0 && !bsSearchQuery" class="bs-section__state">Không có mã nào cần xuất Bổ Sung.</div>
+      <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && bsPendingCount === 0 && !bsSearchQuery" class="bs-section__state">Không có mã chưa xuất. Gõ tìm để xem phiếu đã xuất.</div>
       <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && filteredBsItems.length === 0" class="bs-section__state">Không tìm thấy phiếu khớp "{{ bsSearchQuery }}".</div>
 
       <div class="bs-table-wrap" *ngIf="!bsLoading && filteredBsItems.length > 0">
@@ -634,22 +699,27 @@
               <th>Mã hàng</th>
               <th>Tên VT</th>
               <th>PO</th>
+              <th>IQC Status</th>
               <th class="num">Lượng cần xuất</th>
               <th>ĐVT</th>
               <th class="center">Hành động</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of filteredBsItems; let i = index; trackBy: trackByIndex">
+            <tr *ngFor="let item of filteredBsItems; let i = index; trackBy: trackByIndex" [class.bs-table__row--done]="item.exported">
               <td class="bs-table__idx">{{ i + 1 }}</td>
               <td class="mono">{{ item.lsx }}</td>
               <td class="strong">{{ item.materialCode }}</td>
               <td class="muted">{{ item.tenVatTu }}</td>
               <td>{{ item.po }}</td>
+              <td>
+                <span class="bs-iqc" [ngClass]="bsIqcClass(item.iqcStatus)">{{ item.iqcStatus || '—' }}</span>
+              </td>
               <td class="num strong">{{ item.quantity | number }}</td>
               <td>{{ item.unit }}</td>
               <td class="center">
-                <button type="button" class="bs-table__go" (click)="openBsScanDialog(item)">Xuất kho</button>
+                <span class="bs-table__done" *ngIf="item.exported">Đã xuất</span>
+                <button type="button" class="bs-table__go" *ngIf="!item.exported" (click)="openBsScanDialog(item)">Xuất kho</button>
                 <button type="button" class="bs-table__del" (click)="deleteBsItem(item)" title="Xoá khỏi danh sách BS">
                   <i class="material-icons">delete</i>
                 </button>
@@ -738,7 +808,7 @@
       </table>
     </div>
     <div class="pagination-container" *ngIf="totalPages > 1">
-      <div class="pagination-info">Trang {{currentPage}} / {{totalPages}} - Tổng: {{filteredMaterials.length}} materials</div>
+      <div class="pagination-info">Trang {{currentPage}} / {{totalPages}} — {{getHistoryViewMaterials().length}} dòng</div>
       <div class="pagination-controls">
         <button class="page-btn" (click)="previousPage()" [disabled]="currentPage <= 1">
           <i class="material-icons">chevron_left</i>

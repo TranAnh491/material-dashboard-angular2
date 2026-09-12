@@ -292,6 +292,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     checkedBy: string;
     checkedAt: Date;
   }> = [];
+  showKkIdReport = false;
+  kkIdReportMode: 'day' | 'range' = 'day';
+  kkIdReportStart = '';
+  kkIdReportEnd = '';
+  kkIdReportLoading = false;
+  kkIdReportError = '';
+  kkIdReportExpandedId: string | null = null;
+  kkIdReportRows: Array<{
+    id: string;
+    uniqueCodes: number;
+    tickCount: number;
+    firstAt: Date;
+    lastAt: Date;
+    codes: string[];
+  }> = [];
   /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
   /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
   kkLocMapExpandedKey: string | null = null;
@@ -6198,6 +6213,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
     this.showKkTypeReportMenu = false;
+    this.showKkIdReport = false;
     this.showKkPalletCheck = false;
     this.stopKkLive();
   }
@@ -6277,6 +6293,184 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!d || Number.isNaN(d.getTime()) || !d.getTime()) return '—';
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  get kkIdReportTotalIds(): number {
+    return this.kkIdReportRows.length;
+  }
+
+  get kkIdReportTotalCodes(): number {
+    const s = new Set<string>();
+    for (const row of this.kkIdReportRows) {
+      for (const c of row.codes) s.add(c);
+    }
+    return s.size;
+  }
+
+  get kkIdReportTotalTicks(): number {
+    return this.kkIdReportRows.reduce((n, r) => n + r.tickCount, 0);
+  }
+
+  openKkIdReport(): void {
+    const today = this.toDateKey(new Date());
+    if (!this.kkIdReportStart) this.kkIdReportStart = today;
+    if (!this.kkIdReportEnd) this.kkIdReportEnd = today;
+    this.showKkIdReport = true;
+    this.kkIdReportError = '';
+    if (!this.kkIdReportRows.length && !this.kkIdReportLoading) {
+      void this.loadKkIdReport();
+    }
+  }
+
+  closeKkIdReport(): void {
+    this.showKkIdReport = false;
+    this.kkIdReportExpandedId = null;
+  }
+
+  setKkIdReportMode(mode: 'day' | 'range'): void {
+    this.kkIdReportMode = mode;
+    if (mode === 'day') {
+      this.kkIdReportEnd = this.kkIdReportStart;
+    }
+  }
+
+  toggleKkIdReportId(id: string): void {
+    this.kkIdReportExpandedId = this.kkIdReportExpandedId === id ? null : id;
+  }
+
+  async loadKkIdReport(): Promise<void> {
+    if (this.kkIdReportLoading) return;
+    let start = String(this.kkIdReportStart || '').trim();
+    let end = this.kkIdReportMode === 'range'
+      ? String(this.kkIdReportEnd || '').trim()
+      : start;
+    if (!start) {
+      this.kkIdReportError = 'Chọn ngày bắt đầu.';
+      return;
+    }
+    if (!end) end = start;
+    if (end < start) {
+      const t = start;
+      start = end;
+      end = t;
+      this.kkIdReportStart = start;
+      this.kkIdReportEnd = end;
+    }
+    const dateKeys = this.listDateKeysInclusive(start, end);
+    if (dateKeys.length > 62) {
+      this.kkIdReportError = 'Khoảng thời gian tối đa 62 ngày.';
+      return;
+    }
+
+    this.kkIdReportLoading = true;
+    this.kkIdReportError = '';
+    this.kkIdReportExpandedId = null;
+    this.cdr.detectChanges();
+    try {
+      const factory = this.selectedFactory;
+      const events: Array<{ id: string; code: string; at: Date }> = [];
+      let reads = 0;
+      for (const dateKey of dateKeys) {
+        const snap = await this.firestore
+          .collection('inventory-kk-history', (ref) =>
+            ref.where('factory', '==', factory).where('checkedDateKey', '==', dateKey).limit(10000)
+          )
+          .get()
+          .toPromise();
+        reads += snap?.docs?.length || 0;
+        for (const doc of snap?.docs || []) {
+          const data = doc.data() as any;
+          const code = String(data?.materialCode || '').trim().toUpperCase();
+          if (!code) continue;
+          const at = this.normalizeTimestamp(data?.checkedAt) || this.normalizeTimestamp(data?.createdAt) || new Date(0);
+          events.push({
+            id: String(data?.checkedBy || '').trim().toUpperCase() || '(không ID)',
+            code,
+            at
+          });
+        }
+      }
+
+      if (!events.length) {
+        const docs = await this.loadKkDocsForFactory(factory);
+        reads += docs.length;
+        const startKey = dateKeys[0];
+        const endKey = dateKeys[dateKeys.length - 1];
+        for (const doc of docs) {
+          const data = doc.data ? doc.data() : doc;
+          if (data?.kkChecked !== true) continue;
+          const at = this.normalizeTimestamp(data.kkAt);
+          const key = this.toDateKey(at);
+          if (!key || key < startKey || key > endKey) continue;
+          const code = String(data.materialCode || '').trim().toUpperCase();
+          if (!code) continue;
+          events.push({
+            id: String(data.kkBy || '').trim().toUpperCase() || '(không ID)',
+            code,
+            at: at || new Date(0)
+          });
+        }
+      }
+
+      this.readTracker.track('materials', 'inventory-kk-history', reads);
+      this.kkIdReportRows = this.aggregateKkIdReport(events);
+      if (!this.kkIdReportRows.length) {
+        this.kkIdReportError = `Không có tick KK ${factory} từ ${start}${start !== end ? ' → ' + end : ''}.`;
+      }
+    } catch (e) {
+      console.error('❌ KK Report:', e);
+      this.kkIdReportError = 'Không đọc được lịch sử KK.';
+      this.kkIdReportRows = [];
+    } finally {
+      this.kkIdReportLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private listDateKeysInclusive(start: string, end: string): string[] {
+    const out: string[] = [];
+    const d = new Date(`${start}T00:00:00`);
+    const last = new Date(`${end}T00:00:00`);
+    if (Number.isNaN(d.getTime()) || Number.isNaN(last.getTime())) return out;
+    while (d.getTime() <= last.getTime()) {
+      out.push(this.toDateKey(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+
+  private aggregateKkIdReport(
+    events: Array<{ id: string; code: string; at: Date }>
+  ): Array<{
+    id: string;
+    uniqueCodes: number;
+    tickCount: number;
+    firstAt: Date;
+    lastAt: Date;
+    codes: string[];
+  }> {
+    const map = new Map<string, { codes: Set<string>; ticks: number; first: Date; last: Date }>();
+    for (const ev of events) {
+      let g = map.get(ev.id);
+      if (!g) {
+        g = { codes: new Set(), ticks: 0, first: ev.at, last: ev.at };
+        map.set(ev.id, g);
+      }
+      g.codes.add(ev.code);
+      g.ticks += 1;
+      if (ev.at.getTime() && ev.at.getTime() < g.first.getTime()) g.first = ev.at;
+      if (ev.at.getTime() > g.last.getTime()) g.last = ev.at;
+    }
+    return Array.from(map.entries())
+      .map(([id, g]) => ({
+        id,
+        uniqueCodes: g.codes.size,
+        tickCount: g.ticks,
+        firstAt: g.first,
+        lastAt: g.last,
+        codes: Array.from(g.codes).sort()
+      }))
+      .sort((a, b) => b.uniqueCodes - a.uniqueCodes || a.id.localeCompare(b.id));
   }
 
   setKkLocMapView(view: 'location' | 'material' | 'type'): void {

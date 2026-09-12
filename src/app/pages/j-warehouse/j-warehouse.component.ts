@@ -360,7 +360,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.confirmClearPallet': 'Xóa pallet "{{code}}" khỏi vị trí {{slot}}?',
     'alert.resetLayout': 'Khôi phục layout kệ mặc định? Thay đổi chưa lưu sẽ mất.',
     'alert.deleteBlock': 'Xóa block {{code}}?',
-    'cctv.hint': 'Kéo camera / ổ điện để đổi vị trí. Kéo núm vàng để xoay góc camera. Sao = camera bắt buộc (không xóa được).',
+    'cctv.hint': 'Kéo camera / ổ điện / ổ mạng để đổi vị trí. Kéo núm vàng để xoay góc camera. Sao = camera bắt buộc (không xóa được).',
     'cctv.hint3d': 'Chọn camera bên phải để xem góc nhìn 3D. Bấm Tổng quan để xoay mô hình và thấy tầm phủ.',
     'cctv.live': 'TRỰC TIẾP',
     'cctv.online': 'Online',
@@ -411,10 +411,25 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'outlet.custom': 'Ổ điện mới',
     'outlet.pos': 'Vị trí',
     'outlet.count': '{{n}} ổ điện · J5: {{j5}} · J4: {{j4}}',
+    'outlet.hideCams': 'Ẩn camera trên sơ đồ',
+    'outlet.qty': 'Số ổ thêm',
+    'net.list': 'Ổ cắm mạng',
+    'net.addJ5': 'Thêm mạng J5',
+    'net.addJ4': 'Thêm mạng J4',
+    'net.delete': 'Xóa ổ mạng',
+    'net.deleteConfirm': 'Xóa {{id}} khỏi {{bldg}}?',
+    'net.custom': 'Ổ mạng mới',
+    'net.count': '{{n}} ổ mạng · J5: {{j5}} · J4: {{j4}}',
+    'net.qty': 'Số ổ thêm',
     'info.cameras': 'Số camera',
     'info.camerasVal': '{{n}} camera (J5: {{j5}} · J4: {{j4}})\nCamera CCTV lắp trên sơ đồ J5 và J4',
     'info.outlets': 'Số ổ điện',
-    'info.outletsVal': '{{n}} ổ điện (J5: {{j5}} · J4: {{j4}})\nỔ điện đã thêm trên sơ đồ camera'
+    'info.outletsVal': '{{n}} ổ điện (J5: {{j5}} · J4: {{j4}})\nỔ điện đã thêm trên sơ đồ camera',
+    'info.legendPower': 'Ổ cắm điện',
+    'info.legendNet': 'Ổ cắm mạng',
+    'info.downloadCameras': 'Số camera',
+    'info.downloadPower': 'Ổ cắm điện',
+    'info.downloadNet': 'Ổ cắm mạng'
   },
   en: {
     'drawMode.kyThuat': 'Technical Drawing',
@@ -564,7 +579,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'alert.confirmClearPallet': 'Remove pallet "{{code}}" from slot {{slot}}?',
     'alert.resetLayout': 'Restore the default rack layout? Unsaved changes will be lost.',
     'alert.deleteBlock': 'Delete block {{code}}?',
-    'cctv.hint': 'Drag a camera or outlet to move it. Drag the yellow handle to rotate a camera. Star = required camera (cannot delete).',
+    'cctv.hint': 'Drag a camera, power outlet or network jack to move it. Drag the yellow handle to rotate a camera. Star = required camera (cannot delete).',
     'cctv.hint3d': 'Select a camera on the right to see its 3D viewpoint. Click Overview to orbit and see coverage cones.',
     'cctv.live': 'LIVE',
     'cctv.online': 'Online',
@@ -615,10 +630,25 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'outlet.custom': 'New outlet',
     'outlet.pos': 'Position',
     'outlet.count': '{{n}} outlets · J5: {{j5}} · J4: {{j4}}',
+    'outlet.hideCams': 'Hide cameras on the map',
+    'outlet.qty': 'Add quantity',
+    'net.list': 'Network jacks',
+    'net.addJ5': 'Add J5 network',
+    'net.addJ4': 'Add J4 network',
+    'net.delete': 'Delete network jack',
+    'net.deleteConfirm': 'Delete {{id}} from {{bldg}}?',
+    'net.custom': 'New network jack',
+    'net.count': '{{n}} network jacks · J5: {{j5}} · J4: {{j4}}',
+    'net.qty': 'Add quantity',
     'info.cameras': 'Cameras',
     'info.camerasVal': '{{n}} cameras (J5: {{j5}} · J4: {{j4}})\nCCTV cameras placed on the J5 and J4 layout',
     'info.outlets': 'Power outlets',
-    'info.outletsVal': '{{n}} outlets (J5: {{j5}} · J4: {{j4}})\nPower outlets added on the camera layout'
+    'info.outletsVal': '{{n}} outlets (J5: {{j5}} · J4: {{j4}})\nPower outlets added on the camera layout',
+    'info.legendPower': 'Power outlet',
+    'info.legendNet': 'Network jack',
+    'info.downloadCameras': 'Cameras',
+    'info.downloadPower': 'Power outlets',
+    'info.downloadNet': 'Network jacks'
   }
 };
 
@@ -718,7 +748,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private readonly CCTV_STORAGE_KEY = 'j-warehouse-cctv-v2';
   private readonly CCTV_STORAGE_KEY_V1 = 'j-warehouse-cctv-v1';
   private readonly CCTV_LIVE_HIDDEN_KEY = 'j-warehouse-cctv-live-hidden-v1';
+  private readonly CCTV_MAP_HIDDEN_KEY = 'j-warehouse-cctv-map-hidden-v1';
   private readonly OUTLET_STORAGE_KEY = 'j-warehouse-outlets-v1';
+  private readonly NET_OUTLET_STORAGE_KEY = 'j-warehouse-net-outlets-v1';
+  private readonly MAX_OUTLETS = 400;
   private readonly EXTRA_PALLET_STORAGE_KEY = 'j-warehouse-extra-pallets-v1';
   private readonly LANG_STORAGE_KEY = 'j-warehouse-lang-v1';
   private readonly LAYOUT_SNAP_M = 0.05;
@@ -805,6 +838,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   cctvCams: JwCctvCam[] = this.buildCctvCams();
   /** Ổ điện trên sơ đồ camera — thêm thủ công, lưu localStorage. */
   powerOutlets: JwPowerOutlet[] = [];
+  /** Ổ cắm mạng trên sơ đồ camera — thêm thủ công, lưu localStorage. */
+  netOutlets: JwPowerOutlet[] = [];
 
   readonly WC_EXIT_CLEARANCE_M = 1.5;
 
@@ -872,6 +907,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.drawMode === 'camera';
   }
 
+  get showCctvLayer(): boolean {
+    return this.showCctv && !this.hideCctvOnMap;
+  }
+
   get visibleCctvCams(): JwCctvCam[] {
     return this.cctvCams.filter((c) => c.building === 'j5' || this.showJ4);
   }
@@ -908,8 +947,28 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.powerOutlets.filter((o) => o.building === 'j4').length;
   }
 
+  get visibleNetOutlets(): JwPowerOutlet[] {
+    return this.netOutlets.filter((o) => o.building === 'j5' || this.showJ4);
+  }
+
+  get selectedNetOutlet(): JwPowerOutlet | null {
+    return this.netOutlets.find((o) => o.id === this.selectedNetOutletId) || null;
+  }
+
+  get netOutletJ5Count(): number {
+    return this.netOutlets.filter((o) => o.building === 'j5').length;
+  }
+
+  get netOutletJ4Count(): number {
+    return this.netOutlets.filter((o) => o.building === 'j4').length;
+  }
+
   outletLabel(outlet: JwPowerOutlet): string {
     return outlet.label || this.t('outlet.custom');
+  }
+
+  netOutletLabel(outlet: JwPowerOutlet): string {
+    return outlet.label || this.t('net.custom');
   }
 
   outletScreenX(outlet: JwPowerOutlet): number {
@@ -1011,6 +1070,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     this.selectedCctvId = cam.id;
     this.selectedOutletId = null;
+    this.selectedNetOutletId = null;
     this.selectedBlock = null;
     this.showScanInput = false;
     if (this.show3D) this.syncRack3dInputs();
@@ -1117,6 +1177,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   selectOutlet(outlet: JwPowerOutlet, event?: Event, focus = true): void {
     event?.stopPropagation();
     this.selectedOutletId = outlet.id;
+    this.selectedNetOutletId = null;
     this.selectedCctvId = null;
     this.selectedBlock = null;
     this.showScanInput = false;
@@ -1129,28 +1190,102 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (!this.canEditCctv) return;
     const pt = this.clientToCctvMeter(outlet, event.clientX, event.clientY);
     if (!pt) return;
-    this.beginOutletDrag(outlet, pt, event);
+    this.beginOutletDrag(outlet, pt, event, 'power');
+  }
+
+  onNetOutletClick(outlet: JwPowerOutlet, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (this.outletSuppressClick) {
+      this.outletSuppressClick = false;
+      return;
+    }
+    this.selectNetOutlet(outlet, event, false);
+  }
+
+  selectNetOutlet(outlet: JwPowerOutlet, event?: Event, focus = true): void {
+    event?.stopPropagation();
+    this.selectedNetOutletId = outlet.id;
+    this.selectedOutletId = null;
+    this.selectedCctvId = null;
+    this.selectedBlock = null;
+    this.showScanInput = false;
+  }
+
+  onNetOutletMovePointerDown(outlet: JwPowerOutlet, event: PointerEvent): void {
+    if (this.mapTool === 'pan' || event.button !== 0) return;
+    event.stopPropagation();
+    this.selectNetOutlet(outlet, event, false);
+    if (!this.canEditCctv) return;
+    const pt = this.clientToCctvMeter(outlet, event.clientX, event.clientY);
+    if (!pt) return;
+    this.beginOutletDrag(outlet, pt, event, 'net');
   }
 
   addOutlet(building: 'j5' | 'j4', event?: Event): void {
     event?.stopPropagation();
     if (!this.canEditCctv) return;
-    if (this.powerOutlets.length >= 80) return;
+    const room = this.MAX_OUTLETS - this.powerOutlets.length;
+    if (room <= 0) return;
+    const qty = Math.max(1, Math.min(50, Math.floor(Number(this.outletAddCount) || 1)));
+    this.outletAddCount = qty;
+    const count = Math.min(qty, room);
     if (building === 'j4' && this.buildingView !== 'j4-j5') {
       this.setBuildingView('j4-j5');
     }
-    const same = this.powerOutlets.filter((o) => o.building === building).length;
-    const outlet: JwPowerOutlet = {
-      id: 'OUT-tmp',
-      num: 0,
-      building,
-      xM: this.round2(Math.min(this.LENGTH_M - 2, 10 + (same % 10) * 8)),
-      yM: this.round2(Math.min(this.WIDTH_M - 2, 4 + Math.floor(same / 10) * 5))
-    };
-    this.powerOutlets = [...this.powerOutlets, outlet];
+    const added: JwPowerOutlet[] = [];
+    const existing = this.powerOutlets.filter((o) => o.building === building).length;
+    for (let i = 0; i < count; i++) {
+      const same = existing + i;
+      added.push({
+        id: 'OUT-tmp',
+        num: 0,
+        building,
+        xM: this.round2(Math.min(this.LENGTH_M - 2, 8 + (same % 16) * 5.5)),
+        yM: this.round2(Math.min(this.WIDTH_M - 2, 3 + Math.floor(same / 16) * 3.5))
+      });
+    }
+    this.powerOutlets = [...this.powerOutlets, ...added];
     this.syncOutletNums();
     this.saveOutletLayout();
-    this.selectOutlet(outlet, event, false);
+    this.selectOutlet(added[added.length - 1], event, false);
+  }
+
+  addNetOutlet(building: 'j5' | 'j4', event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canEditCctv) return;
+    const room = this.MAX_OUTLETS - this.netOutlets.length;
+    if (room <= 0) return;
+    const qty = Math.max(1, Math.min(50, Math.floor(Number(this.netAddCount) || 1)));
+    this.netAddCount = qty;
+    const count = Math.min(qty, room);
+    if (building === 'j4' && this.buildingView !== 'j4-j5') {
+      this.setBuildingView('j4-j5');
+    }
+    const added: JwPowerOutlet[] = [];
+    const existing = this.netOutlets.filter((o) => o.building === building).length;
+    for (let i = 0; i < count; i++) {
+      const same = existing + i;
+      added.push({
+        id: 'NET-tmp',
+        num: 0,
+        building,
+        xM: this.round2(Math.min(this.LENGTH_M - 2, 11 + (same % 16) * 5.5)),
+        yM: this.round2(Math.min(this.WIDTH_M - 2, 8 + Math.floor(same / 16) * 3.5))
+      });
+    }
+    this.netOutlets = [...this.netOutlets, ...added];
+    this.syncNetOutletNums();
+    this.saveNetOutletLayout();
+    this.selectNetOutlet(added[added.length - 1], event, false);
+  }
+
+  toggleHideCctvOnMap(event?: Event): void {
+    event?.stopPropagation();
+    this.hideCctvOnMap = !this.hideCctvOnMap;
+    this.persistHideCctvOnMap();
+    if (this.show3D) this.syncRack3dInputs();
+    this.cdr.markForCheck();
   }
 
   removeOutlet(outlet: JwPowerOutlet, event?: Event): void {
@@ -1166,6 +1301,19 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.selectedOutletId = keep?.id ?? this.visiblePowerOutlets[0]?.id ?? null;
   }
 
+  removeNetOutlet(outlet: JwPowerOutlet, event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    if (!this.canEditCctv) return;
+    if (!confirm(this.t('net.deleteConfirm', { id: outlet.id, bldg: outlet.building.toUpperCase() }))) return;
+    const keep =
+      this.selectedNetOutletId === outlet.id ? null : this.netOutlets.find((o) => o.id === this.selectedNetOutletId);
+    this.netOutlets = this.netOutlets.filter((o) => o !== outlet);
+    this.syncNetOutletNums();
+    this.saveNetOutletLayout();
+    this.selectedNetOutletId = keep?.id ?? this.visibleNetOutlets[0]?.id ?? null;
+  }
+
   private syncOutletNums(): void {
     const sel = this.powerOutlets.find((o) => o.id === this.selectedOutletId) || null;
     this.powerOutlets.forEach((o, i) => {
@@ -1175,13 +1323,24 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (sel) this.selectedOutletId = sel.id;
   }
 
+  private syncNetOutletNums(): void {
+    const sel = this.netOutlets.find((o) => o.id === this.selectedNetOutletId) || null;
+    this.netOutlets.forEach((o, i) => {
+      o.num = i + 1;
+      o.id = `NET-${String(o.num).padStart(2, '0')}`;
+    });
+    if (sel) this.selectedNetOutletId = sel.id;
+  }
+
   private beginOutletDrag(
     outlet: JwPowerOutlet,
     pt: { xM: number; yM: number },
-    event: PointerEvent
+    event: PointerEvent,
+    kind: 'power' | 'net' = 'power'
   ): void {
     this.outletDrag = {
       outlet,
+      kind,
       origXM: outlet.xM,
       origYM: outlet.yM,
       startXM: pt.xM,
@@ -1213,11 +1372,15 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private endOutletDrag(): void {
     if (!this.outletDrag) return;
     const moved = this.outletDragMoved;
+    const kind = this.outletDrag.kind;
     this.ngZone.run(() => {
       this.outletDrag = null;
       this.outletDraggingId = null;
       this.outletDragMoved = false;
-      if (moved) this.saveOutletLayout();
+      if (moved) {
+        if (kind === 'net') this.saveNetOutletLayout();
+        else this.saveOutletLayout();
+      }
       this.cdr.markForCheck();
     });
     if (moved) this.outletSuppressClick = true;
@@ -1241,13 +1404,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     }
   }
 
-  private hydrateOutlet(s: Partial<JwPowerOutlet>, i: number): JwPowerOutlet | null {
+  private hydrateOutlet(s: Partial<JwPowerOutlet>, i: number, prefix = 'OUT'): JwPowerOutlet | null {
     const building = s.building === 'j4' ? 'j4' : 'j5';
     const xM = Number(s.xM);
     const yM = Number(s.yM);
     if (!Number.isFinite(xM) || !Number.isFinite(yM)) return null;
     return {
-      id: String(s.id || `OUT-${String(i + 1).padStart(2, '0')}`),
+      id: String(s.id || `${prefix}-${String(i + 1).padStart(2, '0')}`),
       num: Number(s.num) || i + 1,
       building,
       xM: this.round2(Math.max(0.4, Math.min(this.LENGTH_M - 0.4, xM))),
@@ -1274,6 +1437,45 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       );
     } catch (err) {
       console.error('[JWarehouse] saveOutletLayout failed', err);
+    }
+  }
+
+  private loadNetOutletLayout(): void {
+    try {
+      const raw = localStorage.getItem(this.NET_OUTLET_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { version?: number; outlets?: Array<Partial<JwPowerOutlet>> };
+      if (!Array.isArray(parsed?.outlets)) return;
+      const outlets = parsed.outlets
+        .map((s, i) => this.hydrateOutlet(s, i, 'NET'))
+        .filter((o): o is JwPowerOutlet => !!o);
+      if (outlets.length) {
+        this.netOutlets = outlets;
+        this.syncNetOutletNums();
+      }
+    } catch (err) {
+      console.error('[JWarehouse] loadNetOutletLayout failed', err);
+    }
+  }
+
+  private saveNetOutletLayout(): void {
+    try {
+      localStorage.setItem(
+        this.NET_OUTLET_STORAGE_KEY,
+        JSON.stringify({
+          version: 1,
+          outlets: this.netOutlets.map((o) => ({
+            id: o.id,
+            num: o.num,
+            building: o.building,
+            xM: o.xM,
+            yM: o.yM,
+            label: o.label || undefined
+          }))
+        })
+      );
+    } catch (err) {
+      console.error('[JWarehouse] saveNetOutletLayout failed', err);
     }
   }
 
@@ -1456,6 +1658,22 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       this.cctvLiveHidden = localStorage.getItem(this.CCTV_LIVE_HIDDEN_KEY) === '1';
     } catch {
       this.cctvLiveHidden = false;
+    }
+  }
+
+  private persistHideCctvOnMap(): void {
+    try {
+      localStorage.setItem(this.CCTV_MAP_HIDDEN_KEY, this.hideCctvOnMap ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private loadHideCctvOnMap(): void {
+    try {
+      this.hideCctvOnMap = localStorage.getItem(this.CCTV_MAP_HIDDEN_KEY) === '1';
+    } catch {
+      this.hideCctvOnMap = false;
     }
   }
 
@@ -1903,40 +2121,51 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.show3D) this.syncRack3dInputs();
   }
 
-  /** Dòng thông tin kho — sidebar (đầy đủ). */
-  get warehouseInfoRows(): Array<{ label: string; value: string; icon?: 'electric'; multiline?: boolean }> {
+  /** Dòng thông tin kho — sidebar. Sơ đồ camera chỉ chú thích icon ổ điện / ổ mạng. */
+  get warehouseInfoRows(): Array<{
+    label: string;
+    value: string;
+    icon?: 'electric' | 'powerOutlet' | 'netOutlet';
+    multiline?: boolean;
+  }> {
+    if (this.showCctv) {
+      return [
+        { label: this.t('info.legendPower'), value: '', icon: 'powerOutlet' },
+        { label: this.t('info.legendNet'), value: '', icon: 'netOutlet' }
+      ];
+    }
     return [...this.warehouseInfoBaseRows, ...this.warehouseInfoExtraPalletRows];
   }
 
-  /** Dòng thông tin kho — file tải về (không gồm pallet ngoài). */
-  get warehouseInfoDownloadRows(): Array<{ label: string; value: string; icon?: 'electric'; multiline?: boolean }> {
+  /** Dòng thông tin kho — file tải về, theo đúng bản đồ đang xem. */
+  get warehouseInfoDownloadRows(): Array<{
+    label: string;
+    value: string;
+    icon?: 'electric' | 'powerOutlet' | 'netOutlet';
+    multiline?: boolean;
+  }> {
+    if (this.showCctv) {
+      return [
+        { label: this.t('info.downloadCameras'), value: String(this.visibleCctvCams.length) },
+        { label: this.t('info.downloadNet'), value: String(this.visibleNetOutlets.length) },
+        { label: this.t('info.downloadPower'), value: String(this.visiblePowerOutlets.length) }
+      ];
+    }
     return this.warehouseInfoBaseRows;
   }
 
-  private get warehouseInfoBaseRows(): Array<{ label: string; value: string; icon?: 'electric'; multiline?: boolean }> {
-    const rows: Array<{ label: string; value: string; icon?: 'electric'; multiline?: boolean }> = [];
-    if (this.showCctv) {
-      rows.push(
-        {
-          label: this.t('info.cameras'),
-          value: this.t('info.camerasVal', {
-            n: this.cctvCams.length,
-            j5: this.cctvJ5Count,
-            j4: this.cctvJ4Count
-          }),
-          multiline: true
-        },
-        {
-          label: this.t('info.outlets'),
-          value: this.t('info.outletsVal', {
-            n: this.powerOutlets.length,
-            j5: this.outletJ5Count,
-            j4: this.outletJ4Count
-          }),
-          multiline: true
-        }
-      );
-    }
+  private get warehouseInfoBaseRows(): Array<{
+    label: string;
+    value: string;
+    icon?: 'electric' | 'powerOutlet' | 'netOutlet';
+    multiline?: boolean;
+  }> {
+    const rows: Array<{
+      label: string;
+      value: string;
+      icon?: 'electric' | 'powerOutlet' | 'netOutlet';
+      multiline?: boolean;
+    }> = [];
     rows.push(
       { label: this.t('info.rackRows'), value: `R1–R${this.rackCount}` },
       { label: this.t('info.rackHeight'), value: `${this.RACK_HEIGHT_M}m` },
@@ -2001,12 +2230,14 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       const first = this.visibleCctvCams[0];
       this.selectedCctvId = first?.id ?? null;
       this.selectedOutletId = null;
+      this.selectedNetOutletId = null;
       setTimeout(() => {
         if (first) this.focusCctv(first);
       }, 80);
     } else {
       this.selectedCctvId = null;
       this.selectedOutletId = null;
+      this.selectedNetOutletId = null;
     }
     if (this.show3D) this.syncRack3dInputs();
   }
@@ -2204,7 +2435,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     setInput('selectedPos', this.selectedPos);
     setInput('selectedBlockCode', this.selectedBlock?.code || null);
     setInput('slotPallets', this.slotPallets);
-    setInput('showCctv', this.showCctv);
+    setInput('showCctv', this.showCctvLayer);
     setInput('cctvCams', this.cctvCams);
     setInput('selectedCctvId', this.selectedCctvId);
     setInput('selectedCctvLabel', this.selectedCctvCam ? this.cctvCamLabel(this.selectedCctvCam) : '');
@@ -2680,9 +2911,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   selectedBlock: JwBlock | null = null;
   selectedCctvId: string | null = null;
   selectedOutletId: string | null = null;
+  selectedNetOutletId: string | null = null;
   cctvDraggingId: string | null = null;
   outletDraggingId: string | null = null;
   cctvLiveHidden = false;
+  hideCctvOnMap = false;
+  outletAddCount = 1;
+  netAddCount = 1;
   selectedLevel = 1;
   selectedPos: JwPos = 'A';
 
@@ -2750,6 +2985,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private cctvSuppressClick = false;
   private outletDrag: {
     outlet: JwPowerOutlet;
+    kind: 'power' | 'net';
     origXM: number;
     origYM: number;
     startXM: number;
@@ -2937,7 +3173,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.loadSavedLayout();
     this.loadCctvLayout();
     this.loadCctvLiveHidden();
+    this.loadHideCctvOnMap();
     this.loadOutletLayout();
+    this.loadNetOutletLayout();
     this.loadExtraPallets();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
     // của component này (template rất lớn), dù đa số trường hợp không kéo layout gì cả.
@@ -3554,6 +3792,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.selectedBlock = null;
     this.selectedCctvId = null;
     this.selectedOutletId = null;
+    this.selectedNetOutletId = null;
     this.showScanInput = false;
     this.scanPalletInput = '';
     if (this.show3D) this.syncRack3dInputs();

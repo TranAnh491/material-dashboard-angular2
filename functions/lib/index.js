@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = void 0;
+exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -101,6 +101,46 @@ exports.notifyOutboundDuplicatesAt17 = functions
     .onRun(async () => {
     const { runOutboundDupNotifyForSlot } = await Promise.resolve().then(() => __importStar(require('./outbound-dup-notify')));
     await runOutboundDupNotifyForSlot(admin.firestore(), '17');
+});
+/**
+ * Dashboard KPI: 8:30 và 17:00 T2–T7 (Asia/Ho_Chi_Minh).
+ * Đọc WO + Shipment hôm nay & mai, xuất Excel, gửi mail (EMAIL_TO) + Zalo (ASP0106).
+ */
+const runDashboardKpiReportJob = async (slot) => {
+    const { runDashboardKpiReport } = await Promise.resolve().then(() => __importStar(require('./dashboard-kpi-report')));
+    await runDashboardKpiReport(admin.firestore(), slot);
+};
+exports.notifyDashboardKpiReportMorning = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+    .pubsub.schedule('30 8 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    await runDashboardKpiReportJob('08');
+});
+exports.notifyDashboardKpiReportAfternoon = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+    .pubsub.schedule('0 17 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    await runDashboardKpiReportJob('17');
+});
+/** Nút Dashboard: gửi ngay báo cáo KPI (cùng nội dung job tự động). */
+exports.sendDashboardKpiReportManualFn = functions
+    .runWith({ secrets: [params_config_1.emailPass, params_config_1.zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const slot = (data === null || data === void 0 ? void 0 : data.slot) === '17' ? '17' : '08';
+    try {
+        const { runDashboardKpiReport } = await Promise.resolve().then(() => __importStar(require('./dashboard-kpi-report')));
+        const r = await runDashboardKpiReport(admin.firestore(), slot);
+        return { ok: true, fileName: r.fileName, emailOk: r.emailOk, zaloOk: r.zaloOk };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Không gửi') || msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
 });
 /**
  * Dashboard: tính Rack Utilization Warnings 1 lần/ngày lúc 8h (Asia/Ho_Chi_Minh), lưu vào

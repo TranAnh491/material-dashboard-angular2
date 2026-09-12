@@ -1277,35 +1277,54 @@
                   [class.jw-outlet--dragging]="outletDraggingId === outlet.id">
                   <rect
                     class="jw-outlet__hit"
-                    [attr.x]="outletScreenX(outlet) - 14"
-                    [attr.y]="outletScreenY(outlet) - 14"
-                    width="28"
-                    height="28"
-                    rx="4"
+                    [attr.x]="outletScreenX(outlet) - 9"
+                    [attr.y]="outletScreenY(outlet) - 9"
+                    width="18"
+                    height="18"
+                    rx="3"
                     (pointerdown)="onOutletMovePointerDown(outlet, $event)"
                     (click)="onOutletClick(outlet, $event)" />
                   <rect
                     class="jw-outlet__body"
-                    [attr.x]="outletScreenX(outlet) - 11"
-                    [attr.y]="outletScreenY(outlet) - 11"
-                    width="22"
-                    height="22"
-                    rx="3" />
-                  <circle class="jw-outlet__hole" [attr.cx]="outletScreenX(outlet) - 4" [attr.cy]="outletScreenY(outlet) - 2" r="2.2" />
-                  <circle class="jw-outlet__hole" [attr.cx]="outletScreenX(outlet) + 4" [attr.cy]="outletScreenY(outlet) - 2" r="2.2" />
+                    [attr.x]="outletScreenX(outlet) - 5.5"
+                    [attr.y]="outletScreenY(outlet) - 5.5"
+                    width="11"
+                    height="11"
+                    rx="2" />
+                  <text class="jw-outlet__num" [attr.x]="outletScreenX(outlet)" [attr.y]="outletScreenY(outlet)">{{ outlet.num }}</text>
+                </g>
+              </g>
+
+              <!-- Ổ cắm mạng trên sơ đồ camera -->
+              <g class="jw-outlet-layer jw-net-layer" *ngIf="showCctv">
+                <g
+                  *ngFor="let outlet of visibleNetOutlets; trackBy: trackOutlet"
+                  class="jw-outlet jw-outlet--net"
+                  [class.jw-outlet--on]="selectedNetOutletId === outlet.id"
+                  [class.jw-outlet--edit]="canEditCctv"
+                  [class.jw-outlet--dragging]="outletDraggingId === outlet.id">
                   <rect
-                    class="jw-outlet__slot"
-                    [attr.x]="outletScreenX(outlet) - 3.5"
-                    [attr.y]="outletScreenY(outlet) + 3"
-                    width="7"
-                    height="2.4"
-                    rx="1" />
-                  <text class="jw-outlet__num" [attr.x]="outletScreenX(outlet)" [attr.y]="outletScreenY(outlet) + 18">{{ outlet.num }}</text>
+                    class="jw-outlet__hit"
+                    [attr.x]="outletScreenX(outlet) - 9"
+                    [attr.y]="outletScreenY(outlet) - 9"
+                    width="18"
+                    height="18"
+                    rx="3"
+                    (pointerdown)="onNetOutletMovePointerDown(outlet, $event)"
+                    (click)="onNetOutletClick(outlet, $event)" />
+                  <rect
+                    class="jw-outlet__body"
+                    [attr.x]="outletScreenX(outlet) - 5.5"
+                    [attr.y]="outletScreenY(outlet) - 5.5"
+                    width="11"
+                    height="11"
+                    rx="2" />
+                  <text class="jw-outlet__num" [attr.x]="outletScreenX(outlet)" [attr.y]="outletScreenY(outlet)">{{ outlet.num }}</text>
                 </g>
               </g>
 
               <!-- 20 camera CCTV — J5 (12) + J4 (8) -->
-              <g class="jw-cctv-layer" *ngIf="showCctv">
+              <g class="jw-cctv-layer" *ngIf="showCctvLayer">
                 <g
                   *ngFor="let cam of visibleCctvCams; trackBy: trackCctv"
                   class="jw-cctv"
@@ -1347,7 +1366,7 @@
 
         <div
           class="jw-cctv-monitor"
-          *ngIf="!cctvLiveHidden && (showCctv && !show3D && !showUtilization) ? selectedCctvCam : null as cam"
+          *ngIf="!cctvLiveHidden && (showCctvLayer && !show3D && !showUtilization) ? selectedCctvCam : null as cam"
           (click)="$event.stopPropagation()">
           <div class="jw-cctv-monitor__head">
             <span class="jw-cctv-monitor__rec" aria-hidden="true"></span>
@@ -1414,7 +1433,7 @@
         <button
           type="button"
           class="jw-cctv-monitor-show"
-          *ngIf="cctvLiveHidden && showCctv && !show3D && !showUtilization && selectedCctvCam"
+          *ngIf="cctvLiveHidden && showCctvLayer && !show3D && !showUtilization && selectedCctvCam"
           (click)="toggleCctvLive($event)">
           <i class="material-icons">videocam</i>
           {{ t('cctv.showLive') }}
@@ -1522,6 +1541,18 @@
                   <path [attr.d]="electricIconPath" />
                 </svg>
               </dd>
+              <dd *ngIf="row.icon === 'powerOutlet'" class="jw-fields__icon-dd" [attr.aria-label]="row.label">
+                <svg class="jw-legend-socket jw-legend-socket--power" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="2" y="2" width="20" height="20" rx="3" />
+                  <text x="12" y="13">1</text>
+                </svg>
+              </dd>
+              <dd *ngIf="row.icon === 'netOutlet'" class="jw-fields__icon-dd" [attr.aria-label]="row.label">
+                <svg class="jw-legend-socket jw-legend-socket--net" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="2" y="2" width="20" height="20" rx="3" />
+                  <text x="12" y="13">1</text>
+                </svg>
+              </dd>
             </div>
           </dl>
           <h3>{{ t('cctv.list') }}</h3>
@@ -1620,6 +1651,19 @@
           </div>
           <h3 class="jw-detail__section">{{ t('outlet.list') }}</h3>
           <p class="jw-detail__sub">{{ t('outlet.count', { n: powerOutlets.length, j5: outletJ5Count, j4: outletJ4Count }) }}</p>
+          <label class="jw-outlet-hide-cams">
+            <input type="checkbox" [checked]="hideCctvOnMap" (change)="toggleHideCctvOnMap($event)" />
+            {{ t('outlet.hideCams') }}
+          </label>
+          <div class="jw-outlet-qty" *ngIf="canEditCctv">
+            <span>{{ t('outlet.qty') }}</span>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              [(ngModel)]="outletAddCount"
+              (click)="$event.stopPropagation()" />
+          </div>
           <div class="jw-cctv-add" *ngIf="canEditCctv">
             <button type="button" class="jw-btn jw-btn--outline" (click)="addOutlet('j5', $event)">
               <i class="material-icons">add</i> {{ t('outlet.addJ5') }}
@@ -1662,6 +1706,61 @@
           <div class="jw-detail__btns" *ngIf="canEditCctv && selectedPowerOutlet">
             <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="removeOutlet(selectedPowerOutlet, $event)">
               <i class="material-icons">delete</i> {{ t('outlet.delete') }}
+            </button>
+          </div>
+          <h3 class="jw-detail__section">{{ t('net.list') }}</h3>
+          <p class="jw-detail__sub">{{ t('net.count', { n: netOutlets.length, j5: netOutletJ5Count, j4: netOutletJ4Count }) }}</p>
+          <div class="jw-outlet-qty" *ngIf="canEditCctv">
+            <span>{{ t('net.qty') }}</span>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              [(ngModel)]="netAddCount"
+              (click)="$event.stopPropagation()" />
+          </div>
+          <div class="jw-cctv-add" *ngIf="canEditCctv">
+            <button type="button" class="jw-btn jw-btn--outline" (click)="addNetOutlet('j5', $event)">
+              <i class="material-icons">add</i> {{ t('net.addJ5') }}
+            </button>
+            <button type="button" class="jw-btn jw-btn--outline" (click)="addNetOutlet('j4', $event)">
+              <i class="material-icons">add</i> {{ t('net.addJ4') }}
+            </button>
+          </div>
+          <div class="jw-cctv-list">
+            <div
+              class="jw-cctv-item jw-outlet-item"
+              *ngFor="let outlet of visibleNetOutlets; trackBy: trackOutlet"
+              [class.jw-cctv-item--on]="selectedNetOutletId === outlet.id"
+              (click)="selectNetOutlet(outlet, $event)">
+              <span class="jw-cctv-item__num jw-net-item__num">{{ outlet.num }}</span>
+              <span class="jw-cctv-item__meta">
+                <strong>{{ outlet.id }}</strong>
+                <em>{{ netOutletLabel(outlet) }} · {{ outlet.building | uppercase }}</em>
+              </span>
+              <button
+                type="button"
+                class="jw-cctv-item__del"
+                *ngIf="canEditCctv"
+                [title]="t('net.delete')"
+                (click)="removeNetOutlet(outlet, $event)">
+                <i class="material-icons">close</i>
+              </button>
+            </div>
+          </div>
+          <dl class="jw-fields" *ngIf="selectedNetOutlet as outlet">
+            <div class="jw-fields__row">
+              <dt>{{ t('cctv.building') }}</dt>
+              <dd>{{ outlet.building | uppercase }}</dd>
+            </div>
+            <div class="jw-fields__row">
+              <dt>{{ t('outlet.pos') }}</dt>
+              <dd>{{ outlet.xM | number:'1.1-1' }}m · {{ outlet.yM | number:'1.1-1' }}m</dd>
+            </div>
+          </dl>
+          <div class="jw-detail__btns" *ngIf="canEditCctv && selectedNetOutlet">
+            <button type="button" class="jw-btn jw-btn--outline jw-btn--block" (click)="removeNetOutlet(selectedNetOutlet, $event)">
+              <i class="material-icons">delete</i> {{ t('net.delete') }}
             </button>
           </div>
         </ng-container>

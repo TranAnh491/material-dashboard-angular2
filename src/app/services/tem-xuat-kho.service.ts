@@ -62,35 +62,42 @@ export class TemXuatKhoService {
   }
 
   /**
-   * Tập mã hàng trong PXK theo LSX (validate scan xuất).
+   * Mã + PO trong PXK theo LSX (validate scan xuất).
    * Lấy mọi dòng có materialCode — không loại trừ mã kho như tem xuất kho.
    * Rỗng = không có PXK / không có dòng.
    */
-  async loadPxkMaterialCodesForLsx(factory: 'ASM1' | 'ASM2', lsxRaw: string): Promise<Set<string>> {
+  async loadPxkScanPairsForLsx(
+    factory: 'ASM1' | 'ASM2',
+    lsxRaw: string
+  ): Promise<{ materialCode: string; po: string }[]> {
     const variants = this.buildLsxVariants(factory, lsxRaw);
-    const codes = new Set<string>();
     if (variants.length === 0) {
-      return codes;
+      return [];
     }
 
-    const collect = (data: any): void => {
-      if (!data) return;
+    const collect = (data: any): { materialCode: string; po: string }[] => {
+      if (!data) return [];
       const rawLines = Array.isArray(data.lines) ? data.lines : [];
+      const out: { materialCode: string; po: string }[] = [];
       for (const ln of rawLines) {
         const materialCode = String(ln?.materialCode ?? '').trim().toUpperCase();
-        if (materialCode) {
-          codes.add(materialCode);
-        }
+        if (!materialCode) continue;
+        const po = String(ln?.po ?? ln?.poNumber ?? '')
+          .trim()
+          .toUpperCase()
+          .replace(/\s/g, '');
+        out.push({ materialCode, po });
       }
+      return out;
     };
 
     for (const lsx of variants) {
       const docId = `${factory}_${lsx.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
       const snap = await this.firestore.collection('pxk-import-data').doc(docId).get().toPromise();
       if (snap?.exists) {
-        collect(snap.data());
-        if (codes.size > 0) {
-          return codes;
+        const pairs = collect(snap.data());
+        if (pairs.length > 0) {
+          return pairs;
         }
       }
     }
@@ -103,15 +110,25 @@ export class TemXuatKhoService {
           ref.where('factory', '==', factory).where('lsx', 'in', chunk)
         ).get()
       );
+      const pairs: { materialCode: string; po: string }[] = [];
       for (const doc of qSnap.docs) {
-        collect(doc.data());
+        pairs.push(...collect(doc.data()));
       }
-      if (codes.size > 0) {
-        return codes;
+      if (pairs.length > 0) {
+        return pairs;
       }
     }
 
-    return codes;
+    return [];
+  }
+
+  /**
+   * Tập mã hàng trong PXK theo LSX (validate scan xuất).
+   * Rỗng = không có PXK / không có dòng.
+   */
+  async loadPxkMaterialCodesForLsx(factory: 'ASM1' | 'ASM2', lsxRaw: string): Promise<Set<string>> {
+    const pairs = await this.loadPxkScanPairsForLsx(factory, lsxRaw);
+    return new Set(pairs.map(p => p.materialCode));
   }
 
   private parsePxkDocLines(data: any): PxkLineExport[] {
