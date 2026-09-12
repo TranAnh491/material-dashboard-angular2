@@ -15,11 +15,10 @@ function rangeSlots(prefix: string, from: number, to: number): string[] {
   return out;
 }
 
-/** Token J warehouse: R11-1A (kệ thường) hoặc S01-1-3 (kệ kho mát, 7 tầng, không A/B/C). */
+/** Token kho J: vị trí bắt đầu bằng R1–R99 hoặc S1–S99 (kèm hậu tố cũng tính). */
 export function isJWarehouseLocation(loc: string): boolean {
-  const raw = String(loc || '').trim().toUpperCase();
-  if (/^R\d+-\d[ABC]\b/.test(raw)) return true;
-  return /^S\d{2}-\d+-\d+\b/.test(raw);
+  const raw = String(loc || '').trim().toUpperCase().replace(/\s+/g, '');
+  return /^[RS](0?[1-9]|[1-9]\d)(?!\d)/.test(raw);
 }
 
 /** Dãy kệ S trong kho mát J: 0.5m; S01 cách vách VP Kho 5.5m; S01–S02 = 2 block, các dãy sau = 3 block × 7 tầng. Kéo đến sát kho hóa chất. */

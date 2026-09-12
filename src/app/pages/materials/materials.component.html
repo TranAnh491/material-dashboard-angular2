@@ -47,6 +47,16 @@
                 <i class="material-icons">swap_horiz</i>
                 <span>{{ selectedFactory }}</span>
               </button>
+              <button type="button"
+                      class="kk-play-btn"
+                      (click)="playKkStock()"
+                      [disabled]="kkLocMapLoading || kkLocMapBusy"
+                      [class.kk-play-btn--on]="kkStockLoaded"
+                      title="Đọc tồn kho">
+                <i class="material-icons" [class.rotating]="kkLocMapLoading || kkLocMapBusy">
+                  {{ (kkLocMapLoading || kkLocMapBusy) ? 'sync' : 'play_arrow' }}
+                </i>
+              </button>
               <div class="kk-loc-map__modes" *ngIf="!kkActiveProductType">
                 <button type="button"
                         [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
@@ -77,7 +87,7 @@
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkTypeScanModal()"
                       [disabled]="!canEdit || kkLocMapBusy"
-                      title="Scan pallet rồi scan mã hàng để tick KK">
+                      title="Scan vị trí rồi scan mã hàng — ghi mã và lượng vào kệ">
                 <i class="material-icons">qr_code_scanner</i>
                 <span class="btn-label">Scan</span>
               </button>
@@ -162,7 +172,7 @@
                       [class.kk-loc-map__zone--j]="w.id === 'J'"
                       (click)="setKkTypeZone(w.id)"
                       [disabled]="kkLocMapLoading"
-                      [title]="w.id === 'J' ? ('Kho J gồm J5 và kệ R/S — ' + kkJMovedSummary.codes + ' mã') : (w.id === 'ASM3' ? 'ASM3 / WH3' : w.label)">
+                      [title]="w.id === 'J' ? ('Kho J gồm J5 và vị trí R1–R99 / S1–S99 — ' + kkJMovedSummary.codes + ' mã') : (w.id === 'ASM3' ? 'ASM3 / WH3' : w.label)">
                 {{ w.label }}
                 <span class="kk-loc-map__zone-n" *ngIf="w.id === 'J'">{{ kkJMovedSummary.codes }}</span>
               </button>
@@ -172,10 +182,11 @@
               <input type="search"
                      [(ngModel)]="kkLocMapQuery"
                      (ngModelChange)="onKkLocMapQueryChange($event)"
-                     [placeholder]="kkLocMapView === 'material' ? 'Lọc mã hàng…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : 'Tìm mã, tên hàng, pallet…'"
+                     [placeholder]="kkLocMapView === 'material' ? 'Nhập 4 số để tìm mã…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : 'Nhập 4 số để tìm mã…'"
                      autocomplete="off"
                      autocapitalize="characters"
                      spellcheck="false">
+              <span class="kk-toolbar__search-hint" *ngIf="kkLocMapQuery && kkLocMapView !== 'location' && !kkSearchReady">Nhập đủ 4 số</span>
               <button type="button"
                       class="kk-toolbar__search-clear"
                       *ngIf="kkLocMapQuery"
@@ -207,7 +218,7 @@
                       [class.kk-loc-map__j-btn--on]="kkJOnly"
                       (click)="toggleKkJOnly()"
                       [disabled]="kkLocMapLoading"
-                      title="Chỉ hiện mã kho J (gồm J5 và kệ R/S)">
+                      title="Chỉ hiện mã kho J (gồm J5 và vị trí R1–R99 / S1–S99)">
                 <i class="material-icons">warehouse</i>
                 Chỉ hiện kho J
                 <span class="kk-loc-map__j-btn-n">{{ kkJMovedSummary.codes }} mã</span>
@@ -283,7 +294,12 @@
         <i class="material-icons">fact_check</i>
         <p>Chọn <strong>Theo vị trí</strong>, <strong>Theo mã hàng</strong> hoặc <strong>Theo loại hàng</strong> để xem.</p>
       </div>
-      <div class="kk-loc-map__legend" *ngIf="kkLocMapView === 'location'">
+      <div class="kk-loc-map__idle" *ngIf="kkLocMapView && !kkStockLoaded && !kkLocMapLoading && !kkLocMapBusy">
+        <i class="material-icons">play_circle</i>
+        <p>Bấm <strong>Play</strong> để đọc tồn kho.</p>
+        <p>Hoặc nhập <strong>4 số</strong> vào ô tìm để search.</p>
+      </div>
+      <div class="kk-loc-map__legend" *ngIf="kkLocMapView === 'location' && kkStockLoaded">
         <span class="kk-loc-map__dot kk-loc-map__dot--done">Đủ KK</span>
         <span class="kk-loc-map__dot kk-loc-map__dot--partial">Đang KK</span>
         <span class="kk-loc-map__dot kk-loc-map__dot--none">Chưa KK</span>
@@ -296,7 +312,7 @@
         <i class="material-icons rotating">sync</i>
         <span>{{ kkLocMapStatus }}</span>
       </div>
-      <div class="kk-loc-map__groups" *ngIf="!kkLocMapLoading && kkLocMapView === 'location'">
+      <div class="kk-loc-map__groups" *ngIf="!kkLocMapLoading && kkLocMapView === 'location' && kkStockLoaded">
         <section class="kk-loc-map__group" *ngFor="let group of kkLocMapGroupedBoxes">
           <header class="kk-loc-map__group-head">
             <strong>{{ group.key }}</strong>
@@ -320,7 +336,7 @@
         <p class="hidden-empty" *ngIf="!kkLocMapGroupedBoxes.length">Không có vị trí khớp.</p>
       </div>
 
-      <div class="kk-loc-map__table-wrap" *ngIf="!kkLocMapLoading && kkLocMapView === 'material'">
+      <div class="kk-loc-map__table-wrap" *ngIf="!kkLocMapLoading && kkLocMapView === 'material' && kkStockLoaded">
         <table class="kk-loc-map__table">
           <thead>
             <tr>
@@ -458,14 +474,14 @@
         <p class="hidden-empty" *ngIf="!kkLocMapFilteredMaterials.length">Không có mã hàng khớp bộ lọc.</p>
       </div>
 
-      <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type'">
+      <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type' && kkStockLoaded">
           <div class="kk-type-topbar" *ngIf="kkActiveProductType">
           <div class="kk-type-topbar__search">
             <i class="material-icons" aria-hidden="true">search</i>
             <input type="search"
                    [(ngModel)]="kkLocMapQuery"
                    (ngModelChange)="onKkLocMapQueryChange($event)"
-                   placeholder="Tìm mã, tên hàng, pallet..."
+                   placeholder="Nhập 4 số để tìm mã…"
                    autocomplete="off"
                    autocapitalize="characters"
                    spellcheck="false">
@@ -801,8 +817,8 @@
       <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
         Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
       </button>
-      <p class="mat-m-hint" *ngIf="searchTerm && searchTerm.length < 3 && !isLoading">
-        Cần ít nhất 3 ký tự, hoặc Scan / Enter
+      <p class="mat-m-hint" *ngIf="searchTerm && searchTerm.length < 4 && !isLoading">
+        Cần ít nhất 4 số, hoặc Scan / Enter
       </p>
     </header>
 
@@ -816,7 +832,7 @@
       <p>Nhập hoặc quét mã hàng để đổi vị trí / kho</p>
     </div>
 
-    <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 3 && filteredInventory.length === 0">
+    <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 4 && filteredInventory.length === 0">
       <i class="material-icons">search_off</i>
       <p>Không tìm thấy mã trong {{ selectedFactory }}</p>
     </div>
@@ -4546,8 +4562,8 @@
           <i class="material-icons">qr_code_scanner</i>
         </span>
         <div>
-          <h3>Scan KK</h3>
-          <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}</p>
+          <h3>Scan vị trí</h3>
+          <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
@@ -4557,7 +4573,7 @@
 
     <div class="kk-type-scan__body">
       <div *ngIf="kkTypeScanStep === 'operator'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">Bước 1: Nhập / scan mã nhân viên (chỉ 1 lần) — dùng để tick KK khi đủ số lượng</p>
+        <p class="kk-type-scan__hint">Bước 1: Scan mã nhân viên — giữ phiên đến khi tắt tab hoặc hết 12:00 / 17:00 / 20:00</p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanOperatorInput"
                  type="text"
@@ -4575,25 +4591,25 @@
         </div>
       </div>
 
-      <div *ngIf="kkTypeScanStep === 'pallet'" class="kk-type-scan__step">
+      <div *ngIf="kkTypeScanStep === 'location'" class="kk-type-scan__step">
         <p class="kk-type-scan__hint">
           NV <strong>{{ kkTypeScanOperator || '—' }}</strong>
-          · Bước 2: Scan số pallet
+          · Bước 2: Scan vị trí (vd: S07-1-1)
         </p>
         <div class="kk-type-scan__input-row">
-          <input id="kkTypeScanPalletInput"
+          <input id="kkTypeScanLocationInput"
                  type="text"
-                 [(ngModel)]="kkTypeScanPalletInput"
-                 (input)="onKkTypeScanNewline('pallet', $event)"
-                 (keydown.enter)="submitKkTypeScanPallet($event)"
-                 (keydown.tab)="submitKkTypeScanPallet($event)"
-                 placeholder="Scan pallet..."
+                 [(ngModel)]="kkTypeScanLocationInput"
+                 (input)="onKkTypeScanNewline('location', $event)"
+                 (keydown.enter)="submitKkTypeScanLocation($event)"
+                 (keydown.tab)="submitKkTypeScanLocation($event)"
+                 placeholder="Scan vị trí..."
                  autocomplete="off"
                  autocapitalize="characters"
                  enterkeyhint="next"
                  spellcheck="false"
                  [disabled]="kkTypeScanBusy">
-          <button type="button" (click)="submitKkTypeScanPallet()" [disabled]="kkTypeScanBusy || !kkTypeScanPalletInput.trim()">
+          <button type="button" (click)="submitKkTypeScanLocation()" [disabled]="kkTypeScanBusy || !kkTypeScanLocationInput.trim()">
             <i class="material-icons">arrow_forward</i>
           </button>
         </div>
@@ -4601,9 +4617,9 @@
 
       <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
         <p class="kk-type-scan__hint">
-          Pallet <strong>{{ kkTypeScanPallet }}</strong>
+          Vị trí <strong>{{ kkTypeScanLocation }}</strong>
           · NV {{ kkTypeScanOperator || '—' }}
-          · Scan mã hàng
+          · Scan mã hàng tại kệ này. Scan mã khác = làm mã mới. Đổi kệ: bấm Đổi vị trí.
         </p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanQrInput"
@@ -4626,8 +4642,14 @@
           <div class="kk-type-scan__code-head">
             <div class="kk-type-scan__code-title">
               <strong>{{ kkTypeScanMaterialCode }}</strong>
-              <span>Tổng cuộn <b>{{ kkTypeScanCodeRollsTotal | number }}</b>
-                · {{ kkTypeScanCodeRows.length | number }} dòng</span>
+              <span class="kk-type-scan__frac"
+                    [class.kk-type-scan__frac--ok]="kkTypeScanProgressTone === 'ok'"
+                    [class.kk-type-scan__frac--low]="kkTypeScanProgressTone === 'low'"
+                    [class.kk-type-scan__frac--over]="kkTypeScanProgressTone === 'over'">
+                {{ kkTypeScanCartonScanned }} / {{ kkTypeScanCartonTotal || '—' }} thùng
+              </span>
+              <span>{{ kkTypeScanStatusText }}</span>
+              <span>Lượng {{ formatNumber(kkTypeScanQtyScanned) }} / {{ formatNumber(kkTypeScanQtyTotal) }}</span>
             </div>
             <label class="kk-type-scan__std">
               Standard
@@ -4655,8 +4677,9 @@
                 <tr>
                   <th>PO</th>
                   <th>IMD</th>
+                  <th>Vị trí</th>
                   <th>Lượng</th>
-                  <th>Cuộn</th>
+                  <th>Đã quét</th>
                   <th>KK</th>
                 </tr>
               </thead>
@@ -4666,8 +4689,9 @@
                     (click)="canEdit && !kkTypeScanBusy && onKkTypeScanRowTick(line, !line.kkChecked)">
                   <td>{{ line.poNumber || '—' }}</td>
                   <td>{{ getDisplayIMD(line) }}</td>
+                  <td>{{ primaryLocationDisplay(line.location) }}</td>
                   <td class="n">{{ formatNumber(calculateCurrentStock(line)) }}</td>
-                  <td class="n">{{ getKkRollsText(line) }}</td>
+                  <td class="n">{{ formatNumber(getKkScanCount(line)) }}</td>
                   <td class="kk">
                     <span class="kk-type-scan__kk-mark" [class.kk-type-scan__kk-mark--on]="!!line.kkChecked">
                       <i class="material-icons">{{ line.kkChecked ? 'check_box' : 'check_box_outline_blank' }}</i>
@@ -4680,9 +4704,9 @@
           <p class="kk-type-scan__empty" *ngIf="!kkTypeScanCodeRows.length">Không có dòng tồn mã này{{ kkActiveProductType ? ' trong loại hàng' : '' }}.</p>
         </div>
 
-        <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToPallet()" [disabled]="kkTypeScanBusy">
+        <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToLocation()" [disabled]="kkTypeScanBusy">
           <i class="material-icons">swap_horiz</i>
-          Đổi pallet
+          Đổi vị trí
         </button>
         <ul class="kk-type-scan__log" *ngIf="kkTypeScanLogs.length">
           <li *ngFor="let log of kkTypeScanLogs"

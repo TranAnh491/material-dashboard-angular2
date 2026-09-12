@@ -272,6 +272,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapLoading = false;
   kkLocMapStatus = '';
   kkLocMapQuery = '';
+  /** Đã đọc tồn kho (Play hoặc search đủ 4 số). Mở trang không tự đọc. */
+  kkStockLoaded = false;
   kkLocMapView: 'location' | 'material' | 'type' | null = null;
   kkLocMapWarehouseFilter: '' | KkWarehouse = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
@@ -382,11 +384,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkTypePalletNotesSig = '';
   private kkTypePalletNotesCached = new Map<string, string>();
   showKkTypeScanModal = false;
-  kkTypeScanStep: 'operator' | 'pallet' | 'codes' = 'pallet';
+  kkTypeScanStep: 'operator' | 'location' | 'codes' = 'location';
   kkTypeScanOperator = '';
   kkTypeScanOperatorInput = '';
-  kkTypeScanPallet = '';
-  kkTypeScanPalletInput = '';
+  kkTypeScanLocation = '';
+  kkTypeScanLocationInput = '';
   kkTypeScanQrInput = '';
   kkTypeScanBusy = false;
   kkTypeScanMaterialCode = '';
@@ -395,6 +397,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeScanSkipCount = 0;
   kkTypeScanMissCount = 0;
   kkTypeScanLogs: Array<{ ok: boolean; skip?: boolean; text: string }> = [];
+  kkTypeScanOpUntil: Date | null = null;
+  private kkTypeScanExtraLines: InventoryMaterial[] = [];
+  private kkTypeScanCartons: Record<string, number> = {};
+  private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
+  private kkScanOpTimer: any;
   kkTypePrintBusy = false;
   showKkTypeReportMenu = false;
   showKkCodeLookup = false;
@@ -416,7 +423,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkCountWh3 = true;
   /** Khi Tính WH3/ASM3: chỉ hiện dòng kho ASM3 / WH3. */
   kkWh3Only = false;
-  /** Chỉ hiện mã / vị trí đã gán kệ kho J mới (Rxx-xA/B/C hoặc Sxx-x-x). */
+  /** Chỉ hiện mã / vị trí kho J (R1–R99, S1–S99, J5, TRA…). */
   kkJOnly = false;
   private kkJMovedSig = '';
   private kkJMovedCached = { codes: 0, lines: 0, stock: 0 };
@@ -2353,7 +2360,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   runMobileNguyenLieuSearch(): void {
     const term = String(this.searchTerm || '').trim().toUpperCase();
     this.searchTerm = term;
-    if (!term) return;
+    if (!term || term.length < 4) return;
     void this.performSearch(term);
   }
 
@@ -2568,6 +2575,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
+    this.restoreKkScanOpSession();
     this.loadPermissions();
     this.isLocationColumnUnlocked = this.TEMP_UNLOCK_LOCATION_WH_PALLET || this.locationUnlock.isUnlocked();
     this.locationUnlock.unlocked$.pipe(takeUntil(this.destroy$)).subscribe(unlocked => {
@@ -2716,6 +2724,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy(): void {
     this.stopScanning();
     this.stopKkLive();
+    if (this.kkScanOpTimer) {
+      clearTimeout(this.kkScanOpTimer);
+      this.kkScanOpTimer = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
     this.kkLiveStop$.complete();
@@ -5265,9 +5277,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    if (!this.isLocationSearchActive && searchTerm.length < 3) {
+    const minSearchLen = this.isNguyenLieuPage ? 4 : 3;
+    if (!this.isLocationSearchActive && searchTerm.length < minSearchLen) {
       this.filteredInventory = [];
-      console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất 3 ký tự)`);
+      console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất ${minSearchLen} ký tự)`);
       return;
     }
 
@@ -6168,6 +6181,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   enterKkLocMap(): void {
     this.showKkLocMap = true;
     this.kkLocMapQuery = '';
+    this.kkStockLoaded = false;
     this.kkLocMapView = 'type';
     this.kkLocMapWarehouseFilter = '';
     this.kkCountWh3 = true;
@@ -6185,7 +6199,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
-    setTimeout(() => void this.loadKkCatalogForMap(), 0);
+    setTimeout(() => void this.loadKkCatalogMeta(), 0);
   }
 
   closeKkLocMap(): void {
@@ -6193,6 +6207,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapLoading = false;
     this.kkLocMapStatus = '';
     this.kkLocMapQuery = '';
+    this.kkStockLoaded = false;
     this.kkLocMapView = null;
     this.kkLocMapWarehouseFilter = '';
     this.kkCountWh3 = true;
@@ -6482,15 +6497,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
+    if (!this.kkStockLoaded) return;
     if (view === 'location') void this.loadKkLocMap();
     else if (view === 'material') void this.loadKkByMaterial();
     else void this.loadKkCatalogForMap();
   }
 
-  refreshKkLocMap(): void {
+  /** Nút Play: đọc tồn kho. Search không bấm Play thì chỉ chạy khi đủ 4 số. */
+  playKkStock(): void {
+    this.refreshKkLocMap(true);
+  }
+
+  refreshKkLocMap(force = false): void {
+    if (force) this.invalidateKkInvSnapCache(this.selectedFactory);
     if (this.kkLocMapView === 'material') void this.loadKkByMaterial();
     else if (this.kkLocMapView === 'location') void this.loadKkLocMap();
     else if (this.kkLocMapView === 'type') {
+      void this.loadKkCatalogForMap(true);
+    } else {
+      this.kkLocMapView = 'type';
       void this.loadKkCatalogForMap(true);
     }
   }
@@ -7019,7 +7044,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const q = this.kkEffectiveSearchQuery();
     if (!q) return this.kkCatalogEntries;
     return this.kkCatalogEntries.filter((e) =>
-      this.kkCodeMatchesSearch(e.groupCode, q) || e.productType.toUpperCase().includes(q)
+      this.kkCodeMatchesSearch(e.groupCode, q) ||
+      (!this.isKkFullMaterialQuery(q) && e.productType.toUpperCase().includes(q))
     );
   }
 
@@ -7027,8 +7053,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const q = this.kkEffectiveSearchQuery();
     if (!q) return this.kkLocMapByType;
     return this.kkLocMapByType.filter((r) =>
-      r.productType.toUpperCase().includes(q) ||
-      r.groupCodes.some((g) => this.kkCodeMatchesSearch(g, q))
+      r.groupCodes.some((g) => this.kkCodeMatchesSearch(g, q)) ||
+      (!this.isKkFullMaterialQuery(q) && r.productType.toUpperCase().includes(q))
     );
   }
 
@@ -7357,12 +7383,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       let totalLines = 0;
       let searchHit = false;
       for (const m of raw) {
-        const code = String(m.materialCode || '').toUpperCase();
-        if (q && !searchHit) {
-          const pallet = String(m.palletId || '').toUpperCase();
-          const name = this.getKkMaterialName(m).toUpperCase();
-          if (this.kkCodeMatchesSearch(code, q) || pallet.includes(q) || name.includes(q)) searchHit = true;
-        }
+        if (q && !searchHit && this.kkLineMatchesSearchQuery(m, q)) searchHit = true;
         const wh = this.kkWarehouseFromLocation(m.location);
         if (!this.kkMatchesWh3Mode(wh)) continue;
         if (zone && wh !== zone) continue;
@@ -7372,7 +7393,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         totalLines += 1;
         if (this.isKkFlagOn(m.kkChecked)) checked += 1;
       }
-      if (q && !searchHit) {
+      if (q && !searchHit && !this.isKkFullMaterialQuery(q)) {
         searchHit = Array.from(cur.sources).some((s) => s.toUpperCase().includes(q));
       }
       cur.stock = stock;
@@ -7383,10 +7404,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const built = Array.from(map.values())
       .filter((v) => {
         const queryHit = !q ? true : (
-          v.productType.toUpperCase().includes(q)
+          (!this.isKkFullMaterialQuery(q) && v.productType.toUpperCase().includes(q))
           || Array.from(v.groups).some((g) => this.kkCodeMatchesSearch(g, q))
           || v.searchHit
-          || (this.isKkConnector110PType(v.productType, Array.from(v.groups))
+          || (!this.isKkFullMaterialQuery(q)
+            && this.isKkConnector110PType(v.productType, Array.from(v.groups))
             && (/1\s*[-–]?\s*4P/.test(q) || /5\s*[-–]?\s*10P/.test(q)))
         );
         if (!queryHit) return false;
@@ -7839,11 +7861,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const q = this.kkEffectiveSearchQuery(this.kkLocMapQuery || this.kkTypeDetailQuery);
     if (q) {
-      rows = rows.filter((m) => {
-        const pallet = String(m.palletId || '').toUpperCase();
-        const name = this.getKkMaterialName(m).toUpperCase();
-        return this.kkCodeMatchesSearch(String(m.materialCode || ''), q) || pallet.includes(q) || name.includes(q);
-      });
+      rows = rows.filter((m) => this.kkLineMatchesSearchQuery(m, q));
     }
     if (this.kkTypeSortQtyDesc) {
       rows = [...rows].sort((a, b) => this.calculateCurrentStock(b) - this.calculateCurrentStock(a));
@@ -7950,18 +7968,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return result;
   }
 
-  /** Search only after 4+ characters; always uppercase. */
+  get kkSearchReady(): boolean {
+    return !!this.kkEffectiveSearchQuery();
+  }
+
+  /** Mã đầy đủ: B001800 / A012345 / R000001 (+ hậu tố). Không còn khớp nhóm B001 hay đoạn số 1800. */
+  private isKkFullMaterialQuery(q: string): boolean {
+    return /^[ABR]\d{6,}$/.test(String(q || '').trim().toUpperCase());
+  }
+
+  /** Search only after 4+ characters (4 số); always uppercase. Location names may be shorter. */
   private kkEffectiveSearchQuery(raw?: string): string {
     const q = String(raw ?? (this.kkLocMapQuery || '')).trim().toUpperCase();
+    if (!q) return '';
+    if (this.kkLocMapView === 'location') return q;
     return q.length >= 4 ? q : '';
   }
 
-  /** 16580 matches B016580; optional leading A/B/R. */
+  /** 16580 matches B016580; optional leading A/B/R. Full mã B001800 chỉ khớp đúng mã đó. */
   private kkCodeMatchesSearch(code: string, q: string): boolean {
     const c = String(code || '').trim().toUpperCase();
-    if (!c || !q) return false;
-    if (c.includes(q)) return true;
-    const qDigits = /^\d+$/.test(q) ? q : (/^[ABR](\d+)$/.exec(q)?.[1] || '');
+    const query = String(q || '').trim().toUpperCase();
+    if (!c || !query) return false;
+    if (this.isKkFullMaterialQuery(query)) {
+      if (c === query || c.startsWith(query)) return true;
+      const qGroup = this.kkCatalog.normalizeGroupCode(query);
+      const cGroup = this.kkCatalog.normalizeGroupCode(c);
+      return !!(qGroup && cGroup && qGroup === cGroup);
+    }
+    if (c.includes(query)) return true;
+    const qDigits = /^\d+$/.test(query) ? query : (/^[ABR](\d+)$/.exec(query)?.[1] || '');
     if (qDigits.length < 4) return false;
     const cDigits = c.replace(/\D/g, '');
     if (cDigits.includes(qDigits)) return true;
@@ -7978,6 +8014,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkLineMatchesSearchQuery(m: InventoryMaterial, q: string): boolean {
     if (!q) return true;
     if (this.kkCodeMatchesSearch(String(m.materialCode || ''), q)) return true;
+    if (this.isKkFullMaterialQuery(q)) return false;
     if (String(m.palletId || '').toUpperCase().includes(q)) return true;
     return this.getKkMaterialName(m).toUpperCase().includes(q);
   }
@@ -7989,6 +8026,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   onKkLocMapQueryChange(value: string): void {
     this.kkLocMapQuery = String(value || '').toUpperCase();
+    const q = this.kkEffectiveSearchQuery();
+    if (!q) {
+      if (this.kkLocMapView === 'type') {
+        this.kkTypeSearchDraft = '';
+        this.kkTypeDetailQuery = '';
+        this.kkTypePage = 1;
+        this.invalidateKkTypeViewCache();
+      }
+      return;
+    }
+    if (!this.kkStockLoaded && !this.kkLocMapLoading && !this.kkLocMapBusy) {
+      this.playKkStock();
+      return;
+    }
     if (this.kkLocMapView === 'type') this.onKkTypeUnifiedSearch();
   }
 
@@ -8395,7 +8446,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'D1';
   }
 
-  /** Token kho J: kệ R/S mới, tiền tố J5-/J-, locker/BOX, hoặc TRA (không cần J5-). */
+  /** Token kho J: R1–R99 / S1–S99, tiền tố J5-/J-, locker/BOX, hoặc TRA. */
   private isJWarehouseToken(loc: string): boolean {
     const raw = String(loc || '').trim().toUpperCase();
     if (!raw) return false;
@@ -8406,7 +8457,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return isJWarehouseLocation(this.stripDoiKhoWhPrefix(raw).toUpperCase());
   }
 
-  /** Kho theo vị trí: J5- và kệ J mới cùng là Kho J; 00- → 00; ASM3/WH3 → kho tạm; còn lại = D1. */
+  /** Kho theo vị trí: R1–R99 / S1–S99 / J5 → Kho J; 00- → 00; ASM3/WH3 → kho tạm; còn lại = D1. */
   kkWarehouseFromLocation(location: string | null | undefined): KkWarehouse {
     const tokens = splitMultiLocations(String(location || ''));
     const list = tokens.length ? tokens : [String(location || '')];
@@ -8917,15 +8968,105 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  get kkTypeScanOpUntilLabel(): string {
+    if (!this.kkTypeScanOpUntil) return '';
+    const h = this.kkTypeScanOpUntil.getHours();
+    const m = this.kkTypeScanOpUntil.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  private nextKkScanOpExpiry(from: Date = new Date()): Date {
+    const cutHours = [12, 17, 20];
+    for (const h of cutHours) {
+      const cut = new Date(from.getFullYear(), from.getMonth(), from.getDate(), h, 0, 0, 0);
+      if (from.getTime() < cut.getTime()) return cut;
+    }
+    return new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1, 12, 0, 0, 0);
+  }
+
+  private restoreKkScanOpSession(): void {
+    try {
+      const raw = sessionStorage.getItem(MaterialsComponent.KK_SCAN_OP_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { employeeId?: string; until?: number };
+      const id = String(parsed?.employeeId || '').trim().toUpperCase();
+      const until = Number(parsed?.until || 0);
+      if (!/^ASP\d{4}$/.test(id) || !until || Date.now() >= until) {
+        sessionStorage.removeItem(MaterialsComponent.KK_SCAN_OP_KEY);
+        return;
+      }
+      this.kkOperatorIdCache = id;
+      this.kkTypeScanOperator = id;
+      this.kkTypeScanOpUntil = new Date(until);
+      this.scheduleKkScanOpExpiry();
+    } catch {
+      sessionStorage.removeItem(MaterialsComponent.KK_SCAN_OP_KEY);
+    }
+  }
+
+  private persistKkScanOpSession(): void {
+    if (!this.kkTypeScanOperator || !this.kkTypeScanOpUntil || Date.now() >= this.kkTypeScanOpUntil.getTime()) {
+      sessionStorage.removeItem(MaterialsComponent.KK_SCAN_OP_KEY);
+      return;
+    }
+    sessionStorage.setItem(MaterialsComponent.KK_SCAN_OP_KEY, JSON.stringify({
+      employeeId: this.kkTypeScanOperator,
+      until: this.kkTypeScanOpUntil.getTime()
+    }));
+  }
+
+  private startKkScanOpSession(employeeId: string): void {
+    this.kkTypeScanOperator = employeeId;
+    this.kkOperatorIdCache = employeeId;
+    this.kkTypeScanOpUntil = this.nextKkScanOpExpiry(new Date());
+    this.persistKkScanOpSession();
+    this.scheduleKkScanOpExpiry();
+  }
+
+  private scheduleKkScanOpExpiry(): void {
+    if (this.kkScanOpTimer) {
+      clearTimeout(this.kkScanOpTimer);
+      this.kkScanOpTimer = null;
+    }
+    if (!this.kkTypeScanOpUntil) return;
+    const ms = Math.max(250, this.kkTypeScanOpUntil.getTime() - Date.now());
+    this.kkScanOpTimer = setTimeout(() => this.checkKkScanOpExpiry(), Math.min(ms, 60000));
+  }
+
+  private checkKkScanOpExpiry(): boolean {
+    if (!this.kkTypeScanOperator) return false;
+    if (this.kkTypeScanOpUntil && Date.now() < this.kkTypeScanOpUntil.getTime()) {
+      this.scheduleKkScanOpExpiry();
+      return true;
+    }
+    this.kkTypeScanOperator = '';
+    this.kkTypeScanOperatorInput = '';
+    this.kkTypeScanOpUntil = null;
+    this.kkOperatorIdCache = null;
+    sessionStorage.removeItem(MaterialsComponent.KK_SCAN_OP_KEY);
+    if (this.kkScanOpTimer) {
+      clearTimeout(this.kkScanOpTimer);
+      this.kkScanOpTimer = null;
+    }
+    if (this.showKkTypeScanModal) {
+      this.kkTypeScanStep = 'operator';
+      alert('Hết phiên làm việc (12:00 / 17:00 / 20:00). Vui lòng quét lại mã nhân viên.');
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+    }
+    return false;
+  }
+
   openKkTypeScanModal(row?: KkTypeRow): void {
     if (!this.canEdit || this.kkLocMapBusy) return;
     if (row && !row.totalLines) return;
+    this.restoreKkScanOpSession();
+    const sessionOk = this.checkKkScanOpExpiry() || !!this.kkTypeScanOperator;
     this.showKkTypeScanModal = true;
-    this.kkTypeScanOperator = this.kkOperatorIdCache || '';
     this.kkTypeScanOperatorInput = this.kkTypeScanOperator;
-    this.kkTypeScanStep = this.kkTypeScanOperator ? 'pallet' : 'operator';
-    this.kkTypeScanPallet = '';
-    this.kkTypeScanPalletInput = '';
+    this.kkTypeScanStep = sessionOk ? 'location' : 'operator';
+    this.kkTypeScanLocation = '';
+    this.kkTypeScanLocationInput = '';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanBusy = false;
     this.kkTypeScanMaterialCode = '';
@@ -8934,22 +9075,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanSkipCount = 0;
     this.kkTypeScanMissCount = 0;
     this.kkTypeScanLogs = [];
+    this.kkTypeScanExtraLines = [];
+    this.kkTypeScanCartons = {};
     this.cdr.detectChanges();
     setTimeout(() => this.focusKkTypeScanInput(
-      this.kkTypeScanStep === 'operator' ? 'kkTypeScanOperatorInput' : 'kkTypeScanPalletInput'
+      this.kkTypeScanStep === 'operator' ? 'kkTypeScanOperatorInput' : 'kkTypeScanLocationInput'
     ), 80);
   }
 
   closeKkTypeScanModal(): void {
     if (this.kkTypeScanBusy) return;
     this.showKkTypeScanModal = false;
-    this.kkTypeScanStep = 'pallet';
-    this.kkTypeScanPallet = '';
-    this.kkTypeScanPalletInput = '';
+    this.kkTypeScanStep = 'location';
+    this.kkTypeScanLocation = '';
+    this.kkTypeScanLocationInput = '';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanMaterialCode = '';
     this.kkTypeScanStandardDraft = '';
     this.kkTypeScanLogs = [];
+    this.kkTypeScanExtraLines = [];
+    this.kkTypeScanCartons = {};
   }
 
   submitKkTypeScanOperator(event?: Event): void {
@@ -8967,12 +9112,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.focusKkTypeScanInput('kkTypeScanOperatorInput');
       return;
     }
-    this.kkOperatorIdCache = shortCode;
-    this.kkTypeScanOperator = shortCode;
+    this.startKkScanOpSession(shortCode);
     this.kkTypeScanOperatorInput = shortCode;
-    this.kkTypeScanStep = 'pallet';
+    this.kkTypeScanStep = 'location';
     this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanPalletInput');
+    this.focusKkTypeScanInput('kkTypeScanLocationInput');
   }
 
   private focusKkTypeScanInput(id: string, retry = 0): void {
@@ -8987,59 +9131,116 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }, retry === 0 ? 0 : 50);
   }
 
-  onKkTypeScanNewline(kind: 'operator' | 'pallet' | 'code', event: Event): void {
+  onKkTypeScanNewline(kind: 'operator' | 'location' | 'code', event: Event): void {
     const el = event.target as HTMLInputElement | undefined;
     const raw = String(el?.value || '');
     if (!/[\r\n]/.test(raw)) return;
     const cleaned = raw.replace(/[\r\n]+/g, '').trim();
     if (kind === 'operator') this.kkTypeScanOperatorInput = cleaned;
-    else if (kind === 'pallet') this.kkTypeScanPalletInput = cleaned;
+    else if (kind === 'location') this.kkTypeScanLocationInput = cleaned;
     else this.kkTypeScanQrInput = cleaned;
     if (el) el.value = cleaned;
     if (kind === 'operator') this.submitKkTypeScanOperator(event);
-    else if (kind === 'pallet') this.submitKkTypeScanPallet(event);
+    else if (kind === 'location') this.submitKkTypeScanLocation(event);
     else void this.submitKkTypeScanCode(event);
   }
 
-  kkTypeScanPalletLines(): InventoryMaterial[] {
-    const pallet = this.kkTypeScanPallet;
-    if (!pallet) return [];
-    return this.kkScanScopeLines().filter(
-      (m) => String(m.palletId || '').trim().toUpperCase() === pallet && !!m.id
-    );
+  private normalizeKkScanLocation(raw: string): string {
+    let loc = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!loc || loc.includes('|')) return '';
+    loc = loc.replace(/^(J5|J)-/, '');
+    const khoMat = loc.match(/^S(\d{1,2})-(\d+)-(\d+)$/);
+    if (khoMat) return `S${String(Number(khoMat[1])).padStart(2, '0')}-${khoMat[2]}-${khoMat[3]}`;
+    const aisle = loc.match(/^S(\d{1,2})$/);
+    if (aisle) return `S${String(Number(aisle[1])).padStart(2, '0')}`;
+    return loc;
   }
 
-  submitKkTypeScanPallet(event?: Event): void {
+  private kkScanAisleOf(loc: string): string {
+    const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
+    const s = n.match(/^(S\d{2})(?:-|$)/);
+    if (s) return s[1];
+    const r = n.match(/^(R\d{1,2})(?=\d-|\d$|$)/);
+    if (r) return r[1];
+    return n;
+  }
+
+  private kkScanIsStagingLocation(loc: string): boolean {
+    const p = this.primaryLocationDisplay(loc);
+    const u = String(p || '').trim().toUpperCase();
+    return !u || u === '-' || /^(F62|F62TRA|IQC|NG)$/.test(u);
+  }
+
+  private kkScanHomeLocation(code: string): string {
+    const lines = this.kkStockLinesForCode(code);
+    const homes: Array<{ loc: string; stock: number; slot: boolean }> = [];
+    for (const m of lines) {
+      const loc = this.normalizeKkScanLocation(this.primaryLocationDisplay(m.location));
+      if (!loc || this.kkScanIsStagingLocation(loc)) continue;
+      const hit = homes.find((h) => h.loc === loc);
+      const stock = this.calculateCurrentStock(m);
+      if (hit) hit.stock += stock;
+      else homes.push({ loc, stock, slot: loc.includes('-') });
+    }
+    if (!homes.length) return '';
+    homes.sort((a, b) => {
+      if (a.slot !== b.slot) return a.slot ? -1 : 1;
+      return b.stock - a.stock;
+    });
+    return homes[0].loc;
+  }
+
+  private kkScanLocationAllowed(scanned: string, home: string): boolean {
+    if (!home) return true;
+    if (scanned === home) return true;
+    if (!home.includes('-') && this.kkScanAisleOf(scanned) === home) return true;
+    return false;
+  }
+
+  submitKkTypeScanLocation(event?: Event): void {
     event?.preventDefault?.();
-    const el = (event?.target as HTMLInputElement | undefined)
-      || (document.getElementById('kkTypeScanPalletInput') as HTMLInputElement | null);
-    const raw = String(el?.value ?? this.kkTypeScanPalletInput ?? '')
-      .replace(/[\r\n\t]+/g, '')
-      .replace(/[\u0000-\u001F]/g, '')
-      .trim();
-    const pallet = this.normalizeGanPalletCode(raw);
-    if (!pallet) {
-      alert('⚠️ Vui lòng scan số pallet');
+    if (!this.checkKkScanOpExpiry() && !this.kkTypeScanOperator) {
+      this.kkTypeScanStep = 'operator';
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
       return;
     }
-    this.kkTypeScanPallet = pallet;
-    this.kkTypeScanPalletInput = pallet;
+    const el = (event?.target as HTMLInputElement | undefined)
+      || (document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null);
+    const loc = this.normalizeKkScanLocation(String(el?.value ?? this.kkTypeScanLocationInput ?? ''));
+    if (!loc) {
+      alert('⚠️ Vui lòng scan vị trí');
+      return;
+    }
+    this.kkTypeScanLocation = loc;
+    this.kkTypeScanLocationInput = loc;
     this.kkTypeScanStep = 'codes';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanMaterialCode = '';
     this.kkTypeScanStandardDraft = '';
+    this.kkTypeScanCartons = {};
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanQrInput');
     this.kkTypeScanBeep('ready');
   }
 
-  backKkTypeScanToPallet(): void {
-    this.kkTypeScanStep = 'pallet';
+  backKkTypeScanToLocation(): void {
+    this.kkTypeScanStep = 'location';
+    this.kkTypeScanLocation = '';
+    this.kkTypeScanLocationInput = '';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanMaterialCode = '';
     this.kkTypeScanStandardDraft = '';
+    this.kkTypeScanCartons = {};
     this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanPalletInput');
+    this.focusKkTypeScanInput('kkTypeScanLocationInput');
+    setTimeout(() => {
+      const el = document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null;
+      if (el) {
+        el.value = '';
+        el.focus();
+      }
+    }, 80);
   }
 
   private kkTypeScanPoMatch(a: string, b: string): boolean {
@@ -9097,17 +9298,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   async submitKkTypeScanCode(event?: Event): Promise<void> {
     event?.preventDefault?.();
     if (this.kkTypeScanStep !== 'codes' || this.kkTypeScanBusy) return;
+    if (!this.checkKkScanOpExpiry() && !this.kkTypeScanOperator) {
+      this.kkTypeScanStep = 'operator';
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      return;
+    }
     const raw = this.readKkTypeScanInput('kkTypeScanQrInput', this.kkTypeScanQrInput, event);
     this.kkTypeScanQrInput = '';
     const inputEl = document.getElementById('kkTypeScanQrInput') as HTMLInputElement | null;
     if (inputEl) inputEl.value = '';
     if (!raw) return;
-
-    if (!raw.includes('|') && /^[PF]/i.test(raw)) {
-      this.kkTypeScanPalletInput = raw;
-      this.submitKkTypeScanPallet();
-      return;
-    }
 
     const parsed = this.parseInboundQrLabelDisplayFields(raw);
     const code = String(parsed.materialCode || raw || '').trim().toUpperCase();
@@ -9119,46 +9320,311 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    if (!this.kkTypeScanPallet) {
-      this.pushKkTypeScanLog(false, 'Chưa lưu số pallet');
-      this.kkTypeScanStep = 'pallet';
+    if (!this.kkTypeScanLocation) {
+      this.pushKkTypeScanLog(false, 'Chưa scan vị trí');
+      this.kkTypeScanStep = 'location';
       this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanPalletInput');
+      this.focusKkTypeScanInput('kkTypeScanLocationInput');
       return;
     }
 
+    const qty = this.parseKkScanQty(parsed.quantity) || 1;
+    const prevCode = this.kkTypeScanMaterialCode;
+    if (prevCode && prevCode !== code) {
+      this.pushKkTypeScanLog(true, `Sang mã ${code}`, true);
+    }
+    await this.applyKkTypeScanPutaway(code, parsed.po, parsed.imd, qty);
+  }
+
+  private kkStockLinesForCode(code: string): InventoryMaterial[] {
+    const u = String(code || '').trim().toUpperCase();
+    if (!u) return [];
+    const seen = new Set<string>();
+    const out: InventoryMaterial[] = [];
+    const add = (m: InventoryMaterial) => {
+      if (!m?.id || seen.has(m.id)) return;
+      if (String(m.materialCode || '').trim().toUpperCase() !== u) return;
+      if (this.calculateCurrentStock(m) <= 0) return;
+      seen.add(m.id);
+      out.push(m);
+    };
+    for (const m of this.kkScanScopeLines()) add(m);
+    this.kkLocMapTypeCache.forEach((list) => list.forEach(add));
+    this.kkLocMapMaterialCache.forEach((list) => list.forEach(add));
+    this.kkTypeScanExtraLines.forEach(add);
+    return out;
+  }
+
+  private async ensureKkScanStockLines(code: string): Promise<InventoryMaterial[]> {
+    let lines = this.kkStockLinesForCode(code);
+    if (lines.length) return lines;
+    const factories = this.selectedFactory === 'ASM2' ? (['ASM2', 'ASM1'] as const) : (['ASM1', 'ASM2'] as const);
+    try {
+      const snaps = await Promise.all(
+        factories.map((factory) =>
+          this.firestore
+            .collection('inventory-materials', (ref) =>
+              ref.where('factory', '==', factory).where('materialCode', '==', code).limit(80)
+            )
+            .get()
+            .toPromise()
+        )
+      );
+      const docs = snaps.flatMap((s) => s?.docs || []);
+      const rows = docs
+        .map((doc) => {
+          const material = this.mapKkInventoryDoc(doc);
+          material.kkChecked = this.isKkFlagOn((doc.data() as any)?.kkChecked);
+          material.factory = String((doc.data() as any)?.factory || this.selectedFactory);
+          this.stampLocationAtLoad(material);
+          this.rememberLocationBeforeEdit(material);
+          return material;
+        })
+        .filter((m) => this.calculateCurrentStock(m) > 0);
+      if (rows.length) {
+        await this.ensureCatalogForMaterialCodes([code]);
+        this.applyCatalogToMaterials(rows);
+        const seen = new Set(this.kkTypeScanExtraLines.map((m) => m.id));
+        for (const row of rows) {
+          if (!row.id || seen.has(row.id)) continue;
+          this.kkTypeScanExtraLines = [...this.kkTypeScanExtraLines, row];
+          seen.add(row.id);
+        }
+      }
+      return this.kkStockLinesForCode(code);
+    } catch (e) {
+      console.warn('[KK scan] ensureKkScanStockLines:', e);
+      return lines;
+    }
+  }
+
+  private pickKkScanLine(
+    code: string,
+    po: string,
+    imd: string
+  ): InventoryMaterial | null {
+    const lines = this.kkStockLinesForCode(code);
+    if (!lines.length) return null;
+    const loc = this.kkTypeScanLocation;
+    const scored = lines.map((m) => {
+      let score = 0;
+      if (this.kkTypeScanPoMatch(String(m.poNumber || ''), po)) score += 8;
+      if (this.kkTypeScanImdMatch(imd, this.getDisplayIMD(m))) score += 4;
+      const here = this.normalizeKkScanLocation(this.primaryLocationDisplay(m.location));
+      if (here === loc) score += 3;
+      const remain = this.calculateCurrentStock(m) - this.getKkScanCount(m);
+      if (remain > 1e-9) score += 2;
+      return { m, score, remain };
+    });
+    scored.sort((a, b) => b.score - a.score || b.remain - a.remain);
+    return scored[0].m;
+  }
+
+  private async applyKkTypeScanPutaway(code: string, po: string, imd: string, qty: number): Promise<void> {
     this.kkTypeScanMaterialCode = code;
-    const lines = this.kkTypeScanCodeRows;
-    const first = lines[0];
+    const loc = this.kkTypeScanLocation;
+    this.kkTypeScanBusy = true;
+    this.cdr.detectChanges();
+    try {
+      await this.ensureKkScanStockLines(code);
+    } finally {
+      this.kkTypeScanBusy = false;
+    }
+    const home = this.kkScanHomeLocation(code);
+    if (home && !this.kkScanLocationAllowed(loc, home)) {
+      const msg = `Đưa mã ${code} về ${home} (đã có hàng ở kệ đó). Không scan vào ${loc}.`;
+      this.pushKkTypeScanLog(false, msg);
+      this.kkTypeScanBeep('err');
+      alert(msg);
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
+
+    const line = this.pickKkScanLine(code, po, imd);
+    const first = line || this.kkTypeScanCodeRows[0];
     this.kkTypeScanStandardDraft = first ? (this.getEffectiveStandardPacking(first) || '') : '';
-    if (!lines.length) {
+    if (!line?.id) {
       this.pushKkTypeScanLog(false, `${code} — không có dòng tồn`);
       this.kkTypeScanBeep('err');
-    } else {
-      this.pushKkTypeScanLog(true, `${code} · ${lines.length} dòng · ${this.kkTypeScanCodeRollsTotal} cuộn`);
-      this.kkTypeScanBeep('ok');
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
     }
+
+    const operator = this.kkTypeScanOperator || this.kkOperatorIdCache;
+    if (!operator) {
+      this.kkTypeScanStep = 'operator';
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      return;
+    }
+
+    const fromLocation = this.normalizeMultiLocationValue(String(line.location || ''));
+    const nextLoc = this.normalizeMultiLocationValue(loc);
+    const nextScan = this.roundKkQty(this.getKkScanCount(line) + qty);
+    const stock = this.calculateCurrentStock(line);
+    const shouldKk = nextScan + 1e-9 >= stock && stock > 0;
+    const kkAt = new Date();
+
+    this.kkTypeScanBusy = true;
     this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanQrInput');
+    try {
+      const payload: Record<string, unknown> = {
+        ...this.inventoryLocationWriteFields(nextLoc),
+        kkScanCount: nextScan,
+        updatedAt: kkAt,
+        lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+        modifiedBy: operator,
+        locationManualOverride: true
+      };
+      if (shouldKk) {
+        payload.kkChecked = true;
+        payload.kkBy = operator;
+        payload.kkAt = kkAt;
+      }
+      const batch = this.firestore.firestore.batch();
+      batch.update(this.firestore.collection('inventory-materials').doc(line.id).ref, payload);
+      if (fromLocation !== nextLoc) {
+        batch.set(this.firestore.collection('material-location-history').doc().ref, {
+          factory: this.selectedFactory,
+          materialId: line.id,
+          materialCode: line.materialCode,
+          poNumber: line.poNumber || '',
+          fromLocation,
+          toLocation: nextLoc,
+          changedBy: operator,
+          changeType: 'kk-type-scan',
+          changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      if (shouldKk) {
+        batch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
+          inventoryDocId: line.id,
+          factory: this.resolveKkFactoryForMaterial(line),
+          materialCode: String(line.materialCode || '').trim().toUpperCase(),
+          materialName: String(line.materialName || '').trim(),
+          poNumber: String(line.poNumber || '').trim(),
+          batchNumber: String(line.batchNumber || '').trim(),
+          location: nextLoc,
+          quantity: Number(line.quantity) || 0,
+          stock,
+          unit: String(line.unit || '').trim(),
+          checkedBy: operator,
+          checkedAt: kkAt,
+          checkedDateKey: this.toDateKey(kkAt),
+          createdAt: new Date(),
+          source: 'kk-type-scan'
+        });
+      }
+      await batch.commit();
+
+      line.location = nextLoc;
+      line.kkScanCount = nextScan;
+      const rowMeta = line as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
+      rowMeta.__prevLocation = nextLoc;
+      rowMeta.__locationAtLoad = nextLoc;
+      rowMeta.locationManualOverride = true;
+      if (shouldKk) {
+        line.kkChecked = true;
+        line.kkBy = operator;
+        line.kkAt = kkAt;
+      }
+      const stamp = (x: InventoryMaterial) => {
+        if (x.id !== line.id) return;
+        x.location = nextLoc;
+        x.kkScanCount = nextScan;
+        if (shouldKk) {
+          x.kkChecked = true;
+          x.kkBy = operator;
+          x.kkAt = kkAt;
+        }
+      };
+      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+      this.kkTypeScanExtraLines.forEach(stamp);
+      this.patchKkInvSnapCache(line.id, {
+        location: nextLoc,
+        viTri: nextLoc,
+        kkScanCount: nextScan,
+        locationManualOverride: true,
+        ...(shouldKk ? { kkChecked: true, kkBy: operator, kkAt } : {})
+      });
+      this.syncKkTypeRows();
+      this.kkTypeScanCartons = {
+        ...this.kkTypeScanCartons,
+        [code]: (this.kkTypeScanCartons[code] || 0) + 1
+      };
+      const cartons = this.kkTypeScanCartonScanned;
+      const cartonTotal = this.kkTypeScanCartonTotal;
+      const cartonNote = cartonTotal
+        ? `${cartons}/${cartonTotal} thùng${cartons < cartonTotal ? ` · thiếu ${cartonTotal - cartons}` : cartons > cartonTotal ? ` · thừa ${cartons - cartonTotal}` : ' · đủ'}`
+        : `${cartons} thùng`;
+      this.pushKkTypeScanLog(
+        true,
+        `${code} · ${cartonNote} · lượng ${this.formatNumber(nextScan)}/${this.formatNumber(stock)}${shouldKk ? ' · KK' : ''}`
+      );
+      this.kkTypeScanBeep('ok');
+    } catch (e) {
+      console.error('❌ applyKkTypeScanPutaway:', e);
+      this.pushKkTypeScanLog(false, 'Không lưu được vị trí / lượng');
+      this.kkTypeScanBeep('err');
+      alert('❌ Không lưu được scan vị trí.');
+    } finally {
+      this.kkTypeScanBusy = false;
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+    }
   }
 
   get kkTypeScanCodeRows(): InventoryMaterial[] {
     const code = this.kkTypeScanMaterialCode;
     if (!code) return [];
-    return this.kkScanScopeLines()
-      .filter((m) =>
-        String(m.materialCode || '').trim().toUpperCase() === code &&
-        this.calculateCurrentStock(m) > 0
-      )
-      .sort((a, b) => {
-        const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
-        if (po) return po;
-        return String(this.getDisplayIMD(a) || '').localeCompare(String(this.getDisplayIMD(b) || ''), 'en', { numeric: true });
-      });
+    return this.kkStockLinesForCode(code).sort((a, b) => {
+      const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+      if (po) return po;
+      return String(this.getDisplayIMD(a) || '').localeCompare(String(this.getDisplayIMD(b) || ''), 'en', { numeric: true });
+    });
   }
 
   get kkTypeScanCodeRollsTotal(): number {
     return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.getKkRollsCount(m), 0);
+  }
+
+  get kkTypeScanCartonScanned(): number {
+    const code = this.kkTypeScanMaterialCode;
+    if (!code) return 0;
+    return Math.max(0, Number(this.kkTypeScanCartons[code]) || 0);
+  }
+
+  get kkTypeScanCartonTotal(): number {
+    return this.kkTypeScanCodeRollsTotal;
+  }
+
+  get kkTypeScanQtyScanned(): number {
+    return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.getKkScanCount(m), 0);
+  }
+
+  get kkTypeScanQtyTotal(): number {
+    return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.calculateCurrentStock(m), 0);
+  }
+
+  get kkTypeScanProgressTone(): '' | 'ok' | 'low' | 'over' {
+    const scanned = this.kkTypeScanCartonScanned;
+    const total = this.kkTypeScanCartonTotal;
+    if (scanned <= 0) return '';
+    if (!total) return 'low';
+    if (scanned === total) return 'ok';
+    return scanned < total ? 'low' : 'over';
+  }
+
+  get kkTypeScanStatusText(): string {
+    const scanned = this.kkTypeScanCartonScanned;
+    const total = this.kkTypeScanCartonTotal;
+    if (!total) return scanned ? `Đã scan ${scanned} thùng` : 'Chưa scan';
+    if (scanned < total) return `Thiếu ${total - scanned} thùng`;
+    if (scanned > total) return `Thừa ${scanned - total} thùng`;
+    return 'Đủ thùng';
   }
 
   get kkTypeScanAllTicked(): boolean {
@@ -9189,11 +9655,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private async applyKkTypeScanTick(lines: InventoryMaterial[], checked: boolean): Promise<void> {
     if (!this.canEdit || this.kkTypeScanBusy) return;
     const next = !!checked;
-    const pallet = this.kkTypeScanPallet;
-    const targets = lines.filter((m) => !!m?.id && (
-      this.isKkFlagOn(m.kkChecked) !== next ||
-      (!!pallet && String(m.palletId || '').trim().toUpperCase() !== pallet)
-    ));
+    const targets = lines.filter((m) => !!m?.id && this.isKkFlagOn(m.kkChecked) !== next);
     if (!targets.length) {
       this.cdr.detectChanges();
       return;
@@ -9238,7 +9700,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
             modifiedBy: operator
           };
-          if (pallet) payload.palletId = pallet;
           if (!next) payload.kkScanCount = 0;
           batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
         }
@@ -9253,8 +9714,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
               materialName: String(m.materialName || '').trim(),
               poNumber: String(m.poNumber || '').trim(),
               batchNumber: String(m.batchNumber || '').trim(),
-              location: String(m.location || '').trim().toUpperCase(),
-              palletId: pallet || String(m.palletId || '').trim(),
+              location: this.kkTypeScanLocation || String(m.location || '').trim().toUpperCase(),
+              palletId: String(m.palletId || '').trim(),
               quantity: Number(m.quantity) || 0,
               stock: Number(this.calculateCurrentStock(m)) || 0,
               unit: String(m.unit || '').trim(),
@@ -9272,20 +9733,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         m.kkChecked = next;
         m.kkBy = operator;
         m.kkAt = kkAt;
-        if (pallet) {
-          m.palletId = pallet;
-          (m as { __prevPalletId?: string }).__prevPalletId = pallet;
-        }
         if (!next) m.kkScanCount = 0;
         const stamp = (x: InventoryMaterial) => {
           if (x.id !== m.id) return;
           x.kkChecked = next;
           x.kkBy = operator;
           x.kkAt = kkAt;
-          if (pallet) {
-            x.palletId = pallet;
-            (x as { __prevPalletId?: string }).__prevPalletId = pallet;
-          }
           if (!next) x.kkScanCount = 0;
         };
         this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
@@ -9294,7 +9747,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.invalidateKkInvSnapCache();
       this.syncKkTypeRows();
       this.pushKkTypeScanLog(true, next
-        ? `KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}${pallet ? ` · pallet ${pallet}` : ''}`
+        ? `KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}${this.kkTypeScanLocation ? ` · ${this.kkTypeScanLocation}` : ''}`
         : `Bỏ KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}`);
       this.kkTypeScanBeep('ok');
     } catch (e) {
@@ -9652,11 +10105,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private finishKkLocMapLoad(loadId: number): void {
+  private finishKkLocMapLoad(loadId: number, markStock = true): void {
     if (loadId === this.kkLocMapLoadId) {
       this.kkLocMapLoading = false;
       this.kkLocMapBusy = false;
       this.kkLocMapStatus = '';
+      if (markStock) {
+        this.kkStockLoaded = true;
+        if (this.kkLocMapView === 'type' && this.kkEffectiveSearchQuery()) {
+          this.onKkTypeUnifiedSearch();
+        }
+      }
       this.cdr.detectChanges();
       return;
     }
@@ -9839,6 +10298,33 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  private async loadKkCatalogMeta(forceRefresh = false): Promise<void> {
+    this.kkLocMapBusy = true;
+    this.kkLocMapStatus = 'Đang tải danh mục KK…';
+    this.cdr.detectChanges();
+    try {
+      this.kkCatalogEntries = await this.kkCatalog.loadAll(forceRefresh);
+      this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
+      try {
+        this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs(forceRefresh);
+      } catch (homeErr) {
+        console.error('❌ loadHomeLocs:', homeErr);
+      }
+      this.invalidateKkTypeViewCache();
+    } catch (e) {
+      console.error('❌ loadKkCatalogMeta:', e);
+      this.kkCatalogEntries = [];
+      this.kkCatalogTypeMap = new Map();
+    } finally {
+      this.kkLocMapBusy = false;
+      this.kkLocMapStatus = '';
+      this.cdr.detectChanges();
+      if (this.kkEffectiveSearchQuery() && !this.kkStockLoaded) {
+        this.playKkStock();
+      }
+    }
+  }
+
   private async loadKkCatalogForMap(forceRefresh = false): Promise<void> {
     const loadId = ++this.kkLocMapLoadId;
     this.kkLocMapBusy = true;
@@ -9873,7 +10359,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkCatalogEntries = [];
       this.kkCatalogTypeMap = new Map();
     } finally {
-      if (!handedOff) this.finishKkLocMapLoad(loadId);
+      if (!handedOff) this.finishKkLocMapLoad(loadId, false);
     }
   }
 
@@ -9884,7 +10370,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLocMapExpandedKey = null;
     this.kkTypePage = 1;
     this.invalidateKkTypeViewCache();
-    if (!this.kkLocMapByType.length && !this.kkLocMapBusy) void this.loadKkByType();
+    if (this.kkStockLoaded && !this.kkLocMapByType.length && !this.kkLocMapBusy) void this.loadKkByType();
   }
 
   async loadKkByType(existingLoadId?: number): Promise<void> {

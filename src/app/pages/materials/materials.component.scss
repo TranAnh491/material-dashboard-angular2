@@ -4808,6 +4808,53 @@ $asm1-toolbar-h: 36px;
     }
   }
 
+  .kk-play-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid #86efac;
+    border-radius: 9px;
+    background: #ecfdf3;
+    color: #166534;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    .material-icons {
+      font-size: 22px;
+      color: #16a34a;
+    }
+
+    &:hover:not(:disabled) {
+      background: #dcfce7;
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    &--on {
+      border-color: #16a34a;
+      background: #16a34a;
+
+      .material-icons {
+        color: #fff;
+      }
+    }
+  }
+
+  .kk-toolbar__search-hint {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 800;
+    color: #b45309;
+    white-space: nowrap;
+    padding-right: 6px;
+  }
+
   .factory-toggle-btn {
     height: 34px;
     padding: 0 12px;
@@ -8579,6 +8626,17 @@ $asm1-toolbar-h: 36px;
         color: #0f172a;
       }
     }
+  }
+
+  &__frac {
+    font-size: 26px !important;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #0f172a !important;
+
+    &--ok { color: #047857 !important; }
+    &--low { color: #b45309 !important; }
+    &--over { color: #b91c1c !important; }
   }
 
   &__std {

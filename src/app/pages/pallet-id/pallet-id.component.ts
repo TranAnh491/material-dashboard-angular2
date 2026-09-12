@@ -3,6 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as QRCode from 'qrcode';
+import { getLayoutLocationGroups, LayoutLocGroup } from '../materials/layout-location-catalog';
 
 interface PalletItem {
   id: string;
@@ -40,6 +41,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   // Factory selection
   selectedFactory: string = 'ASM1';
   factories: string[] = ['ASM1', 'ASM2'];
+  palletSearch = '';
 
   // Pallet data
   pallets: PalletItem[] = [];
@@ -91,6 +93,15 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   daKiemLabelError = '';
   isPrintingDaKiemLabels = false;
 
+  /** Tem vị trí kho J — 57×32mm, QR trái / tên vị trí phải */
+  showJLocLabelModal = false;
+  jLocQuery = '';
+  jLocExpandedId = '';
+  jLocSelected = new Set<string>();
+  jLocError = '';
+  isPrintingJLocLabels = false;
+  readonly jLocGroups: LayoutLocGroup[] = getLayoutLocationGroups('J');
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
@@ -140,6 +151,21 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
         console.error('Error loading pallets:', error);
         this.isLoading = false;
       });
+  }
+
+  get visiblePallets(): PalletItem[] {
+    const q = String(this.palletSearch || '').trim().toUpperCase();
+    if (!q) return this.pallets;
+    return this.pallets.filter((p) =>
+      p.palletCode.toUpperCase().includes(q) || p.factory.toUpperCase().includes(q)
+    );
+  }
+
+  selectFactory(factory: string): void {
+    if (this.selectedFactory === factory) return;
+    this.selectedFactory = factory;
+    this.palletSearch = '';
+    this.onFactoryChange();
   }
 
   // Change factory
@@ -1309,5 +1335,251 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     const fromWidth = boxW / (digits * digitWidthEm);
     const fontMm = Math.min(fromHeight, fromWidth) * 0.98;
     return `${Math.max(4, Math.round(fontMm * 10) / 10)}mm`;
+  }
+
+  // ====== Tem vị trí kho J (57×32mm, QR trái / tên vị trí phải) ======
+
+  openJLocLabelModal(): void {
+    this.jLocQuery = '';
+    this.jLocError = '';
+    this.jLocExpandedId = this.jLocRGroups[0]?.id || this.jLocSGroups[0]?.id || '';
+    this.showJLocLabelModal = true;
+  }
+
+  closeJLocLabelModal(): void {
+    if (this.isPrintingJLocLabels) return;
+    this.showJLocLabelModal = false;
+    this.jLocError = '';
+  }
+
+  get jLocRGroups(): LayoutLocGroup[] {
+    return this.filterJLocGroups(this.jLocGroups.filter((g) => /^R\d+$/i.test(g.id)));
+  }
+
+  get jLocSGroups(): LayoutLocGroup[] {
+    return this.filterJLocGroups(this.jLocGroups.filter((g) => /^S\d+/i.test(g.id)));
+  }
+
+  get jLocSelectedCount(): number {
+    return this.jLocSelected.size;
+  }
+
+  private filterJLocGroups(groups: LayoutLocGroup[]): LayoutLocGroup[] {
+    const q = String(this.jLocQuery || '').trim().toUpperCase();
+    if (!q) return groups;
+    return groups
+      .map((g) => ({
+        ...g,
+        slots: g.id.toUpperCase().includes(q)
+          ? g.slots
+          : g.slots.filter((s) => s.toUpperCase().includes(q))
+      }))
+      .filter((g) => g.slots.length > 0);
+  }
+
+  onJLocQueryChange(value: string): void {
+    this.jLocQuery = String(value || '').toUpperCase();
+  }
+
+  toggleJLocGroup(id: string): void {
+    this.jLocExpandedId = this.jLocExpandedId === id ? '' : id;
+  }
+
+  isJLocSlotSelected(slot: string): boolean {
+    return this.jLocSelected.has(slot);
+  }
+
+  toggleJLocSlot(slot: string): void {
+    const next = new Set(this.jLocSelected);
+    if (next.has(slot)) next.delete(slot);
+    else next.add(slot);
+    this.jLocSelected = next;
+  }
+
+  selectJLocGroup(group: LayoutLocGroup, on?: boolean): void {
+    const next = new Set(this.jLocSelected);
+    const shouldOn = on ?? !group.slots.every((s) => next.has(s));
+    for (const slot of group.slots) {
+      if (shouldOn) next.add(slot);
+      else next.delete(slot);
+    }
+    this.jLocSelected = next;
+  }
+
+  isJLocGroupAllSelected(group: LayoutLocGroup): boolean {
+    return group.slots.length > 0 && group.slots.every((s) => this.jLocSelected.has(s));
+  }
+
+  jLocGroupSelectedCount(group: LayoutLocGroup): number {
+    return group.slots.filter((s) => this.jLocSelected.has(s)).length;
+  }
+
+  clearJLocSelection(): void {
+    this.jLocSelected = new Set();
+  }
+
+  jLocDiagram(group: LayoutLocGroup): Array<{
+    block: number;
+    levels: Array<{ level: number; cells: Array<{ slot: string; pos: string }> }>;
+  }> {
+    const byBlock = new Map<number, Map<number, Array<{ slot: string; pos: string }>>>();
+    const add = (block: number, level: number, slot: string, pos: string) => {
+      if (!Number.isFinite(block) || !Number.isFinite(level)) return;
+      if (!byBlock.has(block)) byBlock.set(block, new Map());
+      const lvMap = byBlock.get(block)!;
+      if (!lvMap.has(level)) lvMap.set(level, []);
+      lvMap.get(level)!.push({ slot, pos });
+    };
+    for (const slot of group.slots) {
+      const khoMat = slot.match(/^S\d{2}-(\d+)-(\d+)$/i);
+      if (khoMat) {
+        add(Number(khoMat[1]), Number(khoMat[2]), slot, '●');
+        continue;
+      }
+      const prefix = group.id;
+      const rest = slot.slice(prefix.length);
+      const dash = rest.indexOf('-');
+      if (dash < 0) continue;
+      const block = Number(rest.slice(0, dash));
+      const lvPos = rest.slice(dash + 1);
+      const level = Number(lvPos[0]);
+      const pos = lvPos.slice(1);
+      add(block, level, slot, pos);
+    }
+    return Array.from(byBlock.keys())
+      .sort((a, b) => a - b)
+      .map((block) => ({
+        block,
+        levels: Array.from(byBlock.get(block)!.keys())
+          .sort((a, b) => b - a)
+          .map((level) => ({
+            level,
+            cells: (byBlock.get(block)!.get(level) || []).slice().sort((a, b) => a.pos.localeCompare(b.pos))
+          }))
+      }));
+  }
+
+  async printJLocLabels(): Promise<void> {
+    const order = new Map<string, number>();
+    for (const g of this.jLocGroups) {
+      for (const s of g.slots) {
+        if (!order.has(s)) order.set(s, order.size);
+      }
+    }
+    const slots = Array.from(this.jLocSelected).sort(
+      (a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)
+    );
+    if (!slots.length) {
+      this.jLocError = 'Chọn ít nhất một vị trí để in.';
+      return;
+    }
+    if (slots.length > 200 && !confirm(`In ${slots.length} tem vị trí kho J?`)) return;
+    this.jLocError = '';
+    this.isPrintingJLocLabels = true;
+    try {
+      const qrImages = await Promise.all(
+        slots.map((name) =>
+          QRCode.toDataURL(name, {
+            width: 280,
+            margin: 1,
+            color: { dark: '#000000', light: '#FFFFFF' }
+          })
+        )
+      );
+
+      const labelHtml = slots.map((name, i) => `
+        <div class="j-loc-label">
+          <div class="j-loc-label__qr">
+            <img src="${qrImages[i]}" alt="QR ${name}">
+          </div>
+          <div class="j-loc-label__text">${name}</div>
+        </div>`).join('');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tem vị trí kho J</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      width: 57mm;
+      height: 32mm;
+    }
+    .j-loc-label {
+      width: 57mm;
+      height: 32mm;
+      border: 1px solid #000;
+      display: flex;
+      align-items: stretch;
+      background: #fff;
+      overflow: hidden;
+      page-break-after: always;
+      page-break-inside: avoid;
+    }
+    .j-loc-label:last-child { page-break-after: avoid; }
+    .j-loc-label__qr {
+      width: 30mm;
+      height: 32mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #ccc;
+      flex-shrink: 0;
+    }
+    .j-loc-label__qr img {
+      width: 28mm;
+      height: 28mm;
+      object-fit: contain;
+      display: block;
+    }
+    .j-loc-label__text {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1mm 2mm;
+      text-align: center;
+      font-size: 16px;
+      font-weight: bold;
+      color: #000;
+      word-break: break-word;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; background: #fff !important; width: 57mm !important; height: 32mm !important; }
+      @page { margin: 0 !important; size: 57mm 32mm !important; }
+      .j-loc-label {
+        width: 57mm !important;
+        height: 32mm !important;
+        page-break-after: always !important;
+      }
+      .j-loc-label:last-child { page-break-after: avoid !important; }
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 400);
+      this.showJLocLabelModal = false;
+    } catch (err) {
+      console.error('Error printing J location labels:', err);
+      alert('Lỗi khi in tem vị trí. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingJLocLabels = false;
+    }
   }
 }
