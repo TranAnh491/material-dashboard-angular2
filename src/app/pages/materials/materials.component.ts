@@ -21,6 +21,7 @@ import { MaterialsDashboardService } from '../../services/materials-dashboard.se
 import { LocationUnlockService } from '../../services/location-unlock.service';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 import { MaterialsInventoryUnlockService } from '../../services/materials-inventory-unlock.service';
+import { KkScanGuideZaloService } from '../../services/kk-scan-guide-zalo.service';
 import {
   isAsm3OrWh3PrefixLocation,
   isIqcPrefixLocation,
@@ -384,6 +385,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkTypePalletNotesSig = '';
   private kkTypePalletNotesCached = new Map<string, string>();
   showKkTypeScanModal = false;
+  showKkScanGuide = false;
+  kkScanGuideSending = false;
+  kkScanGuideSendMsg = '';
+  kkScanGuideSendErr = false;
   kkTypeScanStep: 'operator' | 'location' | 'codes' = 'location';
   kkTypeScanOperator = '';
   kkTypeScanOperatorInput = '';
@@ -858,6 +863,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     private materialsDashboard: MaterialsDashboardService,
     private locationUnlock: LocationUnlockService,
     private materialsInventoryUnlock: MaterialsInventoryUnlockService,
+    private kkScanGuideZalo: KkScanGuideZaloService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private nvlkhCatalog: NvlkhCatalogService,
     private nvlCatalogFull: NvlCatalogFullService,
@@ -9055,6 +9061,58 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.focusKkTypeScanInput('kkTypeScanOperatorInput');
     }
     return false;
+  }
+
+  openKkScanGuide(): void {
+    this.showKkScanGuide = true;
+    this.kkScanGuideSending = false;
+    this.kkScanGuideSendMsg = '';
+    this.kkScanGuideSendErr = false;
+  }
+
+  closeKkScanGuide(): void {
+    this.showKkScanGuide = false;
+  }
+
+  async sendKkScanGuideToZalo(): Promise<void> {
+    if (this.kkScanGuideSending) return;
+    this.kkScanGuideSending = true;
+    this.kkScanGuideSendMsg = '';
+    this.kkScanGuideSendErr = false;
+    this.cdr.detectChanges();
+    try {
+      const user = await firstValueFrom(this.authService.currentUser);
+      const sentBy = String(user?.employeeId || this.kkTypeScanOperator || '').trim().toUpperCase();
+      const r = await this.kkScanGuideZalo.sendToKhoGroup(sentBy);
+      this.kkScanGuideSendErr = false;
+      this.kkScanGuideSendMsg =
+        r?.images > 0
+          ? `Đã gửi ${r.images} hình + hướng dẫn vào nhóm Quản lý kho.`
+          : 'Đã gửi hướng dẫn vào nhóm Quản lý kho.';
+    } catch (e: unknown) {
+      const err = e as { code?: string; message?: string; error?: { message?: string; status?: string } };
+      const raw = String(err?.error?.message || err?.message || '').trim();
+      const lower = raw.toLowerCase();
+      this.kkScanGuideSendErr = true;
+      if (
+        lower.includes('cors') ||
+        lower.includes('err_failed') ||
+        lower.includes('not-found') ||
+        err?.code === 'functions/not-found' ||
+        err?.error?.status === 'NOT_FOUND' ||
+        raw === 'internal' ||
+        err?.code === 'functions/internal'
+      ) {
+        this.kkScanGuideSendMsg =
+          'Chưa gửi được vào nhóm Quản lý kho. Thử lại sau.';
+      } else {
+        this.kkScanGuideSendMsg =
+          raw || 'Không gửi được Zalo vào nhóm Quản lý kho. Thử lại.';
+      }
+    } finally {
+      this.kkScanGuideSending = false;
+      this.cdr.detectChanges();
+    }
   }
 
   openKkTypeScanModal(row?: KkTypeRow): void {

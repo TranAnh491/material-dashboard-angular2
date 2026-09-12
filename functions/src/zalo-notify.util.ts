@@ -36,6 +36,33 @@ async function resolveZaloChatId(memberId: string): Promise<{ token: string; cha
  *
  * Hàm gọi phải khai báo secret ZALO_BOT_TOKEN trong `runWith({ secrets: [zaloBotToken] })`.
  */
+export async function sendZaloToChat(chatIdRaw: string, text: string): Promise<boolean> {
+  try {
+    const chatId = String(chatIdRaw || '').trim();
+    const token = await readBotToken();
+    if (!token || !chatId || !text) return false;
+    const res = await fetch(ZALO_BOT_URL(token, 'sendMessage'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 2000) })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.error('sendZaloToChat: sendMessage failed', res.status, JSON.stringify(body));
+      return false;
+    }
+    const body = await res.json().catch(() => ({ ok: true }));
+    if (body && body.ok === false) {
+      console.error('sendZaloToChat: Zalo ok=false', JSON.stringify(body));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('sendZaloToChat failed', e);
+    return false;
+  }
+}
+
 export async function sendZaloToEmployee(memberIdRaw: string, text: string): Promise<boolean> {
   try {
     const memberId = String(memberIdRaw || '').trim().toUpperCase();
@@ -44,20 +71,92 @@ export async function sendZaloToEmployee(memberIdRaw: string, text: string): Pro
     }
     const link = await resolveZaloChatId(memberId);
     if (!link) return false;
+    return sendZaloToChat(link.chatId, text);
+  } catch (e) {
+    console.error('sendZaloToEmployee failed', e);
+    return false;
+  }
+}
 
-    const res = await fetch(ZALO_BOT_URL(link.token, 'sendMessage'), {
+function guessZaloFileMime(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.txt')) return 'text/plain; charset=utf-8';
+  if (lower.endsWith('.xlsx')) {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  return 'application/octet-stream';
+}
+
+/** Gửi ảnh: Zalo Bot sendPhoto chỉ nhận URL công khai, không nhận file upload. */
+export async function sendZaloPhotoByUrl(
+  chatIdRaw: string,
+  photoUrl: string,
+  caption?: string
+): Promise<boolean> {
+  try {
+    const chatId = String(chatIdRaw || '').trim();
+    const url = String(photoUrl || '').trim();
+    const token = await readBotToken();
+    if (!token || !chatId || !url) return false;
+    const res = await fetch(ZALO_BOT_URL(token, 'sendPhoto'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: link.chatId, text: text.slice(0, 2000) })
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: url,
+        ...(caption ? { caption: caption.slice(0, 2000) } : {})
+      })
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      console.error('sendZaloToEmployee: Zalo sendMessage failed', res.status, JSON.stringify(body));
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body?.ok === false) {
+      console.warn('sendZaloPhotoByUrl failed', res.status, JSON.stringify(body).slice(0, 400));
       return false;
     }
     return true;
   } catch (e) {
-    console.error('sendZaloToEmployee failed', e);
+    console.error('sendZaloPhotoByUrl failed', e);
+    return false;
+  }
+}
+
+/** Gửi file tới chatId (1-1 hoặc nhóm). Thử sendFile / sendDocument; ảnh thử sendPhoto. */
+export async function sendZaloFileToChat(
+  chatIdRaw: string,
+  buf: Buffer,
+  filename: string,
+  caption?: string
+): Promise<boolean> {
+  try {
+    const chatId = String(chatIdRaw || '').trim();
+    const token = await readBotToken();
+    if (!token || !chatId || !buf?.length || !filename) return false;
+    const mime = guessZaloFileMime(filename);
+    const blob = new Blob([new Uint8Array(buf)], { type: mime });
+    const isImage = mime.startsWith('image/');
+
+    const tryMethod = async (method: string, field: 'file' | 'photo'): Promise<boolean> => {
+      const form = new FormData();
+      form.append('chat_id', chatId);
+      form.append(field, blob, filename);
+      if (caption) form.append('caption', caption.slice(0, 2000));
+      const res = await fetch(ZALO_BOT_URL(token, method), { method: 'POST', body: form });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.warn(`sendZaloFileToChat ${method} failed`, res.status, body.slice(0, 400));
+        return false;
+      }
+      return true;
+    };
+
+    if (isImage && (await tryMethod('sendPhoto', 'photo'))) return true;
+    if (await tryMethod('sendFile', 'file')) return true;
+    if (await tryMethod('sendDocument', 'file')) return true;
+    return false;
+  } catch (e) {
+    console.error('sendZaloFileToChat failed', e);
     return false;
   }
 }
@@ -74,29 +173,7 @@ export async function sendZaloFileToEmployee(
     if (!memberId || !buf?.length || !filename) return false;
     const link = await resolveZaloChatId(memberId);
     if (!link) return false;
-
-    const mime = filename.toLowerCase().endsWith('.xlsx')
-      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      : 'application/octet-stream';
-    const blob = new Blob([new Uint8Array(buf)], { type: mime });
-
-    const tryMethod = async (method: string): Promise<boolean> => {
-      const form = new FormData();
-      form.append('chat_id', link.chatId);
-      form.append('file', blob, filename);
-      if (caption) form.append('caption', caption.slice(0, 2000));
-      const res = await fetch(ZALO_BOT_URL(link.token, method), { method: 'POST', body: form });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        console.warn(`sendZaloFileToEmployee ${method} failed`, res.status, body.slice(0, 400));
-        return false;
-      }
-      return true;
-    };
-
-    if (await tryMethod('sendFile')) return true;
-    if (await tryMethod('sendDocument')) return true;
-    return false;
+    return sendZaloFileToChat(link.chatId, buf, filename, caption);
   } catch (e) {
     console.error('sendZaloFileToEmployee failed', e);
     return false;

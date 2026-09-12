@@ -92,6 +92,14 @@
                 <span class="btn-label">Scan</span>
               </button>
               <button type="button"
+                      class="more-btn more-btn--info"
+                      *ngIf="kkLocMapView === 'type'"
+                      (click)="openKkScanGuide()"
+                      title="Hướng dẫn sử dụng Scan">
+                <i class="material-icons">info</i>
+                <span class="btn-label">Hướng dẫn</span>
+              </button>
+              <button type="button"
                       class="more-btn"
                       *ngIf="kkLocMapView === 'type'"
                       (click)="showKkTypeReportMenu = true"
@@ -4566,9 +4574,14 @@
           <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
         </div>
       </div>
-      <button type="button" class="more-popup-close" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
-        <i class="material-icons">close</i>
-      </button>
+      <div class="more-popup-header__right">
+        <button type="button" class="more-popup-close" (click)="openKkScanGuide()" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn">
+          <i class="material-icons">info</i>
+        </button>
+        <button type="button" class="more-popup-close" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
     </div>
 
     <div class="kk-type-scan__body">
@@ -4717,6 +4730,95 @@
           </li>
         </ul>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay kk-scan-guide-overlay"
+     [class.more-overlay]="!isMobile"
+     *ngIf="showKkScanGuide"
+     (click)="closeKkScanGuide()">
+  <div class="modal-content kk-scan-guide" (click)="$event.stopPropagation()" role="dialog" aria-label="Hướng dẫn Scan">
+    <div class="more-popup-header gan-pallet__head">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">info</i>
+        </span>
+        <div>
+          <h3>Hướng dẫn sử dụng Scan</h3>
+          <p class="more-popup-header__sub">Đọc chậm · làm từng bước · như xếp hình</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkScanGuide()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="kk-scan-guide__body">
+      <p class="kk-scan-guide__intro">
+        Làm <strong>xong bước này mới tới bước kia</strong>. Đừng nhảy cóc.
+        Máy quét giống cây đũa thần: chỉ cần đưa vào tem, bấm — máy tự đọc.
+      </p>
+
+      <article class="kk-scan-guide__card">
+        <div class="kk-scan-guide__num">1</div>
+        <div class="kk-scan-guide__text">
+          <h4>Bài 1 — Đếm hàng trên kệ</h4>
+          <p>Bạn đứng trước một kệ. Việc của bạn: đếm xem kệ đó có đủ thùng không.</p>
+          <ol>
+            <li>Bấm nút <strong>Scan</strong> (hình máy quét).</li>
+            <li>Lần đầu trong ca, quét <strong>thẻ nhân viên</strong> (ASP + 4 số, ví dụ ASP0106). Máy nhớ bạn đến <strong>12:00</strong>, <strong>17:00</strong> hoặc <strong>20:00</strong>. Hết giờ / tắt tab thì quét thẻ lại.</li>
+            <li>Quét <strong>tem dán trên kệ</strong>. Ví dụ <strong>S07-1-1</strong> — đó là địa chỉ nhà của kệ.</li>
+            <li>Quét <strong>tem trên từng thùng</strong>. Mỗi lần quét = 1 thùng.</li>
+          </ol>
+          <p class="kk-scan-guide__tip">Nhìn màn hình: <strong>2/5 thùng</strong> = đã quét 2, kệ cần 5 → còn thiếu, quét tiếp. Đủ số thì xong kệ này.</p>
+          <p>Quét sang mã hàng khác? Không sao. Máy vẫn đứng ở <strong>cùng kệ</strong>. Muốn sang kệ khác thì làm Bài 2.</p>
+        </div>
+        <img class="kk-scan-guide__img" src="assets/img/kk-scan-guide-kiem-ke.png" alt="Ví dụ: quét thẻ nhân viên, quét kệ S07-1-1, rồi quét từng thùng">
+      </article>
+
+      <article class="kk-scan-guide__card">
+        <div class="kk-scan-guide__num">2</div>
+        <div class="kk-scan-guide__text">
+          <h4>Bài 2 — Đổi kệ</h4>
+          <p>Khi muốn kiểm kê kệ khác, làm đúng 3 việc này:</p>
+          <ol>
+            <li>Bấm nút <strong>Đổi vị trí</strong>.</li>
+            <li>Ô scan sẽ trống. Quét tem kệ <strong>mới</strong>.</li>
+            <li>Rồi quét từng thùng trên kệ mới, giống Bài 1.</li>
+          </ol>
+          <p class="kk-scan-guide__tip">Nếu quên bấm <strong>Đổi vị trí</strong>, máy tưởng bạn vẫn đang đếm kệ cũ.</p>
+        </div>
+        <img class="kk-scan-guide__img" src="assets/img/kk-scan-guide-doi-vi-tri.png" alt="Ví dụ: bấm Đổi vị trí rồi quét kệ mới S08-1-2">
+      </article>
+
+      <article class="kk-scan-guide__card">
+        <div class="kk-scan-guide__num">3</div>
+        <div class="kk-scan-guide__text">
+          <h4>Bài 3 — Một mã hàng chỉ để một chỗ</h4>
+          <p>Cùng một mã (ví dụ <strong>B009064</strong>) phải nằm chung một kệ. Không được rải hai kệ.</p>
+          <ol>
+            <li>Mã này đã có thùng ở kệ <strong>S07-1-1</strong>.</li>
+            <li>Bạn lại quét vào kệ <strong>S08-1-2</strong>.</li>
+            <li>Máy báo: hãy <strong>đưa hàng về S07-1-1</strong>.</li>
+            <li>Khiêng thùng về đúng kệ đó, rồi mới quét.</li>
+          </ol>
+          <p class="kk-scan-guide__tip">Cùng dãy thì được: đã có hàng ở S07 thì được để vào S07-1-1. Kệ tạm F62 / IQC / NG không tính là “nhà”.</p>
+        </div>
+        <img class="kk-scan-guide__img" src="assets/img/kk-scan-guide-gom-ke.png" alt="Ví dụ: mã phải về S07-1-1, không quét vào S08-1-2">
+      </article>
+    </div>
+    <div class="kk-scan-guide__foot">
+      <button type="button"
+              class="kk-scan-guide__zalo"
+              (click)="sendKkScanGuideToZalo()"
+              [disabled]="kkScanGuideSending"
+              title="Gửi hướng dẫn vào nhóm Zalo Quản lý kho">
+        <i class="material-icons">chat</i>
+        <span>{{ kkScanGuideSending ? 'Đang gửi…' : 'Gửi Zalo nhóm Quản lý kho' }}</span>
+      </button>
+      <p class="kk-scan-guide__send-msg"
+         *ngIf="kkScanGuideSendMsg"
+         [class.kk-scan-guide__send-msg--err]="kkScanGuideSendErr">{{ kkScanGuideSendMsg }}</p>
     </div>
   </div>
 </div>

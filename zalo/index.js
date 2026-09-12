@@ -204,7 +204,8 @@ exports.zaloWebhook = onRequest(
     const CHUCNANG_TEXT =
       "Danh sách câu lệnh:\n" +
       "- /link   (liên kết mã nhân viên để nhận thông báo)\n" +
-      "- /id     (xem mã nhân viên đã liên kết)";
+      "- /id     (xem mã nhân viên đã liên kết)\n" +
+      "- /nhomkho  (trong nhóm Kho: gắn nhóm nhận file hướng dẫn Scan)";
 
     // Greetings:
     // - Always show intro + guidance
@@ -232,6 +233,66 @@ exports.zaloWebhook = onRequest(
       }
       res.status(200).json({ok: true});
       return;
+    }
+
+    const isGroupChat =
+      chatType === "GROUP" || chatType === "GROUPCHAT" || chatType === "GROUP_CHAT";
+    const chatName = String(
+      message?.chat?.name || message?.chat?.title || message?.chat?.display_name || ""
+    ).trim();
+    const nhomKhoCmd = String(text || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "");
+    const isNhomKhoCommand =
+      nhomKhoCmd === "/nhomkho" ||
+      nhomKhoCmd === "/nhómkho" ||
+      nhomKhoCmd === "/dangkykho";
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && isNhomKhoCommand) {
+      try {
+        if (!isGroupChat) {
+          await sendText(chatId, "Lệnh /nhomkho chỉ dùng trong nhóm. Mở nhóm Kho, @bot rồi gõ /nhomkho.");
+        } else {
+          await db.collection("zalo_groups").doc("kho").set(
+            {
+              key: "kho",
+              name: chatName || "Kho",
+              chatId: String(chatId),
+              chatType: chatType || "GROUP",
+              source: "zaloWebhook:/nhomkho",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {merge: true}
+          );
+          await sendText(
+            chatId,
+            "Đã gắn nhóm này là nhóm Kho.\nApp bấm “Gửi Zalo” sẽ gửi file hướng dẫn Scan vào đây."
+          );
+        }
+      } catch (err) {
+        logger.error("nhomkho command failed", err);
+        await sendText(chatId, "Không gắn được nhóm Kho. Thử lại.");
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    if (eventName === "message.text.received" && chatId && isGroupChat) {
+      const nameNorm = chatName.toLowerCase().replace(/\s+/g, " ").trim();
+      if (nameNorm === "kho" || nameNorm === "nhóm kho" || nameNorm === "nhom kho") {
+        db.collection("zalo_groups").doc("kho").set(
+          {
+            key: "kho",
+            name: chatName || "Kho",
+            chatId: String(chatId),
+            chatType: chatType || "GROUP",
+            source: "zaloWebhook:group-name",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          {merge: true}
+        ).catch((err) => logger.error("auto save nhóm Kho failed", err));
+      }
     }
 
     if (eventName === "message.text.received" && chatId && typeof text === "string" && text.trim() === "/link") {

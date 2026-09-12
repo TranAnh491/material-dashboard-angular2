@@ -207,6 +207,28 @@ export const sendNhietDoZaloRemindTestFn = functions
     }
   });
 
+/** Quản lý NVL: gửi file hướng dẫn Scan vào nhóm Zalo Kho. */
+export const sendKkScanGuideToKhoGroupFn = functions
+  .runWith({ secrets: [zaloBotToken], timeoutSeconds: 120 })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const sentBy = typeof data?.sentBy === 'string' ? data.sentBy.trim().slice(0, 20) : '';
+    try {
+      const { sendKkScanGuideToKhoGroup } = await import('./kk-scan-guide-zalo');
+      return await sendKkScanGuideToKhoGroup(admin.firestore(), sentBy);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Chưa') || msg.includes('Không') || msg.includes('nhóm')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
 /** Callable: gửi mail + Zalo (ASP0106) báo cáo trùng xuất tại thời điểm gọi (nút Send Mail — Control Batch). */
 export const sendControlBatchReportEmail = functions
   .runWith({ secrets: [emailPass, zaloBotToken] })
