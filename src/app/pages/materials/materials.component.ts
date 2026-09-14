@@ -849,7 +849,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   layoutLocFocus: 'location' | 'pallet' = 'location';
   /** Block kệ đang mở để chọn mâm. Null = đang xem danh sách kệ. */
   layoutJFocusBlock: number | null = null;
-  /** Gán vị trí cất hàng cho box loại (chuột phải). */
+  /** Gán vị trí yêu cầu cho box loại (chuột phải). */
   layoutLocTypeAssign: string | null = null;
   private layoutLocTypeAssignGroups: string[] = [];
   kkTypeHomeLocs = new Map<string, string>();
@@ -2521,7 +2521,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.markForCheck();
   }
 
-  /** Vị trí cất hàng đã gán ngoài box loại hàng. */
+  /** Vị trí yêu cầu đã gán ngoài box loại hàng. */
   getKkHomeLocForMaterial(material: InventoryMaterial | null | undefined): string {
     const code = String(material?.materialCode || '').trim();
     if (!code) return '';
@@ -7803,7 +7803,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.closeLayoutLocPicker();
     } catch (e) {
       console.error('❌ saveHomeLoc:', e);
-      alert('❌ Không lưu được vị trí cất hàng.');
+      alert('❌ Không lưu được vị trí yêu cầu.');
     }
   }
 
@@ -9649,7 +9649,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const home = this.kkScanHomeLocation(code);
     if (home && !this.kkScanLocationAllowed(loc, home)) {
-      const msg = `Đưa mã ${code} về ${home} (đã có hàng ở kệ đó). Không scan vào ${loc}.`;
+      const msg = `Đưa mã ${code} về vị trí yêu cầu ${home} (đã có hàng ở kệ đó). Không scan vào ${loc}.`;
       this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
       this.kkTypeScanLastSavePending = false;

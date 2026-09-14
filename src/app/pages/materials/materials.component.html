@@ -16,7 +16,9 @@
               </ng-container>
             </h4>
             <p class="kk-page__sub" *ngIf="kkLocMapView === 'type' && kkActiveProductType">
-              {{ selectedFactory }} · tick KK · đổi vị trí
+              {{ selectedFactory }}
+              <ng-container *ngIf="kkTypeHomeLocOf(kkActiveProductType) as loc"> · Vị trí yêu cầu {{ loc }}</ng-container>
+              · tick KK · đổi vị trí
             </p>
             <p class="kk-page__sub" *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
               {{ selectedFactory }} · kiểm kê tồn kho nguyên liệu
@@ -522,7 +524,7 @@
                 [class.kk-type-box--empty]="!box.totalLines"
                 (click)="selectKkTypeBox(box.productType)"
                 (contextmenu)="openKkTypeBoxMenu($event, box)"
-                [title]="box.productType + ' — chuột phải: gán vị trí hoặc in tên'">
+                [title]="box.productType + ' — chuột phải: gán vị trí yêu cầu hoặc in tên'">
                 <strong>{{ box.productType }}</strong>
                 <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
                   <span class="kk-type-box__groups" *ngIf="prefixes.length">
@@ -531,7 +533,10 @@
                 </ng-container>
                 <span class="kk-type-box__foot">
                   <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-                  <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Cất vào: ' + loc">{{ loc }}</span>
+                  <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
+                    <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
+                    {{ loc }}
+                  </span>
                 </span>
               </button>
             </div>
@@ -903,7 +908,7 @@
             <strong>{{ primaryLocationDisplay(material.location) || '—' }}</strong>
           </div>
           <div class="mat-m-nl-field mat-m-nl-field--home">
-            <span>Vị trí thiết lập</span>
+            <span>Vị trí yêu cầu</span>
             <strong>{{ getKkHomeLocForMaterial(material) || 'Chưa gán' }}</strong>
           </div>
           <div class="mat-m-nl-field">
@@ -2597,6 +2602,7 @@
       <ul class="mat-m-detail-list">
         <li><span>PO</span><strong>{{ m.poNumber || '—' }}</strong></li>
         <li><span>Vị trí</span><strong>{{ m.location || '—' }}</strong></li>
+        <li *ngIf="isNguyenLieuPage && getKkHomeLocForMaterial(m)"><span>Vị trí yêu cầu</span><strong>{{ getKkHomeLocForMaterial(m) }}</strong></li>
         <li><span>IMD</span><strong>{{ getDisplayIMD(m) || '—' }}</strong></li>
         <li><span>Tồn kho</span><strong>{{ formatNumber(calculateCurrentStock(m)) }}</strong></li>
         <li><span>NK</span><strong>{{ formatNumber(m.quantity) }}</strong></li>
@@ -2646,7 +2652,7 @@
             <i class="material-icons">place</i>Hiện tại: {{ m.location }}
           </span>
           <span class="mat-m-chip mat-m-chip--wh" *ngIf="isNguyenLieuPage && getKkHomeLocForMaterial(m)">
-            Cất vào: {{ getKkHomeLocForMaterial(m) }}
+            Vị trí yêu cầu: {{ getKkHomeLocForMaterial(m) }}
           </span>
           <span class="mat-m-chip" *ngIf="!m.location">Chưa có vị trí</span>
         </div>
@@ -3766,7 +3772,7 @@
      (contextmenu)="$event.preventDefault(); $event.stopPropagation()">
   <button type="button" class="kk-type-box-menu__item" (click)="onKkTypeBoxMenuAssign()">
     <i class="material-icons">place</i>
-    Gán vị trí
+    Gán vị trí yêu cầu
   </button>
   <button type="button" class="kk-type-box-menu__item" (click)="onKkTypeBoxMenuPrint()">
     <i class="material-icons">print</i>
@@ -3776,14 +3782,14 @@
 
 <!-- Popup chọn vị trí kệ — chỉ Kho J -->
 <div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && (layoutLocMaterial || layoutLocTypeAssign)" (click)="closeLayoutLocPicker()">
-  <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn vị trí Kho J">
+  <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="layoutLocTypeAssign ? 'Gán vị trí yêu cầu Kho J' : 'Chọn vị trí Kho J'">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
           <i class="material-icons">{{ layoutLocFocus === 'pallet' ? 'widgets' : 'view_module' }}</i>
         </span>
         <div>
-          <h3>{{ layoutLocTypeAssign ? 'Gán vị trí cất hàng — Kho J' : (layoutLocFocus === 'pallet' ? 'Sửa pallet' : 'Chọn vị trí kệ — Kho J') }}</h3>
+          <h3>{{ layoutLocTypeAssign ? 'Gán vị trí yêu cầu — Kho J' : (layoutLocFocus === 'pallet' ? 'Sửa pallet' : 'Chọn vị trí kệ — Kho J') }}</h3>
           <p class="more-popup-header__sub">{{ layoutLocTypeAssign || ((layoutLocMaterial?.materialCode || '') + ' · ' + (layoutLocMaterial?.poNumber || '—')) }}</p>
         </div>
       </div>
