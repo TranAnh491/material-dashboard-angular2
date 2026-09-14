@@ -7183,7 +7183,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeBoxGroupsCached = Array.from(map.entries()).map(([category, boxesInCat]) => ({
       category,
       title: this.kkTypeMucTitle(category),
-      boxes: boxesInCat
+      boxes: this.sortKkTypeBoxesInCategory(category, boxesInCat)
     }));
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
     return this.kkTypeBoxGroupsCached;
@@ -7596,6 +7596,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const byCode = this.compareNhuaGroupCode(ga, gb);
     if (byCode) return byCode;
     return a.productType.localeCompare(b.productType, 'vi', { numeric: true });
+  }
+
+  /** Số AWG trên tên loại (28AWG, 28 AWG, AWG28). Không có → null. */
+  private parseKkAwgFromType(productType: string): number | null {
+    const u = String(productType || '').toUpperCase().replace(/,/g, ' ');
+    const m = /(\d+(?:\.\d+)?)\s*AWG\b/.exec(u) || /\bAWG\s*(\d+(?:\.\d+)?)/.exec(u);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Mục B001 dây điện: box theo AWG lớn → nhỏ. Mục khác giữ thứ tự mã. */
+  private sortKkTypeBoxesInCategory(
+    category: string,
+    boxes: typeof this.kkTypeBoxesCached
+  ): typeof this.kkTypeBoxesCached {
+    const list = [...boxes];
+    if (category !== 'B001') {
+      list.sort((a, b) => this.compareKkTypeBox(a, b));
+      return list;
+    }
+    list.sort((a, b) => {
+      const awgA = this.parseKkAwgFromType(a.productType);
+      const awgB = this.parseKkAwgFromType(b.productType);
+      if (awgA != null && awgB != null && awgA !== awgB) return awgB - awgA;
+      if (awgA != null && awgB == null) return -1;
+      if (awgA == null && awgB != null) return 1;
+      return this.compareKkTypeBox(a, b);
+    });
+    return list;
   }
 
   get kkActiveTypeRow(): KkTypeRow | null {
