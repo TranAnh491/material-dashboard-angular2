@@ -124,6 +124,8 @@
                (ngModelChange)="applyNvlFilters()" placeholder="Trọng lượng">
         <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.customer"
                (ngModelChange)="applyNvlFilters()" placeholder="Khách hàng">
+        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.requiredLocation"
+               (ngModelChange)="applyNvlFilters()" placeholder="Vị trí yêu cầu">
       </div>
     </div>
 
@@ -167,6 +169,7 @@
             <th>Trọng lượng</th>
             <th title="Danh mục NVLKH — gộp vào đây để sửa cùng chỗ">Khách hàng</th>
             <th title="Danh mục DV Lưu trữ — gộp vào đây để sửa cùng chỗ">DV Lưu trữ</th>
+            <th title="Vị trí yêu cầu theo loại hàng (gán ngoài box KK)">Vị trí yêu cầu</th>
             <th>Standard Packing</th>
             <th>Lock</th>
             <th title="Cho phép quét Tem Thùng để xuất kho ở Outbound">Xuất thùng</th>
@@ -221,6 +224,7 @@
                 {{ getStorageUnitLabel(row.storageUnitSize) || '—' }}
               </button>
             </td>
+            <td>{{ row.requiredLocation || '—' }}</td>
             <td class="dv-cell-number">
               <ng-container *ngIf="isNvlEditing(row); else nvlPackingInlineView">
                 <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.standardPacking"

@@ -82,6 +82,31 @@ export class KkCatalogService {
     return (map || this.cachedMap || new Map()).get(group) || '';
   }
 
+  /** Vị trí yêu cầu đã gán theo loại hàng (danh mục KK). */
+  homeLocForMaterial(
+    materialCode: string,
+    typeMap?: Map<string, string>,
+    homeLocs?: Map<string, string>
+  ): string {
+    const type = this.productTypeOf(materialCode, typeMap);
+    const locs = homeLocs || this.cachedHomeLocs;
+    if (!locs) return '';
+    if (type) {
+      const direct = String(locs.get(type) || '').trim();
+      if (direct) return direct;
+      const fold = String(type)
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/Đ/g, 'D');
+      if (/DAU\s*COT/.test(fold) || /\bTERMINAL/.test(fold)) {
+        const grouped = String(locs.get('Đầu cốt (terminal)') || '').trim();
+        if (grouped) return grouped;
+      }
+    }
+    return '';
+  }
+
   /**
    * Import = THAY THẾ TOÀN BỘ danh mục. Nhóm mã trùng trong file: dòng sau ghi đè.
    */

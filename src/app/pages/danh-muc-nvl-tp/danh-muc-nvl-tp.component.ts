@@ -11,6 +11,7 @@ import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.servic
 import { StorageUnitSize, getStorageUnitOption } from '../../models/storage-unit.model';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-alert.service';
+import { KkCatalogService } from '../../services/kk-catalog.service';
 
 type CatalogTab = 'nvl' | 'tp';
 
@@ -18,6 +19,7 @@ type CatalogTab = 'nvl' | 'tp';
 interface NvlCatalogRow extends NvlCatalogItem {
   customer: string;
   storageUnitSize: StorageUnitSize | '';
+  requiredLocation: string;
 }
 
 /** 1 dòng đề xuất sửa Standard Packing, suy ra từ lịch sử Outbound. */
@@ -55,7 +57,7 @@ export class DanhMucNvlTpComponent implements OnInit {
   filteredNvlItems: NvlCatalogRow[] = [];
   pagedNvlItems: NvlCatalogRow[] = [];
   nvlSearchText = '';
-  nvlColumnFilters = { materialCode: '', materialName: '', unit: '', unitWeight: '', customer: '' };
+  nvlColumnFilters = { materialCode: '', materialName: '', unit: '', unitWeight: '', customer: '', requiredLocation: '' };
   nvlPageSize = 25;
   nvlCurrentPage = 1;
   nvlLoadedAt: Date | null = null;
@@ -135,6 +137,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     private dvLuuTruCatalog: DvLuuTruCatalogService,
     private authService: FirebaseAuthService,
     private cartonPackingQtyAlertService: CartonPackingQtyAlertService,
+    private kkCatalog: KkCatalogService,
     private route: ActivatedRoute,
     private router: Router
   ) {}
@@ -214,15 +217,18 @@ export class DanhMucNvlTpComponent implements OnInit {
   async loadNvl(forceRefresh = false): Promise<void> {
     this.isNvlLoading = true;
     try {
-      const [items, customerMap, storageUnitMap] = await Promise.all([
+      const [items, customerMap, storageUnitMap, typeMap, homeLocs] = await Promise.all([
         this.nvlService.listAll(forceRefresh),
         this.nvlkhCatalog.loadAllAsMap(forceRefresh),
-        this.dvLuuTruCatalog.loadAllAsMap(forceRefresh)
+        this.dvLuuTruCatalog.loadAllAsMap(forceRefresh),
+        this.kkCatalog.loadAllAsMap(forceRefresh),
+        this.kkCatalog.loadHomeLocs(forceRefresh)
       ]);
       this.nvlItems = items.map(i => ({
         ...i,
         customer: customerMap.get(i.materialCode) || '',
-        storageUnitSize: storageUnitMap.get(this.dvLuuTruCatalog.normalizeMaterialCode(i.materialCode)) || ''
+        storageUnitSize: storageUnitMap.get(this.dvLuuTruCatalog.normalizeMaterialCode(i.materialCode)) || '',
+        requiredLocation: this.kkCatalog.homeLocForMaterial(i.materialCode, typeMap, homeLocs)
       }));
       this.nvlLoadedAt = new Date();
       this.applyNvlFilters();
@@ -241,13 +247,15 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (q && !(
         item.materialCode.toLowerCase().includes(q) ||
         item.materialName.toLowerCase().includes(q) ||
-        item.customer.toLowerCase().includes(q)
+        item.customer.toLowerCase().includes(q) ||
+        (item.requiredLocation || '').toLowerCase().includes(q)
       )) return false;
       if (cf.materialCode && !item.materialCode.toLowerCase().includes(cf.materialCode.toLowerCase())) return false;
       if (cf.materialName && !item.materialName.toLowerCase().includes(cf.materialName.toLowerCase())) return false;
       if (cf.unit && !item.unit.toLowerCase().includes(cf.unit.toLowerCase())) return false;
       if (cf.unitWeight && !String(item.unitWeight ?? '').toLowerCase().includes(cf.unitWeight.toLowerCase())) return false;
       if (cf.customer && !item.customer.toLowerCase().includes(cf.customer.toLowerCase())) return false;
+      if (cf.requiredLocation && !(item.requiredLocation || '').toLowerCase().includes(cf.requiredLocation.toLowerCase())) return false;
       if (this.nvlOnlyWithStock && this.nvlCodesWithStock && !this.nvlCodesWithStock.has(item.materialCode)) return false;
       return true;
     });
@@ -605,6 +613,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       ĐVT: i.unit,
       'Trọng lượng (g)': i.unitWeight || 0,
       'Khách hàng': i.customer,
+      'Vị trí yêu cầu': i.requiredLocation,
       'Standard Packing': i.standardPacking
     }));
     if (!rows.length) {

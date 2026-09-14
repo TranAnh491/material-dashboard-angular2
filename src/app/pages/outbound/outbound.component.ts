@@ -155,10 +155,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
   operatorSessionError = '';
   private operatorExpiryTimer: any;
   private readonly onOperatorVisibilityChange = () => this.checkOperatorSessionExpiry();
-  /** Mã + PO trong PXK của LSX đang scan. Scan xuất NL phải khớp cả hai; không có PXK thì từ chối. */
-  private batchPxkPairs: { code: string; po: string }[] = [];
+  /** Mã + PO + SL PXK của LSX đang scan. Scan xuất NL phải khớp mã/PO; SL dư trong 1 lần scan thì từ chối. */
+  private batchPxkPairs: { code: string; po: string; qty: number }[] = [];
   private batchPxkCachedLsx = '';
   private batchPxkLoading: Promise<void> | null = null;
+  /** Đã xuất (outbound-materials) theo mã|PO của LSX đang scan — để chặn scan dư. */
+  private batchPxkExportedByKey = new Map<string, number>();
   
   // Scan queue to avoid losing scans during rapid input
   private isProcessingMaterialScan: boolean = false;
@@ -299,6 +301,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.batchPxkPairs = [];
     this.batchPxkCachedLsx = '';
     this.batchPxkLoading = null;
+    this.batchPxkExportedByKey = new Map();
   }
 
   /** Sau khi LSX hợp lệ (Kitting): lưu LSX và preload PXK để chặn sai mã / sai PO. */
@@ -318,20 +321,26 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
     this.batchPxkCachedLsx = lsx;
     this.batchPxkPairs = [];
-    this.batchPxkLoading = this.temXuatKho
-      .loadPxkScanPairsForLsx(this.selectedFactory, lsx)
-      .then(pairs => {
+    this.batchPxkExportedByKey = new Map();
+    this.batchPxkLoading = Promise.all([
+      this.temXuatKho.loadPxkScanPairsForLsx(this.selectedFactory, lsx),
+      this.loadBatchPxkExportedTotals(lsx)
+    ])
+      .then(([pairs, exported]) => {
         if (this.batchPxkCachedLsx === lsx) {
           this.batchPxkPairs = pairs.map(p => ({
             code: String(p.materialCode || '').trim().toUpperCase(),
-            po: this.normalizePxImportPo(p.po)
+            po: this.normalizePxImportPo(p.po),
+            qty: Number(p.quantity) || 0
           }));
+          this.batchPxkExportedByKey = exported;
         }
       })
       .catch(err => {
         console.warn('ensureBatchPxkLoaded failed:', err);
         if (this.batchPxkCachedLsx === lsx) {
           this.batchPxkPairs = [];
+          this.batchPxkExportedByKey = new Map();
         }
       })
       .finally(() => {
@@ -340,6 +349,44 @@ export class OutboundComponent implements OnInit, OnDestroy {
         }
       });
     await this.batchPxkLoading;
+  }
+
+  private pxkScanKey(code: string, po: string): string {
+    return `${String(code || '').trim().toUpperCase()}|${this.normalizePxImportPo(po)}`;
+  }
+
+  /** Tổng đã xuất theo mã+PO của LSX (outbound-materials). */
+  private async loadBatchPxkExportedTotals(lsx: string): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    const lsxTrim = String(lsx || '').trim();
+    if (!lsxTrim) return out;
+    try {
+      const snap = await this.firestore
+        .collection('outbound-materials', ref =>
+          ref.where('factory', '==', this.selectedFactory).where('productionOrder', '==', lsxTrim)
+        )
+        .get()
+        .toPromise();
+      (snap?.docs || []).forEach(doc => {
+        const d = doc.data() as any;
+        const code = String(d?.materialCode || '').trim().toUpperCase();
+        if (!code) return;
+        const qty = Number(d?.exportQuantity ?? d?.quantity ?? 0);
+        if (!(qty > 0)) return;
+        const key = this.pxkScanKey(code, d?.poNumber ?? d?.po);
+        out.set(key, (out.get(key) || 0) + qty);
+      });
+    } catch (e) {
+      console.warn('loadBatchPxkExportedTotals failed:', e);
+    }
+    return out;
+  }
+
+  private addBatchPxkExported(code: string, po: string, qty: number): void {
+    const q = Number(qty) || 0;
+    if (!(q > 0)) return;
+    const key = this.pxkScanKey(code, po);
+    this.batchPxkExportedByKey.set(key, (this.batchPxkExportedByKey.get(key) || 0) + q);
   }
 
   /** Tập mã được phép quét Tem Thùng để xuất kho — load 1 lần từ cache dùng chung (không thêm read). */
@@ -1571,6 +1618,18 @@ export class OutboundComponent implements OnInit, OnDestroy {
     if (packErr) {
       this.bsScanError = `❌ ${packErr}`;
       return;
+    }
+
+    const needQty = Number(item.quantity) || 0;
+    if (needQty > 0) {
+      const remain = needQty - this.bsScanTotal;
+      if (scannedQty > remain + 1e-9) {
+        const fmt = (n: number) => n.toLocaleString('vi-VN');
+        this.bsScanError =
+          `❌ Từ chối: số lượng quét ${fmt(scannedQty)} dư so với còn lại ${fmt(Math.max(0, remain))}.\n` +
+          `Cần ${fmt(needQty)} ${item.unit || ''} — đã scan ${fmt(this.bsScanTotal)}. Không cho xuất dư trong 1 lần scan.`;
+        return;
+      }
     }
 
     this.bsScanError = '';
@@ -2973,6 +3032,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
       
       // Clear pending data
       const processedCount = this.pendingScanData.length;
+      for (const scanItem of this.pendingScanData) {
+        this.addBatchPxkExported(scanItem.materialCode, scanItem.poNumber, scanItem.quantity);
+      }
       this.pendingScanData = [];
       this.savePendingToStorage();
       
@@ -3349,6 +3411,18 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.exportQuantity = 0;
       return;
     }
+
+    const pxkQtyErrAuto = this.validateScanQtyVsPxkRemaining(
+      this.lastScannedData.materialCode,
+      this.lastScannedData.poNumber,
+      this.exportQuantity
+    );
+    if (pxkQtyErrAuto) {
+      this.showScanError(pxkQtyErrAuto);
+      this.lastScannedData = null;
+      this.exportQuantity = 0;
+      return;
+    }
     
     try {
       console.log('🚀 SCANNER: Auto-exporting scanned material...');
@@ -3383,9 +3457,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
       // Store data for success message
       const successData = {
         materialCode: this.lastScannedData.materialCode,
+        poNumber: this.lastScannedData.poNumber,
         exportQuantity: this.exportQuantity,
         unit: 'KG' // Default unit
       };
+      this.addBatchPxkExported(successData.materialCode, successData.poNumber, successData.exportQuantity);
       
       // Reset scanner state
       this.lastScannedData = null;
@@ -4191,6 +4267,51 @@ export class OutboundComponent implements OnInit, OnDestroy {
     return null;
   }
 
+  /**
+   * Một lần scan không được dư SL so với phần còn lại của PXK (PXK − đã xuất − đang pending).
+   * Không cắt tem / không ghi nhận phần dư.
+   */
+  private validateScanQtyVsPxkRemaining(materialCode: string, poNumber: string, scanQty: number): string | null {
+    const codeKey = String(materialCode || '').trim().toUpperCase();
+    const poKey = this.normalizePxImportPo(poNumber);
+    const q = Number(scanQty);
+    if (!(q > 0)) {
+      return `Số lượng quét không hợp lệ: ${scanQty}`;
+    }
+    const pxkQty = this.batchPxkPairs
+      .filter(p => p.code === codeKey && p.po && this.pxImportPoMatch(p.po, poKey))
+      .reduce((s, p) => s + (Number(p.qty) || 0), 0);
+    if (!(pxkQty > 0)) {
+      return null;
+    }
+    let exported = 0;
+    this.batchPxkExportedByKey.forEach((qty, key) => {
+      const sep = key.indexOf('|');
+      const c = sep >= 0 ? key.slice(0, sep) : key;
+      const p = sep >= 0 ? key.slice(sep + 1) : '';
+      if (c === codeKey && this.pxImportPoMatch(p, poKey)) {
+        exported += Number(qty) || 0;
+      }
+    });
+    const pending = (this.pendingScanData || []).reduce((s, item) => {
+      const ic = String(item?.materialCode || '').trim().toUpperCase();
+      if (ic !== codeKey) return s;
+      if (!this.pxImportPoMatch(this.normalizePxImportPo(item?.poNumber), poKey)) return s;
+      return s + (Number(item?.quantity) || 0);
+    }, 0);
+    const remain = pxkQty - exported - pending;
+    if (q > remain + 1e-9) {
+      const fmt = (n: number) => n.toLocaleString('vi-VN');
+      const remainShow = Math.max(0, remain);
+      return (
+        `Từ chối: số lượng quét ${fmt(q)} dư so với còn lại ${fmt(remainShow)}.\n` +
+        `PXK ${fmt(pxkQty)} — đã xuất ${fmt(exported)} — đang scan ${fmt(pending)}.\n` +
+        `Không cho xuất dư trong 1 lần scan.`
+      );
+    }
+    return null;
+  }
+
   /** Parse và ghi pending — có kiểm QC rule (IQC) trên inventory khớp vật tư. */
   private async processBatchMaterialScanAsync(scannedData: string): Promise<void> {
     if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
@@ -4228,6 +4349,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
     const lsxMatchErr = await this.validateScanMatchesLsxPxk(materialCode, poNumber);
     if (lsxMatchErr) {
       this.showScanError(lsxMatchErr);
+      return;
+    }
+
+    const pxkQtyErr = this.validateScanQtyVsPxkRemaining(materialCode, poNumber, quantity);
+    if (pxkQtyErr) {
+      this.showScanError(pxkQtyErr);
       return;
     }
 

@@ -69,16 +69,16 @@ export class TemXuatKhoService {
   async loadPxkScanPairsForLsx(
     factory: 'ASM1' | 'ASM2',
     lsxRaw: string
-  ): Promise<{ materialCode: string; po: string }[]> {
+  ): Promise<{ materialCode: string; po: string; quantity: number }[]> {
     const variants = this.buildLsxVariants(factory, lsxRaw);
     if (variants.length === 0) {
       return [];
     }
 
-    const collect = (data: any): { materialCode: string; po: string }[] => {
+    const collect = (data: any): { materialCode: string; po: string; quantity: number }[] => {
       if (!data) return [];
       const rawLines = Array.isArray(data.lines) ? data.lines : [];
-      const out: { materialCode: string; po: string }[] = [];
+      const out: { materialCode: string; po: string; quantity: number }[] = [];
       for (const ln of rawLines) {
         const materialCode = String(ln?.materialCode ?? '').trim().toUpperCase();
         if (!materialCode) continue;
@@ -86,7 +86,16 @@ export class TemXuatKhoService {
           .trim()
           .toUpperCase()
           .replace(/\s/g, '');
-        out.push({ materialCode, po });
+        const rawQty = ln?.quantity ?? ln?.qty ?? 0;
+        const quantity =
+          typeof rawQty === 'number'
+            ? rawQty
+            : Number(String(rawQty).replace(/,/g, '').trim());
+        out.push({
+          materialCode,
+          po,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 0
+        });
       }
       return out;
     };
@@ -110,7 +119,7 @@ export class TemXuatKhoService {
           ref.where('factory', '==', factory).where('lsx', 'in', chunk)
         ).get()
       );
-      const pairs: { materialCode: string; po: string }[] = [];
+      const pairs: { materialCode: string; po: string; quantity: number }[] = [];
       for (const doc of qSnap.docs) {
         pairs.push(...collect(doc.data()));
       }

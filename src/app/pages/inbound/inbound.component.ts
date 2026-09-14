@@ -15,6 +15,7 @@ import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.servic
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
+import { KkCatalogService } from '../../services/kk-catalog.service';
 
 type TbhdCheckBatchRow = {
   batchNumber: string;
@@ -258,7 +259,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     private router: Router,
     private route: ActivatedRoute,
     private location: Location,
-    private authService: FirebaseAuthService
+    private authService: FirebaseAuthService,
+    private kkCatalog: KkCatalogService
   ) {}
 
   goToMenu(): void {
@@ -3111,13 +3113,17 @@ export class InboundComponent implements OnInit, OnDestroy {
           )
         : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '');
     const iconHtml = qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : '';
+    const loc = this.formatInboundLabelHomeLoc(qr.homeLoc);
+    const locHtml = loc ? `<div class="req-loc">${this.escapeInboundLabelHtml(loc)}</div>` : '';
+    const hasIcon = qr.iconType ? ' has-icon' : '';
     return `
-                    <div class="qr-container">
+                    <div class="qr-container${hasIcon}">
                       <div class="qr-section">
                         <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                       </div>
                       ${infoHtml}
                       ${iconHtml}
+                      ${locHtml}
                     </div>
                   `;
   }
@@ -3173,6 +3179,31 @@ export class InboundComponent implements OnInit, OnDestroy {
       imd,
       bag
     };
+  }
+
+  private formatInboundLabelHomeLoc(raw: string | null | undefined): string {
+    const first = String(raw || '')
+      .split(/[,;|/]+/)
+      .map((x) => x.trim())
+      .find(Boolean);
+    return first || '';
+  }
+
+  private async attachInboundLabelHomeLocs(qrImages: any[]): Promise<void> {
+    if (!qrImages.length) return;
+    const [typeMap, homeLocs] = await Promise.all([
+      this.kkCatalog.loadAllAsMap(),
+      this.kkCatalog.loadHomeLocs()
+    ]);
+    const cache = new Map<string, string>();
+    for (const qr of qrImages) {
+      const parsed = this.parseInboundQrLabelDisplayFields(String(qr.qrData || ''));
+      const code = String(qr.materialCode || parsed.materialCode || '').trim();
+      if (!cache.has(code)) {
+        cache.set(code, this.kkCatalog.homeLocForMaterial(code, typeMap, homeLocs));
+      }
+      qr.homeLoc = cache.get(code) || '';
+    }
   }
 
   /** Số lượng trên tem: phân tách hàng nghìn bằng dấu phẩy (VD: 10000 → 10,000). */
@@ -3289,6 +3320,8 @@ export class InboundComponent implements OnInit, OnDestroy {
         alert('Không tạo được tem để in.');
         return;
       }
+
+      await this.attachInboundLabelHomeLocs(qrImages);
 
       // Create print window with real QR codes
       const newWindow = window.open('', '_blank');
@@ -3424,6 +3457,26 @@ export class InboundComponent implements OnInit, OnDestroy {
                 .qr-container {
                   position: relative !important;
                 }
+
+                .req-loc {
+                  position: absolute !important;
+                  right: 0.8mm !important;
+                  bottom: 0.5mm !important;
+                  font-size: 7px !important;
+                  font-weight: 800 !important;
+                  font-family: Arial, sans-serif !important;
+                  color: #000000 !important;
+                  line-height: 1 !important;
+                  text-align: right !important;
+                  max-width: 22mm !important;
+                  white-space: nowrap !important;
+                  overflow: hidden !important;
+                  z-index: 8 !important;
+                }
+
+                .qr-container.has-icon .req-loc {
+                  right: 7.4mm !important;
+                }
                 
                 .qr-grid {
                   text-align: left !important;
@@ -3543,6 +3596,25 @@ export class InboundComponent implements OnInit, OnDestroy {
                   
                   .qr-container {
                     position: relative !important;
+                  }
+
+                  .req-loc {
+                    position: absolute !important;
+                    right: 0.8mm !important;
+                    bottom: 0.5mm !important;
+                    font-size: 7px !important;
+                    font-weight: 800 !important;
+                    color: #000000 !important;
+                    line-height: 1 !important;
+                    text-align: right !important;
+                    max-width: 22mm !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    z-index: 8 !important;
+                  }
+
+                  .qr-container.has-icon .req-loc {
+                    right: 7.4mm !important;
                   }
                   
                   .qr-grid {
@@ -4045,6 +4117,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       if (qrImages.length === 0) {
         alert('Không tạo được tem để in (kiểm tra lại dữ liệu).');
       } else {
+      await this.attachInboundLabelHomeLocs(qrImages);
 
       // Create print window with all QR codes
       const newWindow = window.open('', '_blank');
@@ -4182,6 +4255,26 @@ export class InboundComponent implements OnInit, OnDestroy {
                 .qr-container {
                   position: relative !important;
                 }
+
+                .req-loc {
+                  position: absolute !important;
+                  right: 0.8mm !important;
+                  bottom: 0.5mm !important;
+                  font-size: 7px !important;
+                  font-weight: 800 !important;
+                  font-family: Arial, sans-serif !important;
+                  color: #000000 !important;
+                  line-height: 1 !important;
+                  text-align: right !important;
+                  max-width: 22mm !important;
+                  white-space: nowrap !important;
+                  overflow: hidden !important;
+                  z-index: 8 !important;
+                }
+
+                .qr-container.has-icon .req-loc {
+                  right: 7.4mm !important;
+                }
                 
                 .qr-grid {
                   text-align: left !important;
@@ -4298,6 +4391,25 @@ export class InboundComponent implements OnInit, OnDestroy {
                   
                   .qr-container {
                     position: relative !important;
+                  }
+
+                  .req-loc {
+                    position: absolute !important;
+                    right: 0.8mm !important;
+                    bottom: 0.5mm !important;
+                    font-size: 7px !important;
+                    font-weight: 800 !important;
+                    color: #000000 !important;
+                    line-height: 1 !important;
+                    text-align: right !important;
+                    max-width: 22mm !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    z-index: 8 !important;
+                  }
+
+                  .qr-container.has-icon .req-loc {
+                    right: 7.4mm !important;
                   }
                   
                   .qr-grid {
