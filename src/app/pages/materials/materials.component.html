@@ -825,6 +825,9 @@
       <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
         Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
       </button>
+      <p class="mat-m-hint" *ngIf="nlScanLastReadMs !== null">
+        Đọc tem lần scan: <strong>{{ formatScanMs(nlScanLastReadMs) }}</strong>
+      </p>
       <p class="mat-m-hint" *ngIf="searchTerm && searchTerm.length < 4 && !isLoading">
         Cần ít nhất 4 số, hoặc Scan / Enter
       </p>
@@ -2766,19 +2769,21 @@
           id="nl-pda-scan-input"
           type="text"
           class="mat-m-loc-scan-input"
-          [(ngModel)]="nlPdaBuffer"
-          (keydown)="onNlPdaScanKeydown($event)"
           placeholder="Bắn scanner vào đây…"
           autocomplete="off"
-          autocapitalize="characters"
+          autocorrect="off"
+          autocapitalize="off"
           spellcheck="false"
         />
       </div>
-      <p class="mat-m-loc-scan-hint">Scanner tự Enter sau khi quét — hệ thống tìm mã ngay.</p>
+      <p class="mat-m-loc-scan-hint">
+        Scanner tự Enter sau khi quét — hệ thống tìm mã ngay.
+        <span *ngIf="nlScanLastReadMs !== null"> · Đọc tem lần này: <strong>{{ formatScanMs(nlScanLastReadMs) }}</strong></span>
+      </p>
     </div>
     <footer class="mat-m-kk-modal__footer">
       <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="closeNlPdaScan()">Hủy</button>
-      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary" (click)="applyNlSearchScan(nlPdaBuffer)" [disabled]="!nlPdaBuffer.trim()">
+      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--primary" (click)="submitNlPdaScan()">
         Tìm mã
       </button>
     </footer>
@@ -4637,19 +4642,24 @@
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanQrInput"
                  type="text"
-                 [(ngModel)]="kkTypeScanQrInput"
-                 (input)="onKkTypeScanNewline('code', $event)"
-                 (keydown.enter)="submitKkTypeScanCode($event)"
-                 (keydown.tab)="submitKkTypeScanCode($event)"
                  placeholder="Scan mã hàng..."
                  autocomplete="off"
+                 autocorrect="off"
+                 autocapitalize="off"
                  spellcheck="false"
-                 enterkeyhint="done"
-                 [disabled]="kkTypeScanBusy">
-          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || !kkTypeScanQrInput.trim()">
+                 enterkeyhint="done">
+          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy">
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
         </div>
+        <p class="kk-type-scan__timing" *ngIf="kkTypeScanLastReadMs !== null">
+          Đọc tem: <strong>{{ formatScanMs(kkTypeScanLastReadMs) }}</strong>
+          <ng-container *ngIf="kkTypeScanLastSaveMs !== null">
+            · Ghi nhận: <strong>{{ formatScanMs(kkTypeScanLastSaveMs) }}</strong>
+          </ng-container>
+          <ng-container *ngIf="kkTypeScanLastSavePending"> · đang ghi…</ng-container>
+          <span *ngIf="kkTypeScanPendingCount > 1"> · chờ {{ kkTypeScanPendingCount - 1 }} tem</span>
+        </p>
 
         <div class="kk-type-scan__code" *ngIf="kkTypeScanMaterialCode">
           <div class="kk-type-scan__code-head">

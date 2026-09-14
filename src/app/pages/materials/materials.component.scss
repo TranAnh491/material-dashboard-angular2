@@ -8787,6 +8787,18 @@ $asm1-toolbar-h: 36px;
     color: #b45309;
   }
 
+  &__timing {
+    margin: 8px 0 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f766e;
+    font-variant-numeric: tabular-nums;
+
+    strong {
+      color: #134e4a;
+    }
+  }
+
   &__log {
     list-style: none;
     margin: 16px 0 0;

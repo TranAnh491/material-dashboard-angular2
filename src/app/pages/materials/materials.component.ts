@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { Subject, BehaviorSubject, Subscription, firstValueFrom } from 'rxjs';
@@ -401,10 +401,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeScanOkCount = 0;
   kkTypeScanSkipCount = 0;
   kkTypeScanMissCount = 0;
-  kkTypeScanLogs: Array<{ ok: boolean; skip?: boolean; text: string }> = [];
+  kkTypeScanLogs: Array<{ id: number; ok: boolean; skip?: boolean; text: string; readMs?: number; saveMs?: number }> = [];
+  kkTypeScanLastReadMs: number | null = null;
+  kkTypeScanLastSaveMs: number | null = null;
+  kkTypeScanLastSavePending = false;
+  nlScanLastReadMs: number | null = null;
   kkTypeScanOpUntil: Date | null = null;
   private kkTypeScanExtraLines: InventoryMaterial[] = [];
   private kkTypeScanCartons: Record<string, number> = {};
+  /** Hàng đợi QR khi user scan tiếp lúc đang ghi. */
+  private kkHidQrQueue: Array<{ raw: string; readMs: number }> = [];
+  private kkHidQrDraining = false;
+  private kkScanLogSeq = 0;
+  private kkScanWriteChain: Promise<void> = Promise.resolve();
+  private kkScanWritesInFlight = 0;
+  private kkBeepCtx: AudioContext | null = null;
+  private hidScanTimers = new Map<HTMLInputElement, ReturnType<typeof setTimeout>>();
+  private hidScanBound = new WeakSet<HTMLInputElement>();
   private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
   private kkScanOpTimer: any;
   kkTypePrintBusy = false;
@@ -870,7 +883,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     private kkCatalog: KkCatalogService,
     private readTracker: ReadTrackerService,
     private location: Location,
-    private authService: FirebaseAuthService
+    private authService: FirebaseAuthService,
+    private ngZone: NgZone
   ) {}
 
   getStorageUnitLabel(material: InventoryMaterial): string {
@@ -2429,23 +2443,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     void this.performSearch(code);
   }
 
-  onNlPdaScanKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.applyNlSearchScan(this.nlPdaBuffer);
-  }
-
   closeNlPdaScan(): void {
     this.showNlPdaScan = false;
     this.nlPdaBuffer = '';
+    this.nlScanLastReadMs = null;
   }
 
   private focusNlPdaInput(): void {
     const el = document.getElementById('nl-pda-scan-input') as HTMLInputElement | null;
     if (!el) return;
     el.focus();
-    el.select();
+    this.bindHidScanInput(el, (raw, readMs) => {
+      this.nlScanLastReadMs = readMs;
+      this.applyNlSearchScan(raw);
+    }, { idleMs: 50 });
+  }
+
+  submitNlPdaScan(): void {
+    const el = document.getElementById('nl-pda-scan-input') as HTMLInputElement | null;
+    this.applyNlSearchScan(el?.value || this.nlPdaBuffer);
   }
 
   async startNlCamera(purpose: 'search' | 'location'): Promise<void> {
@@ -2737,6 +2753,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.destroy$.next();
     this.destroy$.complete();
     this.kkLiveStop$.complete();
+    this.hidScanTimers.forEach((t) => clearTimeout(t));
+    this.hidScanTimers.clear();
+    this.kkHidQrQueue = [];
   }
 
   // Setup debounced search for better performance
@@ -9127,12 +9146,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanLocationInput = '';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanBusy = false;
+    this.kkHidQrQueue = [];
+    this.kkHidQrDraining = false;
     this.kkTypeScanMaterialCode = '';
     this.kkTypeScanStandardDraft = '';
     this.kkTypeScanOkCount = 0;
     this.kkTypeScanSkipCount = 0;
     this.kkTypeScanMissCount = 0;
     this.kkTypeScanLogs = [];
+    this.kkTypeScanLastReadMs = null;
+    this.kkTypeScanLastSaveMs = null;
+    this.kkTypeScanLastSavePending = false;
     this.kkTypeScanExtraLines = [];
     this.kkTypeScanCartons = {};
     this.cdr.detectChanges();
@@ -9153,6 +9177,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanLogs = [];
     this.kkTypeScanExtraLines = [];
     this.kkTypeScanCartons = {};
+    this.kkHidQrQueue = [];
+    this.kkHidQrDraining = false;
+    this.syncKkTypeRows();
   }
 
   submitKkTypeScanOperator(event?: Event): void {
@@ -9183,10 +9210,111 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el && !el.disabled) {
         el.focus();
+        if (id === 'kkTypeScanQrInput') {
+          this.bindHidScanInput(el, (raw, readMs) => this.enqueueKkTypeScanCode(raw, readMs), { idleMs: 50 });
+        }
         return;
       }
       if (retry < 8) this.focusKkTypeScanInput(id, retry + 1);
     }, retry === 0 ? 0 : 50);
+  }
+
+  /**
+   * Máy scanner HID gõ rất nhanh. Không dùng ngModel / (keydown) Angular
+   * vì mỗi ký tự kích hoạt change detection → mất chữ khi tem QR dài.
+   * Gom native value, chỉ xử lý khi Enter hoặc hết burst.
+   */
+  private bindHidScanInput(
+    el: HTMLInputElement,
+    onComplete: (raw: string, readMs: number) => void,
+    opts?: { idleMs?: number }
+  ): void {
+    if (!el || this.hidScanBound.has(el)) return;
+    this.hidScanBound.add(el);
+    const idleMs = opts?.idleMs ?? 0;
+    let burstStart = 0;
+    const markBurst = () => {
+      if (!burstStart) burstStart = performance.now();
+    };
+    const flush = (delay: number) => {
+      const prev = this.hidScanTimers.get(el);
+      if (prev) clearTimeout(prev);
+      const t = setTimeout(() => {
+        this.hidScanTimers.delete(el);
+        const raw = String(el.value || '')
+          .replace(/[\r\n\t]+/g, '')
+          .replace(/[\u0000-\u001F]/g, '')
+          .trim();
+        const started = burstStart;
+        burstStart = 0;
+        if (!raw) return;
+        el.value = '';
+        const elapsed = started ? performance.now() - started : 0;
+        const readMs = Math.max(0, Math.round(elapsed - delay));
+        this.ngZone.run(() => onComplete(raw, readMs));
+      }, delay);
+      this.hidScanTimers.set(el, t);
+    };
+    this.ngZone.runOutsideAngular(() => {
+      el.addEventListener('keydown', (event: KeyboardEvent) => {
+        if (event.key === 'Enter' || event.key === 'Tab') {
+          event.preventDefault();
+          event.stopPropagation();
+          flush(8);
+          return;
+        }
+        if (event.key.length === 1 || event.key === 'Unidentified' || event.key === 'Process') {
+          markBurst();
+        }
+      });
+      el.addEventListener('input', () => {
+        markBurst();
+        if (/[\r\n]/.test(el.value)) {
+          el.value = el.value.replace(/[\r\n]+/g, '');
+          flush(8);
+          return;
+        }
+        if (idleMs > 0) {
+          const v = el.value || '';
+          if (v.includes('|') || v.length >= 20) flush(idleMs);
+        }
+      });
+    });
+  }
+
+  private enqueueKkTypeScanCode(raw: string, readMs = 0): void {
+    const v = String(raw || '').trim();
+    if (!v) return;
+    this.kkHidQrQueue.push({ raw: v, readMs: Math.max(0, readMs || 0) });
+    void this.drainKkHidQrQueue();
+  }
+
+  get kkTypeScanPendingCount(): number {
+    return this.kkHidQrQueue.length + (this.kkHidQrDraining ? 1 : 0) + this.kkScanWritesInFlight;
+  }
+
+  formatScanMs(ms: number | null | undefined): string {
+    const n = Number(ms);
+    if (!Number.isFinite(n) || n < 0) return '—';
+    if (n < 1000) return `${Math.round(n)}ms`;
+    return `${(n / 1000).toFixed(2)}s`;
+  }
+
+  private async drainKkHidQrQueue(): Promise<void> {
+    if (this.kkHidQrDraining) return;
+    this.kkHidQrDraining = true;
+    try {
+      while (this.kkHidQrQueue.length && this.showKkTypeScanModal && this.kkTypeScanStep === 'codes') {
+        const next = this.kkHidQrQueue.shift();
+        if (!next) break;
+        await this.submitKkTypeScanCodeFromRaw(next.raw, next.readMs);
+      }
+    } finally {
+      this.kkHidQrDraining = false;
+      if (this.kkHidQrQueue.length && this.showKkTypeScanModal && this.kkTypeScanStep === 'codes') {
+        void this.drainKkHidQrQueue();
+      }
+    }
   }
 
   onKkTypeScanNewline(kind: 'operator' | 'location' | 'code', event: Event): void {
@@ -9290,6 +9418,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanMaterialCode = '';
     this.kkTypeScanStandardDraft = '';
     this.kkTypeScanCartons = {};
+    this.kkHidQrQueue = [];
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanLocationInput');
     setTimeout(() => {
@@ -9317,18 +9446,33 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return a.startsWith(b) || b.startsWith(a);
   }
 
-  private pushKkTypeScanLog(ok: boolean, text: string, skip = false): void {
-    this.kkTypeScanLogs = [{ ok, skip, text }, ...this.kkTypeScanLogs].slice(0, 20);
+  private pushKkTypeScanLog(
+    ok: boolean,
+    text: string,
+    skip = false,
+    extra?: { readMs?: number; saveMs?: number }
+  ): number {
+    const id = ++this.kkScanLogSeq;
+    this.kkTypeScanLogs = [{ id, ok, skip, text, readMs: extra?.readMs, saveMs: extra?.saveMs }, ...this.kkTypeScanLogs].slice(0, 20);
     if (ok) this.kkTypeScanOkCount += 1;
     else if (skip) this.kkTypeScanSkipCount += 1;
     else this.kkTypeScanMissCount += 1;
+    return id;
+  }
+
+  private patchKkTypeScanLog(id: number, text: string, saveMs?: number): void {
+    this.kkTypeScanLogs = this.kkTypeScanLogs.map((log) =>
+      log.id === id ? { ...log, text, saveMs } : log
+    );
   }
 
   private kkTypeScanBeep(kind: 'ready' | 'ok' | 'err'): void {
     try {
       const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return;
-      const ctx = new Ctx();
+      if (!this.kkBeepCtx) this.kkBeepCtx = new Ctx();
+      const ctx = this.kkBeepCtx;
+      if (ctx.state === 'suspended') void ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -9338,7 +9482,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       gain.gain.value = 0.08;
       osc.start();
       osc.stop(ctx.currentTime + (kind === 'ready' ? 0.12 : 0.08));
-      osc.onended = () => ctx.close();
     } catch {
       /* ignore audio */
     }
@@ -9355,32 +9498,43 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async submitKkTypeScanCode(event?: Event): Promise<void> {
     event?.preventDefault?.();
-    if (this.kkTypeScanStep !== 'codes' || this.kkTypeScanBusy) return;
-    if (!this.checkKkScanOpExpiry() && !this.kkTypeScanOperator) {
-      this.kkTypeScanStep = 'operator';
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
-      return;
-    }
+    if (this.kkTypeScanStep !== 'codes') return;
     const raw = this.readKkTypeScanInput('kkTypeScanQrInput', this.kkTypeScanQrInput, event);
     this.kkTypeScanQrInput = '';
     const inputEl = document.getElementById('kkTypeScanQrInput') as HTMLInputElement | null;
     if (inputEl) inputEl.value = '';
+    if (raw) this.enqueueKkTypeScanCode(raw, 0);
+  }
+
+  private async submitKkTypeScanCodeFromRaw(raw: string, readMs = 0): Promise<void> {
+    if (this.kkTypeScanStep !== 'codes') return;
+    this.kkTypeScanLastReadMs = readMs;
+    this.kkTypeScanLastSaveMs = null;
+    this.kkTypeScanLastSavePending = true;
+    if (!this.checkKkScanOpExpiry() && !this.kkTypeScanOperator) {
+      this.kkTypeScanStep = 'operator';
+      this.kkTypeScanLastSavePending = false;
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      return;
+    }
     if (!raw) return;
 
     const parsed = this.parseInboundQrLabelDisplayFields(raw);
     const code = String(parsed.materialCode || raw || '').trim().toUpperCase();
     if (!code) {
-      this.pushKkTypeScanLog(false, 'QR thiếu mã hàng');
+      this.pushKkTypeScanLog(false, `QR thiếu mã hàng · đọc ${this.formatScanMs(readMs)}`, false, { readMs });
       this.kkTypeScanBeep('err');
+      this.kkTypeScanLastSavePending = false;
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
     }
 
     if (!this.kkTypeScanLocation) {
-      this.pushKkTypeScanLog(false, 'Chưa scan vị trí');
+      this.pushKkTypeScanLog(false, `Chưa scan vị trí · đọc ${this.formatScanMs(readMs)}`, false, { readMs });
       this.kkTypeScanStep = 'location';
+      this.kkTypeScanLastSavePending = false;
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanLocationInput');
       return;
@@ -9391,7 +9545,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (prevCode && prevCode !== code) {
       this.pushKkTypeScanLog(true, `Sang mã ${code}`, true);
     }
-    await this.applyKkTypeScanPutaway(code, parsed.po, parsed.imd, qty);
+    await this.applyKkTypeScanPutaway(code, parsed.po, parsed.imd, qty, readMs);
   }
 
   private kkStockLinesForCode(code: string): InventoryMaterial[] {
@@ -9478,21 +9632,27 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return scored[0].m;
   }
 
-  private async applyKkTypeScanPutaway(code: string, po: string, imd: string, qty: number): Promise<void> {
+  private async applyKkTypeScanPutaway(
+    code: string,
+    po: string,
+    imd: string,
+    qty: number,
+    readMs = 0
+  ): Promise<void> {
     this.kkTypeScanMaterialCode = code;
     const loc = this.kkTypeScanLocation;
-    this.kkTypeScanBusy = true;
-    this.cdr.detectChanges();
+    const readNote = `đọc ${this.formatScanMs(readMs)}`;
     try {
       await this.ensureKkScanStockLines(code);
-    } finally {
-      this.kkTypeScanBusy = false;
+    } catch {
+      /* ensure already logs */
     }
     const home = this.kkScanHomeLocation(code);
     if (home && !this.kkScanLocationAllowed(loc, home)) {
       const msg = `Đưa mã ${code} về ${home} (đã có hàng ở kệ đó). Không scan vào ${loc}.`;
-      this.pushKkTypeScanLog(false, msg);
+      this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
+      this.kkTypeScanLastSavePending = false;
       alert(msg);
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
@@ -9503,8 +9663,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const first = line || this.kkTypeScanCodeRows[0];
     this.kkTypeScanStandardDraft = first ? (this.getEffectiveStandardPacking(first) || '') : '';
     if (!line?.id) {
-      this.pushKkTypeScanLog(false, `${code} — không có dòng tồn`);
+      this.pushKkTypeScanLog(false, `${code} — không có dòng tồn · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
+      this.kkTypeScanLastSavePending = false;
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
       return;
@@ -9513,6 +9674,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const operator = this.kkTypeScanOperator || this.kkOperatorIdCache;
     if (!operator) {
       this.kkTypeScanStep = 'operator';
+      this.kkTypeScanLastSavePending = false;
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanOperatorInput');
       return;
@@ -9520,119 +9682,156 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const fromLocation = this.normalizeMultiLocationValue(String(line.location || ''));
     const nextLoc = this.normalizeMultiLocationValue(loc);
-    const nextScan = this.roundKkQty(this.getKkScanCount(line) + qty);
+    const prevScanCount = this.getKkScanCount(line);
+    const prevLocation = String(line.location || '');
+    const prevKk = !!line.kkChecked;
+    const prevKkBy = line.kkBy;
+    const prevKkAt = line.kkAt;
+    const nextScan = this.roundKkQty(prevScanCount + qty);
     const stock = this.calculateCurrentStock(line);
     const shouldKk = nextScan + 1e-9 >= stock && stock > 0;
     const kkAt = new Date();
 
-    this.kkTypeScanBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const payload: Record<string, unknown> = {
-        ...this.inventoryLocationWriteFields(nextLoc),
-        kkScanCount: nextScan,
-        updatedAt: kkAt,
-        lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-        modifiedBy: operator,
-        locationManualOverride: true
-      };
-      if (shouldKk) {
-        payload.kkChecked = true;
-        payload.kkBy = operator;
-        payload.kkAt = kkAt;
-      }
-      const batch = this.firestore.firestore.batch();
-      batch.update(this.firestore.collection('inventory-materials').doc(line.id).ref, payload);
-      if (fromLocation !== nextLoc) {
-        batch.set(this.firestore.collection('material-location-history').doc().ref, {
-          factory: this.selectedFactory,
-          materialId: line.id,
-          materialCode: line.materialCode,
-          poNumber: line.poNumber || '',
-          fromLocation,
-          toLocation: nextLoc,
-          changedBy: operator,
-          changeType: 'kk-type-scan',
-          changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-        });
-      }
-      if (shouldKk) {
-        batch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
-          inventoryDocId: line.id,
-          factory: this.resolveKkFactoryForMaterial(line),
-          materialCode: String(line.materialCode || '').trim().toUpperCase(),
-          materialName: String(line.materialName || '').trim(),
-          poNumber: String(line.poNumber || '').trim(),
-          batchNumber: String(line.batchNumber || '').trim(),
-          location: nextLoc,
-          quantity: Number(line.quantity) || 0,
-          stock,
-          unit: String(line.unit || '').trim(),
-          checkedBy: operator,
-          checkedAt: kkAt,
-          checkedDateKey: this.toDateKey(kkAt),
-          createdAt: new Date(),
-          source: 'kk-type-scan'
-        });
-      }
-      await batch.commit();
+    const payload: Record<string, unknown> = {
+      ...this.inventoryLocationWriteFields(nextLoc),
+      kkScanCount: nextScan,
+      updatedAt: kkAt,
+      lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+      modifiedBy: operator,
+      locationManualOverride: true
+    };
+    if (shouldKk) {
+      payload.kkChecked = true;
+      payload.kkBy = operator;
+      payload.kkAt = kkAt;
+    }
+    const batch = this.firestore.firestore.batch();
+    batch.update(this.firestore.collection('inventory-materials').doc(line.id).ref, payload);
+    if (fromLocation !== nextLoc) {
+      batch.set(this.firestore.collection('material-location-history').doc().ref, {
+        factory: this.selectedFactory,
+        materialId: line.id,
+        materialCode: line.materialCode,
+        poNumber: line.poNumber || '',
+        fromLocation,
+        toLocation: nextLoc,
+        changedBy: operator,
+        changeType: 'kk-type-scan',
+        changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    if (shouldKk) {
+      batch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
+        inventoryDocId: line.id,
+        factory: this.resolveKkFactoryForMaterial(line),
+        materialCode: String(line.materialCode || '').trim().toUpperCase(),
+        materialName: String(line.materialName || '').trim(),
+        poNumber: String(line.poNumber || '').trim(),
+        batchNumber: String(line.batchNumber || '').trim(),
+        location: nextLoc,
+        quantity: Number(line.quantity) || 0,
+        stock,
+        unit: String(line.unit || '').trim(),
+        checkedBy: operator,
+        checkedAt: kkAt,
+        checkedDateKey: this.toDateKey(kkAt),
+        createdAt: new Date(),
+        source: 'kk-type-scan'
+      });
+    }
 
-      line.location = nextLoc;
-      line.kkScanCount = nextScan;
+    const stampLocal = (
+      location: string,
+      scanCount: number,
+      kkOn: boolean,
+      kkBy?: string,
+      kkWhen?: Date
+    ) => {
+      const applyKk = (x: InventoryMaterial) => {
+        if (kkOn) {
+          x.kkChecked = true;
+          x.kkBy = kkBy;
+          x.kkAt = kkWhen;
+        } else {
+          x.kkChecked = prevKk;
+          x.kkBy = prevKkBy;
+          x.kkAt = prevKkAt;
+        }
+      };
+      line.location = location;
+      line.kkScanCount = scanCount;
       const rowMeta = line as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
-      rowMeta.__prevLocation = nextLoc;
-      rowMeta.__locationAtLoad = nextLoc;
+      rowMeta.__prevLocation = location;
+      rowMeta.__locationAtLoad = location;
       rowMeta.locationManualOverride = true;
-      if (shouldKk) {
-        line.kkChecked = true;
-        line.kkBy = operator;
-        line.kkAt = kkAt;
-      }
+      applyKk(line);
       const stamp = (x: InventoryMaterial) => {
         if (x.id !== line.id) return;
-        x.location = nextLoc;
-        x.kkScanCount = nextScan;
-        if (shouldKk) {
-          x.kkChecked = true;
-          x.kkBy = operator;
-          x.kkAt = kkAt;
-        }
+        x.location = location;
+        x.kkScanCount = scanCount;
+        applyKk(x);
       };
       this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
       this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
       this.kkTypeScanExtraLines.forEach(stamp);
       this.patchKkInvSnapCache(line.id, {
-        location: nextLoc,
-        viTri: nextLoc,
-        kkScanCount: nextScan,
+        location,
+        viTri: location,
+        kkScanCount: scanCount,
         locationManualOverride: true,
-        ...(shouldKk ? { kkChecked: true, kkBy: operator, kkAt } : {})
+        ...(kkOn ? { kkChecked: true, kkBy, kkAt: kkWhen } : { kkChecked: prevKk })
       });
-      this.syncKkTypeRows();
-      this.kkTypeScanCartons = {
-        ...this.kkTypeScanCartons,
-        [code]: (this.kkTypeScanCartons[code] || 0) + 1
-      };
-      const cartons = this.kkTypeScanCartonScanned;
-      const cartonTotal = this.kkTypeScanCartonTotal;
-      const cartonNote = cartonTotal
-        ? `${cartons}/${cartonTotal} thùng${cartons < cartonTotal ? ` · thiếu ${cartonTotal - cartons}` : cartons > cartonTotal ? ` · thừa ${cartons - cartonTotal}` : ' · đủ'}`
-        : `${cartons} thùng`;
-      this.pushKkTypeScanLog(
-        true,
-        `${code} · ${cartonNote} · lượng ${this.formatNumber(nextScan)}/${this.formatNumber(stock)}${shouldKk ? ' · KK' : ''}`
-      );
-      this.kkTypeScanBeep('ok');
-    } catch (e) {
-      console.error('❌ applyKkTypeScanPutaway:', e);
-      this.pushKkTypeScanLog(false, 'Không lưu được vị trí / lượng');
-      this.kkTypeScanBeep('err');
-      alert('❌ Không lưu được scan vị trí.');
-    } finally {
-      this.kkTypeScanBusy = false;
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-    }
+    };
+
+    stampLocal(nextLoc, nextScan, shouldKk, operator, kkAt);
+    this.kkTypeScanCartons = {
+      ...this.kkTypeScanCartons,
+      [code]: (this.kkTypeScanCartons[code] || 0) + 1
+    };
+    const cartons = this.kkTypeScanCartonScanned;
+    const cartonTotal = this.kkTypeScanCartonTotal;
+    const cartonNote = cartonTotal
+      ? `${cartons}/${cartonTotal} thùng${cartons < cartonTotal ? ` · thiếu ${cartonTotal - cartons}` : cartons > cartonTotal ? ` · thừa ${cartons - cartonTotal}` : ' · đủ'}`
+      : `${cartons} thùng`;
+    const baseText = `${code} · ${cartonNote} · lượng ${this.formatNumber(nextScan)}/${this.formatNumber(stock)}${shouldKk ? ' · KK' : ''}`;
+    const logId = this.pushKkTypeScanLog(
+      true,
+      `${baseText} · ${readNote} · đang ghi…`,
+      false,
+      { readMs }
+    );
+    this.kkTypeScanBeep('ok');
+    this.kkTypeScanLastSavePending = true;
+    this.cdr.detectChanges();
+    this.focusKkTypeScanInput('kkTypeScanQrInput');
+
+    this.kkScanWritesInFlight += 1;
+    this.kkScanWriteChain = this.kkScanWriteChain
+      .then(async () => {
+        const saveStarted = performance.now();
+        await batch.commit();
+        const saveMs = Math.max(0, Math.round(performance.now() - saveStarted));
+        this.kkTypeScanLastSaveMs = saveMs;
+        this.kkTypeScanLastSavePending = this.kkScanWritesInFlight > 1;
+        this.patchKkTypeScanLog(logId, `${baseText} · ${readNote} · ghi ${this.formatScanMs(saveMs)}`, saveMs);
+        if (this.showKkTypeScanModal) this.cdr.detectChanges();
+      })
+      .catch((e) => {
+        console.error('❌ applyKkTypeScanPutaway:', e);
+        stampLocal(prevLocation, prevScanCount, prevKk, prevKkBy as string | undefined, prevKkAt as Date | undefined);
+        this.kkTypeScanCartons = {
+          ...this.kkTypeScanCartons,
+          [code]: Math.max(0, (this.kkTypeScanCartons[code] || 1) - 1)
+        };
+        this.kkTypeScanLastSavePending = false;
+        this.patchKkTypeScanLog(logId, `${code} — không lưu được · ${readNote}`, undefined);
+        this.kkTypeScanBeep('err');
+        if (this.showKkTypeScanModal) this.cdr.detectChanges();
+      })
+      .then(() => {
+        this.kkScanWritesInFlight = Math.max(0, this.kkScanWritesInFlight - 1);
+        if (!this.kkScanWritesInFlight) this.syncKkTypeRows();
+      });
   }
 
   get kkTypeScanCodeRows(): InventoryMaterial[] {
