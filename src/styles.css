@@ -197,3 +197,12 @@ body.ws-fullscreen-layout .content-area > * {
   height: 100dvh !important;
   max-width: none !important;
 }
+
+/* Scan Kiểm Kê: không để bàn phím ảo đẩy / che màn hình */
+body.kk-scan-kb-lock {
+  overflow: hidden !important;
+}
+
+body.kk-scan-kb-lock .kk-type-scan {
+  max-height: 100dvh;
+}

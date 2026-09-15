@@ -5412,11 +5412,19 @@ $asm1-toolbar-h: 36px;
   gap: 10px;
   margin-bottom: 16px;
 
+  &__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   &__head {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
+    width: auto;
     padding: 8px 10px;
     border: none;
     border-radius: 10px;
@@ -5446,6 +5454,43 @@ $asm1-toolbar-h: 36px;
       background: #e2e8f0;
     }
   }
+}
+
+.kk-scan-reset-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+
+  .material-icons {
+    font-size: 16px;
+    color: #c2410c;
+  }
+
+  &:hover:not(:disabled) {
+    background: #ffedd5;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.kk-type-muc__bar .kk-type-submuc__head {
+  flex: 1;
+  min-width: 0;
+  width: auto;
 }
 
 .kk-type-group {
@@ -5610,6 +5655,27 @@ $asm1-toolbar-h: 36px;
     font-weight: 700 !important;
     letter-spacing: 0.01em;
     color: #b91c1c !important;
+  }
+
+  &__reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid #fdba74;
+    background: #fff7ed !important;
+    color: #9a3412 !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    line-height: 1.2;
+    cursor: pointer;
+
+    .material-icons {
+      font-size: 14px;
+      color: #c2410c !important;
+    }
   }
 
   &:hover {
@@ -5941,6 +6007,15 @@ $asm1-toolbar-h: 36px;
 
     &:hover:not(:disabled) {
       background: #f8fafc;
+    }
+  }
+
+  &__reset-scan {
+    background: #fff7ed;
+    color: #9a3412;
+
+    &:hover:not(:disabled) {
+      background: #ffedd5;
     }
   }
 
@@ -8675,6 +8750,31 @@ $asm1-toolbar-h: 36px;
       &:disabled {
         opacity: 0.45;
       }
+    }
+  }
+
+  &__reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid #fdba74;
+    border-radius: 8px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+
+    .material-icons {
+      font-size: 16px;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
   }
 

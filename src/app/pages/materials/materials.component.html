@@ -506,13 +506,23 @@
         </div>
         <ng-container *ngIf="!kkActiveProductType">
           <div class="kk-type-muc" *ngFor="let muc of kkTypeBoxGroups">
-            <button type="button"
-                    class="kk-type-muc__head"
-                    (click)="toggleKkTypeMuc(muc.category, $event)">
-              <i class="material-icons">{{ isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less' }}</i>
-              <strong>{{ muc.title }}</strong>
-              <span>{{ muc.boxes.length }} loại</span>
-            </button>
+            <div class="kk-type-muc__bar">
+              <button type="button"
+                      class="kk-type-muc__head"
+                      (click)="toggleKkTypeMuc(muc.category, $event)">
+                <i class="material-icons">{{ isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less' }}</i>
+                <strong>{{ muc.title }}</strong>
+                <span>{{ muc.boxes.length }} loại</span>
+              </button>
+              <button type="button"
+                      class="kk-scan-reset-btn"
+                      (click)="resetKkScanForBoxes(muc.boxes, muc.title, $event)"
+                      [disabled]="!canEdit || kkLocMapBusy"
+                      title="Xóa lần quét cũ của mục này để quét lại">
+                <i class="material-icons">restart_alt</i>
+                Reset lần quét
+              </button>
+            </div>
             <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
               <div class="kk-type-group" *ngFor="let g of muc.groups || []">
                 <button type="button"
@@ -524,13 +534,23 @@
                 </button>
                 <ng-container *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
                   <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
-                    <button type="button"
-                            class="kk-type-submuc__head"
-                            (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key, s.key), $event)">
-                      <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key)) ? 'expand_more' : 'expand_less' }}</i>
-                      <strong>{{ s.title }}</strong>
-                      <span>{{ s.boxes.length }} loại</span>
-                    </button>
+                    <div class="kk-type-muc__bar">
+                      <button type="button"
+                              class="kk-type-submuc__head"
+                              (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key, s.key), $event)">
+                        <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key)) ? 'expand_more' : 'expand_less' }}</i>
+                        <strong>{{ s.title }}</strong>
+                        <span>{{ s.boxes.length }} loại</span>
+                      </button>
+                      <button type="button"
+                              class="kk-scan-reset-btn"
+                              (click)="resetKkScanForBoxes(s.boxes, s.title, $event)"
+                              [disabled]="!canEdit || kkLocMapBusy"
+                              title="Xóa lần quét cũ của mục này để quét lại">
+                        <i class="material-icons">restart_alt</i>
+                        Reset
+                      </button>
+                    </div>
                     <div class="kk-type-grid" *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
                       <button
                         type="button"
@@ -555,6 +575,12 @@
                             <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
                             {{ loc }}
                           </span>
+                        </span>
+                        <span class="kk-type-box__reset"
+                              (click)="resetKkScanForBoxes([box], box.productType, $event)"
+                              title="Xóa lần quét cũ để quét lại">
+                          <i class="material-icons">restart_alt</i>
+                          Reset lần quét
                         </span>
                       </button>
                     </div>
@@ -585,6 +611,12 @@
                       <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
                       {{ loc }}
                     </span>
+                  </span>
+                  <span class="kk-type-box__reset"
+                        (click)="resetKkScanForBoxes([box], box.productType, $event)"
+                        title="Xóa lần quét cũ để quét lại">
+                    <i class="material-icons">restart_alt</i>
+                    Reset lần quét
                   </span>
                 </button>
               </div>
@@ -648,6 +680,13 @@
                       [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
                       title="Bỏ tick KK mọi dòng loại hàng đang chọn">
                 Bỏ tick
+              </button>
+              <button type="button"
+                      class="kk-type-filter__reset-scan"
+                      (click)="resetKkScanForBoxes([{ productType: row.productType }], row.productType, $event)"
+                      [disabled]="!canEdit || kkLocMapBusy || !row.totalLines"
+                      title="Xóa lần quét cũ của loại hàng này để quét lại">
+                Reset lần quét
               </button>
             </div>
             <div class="kk-type-filter__split kk-type-filter__split--pallet">
@@ -2737,6 +2776,9 @@
           autocomplete="off"
           autocapitalize="characters"
           spellcheck="false"
+          inputmode="none"
+          enterkeyhint="done"
+          (focus)="onKkHidScanFocus($event)"
         />
       </div>
       <p class="mat-m-loc-scan-hint">{{ isNguyenLieuPage ? 'Chọn kho rồi quét vị trí. Scanner tự Enter sẽ lưu ngay.' : 'Scanner sẽ tự Enter sau khi quét — mã chuyển sang vị trí mới ngay.' }}</p>
@@ -2843,6 +2885,9 @@
           autocorrect="off"
           autocapitalize="off"
           spellcheck="false"
+          inputmode="none"
+          enterkeyhint="done"
+          (focus)="onKkHidScanFocus($event)"
         />
       </div>
       <p class="mat-m-loc-scan-hint">
@@ -4674,13 +4719,15 @@
           <input id="kkTypeScanOperatorInput"
                  type="text"
                  [(ngModel)]="kkTypeScanOperatorInput"
+                 (focus)="onKkHidScanFocus($event)"
                  (input)="onKkTypeScanNewline('operator', $event)"
                  (keydown.enter)="submitKkTypeScanOperator($event)"
                  placeholder="4 số (vd: 0106) hoặc ASP0106"
                  autocomplete="off"
                  autocapitalize="characters"
-                 enterkeyhint="next"
-                 spellcheck="false">
+                 spellcheck="false"
+                 [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
+                 [attr.enterkeyhint]="kkScanHideKeyboard ? 'done' : 'next'">
           <button type="button" (click)="submitKkTypeScanOperator()" [disabled]="!kkTypeScanOperatorInput.trim()">
             <i class="material-icons">arrow_forward</i>
           </button>
@@ -4696,15 +4743,17 @@
           <input id="kkTypeScanLocationInput"
                  type="text"
                  [(ngModel)]="kkTypeScanLocationInput"
+                 (focus)="onKkHidScanFocus($event)"
                  (input)="onKkTypeScanNewline('location', $event)"
                  (keydown.enter)="submitKkTypeScanLocation($event)"
                  (keydown.tab)="submitKkTypeScanLocation($event)"
                  placeholder="Scan vị trí..."
                  autocomplete="off"
                  autocapitalize="characters"
-                 enterkeyhint="next"
                  spellcheck="false"
-                 [disabled]="kkTypeScanBusy">
+                 [disabled]="kkTypeScanBusy"
+                 [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
+                 [attr.enterkeyhint]="kkScanHideKeyboard ? 'done' : 'next'">
           <button type="button" (click)="submitKkTypeScanLocation()" [disabled]="kkTypeScanBusy || !kkTypeScanLocationInput.trim()">
             <i class="material-icons">arrow_forward</i>
           </button>
@@ -4725,7 +4774,9 @@
                  autocorrect="off"
                  autocapitalize="off"
                  spellcheck="false"
-                 enterkeyhint="done">
+                 (focus)="onKkHidScanFocus($event)"
+                 [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
+                 [attr.enterkeyhint]="'done'">
           <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy">
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
@@ -4751,6 +4802,14 @@
               </span>
               <span>{{ kkTypeScanStatusText }}</span>
               <span>Lượng {{ formatNumber(kkTypeScanQtyScanned) }} / {{ formatNumber(kkTypeScanQtyTotal) }}</span>
+              <button type="button"
+                      class="kk-type-scan__reset"
+                      (click)="resetKkScanForCurrentCode($event)"
+                      [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length"
+                      title="Xóa lần quét cũ của mã này để quét lại">
+                <i class="material-icons">restart_alt</i>
+                Reset lần quét
+              </button>
             </div>
             <label class="kk-type-scan__std">
               Standard

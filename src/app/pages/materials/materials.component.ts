@@ -428,6 +428,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkBeepCtx: AudioContext | null = null;
   private hidScanTimers = new Map<HTMLInputElement, ReturnType<typeof setTimeout>>();
   private hidScanBound = new WeakSet<HTMLInputElement>();
+  private kkPrevViewport = '';
   private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
   private kkScanOpTimer: any;
   kkTypePrintBusy = false;
@@ -2457,6 +2458,55 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'Đưa tem vào khung hình';
   }
 
+  get kkScanHideKeyboard(): boolean {
+    return this.isMobile && this.nlScanDevice !== 'mobile';
+  }
+
+  onKkHidScanFocus(event: FocusEvent): void {
+    const el = event.target as HTMLInputElement | null;
+    if (!el) return;
+    if (this.isMobile && this.nlScanDevice === 'mobile') return;
+    this.suppressVirtualKeyboard(el);
+  }
+
+  private suppressVirtualKeyboard(el: HTMLInputElement): void {
+    try {
+      el.setAttribute('inputmode', 'none');
+      (el as HTMLInputElement & { virtualKeyboardPolicy?: string }).virtualKeyboardPolicy = 'manual';
+    } catch { /* ignore */ }
+    try {
+      const vk = (navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean; hide?: () => void } }).virtualKeyboard;
+      if (vk) {
+        vk.overlaysContent = true;
+        vk.hide?.();
+      }
+    } catch { /* ignore */ }
+  }
+
+  private lockKkScanKeyboard(): void {
+    const meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    if (meta && !this.kkPrevViewport) {
+      this.kkPrevViewport = meta.content || '';
+      if (!/interactive-widget/.test(meta.content || '')) {
+        meta.content = `${meta.content || ''}, interactive-widget=overlays-content`.replace(/^,\s*/, '');
+      }
+    }
+    try {
+      const vk = (navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
+      if (vk) vk.overlaysContent = true;
+    } catch { /* ignore */ }
+    document.body.classList.add('kk-scan-kb-lock');
+  }
+
+  private unlockKkScanKeyboard(): void {
+    const meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    if (meta && this.kkPrevViewport) {
+      meta.content = this.kkPrevViewport;
+      this.kkPrevViewport = '';
+    }
+    document.body.classList.remove('kk-scan-kb-lock');
+  }
+
   onNlKkTick(material: InventoryMaterial, checked: boolean): void {
     if (!this.canEdit || !material?.id) return;
     if (!!material.kkChecked === !!checked) return;
@@ -2494,7 +2544,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private focusNlPdaInput(): void {
     const el = document.getElementById('nl-pda-scan-input') as HTMLInputElement | null;
     if (!el) return;
-    el.focus();
+    this.suppressVirtualKeyboard(el);
+    el.focus({ preventScroll: true });
     this.bindHidScanInput(el, (raw, readMs) => {
       this.nlScanLastReadMs = readMs;
       this.applyNlSearchScan(raw);
@@ -2836,6 +2887,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.hidScanTimers.forEach((t) => clearTimeout(t));
     this.hidScanTimers.clear();
     this.kkHidQrQueue = [];
+    this.unlockKkScanKeyboard();
   }
 
   // Setup debounced search for better performance
@@ -9344,6 +9396,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanLastSavePending = false;
     this.kkTypeScanExtraLines = [];
     this.kkTypeScanCartons = {};
+    this.lockKkScanKeyboard();
     this.cdr.detectChanges();
     setTimeout(() => this.focusKkTypeScanInput(
       this.kkTypeScanStep === 'operator' ? 'kkTypeScanOperatorInput' : 'kkTypeScanLocationInput'
@@ -9353,6 +9406,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   closeKkTypeScanModal(): void {
     if (this.kkTypeScanBusy) return;
     if (this.nlCameraPurpose === 'kk') this.stopNlCamera();
+    this.unlockKkScanKeyboard();
     this.showKkTypeScanModal = false;
     this.kkTypeScanStep = 'location';
     this.kkTypeScanLocation = '';
@@ -9392,12 +9446,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private focusKkTypeScanInput(id: string, retry = 0): void {
     if (!this.showKkTypeScanModal) return;
+    const skipFocus = this.isMobile && this.nlScanDevice === 'mobile';
     setTimeout(() => {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el && !el.disabled) {
-        el.focus();
         if (id === 'kkTypeScanQrInput') {
           this.bindHidScanInput(el, (raw, readMs) => this.enqueueKkTypeScanCode(raw, readMs), { idleMs: 50 });
+        }
+        if (!skipFocus) {
+          this.suppressVirtualKeyboard(el);
+          el.focus({ preventScroll: true });
         }
         return;
       }
@@ -9799,11 +9857,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private pickKkScanLine(
     code: string,
     po: string,
-    imd: string
+    imd: string,
+    qty = 0
   ): InventoryMaterial | null {
     const lines = this.kkStockLinesForCode(code);
     if (!lines.length) return null;
     const loc = this.kkTypeScanLocation;
+    const need = Math.max(0, Number(qty) || 0);
     const scored = lines.map((m) => {
       let score = 0;
       if (this.kkTypeScanPoMatch(String(m.poNumber || ''), po)) score += 8;
@@ -9814,8 +9874,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (remain > 1e-9) score += 2;
       return { m, score, remain };
     });
-    scored.sort((a, b) => b.score - a.score || b.remain - a.remain);
-    return scored[0].m;
+    const fit = need > 0
+      ? scored.filter((s) => s.remain + 1e-9 >= need)
+      : scored;
+    if (!fit.length) return null;
+    fit.sort((a, b) => b.score - a.score || b.remain - a.remain);
+    return fit[0].m;
   }
 
   private async applyKkTypeScanPutaway(
@@ -9845,11 +9909,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const line = this.pickKkScanLine(code, po, imd);
+    const line = this.pickKkScanLine(code, po, imd, qty);
     const first = line || this.kkTypeScanCodeRows[0];
     this.kkTypeScanStandardDraft = first ? (this.getEffectiveStandardPacking(first) || '') : '';
-    if (!line?.id) {
+    if (!this.kkStockLinesForCode(code).length) {
       this.pushKkTypeScanLog(false, `${code} — không có dòng tồn · ${readNote}`, false, { readMs });
+      this.kkTypeScanBeep('err');
+      this.kkTypeScanLastSavePending = false;
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
+    if (!line?.id) {
+      const scanned = this.kkTypeScanQtyScanned;
+      const stockAll = this.kkTypeScanQtyTotal;
+      const msg = `${code} — không ghi nhận: lượng quét dư so với tồn ${this.formatNumber(scanned)} / ${this.formatNumber(stockAll)}`;
+      this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
       this.kkTypeScanLastSavePending = false;
       this.cdr.detectChanges();
@@ -9875,6 +9950,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const prevKkAt = line.kkAt;
     const nextScan = this.roundKkQty(prevScanCount + qty);
     const stock = this.calculateCurrentStock(line);
+    if (nextScan > stock + 1e-9) {
+      const msg = `${code} — không ghi nhận: lượng quét dư so với tồn ${this.formatNumber(prevScanCount)} / ${this.formatNumber(stock)}`;
+      this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
+      this.kkTypeScanBeep('err');
+      this.kkTypeScanLastSavePending = false;
+      this.cdr.detectChanges();
+      this.focusKkTypeScanInput('kkTypeScanQrInput');
+      return;
+    }
     const shouldKk = nextScan + 1e-9 >= stock && stock > 0;
     const kkAt = new Date();
 
@@ -11096,6 +11180,96 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  async resetKkScanForBoxes(
+    boxes: Array<{ productType: string }>,
+    label: string,
+    event?: Event
+  ): Promise<void> {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (!this.canEdit || this.kkLocMapBusy) return;
+    const seen = new Set<string>();
+    const lines: InventoryMaterial[] = [];
+    for (const box of boxes || []) {
+      for (const m of this.kkCachedLinesForType(box.productType)) {
+        if (!m?.id || seen.has(m.id)) continue;
+        seen.add(m.id);
+        lines.push(m);
+      }
+    }
+    await this.commitKkScanCountReset(lines, label);
+  }
+
+  async resetKkScanForCurrentCode(event?: Event): Promise<void> {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    await this.commitKkScanCountReset(
+      this.kkTypeScanCodeRows,
+      this.kkTypeScanMaterialCode || 'mã đang quét'
+    );
+  }
+
+  private async commitKkScanCountReset(lines: InventoryMaterial[], label: string): Promise<void> {
+    if (!this.canEdit) return;
+    const targets = (lines || []).filter((m) => !!m?.id && this.getKkScanCount(m) > 0);
+    if (!targets.length) {
+      alert(`Chưa có lần quét nào để xóa (${label}).`);
+      return;
+    }
+    if (!confirm(`Xóa lần quét cũ của ${label}?\n${targets.length} dòng sẽ về 0 để quét lại.`)) {
+      return;
+    }
+    this.kkLocMapBusy = true;
+    this.kkTypeScanBusy = true;
+    this.cdr.detectChanges();
+    const operator = this.kkTypeScanOperator || this.kkOperatorIdCache || '';
+    try {
+      const chunkSize = 400;
+      for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        const batch = this.firestore.firestore.batch();
+        for (const m of chunk) {
+          const payload: Record<string, unknown> = {
+            kkScanCount: 0,
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp()
+          };
+          if (operator) payload.modifiedBy = operator;
+          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
+        }
+        await batch.commit();
+      }
+      const ids = new Set(targets.map((m) => m.id));
+      const stamp = (x: InventoryMaterial) => {
+        if (x?.id && ids.has(x.id)) x.kkScanCount = 0;
+      };
+      targets.forEach((m) => { m.kkScanCount = 0; });
+      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+      this.kkTypeScanExtraLines.forEach(stamp);
+      this.inventoryMaterials.forEach(stamp);
+      targets.forEach((m) => this.patchKkInvSnapCache(m.id!, { kkScanCount: 0 }));
+      const codes = new Set(
+        targets.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
+      );
+      const nextCartons = { ...this.kkTypeScanCartons };
+      codes.forEach((c) => { delete nextCartons[c]; });
+      this.kkTypeScanCartons = nextCartons;
+      this.syncKkTypeRows();
+      if (this.showKkTypeScanModal) {
+        this.pushKkTypeScanLog(true, `Reset lần quét ${label} · ${targets.length} dòng`);
+      }
+    } catch (e) {
+      console.error('❌ resetKkScanCount:', e);
+      alert('❌ Không xóa được lần quét. Thử lại.');
+    } finally {
+      this.kkLocMapBusy = false;
+      this.kkTypeScanBusy = false;
+      this.cdr.detectChanges();
+      if (this.showKkTypeScanModal) this.focusKkTypeScanInput('kkTypeScanQrInput');
     }
   }
 
