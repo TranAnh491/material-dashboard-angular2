@@ -142,7 +142,9 @@
 .navbar.navbar--materials-pass-through,
 .navbar.navbar--materials-pass-through .container-fluid,
 .navbar.navbar--inventory-overview-pass-through,
-.navbar.navbar--inventory-overview-pass-through .container-fluid {
+.navbar.navbar--inventory-overview-pass-through .container-fluid,
+.navbar.navbar--work-schedule-pass-through,
+.navbar.navbar--work-schedule-pass-through .container-fluid {
   pointer-events: none;
 }
 
@@ -167,7 +169,9 @@
 .navbar.navbar--qc-trace-pass-through .navbar-wrapper,
 .navbar.navbar--qc-trace-pass-through .navbar-wrapper .navbar-brand,
 .navbar.navbar--print-label-pass-through .navbar-wrapper,
-.navbar.navbar--print-label-pass-through .navbar-wrapper .navbar-brand {
+.navbar.navbar--print-label-pass-through .navbar-wrapper .navbar-brand,
+.navbar.navbar--work-schedule-pass-through .navbar-wrapper,
+.navbar.navbar--work-schedule-pass-through .navbar-wrapper .navbar-brand {
   pointer-events: auto;
 }
 

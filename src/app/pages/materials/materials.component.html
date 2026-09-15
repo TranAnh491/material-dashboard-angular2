@@ -513,33 +513,82 @@
               <strong>{{ muc.title }}</strong>
               <span>{{ muc.boxes.length }} loại</span>
             </button>
-            <div class="kk-type-grid" *ngIf="!isKkTypeMucCollapsed(muc.category)">
-              <button
-                type="button"
-                class="kk-type-box"
-                *ngFor="let box of muc.boxes"
-                [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
-                [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
-                [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
-                [class.kk-type-box--empty]="!box.totalLines"
-                (click)="selectKkTypeBox(box.productType)"
-                (contextmenu)="openKkTypeBoxMenu($event, box)"
-                [title]="box.productType + ' — chuột phải: gán vị trí yêu cầu hoặc in tên'">
-                <strong>{{ box.productType }}</strong>
-                <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
-                  <span class="kk-type-box__groups" *ngIf="prefixes.length">
-                    <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
-                  </span>
+            <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
+              <div class="kk-type-group" *ngFor="let g of muc.groups || []">
+                <button type="button"
+                        class="kk-type-group__head"
+                        (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key), $event)">
+                  <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key)) ? 'expand_more' : 'expand_less' }}</i>
+                  <strong>{{ g.title }}</strong>
+                  <span>{{ g.subMucs.length }} mục</span>
+                </button>
+                <ng-container *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
+                  <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
+                    <button type="button"
+                            class="kk-type-submuc__head"
+                            (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key, s.key), $event)">
+                      <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key)) ? 'expand_more' : 'expand_less' }}</i>
+                      <strong>{{ s.title }}</strong>
+                      <span>{{ s.boxes.length }} loại</span>
+                    </button>
+                    <div class="kk-type-grid" *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
+                      <button
+                        type="button"
+                        class="kk-type-box"
+                        *ngFor="let box of s.boxes"
+                        [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
+                        [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
+                        [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
+                        [class.kk-type-box--empty]="!box.totalLines"
+                        (click)="selectKkTypeBox(box.productType)"
+                        (contextmenu)="openKkTypeBoxMenu($event, box)"
+                        [title]="box.productType + ' — chuột phải: gán vị trí yêu cầu hoặc in tên'">
+                        <strong>{{ box.productType }}</strong>
+                        <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
+                          <span class="kk-type-box__groups" *ngIf="prefixes.length">
+                            <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
+                          </span>
+                        </ng-container>
+                        <span class="kk-type-box__foot">
+                          <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
+                          <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
+                            <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
+                            {{ loc }}
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                 </ng-container>
-                <span class="kk-type-box__foot">
-                  <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-                  <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
-                    <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
-                    {{ loc }}
+              </div>
+              <div class="kk-type-grid" *ngIf="!muc.groups?.length">
+                <button
+                  type="button"
+                  class="kk-type-box"
+                  *ngFor="let box of muc.boxes"
+                  [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
+                  [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
+                  [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
+                  [class.kk-type-box--empty]="!box.totalLines"
+                  (click)="selectKkTypeBox(box.productType)"
+                  (contextmenu)="openKkTypeBoxMenu($event, box)"
+                  [title]="box.productType + ' — chuột phải: gán vị trí yêu cầu hoặc in tên'">
+                  <strong>{{ box.productType }}</strong>
+                  <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
+                    <span class="kk-type-box__groups" *ngIf="prefixes.length">
+                      <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
+                    </span>
+                  </ng-container>
+                  <span class="kk-type-box__foot">
+                    <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
+                    <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
+                      <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
+                      {{ loc }}
+                    </span>
                   </span>
-                </span>
-              </button>
-            </div>
+                </button>
+              </div>
+            </ng-container>
           </div>
           <p class="hidden-empty" *ngIf="!kkTypeBoxes.length">
             <ng-container *ngIf="!kkCatalogEntries.length && kkLocMapBusy">Đang tải danh mục KK…</ng-container>
@@ -827,6 +876,13 @@
         <i class="material-icons">{{ nlScanDevice === 'pda' ? 'sensors' : 'qr_code_scanner' }}</i>
         {{ nlScanDevice === 'pda' ? 'Scan (PDA)' : 'Scan' }}
       </button>
+      <button type="button"
+              class="mat-m-nl-scanbtn mat-m-nl-scanbtn--kk"
+              (click)="startNlKkScan()"
+              [disabled]="isLoading || isScanning || !canEdit">
+        <i class="material-icons">fact_check</i>
+        Scan Kiểm Kê
+      </button>
       <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
         Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
       </button>
@@ -846,6 +902,7 @@
     <div class="mat-m-empty" *ngIf="!isLoading && !searchTerm">
       <i class="material-icons">search</i>
       <p>Nhập hoặc quét mã hàng để đổi vị trí / kho</p>
+      <p>Kiểm kê: bấm Scan Kiểm Kê → quét vị trí → quét mã hàng</p>
     </div>
 
     <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 4 && filteredInventory.length === 0">
@@ -2725,7 +2782,10 @@
 </div>
 
 <!-- Quản lý NVL: camera -->
-<div class="modal-overlay mat-m-kk-overlay" *ngIf="showNlCamera" (click)="stopNlCamera()">
+<div class="modal-overlay mat-m-kk-overlay"
+     [class.mat-m-kk-overlay--front]="nlCameraPurpose === 'kk'"
+     *ngIf="showNlCamera"
+     (click)="stopNlCamera()">
   <div class="modal-content mat-m-kk-modal mat-m-loc-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Quét camera">
     <header class="mat-m-kk-modal__header">
       <div class="mat-m-kk-modal__brand">
@@ -2733,8 +2793,8 @@
           <i class="material-icons">qr_code_scanner</i>
         </span>
         <div>
-          <h3>{{ nlCameraPurpose === 'location' ? 'Quét vị trí' : 'Quét mã hàng' }}</h3>
-          <p>Đưa tem vào khung hình</p>
+          <h3>{{ nlCameraHeading }}</h3>
+          <p>{{ nlCameraSub }}</p>
         </div>
       </div>
       <button type="button" class="mat-m-kk-modal__close" (click)="stopNlCamera()" aria-label="Đóng">
@@ -2743,6 +2803,9 @@
     </header>
     <div class="mat-m-kk-modal__body">
       <div id="nl-qr-reader" class="mat-m-nl-qr"></div>
+      <p class="mat-m-loc-scan-hint" *ngIf="nlCameraPurpose === 'kk' && kkTypeScanLogs[0]">
+        {{ kkTypeScanLogs[0].text }}
+      </p>
     </div>
     <footer class="mat-m-kk-modal__footer">
       <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="stopNlCamera()">Hủy</button>
@@ -4581,11 +4644,20 @@
           <i class="material-icons">qr_code_scanner</i>
         </span>
         <div>
-          <h3>Scan vị trí</h3>
+          <h3>{{ isNguyenLieuPage ? 'Scan Kiểm Kê' : 'Scan vị trí' }}</h3>
           <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
         </div>
       </div>
       <div class="more-popup-header__right">
+        <button type="button"
+                class="more-popup-close"
+                *ngIf="isMobile && nlScanDevice === 'mobile'"
+                (click)="startNlCamera('kk')"
+                [disabled]="kkTypeScanBusy || showNlCamera"
+                title="Quét bằng camera"
+                aria-label="Quét camera">
+          <i class="material-icons">qr_code_scanner</i>
+        </button>
         <button type="button" class="more-popup-close" (click)="openKkScanGuide()" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn">
           <i class="material-icons">info</i>
         </button>

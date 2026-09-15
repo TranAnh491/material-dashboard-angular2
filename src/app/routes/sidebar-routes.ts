@@ -10,6 +10,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
   { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', class: '' },
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
+  { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
   {
     path: '',

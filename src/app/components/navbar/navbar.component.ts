@@ -360,6 +360,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return path === '/fg-inventory' || path.startsWith('/fg-inventory/');
     }
 
+    isWorkSchedulePage(): boolean {
+      return this.currentAppPath() === '/lich-lam-viec';
+    }
+
     /**
      * Đường dẫn các tab đã tự có nút Back / Về Menu riêng gắn trong toolbar của trang —
      * ẩn nút "Về Menu" nổi trên navbar ở các tab này để tránh trùng lặp / lệch style.
@@ -396,7 +400,8 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/materials',
       '/quan-ly-nguyen-lieu',
       '/danh-muc-nvl-tp',
-      '/inventory-overview'
+      '/inventory-overview',
+      '/lich-lam-viec'
     ]);
 
     hasOwnNav(): boolean {

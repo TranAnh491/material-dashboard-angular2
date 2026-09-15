@@ -95,6 +95,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', iconImage: 'assets/img/palletid.png', category: 'ASM FG' },
     
     // Tools & Operations
+    { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', iconImage: 'assets/img/workorder.png', category: 'Tools' },
     { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
     { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Tools' },
     { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Tools' },
@@ -220,6 +221,7 @@ export class MenuComponent implements OnInit, OnDestroy {
   private readonly subtitleByPath: Record<string, string> = {
     '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
     '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
+    '/lich-lam-viec': 'Phân công tuần: soạn LSX, nhận NVL, giao LSX theo nhóm',
     '/shipment': 'Kế hoạch và theo dõi giao hàng',
     '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
     '/report': 'Báo cáo và phân tích',

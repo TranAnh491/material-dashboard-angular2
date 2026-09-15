@@ -1,0 +1,205 @@
+<div class="ws-page">
+
+  <header class="ws-header">
+    <button type="button" class="ws-btn ws-btn--icon" (click)="goToMenu()" title="Về Menu">←</button>
+    <h1 class="ws-title">Lịch Làm Việc</h1>
+    <div class="ws-week-nav">
+      <button type="button" class="ws-btn" (click)="prevWeek()">‹</button>
+      <strong>{{ weekRangeLabel }}</strong>
+      <button type="button" class="ws-btn" (click)="goThisWeek()">Tuần này</button>
+      <button type="button" class="ws-btn" (click)="nextWeek()">›</button>
+    </div>
+    <div class="ws-days" *ngIf="activeView === 'schedule'">
+      <button
+        type="button"
+        class="ws-btn ws-day"
+        *ngFor="let day of days"
+        [class.ws-btn--primary]="day.ymd === selectedDayYmd"
+        [class.is-today]="day.isToday"
+        (click)="selectDay(day.ymd)"
+      >
+        {{ day.label }} {{ day.dateLabel }}
+      </button>
+    </div>
+    <div class="ws-tabs">
+      <button type="button" class="ws-btn" [class.ws-btn--primary]="activeView === 'schedule'" (click)="switchView('schedule')">Lịch</button>
+      <button type="button" class="ws-btn" [class.ws-btn--primary]="activeView === 'settings'" (click)="switchView('settings')">Cài đặt</button>
+    </div>
+  </header>
+
+  <p class="ws-error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+  <section class="ws-schedule" *ngIf="activeView === 'schedule'">
+    <div class="ws-live">
+      <div class="ws-live__card">
+        <div class="ws-live__head">
+          <strong>Lệnh sản xuất (tuần này)</strong>
+          <span>{{ lsxLive.total }} LSX</span>
+        </div>
+        <div class="ws-live__stats">
+          <span>Chờ {{ lsxLive.waiting }}</span>
+          <span>Kitting {{ lsxLive.kitting }}</span>
+          <span>Ready {{ lsxLive.ready }}</span>
+          <span>Xong {{ lsxLive.done }}</span>
+        </div>
+        <ul class="ws-live__list" *ngIf="lsxLive.items.length">
+          <li *ngFor="let it of lsxLive.items">
+            <b>{{ it.lsx }}</b>
+            <span *ngIf="it.productCode">{{ it.productCode }}</span>
+            <em>{{ lsxStatusLabel(it.status) }}</em>
+          </li>
+        </ul>
+        <p class="ws-hint" *ngIf="!lsxLive.total">Chưa có LSX trong tuần này.</p>
+      </div>
+      <div class="ws-live__card">
+        <div class="ws-live__head">
+          <strong>NVL nhập kho (tuần này)</strong>
+          <span>{{ inboundLive.total }} dòng</span>
+        </div>
+        <div class="ws-live__stats">
+          <span>Chưa nhận {{ inboundLive.waiting }}</span>
+          <span>Đã nhận {{ inboundLive.received }}</span>
+        </div>
+        <ul class="ws-live__list" *ngIf="inboundLive.items.length">
+          <li *ngFor="let it of inboundLive.items">
+            <b>{{ it.code }}</b>
+            <span *ngIf="it.po">{{ it.po }}</span>
+            <em>{{ it.received ? 'Đã nhận' : 'Chưa nhận' }}</em>
+          </li>
+        </ul>
+        <p class="ws-hint" *ngIf="!inboundLive.total">Chưa có NVL nhập trong tuần này.</p>
+      </div>
+      <button type="button" class="ws-btn ws-live__refresh" [disabled]="liveLoading" (click)="refreshLiveWork()">
+        {{ liveLoading ? 'Đang tải…' : (liveUpdatedLabel ? 'Cập nhật ' + liveUpdatedLabel : 'Cập nhật') }}
+      </button>
+    </div>
+
+    <div class="ws-matrix-wrap" *ngIf="!loading; else loadingTpl">
+      <table class="ws-matrix">
+        <thead>
+          <tr>
+            <th class="ws-matrix__emp">Nhân viên</th>
+            <th *ngFor="let task of tasks">
+              <div class="ws-col-head">
+                <strong>{{ task.label }}</strong>
+                <span *ngIf="task.kind === 'lsx'">{{ lsxLive.kitting + lsxLive.waiting }} việc LSX</span>
+                <span *ngIf="task.kind === 'inbound'">{{ inboundLive.waiting }} NVL chờ</span>
+              </div>
+            </th>
+            <th class="ws-matrix__add">
+              <div class="ws-add-task">
+                <input type="text" [(ngModel)]="newTaskName" placeholder="+ Thêm việc" (keydown.enter)="addTask()" />
+                <button type="button" class="ws-btn ws-btn--primary" [disabled]="taskSaving || !newTaskName.trim()" (click)="addTask()">Thêm</button>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let e of employees; trackBy: trackById">
+            <td class="ws-matrix__emp">
+              <span class="dot" [style.background]="groupColor(e.groupId)"></span>
+              <span class="name">{{ e.name }}</span>
+              <span class="group" *ngIf="groupName(e.groupId)">{{ groupName(e.groupId) }}</span>
+            </td>
+            <td *ngFor="let task of tasks">
+              <button
+                type="button"
+                class="ws-cell"
+                [class.ws-cell--on]="isAssigned(e.id, task.id)"
+                [disabled]="saving"
+                (click)="toggleAssign(e, task)"
+                [title]="isAssigned(e.id, task.id) ? 'Bỏ phân công' : 'Phân công'"
+              >
+                {{ isAssigned(e.id, task.id) ? '●' : '' }}
+              </button>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="ws-hint" *ngIf="!employees.length">
+        Chưa có nhân viên. Sang <strong>Cài đặt</strong> để thêm nhóm / nhân viên.
+      </p>
+    </div>
+    <ng-template #loadingTpl>
+      <p class="ws-loading">Đang tải lịch…</p>
+    </ng-template>
+  </section>
+
+  <section class="ws-settings" *ngIf="activeView === 'settings'">
+    <div class="ws-card">
+      <h2>Công việc</h2>
+      <p class="ws-hint">Thêm cột việc trên lịch. Soạn LSX / Nhận NVL gắn số liệu LSX và nhập kho.</p>
+      <div class="ws-group-list">
+        <div class="ws-group-chip" *ngFor="let t of tasks; trackBy: trackById">
+          <span class="name">{{ t.label }}</span>
+          <button type="button" class="ws-btn ws-btn--icon" title="Đổi tên" (click)="renameTaskPrompt(t)">✎</button>
+          <button type="button" class="ws-btn ws-btn--icon" title="Xoá việc" (click)="deleteTaskConfirm(t)">✕</button>
+        </div>
+      </div>
+      <div class="ws-add-row">
+        <input type="text" class="form-control" placeholder="Tên công việc mới" [(ngModel)]="newTaskName" (keydown.enter)="addTask()" />
+        <button type="button" class="ws-btn ws-btn--primary" [disabled]="taskSaving || !newTaskName.trim()" (click)="addTask()">+ Thêm việc</button>
+      </div>
+    </div>
+
+    <div class="ws-card">
+      <h2>Nhóm</h2>
+      <div class="ws-group-list">
+        <div class="ws-group-chip" *ngFor="let g of groups; trackBy: trackById">
+          <span class="dot" [style.background]="groupColor(g.id)"></span>
+          <span class="name">{{ g.name }}</span>
+          <button type="button" class="ws-btn ws-btn--icon" title="Đổi tên" (click)="renameGroupPrompt(g)">✎</button>
+          <button type="button" class="ws-btn ws-btn--icon" title="Xoá nhóm" (click)="deleteGroupConfirm(g)">✕</button>
+        </div>
+        <p class="ws-hint" *ngIf="!groups.length">Chưa có nhóm nào.</p>
+      </div>
+      <div class="ws-add-row">
+        <input type="text" class="form-control" placeholder="Tên nhóm mới" [(ngModel)]="newGroupName" (keydown.enter)="addGroup()" />
+        <button type="button" class="ws-btn ws-btn--primary" [disabled]="groupSaving || !newGroupName.trim()" (click)="addGroup()">+ Thêm nhóm</button>
+      </div>
+    </div>
+
+    <div class="ws-card">
+      <h2>Nhân viên &amp; kỹ năng</h2>
+      <p class="ws-hint">Tick kỹ năng = tự phân công lên lịch tuần. Bấm ô trên lịch để chỉnh từng ngày.</p>
+      <div class="ws-emp-table-wrap">
+        <table class="ws-emp-table">
+          <thead>
+            <tr>
+              <th>Tên nhân viên</th>
+              <th>Nhóm</th>
+              <th *ngFor="let task of tasks">{{ task.label }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let e of employees; trackBy: trackById">
+              <td class="ws-emp-name">
+                <span class="dot" [style.background]="groupColor(e.groupId)"></span>
+                {{ e.name }}
+              </td>
+              <td>
+                <select class="form-control form-control-sm" [(ngModel)]="e.groupId" (ngModelChange)="setEmployeeGroup(e, $event)">
+                  <option [ngValue]="null">— Chưa có nhóm —</option>
+                  <option *ngFor="let g of groups" [ngValue]="g.id">{{ g.name }}</option>
+                </select>
+              </td>
+              <td *ngFor="let task of tasks" class="ws-skill-cell">
+                <input type="checkbox" [checked]="hasSkill(e, task.id)" (change)="toggleSkill(e, task.id)" />
+              </td>
+              <td>
+                <button type="button" class="ws-btn ws-btn--icon" title="Xoá nhân viên" (click)="deleteEmployeeConfirm(e)">✕</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="ws-hint" *ngIf="!employees.length">Chưa có nhân viên nào.</p>
+      </div>
+      <div class="ws-add-row">
+        <input type="text" class="form-control" placeholder="Tên nhân viên mới" [(ngModel)]="newEmployeeName" (keydown.enter)="addEmployee()" />
+        <button type="button" class="ws-btn ws-btn--primary" [disabled]="!newEmployeeName.trim()" (click)="addEmployee()">+ Thêm nhân viên</button>
+      </div>
+    </div>
+  </section>
+</div>

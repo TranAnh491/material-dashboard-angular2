@@ -99,6 +99,7 @@ export class FilteredRoutesService {
       '/materials-dashboard': 'materials-dashboard',
       '/fgs-dashboard': 'fgs-dashboard',
       '/work-order-status': 'work-order-status',
+      '/lich-lam-viec': 'lich-lam-viec',
       '/shipment': 'shipment',
       
       // RM Inbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)

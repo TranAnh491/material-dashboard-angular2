@@ -404,6 +404,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Menu tabs for icon grid (+ Main giống menu hệ thống)
   menuTabs = [
     { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
+    { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', category: 'Main' },
     { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
     {
       path: '/location',
@@ -548,6 +549,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const byPath: Record<string, string> = {
       '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
       '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
+      '/lich-lam-viec': 'Phân công tuần: soạn LSX, nhận NVL, giao LSX theo nhóm',
       '/shipment': 'Kế hoạch và theo dõi giao hàng',
       '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
       '/report': 'Báo cáo và phân tích',

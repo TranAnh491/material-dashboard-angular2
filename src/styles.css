@@ -173,3 +173,27 @@ body.truck-schedule-tab button[title='Về Menu'] {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* Lịch làm việc — full màn hình, không padding layout */
+body.ws-fullscreen-layout .footer-wrapper {
+  display: none !important;
+}
+
+body.ws-fullscreen-layout .wrapper,
+body.ws-fullscreen-layout .main-panel,
+body.ws-fullscreen-layout .content-area {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+body.ws-fullscreen-layout .main-panel .main-content,
+body.ws-fullscreen-layout .content-area > * {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+  max-width: none !important;
+}

@@ -374,7 +374,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Cache cho getter `kkTypeBoxGroups` — khoá theo `kkTypeBoxesSig` để không gom nhóm
    * lại (Map mới + regex/normalize cho ~100 loại) mỗi lần change detection. */
   private kkTypeBoxGroupsSig = ' ';
-  private kkTypeBoxGroupsCached: Array<{ category: string; title: string; boxes: typeof this.kkTypeBoxesCached }> = [];
+  private kkTypeBoxGroupsCached: Array<{
+    category: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    groups?: Array<{
+      key: string;
+      title: string;
+      boxes: typeof this.kkTypeBoxesCached;
+      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+    }>;
+  }> = [];
   kkTypeMucCollapsed: Record<string, boolean> = {};
   kkActivePinSplit: '1-4' | '5-10' | null = null;
   kkActiveSourceProductType: string | null = null;
@@ -587,9 +597,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   showNlCamera = false;
   showNlPdaScan = false;
   nlPdaBuffer = '';
-  nlCameraPurpose: 'search' | 'location' = 'search';
+  nlCameraPurpose: 'search' | 'location' | 'kk' = 'search';
   private nlScanLock = false;
-  private nlPendingAction: 'search' | 'location' | null = null;
+  private nlPendingAction: 'search' | 'location' | 'kk' | null = null;
 
   /** Mobile: sheet Chi tiết dòng tồn. */
   showMobileDetail = false;
@@ -2391,6 +2401,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.nlPendingAction = null;
     this.cdr.markForCheck();
     if (pending === 'search') this.startNlSearchScan();
+    else if (pending === 'kk') this.startNlKkScan();
     else if (pending === 'location' && this.mobileLocScanMaterial) {
       this.openMobileLocationScan(this.mobileLocScanMaterial);
     }
@@ -2413,6 +2424,37 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     void this.startNlCamera('search');
+  }
+
+  startNlKkScan(): void {
+    if (!this.canEdit || this.isLoading) return;
+    if (!this.nlScanDevice) {
+      this.nlPendingAction = 'kk';
+      this.showNlDevicePicker = true;
+      return;
+    }
+    this.openKkTypeScanModal();
+    if (!this.showKkTypeScanModal) return;
+    if (this.nlScanDevice === 'mobile') {
+      setTimeout(() => void this.startNlCamera('kk'), 120);
+    }
+  }
+
+  get nlCameraHeading(): string {
+    if (this.nlCameraPurpose === 'location') return 'Quét vị trí';
+    if (this.nlCameraPurpose === 'kk') {
+      if (this.kkTypeScanStep === 'operator') return 'Quét mã nhân viên';
+      if (this.kkTypeScanStep === 'location') return 'Quét vị trí';
+      return 'Quét mã hàng';
+    }
+    return 'Quét mã hàng';
+  }
+
+  get nlCameraSub(): string {
+    if (this.nlCameraPurpose === 'kk' && this.kkTypeScanStep === 'codes' && this.kkTypeScanLocation) {
+      return `Kệ ${this.kkTypeScanLocation} · đưa tem vào khung`;
+    }
+    return 'Đưa tem vào khung hình';
   }
 
   onNlKkTick(material: InventoryMaterial, checked: boolean): void {
@@ -2464,7 +2506,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applyNlSearchScan(el?.value || this.nlPdaBuffer);
   }
 
-  async startNlCamera(purpose: 'search' | 'location'): Promise<void> {
+  async startNlCamera(purpose: 'search' | 'location' | 'kk'): Promise<void> {
     if (this.html5QrCode) {
       const prev = this.html5QrCode;
       this.html5QrCode = null;
@@ -2500,6 +2542,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private onNlCameraDecoded(text: string): void {
     if (this.nlScanLock) return;
     this.nlScanLock = true;
+    if (this.nlCameraPurpose === 'kk') {
+      void this.onNlKkCameraDecoded(text);
+      return;
+    }
     if (this.nlCameraPurpose === 'location') {
       this.mobileLocScanBuffer = String(text || '').trim().toUpperCase().replace(/\s+/g, '');
       this.stopNlCamera();
@@ -2507,6 +2553,40 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     this.applyNlSearchScan(text);
+  }
+
+  private async onNlKkCameraDecoded(text: string): Promise<void> {
+    const raw = String(text || '').trim();
+    if (!raw) {
+      this.nlScanLock = false;
+      return;
+    }
+    const step = this.kkTypeScanStep;
+    if (step === 'operator') {
+      const el = document.getElementById('kkTypeScanOperatorInput') as HTMLInputElement | null;
+      if (el) el.value = raw;
+      this.kkTypeScanOperatorInput = raw;
+      this.stopNlCamera();
+      this.submitKkTypeScanOperator();
+      if (this.showKkTypeScanModal && this.nlScanDevice === 'mobile') {
+        setTimeout(() => void this.startNlCamera('kk'), 220);
+      }
+      return;
+    }
+    if (step === 'location') {
+      const el = document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null;
+      if (el) el.value = raw;
+      this.kkTypeScanLocationInput = raw;
+      this.stopNlCamera();
+      this.submitKkTypeScanLocation();
+      if (this.showKkTypeScanModal && this.nlScanDevice === 'mobile') {
+        setTimeout(() => void this.startNlCamera('kk'), 220);
+      }
+      return;
+    }
+    this.enqueueKkTypeScanCode(raw, 0);
+    this.cdr.detectChanges();
+    setTimeout(() => { this.nlScanLock = false; }, 700);
   }
 
   stopNlCamera(): void {
@@ -7166,6 +7246,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       totalLines: number;
       remaining: number;
     }>;
+    groups?: Array<{
+      key: string;
+      title: string;
+      boxes: typeof this.kkTypeBoxesCached;
+      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+    }>;
   }> {
     // `kkTypeBoxes` đã tự cache theo `kkTypeBoxesSig`; nhóm mục chỉ phụ thuộc vào nó
     // nên tái dùng kết quả cho tới khi chữ ký đổi — tránh gom nhóm lại mỗi CD tick.
@@ -7180,11 +7266,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       list.push(box);
       map.set(category, list);
     }
-    this.kkTypeBoxGroupsCached = Array.from(map.entries()).map(([category, boxesInCat]) => ({
-      category,
-      title: this.kkTypeMucTitle(category),
-      boxes: this.sortKkTypeBoxesInCategory(category, boxesInCat)
-    }));
+    this.kkTypeBoxGroupsCached = Array.from(map.entries()).map(([category, boxesInCat]) => {
+      const sorted = this.sortKkTypeBoxesInCategory(category, boxesInCat);
+      return {
+        category,
+        title: this.kkTypeMucTitle(category),
+        boxes: sorted,
+        groups: category === 'ĐẦU NỐI' ? this.buildKkDauNoiGroups(sorted) : undefined
+      };
+    });
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
     return this.kkTypeBoxGroupsCached;
   }
@@ -7223,11 +7313,72 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return head.length ? head.join(' ') : raw;
   }
 
-  /** Mục Đầu nối: chỉ B007, B008, B009, B016. */
+  /** Mục Đầu nối: B008, B009, B016. */
   private isKkDauNoiMuc(_productType: string, groupCodes: string[] = []): boolean {
     const prefixes = this.kkTypeGroupPrefixes(groupCodes);
     if (!prefixes.length) return false;
-    return prefixes.every((p) => p === 'B007' || p === 'B008' || p === 'B009' || p === 'B016');
+    return prefixes.every((p) => p === 'B008' || p === 'B009' || p === 'B016');
+  }
+
+  private kkDauNoiGroupKey(box: { groupCodes?: string[] }): string {
+    const prefixes = this.kkTypeGroupPrefixes(box.groupCodes || []);
+    for (const p of ['B008', 'B009', 'B016'] as const) {
+      if (prefixes.includes(p)) return p;
+    }
+    return prefixes[0] || 'Khác';
+  }
+
+  /** Tên mục nhỏ trong nhóm đầu nối: bỏ khoảng pin (1-4P / 5-10P). */
+  private kkTypeDauNoiSubMuc(productType: string): string {
+    const raw = String(productType || '').trim();
+    if (!raw) return 'Khác';
+    const stripped = raw
+      .replace(/\d+\s*[-–]\s*\d+\s*P/gi, ' ')
+      .replace(/\b\d{1,2}\s*P\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return stripped || raw;
+  }
+
+  private buildKkDauNoiGroups(boxes: typeof this.kkTypeBoxesCached): Array<{
+    key: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+  }> {
+    const order = ['B008', 'B009', 'B016'];
+    const byPrefix = new Map<string, typeof boxes>();
+    for (const box of boxes) {
+      const key = this.kkDauNoiGroupKey(box);
+      const list = byPrefix.get(key) || [];
+      list.push(box);
+      byPrefix.set(key, list);
+    }
+    const keys = [
+      ...order.filter((k) => byPrefix.has(k)),
+      ...Array.from(byPrefix.keys()).filter((k) => !order.includes(k))
+    ];
+    return keys.map((key) => {
+      const gBoxes = this.sortKkTypeBoxesInCategory(key, byPrefix.get(key) || []);
+      const subMap = new Map<string, typeof gBoxes>();
+      const subTitle = new Map<string, string>();
+      for (const box of gBoxes) {
+        const title = this.kkTypeDauNoiSubMuc(box.productType);
+        const subKey = this.foldKkTypeName(title) || title;
+        const list = subMap.get(subKey) || [];
+        list.push(box);
+        subMap.set(subKey, list);
+        if (!subTitle.has(subKey)) subTitle.set(subKey, title);
+      }
+      const subMucs = Array.from(subMap.entries())
+        .map(([subKey, subBoxes]) => ({
+          key: subKey,
+          title: subTitle.get(subKey) || subKey,
+          boxes: subBoxes
+        }))
+        .sort((a, b) => a.title.localeCompare(b.title, 'vi'));
+      return { key, title: key, boxes: gBoxes, subMucs };
+    });
   }
 
   private isKkDauCotMuc(productType: string, groupCodes: string[] = []): boolean {
@@ -7331,6 +7482,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       ...this.kkTypeMucCollapsed,
       [category]: !this.kkTypeMucCollapsed[category]
     };
+  }
+
+  kkTypeNestKey(...parts: string[]): string {
+    return parts.filter(Boolean).join('|');
   }
 
   private ensureKkTypeBoxesCache(): void {
@@ -9197,6 +9352,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   closeKkTypeScanModal(): void {
     if (this.kkTypeScanBusy) return;
+    if (this.nlCameraPurpose === 'kk') this.stopNlCamera();
     this.showKkTypeScanModal = false;
     this.kkTypeScanStep = 'location';
     this.kkTypeScanLocation = '';

@@ -623,6 +623,10 @@ $mat-nav-h: 68px;
     opacity: 0.55;
     cursor: default;
   }
+
+  &--kk {
+    background: #059669 !important;
+  }
 }
 
 .mat-m-nl-devicehint {
@@ -884,6 +888,10 @@ $mat-nav-h: 68px;
   padding: 0 !important;
   background: rgba(15, 23, 42, 0.45) !important;
   z-index: 1200;
+}
+
+.mat-m-kk-overlay--front {
+  z-index: 11000 !important;
 }
 
 .mat-m-kk-modal {
@@ -1236,5 +1244,48 @@ $mat-nav-h: 68px;
   .mat-m-kk-modal {
     border-radius: 18px !important;
     width: calc(100vw - 32px);
+  }
+}
+
+@media (max-width: 768px) {
+  .modal-overlay:has(.kk-type-scan) {
+    align-items: stretch !important;
+    padding: 0 !important;
+  }
+
+  .modal-content.kk-type-scan,
+  .kk-type-scan {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0 !important;
+  }
+
+  .kk-type-scan .more-popup-header {
+    padding: 12px 14px;
+  }
+
+  .kk-type-scan .more-popup-header h3 {
+    font-size: 20px;
+  }
+
+  .kk-type-scan .more-popup-header__icon,
+  .kk-type-scan .more-popup-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .kk-type-scan__hint {
+    font-size: 14px !important;
+  }
+
+  .kk-type-scan__input-row input,
+  .kk-type-scan__input-row button {
+    height: 52px !important;
+  }
+
+  .kk-type-scan__input-row input {
+    font-size: 18px !important;
   }
 }

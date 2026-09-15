@@ -38,6 +38,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'fgs-dashboard', name: 'FGs Dashboard', category: 'Chính' },
     { key: 'pd-control', name: 'PD Control', category: 'Chính' },
     { key: 'work-order-status', name: 'Work Order', category: 'Chính' },
+    { key: 'lich-lam-viec', name: 'Lịch Làm Việc', category: 'Chính' },
     { key: 'shipment', name: 'Shipment', category: 'Chính' },
 
     // RM tabs — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)

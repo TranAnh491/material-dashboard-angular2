@@ -46,6 +46,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'menu',                 component: MenuComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-dashboard',  component: MaterialsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'lich-lam-viec',        loadChildren: () => import('../../pages/work-schedule/work-schedule.module').then(m => m.WorkScheduleModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fgs-dashboard',          component: FgsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials',            loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
   { path: 'quan-ly-nguyen-lieu',  loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
