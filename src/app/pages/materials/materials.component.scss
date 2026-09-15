@@ -8719,6 +8719,17 @@ $asm1-toolbar-h: 36px;
     color: #b45309;
   }
 
+  &__err {
+    margin: 10px 0 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
   &__input-row {
     display: flex;
     gap: 12px;

@@ -429,6 +429,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private hidScanTimers = new Map<HTMLInputElement, ReturnType<typeof setTimeout>>();
   private hidScanBound = new WeakSet<HTMLInputElement>();
   private kkPrevViewport = '';
+  private kkDocScanHandler: ((e: KeyboardEvent) => void) | null = null;
+  private kkDocScanBuf = '';
+  private kkDocScanAt = 0;
+  private kkDocScanTimer: ReturnType<typeof setTimeout> | null = null;
+  kkTypeScanErr = '';
   private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
   private kkScanOpTimer: any;
   kkTypePrintBusy = false;
@@ -2496,15 +2501,147 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (vk) vk.overlaysContent = true;
     } catch { /* ignore */ }
     document.body.classList.add('kk-scan-kb-lock');
+    // KHÔNG dùng attachKkDocScan() (idle-timeout ngắn, chỉ nghe keydown) nữa cho luồng này —
+    // xem bindKkTypeScanHidInput() / bindHidScanInput() được gắn trong focusKkTypeScanInput().
   }
 
   private unlockKkScanKeyboard(): void {
+    this.detachKkDocScan();
     const meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
     if (meta && this.kkPrevViewport) {
       meta.content = this.kkPrevViewport;
       this.kkPrevViewport = '';
     }
     document.body.classList.remove('kk-scan-kb-lock');
+  }
+
+  private attachKkDocScan(): void {
+    if (this.kkDocScanHandler) return;
+    this.kkDocScanHandler = (event: KeyboardEvent) => this.onKkDocScanKey(event);
+    document.addEventListener('keydown', this.kkDocScanHandler, true);
+  }
+
+  private detachKkDocScan(): void {
+    if (this.kkDocScanHandler) {
+      document.removeEventListener('keydown', this.kkDocScanHandler, true);
+      this.kkDocScanHandler = null;
+    }
+    if (this.kkDocScanTimer) {
+      clearTimeout(this.kkDocScanTimer);
+      this.kkDocScanTimer = null;
+    }
+    this.kkDocScanBuf = '';
+    this.kkDocScanAt = 0;
+  }
+
+  private onKkDocScanKey(event: KeyboardEvent): void {
+    if (!this.showKkTypeScanModal) return;
+    if (this.nlScanDevice === 'mobile' && this.showNlCamera) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.('.kk-type-scan__std')) return;
+    const key = event.key;
+    if (!key || key === 'Escape' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
+    if (key === 'Tab' || key === 'Enter') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.flushKkDocScan();
+      return;
+    }
+    if (key === 'Backspace') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.kkDocScanBuf = this.kkDocScanBuf.slice(0, -1);
+      this.paintKkDocScanBuf();
+      return;
+    }
+    if (key.length !== 1) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!this.kkDocScanAt) this.kkDocScanAt = performance.now();
+    this.kkDocScanBuf += key;
+    this.paintKkDocScanBuf();
+    const idle = this.kkTypeScanStep === 'codes' ? 60 : 120;
+    this.scheduleKkDocScanFlush(idle);
+  }
+
+  private scheduleKkDocScanFlush(idleMs: number): void {
+    if (this.kkDocScanTimer) clearTimeout(this.kkDocScanTimer);
+    this.kkDocScanTimer = setTimeout(() => {
+      this.kkDocScanTimer = null;
+      this.flushKkDocScan();
+    }, idleMs);
+  }
+
+  private paintKkDocScanBuf(): void {
+    const id = this.kkActiveScanInputId();
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    if (el) el.value = this.kkDocScanBuf;
+    if (this.kkTypeScanStep === 'operator') this.kkTypeScanOperatorInput = this.kkDocScanBuf;
+    if (this.kkTypeScanStep === 'location') this.kkTypeScanLocationInput = this.kkDocScanBuf;
+  }
+
+  private kkActiveScanInputId(): string {
+    if (this.kkTypeScanStep === 'operator') return 'kkTypeScanOperatorInput';
+    if (this.kkTypeScanStep === 'location') return 'kkTypeScanLocationInput';
+    return 'kkTypeScanQrInput';
+  }
+
+  private flushKkDocScan(): void {
+    if (this.kkDocScanTimer) {
+      clearTimeout(this.kkDocScanTimer);
+      this.kkDocScanTimer = null;
+    }
+    const raw = String(this.kkDocScanBuf || '')
+      .replace(/[\r\n\t]+/g, '')
+      .replace(/[\u0000-\u001F]/g, '')
+      .trim();
+    this.kkDocScanBuf = '';
+    this.kkDocScanAt = 0;
+    this.paintKkDocScanBuf();
+    if (!raw) {
+      this.pinKkScanFocus();
+      return;
+    }
+    if (this.kkTypeScanStep === 'operator') {
+      this.submitKkTypeScanOperator(undefined, raw);
+    } else if (this.kkTypeScanStep === 'location') {
+      this.submitKkTypeScanLocation(undefined, raw);
+    } else {
+      this.enqueueKkTypeScanCode(raw, 0);
+    }
+    this.pinKkScanFocus();
+  }
+
+  pinKkScanFocus(): void {
+    if (!this.showKkTypeScanModal) return;
+    if (this.nlScanDevice === 'mobile' && this.showNlCamera) return;
+    this.focusKkTypeScanInput(this.kkActiveScanInputId());
+  }
+
+  onKkScanTrapBlur(event: FocusEvent): void {
+    if (!this.showKkTypeScanModal) return;
+    const next = event.relatedTarget as HTMLElement | null;
+    if (next?.closest?.('.kk-type-scan') && (next.tagName === 'BUTTON' || next.closest('button, a, input[type="number"]'))) {
+      return;
+    }
+    setTimeout(() => this.pinKkScanFocus(), 0);
+  }
+
+  /** Tem NV: chỉ lấy 7 ký tự đầu ASP + 4 số, bỏ phần còn lại. */
+  private parseKkEmployeeBadge(raw: string): string {
+    const compact = String(raw || '')
+      .replace(/[\r\n\t]+/g, '')
+      .replace(/[\u0000-\u001F]/g, '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    if (!compact) return '';
+    const found = compact.match(/ASP\d{4}/);
+    if (found) return found[0];
+    const head = compact.slice(0, 7);
+    if (/^ASP\d{4}$/.test(head)) return head;
+    if (/^\d{4}/.test(compact)) return `ASP${compact.slice(0, 4)}`;
+    return head;
   }
 
   onNlKkTick(material: InventoryMaterial, checked: boolean): void {
@@ -2618,7 +2755,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (el) el.value = raw;
       this.kkTypeScanOperatorInput = raw;
       this.stopNlCamera();
-      this.submitKkTypeScanOperator();
+      this.submitKkTypeScanOperator(undefined, raw);
       if (this.showKkTypeScanModal && this.nlScanDevice === 'mobile') {
         setTimeout(() => void this.startNlCamera('kk'), 220);
       }
@@ -9396,6 +9533,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanLastSavePending = false;
     this.kkTypeScanExtraLines = [];
     this.kkTypeScanCartons = {};
+    this.kkTypeScanErr = '';
     this.lockKkScanKeyboard();
     this.cdr.detectChanges();
     setTimeout(() => this.focusKkTypeScanInput(
@@ -9422,26 +9560,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.syncKkTypeRows();
   }
 
-  submitKkTypeScanOperator(event?: Event): void {
+  submitKkTypeScanOperator(event?: Event, rawOverride?: string): void {
     event?.preventDefault?.();
     const el = (event?.target as HTMLInputElement | undefined)
       || (document.getElementById('kkTypeScanOperatorInput') as HTMLInputElement | null);
-    const raw = String(el?.value ?? this.kkTypeScanOperatorInput ?? '')
-      .replace(/[\r\n\t]+/g, '')
-      .replace(/[\u0000-\u001F]/g, '')
-      .trim()
-      .toUpperCase();
-    const shortCode = /^\d{4}$/.test(raw) ? `ASP${raw}` : raw.slice(0, 7);
+    const shortCode = this.parseKkEmployeeBadge(String(rawOverride ?? el?.value ?? this.kkTypeScanOperatorInput ?? ''));
     if (!/^ASP\d{4}$/.test(shortCode)) {
-      alert('Mã nhân viên không đúng. Nhập 4 số (vd: 0106) hoặc quét ASP + 4 số.');
-      this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+      this.kkTypeScanErr = 'Mã nhân viên không đúng. Quét tem ASP + 4 số.';
+      this.kkTypeScanBeep('err');
+      this.kkTypeScanOperatorInput = '';
+      if (el) el.value = '';
+      this.pinKkScanFocus();
+      this.cdr.detectChanges();
       return;
     }
+    this.kkTypeScanErr = '';
     this.startKkScanOpSession(shortCode);
     this.kkTypeScanOperatorInput = shortCode;
     this.kkTypeScanStep = 'location';
     this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanLocationInput');
+    this.pinKkScanFocus();
   }
 
   private focusKkTypeScanInput(id: string, retry = 0): void {
@@ -9450,17 +9588,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el && !el.disabled) {
-        if (id === 'kkTypeScanQrInput') {
-          this.bindHidScanInput(el, (raw, readMs) => this.enqueueKkTypeScanCode(raw, readMs), { idleMs: 50 });
-        } else if (id === 'kkTypeScanLocationInput') {
-          this.bindHidScanInput(el, (raw) => this.submitKkTypeScanLocation(undefined, raw), { idleMs: 80 });
-        } else if (id === 'kkTypeScanOperatorInput') {
-          this.bindHidScanInput(el, (raw) => {
-            this.kkTypeScanOperatorInput = raw;
-            el.value = raw;
-            this.submitKkTypeScanOperator();
-          }, { idleMs: 80 });
-        }
+        this.bindKkTypeScanHidInput(id, el);
         if (!skipFocus) {
           this.suppressVirtualKeyboard(el);
           el.focus({ preventScroll: true });
@@ -9472,6 +9600,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
+   * Gắn máy quét PDA (HID) cho 3 ô Kiểm tra KK theo loại hàng — dùng `bindHidScanInput`
+   * (nghe cả `input` native, không chỉ `keydown`) thay cho `attachKkDocScan` cũ (chỉ
+   * nghe keydown + idle timeout 60ms tính từ ký tự đầu tiên → hay bị đọc thiếu/đọc gãy
+   * khi tem QR dài hoặc thiết bị gõ có độ trễ giữa ký tự; cũng không bắt được trường hợp
+   * PDA đẩy chữ qua composition/input thay vì keydown rời từng ký tự).
+   * Idempotent — `bindHidScanInput` tự bỏ qua nếu element đã được gắn.
+   */
+  private bindKkTypeScanHidInput(id: string, el: HTMLInputElement): void {
+    if (id === 'kkTypeScanOperatorInput') {
+      this.bindHidScanInput(
+        el,
+        (raw) => this.submitKkTypeScanOperator(undefined, raw),
+        { idleMs: 120, minLenForIdleFlush: 1 }
+      );
+    } else if (id === 'kkTypeScanLocationInput') {
+      this.bindHidScanInput(
+        el,
+        (raw) => this.submitKkTypeScanLocation(undefined, raw),
+        { idleMs: 120, minLenForIdleFlush: 1 }
+      );
+    } else if (id === 'kkTypeScanQrInput') {
+      this.bindHidScanInput(
+        el,
+        (raw, readMs) => this.enqueueKkTypeScanCode(raw, readMs),
+        { idleMs: 120, minLenForIdleFlush: 4 }
+      );
+    }
+  }
+
+  /**
    * Máy scanner HID gõ rất nhanh. Không dùng ngModel / (keydown) Angular
    * vì mỗi ký tự kích hoạt change detection → mất chữ khi tem QR dài.
    * Gom native value, chỉ xử lý khi Enter hoặc hết burst.
@@ -9479,11 +9637,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private bindHidScanInput(
     el: HTMLInputElement,
     onComplete: (raw: string, readMs: number) => void,
-    opts?: { idleMs?: number }
+    opts?: { idleMs?: number; minLenForIdleFlush?: number }
   ): void {
     if (!el || this.hidScanBound.has(el)) return;
     this.hidScanBound.add(el);
     const idleMs = opts?.idleMs ?? 0;
+    const minLenForIdleFlush = opts?.minLenForIdleFlush ?? 20;
     let burstStart = 0;
     const markBurst = () => {
       if (!burstStart) burstStart = performance.now();
@@ -9533,7 +9692,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         if (idleMs > 0) {
           const v = el.value || '';
-          if (v.includes('|') || v.length >= 20) flush(idleMs);
+          if (v.includes('|') || v.length >= minLenForIdleFlush) flush(idleMs);
         }
       });
     });
@@ -9670,10 +9829,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       || (document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null);
     const loc = this.normalizeKkScanLocation(String(rawOverride ?? el?.value ?? this.kkTypeScanLocationInput ?? ''));
     if (!loc) {
-      alert('⚠️ Vui lòng scan vị trí (vd: S16-1-1)');
-      this.focusKkTypeScanInput('kkTypeScanLocationInput');
+      this.kkTypeScanErr = 'Không đọc được vị trí. Quét lại tem kệ (vd: S16-1-1).';
+      this.kkTypeScanBeep('err');
+      this.kkTypeScanLocationInput = '';
+      if (el) el.value = '';
+      this.pinKkScanFocus();
+      this.cdr.detectChanges();
       return;
     }
+    this.kkTypeScanErr = '';
     this.kkTypeScanLocation = loc;
     this.kkTypeScanLocationInput = loc;
     if (el) el.value = loc;

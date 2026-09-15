@@ -4699,14 +4699,15 @@
                 *ngIf="isMobile && nlScanDevice === 'mobile'"
                 (click)="startNlCamera('kk')"
                 [disabled]="kkTypeScanBusy || showNlCamera"
+                tabindex="-1"
                 title="Quét bằng camera"
                 aria-label="Quét camera">
           <i class="material-icons">qr_code_scanner</i>
         </button>
-        <button type="button" class="more-popup-close" (click)="openKkScanGuide()" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn">
+        <button type="button" class="more-popup-close" tabindex="-1" (click)="openKkScanGuide()" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn">
           <i class="material-icons">info</i>
         </button>
-        <button type="button" class="more-popup-close" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
+        <button type="button" class="more-popup-close" tabindex="-1" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
           <i class="material-icons">close</i>
         </button>
       </div>
@@ -4714,24 +4715,26 @@
 
     <div class="kk-type-scan__body">
       <div *ngIf="kkTypeScanStep === 'operator'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">Bước 1: Scan mã nhân viên — giữ phiên đến khi tắt tab hoặc hết 12:00 / 17:00 / 20:00</p>
+        <p class="kk-type-scan__hint">Bước 1: Scan mã nhân viên — chỉ lấy 7 ký tự đầu (ASP + 4 số)</p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanOperatorInput"
                  type="text"
+                 class="kk-scan-trap"
                  [(ngModel)]="kkTypeScanOperatorInput"
                  (focus)="onKkHidScanFocus($event)"
-                 (input)="onKkTypeScanNewline('operator', $event)"
-                 (keydown.enter)="submitKkTypeScanOperator($event)"
-                 placeholder="4 số (vd: 0106) hoặc ASP0106"
+                 (blur)="onKkScanTrapBlur($event)"
+                 placeholder="Quét thẻ ASP + 4 số"
                  autocomplete="off"
-                 autocapitalize="characters"
+                 autocapitalize="off"
                  spellcheck="false"
+                 tabindex="0"
                  [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
-                 [attr.enterkeyhint]="kkScanHideKeyboard ? 'done' : 'next'">
-          <button type="button" (click)="submitKkTypeScanOperator()" [disabled]="!kkTypeScanOperatorInput.trim()">
+                 [attr.enterkeyhint]="'done'">
+          <button type="button" tabindex="-1" (click)="submitKkTypeScanOperator()" [disabled]="!kkTypeScanOperatorInput.trim()">
             <i class="material-icons">arrow_forward</i>
           </button>
         </div>
+        <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'operator'">{{ kkTypeScanErr }}</p>
       </div>
 
       <div *ngIf="kkTypeScanStep === 'location'" class="kk-type-scan__step">
@@ -4742,22 +4745,23 @@
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanLocationInput"
                  type="text"
+                 class="kk-scan-trap"
                  [(ngModel)]="kkTypeScanLocationInput"
                  (focus)="onKkHidScanFocus($event)"
-                 (input)="onKkTypeScanNewline('location', $event)"
-                 (keydown.enter)="submitKkTypeScanLocation($event)"
-                 (keydown.tab)="submitKkTypeScanLocation($event)"
+                 (blur)="onKkScanTrapBlur($event)"
                  placeholder="Scan vị trí..."
                  autocomplete="off"
-                 autocapitalize="characters"
+                 autocapitalize="off"
                  spellcheck="false"
+                 tabindex="0"
                  [disabled]="kkTypeScanBusy"
                  [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
-                 [attr.enterkeyhint]="kkScanHideKeyboard ? 'done' : 'next'">
-          <button type="button" (click)="submitKkTypeScanLocation()" [disabled]="kkTypeScanBusy || !kkTypeScanLocationInput.trim()">
+                 [attr.enterkeyhint]="'done'">
+          <button type="button" tabindex="-1" (click)="submitKkTypeScanLocation()" [disabled]="kkTypeScanBusy || !kkTypeScanLocationInput.trim()">
             <i class="material-icons">arrow_forward</i>
           </button>
         </div>
+        <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'location'">{{ kkTypeScanErr }}</p>
       </div>
 
       <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
@@ -4769,15 +4773,18 @@
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanQrInput"
                  type="text"
+                 class="kk-scan-trap"
                  placeholder="Scan mã hàng..."
                  autocomplete="off"
                  autocorrect="off"
                  autocapitalize="off"
                  spellcheck="false"
+                 tabindex="0"
                  (focus)="onKkHidScanFocus($event)"
+                 (blur)="onKkScanTrapBlur($event)"
                  [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
                  [attr.enterkeyhint]="'done'">
-          <button type="button" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy">
+          <button type="button" tabindex="-1" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy">
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
         </div>
@@ -4804,6 +4811,7 @@
               <span>Lượng {{ formatNumber(kkTypeScanQtyScanned) }} / {{ formatNumber(kkTypeScanQtyTotal) }}</span>
               <button type="button"
                       class="kk-type-scan__reset"
+                      tabindex="-1"
                       (click)="resetKkScanForCurrentCode($event)"
                       [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length"
                       title="Xóa lần quét cũ của mã này để quét lại">
@@ -4864,7 +4872,7 @@
           <p class="kk-type-scan__empty" *ngIf="!kkTypeScanCodeRows.length">Không có dòng tồn mã này{{ kkActiveProductType ? ' trong loại hàng' : '' }}.</p>
         </div>
 
-        <button type="button" class="kk-type-scan__back" (click)="backKkTypeScanToLocation()" [disabled]="kkTypeScanBusy">
+        <button type="button" class="kk-type-scan__back" tabindex="-1" (click)="backKkTypeScanToLocation()" [disabled]="kkTypeScanBusy">
           <i class="material-icons">swap_horiz</i>
           Đổi vị trí
         </button>
