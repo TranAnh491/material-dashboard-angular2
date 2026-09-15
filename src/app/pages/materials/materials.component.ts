@@ -2629,7 +2629,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (el) el.value = raw;
       this.kkTypeScanLocationInput = raw;
       this.stopNlCamera();
-      this.submitKkTypeScanLocation();
+      this.submitKkTypeScanLocation(undefined, raw);
       if (this.showKkTypeScanModal && this.nlScanDevice === 'mobile') {
         setTimeout(() => void this.startNlCamera('kk'), 220);
       }
@@ -9452,6 +9452,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (el && !el.disabled) {
         if (id === 'kkTypeScanQrInput') {
           this.bindHidScanInput(el, (raw, readMs) => this.enqueueKkTypeScanCode(raw, readMs), { idleMs: 50 });
+        } else if (id === 'kkTypeScanLocationInput') {
+          this.bindHidScanInput(el, (raw) => this.submitKkTypeScanLocation(undefined, raw), { idleMs: 80 });
+        } else if (id === 'kkTypeScanOperatorInput') {
+          this.bindHidScanInput(el, (raw) => {
+            this.kkTypeScanOperatorInput = raw;
+            el.value = raw;
+            this.submitKkTypeScanOperator();
+          }, { idleMs: 80 });
         }
         if (!skipFocus) {
           this.suppressVirtualKeyboard(el);
@@ -9509,6 +9517,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         if (event.key.length === 1 || event.key === 'Unidentified' || event.key === 'Process') {
           markBurst();
+          if (event.key.length === 1 && el.getAttribute('inputmode') === 'none') {
+            event.preventDefault();
+            el.value += event.key;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+          }
         }
       });
       el.addEventListener('input', () => {
@@ -9576,11 +9589,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private normalizeKkScanLocation(raw: string): string {
-    let loc = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
-    if (!loc || loc.includes('|')) return '';
-    loc = loc.replace(/^(J5|J)-/, '');
-    const khoMat = loc.match(/^S(\d{1,2})-(\d+)-(\d+)$/);
-    if (khoMat) return `S${String(Number(khoMat[1])).padStart(2, '0')}-${khoMat[2]}-${khoMat[3]}`;
+    let loc = String(raw || '')
+      .replace(/[\u0000-\u001F]/g, '')
+      .replace(/[\u2010-\u2015\u2212]/g, '-')
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '');
+    if (!loc) return '';
+    if (loc.includes('|')) {
+      const first = loc.split('|').map((p) => p.trim()).find(Boolean) || '';
+      if (/^B\d{5,}/.test(first) || /^ASP\d{4}$/.test(first)) return '';
+      loc = first;
+    }
+    loc = loc.replace(/^(J5|J|00|WH3|ASM3)(?=-|S\d|R\d)/, '');
+    loc = loc.replace(/^[-_./]+/, '');
+    loc = loc.replace(/^S(\d{1,2})[._/](\d+)[._/](\d+)/, 'S$1-$2-$3');
+    const khoMat = loc.match(/^S(\d{1,2})-(\d+)-(\d+)/);
+    if (khoMat) {
+      return `S${String(Number(khoMat[1])).padStart(2, '0')}-${Number(khoMat[2])}-${Number(khoMat[3])}`;
+    }
     const aisle = loc.match(/^S(\d{1,2})$/);
     if (aisle) return `S${String(Number(aisle[1])).padStart(2, '0')}`;
     return loc;
@@ -9623,12 +9650,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkScanLocationAllowed(scanned: string, home: string): boolean {
     if (!home) return true;
     if (scanned === home) return true;
-    if (!home.includes('-') && this.kkScanAisleOf(scanned) === home) return true;
+    const scannedAisle = this.kkScanAisleOf(scanned);
+    const homeAisle = this.kkScanAisleOf(home);
+    if (scannedAisle && scannedAisle === homeAisle && /^S\d{2}$/.test(scannedAisle)) return true;
+    if (!home.includes('-') && scannedAisle === home) return true;
     return false;
   }
 
-  submitKkTypeScanLocation(event?: Event): void {
+  submitKkTypeScanLocation(event?: Event, rawOverride?: string): void {
     event?.preventDefault?.();
+    if (this.kkTypeScanStep === 'codes' && this.kkTypeScanLocation) return;
     if (!this.checkKkScanOpExpiry() && !this.kkTypeScanOperator) {
       this.kkTypeScanStep = 'operator';
       this.cdr.detectChanges();
@@ -9637,13 +9668,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const el = (event?.target as HTMLInputElement | undefined)
       || (document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null);
-    const loc = this.normalizeKkScanLocation(String(el?.value ?? this.kkTypeScanLocationInput ?? ''));
+    const loc = this.normalizeKkScanLocation(String(rawOverride ?? el?.value ?? this.kkTypeScanLocationInput ?? ''));
     if (!loc) {
-      alert('⚠️ Vui lòng scan vị trí');
+      alert('⚠️ Vui lòng scan vị trí (vd: S16-1-1)');
+      this.focusKkTypeScanInput('kkTypeScanLocationInput');
       return;
     }
     this.kkTypeScanLocation = loc;
     this.kkTypeScanLocationInput = loc;
+    if (el) el.value = loc;
     this.kkTypeScanStep = 'codes';
     this.kkTypeScanQrInput = '';
     this.kkTypeScanMaterialCode = '';
