@@ -8865,10 +8865,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'D1';
   }
 
-  /** Token kho J: R1–R99 / S1–S99, tiền tố J5-/J-, locker/BOX, hoặc TRA. */
+  /** Token kho J: R1–R99 / S1–S99, tiền tố J5-/J-, locker/BOX, TRA, IQC, Pass. */
   private isJWarehouseToken(loc: string): boolean {
     const raw = String(loc || '').trim().toUpperCase();
     if (!raw) return false;
+    if (raw === 'IQC' || raw.startsWith('IQC')) return true;
+    if (raw === 'PASS') return true;
     if (this.isLockerOrBoxToken(raw)) return true;
     if (this.isTraLocationToken(raw)) return true;
     if (raw === 'J' || raw === 'J5' || raw.startsWith('J5-') || raw.startsWith('J-')) return true;

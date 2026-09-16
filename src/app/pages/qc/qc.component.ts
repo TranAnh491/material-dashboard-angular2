@@ -1810,6 +1810,9 @@ export class QCComponent implements OnInit, OnDestroy {
     if (index >= 0) {
       this.materials[index].iqcStatus = statusToUpdate;
       this.materials[index].updatedAt = new Date();
+      if (this.isQcPassStatus(statusToUpdate) && this.shouldMoveIqcLocationToPass(this.materials[index].location)) {
+        this.materials[index].location = 'Pass';
+      }
     }
     
     // Update local counts immediately (optimistic update)
@@ -1832,6 +1835,9 @@ export class QCComponent implements OnInit, OnDestroy {
       qcCheckedBy: employeeIdToSave,
       qcCheckedAt: now
     };
+    if (this.isQcPassStatus(statusToUpdate) && this.shouldMoveIqcLocationToPass(materialToUpdate.location)) {
+      updatePayload.location = 'Pass';
+    }
 
     // Clear backend priority flags — giữ ưu tiên khi chuyển CHỜ KIỂM → CHỜ XÁC NHẬN; chỉ xóa khi Pass/NG
     if (shouldTransferQcPriorityToConfirm) {
@@ -3080,6 +3086,12 @@ export class QCComponent implements OnInit, OnDestroy {
     return loc.length > 0 && loc.startsWith('IQC');
   }
 
+  /** IQC (hoặc trống) → Pass sau khi kiểm đạt. Không đè kệ S/R đã cất. */
+  private shouldMoveIqcLocationToPass(location: any): boolean {
+    const loc = this.normalizeLocationUpper(location);
+    return !loc || loc === 'IQC' || loc.startsWith('IQC');
+  }
+
   /** Cùng rule với box "Mã hàng chờ kiểm": CHỜ KIỂM tại khu IQC (prefix IQC) */
   private isPendingQcAtIqc(data: any): boolean {
     const status = (data?.iqcStatus ?? '').toString().trim();
@@ -3269,6 +3281,7 @@ export class QCComponent implements OnInit, OnDestroy {
         iqcStatus: pass.iqcStatus,
         qcCheckedBy: pass.qcCheckedBy,
         qcCheckedAt: pass.qcCheckedAt,
+        location: 'Pass',
         updatedAt: now
       });
       count++;
@@ -3307,12 +3320,14 @@ export class QCComponent implements OnInit, OnDestroy {
       if (this.getInventoryLotKey(data) !== lotKey) continue;
 
       const docRef = this.firestore.collection('inventory-materials').doc(doc.id).ref;
-      batch.update(docRef, {
+      const siblingPatch: Record<string, unknown> = {
         iqcStatus: 'PASS',
         qcCheckedBy: passMeta.qcCheckedBy,
         qcCheckedAt: passMeta.qcCheckedAt,
         updatedAt: now
-      });
+      };
+      if (this.shouldMoveIqcLocationToPass(data?.location)) siblingPatch.location = 'Pass';
+      batch.update(docRef, siblingPatch);
       count++;
     }
 

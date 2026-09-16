@@ -955,6 +955,48 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.updateMaterial(material);
   }
   
+  private isInboundTraMaterial(material: InboundMaterial): boolean {
+    const loc = String(material?.location || '').trim().toUpperCase();
+    const batch = String(material?.batchNumber || '').trim().toUpperCase();
+    return loc === 'TRA' || loc === 'F62TRA' || batch.startsWith('TRA');
+  }
+
+  /** Vừa nhập kho: IQC + kho J. Hàng trả giữ TRA. */
+  private inboundReceiveLocation(material: InboundMaterial): string {
+    return this.isInboundTraMaterial(material) ? 'TRA' : 'IQC';
+  }
+
+  private isIqcStagingLocation(location: string | null | undefined): boolean {
+    const u = String(location || '').trim().toUpperCase();
+    return !u || u === 'IQC' || u.startsWith('IQC');
+  }
+
+  private async applyInventoryPassLocation(material: InboundMaterial): Promise<void> {
+    const patch = { location: 'Pass', iqcStatus: 'PASS', updatedAt: new Date() };
+    const docId = String(material.linkedInventoryDocId || '').trim();
+    if (docId) {
+      await this.firestore.collection('inventory-materials').doc(docId).update(patch);
+      return;
+    }
+    const snap = await this.firestore
+      .collection('inventory-materials', (ref) =>
+        ref
+          .where('factory', '==', this.selectedFactory)
+          .where('materialCode', '==', material.materialCode)
+          .where('poNumber', '==', material.poNumber)
+          .where('source', '==', 'inbound')
+          .limit(20)
+      )
+      .get()
+      .toPromise();
+    if (!snap || snap.empty) return;
+    const updates = snap.docs.filter((doc) => {
+      const loc = String((doc.data() as any)?.location || '');
+      return this.isIqcStagingLocation(loc);
+    });
+    await Promise.all(updates.map((doc) => doc.ref.update(patch)));
+  }
+
   // Add material to Inventory when received
   private addToInventory(material: InboundMaterial): void {
     // batchNumber trong inventory chỉ là ngày nhập: 26/08/2025 -> 26082025
@@ -967,12 +1009,8 @@ export class InboundComponent implements OnInit, OnDestroy {
       .then(result => {
         const finalBatchNumber = result.sequenceNumber;
       
-        // Xử lý location đặc biệt cho hàng trả (TRA)
-        // Nếu location là TRA hoặc batchNumber bắt đầu bằng TRA, đổi thành TRA khi thêm vào inventory
-        let inventoryLocation = material.location;
-        if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
-          inventoryLocation = 'TRA';
-        }
+        // Vừa nhập kho: vị trí IQC, kho J (TRA giữ nguyên).
+        const inventoryLocation = this.inboundReceiveLocation(material);
         
         const totalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
         const inventoryMaterial = {
@@ -989,7 +1027,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           openingBagsAtInit: totalBags, // số bag tồn đầu (lấy từ Inbound "số bịch")
           exportedBags: 0,
           stock: material.quantity, // Initial stock = quantity
-          location: inventoryLocation, // Đã xử lý đặc biệt cho hàng trả
+          location: inventoryLocation,
           type: material.type,
           expiryDate: material.expiryDate,
           qualityCheck: material.qualityCheck,
@@ -999,7 +1037,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           supplier: material.supplier,
           remarks: material.remarks,
           source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
-          iqcStatus: (inventoryLocation === 'TRA' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM', // Nếu location là TRA hoặc F62TRA (dữ liệu cũ) thì mặc định Pass
+          iqcStatus: this.isInboundTraMaterial(material) ? 'Pass' : 'CHỜ KIỂM',
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -1111,7 +1149,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           isReceived: true,
           preScanInventoryPending: true,
           linkedInventoryDocId: docRef.id,
-          location: (material.location || '').trim() || 'IQC',
+          location: this.inboundReceiveLocation(material),
           updatedAt: new Date()
         }).then(() => docRef);
       })
@@ -1121,12 +1159,12 @@ export class InboundComponent implements OnInit, OnDestroy {
           this.materials[idx].isReceived = true;
           this.materials[idx].preScanInventoryPending = true;
           this.materials[idx].linkedInventoryDocId = docRef.id;
-          if (!(this.materials[idx].location || '').trim()) this.materials[idx].location = 'IQC';
+          this.materials[idx].location = this.inboundReceiveLocation(material);
         }
         material.isReceived = true;
         material.preScanInventoryPending = true;
         material.linkedInventoryDocId = docRef.id;
-        if (!(material.location || '').trim()) material.location = 'IQC';
+        material.location = this.inboundReceiveLocation(material);
         this.updateStandardPackingFromInbound(material);
         this.updateUnitWeightFromInbound(material);
       });
@@ -1146,10 +1184,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
       const inv = snap.data() as Record<string, unknown>;
       const imd = String(inv['batchNumber'] || '');
-      let inventoryLocation = (material.location || inv['location'] || 'IQC') as string;
-      if (material.location === 'TRA' || material.batchNumber?.toUpperCase().startsWith('TRA')) {
-        inventoryLocation = 'TRA';
-      }
+      const inventoryLocation = this.inboundReceiveLocation(material);
       const totalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
       const bb = (material.bagBatch || '').trim();
       return this.firestore.collection('inventory-materials').doc(docId).update({
@@ -1158,7 +1193,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         exportedBags: 0,
         location: inventoryLocation,
         stock: material.quantity,
-        iqcStatus: (inventoryLocation === 'TRA' || inventoryLocation === 'F62TRA') ? 'Pass' : 'CHỜ KIỂM',
+        iqcStatus: this.isInboundTraMaterial(material) ? 'Pass' : 'CHỜ KIỂM',
         bagsPendingPhysicalScan: firebase.firestore.FieldValue.delete(),
         updatedAt: new Date()
       }).then(() => {
@@ -4496,7 +4531,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       poNumber: '',
       quantity: 0.00,
       unit: '',
-      location: '',
+      location: 'IQC',
       type: '',
       expiryDate: null,
       qualityCheck: false,
@@ -6103,12 +6138,9 @@ export class InboundComponent implements OnInit, OnDestroy {
           
           if (isComplete) {
             const finalizePreScan = !!(foundMaterial.preScanInventoryPending && foundMaterial.linkedInventoryDocId);
-            // Gán vị trí nếu đã scan vị trí
-            const locationToUse = this.inspectionCurrentLocation || foundMaterial.location;
-            if (this.inspectionCurrentLocation) {
-              foundMaterial.location = this.inspectionCurrentLocation;
-              if (materialIndex !== -1) this.materials[materialIndex].location = this.inspectionCurrentLocation;
-            }
+            const locationToUse = this.inboundReceiveLocation(foundMaterial);
+            foundMaterial.location = locationToUse;
+            if (materialIndex !== -1) this.materials[materialIndex].location = locationToUse;
             // 🚀 OPTIMIZE: Update local data trước (UI update ngay)
             if (materialIndex !== -1) {
               this.materials[materialIndex].isReceived = true;
@@ -6639,15 +6671,27 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
 
       // Update in Firestore
-      await this.firestore.collection('inbound-materials').doc(materialId).update({
+      const inboundPatch: Record<string, unknown> = {
         iqcStatus: status,
         updatedAt: new Date()
-      });
+      };
+      const isPass = String(status || '').trim().toUpperCase() === 'PASS';
+      if (isPass) inboundPatch.location = 'Pass';
+      await this.firestore.collection('inbound-materials').doc(materialId).update(inboundPatch);
 
       // Update local data
       const materialIndex = this.materials.findIndex(m => m.id === materialId);
       if (materialIndex !== -1) {
         this.materials[materialIndex].iqcStatus = status;
+        if (isPass) this.materials[materialIndex].location = 'Pass';
+      }
+      if (isPass) {
+        this.scannedMaterial.location = 'Pass';
+        try {
+          await this.applyInventoryPassLocation(this.scannedMaterial);
+        } catch (e) {
+          console.warn('⚠️ Không cập nhật được vị trí Pass trên inventory:', e);
+        }
       }
 
       console.log(`✅ IQC status updated to: ${status}`);
