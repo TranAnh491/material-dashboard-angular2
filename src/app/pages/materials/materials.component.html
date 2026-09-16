@@ -743,7 +743,7 @@
                     <th>PALLET</th>
                     <th title="Standard Packing — nhập 1 ô thì cả mã đổi, đồng bộ danh mục">STANDARD</th>
                     <th title="Số cuộn = tồn ÷ Standard; phần lẻ +1">CUỘN</th>
-                    <th title="Cộng dồn số lượng trên tem Scan — so với tồn kho">LẦN QUÉT</th>
+                    <th title="Mỗi lần quét = 1 Box — so với số cuộn/thùng">LẦN QUÉT (BOX)</th>
                     <th title="Đã kiểm kê">KK</th>
                     <th title="Cùng mã + PO + IMD ở nhiều pallet — số cuộn từng pallet">GHI CHÚ</th>
                   </tr>
@@ -812,7 +812,7 @@
                         [class.kk-type-scan-count-cell--over]="kkScanStockTone(material) === 'over'"
                         [title]="getKkScanCompareTitle(material)">
                       {{ formatNumber(getKkScanCount(material)) }}
-                      <span class="kk-type-scan-count-cell__vs">/ {{ formatNumber(calculateCurrentStock(material)) }}</span>
+                      <span class="kk-type-scan-count-cell__vs">/ {{ getKkRollsCount(material) || '—' }} Box</span>
                     </td>
                     <td class="kk-cell">
                       <input type="checkbox"
@@ -4728,8 +4728,8 @@
                  autocapitalize="off"
                  spellcheck="false"
                  tabindex="0"
-                 [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
-                 [attr.enterkeyhint]="'done'">
+                 inputmode="text"
+                 enterkeyhint="done">
           <button type="button" tabindex="-1" (click)="submitKkTypeScanOperator()" [disabled]="!kkTypeScanOperatorInput.trim()">
             <i class="material-icons">arrow_forward</i>
           </button>
@@ -4805,10 +4805,9 @@
                     [class.kk-type-scan__frac--ok]="kkTypeScanProgressTone === 'ok'"
                     [class.kk-type-scan__frac--low]="kkTypeScanProgressTone === 'low'"
                     [class.kk-type-scan__frac--over]="kkTypeScanProgressTone === 'over'">
-                {{ kkTypeScanCartonScanned }} / {{ kkTypeScanCartonTotal || '—' }} thùng
+                {{ formatNumber(kkTypeScanQtyScanned) }} / {{ kkTypeScanCartonTotal || '—' }} Box
               </span>
               <span>{{ kkTypeScanStatusText }}</span>
-              <span>Lượng {{ formatNumber(kkTypeScanQtyScanned) }} / {{ formatNumber(kkTypeScanQtyTotal) }}</span>
               <button type="button"
                       class="kk-type-scan__reset"
                       tabindex="-1"
@@ -4847,7 +4846,7 @@
                   <th>IMD</th>
                   <th>Vị trí</th>
                   <th>Lượng</th>
-                  <th>Đã quét</th>
+                  <th>Box</th>
                   <th>KK</th>
                 </tr>
               </thead>

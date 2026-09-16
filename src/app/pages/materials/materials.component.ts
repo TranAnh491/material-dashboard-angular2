@@ -2471,6 +2471,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const el = event.target as HTMLInputElement | null;
     if (!el) return;
     if (this.isMobile && this.nlScanDevice === 'mobile') return;
+    // Tem NV PDA: giữ inputmode=text để máy quét gõ vào ô. inputmode=none hay nuốt mã.
+    if (el.id === 'kkTypeScanOperatorInput') return;
     this.suppressVirtualKeyboard(el);
   }
 
@@ -2501,8 +2503,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (vk) vk.overlaysContent = true;
     } catch { /* ignore */ }
     document.body.classList.add('kk-scan-kb-lock');
-    // KHÔNG dùng attachKkDocScan() (idle-timeout ngắn, chỉ nghe keydown) nữa cho luồng này —
-    // xem bindKkTypeScanHidInput() / bindHidScanInput() được gắn trong focusKkTypeScanInput().
+    this.attachKkDocScan();
   }
 
   private unlockKkScanKeyboard(): void {
@@ -2537,14 +2538,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private onKkDocScanKey(event: KeyboardEvent): void {
     if (!this.showKkTypeScanModal) return;
     if (this.nlScanDevice === 'mobile' && this.showNlCamera) return;
+    // Mã hàng QR dài: để bindHidScanInput xử lý. Chỉ bắt NV + vị trí ở cấp document
+    // để PDA không mất tem khi ô input chưa focus.
+    if (this.kkTypeScanStep === 'codes') return;
     const target = event.target as HTMLElement | null;
     if (target?.closest?.('.kk-type-scan__std')) return;
+    // Ô NV/vị trí đang focus: để bindHidScanInput nhận ký tự native. Chỉ bắt cấp document khi mất focus.
+    if (target && (target.id === 'kkTypeScanOperatorInput' || target.id === 'kkTypeScanLocationInput')) {
+      return;
+    }
     const key = event.key;
     if (!key || key === 'Escape' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
     if (key === 'Tab' || key === 'Enter') {
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.flushKkDocScan();
+      this.flushKkDocScan(true);
       return;
     }
     if (key === 'Backspace') {
@@ -2560,8 +2568,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.kkDocScanAt) this.kkDocScanAt = performance.now();
     this.kkDocScanBuf += key;
     this.paintKkDocScanBuf();
-    const idle = this.kkTypeScanStep === 'codes' ? 60 : 120;
-    this.scheduleKkDocScanFlush(idle);
+    if (this.kkTypeScanStep === 'operator') {
+      const compact = this.kkDocScanBuf.replace(/[^A-Z0-9]/gi, '');
+      const ready = /^ASP\d{4}$/.test(this.parseKkEmployeeBadge(this.kkDocScanBuf)) || compact.length >= 7;
+      if (ready) this.scheduleKkDocScanFlush(220);
+      return;
+    }
+    this.scheduleKkDocScanFlush(150);
   }
 
   private scheduleKkDocScanFlush(idleMs: number): void {
@@ -2586,7 +2599,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'kkTypeScanQrInput';
   }
 
-  private flushKkDocScan(): void {
+  private flushKkDocScan(fromEnter = false): void {
     if (this.kkDocScanTimer) {
       clearTimeout(this.kkDocScanTimer);
       this.kkDocScanTimer = null;
@@ -2595,6 +2608,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .replace(/[\r\n\t]+/g, '')
       .replace(/[\u0000-\u001F]/g, '')
       .trim();
+    if (this.kkTypeScanStep === 'operator' && !fromEnter) {
+      const compact = raw.replace(/[^A-Z0-9]/gi, '');
+      if (!/^ASP\d{4}$/.test(this.parseKkEmployeeBadge(raw)) && compact.length < 7) {
+        this.pinKkScanFocus();
+        return;
+      }
+    }
     this.kkDocScanBuf = '';
     this.kkDocScanAt = 0;
     this.paintKkDocScanBuf();
@@ -8622,7 +8642,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         <td>${esc(String(m.palletId || '—'))}</td>
         <td class="n">${esc(this.formatNumber(this.getEffectiveStandardPacking(m) || 0))}</td>
         <td class="c">${esc(this.getKkRollsText(m))}</td>
-        <td class="n">${esc(this.formatNumber(this.getKkScanCount(m)))} / ${esc(this.formatNumber(stock))}</td>
+        <td class="n">${esc(this.formatNumber(this.getKkScanCount(m)))} / ${esc(String(this.getKkRollsCount(m) || '—'))} Box</td>
         <td class="c">${m.kkChecked ? '☑' : '☐'}</td>
         <td>${esc(this.getKkTypePalletNote(m) || '—')}</td>
       </tr>`;
@@ -8690,7 +8710,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         <th>Pallet</th>
         <th class="c">Standard</th>
         <th class="c">Cuộn</th>
-        <th class="c">Lần quét</th>
+        <th class="c">Lần quét (Box)</th>
         <th class="c">KK</th>
         <th>Ghi chú</th>
       </tr>
@@ -9564,8 +9584,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     event?.preventDefault?.();
     const el = (event?.target as HTMLInputElement | undefined)
       || (document.getElementById('kkTypeScanOperatorInput') as HTMLInputElement | null);
-    const shortCode = this.parseKkEmployeeBadge(String(rawOverride ?? el?.value ?? this.kkTypeScanOperatorInput ?? ''));
+    const raw = String(rawOverride ?? el?.value ?? this.kkTypeScanOperatorInput ?? '');
+    const shortCode = this.parseKkEmployeeBadge(raw);
     if (!/^ASP\d{4}$/.test(shortCode)) {
+      const compact = raw.replace(/[^A-Za-z0-9]/g, '');
+      // PDA hay flush sớm 1-2 ký tự — giữ ô, đợi hết tem, không báo lỗi.
+      if (!event && compact.length < 7) {
+        this.pinKkScanFocus();
+        return;
+      }
       this.kkTypeScanErr = 'Mã nhân viên không đúng. Quét tem ASP + 4 số.';
       this.kkTypeScanBeep('err');
       this.kkTypeScanOperatorInput = '';
@@ -9590,7 +9617,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (el && !el.disabled) {
         this.bindKkTypeScanHidInput(id, el);
         if (!skipFocus) {
-          this.suppressVirtualKeyboard(el);
+          if (id !== 'kkTypeScanOperatorInput') this.suppressVirtualKeyboard(el);
           el.focus({ preventScroll: true });
         }
         return;
@@ -9612,7 +9639,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.bindHidScanInput(
         el,
         (raw) => this.submitKkTypeScanOperator(undefined, raw),
-        { idleMs: 120, minLenForIdleFlush: 1 }
+        {
+          idleMs: 250,
+          minLenForIdleFlush: 7,
+          shouldFlush: (raw) => /^ASP\d{4}$/.test(this.parseKkEmployeeBadge(raw))
+        }
       );
     } else if (id === 'kkTypeScanLocationInput') {
       this.bindHidScanInput(
@@ -9637,12 +9668,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private bindHidScanInput(
     el: HTMLInputElement,
     onComplete: (raw: string, readMs: number) => void,
-    opts?: { idleMs?: number; minLenForIdleFlush?: number }
+    opts?: { idleMs?: number; minLenForIdleFlush?: number; shouldFlush?: (raw: string) => boolean }
   ): void {
     if (!el || this.hidScanBound.has(el)) return;
     this.hidScanBound.add(el);
     const idleMs = opts?.idleMs ?? 0;
     const minLenForIdleFlush = opts?.minLenForIdleFlush ?? 20;
+    const shouldFlush = opts?.shouldFlush;
     let burstStart = 0;
     const markBurst = () => {
       if (!burstStart) burstStart = performance.now();
@@ -9676,11 +9708,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         if (event.key.length === 1 || event.key === 'Unidentified' || event.key === 'Process') {
           markBurst();
-          if (event.key.length === 1 && el.getAttribute('inputmode') === 'none') {
-            event.preventDefault();
-            el.value += event.key;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-          }
         }
       });
       el.addEventListener('input', () => {
@@ -9692,7 +9719,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         if (idleMs > 0) {
           const v = el.value || '';
-          if (v.includes('|') || v.length >= minLenForIdleFlush) flush(idleMs);
+          const ready = shouldFlush
+            ? shouldFlush(v)
+            : (v.includes('|') || v.length >= minLenForIdleFlush);
+          if (ready) flush(idleMs);
         }
       });
     });
@@ -9776,9 +9806,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
     const s = n.match(/^(S\d{2})(?:-|$)/);
     if (s) return s[1];
-    const r = n.match(/^(R\d{1,2})(?=\d-|\d$|$)/);
+    const r = n.match(/^(R\d{1,2})(?=\d-|\d$|$|-)/);
     if (r) return r[1];
     return n;
+  }
+
+  /** Kệ kho J dạng Sxx / Rxx (xx là số 1–99). J5, TRA, D1… không tính. */
+  private kkScanIsJShelfLocation(loc: string): boolean {
+    const n = this.normalizeKkScanLocation(loc)
+      || String(loc || '').trim().toUpperCase().replace(/\s+/g, '');
+    return isJWarehouseLocation(n);
   }
 
   private kkScanIsStagingLocation(loc: string): boolean {
@@ -9787,12 +9824,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return !u || u === '-' || /^(F62|F62TRA|IQC|NG)$/.test(u);
   }
 
-  private kkScanHomeLocation(code: string): string {
+  private kkScanHomeLocation(code: string, po = ''): string {
     const lines = this.kkStockLinesForCode(code);
     const homes: Array<{ loc: string; stock: number; slot: boolean }> = [];
+    const needPo = String(po || '').trim();
     for (const m of lines) {
+      if (needPo && !this.kkTypeScanPoMatch(String(m.poNumber || ''), needPo)) continue;
       const loc = this.normalizeKkScanLocation(this.primaryLocationDisplay(m.location));
       if (!loc || this.kkScanIsStagingLocation(loc)) continue;
+      if (!this.kkScanIsJShelfLocation(loc)) continue;
       const hit = homes.find((h) => h.loc === loc);
       const stock = this.calculateCurrentStock(m);
       if (hit) hit.stock += stock;
@@ -9808,11 +9848,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private kkScanLocationAllowed(scanned: string, home: string): boolean {
     if (!home) return true;
+    if (!this.kkScanIsJShelfLocation(home)) return true;
     if (scanned === home) return true;
     const scannedAisle = this.kkScanAisleOf(scanned);
     const homeAisle = this.kkScanAisleOf(home);
-    if (scannedAisle && scannedAisle === homeAisle && /^S\d{2}$/.test(scannedAisle)) return true;
-    if (!home.includes('-') && scannedAisle === home) return true;
+    // Home chỉ là kệ Sxx/Rxx (chưa có ô) thì cho scan đúng kệ đó.
+    if (!home.includes('-') && scannedAisle && scannedAisle === homeAisle) return true;
     return false;
   }
 
@@ -9981,7 +10022,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const qty = this.parseKkScanQty(parsed.quantity) || 1;
+    const qty = 1;
     const prevCode = this.kkTypeScanMaterialCode;
     if (prevCode && prevCode !== code) {
       this.pushKkTypeScanLog(true, `Sang mã ${code}`, true);
@@ -10060,23 +10101,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const lines = this.kkStockLinesForCode(code);
     if (!lines.length) return null;
     const loc = this.kkTypeScanLocation;
-    const need = Math.max(0, Number(qty) || 0);
     const scored = lines.map((m) => {
       let score = 0;
       if (this.kkTypeScanPoMatch(String(m.poNumber || ''), po)) score += 8;
       if (this.kkTypeScanImdMatch(imd, this.getDisplayIMD(m))) score += 4;
       const here = this.normalizeKkScanLocation(this.primaryLocationDisplay(m.location));
       if (here === loc) score += 3;
-      const remain = this.calculateCurrentStock(m) - this.getKkScanCount(m);
-      if (remain > 1e-9) score += 2;
-      return { m, score, remain };
+      const remainBoxes = this.getKkRollsCount(m) - this.getKkScanCount(m);
+      if (remainBoxes > 0) score += 2;
+      return { m, score, remain: remainBoxes };
     });
-    const fit = need > 0
-      ? scored.filter((s) => s.remain + 1e-9 >= need)
-      : scored;
-    if (!fit.length) return null;
-    fit.sort((a, b) => b.score - a.score || b.remain - a.remain);
-    return fit[0].m;
+    if (!scored.length) return null;
+    scored.sort((a, b) => b.score - a.score || b.remain - a.remain);
+    return scored[0].m;
   }
 
   private async applyKkTypeScanPutaway(
@@ -10094,9 +10131,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch {
       /* ensure already logs */
     }
-    const home = this.kkScanHomeLocation(code);
+    const home = po ? this.kkScanHomeLocation(code, po) : '';
     if (home && !this.kkScanLocationAllowed(loc, home)) {
-      const msg = `Đưa mã ${code} về vị trí yêu cầu ${home} (đã có hàng ở kệ đó). Không scan vào ${loc}.`;
+      const poNote = po ? ` PO ${po}` : '';
+      const msg = `Mã ${code}${poNote} đang ở ${home} (kho J kệ S/R). Không được để vị trí khác ${loc}.`;
       this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
       this.kkTypeScanLastSavePending = false;
@@ -10119,8 +10157,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (!line?.id) {
       const scanned = this.kkTypeScanQtyScanned;
-      const stockAll = this.kkTypeScanQtyTotal;
-      const msg = `${code} — không ghi nhận: lượng quét dư so với tồn ${this.formatNumber(scanned)} / ${this.formatNumber(stockAll)}`;
+      const boxTotal = this.kkTypeScanCartonTotal;
+      const msg = `${code} — không ghi nhận Box ${this.formatNumber(scanned)} / ${boxTotal || '—'}`;
       this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
       this.kkTypeScanLastSavePending = false;
@@ -10145,18 +10183,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const prevKk = !!line.kkChecked;
     const prevKkBy = line.kkBy;
     const prevKkAt = line.kkAt;
-    const nextScan = this.roundKkQty(prevScanCount + qty);
+    const nextScan = this.roundKkQty(prevScanCount + 1);
     const stock = this.calculateCurrentStock(line);
-    if (nextScan > stock + 1e-9) {
-      const msg = `${code} — không ghi nhận: lượng quét dư so với tồn ${this.formatNumber(prevScanCount)} / ${this.formatNumber(stock)}`;
-      this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
-      this.kkTypeScanBeep('err');
-      this.kkTypeScanLastSavePending = false;
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-      return;
-    }
-    const shouldKk = nextScan + 1e-9 >= stock && stock > 0;
+    const rolls = this.getKkRollsCount(line);
+    const shouldKk = rolls > 0 && nextScan + 1e-9 >= rolls && stock > 0;
     const kkAt = new Date();
 
     const payload: Record<string, unknown> = {
@@ -10255,12 +10285,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       ...this.kkTypeScanCartons,
       [code]: (this.kkTypeScanCartons[code] || 0) + 1
     };
-    const cartons = this.kkTypeScanCartonScanned;
-    const cartonTotal = this.kkTypeScanCartonTotal;
-    const cartonNote = cartonTotal
-      ? `${cartons}/${cartonTotal} thùng${cartons < cartonTotal ? ` · thiếu ${cartonTotal - cartons}` : cartons > cartonTotal ? ` · thừa ${cartons - cartonTotal}` : ' · đủ'}`
-      : `${cartons} thùng`;
-    const baseText = `${code} · ${cartonNote} · lượng ${this.formatNumber(nextScan)}/${this.formatNumber(stock)}${shouldKk ? ' · KK' : ''}`;
+    const boxes = this.kkTypeScanQtyScanned;
+    const boxTotal = this.kkTypeScanCartonTotal;
+    const boxNote = boxTotal
+      ? `${boxes}/${boxTotal} Box${boxes < boxTotal ? ` · thiếu ${boxTotal - boxes}` : boxes > boxTotal ? ` · thừa ${boxes - boxTotal}` : ' · đủ'}`
+      : `${boxes} Box`;
+    const baseText = `${code} · ${boxNote}${shouldKk ? ' · KK' : ''}`;
     const logId = this.pushKkTypeScanLog(
       true,
       `${baseText} · ${readNote} · đang ghi…`,
@@ -10334,7 +10364,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkTypeScanProgressTone(): '' | 'ok' | 'low' | 'over' {
-    const scanned = this.kkTypeScanCartonScanned;
+    const scanned = this.kkTypeScanQtyScanned;
     const total = this.kkTypeScanCartonTotal;
     if (scanned <= 0) return '';
     if (!total) return 'low';
@@ -10343,12 +10373,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkTypeScanStatusText(): string {
-    const scanned = this.kkTypeScanCartonScanned;
+    const scanned = this.kkTypeScanQtyScanned;
     const total = this.kkTypeScanCartonTotal;
-    if (!total) return scanned ? `Đã scan ${scanned} thùng` : 'Chưa scan';
-    if (scanned < total) return `Thiếu ${total - scanned} thùng`;
-    if (scanned > total) return `Thừa ${scanned - total} thùng`;
-    return 'Đủ thùng';
+    if (!total) return scanned ? `Đã scan ${scanned} Box` : 'Chưa scan';
+    if (scanned < total) return `Thiếu ${total - scanned} Box`;
+    if (scanned > total) return `Thừa ${scanned - total} Box`;
+    return 'Đủ Box';
   }
 
   get kkTypeScanAllTicked(): boolean {
@@ -10604,24 +10634,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkScanStockTone(material: InventoryMaterial): '' | 'ok' | 'low' | 'over' {
     const scanned = this.getKkScanCount(material);
     if (scanned <= 0) return '';
-    const stock = this.calculateCurrentStock(material);
-    const d = scanned - stock;
-    if (Math.abs(d) < 1e-6) return 'ok';
-    return d < 0 ? 'low' : 'over';
+    const total = this.getKkRollsCount(material);
+    if (!total) return 'low';
+    if (scanned === total) return 'ok';
+    return scanned < total ? 'low' : 'over';
   }
 
   getKkScanCompareTitle(material: InventoryMaterial): string {
     const scanned = this.getKkScanCount(material);
-    const stock = this.calculateCurrentStock(material);
+    const total = this.getKkRollsCount(material);
     const tone = this.kkScanStockTone(material);
-    if (tone === 'ok') return `Đã quét ${this.formatNumber(scanned)} = tồn ${this.formatNumber(stock)}`;
-    if (tone === 'low') {
-      return `Đã quét ${this.formatNumber(scanned)} / tồn ${this.formatNumber(stock)} — thiếu ${this.formatNumber(stock - scanned)}`;
+    if (!total) {
+      return scanned ? `Đã quét ${scanned} Box · chưa có số cuộn/thùng` : 'Chưa scan';
     }
-    if (tone === 'over') {
-      return `Đã quét ${this.formatNumber(scanned)} / tồn ${this.formatNumber(stock)} — thừa ${this.formatNumber(scanned - stock)}`;
-    }
-    return `Chưa scan · tồn ${this.formatNumber(stock)}`;
+    if (tone === 'ok') return `Đã quét ${scanned} Box = ${total} Box`;
+    if (tone === 'low') return `Đã quét ${scanned} / ${total} Box — thiếu ${total - scanned}`;
+    if (tone === 'over') return `Đã quét ${scanned} / ${total} Box — thừa ${scanned - total}`;
+    return `Chưa scan · ${total} Box`;
   }
 
   getKkRollsTitle(material: InventoryMaterial): string {
