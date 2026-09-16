@@ -275,7 +275,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkLocMapQuery = '';
   /** Đã đọc tồn kho (Play hoặc search đủ 4 số). Mở trang không tự đọc. */
   kkStockLoaded = false;
-  kkLocMapView: 'location' | 'material' | 'type' | null = null;
+  kkLocMapView: 'location' | 'material' | 'type' | 'manager' | null = null;
   kkLocMapWarehouseFilter: '' | KkWarehouse = '';
   kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
   kkLocMapByMaterial: KkLocMaterialRow[] = [];
@@ -359,6 +359,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeShowExtraFilter = false;
   private kkTypeCacheRev = 0;
   private kkTypeBoxesSig = '';
+  private kkManagerRowsSig = '';
+  private kkManagerRowsCached: Array<{
+    name: string;
+    codeCount: number;
+    typeCount: number;
+    types: string[];
+  }> = [];
   private kkTypeBoxesCached: Array<{
     productType: string;
     sourceProductType?: string;
@@ -869,10 +876,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   layoutLocTypeAssign: string | null = null;
   private layoutLocTypeAssignGroups: string[] = [];
   kkTypeHomeLocs = new Map<string, string>();
+  kkTypeManagers = new Map<string, string>();
   kkTypeBoxMenuVisible = false;
   kkTypeBoxMenuX = 0;
   kkTypeBoxMenuY = 0;
   kkTypeBoxMenuBox: { productType: string; groupCodes?: string[] } | null = null;
+  kkTypeBoxMenuManagerDraft = '';
+  kkTypeBoxMenuSaving = false;
   private skipKkTypeBoxMenuClose = false;
   // canEditHSD = false; // Removed - HSD column deleted
 
@@ -2826,6 +2836,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
       }
       this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs();
+      this.kkTypeManagers = await this.kkCatalog.loadManagers();
       this.cdr.markForCheck();
     } catch (e) {
       console.error('ensureKkMobileCatalog:', e);
@@ -6802,7 +6813,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .sort((a, b) => b.uniqueCodes - a.uniqueCodes || a.id.localeCompare(b.id));
   }
 
-  setKkLocMapView(view: 'location' | 'material' | 'type'): void {
+  setKkLocMapView(view: 'location' | 'material' | 'type' | 'manager'): void {
     if (this.kkLocMapView === view && !this.kkLocMapLoading) return;
     this.kkLocMapView = view;
     this.kkLocMapQuery = '';
@@ -6814,7 +6825,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.kkStockLoaded) return;
     if (view === 'location') void this.loadKkLocMap();
     else if (view === 'material') void this.loadKkByMaterial();
-    else void this.loadKkCatalogForMap();
+    else if (view === 'manager' && this.kkLocMapTypeCache.size) {
+      this.invalidateKkTypeViewCache();
+      this.cdr.detectChanges();
+    } else {
+      void this.loadKkCatalogForMap();
+    }
   }
 
   /** Nút Play: đọc tồn kho. Search không bấm Play thì chỉ chạy khi đủ 4 số. */
@@ -6826,7 +6842,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (force) this.invalidateKkInvSnapCache(this.selectedFactory);
     if (this.kkLocMapView === 'material') void this.loadKkByMaterial();
     else if (this.kkLocMapView === 'location') void this.loadKkLocMap();
-    else if (this.kkLocMapView === 'type') {
+    else if (this.kkLocMapView === 'type' || this.kkLocMapView === 'manager') {
       void this.loadKkCatalogForMap(true);
     } else {
       this.kkLocMapView = 'type';
@@ -7426,8 +7442,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private invalidateKkTypeViewCache(): void {
     this.kkTypeCacheRev++;
     this.kkTypeBoxesSig = '';
+    this.kkTypeBoxGroupsSig = '';
     this.kkTypeDetailSig = '';
     this.kkTypePalletNotesSig = '';
+    this.kkManagerRowsSig = '';
   }
 
   get kkTypeBoxes(): Array<{
@@ -7480,8 +7498,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return {
         category,
         title: this.kkTypeMucTitle(category),
-        boxes: sorted,
-        groups: category === 'ĐẦU NỐI' ? this.buildKkDauNoiGroups(sorted) : undefined
+        boxes: sorted
       };
     });
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
@@ -7493,7 +7510,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = String(productType || '').trim();
     if (!raw) return 'Khác';
     if (raw === 'Chưa gán danh mục') return raw;
-    if (this.isKkDauNoiMuc(raw, groupCodes)) return 'ĐẦU NỐI';
+    if (this.isKkDauNoiMuc(raw, groupCodes)) return this.kkDauNoiGroupKey({ groupCodes });
     if (this.isKkDauCotMuc(raw, groupCodes)) return 'ĐẦU CỐT';
     const bPrefix = this.kkTypeSharedBPrefix(groupCodes);
     if (bPrefix) return bPrefix;
@@ -7535,59 +7552,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (prefixes.includes(p)) return p;
     }
     return prefixes[0] || 'Khác';
-  }
-
-  /** Tên mục nhỏ trong nhóm đầu nối: bỏ khoảng pin (1-4P / 5-10P). */
-  private kkTypeDauNoiSubMuc(productType: string): string {
-    const raw = String(productType || '').trim();
-    if (!raw) return 'Khác';
-    const stripped = raw
-      .replace(/\d+\s*[-–]\s*\d+\s*P/gi, ' ')
-      .replace(/\b\d{1,2}\s*P\b/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return stripped || raw;
-  }
-
-  private buildKkDauNoiGroups(boxes: typeof this.kkTypeBoxesCached): Array<{
-    key: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> {
-    const order = ['B008', 'B009', 'B016'];
-    const byPrefix = new Map<string, typeof boxes>();
-    for (const box of boxes) {
-      const key = this.kkDauNoiGroupKey(box);
-      const list = byPrefix.get(key) || [];
-      list.push(box);
-      byPrefix.set(key, list);
-    }
-    const keys = [
-      ...order.filter((k) => byPrefix.has(k)),
-      ...Array.from(byPrefix.keys()).filter((k) => !order.includes(k))
-    ];
-    return keys.map((key) => {
-      const gBoxes = this.sortKkTypeBoxesInCategory(key, byPrefix.get(key) || []);
-      const subMap = new Map<string, typeof gBoxes>();
-      const subTitle = new Map<string, string>();
-      for (const box of gBoxes) {
-        const title = this.kkTypeDauNoiSubMuc(box.productType);
-        const subKey = this.foldKkTypeName(title) || title;
-        const list = subMap.get(subKey) || [];
-        list.push(box);
-        subMap.set(subKey, list);
-        if (!subTitle.has(subKey)) subTitle.set(subKey, title);
-      }
-      const subMucs = Array.from(subMap.entries())
-        .map(([subKey, subBoxes]) => ({
-          key: subKey,
-          title: subTitle.get(subKey) || subKey,
-          boxes: subBoxes
-        }))
-        .sort((a, b) => a.title.localeCompare(b.title, 'vi'));
-      return { key, title: key, boxes: gBoxes, subMucs };
-    });
   }
 
   private isKkDauCotMuc(productType: string, groupCodes: string[] = []): boolean {
@@ -7971,25 +7935,99 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return Number.isFinite(n) ? n : null;
   }
 
-  /** Mục B001 dây điện: box theo AWG lớn → nhỏ. Mục khác giữ thứ tự mã. */
+  /** Trong cùng mục: vị trí yêu cầu nhỏ nhất trước (S1 / R1 nhỏ nhất). Chưa gán vị trí xuống cuối. */
   private sortKkTypeBoxesInCategory(
     category: string,
     boxes: typeof this.kkTypeBoxesCached
   ): typeof this.kkTypeBoxesCached {
     const list = [...boxes];
-    if (category !== 'B001') {
-      list.sort((a, b) => this.compareKkTypeBox(a, b));
-      return list;
-    }
     list.sort((a, b) => {
-      const awgA = this.parseKkAwgFromType(a.productType);
-      const awgB = this.parseKkAwgFromType(b.productType);
-      if (awgA != null && awgB != null && awgA !== awgB) return awgB - awgA;
-      if (awgA != null && awgB == null) return -1;
-      if (awgA == null && awgB != null) return 1;
+      const byHome = this.compareKkTypeBoxByHomeLoc(a, b);
+      if (byHome) return byHome;
+      if (category === 'B001') {
+        const awgA = this.parseKkAwgFromType(a.productType);
+        const awgB = this.parseKkAwgFromType(b.productType);
+        if (awgA != null && awgB != null && awgA !== awgB) return awgB - awgA;
+        if (awgA != null && awgB == null) return -1;
+        if (awgA == null && awgB != null) return 1;
+      }
       return this.compareKkTypeBox(a, b);
     });
     return list;
+  }
+
+  private kkTypeBoxHomeLoc(box: {
+    productType: string;
+    sourceProductType?: string;
+    sourceProductTypes?: string[];
+  }): string {
+    const keys = [
+      box.productType,
+      box.sourceProductType,
+      ...(box.sourceProductTypes || [])
+    ].filter(Boolean);
+    for (const k of keys) {
+      const loc = this.kkTypeHomeLocOf(String(k));
+      if (loc) return loc;
+    }
+    return '';
+  }
+
+  /** S1 < S2; R1 < R1-6 < R3. Token khác / trống xuống sau. */
+  private parseKkHomeLocRank(token: string): number[] {
+    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!raw) return [9, 999, 999, 999, 999];
+    const s = /^S0*(\d{1,2})(?:-(\d+))?(?:-(\d+))?$/.exec(raw);
+    if (s) return [0, Number(s[1]), Number(s[2] || 0), Number(s[3] || 0), 0];
+    const posOf = (ch?: string) => (ch ? ch.charCodeAt(0) - 64 : 0);
+    // Slot kho: R16-1A = dãy R1, block 6, tầng 1, A
+    const rSlot = /^R(\d{1,2})([1-6])-(\d+)([A-C])?$/.exec(raw);
+    if (rSlot) {
+      return [1, Number(rSlot[1]), Number(rSlot[2]), Number(rSlot[3]), posOf(rSlot[4])];
+    }
+    // Cả block: R1-6 / R1-6-1A = dãy R1, block 6
+    const rBlock = /^R0*(\d{1,2})-([1-6])(?:-(\d+))?([A-C])?$/.exec(raw);
+    if (rBlock) {
+      return [1, Number(rBlock[1]), Number(rBlock[2]), Number(rBlock[3] || 0), posOf(rBlock[4])];
+    }
+    const rAisle = /^R0*(\d{1,2})$/.exec(raw);
+    if (rAisle) return [1, Number(rAisle[1]), 0, 0, 0];
+    return [8, 999, 999, 999, 999];
+  }
+
+  private minKkHomeLocRank(joined: string): { empty: boolean; rank: number[]; text: string } {
+    const tokens = splitMultiLocations(joined).filter(Boolean);
+    if (!tokens.length) return { empty: true, rank: [9, 999, 999, 999, 999], text: '' };
+    let bestText = tokens[0];
+    let bestRank = this.parseKkHomeLocRank(bestText);
+    for (let i = 1; i < tokens.length; i++) {
+      const rank = this.parseKkHomeLocRank(tokens[i]);
+      if (this.compareKkHomeLocRank(rank, bestRank) < 0) {
+        bestRank = rank;
+        bestText = tokens[i];
+      }
+    }
+    return { empty: false, rank: bestRank, text: String(bestText || '').toUpperCase() };
+  }
+
+  private compareKkHomeLocRank(a: number[], b: number[]): number {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+  }
+
+  private compareKkTypeBoxByHomeLoc(
+    a: { productType: string; sourceProductType?: string; sourceProductTypes?: string[] },
+    b: { productType: string; sourceProductType?: string; sourceProductTypes?: string[] }
+  ): number {
+    const ha = this.minKkHomeLocRank(this.kkTypeBoxHomeLoc(a));
+    const hb = this.minKkHomeLocRank(this.kkTypeBoxHomeLoc(b));
+    if (ha.empty !== hb.empty) return ha.empty ? 1 : -1;
+    const byRank = this.compareKkHomeLocRank(ha.rank, hb.rank);
+    if (byRank) return byRank;
+    return ha.text.localeCompare(hb.text, 'en', { numeric: true });
   }
 
   get kkActiveTypeRow(): KkTypeRow | null {
@@ -8049,12 +8087,123 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkTypeHomeLocs.get(String(productType || '').trim()) || '';
   }
 
+  kkTypeManagerOf(productType: string): string {
+    return this.kkTypeManagers.get(String(productType || '').trim()) || '';
+  }
+
+  private kkManagerNameForType(productType: string, sources: string[] = []): string {
+    const keys = [productType, ...sources];
+    for (const k of keys) {
+      const n = this.kkTypeManagerOf(k);
+      if (n) return n;
+    }
+    return '';
+  }
+
+  get kkManagerRows(): Array<{ name: string; codeCount: number; typeCount: number; types: string[] }> {
+    const q = String(this.kkLocMapQuery || '').trim().toLowerCase();
+    const sig = [
+      this.kkTypeCacheRev,
+      this.kkTypeManagers.size,
+      this.kkLocMapTypeCache.size,
+      this.kkLocMapWarehouseFilter,
+      this.kkCountWh3 ? 1 : 0,
+      this.kkWh3Only ? 1 : 0,
+      this.kkJOnly ? 1 : 0,
+      q
+    ].join('|');
+    if (sig === this.kkManagerRowsSig) return this.kkManagerRowsCached;
+    this.kkManagerRowsSig = sig;
+    this.kkManagerRowsCached = this.buildKkManagerRows(q);
+    return this.kkManagerRowsCached;
+  }
+
+  get kkManagerTotalCodes(): number {
+    return this.kkManagerRows.reduce((sum, row) => sum + row.codeCount, 0);
+  }
+
+  private buildKkManagerRows(query: string): Array<{
+    name: string;
+    codeCount: number;
+    typeCount: number;
+    types: string[];
+  }> {
+    const map = new Map<string, { productType: string; groups: Set<string>; sources: Set<string> }>();
+    const bump = (productType: string, groupCodes: string[] = []) => {
+      const key = this.kkCanonicalTypeKey(productType, groupCodes);
+      const cur = map.get(key) || {
+        productType: key,
+        groups: new Set<string>(),
+        sources: new Set<string>()
+      };
+      cur.sources.add(productType);
+      groupCodes.forEach((g) => cur.groups.add(g));
+      map.set(key, cur);
+      return cur;
+    };
+    for (const e of this.kkCatalogEntries) {
+      bump(e.productType).groups.add(e.groupCode);
+    }
+    for (const r of this.kkLocMapByType) {
+      bump(r.productType, r.groupCodes);
+    }
+    this.kkTypeManagers.forEach((_name, typeKey) => bump(typeKey));
+
+    const zone = this.kkLocMapWarehouseFilter;
+    const byManager = new Map<string, { display: string; types: Set<string>; codes: Set<string> }>();
+    map.forEach((cur) => {
+      const sources = Array.from(cur.sources);
+      const manager = this.kkManagerNameForType(cur.productType, sources);
+      if (!manager) return;
+      const nk = manager.toLocaleLowerCase('vi');
+      let rec = byManager.get(nk);
+      if (!rec) {
+        rec = { display: manager, types: new Set<string>(), codes: new Set<string>() };
+        byManager.set(nk, rec);
+      }
+      rec.types.add(cur.productType);
+      const seen = new Set<string>();
+      for (const src of sources) {
+        for (const m of this.kkLocMapTypeCache.get(src) || []) {
+          const id = String(m.id || '');
+          if (id) {
+            if (seen.has(id)) continue;
+            seen.add(id);
+          }
+          const wh = this.kkWarehouseFromLocation(m.location);
+          if (!this.kkMatchesWh3Mode(wh)) continue;
+          if (zone && wh !== zone) continue;
+          if (this.calculateCurrentStock(m) <= 0) continue;
+          const code = String(m.materialCode || '').trim().toUpperCase();
+          if (code) rec.codes.add(code);
+        }
+      }
+    });
+
+    let rows = Array.from(byManager.values()).map((rec) => ({
+      name: rec.display,
+      codeCount: rec.codes.size,
+      typeCount: rec.types.size,
+      types: Array.from(rec.types).sort((a, b) => a.localeCompare(b, 'vi'))
+    }));
+    rows.sort((a, b) => b.codeCount - a.codeCount || a.name.localeCompare(b.name, 'vi'));
+    if (query) {
+      rows = rows.filter((r) =>
+        r.name.toLowerCase().includes(query)
+        || r.types.some((t) => t.toLowerCase().includes(query))
+      );
+    }
+    return rows;
+  }
+
   openKkTypeBoxMenu(event: MouseEvent, box: { productType: string; groupCodes?: string[] }): void {
     event.preventDefault();
     event.stopPropagation();
     const productType = String(box?.productType || '').trim();
     if (!productType) return;
     this.kkTypeBoxMenuBox = { productType, groupCodes: box.groupCodes || [] };
+    this.kkTypeBoxMenuManagerDraft = this.kkTypeManagerOf(productType);
+    this.kkTypeBoxMenuSaving = false;
     this.kkTypeBoxMenuX = event.clientX;
     this.kkTypeBoxMenuY = event.clientY;
     this.kkTypeBoxMenuVisible = true;
@@ -8066,6 +8215,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   closeKkTypeBoxMenu(): void {
     this.kkTypeBoxMenuVisible = false;
     this.kkTypeBoxMenuBox = null;
+    this.kkTypeBoxMenuManagerDraft = '';
+    this.kkTypeBoxMenuSaving = false;
   }
 
   onKkTypeBoxMenuAssign(): void {
@@ -8079,6 +8230,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeKkTypeBoxMenu();
     if (!box?.productType) return;
     this.printKkTypeNameLabel(box.productType);
+  }
+
+  async saveKkTypeBoxManager(): Promise<void> {
+    const productType = String(this.kkTypeBoxMenuBox?.productType || '').trim();
+    if (!productType || !this.canEdit || this.kkTypeBoxMenuSaving) return;
+    const name = String(this.kkTypeBoxMenuManagerDraft || '').trim();
+    this.kkTypeBoxMenuSaving = true;
+    this.cdr.detectChanges();
+    try {
+      await this.kkCatalog.saveManager(productType, name);
+      if (name) this.kkTypeManagers.set(productType, name);
+      else this.kkTypeManagers.delete(productType);
+      this.kkTypeManagers = new Map(this.kkTypeManagers);
+      this.invalidateKkTypeViewCache();
+      this.closeKkTypeBoxMenu();
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('saveKkTypeBoxManager:', e);
+      alert('Không lưu được tên người quản lý. Thử lại.');
+      this.kkTypeBoxMenuSaving = false;
+      this.cdr.detectChanges();
+    }
   }
 
   printKkTypeNameLabelFromPicker(): void {
@@ -8194,7 +8367,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (joined) this.kkTypeHomeLocs.set(productType, joined);
       else this.kkTypeHomeLocs.delete(productType);
       this.kkTypeHomeLocs = new Map(this.kkTypeHomeLocs);
+      this.invalidateKkTypeViewCache();
       this.closeLayoutLocPicker();
+      this.cdr.detectChanges();
     } catch (e) {
       console.error('❌ saveHomeLoc:', e);
       alert('❌ Không lưu được vị trí yêu cầu.');
@@ -8444,6 +8619,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onKkLocMapQueryChange(value: string): void {
+    if (this.kkLocMapView === 'manager') {
+      this.kkLocMapQuery = String(value || '');
+      this.kkManagerRowsSig = '';
+      this.cdr.detectChanges();
+      return;
+    }
     this.kkLocMapQuery = String(value || '').toUpperCase();
     const q = this.kkEffectiveSearchQuery();
     if (!q) {
@@ -11065,6 +11246,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       } catch (homeErr) {
         console.error('❌ loadHomeLocs:', homeErr);
       }
+      try {
+        this.kkTypeManagers = await this.kkCatalog.loadManagers(forceRefresh);
+      } catch (mgrErr) {
+        console.error('❌ loadManagers:', mgrErr);
+      }
       this.invalidateKkTypeViewCache();
     } catch (e) {
       console.error('❌ loadKkCatalogMeta:', e);
@@ -11084,7 +11270,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const loadId = ++this.kkLocMapLoadId;
     this.kkLocMapBusy = true;
     this.kkLocMapStatus = 'Đang tải danh mục KK…';
-    if (this.kkLocMapView === 'type') {
+    if (this.kkLocMapView === 'type' || this.kkLocMapView === 'manager') {
       this.kkLocMapLoading = false;
     } else {
       this.kkLocMapLoading = true;
@@ -11099,10 +11285,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       } catch (homeErr) {
         console.error('❌ loadHomeLocs:', homeErr);
       }
+      try {
+        this.kkTypeManagers = await this.kkCatalog.loadManagers(forceRefresh);
+      } catch (mgrErr) {
+        console.error('❌ loadManagers:', mgrErr);
+      }
       if (loadId !== this.kkLocMapLoadId) return;
       this.invalidateKkTypeViewCache();
       this.cdr.detectChanges();
-      if (this.kkLocMapView === 'type') {
+      if (this.kkLocMapView === 'type' || this.kkLocMapView === 'manager') {
         this.kkLocMapStatus = 'Đang đọc tồn kho…';
         this.cdr.detectChanges();
         await new Promise<void>((resolve) => setTimeout(resolve, 0));

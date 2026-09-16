@@ -6,13 +6,13 @@
       <div class="excel-header__title-row kk-page__hero">
         <div class="kk-page__brand">
           <span class="kk-page__ico" aria-hidden="true">
-            <i class="material-icons">{{ kkLocMapView === 'type' && kkActiveProductType ? 'category' : 'fact_check' }}</i>
+            <i class="material-icons">{{ kkLocMapView === 'type' && kkActiveProductType ? 'category' : kkLocMapView === 'manager' ? 'groups' : 'fact_check' }}</i>
           </span>
           <div class="kk-page__titles">
             <h4>
               <ng-container *ngIf="kkLocMapView === 'type' && kkActiveProductType">{{ kkActiveProductType }}</ng-container>
               <ng-container *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
-                {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : kkLocMapView === 'type' ? 'Kiểm tra KK theo loại hàng' : 'Quản lý Nguyên Liệu' }}
+                {{ kkLocMapView === 'material' ? 'Kiểm tra KK theo mã hàng' : kkLocMapView === 'location' ? 'Kiểm tra KK theo vị trí' : kkLocMapView === 'type' ? 'Kiểm tra KK theo loại hàng' : kkLocMapView === 'manager' ? 'Quản lý' : 'Quản lý Nguyên Liệu' }}
               </ng-container>
             </h4>
             <p class="kk-page__sub" *ngIf="kkLocMapView === 'type' && kkActiveProductType">
@@ -21,7 +21,7 @@
               · tick KK · đổi vị trí
             </p>
             <p class="kk-page__sub" *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
-              {{ selectedFactory }} · kiểm kê tồn kho nguyên liệu
+              {{ selectedFactory }} · {{ kkLocMapView === 'manager' ? 'Danh sách người quản lý và tổng số mã đang quản' : 'kiểm kê tồn kho nguyên liệu' }}
             </p>
           </div>
         </div>
@@ -72,6 +72,10 @@
                         [class.kk-loc-map__mode--on]="kkLocMapView === 'type'"
                         (click)="setKkLocMapView('type')"
                         [disabled]="kkLocMapLoading">Theo loại hàng</button>
+                <button type="button"
+                        [class.kk-loc-map__mode--on]="kkLocMapView === 'manager'"
+                        (click)="setKkLocMapView('manager')"
+                        [disabled]="kkLocMapLoading">Quản lý</button>
               </div>
             </div>
             <div class="kk-toolbar__actions">
@@ -192,11 +196,11 @@
               <input type="search"
                      [(ngModel)]="kkLocMapQuery"
                      (ngModelChange)="onKkLocMapQueryChange($event)"
-                     [placeholder]="kkLocMapView === 'material' ? 'Nhập 4 số để tìm mã…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : 'Nhập 4 số để tìm mã…'"
+                     [placeholder]="kkLocMapView === 'material' ? 'Nhập 4 số để tìm mã…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : kkLocMapView === 'manager' ? 'Tìm người quản lý…' : 'Nhập 4 số để tìm mã…'"
                      autocomplete="off"
-                     autocapitalize="characters"
+                     [attr.autocapitalize]="kkLocMapView === 'manager' ? 'off' : 'characters'"
                      spellcheck="false">
-              <span class="kk-toolbar__search-hint" *ngIf="kkLocMapQuery && kkLocMapView !== 'location' && !kkSearchReady">Nhập đủ 4 số</span>
+              <span class="kk-toolbar__search-hint" *ngIf="kkLocMapQuery && kkLocMapView !== 'location' && kkLocMapView !== 'manager' && !kkSearchReady">Nhập đủ 4 số</span>
               <button type="button"
                       class="kk-toolbar__search-clear"
                       *ngIf="kkLocMapQuery"
@@ -206,7 +210,7 @@
               </button>
             </div>
             <div class="kk-loc-map__opts">
-              <ng-container *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'">
+              <ng-container *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material' || kkLocMapView === 'manager'">
                 <label class="kk-loc-map__opt" title="Bỏ tick thì không tính các mã đang ở kho WH3/ASM3">
                   <input type="checkbox"
                          [ngModel]="kkCountWh3"
@@ -302,7 +306,7 @@
     <div class="kk-page__body">
       <div class="kk-loc-map__idle" *ngIf="!kkLocMapView && !kkLocMapLoading">
         <i class="material-icons">fact_check</i>
-        <p>Chọn <strong>Theo vị trí</strong>, <strong>Theo mã hàng</strong> hoặc <strong>Theo loại hàng</strong> để xem.</p>
+        <p>Chọn <strong>Theo vị trí</strong>, <strong>Theo mã hàng</strong>, <strong>Theo loại hàng</strong> hoặc <strong>Quản lý</strong> để xem.</p>
       </div>
       <div class="kk-loc-map__idle" *ngIf="kkLocMapView && !kkStockLoaded && !kkLocMapLoading && !kkLocMapBusy">
         <i class="material-icons">play_circle</i>
@@ -314,11 +318,11 @@
         <span class="kk-loc-map__dot kk-loc-map__dot--partial">Đang KK</span>
         <span class="kk-loc-map__dot kk-loc-map__dot--none">Chưa KK</span>
       </div>
-      <div class="kk-loc-map__loading" *ngIf="kkLocMapLoading && kkLocMapView !== 'type'">
+      <div class="kk-loc-map__loading" *ngIf="kkLocMapLoading && kkLocMapView !== 'type' && kkLocMapView !== 'manager'">
         <i class="material-icons rotating">sync</i>
         <span>{{ kkLocMapStatus || (kkLocMapView === 'location' ? ('Đang đọc tồn kho ' + selectedFactory + '…') : 'Đang đọc tồn kho theo mã hàng…') }}</span>
       </div>
-      <div class="kk-loc-map__status" *ngIf="kkLocMapView === 'type' && kkLocMapStatus">
+      <div class="kk-loc-map__status" *ngIf="(kkLocMapView === 'type' || kkLocMapView === 'manager') && kkLocMapStatus">
         <i class="material-icons rotating">sync</i>
         <span>{{ kkLocMapStatus }}</span>
       </div>
@@ -484,6 +488,38 @@
         <p class="hidden-empty" *ngIf="!kkLocMapFilteredMaterials.length">Không có mã hàng khớp bộ lọc.</p>
       </div>
 
+      <div class="kk-loc-map__table-wrap" *ngIf="!kkLocMapLoading && kkLocMapView === 'manager' && kkStockLoaded">
+        <table class="kk-loc-map__table kk-loc-map__table--plain">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Người quản lý</th>
+              <th class="kk-loc-map__num">Tổng số mã</th>
+              <th class="kk-loc-map__num">Số loại hàng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of kkManagerRows; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>
+                <div class="kk-loc-map__mgr-name">{{ row.name }}</div>
+                <div class="kk-loc-map__mgr-types" *ngIf="row.types.length">{{ row.types.join(', ') }}</div>
+              </td>
+              <td class="kk-loc-map__num">{{ row.codeCount }}</td>
+              <td class="kk-loc-map__num">{{ row.typeCount }}</td>
+            </tr>
+          </tbody>
+          <tfoot *ngIf="kkManagerRows.length">
+            <tr class="kk-loc-map__table-foot">
+              <td colspan="2">{{ kkManagerRows.length }} người quản lý</td>
+              <td class="kk-loc-map__num">{{ kkManagerTotalCodes }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <p class="hidden-empty" *ngIf="!kkManagerRows.length">Chưa có người quản lý. Chuột phải ô loại hàng để gán.</p>
+      </div>
+
       <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type' && kkStockLoaded">
           <div class="kk-type-topbar" *ngIf="kkActiveProductType">
           <div class="kk-type-topbar__search">
@@ -562,7 +598,7 @@
                         [class.kk-type-box--empty]="!box.totalLines"
                         (click)="selectKkTypeBox(box.productType)"
                         (contextmenu)="openKkTypeBoxMenu($event, box)"
-                        [title]="box.productType + ' — chuột phải: gán vị trí yêu cầu hoặc in tên'">
+                        [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
                         <strong>{{ box.productType }}</strong>
                         <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
                           <span class="kk-type-box__groups" *ngIf="prefixes.length">
@@ -576,11 +612,8 @@
                             {{ loc }}
                           </span>
                         </span>
-                        <span class="kk-type-box__reset"
-                              (click)="resetKkScanForBoxes([box], box.productType, $event)"
-                              title="Xóa lần quét cũ để quét lại">
-                          <i class="material-icons">restart_alt</i>
-                          Reset lần quét
+                        <span class="kk-type-box__mgr" *ngIf="kkTypeManagerOf(box.productType) as mgr" [title]="'Người quản lý: ' + mgr">
+                          <i class="material-icons">person</i>{{ mgr }}
                         </span>
                       </button>
                     </div>
@@ -598,7 +631,7 @@
                   [class.kk-type-box--empty]="!box.totalLines"
                   (click)="selectKkTypeBox(box.productType)"
                   (contextmenu)="openKkTypeBoxMenu($event, box)"
-                  [title]="box.productType + ' — chuột phải: gán vị trí yêu cầu hoặc in tên'">
+                  [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
                   <strong>{{ box.productType }}</strong>
                   <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
                     <span class="kk-type-box__groups" *ngIf="prefixes.length">
@@ -612,11 +645,8 @@
                       {{ loc }}
                     </span>
                   </span>
-                  <span class="kk-type-box__reset"
-                        (click)="resetKkScanForBoxes([box], box.productType, $event)"
-                        title="Xóa lần quét cũ để quét lại">
-                    <i class="material-icons">restart_alt</i>
-                    Reset lần quét
+                  <span class="kk-type-box__mgr" *ngIf="kkTypeManagerOf(box.productType) as mgr" [title]="'Người quản lý: ' + mgr">
+                    <i class="material-icons">person</i>{{ mgr }}
                   </span>
                 </button>
               </div>
@@ -3886,6 +3916,23 @@
     <i class="material-icons">print</i>
     In tên nhóm hàng
   </button>
+  <div class="kk-type-box-menu__mgr">
+    <label for="kkTypeBoxMenuManager">Người quản lý mục</label>
+    <input id="kkTypeBoxMenuManager"
+           type="text"
+           [(ngModel)]="kkTypeBoxMenuManagerDraft"
+           placeholder="Nhập tên…"
+           autocomplete="off"
+           (keydown.enter)="saveKkTypeBoxManager()"
+           [disabled]="!canEdit || kkTypeBoxMenuSaving">
+    <button type="button"
+            class="kk-type-box-menu__item"
+            (click)="saveKkTypeBoxManager()"
+            [disabled]="!canEdit || kkTypeBoxMenuSaving">
+      <i class="material-icons">person_add</i>
+      {{ kkTypeBoxMenuSaving ? 'Đang lưu…' : 'Lưu tên quản lý' }}
+    </button>
+  </div>
 </div>
 
 <!-- Popup chọn vị trí kệ — chỉ Kho J -->

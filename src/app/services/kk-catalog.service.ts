@@ -205,6 +205,47 @@ export class KkCatalogService {
     this.cachedHomeLocs.set(type, loc);
   }
 
+  readonly managerCollectionName = 'kk-type-managers';
+  private cachedManagers: Map<string, string> | null = null;
+
+  async loadManagers(forceRefresh = false): Promise<Map<string, string>> {
+    if (!forceRefresh && this.cachedManagers) return this.cachedManagers;
+    const snap = await firstValueFrom(
+      this.firestore
+        .collection(this.managerCollectionName, (ref) => ref.limit(2000))
+        .get()
+        .pipe(timeout(20000))
+    );
+    const map = new Map<string, string>();
+    for (const doc of snap?.docs || []) {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      const productType = String(data['productType'] || doc.id || '').trim();
+      const manager = String(data['manager'] || '').trim();
+      if (productType && manager) map.set(productType, manager);
+    }
+    this.cachedManagers = map;
+    return map;
+  }
+
+  async saveManager(productType: string, manager: string): Promise<void> {
+    const type = String(productType || '').trim();
+    if (!type) return;
+    const name = String(manager || '').trim();
+    const ref = this.firestore.collection(this.managerCollectionName).doc(this.buildHomeLocDocId(type));
+    if (!this.cachedManagers) this.cachedManagers = new Map();
+    if (!name) {
+      await ref.delete();
+      this.cachedManagers.delete(type);
+      return;
+    }
+    await ref.set({
+      productType: type,
+      manager: name,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    this.cachedManagers.set(type, name);
+  }
+
   private mapDoc(id: string, data: Record<string, unknown>): KkCatalogEntry {
     return {
       id,

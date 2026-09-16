@@ -4207,6 +4207,10 @@ $asm1-toolbar-h: 36px;
       cursor: pointer;
     }
 
+    &--plain tbody td {
+      cursor: default;
+    }
+
     .kk-loc-map__tick-col,
     .kk-loc-map__pallet,
     .kk-loc-map__loc {
@@ -4337,6 +4341,25 @@ $asm1-toolbar-h: 36px;
     text-align: right;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+  }
+
+  &__mgr-name {
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  &__mgr-types {
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.35;
+  }
+
+  &__table-foot td {
+    font-weight: 800;
+    background: #f8fafc;
+    cursor: default;
   }
 
   &__factory-col {
@@ -5657,24 +5680,18 @@ $asm1-toolbar-h: 36px;
     color: #b91c1c !important;
   }
 
-  &__reset {
+  &__mgr {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-top: 2px;
-    padding: 4px 8px;
-    border-radius: 8px;
-    border: 1px solid #fdba74;
-    background: #fff7ed !important;
-    color: #9a3412 !important;
     font-size: 11px !important;
-    font-weight: 800 !important;
+    font-weight: 700 !important;
+    color: #0f766e !important;
     line-height: 1.2;
-    cursor: pointer;
 
     .material-icons {
       font-size: 14px;
-      color: #c2410c !important;
+      color: #0f766e !important;
     }
   }
 
@@ -5744,6 +5761,31 @@ $asm1-toolbar-h: 36px;
 
   &:hover {
     background: #f1f5f9;
+  }
+}
+
+.kk-type-box-menu__mgr {
+  margin-top: 4px;
+  padding: 8px 8px 4px;
+  border-top: 1px solid #e2e8f0;
+
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #334155;
+  }
+
+  input {
+    width: 100%;
+    height: 34px;
+    margin-bottom: 6px;
+    padding: 0 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #0f172a;
   }
 }
 
