@@ -3743,10 +3743,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   getXtLeCellText(material: InventoryMaterial): string {
     const le = this.getXtLeTotal(material);
     if (le <= 0) return '—';
-    const bags = this.normalizeXtBags(material).filter((b) => Number(b.leQty) > 0);
-    if (bags.length === 0) return this.formatNumber(le);
-    const nos = bags.map((b) => `#${b.bagNo}`).join(', ');
-    return `${this.formatNumber(le)} · ${nos}`;
+    return this.formatNumber(le);
   }
 
   private getXtFullBags(material: InventoryMaterial): InventoryXtBagPick[] {
@@ -8794,6 +8791,118 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (section === 'S09') return 'S09 — B009501 ~ B009750';
     if (section === 'S10') return 'S10 — B009751 ~ B009999';
     return section;
+  }
+
+  /** Sơ đồ mặt đứng 4 kệ S07–S10: mỗi mâm ghi vị trí + dải mã được phép. */
+  printKkB009ShelfMap(): void {
+    const win = window.open('', '_blank', 'width=1200,height=860');
+    if (!win) {
+      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
+      return;
+    }
+    const esc = (s: string) => this.escapeHtmlForPrint(s);
+    const now = new Date().toLocaleString('vi-VN');
+    const byLoc = new Map(this.kkB009AllTrays().map((t) => [t.loc, t]));
+    const shelves = ['S07', 'S08', 'S09', 'S10'];
+    const pages = shelves.map((shelf, idx) => {
+      const rows = [7, 6, 5, 4, 3, 2, 1].map((lv) => {
+        const cells = [1, 2, 3].map((block) => {
+          const loc = `${shelf}-${block}-${lv}`;
+          const tray = byLoc.get(loc);
+          if (!tray) {
+            return `<td class="mam mam--empty">
+              <div class="slot">${esc(loc)}</div>
+              <div class="codes">Trống</div>
+            </td>`;
+          }
+          return `<td class="mam">
+            <div class="slot">${esc(loc)}</div>
+            <div class="codes">${esc(this.kkB009RangeText(tray.from, tray.to))}</div>
+            <div class="n">${tray.to - tray.from + 1} mã</div>
+          </td>`;
+        }).join('');
+        return `<tr>
+          <th class="lv">T${lv}</th>
+          ${cells}
+        </tr>`;
+      }).join('');
+      return `<section class="page${idx === shelves.length - 1 ? ' page--last' : ''}">
+        <div class="page-hdr">
+          <h1>SƠ ĐỒ KỆ ${esc(shelf)}</h1>
+          <p>B009 · ${esc(this.kkB009SectionCaption(shelf))} · 3 block × 7 tầng · mã được phép trên từng mâm</p>
+        </div>
+        <div class="rack">
+          <div class="post post--l" aria-hidden="true"></div>
+          <table>
+            <thead>
+              <tr>
+                <th class="lv"></th>
+                <th>Block 1</th>
+                <th>Block 2</th>
+                <th>Block 3</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="post post--r" aria-hidden="true"></div>
+        </div>
+        <p class="hint">Tầng 1 dưới cùng · Tầng 7 trên cùng · Cùng tầng 3 block chung một dải mã</p>
+      </section>`;
+    }).join('\n');
+
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Sơ đồ kệ B009</title>
+  <style>
+    @page { size: A4 landscape; margin: 8mm 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; }
+    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:10px;
+                border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
+    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
+                       border-radius:4px; cursor:pointer; font-size:12px; }
+    .page { page-break-after: always; }
+    .page--last { page-break-after: auto; }
+    .page-hdr { border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 10px; }
+    .page-hdr h1 { font-size: 20px; letter-spacing: .4px; }
+    .page-hdr p { font-size: 12px; margin-top: 3px; }
+    .rack { display: flex; align-items: stretch; gap: 0; }
+    .post { width: 10px; background: #334155; border: 1px solid #111; }
+    table { flex: 1; border-collapse: collapse; width: 100%; }
+    th, td { border: 2px solid #111; }
+    thead th { background: #e2e8f0; font-size: 13px; padding: 6px 4px; text-transform: uppercase; }
+    th.lv { width: 42px; background: #0f172a; color: #fff; font-size: 13px; }
+    tbody th.lv { padding: 0; }
+    td.mam {
+      height: 22mm;
+      text-align: center;
+      vertical-align: middle;
+      background: #fffbeb;
+      padding: 4px 6px;
+    }
+    td.mam--empty { background: #f8fafc; color: #64748b; }
+    .slot { font-size: 13px; font-weight: 800; letter-spacing: .2px; }
+    .codes { font-size: 14px; font-weight: 800; margin-top: 4px; }
+    .n { font-size: 10px; margin-top: 2px; color: #334155; }
+    .hint { margin-top: 8px; font-size: 11px; color: #475569; }
+    .foot { margin-top: 6px; font-size: 10px; color: #64748b; text-align: right; }
+    @media print { .no-print { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <span>Sơ đồ kệ B009 — nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in (4 trang: S07–S10)</span>
+    <button onclick="window.print()">In ngay</button>
+  </div>
+  ${pages}
+  <div class="foot">In lúc: ${esc(now)} · ${esc(this.selectedFactory)}</div>
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
   }
 
   private printKkMucReport(
@@ -17293,14 +17402,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
       
-      // QTY BAG nhập để in tem
-      const qtyBag = parseFloat(String(material.rollsOrBags).replace(/,/g, '')) || 0;
+      // QTY BAG nhập để in tem — không được lớn hơn tồn kho
+      const qtyBagRaw = parseFloat(String(material.rollsOrBags).replace(/,/g, '')) || 0;
       const totalQuantity = this.calculateCurrentStock(material);
       
       if (!totalQuantity || totalQuantity <= 0) {
         alert('❌ Vui lòng nhập số lượng trước khi tạo QR code!');
         return;
       }
+
+      if (qtyBagRaw > totalQuantity) {
+        alert('❌ Không thể in tem QR!\n\nQTY BAG không được lớn hơn tồn kho.\n\nTồn kho: ' + this.formatNumber(totalQuantity) + '\nQTY BAG: ' + this.formatNumber(qtyBagRaw));
+        return;
+      }
+
+      const qtyBag = qtyBagRaw > 0 ? qtyBagRaw : totalQuantity;
       
       // Rule in tem:
       // - Số tem chuẩn = QTY BAG / Standard Packing

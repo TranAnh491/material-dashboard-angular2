@@ -135,6 +135,15 @@
                 <span class="btn-label">In báo cáo</span>
               </button>
               <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView === 'type'"
+                      (click)="printKkB009ShelfMap()"
+                      [disabled]="kkTypePrintBusy"
+                      title="Sơ đồ mâm kệ B009 — mã được phép trên từng mâm">
+                <i class="material-icons">map</i>
+                <span class="btn-label">Hình Sơ Đồ</span>
+              </button>
+              <button type="button"
                       class="more-btn more-btn--info"
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkScanGuide()"
@@ -1724,9 +1733,7 @@
           </div>
           <div class="info-row">
             <span class="label">Xuất lẻ:</span>
-            <button type="button" class="xt-cell-btn xt-le-cell-btn" (click)="openXtBagPopup(material, $event)">
-              {{ getXtLeCellText(material) }}
-            </button>
+            <span class="value" title="Tổng xuất lẻ">{{ getXtLeCellText(material) }}</span>
           </div>
           
           <div class="info-row">
@@ -1857,7 +1864,7 @@
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
             <th title="Bấm để chọn bag cần xuất và lượng từng bag">XT</th>
-            <th title="Xuất lẻ — có số thì xuất theo cột này, không cần đủ 1 bag">Xuất lẻ</th>
+            <th title="Tổng xuất lẻ">Xuất lẻ</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT (XT gồm xuất lẻ)">Tồn kho</th>
             <th class="location-header-cell" [title]="TEMP_UNLOCK_LOCATION_WH_PALLET || isLocationColumnUnlocked ? 'Bấm ô vị trí để mở sơ đồ kho' : 'Click ổ khóa để mở sửa Vị trí (mã Zalo OTP)'">
               <span class="location-header-cell__in">
@@ -2006,13 +2013,8 @@
                 {{ getXtCellText(material) }}
               </button>
             </td>
-            <td class="number-cell xt-column">
-              <button type="button"
-                      class="xt-cell-btn xt-le-cell-btn"
-                      (click)="openXtBagPopup(material, $event)"
-                      title="Xuất lẻ — bấm để nhập. Có số thì xuất theo cột này, không cần đủ 1 bag">
-                {{ getXtLeCellText(material) }}
-              </button>
+            <td class="number-cell xt-column" title="Tổng xuất lẻ">
+              {{ getXtLeCellText(material) }}
             </td>
             <td class="number-cell" [class.duplicate-cell]="material.isDuplicate" 
                 [class.negative-stock-cell]="calculateCurrentStock(material) < 0"
