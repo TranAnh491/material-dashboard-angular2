@@ -59,26 +59,45 @@
                   {{ (kkLocMapLoading || kkLocMapBusy) ? 'sync' : 'play_arrow' }}
                 </i>
               </button>
-              <div class="kk-loc-map__modes" *ngIf="!kkActiveProductType">
+              <div class="kk-toolbar__search" *ngIf="kkLocMapView">
+                <i class="material-icons" aria-hidden="true">search</i>
+                <input type="search"
+                       [(ngModel)]="kkLocMapQuery"
+                       (ngModelChange)="onKkLocMapQueryChange($event)"
+                       [placeholder]="kkLocMapView === 'material' ? 'Nhập 4 số để tìm mã…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : kkLocMapView === 'manager' ? 'Tìm người quản lý…' : 'Nhập 4 số để tìm mã…'"
+                       autocomplete="off"
+                       [attr.autocapitalize]="kkLocMapView === 'manager' ? 'off' : 'characters'"
+                       spellcheck="false">
+                <span class="kk-toolbar__search-hint" *ngIf="kkLocMapQuery && kkLocMapView !== 'location' && kkLocMapView !== 'manager' && !kkSearchReady">Nhập đủ 4 số</span>
                 <button type="button"
-                        [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
-                        (click)="setKkLocMapView('location')"
-                        [disabled]="kkLocMapLoading">Theo vị trí</button>
-                <button type="button"
-                        [class.kk-loc-map__mode--on]="kkLocMapView === 'material'"
-                        (click)="setKkLocMapView('material')"
-                        [disabled]="kkLocMapLoading">Theo mã hàng</button>
-                <button type="button"
-                        [class.kk-loc-map__mode--on]="kkLocMapView === 'type'"
-                        (click)="setKkLocMapView('type')"
-                        [disabled]="kkLocMapLoading">Theo loại hàng</button>
-                <button type="button"
-                        [class.kk-loc-map__mode--on]="kkLocMapView === 'manager'"
-                        (click)="setKkLocMapView('manager')"
-                        [disabled]="kkLocMapLoading">Quản lý</button>
+                        class="kk-toolbar__search-clear"
+                        *ngIf="kkLocMapQuery"
+                        (click)="kkLocMapView === 'type' ? clearKkTypeUnifiedSearch() : (kkLocMapQuery = '')"
+                        title="Xóa tìm">
+                  <i class="material-icons">close</i>
+                </button>
               </div>
             </div>
-            <div class="kk-toolbar__actions">
+            <div class="kk-loc-map__modes" *ngIf="kkLocMapView">
+              <button type="button"
+                      [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
+                      (click)="setKkLocMapView('location')"
+                      [disabled]="kkLocMapLoading">Vị trí</button>
+              <button type="button"
+                      [class.kk-loc-map__mode--on]="kkLocMapView === 'material'"
+                      (click)="setKkLocMapView('material')"
+                      [disabled]="kkLocMapLoading">Mã hàng</button>
+              <button type="button"
+                      [class.kk-loc-map__mode--on]="kkLocMapView === 'type'"
+                      (click)="setKkLocMapView('type')"
+                      [disabled]="kkLocMapLoading">Loại hàng</button>
+              <button type="button"
+                      [class.kk-loc-map__mode--on]="kkLocMapView === 'manager'"
+                      (click)="setKkLocMapView('manager')"
+                      [disabled]="kkLocMapLoading">Quản lý</button>
+            </div>
+          </div>
+          <div class="kk-toolbar__row kk-toolbar__row--tools" *ngIf="kkLocMapView">
               <button type="button"
                       class="more-btn"
                       *ngIf="kkLocMapView === 'type' && kkActiveProductType"
@@ -98,6 +117,15 @@
                 <span class="btn-label">Scan</span>
               </button>
               <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView === 'type'"
+                      (click)="openKkShelfLabelPicker()"
+                      [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length"
+                      title="In tem kệ 57×32mm — chọn nhóm, mỗi loại một tem (tên + vị trí)">
+                <i class="material-icons">print</i>
+                <span class="btn-label">Tem kệ</span>
+              </button>
+              <button type="button"
                       class="more-btn more-btn--info"
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkScanGuide()"
@@ -112,7 +140,7 @@
                       [disabled]="kkLocMapLoading || kkTypeReportBusy"
                       title="Tải báo cáo Excel lưu trữ">
                 <i class="material-icons">download</i>
-                <span class="btn-label">{{ kkTypeReportBusy ? 'Đang tải...' : 'Tải báo cáo' }}</span>
+                <span class="btn-label">{{ kkTypeReportBusy ? 'Đang tải...' : 'Báo cáo' }}</span>
               </button>
               <button type="button" class="more-btn" *ngIf="kkLocMapView" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading">
                 <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
@@ -125,7 +153,7 @@
                       [disabled]="isCatalogLoading"
                       title="Đọc lại Danh mục NVL — cập nhật Standard Packing và trạng thái Lock">
                 <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
-                <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật danh mục' }}</span>
+                <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật' }}</span>
               </button>
               <button type="button"
                       class="more-btn"
@@ -134,7 +162,7 @@
                       [disabled]="kkPalletCheckBusy"
                       title="Số pallet theo từng kho">
                 <i class="material-icons" [class.rotating]="kkPalletCheckBusy">{{ kkPalletCheckBusy ? 'sync' : 'widgets' }}</i>
-                <span class="btn-label">{{ kkPalletCheckBusy ? 'Đang đếm...' : 'Kiểm tra pallet' }}</span>
+                <span class="btn-label">{{ kkPalletCheckBusy ? 'Đang đếm...' : 'Pallet' }}</span>
               </button>
               <button type="button"
                       class="more-btn"
@@ -166,10 +194,9 @@
                       (click)="openKkCatalogPopup()"
                       title="Import Nhóm mã (B+6 số) · Loại hàng">
                 <i class="material-icons">category</i>
-                <span class="btn-label">Danh mục KK</span>
+                <span class="btn-label">Danh mục</span>
               </button>
             </div>
-          </div>
 
           <div class="kk-toolbar__row kk-toolbar__row--filters" *ngIf="kkLocMapView && !kkActiveProductType">
             <div class="kk-loc-map__zones">
@@ -189,24 +216,6 @@
                       [title]="w.id === 'J' ? ('Kho J gồm J5 và vị trí R1–R99 / S1–S99 — ' + kkJMovedSummary.codes + ' mã') : (w.id === 'ASM3' ? 'ASM3 / WH3' : w.label)">
                 {{ w.label }}
                 <span class="kk-loc-map__zone-n" *ngIf="w.id === 'J'">{{ kkJMovedSummary.codes }}</span>
-              </button>
-            </div>
-            <div class="kk-toolbar__search">
-              <i class="material-icons" aria-hidden="true">search</i>
-              <input type="search"
-                     [(ngModel)]="kkLocMapQuery"
-                     (ngModelChange)="onKkLocMapQueryChange($event)"
-                     [placeholder]="kkLocMapView === 'material' ? 'Nhập 4 số để tìm mã…' : kkLocMapView === 'location' ? 'Lọc vị trí…' : kkLocMapView === 'manager' ? 'Tìm người quản lý…' : 'Nhập 4 số để tìm mã…'"
-                     autocomplete="off"
-                     [attr.autocapitalize]="kkLocMapView === 'manager' ? 'off' : 'characters'"
-                     spellcheck="false">
-              <span class="kk-toolbar__search-hint" *ngIf="kkLocMapQuery && kkLocMapView !== 'location' && kkLocMapView !== 'manager' && !kkSearchReady">Nhập đủ 4 số</span>
-              <button type="button"
-                      class="kk-toolbar__search-clear"
-                      *ngIf="kkLocMapQuery"
-                      (click)="kkLocMapView === 'type' ? clearKkTypeUnifiedSearch() : (kkLocMapQuery = '')"
-                      title="Xóa tìm">
-                <i class="material-icons">close</i>
               </button>
             </div>
             <div class="kk-loc-map__opts">
@@ -521,25 +530,6 @@
       </div>
 
       <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type' && kkStockLoaded">
-          <div class="kk-type-topbar" *ngIf="kkActiveProductType">
-          <div class="kk-type-topbar__search">
-            <i class="material-icons" aria-hidden="true">search</i>
-            <input type="search"
-                   [(ngModel)]="kkLocMapQuery"
-                   (ngModelChange)="onKkLocMapQueryChange($event)"
-                   placeholder="Nhập 4 số để tìm mã…"
-                   autocomplete="off"
-                   autocapitalize="characters"
-                   spellcheck="false">
-            <button type="button"
-                    class="kk-type-topbar__clear"
-                    *ngIf="kkLocMapQuery"
-                    (click)="clearKkTypeUnifiedSearch()"
-                    title="Xóa tìm">
-              <i class="material-icons">close</i>
-            </button>
-          </div>
-        </div>
         <ng-container *ngIf="!kkActiveProductType">
           <div class="kk-type-muc" *ngFor="let muc of kkTypeBoxGroups">
             <div class="kk-type-muc__bar">
@@ -560,15 +550,18 @@
               </button>
             </div>
             <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
-              <div class="kk-type-group" *ngFor="let g of muc.groups || []">
+              <div class="kk-type-group"
+                   *ngFor="let g of muc.groups || []"
+                   [class.kk-type-group--bare]="!g.title">
                 <button type="button"
                         class="kk-type-group__head"
+                        *ngIf="g.title"
                         (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key), $event)">
                   <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key)) ? 'expand_more' : 'expand_less' }}</i>
                   <strong>{{ g.title }}</strong>
                   <span>{{ g.subMucs.length }} mục</span>
                 </button>
-                <ng-container *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
+                <ng-container *ngIf="!g.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
                   <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
                     <div class="kk-type-muc__bar">
                       <button type="button"
@@ -4138,6 +4131,50 @@
       <button type="button" class="pushback-btn" (click)="applyLayoutLocPicker()" [disabled]="!canApplyLayoutLoc()">
         <i class="material-icons">check</i> Done
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Chọn nhóm in tem kệ -->
+<div class="modal-overlay more-overlay" *ngIf="showKkShelfLabelPicker" (click)="closeKkShelfLabelPicker()">
+  <div class="modal-content filter-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="In tem kệ">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">print</i>
+        </span>
+        <div>
+          <h3>In tem Kệ</h3>
+          <p class="more-popup-header__sub">Chọn nhóm (vd B018) — mỗi loại một tem 57×32mm</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkShelfLabelPicker()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body filter-picker-body">
+      <div class="hidden-search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="kkShelfLabelQuery" placeholder="Tìm B018, Molex…" autocomplete="off" />
+        <button type="button" class="hidden-search__clear" *ngIf="kkShelfLabelQuery" (click)="kkShelfLabelQuery = ''" aria-label="Xóa">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="filter-picker-list">
+        <button type="button"
+                class="kho-picker-item"
+                *ngFor="let g of kkShelfLabelGroups"
+                (click)="printKkShelfLabelsForGroup(g)"
+                [disabled]="kkTypePrintBusy || !g.labelCount">
+          <i class="material-icons">view_module</i>
+          <span>{{ g.title }}</span>
+          <span class="kk-shelf-label-n">{{ g.labelCount }} tem</span>
+        </button>
+        <p class="hidden-empty" *ngIf="!kkShelfLabelGroups.length">Không có nhóm khớp.</p>
+      </div>
+    </div>
+    <div class="filter-picker-footer">
+      <button type="button" class="cancel-btn" (click)="closeKkShelfLabelPicker()">Đóng</button>
     </div>
   </div>
 </div>

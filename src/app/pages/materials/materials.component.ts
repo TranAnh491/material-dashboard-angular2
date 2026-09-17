@@ -450,6 +450,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkScanOpTimer: any;
   kkTypePrintBusy = false;
   showKkTypeReportMenu = false;
+  showKkShelfLabelPicker = false;
+  kkShelfLabelQuery = '';
   showKkCodeLookup = false;
   showKkPalletCheck = false;
   kkPalletCheckBusy = false;
@@ -6823,7 +6825,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   setKkLocMapView(view: 'location' | 'material' | 'type' | 'manager'): void {
-    if (this.kkLocMapView === view && !this.kkLocMapLoading) return;
+    if (this.kkLocMapView === view && !this.kkLocMapLoading) {
+      if (this.kkActiveProductType) this.backKkTypeBoxes();
+      return;
+    }
     this.kkLocMapView = view;
     this.kkLocMapQuery = '';
     this.kkLocMapExpandedKey = null;
@@ -7507,7 +7512,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return {
         category,
         title: this.kkTypeMucTitle(category),
-        boxes: sorted
+        boxes: sorted,
+        groups: this.kkTypeBrandGroupsOf(category, sorted)
       };
     });
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
@@ -7524,13 +7530,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const bPrefix = this.kkTypeSharedBPrefix(groupCodes);
     if (bPrefix) return bPrefix;
     if (/DAU\s*NOI/.test(this.foldKkTypeName(raw))) return 'Khác';
+    return this.kkTypeNameHeadOf(raw);
+  }
 
+  /** Tên hãng/đầu loại (Molex, JST…) — bỏ màu và thông số. */
+  private kkTypeNameHeadOf(productType: string): string {
+    const raw = String(productType || '').trim();
+    if (!raw) return '';
     const tokens = raw.split(/\s+/).filter(Boolean);
     const skip = new Set([
       'DEN', 'TRANG', 'DO', 'XANH', 'VANG', 'NAU', 'XAM', 'CAM', 'HONG', 'TIM',
       'BLACK', 'WHITE', 'RED', 'BLUE', 'YELLOW', 'GREEN', 'GREY', 'GRAY', 'BROWN', 'ORANGE'
     ]);
-    const fold = (t: string) => t.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[Đđ]/g, 'D');
     const isSpec = (t: string): boolean => {
       const u = t.toUpperCase().replace(/[(),]/g, '');
       if (!u) return true;
@@ -7541,11 +7552,38 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     };
     const head: string[] = [];
     for (const t of tokens) {
-      if (skip.has(fold(t))) continue;
+      if (skip.has(this.foldKkTypeName(t))) continue;
       if (isSpec(t)) break;
       head.push(t);
     }
     return head.length ? head.join(' ') : raw;
+  }
+
+  /** Trong mục B018: chia mục con theo hãng (Molex…). B008/B009/B016 giữ phẳng. */
+  private kkTypeBrandGroupsOf(
+    category: string,
+    boxes: typeof this.kkTypeBoxesCached
+  ): Array<{
+    key: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+  }> | undefined {
+    if (!/^B\d{3}$/.test(category)) return undefined;
+    if (category === 'B008' || category === 'B009' || category === 'B016') return undefined;
+    const map = new Map<string, { title: string; boxes: typeof this.kkTypeBoxesCached }>();
+    for (const box of boxes) {
+      const head = this.kkTypeNameHeadOf(box.productType) || box.productType;
+      const key = this.foldKkTypeName(head) || head;
+      const cur = map.get(key) || { title: this.kkTypeMucTitle(head), boxes: [] };
+      cur.boxes.push(box);
+      map.set(key, cur);
+    }
+    const subMucs = Array.from(map.entries())
+      .map(([key, v]) => ({ key, title: v.title, boxes: v.boxes }))
+      .sort((a, b) => a.title.localeCompare(b.title, 'vi', { numeric: true }));
+    if (!subMucs.length) return undefined;
+    return [{ key: 'hang', title: '', boxes, subMucs }];
   }
 
   /** Mục Đầu nối: B008, B009, B016. */
@@ -8257,6 +8295,153 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const productType = String(this.layoutLocTypeAssign || '').trim();
     if (!productType) return;
     this.printKkTypeNameLabel(productType);
+  }
+
+  openKkShelfLabelPicker(): void {
+    this.kkShelfLabelQuery = '';
+    this.showKkShelfLabelPicker = true;
+  }
+
+  closeKkShelfLabelPicker(): void {
+    this.showKkShelfLabelPicker = false;
+    this.kkShelfLabelQuery = '';
+  }
+
+  get kkShelfLabelGroups(): Array<{
+    category: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    labelCount: number;
+  }> {
+    const q = String(this.kkShelfLabelQuery || '').trim().toLowerCase();
+    return this.kkTypeBoxGroups
+      .map((muc) => ({
+        category: muc.category,
+        title: muc.title,
+        boxes: muc.boxes,
+        labelCount: muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
+      }))
+      .filter((g) => {
+        if (!q) return true;
+        return g.title.toLowerCase().includes(q) || String(g.category || '').toLowerCase().includes(q);
+      });
+  }
+
+  printKkShelfLabelsForGroup(group: {
+    title: string;
+    boxes: Array<{ productType: string; groupCodes?: string[] }>;
+  }): void {
+    const boxes = group?.boxes || [];
+    const labels = boxes
+      .map((box) => ({
+        name: this.kkShelfLabelTitle(box),
+        loc: this.kkShelfLabelLocOf(box)
+      }))
+      .filter((row) => !!row.loc)
+      .sort((a, b) => a.loc.localeCompare(b.loc, 'en', { numeric: true })
+        || a.name.localeCompare(b.name, 'vi', { numeric: true }));
+    if (!labels.length) {
+      alert(`Nhóm ${group?.title || ''} chưa có vị trí yêu cầu để in tem kệ.`);
+      return;
+    }
+    this.closeKkShelfLabelPicker();
+    this.printKkShelfLabels(labels, group.title);
+  }
+
+  private kkShelfLabelLocOf(box: {
+    productType: string;
+    groupCodes?: string[];
+    sourceProductType?: string;
+    sourceProductTypes?: string[];
+  }): string {
+    const loc = this.kkTypeBoxHomeLoc(box);
+    const shown = this.primaryLocationDisplay(loc);
+    return shown && shown !== '-' ? shown : '';
+  }
+
+  private kkShelfLabelTitle(box: { productType: string; groupCodes?: string[] }): string {
+    const type = String(box?.productType || '').trim();
+    const codes = box?.groupCodes || [];
+    if (this.isKkDauCotMuc(type, codes)) {
+      const brand = String(this.kkTerminalBrandTail(type) || '').replace(/\s+/g, ' ').trim();
+      const pretty = this.kkShelfLabelPretty(brand);
+      return pretty ? `Terminal ${pretty}` : 'Terminal';
+    }
+    return this.kkShelfLabelPretty(this.kkTypeNameHeadOf(type) || type) || type;
+  }
+
+  private kkShelfLabelPretty(raw: string): string {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^[A-Z0-9][A-Z0-9.&/-]{1,10}$/.test(s)) return s;
+    const lower = s.toLocaleLowerCase('vi');
+    return lower.charAt(0).toLocaleUpperCase('vi') + lower.slice(1);
+  }
+
+  /** Tem kệ 57×32mm (cùng khổ Inbound): tên nhóm + vị trí, mỗi nhóm một tem. */
+  private printKkShelfLabels(labels: Array<{ name: string; loc: string }>, title: string): void {
+    if (!labels.length) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      return;
+    }
+    const esc = (s: string) => this.escapeHtmlForPrint(s);
+    const pages = labels.map((row) => {
+      const nameSize = row.name.length > 22 ? '13px' : row.name.length > 14 ? '16px' : '18px';
+      return `<div class="label">
+    <div class="name" style="font-size:${nameSize}!important">${esc(row.name)}</div>
+    <div class="loc">${esc(row.loc)}</div>
+  </div>`;
+    }).join('\n');
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${esc(title)} — tem kệ</title>
+<style>
+  * { margin:0!important; padding:0!important; box-sizing:border-box!important; }
+  body {
+    font-family: Arial, sans-serif;
+    background: white!important;
+    color: #000!important;
+  }
+  .label {
+    display: flex!important;
+    flex-direction: column!important;
+    justify-content: center!important;
+    align-items: center!important;
+    text-align: center!important;
+    width: 57mm!important;
+    height: 32mm!important;
+    padding: 2mm 2.5mm!important;
+    border: 1px solid #000!important;
+    page-break-after: always!important;
+    page-break-inside: avoid!important;
+    box-sizing: border-box!important;
+    color: #000!important;
+    gap: 1.5mm!important;
+  }
+  .label:last-child { page-break-after: auto!important; }
+  .name {
+    font-weight: 800!important;
+    line-height: 1.15!important;
+    word-break: break-word!important;
+    max-width: 52mm!important;
+  }
+  .loc {
+    font-size: 20px!important;
+    font-weight: 800!important;
+    line-height: 1.1!important;
+    letter-spacing: 0.3px!important;
+  }
+  @media print {
+    @page { margin:0!important; size: 57mm 32mm!important; padding:0!important; }
+    .label { width:57mm!important; height:32mm!important; }
+  }
+</style></head>
+<body>
+  ${pages}
+  <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
+</body></html>`);
+    printWindow.document.close();
   }
 
   /** Tem 57×32mm (cùng khổ Inbound) — chỉ tên nhóm hàng. */

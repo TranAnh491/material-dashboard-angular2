@@ -165,6 +165,11 @@
     border-color: #cbd5e1;
   }
 
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   &.on {
     background: #eff6ff;
     border-color: #2563eb;
@@ -174,6 +179,14 @@
       color: #2563eb;
     }
   }
+}
+
+.kk-shelf-label-n {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .tem-inlai-toolbar {
@@ -4728,16 +4741,24 @@ $asm1-toolbar-h: 36px;
   }
 
   .kk-toolbar__row--nav {
-    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
   }
 
-  .kk-toolbar__left,
-  .kk-toolbar__actions {
+  .kk-toolbar__left {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 6px;
+    flex-wrap: nowrap;
     min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .kk-toolbar__row--tools {
+    gap: 6px;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid #eef2f7;
   }
 
   .kk-toolbar__row--filters {
@@ -4750,10 +4771,10 @@ $asm1-toolbar-h: 36px;
   .kk-toolbar__search {
     display: flex;
     align-items: center;
-    flex: 1 1 220px;
-    min-width: 180px;
-    max-width: 420px;
-    height: 34px;
+    flex: 1 1 160px;
+    min-width: 140px;
+    max-width: 220px;
+    height: 32px;
     padding: 0 8px 0 10px;
     border: 1px solid var(--kk-border);
     border-radius: 999px;
@@ -4800,16 +4821,18 @@ $asm1-toolbar-h: 36px;
   }
 
   .more-btn {
-    height: 34px;
-    padding: 0 12px;
-    gap: 6px;
+    height: 32px;
+    padding: 0 8px;
+    gap: 4px;
     border: 1px solid var(--kk-border);
-    border-radius: 9px;
+    border-radius: 8px;
     background: #fff;
     color: #334155;
     font-size: 12px;
     font-weight: 700;
     box-shadow: none;
+    white-space: nowrap;
+    flex: 0 0 auto;
 
     i {
       font-size: 18px;
@@ -4844,8 +4867,8 @@ $asm1-toolbar-h: 36px;
   }
 
   .kk-play-btn {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 1px solid #86efac;
     border-radius: 9px;
@@ -4891,9 +4914,9 @@ $asm1-toolbar-h: 36px;
   }
 
   .factory-toggle-btn {
-    height: 34px;
-    padding: 0 12px;
-    border-radius: 9px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
     border: 1px solid rgba(15, 118, 110, 0.28);
     background: rgba(15, 118, 110, 0.10);
     color: #0f766e;
@@ -4905,16 +4928,18 @@ $asm1-toolbar-h: 36px;
   }
 
   .kk-loc-map__modes {
-    border-radius: 10px;
+    flex: 0 0 auto;
+    border-radius: 8px;
     border-color: var(--kk-border);
     background: #f8fafc;
     overflow: hidden;
 
     button {
-      padding: 8px 14px;
+      padding: 6px 10px;
       font-size: 12px;
       font-weight: 700;
       color: #64748b;
+      white-space: nowrap;
 
       &.kk-loc-map__mode--on {
         background: var(--kk-accent);
@@ -5523,6 +5548,12 @@ $asm1-toolbar-h: 36px;
   margin: 0 0 4px 6px;
   padding: 4px 0 8px 10px;
   border-left: 3px solid #cbd5e1;
+
+  &--bare {
+    margin: 0;
+    padding: 0;
+    border-left: 0;
+  }
 
   &__head {
     display: flex;

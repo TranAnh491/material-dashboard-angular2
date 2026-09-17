@@ -37,8 +37,20 @@ interface WoHeatmapCell {
   tooltip: string;
   /** Line WHE/WHD hoặc ghi chú ASM3 → chấm xanh giữa ô SKU */
   giaoAsm3?: boolean;
+  /** LSX đánh dấu gấp → viền đỏ ngoài ô */
+  isUrgent?: boolean;
   /** id document work-orders — bấm ô mở popup chỉnh LSX */
   woId?: string;
+}
+
+interface WoPxkLine {
+  materialCode: string;
+  tenVatTu: string;
+  unit: string;
+  quantity: number;
+  po: string;
+  maKho: string;
+  soChungTu: string;
 }
 
 interface WoHeatmapDayCol {
@@ -197,6 +209,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     planReceivedDate: '',
     notes: ''
   };
+  showWoPxkModal = false;
+  woPxkLoading = false;
+  woPxkError = '';
+  woPxkLines: WoPxkLine[] = [];
   yesterdayOverdueCount: number = 0;
   /** Bảng chi tiết cuối dashboard: shipment 7 ngày sắp tới (cùng collection tab Shipment) */
   shipmentWeeklyDetailRows: Array<{
@@ -1531,20 +1547,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const base = this.woHeatKindLabel(kind);
       const parts = sku ? [`${sku} · ${base}`] : [base];
       if (lsx) parts.push(`LSX: ${lsx}`);
+      if (wo.isUrgent) parts.push('Gấp');
       if (soanLine) parts.push(soanLine);
       if (kittingReadyLine) parts.push(kittingReadyLine);
       if (asm3Label) parts.push(asm3Label);
-      return { kind, tooltip: parts.join('\n'), giaoAsm3, woId };
+      return { kind, tooltip: parts.join('\n'), giaoAsm3, isUrgent: !!wo.isUrgent, woId };
     }
     const sku = (wo.productCode || '—').trim();
     const lsx = (wo.productionOrder || '').trim();
     const lines = [sku];
     if (lsx) lines.push(`LSX: ${lsx}`);
+    if (wo.isUrgent) lines.push('Gấp');
     lines.push(soanLine || `Người soạn: ${this.formatWoCreatedByLabel(wo.createdBy, (wo as any).createdByMemberId)}`);
     lines.push(`Bắt đầu: ${this.formatWoKittingStartTime(wo)}`);
     lines.push(kittingReadyLine || 'Kitting→Ready: —');
     if (asm3Label) lines.push(asm3Label);
-    return { kind, tooltip: lines.join('\n'), giaoAsm3, woId };
+    return { kind, tooltip: lines.join('\n'), giaoAsm3, isUrgent: !!wo.isUrgent, woId };
   }
 
   /** Dựng 6 cột T2–T7 từ WO của `monday`, lọc theo `filterFn` (dùng chung cho heatmap chính + Sample). */
@@ -1621,13 +1639,68 @@ export class DashboardComponent implements OnInit, OnDestroy {
       notes: wo.notes || ''
     };
     this.showWoLsxModal = true;
+    this.closeWoPxkModal();
     void this.loadWoCreatedByStaff();
   }
 
   closeWoLsxModal(): void {
     if (this.woEditSaving) return;
+    this.closeWoPxkModal();
     this.showWoLsxModal = false;
     this.woEditSource = null;
+  }
+
+  closeWoPxkModal(): void {
+    this.showWoPxkModal = false;
+    this.woPxkLoading = false;
+    this.woPxkError = '';
+    this.woPxkLines = [];
+  }
+
+  async openWoPxkView(): Promise<void> {
+    const lsx = String(this.woEditSource?.productionOrder || '').trim();
+    if (!lsx) {
+      alert('LSX trống — không mở được PXK.');
+      return;
+    }
+    this.showWoPxkModal = true;
+    this.woPxkLoading = true;
+    this.woPxkError = '';
+    this.woPxkLines = [];
+    try {
+      const variants = Array.from(new Set([lsx, lsx.toUpperCase()].filter(Boolean)));
+      const snap = await firstValueFrom(
+        this.firestore.collection('pxk-import-data', (ref) =>
+          variants.length === 1
+            ? ref.where('lsx', '==', variants[0])
+            : ref.where('lsx', 'in', variants)
+        ).get()
+      );
+      this.readTracker.track('dashboard', 'pxk-import-data', snap.docs.length);
+      const lines: WoPxkLine[] = [];
+      snap.docs.forEach((doc) => {
+        const data = doc.data() as any;
+        const rawLines = Array.isArray(data?.lines) ? data.lines : [];
+        for (const row of rawLines) {
+          lines.push({
+            materialCode: String(row?.materialCode || '').trim().toUpperCase(),
+            tenVatTu: String(row?.tenVatTu || '').trim(),
+            unit: String(row?.unit || '').trim(),
+            quantity: Number(row?.quantity || 0),
+            po: String(row?.po || '').trim(),
+            maKho: String(row?.maKho || '').trim(),
+            soChungTu: String(row?.soChungTu || '').trim()
+          });
+        }
+      });
+      this.woPxkLines = lines;
+      if (!lines.length) this.woPxkError = `Chưa có dữ liệu PXK cho LSX ${lsx}. Import PXK ở tab Work Order trước.`;
+    } catch (e) {
+      console.error('openWoPxkView:', e);
+      this.woPxkError = 'Không tải được PXK. Thử lại.';
+    } finally {
+      this.woPxkLoading = false;
+    }
   }
 
   isWoEditStatusDisabled(optionValue: string): boolean {
