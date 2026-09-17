@@ -126,6 +126,15 @@
                 <span class="btn-label">Tem kệ</span>
               </button>
               <button type="button"
+                      class="more-btn"
+                      *ngIf="kkLocMapView === 'type'"
+                      (click)="openKkMucReportPicker()"
+                      [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length"
+                      title="In báo cáo mục — mã, tên, vị trí yêu cầu, vị trí thực tế">
+                <i class="material-icons">description</i>
+                <span class="btn-label">In báo cáo</span>
+              </button>
+              <button type="button"
                       class="more-btn more-btn--info"
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkScanGuide()"
@@ -4145,7 +4154,7 @@
         </span>
         <div>
           <h3>In tem Kệ</h3>
-          <p class="more-popup-header__sub">Chọn nhóm (vd B018) — mỗi loại một tem 57×32mm</p>
+          <p class="more-popup-header__sub">Chọn nhóm — B009: mỗi mâm một tem dải mã 57×32mm</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkShelfLabelPicker()" aria-label="Đóng">
@@ -4175,6 +4184,50 @@
     </div>
     <div class="filter-picker-footer">
       <button type="button" class="cancel-btn" (click)="closeKkShelfLabelPicker()">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chọn mục in báo cáo -->
+<div class="modal-overlay more-overlay" *ngIf="showKkMucReportPicker" (click)="closeKkMucReportPicker()">
+  <div class="modal-content filter-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="In báo cáo">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">description</i>
+        </span>
+        <div>
+          <h3>In báo cáo</h3>
+          <p class="more-popup-header__sub">Chọn mục — danh sách mã, tên, vị trí yêu cầu, vị trí thực tế</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkMucReportPicker()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body filter-picker-body">
+      <div class="hidden-search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="kkMucReportQuery" placeholder="Tìm B009, Đầu nối…" autocomplete="off" />
+        <button type="button" class="hidden-search__clear" *ngIf="kkMucReportQuery" (click)="kkMucReportQuery = ''" aria-label="Xóa">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="filter-picker-list">
+        <button type="button"
+                class="kho-picker-item"
+                *ngFor="let g of kkMucReportGroups"
+                (click)="printKkMucReportForGroup(g)"
+                [disabled]="kkTypePrintBusy">
+          <i class="material-icons">folder_open</i>
+          <span>{{ g.title }}</span>
+          <span class="kk-shelf-label-n">{{ g.codeCount }} mã</span>
+        </button>
+        <p class="hidden-empty" *ngIf="!kkMucReportGroups.length">Không có mục khớp.</p>
+      </div>
+    </div>
+    <div class="filter-picker-footer">
+      <button type="button" class="cancel-btn" (click)="closeKkMucReportPicker()">Đóng</button>
     </div>
   </div>
 </div>

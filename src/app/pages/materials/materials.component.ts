@@ -452,6 +452,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   showKkTypeReportMenu = false;
   showKkShelfLabelPicker = false;
   kkShelfLabelQuery = '';
+  showKkMucReportPicker = false;
+  kkMucReportQuery = '';
   showKkCodeLookup = false;
   showKkPalletCheck = false;
   kkPalletCheckBusy = false;
@@ -8307,6 +8309,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkShelfLabelQuery = '';
   }
 
+  openKkMucReportPicker(): void {
+    this.kkMucReportQuery = '';
+    this.showKkMucReportPicker = true;
+  }
+
+  closeKkMucReportPicker(): void {
+    this.showKkMucReportPicker = false;
+    this.kkMucReportQuery = '';
+  }
+
+  get kkMucReportGroups(): Array<{
+    category: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    codeCount: number;
+  }> {
+    const q = String(this.kkMucReportQuery || '').trim().toLowerCase();
+    return this.kkTypeBoxGroups
+      .map((muc) => ({
+        category: muc.category,
+        title: muc.title,
+        boxes: muc.boxes,
+        codeCount: muc.boxes.reduce((n, box) => n + (box.groupCodes?.length || 0), 0)
+      }))
+      .filter((g) => {
+        if (!q) return true;
+        return g.title.toLowerCase().includes(q) || String(g.category || '').toLowerCase().includes(q);
+      });
+  }
+
   get kkShelfLabelGroups(): Array<{
     category: string;
     title: string;
@@ -8319,7 +8351,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         category: muc.category,
         title: muc.title,
         boxes: muc.boxes,
-        labelCount: muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
+        labelCount: String(muc.category || '') === 'B009'
+          ? this.kkB009AllTrays().length
+          : muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
       }))
       .filter((g) => {
         if (!q) return true;
@@ -8328,9 +8362,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   printKkShelfLabelsForGroup(group: {
+    category?: string;
     title: string;
     boxes: Array<{ productType: string; groupCodes?: string[] }>;
   }): void {
+    if (String(group?.category || '') === 'B009') {
+      const labels = this.kkB009AllTrays().map((t) => ({
+        name: this.kkB009RangeText(t.from, t.to),
+        loc: t.loc
+      }));
+      if (!labels.length) {
+        alert('Mục B009 chưa có dải mã để in tem kệ.');
+        return;
+      }
+      this.closeKkShelfLabelPicker();
+      this.printKkShelfLabels(labels, group.title);
+      return;
+    }
     const boxes = group?.boxes || [];
     const labels = boxes
       .map((box) => ({
@@ -8442,6 +8490,442 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
 </body></html>`);
     printWindow.document.close();
+  }
+
+  printKkMucReportForGroup(group: {
+    category: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+  }): void {
+    const boxes = group?.boxes || [];
+    if (!boxes.length) {
+      alert(`Mục ${group?.title || ''} chưa có mã để in.`);
+      return;
+    }
+    const splitB009 = String(group.category || '') === 'B009';
+    const rows = this.buildKkMucReportRows(boxes, splitB009);
+    if (!rows.length) {
+      alert(`Mục ${group?.title || ''} chưa có mã để in.`);
+      return;
+    }
+    this.closeKkMucReportPicker();
+    this.printKkMucReport(rows, group.title || group.category, splitB009);
+  }
+
+  private buildKkMucReportRows(
+    boxes: typeof this.kkTypeBoxesCached,
+    splitB009: boolean
+  ): Array<{
+    code: string;
+    name: string;
+    requiredLoc: string;
+    actualLoc: string;
+    section: string;
+    sectionOrder: number;
+    trayOrder: number;
+    trayRange: string;
+  }> {
+    type Acc = {
+      code: string;
+      name: string;
+      requiredLoc: string;
+      typeName: string;
+      groupCode: string;
+      stockLocs: Set<string>;
+      otherLocs: Set<string>;
+      hasMaterial: boolean;
+    };
+    const byCode = new Map<string, Acc>();
+    const groupToBox = new Map<string, (typeof boxes)[number]>();
+    for (const box of boxes) {
+      for (const g of box.groupCodes || []) {
+        const ng = this.kkCatalog.normalizeGroupCode(g) || String(g || '').trim().toUpperCase();
+        if (ng && !groupToBox.has(ng)) groupToBox.set(ng, box);
+      }
+    }
+
+    const requiredOf = (groupCode: string, box?: (typeof boxes)[number]): string => {
+      if (splitB009) {
+        const tray = this.kkB009TrayOf(groupCode);
+        return tray ? this.kkB009FloorLocText(tray) : '—';
+      }
+      const loc = box ? this.kkTypeBoxHomeLoc(box) : '';
+      const shown = this.primaryLocationDisplay(loc);
+      return shown && shown !== '-' ? shown : '—';
+    };
+
+    const ensure = (
+      code: string,
+      groupCode: string,
+      typeName: string,
+      box: (typeof boxes)[number] | undefined,
+      name: string,
+      isMaterial: boolean
+    ): Acc => {
+      const key = String(code || '').trim().toUpperCase();
+      let rec = byCode.get(key);
+      if (!rec) {
+        rec = {
+          code: key,
+          name: name || typeName || '—',
+          requiredLoc: requiredOf(groupCode, box),
+          typeName,
+          groupCode,
+          stockLocs: new Set<string>(),
+          otherLocs: new Set<string>(),
+          hasMaterial: isMaterial
+        };
+        byCode.set(key, rec);
+      } else {
+        if (isMaterial) rec.hasMaterial = true;
+        if ((!rec.name || rec.name === '—') && name) rec.name = name;
+      }
+      return rec;
+    };
+
+    const addLocs = (rec: Acc, location: string | null | undefined, hasStock: boolean): void => {
+      const parts = this.locationParts(location)
+        .map((p) => this.displayLocationToken(p))
+        .filter((p) => !!p && p !== '-');
+      const target = hasStock ? rec.stockLocs : rec.otherLocs;
+      for (const p of parts) target.add(p);
+    };
+
+    for (const box of boxes) {
+      const typeName = String(box.productType || '').trim();
+      for (const g of box.groupCodes || []) {
+        const ng = this.kkCatalog.normalizeGroupCode(g) || String(g || '').trim().toUpperCase();
+        if (!ng) continue;
+        ensure(ng, ng, typeName, box, typeName, false);
+      }
+      for (const m of this.kkMucReportLinesForBox(box)) {
+        const code = String(m.materialCode || '').trim().toUpperCase();
+        if (!code) continue;
+        const groupCode = this.kkCatalog.groupCodeFromMaterial(code)
+          || this.kkCatalog.normalizeGroupCode(code)
+          || code;
+        const name = this.kkMucReportNameOf(code, typeName, m);
+        const rec = ensure(code, groupCode, typeName, box, name, true);
+        addLocs(rec, m.location, this.calculateCurrentStock(m) > 0);
+      }
+    }
+
+    this.catalogCache.forEach((item, rawCode) => {
+      const code = String(rawCode || item?.materialCode || '').trim().toUpperCase();
+      if (!code) return;
+      const groupCode = this.kkCatalog.groupCodeFromMaterial(code);
+      if (!groupCode) return;
+      const box = groupToBox.get(groupCode);
+      if (!box) return;
+      const typeName = String(box.productType || '').trim();
+      const name = String(item?.materialName || '').trim() || typeName;
+      ensure(code, groupCode, typeName, box, name, true);
+    });
+
+    const groupedHasMaterial = new Set<string>();
+    byCode.forEach((rec) => {
+      if (rec.hasMaterial && rec.groupCode) groupedHasMaterial.add(rec.groupCode);
+    });
+
+    const rows: Array<{
+      code: string;
+      name: string;
+      requiredLoc: string;
+      actualLoc: string;
+      section: string;
+      sectionOrder: number;
+      trayOrder: number;
+      trayRange: string;
+    }> = [];
+
+    byCode.forEach((rec) => {
+      if (!rec.hasMaterial && groupedHasMaterial.has(rec.code)) return;
+      const locs = rec.stockLocs.size ? rec.stockLocs : rec.otherLocs;
+      const actualLoc = locs.size
+        ? Array.from(locs).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join(', ')
+        : '—';
+      const tray = splitB009 ? this.kkB009TrayOf(rec.groupCode || rec.code) : null;
+      const section = tray?.shelf || '';
+      const sectionOrder = splitB009 ? (tray ? this.kkB009SectionOrder(tray.shelf) : 99) : 0;
+      const trayOrder = tray ? tray.level : 0;
+      rows.push({
+        code: rec.code,
+        name: rec.name || rec.typeName || '—',
+        requiredLoc: rec.requiredLoc || tray?.loc || '—',
+        actualLoc,
+        section,
+        sectionOrder,
+        trayOrder,
+        trayRange: tray ? this.kkB009RangeText(tray.from, tray.to) : ''
+      });
+    });
+
+    rows.sort((a, b) =>
+      a.sectionOrder - b.sectionOrder
+      || a.trayOrder - b.trayOrder
+      || a.code.localeCompare(b.code, 'en', { numeric: true })
+      || a.name.localeCompare(b.name, 'vi', { numeric: true })
+    );
+    return rows;
+  }
+
+  private kkMucReportLinesForBox(box: {
+    productType: string;
+    sourceProductType?: string;
+    sourceProductTypes?: string[];
+  }): InventoryMaterial[] {
+    const sources = (box.sourceProductTypes && box.sourceProductTypes.length)
+      ? box.sourceProductTypes
+      : [box.sourceProductType || box.productType];
+    const seen = new Set<string>();
+    const out: InventoryMaterial[] = [];
+    const zone = this.kkLocMapWarehouseFilter;
+    for (const src of sources) {
+      for (const m of this.kkLocMapTypeCache.get(src) || []) {
+        const id = String(m.id || '');
+        if (id) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+        }
+        const wh = this.kkWarehouseFromLocation(m.location);
+        if (!this.kkMatchesWh3Mode(wh)) continue;
+        if (zone && wh !== zone) continue;
+        out.push(m);
+      }
+    }
+    return out;
+  }
+
+  private kkMucReportNameOf(code: string, fallbackType: string, material?: InventoryMaterial): string {
+    if (material) {
+      const n = this.getKkMaterialName(material);
+      if (n && n !== '—') return n;
+    }
+    const cat = this.catalogCache.get(code);
+    const catName = String(cat?.materialName || '').trim();
+    if (catName) return catName;
+    const inbound = this.inboundNameCache.get(code);
+    if (inbound) return inbound;
+    return String(fallbackType || '').trim() || '—';
+  }
+
+  /** B009: mỗi tầng 50 mã, 3 block cùng dải. S07-1-1 / S07-2-1 / S07-3-1 = B009001–B009050, cứ vậy. */
+  private kkB009AllTrays(): Array<{
+    loc: string;
+    shelf: string;
+    block: number;
+    level: number;
+    from: number;
+    to: number;
+  }> {
+    const shelves: Array<{ shelf: string; from: number; to: number }> = [
+      { shelf: 'S07', from: 1, to: 250 },
+      { shelf: 'S08', from: 251, to: 500 },
+      { shelf: 'S09', from: 501, to: 750 },
+      { shelf: 'S10', from: 751, to: 999 }
+    ];
+    const out: Array<{ loc: string; shelf: string; block: number; level: number; from: number; to: number }> = [];
+    for (const s of shelves) {
+      let n = s.from;
+      for (let lv = 1; lv <= 7 && n <= s.to; lv++) {
+        const from = n;
+        const to = Math.min(from + 49, s.to);
+        for (let block = 1; block <= 3; block++) {
+          out.push({
+            loc: `${s.shelf}-${block}-${lv}`,
+            shelf: s.shelf,
+            block,
+            level: lv,
+            from,
+            to
+          });
+        }
+        n = to + 1;
+      }
+    }
+    return out;
+  }
+
+  private kkB009FloorLocText(tray: { shelf: string; level: number }): string {
+    return [1, 2, 3].map((b) => `${tray.shelf}-${b}-${tray.level}`).join(', ');
+  }
+
+  private kkB009Code(n: number): string {
+    return `B009${String(n).padStart(3, '0')}`;
+  }
+
+  private kkB009RangeText(from: number, to: number): string {
+    return `${this.kkB009Code(from)} ~ ${this.kkB009Code(to)}`;
+  }
+
+  private kkB009TrayOf(groupCode: string): {
+    loc: string;
+    shelf: string;
+    block: number;
+    level: number;
+    from: number;
+    to: number;
+  } | null {
+    const n = this.kkB009SeqOf(groupCode);
+    if (n == null || n < 1 || n > 999) return null;
+    return this.kkB009AllTrays().find((t) => n >= t.from && n <= t.to) || null;
+  }
+
+  private kkB009SeqOf(groupCode: string): number | null {
+    const g = this.kkCatalog.normalizeGroupCode(groupCode)
+      || this.kkCatalog.groupCodeFromMaterial(groupCode)
+      || String(groupCode || '').trim().toUpperCase();
+    const m = /^B009(\d{3})$/.exec(g);
+    if (!m) return null;
+    return Number(m[1]);
+  }
+
+  private kkB009SectionOrder(section: string): number {
+    if (section === 'S07') return 1;
+    if (section === 'S08') return 2;
+    if (section === 'S09') return 3;
+    if (section === 'S10') return 4;
+    return 9;
+  }
+
+  private kkB009SectionCaption(section: string): string {
+    if (section === 'S07') return 'S07 — B009001 ~ B009250';
+    if (section === 'S08') return 'S08 — B009251 ~ B009500';
+    if (section === 'S09') return 'S09 — B009501 ~ B009750';
+    if (section === 'S10') return 'S10 — B009751 ~ B009999';
+    return section;
+  }
+
+  private printKkMucReport(
+    rows: Array<{
+      code: string;
+      name: string;
+      requiredLoc: string;
+      actualLoc: string;
+      section: string;
+      trayRange?: string;
+    }>,
+    title: string,
+    splitB009: boolean
+  ): void {
+    const win = window.open('', '_blank', 'width=900,height=800');
+    if (!win) {
+      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
+      return;
+    }
+    const esc = (s: string) => this.escapeHtmlForPrint(s);
+    const now = new Date().toLocaleString('vi-VN');
+    const sections: Array<{ key: string; caption: string; rows: typeof rows }> = [];
+    if (splitB009) {
+      for (const key of ['S07', 'S08', 'S09', 'S10']) {
+        const part = rows.filter((r) => r.section === key);
+        if (!part.length) continue;
+        sections.push({ key, caption: this.kkB009SectionCaption(key), rows: part });
+      }
+    } else {
+      sections.push({ key: '', caption: '', rows });
+    }
+
+    const tableOf = (list: typeof rows, startStt: number): string => {
+      const body = list.map((r, i) => `<tr>
+        <td class="c">${startStt + i}</td>
+        <td>${esc(r.code)}</td>
+        <td>${esc(r.name)}</td>
+        <td class="c">${esc(r.requiredLoc)}</td>
+        <td>${esc(r.actualLoc)}</td>
+      </tr>`).join('');
+      return `<table>
+        <thead>
+          <tr>
+            <th class="c">STT</th>
+            <th>Mã</th>
+            <th>Tên</th>
+            <th class="c">Vị trí yêu cầu</th>
+            <th>Vị trí thực tế</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>`;
+    };
+
+    const traysHtml = (list: typeof rows, startStt: number): { html: string; next: number } => {
+      if (!splitB009) {
+        return { html: tableOf(list, startStt), next: startStt + list.length };
+      }
+      let stt = startStt;
+      const chunks: string[] = [];
+      let i = 0;
+      while (i < list.length) {
+        const loc = list[i].requiredLoc;
+        let j = i + 1;
+        while (j < list.length && list[j].requiredLoc === loc) j += 1;
+        const part = list.slice(i, j);
+        const range = part[0].trayRange || '';
+        chunks.push(`<h3>${esc(loc)}${range ? ` — ${esc(range)}` : ''} <span>(${part.length} mã)</span></h3>
+      ${tableOf(part, stt)}`);
+        stt += part.length;
+        i = j;
+      }
+      return { html: chunks.join(''), next: stt };
+    };
+
+    let stt = 1;
+    const sectionsHtml = sections.map((sec) => {
+      const body = traysHtml(sec.rows, stt);
+      stt = body.next;
+      return `${sec.caption ? `<h2>${esc(sec.caption)} <span>(${sec.rows.length} mã)</span></h2>` : ''}
+      ${body.html}`;
+    }).join('');
+
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Báo cáo · ${esc(title)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm 10mm 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
+    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:12px;
+                border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
+    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
+                       border-radius:4px; cursor:pointer; font-size:12px; }
+    .page-hdr { border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:10px; }
+    .page-hdr h1 { font-size:16px; letter-spacing:.4px; margin-bottom:4px; }
+    .page-hdr p { font-size:11px; color:#333; }
+    h2 { font-size:13px; margin:14px 0 6px; padding:4px 0; border-bottom:1px solid #000; }
+    h2 span { font-weight:400; font-size:11px; }
+    h3 { font-size:12px; margin:10px 0 4px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+    thead { display: table-header-group; }
+    th, td { border:1px solid #333; padding:4px 6px; }
+    th { background:#f0f0f0; font-size:10px; text-transform:uppercase; text-align:left; }
+    td.c, th.c { text-align:center; }
+    tbody tr:nth-child(even) td { background:#fafafa; }
+    .print-footer { margin-top:10px; font-size:9px; color:#666; text-align:right; }
+    @media print { .no-print { display:none !important; } }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <span>Nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in báo cáo ${esc(title)}</span>
+    <button onclick="window.print()">In ngay</button>
+  </div>
+  <div class="page-hdr">
+    <h1>BÁO CÁO NGUYÊN LIỆU — ${esc(title)}</h1>
+    <p>
+      Nhà máy: <strong>${esc(this.selectedFactory)}</strong>
+      &nbsp;|&nbsp; ${rows.length} mã
+      &nbsp;|&nbsp; In lúc: ${esc(now)}
+    </p>
+  </div>
+  ${sectionsHtml}
+  <div class="print-footer">In lúc: ${esc(now)}</div>
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
   }
 
   /** Tem 57×32mm (cùng khổ Inbound) — chỉ tên nhóm hàng. */
