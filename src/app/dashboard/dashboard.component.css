@@ -693,6 +693,17 @@
   font-size: 13px;
 }
 
+.wo-chart-widget:not(.fg-in-widget) .detail-run-btn {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.wo-chart-widget:not(.fg-in-widget) .detail-run-btn:hover:not(:disabled) {
+  background: #15803d;
+  border-color: #15803d;
+}
+
 /* Putaway staging — cùng kích thước/chữ với wo-heatmap-legend, màu khớp ô heatmap */
 .wo-legend-dot--iqc-pending { background: var(--st-pending); }
 .wo-legend-dot--iqc-pass    { background: var(--st-pass); }

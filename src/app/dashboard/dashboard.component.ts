@@ -1228,9 +1228,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const monday = this.getWoHeatmapMonday();
     const saturday = new Date(monday);
     saturday.setDate(monday.getDate() + 5);
-    const fmt = (d: Date) =>
-      d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    const range = `${fmt(monday)}–${fmt(saturday)}`;
+    const fmt = (d: Date) => {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${dd}-${mm}`;
+    };
+    const range = `${fmt(monday)} - ${fmt(saturday)}`;
     if (this.woHeatmapWeekOffset < 0) return `Tuần trước · ${range}`;
     if (this.woHeatmapWeekOffset > 0) return `Tuần tới · ${range}`;
     return `Tuần này · ${range}`;
@@ -1573,10 +1576,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (let i = 0; i < 6; i++) {
       const targetDate = new Date(monday);
       targetDate.setDate(monday.getDate() + i);
-      const dateStr = targetDate.toLocaleDateString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit'
-      });
+      const dd = String(targetDate.getDate()).padStart(2, '0');
+      const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const dateStr = `${dd}-${mm}`;
       const workOrdersForDate = this.getWorkOrdersForDeliveryDate(targetDate).filter(filterFn);
       const cells: WoHeatmapCell[] = [];
       for (const kind of kindOrder) {
