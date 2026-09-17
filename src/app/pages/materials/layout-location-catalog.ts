@@ -21,6 +21,109 @@ export function isJWarehouseLocation(loc: string): boolean {
   return /^[RS](0?[1-9]|[1-9]\d)(?!\d)/.test(raw);
 }
 
+const J_RACK_SHORT_BLOCKS = new Set([1, 4]);
+
+export type JRackLoc = {
+  rack: number;
+  block: number;
+  level: number;
+  pos: string;
+};
+
+/** R01 / R05 — mã dãy kệ. */
+export function formatJRackAisle(rack: number): string {
+  return `R${String(rack).padStart(2, '0')}`;
+}
+
+/** R05-2 — cả block kệ. */
+export function formatJRackBlock(rack: number, block: number): string {
+  return `${formatJRackAisle(rack)}-${block}`;
+}
+
+/** R01-3-4A — kệ, block, tầng + vị trí mâm. */
+export function formatJRackSlot(rack: number, block: number, level: number, pos: string): string {
+  return `${formatJRackBlock(rack, block)}-${level}${String(pos || '').toUpperCase()}`;
+}
+
+export function parseJRackLocation(loc: string): JRackLoc | null {
+  const raw = String(loc || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!raw) return null;
+  const neuSlot = /^R0*(\d{1,2})-([1-6])-(\d+)([A-C])$/.exec(raw);
+  if (neuSlot) {
+    return { rack: Number(neuSlot[1]), block: Number(neuSlot[2]), level: Number(neuSlot[3]), pos: neuSlot[4] };
+  }
+  const neuBlock = /^R0*(\d{1,2})-([1-6])$/.exec(raw);
+  if (neuBlock) {
+    return { rack: Number(neuBlock[1]), block: Number(neuBlock[2]), level: 0, pos: '' };
+  }
+  const oldSlot = /^R(\d{1,2})([1-6])-(\d+)([A-C])$/.exec(raw);
+  if (oldSlot) {
+    return { rack: Number(oldSlot[1]), block: Number(oldSlot[2]), level: Number(oldSlot[3]), pos: oldSlot[4] };
+  }
+  const aisle = /^R0*(\d{1,2})$/.exec(raw);
+  if (aisle) return { rack: Number(aisle[1]), block: 0, level: 0, pos: '' };
+  return null;
+}
+
+export function normalizeJRackLocation(loc: string): string {
+  const p = parseJRackLocation(loc);
+  if (!p) return String(loc || '').trim().toUpperCase();
+  if (p.level && p.pos) return formatJRackSlot(p.rack, p.block, p.level, p.pos);
+  if (p.block) return formatJRackBlock(p.rack, p.block);
+  return formatJRackAisle(p.rack);
+}
+
+export function listJRackBlockSlots(rack: number, block: number): string[] {
+  const poses = J_RACK_SHORT_BLOCKS.has(block) ? ['A', 'B'] : ['A', 'B', 'C'];
+  const out: string[] = [];
+  for (let lv = 1; lv <= 4; lv++) {
+    for (const pos of poses) out.push(formatJRackSlot(rack, block, lv, pos));
+  }
+  return out;
+}
+
+export function compactJRackLocations(tokens: string[]): string[] {
+  const out: string[] = [];
+  const byBlock = new Map<string, Set<string>>();
+  const order: string[] = [];
+  for (const raw of tokens) {
+    const key = normalizeJRackLocation(raw);
+    if (!key) continue;
+    const p = parseJRackLocation(key);
+    if (!p || !p.block) {
+      if (!out.includes(key)) out.push(key);
+      continue;
+    }
+    const bk = formatJRackBlock(p.rack, p.block);
+    if (!byBlock.has(bk)) {
+      byBlock.set(bk, new Set());
+      order.push(bk);
+    }
+    if (!p.level) byBlock.get(bk)!.add(bk);
+    else byBlock.get(bk)!.add(key);
+  }
+  for (const bk of order) {
+    const set = byBlock.get(bk)!;
+    if (set.has(bk)) {
+      if (!out.includes(bk)) out.push(bk);
+      continue;
+    }
+    const p = parseJRackLocation(bk);
+    const all = p ? listJRackBlockSlots(p.rack, p.block) : [];
+    if (all.length && all.every((s) => set.has(s))) {
+      out.push(bk);
+      continue;
+    }
+    for (const s of all) {
+      if (set.has(s) && !out.includes(s)) out.push(s);
+    }
+    for (const s of set) {
+      if (!out.includes(s)) out.push(s);
+    }
+  }
+  return out;
+}
+
 /** Dãy kệ S trong kho mát J: 0.5m; S01 cách vách VP Kho 5.5m; S01–S02 = 2 block, các dãy sau = 3 block × 7 tầng. Kéo đến sát kho hóa chất. */
 export function listJKhoMatRowIds(): string[] {
   const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -128,19 +231,14 @@ export function getLayoutLocationGroups(wh: LayoutWhPick): LayoutLocGroup[] {
 
   if (wh === 'J') {
     if (jLayoutGroupsCache) return jLayoutGroupsCache;
-    const shortBlocks = new Set([1, 4]);
     jLayoutGroupsCache = Array.from({ length: 28 }, (_, r) => {
       const rack = r + 1;
       const slots: string[] = [];
       for (let block = 1; block <= 6; block++) {
-        const poses = shortBlocks.has(block) ? ['A', 'B'] : ['A', 'B', 'C'];
-        for (let lv = 1; lv <= 4; lv++) {
-          for (const pos of poses) {
-            slots.push(`R${rack}${block}-${lv}${pos}`);
-          }
-        }
+        slots.push(...listJRackBlockSlots(rack, block));
       }
-      return { id: `R${rack}`, label: `R${rack}`, slots };
+      const id = formatJRackAisle(rack);
+      return { id, label: id, slots };
     }).concat(
       listJKhoMatRowIds().map((rowId) => ({
         id: rowId,

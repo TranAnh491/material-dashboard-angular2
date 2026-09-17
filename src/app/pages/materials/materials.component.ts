@@ -40,7 +40,12 @@ import {
   jKhoMatSRuleLabel,
   jKhoMatSRuleOfRow,
   jKhoMatSFirstRowForPrefix,
-  jKhoMatSRowIdFromSlot
+  jKhoMatSRowIdFromSlot,
+  parseJRackLocation,
+  normalizeJRackLocation,
+  formatJRackAisle,
+  formatJRackBlock,
+  compactJRackLocations
 } from './layout-location-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
@@ -5567,6 +5572,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isLockerOrBoxToken(bare) || this.isTraLocationToken(bare) || this.isTraLocationToken(raw)) {
       return (bare || raw).toUpperCase();
     }
+    if (parseJRackLocation(raw) || parseJRackLocation(bare)) {
+      return normalizeJRackLocation(bare || raw);
+    }
     if (/^(J5|J)-/i.test(raw)) return (bare || raw).toUpperCase();
     return raw;
   }
@@ -5579,6 +5587,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!token) return '';
         const bare = this.stripDoiKhoWhPrefix(token);
         if (this.isLockerOrBoxToken(bare) || this.isTraLocationToken(bare)) return bare.toUpperCase();
+        if (parseJRackLocation(token) || parseJRackLocation(bare)) return normalizeJRackLocation(bare || token);
         return token;
       }).filter(Boolean)
     );
@@ -7980,18 +7989,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const s = /^S0*(\d{1,2})(?:-(\d+))?(?:-(\d+))?$/.exec(raw);
     if (s) return [0, Number(s[1]), Number(s[2] || 0), Number(s[3] || 0), 0];
     const posOf = (ch?: string) => (ch ? ch.charCodeAt(0) - 64 : 0);
-    // Slot kho: R16-1A = dãy R1, block 6, tầng 1, A
-    const rSlot = /^R(\d{1,2})([1-6])-(\d+)([A-C])?$/.exec(raw);
-    if (rSlot) {
-      return [1, Number(rSlot[1]), Number(rSlot[2]), Number(rSlot[3]), posOf(rSlot[4])];
-    }
-    // Cả block: R1-6 / R1-6-1A = dãy R1, block 6
-    const rBlock = /^R0*(\d{1,2})-([1-6])(?:-(\d+))?([A-C])?$/.exec(raw);
-    if (rBlock) {
-      return [1, Number(rBlock[1]), Number(rBlock[2]), Number(rBlock[3] || 0), posOf(rBlock[4])];
-    }
-    const rAisle = /^R0*(\d{1,2})$/.exec(raw);
-    if (rAisle) return [1, Number(rAisle[1]), 0, 0, 0];
+    const r = parseJRackLocation(raw);
+    if (r) return [1, r.rack, r.block || 0, r.level || 0, posOf(r.pos)];
     return [8, 999, 999, 999, 999];
   }
 
@@ -8327,12 +8326,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocFocus = 'location';
     this.layoutLocWh = 'J';
     const existing = this.kkTypeHomeLocOf(productType);
-    this.layoutLocSelected = new Set(
-      splitMultiLocations(existing).map((x) => this.displayLocationToken(normalizeLayoutLocToken(x, 'J'))).filter(Boolean)
-    );
+    const tokens = this.layoutLocNormalizeTokens(splitMultiLocations(existing));
+    this.layoutLocSelected = new Set(tokens);
     const groups = getLayoutLocationGroups('J');
-    const selectedUpper = new Set(Array.from(this.layoutLocSelected).map((s) => s.toUpperCase()));
-    const hit = groups.find((g) => g.slots.some((s) => selectedUpper.has(s.toUpperCase())));
+    const hit = this.layoutLocGroupFromTokens(tokens);
     const prefixes = this.kkTypeGroupPrefixes(this.layoutLocTypeAssignGroups);
     const bPrefix = prefixes.find((p) => /^B\d{3}$/.test(p)) || '';
     const suggestedS = jKhoMatSFirstRowForPrefix(bPrefix);
@@ -8358,7 +8355,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const productType = String(this.layoutLocTypeAssign || '').trim();
     if (!productType) return;
     if (String(this.layoutLocManualDraft || '').trim()) this.addLayoutLocManual();
-    const locs = Array.from(this.layoutLocSelected);
+    const locs = this.layoutLocNormalizeTokens(Array.from(this.layoutLocSelected));
     const mismatch = this.layoutLocSRuleMismatchMessage(locs);
     if (mismatch && !confirm(mismatch)) return;
     const joined = this.normalizeMultiLocationValue(joinMultiLocations(locs));
@@ -13833,15 +13830,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         add(Number(khoMat[1]), Number(khoMat[2]), slot, '●');
         continue;
       }
-      const prefix = group.id;
-      const rest = slot.slice(prefix.length);
-      const dash = rest.indexOf('-');
-      if (dash < 0) continue;
-      const block = Number(rest.slice(0, dash));
-      const lvPos = rest.slice(dash + 1);
-      const level = Number(lvPos[0]);
-      const pos = lvPos.slice(1);
-      add(block, level, slot, pos);
+      const parsed = parseJRackLocation(slot);
+      if (parsed && parsed.level && parsed.pos) {
+        add(parsed.block, parsed.level, slot, parsed.pos);
+      }
     }
     return Array.from(byBlock.keys())
       .sort((a, b) => a - b)
@@ -13892,19 +13884,33 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return total > 0 && this.layoutJBlockSelectedCount(block) >= total;
   }
 
-  /** Chọn / bỏ chọn toàn bộ mâm của 1 kệ (Kệ 1/2/3). */
+  /** Chọn / bỏ chọn cả block kệ. Kệ R lưu một mã R05-2, không bung từng mâm. */
   toggleLayoutJBlock(block: number): void {
-    const hit = this.layoutJRackDiagram.find((b) => b.block === block);
-    if (!hit) return;
-    const slots = hit.levels.flatMap((lv) => lv.cells.map((c) => String(c.slot || '').trim().toUpperCase())).filter(Boolean);
-    if (!slots.length) return;
-    const allOn = slots.every((s) => this.layoutLocSelected.has(s));
-    const next = new Set(this.layoutLocSelected);
-    if (allOn) {
-      for (const s of slots) next.delete(s);
-    } else {
-      for (const s of slots) next.add(s);
+    if (this.isLayoutJKhoMatGroup) {
+      const hit = this.layoutJRackDiagram.find((b) => b.block === block);
+      if (!hit) return;
+      const slots = hit.levels.flatMap((lv) => lv.cells.map((c) => String(c.slot || '').trim().toUpperCase())).filter(Boolean);
+      if (!slots.length) return;
+      const allOn = slots.every((s) => this.layoutLocSelected.has(s));
+      const next = new Set(this.layoutLocSelected);
+      if (allOn) {
+        for (const s of slots) next.delete(s);
+      } else {
+        for (const s of slots) next.add(s);
+      }
+      this.layoutLocSelected = next;
+      return;
     }
+    const rack = this.layoutJActiveRackNum();
+    if (!rack || block < 1) return;
+    const token = formatJRackBlock(rack, block);
+    const next = new Set(this.layoutLocSelected);
+    const on = this.isLayoutJBlockFullyOn(block);
+    for (const s of Array.from(next)) {
+      const p = parseJRackLocation(s);
+      if (p && p.rack === rack && p.block === block) next.delete(s);
+    }
+    if (!on) next.add(token);
     this.layoutLocSelected = next;
   }
 
@@ -13927,9 +13933,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.layoutJFocusBlock = null;
       return;
     }
-    const selected = Array.from(this.layoutLocSelected);
+    const rack = this.layoutJActiveRackNum();
+    const tokens = Array.from(this.layoutLocSelected);
+    const onlyWholeBlocks = tokens.length > 0 && tokens.every((t) => {
+      const p = parseJRackLocation(t);
+      return !!p && (!rack || p.rack === rack) && p.block > 0 && !p.level;
+    });
+    if (onlyWholeBlocks) {
+      this.layoutJFocusBlock = null;
+      return;
+    }
     for (const b of this.layoutJRackDiagram) {
-      if (b.levels.some((lv) => lv.cells.some((c) => selected.includes(c.slot)))) {
+      if (b.levels.some((lv) => lv.cells.some((c) => this.isLayoutLocSlotOn(c.slot)))) {
         this.layoutJFocusBlock = b.block;
         return;
       }
@@ -13976,12 +13991,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutLocMaterial = material;
     this.layoutLocFocus = focus;
     this.layoutLocWh = 'J';
-    this.layoutLocSelected = new Set(
-      parts.map((x) => this.displayLocationToken(normalizeLayoutLocToken(x, 'J'))).filter(Boolean)
-    );
+    const tokens = this.layoutLocNormalizeTokens(parts);
+    this.layoutLocSelected = new Set(tokens);
     const groups = getLayoutLocationGroups('J');
-    const selectedUpper = new Set(Array.from(this.layoutLocSelected).map((s) => s.toUpperCase()));
-    const hit = groups.find((g) => g.slots.some((s) => selectedUpper.has(s.toUpperCase())));
+    const hit = this.layoutLocGroupFromTokens(tokens);
     const suggestedS = this.layoutLocSuggestedSGroupId(material);
     if (hit) {
       this.layoutLocGroupId = hit.id;
@@ -14039,7 +14052,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const loc = this.displayLocationToken(t) || t;
       if (loc) next.add(loc);
     }
-    this.layoutLocSelected = next;
+    this.layoutLocSelected = new Set(this.layoutLocNormalizeTokens(Array.from(next)));
     this.layoutLocManualDraft = '';
   }
 
@@ -14089,16 +14102,59 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   toggleLayoutLocSlot(slot: string): void {
-    const key = String(slot || '').trim().toUpperCase();
+    const key = this.displayLocationToken(String(slot || '').trim().toUpperCase()) || String(slot || '').trim().toUpperCase();
     if (!key) return;
     const next = new Set(this.layoutLocSelected);
+    const parsed = parseJRackLocation(key);
+    if (parsed && parsed.block && parsed.level) {
+      const blockTok = formatJRackBlock(parsed.rack, parsed.block);
+      if (next.has(blockTok)) {
+        next.delete(blockTok);
+        next.add(key);
+        this.layoutLocSelected = next;
+        return;
+      }
+    }
     if (next.has(key)) next.delete(key);
     else next.add(key);
     this.layoutLocSelected = next;
   }
 
   isLayoutLocSlotOn(slot: string): boolean {
-    return this.layoutLocSelected.has(String(slot || '').trim().toUpperCase());
+    const key = this.displayLocationToken(String(slot || '').trim().toUpperCase()) || String(slot || '').trim().toUpperCase();
+    if (!key) return false;
+    if (this.layoutLocSelected.has(key)) return true;
+    const parsed = parseJRackLocation(key);
+    if (parsed && parsed.block) {
+      return this.layoutLocSelected.has(formatJRackBlock(parsed.rack, parsed.block));
+    }
+    return false;
+  }
+
+  private layoutJActiveRackNum(): number {
+    const m = /^R0*(\d+)$/i.exec(this.layoutLocActiveGroup?.id || '');
+    return m ? Number(m[1]) : 0;
+  }
+
+  private layoutLocNormalizeTokens(tokens: string[]): string[] {
+    return compactJRackLocations(
+      tokens
+        .map((x) => this.displayLocationToken(normalizeLayoutLocToken(x, 'J')))
+        .filter(Boolean)
+    );
+  }
+
+  private layoutLocGroupFromTokens(tokens: string[]): LayoutLocGroup | undefined {
+    const groups = getLayoutLocationGroups('J');
+    for (const t of tokens) {
+      const p = parseJRackLocation(t);
+      if (p) {
+        const g = groups.find((x) => x.id === formatJRackAisle(p.rack));
+        if (g) return g;
+      }
+    }
+    const selectedUpper = new Set(tokens.map((s) => s.toUpperCase()));
+    return groups.find((g) => g.slots.some((s) => selectedUpper.has(s.toUpperCase())));
   }
 
   async applyLayoutLocPicker(): Promise<void> {
@@ -14110,7 +14166,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!material) return;
     // Gộp phần gõ tay chưa kịp bấm "Thêm".
     if (String(this.layoutLocManualDraft || '').trim()) this.addLayoutLocManual();
-    const locs = Array.from(this.layoutLocSelected);
+    const locs = this.layoutLocNormalizeTokens(Array.from(this.layoutLocSelected));
     const mismatch = this.layoutLocSRuleMismatchMessage(locs);
     if (mismatch && !confirm(mismatch)) return;
     const pallet = String(this.layoutLocPalletDraft || '').trim().toUpperCase();
