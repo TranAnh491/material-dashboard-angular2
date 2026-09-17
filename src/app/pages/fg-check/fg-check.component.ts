@@ -421,26 +421,24 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return merged;
   }
 
-  // Load customer code mappings — dùng cache dùng chung (TpCatalogFullService, gộp cả fg-catalog
-  // lẫn fg-customer-mapping) thay vì chỉ đọc fg-customer-mapping, để không bỏ sót mã KH của các
-  // mã TP import mới (chỉ nằm trong fg-catalog, không còn ghi vào fg-customer-mapping nữa).
+  // Load customer code mappings — chỉ đọc Danh mục TP (`fg-catalog`) trên
+  // /danh-muc-nvl-tp. Không dùng `fg-customer-mapping`.
   loadCustomerMappings(): void {
     this.tpCatalogService
-      .loadMerged()
+      .getCatalogItemsCached()
       .then(items => {
         this.customerMappings.clear();
         items.forEach(item => {
-          if (item.customerCode && item.materialCode) {
-            const key = item.customerCode.trim().toUpperCase();
-            const materialCode = item.materialCode.trim();
-            const list = this.customerMappings.get(key) || [];
-            if (!list.includes(materialCode)) list.push(materialCode);
-            this.customerMappings.set(key, list);
-          }
+          const key = String(item.customerCode || '').trim().toUpperCase();
+          const materialCode = String(item.materialCode || '').trim();
+          if (!key || !materialCode) return;
+          const list = this.customerMappings.get(key) || [];
+          if (!list.includes(materialCode)) list.push(materialCode);
+          this.customerMappings.set(key, list);
         });
         this.cdr.detectChanges();
       })
-      .catch(err => console.error('Load danh mục TP (cached) failed:', err));
+      .catch(err => console.error('Load danh mục TP failed:', err));
   }
 
   loadShipmentData(): void {
