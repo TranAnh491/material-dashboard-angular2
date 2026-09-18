@@ -5719,7 +5719,7 @@ $asm1-toolbar-h: 36px;
 
 .kk-b009-col__axis {
   display: grid;
-  grid-template-columns: 26px repeat(3, minmax(0, 1fr));
+  grid-template-columns: 26px repeat(auto-fit, minmax(52px, 1fr));
   gap: 4px;
   font-size: 10px;
   font-weight: 800;
@@ -5731,7 +5731,7 @@ $asm1-toolbar-h: 36px;
 
 .kk-b009-row {
   display: grid;
-  grid-template-columns: 26px repeat(3, minmax(0, 1fr));
+  grid-template-columns: 26px repeat(auto-fit, minmax(52px, 1fr));
   gap: 4px;
   align-items: stretch;
   width: 100%;
@@ -5793,7 +5793,7 @@ $asm1-toolbar-h: 36px;
 
 .kk-b009-blocks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
   margin: 6px 0 10px;
 }

@@ -137,9 +137,9 @@
               <button type="button"
                       class="more-btn"
                       *ngIf="kkLocMapView === 'type'"
-                      (click)="printKkB009ShelfMap()"
+                      (click)="printKkSShelfMap()"
                       [disabled]="kkTypePrintBusy"
-                      title="Sơ đồ mâm kệ B009 — mã được phép trên từng mâm">
+                      title="Danh sách kệ S từ nhỏ đến lớn và mã hàng theo từng kệ">
                 <i class="material-icons">map</i>
                 <span class="btn-label">Hình Sơ Đồ</span>
               </button>
@@ -569,18 +569,16 @@
             </div>
             <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
               <div class="kk-b009-board" *ngIf="isKkConnectorRackMuc(muc.category) && muc.groups?.length">
-                <p class="kk-b009-board__hint">Mỗi kệ 3 block. Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem toàn bộ mã.</p>
+                <p class="kk-b009-board__hint">Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem toàn bộ mã. S01 có 2 block; kệ khác 3 block.</p>
                 <div class="kk-b009-board__cols">
                   <div class="kk-b009-col" *ngFor="let g of kkB009ShelfGroups(muc)">
                     <div class="kk-b009-col__head">
                       <strong>{{ g.key }}</strong>
-                      <small>{{ kkB009ShelfShortRange(g) }} · 3 block</small>
+                      <small>{{ kkB009ShelfShortRange(g) }} · {{ kkShelfBlockNos(g.key).length }} block</small>
                     </div>
                     <div class="kk-b009-col__axis" aria-hidden="true">
                       <span></span>
-                      <span>Block 1</span>
-                      <span>Block 2</span>
-                      <span>Block 3</span>
+                      <span *ngFor="let b of kkShelfBlockNos(g.key)">Block {{ b }}</span>
                     </div>
                     <button type="button"
                             class="kk-b009-row"
@@ -590,7 +588,7 @@
                             [title]="s.title"
                             (click)="setKkB009Floor(muc.category, g.key, s)">
                       <span class="kk-b009-row__lv">T{{ kkB009SubLevel(s) }}</span>
-                      <span class="kk-b009-mam" *ngFor="let b of kkB009Blocks">{{ kkB009LocOf(g.key, b, kkB009SubLevel(s)) }}</span>
+                      <span class="kk-b009-mam" *ngFor="let b of kkShelfBlockNos(g.key)">{{ kkB009LocOf(g.key, b, kkB009SubLevel(s)) }}</span>
                     </button>
                   </div>
                 </div>
@@ -603,7 +601,7 @@
                   </div>
                   <div class="kk-b009-blocks">
                     <div class="kk-b009-block"
-                         *ngFor="let b of kkB009Blocks"
+                         *ngFor="let b of kkShelfBlockNos(kkConnectorViewShelf(muc.category))"
                          [class.kk-b009-block--empty]="kkB009FloorEmpty(s)">
                       <strong>{{ kkB009LocOf(kkConnectorViewShelf(muc.category), b, kkConnectorViewLevel(muc.category)) }}</strong>
                       <span>{{ kkB009FloorEmpty(s) ? 'Trống' : (kkB009SubShortRange(s) + ' · ' + kkB009FloorCodeCount(s) + ' mã') }}</span>
@@ -4249,7 +4247,7 @@
         </span>
         <div>
           <h3>In tem Kệ</h3>
-          <p class="more-popup-header__sub">Chọn nhóm — B009 / B016: mỗi mâm một tem dải mã 57×32mm</p>
+          <p class="more-popup-header__sub">Chọn nhóm — B009 / B016 / B018: mỗi mâm một tem dải mã 57×32mm</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkShelfLabelPicker()" aria-label="Đóng">

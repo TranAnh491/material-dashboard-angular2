@@ -173,9 +173,11 @@ export interface JKhoMatSRule {
 }
 
 export const J_KHO_MAT_S_RULES: JKhoMatSRule[] = [
-  { from: 6, to: 9, code: 'B009', label: 'B009' },
-  { from: 10, to: 13, code: 'B016', label: 'B016' },
-  { from: 14, to: 15, code: 'B008', label: 'B008' }
+  { from: 1, to: 6, code: 'B018', label: 'B018' },
+  { from: 7, to: 10, code: 'B009', label: 'B009' },
+  { from: 11, to: 14, code: 'B016', label: 'B016' },
+  { from: 15, to: 15, code: 'B007', label: 'B007' },
+  { from: 16, to: 16, code: 'B008', label: 'B008' }
 ];
 
 export function jKhoMatSRowNum(id: string): number {

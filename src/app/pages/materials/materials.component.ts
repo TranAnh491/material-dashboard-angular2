@@ -41,6 +41,7 @@ import {
   jKhoMatSRuleOfRow,
   jKhoMatSFirstRowForPrefix,
   jKhoMatSRowIdFromSlot,
+  jKhoMatBlocksForRow,
   parseJRackLocation,
   normalizeJRackLocation,
   formatJRackAisle,
@@ -400,7 +401,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeMucCollapsed: Record<string, boolean> = {};
   kkConnectorRackView: Record<string, { shelf: string; level: number }> = {
     B009: { shelf: 'S07', level: 1 },
-    B016: { shelf: 'S11', level: 1 }
+    B016: { shelf: 'S11', level: 1 },
+    B018: { shelf: 'S01', level: 1 }
   };
   readonly kkB009Blocks = [1, 2, 3] as const;
   kkActivePinSplit: '1-4' | '5-10' | null = null;
@@ -7563,7 +7565,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return head.length ? head.join(' ') : raw;
   }
 
-  /** Trong mục B018: chia mục con theo hãng (Molex…). B009/B016 chia kệ × tầng. B008 giữ phẳng. */
+  /** B009/B016/B018 chia kệ × tầng. B018: S01/S03/S05. B008 giữ phẳng. */
   private kkTypeBrandGroupsOf(
     category: string,
     boxes: typeof this.kkTypeBoxesCached
@@ -7574,7 +7576,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
   }> | undefined {
     if (!/^B\d{3}$/.test(category)) return undefined;
-    if (category === 'B009' || category === 'B016') {
+    if (category === 'B009' || category === 'B016' || category === 'B018') {
       return this.kkTypeConnectorShelfGroupsOf(category, boxes);
     }
     if (category === 'B008') return undefined;
@@ -7593,7 +7595,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return [{ key: 'hang', title: '', boxes, subMucs }];
   }
 
-  /** B009: S07–S10. B016: S11–S14. Mỗi kệ 3 block × 7 tầng; tầng 1–5 mỗi tầng 50 mã; tầng 6–7 trống. */
+  /** B009: S07–S10 ×50. B016: S11–S14 ×50. B018: S01×50, S03/S05×80. Tầng 1–5 có mã; 6–7 trống. */
   private kkTypeConnectorShelfGroupsOf(
     prefix: string,
     boxes: typeof this.kkTypeBoxesCached
@@ -7606,15 +7608,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const shelves = this.kkConnectorRackShelves(prefix);
     const used = new Set<string>();
     const groups = shelves.map((s) => {
+      const blocks = jKhoMatBlocksForRow(s.shelf);
       const subMucs = [];
       for (let lv = 1; lv <= 7; lv++) {
-        const filled = lv <= 5;
-        const levelFrom = filled ? s.from + (lv - 1) * 50 : 0;
-        const levelTo = filled ? Math.min(levelFrom + 49, s.to) : 0;
-        const locText = [1, 2, 3].map((b) => `${s.shelf}-${b}-${lv}`).join(' / ');
-        const rangeText = filled ? this.kkConnectorRangeText(prefix, levelFrom, levelTo) : 'trống';
-        const floorBoxes = filled
-          ? boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, levelFrom, levelTo))
+        const range = this.kkConnectorFloorRange(s, lv);
+        const locText = Array.from({ length: blocks }, (_, i) => `${s.shelf}-${i + 1}-${lv}`).join(' / ');
+        const rangeText = range ? this.kkConnectorRangeText(prefix, range.from, range.to) : 'trống';
+        const floorBoxes = range
+          ? boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, range.from, range.to))
           : [];
         for (const box of floorBoxes) used.add(box.productType);
         subMucs.push({
@@ -7643,25 +7644,52 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return groups;
   }
 
-  private kkConnectorRackShelves(prefix: string): Array<{ shelf: string; from: number; to: number }> {
+  private kkConnectorRackShelves(prefix: string): Array<{
+    shelf: string;
+    from: number;
+    to: number;
+    perFloor: number;
+  }> {
+    if (prefix === 'B018') {
+      return [
+        { shelf: 'S01', from: 1, to: 200, perFloor: 50 },
+        { shelf: 'S03', from: 201, to: 600, perFloor: 80 },
+        { shelf: 'S05', from: 601, to: 999, perFloor: 80 }
+      ];
+    }
     if (prefix === 'B016') {
       return [
-        { shelf: 'S11', from: 1, to: 250 },
-        { shelf: 'S12', from: 251, to: 500 },
-        { shelf: 'S13', from: 501, to: 750 },
-        { shelf: 'S14', from: 751, to: 999 }
+        { shelf: 'S11', from: 1, to: 250, perFloor: 50 },
+        { shelf: 'S12', from: 251, to: 500, perFloor: 50 },
+        { shelf: 'S13', from: 501, to: 750, perFloor: 50 },
+        { shelf: 'S14', from: 751, to: 999, perFloor: 50 }
       ];
     }
     return [
-      { shelf: 'S07', from: 1, to: 250 },
-      { shelf: 'S08', from: 251, to: 500 },
-      { shelf: 'S09', from: 501, to: 750 },
-      { shelf: 'S10', from: 751, to: 999 }
+      { shelf: 'S07', from: 1, to: 250, perFloor: 50 },
+      { shelf: 'S08', from: 251, to: 500, perFloor: 50 },
+      { shelf: 'S09', from: 501, to: 750, perFloor: 50 },
+      { shelf: 'S10', from: 751, to: 999, perFloor: 50 }
     ];
   }
 
+  private kkConnectorFloorRange(
+    s: { from: number; to: number; perFloor: number },
+    lv: number
+  ): { from: number; to: number } | null {
+    if (lv < 1 || lv > 5 || s.from <= 0) return null;
+    const from = s.from + (lv - 1) * s.perFloor;
+    if (from > s.to) return null;
+    return { from, to: Math.min(from + s.perFloor - 1, s.to) };
+  }
+
   isKkConnectorRackMuc(category: string): boolean {
-    return category === 'B009' || category === 'B016';
+    return category === 'B009' || category === 'B016' || category === 'B018';
+  }
+
+  kkShelfBlockNos(shelf: string): number[] {
+    const n = jKhoMatBlocksForRow(shelf);
+    return Array.from({ length: n }, (_, i) => i + 1);
   }
 
   private kkConnectorCode(prefix: string, n: number): string {
@@ -8557,6 +8585,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
+  private kkBoxHasBPrefix(box: { groupCodes?: string[] }, prefix: string): boolean {
+    return this.kkTypeGroupPrefixes(box.groupCodes || []).includes(prefix);
+  }
+
+  private kkShelfLabelTrayCount(prefix: string): number {
+    return this.kkConnectorAllTrays(prefix).filter((t) => t.from > 0).length;
+  }
+
   get kkShelfLabelGroups(): Array<{
     category: string;
     title: string;
@@ -8564,19 +8600,57 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     labelCount: number;
   }> {
     const q = String(this.kkShelfLabelQuery || '').trim().toLowerCase();
-    return this.kkTypeBoxGroups
-      .map((muc) => ({
-        category: muc.category,
+    const out: Array<{
+      category: string;
+      title: string;
+      boxes: typeof this.kkTypeBoxesCached;
+      labelCount: number;
+    }> = [];
+    let addedB018 = false;
+    const b018Group = () => ({
+      category: 'B018',
+      title: this.kkTypeMucTitle('B018'),
+      boxes: [] as typeof this.kkTypeBoxesCached,
+      labelCount: this.kkShelfLabelTrayCount('B018')
+    });
+    for (const muc of this.kkTypeBoxGroups) {
+      const category = String(muc.category || '');
+      if (this.isKkConnectorRackMuc(category)) {
+        if (category === 'B018') addedB018 = true;
+        out.push({
+          category,
+          title: muc.title,
+          boxes: muc.boxes,
+          labelCount: this.kkShelfLabelTrayCount(category)
+        });
+        continue;
+      }
+      if (category === 'ĐẦU CỐT') {
+        const rest = muc.boxes.filter((box) => !this.kkBoxHasBPrefix(box, 'B018'));
+        if (!addedB018 && muc.boxes.some((box) => this.kkBoxHasBPrefix(box, 'B018'))) {
+          addedB018 = true;
+          out.push(b018Group());
+        }
+        if (!rest.length) continue;
+        out.push({
+          category,
+          title: muc.title,
+          boxes: rest,
+          labelCount: rest.filter((box) => !!this.kkShelfLabelLocOf(box)).length
+        });
+        continue;
+      }
+      out.push({
+        category,
         title: muc.title,
         boxes: muc.boxes,
-        labelCount: this.isKkConnectorRackMuc(String(muc.category || ''))
-          ? this.kkConnectorAllTrays(String(muc.category)).filter((t) => t.from > 0).length
-          : muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
-      }))
-      .filter((g) => {
-        if (!q) return true;
-        return g.title.toLowerCase().includes(q) || String(g.category || '').toLowerCase().includes(q);
+        labelCount: muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
       });
+    }
+    return out.filter((g) => {
+      if (!q) return true;
+      return g.title.toLowerCase().includes(q) || String(g.category || '').toLowerCase().includes(q);
+    });
   }
 
   printKkShelfLabelsForGroup(group: {
@@ -8585,15 +8659,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     boxes: Array<{ productType: string; groupCodes?: string[] }>;
   }): void {
     const category = String(group?.category || '');
-    if (this.isKkConnectorRackMuc(category)) {
-      const labels = this.kkConnectorAllTrays(category)
+    const rackPrefix = this.isKkConnectorRackMuc(category)
+      ? category
+      : ((group?.boxes || []).some((box) => this.kkBoxHasBPrefix(box, 'B018')) ? 'B018' : '');
+    if (rackPrefix) {
+      const labels = this.kkConnectorAllTrays(rackPrefix)
         .filter((t) => t.from > 0)
         .map((t) => ({
-          name: this.kkConnectorRangeText(category, t.from, t.to),
+          name: this.kkConnectorRangeText(rackPrefix, t.from, t.to),
           loc: t.loc
         }));
       if (!labels.length) {
-        alert(`Mục ${category} chưa có dải mã để in tem kệ.`);
+        alert(`Mục ${rackPrefix} chưa có dải mã để in tem kệ.`);
         return;
       }
       this.closeKkShelfLabelPicker();
@@ -8930,7 +9007,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return String(fallbackType || '').trim() || '—';
   }
 
-  /** B009 / B016: mỗi tầng 50 mã, 3 block cùng dải. Tầng 1–5 có mã; tầng 6–7 trống. */
+  /** B009 / B016 / B018: mã theo tầng; tầng không có dải thì from=0. */
   private kkConnectorAllTrays(prefix: string): Array<{
     loc: string;
     shelf: string;
@@ -8941,11 +9018,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }> {
     const out: Array<{ loc: string; shelf: string; block: number; level: number; from: number; to: number }> = [];
     for (const s of this.kkConnectorRackShelves(prefix)) {
+      const blocks = jKhoMatBlocksForRow(s.shelf);
       for (let lv = 1; lv <= 7; lv++) {
-        const filled = lv <= 5;
-        const from = filled ? s.from + (lv - 1) * 50 : 0;
-        const to = filled ? Math.min(from + 49, s.to) : 0;
-        for (let block = 1; block <= 3; block++) {
+        const range = this.kkConnectorFloorRange(s, lv);
+        const from = range?.from || 0;
+        const to = range?.to || 0;
+        for (let block = 1; block <= blocks; block++) {
           out.push({
             loc: `${s.shelf}-${block}-${lv}`,
             shelf: s.shelf,
@@ -9021,60 +9099,216 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return section;
   }
 
-  /** Sơ đồ mặt đứng 4 kệ S07–S10: mỗi mâm ghi vị trí + dải mã được phép. */
-  printKkB009ShelfMap(): void {
-    const win = window.open('', '_blank', 'width=1200,height=860');
+  private kkNormalizeSShelfId(token: string): string {
+    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
+    const m = /^S0*(\d{1,2})(?:-|$)/.exec(raw);
+    if (!m) return '';
+    const n = Number(m[1]);
+    if (n < 1 || n > 19) return '';
+    return `S${String(n).padStart(2, '0')}`;
+  }
+
+  private kkSLevelFromLoc(token: string): number {
+    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
+    const m = /^S\d{1,2}-\d+-(\d+)/.exec(raw);
+    return m ? Number(m[1]) : 0;
+  }
+
+  private kkSPrefixOfCode(code: string): string {
+    const g = this.kkCatalog.normalizeGroupCode(code)
+      || String(code || '').trim().toUpperCase();
+    const m = /^(B\d{3})/.exec(g);
+    return m ? m[1] : '';
+  }
+
+  private kkSShelfKind(n: number): 'empty' | 'B018' | 'B009' | 'B016' | 'B007' | 'B008' | 'home' {
+    if (n === 2 || n === 4 || n === 6) return 'empty';
+    if (n === 1 || n === 3 || n === 5) return 'B018';
+    if (n >= 7 && n <= 10) return 'B009';
+    if (n >= 11 && n <= 14) return 'B016';
+    if (n === 15) return 'B007';
+    if (n === 16) return 'B008';
+    return 'home';
+  }
+
+  private kkSHomeLocRecords(): Array<{
+    code: string;
+    typeName: string;
+    prefix: string;
+    terminal: boolean;
+    shelf: string;
+    loc: string;
+    level: number;
+  }> {
+    const out: Array<{
+      code: string;
+      typeName: string;
+      prefix: string;
+      terminal: boolean;
+      shelf: string;
+      loc: string;
+      level: number;
+    }> = [];
+    const seen = new Set<string>();
+    for (const e of this.kkCatalogEntries) {
+      const code = this.kkCatalog.normalizeGroupCode(e.groupCode)
+        || String(e.groupCode || '').trim().toUpperCase();
+      if (!code) continue;
+      const locJoined = String(
+        this.kkCatalog.homeLocForMaterial(code) || this.kkTypeHomeLocOf(e.productType) || ''
+      ).trim();
+      const tokens = splitMultiLocations(locJoined);
+      const terminal = this.isKkDauCotMuc(e.productType, [code]);
+      const prefix = this.kkSPrefixOfCode(code);
+      if (!tokens.length) {
+        const key = `${code}|`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ code, typeName: e.productType, prefix, terminal, shelf: '', loc: '', level: 0 });
+        continue;
+      }
+      for (const token of tokens) {
+        const shelf = this.kkNormalizeSShelfId(token);
+        const key = `${code}|${shelf}|${token}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          code,
+          typeName: e.productType,
+          prefix,
+          terminal,
+          shelf,
+          loc: String(token || '').toUpperCase(),
+          level: this.kkSLevelFromLoc(token)
+        });
+      }
+    }
+    return out;
+  }
+
+  /** Danh sách kệ S01–S19 (nhỏ → lớn) và mã hàng theo từng kệ. */
+  printKkSShelfMap(): void {
+    const win = window.open('', '_blank', 'width=980,height=860');
     if (!win) {
       alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
       return;
     }
     const esc = (s: string) => this.escapeHtmlForPrint(s);
     const now = new Date().toLocaleString('vi-VN');
-    const byLoc = new Map(this.kkB009AllTrays().map((t) => [t.loc, t]));
-    const shelves = ['S07', 'S08', 'S09', 'S10'];
-    const pages = shelves.map((shelf, idx) => {
-      const rows = [7, 6, 5, 4, 3, 2, 1].map((lv) => {
-        const cells = [1, 2, 3].map((block) => {
-          const loc = `${shelf}-${block}-${lv}`;
-          const tray = byLoc.get(loc);
-          if (!tray || tray.from <= 0) {
-            return `<td class="mam mam--empty">
-              <div class="slot">${esc(loc)}</div>
-              <div class="codes">Trống</div>
-            </td>`;
+    const home = this.kkSHomeLocRecords();
+    const addUnique = (
+      map: Map<number, Array<{ code: string; loc: string }>>,
+      level: number,
+      code: string,
+      loc: string
+    ) => {
+      const list = map.get(level) || [];
+      if (list.some((x) => x.code === code)) return;
+      list.push({ code, loc });
+      map.set(level, list);
+    };
+    const shelves = Array.from({ length: 19 }, (_, i) => {
+      const n = i + 1;
+      const shelf = `S${String(n).padStart(2, '0')}`;
+      const kind = this.kkSShelfKind(n);
+      const planned = (kind === 'B009' || kind === 'B016' || kind === 'B018')
+        ? (this.kkConnectorRackShelves(kind).find((row) => row.shelf === shelf) || null)
+        : null;
+      const byLevel = new Map<number, Array<{ code: string; loc: string }>>();
+      const leftover: Array<{ code: string; loc: string }> = [];
+      if (kind === 'B007' || kind === 'B008' || kind === 'home') {
+        for (const rec of home) {
+          if (rec.shelf === shelf) {
+            addUnique(byLevel, rec.level || 0, rec.code, rec.loc);
+            continue;
           }
-          return `<td class="mam">
-            <div class="slot">${esc(loc)}</div>
-            <div class="codes">${esc(this.kkB009RangeText(tray.from, tray.to))}</div>
-            <div class="n">${tray.to - tray.from + 1} mã</div>
-          </td>`;
+          if (rec.shelf) continue;
+          if (kind === 'B007' && rec.prefix === 'B007') leftover.push({ code: rec.code, loc: '' });
+          if (kind === 'B008' && rec.prefix === 'B008') leftover.push({ code: rec.code, loc: '' });
+        }
+      }
+      const codeCount = planned
+        ? planned.to - planned.from + 1
+        : Array.from(byLevel.values()).reduce((sum, list) => sum + list.length, 0) + leftover.length;
+      return { shelf, kind, blocks: jKhoMatBlocksForRow(shelf), planned, byLevel, leftover, codeCount };
+    });
+
+    const indexRows = shelves.map((s) => {
+      const group = s.kind === 'home' || s.kind === 'empty' ? '—' : s.kind;
+      const range = s.planned
+        ? this.kkConnectorRangeText(s.kind, s.planned.from, s.planned.to)
+        : (s.kind === 'empty' ? 'Trống' : 'Theo vị trí yêu cầu');
+      return `<tr class="${s.codeCount ? '' : 'empty'}">
+        <td class="c"><strong>${esc(s.shelf)}</strong></td>
+        <td class="c">${esc(group)}</td>
+        <td>${esc(range)}</td>
+        <td class="c">${s.codeCount ? s.codeCount + ' mã' : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    const chipsOf = (list: Array<{ code: string; loc: string }>): string => {
+      const sorted = [...list].sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }));
+      return sorted.map((x) => `<span class="chip" title="${esc(x.loc)}">${esc(x.code)}</span>`).join('');
+    };
+
+    const shelfSections = shelves.map((s) => {
+      const blockNos = Array.from({ length: s.blocks }, (_, i) => i + 1);
+      if (s.planned) {
+        const plan = s.planned;
+        const prefix = s.kind;
+        const floors = [7, 6, 5, 4, 3, 2, 1].map((lv) => {
+          const range = this.kkConnectorFloorRange(plan, lv);
+          const locs = blockNos.map((b) => `${s.shelf}-${b}-${lv}`).join(' / ');
+          if (!range) {
+            return `<div class="floor floor--empty">
+              <div class="floor__meta"><strong>Tầng ${lv}</strong> · ${esc(locs)} · Trống</div>
+            </div>`;
+          }
+          const codes: string[] = [];
+          for (let num = range.from; num <= range.to; num++) codes.push(this.kkConnectorCode(prefix, num));
+          return `<div class="floor">
+            <div class="floor__meta">
+              <strong>Tầng ${lv}</strong>
+              · ${esc(locs)}
+              · ${esc(this.kkConnectorRangeText(prefix, range.from, range.to))}
+              · ${range.to - range.from + 1} mã
+            </div>
+            <div class="chips">${codes.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
+          </div>`;
         }).join('');
-        return `<tr>
-          <th class="lv">T${lv}</th>
-          ${cells}
-        </tr>`;
+        return `<section class="shelf">
+          <h2>Kệ ${esc(s.shelf)} · ${esc(prefix)} · ${esc(this.kkConnectorRangeText(prefix, plan.from, plan.to))} · ${s.blocks} block</h2>
+          ${floors}
+        </section>`;
+      }
+
+      const floors = [7, 6, 5, 4, 3, 2, 1].map((lv) => {
+        const locs = blockNos.map((b) => `${s.shelf}-${b}-${lv}`).join(' / ');
+        const list = s.byLevel.get(lv) || [];
+        if (!list.length) {
+          return `<div class="floor floor--empty">
+            <div class="floor__meta"><strong>Tầng ${lv}</strong> · ${esc(locs)} · Trống</div>
+          </div>`;
+        }
+        return `<div class="floor">
+          <div class="floor__meta"><strong>Tầng ${lv}</strong> · ${esc(locs)} · ${list.length} mã</div>
+          <div class="chips">${chipsOf(list)}</div>
+        </div>`;
       }).join('');
-      return `<section class="page${idx === shelves.length - 1 ? ' page--last' : ''}">
-        <div class="page-hdr">
-          <h1>SƠ ĐỒ KỆ ${esc(shelf)}</h1>
-          <p>B009 · ${esc(this.kkB009SectionCaption(shelf))} · 3 block × 7 tầng · tầng 1–5 có mã, tầng 6–7 trống</p>
-        </div>
-        <div class="rack">
-          <div class="post post--l" aria-hidden="true"></div>
-          <table>
-            <thead>
-              <tr>
-                <th class="lv"></th>
-                <th>Block 1</th>
-                <th>Block 2</th>
-                <th>Block 3</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div class="post post--r" aria-hidden="true"></div>
-        </div>
-        <p class="hint">Tầng 1 dưới cùng · Tầng 7 trên cùng · Cùng tầng 3 block chung một dải mã · Tầng 6–7 để trống dùng khi cần</p>
+      const unknown = s.byLevel.get(0) || [];
+      const extra = [
+        unknown.length
+          ? `<div class="floor"><div class="floor__meta">Có vị trí S nhưng chưa rõ tầng · ${unknown.length} mã</div><div class="chips">${chipsOf(unknown)}</div></div>`
+          : '',
+        s.leftover.length
+          ? `<div class="floor"><div class="floor__meta">Chưa gán vị trí yêu cầu · ${s.leftover.length} mã</div><div class="chips">${chipsOf(s.leftover)}</div></div>`
+          : ''
+      ].join('');
+      const group = s.kind === 'home' || s.kind === 'empty' ? (s.kind === 'empty' ? 'Trống' : 'Theo vị trí yêu cầu') : s.kind;
+      return `<section class="shelf">
+        <h2>Kệ ${esc(s.shelf)} · ${esc(group)} · ${s.blocks} block</h2>
+        ${floors}
+        ${extra}
       </section>`;
     }).join('\n');
 
@@ -9083,49 +9317,54 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Sơ đồ kệ B009</title>
+  <title>Sơ đồ kệ S</title>
   <style>
-    @page { size: A4 landscape; margin: 8mm 10mm; }
+    @page { size: A4 portrait; margin: 10mm 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; }
-    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:10px;
+    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:12px;
                 border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
     .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
                        border-radius:4px; cursor:pointer; font-size:12px; }
-    .page { page-break-after: always; }
-    .page--last { page-break-after: auto; }
-    .page-hdr { border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 10px; }
-    .page-hdr h1 { font-size: 20px; letter-spacing: .4px; }
-    .page-hdr p { font-size: 12px; margin-top: 3px; }
-    .rack { display: flex; align-items: stretch; gap: 0; }
-    .post { width: 10px; background: #334155; border: 1px solid #111; }
-    table { flex: 1; border-collapse: collapse; width: 100%; }
-    th, td { border: 2px solid #111; }
-    thead th { background: #e2e8f0; font-size: 13px; padding: 6px 4px; text-transform: uppercase; }
-    th.lv { width: 42px; background: #0f172a; color: #fff; font-size: 13px; }
-    tbody th.lv { padding: 0; }
-    td.mam {
-      height: 22mm;
-      text-align: center;
-      vertical-align: middle;
-      background: #fffbeb;
-      padding: 4px 6px;
-    }
-    td.mam--empty { background: #f8fafc; color: #64748b; }
-    .slot { font-size: 13px; font-weight: 800; letter-spacing: .2px; }
-    .codes { font-size: 14px; font-weight: 800; margin-top: 4px; }
-    .n { font-size: 10px; margin-top: 2px; color: #334155; }
-    .hint { margin-top: 8px; font-size: 11px; color: #475569; }
-    .foot { margin-top: 6px; font-size: 10px; color: #64748b; text-align: right; }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .sub { color:#475569; margin-bottom: 12px; }
+    table.index { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    table.index th, table.index td { border: 1px solid #111; padding: 6px 8px; }
+    table.index th { background: #0f172a; color: #fff; text-align: left; }
+    table.index td.c, table.index th.c { text-align: center; }
+    table.index tr.empty td { color: #64748b; background: #f8fafc; }
+    .shelf { page-break-inside: avoid; margin: 0 0 14px; padding: 10px 0 4px; border-top: 2px solid #111; }
+    .shelf h2 { font-size: 15px; margin: 0 0 8px; }
+    .shelf--empty h2 { color: #64748b; font-weight: 700; }
+    .floor { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; margin-bottom: 6px; background: #fffbeb; }
+    .floor--empty { background: #f8fafc; color: #64748b; }
+    .floor__meta { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip { display: inline-block; border: 1px solid #cbd5e1; background: #f1f5f9;
+            border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 800; }
+    .foot { margin-top: 10px; font-size: 10px; color: #64748b; text-align: right; }
     @media print { .no-print { display: none !important; } }
   </style>
 </head>
 <body>
   <div class="no-print">
-    <span>Sơ đồ kệ B009 — nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in (4 trang: S07–S10)</span>
+    <span>Danh sách kệ S và mã hàng — nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in</span>
     <button onclick="window.print()">In ngay</button>
   </div>
-  ${pages}
+  <h1>HÌNH SƠ ĐỒ KỆ S</h1>
+  <p class="sub">S01/S03/S05 B018 · S02/S04/S06 trống · S07–S10 B009 · S11–S14 B016 · S15 B007 · S16 B008 · S17–S19 theo vị trí yêu cầu</p>
+  <table class="index">
+    <thead>
+      <tr>
+        <th class="c">Kệ</th>
+        <th class="c">Nhóm</th>
+        <th>Dải mã</th>
+        <th class="c">Số mã</th>
+      </tr>
+    </thead>
+    <tbody>${indexRows}</tbody>
+  </table>
+  ${shelfSections}
   <div class="foot">In lúc: ${esc(now)} · ${esc(this.selectedFactory)}</div>
 </body>
 </html>`);
