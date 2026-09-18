@@ -8569,8 +8569,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         category: muc.category,
         title: muc.title,
         boxes: muc.boxes,
-        labelCount: String(muc.category || '') === 'B009'
-          ? this.kkB009AllTrays().filter((t) => t.from > 0).length
+        labelCount: this.isKkConnectorRackMuc(String(muc.category || ''))
+          ? this.kkConnectorAllTrays(String(muc.category)).filter((t) => t.from > 0).length
           : muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
       }))
       .filter((g) => {
@@ -8584,15 +8584,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     title: string;
     boxes: Array<{ productType: string; groupCodes?: string[] }>;
   }): void {
-    if (String(group?.category || '') === 'B009') {
-      const labels = this.kkB009AllTrays()
+    const category = String(group?.category || '');
+    if (this.isKkConnectorRackMuc(category)) {
+      const labels = this.kkConnectorAllTrays(category)
         .filter((t) => t.from > 0)
         .map((t) => ({
-          name: this.kkB009RangeText(t.from, t.to),
+          name: this.kkConnectorRangeText(category, t.from, t.to),
           loc: t.loc
         }));
       if (!labels.length) {
-        alert('Mục B009 chưa có dải mã để in tem kệ.');
+        alert(`Mục ${category} chưa có dải mã để in tem kệ.`);
         return;
       }
       this.closeKkShelfLabelPicker();
@@ -8929,8 +8930,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return String(fallbackType || '').trim() || '—';
   }
 
-  /** B009: mỗi tầng 50 mã, 3 block cùng dải. Tầng 1–5 có mã; tầng 6–7 trống. */
-  private kkB009AllTrays(): Array<{
+  /** B009 / B016: mỗi tầng 50 mã, 3 block cùng dải. Tầng 1–5 có mã; tầng 6–7 trống. */
+  private kkConnectorAllTrays(prefix: string): Array<{
     loc: string;
     shelf: string;
     block: number;
@@ -8938,14 +8939,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     from: number;
     to: number;
   }> {
-    const shelves: Array<{ shelf: string; from: number; to: number }> = [
-      { shelf: 'S07', from: 1, to: 250 },
-      { shelf: 'S08', from: 251, to: 500 },
-      { shelf: 'S09', from: 501, to: 750 },
-      { shelf: 'S10', from: 751, to: 999 }
-    ];
     const out: Array<{ loc: string; shelf: string; block: number; level: number; from: number; to: number }> = [];
-    for (const s of shelves) {
+    for (const s of this.kkConnectorRackShelves(prefix)) {
       for (let lv = 1; lv <= 7; lv++) {
         const filled = lv <= 5;
         const from = filled ? s.from + (lv - 1) * 50 : 0;
@@ -8963,6 +8958,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
     return out;
+  }
+
+  private kkB009AllTrays(): Array<{
+    loc: string;
+    shelf: string;
+    block: number;
+    level: number;
+    from: number;
+    to: number;
+  }> {
+    return this.kkConnectorAllTrays('B009');
   }
 
   private kkB009FloorLocText(tray: { shelf: string; level: number }): string {
