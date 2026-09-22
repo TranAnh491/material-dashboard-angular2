@@ -70,6 +70,10 @@
                 <button type="button" class="wo-tab wo-tab--bag" [class.wo-tab--on]="showBagQrDialog" (click)="openBagQrDialog()" title="Soạn túi R029 theo LSX và in tem QR">
                   <i class="material-icons">qr_code_2</i> BAG
                 </button>
+                <button type="button" class="wo-tab wo-tab--guide" [class.wo-tab--on]="showGuideDialog"
+                        (click)="openGuideDialog()" title="Hướng dẫn phân việc và nguyên tắc soạn NVL">
+                  <i class="material-icons">menu_book</i> Hướng dẫn
+                </button>
                 <button type="button" class="wo-tab" (click)="showMoreDialog = true">… KHÁC</button>
                 <button type="button" class="wo-tab" [class.wo-tab--on]="!!viewByDate"
                         (click)="openViewByDatePicker()"
@@ -200,6 +204,158 @@
                 <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
                   <button mat-raised-button type="button" (click)="showMoreDialog = false">
                     <mat-icon>close</mat-icon> Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dialog: Hướng dẫn phân việc + nguyên tắc -->
+            <div class="time-range-dialog-overlay" *ngIf="showGuideDialog" (click)="closeGuideDialog()">
+              <div class="time-range-dialog wo-guide-dialog" (click)="$event.stopPropagation()">
+                <div class="dialog-header">
+                  <h4>
+                    <i class="material-icons" style="vertical-align:middle;margin-right:6px;">menu_book</i>
+                    Hướng dẫn soạn NVL / LSX
+                  </h4>
+                  <button mat-icon-button type="button" (click)="closeGuideDialog()" title="Đóng">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content wo-guide-dialog-content">
+                  <h5 class="wo-guide-title">Phân việc nhân sự</h5>
+                  <div class="wo-guide-toolbar">
+                    <input class="wo-guide-input" type="text"
+                           [(ngModel)]="woGuideStaffDraft"
+                           name="woGuideStaffDraft"
+                           placeholder="Tên nhân sự"
+                           (keydown.enter)="$event.preventDefault(); addGuideStaff()">
+                    <button type="button" class="wo-guide-add" (click)="addGuideStaff()" [disabled]="!woGuideStaffDraft.trim()">
+                      <i class="material-icons">person_add</i> Thêm nhân sự
+                    </button>
+                    <input class="wo-guide-input" type="text"
+                           [(ngModel)]="woGuideJobDraft"
+                           name="woGuideJobDraft"
+                           placeholder="Tên việc"
+                           (keydown.enter)="$event.preventDefault(); addGuideJob()">
+                    <button type="button" class="wo-guide-add" (click)="addGuideJob()" [disabled]="!woGuideJobDraft.trim()">
+                      <i class="material-icons">add</i> Thêm việc
+                    </button>
+                    <span class="wo-guide-save" *ngIf="woGuideSaving || woGuideLoading">
+                      {{ woGuideLoading ? 'Đang tải…' : 'Đang lưu…' }}
+                    </span>
+                  </div>
+                  <p class="wo-guide-hint">Bấm ô để đổi Việc chính / Việc phụ. Kéo chip sang ô khác hoặc kéo hàng nhân sự để đổi chỗ. Sửa tên nhân sự trực tiếp trên bảng.</p>
+                  <div class="wo-guide-table-wrap">
+                    <table class="wo-guide-table wo-guide-table--jobs">
+                      <thead>
+                        <tr>
+                          <th>Nhân sự</th>
+                          <th *ngFor="let col of woGuideJobs">
+                            {{ col.label }}
+                            <button type="button" class="wo-guide-del wo-guide-del--head"
+                                    *ngIf="!isGuideJobLocked(col)"
+                                    (click)="removeGuideJob(col)"
+                                    title="Xóa việc">
+                              <i class="material-icons">close</i>
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let row of woGuideStaff; let si = index"
+                            (dragover)="$event.preventDefault()"
+                            (drop)="onGuideStaffDrop(si, $event)">
+                          <th>
+                            <span class="wo-guide-drag" draggable="true"
+                                  (dragstart)="onGuideStaffDragStart(si, $event)"
+                                  title="Kéo để đổi hàng">
+                              <i class="material-icons">drag_indicator</i>
+                            </span>
+                            <input class="wo-guide-name-input"
+                                   [(ngModel)]="row.name"
+                                   [name]="'woGuideStaff-' + row.id"
+                                   (ngModelChange)="onGuideChanged()">
+                            <button type="button" class="wo-guide-del" (click)="removeGuideStaff(row)" title="Xóa nhân sự">
+                              <i class="material-icons">close</i>
+                            </button>
+                          </th>
+                          <td *ngFor="let col of woGuideJobs"
+                              class="wo-guide-cell"
+                              (click)="cycleGuideRole(row, col.id, $event)"
+                              (dragover)="$event.preventDefault()"
+                              (drop)="onGuideChipDrop(row, col.id, $event)"
+                              title="Bấm để đổi Việc chính / Việc phụ">
+                            <span class="wo-guide-chip wo-guide-chip--chinh"
+                                  *ngIf="woGuideRoleOf(row, col.id) === 'chinh'"
+                                  draggable="true"
+                                  (dragstart)="onGuideChipDragStart(row, col.id, $event)">Việc chính</span>
+                            <span class="wo-guide-chip wo-guide-chip--phu"
+                                  *ngIf="woGuideRoleOf(row, col.id) === 'phu'"
+                                  draggable="true"
+                                  (dragstart)="onGuideChipDragStart(row, col.id, $event)">Việc phụ</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <h5 class="wo-guide-title">Nguyên tắc</h5>
+                  <div class="wo-guide-table-wrap">
+                    <table class="wo-guide-table wo-guide-table--rules">
+                      <thead>
+                        <tr>
+                          <th class="wo-guide-stt">STT</th>
+                          <th>Nguyên tắc</th>
+                          <th>Mô tả</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let r of woGuideRules">
+                          <td class="wo-guide-stt">{{ r.stt }}</td>
+                          <td><strong>{{ r.title }}</strong></td>
+                          <td>{{ r.desc }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
+                  <button mat-raised-button type="button" (click)="closeGuideDialog()">
+                    <mat-icon>close</mat-icon> Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dialog: In tem LSX 10×10 cm -->
+            <div class="time-range-dialog-overlay" *ngIf="showLsxLabelDialog" (click)="closeLsxLabelDialog()">
+              <div class="time-range-dialog wo-lsx-label-dialog" (click)="$event.stopPropagation()">
+                <div class="dialog-header">
+                  <h4>
+                    <i class="material-icons" style="vertical-align:middle;margin-right:6px;">print</i>
+                    In tem LSX
+                  </h4>
+                  <button mat-icon-button type="button" (click)="closeLsxLabelDialog()" title="Đóng" [disabled]="lsxLabelPrinting">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content">
+                  <p class="wo-lsx-label-lsx">{{ lsxLabelWorkOrder?.productionOrder }}</p>
+                  <p class="wo-lsx-label-hint">Tem khổ <strong>10 cm × 10 cm</strong>, ghi số LSX để dán pallet khi cần.</p>
+                  <label class="wo-lsx-label-qty">
+                    Số lượng tem
+                    <input type="number" min="1" max="99" step="1"
+                           [(ngModel)]="lsxLabelQty"
+                           name="lsxLabelQty"
+                           [disabled]="lsxLabelPrinting">
+                  </label>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end; gap:8px;">
+                  <button mat-button type="button" (click)="closeLsxLabelDialog()" [disabled]="lsxLabelPrinting">Hủy</button>
+                  <button mat-raised-button color="primary" type="button"
+                          (click)="printLsxLabels()"
+                          [disabled]="lsxLabelPrinting || !lsxLabelQty">
+                    <mat-icon>print</mat-icon> In
                   </button>
                 </div>
               </div>
@@ -538,6 +694,13 @@
                               <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
                             </mat-select>
                           </mat-form-field>
+                          <mat-form-field class="full-width">
+                            <mat-label>Người soạn 2</mat-label>
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrderCreatedBy2" name="createdBy2">
+                              <mat-option value="">Không chọn</mat-option>
+                              <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                            </mat-select>
+                          </mat-form-field>
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
@@ -600,6 +763,7 @@
                           <th>Line</th>
                           <th>NVL thiếu</th>
                           <th>Người soạn</th>
+                          <th>Số Mã</th>
                           <th>Tình trạng</th>
                           <th>Đủ/Thiếu</th>
                           <th>Ngày nhận thông tin</th>
@@ -613,7 +777,10 @@
                           <td>{{wo.month}}</td>
                           <td>{{ (currentPage - 1) * itemsPerPage + i + 1 }}</td>
                           <td>{{wo.productCode}}</td>
-                          <td class="lsx-cell" [class.wo-lsx-pxk]="hasPxkForWorkOrder(wo)">{{wo.productionOrder}}</td>
+                          <td class="lsx-cell lsx-cell--print"
+                              [class.wo-lsx-pxk]="hasPxkForWorkOrder(wo)"
+                              (click)="openLsxLabelDialog(wo, $event)"
+                              title="In tem LSX 10×10 cm">{{wo.productionOrder}}</td>
                           <td class="wo-sl">
                             <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="printPxk(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In PXK'">
                               <i class="material-icons">print</i>
@@ -645,19 +812,28 @@
                             <span *ngIf="!canEdit()">{{ wo.missingMaterials || '—' }}</span>
                           </td>
                           <td>
-                            <select class="wo-plain-select" *ngIf="canEdit() && !isCreatedByFromOutbound(wo)"
-                                    [ngModel]="wo.createdBy || ''"
-                                    (ngModelChange)="updateWorkOrder(wo, 'createdBy', $event)">
-                              <option value="">CHỌN NGƯỜI</option>
-                              <option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
-                            </select>
-                            <span *ngIf="canEdit() && isCreatedByFromOutbound(wo)"
-                                  class="wo-created-by-outbound"
-                                  [title]="'Xuất kho: ' + (wo.createdByMemberId || '')">
-                              {{ getCreatedByDisplay(wo) }}
-                            </span>
-                            <span *ngIf="!canEdit()">{{ getCreatedByDisplay(wo) || '—' }}</span>
+                            <div class="wo-created-by-stack" *ngIf="canEdit()">
+                              <select class="wo-plain-select"
+                                      [ngModel]="getCreatedBySlot(wo, 0)"
+                                      (ngModelChange)="updateCreatedBySlot(wo, 0, $event)"
+                                      [name]="'createdBy0-' + wo.id">
+                                <option value="">CHỌN NGƯỜI</option>
+                                <option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
+                              </select>
+                              <select class="wo-plain-select"
+                                      [ngModel]="getCreatedBySlot(wo, 1)"
+                                      (ngModelChange)="updateCreatedBySlot(wo, 1, $event)"
+                                      [name]="'createdBy1-' + wo.id">
+                                <option value="">NGƯỜI 2</option>
+                                <option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
+                              </select>
+                            </div>
+                            <div class="wo-created-by-stack wo-created-by-stack--read" *ngIf="!canEdit()">
+                              <span *ngFor="let name of getCreatedByLabels(wo)">{{ name }}</span>
+                              <span *ngIf="!getCreatedByLabels(wo).length">—</span>
+                            </div>
                           </td>
+                          <td class="wo-so-ma">{{ getPxkSoMa(wo) }}</td>
                           <td>
                             <select class="wo-plain-select" [ngModel]="wo.status" (ngModelChange)="onStatusChange(wo, $event)" [disabled]="!canEdit()">
                               <option value="">Chọn tình trạng</option>

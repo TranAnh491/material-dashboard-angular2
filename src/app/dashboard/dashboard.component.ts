@@ -1317,6 +1317,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   formatWoCreatedByLabel(createdBy?: string, memberId?: string): string {
+    const raw = String(createdBy ?? '').trim();
+    const parts = raw.split(/[,;\/|\n\r]+/).map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      return parts.map((p) => this.formatWoCreatedByLabel(p)).join(' / ');
+    }
     const mid = this.woOutboundCreatedBy.normalizeMemberId(memberId || createdBy || '');
     const fromSettings = mid ? this.settingsNameByMemberId.get(mid) : '';
     if (fromSettings) return fromSettings;
@@ -1368,46 +1373,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return 'ASM1';
   }
 
-  /** Gắn mã NV scan xuất kho + tên Settings lên WO của heatmap weekly. */
+  /** Scan xuất kho không còn gắn người scan lên Người soạn WO. */
   private async applyOutboundCreatedByOnDashboard(): Promise<void> {
-    const weekWos = this.collectHeatmapWeekWorkOrders();
-    const asm1Lsx: string[] = [];
-    const asm2Lsx: string[] = [];
-    for (const wo of weekWos) {
-      const lsx = String(wo.productionOrder || '').trim();
-      if (!lsx) continue;
-      (this.dashboardOutboundFactory(wo) === 'ASM2' ? asm2Lsx : asm1Lsx).push(lsx);
-    }
-
-    const [nameMap, memberAsm1, memberAsm2] = await Promise.all([
-      this.woOutboundCreatedBy.getSettingsNameMap(),
-      this.woOutboundCreatedBy.loadLatestMemberIdByLsx('ASM1', asm1Lsx),
-      this.woOutboundCreatedBy.loadLatestMemberIdByLsx('ASM2', asm2Lsx)
-    ]);
-    this.settingsNameByMemberId = nameMap;
-
-    for (const wo of this.workOrders) {
-      const lsxNorm = this.woOutboundCreatedBy.normLsxForMatch(wo.productionOrder || '');
-      const fromOutbound =
-        this.dashboardOutboundFactory(wo) === 'ASM2'
-          ? memberAsm2.get(lsxNorm)
-          : memberAsm1.get(lsxNorm);
-      const memberId = this.woOutboundCreatedBy.normalizeMemberId(
-        String(fromOutbound || (wo as any).createdByMemberId || wo.createdBy || '')
-      );
-      const isAsp = memberId.startsWith('ASP') && memberId.length === 7;
-      if (isAsp) {
-        (wo as any).createdByMemberId = memberId;
-        if (fromOutbound) {
-          (wo as any).createdByFromOutbound = true;
-        }
-        wo.createdBy = nameMap.get(memberId) || wo.createdBy || memberId;
-      } else if (wo.createdBy) {
-        const asId = this.woOutboundCreatedBy.normalizeMemberId(wo.createdBy);
-        const named = this.settingsNameByMemberId.get(asId);
-        if (named) wo.createdBy = named;
-      }
-    }
+    return;
   }
 
   private async loadWoCreatedByStaff(): Promise<void> {
@@ -1802,8 +1770,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private normalizeCreatedBy(value: any): string {
     const raw = String(value ?? '').trim();
     if (!raw) return '';
-    const first = raw.split(/[,;\/|\n\r]+/)[0]?.trim() || '';
-    return first.replace(/\s+/g, ' ').toUpperCase();
+    const parts = raw.split(/[,;\/|\n\r]+/).map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const uniq: string[] = [];
+    for (const p of parts) {
+      const n = p.toUpperCase();
+      if (n && !uniq.includes(n)) uniq.push(n);
+      if (uniq.length >= 2) break;
+    }
+    return uniq.join('\n');
   }
 
   /** Rule giống tab Work Order: Kitting từ Waiting, Ready từ Kitting, Transfer từ Ready. */

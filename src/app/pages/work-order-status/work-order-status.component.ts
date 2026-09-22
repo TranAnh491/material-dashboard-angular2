@@ -23,6 +23,7 @@ import { WorkOrderOutboundCreatedByService } from '../../services/work-order-out
 import { WoCreatedByStaffService, WoCreatedByStaff } from '../../services/wo-created-by-staff.service';
 import { WoPxkBypassOtpService } from '../../services/wo-pxk-bypass-otp.service';
 import { PxkSkipKind, PxkSkipScanItem, WoPxkSkipCatalogService } from '../../services/wo-pxk-skip-catalog.service';
+import { WoGuideJob, WoGuideRole, WoGuideStaff, WoLsxGuideService } from '../../services/wo-lsx-guide.service';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -144,9 +145,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   readonly pageSizeOptions = [10, 25, 50];
 
   /**
-   * Người soạn: `value` phải trùng kết quả `normalizeCreatedBy(label)` (IN HOA có dấu)
-   * thì mat-select mới hiển thị đúng sau khi lưu Firebase.
-   * Danh sách lấy từ Danh mục nhân viên (KHÁC); mặc định 9 người khi chưa tải xong.
+   * Người soạn: mỗi LSX tối đa 2 tên, `value` trùng `normalizeCreatedBy` (IN HOA có dấu).
+   * Lưu Firebase cách nhau bằng xuống dòng. Danh sách từ Danh mục nhân viên (KHÁC).
    */
   createdByPickerOptions: Array<{ value: string; label: string }> = [
     { value: 'TÌNH', label: 'Tình' },
@@ -164,6 +164,30 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   staffCatalogDraft = '';
   staffCatalogLoading = false;
   staffCatalogSaving = false;
+  showGuideDialog = false;
+  woGuideJobs: WoGuideJob[] = [];
+  woGuideStaff: WoGuideStaff[] = [];
+  woGuideStaffDraft = '';
+  woGuideJobDraft = '';
+  woGuideLoading = false;
+  woGuideSaving = false;
+  private woGuideSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private woGuideDragChip: { staffId: string; jobId: string; role: WoGuideRole } | null = null;
+  private woGuideDragStaffIndex: number | null = null;
+  showLsxLabelDialog = false;
+  lsxLabelWorkOrder: WorkOrder | null = null;
+  lsxLabelQty = 1;
+  lsxLabelPrinting = false;
+  readonly woGuideRules: Array<{ stt: number; title: string; desc: string }> = [
+    { stt: 1, title: '1 người = 1 LSX', desc: 'Mỗi nhân viên chỉ phụ trách một LSX tại một thời điểm.' },
+    { stt: 2, title: 'Xong LSX này → mới sang LSX khác', desc: 'Không chuyển sang LSX tiếp theo khi LSX hiện tại chưa hoàn tất.' },
+    { stt: 3, title: 'Kệ S + Kệ R có thể chung pallet', desc: 'NVL lấy từ Kệ S và Kệ R có thể được đặt chung trên một hoặc nhiều pallet nếu cùng một LSX.' },
+    { stt: 4, title: 'Mỗi LSX có tem nhận diện riêng', desc: 'Sau khi tạo/in LSX trên phần mềm, in tem LSX và dán lên pallet/khu vực hàng để nhận diện.' },
+    { stt: 5, title: 'Không làm chung LSX', desc: 'Một người đã nhận LSX A thì chỉ làm LSX A, không đồng thời soạn LSX B.' },
+    { stt: 6, title: 'Một người chịu trách nhiệm xuyên suốt', desc: 'Người nhận LSX chịu trách nhiệm soạn đủ NVL của LSX đó từ Kệ S/R và đưa ra khu vực chờ giao.' },
+    { stt: 7, title: 'Hoàn tất → đưa ra khu vực chờ giao', desc: 'Khi soạn xong LSX, toàn bộ pallet của LSX được đưa về khu vực chờ giao LSX.' },
+    { stt: 8, title: 'Không trộn LSX', desc: 'Pallet của LSX A không được để chung với LSX B, dù cùng mã NVL.' }
+  ];
   showPxkSkipCatalogDialog = false;
   pxkSkipScanCatalog: PxkSkipScanItem[] = [];
   pxkSkipCatalogDraft = '';
@@ -237,7 +261,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     planReceivedDate: new Date(),
     notes: ''
   };
-  
+  /** Người soạn thứ 2 khi thêm LSX (tuỳ chọn). */
+  newWorkOrderCreatedBy2 = '';
+
   // Import functionality
   isImporting: boolean = false;
   importProgress: number = 0;
@@ -315,6 +341,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private _pxkLinesCache = new Map<string, PxkLine[]>();  // cache kết quả lookup
   /** LSX norm đã query pxk-import-data (tránh query lặp khi không có PXK) */
   private pxkLoadAttemptedNorms = new Set<string>();
+  private pxkSoMaLoadToken = 0;
   /** Danh sách LSX đã import PXK — đọc 1 doc index, không cần tải lines */
   private pxkIndexLsxKeys: string[] = [];
   private readonly PXK_INDEX_DOC = 'app-settings/pxk-import-lsx-index';
@@ -389,7 +416,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
     private woCreatedByStaff: WoCreatedByStaffService,
     private woPxkSkipCatalog: WoPxkSkipCatalogService,
-    private woPxkBypassOtp: WoPxkBypassOtpService
+    private woPxkBypassOtp: WoPxkBypassOtpService,
+    private woLsxGuide: WoLsxGuideService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -422,6 +450,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.flushGuideSave();
     
     // Clean up physical scanner
     this.stopPhysicalScanner();
@@ -472,12 +501,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
           if (wo.id && !byId.has(wo.id)) byId.set(wo.id, wo);
         }
         this.processLoadedWorkOrders([...byId.values()]);
-        await Promise.all([
-          this.loadPxkPresenceFromIndex(),
-          this.applyOutboundCreatedByOverrides()
-        ]);
-      } catch (e) {
-        console.error('❌ Tải LSX theo ngày thất bại:', e);
+      await Promise.all([
+        this.loadPxkPresenceFromIndex(),
+        this.applyOutboundCreatedByOverrides()
+      ]);
+      void this.ensurePxkSoMaForDisplayed();
+    } catch (e) {
+      console.error('❌ Tải LSX theo ngày thất bại:', e);
         this.applyFilters();
         this.calculateSummary();
       } finally {
@@ -628,6 +658,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.loadPxkPresenceFromIndex(),
         this.applyOutboundCreatedByOverrides()
       ]);
+      void this.ensurePxkSoMaForDisplayed();
     } catch (e) {
       console.error('❌ loadWorkOrders failed:', e);
       alert(`⚠️ Lỗi tải dữ liệu Work Order: ${(e as Error)?.message || e}`);
@@ -1059,9 +1090,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         processedWo.doneAt = (processedWo.doneAt as any).toDate();
       }
 
-      if (processedWo.createdByFromOutbound) {
-        processedWo.createdBy = String(processedWo.createdBy || '').trim();
-      } else if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
+      if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
         processedWo.createdBy = this.normalizeCreatedBy(processedWo.createdBy);
       }
       
@@ -1289,11 +1318,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     if (this.currentPage < 1) {
       this.currentPage = 1;
     }
+    void this.ensurePxkSoMaForDisplayed();
   }
 
   goToPage(page: number): void {
     const p = Math.max(1, Math.min(Math.floor(page) || 1, this.totalPages));
     this.currentPage = p;
+    void this.ensurePxkSoMaForDisplayed();
   }
 
   nextPage(): void {
@@ -1368,7 +1399,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
           id: wo.id || (wo.productionOrder + '-' + wo.productCode),
           productionOrder: (wo.productionOrder || '').trim() || '—',
           productCode: (wo.productCode || '').trim() || '—',
-          createdBy: (wo.createdBy || '').toString().trim() || '—',
+          createdBy: this.formatCreatedByOneLine(wo.createdBy) || '—',
           status: this.getStatusText(wo.status || WorkOrderStatus.WAITING),
           kittingToReadyMs,
           readyToDoneMs,
@@ -1424,6 +1455,256 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.staffCatalogDraft = '';
     this.showStaffCatalogDialog = true;
     void this.loadCreatedByStaffCatalog(true);
+  }
+
+  openGuideDialog(): void {
+    this.showGuideDialog = true;
+    this.woGuideStaffDraft = '';
+    this.woGuideJobDraft = '';
+    void this.loadWoGuide(true);
+  }
+
+  closeGuideDialog(): void {
+    this.showGuideDialog = false;
+    this.flushGuideSave();
+  }
+
+  woGuideRoleOf(row: WoGuideStaff, jobId: string): WoGuideRole {
+    return this.woLsxGuide.roleOf(row, jobId);
+  }
+
+  async loadWoGuide(forceRefresh = false): Promise<void> {
+    this.woGuideLoading = true;
+    try {
+      const data = await this.woLsxGuide.load(forceRefresh);
+      this.woGuideJobs = data.jobs;
+      this.woGuideStaff = data.staff;
+    } catch (error) {
+      console.error('Error loading LSX guide:', error);
+      const fallback = this.woLsxGuide.defaults();
+      this.woGuideJobs = fallback.jobs;
+      this.woGuideStaff = fallback.staff;
+    } finally {
+      this.woGuideLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  onGuideChanged(): void {
+    if (this.woGuideSaveTimer) clearTimeout(this.woGuideSaveTimer);
+    this.woGuideSaveTimer = setTimeout(() => {
+      this.woGuideSaveTimer = null;
+      void this.saveWoGuide();
+    }, 400);
+  }
+
+  private flushGuideSave(): void {
+    if (!this.woGuideSaveTimer) return;
+    clearTimeout(this.woGuideSaveTimer);
+    this.woGuideSaveTimer = null;
+    void this.saveWoGuide();
+  }
+
+  private async saveWoGuide(): Promise<void> {
+    this.woGuideSaving = true;
+    try {
+      await this.woLsxGuide.save({ jobs: this.woGuideJobs, staff: this.woGuideStaff });
+    } catch (error) {
+      console.error('Error saving LSX guide:', error);
+    } finally {
+      this.woGuideSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  cycleGuideRole(row: WoGuideStaff, jobId: string, event?: Event): void {
+    event?.preventDefault?.();
+    if (!row || !jobId) return;
+    const next = this.woLsxGuide.nextRole(this.woGuideRoleOf(row, jobId));
+    if (next) row.roles[jobId] = next;
+    else delete row.roles[jobId];
+    this.onGuideChanged();
+  }
+
+  addGuideStaff(): void {
+    const name = this.woGuideStaffDraft.trim();
+    if (!name) return;
+    this.woGuideStaff = [...this.woGuideStaff, { id: this.woLsxGuide.newId(), name, roles: {} }];
+    this.woGuideStaffDraft = '';
+    this.onGuideChanged();
+  }
+
+  addGuideJob(): void {
+    const label = this.woGuideJobDraft.trim();
+    if (!label) return;
+    this.woGuideJobs = [...this.woGuideJobs, { id: this.woLsxGuide.newId(), label }];
+    this.woGuideJobDraft = '';
+    this.onGuideChanged();
+  }
+
+  removeGuideStaff(row: WoGuideStaff): void {
+    if (!row?.id) return;
+    if (!confirm(`Xóa nhân sự "${row.name}" khỏi bảng hướng dẫn?`)) return;
+    this.woGuideStaff = this.woGuideStaff.filter((s) => s.id !== row.id);
+    this.onGuideChanged();
+  }
+
+  removeGuideJob(job: WoGuideJob): void {
+    if (!job?.id || this.isGuideJobLocked(job)) return;
+    if (!confirm(`Xóa việc "${job.label}" khỏi bảng hướng dẫn?`)) return;
+    this.woGuideJobs = this.woGuideJobs.filter((j) => j.id !== job.id);
+    this.woGuideStaff = this.woGuideStaff.map((s) => {
+      const roles = { ...s.roles };
+      delete roles[job.id];
+      return { ...s, roles };
+    });
+    this.onGuideChanged();
+  }
+
+  isGuideJobLocked(job: WoGuideJob): boolean {
+    return this.woLsxGuide.isLockedJob(job?.id);
+  }
+
+  onGuideChipDragStart(row: WoGuideStaff, jobId: string, event: DragEvent): void {
+    const role = this.woGuideRoleOf(row, jobId);
+    if (!role) {
+      event.preventDefault();
+      return;
+    }
+    this.woGuideDragChip = { staffId: row.id, jobId, role };
+    this.woGuideDragStaffIndex = null;
+    event.dataTransfer?.setData('text/plain', 'chip');
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    event.stopPropagation();
+  }
+
+  onGuideChipDrop(row: WoGuideStaff, jobId: string, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const drag = this.woGuideDragChip;
+    this.woGuideDragChip = null;
+    if (!drag || !row || !jobId) return;
+    const from = this.woGuideStaff.find((s) => s.id === drag.staffId);
+    if (from && (from.id !== row.id || drag.jobId !== jobId)) {
+      delete from.roles[drag.jobId];
+    }
+    row.roles[jobId] = drag.role;
+    this.onGuideChanged();
+  }
+
+  onGuideStaffDragStart(index: number, event: DragEvent): void {
+    this.woGuideDragStaffIndex = index;
+    this.woGuideDragChip = null;
+    event.dataTransfer?.setData('text/plain', 'staff');
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    event.stopPropagation();
+  }
+
+  onGuideStaffDrop(index: number, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const from = this.woGuideDragStaffIndex;
+    this.woGuideDragStaffIndex = null;
+    if (from == null || from === index) return;
+    const list = [...this.woGuideStaff];
+    const [moved] = list.splice(from, 1);
+    if (!moved) return;
+    list.splice(index, 0, moved);
+    this.woGuideStaff = list;
+    this.onGuideChanged();
+  }
+
+  openLsxLabelDialog(wo: WorkOrder, event?: Event): void {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const lsx = String(wo?.productionOrder || '').trim();
+    if (!lsx) return;
+    this.lsxLabelWorkOrder = wo;
+    this.lsxLabelQty = 1;
+    this.showLsxLabelDialog = true;
+  }
+
+  closeLsxLabelDialog(): void {
+    if (this.lsxLabelPrinting) return;
+    this.showLsxLabelDialog = false;
+    this.lsxLabelWorkOrder = null;
+  }
+
+  printLsxLabels(): void {
+    const lsx = String(this.lsxLabelWorkOrder?.productionOrder || '').trim();
+    if (!lsx) return;
+    const qty = Math.max(1, Math.min(99, Math.floor(Number(this.lsxLabelQty) || 1)));
+    this.lsxLabelQty = qty;
+    this.lsxLabelPrinting = true;
+    try {
+      const win = window.open('', '_blank', 'width=520,height=560');
+      if (!win) {
+        alert('Không mở được cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+      const safe = this.escapeHtmlForPrint(lsx);
+      const pages = Array.from({ length: qty }, () => `
+        <div class="page">
+          <div class="page__lab">LSX</div>
+          <div class="page__lsx">${safe}</div>
+        </div>`).join('');
+      win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tem LSX ${safe}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: #fff; }
+    .page {
+      width: 100mm;
+      height: 100mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8mm;
+      page-break-after: always;
+      border: 0.4mm solid #111;
+    }
+    .page:last-child { page-break-after: auto; }
+    .page__lab {
+      font-family: Arial, sans-serif;
+      font-size: 8mm;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: #111;
+      margin-bottom: 6mm;
+    }
+    .page__lsx {
+      font-family: Arial, sans-serif;
+      font-size: 14mm;
+      font-weight: 900;
+      line-height: 1.15;
+      text-align: center;
+      word-break: break-all;
+      color: #000;
+    }
+    @page { size: 100mm 100mm; margin: 0; }
+    @media print {
+      html, body { width: 100mm; height: 100mm; }
+      .page { border: 0; }
+    }
+  </style>
+</head>
+<body>${pages}</body>
+</html>`);
+      win.document.close();
+      win.focus();
+      setTimeout(() => {
+        try { win.print(); } catch {}
+      }, 250);
+      this.showLsxLabelDialog = false;
+      this.lsxLabelWorkOrder = null;
+    } finally {
+      this.lsxLabelPrinting = false;
+      this.cdr.markForCheck();
+    }
   }
 
   openPxkSkipCatalogDialog(): void {
@@ -1852,8 +2133,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.newWorkOrder.orderNumber = this.generateOrderNumber();
       }
 
-      // Normalize creator: 1 name, uppercase
-      this.newWorkOrder.createdBy = this.normalizeCreatedBy(this.newWorkOrder.createdBy);
+      this.newWorkOrder.createdBy = this.normalizeCreatedBy(
+        [this.newWorkOrder.createdBy, this.newWorkOrderCreatedBy2].filter(Boolean).join('\n')
+      );
 
       const workOrder: WorkOrder = this.applyAutoNotesForProductionLine({
         ...this.newWorkOrder,
@@ -1941,14 +2223,61 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Người soạn: chỉ 1 tên, nhập tay, lưu dạng UPPERCASE */
-  private normalizeCreatedBy(value: any): string {
+  /** Người soạn: tối đa 2 tên, UPPERCASE, lưu cách nhau bằng xuống dòng. */
+  private parseCreatedByNames(value: any): string[] {
     const raw = String(value ?? '').trim();
-    if (!raw) return '';
-    // chỉ lấy phần đầu tiên nếu người dùng nhập nhiều tên (ngăn cách bởi , ; / | hoặc xuống dòng)
-    const first = raw.split(/[,;\/|\n\r]+/)[0]?.trim() || '';
-    // gom khoảng trắng và uppercase
-    return first.replace(/\s+/g, ' ').toUpperCase();
+    if (!raw) return [];
+    const parts = raw
+      .split(/[,;\/|\n\r]+/)
+      .map((s) => s.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const uniq: string[] = [];
+    for (const p of parts) {
+      const n = p.toUpperCase();
+      if (n && !uniq.includes(n)) uniq.push(n);
+      if (uniq.length >= 2) break;
+    }
+    return uniq;
+  }
+
+  private normalizeCreatedBy(value: any): string {
+    return this.parseCreatedByNames(value).join('\n');
+  }
+
+  getCreatedBySlot(wo: WorkOrder, index: 0 | 1): string {
+    return this.parseCreatedByNames(wo?.createdBy)[index] || '';
+  }
+
+  updateCreatedBySlot(wo: WorkOrder, index: 0 | 1, value: string): void {
+    const slots: [string, string] = [
+      this.getCreatedBySlot(wo, 0),
+      this.getCreatedBySlot(wo, 1)
+    ];
+    slots[index] = this.parseCreatedByNames(value)[0] || '';
+    this.updateWorkOrder(wo, 'createdBy', slots.filter(Boolean).join('\n'));
+  }
+
+  getCreatedByLabels(wo: WorkOrder): string[] {
+    return this.parseCreatedByNames(wo?.createdBy)
+      .map((v) => this.labelForCreatedBy(v))
+      .filter(Boolean);
+  }
+
+  private labelForCreatedBy(value: string): string {
+    const key = String(value || '').trim().toUpperCase();
+    if (!key) return '';
+    const opt = this.createdByPickerOptions.find((o) => o.value === key);
+    if (opt) return opt.label;
+    const fromStaff = this.woCreatedByStaff.labelFor(key);
+    if (fromStaff && fromStaff !== key) return fromStaff;
+    return String(value || '').trim();
+  }
+
+  formatCreatedByOneLine(value: any): string {
+    return this.parseCreatedByNames(value)
+      .map((v) => this.labelForCreatedBy(v))
+      .filter(Boolean)
+      .join(' / ');
   }
 
   resetForm(): void {
@@ -1967,6 +2296,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       planReceivedDate: new Date(),
       notes: ''
     };
+    this.newWorkOrderCreatedBy2 = '';
   }
 
   private isPxkBypassGrantedFor(wo: WorkOrder): boolean {
@@ -2250,7 +2580,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Người soạn: normalize còn 1 tên + UPPERCASE (trừ khi từ outbound/zalo)
+    // Người soạn: tối đa 2 tên + UPPERCASE
     if (field === 'createdBy') {
       processedValue = this.normalizeCreatedBy(value);
     }
@@ -2492,7 +2822,7 @@ Please check the console for error details.`);
       wo.isUrgent ? 'Có' : 'Không',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
       wo.missingMaterials || '',
-      wo.createdBy || '',
+      this.formatCreatedByOneLine(wo.createdBy),
       this.getStatusText(wo.status),
       wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
@@ -4156,7 +4486,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       wo.isUrgent ? 'Có' : 'Không',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
       wo.missingMaterials || '',
-      wo.createdBy || '',
+      this.formatCreatedByOneLine(wo.createdBy),
       this.getStatusText(wo.status || WorkOrderStatus.WAITING),
       wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
@@ -4195,7 +4525,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       wo.isUrgent ? 'Yes' : 'No',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('en-US') : '',
       wo.missingMaterials || '',
-      wo.createdBy || '',
+      this.formatCreatedByOneLine(wo.createdBy),
       this.getStatusTextEnglish(wo.status || WorkOrderStatus.WAITING),
       wo.materialsStatus === 'sufficient' ? 'Sufficient' : wo.materialsStatus === 'insufficient' ? 'Insufficient' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('en-US') : '',
@@ -5060,6 +5390,36 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return result;
   }
 
+  private isPxkSoMaExcludedWarehouse(maKho: string | undefined | null): boolean {
+    const u = String(maKho || '').trim().toUpperCase();
+    return u === 'NVL_SX' || u === 'NVL_KS';
+  }
+
+  /** Số dòng PXK của LSX, không tính kho NVL_SX / NVL_KS. */
+  getPxkSoMa(wo: WorkOrder): string {
+    const lsx = String(wo?.productionOrder || '').trim();
+    if (!lsx) return '—';
+    const lines = this.getPxkLinesForLsx(lsx);
+    if (lines.length === 0) return '—';
+    const n = lines.filter((l) => !this.isPxkSoMaExcludedWarehouse(l.maKho)).length;
+    return String(n);
+  }
+
+  /** Tải dòng PXK cho LSX đang hiện trên trang để cột Số Mã đếm được. */
+  private async ensurePxkSoMaForDisplayed(): Promise<void> {
+    const token = ++this.pxkSoMaLoadToken;
+    const need = this.displayedWorkOrders.filter((wo) => {
+      const lsx = String(wo.productionOrder || '').trim();
+      if (!lsx) return false;
+      if (this.getPxkLinesForLsx(lsx).length > 0) return false;
+      return this.hasPxkForWorkOrder(wo);
+    });
+    if (need.length === 0) return;
+    await Promise.all(need.map((wo) => this.ensurePxkLoadedForLsx(wo.productionOrder || '')));
+    if (token !== this.pxkSoMaLoadToken) return;
+    this.cdr.markForCheck();
+  }
+
   /** R / B030 / B033 / B036004 + mã user thêm: PXK coi như xuất đủ, không bắt scan. */
   private isPxkAutoFullExportCode(materialCode: string): boolean {
     return this.woPxkSkipCatalog.isAutoFull(materialCode, this.pxkSkipScanCatalog);
@@ -5232,48 +5592,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return Number.isFinite(d.getTime()) ? d.getTime() : 0;
   }
 
-  /** Ghi đè Người soạn theo người scan xuất kho + tên Settings. */
+  /** Scan xuất kho không còn ghi đè cột Người soạn. */
   private async applyOutboundCreatedByOverrides(): Promise<void> {
-    const [settings, zalo] = await Promise.all([
-      this.woOutboundCreatedBy.getSettingsNameMap(),
-      this.woOutboundCreatedBy.getZaloNameMap()
-    ]);
-    const asm1Lsx: string[] = [];
-    const asm2Lsx: string[] = [];
-    for (const wo of this.workOrders) {
-      const lsx = String(wo.productionOrder || '').trim();
-      if (!lsx) continue;
-      const fac = this.resolveOutboundFactoryFilterForPxk(wo);
-      (fac === 'ASM2' ? asm2Lsx : asm1Lsx).push(lsx);
-    }
-
-    const [metaAsm1, metaAsm2] = await Promise.all([
-      this.ensureOutboundMetaForLsxList('ASM1', asm1Lsx),
-      this.ensureOutboundMetaForLsxList('ASM2', asm2Lsx)
-    ]);
-
-    for (const wo of this.workOrders) {
-      const fac = this.resolveOutboundFactoryFilterForPxk(wo);
-      const lsxNorm = this.normLsxForMatch(wo.productionOrder || '');
-      if (!lsxNorm) continue;
-
-      const meta = fac === 'ASM2' ? metaAsm2 : metaAsm1;
-      const memberId = meta.lsxToMemberId.get(lsxNorm);
-      if (!memberId) continue;
-
-      const existing = String(wo.createdBy || '').trim();
-      if (existing && !wo.createdByFromOutbound) {
-        continue;
-      }
-
-      const name = settings.get(memberId) || zalo.get(memberId) || memberId;
-      wo.createdBy = name;
-      wo.createdByFromOutbound = true;
-      wo.createdByMemberId = memberId;
-    }
-
-    this.applyFilters();
-    this.cdr.markForCheck();
+    return;
   }
 
   isCreatedByFromOutbound(wo: WorkOrder): boolean {
@@ -5281,15 +5602,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   getCreatedByDisplay(wo: WorkOrder): string {
-    const memberId = this.woOutboundCreatedBy.normalizeMemberId(String(wo.createdByMemberId || wo.createdBy || ''));
-    const v = String(wo.createdBy || '').trim();
-    if (!v && !memberId) return 'Chưa có';
-    const key = v.toUpperCase();
-    const opt = this.createdByPickerOptions.find((o) => o.value === key);
-    if (opt) return opt.label;
-    const fromStaff = this.woCreatedByStaff.labelFor(v);
-    if (fromStaff && fromStaff !== v) return fromStaff;
-    return v || memberId || 'Chưa có';
+    const labels = this.getCreatedByLabels(wo);
+    return labels.length ? labels.join('\n') : '';
   }
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */

@@ -394,12 +394,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
   /** Standard Packing theo mã (từ danh mục NVL) — dùng rule Chẵn/Lẻ khi quét. */
   private standardPackingByCode = new Map<string, number>();
 
-  /** Cập nhật Người soạn WO theo tên Settings của NV scan xuất. */
-  private syncWorkOrderCreatedByAfterExport(lsx?: string, employeeId?: string): void {
-    const po = (lsx || this.batchProductionOrder || '').trim();
-    const emp = (employeeId || this.batchEmployeeId || '').trim();
-    if (!po || !emp || emp === 'BS') return;
-    void this.woOutboundCreatedBy.syncFromOutboundScan(this.selectedFactory, po, emp);
+  /** Scan xuất không còn ghi người scan lên work order. */
+  private syncWorkOrderCreatedByAfterExport(_lsx?: string, _employeeId?: string): void {
+    return;
   }
 
   private syncWorkOrderCreatedByFromPendingScans(): void {

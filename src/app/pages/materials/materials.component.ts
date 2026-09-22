@@ -371,6 +371,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     codeCount: number;
     typeCount: number;
     types: string[];
+    prefixes: string[];
+    mucs: string[];
   }> = [];
   private kkTypeBoxesCached: Array<{
     productType: string;
@@ -7513,15 +7515,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       list.push(box);
       map.set(category, list);
     }
-    this.kkTypeBoxGroupsCached = Array.from(map.entries()).map(([category, boxesInCat]) => {
-      const sorted = this.sortKkTypeBoxesInCategory(category, boxesInCat);
-      return {
-        category,
-        title: this.kkTypeMucTitle(category),
-        boxes: sorted,
-        groups: this.kkTypeBrandGroupsOf(category, sorted)
-      };
-    });
+    this.kkTypeBoxGroupsCached = Array.from(map.entries())
+      .map(([category, boxesInCat]) => {
+        const sorted = this.sortKkTypeBoxesInCategory(category, boxesInCat);
+        return {
+          category,
+          title: this.kkTypeMucTitle(category),
+          boxes: sorted,
+          groups: this.kkTypeBrandGroupsOf(category, sorted)
+        };
+      })
+      .filter((muc) => muc.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
     return this.kkTypeBoxGroupsCached;
   }
@@ -7569,7 +7573,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return head.length ? head.join(' ') : raw;
   }
 
-  /** B009/B016/B018 chia kệ × tầng. B018: S01/S03/S05. B008 giữ phẳng. */
+  /** B009/B016/B018 chia kệ × tầng. B018: S01/S03/S05. Mục khác (B001, B007…) chỉ hiện box loại, không tiêu đề con. */
   private kkTypeBrandGroupsOf(
     category: string,
     boxes: typeof this.kkTypeBoxesCached
@@ -7586,21 +7590,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return this.kkTypeConnectorShelfGroupsOf(category, boxes);
     }
     if (category === 'B017') return this.kkTypeB017CodeGroupsOf(boxes);
-    if (category === 'B008') return undefined;
     if (this.isKkNameColsMuc(category)) return this.kkTypeNameColsGroupsOf(boxes);
-    const map = new Map<string, { title: string; boxes: typeof this.kkTypeBoxesCached }>();
-    for (const box of boxes) {
-      const head = this.kkTypeNameHeadOf(box.productType) || box.productType;
-      const key = this.foldKkTypeName(head) || head;
-      const cur = map.get(key) || { title: this.kkTypeMucTitle(head), boxes: [] };
-      cur.boxes.push(box);
-      map.set(key, cur);
-    }
-    const subMucs = Array.from(map.entries())
-      .map(([key, v]) => ({ key, title: v.title, boxes: v.boxes }))
-      .sort((a, b) => a.title.localeCompare(b.title, 'vi', { numeric: true }));
-    if (!subMucs.length) return undefined;
-    return [{ key: 'hang', title: '', boxes, subMucs }];
+    return undefined;
   }
 
   /** B036 / B042: mỗi nhóm loại một cột, xếp một hàng ngang. */
@@ -7654,15 +7645,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!map.has(prefix)) continue;
       map.get(prefix)!.push(box);
     }
-    return order.map((prefix) => {
-      const sorted = this.sortKkTypeBoxesInCategory(prefix, map.get(prefix) || []);
-      return {
-        key: prefix,
-        title: prefix,
-        boxes: sorted,
-        subMucs: [{ key: `${prefix}-all`, title: '', boxes: sorted }]
-      };
-    });
+    return order
+      .map((prefix) => {
+        const sorted = this.sortKkTypeBoxesInCategory(prefix, map.get(prefix) || []);
+        return {
+          key: prefix,
+          title: prefix,
+          boxes: sorted,
+          subMucs: [{ key: `${prefix}-all`, title: '', boxes: sorted }]
+        };
+      })
+      .filter((g) => g.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
   }
 
   /** B017: theo mã + vị trí kệ S23–S25. Trên B017100 → S25-2. */
@@ -7673,7 +7666,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     title: string;
     boxes: typeof this.kkTypeBoxesCached;
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> {
+  }> | undefined {
     const prefix = 'B017';
     const slots: Array<{ loc: string; from: number; to: number }> = [
       { loc: 'S23-1', from: 1, to: 20 },
@@ -7683,11 +7676,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       { loc: 'S25-1', from: 81, to: 100 },
       { loc: 'S25-2', from: 101, to: 999 }
     ];
-    const subMucs = slots.map((s) => ({
-      key: s.loc,
-      title: `${s.loc} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`,
-      boxes: boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, s.from, s.to))
-    }));
+    const subMucs = slots
+      .map((s) => ({
+        key: s.loc,
+        title: `${s.loc} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`,
+        boxes: boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, s.from, s.to))
+      }))
+      .filter((s) => s.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
+    if (!subMucs.length) return undefined;
     return [{ key: 'hang', title: '', boxes, subMucs }];
   }
 
@@ -8199,7 +8195,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         );
         if (!queryHit) return false;
         if (q) return true;
-        if (this.kkJOnly && v.totalLines <= 0) return false;
+        if (v.totalLines <= 0) return false;
         if (this.kkFilterUncheckedOnly && Math.max(0, v.totalLines - v.checked) <= 0) return false;
         return true;
       })
@@ -8523,7 +8519,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return '';
   }
 
-  get kkManagerRows(): Array<{ name: string; codeCount: number; typeCount: number; types: string[] }> {
+  get kkManagerRows(): Array<{
+    name: string;
+    codeCount: number;
+    typeCount: number;
+    types: string[];
+    prefixes: string[];
+    mucs: string[];
+  }> {
     const q = String(this.kkLocMapQuery || '').trim().toLowerCase();
     const sig = [
       this.kkTypeCacheRev,
@@ -8550,6 +8553,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     codeCount: number;
     typeCount: number;
     types: string[];
+    prefixes: string[];
+    mucs: string[];
   }> {
     const map = new Map<string, { productType: string; groups: Set<string>; sources: Set<string> }>();
     const bump = (productType: string, groupCodes: string[] = []) => {
@@ -8573,7 +8578,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeManagers.forEach((_name, typeKey) => bump(typeKey));
 
     const zone = this.kkLocMapWarehouseFilter;
-    const byManager = new Map<string, { display: string; types: Set<string>; codes: Set<string> }>();
+    const byManager = new Map<string, {
+      display: string;
+      types: Set<string>;
+      codes: Set<string>;
+      prefixes: Set<string>;
+      mucs: Set<string>;
+    }>();
     map.forEach((cur) => {
       const sources = Array.from(cur.sources);
       const manager = this.kkManagerNameForType(cur.productType, sources);
@@ -8581,11 +8592,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const nk = manager.toLocaleLowerCase('vi');
       let rec = byManager.get(nk);
       if (!rec) {
-        rec = { display: manager, types: new Set<string>(), codes: new Set<string>() };
+        rec = {
+          display: manager,
+          types: new Set<string>(),
+          codes: new Set<string>(),
+          prefixes: new Set<string>(),
+          mucs: new Set<string>()
+        };
         byManager.set(nk, rec);
       }
-      rec.types.add(cur.productType);
       const seen = new Set<string>();
+      const codesBefore = rec.codes.size;
       for (const src of sources) {
         for (const m of this.kkLocMapTypeCache.get(src) || []) {
           const id = String(m.id || '');
@@ -8601,19 +8618,31 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           if (code) rec.codes.add(code);
         }
       }
+      if (rec.codes.size <= codesBefore) return;
+      rec.types.add(cur.productType);
+      const groupCodes = Array.from(cur.groups);
+      for (const p of this.kkTypeGroupPrefixes(groupCodes)) rec.prefixes.add(p);
+      const muc = this.kkTypeMucTitle(this.kkTypeCategoryOf(cur.productType, groupCodes));
+      if (muc) rec.mucs.add(muc);
     });
 
-    let rows = Array.from(byManager.values()).map((rec) => ({
+    let rows = Array.from(byManager.values())
+      .filter((rec) => rec.codes.size > 0)
+      .map((rec) => ({
       name: rec.display,
       codeCount: rec.codes.size,
       typeCount: rec.types.size,
-      types: Array.from(rec.types).sort((a, b) => a.localeCompare(b, 'vi'))
+      types: Array.from(rec.types).sort((a, b) => a.localeCompare(b, 'vi')),
+      prefixes: Array.from(rec.prefixes).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })),
+      mucs: Array.from(rec.mucs).sort((a, b) => a.localeCompare(b, 'vi'))
     }));
     rows.sort((a, b) => b.codeCount - a.codeCount || a.name.localeCompare(b.name, 'vi'));
     if (query) {
       rows = rows.filter((r) =>
         r.name.toLowerCase().includes(query)
         || r.types.some((t) => t.toLowerCase().includes(query))
+        || r.prefixes.some((p) => p.toLowerCase().includes(query))
+        || r.mucs.some((m) => m.toLowerCase().includes(query))
       );
     }
     return rows;

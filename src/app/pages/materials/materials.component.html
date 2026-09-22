@@ -21,7 +21,7 @@
               · tick KK · đổi vị trí
             </p>
             <p class="kk-page__sub" *ngIf="!(kkLocMapView === 'type' && kkActiveProductType)">
-              {{ selectedFactory }} · {{ kkLocMapView === 'manager' ? 'Danh sách người quản lý và tổng số mã đang quản' : 'kiểm kê tồn kho nguyên liệu' }}
+              {{ selectedFactory }} · {{ kkLocMapView === 'manager' ? 'Danh sách người quản lý, đầu mã và mục đang quản' : 'kiểm kê tồn kho nguyên liệu' }}
             </p>
           </div>
         </div>
@@ -530,7 +530,14 @@
               <td>{{ i + 1 }}</td>
               <td>
                 <div class="kk-loc-map__mgr-name">{{ row.name }}</div>
-                <div class="kk-loc-map__mgr-types" *ngIf="row.types.length">{{ row.types.join(', ') }}</div>
+                <div class="kk-loc-map__mgr-meta" *ngIf="row.mucs.length">
+                  <span class="kk-loc-map__mgr-lab">Mục</span>
+                  {{ row.mucs.join(', ') }}
+                </div>
+                <div class="kk-loc-map__mgr-meta" *ngIf="row.prefixes.length">
+                  <span class="kk-loc-map__mgr-lab">Đầu mã</span>
+                  <span class="kk-loc-map__mgr-code" *ngFor="let p of row.prefixes">{{ p }}</span>
+                </div>
               </td>
               <td class="kk-loc-map__num">{{ row.codeCount }}</td>
               <td class="kk-loc-map__num">{{ row.typeCount }}</td>

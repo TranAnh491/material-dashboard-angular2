@@ -230,44 +230,12 @@ export class WorkOrderOutboundCreatedByService {
     }
   }
 
-  /** Sau khi xuất kho: cập nhật Người soạn = tên Settings theo mã nhân viên scan (không đè lựa chọn tay). */
+  /** Scan xuất kho không ghi Người soạn lên work order. */
   async syncFromOutboundScan(
-    factory: 'ASM1' | 'ASM2',
-    productionOrder: string,
-    employeeId: string
+    _factory: 'ASM1' | 'ASM2',
+    _productionOrder: string,
+    _employeeId: string
   ): Promise<void> {
-    const lsx = String(productionOrder || '').trim();
-    const mid = this.normalizeMemberId(employeeId);
-    if (!lsx || !mid) return;
-
-    const displayName = await this.resolveDisplayName(mid);
-    if (!displayName) return;
-
-    const wo = await this.findWorkOrder(factory, lsx);
-    if (!wo) {
-      console.log(`[WO createdBy] Không tìm WO cho LSX ${lsx}`);
-      return;
-    }
-
-    const hasManual = String(wo.createdBy || '').trim() !== '' && !wo.createdByFromOutbound;
-    if (hasManual) {
-      try {
-        await this.materialService.updateWorkOrder(wo.id, { createdByMemberId: mid } as any);
-      } catch (e) {
-        console.warn('[WO createdBy] update memberId failed:', e);
-      }
-      return;
-    }
-
-    try {
-      await this.materialService.updateWorkOrder(wo.id, {
-        createdBy: displayName,
-        createdByFromOutbound: true,
-        createdByMemberId: mid
-      } as any);
-      console.log(`[WO createdBy] ${lsx} → ${displayName} (${mid})`);
-    } catch (e) {
-      console.warn('[WO createdBy] updateWorkOrder failed:', e);
-    }
+    return;
   }
 }

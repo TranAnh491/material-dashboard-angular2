@@ -4361,12 +4361,35 @@ $asm1-toolbar-h: 36px;
     color: #0f172a;
   }
 
-  &__mgr-types {
-    margin-top: 2px;
-    font-size: 11px;
+  &__mgr-meta {
+    margin-top: 4px;
+    font-size: 12px;
     font-weight: 600;
-    color: #64748b;
-    line-height: 1.35;
+    color: #475569;
+    line-height: 1.45;
+  }
+
+  &__mgr-lab {
+    display: inline-block;
+    min-width: 52px;
+    margin-right: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  &__mgr-code {
+    display: inline-block;
+    margin: 0 4px 2px 0;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
   }
 
   &__table-foot td {
