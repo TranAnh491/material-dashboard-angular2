@@ -244,17 +244,23 @@
                       {{ woGuideLoading ? 'Đang tải…' : 'Đang lưu…' }}
                     </span>
                   </div>
-                  <p class="wo-guide-hint">Bấm ô để đổi Việc chính / Việc phụ. Kéo chip sang ô khác hoặc kéo hàng nhân sự để đổi chỗ. Sửa tên nhân sự trực tiếp trên bảng.</p>
+                  <p class="wo-guide-hint">Bấm ô để đổi Việc chính / Việc phụ. Kéo chip sang ô khác hoặc kéo hàng nhân sự để đổi chỗ. Sửa tên nhân sự, team và tên cột trực tiếp trên bảng.</p>
                   <div class="wo-guide-table-wrap">
                     <table class="wo-guide-table wo-guide-table--jobs">
                       <thead>
                         <tr>
                           <th>Nhân sự</th>
-                          <th *ngFor="let col of woGuideJobs">
-                            {{ col.label }}
+                          <th>Team</th>
+                          <th *ngFor="let col of woGuideJobs" class="wo-guide-job-head">
+                            <input class="wo-guide-name-input wo-guide-name-input--job"
+                                   [(ngModel)]="col.label"
+                                   [name]="'woGuideJob-' + col.id"
+                                   (click)="$event.stopPropagation()"
+                                   (ngModelChange)="onGuideChanged()"
+                                   title="Sửa tên cột">
                             <button type="button" class="wo-guide-del wo-guide-del--head"
                                     *ngIf="!isGuideJobLocked(col)"
-                                    (click)="removeGuideJob(col)"
+                                    (click)="removeGuideJob(col); $event.stopPropagation()"
                                     title="Xóa việc">
                               <i class="material-icons">close</i>
                             </button>
@@ -279,6 +285,14 @@
                               <i class="material-icons">close</i>
                             </button>
                           </th>
+                          <td class="wo-guide-team">
+                            <input class="wo-guide-name-input wo-guide-name-input--team"
+                                   [(ngModel)]="row.team"
+                                   [name]="'woGuideTeam-' + row.id"
+                                   placeholder="Team"
+                                   (click)="$event.stopPropagation()"
+                                   (ngModelChange)="onGuideChanged()">
+                          </td>
                           <td *ngFor="let col of woGuideJobs"
                               class="wo-guide-cell"
                               (click)="cycleGuideRole(row, col.id, $event)"
@@ -688,6 +702,13 @@
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
+                            <mat-label>Team</mat-label>
+                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.createdByTeam" name="createdByTeam">
+                              <mat-option value="">Chọn team</mat-option>
+                              <mat-option *ngFor="let team of createdByTeamChoices(newWorkOrder)" [value]="team">{{ team }}</mat-option>
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field class="full-width">
                             <mat-label>Người soạn</mat-label>
                             <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.createdBy" name="createdBy" required>
                               <mat-option value="">Chọn người</mat-option>
@@ -813,6 +834,13 @@
                           </td>
                           <td>
                             <div class="wo-created-by-stack" *ngIf="canEdit()">
+                              <select class="wo-plain-select wo-plain-select--team"
+                                      [ngModel]="getCreatedByTeam(wo)"
+                                      (ngModelChange)="updateCreatedByTeam(wo, $event)"
+                                      [name]="'createdByTeam-' + wo.id">
+                                <option value="">CHỌN TEAM</option>
+                                <option *ngFor="let team of createdByTeamChoices(wo)" [value]="team">{{ team }}</option>
+                              </select>
                               <select class="wo-plain-select"
                                       [ngModel]="getCreatedBySlot(wo, 0)"
                                       (ngModelChange)="updateCreatedBySlot(wo, 0, $event)"
@@ -829,8 +857,9 @@
                               </select>
                             </div>
                             <div class="wo-created-by-stack wo-created-by-stack--read" *ngIf="!canEdit()">
+                              <span class="wo-created-by-team" *ngIf="getCreatedByTeam(wo)">{{ getCreatedByTeam(wo) }}</span>
                               <span *ngFor="let name of getCreatedByLabels(wo)">{{ name }}</span>
-                              <span *ngIf="!getCreatedByLabels(wo).length">—</span>
+                              <span *ngIf="!getCreatedByTeam(wo) && !getCreatedByLabels(wo).length">—</span>
                             </div>
                           </td>
                           <td class="wo-so-ma">{{ getPxkSoMa(wo) }}</td>

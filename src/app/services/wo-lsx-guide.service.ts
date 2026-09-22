@@ -11,6 +11,7 @@ export interface WoGuideJob {
 export interface WoGuideStaff {
   id: string;
   name: string;
+  team: string;
   roles: Record<string, WoGuideRole>;
 }
 
@@ -36,16 +37,16 @@ export class WoLsxGuideService {
       { id: 'giao', label: 'Giao LSX' }
     ];
     const staff: WoGuideStaff[] = [
-      { id: 'dat', name: 'Đạt', roles: { nhanNvl: 'chinh', catR: 'phu' } },
-      { id: 'huong', name: 'Hương', roles: { soanS: 'chinh', catS: 'phu' } },
-      { id: 'linh', name: 'Linh', roles: { soanR: 'chinh', giao: 'phu' } },
-      { id: 'nhan', name: 'Nhân', roles: { soanR: 'chinh', catR: 'phu' } },
-      { id: 'tinh', name: 'Tình', roles: { soanS: 'chinh', catS: 'phu' } },
-      { id: 'tuan', name: 'Tuấn', roles: { nhanNvl: 'chinh', catR: 'phu' } },
-      { id: 'tuan-nho', name: 'Tuấn nhỏ', roles: { soanR: 'phu', giao: 'chinh' } },
-      { id: 'thai', name: 'Thái', roles: { soanR: 'chinh', giao: 'phu' } },
-      { id: 'thanh', name: 'Thanh', roles: { nhanNvl: 'phu', catR: 'chinh' } },
-      { id: 'thuy', name: 'Thủy', roles: { soanS: 'chinh', catS: 'phu' } }
+      { id: 'dat', name: 'Đạt', team: '', roles: { nhanNvl: 'chinh', catR: 'phu' } },
+      { id: 'huong', name: 'Hương', team: '', roles: { soanS: 'chinh', catS: 'phu' } },
+      { id: 'linh', name: 'Linh', team: '', roles: { soanR: 'chinh', giao: 'phu' } },
+      { id: 'nhan', name: 'Nhân', team: '', roles: { soanR: 'chinh', catR: 'phu' } },
+      { id: 'tinh', name: 'Tình', team: '', roles: { soanS: 'chinh', catS: 'phu' } },
+      { id: 'tuan', name: 'Tuấn', team: '', roles: { nhanNvl: 'chinh', catR: 'phu' } },
+      { id: 'tuan-nho', name: 'Tuấn nhỏ', team: '', roles: { soanR: 'phu', giao: 'chinh' } },
+      { id: 'thai', name: 'Thái', team: '', roles: { soanR: 'chinh', giao: 'phu' } },
+      { id: 'thanh', name: 'Thanh', team: '', roles: { nhanNvl: 'phu', catR: 'chinh' } },
+      { id: 'thuy', name: 'Thủy', team: '', roles: { soanS: 'chinh', catS: 'phu' } }
     ];
     return { jobs, staff };
   }
@@ -93,13 +94,23 @@ export class WoLsxGuideService {
   private normalize(raw: Partial<WoGuideData> | null | undefined): WoGuideData {
     const fallback = this.defaults();
     const savedJobs = Array.isArray(raw?.jobs) ? raw.jobs : [];
-    const extraJobs = savedJobs
-      .map((j) => ({
-        id: String(j?.id || this.newId()),
-        label: String(j?.label || '').trim()
-      }))
-      .filter((j) => j.label && !this.isLockedJob(j.id));
-    const jobs = [...fallback.jobs, ...extraJobs];
+    const savedLabelById = new Map<string, string>();
+    for (const j of savedJobs) {
+      const id = String(j?.id || '').trim();
+      const label = String(j?.label || '').trim();
+      if (id && label) savedLabelById.set(id, label);
+    }
+    const lockedIds = new Set(fallback.jobs.map((j) => j.id));
+    const jobs: WoGuideJob[] = fallback.jobs.map((j) => ({
+      id: j.id,
+      label: savedLabelById.get(j.id) || j.label
+    }));
+    for (const j of savedJobs) {
+      const id = String(j?.id || this.newId());
+      const label = String(j?.label || '').trim();
+      if (!label || lockedIds.has(id) || jobs.some((x) => x.id === id)) continue;
+      jobs.push({ id, label });
+    }
     const staff = Array.isArray(raw?.staff)
       ? raw.staff
           .map((s) => {
@@ -112,6 +123,7 @@ export class WoLsxGuideService {
             return {
               id: String(s?.id || this.newId()),
               name: String(s?.name || '').trim(),
+              team: String(s?.team || '').trim(),
               roles
             };
           })
@@ -123,7 +135,12 @@ export class WoLsxGuideService {
   private clone(data: WoGuideData): WoGuideData {
     return {
       jobs: data.jobs.map((j) => ({ ...j })),
-      staff: data.staff.map((s) => ({ id: s.id, name: s.name, roles: { ...s.roles } }))
+      staff: data.staff.map((s) => ({
+        id: s.id,
+        name: s.name,
+        team: s.team || '',
+        roles: { ...s.roles }
+      }))
     };
   }
 }

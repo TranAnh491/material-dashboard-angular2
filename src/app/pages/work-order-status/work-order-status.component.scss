@@ -111,8 +111,8 @@ html, body {
 }
 
 .time-range-dialog.wo-guide-dialog {
-  max-width: min(1180px, 96vw);
-  width: 96%;
+  max-width: min(1760px, 98vw);
+  width: 98%;
   max-height: min(90vh, 920px);
   display: flex;
   flex-direction: column;
@@ -186,7 +186,7 @@ html, body {
 }
 
 .wo-guide-table--jobs {
-  min-width: 920px;
+  min-width: 1040px;
 }
 
 .wo-guide-table--rules {
@@ -335,10 +335,17 @@ html, body {
     width: 118px;
     color: #fff;
     text-align: center;
+    font-weight: 800;
 
     &:focus {
       color: #0f172a;
     }
+  }
+
+  &--team {
+    width: 88px;
+    text-align: center;
+    font-weight: 700;
   }
 }
 
@@ -347,11 +354,25 @@ html, body {
     white-space: nowrap;
   }
 
+  thead th.wo-guide-job-head {
+    padding: 6px 8px;
+  }
+
   tbody th {
     display: flex;
     align-items: center;
     gap: 4px;
     min-width: 168px;
+  }
+
+  tbody td.wo-guide-team {
+    background: #f8fafc;
+    min-width: 108px;
+    padding: 6px 8px;
+  }
+
+  tbody tr:nth-child(even) td.wo-guide-team {
+    background: #f1f5f9;
   }
 
   thead .wo-guide-del--head {
@@ -2561,7 +2582,7 @@ textarea.mat-input-element {
     th:nth-child(10), td:nth-child(10) { min-width: 80px !important; } /* Ngày Giao NVL */
     th:nth-child(11), td:nth-child(11) { min-width: 50px !important; } /* Line */
     th:nth-child(12), td:nth-child(12) { min-width: 60px !important; } /* NVL thiếu */
-    th:nth-child(13), td:nth-child(13) { min-width: 30px !important; } /* Người soạn */
+    th:nth-child(13), td:nth-child(13) { min-width: 104px !important; } /* Người soạn */
     th:nth-child(14), td:nth-child(14) { min-width: 30px !important; } /* Tình trạng */
     th:nth-child(15), td:nth-child(15) { min-width: 50px !important; } /* Đủ/Thiếu */
     th:nth-child(16), td:nth-child(16) { min-width: 80px !important; } /* Ngày nhận thông tin */
@@ -5131,7 +5152,17 @@ textarea.mat-input-element {
   flex-direction: column;
   align-items: stretch;
   gap: 2px;
-  min-width: 88px;
+  min-width: 104px;
+}
+
+.wo-plain-select--team {
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.wo-created-by-team {
+  color: #0f766e;
+  font-weight: 800;
 }
 
 .wo-created-by-stack--read {

@@ -159,6 +159,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     { value: 'ÂN', label: 'Ân' },
     { value: 'HOÀNG', label: 'Hoàng' },
   ];
+  createdByTeamOptions: string[] = [];
   staffCatalog: WoCreatedByStaff[] = [];
   showStaffCatalogDialog = false;
   staffCatalogDraft = '';
@@ -258,6 +259,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     productionLine: '',
     status: WorkOrderStatus.WAITING,
     createdBy: '',
+    createdByTeam: '',
     planReceivedDate: new Date(),
     notes: ''
   };
@@ -436,6 +438,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.loadUserDepartment();
     this.loadDeletePermission();
     void this.loadCreatedByStaffCatalog();
+    void this.loadWoGuide();
     void this.loadPxkSkipCatalog();
     
     // Factory access disabled for work order tab - only applies to materials inventory
@@ -1093,11 +1096,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       if (processedWo.createdBy != null && String(processedWo.createdBy).trim() !== '') {
         processedWo.createdBy = this.normalizeCreatedBy(processedWo.createdBy);
       }
+      processedWo.createdByTeam = String(processedWo.createdByTeam || '').trim();
       
       return processedWo;
     });
     
     this.workOrders = processedWorkOrders;
+    this.syncCreatedByTeamOptions();
     
     // Auto-mark old completed work orders as completed
     this.markOldCompletedWorkOrders();
@@ -1399,7 +1404,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
           id: wo.id || (wo.productionOrder + '-' + wo.productCode),
           productionOrder: (wo.productionOrder || '').trim() || '—',
           productCode: (wo.productCode || '').trim() || '—',
-          createdBy: this.formatCreatedByOneLine(wo.createdBy) || '—',
+          createdBy: this.formatCreatedByWithTeam(wo) || '—',
           status: this.getStatusText(wo.status || WorkOrderStatus.WAITING),
           kittingToReadyMs,
           readyToDoneMs,
@@ -1479,11 +1484,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const data = await this.woLsxGuide.load(forceRefresh);
       this.woGuideJobs = data.jobs;
       this.woGuideStaff = data.staff;
+      this.syncCreatedByTeamOptions();
     } catch (error) {
       console.error('Error loading LSX guide:', error);
       const fallback = this.woLsxGuide.defaults();
       this.woGuideJobs = fallback.jobs;
       this.woGuideStaff = fallback.staff;
+      this.syncCreatedByTeamOptions();
     } finally {
       this.woGuideLoading = false;
       this.cdr.markForCheck();
@@ -1509,6 +1516,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.woGuideSaving = true;
     try {
       await this.woLsxGuide.save({ jobs: this.woGuideJobs, staff: this.woGuideStaff });
+      this.syncCreatedByTeamOptions();
     } catch (error) {
       console.error('Error saving LSX guide:', error);
     } finally {
@@ -1529,7 +1537,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   addGuideStaff(): void {
     const name = this.woGuideStaffDraft.trim();
     if (!name) return;
-    this.woGuideStaff = [...this.woGuideStaff, { id: this.woLsxGuide.newId(), name, roles: {} }];
+    this.woGuideStaff = [...this.woGuideStaff, { id: this.woLsxGuide.newId(), name, team: '', roles: {} }];
     this.woGuideStaffDraft = '';
     this.onGuideChanged();
   }
@@ -2136,6 +2144,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.newWorkOrder.createdBy = this.normalizeCreatedBy(
         [this.newWorkOrder.createdBy, this.newWorkOrderCreatedBy2].filter(Boolean).join('\n')
       );
+      this.newWorkOrder.createdByTeam = String(this.newWorkOrder.createdByTeam || '').trim();
 
       const workOrder: WorkOrder = this.applyAutoNotesForProductionLine({
         ...this.newWorkOrder,
@@ -2280,6 +2289,48 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       .join(' / ');
   }
 
+  private formatCreatedByWithTeam(wo: WorkOrder): string {
+    const team = String(wo?.createdByTeam || '').trim();
+    const names = this.formatCreatedByOneLine(wo?.createdBy);
+    return [team, names].filter(Boolean).join(' / ');
+  }
+
+  private syncCreatedByTeamOptions(): void {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    const add = (raw: unknown) => {
+      const team = String(raw || '').trim();
+      if (!team) return;
+      const key = team.toLocaleUpperCase('vi');
+      if (seen.has(key)) return;
+      seen.add(key);
+      list.push(team);
+    };
+    for (const s of this.woGuideStaff) add(s.team);
+    for (const wo of this.workOrders) add(wo.createdByTeam);
+    list.sort((a, b) => a.localeCompare(b, 'vi'));
+    this.createdByTeamOptions = list;
+  }
+
+  createdByTeamChoices(wo?: WorkOrder | Partial<WorkOrder> | null): string[] {
+    const current = String(wo?.createdByTeam || '').trim();
+    if (
+      current &&
+      !this.createdByTeamOptions.some((t) => t.toLocaleUpperCase('vi') === current.toLocaleUpperCase('vi'))
+    ) {
+      return [current, ...this.createdByTeamOptions];
+    }
+    return this.createdByTeamOptions;
+  }
+
+  getCreatedByTeam(wo: WorkOrder): string {
+    return String(wo?.createdByTeam || '').trim();
+  }
+
+  updateCreatedByTeam(wo: WorkOrder, value: string): void {
+    this.updateWorkOrder(wo, 'createdByTeam', String(value || '').trim());
+  }
+
   resetForm(): void {
     this.newWorkOrder = {
       year: new Date().getFullYear(),
@@ -2293,6 +2344,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
           productionLine: '',
     status: WorkOrderStatus.WAITING,
     createdBy: '',
+      createdByTeam: '',
       planReceivedDate: new Date(),
       notes: ''
     };
@@ -2584,6 +2636,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     if (field === 'createdBy') {
       processedValue = this.normalizeCreatedBy(value);
     }
+    if (field === 'createdByTeam') {
+      processedValue = String(value || '').trim();
+    }
     
     let updatedWorkOrder: WorkOrder = { 
       ...workOrder, 
@@ -2597,6 +2652,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       workOrder.createdBy = processedValue;
       workOrder.createdByFromOutbound = false;
       delete (workOrder as any).createdByMemberId;
+    }
+    if (field === 'createdByTeam') {
+      workOrder.createdByTeam = processedValue;
     }
 
     if (field === 'productionLine') {
@@ -2822,7 +2880,7 @@ Please check the console for error details.`);
       wo.isUrgent ? 'Có' : 'Không',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
       wo.missingMaterials || '',
-      this.formatCreatedByOneLine(wo.createdBy),
+      this.formatCreatedByWithTeam(wo),
       this.getStatusText(wo.status),
       wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
@@ -4486,7 +4544,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       wo.isUrgent ? 'Có' : 'Không',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('vi-VN') : '',
       wo.missingMaterials || '',
-      this.formatCreatedByOneLine(wo.createdBy),
+      this.formatCreatedByWithTeam(wo),
       this.getStatusText(wo.status || WorkOrderStatus.WAITING),
       wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('vi-VN') : '',
@@ -4525,7 +4583,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       wo.isUrgent ? 'Yes' : 'No',
       wo.deliveryDate ? new Date(wo.deliveryDate).toLocaleDateString('en-US') : '',
       wo.missingMaterials || '',
-      this.formatCreatedByOneLine(wo.createdBy),
+      this.formatCreatedByWithTeam(wo),
       this.getStatusTextEnglish(wo.status || WorkOrderStatus.WAITING),
       wo.materialsStatus === 'sufficient' ? 'Sufficient' : wo.materialsStatus === 'insufficient' ? 'Insufficient' : '',
       wo.planReceivedDate ? new Date(wo.planReceivedDate).toLocaleDateString('en-US') : '',

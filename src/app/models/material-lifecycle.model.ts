@@ -84,6 +84,8 @@ export interface WorkOrder {
   productionLine: string;
   status: WorkOrderStatus;
   createdBy: string;
+  /** Team soạn LSX — chọn trong cột Người soạn. */
+  createdByTeam?: string;
   /** true khi Người soạn được gán từ người scan xuất kho (Settings / outbound). */
   createdByFromOutbound?: boolean;
   /** Mã nhân viên scan xuất (ASPxxxx). */
