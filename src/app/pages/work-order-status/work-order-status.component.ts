@@ -5390,18 +5390,18 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return result;
   }
 
-  private isPxkSoMaExcludedWarehouse(maKho: string | undefined | null): boolean {
+  private isPxkSoMaExcludedLine(maKho: string | undefined | null): boolean {
     const u = String(maKho || '').trim().toUpperCase();
-    return u === 'NVL_SX' || u === 'NVL_KS';
+    return !u || u === 'NVL_SX' || u === 'NVL_KS';
   }
 
-  /** Số dòng PXK của LSX, không tính kho NVL_SX / NVL_KS. */
+  /** Số dòng PXK của LSX, không tính kho NVL_SX / NVL_KS và dòng không có kho. */
   getPxkSoMa(wo: WorkOrder): string {
     const lsx = String(wo?.productionOrder || '').trim();
     if (!lsx) return '—';
     const lines = this.getPxkLinesForLsx(lsx);
     if (lines.length === 0) return '—';
-    const n = lines.filter((l) => !this.isPxkSoMaExcludedWarehouse(l.maKho)).length;
+    const n = lines.filter((l) => !this.isPxkSoMaExcludedLine(l.maKho)).length;
     return String(n);
   }
 
