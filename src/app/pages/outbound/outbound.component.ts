@@ -1407,7 +1407,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       }
 
       const [exportedKeys, iqcMap] = await Promise.all([
-        this.loadBsExportedKeys(items.map(it => it.lsx)),
+        this.loadBsExportedKeys(items),
         this.loadBsIqcMap(items)
       ]);
 
@@ -1440,14 +1440,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
     return `${String(materialCode || '').trim().toUpperCase()}|${String(po || '').replace(/\s+/g, '').toUpperCase()}`;
   }
 
-  private async loadBsExportedKeys(lsxList: string[]): Promise<Set<string>> {
-    const unique = [...new Set(lsxList.map(s => String(s || '').trim()).filter(Boolean))];
+  private async loadBsExportedKeys(items: BsPendingItem[]): Promise<Set<string>> {
     const keys = new Set<string>();
-    if (unique.length === 0) return keys;
+    const uniqueLsx = [...new Set(items.map(it => String(it.lsx || '').trim()).filter(Boolean))];
     const FIRESTORE_IN_MAX = 30;
     try {
-      for (let i = 0; i < unique.length; i += FIRESTORE_IN_MAX) {
-        const chunk = unique.slice(i, i + FIRESTORE_IN_MAX);
+      for (let i = 0; i < uniqueLsx.length; i += FIRESTORE_IN_MAX) {
+        const chunk = uniqueLsx.slice(i, i + FIRESTORE_IN_MAX);
         const snap = await this.firestore
           .collection('outbound-materials', ref =>
             ref.where('factory', '==', this.selectedFactory).where('productionOrder', 'in', chunk)
@@ -1457,6 +1456,23 @@ export class OutboundComponent implements OnInit, OnDestroy {
         (snap?.docs || []).forEach(doc => {
           const d = doc.data() as any;
           keys.add(this.bsMatchKey(d.productionOrder, d.materialCode, d.poNumber || d.po));
+        });
+      }
+
+      // Phiếu BS không LSX: khớp theo mã + PO từ bản ghi bsExport (productionOrder rỗng)
+      const hasNoLsx = items.some(it => !String(it.lsx || '').trim());
+      if (hasNoLsx) {
+        const snap = await this.firestore
+          .collection('outbound-materials', ref =>
+            ref.where('factory', '==', this.selectedFactory).where('bsExport', '==', true).limit(3000)
+          )
+          .get()
+          .toPromise();
+        (snap?.docs || []).forEach(doc => {
+          const d = doc.data() as any;
+          const po = String(d.productionOrder || '').trim();
+          if (po) return;
+          keys.add(this.bsMatchKey('', d.materialCode, d.poNumber || d.po));
         });
       }
     } catch (e) {
@@ -1516,7 +1532,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   async deleteBsItem(item: BsPendingItem): Promise<void> {
-    if (!confirm(`Xoá khỏi danh sách BS?\n${item.materialCode} | PO: ${item.po} | LSX: ${item.lsx}`)) return;
+    if (!confirm(`Xoá khỏi danh sách BS?\n${item.materialCode} | PO: ${item.po} | LSX: ${item.lsx || '—'}`)) return;
     try {
       const docSnap = await this.firestore.collection('pxk-bs-data').doc(item.docId).get().toPromise();
       if (docSnap && docSnap.exists) {
@@ -1658,7 +1674,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
           poNumber: line.po,
           exportQuantity: line.qty,
           unit: item.unit,
-          productionOrder: item.lsx,
+          productionOrder: String(item.lsx || '').trim(),
           importDate: line.imd,
           exportDate,
           createdAt: exportDate,

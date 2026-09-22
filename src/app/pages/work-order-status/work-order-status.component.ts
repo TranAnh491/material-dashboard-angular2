@@ -5011,6 +5011,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const hasMaCtu = colIdx(h, 'Mã Ctừ', 'Ma Ctu', 'MaCtu', 'Mã chứng từ', 'Ma chung tu', 'Chứng từ', 'Loại ctừ') >= 0;
         const hasLsx = colIdx(h, 'Số lệnh sản xuất', 'So lenh san xuat', 'SoLenhSanXuat', 'Số lệnh SX', 'So lenh SX', 'Lệnh sản xuất', 'Lenh san xuat', 'LSX', 'Số LSX') >= 0;
         const hasMaVatTu = colIdx(h, 'Mã vật tư', 'Ma vat tu', 'MaVatTu', 'Mã VT', 'Ma VT', 'Vật tư') >= 0;
+        // Phiếu Xuất BS: cho phép file không có cột / không có giá trị LSX
+        if (this.isBsImport) return hasMaCtu && hasMaVatTu;
         return hasMaCtu && hasLsx && hasMaVatTu;
       };
       let headerRowIndex = -1;
@@ -5063,6 +5065,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         idxMaCtu = colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') >= 0 ? colIdx(headers, 'Mã Ctừ', 'Ma Ctu', 'MaCtu') : COL_A;
         idxSoChungTu = colIdx(headers, 'Số Chứng Từ', 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') >= 0 ? colIdx(headers, 'Số Chứng Từ', 'Số Ctừ', 'So Ctu', 'Số CT', 'So CT') : COL_B;
         idxSoLenhSX = colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'Số lệnh SX', 'So lenh SX', 'LSX', 'Số LSX') >= 0 ? colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'Số lệnh SX', 'So lenh SX', 'LSX', 'Số LSX') : COL_C;
+        // BS: không có cột LSX → không đọc cột C (tránh lấy nhầm số CT làm LSX)
+        if (this.isBsImport && colIdx(headers, 'Số lệnh sản xuất', 'So lenh san xuat', 'Số lệnh SX', 'So lenh SX', 'LSX', 'Số LSX') < 0) {
+          idxSoLenhSX = -1;
+        }
         idxMaVatTu = colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') >= 0 ? colIdx(headers, 'Mã vật tư', 'Ma vat tu', 'MaVatTu') : COL_F;
         idxSoPO = colIdx(headers, 'Số PO', 'So PO', 'PO') >= 0 ? colIdx(headers, 'Số PO', 'So PO', 'PO') : COL_I;
         idxMaKho = colIdx(headers, 'Mã Kho', 'Ma Kho', 'MaKho');
@@ -5087,7 +5093,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         headerRowIndex = 0;
         idxMaCtu = COL_A;
         idxSoChungTu = COL_B;
-        idxSoLenhSX = COL_C;
+        idxSoLenhSX = this.isBsImport ? -1 : COL_C;
         idxMaVatTu = COL_F;
         idxSoPO = COL_I;
         idxMaKho = COL_K;
@@ -5149,6 +5155,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       /** Xác định factory từ prefix LSX: KZ → ASM1, LH → ASM2 */
       const getFactoryFromLsx = (lsxStr: string): 'ASM1' | 'ASM2' =>
         String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
+      /** Key nhóm phiếu BS không có LSX — lưu Firestore lsx='' */
+      const BS_NO_LSX_KEY = '__NO_LSX__';
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
       const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number,
         tenVatTuCol = -1, dinhMucCol = -1, tenTPCol = -1, tongSLYCauCol = -1, luongYeuCauCol = -1, maKhachHangCol = -1, soPOKHCol = -1, phanTramHaoHutCol = -1, ghiChuCol = -1) => {
@@ -5162,13 +5170,27 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           const isDn = v === 'DN' || v.includes('DN');
           if (!isPx && !isDn) continue;
           cnt++;
-          const pxkLsxRaw = getFullLsxFromCell(row[lsxCol]);
-          if (!pxkLsxRaw) continue;
-          if (!isValidLsxFormat(pxkLsxRaw)) continue;
-          const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || pxkLsxRaw;
-          const storeKey = (pxkLsxRaw.toUpperCase().startsWith('KZLSX') || pxkLsxRaw.toUpperCase().startsWith('LHLSX') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
+          const pxkLsxRaw = lsxCol >= 0 ? getFullLsxFromCell(row[lsxCol]) : '';
+          let storeKey = '';
+          if (this.isBsImport) {
+            // Xuất BS: cho phép dòng không có LSX (hoặc LSX không đúng format chuẩn)
+            if (!pxkLsxRaw) {
+              storeKey = BS_NO_LSX_KEY;
+            } else if (isValidLsxFormat(pxkLsxRaw)) {
+              const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || pxkLsxRaw;
+              storeKey = (pxkLsxRaw.toUpperCase().startsWith('KZLSX') || pxkLsxRaw.toUpperCase().startsWith('LHLSX') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
+            } else {
+              storeKey = pxkLsxRaw;
+            }
+          } else {
+            if (!pxkLsxRaw) continue;
+            if (!isValidLsxFormat(pxkLsxRaw)) continue;
+            const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || pxkLsxRaw;
+            storeKey = (pxkLsxRaw.toUpperCase().startsWith('KZLSX') || pxkLsxRaw.toUpperCase().startsWith('LHLSX') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
+          }
           const soChungTu = String(row[soChungTuCol] ?? '').trim();
           const materialCode = String(row[vatTuCol] ?? '').trim();
+          if (!materialCode) continue;
           const qtyRaw = row[qtyCol];
           const quantity = typeof qtyRaw === 'number' ? qtyRaw : parseFloat(String(qtyRaw ?? '0').replace(/,/g, '')) || 0;
           const unit = String(row[dvtCol] ?? '').trim();
@@ -5286,7 +5308,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
       if (total === 0) {
         if (rowsWithPx > 0) {
-          alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột Số lệnh SX đang đọc: ${colLetter(idxSoLenhSXFinal)} (cột ${idxSoLenhSXFinal + 1}).`);
+          if (this.isBsImport) {
+            alert(`Import PXK Bổ Sung: Tìm thấy ${rowsWithPx} dòng PX/DN nhưng không đọc được mã vật tư/lượng.\nCột Mã vật tư đang đọc: ${colLetter(idxMaVatTuFinal)} (cột ${idxMaVatTuFinal + 1}).`);
+          } else {
+            alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột Số lệnh SX đang đọc: ${colLetter(idxSoLenhSXFinal)} (cột ${idxSoLenhSXFinal + 1}).`);
+          }
         } else if (rows.length > dataStartRow) {
           alert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
         } else {
@@ -5306,20 +5332,26 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         // Chỉ lưu các LSX vừa import, dùng dữ liệu đã merge (this.pxkDataByLsx)
         for (const lsxKey of Object.keys(byLsx)) {
           const lines = this.pxkDataByLsx[lsxKey] || [];
-          const factorySave = getFactoryFromLsx(lsxKey);
-          const docId = `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+          const isNoLsx = this.isBsImport && (lsxKey === BS_NO_LSX_KEY || !String(lsxKey || '').trim());
+          const lsxForDoc = isNoLsx ? '' : lsxKey;
+          const factorySave: 'ASM1' | 'ASM2' = isNoLsx
+            ? (this.selectedFactory === 'ASM2' ? 'ASM2' : 'ASM1')
+            : getFactoryFromLsx(lsxKey);
+          const docId = isNoLsx
+            ? `${factorySave}_NO_LSX`
+            : `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
           const sanitizedLines = lines.map(sanitizeLine);
           try {
             const targetCollection = this.isBsImport ? 'pxk-bs-data' : 'pxk-import-data';
             await this.firestore.collection(targetCollection).doc(docId).set({
-              lsx: lsxKey,
+              lsx: lsxForDoc,
               factory: factorySave,
               lines: sanitizedLines,
               importedAt: new Date(),
               ...(this.isBsImport ? { isBoSung: true } : {})
             });
             saveOk++;
-            console.log(`[PXK Save] ✅ Đã lưu LSX ${lsxKey} (${sanitizedLines.length} dòng), docId: ${docId}`);
+            console.log(`[PXK Save] ✅ Đã lưu LSX ${lsxForDoc || '(không LSX)'} (${sanitizedLines.length} dòng), docId: ${docId}`);
           } catch (innerErr) {
             saveErrors++;
             console.error(`[PXK Save] ❌ Lỗi LSX ${lsxKey}:`, innerErr);
@@ -5329,16 +5361,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         if (saveErrors > 0) {
           alert(`⚠️ Import PXK: ${saveOk} LSX lưu thành công, ${saveErrors} LSX bị lỗi. Mở F12 Console để xem chi tiết.`);
         }
-        const lsxList = Object.keys(byLsx).sort();
+        const lsxList = Object.keys(byLsx).map(k => (k === BS_NO_LSX_KEY ? '(không LSX)' : k)).sort();
         const maxShow = 15;
         const lsxDisplay = lsxList.length <= maxShow
           ? lsxList.join(', ')
           : lsxList.slice(0, maxShow).join(', ') + ` và ${lsxList.length - maxShow} LSX khác`;
-        if (!this.isBsImport && lsxList.length > 0) {
-          this.pxkIndexLsxKeys = [...new Set([...this.pxkIndexLsxKeys, ...lsxList])];
-          await this.savePxkIndexKeys(lsxList, false);
+        if (!this.isBsImport && Object.keys(byLsx).length > 0) {
+          const indexKeys = Object.keys(byLsx).filter(k => k && k !== BS_NO_LSX_KEY);
+          this.pxkIndexLsxKeys = [...new Set([...this.pxkIndexLsxKeys, ...indexKeys])];
+          await this.savePxkIndexKeys(indexKeys, false);
         }
-        alert(`Đã import PXK: ${total} dòng, ${lsxList.length} LSX.\n\nLSX đã import:\n${lsxDisplay}`);
+        alert(`Đã import PXK${this.isBsImport ? ' Bổ Sung' : ''}: ${total} dòng, ${lsxList.length} phiếu.\n\nLSX đã import:\n${lsxDisplay}`);
         this.calculateSummary();
       }
     } catch (err) {

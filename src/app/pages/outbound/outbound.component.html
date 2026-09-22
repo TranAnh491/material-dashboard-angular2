@@ -195,7 +195,7 @@
             <div class="ob-m-bs__card-main">
               <div class="ob-m-bs__code">{{ item.materialCode }}</div>
               <div class="ob-m-bs__meta">
-                <span>{{ item.lsx }}</span>
+                <span>{{ item.lsx || '—' }}</span>
                 <span aria-hidden="true">·</span>
                 <span>PO {{ item.po }}</span>
                 <span aria-hidden="true">·</span>
@@ -708,7 +708,7 @@
           <tbody>
             <tr *ngFor="let item of filteredBsItems; let i = index; trackBy: trackByIndex" [class.bs-table__row--done]="item.exported">
               <td class="bs-table__idx">{{ i + 1 }}</td>
-              <td class="mono">{{ item.lsx }}</td>
+              <td class="mono">{{ item.lsx || '—' }}</td>
               <td class="strong">{{ item.materialCode }}</td>
               <td class="muted">{{ item.tenVatTu }}</td>
               <td>{{ item.po }}</td>
@@ -1067,7 +1067,7 @@
       <div>
         <div class="bs-scan-dialog__title">📦 Scan Xuất Bổ Sung</div>
         <div class="bs-scan-dialog__sub" *ngIf="bsScanItem">
-          {{ bsScanItem.materialCode }} &nbsp;|&nbsp; PO: {{ bsScanItem.po }} &nbsp;|&nbsp; LSX: {{ bsScanItem.lsx }}
+          {{ bsScanItem.materialCode }} &nbsp;|&nbsp; PO: {{ bsScanItem.po }} &nbsp;|&nbsp; LSX: {{ bsScanItem.lsx || '—' }}
         </div>
       </div>
       <button type="button" class="bs-scan-dialog__close" (click)="closeBsScanDialog()">✕</button>
