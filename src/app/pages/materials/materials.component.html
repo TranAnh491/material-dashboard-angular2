@@ -657,6 +657,8 @@
                 </div>
               </div>
               <ng-container *ngIf="!isKkConnectorRackMuc(muc.category)">
+              <div [class.kk-nhua-board]="isKkPrefixColsMuc(muc.category)"
+                   [class.kk-nhua-board--row]="isKkNameColsMuc(muc.category)">
               <div class="kk-type-group"
                    *ngFor="let g of muc.groups || []"
                    [class.kk-type-group--bare]="!g.title">
@@ -666,11 +668,11 @@
                         (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key), $event)">
                   <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key)) ? 'expand_more' : 'expand_less' }}</i>
                   <strong>{{ g.title }}</strong>
-                  <span>{{ g.subMucs.length }} {{ muc.category === 'B009' ? 'tầng' : 'mục' }}</span>
+                  <span>{{ isKkPrefixColsMuc(muc.category) ? (g.boxes.length + ' loại') : (g.subMucs.length + (muc.category === 'B009' ? ' tầng' : ' mục')) }}</span>
                 </button>
                 <ng-container *ngIf="!g.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
                   <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
-                    <div class="kk-type-muc__bar">
+                    <div class="kk-type-muc__bar" *ngIf="s.title">
                       <button type="button"
                               class="kk-type-submuc__head"
                               (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key, s.key), $event)">
@@ -687,7 +689,7 @@
                         Reset
                       </button>
                     </div>
-                    <div class="kk-type-grid" *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
+                    <div class="kk-type-grid" *ngIf="!s.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
                       <button
                         type="button"
                         class="kk-type-box"
@@ -720,6 +722,7 @@
                     </div>
                   </div>
                 </ng-container>
+              </div>
               </div>
               </ng-container>
               <div class="kk-type-grid" *ngIf="!muc.groups?.length">

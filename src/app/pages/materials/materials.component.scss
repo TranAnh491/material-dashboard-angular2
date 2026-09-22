@@ -5541,6 +5541,35 @@ $asm1-toolbar-h: 36px;
   width: auto;
 }
 
+.kk-nhua-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  align-items: start;
+
+  .kk-type-group {
+    margin: 0;
+    padding: 8px;
+    border-left: 0;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    min-width: 0;
+  }
+
+  &--row {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+
+    .kk-type-group {
+      flex: 1 1 0;
+      min-width: 220px;
+    }
+  }
+}
+
 .kk-type-group {
   display: flex;
   flex-direction: column;
@@ -5649,7 +5678,7 @@ $asm1-toolbar-h: 36px;
 
   &__cols {
     display: grid;
-    grid-template-columns: repeat(4, minmax(248px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
     gap: 10px;
     overflow-x: auto;
     padding-bottom: 2px;

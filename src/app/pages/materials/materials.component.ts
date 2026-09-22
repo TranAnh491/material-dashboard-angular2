@@ -7532,8 +7532,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!raw) return 'Khác';
     if (raw === 'Chưa gán danh mục') return raw;
     if (this.isKkDauNoiMuc(raw, groupCodes)) return this.kkDauNoiGroupKey({ groupCodes });
-    if (this.isKkDauCotMuc(raw, groupCodes)) return 'ĐẦU CỐT';
+    const prefixes = this.kkTypeGroupPrefixes(groupCodes);
     const bPrefix = this.kkTypeSharedBPrefix(groupCodes);
+    if (bPrefix === 'B018') return 'B018';
+    if (this.isKkDauCotMuc(raw, groupCodes)) return 'ĐẦU CỐT';
+    if (this.isKkNhuaType(prefixes, raw)) return 'NHUA';
+    if (this.isKkDayCapType(prefixes, raw)) return 'DAYCAP';
     if (bPrefix) return bPrefix;
     if (/DAU\s*NOI/.test(this.foldKkTypeName(raw))) return 'Khác';
     return this.kkTypeNameHeadOf(raw);
@@ -7575,11 +7579,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     boxes: typeof this.kkTypeBoxesCached;
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
   }> | undefined {
+    if (category === 'NHUA') return this.kkTypePrefixColsGroupsOf(boxes, ['B011', 'B012', 'B014', 'B013']);
+    if (category === 'DAYCAP') return this.kkTypePrefixColsGroupsOf(boxes, ['B003', 'B005', 'B002', 'B006']);
     if (!/^B\d{3}$/.test(category)) return undefined;
     if (category === 'B009' || category === 'B016' || category === 'B018') {
       return this.kkTypeConnectorShelfGroupsOf(category, boxes);
     }
+    if (category === 'B017') return this.kkTypeB017CodeGroupsOf(boxes);
     if (category === 'B008') return undefined;
+    if (this.isKkNameColsMuc(category)) return this.kkTypeNameColsGroupsOf(boxes);
     const map = new Map<string, { title: string; boxes: typeof this.kkTypeBoxesCached }>();
     for (const box of boxes) {
       const head = this.kkTypeNameHeadOf(box.productType) || box.productType;
@@ -7592,6 +7600,94 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .map(([key, v]) => ({ key, title: v.title, boxes: v.boxes }))
       .sort((a, b) => a.title.localeCompare(b.title, 'vi', { numeric: true }));
     if (!subMucs.length) return undefined;
+    return [{ key: 'hang', title: '', boxes, subMucs }];
+  }
+
+  /** B036 / B042: mỗi nhóm loại một cột, xếp một hàng ngang. */
+  private kkTypeNameColsGroupsOf(
+    boxes: typeof this.kkTypeBoxesCached
+  ): Array<{
+    key: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+  }> {
+    const map = new Map<string, { title: string; boxes: typeof this.kkTypeBoxesCached }>();
+    for (const box of boxes) {
+      const head = this.kkTypeNameHeadOf(box.productType) || box.productType;
+      const key = this.foldKkTypeName(head) || head;
+      const cur = map.get(key) || { title: head, boxes: [] };
+      cur.boxes.push(box);
+      map.set(key, cur);
+    }
+    return Array.from(map.entries())
+      .map(([key, v]) => {
+        const sorted = this.sortKkTypeBoxesInCategory(key, v.boxes);
+        return {
+          key,
+          title: v.title,
+          boxes: sorted,
+          subMucs: [{ key: `${key}-all`, title: '', boxes: sorted }]
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, 'vi', { numeric: true }));
+  }
+
+  /** Mục Nhựa / Dây cáp: từng đầu mã một cột, ô loại nằm trong cột đó. */
+  private kkTypePrefixColsGroupsOf(
+    boxes: typeof this.kkTypeBoxesCached,
+    order: string[]
+  ): Array<{
+    key: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+  }> {
+    const map = new Map<string, typeof this.kkTypeBoxesCached>();
+    for (const p of order) map.set(p, []);
+    for (const box of boxes) {
+      const prefixes = this.kkTypeGroupPrefixes(box.groupCodes);
+      const prefix = order.find((p) => prefixes.includes(p))
+        || this.kkTypeSharedBPrefix(box.groupCodes)
+        || prefixes[0]
+        || '';
+      if (!map.has(prefix)) continue;
+      map.get(prefix)!.push(box);
+    }
+    return order.map((prefix) => {
+      const sorted = this.sortKkTypeBoxesInCategory(prefix, map.get(prefix) || []);
+      return {
+        key: prefix,
+        title: prefix,
+        boxes: sorted,
+        subMucs: [{ key: `${prefix}-all`, title: '', boxes: sorted }]
+      };
+    });
+  }
+
+  /** B017: theo mã + vị trí kệ S23–S25. Trên B017100 → S25-2. */
+  private kkTypeB017CodeGroupsOf(
+    boxes: typeof this.kkTypeBoxesCached
+  ): Array<{
+    key: string;
+    title: string;
+    boxes: typeof this.kkTypeBoxesCached;
+    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+  }> {
+    const prefix = 'B017';
+    const slots: Array<{ loc: string; from: number; to: number }> = [
+      { loc: 'S23-1', from: 1, to: 20 },
+      { loc: 'S23-2', from: 21, to: 40 },
+      { loc: 'S24-1', from: 41, to: 60 },
+      { loc: 'S24-2', from: 61, to: 80 },
+      { loc: 'S25-1', from: 81, to: 100 },
+      { loc: 'S25-2', from: 101, to: 999 }
+    ];
+    const subMucs = slots.map((s) => ({
+      key: s.loc,
+      title: `${s.loc} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`,
+      boxes: boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, s.from, s.to))
+    }));
     return [{ key: 'hang', title: '', boxes, subMucs }];
   }
 
@@ -7687,6 +7783,44 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return category === 'B009' || category === 'B016' || category === 'B018';
   }
 
+  isKkNhuaMuc(category: string): boolean {
+    return category === 'NHUA';
+  }
+
+  isKkDayCapMuc(category: string): boolean {
+    return category === 'DAYCAP';
+  }
+
+  isKkPrefixColsMuc(category: string): boolean {
+    return this.isKkNhuaMuc(category) || this.isKkDayCapMuc(category) || this.isKkNameColsMuc(category);
+  }
+
+  isKkNameColsMuc(category: string): boolean {
+    return category === 'B036' || category === 'B042';
+  }
+
+  private isKkNhuaPrefix(prefix: string): boolean {
+    return prefix === 'B011' || prefix === 'B012' || prefix === 'B014' || prefix === 'B013';
+  }
+
+  private isKkDayCapPrefix(prefix: string): boolean {
+    return prefix === 'B003' || prefix === 'B005' || prefix === 'B002' || prefix === 'B006';
+  }
+
+  /** Loại có một hoặc nhiều đầu mã nhựa, hoặc tên loại là nhựa. */
+  private isKkNhuaType(prefixes: string[], productType = ''): boolean {
+    if (prefixes.length && prefixes.every((p) => this.isKkNhuaPrefix(p))) return true;
+    const fold = this.foldKkTypeName(this.kkTypeNameHeadOf(productType) || productType);
+    return /^NHUA\b/.test(fold) || fold === 'PLASTIC';
+  }
+
+  /** Loại có một hoặc nhiều đầu mã dây cáp (vd B002+B005), hoặc tên loại là dây cáp. */
+  private isKkDayCapType(prefixes: string[], productType = ''): boolean {
+    if (prefixes.length && prefixes.every((p) => this.isKkDayCapPrefix(p))) return true;
+    const fold = this.foldKkTypeName(this.kkTypeNameHeadOf(productType) || productType);
+    return /^DAY\s*CAP/.test(fold) || fold === 'CABLE';
+  }
+
   kkShelfBlockNos(shelf: string): number[] {
     const n = jKhoMatBlocksForRow(shelf);
     return Array.from({ length: n }, (_, i) => i + 1);
@@ -7741,6 +7875,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private isKkDauCotMuc(productType: string, groupCodes: string[] = []): boolean {
     if (this.isKkDauNoiMuc(productType, groupCodes)) return false;
+    if (this.kkTypeSharedBPrefix(groupCodes) === 'B018') return false;
     const fold = this.foldKkTypeName(productType);
     return /DAU\s*COT/.test(fold) || /\bTERMINAL/.test(fold);
   }
@@ -7824,6 +7959,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (category === 'Khác') return 'Mục khác';
     if (category === 'ĐẦU NỐI') return 'Mục Đầu nối';
     if (category === 'ĐẦU CỐT') return 'Mục Đầu cốt (Terminal)';
+    if (category === 'NHUA') return 'Mục Nhựa';
+    if (category === 'DAYCAP') return 'Mục Dây cáp';
     if (/^B\d{3}$/.test(category)) return `Mục ${category}`;
     const lower = category.toLocaleLowerCase('vi');
     const pretty = lower ? lower.charAt(0).toLocaleUpperCase('vi') + lower.slice(1) : category;
@@ -8007,7 +8144,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return cur;
     };
     for (const e of this.kkCatalogEntries) {
-      bump(e.productType).groups.add(e.groupCode);
+      const group = String(e.groupCode || '').trim();
+      bump(e.productType, group ? [group] : []).groups.add(e.groupCode);
     }
     for (const r of this.kkLocMapByType) {
       bump(r.productType, r.groupCodes);
