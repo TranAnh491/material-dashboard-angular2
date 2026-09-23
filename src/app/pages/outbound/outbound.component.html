@@ -422,6 +422,9 @@
       <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('import-px')">
         <i class="material-icons">upload_file</i> Import PX
       </button>
+      <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('import-bs')">
+        <i class="material-icons">playlist_add</i> Import BS
+      </button>
       <button type="button" class="ob-m-sheet__row" (click)="runMobileSheetAction('qc')">
         <i class="material-icons">policy</i> QC rule
       </button>
@@ -553,6 +556,10 @@
               <a class="dropdown-item" href="javascript:void(0)" (click)="openPxImportPopup()">
                 <i class="material-icons">upload_file</i>
                 Import PX
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="openBsImportPopup()">
+                <i class="material-icons">playlist_add</i>
+                Import BS
               </a>
               <a class="dropdown-item" href="javascript:void(0)" (click)="openQcRuleModal()">
                 <i class="material-icons">policy</i>
@@ -1208,6 +1215,69 @@
       <button type="button" class="px-import-dialog__apply" (click)="applyPxImportSelected()"
               [disabled]="pxImportBusy || pxImportSelectedOkCount === 0">
         Trừ tồn {{ pxImportSelectedOkCount }} mã/PO
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="px-import-overlay" *ngIf="showBsImportPopup" (click)="closeBsImportPopup()">
+  <div class="px-import-dialog" (click)="$event.stopPropagation()" role="dialog" aria-label="Import BS">
+    <div class="px-import-dialog__head">
+      <div>
+        <h3>Import BS</h3>
+        <p>
+          Nhận phiếu Xuất Bổ Sung vào danh sách <strong>Xuất BS</strong>.
+          File không có LSX (hoặc để trống) → hệ thống gán <strong>{{ bsCommonLsx }}</strong>.
+        </p>
+      </div>
+      <button type="button" class="px-import-dialog__x" (click)="closeBsImportPopup()" [disabled]="bsImportBusy" aria-label="Đóng">×</button>
+    </div>
+
+    <div class="px-import-dialog__bar">
+      <button type="button" (click)="downloadBsImportTemplate()" [disabled]="bsImportBusy">Template</button>
+      <button type="button" (click)="pickBsImportFile()" [disabled]="bsImportBusy">
+        {{ bsImportBusy ? 'Đang xử lý…' : 'Chọn file' }}
+      </button>
+      <span class="px-import-dialog__file" *ngIf="bsImportFileName">{{ bsImportFileName }}</span>
+    </div>
+
+    <div class="px-import-dialog__sum" *ngIf="bsImportRows.length">
+      {{ bsImportRows.length }} dòng · Trong đó <b>{{ bsImportCommonCount }}</b> dòng → <b>{{ bsCommonLsx }}</b>
+    </div>
+    <div class="px-import-dialog__sum px-import-dialog__sum--empty" *ngIf="!bsImportRows.length">
+      Chưa có file. Tải template hoặc chọn Excel/CSV (Mã, PO, Lượng; LSX tùy chọn).
+    </div>
+
+    <div class="px-import-dialog__table" *ngIf="bsImportRows.length">
+      <table>
+        <thead>
+          <tr>
+            <th>LSX</th>
+            <th>Mã</th>
+            <th>Tên VT</th>
+            <th>PO</th>
+            <th>Lượng</th>
+            <th>ĐVT</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of bsImportRows; let i = index">
+            <td><input type="text" [(ngModel)]="r.lsx" name="bsLsx{{i}}" [disabled]="bsImportBusy" /></td>
+            <td><input type="text" [(ngModel)]="r.materialCode" name="bsCode{{i}}" [disabled]="bsImportBusy" /></td>
+            <td><input type="text" [(ngModel)]="r.tenVatTu" name="bsTen{{i}}" [disabled]="bsImportBusy" /></td>
+            <td><input type="text" [(ngModel)]="r.po" name="bsPo{{i}}" [disabled]="bsImportBusy" /></td>
+            <td><input type="number" [(ngModel)]="r.quantity" name="bsQty{{i}}" min="0" step="any" [disabled]="bsImportBusy" /></td>
+            <td><input type="text" [(ngModel)]="r.unit" name="bsUnit{{i}}" [disabled]="bsImportBusy" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="px-import-dialog__foot">
+      <button type="button" (click)="closeBsImportPopup()" [disabled]="bsImportBusy">Đóng</button>
+      <button type="button" class="px-import-dialog__apply" (click)="saveBsImportRows()"
+              [disabled]="bsImportBusy || !bsImportRows.length">
+        {{ bsImportBusy ? 'Đang lưu…' : 'Lưu vào Xuất BS' }}
       </button>
     </div>
   </div>

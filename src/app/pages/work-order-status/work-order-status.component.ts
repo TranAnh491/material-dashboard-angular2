@@ -5063,7 +5063,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const norm = (s: string) => s.toLowerCase().replace(/\s/g, '').replace(/[àáảãạăắằẳẵặâấầẩẫậ]/g, 'a').replace(/[đ]/g, 'd').replace(/[èéẻẽẹêếềểễệ]/g, 'e').replace(/[ìíỉĩị]/g, 'i').replace(/[òóỏõọôốồổỗộơớờởỡợ]/g, 'o').replace(/[ùúủũụưứừửữự]/g, 'u');
       const colIdx = (headers: string[], ...names: string[]): number => {
         for (const name of names) {
-          const i = headers.findIndex((h: string) => norm(h).includes(norm(name)) || norm(name).includes(norm(h)));
+          const nName = norm(name);
+          if (!nName) continue;
+          const i = headers.findIndex((h: string) => {
+            const nh = norm(h);
+            // Bỏ qua ô header trống — `''.includes` sẽ khớp mọi tên cột (bug nhận nhầm cột LSX)
+            if (!nh) return false;
+            return nh.includes(nName) || nName.includes(nh);
+          });
           if (i >= 0) return i;
         }
         return -1;
@@ -5216,8 +5223,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       /** Xác định factory từ prefix LSX: KZ → ASM1, LH → ASM2 */
       const getFactoryFromLsx = (lsxStr: string): 'ASM1' | 'ASM2' =>
         String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
-      /** Key nhóm phiếu BS không có LSX — lưu Firestore lsx='' */
+      /** Key nhóm phiếu BS không có LSX — lưu Firestore lsx='LSX Chung' */
       const BS_NO_LSX_KEY = '__NO_LSX__';
+      const BS_COMMON_LSX = 'LSX Chung';
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
       const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number,
         tenVatTuCol = -1, dinhMucCol = -1, tenTPCol = -1, tongSLYCauCol = -1, luongYeuCauCol = -1, maKhachHangCol = -1, soPOKHCol = -1, phanTramHaoHutCol = -1, ghiChuCol = -1) => {
@@ -5235,13 +5243,15 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           let storeKey = '';
           if (this.isBsImport) {
             // Xuất BS: cho phép dòng không có LSX (hoặc LSX không đúng format chuẩn)
-            if (!pxkLsxRaw) {
+            const blankLsx = !pxkLsxRaw || /^(N\/?A|-|—|–|NONE|NULL|\.)$/i.test(pxkLsxRaw);
+            if (blankLsx) {
               storeKey = BS_NO_LSX_KEY;
             } else if (isValidLsxFormat(pxkLsxRaw)) {
               const matchedLsx = findMatchingWoLsx(pxkLsxRaw) || pxkLsxRaw;
               storeKey = (pxkLsxRaw.toUpperCase().startsWith('KZLSX') || pxkLsxRaw.toUpperCase().startsWith('LHLSX') || /\d{4}[\/\-\.]\d+/.test(pxkLsxRaw)) ? pxkLsxRaw : matchedLsx;
             } else {
-              storeKey = pxkLsxRaw;
+              // LSX lạ / không chuẩn → vẫn gom phiếu không LSX (hiển thị & xuất BS được)
+              storeKey = BS_NO_LSX_KEY;
             }
           } else {
             if (!pxkLsxRaw) continue;
@@ -5356,14 +5366,16 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const pxkLsxRaw = getFullLsxFromCell(row[idxSoLenhSXFinal]);
         if (pxkLsxRaw) pxkLsxSamples.push(pxkLsxRaw);
       }
-      // Merge: cùng số CT ghi đè, khác số CT thêm mới
-      for (const [lsxKey, newLines] of Object.entries(byLsx)) {
-        const existing = this.pxkDataByLsx[lsxKey] || [];
-        const newSoCtSet = new Set(newLines.map(l => l.soChungTu ?? ''));
-        const kept = existing.filter(l => !newSoCtSet.has(l.soChungTu ?? ''));
-        this.pxkDataByLsx[lsxKey] = [...kept, ...newLines];
+      // Merge: cùng số CT ghi đè, khác số CT thêm mới — chỉ cho PXK thường (không trộn vào BS)
+      if (!this.isBsImport) {
+        for (const [lsxKey, newLines] of Object.entries(byLsx)) {
+          const existing = this.pxkDataByLsx[lsxKey] || [];
+          const newSoCtSet = new Set(newLines.map(l => l.soChungTu ?? ''));
+          const kept = existing.filter(l => !newSoCtSet.has(l.soChungTu ?? ''));
+          this.pxkDataByLsx[lsxKey] = [...kept, ...newLines];
+        }
+        this.invalidatePxkCache();
       }
-      this.invalidatePxkCache();
       const total = Object.values(byLsx).reduce((s, arr) => s + arr.length, 0);
       const storedKeys = Object.keys(byLsx);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
@@ -5388,20 +5400,49 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           }
           return out;
         };
+        const lineMergeKey = (l: any): string => {
+          const ct = String(l?.soChungTu || '').trim();
+          if (ct) return `ct:${ct}|${String(l?.materialCode || '').trim().toUpperCase()}`;
+          return `mp:${String(l?.materialCode || '').trim().toUpperCase()}|${String(l?.po || '').replace(/\s+/g, '').toUpperCase()}`;
+        };
         let saveOk = 0;
         let saveErrors = 0;
-        // Chỉ lưu các LSX vừa import, dùng dữ liệu đã merge (this.pxkDataByLsx)
         for (const lsxKey of Object.keys(byLsx)) {
-          const lines = this.pxkDataByLsx[lsxKey] || [];
           const isNoLsx = this.isBsImport && (lsxKey === BS_NO_LSX_KEY || !String(lsxKey || '').trim());
-          const lsxForDoc = isNoLsx ? '' : lsxKey;
+          const lsxForDoc = isNoLsx ? BS_COMMON_LSX : lsxKey;
           const factorySave: 'ASM1' | 'ASM2' = isNoLsx
-            ? (this.selectedFactory === 'ASM2' ? 'ASM2' : 'ASM1')
+            ? (this.mapDisplayFactoryToOperationalAsm(this.selectedFactory) || 'ASM1')
             : getFactoryFromLsx(lsxKey);
           const docId = isNoLsx
-            ? `${factorySave}_NO_LSX`
+            ? `${factorySave}_LSX_Chung`
             : `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-          const sanitizedLines = lines.map(sanitizeLine);
+          let linesToSave: any[] = byLsx[lsxKey] || [];
+          if (!this.isBsImport) {
+            linesToSave = this.pxkDataByLsx[lsxKey] || linesToSave;
+          } else {
+            // BS: merge với phiếu đã có trên Firestore (giữ done), không lấy từ cache PXK thường
+            try {
+              const prevSnap = await this.firestore.collection('pxk-bs-data').doc(docId).get().toPromise();
+              if (prevSnap?.exists) {
+                const prevLines: any[] = ((prevSnap.data() as any)?.lines || []) as any[];
+                const map = new Map<string, any>();
+                prevLines.forEach(l => map.set(lineMergeKey(l), { ...l }));
+                for (const l of linesToSave) {
+                  const k = lineMergeKey(l);
+                  const old = map.get(k);
+                  if (old) {
+                    map.set(k, { ...old, ...l, done: !!old.done });
+                  } else {
+                    map.set(k, { ...l, done: false });
+                  }
+                }
+                linesToSave = [...map.values()];
+              }
+            } catch (mergeErr) {
+              console.warn('[PXK BS] merge existing failed, overwrite with import only', mergeErr);
+            }
+          }
+          const sanitizedLines = linesToSave.map(sanitizeLine);
           try {
             const targetCollection = this.isBsImport ? 'pxk-bs-data' : 'pxk-import-data';
             await this.firestore.collection(targetCollection).doc(docId).set({
@@ -5422,7 +5463,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         if (saveErrors > 0) {
           alert(`⚠️ Import PXK: ${saveOk} LSX lưu thành công, ${saveErrors} LSX bị lỗi. Mở F12 Console để xem chi tiết.`);
         }
-        const lsxList = Object.keys(byLsx).map(k => (k === BS_NO_LSX_KEY ? '(không LSX)' : k)).sort();
+        const lsxList = Object.keys(byLsx).map(k => (k === BS_NO_LSX_KEY ? BS_COMMON_LSX : k)).sort();
         const maxShow = 15;
         const lsxDisplay = lsxList.length <= maxShow
           ? lsxList.join(', ')

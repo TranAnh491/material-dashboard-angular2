@@ -71,6 +71,18 @@ export interface PxImportRow {
   allocations: PxImportAlloc[];
 }
 
+export interface BsImportPreviewRow {
+  lsx: string;
+  materialCode: string;
+  po: string;
+  quantity: number;
+  unit: string;
+  tenVatTu: string;
+}
+
+/** LSX mặc định khi file Import BS không có / để trống cột LSX */
+export const BS_COMMON_LSX = 'LSX Chung';
+
 export interface OutboundMaterial {
   id?: string;
   factory?: string;
@@ -224,6 +236,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
   pxImportBusy = false;
   pxImportFileName = '';
   pxImportRows: PxImportRow[] = [];
+
+  /** Import BS (More) → lưu vào pxk-bs-data, hiện ở Xuất BS */
+  showBsImportPopup = false;
+  bsImportBusy = false;
+  bsImportFileName = '';
+  bsImportRows: BsImportPreviewRow[] = [];
+  readonly bsCommonLsx = BS_COMMON_LSX;
 
   /** Ẩn nút Home nổi / toggler navbar toàn cục khi đang ở Outbound mobile (styles.css) */
   private readonly outboundMobileBodyClass = 'ob-outbound-mobile-layout';
@@ -1380,31 +1399,53 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.bsError = '';
     this.bsItems = [];
     try {
-      const snap = await this.firestore
-        .collection('pxk-bs-data', ref => ref.where('factory', '==', this.selectedFactory))
-        .get().toPromise();
-      if (!snap || snap.empty) { this.bsLoading = false; return; }
+      const factory = this.selectedFactory;
+      const commonDocId = this.bsCommonDocId(factory);
+      const legacyNoLsxDocId = `${factory}_NO_LSX`;
+      const [snap, commonSnap, legacySnap] = await Promise.all([
+        this.firestore
+          .collection('pxk-bs-data', ref => ref.where('factory', '==', factory))
+          .get()
+          .toPromise(),
+        this.firestore.collection('pxk-bs-data').doc(commonDocId).get().toPromise(),
+        this.firestore.collection('pxk-bs-data').doc(legacyNoLsxDocId).get().toPromise()
+      ]);
+
+      const docsById = new Map<string, any>();
+      (snap?.docs || []).forEach(doc => docsById.set(doc.id, doc.data()));
+      if (commonSnap?.exists) docsById.set(commonSnap.id, commonSnap.data());
+      if (legacySnap?.exists) docsById.set(legacySnap.id, legacySnap.data());
+
+      if (docsById.size === 0) {
+        this.bsLoading = false;
+        return;
+      }
+
       const items: BsPendingItem[] = [];
-      for (const doc of snap.docs) {
-        const data = doc.data() as any;
-        const lines: any[] = data.lines || [];
+      docsById.forEach((data: any, docId: string) => {
+        const lsx = this.normalizeBsDisplayLsx(String(data?.lsx ?? ''), docId);
+        const lines: any[] = data?.lines || [];
         lines.forEach((line: any, idx: number) => {
+          const materialCode = String(
+            line?.materialCode || line?.maVatTu || line?.maHang || ''
+          ).trim();
+          if (!materialCode) return;
           items.push({
-            docId: doc.id,
-            lsx: data.lsx || '',
-            factory: data.factory || this.selectedFactory,
+            docId,
+            lsx,
+            factory: data?.factory || factory,
             lineIndex: idx,
-            materialCode: line.materialCode || '',
-            po: line.po || '',
-            quantity: Number(line.quantity) || 0,
-            unit: line.unit || '',
-            tenVatTu: line.tenVatTu || '',
-            done: !!line.done,
-            exported: !!line.done,
+            materialCode,
+            po: String(line?.po || line?.soPO || '').trim(),
+            quantity: Number(line?.quantity ?? line?.soLuong ?? 0) || 0,
+            unit: String(line?.unit || line?.dvt || '').trim(),
+            tenVatTu: String(line?.tenVatTu || '').trim(),
+            done: !!line?.done,
+            exported: !!line?.done,
             iqcStatus: ''
           });
         });
-      }
+      });
 
       const [exportedKeys, iqcMap] = await Promise.all([
         this.loadBsExportedKeys(items),
@@ -1419,7 +1460,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
         if (iqc) it.iqcStatus = iqc;
       }
 
-      items.sort((a, b) => a.lsx.localeCompare(b.lsx) || a.materialCode.localeCompare(b.materialCode));
+      // LSX Chung ưu tiên lên đầu
+      items.sort((a, b) => {
+        const aCommon = this.isBsCommonLsx(a.lsx) ? 0 : 1;
+        const bCommon = this.isBsCommonLsx(b.lsx) ? 0 : 1;
+        if (aCommon !== bCommon) return aCommon - bCommon;
+        return a.lsx.localeCompare(b.lsx) || a.materialCode.localeCompare(b.materialCode);
+      });
       this.bsItems = items;
     } catch (e: any) {
       this.bsError = 'Không tải được danh sách Xuất BS.';
@@ -1427,6 +1474,36 @@ export class OutboundComponent implements OnInit, OnDestroy {
     } finally {
       this.bsLoading = false;
     }
+  }
+
+  private bsCommonDocId(factory: string = this.selectedFactory): string {
+    return `${factory}_LSX_Chung`;
+  }
+
+  private isBsCommonLsx(lsx: string): boolean {
+    const t = String(lsx || '').trim();
+    if (!t || t === '__NO_LSX__') return true;
+    return t.replace(/\s+/g, '').toUpperCase() === 'LSXCHUNG';
+  }
+
+  /** Chuẩn hoá LSX hiển thị / xuất: thiếu LSX → LSX Chung */
+  private normalizeBsDisplayLsx(rawLsx: string, docId?: string): string {
+    const t = String(rawLsx || '').trim();
+    if (docId && (docId.endsWith('_NO_LSX') || docId.endsWith('_LSX_Chung'))) {
+      return BS_COMMON_LSX;
+    }
+    if (this.isBsCommonLsx(t)) return BS_COMMON_LSX;
+    return t;
+  }
+
+  /** Gán LSX khi import: trống / không chuẩn → LSX Chung */
+  private resolveBsImportLsx(raw: string): string {
+    const t = String(raw || '').trim().replace(/\uFF0F/g, '/').replace(/\s+/g, '');
+    if (!t || /^(N\/?A|-|—|–|NONE|NULL|\.)$/i.test(t)) return BS_COMMON_LSX;
+    if (this.isBsCommonLsx(t)) return BS_COMMON_LSX;
+    if (/^(KZLSX|LHLSX)\d{4}\/\d{4}$/i.test(t)) return t.toUpperCase();
+    // Có giá trị nhưng không đúng format chuẩn → LSX Chung
+    return BS_COMMON_LSX;
   }
 
   private bsMatchKey(lsx: string, materialCode: string, po: string): string {
@@ -1459,9 +1536,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
         });
       }
 
-      // Phiếu BS không LSX: khớp theo mã + PO từ bản ghi bsExport (productionOrder rỗng)
-      const hasNoLsx = items.some(it => !String(it.lsx || '').trim());
-      if (hasNoLsx) {
+      // Phiếu BS LSX Chung / không LSX cũ: khớp bản ghi bsExport có productionOrder rỗng hoặc LSX Chung
+      const hasCommon = items.some(it => this.isBsCommonLsx(it.lsx));
+      if (hasCommon) {
         const snap = await this.firestore
           .collection('outbound-materials', ref =>
             ref.where('factory', '==', this.selectedFactory).where('bsExport', '==', true).limit(3000)
@@ -1471,8 +1548,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
         (snap?.docs || []).forEach(doc => {
           const d = doc.data() as any;
           const po = String(d.productionOrder || '').trim();
-          if (po) return;
-          keys.add(this.bsMatchKey('', d.materialCode, d.poNumber || d.po));
+          if (po && !this.isBsCommonLsx(po)) return;
+          keys.add(this.bsMatchKey(BS_COMMON_LSX, d.materialCode, d.poNumber || d.po));
         });
       }
     } catch (e) {
@@ -1771,7 +1848,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   runMobileSheetAction(
-    action: 'refresh' | 'excel' | 'add' | 'monthly' | 'cleanup' | 'qc' | 'filter' | 'import-px'
+    action: 'refresh' | 'excel' | 'add' | 'monthly' | 'cleanup' | 'qc' | 'filter' | 'import-px' | 'import-bs'
   ): void {
     this.closeMobileMoreSheet();
     switch (action) {
@@ -1795,6 +1872,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
         break;
       case 'import-px':
         this.openPxImportPopup();
+        break;
+      case 'import-bs':
+        this.openBsImportPopup();
         break;
       case 'filter':
         this.openMobileFilterSheet();
@@ -4484,6 +4564,258 @@ export class OutboundComponent implements OnInit, OnDestroy {
   openPxImportPopup(): void {
     this.closeDropdown();
     this.showPxImportPopup = true;
+  }
+
+  openBsImportPopup(): void {
+    this.closeDropdown();
+    this.showBsImportPopup = true;
+  }
+
+  closeBsImportPopup(): void {
+    if (this.bsImportBusy) return;
+    this.showBsImportPopup = false;
+  }
+
+  downloadBsImportTemplate(): void {
+    const ws = XLSX.utils.json_to_sheet([
+      { LSX: '', 'Mã': 'B005001', PO: 'KZPO0726/0001', 'Lượng': 10, 'ĐVT': 'PCS', 'Tên VT': 'Ví dụ không LSX → LSX Chung' },
+      { LSX: 'KZLSX0326/0001', 'Mã': 'B002010', PO: 'KZPO0726/0002', 'Lượng': 5, 'ĐVT': 'SET', 'Tên VT': 'Có LSX thì giữ nguyên' }
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Import BS');
+    XLSX.writeFile(wb, `Import_BS_template_${this.selectedFactory}.xlsx`);
+  }
+
+  pickBsImportFile(): void {
+    if (this.bsImportBusy) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (ev: Event) => {
+      const file = (ev.target as HTMLInputElement)?.files?.[0];
+      if (file) void this.processBsImportFile(file);
+    };
+    input.click();
+  }
+
+  private async processBsImportFile(file: File): Promise<void> {
+    this.bsImportBusy = true;
+    this.bsImportFileName = file.name;
+    this.cdr.detectChanges();
+    try {
+      const rows = await this.parseBsImportExcel(file);
+      if (!rows.length) {
+        alert('Không đọc được dòng hợp lệ. Cần cột Mã, PO, Lượng (LSX để trống → LSX Chung).');
+        this.bsImportRows = [];
+        return;
+      }
+      this.bsImportRows = rows;
+    } catch (e: any) {
+      console.error('❌ processBsImportFile:', e);
+      alert('Lỗi đọc file Import BS: ' + (e?.message || e));
+      this.bsImportRows = [];
+    } finally {
+      this.bsImportBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private parseBsImportExcel(file: File): Promise<BsImportPreviewRow[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+          resolve(this.parseBsImportMatrix(matrix));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  private parseBsImportMatrix(rows: unknown[][]): BsImportPreviewRow[] {
+    if (!rows?.length) return [];
+    const fold = (s: string) => this.foldPxImportHeader(s);
+    const findHeader = (): number => {
+      const max = Math.min(40, rows.length);
+      for (let r = 0; r < max; r++) {
+        const cells = (rows[r] || []).map(c => fold(String(c ?? '')));
+        const hasCode = cells.some(c => c.includes('ma vat tu') || c.includes('ma hang') || c === 'ma' || c.includes('material'));
+        const hasQty = cells.some(c => c.includes('luong') || c.includes('xuat kho') || c.includes('so luong') || c === 'qty' || c === 'sl');
+        if (hasCode && hasQty) return r;
+      }
+      return 0;
+    };
+    const headerRow = findHeader();
+    const headers = (rows[headerRow] || []).map(c => String(c ?? '').trim());
+    const colOf = (...names: string[]): number => {
+      for (const name of names) {
+        const n = fold(name);
+        if (!n) continue;
+        const i = headers.findIndex(h => {
+          const nh = fold(h);
+          if (!nh) return false;
+          return nh.includes(n) || n.includes(nh);
+        });
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+
+    let idxLsx = colOf('Số lệnh sản xuất', 'So lenh SX', 'LSX', 'Số LSX');
+    let idxCode = colOf('Mã vật tư', 'Ma vat tu', 'Mã hàng', 'Mã', 'Material');
+    let idxPo = colOf('Số PO', 'So PO', 'PO');
+    let idxQty = colOf('Xuất Kho', 'Lượng', 'Số lượng', 'Qty', 'SL');
+    let idxUnit = colOf('Đvt', 'DVT', 'Đơn vị');
+    let idxTen = colOf('Tên Vật Tư', 'Ten Vat Tu', 'Tên VT');
+    let idxMaCtu = colOf('Mã Ctừ', 'Ma Ctu', 'Mã chứng từ');
+
+    // Fallback form PXK cố định nếu thiếu cột
+    if (idxCode < 0) idxCode = 5;
+    if (idxPo < 0) idxPo = 8;
+    if (idxQty < 0) idxQty = 9;
+    if (idxUnit < 0) idxUnit = 7;
+    if (idxTen < 0) idxTen = 6;
+    if (idxLsx < 0) idxLsx = -1; // không có cột LSX → mọi dòng = LSX Chung
+
+    const out: BsImportPreviewRow[] = [];
+    const mergeKey = (r: BsImportPreviewRow) =>
+      `${r.lsx}|${r.materialCode}|${r.po.replace(/\s+/g, '').toUpperCase()}`;
+    const byKey = new Map<string, BsImportPreviewRow>();
+
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      if (idxMaCtu >= 0) {
+        const v = String(row[idxMaCtu] ?? '').trim().toUpperCase();
+        const isPx = v === 'PX' || v.includes('PX') || v.includes('PHIEU XUAT') || v.includes('PHIẾU XUẤT');
+        const isDn = v === 'DN' || v.includes('DN');
+        // Có cột Mã Ctừ thì chỉ lấy PX/DN; không có thì lấy mọi dòng có mã
+        if (v && !isPx && !isDn) continue;
+      }
+      const materialCode = String(row[idxCode] ?? '').trim().toUpperCase();
+      if (!materialCode) continue;
+      const qtyRaw = row[idxQty];
+      const quantity = typeof qtyRaw === 'number' ? qtyRaw : parseFloat(String(qtyRaw ?? '0').replace(/,/g, '')) || 0;
+      if (quantity <= 0) continue;
+      const po = String(row[idxPo] ?? '').trim();
+      const unit = idxUnit >= 0 ? String(row[idxUnit] ?? '').trim() : '';
+      const tenVatTu = idxTen >= 0 ? String(row[idxTen] ?? '').trim() : '';
+      const lsxRaw = idxLsx >= 0 ? String(row[idxLsx] ?? '').trim() : '';
+      const lsx = this.resolveBsImportLsx(lsxRaw);
+      const preview: BsImportPreviewRow = { lsx, materialCode, po, quantity, unit, tenVatTu };
+      const key = mergeKey(preview);
+      const prev = byKey.get(key);
+      if (prev) {
+        prev.quantity += quantity;
+        if (!prev.tenVatTu && tenVatTu) prev.tenVatTu = tenVatTu;
+        if (!prev.unit && unit) prev.unit = unit;
+      } else {
+        byKey.set(key, preview);
+      }
+    }
+    return Array.from(byKey.values());
+  }
+
+  get bsImportCommonCount(): number {
+    return this.bsImportRows.filter(r => this.isBsCommonLsx(r.lsx)).length;
+  }
+
+  async saveBsImportRows(): Promise<void> {
+    if (this.bsImportBusy || !this.bsImportRows.length) return;
+    this.bsImportBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const factory = this.selectedFactory;
+      const byLsx = new Map<string, BsImportPreviewRow[]>();
+      for (const row of this.bsImportRows) {
+        const lsx = this.resolveBsImportLsx(row.lsx);
+        const list = byLsx.get(lsx) || [];
+        list.push({ ...row, lsx });
+        byLsx.set(lsx, list);
+      }
+
+      const lineMergeKey = (l: any): string => {
+        const ct = String(l?.soChungTu || '').trim();
+        if (ct) return `ct:${ct}|${String(l?.materialCode || '').trim().toUpperCase()}`;
+        return `mp:${String(l?.materialCode || '').trim().toUpperCase()}|${String(l?.po || '').replace(/\s+/g, '').toUpperCase()}`;
+      };
+
+      let savedDocs = 0;
+      let savedLines = 0;
+      for (const [lsx, rows] of byLsx.entries()) {
+        const isCommon = this.isBsCommonLsx(lsx);
+        const lsxForDoc = isCommon ? BS_COMMON_LSX : lsx;
+        const docId = isCommon
+          ? this.bsCommonDocId(factory)
+          : `${factory}_${lsxForDoc.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+        const newLines = rows.map(r => {
+          const line: any = {
+            materialCode: r.materialCode,
+            po: r.po,
+            quantity: r.quantity,
+            done: false
+          };
+          if (r.unit) line.unit = r.unit;
+          if (r.tenVatTu) line.tenVatTu = r.tenVatTu;
+          return line;
+        });
+
+        let linesToSave = newLines;
+        try {
+          const prevSnap = await this.firestore.collection('pxk-bs-data').doc(docId).get().toPromise();
+          if (prevSnap?.exists) {
+            const prevLines: any[] = ((prevSnap.data() as any)?.lines || []) as any[];
+            const map = new Map<string, any>();
+            prevLines.forEach(l => map.set(lineMergeKey(l), { ...l }));
+            for (const l of newLines) {
+              const k = lineMergeKey(l);
+              const old = map.get(k);
+              if (old) {
+                map.set(k, { ...old, ...l, done: !!old.done });
+              } else {
+                map.set(k, { ...l, done: false });
+              }
+            }
+            linesToSave = [...map.values()];
+          }
+        } catch (mergeErr) {
+          console.warn('[Import BS] merge existing failed', mergeErr);
+        }
+
+        await this.firestore.collection('pxk-bs-data').doc(docId).set({
+          lsx: lsxForDoc,
+          factory,
+          lines: linesToSave,
+          importedAt: new Date(),
+          isBoSung: true
+        });
+        savedDocs++;
+        savedLines += newLines.length;
+      }
+
+      this.showBsImportPopup = false;
+      this.bsImportRows = [];
+      this.bsImportFileName = '';
+      this.switchExportMode('BS');
+      await this.loadBsItems();
+      alert(
+        `Đã import BS: ${savedLines} dòng → ${savedDocs} phiếu (${factory}).\n` +
+        `Không có LSX → gán "${BS_COMMON_LSX}".`
+      );
+    } catch (e: any) {
+      console.error('[Import BS] save failed', e);
+      alert('Lỗi lưu Import BS: ' + (e?.message || e));
+    } finally {
+      this.bsImportBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   closePxImportPopup(): void {
