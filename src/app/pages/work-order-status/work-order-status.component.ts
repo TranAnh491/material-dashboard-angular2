@@ -2185,7 +2185,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.newWorkOrder.customer &&
       this.newWorkOrder.deliveryDate &&
       this.newWorkOrder.productionLine &&
-      this.normalizeCreatedBy(this.newWorkOrder.createdBy) &&
+      String(this.newWorkOrder.createdByTeam || '').trim() &&
       this.newWorkOrder.planReceivedDate
     );
   }
@@ -2291,8 +2291,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   private formatCreatedByWithTeam(wo: WorkOrder): string {
     const team = String(wo?.createdByTeam || '').trim();
-    const names = this.formatCreatedByOneLine(wo?.createdBy);
-    return [team, names].filter(Boolean).join(' / ');
+    if (team) return team;
+    return this.formatCreatedByOneLine(wo?.createdBy);
   }
 
   private syncCreatedByTeamOptions(): void {

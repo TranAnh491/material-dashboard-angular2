@@ -702,24 +702,10 @@
                         </div>
                         <div class="col-md-3">
                           <mat-form-field class="full-width">
-                            <mat-label>Team</mat-label>
+                            <mat-label>Người soạn (Team)</mat-label>
                             <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.createdByTeam" name="createdByTeam">
                               <mat-option value="">Chọn team</mat-option>
                               <mat-option *ngFor="let team of createdByTeamChoices(newWorkOrder)" [value]="team">{{ team }}</mat-option>
-                            </mat-select>
-                          </mat-form-field>
-                          <mat-form-field class="full-width">
-                            <mat-label>Người soạn</mat-label>
-                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrder.createdBy" name="createdBy" required>
-                              <mat-option value="">Chọn người</mat-option>
-                              <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
-                            </mat-select>
-                          </mat-form-field>
-                          <mat-form-field class="full-width">
-                            <mat-label>Người soạn 2</mat-label>
-                            <mat-select panelClass="wo-status-select-panel" [(value)]="newWorkOrderCreatedBy2" name="createdBy2">
-                              <mat-option value="">Không chọn</mat-option>
-                              <mat-option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</mat-option>
                             </mat-select>
                           </mat-form-field>
                         </div>
@@ -833,34 +819,14 @@
                             <span *ngIf="!canEdit()">{{ wo.missingMaterials || '—' }}</span>
                           </td>
                           <td>
-                            <div class="wo-created-by-stack" *ngIf="canEdit()">
-                              <select class="wo-plain-select wo-plain-select--team"
-                                      [ngModel]="getCreatedByTeam(wo)"
-                                      (ngModelChange)="updateCreatedByTeam(wo, $event)"
-                                      [name]="'createdByTeam-' + wo.id">
-                                <option value="">CHỌN TEAM</option>
-                                <option *ngFor="let team of createdByTeamChoices(wo)" [value]="team">{{ team }}</option>
-                              </select>
-                              <select class="wo-plain-select"
-                                      [ngModel]="getCreatedBySlot(wo, 0)"
-                                      (ngModelChange)="updateCreatedBySlot(wo, 0, $event)"
-                                      [name]="'createdBy0-' + wo.id">
-                                <option value="">CHỌN NGƯỜI</option>
-                                <option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
-                              </select>
-                              <select class="wo-plain-select"
-                                      [ngModel]="getCreatedBySlot(wo, 1)"
-                                      (ngModelChange)="updateCreatedBySlot(wo, 1, $event)"
-                                      [name]="'createdBy1-' + wo.id">
-                                <option value="">NGƯỜI 2</option>
-                                <option *ngFor="let opt of createdByPickerOptions" [value]="opt.value">{{ opt.label }}</option>
-                              </select>
-                            </div>
-                            <div class="wo-created-by-stack wo-created-by-stack--read" *ngIf="!canEdit()">
-                              <span class="wo-created-by-team" *ngIf="getCreatedByTeam(wo)">{{ getCreatedByTeam(wo) }}</span>
-                              <span *ngFor="let name of getCreatedByLabels(wo)">{{ name }}</span>
-                              <span *ngIf="!getCreatedByTeam(wo) && !getCreatedByLabels(wo).length">—</span>
-                            </div>
+                            <select class="wo-plain-select wo-plain-select--team" *ngIf="canEdit()"
+                                    [ngModel]="getCreatedByTeam(wo)"
+                                    (ngModelChange)="updateCreatedByTeam(wo, $event)"
+                                    [name]="'createdByTeam-' + wo.id">
+                              <option value="">CHỌN TEAM</option>
+                              <option *ngFor="let team of createdByTeamChoices(wo)" [value]="team">{{ team }}</option>
+                            </select>
+                            <span *ngIf="!canEdit()">{{ getCreatedByTeam(wo) || '—' }}</span>
                           </td>
                           <td class="wo-so-ma">{{ getPxkSoMa(wo) }}</td>
                           <td>
