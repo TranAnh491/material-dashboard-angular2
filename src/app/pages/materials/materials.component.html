@@ -44,6 +44,7 @@
               </button>
               <button type="button"
                       class="factory-toggle-btn"
+                      *ngIf="!kkActiveProductType"
                       (click)="toggleFactory()"
                       [title]="'Đổi nhà máy (hiện: ' + selectedFactory + ')'">
                 <i class="material-icons">swap_horiz</i>
@@ -51,6 +52,7 @@
               </button>
               <button type="button"
                       class="kk-play-btn"
+                      *ngIf="!kkActiveProductType"
                       (click)="playKkStock()"
                       [disabled]="kkLocMapLoading || kkLocMapBusy"
                       [class.kk-play-btn--on]="kkStockLoaded"
@@ -59,7 +61,7 @@
                   {{ (kkLocMapLoading || kkLocMapBusy) ? 'sync' : 'play_arrow' }}
                 </i>
               </button>
-              <div class="kk-toolbar__search" *ngIf="kkLocMapView">
+              <div class="kk-toolbar__search" *ngIf="kkLocMapView && !kkActiveProductType">
                 <i class="material-icons" aria-hidden="true">search</i>
                 <input type="search"
                        [(ngModel)]="kkLocMapQuery"
@@ -78,7 +80,7 @@
                 </button>
               </div>
             </div>
-            <div class="kk-loc-map__modes" *ngIf="kkLocMapView">
+            <div class="kk-loc-map__modes" *ngIf="kkLocMapView && !kkActiveProductType">
               <button type="button"
                       [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
                       (click)="setKkLocMapView('location')"
@@ -97,7 +99,7 @@
                       [disabled]="kkLocMapLoading">Quản lý</button>
             </div>
           </div>
-          <div class="kk-toolbar__row kk-toolbar__row--tools" *ngIf="kkLocMapView">
+          <div class="kk-toolbar__row kk-toolbar__row--tools" *ngIf="kkLocMapView && !kkActiveProductType">
               <button type="button"
                       class="more-btn"
                       *ngIf="kkLocMapView === 'type' && kkActiveProductType"
@@ -556,6 +558,35 @@
 
       <div class="kk-loc-map__type" *ngIf="kkLocMapView === 'type' && kkStockLoaded">
         <ng-container *ngIf="!kkActiveProductType">
+          <ng-template #kkTypeBoxCardTpl let-box="box" let-hide="hide">
+            <button
+              type="button"
+              class="kk-type-box"
+              [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
+              [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
+              [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
+              [class.kk-type-box--empty]="!box.totalLines"
+              (click)="selectKkTypeBox(box.productType)"
+              (contextmenu)="openKkTypeBoxMenu($event, box)"
+              [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
+              <strong>{{ box.productType }}</strong>
+              <ng-container *ngIf="kkTypeVisibleGroupPrefixes(box, hide) as prefixes">
+                <span class="kk-type-box__groups" *ngIf="prefixes.length">
+                  <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
+                </span>
+              </ng-container>
+              <span class="kk-type-box__foot">
+                <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
+                <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
+                  <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
+                  {{ loc }}
+                </span>
+              </span>
+              <span class="kk-type-box__mgr" *ngIf="kkTypeManagerOf(box.productType) as mgr" [title]="'Người quản lý: ' + mgr">
+                <i class="material-icons">person</i>{{ mgr }}
+              </span>
+            </button>
+          </ng-template>
           <div class="kk-type-muc" *ngFor="let muc of kkTypeBoxGroups">
             <div class="kk-type-muc__bar">
               <button type="button"
@@ -563,7 +594,23 @@
                       (click)="toggleKkTypeMuc(muc.category, $event)">
                 <i class="material-icons">{{ isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less' }}</i>
                 <strong>{{ muc.title }}</strong>
-                <span>{{ muc.boxes.length }} loại</span>
+                <span *ngIf="!(isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc))">{{ muc.boxes.length }} loại</span>
+                <span class="kk-b009-board__range"
+                      *ngIf="isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc) as s">
+                  <ng-container *ngIf="!kkB009FloorEmpty(s)">
+                    {{ kkConnectorViewShelf(muc.category) }}-T{{ kkConnectorViewLevel(muc.category) }}
+                    · {{ kkB009SubFullRange(s) }} · {{ kkB009FloorCodeCount(s) }} mã
+                  </ng-container>
+                  <ng-container *ngIf="kkB009FloorEmpty(s)">Tầng trống</ng-container>
+                </span>
+              </button>
+              <button type="button"
+                      class="kk-b009-detail-btn"
+                      *ngIf="isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc) as s"
+                      [disabled]="kkB009FloorEmpty(s)"
+                      (click)="openKkConnectorFloorKkDetail(muc.category, $event)">
+                <i class="material-icons">fact_check</i>
+                Chi tiết
               </button>
               <button type="button"
                       class="kk-scan-reset-btn"
@@ -576,7 +623,7 @@
             </div>
             <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
               <div class="kk-b009-board" *ngIf="isKkConnectorRackMuc(muc.category) && muc.groups?.length">
-                <p class="kk-b009-board__hint">Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem khoảng mã và danh sách loại. S01 có 2 block; kệ khác 3 block.</p>
+                <p class="kk-b009-board__hint">Bấm ô vị trí để chọn tầng · bấm Chi tiết để mở bảng kiểm kê toàn bộ mã của vị trí đó.</p>
                 <div class="kk-b009-board__cols">
                   <div class="kk-b009-col" *ngFor="let g of kkB009ShelfGroups(muc)">
                     <div class="kk-b009-col__head">
@@ -593,95 +640,16 @@
                             [class.kk-b009-row--on]="isKkB009FloorOn(muc.category, g.key, s)"
                             [class.kk-b009-row--empty]="kkB009FloorEmpty(s)"
                             [title]="s.title"
-                            (click)="setKkB009Floor(muc.category, g.key, s)">
+                            (click)="selectKkB009Floor(muc.category, g.key, s)">
                       <span class="kk-b009-row__lv">T{{ kkB009SubLevel(s) }}</span>
                       <span class="kk-b009-mam" *ngFor="let b of kkShelfBlockNos(g.key)">{{ kkB009LocOf(g.key, b, kkB009SubLevel(s)) }}</span>
                     </button>
                   </div>
                 </div>
-                <div class="kk-b009-board__detail" *ngIf="kkB009ViewSub(muc) as s">
-                  <div class="kk-type-muc__bar">
-                    <div class="kk-b009-board__detail-head">
-                      <strong>{{ s.title }}</strong>
-                      <span>{{ kkB009FloorCodeCount(s) }} mã · {{ s.boxes.length }} loại</span>
-                    </div>
-                  </div>
-                  <div class="kk-b009-blocks">
-                    <div class="kk-b009-block"
-                         *ngFor="let b of kkShelfBlockNos(kkConnectorViewShelf(muc.category))"
-                         [class.kk-b009-block--empty]="kkB009FloorEmpty(s)">
-                      <strong>{{ kkB009LocOf(kkConnectorViewShelf(muc.category), b, kkConnectorViewLevel(muc.category)) }}</strong>
-                      <span>{{ kkB009FloorEmpty(s) ? 'Trống' : (kkB009SubFullRange(s) + ' · ' + kkB009FloorCodeCount(s) + ' mã') }}</span>
-                    </div>
-                  </div>
-                  <div class="kk-type-grid" *ngIf="s.boxes.length">
-                    <button
-                      type="button"
-                      class="kk-type-box"
-                      *ngFor="let box of s.boxes"
-                      [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
-                      [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
-                      [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
-                      [class.kk-type-box--empty]="!box.totalLines"
-                      (click)="selectKkTypeBox(box.productType)"
-                      (contextmenu)="openKkTypeBoxMenu($event, box)"
-                      [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
-                      <strong>{{ box.productType }}</strong>
-                      <span class="kk-type-box__foot">
-                        <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-                      </span>
-                    </button>
-                  </div>
-                </div>
-                <div class="kk-type-group"
-                     *ngFor="let g of kkB009OtherGroups(muc)"
-                     [class.kk-type-group--bare]="!g.title">
-                  <button type="button"
-                          class="kk-type-group__head"
-                          *ngIf="g.title"
-                          (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key), $event)">
-                    <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key)) ? 'expand_more' : 'expand_less' }}</i>
-                    <strong>{{ g.title }}</strong>
-                    <span>{{ g.subMucs.length }} mục</span>
-                  </button>
-                  <ng-container *ngIf="!g.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
-                    <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
-                      <div class="kk-type-muc__bar">
-                        <button type="button"
-                                class="kk-type-submuc__head"
-                                (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key, s.key), $event)">
-                          <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key)) ? 'expand_more' : 'expand_less' }}</i>
-                          <strong>{{ s.title }}</strong>
-                          <span>{{ s.boxes.length }} loại</span>
-                        </button>
-                      </div>
-                      <div class="kk-type-grid" *ngIf="!isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
-                        <button
-                          type="button"
-                          class="kk-type-box"
-                          *ngFor="let box of s.boxes"
-                          [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
-                          [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
-                          [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
-                          [class.kk-type-box--empty]="!box.totalLines"
-                          (click)="selectKkTypeBox(box.productType)"
-                          (contextmenu)="openKkTypeBoxMenu($event, box)"
-                          [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
-                          <strong>{{ box.productType }}</strong>
-                          <span class="kk-type-box__foot">
-                            <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  </ng-container>
-                </div>
               </div>
-              <ng-container *ngIf="!isKkConnectorRackMuc(muc.category)">
-              <div [class.kk-nhua-board]="isKkPrefixColsMuc(muc.category)"
-                   [class.kk-nhua-board--row]="isKkNameColsMuc(muc.category)">
+              <ng-container *ngIf="isKkConnectorRackMuc(muc.category)">
               <div class="kk-type-group"
-                   *ngFor="let g of muc.groups || []"
+                   *ngFor="let g of kkB009OtherGroups(muc)"
                    [class.kk-type-group--bare]="!g.title">
                 <button type="button"
                         class="kk-type-group__head"
@@ -689,7 +657,7 @@
                         (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key), $event)">
                   <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key)) ? 'expand_more' : 'expand_less' }}</i>
                   <strong>{{ g.title }}</strong>
-                  <span>{{ isKkPrefixColsMuc(muc.category) ? (g.boxes.length + ' loại') : (g.subMucs.length + (muc.category === 'B009' ? ' tầng' : ' mục')) }}</span>
+                  <span>{{ g.boxes.length }} loại</span>
                 </button>
                 <ng-container *ngIf="!g.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
                   <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
@@ -711,34 +679,52 @@
                       </button>
                     </div>
                     <div class="kk-type-grid" *ngIf="!s.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
-                      <button
-                        type="button"
-                        class="kk-type-box"
-                        *ngFor="let box of s.boxes"
-                        [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
-                        [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
-                        [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
-                        [class.kk-type-box--empty]="!box.totalLines"
-                        (click)="selectKkTypeBox(box.productType)"
-                        (contextmenu)="openKkTypeBoxMenu($event, box)"
-                        [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
-                        <strong>{{ box.productType }}</strong>
-                        <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
-                          <span class="kk-type-box__groups" *ngIf="prefixes.length">
-                            <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
-                          </span>
-                        </ng-container>
-                        <span class="kk-type-box__foot">
-                          <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-                          <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
-                            <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
-                            {{ loc }}
-                          </span>
-                        </span>
-                        <span class="kk-type-box__mgr" *ngIf="kkTypeManagerOf(box.productType) as mgr" [title]="'Người quản lý: ' + mgr">
-                          <i class="material-icons">person</i>{{ mgr }}
-                        </span>
+                      <ng-container *ngFor="let box of s.boxes">
+                        <ng-container *ngTemplateOutlet="kkTypeBoxCardTpl; context: { box: box, hide: [muc.category, g.key] }"></ng-container>
+                      </ng-container>
+                      <p class="hidden-empty" *ngIf="!s.boxes.length">Để trống — dùng khi cần</p>
+                    </div>
+                  </div>
+                </ng-container>
+              </div>
+              </ng-container>
+              <ng-container *ngIf="!isKkConnectorRackMuc(muc.category)">
+              <div [class.kk-nhua-board]="isKkPrefixColsMuc(muc.category)"
+                   [class.kk-nhua-board--row]="isKkNameColsMuc(muc.category)">
+              <div class="kk-type-group"
+                   *ngFor="let g of muc.groups || []"
+                   [class.kk-type-group--bare]="!g.title">
+                <button type="button"
+                        class="kk-type-group__head"
+                        *ngIf="g.title"
+                        (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key), $event)">
+                  <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key)) ? 'expand_more' : 'expand_less' }}</i>
+                  <strong>{{ g.title }}</strong>
+                  <span>{{ isKkPrefixColsMuc(muc.category) ? (g.boxes.length + ' loại') : (g.subMucs.length + ' mục') }}</span>
+                </button>
+                <ng-container *ngIf="!g.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key))">
+                  <div class="kk-type-submuc" *ngFor="let s of g.subMucs">
+                    <div class="kk-type-muc__bar" *ngIf="s.title">
+                      <button type="button"
+                              class="kk-type-submuc__head"
+                              (click)="toggleKkTypeMuc(kkTypeNestKey(muc.category, g.key, s.key), $event)">
+                        <i class="material-icons">{{ isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key)) ? 'expand_more' : 'expand_less' }}</i>
+                        <strong>{{ s.title }}</strong>
+                        <span>{{ s.boxes.length }} loại</span>
                       </button>
+                      <button type="button"
+                              class="kk-scan-reset-btn"
+                              (click)="resetKkScanForBoxes(s.boxes, s.title, $event)"
+                              [disabled]="!canEdit || kkLocMapBusy"
+                              title="Xóa lần quét cũ của mục này để quét lại">
+                        <i class="material-icons">restart_alt</i>
+                        Reset
+                      </button>
+                    </div>
+                    <div class="kk-type-grid" *ngIf="!s.title || !isKkTypeMucCollapsed(kkTypeNestKey(muc.category, g.key, s.key))">
+                      <ng-container *ngFor="let box of s.boxes">
+                        <ng-container *ngTemplateOutlet="kkTypeBoxCardTpl; context: { box: box, hide: [muc.category, g.key] }"></ng-container>
+                      </ng-container>
                       <p class="hidden-empty" *ngIf="!s.boxes.length">Để trống — dùng khi cần</p>
                     </div>
                   </div>
@@ -747,34 +733,9 @@
               </div>
               </ng-container>
               <div class="kk-type-grid" *ngIf="!muc.groups?.length">
-                <button
-                  type="button"
-                  class="kk-type-box"
-                  *ngFor="let box of muc.boxes"
-                  [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
-                  [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
-                  [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
-                  [class.kk-type-box--empty]="!box.totalLines"
-                  (click)="selectKkTypeBox(box.productType)"
-                  (contextmenu)="openKkTypeBoxMenu($event, box)"
-                  [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
-                  <strong>{{ box.productType }}</strong>
-                  <ng-container *ngIf="kkTypeGroupPrefixes(box.groupCodes) as prefixes">
-                    <span class="kk-type-box__groups" *ngIf="prefixes.length">
-                      <span class="kk-type-box__code" *ngFor="let p of prefixes">{{ p }}</span>
-                    </span>
-                  </ng-container>
-                  <span class="kk-type-box__foot">
-                    <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
-                    <span class="kk-type-box__home" *ngIf="kkTypeHomeLocOf(box.productType) as loc" [title]="'Vị trí yêu cầu: ' + loc">
-                      <span class="kk-type-box__home-lab">Vị trí yêu cầu</span>
-                      {{ loc }}
-                    </span>
-                  </span>
-                  <span class="kk-type-box__mgr" *ngIf="kkTypeManagerOf(box.productType) as mgr" [title]="'Người quản lý: ' + mgr">
-                    <i class="material-icons">person</i>{{ mgr }}
-                  </span>
-                </button>
+                <ng-container *ngFor="let box of muc.boxes">
+                  <ng-container *ngTemplateOutlet="kkTypeBoxCardTpl; context: { box: box, hide: [muc.category] }"></ng-container>
+                </ng-container>
               </div>
             </ng-container>
           </div>
@@ -4932,31 +4893,38 @@
      [class.more-overlay]="!isMobile"
      *ngIf="showKkTypeScanModal"
      (click)="closeKkTypeScanModal()">
-  <div class="modal-content kk-type-scan" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="kkTypeScanModalTitle">
-    <div class="more-popup-header gan-pallet__head">
-      <div class="more-popup-header__left">
-        <span class="more-popup-header__icon" aria-hidden="true">
+  <div class="modal-content kk-type-scan kk-scan-pro" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="kkTypeScanModalTitle">
+    <header class="kk-scan-pro__head">
+      <div class="kk-scan-pro__head-left">
+        <span class="kk-scan-pro__head-ico" aria-hidden="true">
           <i class="material-icons">qr_code_scanner</i>
         </span>
         <div>
           <h3>{{ kkTypeScanModalTitle }}</h3>
-          <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
+          <p>{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
         </div>
       </div>
-      <div class="more-popup-header__right">
-        <button type="button" class="more-popup-close" tabindex="-1" (click)="openKkScanGuide()" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn">
+      <div class="kk-scan-pro__head-actions">
+        <button type="button" class="kk-scan-pro__icon-btn" tabindex="-1" (click)="openKkScanGuide()" title="Hướng dẫn" aria-label="Hướng dẫn">
           <i class="material-icons">info</i>
         </button>
-        <button type="button" class="more-popup-close" tabindex="-1" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
+        <button type="button" class="kk-scan-pro__icon-btn" tabindex="-1" (click)="closeKkTypeScanModal()" [disabled]="kkTypeScanBusy" aria-label="Đóng">
           <i class="material-icons">close</i>
         </button>
       </div>
-    </div>
+    </header>
 
-    <div class="kk-type-scan__body">
-      <div *ngIf="kkTypeScanStep === 'operator'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">Bước 1: <strong>Nhập tay</strong> mã nhân viên (ASP + 4 số, vd ASP1234)</p>
-        <div class="kk-type-scan__input-row">
+    <div class="kk-scan-pro__body">
+      <!-- Bước 1: NV -->
+      <div *ngIf="kkTypeScanStep === 'operator'" class="kk-scan-pro__panel">
+        <div class="kk-scan-pro__ctx">
+          <div class="kk-scan-pro__ctx-ico" aria-hidden="true"><i class="material-icons">badge</i></div>
+          <div class="kk-scan-pro__ctx-main">
+            <strong>Bước 1 · Mã nhân viên</strong>
+            <span>Chỉ nhập tay ASP + 4 số (vd ASP1234)</span>
+          </div>
+        </div>
+        <div class="kk-scan-pro__input-row">
           <input id="kkTypeScanOperatorInput"
                  type="text"
                  [(ngModel)]="kkTypeScanOperatorInput"
@@ -4972,200 +4940,282 @@
             <i class="material-icons">arrow_forward</i>
           </button>
         </div>
-        <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'operator'">{{ kkTypeScanErr }}</p>
+        <p class="kk-scan-pro__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'operator'">{{ kkTypeScanErr }}</p>
       </div>
 
-      <!-- Camera gắn trong màn (mobile) — chiếm phần lớn màn hình -->
-      <div class="kk-type-scan__cam"
-           *ngIf="isMobile && nlScanDevice === 'mobile' && kkTypeScanStep !== 'operator'"
-           [class.kk-type-scan__cam--dim]="showKkTypeScanConfirm">
-        <div class="kk-type-scan__cam-head">
-          <strong>{{ nlCameraHeading }}</strong>
-          <span>{{ nlCameraSub }}</span>
-        </div>
-        <div id="kk-inline-qr-reader" class="kk-type-scan__cam-view"></div>
-        <p class="kk-type-scan__cam-tip">Đưa tem vào khung lớn — quét một lần</p>
-      </div>
-
-      <!-- PDA / scanner HID: ô bắn rõ ràng -->
-      <div class="kk-type-scan__pda-banner"
-           *ngIf="nlScanDevice === 'pda' && kkTypeScanStep !== 'operator' && !showKkTypeScanConfirm">
-        <i class="material-icons">sensors</i>
-        <div>
-          <strong>Chế độ Scanner (PDA)</strong>
-          <span>Bắn tem vào ô bên dưới — máy tự nhận</span>
-        </div>
-      </div>
-
-      <div *ngIf="kkTypeScanStep === 'location'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">
-          NV <strong>{{ kkTypeScanOperator || '—' }}</strong>
-          · Bước 2: <strong>Scan kệ</strong> — tem phải bắt đầu bằng <strong>S</strong> hoặc <strong>R</strong>
-        </p>
-        <div class="kk-type-scan__input-row" *ngIf="nlScanDevice !== 'mobile'">
-          <input id="kkTypeScanLocationInput"
-                 type="text"
-                 class="kk-scan-trap kk-type-scan__trap--lg"
-                 [(ngModel)]="kkTypeScanLocationInput"
-                 (focus)="onKkHidScanFocus($event)"
-                 (blur)="onKkScanTrapBlur($event)"
-                 placeholder="Bắn tem kệ S… / R… vào đây"
-                 autocomplete="off"
-                 autocapitalize="off"
-                 spellcheck="false"
-                 tabindex="0"
-                 [disabled]="kkTypeScanBusy"
-                 [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
-                 [attr.enterkeyhint]="'done'">
-          <button type="button" tabindex="-1" (click)="submitKkTypeScanLocation()" [disabled]="kkTypeScanBusy || !kkTypeScanLocationInput.trim()">
-            <i class="material-icons">arrow_forward</i>
-          </button>
-        </div>
-        <!-- Camera mode: ô ẩn nhận HID nếu có -->
-        <input *ngIf="nlScanDevice === 'mobile'"
-               id="kkTypeScanLocationInput"
-               type="text"
-               class="kk-scan-trap kk-type-scan__hid"
-               [(ngModel)]="kkTypeScanLocationInput"
-               autocomplete="off"
-               tabindex="-1"
-               aria-hidden="true">
-        <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'location'">{{ kkTypeScanErr }}</p>
-      </div>
-
-      <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">
-          Kệ <strong>{{ kkTypeScanLocation }}</strong>
-          · NV {{ kkTypeScanOperator || '—' }}
-          · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong>
-          <ng-container *ngIf="kkTypeScanMode === 'location'"> — chuyển về kệ này, rồi scan mã tiếp.</ng-container>
-          <ng-container *ngIf="kkTypeScanMode === 'inventory'"> (không đọc lượng).</ng-container>
-        </p>
-        <div class="kk-type-scan__input-row" *ngIf="nlScanDevice !== 'mobile'">
-          <input id="kkTypeScanQrInput"
-                 type="text"
-                 class="kk-scan-trap kk-type-scan__trap--lg"
-                 placeholder="Bắn tem mã hàng vào đây"
-                 autocomplete="off"
-                 autocorrect="off"
-                 autocapitalize="off"
-                 spellcheck="false"
-                 tabindex="0"
-                 (focus)="onKkHidScanFocus($event)"
-                 (blur)="onKkScanTrapBlur($event)"
-                 [disabled]="kkTypeScanBusy || showKkTypeScanConfirm"
-                 [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
-                 [attr.enterkeyhint]="'done'">
-          <button type="button" tabindex="-1" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || showKkTypeScanConfirm">
-            <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
-          </button>
-        </div>
-        <input *ngIf="nlScanDevice === 'mobile'"
-               id="kkTypeScanQrInput"
-               type="text"
-               class="kk-scan-trap kk-type-scan__hid"
-               autocomplete="off"
-               tabindex="-1"
-               aria-hidden="true">
-        <p class="kk-type-scan__timing" *ngIf="kkTypeScanLastReadMs !== null && !showKkTypeScanConfirm">
-          Đọc tem: <strong>{{ formatScanMs(kkTypeScanLastReadMs) }}</strong>
-          <ng-container *ngIf="kkTypeScanLastSaveMs !== null">
-            · Ghi nhận: <strong>{{ formatScanMs(kkTypeScanLastSaveMs) }}</strong>
-          </ng-container>
-          <ng-container *ngIf="kkTypeScanLastSavePending"> · đang ghi…</ng-container>
-        </p>
-
-        <div class="kk-type-scan__code" *ngIf="kkTypeScanMaterialCode">
-          <div class="kk-type-scan__code-head">
-            <div class="kk-type-scan__code-title">
-              <strong>{{ kkTypeScanMaterialCode }}</strong>
-              <span class="kk-type-scan__frac"
-                    *ngIf="kkTypeScanMode === 'inventory'"
-                    [class.kk-type-scan__frac--ok]="kkTypeScanProgressTone === 'ok'"
-                    [class.kk-type-scan__frac--low]="kkTypeScanProgressTone === 'low'"
-                    [class.kk-type-scan__frac--over]="kkTypeScanProgressTone === 'over'">
-                {{ formatNumber(kkTypeScanQtyScanned) }} / {{ kkTypeScanCartonTotal || '—' }} Box
-              </span>
-              <span *ngIf="kkTypeScanMode === 'location'" class="kk-type-scan__frac kk-type-scan__frac--ok">Chỉ vị trí</span>
-              <span>{{ kkTypeScanStatusText }}</span>
-              <button type="button"
-                      class="kk-type-scan__reset"
-                      *ngIf="kkTypeScanMode === 'inventory'"
-                      tabindex="-1"
-                      (click)="resetKkScanForCurrentCode($event)"
-                      [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length"
-                      title="Xóa lần quét cũ của mã này để quét lại">
-                <i class="material-icons">restart_alt</i>
-                Reset lần quét
-              </button>
+      <ng-container *ngIf="kkTypeScanStep !== 'operator'">
+        <!-- Stage luôn gắn (camera/PDA) — không *ngIf theo tab để camera không bị tắt -->
+        <div class="kk-scan-pro__stage"
+             [class.kk-scan-pro__stage--dim]="showKkTypeScanConfirm"
+             [class.kk-scan-pro__stage--hide]="kkTypeScanUiTab !== 'scan'">
+          <div class="kk-scan-pro__stage-head">
+            <div>
+              <strong>
+                <i class="material-icons">{{ nlScanDevice === 'mobile' ? 'qr_code_scanner' : 'sensors' }}</i>
+                {{ kkTypeScanStageTitle }}
+              </strong>
+              <span>{{ kkTypeScanStageSub }}</span>
             </div>
-            <label class="kk-type-scan__std">
-              Standard
-              <input type="number"
-                     [ngModel]="kkTypeScanStandardDraft"
-                     (ngModelChange)="kkTypeScanStandardDraft = $event === '' || $event === null ? '' : +$event"
-                     (keydown.enter)="$any($event.target).blur()"
-                     (blur)="saveKkTypeScanStandard()"
-                     min="0"
-                     step="0.1"
-                     [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
-            </label>
-            <button type="button"
-                    class="kk-type-scan__all-btn"
-                    [class.kk-type-scan__all-btn--on]="kkTypeScanAllTicked"
-                    (click)="onKkTypeScanTickAll(!kkTypeScanAllTicked)"
-                    [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
-              <i class="material-icons">{{ kkTypeScanAllTicked ? 'check_box' : 'check_box_outline_blank' }}</i>
-              Đủ toàn bộ
+            <span class="kk-scan-pro__ready" *ngIf="!kkTypeScanBusy && !showKkTypeScanConfirm">● Sẵn sàng quét</span>
+            <span class="kk-scan-pro__ready kk-scan-pro__ready--busy" *ngIf="kkTypeScanBusy">● Đang xử lý…</span>
+          </div>
+
+          <div id="kk-inline-qr-reader"
+               class="kk-scan-pro__cam"
+               *ngIf="isMobile && nlScanDevice === 'mobile'"></div>
+
+          <div class="kk-scan-pro__pda" *ngIf="nlScanDevice !== 'mobile' && kkTypeScanStep === 'location'">
+            <input id="kkTypeScanLocationInput"
+                   type="text"
+                   class="kk-scan-trap"
+                   [(ngModel)]="kkTypeScanLocationInput"
+                   (focus)="onKkHidScanFocus($event)"
+                   (blur)="onKkScanTrapBlur($event)"
+                   placeholder="Bắn tem kệ S… / R… vào đây"
+                   autocomplete="off"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   tabindex="0"
+                   [disabled]="kkTypeScanBusy"
+                   [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
+                   [attr.enterkeyhint]="'done'">
+            <button type="button" tabindex="-1" (click)="submitKkTypeScanLocation()" [disabled]="kkTypeScanBusy || !kkTypeScanLocationInput.trim()">
+              <i class="material-icons">arrow_forward</i>
             </button>
           </div>
-          <div class="kk-type-scan__table-wrap" *ngIf="kkTypeScanCodeRows.length">
-            <table class="kk-type-scan__table">
-              <thead>
-                <tr>
-                  <th>PO</th>
-                  <th>IMD</th>
-                  <th>Vị trí</th>
-                  <th>Lượng</th>
-                  <th>Box</th>
-                  <th>KK</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let line of kkTypeScanCodeRows; trackBy: trackByFn"
-                    [class.kk-type-scan__row--on]="!!line.kkChecked"
-                    (click)="canEdit && !kkTypeScanBusy && onKkTypeScanRowTick(line, !line.kkChecked)">
-                  <td>{{ line.poNumber || '—' }}</td>
-                  <td>{{ getDisplayIMD(line) }}</td>
-                  <td>{{ primaryLocationDisplay(line.location) }}</td>
-                  <td class="n">{{ formatNumber(calculateCurrentStock(line)) }}</td>
-                  <td class="n">{{ formatNumber(getKkScanCount(line)) }}</td>
-                  <td class="kk">
-                    <span class="kk-type-scan__kk-mark" [class.kk-type-scan__kk-mark--on]="!!line.kkChecked">
-                      <i class="material-icons">{{ line.kkChecked ? 'check_box' : 'check_box_outline_blank' }}</i>
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="kk-scan-pro__pda" *ngIf="nlScanDevice !== 'mobile' && kkTypeScanStep === 'codes'">
+            <input id="kkTypeScanQrInput"
+                   type="text"
+                   class="kk-scan-trap"
+                   placeholder="Bắn tem mã hàng vào đây"
+                   autocomplete="off"
+                   autocorrect="off"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   tabindex="0"
+                   (focus)="onKkHidScanFocus($event)"
+                   (blur)="onKkScanTrapBlur($event)"
+                   [disabled]="kkTypeScanBusy || showKkTypeScanConfirm"
+                   [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
+                   [attr.enterkeyhint]="'done'">
+            <button type="button" tabindex="-1" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || showKkTypeScanConfirm">
+              <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
+            </button>
           </div>
-          <p class="kk-type-scan__empty" *ngIf="!kkTypeScanCodeRows.length">Không có dòng tồn mã này{{ kkActiveProductType ? ' trong loại hàng' : '' }}.</p>
+
+          <ng-container *ngIf="nlScanDevice === 'mobile'">
+            <input *ngIf="kkTypeScanStep === 'location'"
+                   id="kkTypeScanLocationInput"
+                   type="text"
+                   class="kk-scan-trap kk-scan-pro__hid"
+                   [(ngModel)]="kkTypeScanLocationInput"
+                   autocomplete="off"
+                   tabindex="-1"
+                   aria-hidden="true">
+            <input *ngIf="kkTypeScanStep === 'codes'"
+                   id="kkTypeScanQrInput"
+                   type="text"
+                   class="kk-scan-trap kk-scan-pro__hid"
+                   autocomplete="off"
+                   tabindex="-1"
+                   aria-hidden="true">
+          </ng-container>
         </div>
 
-        <button type="button" class="kk-type-scan__back" tabindex="-1" (click)="backKkTypeScanToLocation()" [disabled]="kkTypeScanBusy">
-          <i class="material-icons">swap_horiz</i>
-          Đổi vị trí
-        </button>
-        <ul class="kk-type-scan__log" *ngIf="kkTypeScanLogs.length">
-          <li *ngFor="let log of kkTypeScanLogs"
-              [class.kk-type-scan__log--ok]="log.ok"
-              [class.kk-type-scan__log--skip]="log.skip"
-              [class.kk-type-scan__log--miss]="!log.ok && !log.skip">
-            {{ log.text }}
-          </li>
-        </ul>
-      </div>
+        <p class="kk-scan-pro__err" *ngIf="kkTypeScanErr && (kkTypeScanStep === 'location' || kkTypeScanStep === 'codes') && kkTypeScanUiTab === 'scan'">{{ kkTypeScanErr }}</p>
+
+        <!-- TAB: Scan (nội dung dưới stage) -->
+        <div class="kk-scan-pro__panel" *ngIf="kkTypeScanUiTab === 'scan'">
+          <div class="kk-scan-pro__ctx" (click)="setKkTypeScanUiTab('shelf')">
+            <div class="kk-scan-pro__ctx-ico" aria-hidden="true">
+              <i class="material-icons">{{ kkTypeScanStep === 'codes' ? 'inventory_2' : 'place' }}</i>
+            </div>
+            <div class="kk-scan-pro__ctx-main">
+              <strong *ngIf="kkTypeScanStep === 'codes'">Kệ {{ kkTypeScanLocation || '—' }} · NV {{ kkTypeScanOperator || '—' }}</strong>
+              <strong *ngIf="kkTypeScanStep === 'location'">NV {{ kkTypeScanOperator || '—' }} · chờ scan kệ</strong>
+              <span>{{ kkTypeScanStepHint }}</span>
+              <div class="kk-scan-pro__chips" *ngIf="kkTypeScanLastReadMs !== null && !showKkTypeScanConfirm">
+                <span class="kk-scan-pro__chip kk-scan-pro__chip--ok">
+                  <i class="material-icons">bolt</i> Đọc tem {{ formatScanMs(kkTypeScanLastReadMs) }}
+                </span>
+                <span class="kk-scan-pro__chip" *ngIf="kkTypeScanLastSaveMs !== null">
+                  <i class="material-icons">schedule</i> Ghi nhận {{ formatScanMs(kkTypeScanLastSaveMs) }}
+                </span>
+                <span class="kk-scan-pro__chip" *ngIf="kkTypeScanLastSavePending">đang ghi…</span>
+              </div>
+            </div>
+            <i class="material-icons kk-scan-pro__chev">chevron_right</i>
+          </div>
+
+          <button type="button"
+                  class="kk-scan-pro__action"
+                  *ngIf="kkTypeScanStep === 'codes'"
+                  tabindex="-1"
+                  (click)="backKkTypeScanToLocation(); setKkTypeScanUiTab('shelf')"
+                  [disabled]="kkTypeScanBusy">
+            <i class="material-icons">swap_horiz</i>
+            <span>Đổi vị trí</span>
+            <i class="material-icons kk-scan-pro__chev">chevron_right</i>
+          </button>
+
+          <div class="kk-scan-pro__feed" *ngIf="kkTypeScanRecentLogs.length">
+            <button type="button"
+                    class="kk-scan-pro__feed-item"
+                    *ngFor="let log of kkTypeScanRecentLogs"
+                    [class.kk-scan-pro__feed-item--ok]="log.ok"
+                    [class.kk-scan-pro__feed-item--skip]="log.skip"
+                    [class.kk-scan-pro__feed-item--miss]="!log.ok && !log.skip"
+                    (click)="setKkTypeScanUiTab('log')">
+              <i class="material-icons">{{ log.ok ? 'check_circle' : (log.skip ? 'remove_circle' : 'error') }}</i>
+              <span>{{ log.text }}</span>
+              <i class="material-icons kk-scan-pro__chev">chevron_right</i>
+            </button>
+          </div>
+
+          <div class="kk-scan-pro__progress" *ngIf="kkTypeScanOkCount || kkTypeScanMissCount || (kkTypeScanMode === 'inventory' && kkTypeScanMaterialCode)">
+            <div class="kk-scan-pro__progress-lab">
+              <span>{{ kkTypeScanProgressLabel }}</span>
+              <span *ngIf="kkTypeScanMaterialCode && kkTypeScanMode === 'inventory'">{{ kkTypeScanStatusText }}</span>
+            </div>
+            <div class="kk-scan-pro__progress-bar" aria-hidden="true">
+              <span [style.width.%]="kkTypeScanProgressPct"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Vị trí -->
+        <div class="kk-scan-pro__panel" *ngIf="kkTypeScanUiTab === 'shelf'">
+          <div class="kk-scan-pro__ctx">
+            <div class="kk-scan-pro__ctx-ico" aria-hidden="true"><i class="material-icons">place</i></div>
+            <div class="kk-scan-pro__ctx-main">
+              <strong>Kệ hiện tại: {{ kkTypeScanLocation || '— chưa scan' }}</strong>
+              <span>NV {{ kkTypeScanOperator || '—' }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></span>
+            </div>
+          </div>
+          <button type="button"
+                  class="kk-scan-pro__action"
+                  tabindex="-1"
+                  (click)="backKkTypeScanToLocation(); setKkTypeScanUiTab('scan')"
+                  [disabled]="kkTypeScanBusy || kkTypeScanStep === 'location'">
+            <i class="material-icons">swap_horiz</i>
+            <span>{{ kkTypeScanStep === 'location' ? 'Đang chờ scan kệ…' : 'Đổi vị trí — scan kệ mới' }}</span>
+            <i class="material-icons kk-scan-pro__chev">chevron_right</i>
+          </button>
+          <button type="button" class="kk-scan-pro__action kk-scan-pro__action--ghost" (click)="setKkTypeScanUiTab('scan')">
+            <i class="material-icons">qr_code_scanner</i>
+            <span>Quay lại Scan</span>
+            <i class="material-icons kk-scan-pro__chev">chevron_right</i>
+          </button>
+        </div>
+
+        <!-- TAB: Nhật ký -->
+        <div class="kk-scan-pro__panel" *ngIf="kkTypeScanUiTab === 'log'">
+          <div class="kk-scan-pro__code" *ngIf="kkTypeScanMaterialCode && kkTypeScanMode === 'inventory'">
+            <div class="kk-scan-pro__code-head">
+              <strong>{{ kkTypeScanMaterialCode }}</strong>
+              <span class="kk-scan-pro__frac"
+                    [class.kk-scan-pro__frac--ok]="kkTypeScanProgressTone === 'ok'"
+                    [class.kk-scan-pro__frac--low]="kkTypeScanProgressTone === 'low'"
+                    [class.kk-scan-pro__frac--over]="kkTypeScanProgressTone === 'over'">
+                {{ formatNumber(kkTypeScanQtyScanned) }} / {{ kkTypeScanCartonTotal || '—' }} Box
+              </span>
+              <span>{{ kkTypeScanStatusText }}</span>
+              <button type="button"
+                      class="kk-scan-pro__reset"
+                      tabindex="-1"
+                      (click)="resetKkScanForCurrentCode($event)"
+                      [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
+                <i class="material-icons">restart_alt</i> Reset
+              </button>
+            </div>
+            <div class="kk-scan-pro__code-tools">
+              <label>
+                Standard
+                <input type="number"
+                       [ngModel]="kkTypeScanStandardDraft"
+                       (ngModelChange)="kkTypeScanStandardDraft = $event === '' || $event === null ? '' : +$event"
+                       (keydown.enter)="$any($event.target).blur()"
+                       (blur)="saveKkTypeScanStandard()"
+                       min="0"
+                       step="0.1"
+                       [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
+              </label>
+              <button type="button"
+                      class="kk-scan-pro__all-btn"
+                      [class.is-on]="kkTypeScanAllTicked"
+                      (click)="onKkTypeScanTickAll(!kkTypeScanAllTicked)"
+                      [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length">
+                <i class="material-icons">{{ kkTypeScanAllTicked ? 'check_box' : 'check_box_outline_blank' }}</i>
+                Đủ toàn bộ
+              </button>
+            </div>
+            <div class="kk-scan-pro__table-wrap" *ngIf="kkTypeScanCodeRows.length">
+              <table>
+                <thead>
+                  <tr>
+                    <th>PO</th>
+                    <th>IMD</th>
+                    <th>Vị trí</th>
+                    <th>Lượng</th>
+                    <th>Box</th>
+                    <th>KK</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let line of kkTypeScanCodeRows; trackBy: trackByFn"
+                      [class.is-on]="!!line.kkChecked"
+                      (click)="canEdit && !kkTypeScanBusy && onKkTypeScanRowTick(line, !line.kkChecked)">
+                    <td>{{ line.poNumber || '—' }}</td>
+                    <td>{{ getDisplayIMD(line) }}</td>
+                    <td>{{ primaryLocationDisplay(line.location) }}</td>
+                    <td class="n">{{ formatNumber(calculateCurrentStock(line)) }}</td>
+                    <td class="n">{{ formatNumber(getKkScanCount(line)) }}</td>
+                    <td>
+                      <i class="material-icons">{{ line.kkChecked ? 'check_box' : 'check_box_outline_blank' }}</i>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="kk-scan-pro__feed kk-scan-pro__feed--full" *ngIf="kkTypeScanLogs.length; else kkScanLogEmpty">
+            <div class="kk-scan-pro__feed-item"
+                 *ngFor="let log of kkTypeScanLogs"
+                 [class.kk-scan-pro__feed-item--ok]="log.ok"
+                 [class.kk-scan-pro__feed-item--skip]="log.skip"
+                 [class.kk-scan-pro__feed-item--miss]="!log.ok && !log.skip">
+              <i class="material-icons">{{ log.ok ? 'check_circle' : (log.skip ? 'remove_circle' : 'error') }}</i>
+              <span>{{ log.text }}</span>
+            </div>
+          </div>
+          <ng-template #kkScanLogEmpty>
+            <p class="kk-scan-pro__empty">Chưa có nhật ký scan.</p>
+          </ng-template>
+        </div>
+      </ng-container>
     </div>
+
+    <nav class="kk-scan-pro__tabs" *ngIf="kkTypeScanStep !== 'operator'" aria-label="Scan tabs">
+      <button type="button"
+              [class.is-on]="kkTypeScanUiTab === 'scan'"
+              (click)="setKkTypeScanUiTab('scan')">
+        <i class="material-icons">qr_code_scanner</i>
+        <span>Scan</span>
+      </button>
+      <button type="button"
+              [class.is-on]="kkTypeScanUiTab === 'shelf'"
+              (click)="setKkTypeScanUiTab('shelf')">
+        <i class="material-icons">place</i>
+        <span>Vị trí</span>
+      </button>
+      <button type="button"
+              [class.is-on]="kkTypeScanUiTab === 'log'"
+              (click)="setKkTypeScanUiTab('log')">
+        <i class="material-icons">receipt_long</i>
+        <span>Nhật ký</span>
+      </button>
+    </nav>
   </div>
 </div>
 
