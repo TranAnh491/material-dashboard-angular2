@@ -455,6 +455,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkDocScanAt = 0;
   private kkDocScanTimer: ReturnType<typeof setTimeout> | null = null;
   kkTypeScanErr = '';
+  /** Popup xác nhận sau mỗi lần scan mã — phải bấm Đồng ý mới scan tiếp */
+  showKkTypeScanConfirm = false;
+  kkTypeScanConfirm: {
+    code: string;
+    po: string;
+    imd: string;
+    location: string;
+    scannedShelf: string;
+    relocated: boolean;
+  } | null = null;
   private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
   private kkScanOpTimer: any;
   kkTypePrintBusy = false;
@@ -2743,15 +2753,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showNlCamera = true;
     this.isScanning = true;
     this.cdr.markForCheck();
-    await new Promise((r) => setTimeout(r, 80));
+    // KK: camera gắn trong màn Scan vị trí — đợi DOM inline render
+    await new Promise((r) => setTimeout(r, purpose === 'kk' ? 120 : 80));
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
-      const elId = 'nl-qr-reader';
+      const elId = purpose === 'kk' ? 'kk-inline-qr-reader' : 'nl-qr-reader';
+      const host = document.getElementById(elId);
+      if (!host) {
+        throw new Error(`Camera host #${elId} chưa sẵn sàng`);
+      }
+      host.innerHTML = '';
       this.html5QrCode = new Html5Qrcode(elId);
       const cameras = await Html5Qrcode.getCameras();
       const back = (cameras || []).find((c) => /back|rear|environment/i.test(c.label));
       const camId = back?.id || cameras?.[cameras.length - 1]?.id || cameras?.[0]?.id;
-      const config = { fps: 10, qrbox: { width: 240, height: 240 } };
+      // Khung scan lớn hơn trên mobile web để quét nhanh
+      const box = purpose === 'kk' ? { width: 260, height: 260 } : { width: 240, height: 240 };
+      const config = { fps: 12, qrbox: box };
       const onOk = (text: string) => this.onNlCameraDecoded(text);
       if (camId) {
         await this.html5QrCode.start(camId, config, onOk, () => undefined);
@@ -2787,6 +2805,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.nlScanLock = false;
       return;
     }
+    if (this.showKkTypeScanConfirm) {
+      this.nlScanLock = false;
+      this.kkTypeScanBeep('err');
+      return;
+    }
     const step = this.kkTypeScanStep;
     if (step === 'operator') {
       // Không scan mã NV bằng camera — chỉ nhập tay
@@ -2799,11 +2822,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const el = document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null;
       if (el) el.value = raw;
       this.kkTypeScanLocationInput = raw;
-      this.stopNlCamera();
+      // Giữ camera inline — chỉ chuyển bước, không tắt popup (không còn popup)
       this.submitKkTypeScanLocation(undefined, raw);
-      if (this.showKkTypeScanModal && this.nlScanDevice === 'mobile') {
-        setTimeout(() => void this.startNlCamera('kk'), 220);
-      }
+      setTimeout(() => { this.nlScanLock = false; }, 500);
       return;
     }
     this.enqueueKkTypeScanCode(raw, 0);
@@ -11173,6 +11194,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanExtraLines = [];
     this.kkTypeScanCartons = {};
     this.kkTypeScanErr = '';
+    this.showKkTypeScanConfirm = false;
+    this.kkTypeScanConfirm = null;
     this.lockKkScanKeyboard();
     this.cdr.detectChanges();
     setTimeout(() => this.focusKkTypeScanInput('kkTypeScanOperatorInput'), 80);
@@ -11183,6 +11206,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.nlCameraPurpose === 'kk') this.stopNlCamera();
     this.unlockKkScanKeyboard();
     this.showKkTypeScanModal = false;
+    this.showKkTypeScanConfirm = false;
+    this.kkTypeScanConfirm = null;
     this.kkTypeScanStep = 'location';
     this.kkTypeScanLocation = '';
     this.kkTypeScanLocationInput = '';
@@ -11334,6 +11359,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private enqueueKkTypeScanCode(raw: string, readMs = 0): void {
+    if (this.showKkTypeScanConfirm) {
+      this.kkTypeScanBeep('err');
+      return;
+    }
     const v = String(raw || '').trim();
     if (!v) return;
     this.kkHidQrQueue.push({ raw: v, readMs: Math.max(0, readMs || 0) });
@@ -11353,18 +11382,50 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async drainKkHidQrQueue(): Promise<void> {
     if (this.kkHidQrDraining) return;
+    if (this.showKkTypeScanConfirm) return;
     this.kkHidQrDraining = true;
     try {
-      while (this.kkHidQrQueue.length && this.showKkTypeScanModal && this.kkTypeScanStep === 'codes') {
+      while (
+        this.kkHidQrQueue.length &&
+        this.showKkTypeScanModal &&
+        this.kkTypeScanStep === 'codes' &&
+        !this.showKkTypeScanConfirm
+      ) {
         const next = this.kkHidQrQueue.shift();
         if (!next) break;
         await this.submitKkTypeScanCodeFromRaw(next.raw, next.readMs);
+        // Sau 1 mã thành công → chờ Đồng ý, không drain tiếp
+        if (this.showKkTypeScanConfirm) break;
       }
     } finally {
       this.kkHidQrDraining = false;
-      if (this.kkHidQrQueue.length && this.showKkTypeScanModal && this.kkTypeScanStep === 'codes') {
+      if (
+        !this.showKkTypeScanConfirm &&
+        this.kkHidQrQueue.length &&
+        this.showKkTypeScanModal &&
+        this.kkTypeScanStep === 'codes'
+      ) {
         void this.drainKkHidQrQueue();
       }
+    }
+  }
+
+  acknowledgeKkTypeScanConfirm(): void {
+    this.showKkTypeScanConfirm = false;
+    this.kkTypeScanConfirm = null;
+    this.kkHidQrQueue = [];
+    this.nlScanLock = false;
+    this.cdr.detectChanges();
+    this.focusKkTypeScanInput('kkTypeScanQrInput');
+    // Camera vẫn chạy inline — không cần start lại nếu đang mở
+    if (
+      this.isMobile &&
+      this.nlScanDevice === 'mobile' &&
+      this.showKkTypeScanModal &&
+      this.kkTypeScanStep === 'codes' &&
+      !this.showNlCamera
+    ) {
+      setTimeout(() => void this.startNlCamera('kk'), 80);
     }
   }
 
@@ -11925,8 +11986,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
     this.kkTypeScanBeep('ok');
     this.kkTypeScanLastSavePending = true;
+
+    // Báo liền — overlay phủ toàn màn, không bị che; chờ Đồng ý mới scan tiếp
+    this.kkHidQrQueue = [];
+    this.kkTypeScanConfirm = {
+      code,
+      po: String(po || '').trim(),
+      imd: String(imd || '').trim(),
+      location: nextLoc,
+      scannedShelf: loc,
+      relocated: !!relocateNote
+    };
+    this.showKkTypeScanConfirm = true;
     this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanQrInput');
+    setTimeout(() => {
+      const btn = document.getElementById('kkTypeScanConfirmOk') as HTMLButtonElement | null;
+      btn?.focus();
+    }, 40);
 
     this.kkScanWritesInFlight += 1;
     this.kkScanWriteChain = this.kkScanWriteChain
@@ -11947,9 +12023,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           [code]: Math.max(0, (this.kkTypeScanCartons[code] || 1) - 1)
         };
         this.kkTypeScanLastSavePending = false;
+        this.showKkTypeScanConfirm = false;
+        this.kkTypeScanConfirm = null;
         this.patchKkTypeScanLog(logId, `${code} — không lưu được · ${readNote}`, undefined);
         this.kkTypeScanBeep('err');
         if (this.showKkTypeScanModal) this.cdr.detectChanges();
+        this.focusKkTypeScanInput('kkTypeScanQrInput');
       })
       .then(() => {
         this.kkScanWritesInFlight = Math.max(0, this.kkScanWritesInFlight - 1);

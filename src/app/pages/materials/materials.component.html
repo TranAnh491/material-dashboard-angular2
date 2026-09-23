@@ -2954,10 +2954,9 @@
   </div>
 </div>
 
-<!-- Quản lý NVL: camera -->
+<!-- Quản lý NVL: camera (search / location) — KK dùng camera gắn trong màn Scan vị trí -->
 <div class="modal-overlay mat-m-kk-overlay"
-     [class.mat-m-kk-overlay--front]="nlCameraPurpose === 'kk'"
-     *ngIf="showNlCamera"
+     *ngIf="showNlCamera && nlCameraPurpose !== 'kk'"
      (click)="stopNlCamera()">
   <div class="modal-content mat-m-kk-modal mat-m-loc-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Quét camera">
     <header class="mat-m-kk-modal__header">
@@ -2976,9 +2975,6 @@
     </header>
     <div class="mat-m-kk-modal__body">
       <div id="nl-qr-reader" class="mat-m-nl-qr"></div>
-      <p class="mat-m-loc-scan-hint" *ngIf="nlCameraPurpose === 'kk' && kkTypeScanLogs[0]">
-        {{ kkTypeScanLogs[0].text }}
-      </p>
     </div>
     <footer class="mat-m-kk-modal__footer">
       <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="stopNlCamera()">Hủy</button>
@@ -4914,7 +4910,7 @@
   </div>
 </div>
 
-<div class="modal-overlay"
+<div class="modal-overlay kk-type-scan-shell"
      [class.more-overlay]="!isMobile"
      *ngIf="showKkTypeScanModal"
      (click)="closeKkTypeScanModal()">
@@ -4930,16 +4926,6 @@
         </div>
       </div>
       <div class="more-popup-header__right">
-        <button type="button"
-                class="more-popup-close"
-                *ngIf="isMobile && nlScanDevice === 'mobile' && kkTypeScanStep !== 'operator'"
-                (click)="startNlCamera('kk')"
-                [disabled]="kkTypeScanBusy || showNlCamera"
-                tabindex="-1"
-                title="Quét bằng camera"
-                aria-label="Quét camera">
-          <i class="material-icons">qr_code_scanner</i>
-        </button>
         <button type="button" class="more-popup-close" tabindex="-1" (click)="openKkScanGuide()" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn">
           <i class="material-icons">info</i>
         </button>
@@ -4971,12 +4957,24 @@
         <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'operator'">{{ kkTypeScanErr }}</p>
       </div>
 
+      <!-- Camera gắn trong màn (mobile) — không popup; giữ DOM khi confirm để không restart cam -->
+      <div class="kk-type-scan__cam"
+           *ngIf="isMobile && nlScanDevice === 'mobile' && kkTypeScanStep !== 'operator'"
+           [class.kk-type-scan__cam--dim]="showKkTypeScanConfirm">
+        <div class="kk-type-scan__cam-head">
+          <strong>{{ nlCameraHeading }}</strong>
+          <span>{{ nlCameraSub }}</span>
+        </div>
+        <div id="kk-inline-qr-reader" class="kk-type-scan__cam-view"></div>
+        <p class="kk-type-scan__cam-tip">Đưa tem vào khung — quét một lần, báo ngay</p>
+      </div>
+
       <div *ngIf="kkTypeScanStep === 'location'" class="kk-type-scan__step">
         <p class="kk-type-scan__hint">
           NV <strong>{{ kkTypeScanOperator || '—' }}</strong>
-          · Bước 2: <strong>Scan kệ</strong> — tem phải bắt đầu bằng <strong>S</strong> hoặc <strong>R</strong> (vd: S07-1-1, R03)
+          · Bước 2: <strong>Scan kệ</strong> — tem phải bắt đầu bằng <strong>S</strong> hoặc <strong>R</strong>
         </p>
-        <div class="kk-type-scan__input-row">
+        <div class="kk-type-scan__input-row" *ngIf="!(isMobile && nlScanDevice === 'mobile')">
           <input id="kkTypeScanLocationInput"
                  type="text"
                  class="kk-scan-trap"
@@ -4995,6 +4993,15 @@
             <i class="material-icons">arrow_forward</i>
           </button>
         </div>
+        <!-- Ô ẩn để PDA/HID vẫn ghi được khi cần -->
+        <input *ngIf="isMobile && nlScanDevice === 'mobile'"
+               id="kkTypeScanLocationInput"
+               type="text"
+               class="kk-scan-trap kk-type-scan__hid"
+               [(ngModel)]="kkTypeScanLocationInput"
+               autocomplete="off"
+               tabindex="-1"
+               aria-hidden="true">
         <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'location'">{{ kkTypeScanErr }}</p>
       </div>
 
@@ -5004,7 +5011,7 @@
           · NV {{ kkTypeScanOperator || '—' }}
           · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong> (không đọc lượng). Sai kệ → hệ thống đưa về vị trí đúng đã set.
         </p>
-        <div class="kk-type-scan__input-row">
+        <div class="kk-type-scan__input-row" *ngIf="!(isMobile && nlScanDevice === 'mobile')">
           <input id="kkTypeScanQrInput"
                  type="text"
                  class="kk-scan-trap"
@@ -5016,19 +5023,26 @@
                  tabindex="0"
                  (focus)="onKkHidScanFocus($event)"
                  (blur)="onKkScanTrapBlur($event)"
+                 [disabled]="kkTypeScanBusy || showKkTypeScanConfirm"
                  [attr.inputmode]="kkScanHideKeyboard ? 'none' : 'text'"
                  [attr.enterkeyhint]="'done'">
-          <button type="button" tabindex="-1" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy">
+          <button type="button" tabindex="-1" (click)="submitKkTypeScanCode()" [disabled]="kkTypeScanBusy || showKkTypeScanConfirm">
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
         </div>
-        <p class="kk-type-scan__timing" *ngIf="kkTypeScanLastReadMs !== null">
+        <input *ngIf="isMobile && nlScanDevice === 'mobile'"
+               id="kkTypeScanQrInput"
+               type="text"
+               class="kk-scan-trap kk-type-scan__hid"
+               autocomplete="off"
+               tabindex="-1"
+               aria-hidden="true">
+        <p class="kk-type-scan__timing" *ngIf="kkTypeScanLastReadMs !== null && !showKkTypeScanConfirm">
           Đọc tem: <strong>{{ formatScanMs(kkTypeScanLastReadMs) }}</strong>
           <ng-container *ngIf="kkTypeScanLastSaveMs !== null">
             · Ghi nhận: <strong>{{ formatScanMs(kkTypeScanLastSaveMs) }}</strong>
           </ng-container>
           <ng-container *ngIf="kkTypeScanLastSavePending"> · đang ghi…</ng-container>
-          <span *ngIf="kkTypeScanPendingCount > 1"> · chờ {{ kkTypeScanPendingCount - 1 }} tem</span>
         </p>
 
         <div class="kk-type-scan__code" *ngIf="kkTypeScanMaterialCode">
@@ -5119,6 +5133,52 @@
         </ul>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Báo scan ngay — phủ toàn màn, không bị modal/camera che -->
+<div class="kk-scan-confirm-overlay"
+     *ngIf="showKkTypeScanConfirm && kkTypeScanConfirm"
+     (click)="$event.stopPropagation()"
+     role="alertdialog"
+     aria-modal="true"
+     aria-label="Đã scan mã">
+  <div class="kk-scan-confirm" (click)="$event.stopPropagation()">
+    <div class="kk-scan-confirm__ok-ico" aria-hidden="true">
+      <i class="material-icons">check_circle</i>
+    </div>
+    <h3 class="kk-scan-confirm__title">Đã scan</h3>
+    <dl class="kk-scan-confirm__dl">
+      <div>
+        <dt>Mã</dt>
+        <dd>{{ kkTypeScanConfirm.code }}</dd>
+      </div>
+      <div *ngIf="kkTypeScanConfirm.po">
+        <dt>PO</dt>
+        <dd>{{ kkTypeScanConfirm.po }}</dd>
+      </div>
+      <div *ngIf="kkTypeScanConfirm.imd">
+        <dt>IMD</dt>
+        <dd>{{ kkTypeScanConfirm.imd }}</dd>
+      </div>
+      <div>
+        <dt>Vị trí</dt>
+        <dd class="kk-scan-confirm__loc">{{ kkTypeScanConfirm.location }}</dd>
+      </div>
+    </dl>
+    <p class="kk-scan-confirm__note" *ngIf="kkTypeScanConfirm.relocated">
+      Đã đưa về vị trí đúng (scan kệ {{ kkTypeScanConfirm.scannedShelf }}).
+    </p>
+    <p class="kk-scan-confirm__note" *ngIf="!kkTypeScanConfirm.relocated">
+      Ghi nhận tại kệ đang scan.
+    </p>
+    <button type="button"
+            id="kkTypeScanConfirmOk"
+            class="kk-scan-confirm__btn"
+            (click)="acknowledgeKkTypeScanConfirm()"
+            (keydown.enter)="acknowledgeKkTypeScanConfirm()">
+      Đồng ý — scan mã tiếp
+    </button>
   </div>
 </div>
 
