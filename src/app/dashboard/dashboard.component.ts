@@ -1483,12 +1483,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return String(line || '').replace(/\s/g, '').toUpperCase();
   }
 
-  /** Line nhận WHE / WHD → ASM3 (cùng quy tắc tab Work Order Status). */
+  /** Line nhận WHE / WHD / WHG (kể cả WH G) → ASM3 (cùng quy tắc tab Work Order Status). */
   private isAsm3ProductionLine(line?: string): boolean {
     const key = this.normalizeProductionLineKey(line || '');
     if (!key || key === '-') return false;
-    if (key === 'WHE' || key === 'WHD') return true;
-    return key.startsWith('WHE') || key.startsWith('WHD');
+    if (key === 'WHE' || key === 'WHD' || key === 'WHG') return true;
+    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHG');
   }
 
   private isWoAsm3Marked(wo: WorkOrder): boolean {

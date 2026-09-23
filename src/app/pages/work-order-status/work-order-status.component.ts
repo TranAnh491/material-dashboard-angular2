@@ -2190,7 +2190,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Line nhận WHE / WHD / WHF → ghi chú tự động ASM3. */
+  /** Line nhận WHE / WHD / WHF / WHG (kể cả WH G) → ghi chú tự động ASM3. */
   private normalizeProductionLineKey(line: string): string {
     return String(line || '').replace(/\s/g, '').toUpperCase();
   }
@@ -2198,11 +2198,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private isAsm3ProductionLine(line: string): boolean {
     const key = this.normalizeProductionLineKey(line);
     if (!key || key === '-') return false;
-    if (key === 'WHE' || key === 'WHD' || key === 'WHF') return true;
-    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF');
+    if (key === 'WHE' || key === 'WHD' || key === 'WHF' || key === 'WHG') return true;
+    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF') || key.startsWith('WHG');
   }
 
-  /** KZ + Line WHE/WHD/WHF → ASM3 trên PXK; KZ khác → ASM1; LH → ASM2. */
+  /** KZ + Line WHE/WHD/WHF/WHG → ASM3 trên PXK; KZ khác → ASM1; LH → ASM2. */
   private resolvePxkFactoryBadge(lsx: string, productionLine: string): 'ASM1' | 'ASM2' | 'ASM3' | null {
     const lsxUpper = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
     if (lsxUpper.startsWith('LH')) return 'ASM2';

@@ -139,7 +139,7 @@
                       *ngIf="kkLocMapView === 'type'"
                       (click)="printKkSShelfMap()"
                       [disabled]="kkTypePrintBusy"
-                      title="Danh sách kệ S từ nhỏ đến lớn và mã hàng theo từng kệ">
+                      title="Danh sách kệ S (tới S25) và kệ R — kệ + nhóm mã / khoảng mã">
                 <i class="material-icons">map</i>
                 <span class="btn-label">Hình Sơ Đồ</span>
               </button>
@@ -576,7 +576,7 @@
             </div>
             <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
               <div class="kk-b009-board" *ngIf="isKkConnectorRackMuc(muc.category) && muc.groups?.length">
-                <p class="kk-b009-board__hint">Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem toàn bộ mã. S01 có 2 block; kệ khác 3 block.</p>
+                <p class="kk-b009-board__hint">Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem khoảng mã. S01 có 2 block; kệ khác 3 block.</p>
                 <div class="kk-b009-board__cols">
                   <div class="kk-b009-col" *ngFor="let g of kkB009ShelfGroups(muc)">
                     <div class="kk-b009-col__head">
@@ -611,12 +611,8 @@
                          *ngFor="let b of kkShelfBlockNos(kkConnectorViewShelf(muc.category))"
                          [class.kk-b009-block--empty]="kkB009FloorEmpty(s)">
                       <strong>{{ kkB009LocOf(kkConnectorViewShelf(muc.category), b, kkConnectorViewLevel(muc.category)) }}</strong>
-                      <span>{{ kkB009FloorEmpty(s) ? 'Trống' : (kkB009SubShortRange(s) + ' · ' + kkB009FloorCodeCount(s) + ' mã') }}</span>
+                      <span>{{ kkB009FloorEmpty(s) ? 'Trống' : (kkB009SubFullRange(s) + ' · ' + kkB009FloorCodeCount(s) + ' mã') }}</span>
                     </div>
-                  </div>
-                  <div class="kk-b009-codes">
-                    <span class="kk-b009-code" *ngFor="let code of kkB009FloorCodes(muc.category, s)">{{ code }}</span>
-                    <p class="hidden-empty" *ngIf="!kkB009FloorCodeCount(s)">Để trống — dùng khi cần</p>
                   </div>
                 </div>
                 <div class="kk-type-group"

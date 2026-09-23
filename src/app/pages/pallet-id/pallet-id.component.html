@@ -57,6 +57,10 @@
       <i class="material-icons">place</i>
       <span>{{ isPrintingJLocLabels ? 'Đang in...' : 'Tem vị trí' }}</span>
     </button>
+    <button class="pid-btn" (click)="openShelfLabelModal()" [disabled]="isPrintingShelfLabels">
+      <i class="material-icons">view_week</i>
+      <span>{{ isPrintingShelfLabels ? 'Đang tạo...' : 'Tem kệ' }}</span>
+    </button>
   </div>
 
   <!-- Modal mật khẩu In tem PASS -->
@@ -334,6 +338,144 @@
         <button class="btn-print-confirm" (click)="printJLocLabels()" [disabled]="isPrintingJLocLabels || !jLocSelectedCount">
           <i class="material-icons">print</i>
           In {{ jLocSelectedCount | number }} tem
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Tem kệ (dãy R / S) — tem mâm hoặc label đầu kệ -->
+  <div class="modal-overlay" *ngIf="showShelfLabelModal" (click)="closeShelfLabelModal()">
+    <div class="modal-content shelf-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Tem kệ</h3>
+        <button class="btn-close" (click)="closeShelfLabelModal()" [disabled]="isPrintingShelfLabels">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body shelf-label-modal__body">
+        <div class="shelf-label-modal__kinds" role="group" aria-label="Loại tem">
+          <button type="button"
+                  class="shelf-label-kind"
+                  [class.is-on]="shelfLabelKind === 'mam'"
+                  (click)="setShelfLabelKind('mam')">
+            <strong>Tem mâm kệ</strong>
+            <span>Chọn S01 → in S01-1-1 … S01-1-7 (và các block)</span>
+          </button>
+          <button type="button"
+                  class="shelf-label-kind"
+                  [class.is-on]="shelfLabelKind === 'dauKe'"
+                  (click)="setShelfLabelKind('dauKe')">
+            <strong>Label Đầu Kệ</strong>
+            <span>R = A4 ngang · S = A5 ngang · logo + chữ to</span>
+          </button>
+        </div>
+
+        <p class="shelf-label-modal__hint" *ngIf="shelfLabelKind === 'mam'">
+          Logo góc trái · tên mâm giữa · QR bên cạnh. Xếp trên giấy <strong>A4</strong>
+          ({{ shelfLabelPerPage }} tem/trang). Chọn dãy sẽ bung ra toàn bộ mâm của dãy đó.
+        </p>
+        <p class="shelf-label-modal__hint" *ngIf="shelfLabelKind === 'dauKe'">
+          Mỗi dãy một trang <strong>in ngang</strong>: logo góc trái to, tên kệ (vd <strong>S01</strong>) giữa thật lớn.
+          Kệ <strong>R</strong> = <strong>A4 ngang</strong>, kệ <strong>S</strong> = <strong>A5 ngang</strong>.
+        </p>
+
+        <div class="shelf-label-modal__sizes" *ngIf="shelfLabelKind === 'mam'" role="group" aria-label="Kích cỡ tem">
+          <button type="button"
+                  class="shelf-label-size"
+                  [class.is-on]="shelfLabelSize === '50x100'"
+                  (click)="setShelfLabelSize('50x100')">
+            <strong>5 × 10 cm</strong>
+            <span>Cao 5cm · Ngang 10cm · {{ shelfLabelPerPageOf('50x100') }} tem/A4</span>
+          </button>
+          <button type="button"
+                  class="shelf-label-size"
+                  [class.is-on]="shelfLabelSize === '80x160'"
+                  (click)="setShelfLabelSize('80x160')">
+            <strong>8 × 16 cm</strong>
+            <span>Cao 8cm · Ngang 16cm · {{ shelfLabelPerPageOf('80x160') }} tem/A4</span>
+          </button>
+        </div>
+
+        <div class="shelf-label-modal__bar">
+          <input type="search"
+                 class="shelf-label-modal__search"
+                 [ngModel]="shelfLabelQuery"
+                 (ngModelChange)="onShelfLabelQueryChange($event)"
+                 placeholder="Tìm dãy (R01, S07…)"
+                 autocomplete="off"
+                 autocapitalize="characters">
+          <span class="shelf-label-modal__count">
+            {{ shelfLabelSelectedCount | number }} dãy
+            <ng-container *ngIf="shelfLabelKind === 'mam'"> · {{ shelfLabelPrintCount | number }} mâm</ng-container>
+          </span>
+          <button type="button" class="shelf-label-modal__clear" (click)="clearShelfLabelSelection()" [disabled]="!shelfLabelSelectedCount">Bỏ chọn</button>
+        </div>
+        <p class="shelf-label-modal__err" *ngIf="shelfLabelError">{{ shelfLabelError }}</p>
+
+        <div class="shelf-label-modal__scroll">
+          <section class="shelf-label-sec" *ngIf="shelfLabelRAisles.length">
+            <div class="shelf-label-sec__head">
+              <h4>Kệ R <small *ngIf="shelfLabelKind === 'dauKe'">· A4 ngang</small></h4>
+              <button type="button"
+                      class="shelf-label-sec__all"
+                      [class.is-on]="isShelfLabelFamilyAllSelected('R')"
+                      (click)="toggleShelfLabelFamily('R')">
+                {{ isShelfLabelFamilyAllSelected('R') ? 'Bỏ hết R' : 'Chọn hết R' }}
+              </button>
+            </div>
+            <div class="shelf-label-grid">
+              <label class="shelf-label-chip"
+                     *ngFor="let aisle of shelfLabelRAisles"
+                     [class.is-on]="isShelfLabelSelected(aisle)"
+                     [title]="shelfLabelKind === 'mam' ? (aisle + ' · ' + shelfLabelMamCountOf(aisle) + ' mâm') : aisle">
+                <input type="checkbox"
+                       [checked]="isShelfLabelSelected(aisle)"
+                       (change)="toggleShelfLabel(aisle)">
+                <span>{{ aisle }}</span>
+                <em *ngIf="shelfLabelKind === 'mam'">{{ shelfLabelMamCountOf(aisle) }}</em>
+              </label>
+            </div>
+          </section>
+
+          <section class="shelf-label-sec" *ngIf="shelfLabelSAisles.length">
+            <div class="shelf-label-sec__head">
+              <h4>Kệ S <small *ngIf="shelfLabelKind === 'dauKe'">· A5 ngang</small></h4>
+              <button type="button"
+                      class="shelf-label-sec__all"
+                      [class.is-on]="isShelfLabelFamilyAllSelected('S')"
+                      (click)="toggleShelfLabelFamily('S')">
+                {{ isShelfLabelFamilyAllSelected('S') ? 'Bỏ hết S' : 'Chọn hết S' }}
+              </button>
+            </div>
+            <div class="shelf-label-grid">
+              <label class="shelf-label-chip"
+                     *ngFor="let aisle of shelfLabelSAisles"
+                     [class.is-on]="isShelfLabelSelected(aisle)"
+                     [title]="shelfLabelKind === 'mam' ? (aisle + ' · ' + shelfLabelMamCountOf(aisle) + ' mâm') : aisle">
+                <input type="checkbox"
+                       [checked]="isShelfLabelSelected(aisle)"
+                       (change)="toggleShelfLabel(aisle)">
+                <span>{{ aisle }}</span>
+                <em *ngIf="shelfLabelKind === 'mam'">{{ shelfLabelMamCountOf(aisle) }}</em>
+              </label>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div class="modal-footer shelf-label-modal__footer">
+        <button class="btn-cancel" (click)="closeShelfLabelModal()" [disabled]="isPrintingShelfLabels">Hủy</button>
+        <button class="btn-print-confirm btn-print-confirm--ghost"
+                (click)="downloadShelfLabels()"
+                [disabled]="isPrintingShelfLabels || !shelfLabelSelectedCount">
+          <i class="material-icons">download</i>
+          Tải về
+        </button>
+        <button class="btn-print-confirm"
+                (click)="printShelfLabels()"
+                [disabled]="isPrintingShelfLabels || !shelfLabelSelectedCount">
+          <i class="material-icons">print</i>
+          In {{ shelfLabelPrintCount | number }}
+          {{ shelfLabelKind === 'dauKe' ? 'label' : 'tem' }}
         </button>
       </div>
     </div>

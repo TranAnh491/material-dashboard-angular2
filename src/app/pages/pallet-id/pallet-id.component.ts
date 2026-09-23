@@ -3,7 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import * as QRCode from 'qrcode';
-import { getLayoutLocationGroups, LayoutLocGroup } from '../materials/layout-location-catalog';
+import { getLayoutLocationGroups, LayoutLocGroup, jKhoMatBlocksForRow } from '../materials/layout-location-catalog';
 
 interface PalletItem {
   id: string;
@@ -102,10 +102,28 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   isPrintingJLocLabels = false;
   readonly jLocGroups: LayoutLocGroup[] = getLayoutLocationGroups('J');
 
+  /** Tem kệ (dãy R/S) — tem mâm hoặc label đầu kệ */
+  showShelfLabelModal = false;
+  shelfLabelQuery = '';
+  shelfLabelSelected = new Set<string>();
+  shelfLabelError = '';
+  isPrintingShelfLabels = false;
+  /** mam = từng mâm (S01-1-1…); dauKe = 1 tem/dãy (A4 R / A5 S) */
+  shelfLabelKind: 'mam' | 'dauKe' = 'mam';
+  shelfLabelSize: '50x100' | '80x160' = '50x100';
+  private readonly shelfLabelRList: string[] = Array.from({ length: 28 }, (_, i) =>
+    `R${String(i + 1).padStart(2, '0')}`
+  );
+  private readonly shelfLabelSList: string[] = Array.from({ length: 25 }, (_, i) =>
+    `S${String(i + 1).padStart(2, '0')}`
+  );
+  private shelfLabelSlotsByAisle = new Map<string, string[]>();
+
   constructor(private firestore: AngularFirestore) {}
 
   ngOnInit(): void {
     this.loadPallets();
+    this.buildShelfLabelSlotIndex();
   }
 
   ngOnDestroy(): void {
@@ -1480,7 +1498,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       const qrImages = await Promise.all(
         slots.map((name) =>
           QRCode.toDataURL(name, {
-            width: 280,
+            width: 360,
             margin: 1,
             color: { dark: '#000000', light: '#FFFFFF' }
           })
@@ -1529,7 +1547,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
     .j-loc-label:last-child { page-break-after: avoid; }
     .j-loc-label__qr {
-      width: 30mm;
+      width: 39mm;
       height: 32mm;
       display: flex;
       align-items: center;
@@ -1538,8 +1556,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       flex-shrink: 0;
     }
     .j-loc-label__qr img {
-      width: 28mm;
-      height: 28mm;
+      width: 30.5mm;
+      height: 30.5mm;
       object-fit: contain;
       display: block;
     }
@@ -1548,9 +1566,9 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1mm 2mm;
+      padding: 1mm 1.5mm;
       text-align: center;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: bold;
       color: #000;
       word-break: break-word;
@@ -1581,5 +1599,506 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     } finally {
       this.isPrintingJLocLabels = false;
     }
+  }
+
+  // ====== Tem kệ (dãy R / S) — tem mâm hoặc label đầu kệ ======
+
+  private buildShelfLabelSlotIndex(): void {
+    const map = new Map<string, string[]>();
+    for (const g of this.jLocGroups) {
+      const id = String(g.id || '').toUpperCase();
+      if (/^R\d+$/i.test(id) || /^S\d+/i.test(id)) {
+        map.set(id, [...(g.slots || [])]);
+      }
+    }
+    for (const aisle of this.shelfLabelSList) {
+      if (map.has(aisle) && (map.get(aisle) || []).length) continue;
+      const blocks = jKhoMatBlocksForRow(aisle);
+      const slots: string[] = [];
+      for (let block = 1; block <= blocks; block++) {
+        for (let lv = 1; lv <= 7; lv++) slots.push(`${aisle}-${block}-${lv}`);
+      }
+      map.set(aisle, slots);
+    }
+    this.shelfLabelSlotsByAisle = map;
+  }
+
+  openShelfLabelModal(): void {
+    this.shelfLabelQuery = '';
+    this.shelfLabelError = '';
+    this.showShelfLabelModal = true;
+  }
+
+  closeShelfLabelModal(): void {
+    if (this.isPrintingShelfLabels) return;
+    this.showShelfLabelModal = false;
+    this.shelfLabelError = '';
+  }
+
+  setShelfLabelKind(kind: 'mam' | 'dauKe'): void {
+    this.shelfLabelKind = kind;
+    this.shelfLabelError = '';
+  }
+
+  setShelfLabelSize(size: '50x100' | '80x160'): void {
+    this.shelfLabelSize = size;
+  }
+
+  get shelfLabelPerPage(): number {
+    return this.shelfLabelPerPageOf(this.shelfLabelSize);
+  }
+
+  shelfLabelPerPageOf(size: '50x100' | '80x160'): number {
+    const { widthMm, heightMm } = this.shelfLabelDimensions(size);
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 5;
+    const gap = 2;
+    const usableW = pageW - margin * 2;
+    const usableH = pageH - margin * 2;
+    const cols = Math.max(1, Math.floor((usableW + gap) / (widthMm + gap)));
+    const rows = Math.max(1, Math.floor((usableH + gap) / (heightMm + gap)));
+    return cols * rows;
+  }
+
+  private shelfLabelDimensions(size: '50x100' | '80x160'): { widthMm: number; heightMm: number } {
+    return size === '80x160'
+      ? { widthMm: 160, heightMm: 80 }
+      : { widthMm: 100, heightMm: 50 };
+  }
+
+  get shelfLabelSelectedCount(): number {
+    return this.shelfLabelSelected.size;
+  }
+
+  /** Số tem sẽ in (mâm = tổng vị trí; đầu kệ = số dãy). */
+  get shelfLabelPrintCount(): number {
+    if (this.shelfLabelKind === 'dauKe') return this.shelfLabelSelectedCount;
+    return this.expandShelfLabelSelection().length;
+  }
+
+  shelfLabelMamCountOf(aisle: string): number {
+    return (this.shelfLabelSlotsByAisle.get(aisle) || []).length;
+  }
+
+  get shelfLabelRAisles(): string[] {
+    return this.filterShelfLabelAisles(this.shelfLabelRList);
+  }
+
+  get shelfLabelSAisles(): string[] {
+    return this.filterShelfLabelAisles(this.shelfLabelSList);
+  }
+
+  private filterShelfLabelAisles(list: string[]): string[] {
+    const q = String(this.shelfLabelQuery || '').trim().toUpperCase();
+    if (!q) return list;
+    return list.filter((a) => a.includes(q));
+  }
+
+  onShelfLabelQueryChange(value: string): void {
+    this.shelfLabelQuery = String(value || '').toUpperCase();
+  }
+
+  isShelfLabelSelected(aisle: string): boolean {
+    return this.shelfLabelSelected.has(aisle);
+  }
+
+  toggleShelfLabel(aisle: string): void {
+    const next = new Set(this.shelfLabelSelected);
+    if (next.has(aisle)) next.delete(aisle);
+    else next.add(aisle);
+    this.shelfLabelSelected = next;
+  }
+
+  clearShelfLabelSelection(): void {
+    this.shelfLabelSelected = new Set();
+  }
+
+  isShelfLabelFamilyAllSelected(family: 'R' | 'S'): boolean {
+    const list = family === 'R' ? this.shelfLabelRAisles : this.shelfLabelSAisles;
+    return list.length > 0 && list.every((a) => this.shelfLabelSelected.has(a));
+  }
+
+  toggleShelfLabelFamily(family: 'R' | 'S'): void {
+    const list = family === 'R' ? this.shelfLabelRAisles : this.shelfLabelSAisles;
+    const next = new Set(this.shelfLabelSelected);
+    const shouldOn = !list.every((a) => next.has(a));
+    for (const a of list) {
+      if (shouldOn) next.add(a);
+      else next.delete(a);
+    }
+    this.shelfLabelSelected = next;
+  }
+
+  private orderedShelfLabelAisles(): string[] {
+    const all = [...this.shelfLabelRList, ...this.shelfLabelSList];
+    const order = new Map(all.map((a, i) => [a, i]));
+    return Array.from(this.shelfLabelSelected).sort(
+      (a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)
+    );
+  }
+
+  /** Chọn dãy → bung ra từng mâm (S01-1-1 … S01-1-7, …). */
+  private expandShelfLabelSelection(): string[] {
+    const out: string[] = [];
+    for (const aisle of this.orderedShelfLabelAisles()) {
+      const slots = this.shelfLabelSlotsByAisle.get(aisle);
+      if (slots?.length) out.push(...slots);
+      else out.push(aisle);
+    }
+    return out;
+  }
+
+  async printShelfLabels(): Promise<void> {
+    await this.emitShelfLabels('print');
+  }
+
+  async downloadShelfLabels(): Promise<void> {
+    await this.emitShelfLabels('download');
+  }
+
+  private async emitShelfLabels(mode: 'print' | 'download'): Promise<void> {
+    const aisles = this.orderedShelfLabelAisles();
+    if (!aisles.length) {
+      this.shelfLabelError = 'Chọn ít nhất một dãy kệ để in.';
+      return;
+    }
+    const names =
+      this.shelfLabelKind === 'dauKe' ? aisles : this.expandShelfLabelSelection();
+    if (!names.length) {
+      this.shelfLabelError = 'Không có mâm kệ để in.';
+      return;
+    }
+    if (
+      this.shelfLabelKind === 'mam' &&
+      names.length > 300 &&
+      !confirm(`In ${names.length} tem mâm kệ?`)
+    ) {
+      return;
+    }
+    this.shelfLabelError = '';
+    this.isPrintingShelfLabels = true;
+    try {
+      const html =
+        this.shelfLabelKind === 'dauKe'
+          ? await this.buildDauKeLabelHtml(aisles)
+          : await this.buildShelfMamLabelHtml(names);
+      const fileTag =
+        this.shelfLabelKind === 'dauKe'
+          ? `dau-ke-${aisles.length}`
+          : `mam-${this.shelfLabelSize}-${names.length}`;
+      if (mode === 'download') {
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tem-ke-${fileTag}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 500);
+      this.showShelfLabelModal = false;
+    } catch (err) {
+      console.error('Error creating shelf labels:', err);
+      alert('Lỗi khi tạo tem kệ. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingShelfLabels = false;
+    }
+  }
+
+  private async resolveShelfLabelLogoUrl(): Promise<string> {
+    const fallback =
+      (typeof window !== 'undefined' ? window.location.origin : '') + '/assets/img/logo.png';
+    try {
+      const res = await fetch('/assets/img/logo.png');
+      if (!res.ok) return fallback;
+      const blob = await res.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || fallback));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return fallback;
+    }
+  }
+
+  /** Label đầu kệ: 1 trang/dãy — A4 ngang (R) hoặc A5 ngang (S), logo + chữ to. */
+  private async buildDauKeLabelHtml(aisles: string[]): Promise<string> {
+    const logoUrl = await this.resolveShelfLabelLogoUrl();
+    const pages = aisles
+      .map((name) => {
+        const isS = /^S/i.test(name);
+        const pageClass = isS ? 'page page--a5' : 'page page--a4';
+        return `<div class="${pageClass}">
+        <img class="dau-ke__logo" src="${logoUrl}" alt="AIRSPEED">
+        <div class="dau-ke__name">${name}</div>
+      </div>`;
+      })
+      .join('');
+
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Label đầu kệ — ${aisles.length} tem</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #e2e8f0;
+      color: #000;
+      padding: 12px;
+    }
+    .toolbar {
+      position: sticky; top: 0; z-index: 2;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      background: #fffbe6; border: 1px solid #e6c000; border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 12px;
+    }
+    .toolbar button {
+      border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer;
+      background: #0f172a; color: #fff; font-weight: 700;
+    }
+    .toolbar button.secondary { background: #64748b; }
+    .meta { font-size: 13px; color: #334155; }
+    .pages { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .page {
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(15,23,42,.18);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .page:last-child { page-break-after: auto; }
+    /* In ngang: A4 297×210, A5 210×148 */
+    .page--a4 { width: 297mm; height: 210mm; }
+    .page--a5 { width: 210mm; height: 148mm; }
+    .dau-ke__logo {
+      position: absolute;
+      top: 10mm;
+      left: 12mm;
+      height: 42mm;
+      width: auto;
+      max-width: 110mm;
+      object-fit: contain;
+      object-position: left top;
+    }
+    .page--a5 .dau-ke__logo {
+      height: 32mm;
+      top: 8mm;
+      left: 10mm;
+      max-width: 85mm;
+    }
+    .dau-ke__name {
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      line-height: 0.95;
+      text-align: center;
+      color: #000;
+      padding: 0 8mm;
+    }
+    .page--a4 .dau-ke__name { font-size: 110mm; }
+    .page--a5 .dau-ke__name { font-size: 78mm; }
+    @media print {
+      body { background: #fff !important; padding: 0 !important; }
+      .toolbar { display: none !important; }
+      .pages { gap: 0 !important; }
+      .page { box-shadow: none !important; margin: 0 !important; }
+      .page--a4 { page: a4land; }
+      .page--a5 { page: a5land; }
+      @page a4land { size: A4 landscape; margin: 0; }
+      @page a5land { size: A5 landscape; margin: 0; }
+      @page { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="meta"><strong>${aisles.length}</strong> label đầu kệ · in ngang · R = A4 · S = A5</span>
+    <button type="button" onclick="window.print()">In ngay</button>
+    <button type="button" class="secondary" onclick="window.close()">Đóng</button>
+  </div>
+  <div class="pages">${pages}</div>
+</body>
+</html>`;
+  }
+
+  /** Tem từng mâm kệ — logo + tên + QR, xếp trên A4 theo size đã chọn. */
+  private async buildShelfMamLabelHtml(names: string[]): Promise<string> {
+    const { widthMm, heightMm } = this.shelfLabelDimensions(this.shelfLabelSize);
+    const perPage = this.shelfLabelPerPageOf(this.shelfLabelSize);
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 5;
+    const gap = 2;
+    const usableW = pageW - margin * 2;
+    const cols = Math.max(1, Math.floor((usableW + gap) / (widthMm + gap)));
+    const logoUrl = await this.resolveShelfLabelLogoUrl();
+    const qrSize = Math.round(Math.min(widthMm, heightMm) * 0.55 * 3.78);
+    const qrImages = await Promise.all(
+      names.map((name) =>
+        QRCode.toDataURL(name, {
+          width: Math.max(120, qrSize),
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        })
+      )
+    );
+
+    const nameFontMm = heightMm >= 80 ? 14 : 9;
+    const logoH = heightMm >= 80 ? 15.6 : 9.1; // +30% so với 12 / 7
+    const qrMm = Math.min(heightMm * 0.78, Math.min(heightMm * 0.62, widthMm * 0.28) * 1.3);
+
+    const labelNodes = names.map(
+      (name, i) => `
+      <div class="shelf-lbl">
+        <img class="shelf-lbl__logo" src="${logoUrl}" alt="AIRSPEED">
+        <div class="shelf-lbl__body">
+          <div class="shelf-lbl__name">${name}</div>
+          <div class="shelf-lbl__qr"><img src="${qrImages[i]}" alt="QR ${name}"></div>
+        </div>
+      </div>`
+    );
+
+    const pagesHtml: string[] = [];
+    for (let i = 0; i < labelNodes.length; i += perPage) {
+      pagesHtml.push(`<div class="page">${labelNodes.slice(i, i + perPage).join('')}</div>`);
+    }
+
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Tem mâm kệ ${this.shelfLabelSize} — ${names.length} tem</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #e2e8f0;
+      color: #000;
+      padding: 12px;
+    }
+    .toolbar {
+      position: sticky; top: 0; z-index: 2;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      background: #fffbe6; border: 1px solid #e6c000; border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 12px;
+    }
+    .toolbar button {
+      border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer;
+      background: #0f172a; color: #fff; font-weight: 700;
+    }
+    .toolbar button.secondary { background: #64748b; }
+    .meta { font-size: 13px; color: #334155; }
+    .pages { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .page {
+      width: ${pageW}mm;
+      min-height: ${pageH}mm;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(15,23,42,.18);
+      padding: ${margin}mm;
+      display: grid;
+      grid-template-columns: repeat(${cols}, ${widthMm}mm);
+      grid-auto-rows: ${heightMm}mm;
+      gap: ${gap}mm;
+      align-content: start;
+      justify-content: start;
+      page-break-after: always;
+    }
+    .page:last-child { page-break-after: auto; }
+    .shelf-lbl {
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      border: 1px solid #111;
+      background: #fff;
+      padding: 2mm 3mm 2.5mm;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+    .shelf-lbl__logo {
+      height: ${logoH}mm;
+      width: auto;
+      max-width: 55%;
+      object-fit: contain;
+      object-position: left center;
+      align-self: flex-start;
+      display: block;
+    }
+    .shelf-lbl__body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3mm;
+    }
+    .shelf-lbl__name {
+      flex: 1;
+      text-align: center;
+      font-size: ${nameFontMm}mm;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      line-height: 1.05;
+      color: #000;
+      word-break: break-all;
+    }
+    .shelf-lbl__qr {
+      flex-shrink: 0;
+      width: ${qrMm}mm;
+      height: ${qrMm}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .shelf-lbl__qr img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    @media print {
+      body { background: #fff !important; padding: 0 !important; }
+      .toolbar { display: none !important; }
+      .pages { gap: 0 !important; }
+      .page {
+        box-shadow: none !important;
+        margin: 0 !important;
+        width: ${pageW}mm !important;
+        min-height: ${pageH}mm !important;
+        height: ${pageH}mm !important;
+      }
+      @page { size: A4 portrait; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="meta"><strong>${names.length}</strong> tem mâm · ${widthMm}×${heightMm}mm · ${perPage} tem/trang A4</span>
+    <button type="button" onclick="window.print()">In ngay</button>
+    <button type="button" class="secondary" onclick="window.close()">Đóng</button>
+  </div>
+  <div class="pages">
+    ${pagesHtml.join('')}
+  </div>
+</body>
+</html>`;
   }
 }

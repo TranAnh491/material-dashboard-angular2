@@ -175,7 +175,8 @@ export class PxkBuildService {
     const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
     const lineKey = lineNhanRaw.replace(/\s/g, '').toUpperCase();
     const isAsm3Line = lineKey && lineKey !== '-'
-      && (lineKey === 'WHE' || lineKey === 'WHD' || lineKey.startsWith('WHE') || lineKey.startsWith('WHD'));
+      && (lineKey === 'WHE' || lineKey === 'WHD' || lineKey === 'WHG'
+        || lineKey.startsWith('WHE') || lineKey.startsWith('WHD') || lineKey.startsWith('WHG'));
     const factoryBadge = lsxUpper.startsWith('LH')
       ? 'ASM2'
       : lsxUpper.startsWith('KZ')
