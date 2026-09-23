@@ -110,9 +110,9 @@
               <button type="button"
                       class="more-btn"
                       *ngIf="kkLocMapView === 'type'"
-                      (click)="openKkTypeScanModal()"
+                      (click)="openKkTypeScanModal(undefined, 'location')"
                       [disabled]="!canEdit || kkLocMapBusy"
-                      title="Scan vị trí: nhập NV → scan kệ S/R → scan mã (mã, PO, IMD)">
+                      title="Scan vị trí: nhập NV → scan kệ S/R → scan mã — chỉ cập nhật vị trí">
                 <i class="material-icons">qr_code_scanner</i>
                 <span class="btn-label">Scan vị trí</span>
               </button>
@@ -576,7 +576,7 @@
             </div>
             <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
               <div class="kk-b009-board" *ngIf="isKkConnectorRackMuc(muc.category) && muc.groups?.length">
-                <p class="kk-b009-board__hint">Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem khoảng mã. S01 có 2 block; kệ khác 3 block.</p>
+                <p class="kk-b009-board__hint">Tầng 7 trên cùng, tầng 1 dưới cùng. Bấm tầng để xem khoảng mã và danh sách loại. S01 có 2 block; kệ khác 3 block.</p>
                 <div class="kk-b009-board__cols">
                   <div class="kk-b009-col" *ngFor="let g of kkB009ShelfGroups(muc)">
                     <div class="kk-b009-col__head">
@@ -603,7 +603,7 @@
                   <div class="kk-type-muc__bar">
                     <div class="kk-b009-board__detail-head">
                       <strong>{{ s.title }}</strong>
-                      <span>{{ kkB009FloorCodeCount(s) }} mã</span>
+                      <span>{{ kkB009FloorCodeCount(s) }} mã · {{ s.boxes.length }} loại</span>
                     </div>
                   </div>
                   <div class="kk-b009-blocks">
@@ -613,6 +613,24 @@
                       <strong>{{ kkB009LocOf(kkConnectorViewShelf(muc.category), b, kkConnectorViewLevel(muc.category)) }}</strong>
                       <span>{{ kkB009FloorEmpty(s) ? 'Trống' : (kkB009SubFullRange(s) + ' · ' + kkB009FloorCodeCount(s) + ' mã') }}</span>
                     </div>
+                  </div>
+                  <div class="kk-type-grid" *ngIf="s.boxes.length">
+                    <button
+                      type="button"
+                      class="kk-type-box"
+                      *ngFor="let box of s.boxes"
+                      [class.kk-type-box--done]="kkTypeBoxTone(box) === 'done'"
+                      [class.kk-type-box--partial]="kkTypeBoxTone(box) === 'partial'"
+                      [class.kk-type-box--none]="kkTypeBoxTone(box) === 'none'"
+                      [class.kk-type-box--empty]="!box.totalLines"
+                      (click)="selectKkTypeBox(box.productType)"
+                      (contextmenu)="openKkTypeBoxMenu($event, box)"
+                      [title]="box.productType + ' — chuột phải: vị trí yêu cầu, in tên, người quản lý'">
+                      <strong>{{ box.productType }}</strong>
+                      <span class="kk-type-box__foot">
+                        <span>{{ box.checked }}/{{ box.totalLines }} KK</span>
+                      </span>
+                    </button>
                   </div>
                 </div>
                 <div class="kk-type-group"
@@ -1058,7 +1076,7 @@
               (click)="startNlKkScan()"
               [disabled]="isLoading || isScanning || !canEdit">
         <i class="material-icons">fact_check</i>
-        Scan vị trí
+        Scan kiểm kê
       </button>
       <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
         Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
@@ -4914,14 +4932,14 @@
      [class.more-overlay]="!isMobile"
      *ngIf="showKkTypeScanModal"
      (click)="closeKkTypeScanModal()">
-  <div class="modal-content kk-type-scan" (click)="$event.stopPropagation()" role="dialog" aria-label="Scan vị trí">
+  <div class="modal-content kk-type-scan" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="kkTypeScanModalTitle">
     <div class="more-popup-header gan-pallet__head">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
           <i class="material-icons">qr_code_scanner</i>
         </span>
         <div>
-          <h3>Scan vị trí</h3>
+          <h3>{{ kkTypeScanModalTitle }}</h3>
           <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
         </div>
       </div>
@@ -5019,7 +5037,9 @@
         <p class="kk-type-scan__hint">
           Kệ <strong>{{ kkTypeScanLocation }}</strong>
           · NV {{ kkTypeScanOperator || '—' }}
-          · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong> (không đọc lượng).
+          · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong>
+          <ng-container *ngIf="kkTypeScanMode === 'location'"> — chuyển về kệ này, rồi scan mã tiếp.</ng-container>
+          <ng-container *ngIf="kkTypeScanMode === 'inventory'"> (không đọc lượng).</ng-container>
         </p>
         <div class="kk-type-scan__input-row" *ngIf="nlScanDevice !== 'mobile'">
           <input id="kkTypeScanQrInput"
@@ -5060,14 +5080,17 @@
             <div class="kk-type-scan__code-title">
               <strong>{{ kkTypeScanMaterialCode }}</strong>
               <span class="kk-type-scan__frac"
+                    *ngIf="kkTypeScanMode === 'inventory'"
                     [class.kk-type-scan__frac--ok]="kkTypeScanProgressTone === 'ok'"
                     [class.kk-type-scan__frac--low]="kkTypeScanProgressTone === 'low'"
                     [class.kk-type-scan__frac--over]="kkTypeScanProgressTone === 'over'">
                 {{ formatNumber(kkTypeScanQtyScanned) }} / {{ kkTypeScanCartonTotal || '—' }} Box
               </span>
+              <span *ngIf="kkTypeScanMode === 'location'" class="kk-type-scan__frac kk-type-scan__frac--ok">Chỉ vị trí</span>
               <span>{{ kkTypeScanStatusText }}</span>
               <button type="button"
                       class="kk-type-scan__reset"
+                      *ngIf="kkTypeScanMode === 'inventory'"
                       tabindex="-1"
                       (click)="resetKkScanForCurrentCode($event)"
                       [disabled]="!canEdit || kkTypeScanBusy || !kkTypeScanCodeRows.length"
@@ -5146,7 +5169,7 @@
   </div>
 </div>
 
-<!-- Báo scan ngay — phủ toàn màn, không bị modal/camera che -->
+<!-- Báo scan ngay — phủ toàn màn, không bị modal/camera che (chỉ Scan kiểm kê) -->
 <div class="kk-scan-confirm-overlay"
      *ngIf="showKkTypeScanConfirm && kkTypeScanConfirm"
      (click)="$event.stopPropagation()"
@@ -5192,6 +5215,15 @@
   </div>
 </div>
 
+<!-- Scan vị trí: toast ngắn — đã chuyển mã về kệ, không chặn scan tiếp -->
+<div class="kk-scan-loc-toast" *ngIf="kkTypeScanLocToast" role="status" aria-live="polite">
+  <i class="material-icons" aria-hidden="true">check_circle</i>
+  <div>
+    <strong>Đã chuyển {{ kkTypeScanLocToast.code }} về kệ {{ kkTypeScanLocToast.location }}</strong>
+    <span>Scan mã tiếp…</span>
+  </div>
+</div>
+
 <div class="modal-overlay kk-scan-guide-overlay"
      [class.more-overlay]="!isMobile"
      *ngIf="showKkScanGuide"
@@ -5223,7 +5255,7 @@
           <h4>Bài 1 — Đếm hàng trên kệ</h4>
           <p>Bạn đứng trước một kệ. Việc của bạn: đếm xem kệ đó có đủ thùng không.</p>
           <ol>
-            <li>Bấm nút <strong>Scan vị trí</strong>.</li>
+            <li>Bấm nút <strong>Scan kiểm kê</strong> (nút xanh) hoặc <strong>Scan vị trí</strong> trên thanh công cụ.</li>
             <li>Lần đầu trong ca, <strong>nhập tay</strong> mã nhân viên (ASP + 4 số, ví dụ ASP0106). Máy nhớ bạn đến <strong>12:00</strong>, <strong>17:00</strong> hoặc <strong>20:00</strong>. Hết giờ / tắt tab thì nhập lại.</li>
             <li>Quét <strong>tem dán trên kệ</strong> (bắt đầu bằng S hoặc R). Ví dụ <strong>S07-1-1</strong>.</li>
             <li>Quét <strong>tem trên từng thùng</strong> — hệ thống đọc mã, PO, IMD (không đọc lượng).</li>
