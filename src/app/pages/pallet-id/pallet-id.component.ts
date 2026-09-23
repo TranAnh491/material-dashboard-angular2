@@ -1969,9 +1969,9 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       (name, i) => `
       <div class="shelf-lbl">
         <img class="shelf-lbl__logo" src="${logoUrl}" alt="AIRSPEED">
+        <img class="shelf-lbl__qr-corner" src="${qrImages[i]}" alt="QR ${name}">
         <div class="shelf-lbl__body">
           <div class="shelf-lbl__name">${name}</div>
-          <div class="shelf-lbl__qr"><img src="${qrImages[i]}" alt="QR ${name}"></div>
         </div>
       </div>`
     );
@@ -2023,6 +2023,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
     .page:last-child { page-break-after: auto; }
     .shelf-lbl {
+      position: relative;
       width: ${widthMm}mm;
       height: ${heightMm}mm;
       border: 1px solid #111;
@@ -2036,10 +2037,19 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     .shelf-lbl__logo {
       height: ${logoH}mm;
       width: auto;
-      max-width: 55%;
+      max-width: 48%;
       object-fit: contain;
       object-position: left center;
       align-self: flex-start;
+      display: block;
+    }
+    .shelf-lbl__qr-corner {
+      position: absolute;
+      top: 2mm;
+      right: 2.5mm;
+      width: ${Math.min(qrMm, heightMm * 0.42)}mm;
+      height: ${Math.min(qrMm, heightMm * 0.42)}mm;
+      object-fit: contain;
       display: block;
     }
     .shelf-lbl__body {
@@ -2048,7 +2058,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 3mm;
+      padding-right: ${Math.min(qrMm, heightMm * 0.42) * 0.35}mm;
     }
     .shelf-lbl__name {
       flex: 1;
@@ -2059,20 +2069,6 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       line-height: 1.05;
       color: #000;
       word-break: break-all;
-    }
-    .shelf-lbl__qr {
-      flex-shrink: 0;
-      width: ${qrMm}mm;
-      height: ${qrMm}mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .shelf-lbl__qr img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
     }
     @media print {
       body { background: #fff !important; padding: 0 !important; }

@@ -112,9 +112,9 @@
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkTypeScanModal()"
                       [disabled]="!canEdit || kkLocMapBusy"
-                      title="Scan vị trí rồi scan mã hàng — ghi mã và lượng vào kệ">
+                      title="Scan vị trí: nhập NV → scan kệ S/R → scan mã (mã, PO, IMD)">
                 <i class="material-icons">qr_code_scanner</i>
-                <span class="btn-label">Scan</span>
+                <span class="btn-label">Scan vị trí</span>
               </button>
               <button type="button"
                       class="more-btn"
@@ -1058,7 +1058,7 @@
               (click)="startNlKkScan()"
               [disabled]="isLoading || isScanning || !canEdit">
         <i class="material-icons">fact_check</i>
-        Scan Kiểm Kê
+        Scan vị trí
       </button>
       <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
         Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
@@ -4918,21 +4918,21 @@
      [class.more-overlay]="!isMobile"
      *ngIf="showKkTypeScanModal"
      (click)="closeKkTypeScanModal()">
-  <div class="modal-content kk-type-scan" (click)="$event.stopPropagation()" role="dialog" aria-label="Scan KK">
+  <div class="modal-content kk-type-scan" (click)="$event.stopPropagation()" role="dialog" aria-label="Scan vị trí">
     <div class="more-popup-header gan-pallet__head">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
           <i class="material-icons">qr_code_scanner</i>
         </span>
         <div>
-          <h3>{{ isNguyenLieuPage ? 'Scan Kiểm Kê' : 'Scan vị trí' }}</h3>
+          <h3>Scan vị trí</h3>
           <p class="more-popup-header__sub">{{ kkActiveProductType || 'Tất cả loại hàng' }} · {{ selectedFactory }}<ng-container *ngIf="kkTypeScanOperator"> · {{ kkTypeScanOperator }}<span *ngIf="kkTypeScanOpUntilLabel"> · hết {{ kkTypeScanOpUntilLabel }}</span></ng-container></p>
         </div>
       </div>
       <div class="more-popup-header__right">
         <button type="button"
                 class="more-popup-close"
-                *ngIf="isMobile && nlScanDevice === 'mobile'"
+                *ngIf="isMobile && nlScanDevice === 'mobile' && kkTypeScanStep !== 'operator'"
                 (click)="startNlCamera('kk')"
                 [disabled]="kkTypeScanBusy || showNlCamera"
                 tabindex="-1"
@@ -4951,17 +4951,15 @@
 
     <div class="kk-type-scan__body">
       <div *ngIf="kkTypeScanStep === 'operator'" class="kk-type-scan__step">
-        <p class="kk-type-scan__hint">Bước 1: Scan mã nhân viên — chỉ lấy 7 ký tự đầu (ASP + 4 số)</p>
+        <p class="kk-type-scan__hint">Bước 1: <strong>Nhập tay</strong> mã nhân viên (ASP + 4 số, vd ASP1234)</p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanOperatorInput"
                  type="text"
-                 class="kk-scan-trap"
                  [(ngModel)]="kkTypeScanOperatorInput"
-                 (focus)="onKkHidScanFocus($event)"
-                 (blur)="onKkScanTrapBlur($event)"
-                 placeholder="Quét thẻ ASP + 4 số"
+                 (keydown.enter)="submitKkTypeScanOperator($event)"
+                 placeholder="Nhập tay ASP + 4 số"
                  autocomplete="off"
-                 autocapitalize="off"
+                 autocapitalize="characters"
                  spellcheck="false"
                  tabindex="0"
                  inputmode="text"
@@ -4976,7 +4974,7 @@
       <div *ngIf="kkTypeScanStep === 'location'" class="kk-type-scan__step">
         <p class="kk-type-scan__hint">
           NV <strong>{{ kkTypeScanOperator || '—' }}</strong>
-          · Bước 2: Scan vị trí (vd: S07-1-1)
+          · Bước 2: <strong>Scan kệ</strong> — tem phải bắt đầu bằng <strong>S</strong> hoặc <strong>R</strong> (vd: S07-1-1, R03)
         </p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanLocationInput"
@@ -4985,7 +4983,7 @@
                  [(ngModel)]="kkTypeScanLocationInput"
                  (focus)="onKkHidScanFocus($event)"
                  (blur)="onKkScanTrapBlur($event)"
-                 placeholder="Scan vị trí..."
+                 placeholder="Scan kệ S… / R…"
                  autocomplete="off"
                  autocapitalize="off"
                  spellcheck="false"
@@ -5002,9 +5000,9 @@
 
       <div *ngIf="kkTypeScanStep === 'codes'" class="kk-type-scan__step">
         <p class="kk-type-scan__hint">
-          Vị trí <strong>{{ kkTypeScanLocation }}</strong>
+          Kệ <strong>{{ kkTypeScanLocation }}</strong>
           · NV {{ kkTypeScanOperator || '—' }}
-          · Scan mã hàng tại kệ này. Scan mã khác = làm mã mới. Đổi kệ: bấm Đổi vị trí.
+          · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong> (không đọc lượng). Sai kệ → hệ thống đưa về vị trí đúng đã set.
         </p>
         <div class="kk-type-scan__input-row">
           <input id="kkTypeScanQrInput"
@@ -5155,15 +5153,15 @@
           <h4>Bài 1 — Đếm hàng trên kệ</h4>
           <p>Bạn đứng trước một kệ. Việc của bạn: đếm xem kệ đó có đủ thùng không.</p>
           <ol>
-            <li>Bấm nút <strong>Scan</strong> (hình máy quét).</li>
-            <li>Lần đầu trong ca, quét <strong>thẻ nhân viên</strong> (ASP + 4 số, ví dụ ASP0106). Máy nhớ bạn đến <strong>12:00</strong>, <strong>17:00</strong> hoặc <strong>20:00</strong>. Hết giờ / tắt tab thì quét thẻ lại.</li>
-            <li>Quét <strong>tem dán trên kệ</strong>. Ví dụ <strong>S07-1-1</strong> — đó là địa chỉ nhà của kệ.</li>
-            <li>Quét <strong>tem trên từng thùng</strong>. Mỗi lần quét = 1 thùng.</li>
+            <li>Bấm nút <strong>Scan vị trí</strong>.</li>
+            <li>Lần đầu trong ca, <strong>nhập tay</strong> mã nhân viên (ASP + 4 số, ví dụ ASP0106). Máy nhớ bạn đến <strong>12:00</strong>, <strong>17:00</strong> hoặc <strong>20:00</strong>. Hết giờ / tắt tab thì nhập lại.</li>
+            <li>Quét <strong>tem dán trên kệ</strong> (bắt đầu bằng S hoặc R). Ví dụ <strong>S07-1-1</strong>.</li>
+            <li>Quét <strong>tem trên từng thùng</strong> — hệ thống đọc mã, PO, IMD (không đọc lượng).</li>
           </ol>
           <p class="kk-scan-guide__tip">Nhìn màn hình: <strong>2/5 thùng</strong> = đã quét 2, kệ cần 5 → còn thiếu, quét tiếp. Đủ số thì xong kệ này.</p>
           <p>Quét sang mã hàng khác? Không sao. Máy vẫn đứng ở <strong>cùng kệ</strong>. Muốn sang kệ khác thì làm Bài 2.</p>
         </div>
-        <img class="kk-scan-guide__img" src="assets/img/kk-scan-guide-kiem-ke.png" alt="Ví dụ: quét thẻ nhân viên, quét kệ S07-1-1, rồi quét từng thùng">
+        <img class="kk-scan-guide__img" src="assets/img/kk-scan-guide-kiem-ke.png" alt="Ví dụ: nhập tay mã NV, quét kệ S07-1-1, rồi quét từng thùng">
       </article>
 
       <article class="kk-scan-guide__card">

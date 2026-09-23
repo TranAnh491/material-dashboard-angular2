@@ -2468,18 +2468,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     this.openKkTypeScanModal();
-    if (!this.showKkTypeScanModal) return;
-    if (this.nlScanDevice === 'mobile') {
-      setTimeout(() => void this.startNlCamera('kk'), 120);
-    }
+    // Camera chỉ dùng từ bước scan kệ / mã hàng — không dùng cho mã NV
   }
 
   get nlCameraHeading(): string {
     if (this.nlCameraPurpose === 'location') return 'Quét vị trí';
     if (this.nlCameraPurpose === 'kk') {
-      if (this.kkTypeScanStep === 'operator') return 'Quét mã nhân viên';
-      if (this.kkTypeScanStep === 'location') return 'Quét vị trí';
-      return 'Quét mã hàng';
+      if (this.kkTypeScanStep === 'operator') return 'Nhập mã nhân viên';
+      if (this.kkTypeScanStep === 'location') return 'Quét kệ S/R';
+      return 'Quét mã hàng (mã · PO · IMD)';
     }
     return 'Quét mã hàng';
   }
@@ -2569,10 +2566,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     // Mã hàng QR dài: để bindHidScanInput xử lý. Chỉ bắt NV + vị trí ở cấp document
     // để PDA không mất tem khi ô input chưa focus.
     if (this.kkTypeScanStep === 'codes') return;
+    // Mã NV chỉ nhập tay — không bắt phím/scan cấp document
+    if (this.kkTypeScanStep === 'operator') return;
     const target = event.target as HTMLElement | null;
     if (target?.closest?.('.kk-type-scan__std')) return;
-    // Ô NV/vị trí đang focus: để bindHidScanInput nhận ký tự native. Chỉ bắt cấp document khi mất focus.
-    if (target && (target.id === 'kkTypeScanOperatorInput' || target.id === 'kkTypeScanLocationInput')) {
+    // Ô vị trí đang focus: để bindHidScanInput nhận ký tự native. Chỉ bắt cấp document khi mất focus.
+    if (target && target.id === 'kkTypeScanLocationInput') {
       return;
     }
     const key = event.key;
@@ -2596,12 +2595,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.kkDocScanAt) this.kkDocScanAt = performance.now();
     this.kkDocScanBuf += key;
     this.paintKkDocScanBuf();
-    if (this.kkTypeScanStep === 'operator') {
-      const compact = this.kkDocScanBuf.replace(/[^A-Z0-9]/gi, '');
-      const ready = /^ASP\d{4}$/.test(this.parseKkEmployeeBadge(this.kkDocScanBuf)) || compact.length >= 7;
-      if (ready) this.scheduleKkDocScanFlush(220);
-      return;
-    }
     this.scheduleKkDocScanFlush(150);
   }
 
@@ -2637,11 +2630,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .replace(/[\u0000-\u001F]/g, '')
       .trim();
     if (this.kkTypeScanStep === 'operator' && !fromEnter) {
-      const compact = raw.replace(/[^A-Z0-9]/gi, '');
-      if (!/^ASP\d{4}$/.test(this.parseKkEmployeeBadge(raw)) && compact.length < 7) {
-        this.pinKkScanFocus();
-        return;
-      }
+      this.pinKkScanFocus();
+      return;
     }
     this.kkDocScanBuf = '';
     this.kkDocScanAt = 0;
@@ -2799,14 +2789,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const step = this.kkTypeScanStep;
     if (step === 'operator') {
-      const el = document.getElementById('kkTypeScanOperatorInput') as HTMLInputElement | null;
-      if (el) el.value = raw;
-      this.kkTypeScanOperatorInput = raw;
-      this.stopNlCamera();
-      this.submitKkTypeScanOperator(undefined, raw);
-      if (this.showKkTypeScanModal && this.nlScanDevice === 'mobile') {
-        setTimeout(() => void this.startNlCamera('kk'), 220);
-      }
+      // Không scan mã NV bằng camera — chỉ nhập tay
+      this.nlScanLock = false;
+      this.kkTypeScanErr = 'Mã nhân viên chỉ nhập tay, không quét.';
+      this.cdr.detectChanges();
       return;
     }
     if (step === 'location') {
@@ -8846,7 +8832,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
       this.closeKkShelfLabelPicker();
-      this.printKkShelfLabels(labels, group.title);
+      void this.printKkShelfLabels(labels, group.title);
       return;
     }
     const boxes = group?.boxes || [];
@@ -8863,7 +8849,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     this.closeKkShelfLabelPicker();
-    this.printKkShelfLabels(labels, group.title);
+    void this.printKkShelfLabels(labels, group.title);
   }
 
   private kkShelfLabelLocOf(box: {
@@ -8896,8 +8882,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return lower.charAt(0).toLocaleUpperCase('vi') + lower.slice(1);
   }
 
-  /** Tem kệ 57×32mm (cùng khổ Inbound): tên nhóm + vị trí, mỗi nhóm một tem. */
-  private printKkShelfLabels(labels: Array<{ name: string; loc: string }>, title: string): void {
+  /** Tem kệ 57×32mm: tên + vị trí + QR góc phải (nội dung = vị trí để scan). */
+  private async printKkShelfLabels(labels: Array<{ name: string; loc: string }>, title: string): Promise<void> {
     if (!labels.length) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -8905,14 +8891,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     const esc = (s: string) => this.escapeHtmlForPrint(s);
-    const pages = labels.map((row) => {
-      const nameSize = row.name.length > 22 ? '13px' : row.name.length > 14 ? '16px' : '18px';
-      return `<div class="label">
-    <div class="name" style="font-size:${nameSize}!important">${esc(row.name)}</div>
-    <div class="loc">${esc(row.loc)}</div>
+    try {
+      const QRCode = await import('qrcode') as any;
+      const qrImages = await Promise.all(
+        labels.map((row) =>
+          QRCode.toDataURL(String(row.loc || '').trim() || '—', {
+            width: 360,
+            margin: 0,
+            color: { dark: '#000000', light: '#FFFFFF' }
+          })
+        )
+      );
+      const pages = labels.map((row, i) => {
+        const nameSize = row.name.length > 22 ? '12px' : row.name.length > 14 ? '15px' : '17px';
+        return `<div class="label">
+    <img class="qr" src="${qrImages[i]}" alt="QR ${esc(row.loc)}">
+    <div class="text">
+      <div class="name" style="font-size:${nameSize}!important">${esc(row.name)}</div>
+      <div class="loc">${esc(row.loc)}</div>
+    </div>
   </div>`;
-    }).join('\n');
-    printWindow.document.write(`<!DOCTYPE html>
+      }).join('\n');
+      printWindow.document.write(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)} — tem kệ</title>
 <style>
   * { margin:0!important; padding:0!important; box-sizing:border-box!important; }
@@ -8922,14 +8922,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     color: #000!important;
   }
   .label {
+    position: relative!important;
     display: flex!important;
-    flex-direction: column!important;
-    justify-content: center!important;
+    flex-direction: row!important;
     align-items: center!important;
-    text-align: center!important;
+    justify-content: flex-start!important;
     width: 57mm!important;
     height: 32mm!important;
-    padding: 2mm 2.5mm!important;
+    padding: 2mm 22mm 2mm 2.5mm!important;
     border: 1px solid #000!important;
     page-break-after: always!important;
     page-break-inside: avoid!important;
@@ -8938,14 +8938,33 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     gap: 1.5mm!important;
   }
   .label:last-child { page-break-after: auto!important; }
+  .qr {
+    position: absolute!important;
+    top: 1.5mm!important;
+    right: 1.5mm!important;
+    width: 20mm!important;
+    height: 20mm!important;
+    object-fit: contain!important;
+  }
+  .text {
+    flex: 1!important;
+    min-width: 0!important;
+    display: flex!important;
+    flex-direction: column!important;
+    justify-content: center!important;
+    align-items: flex-start!important;
+    text-align: left!important;
+    gap: 1mm!important;
+    padding-right: 1mm!important;
+  }
   .name {
     font-weight: 800!important;
     line-height: 1.15!important;
     word-break: break-word!important;
-    max-width: 52mm!important;
+    max-width: 30mm!important;
   }
   .loc {
-    font-size: 20px!important;
+    font-size: 18px!important;
     font-weight: 800!important;
     line-height: 1.1!important;
     letter-spacing: 0.3px!important;
@@ -8959,7 +8978,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   ${pages}
   <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
 </body></html>`);
-    printWindow.document.close();
+      printWindow.document.close();
+    } catch (e) {
+      console.error('❌ printKkShelfLabels QR:', e);
+      printWindow.close();
+      alert('Lỗi tạo QR tem kệ. Vui lòng thử lại.');
+    }
   }
 
   printKkMucReportForGroup(group: {
@@ -11127,10 +11151,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.canEdit || this.kkLocMapBusy) return;
     if (row && !row.totalLines) return;
     this.restoreKkScanOpSession();
-    const sessionOk = this.checkKkScanOpExpiry() || !!this.kkTypeScanOperator;
     this.showKkTypeScanModal = true;
     this.kkTypeScanOperatorInput = this.kkTypeScanOperator;
-    this.kkTypeScanStep = sessionOk ? 'location' : 'operator';
+    // Luôn bắt đầu bằng nhập tay mã nhân viên
+    this.kkTypeScanStep = 'operator';
     this.kkTypeScanLocation = '';
     this.kkTypeScanLocationInput = '';
     this.kkTypeScanQrInput = '';
@@ -11151,9 +11175,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanErr = '';
     this.lockKkScanKeyboard();
     this.cdr.detectChanges();
-    setTimeout(() => this.focusKkTypeScanInput(
-      this.kkTypeScanStep === 'operator' ? 'kkTypeScanOperatorInput' : 'kkTypeScanLocationInput'
-    ), 80);
+    setTimeout(() => this.focusKkTypeScanInput('kkTypeScanOperatorInput'), 80);
   }
 
   closeKkTypeScanModal(): void {
@@ -11182,18 +11204,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = String(rawOverride ?? el?.value ?? this.kkTypeScanOperatorInput ?? '');
     const shortCode = this.parseKkEmployeeBadge(raw);
     if (!/^ASP\d{4}$/.test(shortCode)) {
-      const compact = raw.replace(/[^A-Za-z0-9]/g, '');
-      // PDA hay flush sớm 1-2 ký tự — giữ ô, đợi hết tem, không báo lỗi.
-      if (!event && compact.length < 7) {
-        this.pinKkScanFocus();
-        return;
-      }
-      this.kkTypeScanErr = 'Mã nhân viên không đúng. Quét tem ASP + 4 số.';
+      this.kkTypeScanErr = 'Mã nhân viên không đúng. Chỉ nhập tay ASP + 4 số (vd ASP1234).';
       this.kkTypeScanBeep('err');
-      this.kkTypeScanOperatorInput = '';
-      if (el) el.value = '';
-      this.pinKkScanFocus();
       this.cdr.detectChanges();
+      el?.focus();
       return;
     }
     this.kkTypeScanErr = '';
@@ -11201,7 +11215,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanOperatorInput = shortCode;
     this.kkTypeScanStep = 'location';
     this.cdr.detectChanges();
-    this.pinKkScanFocus();
+    this.focusKkTypeScanInput('kkTypeScanLocationInput');
+    // Sau khi nhập NV xong mới bật camera (nếu đang dùng mobile)
+    if (this.isMobile && this.nlScanDevice === 'mobile' && this.showKkTypeScanModal) {
+      setTimeout(() => void this.startNlCamera('kk'), 180);
+    }
   }
 
   private focusKkTypeScanInput(id: string, retry = 0): void {
@@ -11230,17 +11248,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    * Idempotent — `bindHidScanInput` tự bỏ qua nếu element đã được gắn.
    */
   private bindKkTypeScanHidInput(id: string, el: HTMLInputElement): void {
-    if (id === 'kkTypeScanOperatorInput') {
-      this.bindHidScanInput(
-        el,
-        (raw) => this.submitKkTypeScanOperator(undefined, raw),
-        {
-          idleMs: 250,
-          minLenForIdleFlush: 7,
-          shouldFlush: (raw) => /^ASP\d{4}$/.test(this.parseKkEmployeeBadge(raw))
-        }
-      );
-    } else if (id === 'kkTypeScanLocationInput') {
+    // Mã NV: nhập tay — không gắn HID auto-flush (tránh nuốt khi gõ)
+    if (id === 'kkTypeScanOperatorInput') return;
+    if (id === 'kkTypeScanLocationInput') {
       this.bindHidScanInput(
         el,
         (raw) => this.submitKkTypeScanLocation(undefined, raw),
@@ -11388,13 +11398,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     loc = loc.replace(/^(J5|J|00|WH3|ASM3)(?=-|S\d|R\d)/, '');
     loc = loc.replace(/^[-_./]+/, '');
     loc = loc.replace(/^S(\d{1,2})[._/](\d+)[._/](\d+)/, 'S$1-$2-$3');
-    const khoMat = loc.match(/^S(\d{1,2})-(\d+)-(\d+)/);
-    if (khoMat) {
-      return `S${String(Number(khoMat[1])).padStart(2, '0')}-${Number(khoMat[2])}-${Number(khoMat[3])}`;
+    loc = loc.replace(/^R(\d{1,2})[._/](\d+)[._/](\d+)/, 'R$1-$2-$3');
+    const khoMatS = loc.match(/^S(\d{1,2})-(\d+)-(\d+)/);
+    if (khoMatS) {
+      return `S${String(Number(khoMatS[1])).padStart(2, '0')}-${Number(khoMatS[2])}-${Number(khoMatS[3])}`;
     }
-    const aisle = loc.match(/^S(\d{1,2})$/);
-    if (aisle) return `S${String(Number(aisle[1])).padStart(2, '0')}`;
+    const khoMatR = loc.match(/^R(\d{1,2})-(\d+)-(\d+)/);
+    if (khoMatR) {
+      return `R${String(Number(khoMatR[1])).padStart(2, '0')}-${Number(khoMatR[2])}-${Number(khoMatR[3])}`;
+    }
+    const aisleS = loc.match(/^S(\d{1,2})$/);
+    if (aisleS) return `S${String(Number(aisleS[1])).padStart(2, '0')}`;
+    const aisleR = loc.match(/^R(\d{1,2})$/);
+    if (aisleR) return `R${String(Number(aisleR[1])).padStart(2, '0')}`;
     return loc;
+  }
+
+  /** Tem kệ hợp lệ: phải bắt đầu bằng S hoặc R (kệ kho J). */
+  private kkScanIsSrShelfLocation(loc: string): boolean {
+    const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
+    return /^[SR]\d{1,2}(?:-\d+(?:-\d+)?)?$/.test(n);
   }
 
   private kkScanAisleOf(loc: string): string {
@@ -11465,7 +11488,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       || (document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null);
     const loc = this.normalizeKkScanLocation(String(rawOverride ?? el?.value ?? this.kkTypeScanLocationInput ?? ''));
     if (!loc) {
-      this.kkTypeScanErr = 'Không đọc được vị trí. Quét lại tem kệ (vd: S16-1-1).';
+      this.kkTypeScanErr = 'Không đọc được kệ. Quét tem kệ bắt đầu bằng S hoặc R (vd: S16-1-1, R03).';
+      this.kkTypeScanBeep('err');
+      this.kkTypeScanLocationInput = '';
+      if (el) el.value = '';
+      this.pinKkScanFocus();
+      this.cdr.detectChanges();
+      return;
+    }
+    if (!this.kkScanIsSrShelfLocation(loc)) {
+      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem kệ phải bắt đầu bằng S hoặc R.`;
       this.kkTypeScanBeep('err');
       this.kkTypeScanLocationInput = '';
       if (el) el.value = '';
@@ -11617,11 +11649,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const qty = 1;
+    const qty = 1; // không đọc lượng từ QR — mỗi lần scan = 1 lần ghi nhận vị trí
     const prevCode = this.kkTypeScanMaterialCode;
     if (prevCode && prevCode !== code) {
       this.pushKkTypeScanLog(true, `Sang mã ${code}`, true);
     }
+    // Chỉ dùng mã / PO / IMD từ tem — bỏ qua quantity trên QR
     await this.applyKkTypeScanPutaway(code, parsed.po, parsed.imd, qty, readMs);
   }
 
@@ -11726,17 +11759,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch {
       /* ensure already logs */
     }
-    const home = po ? this.kkScanHomeLocation(code, po) : '';
+    const home = po ? this.kkScanHomeLocation(code, po) : this.kkScanHomeLocation(code);
+    let targetLoc = loc;
+    let relocateNote = '';
+    // Đã set vị trí cho loại mã → follow vị trí đúng; scan sai kệ thì đưa về home
     if (home && !this.kkScanLocationAllowed(loc, home)) {
-      const poNote = po ? ` PO ${po}` : '';
-      const msg = `Mã ${code}${poNote} đang ở ${home} (kho J kệ S/R). Không được để vị trí khác ${loc}.`;
-      this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
-      this.kkTypeScanBeep('err');
-      this.kkTypeScanLastSavePending = false;
-      alert(msg);
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-      return;
+      targetLoc = home;
+      relocateNote = ` · đưa về ${home}`;
     }
 
     const line = this.pickKkScanLine(code, po, imd, qty);
@@ -11753,7 +11782,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!line?.id) {
       const scanned = this.kkTypeScanQtyScanned;
       const boxTotal = this.kkTypeScanCartonTotal;
-      const msg = `${code} — không ghi nhận Box ${this.formatNumber(scanned)} / ${boxTotal || '—'}`;
+      const msg = `${code} — không khớp mã/PO/IMD · Box ${this.formatNumber(scanned)} / ${boxTotal || '—'}`;
       this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
       this.kkTypeScanBeep('err');
       this.kkTypeScanLastSavePending = false;
@@ -11772,7 +11801,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     const fromLocation = this.normalizeMultiLocationValue(String(line.location || ''));
-    const nextLoc = this.normalizeMultiLocationValue(loc);
+    const nextLoc = this.normalizeMultiLocationValue(targetLoc);
     const prevScanCount = this.getKkScanCount(line);
     const prevLocation = String(line.location || '');
     const prevKk = !!line.kkChecked;
@@ -11885,7 +11914,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const boxNote = boxTotal
       ? `${boxes}/${boxTotal} Box${boxes < boxTotal ? ` · thiếu ${boxTotal - boxes}` : boxes > boxTotal ? ` · thừa ${boxes - boxTotal}` : ' · đủ'}`
       : `${boxes} Box`;
-    const baseText = `${code} · ${boxNote}${shouldKk ? ' · KK' : ''}`;
+    const imdNote = imd ? ` · IMD ${imd}` : '';
+    const poNote = po ? ` · PO ${po}` : '';
+    const baseText = `${code}${poNote}${imdNote} · ${boxNote}${shouldKk ? ' · KK' : ''}${relocateNote}`;
     const logId = this.pushKkTypeScanLog(
       true,
       `${baseText} · ${readNote} · đang ghi…`,
