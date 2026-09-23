@@ -4957,7 +4957,7 @@
         <p class="kk-type-scan__err" *ngIf="kkTypeScanErr && kkTypeScanStep === 'operator'">{{ kkTypeScanErr }}</p>
       </div>
 
-      <!-- Camera gắn trong màn (mobile) — không popup; giữ DOM khi confirm để không restart cam -->
+      <!-- Camera gắn trong màn (mobile) — chiếm phần lớn màn hình -->
       <div class="kk-type-scan__cam"
            *ngIf="isMobile && nlScanDevice === 'mobile' && kkTypeScanStep !== 'operator'"
            [class.kk-type-scan__cam--dim]="showKkTypeScanConfirm">
@@ -4966,7 +4966,17 @@
           <span>{{ nlCameraSub }}</span>
         </div>
         <div id="kk-inline-qr-reader" class="kk-type-scan__cam-view"></div>
-        <p class="kk-type-scan__cam-tip">Đưa tem vào khung — quét một lần, báo ngay</p>
+        <p class="kk-type-scan__cam-tip">Đưa tem vào khung lớn — quét một lần</p>
+      </div>
+
+      <!-- PDA / scanner HID: ô bắn rõ ràng -->
+      <div class="kk-type-scan__pda-banner"
+           *ngIf="nlScanDevice === 'pda' && kkTypeScanStep !== 'operator' && !showKkTypeScanConfirm">
+        <i class="material-icons">sensors</i>
+        <div>
+          <strong>Chế độ Scanner (PDA)</strong>
+          <span>Bắn tem vào ô bên dưới — máy tự nhận</span>
+        </div>
       </div>
 
       <div *ngIf="kkTypeScanStep === 'location'" class="kk-type-scan__step">
@@ -4974,14 +4984,14 @@
           NV <strong>{{ kkTypeScanOperator || '—' }}</strong>
           · Bước 2: <strong>Scan kệ</strong> — tem phải bắt đầu bằng <strong>S</strong> hoặc <strong>R</strong>
         </p>
-        <div class="kk-type-scan__input-row" *ngIf="!(isMobile && nlScanDevice === 'mobile')">
+        <div class="kk-type-scan__input-row" *ngIf="nlScanDevice !== 'mobile'">
           <input id="kkTypeScanLocationInput"
                  type="text"
-                 class="kk-scan-trap"
+                 class="kk-scan-trap kk-type-scan__trap--lg"
                  [(ngModel)]="kkTypeScanLocationInput"
                  (focus)="onKkHidScanFocus($event)"
                  (blur)="onKkScanTrapBlur($event)"
-                 placeholder="Scan kệ S… / R…"
+                 placeholder="Bắn tem kệ S… / R… vào đây"
                  autocomplete="off"
                  autocapitalize="off"
                  spellcheck="false"
@@ -4993,8 +5003,8 @@
             <i class="material-icons">arrow_forward</i>
           </button>
         </div>
-        <!-- Ô ẩn để PDA/HID vẫn ghi được khi cần -->
-        <input *ngIf="isMobile && nlScanDevice === 'mobile'"
+        <!-- Camera mode: ô ẩn nhận HID nếu có -->
+        <input *ngIf="nlScanDevice === 'mobile'"
                id="kkTypeScanLocationInput"
                type="text"
                class="kk-scan-trap kk-type-scan__hid"
@@ -5009,13 +5019,13 @@
         <p class="kk-type-scan__hint">
           Kệ <strong>{{ kkTypeScanLocation }}</strong>
           · NV {{ kkTypeScanOperator || '—' }}
-          · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong> (không đọc lượng). Sai kệ → hệ thống đưa về vị trí đúng đã set.
+          · Bước 3: Scan mã hàng — đọc <strong>mã, PO, IMD</strong> (không đọc lượng).
         </p>
-        <div class="kk-type-scan__input-row" *ngIf="!(isMobile && nlScanDevice === 'mobile')">
+        <div class="kk-type-scan__input-row" *ngIf="nlScanDevice !== 'mobile'">
           <input id="kkTypeScanQrInput"
                  type="text"
-                 class="kk-scan-trap"
-                 placeholder="Scan mã hàng..."
+                 class="kk-scan-trap kk-type-scan__trap--lg"
+                 placeholder="Bắn tem mã hàng vào đây"
                  autocomplete="off"
                  autocorrect="off"
                  autocapitalize="off"
@@ -5030,7 +5040,7 @@
             <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
           </button>
         </div>
-        <input *ngIf="isMobile && nlScanDevice === 'mobile'"
+        <input *ngIf="nlScanDevice === 'mobile'"
                id="kkTypeScanQrInput"
                type="text"
                class="kk-scan-trap kk-type-scan__hid"

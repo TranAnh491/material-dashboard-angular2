@@ -2572,18 +2572,21 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private onKkDocScanKey(event: KeyboardEvent): void {
     if (!this.showKkTypeScanModal) return;
+    if (this.showKkTypeScanConfirm) return;
     if (this.nlScanDevice === 'mobile' && this.showNlCamera) return;
-    // Mã hàng QR dài: để bindHidScanInput xử lý. Chỉ bắt NV + vị trí ở cấp document
-    // để PDA không mất tem khi ô input chưa focus.
-    if (this.kkTypeScanStep === 'codes') return;
-    // Mã NV chỉ nhập tay — không bắt phím/scan cấp document
+    // Mã NV chỉ nhập tay
     if (this.kkTypeScanStep === 'operator') return;
     const target = event.target as HTMLElement | null;
     if (target?.closest?.('.kk-type-scan__std')) return;
-    // Ô vị trí đang focus: để bindHidScanInput nhận ký tự native. Chỉ bắt cấp document khi mất focus.
-    if (target && target.id === 'kkTypeScanLocationInput') {
+    // Ô trap đang focus: để bindHidScanInput nhận ký tự native
+    if (
+      target &&
+      (target.id === 'kkTypeScanLocationInput' || target.id === 'kkTypeScanQrInput')
+    ) {
       return;
     }
+    // PDA: bắt cấp document khi ô mất focus (cả kệ lẫn mã hàng)
+    if (this.kkTypeScanStep === 'codes' && this.nlScanDevice !== 'pda') return;
     const key = event.key;
     if (!key || key === 'Escape' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
     if (key === 'Tab' || key === 'Enter') {
@@ -2605,7 +2608,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.kkDocScanAt) this.kkDocScanAt = performance.now();
     this.kkDocScanBuf += key;
     this.paintKkDocScanBuf();
-    this.scheduleKkDocScanFlush(150);
+    // Đợi tem đủ dài — không cắt sớm
+    const idle = this.kkTypeScanStep === 'codes' ? 220 : 200;
+    this.scheduleKkDocScanFlush(idle);
   }
 
   private scheduleKkDocScanFlush(idleMs: number): void {
@@ -2642,6 +2647,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkTypeScanStep === 'operator' && !fromEnter) {
       this.pinKkScanFocus();
       return;
+    }
+    // Không từ Enter: chỉ nhận khi tem đủ dạng (tránh cắt sớm)
+    if (!fromEnter) {
+      if (this.kkTypeScanStep === 'location') {
+        const t = raw.toUpperCase().replace(/\s+/g, '');
+        if (!/^[SR]\d{1,2}(?:-\d+(?:-\d+)?)?$/.test(t)) {
+          this.pinKkScanFocus();
+          return;
+        }
+      } else if (this.kkTypeScanStep === 'codes') {
+        const parts = raw.split('|');
+        if (parts.length < 3 || parts[0].trim().length < 4) {
+          this.pinKkScanFocus();
+          return;
+        }
+      }
     }
     this.kkDocScanBuf = '';
     this.kkDocScanAt = 0;
@@ -2767,9 +2788,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const cameras = await Html5Qrcode.getCameras();
       const back = (cameras || []).find((c) => /back|rear|environment/i.test(c.label));
       const camId = back?.id || cameras?.[cameras.length - 1]?.id || cameras?.[0]?.id;
-      // Khung scan lớn hơn trên mobile web để quét nhanh
-      const box = purpose === 'kk' ? { width: 260, height: 260 } : { width: 240, height: 240 };
-      const config = { fps: 12, qrbox: box };
+      // Khung quét lớn (~78% cạnh ngắn) — dễ bắt tem trên điện thoại
+      const qrboxFn = (viewW: number, viewH: number) => {
+        const edge = Math.floor(Math.min(viewW, viewH) * 0.78);
+        const size = Math.max(200, Math.min(edge, 360));
+        return { width: size, height: size };
+      };
+      const config: any = {
+        fps: 15,
+        qrbox: qrboxFn,
+        aspectRatio: 1.0,
+        disableFlip: false
+      };
       const onOk = (text: string) => this.onNlCameraDecoded(text);
       if (camId) {
         await this.html5QrCode.start(camId, config, onOk, () => undefined);
@@ -11279,13 +11309,30 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.bindHidScanInput(
         el,
         (raw) => this.submitKkTypeScanLocation(undefined, raw),
-        { idleMs: 120, minLenForIdleFlush: 1 }
+        {
+          idleMs: 220,
+          minLenForIdleFlush: 4,
+          // Chỉ flush khi đủ dạng kệ S/R (tránh cắt sớm 1–2 ký tự)
+          shouldFlush: (raw) => {
+            const t = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+            return /^[SR]\d{1,2}(?:-\d+(?:-\d+)?)?$/.test(t);
+          }
+        }
       );
     } else if (id === 'kkTypeScanQrInput') {
       this.bindHidScanInput(
         el,
         (raw, readMs) => this.enqueueKkTypeScanCode(raw, readMs),
-        { idleMs: 120, minLenForIdleFlush: 4 }
+        {
+          idleMs: 200,
+          minLenForIdleFlush: 12,
+          // Tem NVL: Mã|PO|SL|IMD… — đủ ≥3 đoạn mới coi là xong (tránh cắt giữa chừng)
+          shouldFlush: (raw) => {
+            const t = String(raw || '').trim();
+            const parts = t.split('|');
+            return parts.length >= 3 && parts[0].trim().length >= 4;
+          }
+        }
       );
     }
   }
