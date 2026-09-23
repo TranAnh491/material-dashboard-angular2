@@ -110,7 +110,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   isPrintingShelfLabels = false;
   /** mam = từng mâm (S01-1-1…); dauKe = 1 tem/dãy (A4 R / A5 S) */
   shelfLabelKind: 'mam' | 'dauKe' = 'mam';
-  shelfLabelSize: '50x100' | '80x160' = '50x100';
+  shelfLabelSize: '60x130' | '100x150' = '60x130';
   private readonly shelfLabelRList: string[] = Array.from({ length: 28 }, (_, i) =>
     `R${String(i + 1).padStart(2, '0')}`
   );
@@ -1640,7 +1640,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.shelfLabelError = '';
   }
 
-  setShelfLabelSize(size: '50x100' | '80x160'): void {
+  setShelfLabelSize(size: '60x130' | '100x150'): void {
     this.shelfLabelSize = size;
   }
 
@@ -1648,7 +1648,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     return this.shelfLabelPerPageOf(this.shelfLabelSize);
   }
 
-  shelfLabelPerPageOf(size: '50x100' | '80x160'): number {
+  shelfLabelPerPageOf(size: '60x130' | '100x150'): number {
     const { widthMm, heightMm } = this.shelfLabelDimensions(size);
     const pageW = 210;
     const pageH = 297;
@@ -1661,10 +1661,10 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     return cols * rows;
   }
 
-  private shelfLabelDimensions(size: '50x100' | '80x160'): { widthMm: number; heightMm: number } {
-    return size === '80x160'
-      ? { widthMm: 160, heightMm: 80 }
-      : { widthMm: 100, heightMm: 50 };
+  private shelfLabelDimensions(size: '60x130' | '100x150'): { widthMm: number; heightMm: number } {
+    return size === '100x150'
+      ? { widthMm: 150, heightMm: 100 }
+      : { widthMm: 130, heightMm: 60 };
   }
 
   get shelfLabelSelectedCount(): number {
@@ -1893,17 +1893,17 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       position: absolute;
       top: 10mm;
       left: 12mm;
-      height: 42mm;
+      height: 54.6mm;
       width: auto;
-      max-width: 110mm;
+      max-width: 143mm;
       object-fit: contain;
       object-position: left top;
     }
     .page--a5 .dau-ke__logo {
-      height: 32mm;
+      height: 41.6mm;
       top: 8mm;
       left: 10mm;
-      max-width: 85mm;
+      max-width: 110.5mm;
     }
     .dau-ke__name {
       font-weight: 900;
@@ -1962,7 +1962,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     );
 
     const nameFontMm = heightMm >= 80 ? 14 : 9;
-    const logoH = heightMm >= 80 ? 15.6 : 9.1; // +30% so với 12 / 7
+    const logoH = heightMm >= 80 ? 20.28 : 11.83; // +30% so với 15.6 / 9.1
     const qrMm = Math.min(heightMm * 0.78, Math.min(heightMm * 0.62, widthMm * 0.28) * 1.3);
 
     const labelNodes = names.map(

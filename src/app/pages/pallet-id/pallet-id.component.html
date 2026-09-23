@@ -382,17 +382,17 @@
         <div class="shelf-label-modal__sizes" *ngIf="shelfLabelKind === 'mam'" role="group" aria-label="Kích cỡ tem">
           <button type="button"
                   class="shelf-label-size"
-                  [class.is-on]="shelfLabelSize === '50x100'"
-                  (click)="setShelfLabelSize('50x100')">
-            <strong>5 × 10 cm</strong>
-            <span>Cao 5cm · Ngang 10cm · {{ shelfLabelPerPageOf('50x100') }} tem/A4</span>
+                  [class.is-on]="shelfLabelSize === '60x130'"
+                  (click)="setShelfLabelSize('60x130')">
+            <strong>6 × 13 cm</strong>
+            <span>Cao 6cm · Ngang 13cm · {{ shelfLabelPerPageOf('60x130') }} tem/A4</span>
           </button>
           <button type="button"
                   class="shelf-label-size"
-                  [class.is-on]="shelfLabelSize === '80x160'"
-                  (click)="setShelfLabelSize('80x160')">
-            <strong>8 × 16 cm</strong>
-            <span>Cao 8cm · Ngang 16cm · {{ shelfLabelPerPageOf('80x160') }} tem/A4</span>
+                  [class.is-on]="shelfLabelSize === '100x150'"
+                  (click)="setShelfLabelSize('100x150')">
+            <strong>10 × 15 cm</strong>
+            <span>Cao 10cm · Ngang 15cm · {{ shelfLabelPerPageOf('100x150') }} tem/A4</span>
           </button>
         </div>
 
