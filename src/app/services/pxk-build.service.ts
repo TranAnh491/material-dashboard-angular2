@@ -173,10 +173,10 @@ export class PxkBuildService {
     const infoBox = (label: string, value: string) =>
       `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">${this.esc(label)}</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.2;padding-top:18px;"><span>${this.esc(value || '-')}</span></div></div>`;
     const lsxUpper = lsx.toUpperCase().replace(/\s/g, '');
-    const lineKey = lineNhanRaw.replace(/\s/g, '').toUpperCase();
+    const lineKey = lineNhanRaw.normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const isAsm3Line = lineKey && lineKey !== '-'
-      && (lineKey === 'WHE' || lineKey === 'WHD' || lineKey === 'WHG'
-        || lineKey.startsWith('WHE') || lineKey.startsWith('WHD') || lineKey.startsWith('WHG'));
+      && (lineKey === 'WHE' || lineKey === 'WHD' || lineKey === 'WHF' || lineKey === 'WHG'
+        || lineKey.startsWith('WHE') || lineKey.startsWith('WHD') || lineKey.startsWith('WHF') || lineKey.startsWith('WHG'));
     const factoryBadge = lsxUpper.startsWith('LH')
       ? 'ASM2'
       : lsxUpper.startsWith('KZ')

@@ -2190,9 +2190,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Line nhận WHE / WHD / WHF / WHG (kể cả WH G) → ghi chú tự động ASM3. */
+  /** Line nhận WHE / WHD / WHF / WHG (kể cả WH G, WH-G) → ghi chú tự động ASM3. */
   private normalizeProductionLineKey(line: string): string {
-    return String(line || '').replace(/\s/g, '').toUpperCase();
+    return String(line || '')
+      .normalize('NFKC')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
   }
 
   private isAsm3ProductionLine(line: string): boolean {
