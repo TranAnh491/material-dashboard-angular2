@@ -1068,14 +1068,14 @@
               (click)="startNlSearchScan()"
               [disabled]="isLoading || isScanning">
         <i class="material-icons">{{ nlScanDevice === 'pda' ? 'sensors' : 'qr_code_scanner' }}</i>
-        {{ nlScanDevice === 'pda' ? 'Scan (PDA)' : 'Scan' }}
+        Kiểm tồn kho
       </button>
       <button type="button"
               class="mat-m-nl-scanbtn mat-m-nl-scanbtn--kk"
               (click)="startNlKkScan()"
               [disabled]="isLoading || isScanning || !canEdit">
         <i class="material-icons">fact_check</i>
-        Scan kiểm kê
+        Cập nhật vị trí
       </button>
       <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
         Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
@@ -1084,7 +1084,7 @@
         Đọc tem lần scan: <strong>{{ formatScanMs(nlScanLastReadMs) }}</strong>
       </p>
       <p class="mat-m-hint" *ngIf="searchTerm && searchTerm.length < 4 && !isLoading">
-        Cần ít nhất 4 số, hoặc Scan / Enter
+        Cần ít nhất 4 số, hoặc Kiểm tồn kho / Enter
       </p>
     </header>
 
@@ -1096,7 +1096,7 @@
     <div class="mat-m-empty" *ngIf="!isLoading && !searchTerm">
       <i class="material-icons">search</i>
       <p>Nhập hoặc quét mã hàng để đổi vị trí / kho</p>
-      <p>Kiểm kê: bấm Scan Kiểm Kê → quét vị trí → quét mã hàng</p>
+      <p>Cập nhật vị trí: bấm Cập nhật vị trí → quét vị trí → quét mã hàng</p>
     </div>
 
     <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 4 && filteredInventory.length === 0">
