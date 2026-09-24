@@ -206,3 +206,36 @@ body.kk-scan-kb-lock {
 body.kk-scan-kb-lock .kk-type-scan {
   max-height: 100dvh;
 }
+
+/* Chi tiết KK: khóa scroll ngoài (.main-panel / PerfectScrollbar) — chỉ bảng cuộn */
+body.kk-page-lock {
+  overflow: hidden !important;
+}
+
+body.kk-page-lock .wrapper,
+body.kk-page-lock .main-panel,
+body.kk-page-lock .content-area {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+body.kk-page-lock .main-panel .ps__rail-y,
+body.kk-page-lock .main-panel .ps__rail-x {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+body.kk-page-lock .main-panel .main-content,
+body.kk-page-lock .content-area > *,
+body.kk-page-lock .kk-page.excel-container {
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}

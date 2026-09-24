@@ -404,6 +404,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkConnectorRackView: Record<string, { shelf: string; level: number }> = {
     B009: { shelf: 'S07', level: 1 },
     B016: { shelf: 'S11', level: 1 },
+    B017: { shelf: 'S23', level: 1 },
     B018: { shelf: 'S01', level: 1 }
   };
   /** Mở danh sách mã phẳng (Chi tiết) theo đầu mã B009/B016/B018 — đã thay bằng bảng KK */
@@ -418,6 +419,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     locs: string[];
     title: string;
   } | null = null;
+  /** Chi tiết KK — toàn bộ tồn kho, không phân loại theo loại hàng */
+  kkAllStockDetail = false;
+  readonly kkAllStockDetailTitle = 'Chi tiết KK';
   readonly kkB009Blocks = [1, 2, 3] as const;
   kkActivePinSplit: '1-4' | '5-10' | null = null;
   kkActiveSourceProductType: string | null = null;
@@ -2570,6 +2574,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     document.body.classList.remove('kk-scan-kb-lock');
   }
 
+  /** Khóa scroll .main-panel khi mở chi tiết KK — tránh thanh kéo ngoài làm lệch footer. */
+  private syncKkPageLock(): void {
+    const lock = !this.isMobile
+      && !!(this.showKkLocMap || this.isNguyenLieuPage)
+      && !!this.kkActiveProductType;
+    document.body.classList.toggle('kk-page-lock', lock);
+    if (lock) {
+      const panel = document.querySelector('.main-panel') as HTMLElement | null;
+      if (panel) panel.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }
+  }
+
   private attachKkDocScan(): void {
     if (this.kkDocScanHandler) return;
     this.kkDocScanHandler = (event: KeyboardEvent) => this.onKkDocScanKey(event);
@@ -3130,6 +3147,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.hidScanTimers.clear();
     this.kkHidQrQueue = [];
     this.unlockKkScanKeyboard();
+    document.body.classList.remove('kk-page-lock');
   }
 
   // Setup debounced search for better performance
@@ -6599,6 +6617,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
+    this.kkAllStockDetail = false;
+    this.kkConnectorFloorDetail = null;
     setTimeout(() => void this.loadKkCatalogMeta(), 0);
   }
 
@@ -6627,10 +6647,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
+    this.kkAllStockDetail = false;
+    this.kkConnectorFloorDetail = null;
     this.showKkTypeReportMenu = false;
     this.showKkIdReport = false;
     this.showKkPalletCheck = false;
     this.stopKkLive();
+    this.syncKkPageLock();
   }
 
   toggleKkLive(): void {
@@ -6900,6 +6923,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveTypeDraft = null;
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
+    this.kkAllStockDetail = false;
+    this.kkConnectorFloorDetail = null;
     if (!this.kkStockLoaded) return;
     if (view === 'location') void this.loadKkLocMap();
     else if (view === 'material') void this.loadKkByMaterial();
@@ -6909,6 +6934,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } else {
       void this.loadKkCatalogForMap();
     }
+    this.syncKkPageLock();
   }
 
   /** Nút Play: đọc tồn kho. Search không bấm Play thì chỉ chạy khi đủ 4 số. */
@@ -7582,8 +7608,43 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         };
       })
       .filter((muc) => muc.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
+    this.kkTypeBoxGroupsCached = this.mergeKkSingletonMucsFromB019(this.kkTypeBoxGroupsCached);
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
     return this.kkTypeBoxGroupsCached;
+  }
+
+  /**
+   * Từ B019 trở đi: mục chỉ có 1 loại → gom vào "Mục còn lại".
+   * Giữ nguyên B036/B042 và các mục đặc biệt (< B019, NHUA, DAYCAP…).
+   */
+  private mergeKkSingletonMucsFromB019(
+    mucs: typeof this.kkTypeBoxGroupsCached
+  ): typeof this.kkTypeBoxGroupsCached {
+    const keep: typeof this.kkTypeBoxGroupsCached = [];
+    const mergedBoxes: typeof this.kkTypeBoxesCached = [];
+    for (const muc of mucs) {
+      const m = /^B(\d{3})$/.exec(String(muc.category || ''));
+      const n = m ? Number(m[1]) : 0;
+      // B036 / B042 giữ mục riêng (đã bỏ mục con, chỉ box phẳng)
+      if (muc.category === 'B036' || muc.category === 'B042') {
+        keep.push(muc);
+        continue;
+      }
+      if (n >= 19 && muc.boxes.length === 1) {
+        mergedBoxes.push(...muc.boxes);
+        continue;
+      }
+      keep.push(muc);
+    }
+    if (!mergedBoxes.length) return keep;
+    const sorted = this.sortKkTypeBoxesInCategory('CONLAI', mergedBoxes);
+    keep.push({
+      category: 'CONLAI',
+      title: this.kkTypeMucTitle('CONLAI'),
+      boxes: sorted,
+      groups: undefined
+    });
+    return keep;
   }
 
   /** Gom loại hàng thành mục. Cùng đầu mã B+3 → một mục, các box nằm trong đó. */
@@ -7631,7 +7692,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return head.length ? head.join(' ') : raw;
   }
 
-  /** B009/B016/B018 chia kệ × tầng. B018: S01/S03/S05. Mục khác (B001, B007…) chỉ hiện box loại, không tiêu đề con. */
+  /** B009/B016/B017/B018 chia kệ × tầng. Mục Nhựa / Dây cáp / B036 / B042: chỉ box loại, không mục con. */
   private kkTypeBrandGroupsOf(
     category: string,
     boxes: typeof this.kkTypeBoxesCached
@@ -7641,15 +7702,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     boxes: typeof this.kkTypeBoxesCached;
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
   }> | undefined {
-    if (category === 'NHUA') return this.kkTypePrefixColsGroupsOf(boxes, ['B011', 'B012', 'B014', 'B013']);
-    // Mục Dây cáp: chỉ các box loại hàng, không chia mục con B002/B003/…
-    if (category === 'DAYCAP') return undefined;
+    // Nhựa / Dây cáp / B036 / B042: không chia mục con
+    if (category === 'NHUA' || category === 'DAYCAP' || category === 'B036' || category === 'B042') {
+      return undefined;
+    }
     if (!/^B\d{3}$/.test(category)) return undefined;
-    if (category === 'B009' || category === 'B016' || category === 'B018') {
+    if (category === 'B009' || category === 'B016' || category === 'B017' || category === 'B018') {
       return this.kkTypeConnectorShelfGroupsOf(category, boxes);
     }
-    if (category === 'B017') return this.kkTypeB017CodeGroupsOf(boxes);
-    if (this.isKkNameColsMuc(category)) return this.kkTypeNameColsGroupsOf(boxes);
     return undefined;
   }
 
@@ -7859,7 +7919,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isKkConnectorRackMuc(category: string): boolean {
-    return category === 'B009' || category === 'B016' || category === 'B018';
+    return category === 'B009' || category === 'B016' || category === 'B017' || category === 'B018';
   }
 
   isKkNhuaMuc(category: string): boolean {
@@ -7871,7 +7931,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isKkPrefixColsMuc(category: string): boolean {
-    return this.isKkNhuaMuc(category) || this.isKkNameColsMuc(category);
+    // Không còn chia cột mục con cho Nhựa / B036 / B042
+    return false;
   }
 
   isKkNameColsMuc(category: string): boolean {
@@ -8036,6 +8097,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeMucTitle(category: string): string {
     if (category === 'Chưa gán danh mục') return 'Chưa gán danh mục';
     if (category === 'Khác') return 'Mục khác';
+    if (category === 'CONLAI') return 'Mục còn lại';
     if (category === 'ĐẦU NỐI') return 'Mục Đầu nối';
     if (category === 'ĐẦU CỐT') return 'Mục Đầu cốt (Terminal)';
     if (category === 'NHUA') return 'Mục Nhựa';
@@ -8162,6 +8224,58 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.openKkConnectorFloorKkDetail(category, event);
   }
 
+  /** Toàn bộ tồn kho — không phân loại theo loại hàng; 50 dòng/trang; tìm mã / vị trí. */
+  openKkAllStockDetail(): void {
+    this.kkAllStockDetail = true;
+    this.kkConnectorFloorDetail = null;
+    const title = this.kkAllStockDetailTitle;
+    this.kkActiveProductType = title;
+    this.kkActiveSourceProductType = title;
+    this.kkActivePinSplit = null;
+    this.kkActiveTypeDraft = this.buildEmptyKkTypeRow(title);
+    this.kkTypePage = 1;
+    this.kkTypePageSize = 50;
+    this.kkTypeDetailQuery = '';
+    this.kkTypeSearchDraft = '';
+    this.kkTypeFilterLoc = '';
+    this.kkTypeFilterWh = '';
+    this.kkTypeFilterRolls = '';
+    this.kkTypeSortQtyDesc = false;
+    this.kkTypeShowExtraFilter = false;
+    this.kkTypeDetailSig = '';
+    if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
+    void this.ensureKkTypeMaterialNames();
+    this.syncKkPageLock();
+    this.cdr.detectChanges();
+  }
+
+  /** Mọi dòng tồn > 0 (theo Zone / WH3), không gom theo loại hàng. */
+  private kkAllStockDetailLines(): InventoryMaterial[] {
+    const seen = new Set<string>();
+    const out: InventoryMaterial[] = [];
+    this.kkLocMapTypeCache.forEach((list) => {
+      for (const m of list) {
+        const id = String(m.id || '');
+        if (id && seen.has(id)) continue;
+        if (this.calculateCurrentStock(m) <= 0) continue;
+        if (!this.kkMatchesWh3Mode(this.kkWarehouseFromLocation(m.location))) continue;
+        const zone = this.kkLocMapWarehouseFilter;
+        if (zone && this.kkWarehouseFromLocation(m.location) !== zone) continue;
+        if (id) seen.add(id);
+        out.push(m);
+      }
+    });
+    out.sort((a, b) => {
+      const code = this.compareMaterialCodesFIFO(
+        String(a.materialCode || ''),
+        String(b.materialCode || '')
+      );
+      if (code) return code;
+      return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+    });
+    return out;
+  }
+
   /** Chi tiết tầng B009/B016/B018 → giao diện kiểm kê, mọi mã set cho vị trí tầng đó. */
   openKkConnectorFloorKkDetail(category: string, event?: Event): void {
     event?.preventDefault?.();
@@ -8177,6 +8291,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!range?.from || range.to < range.from) return;
     const locs = this.kkShelfBlockNos(shelf).map((b) => this.kkB009LocOf(shelf, b, level));
     const title = `${shelf}-T${level} · ${this.kkConnectorRangeText(prefix, range.from, range.to)}`;
+    this.kkAllStockDetail = false;
     this.kkConnectorFloorDetail = {
       prefix,
       shelf,
@@ -8207,6 +8322,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeDetailSig = '';
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
     void this.ensureKkTypeMaterialNames();
+    this.syncKkPageLock();
     this.cdr.detectChanges();
   }
 
@@ -8269,6 +8385,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Bấm mã trên danh sách tầng → mở chi tiết loại chứa mã đó, lọc đúng mã. */
   selectKkConnectorFloorCode(code: string): void {
+    this.kkAllStockDetail = false;
     this.kkConnectorFloorDetail = null;
     const c = String(code || '').trim().toUpperCase();
     if (!c) return;
@@ -8710,6 +8827,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   selectKkTypeBox(productType: string): void {
+    this.kkAllStockDetail = false;
     this.kkConnectorFloorDetail = null;
     this.ensureKkTypeBoxesCache();
     const box = this.kkTypeBoxesCached.find((b) => b.productType === productType)
@@ -8731,6 +8849,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeShowExtraFilter = false;
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
     void this.ensureKkTypeMaterialNames();
+    this.syncKkPageLock();
   }
 
   kkTypeHomeLocOf(productType: string): string {
@@ -10058,12 +10177,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActivePinSplit = null;
     this.kkActiveSourceProductType = null;
     this.kkConnectorFloorDetail = null;
+    this.kkAllStockDetail = false;
     this.kkTypePage = 1;
+    this.kkTypePageSize = 20;
+    this.kkTypeDetailQuery = '';
+    this.kkTypeSearchDraft = '';
     this.kkTypeFilterLoc = '';
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
     this.kkTypeShowExtraFilter = false;
+    this.syncKkPageLock();
   }
 
   get kkTypeDetailAll(): InventoryMaterial[] {
@@ -10090,6 +10214,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkActiveProductType || '',
       this.kkActiveSourceProductType || '',
       this.kkActivePinSplit || '',
+      this.kkAllStockDetail ? 1 : 0,
       floor ? `${floor.prefix}|${floor.shelf}|${floor.level}|${floor.from}|${floor.to}` : '',
       this.kkLocMapWarehouseFilter,
       this.kkCountWh3 ? 1 : 0,
@@ -10105,7 +10230,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     ].join('|');
     if (sig === this.kkTypeDetailSig) return;
     this.kkTypeDetailSig = sig;
-    if (floor && this.kkActiveProductType === floor.title) {
+    if (this.kkAllStockDetail && this.kkActiveProductType === this.kkAllStockDetailTitle) {
+      this.kkTypeDetailAllCached = this.kkAllStockDetailLines();
+    } else if (floor && this.kkActiveProductType === floor.title) {
       this.kkTypeDetailAllCached = this.kkConnectorFloorDetailLines(floor);
     } else {
       const name = this.kkActiveProductType;
@@ -10128,7 +10255,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const loc = this.kkTypeFilterLoc.trim().toUpperCase();
     if (loc) {
-      rows = rows.filter((m) => String(m.location || '').trim().toUpperCase() === loc);
+      if (this.kkAllStockDetail) {
+        rows = rows.filter((m) => String(m.location || '').trim().toUpperCase().includes(loc));
+      } else {
+        rows = rows.filter((m) => String(m.location || '').trim().toUpperCase() === loc);
+      }
     }
     if (this.kkTypeFilterWh) {
       rows = rows.filter((m) => this.kkWarehouseFromLocation(m.location) === this.kkTypeFilterWh);
@@ -10136,7 +10267,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkTypeFilterRolls) {
       rows = rows.filter((m) => this.getKkRollsText(m) === this.kkTypeFilterRolls);
     }
-    const q = this.kkEffectiveSearchQuery(this.kkLocMapQuery || this.kkTypeDetailQuery);
+    const qRaw = String(this.kkLocMapQuery || this.kkTypeDetailQuery || '').trim().toUpperCase();
+    const q = this.kkAllStockDetail
+      ? (qRaw.length >= 2 ? qRaw : '')
+      : this.kkEffectiveSearchQuery(this.kkLocMapQuery || this.kkTypeDetailQuery);
     if (q) {
       rows = rows.filter((m) => this.kkLineMatchesSearchQuery(m, q));
     }
@@ -10343,6 +10477,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeDetailQuery = '';
+    this.kkTypeSearchDraft = '';
     this.kkTypePage = 1;
   }
 
@@ -13317,6 +13453,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private kkCachedLinesForType(productType: string): InventoryMaterial[] {
+    if (this.kkAllStockDetail && productType === this.kkAllStockDetailTitle) {
+      return this.kkAllStockDetailLines();
+    }
     const floor = this.kkConnectorFloorDetail;
     if (floor && productType === floor.title) {
       return this.kkConnectorFloorDetailLines(floor);

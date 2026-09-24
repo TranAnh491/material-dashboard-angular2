@@ -5399,6 +5399,10 @@ $asm1-toolbar-h: 36px;
   }
 
   &--detail {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+
     .excel-header,
     .kk-page__head {
       padding: 10px 16px 8px;
@@ -5417,12 +5421,58 @@ $asm1-toolbar-h: 36px;
     }
 
     .kk-page__body {
-      padding: 10px 14px 12px;
+      padding: 10px 14px 0;
       gap: 8px;
+      overflow: hidden;
+    }
+
+    .kk-loc-map__type {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
     }
 
     .kk-type-detail {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
       gap: 8px;
+    }
+
+    .kk-type-filter {
+      flex-shrink: 0;
+    }
+
+    .kk-type-detail__main {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px 10px 0 0;
+    }
+
+    .kk-type-detail__table {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      border: none;
+      border-radius: 0;
+    }
+
+    .kk-type-pager {
+      flex-shrink: 0;
+      margin: 0;
+      padding: 8px 12px 10px;
+      background: #fff;
+      border-top: 1px solid #e2e8f0;
     }
 
     .kk-type-detail__bar {
@@ -6095,6 +6145,14 @@ $asm1-toolbar-h: 36px;
   gap: 10px;
   min-height: 0;
   flex: 1;
+}
+
+.kk-type-detail__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .kk-type-box-menu {
