@@ -108,9 +108,11 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   shelfLabelSelected = new Set<string>();
   shelfLabelError = '';
   isPrintingShelfLabels = false;
-  /** mam = từng mâm (S01-1-1…); dauKe = 1 tem/dãy (A4 R / A5 S) */
-  shelfLabelKind: 'mam' | 'dauKe' = 'mam';
+  /** mam = từng mâm (S01-1-1…); dauKe = 1 tem/dãy; palletSeq = R10-1…R10-N (57×32mm) */
+  shelfLabelKind: 'mam' | 'dauKe' | 'palletSeq' = 'mam';
   shelfLabelSize: '60x130' | '100x150' = '60x130';
+  /** Số tem theo thứ tự pallet (R10-1 … R10-N) */
+  shelfLabelPalletCount = 30;
   private readonly shelfLabelRList: string[] = Array.from({ length: 28 }, (_, i) =>
     `R${String(i + 1).padStart(2, '0')}`
   );
@@ -1626,6 +1628,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   openShelfLabelModal(): void {
     this.shelfLabelQuery = '';
     this.shelfLabelError = '';
+    this.shelfLabelPalletCount = 30;
     this.showShelfLabelModal = true;
   }
 
@@ -1635,13 +1638,22 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.shelfLabelError = '';
   }
 
-  setShelfLabelKind(kind: 'mam' | 'dauKe'): void {
+  setShelfLabelKind(kind: 'mam' | 'dauKe' | 'palletSeq'): void {
     this.shelfLabelKind = kind;
     this.shelfLabelError = '';
   }
 
   setShelfLabelSize(size: '60x130' | '100x150'): void {
     this.shelfLabelSize = size;
+  }
+
+  onShelfLabelPalletCountChange(value: number | string): void {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n) || n < 1) {
+      this.shelfLabelPalletCount = 1;
+      return;
+    }
+    this.shelfLabelPalletCount = Math.min(999, n);
   }
 
   get shelfLabelPerPage(): number {
@@ -1671,9 +1683,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     return this.shelfLabelSelected.size;
   }
 
-  /** Số tem sẽ in (mâm = tổng vị trí; đầu kệ = số dãy). */
+  /** Số tem sẽ in (mâm = tổng vị trí; đầu kệ = số dãy; palletSeq = dãy × số pallet). */
   get shelfLabelPrintCount(): number {
     if (this.shelfLabelKind === 'dauKe') return this.shelfLabelSelectedCount;
+    if (this.shelfLabelKind === 'palletSeq') {
+      return this.shelfLabelSelectedCount * Math.max(1, this.shelfLabelPalletCount || 1);
+    }
     return this.expandShelfLabelSelection().length;
   }
 
@@ -1749,6 +1764,16 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     return out;
   }
 
+  /** Theo số pallet: R10 + 30 → R10-1 … R10-30 (mỗi dãy đã tick). */
+  private expandShelfLabelPalletSeq(): string[] {
+    const n = Math.max(1, Math.min(999, Math.floor(Number(this.shelfLabelPalletCount) || 1)));
+    const out: string[] = [];
+    for (const aisle of this.orderedShelfLabelAisles()) {
+      for (let i = 1; i <= n; i++) out.push(`${aisle}-${i}`);
+    }
+    return out;
+  }
+
   async printShelfLabels(): Promise<void> {
     await this.emitShelfLabels('print');
   }
@@ -1763,16 +1788,27 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.shelfLabelError = 'Chọn ít nhất một dãy kệ để in.';
       return;
     }
+    if (this.shelfLabelKind === 'palletSeq') {
+      const n = Math.floor(Number(this.shelfLabelPalletCount) || 0);
+      if (n < 1 || n > 999) {
+        this.shelfLabelError = 'Số pallet phải từ 1 đến 999.';
+        return;
+      }
+    }
     const names =
-      this.shelfLabelKind === 'dauKe' ? aisles : this.expandShelfLabelSelection();
+      this.shelfLabelKind === 'dauKe'
+        ? aisles
+        : this.shelfLabelKind === 'palletSeq'
+          ? this.expandShelfLabelPalletSeq()
+          : this.expandShelfLabelSelection();
     if (!names.length) {
-      this.shelfLabelError = 'Không có mâm kệ để in.';
+      this.shelfLabelError = 'Không có tem để in.';
       return;
     }
     if (
-      this.shelfLabelKind === 'mam' &&
+      (this.shelfLabelKind === 'mam' || this.shelfLabelKind === 'palletSeq') &&
       names.length > 300 &&
-      !confirm(`In ${names.length} tem mâm kệ?`)
+      !confirm(`In ${names.length} tem?`)
     ) {
       return;
     }
@@ -1782,11 +1818,15 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       const html =
         this.shelfLabelKind === 'dauKe'
           ? await this.buildDauKeLabelHtml(aisles)
-          : await this.buildShelfMamLabelHtml(names);
+          : this.shelfLabelKind === 'palletSeq'
+            ? await this.buildShelfPalletSeqLabelHtml(names)
+            : await this.buildShelfMamLabelHtml(names);
       const fileTag =
         this.shelfLabelKind === 'dauKe'
           ? `dau-ke-${aisles.length}`
-          : `mam-${this.shelfLabelSize}-${names.length}`;
+          : this.shelfLabelKind === 'palletSeq'
+            ? `pallet-seq-${names.length}`
+            : `mam-${this.shelfLabelSize}-${names.length}`;
       if (mode === 'download') {
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1936,6 +1976,103 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   </div>
   <div class="pages">${pages}</div>
 </body>
+</html>`;
+  }
+
+  /**
+   * Tem theo số thứ tự pallet — 57×32mm (cùng cỡ tem inbound / tem vị trí kho J):
+   * QR trái (nội dung = tên vị trí), tên vị trí phải. VD R10-1 … R10-30.
+   */
+  private async buildShelfPalletSeqLabelHtml(names: string[]): Promise<string> {
+    const qrImages = await Promise.all(
+      names.map((name) =>
+        QRCode.toDataURL(name, {
+          width: 360,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        })
+      )
+    );
+
+    const labelHtml = names
+      .map(
+        (name, i) => `
+        <div class="j-loc-label">
+          <div class="j-loc-label__qr">
+            <img src="${qrImages[i]}" alt="QR ${name}">
+          </div>
+          <div class="j-loc-label__text">${name}</div>
+        </div>`
+      )
+      .join('');
+
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Tem pallet theo kệ — ${names.length} tem</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      width: 57mm;
+      height: 32mm;
+    }
+    .j-loc-label {
+      width: 57mm;
+      height: 32mm;
+      border: 1px solid #000;
+      display: flex;
+      align-items: stretch;
+      background: #fff;
+      overflow: hidden;
+      page-break-after: always;
+      page-break-inside: avoid;
+    }
+    .j-loc-label:last-child { page-break-after: avoid; }
+    .j-loc-label__qr {
+      width: 39mm;
+      height: 32mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #ccc;
+      flex-shrink: 0;
+    }
+    .j-loc-label__qr img {
+      width: 30.5mm;
+      height: 30.5mm;
+      object-fit: contain;
+      display: block;
+    }
+    .j-loc-label__text {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1mm 1.5mm;
+      text-align: center;
+      font-size: 15px;
+      font-weight: bold;
+      color: #000;
+      word-break: break-word;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; background: #fff !important; width: 57mm !important; height: 32mm !important; }
+      @page { margin: 0 !important; size: 57mm 32mm !important; }
+      .j-loc-label {
+        width: 57mm !important;
+        height: 32mm !important;
+        page-break-after: always !important;
+      }
+      .j-loc-label:last-child { page-break-after: avoid !important; }
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
 </html>`;
   }
 

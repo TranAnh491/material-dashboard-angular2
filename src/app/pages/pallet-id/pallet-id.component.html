@@ -368,6 +368,13 @@
             <strong>Label Đầu Kệ</strong>
             <span>R = A4 ngang · S = A5 ngang · logo + chữ to</span>
           </button>
+          <button type="button"
+                  class="shelf-label-kind"
+                  [class.is-on]="shelfLabelKind === 'palletSeq'"
+                  (click)="setShelfLabelKind('palletSeq')">
+            <strong>Theo số pallet</strong>
+            <span>Chọn R10 + 30 → R10-1 … R10-30 · tem 57×32mm</span>
+          </button>
         </div>
 
         <p class="shelf-label-modal__hint" *ngIf="shelfLabelKind === 'mam'">
@@ -377,6 +384,11 @@
         <p class="shelf-label-modal__hint" *ngIf="shelfLabelKind === 'dauKe'">
           Mỗi dãy một trang <strong>in ngang</strong>: logo góc trái to, tên kệ (vd <strong>S01</strong>) giữa thật lớn.
           Kệ <strong>R</strong> = <strong>A4 ngang</strong>, kệ <strong>S</strong> = <strong>A5 ngang</strong>.
+        </p>
+        <p class="shelf-label-modal__hint" *ngIf="shelfLabelKind === 'palletSeq'">
+          Tem <strong>57mm × 32mm</strong> (cùng cỡ tem inbound): QR bên trái, tên vị trí bên phải.
+          Tick chọn kệ (vd <strong>R10</strong>), nhập số pallet (vd <strong>30</strong>) → in
+          <strong>R10-1</strong> … <strong>R10-30</strong>.
         </p>
 
         <div class="shelf-label-modal__sizes" *ngIf="shelfLabelKind === 'mam'" role="group" aria-label="Kích cỡ tem">
@@ -396,6 +408,22 @@
           </button>
         </div>
 
+        <div class="shelf-label-modal__pallet-n" *ngIf="shelfLabelKind === 'palletSeq'">
+          <label>
+            Số pallet
+            <input type="number"
+                   min="1"
+                   max="999"
+                   step="1"
+                   [ngModel]="shelfLabelPalletCount"
+                   (ngModelChange)="onShelfLabelPalletCountChange($event)"
+                   [disabled]="isPrintingShelfLabels">
+          </label>
+          <span class="shelf-label-modal__pallet-n-hint">
+            Mỗi kệ đã chọn → {{ shelfLabelPalletCount }} tem (vd R10-1 … R10-{{ shelfLabelPalletCount }})
+          </span>
+        </div>
+
         <div class="shelf-label-modal__bar">
           <input type="search"
                  class="shelf-label-modal__search"
@@ -407,6 +435,7 @@
           <span class="shelf-label-modal__count">
             {{ shelfLabelSelectedCount | number }} dãy
             <ng-container *ngIf="shelfLabelKind === 'mam'"> · {{ shelfLabelPrintCount | number }} mâm</ng-container>
+            <ng-container *ngIf="shelfLabelKind === 'palletSeq'"> · {{ shelfLabelPrintCount | number }} tem</ng-container>
           </span>
           <button type="button" class="shelf-label-modal__clear" (click)="clearShelfLabelSelection()" [disabled]="!shelfLabelSelectedCount">Bỏ chọn</button>
         </div>

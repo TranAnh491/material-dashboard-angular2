@@ -2500,8 +2500,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.showNlDevicePicker = true;
       return;
     }
-    this.openKkTypeScanModal(undefined, 'inventory');
-    // Camera chỉ dùng từ bước scan kệ / mã hàng — không dùng cho mã NV
+    // Cập nhật vị trí: scan kệ S/R (kể cả R10-1…) → scan mã — chỉ đổi vị trí
+    this.openKkTypeScanModal(undefined, 'location');
   }
 
   get nlCameraHeading(): string {
@@ -11571,7 +11571,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkTypeScanModalTitle(): string {
-    return this.kkTypeScanMode === 'inventory' ? 'Scan kiểm kê' : 'Scan vị trí';
+    return this.kkTypeScanMode === 'inventory' ? 'Scan kiểm kê' : 'Cập nhật vị trí';
   }
 
   setKkTypeScanUiTab(tab: 'scan' | 'shelf' | 'log'): void {
@@ -11606,7 +11606,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return 'Bước 1: Nhập tay mã nhân viên (ASP + 4 số).';
     }
     if (this.kkTypeScanStep === 'location') {
-      return 'Bước 2: Scan kệ — tem phải bắt đầu bằng S hoặc R.';
+      return 'Bước 2: Scan kệ S/R — vd S16-1-1, R03, hoặc R10-1 (theo số pallet).';
     }
     if (this.kkTypeScanMode === 'location') {
       return 'Bước 3: Scan mã hàng — chuyển về kệ này, rồi scan mã tiếp.';
@@ -11933,6 +11933,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     loc = loc.replace(/^[-_./]+/, '');
     loc = loc.replace(/^S(\d{1,2})[._/](\d+)[._/](\d+)/, 'S$1-$2-$3');
     loc = loc.replace(/^R(\d{1,2})[._/](\d+)[._/](\d+)/, 'R$1-$2-$3');
+    loc = loc.replace(/^([SR])(\d{1,2})[._/](\d+)$/, '$1$2-$3');
+    // S07-1-3 / R10-2-1 — mâm kệ 3 phần
     const khoMatS = loc.match(/^S(\d{1,2})-(\d+)-(\d+)/);
     if (khoMatS) {
       return `S${String(Number(khoMatS[1])).padStart(2, '0')}-${Number(khoMatS[2])}-${Number(khoMatS[3])}`;
@@ -11941,6 +11943,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (khoMatR) {
       return `R${String(Number(khoMatR[1])).padStart(2, '0')}-${Number(khoMatR[2])}-${Number(khoMatR[3])}`;
     }
+    // R10-1 / S07-30 — tem theo số thứ tự pallet (pallet-id)
+    const aisleSeq = loc.match(/^([SR])(\d{1,2})-(\d+)$/);
+    if (aisleSeq) {
+      return `${aisleSeq[1]}${String(Number(aisleSeq[2])).padStart(2, '0')}-${Number(aisleSeq[3])}`;
+    }
     const aisleS = loc.match(/^S(\d{1,2})$/);
     if (aisleS) return `S${String(Number(aisleS[1])).padStart(2, '0')}`;
     const aisleR = loc.match(/^R(\d{1,2})$/);
@@ -11948,19 +11955,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return loc;
   }
 
-  /** Tem kệ hợp lệ: phải bắt đầu bằng S hoặc R (kệ kho J). */
+  /**
+   * Tem kệ hợp lệ: S/R + số dãy, tùy chọn -block/-tầng hoặc -số pallet
+   * (vd S16-1-1, R03, R10-1, R10-30).
+   */
   private kkScanIsSrShelfLocation(loc: string): boolean {
     const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
-    return /^[SR]\d{1,2}(?:-\d+(?:-\d+)?)?$/.test(n);
+    return /^[SR]\d{2}(?:-\d+(?:-\d+)?)?$/.test(n);
   }
 
   private kkScanAisleOf(loc: string): string {
     const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
-    const s = n.match(/^(S\d{2})(?:-|$)/);
-    if (s) return s[1];
-    const r = n.match(/^(R\d{1,2})(?=\d-|\d$|$|-)/);
-    if (r) return r[1];
-    return n;
+    const m = n.match(/^([SR]\d{2})(?:-|$)/);
+    return m ? m[1] : n;
   }
 
   /** Kệ kho J dạng Sxx / Rxx (xx là số 1–99). J5, TRA, D1… không tính. */
@@ -12022,7 +12029,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       || (document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null);
     const loc = this.normalizeKkScanLocation(String(rawOverride ?? el?.value ?? this.kkTypeScanLocationInput ?? ''));
     if (!loc) {
-      this.kkTypeScanErr = 'Không đọc được kệ. Quét tem kệ bắt đầu bằng S hoặc R (vd: S16-1-1, R03).';
+      this.kkTypeScanErr = 'Không đọc được kệ. Quét tem S/R (vd: S16-1-1, R03, R10-1).';
       this.kkTypeScanBeep('err');
       this.kkTypeScanLocationInput = '';
       if (el) el.value = '';
@@ -12031,7 +12038,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     if (!this.kkScanIsSrShelfLocation(loc)) {
-      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem kệ phải bắt đầu bằng S hoặc R.`;
+      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem phải dạng S/R + số (vd R10-1, S07-2, S16-1-1).`;
       this.kkTypeScanBeep('err');
       this.kkTypeScanLocationInput = '';
       if (el) el.value = '';

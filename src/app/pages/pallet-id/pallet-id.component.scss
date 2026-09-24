@@ -675,9 +675,13 @@
 
 .shelf-label-modal__kinds {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 12px;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .shelf-label-kind {
@@ -718,6 +722,45 @@
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.shelf-label-modal__pallet-n {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  input[type='number'] {
+    width: 88px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #94a3b8;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    background: #fff;
+  }
+}
+
+.shelf-label-modal__pallet-n-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .shelf-label-size {
