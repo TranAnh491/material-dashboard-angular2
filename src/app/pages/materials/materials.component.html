@@ -913,12 +913,10 @@
                     <td class="number-cell">{{ formatNumber(calculateCurrentStock(material)) }}</td>
                     <td class="location-cell"
                         [class.iqc-location]="isIQCLocation(material.location)"
-                        [class.kk-loc-wrong]="kkScanIsWrongLocationPublic(material.location)"
                         title="Bấm để nhập mã hoặc chọn vị trí Kho J">
                       <button type="button"
                               class="loc-col-btn location-display location-display--clickable"
                               [class.location-display--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'location'"
-                              [class.location-display--wrong]="kkScanIsWrongLocationPublic(material.location)"
                               [disabled]="!canEdit || kkLocMapBusy"
                               (click)="openKkLayoutLocPicker(material, $event)">
                         <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
@@ -1863,10 +1861,14 @@
             <span class="label">Vị trí:</span>
             <div style="display: flex; align-items: center; gap: 8px;">
               <button type="button"
-                      class="loc-col-btn"
-                      (click)="openLayoutLocPicker(material, $event, 'location')">
-                {{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}
-                <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">+{{ locationExtraCount(material.location) }}</span>
+                      class="loc-col-btn loc-col-btn--inv-loc"
+                      (click)="openInvLocListPopup(material, $event)"
+                      [title]="locationLocCount(material.location) > 1 ? ('Có ' + locationLocCount(material.location) + ' vị trí — bấm xem hết') : 'Bấm xem vị trí'">
+                <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
+                <span class="location-badge location-badge--corner"
+                      *ngIf="locationLocCount(material.location) > 1">
+                  {{ locationLocCount(material.location) }}
+                </span>
               </button>
               <button type="button"
                       *ngIf="!TEMP_UNLOCK_LOCATION_WH_PALLET"
@@ -2137,16 +2139,16 @@
                 [title]="'Lượng nhập: ' + (material.quantity || 0) + ' - Xuất: ' + (material.exported || 0) + ' - XT: ' + (material.xt || 0) + ' (lẻ ' + (getXtLeTotal(material) || 0) + ') = ' + calculateCurrentStock(material)">
               {{formatNumber(calculateCurrentStock(material))}}
             </td>
-            <td class="location-cell"
+            <td class="location-cell location-cell--inv"
                 [class.iqc-location]="isIQCLocation(material.location)"
-                title="Bấm để mở sơ đồ kho — chọn vị trí hoặc nhập tay trong popup">
+                [title]="locationLocCount(material.location) > 1 ? ('Có ' + locationLocCount(material.location) + ' vị trí — bấm xem hết') : 'Bấm xem vị trí'">
               <button type="button"
-                      class="loc-col-btn location-display location-display--clickable"
-                      [class.location-display--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'location'"
-                      (click)="openLayoutLocPicker(material, $event, 'location')">
+                      class="loc-col-btn location-display location-display--clickable loc-col-btn--inv-loc"
+                      (click)="openInvLocListPopup(material, $event)">
                 <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
-                <span class="location-badge" *ngIf="locationExtraCount(material.location) > 0">
-                  +{{ locationExtraCount(material.location) }}
+                <span class="location-badge location-badge--corner"
+                      *ngIf="locationLocCount(material.location) > 1">
+                  {{ locationLocCount(material.location) }}
                 </span>
               </button>
             </td>
@@ -4051,6 +4053,56 @@
   </div>
 </div>
 
+<!-- Popup danh sách toàn bộ vị trí (inventory) -->
+<div class="modal-overlay more-overlay inv-loc-list-overlay"
+     *ngIf="showInvLocListPopup && invLocListMaterial"
+     (click)="closeInvLocListPopup()">
+  <div class="modal-content inv-loc-list-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Danh sách vị trí">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">place</i>
+        </span>
+        <div>
+          <h3>Vị trí lưu kho</h3>
+          <p class="more-popup-header__sub">
+            {{ invLocListMaterial.materialCode }}
+            · {{ invLocListMaterial.poNumber || '—' }}
+            · {{ getDisplayIMD(invLocListMaterial) || '—' }}
+          </p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeInvLocListPopup()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body inv-loc-list-modal__body">
+      <p class="inv-loc-list-modal__count" *ngIf="locationLocCount(invLocListMaterial.location) as n">
+        {{ n }} vị trí
+      </p>
+      <ul class="inv-loc-list" *ngIf="locationParts(invLocListMaterial.location).length; else invLocEmpty">
+        <li class="inv-loc-list__item" *ngFor="let loc of locationParts(invLocListMaterial.location); let i = index">
+          <span class="inv-loc-list__idx">{{ i + 1 }}</span>
+          <strong>{{ displayLocationTokenPublic(loc) }}</strong>
+        </li>
+      </ul>
+      <ng-template #invLocEmpty>
+        <p class="hidden-empty">Chưa có vị trí.</p>
+      </ng-template>
+    </div>
+    <div class="modal-footer inv-loc-list-modal__footer">
+      <button type="button" class="btn-cancel" (click)="closeInvLocListPopup()">Đóng</button>
+      <button type="button"
+              class="btn-print-confirm"
+              (click)="editInvLocFromListPopup()"
+              [disabled]="!canEdit">
+        <i class="material-icons">edit_location_alt</i>
+        Sửa vị trí
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Popup chọn vị trí kệ — chỉ Kho J -->
 <div class="modal-overlay more-overlay layout-loc-overlay" *ngIf="showLayoutLocPicker && (layoutLocMaterial || layoutLocTypeAssign)" (click)="closeLayoutLocPicker()">
   <div class="modal-content layout-loc-picker" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="layoutLocTypeAssign ? 'Gán vị trí yêu cầu Kho J' : 'Chọn vị trí Kho J'">
@@ -5305,26 +5357,21 @@
   </div>
 </div>
 
-<!-- Scan vị trí: toast ngắn — đã chuyển / báo vị trí gốc / quét thừa -->
+<!-- Scan vị trí: toast ngắn — đã chuyển / quét thừa -->
 <div class="kk-scan-loc-toast"
      *ngIf="kkTypeScanLocToast"
-     [class.kk-scan-loc-toast--home]="kkTypeScanLocToast.kind === 'home'"
      [class.kk-scan-loc-toast--over]="kkTypeScanLocToast.kind === 'over'"
      role="status"
      aria-live="polite">
   <i class="material-icons" aria-hidden="true">{{
-    kkTypeScanLocToast.kind === 'home' ? 'warning' : kkTypeScanLocToast.kind === 'over' ? 'error_outline' : 'check_circle'
+    kkTypeScanLocToast.kind === 'over' ? 'error_outline' : 'check_circle'
   }}</i>
-  <div *ngIf="kkTypeScanLocToast.kind === 'home'">
-    <strong>{{ kkTypeScanLocToast.code }} đã có vị trí gốc {{ kkTypeScanLocToast.location }}</strong>
-    <span>Đã ghi THAO TÁC SAI — scan lại {{ kkTypeScanLocToast.location }} rồi scan mã để đưa về</span>
-  </div>
   <div *ngIf="kkTypeScanLocToast.kind === 'over'">
     <strong>{{ kkTypeScanLocToast.code }} quét thừa Box ({{ kkTypeScanLocToast.scanned }})</strong>
-    <span>Cần xem lại Standard sau · kệ {{ kkTypeScanLocToast.location }}</span>
+    <span>Cần xem lại Standard sau · {{ kkTypeScanLocToast.location }}</span>
   </div>
   <div *ngIf="!kkTypeScanLocToast.kind || kkTypeScanLocToast.kind === 'ok'">
-    <strong>Đã chuyển {{ kkTypeScanLocToast.code }} về kệ {{ kkTypeScanLocToast.location }}</strong>
+    <strong>Đã ghi {{ kkTypeScanLocToast.code }} · {{ kkTypeScanLocToast.location }}</strong>
     <span>Scan mã tiếp…</span>
   </div>
 </div>
