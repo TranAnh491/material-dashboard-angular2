@@ -913,10 +913,12 @@
                     <td class="number-cell">{{ formatNumber(calculateCurrentStock(material)) }}</td>
                     <td class="location-cell"
                         [class.iqc-location]="isIQCLocation(material.location)"
+                        [class.kk-loc-wrong]="kkScanIsWrongLocationPublic(material.location)"
                         title="Bấm để nhập mã hoặc chọn vị trí Kho J">
                       <button type="button"
                               class="loc-col-btn location-display location-display--clickable"
                               [class.location-display--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'location'"
+                              [class.location-display--wrong]="kkScanIsWrongLocationPublic(material.location)"
                               [disabled]="!canEdit || kkLocMapBusy"
                               (click)="openKkLayoutLocPicker(material, $event)">
                         <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
@@ -5303,10 +5305,25 @@
   </div>
 </div>
 
-<!-- Scan vị trí: toast ngắn — đã chuyển mã về kệ, không chặn scan tiếp -->
-<div class="kk-scan-loc-toast" *ngIf="kkTypeScanLocToast" role="status" aria-live="polite">
-  <i class="material-icons" aria-hidden="true">check_circle</i>
-  <div>
+<!-- Scan vị trí: toast ngắn — đã chuyển / báo vị trí gốc / quét thừa -->
+<div class="kk-scan-loc-toast"
+     *ngIf="kkTypeScanLocToast"
+     [class.kk-scan-loc-toast--home]="kkTypeScanLocToast.kind === 'home'"
+     [class.kk-scan-loc-toast--over]="kkTypeScanLocToast.kind === 'over'"
+     role="status"
+     aria-live="polite">
+  <i class="material-icons" aria-hidden="true">{{
+    kkTypeScanLocToast.kind === 'home' ? 'warning' : kkTypeScanLocToast.kind === 'over' ? 'error_outline' : 'check_circle'
+  }}</i>
+  <div *ngIf="kkTypeScanLocToast.kind === 'home'">
+    <strong>{{ kkTypeScanLocToast.code }} đã có vị trí gốc {{ kkTypeScanLocToast.location }}</strong>
+    <span>Đã ghi THAO TÁC SAI — scan lại {{ kkTypeScanLocToast.location }} rồi scan mã để đưa về</span>
+  </div>
+  <div *ngIf="kkTypeScanLocToast.kind === 'over'">
+    <strong>{{ kkTypeScanLocToast.code }} quét thừa Box ({{ kkTypeScanLocToast.scanned }})</strong>
+    <span>Cần xem lại Standard sau · kệ {{ kkTypeScanLocToast.location }}</span>
+  </div>
+  <div *ngIf="!kkTypeScanLocToast.kind || kkTypeScanLocToast.kind === 'ok'">
     <strong>Đã chuyển {{ kkTypeScanLocToast.code }} về kệ {{ kkTypeScanLocToast.location }}</strong>
     <span>Scan mã tiếp…</span>
   </div>

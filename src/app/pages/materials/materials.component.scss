@@ -6815,6 +6815,12 @@ $asm1-toolbar-h: 36px;
     min-width: 118px;
   }
 
+  .location-display--wrong,
+  .kk-loc-wrong .location-text {
+    color: #b91c1c !important;
+    font-weight: 800;
+  }
+
   .loc-col-btn {
     min-height: 24px;
     padding: 2px 4px;
@@ -11031,6 +11037,22 @@ $asm1-toolbar-h: 36px;
     font-size: 12px;
     font-weight: 600;
     opacity: 0.85;
+  }
+
+  &--home {
+    background: #9a3412;
+
+    .material-icons {
+      color: #fdba74;
+    }
+  }
+
+  &--over {
+    background: #7c2d12;
+
+    .material-icons {
+      color: #fed7aa;
+    }
   }
 }
 

@@ -93,6 +93,8 @@ export interface InventoryMaterial {
   kkChecked?: boolean;
   /** Số lượng cộng dồn từ tem Scan KK — so sánh với tồn kho. */
   kkScanCount?: number;
+  /** Vị trí gốc đã ghi nhận lần đầu (scan cập nhật vị trí). */
+  kkOriginLocation?: string;
   /** Tài khoản đã tick/bỏ tick KK gần nhất. */
   kkBy?: string;
   /** Thời điểm tick/bỏ tick KK gần nhất. */
@@ -486,7 +488,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     relocated: boolean;
   } | null = null;
   /** Toast ngắn sau Scan vị trí — tự ẩn, không chặn scan mã tiếp */
-  kkTypeScanLocToast: { code: string; location: string } | null = null;
+  kkTypeScanLocToast: {
+    code: string;
+    location: string;
+    kind?: 'ok' | 'home' | 'over';
+    scanned?: string;
+  } | null = null;
   private kkTypeScanLocToastTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
   private kkScanOpTimer: any;
@@ -5471,7 +5478,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       kkChecked: true,
       kkBy: data.kkBy || '',
       kkAt: data.kkAt || null,
-      kkScanCount: Math.max(0, Number(data.kkScanCount) || 0)
+      kkScanCount: Math.max(0, Number(data.kkScanCount) || 0),
+      kkOriginLocation: String(data.kkOriginLocation || '').trim().toUpperCase()
     } as InventoryMaterial;
     this.stampLocationAtLoad(material);
     return material;
@@ -11888,18 +11896,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private showKkTypeScanLocToast(code: string, location: string): void {
+  private showKkTypeScanLocToast(
+    code: string,
+    location: string,
+    opts?: { kind?: 'ok' | 'home' | 'over'; scanned?: string; ms?: number }
+  ): void {
     if (this.kkTypeScanLocToastTimer) {
       clearTimeout(this.kkTypeScanLocToastTimer);
       this.kkTypeScanLocToastTimer = null;
     }
-    this.kkTypeScanLocToast = { code, location };
+    this.kkTypeScanLocToast = {
+      code,
+      location,
+      kind: opts?.kind || 'ok',
+      scanned: opts?.scanned
+    };
     this.cdr.detectChanges();
+    const ms = opts?.ms ?? (opts?.kind === 'home' || opts?.kind === 'over' ? 3200 : 1800);
     this.kkTypeScanLocToastTimer = setTimeout(() => {
       this.kkTypeScanLocToast = null;
       this.kkTypeScanLocToastTimer = null;
       if (this.showKkTypeScanModal) this.cdr.detectChanges();
-    }, 1800);
+    }, ms);
   }
 
   onKkTypeScanNewline(kind: 'operator' | 'location' | 'code', event: Event): void {
@@ -11977,10 +11995,60 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return isJWarehouseLocation(n);
   }
 
+  private static readonly KK_LOC_WRONG = 'THAO TÁC SAI';
+
+  /** Vị trí đánh dấu thao tác sai (scan nhầm kệ). */
+  kkScanIsWrongLocationPublic(loc: string): boolean {
+    return this.kkScanIsWrongLocation(loc);
+  }
+
+  private kkScanIsWrongLocation(loc: string): boolean {
+    const u = String(loc || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    return u === MaterialsComponent.KK_LOC_WRONG || u === 'THAOTACSAI' || u.includes('THAO TÁC SAI');
+  }
+
   private kkScanIsStagingLocation(loc: string): boolean {
     const p = this.primaryLocationDisplay(loc);
     const u = String(p || '').trim().toUpperCase();
+    if (this.kkScanIsWrongLocation(u)) return true;
     return !u || u === '-' || /^(F62|F62TRA|IQC|NG)$/.test(u);
+  }
+
+  /** Vị trí gốc của mã+PO+IMD (đã ghi nhận trước / kệ thật, không tính IQC/TRA/THAO TÁC SAI). */
+  private kkScanOriginLocation(code: string, po: string, imd: string): string {
+    const lines = this.kkStockLinesForCode(code);
+    const homes: Array<{ loc: string; stock: number }> = [];
+    const needPo = String(po || '').trim();
+    const needImd = String(imd || '').trim();
+    for (const m of lines) {
+      if (needPo && !this.kkTypeScanPoMatch(String(m.poNumber || ''), needPo)) continue;
+      if (needImd && needImd !== 'N/A' && !this.kkTypeScanImdMatch(needImd, this.getDisplayIMD(m))) continue;
+      const originField = this.normalizeKkScanLocation(String(m.kkOriginLocation || '').trim());
+      if (originField && !this.kkScanIsStagingLocation(originField)) {
+        const stock = this.calculateCurrentStock(m);
+        if (stock > 0) {
+          const hit = homes.find((h) => h.loc === originField);
+          if (hit) hit.stock += stock;
+          else homes.push({ loc: originField, stock });
+        }
+      }
+      const loc = this.normalizeKkScanLocation(this.primaryLocationDisplay(m.location));
+      if (!loc || this.kkScanIsStagingLocation(loc) || this.kkScanIsWrongLocation(loc)) continue;
+      const stock = this.calculateCurrentStock(m);
+      if (stock <= 0) continue;
+      const hit = homes.find((h) => h.loc === loc);
+      if (hit) hit.stock += stock;
+      else homes.push({ loc, stock });
+    }
+    if (!homes.length) return '';
+    homes.sort((a, b) => b.stock - a.stock);
+    return homes[0].loc;
+  }
+
+  private kkScanLocationsEqual(a: string, b: string): boolean {
+    const x = this.normalizeKkScanLocation(a) || String(a || '').trim().toUpperCase();
+    const y = this.normalizeKkScanLocation(b) || String(b || '').trim().toUpperCase();
+    return !!x && !!y && x === y;
   }
 
   private kkScanHomeLocation(code: string, po = ''): string {
@@ -12303,9 +12371,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const home = po ? this.kkScanHomeLocation(code, po) : this.kkScanHomeLocation(code);
     let targetLoc = loc;
     let relocateNote = '';
+    const locationOnly = this.kkTypeScanMode === 'location';
     // Scan kiểm kê: đã set vị trí cho loại mã → follow vị trí đúng; scan sai kệ thì đưa về home
-    // Scan vị trí: luôn chuyển mã về đúng kệ vừa scan
-    if (this.kkTypeScanMode !== 'location' && home && !this.kkScanLocationAllowed(loc, home)) {
+    if (!locationOnly && home && !this.kkScanLocationAllowed(loc, home)) {
       targetLoc = home;
       relocateNote = ` · đưa về ${home}`;
     }
@@ -12333,6 +12401,121 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
+    // Cập nhật vị trí: đã có vị trí gốc ≠ kệ đang scan → ghi THAO TÁC SAI, báo đưa về gốc
+    // Người dùng phải scan lại vị trí gốc → scan mã mới khôi phục. Không đổi sang kệ thứ 2.
+    if (locationOnly) {
+      const origin =
+        this.normalizeKkScanLocation(String(line.kkOriginLocation || '').trim())
+        || this.kkScanOriginLocation(code, po, imd)
+        || (
+          !this.kkScanIsStagingLocation(this.primaryLocationDisplay(line.location))
+            ? this.normalizeKkScanLocation(this.primaryLocationDisplay(line.location))
+            : ''
+        );
+      const scannedNorm = this.normalizeKkScanLocation(loc) || loc;
+      if (
+        origin
+        && !this.kkScanIsStagingLocation(origin)
+        && !this.kkScanLocationsEqual(origin, scannedNorm)
+      ) {
+        const operatorWrong = this.kkTypeScanOperator || this.kkOperatorIdCache;
+        if (!operatorWrong) {
+          this.kkTypeScanStep = 'operator';
+          this.kkTypeScanLastSavePending = false;
+          this.cdr.detectChanges();
+          this.focusKkTypeScanInput('kkTypeScanOperatorInput');
+          return;
+        }
+        const wrongLoc = MaterialsComponent.KK_LOC_WRONG;
+        const fromLocation = this.normalizeMultiLocationValue(String(line.location || ''));
+        const prevScanCount = this.getKkScanCount(line);
+        const prevLocation = String(line.location || '');
+        const kkAt = new Date();
+        const payload: Record<string, unknown> = {
+          ...this.inventoryLocationWriteFields(wrongLoc),
+          kkOriginLocation: origin,
+          updatedAt: kkAt,
+          lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+          modifiedBy: operatorWrong,
+          locationManualOverride: true
+        };
+        const batch = this.firestore.firestore.batch();
+        batch.update(this.firestore.collection('inventory-materials').doc(line.id).ref, payload);
+        if (fromLocation !== wrongLoc) {
+          batch.set(this.firestore.collection('material-location-history').doc().ref, {
+            factory: this.selectedFactory,
+            materialId: line.id,
+            materialCode: line.materialCode,
+            poNumber: line.poNumber || '',
+            fromLocation,
+            toLocation: wrongLoc,
+            changedBy: operatorWrong,
+            changeType: 'kk-location-wrong',
+            originLocation: origin,
+            scannedShelf: scannedNorm,
+            changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        const stampWrong = () => {
+          line.location = wrongLoc;
+          line.kkOriginLocation = origin;
+          const stamp = (x: InventoryMaterial) => {
+            if (x.id !== line.id) return;
+            x.location = wrongLoc;
+            x.kkOriginLocation = origin;
+          };
+          this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+          this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+          this.kkTypeScanExtraLines.forEach(stamp);
+          this.patchKkInvSnapCache(line.id, {
+            location: wrongLoc,
+            viTri: wrongLoc,
+            kkOriginLocation: origin,
+            locationManualOverride: true
+          });
+        };
+        stampWrong();
+        const msg = `${code} — đã ở ${origin} · ghi ${wrongLoc} · đưa về gốc (scan ${origin} rồi scan mã)`;
+        this.pushKkTypeScanLog(false, `${msg} · ${readNote}`, false, { readMs });
+        this.showKkTypeScanLocToast(code, origin, { kind: 'home', scanned: scannedNorm });
+        this.kkTypeScanBeep('err');
+        this.kkTypeScanLastSavePending = true;
+        this.kkHidQrQueue = [];
+        this.nlScanLock = false;
+        // Buộc scan lại vị trí gốc trước khi scan mã
+        this.kkTypeScanStep = 'location';
+        this.kkTypeScanLocation = '';
+        this.kkTypeScanLocationInput = '';
+        this.kkTypeScanQrInput = '';
+        this.cdr.detectChanges();
+        this.focusKkTypeScanInput('kkTypeScanLocationInput');
+        this.kkScanWritesInFlight += 1;
+        this.kkScanWriteChain = this.kkScanWriteChain
+          .then(async () => {
+            await batch.commit();
+            this.kkTypeScanLastSavePending = this.kkScanWritesInFlight > 1;
+            if (this.showKkTypeScanModal) this.cdr.detectChanges();
+          })
+          .catch((e) => {
+            console.error('❌ applyKkTypeScanPutaway wrong-loc:', e);
+            line.location = prevLocation;
+            this.patchKkInvSnapCache(line.id!, {
+              location: prevLocation,
+              viTri: prevLocation,
+              kkScanCount: prevScanCount
+            });
+            this.kkTypeScanLastSavePending = false;
+            this.kkTypeScanBeep('err');
+            if (this.showKkTypeScanModal) this.cdr.detectChanges();
+          })
+          .finally(() => {
+            this.kkScanWritesInFlight = Math.max(0, this.kkScanWritesInFlight - 1);
+            this.kkTypeScanLastSavePending = this.kkScanWritesInFlight > 0;
+          });
+        return;
+      }
+    }
+
     const operator = this.kkTypeScanOperator || this.kkOperatorIdCache;
     if (!operator) {
       this.kkTypeScanStep = 'operator';
@@ -12349,22 +12532,33 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const prevKk = !!line.kkChecked;
     const prevKkBy = line.kkBy;
     const prevKkAt = line.kkAt;
-    const locationOnly = this.kkTypeScanMode === 'location';
-    const nextScan = locationOnly ? prevScanCount : this.roundKkQty(prevScanCount + 1);
+    const prevOrigin = String(line.kkOriginLocation || '').trim();
+    // Đếm mỗi lần quét mã = 1 box (cả cập nhật vị trí lẫn kiểm kê)
+    const nextScan = this.roundKkQty(prevScanCount + 1);
     const stock = this.calculateCurrentStock(line);
     const rolls = this.getKkRollsCount(line);
     const shouldKk = !locationOnly && rolls > 0 && nextScan + 1e-9 >= rolls && stock > 0;
+    const overStandard = rolls > 0 && nextScan > rolls + 1e-9;
+    const originToKeep =
+      this.normalizeKkScanLocation(prevOrigin)
+      || (
+        locationOnly && !this.kkScanIsStagingLocation(nextLoc) && !this.kkScanIsWrongLocation(nextLoc)
+          ? this.normalizeKkScanLocation(nextLoc)
+          : ''
+      )
+      || '';
     const kkAt = new Date();
 
     const payload: Record<string, unknown> = {
       ...this.inventoryLocationWriteFields(nextLoc),
+      kkScanCount: nextScan,
       updatedAt: kkAt,
       lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
       modifiedBy: operator,
       locationManualOverride: true
     };
-    if (!locationOnly) {
-      payload.kkScanCount = nextScan;
+    if (originToKeep) {
+      payload.kkOriginLocation = originToKeep;
     }
     if (shouldKk) {
       payload.kkChecked = true;
@@ -12411,7 +12605,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       scanCount: number,
       kkOn: boolean,
       kkBy?: string,
-      kkWhen?: Date
+      kkWhen?: Date,
+      originLoc?: string
     ) => {
       const applyKk = (x: InventoryMaterial) => {
         if (kkOn) {
@@ -12425,7 +12620,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       };
       line.location = location;
-      if (!locationOnly) line.kkScanCount = scanCount;
+      line.kkScanCount = scanCount;
+      if (originLoc) line.kkOriginLocation = originLoc;
       const rowMeta = line as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
       rowMeta.__prevLocation = location;
       rowMeta.__locationAtLoad = location;
@@ -12434,7 +12630,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const stamp = (x: InventoryMaterial) => {
         if (x.id !== line.id) return;
         x.location = location;
-        if (!locationOnly) x.kkScanCount = scanCount;
+        x.kkScanCount = scanCount;
+        if (originLoc) x.kkOriginLocation = originLoc;
         applyKk(x);
       };
       this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
@@ -12444,24 +12641,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         location,
         viTri: location,
         locationManualOverride: true,
-        ...(locationOnly ? {} : { kkScanCount: scanCount }),
+        kkScanCount: scanCount,
+        ...(originLoc ? { kkOriginLocation: originLoc } : {}),
         ...(kkOn ? { kkChecked: true, kkBy, kkAt: kkWhen } : { kkChecked: prevKk })
       });
     };
 
-    stampLocal(nextLoc, nextScan, shouldKk, operator, kkAt);
-    if (!locationOnly) {
-      this.kkTypeScanCartons = {
-        ...this.kkTypeScanCartons,
-        [code]: (this.kkTypeScanCartons[code] || 0) + 1
-      };
-    }
+    stampLocal(nextLoc, nextScan, shouldKk, operator, kkAt, originToKeep || undefined);
+    this.kkTypeScanCartons = {
+      ...this.kkTypeScanCartons,
+      [code]: (this.kkTypeScanCartons[code] || 0) + 1
+    };
     const boxes = this.kkTypeScanQtyScanned;
-    const boxTotal = this.kkTypeScanCartonTotal;
+    const boxTotal = this.kkTypeScanCartonTotal || rolls;
+    const stdNote = overStandard
+      ? ` · thừa ${this.roundKkQty(nextScan - rolls)} Box — cần xem lại Standard`
+      : rolls > 0 && Math.abs(nextScan - rolls) < 1e-9
+        ? ' · đủ Standard'
+        : '';
     const boxNote = locationOnly
-      ? `→ ${nextLoc}`
+      ? `→ ${nextLoc} · ${this.formatNumber(nextScan)}${boxTotal ? ` / ${boxTotal}` : ''} Box${stdNote}`
       : boxTotal
-        ? `${boxes}/${boxTotal} Box${boxes < boxTotal ? ` · thiếu ${boxTotal - boxes}` : boxes > boxTotal ? ` · thừa ${boxes - boxTotal}` : ' · đủ'}`
+        ? `${boxes}/${boxTotal} Box${boxes < boxTotal ? ` · thiếu ${boxTotal - boxes}` : boxes > boxTotal ? ` · thừa ${boxes - boxTotal}` : ' · đủ'}${stdNote && !locationOnly && overStandard ? stdNote : ''}`
         : `${boxes} Box`;
     const imdNote = imd ? ` · IMD ${imd}` : '';
     const poNote = po ? ` · PO ${po}` : '';
@@ -12472,14 +12673,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       false,
       { readMs }
     );
-    this.kkTypeScanBeep('ok');
+    this.kkTypeScanBeep(overStandard ? 'err' : 'ok');
     this.kkTypeScanLastSavePending = true;
 
     if (locationOnly) {
-      // Scan vị trí: báo ngay đã chuyển về kệ → sẵn sàng scan mã tiếp (không chặn)
       this.kkHidQrQueue = [];
       this.nlScanLock = false;
-      this.showKkTypeScanLocToast(code, nextLoc);
+      if (overStandard) {
+        this.showKkTypeScanLocToast(code, nextLoc, {
+          kind: 'over',
+          scanned: `${this.formatNumber(nextScan)}/${boxTotal} Box`
+        });
+      } else {
+        this.showKkTypeScanLocToast(code, nextLoc);
+      }
       this.kkTypeScanQrInput = '';
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanQrInput');
@@ -12515,22 +12722,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       })
       .catch((e) => {
         console.error('❌ applyKkTypeScanPutaway:', e);
-        stampLocal(prevLocation, prevScanCount, prevKk, prevKkBy as string | undefined, prevKkAt as Date | undefined);
-        if (!locationOnly) {
-          this.kkTypeScanCartons = {
-            ...this.kkTypeScanCartons,
-            [code]: Math.max(0, (this.kkTypeScanCartons[code] || 1) - 1)
-          };
-        }
+        stampLocal(
+          prevLocation,
+          prevScanCount,
+          prevKk,
+          prevKkBy as string | undefined,
+          prevKkAt as Date | undefined,
+          prevOrigin || undefined
+        );
+        this.kkTypeScanCartons = {
+          ...this.kkTypeScanCartons,
+          [code]: Math.max(0, (this.kkTypeScanCartons[code] || 1) - 1)
+        };
         this.kkTypeScanLastSavePending = false;
         this.showKkTypeScanConfirm = false;
         this.kkTypeScanConfirm = null;
-        if (locationOnly) {
-          this.kkTypeScanLocToast = null;
-          if (this.kkTypeScanLocToastTimer) {
-            clearTimeout(this.kkTypeScanLocToastTimer);
-            this.kkTypeScanLocToastTimer = null;
-          }
+        this.kkTypeScanLocToast = null;
+        if (this.kkTypeScanLocToastTimer) {
+          clearTimeout(this.kkTypeScanLocToastTimer);
+          this.kkTypeScanLocToastTimer = null;
         }
         this.patchKkTypeScanLog(logId, `${code} — không lưu được · ${readNote}`, undefined);
         this.kkTypeScanBeep('err');
@@ -12859,9 +13069,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!total) {
       return scanned ? `Đã quét ${scanned} Box · chưa có số cuộn/thùng` : 'Chưa scan';
     }
-    if (tone === 'ok') return `Đã quét ${scanned} Box = ${total} Box`;
+    if (tone === 'ok') return `Đã quét ${scanned} Box = ${total} Box · Standard đúng`;
     if (tone === 'low') return `Đã quét ${scanned} / ${total} Box — thiếu ${total - scanned}`;
-    if (tone === 'over') return `Đã quét ${scanned} / ${total} Box — thừa ${scanned - total}`;
+    if (tone === 'over') {
+      return `Đã quét ${scanned} / ${total} Box — thừa ${scanned - total} · cần xem lại Standard`;
+    }
     return `Chưa scan · ${total} Box`;
   }
 
