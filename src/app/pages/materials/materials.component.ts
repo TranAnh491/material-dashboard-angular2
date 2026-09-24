@@ -5680,6 +5680,39 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (m) this.openLayoutLocPicker(m, undefined, 'location');
   }
 
+  /** Xóa một vị trí sai trong popup danh sách. */
+  async removeInvLocFromList(loc: string, event?: Event): Promise<void> {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const m = this.invLocListMaterial;
+    if (!m?.id || !this.canEdit) return;
+    const label = this.displayLocationToken(loc);
+    if (!confirm(`Xóa vị trí «${label}»?`)) return;
+    this.rememberLocationBeforeEdit(m);
+    const nextParts = this.locationParts(m.location).filter(
+      (t) => !this.kkScanLocationsEqual(t, loc) && String(t).trim().toUpperCase() !== String(loc).trim().toUpperCase()
+    );
+    m.location = this.normalizeMultiLocationValue(joinMultiLocations(nextParts));
+    const ok = await this.persistLocationChange(m, {
+      silent: true,
+      bypassUnlock: true,
+      allowEmpty: true
+    });
+    if (ok) {
+      this.patchKkInvSnapCache(m.id, {
+        location: m.location,
+        viTri: m.location,
+        locationManualOverride: true
+      });
+      this.kkLocMapTypeCache.forEach((list) => {
+        list.forEach((x) => {
+          if (x.id === m.id) x.location = m.location;
+        });
+      });
+    }
+    this.cdr.detectChanges();
+  }
+
   /** Chuỗi đầy đủ mọi vị trí (tooltip / textarea). */
   formatLocationDisplay(location: string | null | undefined): string {
     const parts = this.locationParts(location).map((p) => this.displayLocationToken(p));
@@ -12079,20 +12112,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return !!x && !!y && x === y;
   }
 
-  /** Gộp vị trí cũ + kệ vừa scan (bỏ THAO TÁC SAI; không trùng). */
+  /** Giữ lại sau scan: Locker/Box, hoặc S/R + 1–99 + dấu - … (R01-1, R1-1, S01-2). */
+  private isKkPersistentLocation(loc: string): boolean {
+    const raw = String(loc || '').trim().toUpperCase();
+    if (!raw || this.kkScanIsWrongLocation(raw)) return false;
+    const bare = (this.stripDoiKhoWhPrefix(raw) || raw).trim().toUpperCase();
+    if (this.isLockerOrBoxToken(raw) || this.isLockerOrBoxToken(bare)) return true;
+    // R01-1 / R1-1 / S01-2 / S7-3-1 …
+    return /^[SR](0?[1-9]|[1-9]\d)-.+$/.test(bare) || /^[SR](0?[1-9]|[1-9]\d)-.+$/.test(raw);
+  }
+
+  /** Gộp vị trí: giữ Locker/Box + S/R-…; tự xóa D1 và vị trí không phải S/R. */
   private mergeKkScanLocations(existing: string, scanned: string): string {
     const scannedNorm = this.normalizeKkScanLocation(scanned) || String(scanned || '').trim().toUpperCase();
-    const parts = splitMultiLocations(existing)
+    const kept = splitMultiLocations(existing)
       .map((t) => this.normalizeKkScanLocation(t) || String(t || '').trim().toUpperCase())
-      .filter((t) => !!t && !this.kkScanIsWrongLocation(t));
-    const real = parts.filter((t) => !this.kkScanIsStagingLocation(t));
-    const base = real.length ? real : [];
-    if (scannedNorm && !this.kkScanIsWrongLocation(scannedNorm)) {
+      .filter((t) => !!t && this.isKkPersistentLocation(t));
+    const base: string[] = [];
+    for (const t of kept) {
+      if (!base.some((x) => this.kkScanLocationsEqual(x, t))) base.push(t);
+    }
+    if (scannedNorm && this.isKkPersistentLocation(scannedNorm)) {
+      if (!base.some((t) => this.kkScanLocationsEqual(t, scannedNorm))) {
+        base.push(scannedNorm);
+      }
+    } else if (scannedNorm && this.kkScanIsSrShelfLocation(scannedNorm)) {
+      // Tem vừa scan dạng S/R hợp lệ → luôn thêm
       if (!base.some((t) => this.kkScanLocationsEqual(t, scannedNorm))) {
         base.push(scannedNorm);
       }
     }
-    if (!base.length && scannedNorm) base.push(scannedNorm);
     return this.normalizeMultiLocationValue(joinMultiLocations(base));
   }
 

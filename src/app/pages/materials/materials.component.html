@@ -4084,6 +4084,14 @@
         <li class="inv-loc-list__item" *ngFor="let loc of locationParts(invLocListMaterial.location); let i = index">
           <span class="inv-loc-list__idx">{{ i + 1 }}</span>
           <strong>{{ displayLocationTokenPublic(loc) }}</strong>
+          <button type="button"
+                  class="inv-loc-list__del"
+                  *ngIf="canEdit"
+                  (click)="removeInvLocFromList(loc, $event)"
+                  title="Xóa vị trí này"
+                  aria-label="Xóa vị trí">
+            <i class="material-icons">delete</i>
+          </button>
         </li>
       </ul>
       <ng-template #invLocEmpty>

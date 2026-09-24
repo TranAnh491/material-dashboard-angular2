@@ -1756,10 +1756,34 @@
   background: #f8fafc;
 
   strong {
+    flex: 1;
+    min-width: 0;
     font-size: 15px;
     font-weight: 800;
     color: #0f172a;
     letter-spacing: 0.02em;
+  }
+}
+
+.inv-loc-list__del {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #b91c1c;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  .material-icons {
+    font-size: 20px;
+  }
+
+  &:hover {
+    background: #fef2f2;
   }
 }
 
