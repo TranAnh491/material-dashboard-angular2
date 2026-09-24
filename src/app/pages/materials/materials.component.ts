@@ -12040,12 +12040,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * Tem kệ hợp lệ: S/R + số dãy, tùy chọn -block/-tầng hoặc -số pallet
-   * (vd S16-1-1, R03, R10-1, R10-30).
+   * Tem kệ hợp lệ khi scan: bắt buộc S/R + dãy + dấu - + số
+   * (vd S16-1-1, R10-1, S07-2). Không nhận S01 / R03 trần.
    */
   private kkScanIsSrShelfLocation(loc: string): boolean {
     const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
-    return /^[SR]\d{2}(?:-\d+(?:-\d+)?)?$/.test(n);
+    return /^[SR]\d{2}-\d+(?:-\d+)?$/.test(n);
   }
 
   private kkScanAisleOf(loc: string): string {
@@ -12112,17 +12112,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return !!x && !!y && x === y;
   }
 
-  /** Giữ lại sau scan: Locker/Box, hoặc S/R + 1–99 + dấu - … (R01-1, R1-1, S01-2). */
+  /** Giữ lại sau scan: Locker/Box, hoặc S/R + dãy + dấu - + số (R01-1, S15-1-1). S01 trần → xóa. */
   private isKkPersistentLocation(loc: string): boolean {
     const raw = String(loc || '').trim().toUpperCase();
     if (!raw || this.kkScanIsWrongLocation(raw)) return false;
     const bare = (this.stripDoiKhoWhPrefix(raw) || raw).trim().toUpperCase();
     if (this.isLockerOrBoxToken(raw) || this.isLockerOrBoxToken(bare)) return true;
-    // R01-1 / R1-1 / S01-2 / S7-3-1 …
-    return /^[SR](0?[1-9]|[1-9]\d)-.+$/.test(bare) || /^[SR](0?[1-9]|[1-9]\d)-.+$/.test(raw);
+    // Bắt buộc có "-" sau số dãy — S01 / R15 không giữ
+    const n = this.normalizeKkScanLocation(bare) || bare;
+    return /^[SR]\d{1,2}-\d+(?:-\d+)?$/.test(n);
   }
 
-  /** Gộp vị trí: giữ Locker/Box + S/R-…; tự xóa D1 và vị trí không phải S/R. */
+  /** Gộp vị trí: giữ Locker/Box + S/R-…; tự xóa S01 trần, D1, và vị trí không hợp lệ. */
   private mergeKkScanLocations(existing: string, scanned: string): string {
     const scannedNorm = this.normalizeKkScanLocation(scanned) || String(scanned || '').trim().toUpperCase();
     const kept = splitMultiLocations(existing)
@@ -12132,12 +12133,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     for (const t of kept) {
       if (!base.some((x) => this.kkScanLocationsEqual(x, t))) base.push(t);
     }
+    // Chỉ thêm tem scan đúng mẫu (có dấu -); không thêm S01 trần
     if (scannedNorm && this.isKkPersistentLocation(scannedNorm)) {
-      if (!base.some((t) => this.kkScanLocationsEqual(t, scannedNorm))) {
-        base.push(scannedNorm);
-      }
-    } else if (scannedNorm && this.kkScanIsSrShelfLocation(scannedNorm)) {
-      // Tem vừa scan dạng S/R hợp lệ → luôn thêm
       if (!base.some((t) => this.kkScanLocationsEqual(t, scannedNorm))) {
         base.push(scannedNorm);
       }
@@ -12191,7 +12188,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       || (document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null);
     const loc = this.normalizeKkScanLocation(String(rawOverride ?? el?.value ?? this.kkTypeScanLocationInput ?? ''));
     if (!loc) {
-      this.kkTypeScanErr = 'Không đọc được kệ. Quét tem S/R (vd: S16-1-1, R03, R10-1).';
+      this.kkTypeScanErr = 'Không đọc được kệ. Quét tem S/R (vd: S16-1-1, R10-1, S07-2).';
       this.kkTypeScanBeep('err');
       this.kkTypeScanLocationInput = '';
       if (el) el.value = '';
@@ -12200,7 +12197,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     if (!this.kkScanIsSrShelfLocation(loc)) {
-      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem phải dạng S/R + số (vd R10-1, S07-2, S16-1-1).`;
+      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem phải dạng S/R + dãy + - + số (vd R10-1, S07-2, S16-1-1). Không nhận S01 trần.`;
       this.kkTypeScanBeep('err');
       this.kkTypeScanLocationInput = '';
       if (el) el.value = '';
@@ -12495,7 +12492,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    // Cập nhật vị trí: giữ mọi vị trí đã có + thêm kệ vừa scan (không báo sai / không ép đưa về gốc)
+    // Cập nhật vị trí: thêm kệ vừa scan; tự xóa S01 trần / D1 / vị trí sai (giữ Locker/Box + S/R-…)
     if (locationOnly) {
       targetLoc = this.mergeKkScanLocations(String(line.location || ''), loc);
     }
