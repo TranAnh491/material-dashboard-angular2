@@ -972,7 +972,16 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   private async applyInventoryPassLocation(material: InboundMaterial): Promise<void> {
-    const patch = { location: 'Pass', iqcStatus: 'PASS', updatedAt: new Date() };
+    await this.applyInventoryIqcLocation(material, 'PASS', 'PASS');
+  }
+
+  /** Đồng bộ vị trí inventory sau IQC: PASS → PASS; NG → Hàng lỗi (chỉ khi đang IQC). */
+  private async applyInventoryIqcLocation(
+    material: InboundMaterial,
+    location: string,
+    iqcStatus: string
+  ): Promise<void> {
+    const patch = { location, iqcStatus, updatedAt: new Date() };
     const docId = String(material.linkedInventoryDocId || '').trim();
     if (docId) {
       await this.firestore.collection('inventory-materials').doc(docId).update(patch);
@@ -6670,32 +6679,39 @@ export class InboundComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Update in Firestore
+      const statusU = String(status || '').trim().toUpperCase();
+      const isPass = statusU === 'PASS';
+      const isNg = statusU === 'NG';
+      // Nguyên tắc: Pass → PASS; NG → Hàng lỗi
+      const nextLoc = isPass ? 'PASS' : (isNg ? 'Hàng lỗi' : null);
+
       const inboundPatch: Record<string, unknown> = {
         iqcStatus: status,
         updatedAt: new Date()
       };
-      const isPass = String(status || '').trim().toUpperCase() === 'PASS';
-      if (isPass) inboundPatch.location = 'Pass';
+      if (nextLoc) inboundPatch.location = nextLoc;
       await this.firestore.collection('inbound-materials').doc(materialId).update(inboundPatch);
 
-      // Update local data
       const materialIndex = this.materials.findIndex(m => m.id === materialId);
       if (materialIndex !== -1) {
         this.materials[materialIndex].iqcStatus = status;
-        if (isPass) this.materials[materialIndex].location = 'Pass';
+        if (nextLoc) this.materials[materialIndex].location = nextLoc;
       }
-      if (isPass) {
-        this.scannedMaterial.location = 'Pass';
+      if (nextLoc) {
+        this.scannedMaterial.location = nextLoc;
         try {
-          await this.applyInventoryPassLocation(this.scannedMaterial);
+          await this.applyInventoryIqcLocation(
+            this.scannedMaterial,
+            nextLoc,
+            isPass ? 'PASS' : (isNg ? 'NG' : status)
+          );
         } catch (e) {
-          console.warn('⚠️ Không cập nhật được vị trí Pass trên inventory:', e);
+          console.warn('⚠️ Không cập nhật được vị trí IQC trên inventory:', e);
         }
       }
 
       console.log(`✅ IQC status updated to: ${status}`);
-      alert(`✅ Đã cập nhật trạng thái IQC: ${status}`);
+      alert(`✅ Đã cập nhật trạng thái IQC: ${status}${nextLoc ? ` · vị trí ${nextLoc}` : ''}`);
 
       // Reset for next scan
       this.scannedMaterial = null;
@@ -6719,8 +6735,9 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   getIQCStatusClass(status: string): string {
-    switch (status) {
+    switch (String(status || '').trim()) {
       case 'Pass':
+      case 'PASS':
         return 'iqc-pass';
       case 'NG':
         return 'iqc-ng';

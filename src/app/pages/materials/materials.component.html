@@ -3311,6 +3311,14 @@
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
+          <button type="button" class="more-tile" (click)="openBulkDisposableLocPicker(); closeMorePopup()" [disabled]="!canEditInvLocation()">
+            <span class="more-tile__icon more-tile__icon--orange"><i class="material-icons">playlist_remove</i></span>
+            <span class="more-tile__text">
+              <strong>Dọn vị trí sai (hàng loạt)</strong>
+              <small>Tick D1 / TAM / NVLA… → xóa khỏi mọi mã</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
         </div>
       </section>
 
@@ -3996,7 +4004,72 @@
   </div>
 </div>
 
-<!-- Popup danh sách toàn bộ vị trí (inventory) -->
+<!-- Dọn vị trí sai hàng loạt -->
+<div class="modal-overlay more-overlay" *ngIf="showBulkDisposableLocPicker" (click)="closeBulkDisposableLocPicker()">
+  <div class="modal-content filter-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Dọn vị trí sai hàng loạt">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">playlist_remove</i>
+        </span>
+        <div>
+          <h3>Dọn vị trí sai (hàng loạt)</h3>
+          <p class="more-popup-header__sub">
+            {{ selectedFactory }} — tick vị trí (D1, TAM, NVLA…) rồi xóa khỏi mọi mã có vị trí đó
+          </p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeBulkDisposableLocPicker()" aria-label="Đóng" [disabled]="bulkDisposableLocBusy">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body filter-picker-body">
+      <div class="hidden-search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="bulkDisposableLocQuery" placeholder="Tìm TAM, NVLA12, E7…" autocomplete="off" [disabled]="bulkDisposableLocBusy" />
+        <button type="button" class="hidden-search__clear" *ngIf="bulkDisposableLocQuery" (click)="bulkDisposableLocQuery = ''" aria-label="Xóa">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="kk-kiemke-prefix-toolbar">
+        <button type="button" class="hidden-refresh-btn" (click)="selectAllBulkDisposableLocs(true)" [disabled]="bulkDisposableLocBusy">Chọn hết</button>
+        <button type="button" class="hidden-refresh-btn" (click)="selectAllBulkDisposableLocs(false)" [disabled]="bulkDisposableLocBusy">Bỏ chọn</button>
+        <button type="button" class="hidden-refresh-btn" (click)="scanBulkDisposableLocations()" [disabled]="bulkDisposableLocBusy">
+          <i class="material-icons" [class.rotating]="bulkDisposableLocBusy">refresh</i>
+          Quét lại
+        </button>
+        <span class="kk-kiemke-prefix-n">{{ bulkDisposableLocSelectedCount }} / {{ bulkDisposableLocRows.length }} vị trí</span>
+      </div>
+      <div class="filter-picker-list kk-kiemke-prefix-list" *ngIf="!bulkDisposableLocBusy; else bulkLocScanning">
+        <label class="kk-kiemke-prefix-item"
+               *ngFor="let r of bulkDisposableLocFilteredRows">
+          <input type="checkbox"
+                 [checked]="!!bulkDisposableLocSelected[r.key]"
+                 (change)="toggleBulkDisposableLoc(r.key, $any($event.target).checked)" />
+          <span class="kk-kiemke-prefix-code">{{ r.display }}</span>
+          <span class="kk-kiemke-prefix-title">{{ r.reason }} · {{ r.materialCount }} dòng</span>
+        </label>
+        <p class="hidden-empty" *ngIf="!bulkDisposableLocFilteredRows.length">
+          {{ bulkDisposableLocRows.length ? 'Không khớp tìm kiếm.' : 'Không còn vị trí sai trong inventory.' }}
+        </p>
+      </div>
+      <ng-template #bulkLocScanning>
+        <div class="hidden-empty">Đang quét toàn bộ inventory {{ selectedFactory }}…</div>
+      </ng-template>
+    </div>
+    <div class="filter-picker-footer">
+      <button type="button" class="cancel-btn" (click)="closeBulkDisposableLocPicker()" [disabled]="bulkDisposableLocBusy">Đóng</button>
+      <button type="button"
+              class="btn-print-confirm"
+              (click)="applyBulkDisposableLocDelete()"
+              [disabled]="bulkDisposableLocBusy || !bulkDisposableLocSelectedCount">
+        <i class="material-icons">delete_sweep</i>
+        {{ bulkDisposableLocBusy ? 'Đang xóa…' : 'Xóa hàng loạt' }}
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay more-overlay inv-loc-list-overlay"
      *ngIf="showInvLocListPopup && invLocListMaterial"
      (click)="closeInvLocListPopup()">
@@ -4022,11 +4095,29 @@
     <div class="modal-body inv-loc-list-modal__body">
       <p class="inv-loc-list-modal__count" *ngIf="locationLocCount(invLocListMaterial.location) as n">
         {{ n }} vị trí
+        <span *ngIf="canEditInvLocation() && invLocListSelectedCount"> · đã tick {{ invLocListSelectedCount }}</span>
       </p>
+      <p class="inv-loc-list-modal__hint" *ngIf="canEditInvLocation()">
+        Tick chọn vị trí cũ (D1, TAM, NVLA…, S01 trần) rồi bấm «Xóa đã chọn». Giữ Locker/Box và S/R dạng S03-3-4.
+      </p>
+      <div class="inv-loc-list-toolbar" *ngIf="canEditInvLocation()">
+        <button type="button" class="hidden-refresh-btn" (click)="selectDisposableInvLocs(true)">Tick vị trí sai</button>
+        <button type="button" class="hidden-refresh-btn" (click)="selectDisposableInvLocs(false)">Bỏ tick sai</button>
+      </div>
       <ul class="inv-loc-list" *ngIf="locationParts(invLocListMaterial.location).length; else invLocEmpty">
-        <li class="inv-loc-list__item" *ngFor="let loc of locationParts(invLocListMaterial.location); let i = index">
+        <li class="inv-loc-list__item"
+            *ngFor="let loc of locationParts(invLocListMaterial.location); let i = index"
+            [class.inv-loc-list__item--bad]="isKkDisposableLocation(loc)">
+          <label class="inv-loc-list__check" *ngIf="canEditInvLocation()">
+            <input type="checkbox"
+                   [checked]="!!invLocListSelected[invLocListKey(loc)]"
+                   (change)="toggleInvLocListSelect(loc, $any($event.target).checked)" />
+          </label>
           <span class="inv-loc-list__idx">{{ i + 1 }}</span>
-          <strong>{{ displayLocationTokenPublic(loc) }}</strong>
+          <div class="inv-loc-list__main">
+            <strong>{{ displayLocationTokenPublic(loc) }}</strong>
+            <small *ngIf="invLocDisposableReason(loc) as reason">{{ reason }}</small>
+          </div>
           <button type="button"
                   class="inv-loc-list__del"
                   *ngIf="canEditInvLocation()"
@@ -4046,10 +4137,19 @@
       <button type="button"
               class="btn-inv-loc-clean"
               *ngIf="canEditInvLocation()"
+              (click)="removeSelectedInvLocsFromList($event)"
+              [disabled]="!invLocListSelectedCount"
+              title="Xóa các vị trí đang tick">
+        <i class="material-icons">delete_sweep</i>
+        Xóa đã chọn
+      </button>
+      <button type="button"
+              class="btn-inv-loc-clean"
+              *ngIf="canEditInvLocation()"
               (click)="removeWrongInvLocsFromList($event)"
-              title="Xóa S01 trần, D1, vị trí không phải S/R-… / Locker / Box">
+              title="Xóa D1, TAM, NVL…, S01 trần, vị trí không phải S/R-… / Locker / Box">
         <i class="material-icons">auto_fix_high</i>
-        Xóa vị trí sai
+        Xóa hết vị trí sai
       </button>
       <button type="button"
               class="btn-print-confirm"

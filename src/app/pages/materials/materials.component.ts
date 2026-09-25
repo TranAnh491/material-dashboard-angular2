@@ -922,6 +922,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Popup chỉ xem danh sách mọi vị trí của dòng inventory. */
   showInvLocListPopup = false;
   invLocListMaterial: InventoryMaterial | null = null;
+  /** Tick chọn vị trí để xóa trong popup. */
+  invLocListSelected: Record<string, boolean> = {};
+  /** Dọn vị trí sai hàng loạt (toàn nhà máy). */
+  showBulkDisposableLocPicker = false;
+  bulkDisposableLocBusy = false;
+  bulkDisposableLocQuery = '';
+  bulkDisposableLocSelected: Record<string, boolean> = {};
+  bulkDisposableLocRows: Array<{
+    key: string;
+    display: string;
+    reason: string;
+    materialCount: number;
+  }> = [];
+  private bulkDisposableLocMaterialMap = new Map<string, {
+    id: string;
+    materialCode: string;
+    poNumber: string;
+    location: string;
+  }>();
   layoutLocMaterial: InventoryMaterial | null = null;
   layoutLocWh: LayoutWhPick = 'J';
   layoutLocGroupId = '';
@@ -3267,9 +3286,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * R* + IQC Pass → E7; B011/B013/B014* + IQC Pass → F7 (chỉ khi chưa có vị trí thủ công).
-   * Mutates material.location when rule applies.
-   * @returns location to persist ('E7' | 'F7') or null
+   * Nguyên tắc vị trí sau IQC:
+   * - Đang IQC + Pass → PASS
+   * - Đang IQC + NG → Hàng lỗi
+   * (Không còn auto E7/F7.)
    */
   private applyPassIqcAutoLocation(material: {
     materialCode?: string;
@@ -3277,47 +3297,28 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     location?: string;
     modifiedBy?: string;
     locationManualOverride?: boolean;
-  }): 'E7' | 'F7' | null {
+  }): string | null {
     try {
       if (this.isManualLocationLocked(material)) return null;
 
-      const mc = String(material.materialCode || '').trim().toUpperCase();
       const iqc = String(material.iqcStatus || '').trim().toUpperCase();
-      const loc = String(material.location || '').trim().toUpperCase();
-      if (!loc) {
-        if (mc.startsWith('R') && iqc === 'PASS') {
-          material.location = 'E7';
-          return 'E7';
-        }
-        if (
-          (mc.startsWith('B011') || mc.startsWith('B013') || mc.startsWith('B014')) &&
-          iqc === 'PASS'
-        ) {
-          material.location = 'F7';
-          return 'F7';
-        }
-        return null;
-      }
+      const locRaw = String(material.location || '').trim();
+      const loc = locRaw.toUpperCase();
+      const isIqcStaging = !loc || loc === 'IQC' || loc.startsWith('IQC');
+      if (!isIqcStaging) return null;
 
-      const autoIqcStaging = new Set(['F62', 'F62TRA', 'E7', 'F7']);
-      if (!autoIqcStaging.has(loc)) return null;
-
-      if (mc.startsWith('R') && iqc === 'PASS' && loc !== 'E7') {
-        material.location = 'E7';
-        return 'E7';
+      if (iqc === 'PASS') {
+        material.location = 'PASS';
+        return 'PASS';
       }
-      if (
-        (mc.startsWith('B011') || mc.startsWith('B013') || mc.startsWith('B014')) &&
-        iqc === 'PASS' &&
-        loc !== 'F7'
-      ) {
-        material.location = 'F7';
-        return 'F7';
+      if (iqc === 'NG') {
+        material.location = 'Hàng lỗi';
+        return 'Hàng lỗi';
       }
+      return null;
     } catch {
-      // ignore
+      return null;
     }
-    return null;
   }
 
   // Load inventory data from Firebase - ONLY ASM1
@@ -3338,7 +3339,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`📦 Loaded ${docs.length} materials from Firebase`);
       this.readTracker.track('materials', 'inventory-materials', docs.length);
 
-        // Auto-set location: E7 for R* + IQC PASS; F7 for B011/B013/B014* + IQC PASS
+        // Auto-set location: IQC + Pass → PASS; IQC + NG → Hàng lỗi
         const autoLocationBatch = this.firestore.firestore.batch();
         let autoLocationCount = 0;
         const MAX_BATCH_WRITES = 450; // safety margin under 500
@@ -3421,7 +3422,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             .commit()
             .then(() =>
               console.log(
-                `✅ [ASM1 auto location] Updated ${autoLocationCount} docs (R*→E7 / B011|B013|B014*→F7 khi IQC PASS).`
+                `✅ [ASM1 auto location] Updated ${autoLocationCount} docs (IQC+Pass→PASS / IQC+NG→Hàng lỗi).`
               )
             )
             .catch(err => console.warn('⚠️ [ASM1 auto location] Batch update failed:', err));
@@ -5611,6 +5612,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     event?.stopPropagation?.();
     if (!material) return;
     this.invLocListMaterial = material;
+    this.invLocListSelected = {};
+    for (const loc of this.locationParts(material.location)) {
+      // Mặc định tick sẵn vị trí sai / D1 / TAM / NVL…
+      this.invLocListSelected[this.invLocListKey(loc)] = this.isKkDisposableLocation(loc);
+    }
     this.showInvLocListPopup = true;
     this.cdr.detectChanges();
   }
@@ -5618,6 +5624,57 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   closeInvLocListPopup(): void {
     this.showInvLocListPopup = false;
     this.invLocListMaterial = null;
+    this.invLocListSelected = {};
+  }
+
+  /** Key ổn định cho tick chọn trong popup. */
+  invLocListKey(loc: string): string {
+    return String(loc || '').trim().toUpperCase();
+  }
+
+  /** Vị trí nên xóa: kho D1, TAM, NVLA/NVLH…, S01 trần, không phải S/R-… / Locker / Box. */
+  isKkDisposableLocation(loc: string): boolean {
+    if (!this.isKkPersistentLocation(loc)) return true;
+    return false;
+  }
+
+  /** Nhãn gợi ý vì sao vị trí bị tick (D1 / TAM / NVL…). */
+  invLocDisposableReason(loc: string): string {
+    const raw = String(loc || '').trim();
+    if (!raw) return '';
+    const bare = (this.stripDoiKhoWhPrefix(raw) || raw).trim().toUpperCase();
+    const c = this.locationCompact(bare);
+    if (c === 'TAM' || c.startsWith('TAM')) return 'TAM';
+    if (/^NVL[A-Z]?\d*/.test(c) || c.startsWith('NVLA') || c.startsWith('NVLH') || c.startsWith('NVL')) {
+      return 'NVL cũ';
+    }
+    if (this.kkWarehouseFromLocation(raw) === 'D1' || this.kkWarehouseFromLocation(bare) === 'D1') {
+      // S/R-… kho J không vào đây (persistent). Token D1 còn lại.
+      if (!this.isKkPersistentLocation(raw)) return 'Kho D1';
+    }
+    if (!this.isKkPersistentLocation(raw)) return 'Vị trí sai';
+    return '';
+  }
+
+  get invLocListSelectedCount(): number {
+    return Object.keys(this.invLocListSelected).filter((k) => this.invLocListSelected[k]).length;
+  }
+
+  toggleInvLocListSelect(loc: string, on: boolean): void {
+    const key = this.invLocListKey(loc);
+    this.invLocListSelected = { ...this.invLocListSelected, [key]: !!on };
+  }
+
+  selectDisposableInvLocs(on: boolean): void {
+    const m = this.invLocListMaterial;
+    if (!m) return;
+    const next = { ...this.invLocListSelected };
+    for (const loc of this.locationParts(m.location)) {
+      if (this.isKkDisposableLocation(loc)) {
+        next[this.invLocListKey(loc)] = !!on;
+      }
+    }
+    this.invLocListSelected = next;
   }
 
   /** Có quyền sửa/xóa vị trí từ cột Vị trí (popup). */
@@ -5649,16 +5706,40 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return !same;
       })
     );
+    delete this.invLocListSelected[this.invLocListKey(loc)];
+    this.invLocListSelected = { ...this.invLocListSelected };
   }
 
-  /** Xóa hàng loạt vị trí sai: S01 trần, D1, không phải S/R-… / Locker / Box. */
+  /** Xóa các vị trí đang tick trong popup. */
+  async removeSelectedInvLocsFromList(event?: Event): Promise<void> {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const m = this.invLocListMaterial;
+    if (!m?.id || !this.canEditInvLocation()) return;
+    const parts = this.locationParts(m.location);
+    const selected = parts.filter((t) => this.invLocListSelected[this.invLocListKey(t)]);
+    if (!selected.length) {
+      alert('Tick ít nhất một vị trí để xóa.');
+      return;
+    }
+    const labels = selected.map((t) => this.displayLocationToken(t)).join(', ');
+    if (!confirm(`Xóa ${selected.length} vị trí đã chọn?\n${labels}`)) return;
+    const keep = parts.filter((t) => !this.invLocListSelected[this.invLocListKey(t)]);
+    await this.applyInvLocListParts(m, keep);
+    this.invLocListSelected = {};
+    for (const loc of this.locationParts(m.location)) {
+      this.invLocListSelected[this.invLocListKey(loc)] = this.isKkDisposableLocation(loc);
+    }
+  }
+
+  /** Xóa hàng loạt vị trí sai: D1, TAM, NVL…, S01 trần, không phải S/R-… / Locker / Box. */
   async removeWrongInvLocsFromList(event?: Event): Promise<void> {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     const m = this.invLocListMaterial;
     if (!m?.id || !this.canEditInvLocation()) return;
     const parts = this.locationParts(m.location);
-    const wrong = parts.filter((t) => !this.isKkPersistentLocation(t));
+    const wrong = parts.filter((t) => this.isKkDisposableLocation(t));
     if (!wrong.length) {
       alert('Không có vị trí sai để xóa.\n(Giữ lại: Locker/Box và S/R dạng S03-3-4, R10-1…)');
       return;
@@ -5667,8 +5748,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!confirm(`Xóa ${wrong.length} vị trí sai?\n${labels}`)) return;
     await this.applyInvLocListParts(
       m,
-      parts.filter((t) => this.isKkPersistentLocation(t))
+      parts.filter((t) => !this.isKkDisposableLocation(t))
     );
+    this.invLocListSelected = {};
+    for (const loc of this.locationParts(m.location)) {
+      this.invLocListSelected[this.invLocListKey(loc)] = this.isKkDisposableLocation(loc);
+    }
   }
 
   private async applyInvLocListParts(m: InventoryMaterial, nextParts: string[]): Promise<void> {
@@ -5694,6 +5779,222 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       alert('Không lưu được. Thử lại hoặc kiểm tra quyền sửa vị trí.');
     }
     this.cdr.detectChanges();
+  }
+
+  // ── Dọn vị trí sai hàng loạt (toàn factory) ───────────────────────────────
+
+  openBulkDisposableLocPicker(): void {
+    if (!this.canEditInvLocation()) {
+      alert('Cần quyền sửa vị trí để dọn hàng loạt.');
+      return;
+    }
+    this.showBulkDisposableLocPicker = true;
+    this.bulkDisposableLocQuery = '';
+    void this.scanBulkDisposableLocations();
+  }
+
+  closeBulkDisposableLocPicker(): void {
+    if (this.bulkDisposableLocBusy) return;
+    this.showBulkDisposableLocPicker = false;
+    this.bulkDisposableLocQuery = '';
+    this.bulkDisposableLocSelected = {};
+    this.bulkDisposableLocRows = [];
+    this.bulkDisposableLocMaterialMap.clear();
+  }
+
+  get bulkDisposableLocFilteredRows(): typeof this.bulkDisposableLocRows {
+    const q = String(this.bulkDisposableLocQuery || '').trim().toUpperCase();
+    if (!q) return this.bulkDisposableLocRows;
+    return this.bulkDisposableLocRows.filter(
+      (r) => r.key.includes(q) || r.display.toUpperCase().includes(q) || r.reason.toUpperCase().includes(q)
+    );
+  }
+
+  get bulkDisposableLocSelectedCount(): number {
+    return Object.keys(this.bulkDisposableLocSelected).filter((k) => this.bulkDisposableLocSelected[k]).length;
+  }
+
+  toggleBulkDisposableLoc(key: string, on: boolean): void {
+    this.bulkDisposableLocSelected = { ...this.bulkDisposableLocSelected, [key]: !!on };
+  }
+
+  selectAllBulkDisposableLocs(on: boolean): void {
+    const next = { ...this.bulkDisposableLocSelected };
+    for (const r of this.bulkDisposableLocFilteredRows) next[r.key] = !!on;
+    this.bulkDisposableLocSelected = next;
+  }
+
+  async scanBulkDisposableLocations(): Promise<void> {
+    this.bulkDisposableLocBusy = true;
+    this.bulkDisposableLocRows = [];
+    this.bulkDisposableLocSelected = {};
+    this.bulkDisposableLocMaterialMap.clear();
+    this.cdr.markForCheck();
+    try {
+      const snap = await this.firestore.collection('inventory-materials', (ref) =>
+        ref.where('factory', '==', this.selectedFactory)
+      ).get().toPromise();
+      this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
+
+      const tokenToIds = new Map<string, Set<string>>();
+      const tokenMeta = new Map<string, { display: string; reason: string }>();
+
+      for (const doc of snap?.docs || []) {
+        const data = doc.data() as any;
+        const location = this.locationFromInventoryDoc(data);
+        const parts = this.locationParts(location).filter((t) => this.isKkDisposableLocation(t));
+        if (!parts.length) continue;
+        const id = doc.id;
+        this.bulkDisposableLocMaterialMap.set(id, {
+          id,
+          materialCode: String(data.materialCode || '').trim().toUpperCase(),
+          poNumber: String(data.poNumber || '').trim().toUpperCase(),
+          location: String(location || '')
+        });
+        for (const loc of parts) {
+          const key = this.invLocListKey(loc);
+          if (!tokenToIds.has(key)) tokenToIds.set(key, new Set());
+          tokenToIds.get(key)!.add(id);
+          if (!tokenMeta.has(key)) {
+            tokenMeta.set(key, {
+              display: this.displayLocationToken(loc),
+              reason: this.invLocDisposableReason(loc) || 'Vị trí sai'
+            });
+          }
+        }
+      }
+
+      this.bulkDisposableLocRows = Array.from(tokenToIds.entries())
+        .map(([key, ids]) => ({
+          key,
+          display: tokenMeta.get(key)?.display || key,
+          reason: tokenMeta.get(key)?.reason || 'Vị trí sai',
+          materialCount: ids.size
+        }))
+        .sort((a, b) =>
+          b.materialCount - a.materialCount
+          || a.key.localeCompare(b.key, 'en', { numeric: true })
+        );
+
+      // Tick sẵn tất cả
+      const sel: Record<string, boolean> = {};
+      for (const r of this.bulkDisposableLocRows) sel[r.key] = true;
+      this.bulkDisposableLocSelected = sel;
+    } catch (e) {
+      console.error('[Dọn vị trí sai] scan failed', e);
+      alert('Không quét được inventory. Thử lại.');
+    } finally {
+      this.bulkDisposableLocBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async applyBulkDisposableLocDelete(): Promise<void> {
+    if (!this.canEditInvLocation() || this.bulkDisposableLocBusy) return;
+    const selectedKeys = new Set(
+      Object.keys(this.bulkDisposableLocSelected).filter((k) => this.bulkDisposableLocSelected[k])
+    );
+    if (!selectedKeys.size) {
+      alert('Tick ít nhất một vị trí để xóa hàng loạt.');
+      return;
+    }
+    const affected = Array.from(this.bulkDisposableLocMaterialMap.values()).filter((m) =>
+      this.locationParts(m.location).some((t) => selectedKeys.has(this.invLocListKey(t)))
+    );
+    if (!affected.length) {
+      alert('Khong co dong nao chua vi tri da chon.');
+      return;
+    }
+    const tokenLabels = this.bulkDisposableLocRows
+      .filter((r) => selectedKeys.has(r.key))
+      .map((r) => r.display)
+      .join(', ');
+    if (!confirm(
+      `Xóa ${selectedKeys.size} vị trí khỏi ${affected.length} dòng inventory?\n\n${tokenLabels}`
+    )) return;
+
+    this.bulkDisposableLocBusy = true;
+    this.cdr.markForCheck();
+    const operator = (await this.resolveLocationOperatorId()) || 'bulk-loc-clean';
+    let okCount = 0;
+    let errCount = 0;
+    const CHUNK = 400;
+    try {
+      for (let i = 0; i < affected.length; i += CHUNK) {
+        const chunk = affected.slice(i, i + CHUNK);
+        const batch = this.firestore.firestore.batch();
+        const localPatches: Array<{ id: string; fromLocation: string; location: string; materialCode: string; poNumber: string }> = [];
+        for (const row of chunk) {
+          const fromLocation = this.normalizeMultiLocationValue(String(row.location || ''));
+          const parts = this.locationParts(row.location);
+          const nextParts = parts.filter((t) => !selectedKeys.has(this.invLocListKey(t)));
+          const nextLoc = this.normalizeMultiLocationValue(joinMultiLocations(nextParts));
+          if (nextLoc === fromLocation) continue;
+          const ref = this.firestore.collection('inventory-materials').doc(row.id).ref;
+          batch.update(ref, {
+            ...this.inventoryLocationWriteFields(nextLoc),
+            updatedAt: new Date(),
+            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
+            modifiedBy: operator,
+            locationManualOverride: true
+          });
+          localPatches.push({
+            id: row.id,
+            fromLocation,
+            location: nextLoc,
+            materialCode: row.materialCode,
+            poNumber: row.poNumber
+          });
+          row.location = nextLoc;
+        }
+        if (!localPatches.length) continue;
+        await batch.commit();
+        okCount += localPatches.length;
+
+        for (const p of localPatches) {
+          try {
+            await this.firestore.collection('material-location-history').add({
+              factory: this.selectedFactory,
+              materialId: p.id,
+              materialCode: p.materialCode || '',
+              poNumber: p.poNumber || '',
+              fromLocation: p.fromLocation,
+              toLocation: p.location,
+              changedBy: operator,
+              changeType: 'bulk-disposable-loc-clean',
+              changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+            });
+          } catch { /* ignore history errors */ }
+
+          const inv = this.inventoryMaterials.find((m) => m.id === p.id);
+          if (inv) {
+            inv.location = p.location;
+            this.stampLocationAtLoad(inv);
+          }
+          this.patchKkInvSnapCache(p.id, {
+            location: p.location,
+            viTri: p.location,
+            locationManualOverride: true
+          });
+          this.kkLocMapTypeCache.forEach((list) => {
+            list.forEach((x) => {
+              if (x.id === p.id) x.location = p.location;
+            });
+          });
+          const mapRow = this.bulkDisposableLocMaterialMap.get(p.id);
+          if (mapRow) mapRow.location = p.location;
+        }
+      }
+      alert(`✅ Đã xóa vị trí sai trên ${okCount} dòng.${errCount ? `\n⚠ Lỗi: ${errCount}` : ''}`);
+      await this.scanBulkDisposableLocations();
+    } catch (e) {
+      console.error('[Dọn vị trí sai] apply failed', e);
+      alert('Lỗi khi xóa hàng loạt. Một phần có thể đã lưu — quét lại danh sách.');
+      await this.scanBulkDisposableLocations();
+    } finally {
+      this.bulkDisposableLocBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   /** Chuỗi đầy đủ mọi vị trí (tooltip / textarea). */
@@ -5959,7 +6260,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             .commit()
             .then(() =>
               console.log(
-                `✅ [ASM1 search auto location] Updated ${searchLocWrites} doc(s) (R*→E7 / B011|B013|B014*→F7 khi IQC PASS).`
+                `✅ [ASM1 search auto location] Updated ${searchLocWrites} doc(s) (IQC+Pass→PASS / IQC+NG→Hàng lỗi).`
               )
             )
             .catch(err => console.warn('⚠️ [ASM1 search auto location] Batch update failed:', err));
@@ -9397,7 +9698,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return { map, label };
   }
 
-  /** Overview: lệch nếu |web − LinkQ| > 1; luôn ghi rõ hai số. */
+  /** Overview: lệch nếu |web − LinkQ| > 1; mã khớp → để trống các cột so sánh. */
   private kkKiemKeLinkQInfo(
     code: string,
     linkQMap: Map<string, number>,
@@ -9405,35 +9706,27 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   ): { web: number | null; linkQ: number | null; note: string; warn: boolean } {
     const key = this.normalizeTieuHuyCode(code);
     const web = webByCode.has(key) ? Number(webByCode.get(key)) : null;
+    // Chưa có LinkQ hoặc không so được → không ghi gì
     if (!key || !linkQMap.has(key)) {
-      return {
-        web,
-        linkQ: null,
-        note: web == null ? 'Chưa có LinkQ' : `Web ${this.formatNumber(web)} · chưa có LinkQ`,
-        warn: false
-      };
+      return { web: null, linkQ: null, note: '', warn: false };
     }
     const linkQ = Number(linkQMap.get(key));
     const webN = web == null ? 0 : web;
     if (!Number.isFinite(linkQ)) {
-      return { web, linkQ: null, note: `Web ${this.formatNumber(webN)} · LinkQ —`, warn: false };
+      return { web: null, linkQ: null, note: '', warn: false };
     }
     const diff = Math.round(webN - linkQ);
     const warn = Math.abs(diff) > 1;
-    const diffTxt = `${diff > 0 ? '+' : ''}${this.formatNumber(diff)}`;
-    if (warn) {
-      return {
-        web: webN,
-        linkQ,
-        note: `Lệch ${diffTxt} · Web ${this.formatNumber(webN)} · LQ ${this.formatNumber(linkQ)}`,
-        warn: true
-      };
+    // Khớp Overview «Đủ» → để trống
+    if (!warn) {
+      return { web: null, linkQ: null, note: '', warn: false };
     }
+    const diffTxt = `${diff > 0 ? '+' : ''}${this.formatNumber(diff)}`;
     return {
       web: webN,
       linkQ,
-      note: `Đủ · Web ${this.formatNumber(webN)} · LQ ${this.formatNumber(linkQ)}`,
-      warn: false
+      note: `Lệch ${diffTxt}`,
+      warn: true
     };
   }
 
@@ -9552,8 +9845,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const body = mam.rows.map((r) => {
           const n = stt++;
           const noteCls = r.noteWarn ? ' note--warn' : '';
-          const webTxt = r.webStock == null ? '—' : this.formatNumber(r.webStock);
-          const lqTxt = r.linkQStock == null ? '—' : this.formatNumber(r.linkQStock);
+          const webTxt = r.webStock == null ? '' : this.formatNumber(r.webStock);
+          const lqTxt = r.linkQStock == null ? '' : this.formatNumber(r.linkQStock);
           return `<tr>
             <td class="c">${n}</td>
             <td class="code">${esc(r.code)}</td>
@@ -9581,7 +9874,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
                 <th class="c" rowspan="2">STT</th>
                 <th rowspan="2">Mã</th>
                 <th rowspan="2">PO</th>
-                <th class="c" rowspan="2">Tồn dòng<br><small>gạch cũ / ghi mới</small></th>
+                <th class="c" rowspan="2">Tồn vị trí<br><small>Ghi số mới nếu tồn sai</small></th>
                 <th class="c" rowspan="2">Tồn web<br><small>theo mã</small></th>
                 <th class="c" rowspan="2">Tồn LinkQ</th>
                 <th class="c" colspan="5">Vị trí (tối đa 5)</th>
@@ -9607,7 +9900,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
               &nbsp;|&nbsp; Đầu mã <strong>${esc(s.prefix)}</strong>
               &nbsp;|&nbsp; Kệ <strong>${esc(s.shelf)}</strong>
               &nbsp;|&nbsp; In: ${esc(now)}</p>
-            <p class="hint">LinkQ: <strong>${esc(linkQLabel || '—')}</strong>. Tồn web/LinkQ so theo mã (Overview). Gạch tồn dòng cũ, ghi tồn thực tế.</p>
+            <p class="hint">LinkQ: <strong>${esc(linkQLabel || '—')}</strong>. Chỉ hiện Tồn web / LinkQ / Lưu ý khi lệch. Ghi số mới vào cột Tồn vị trí nếu sai.</p>
             <div class="nv-box">
               <div class="nv-row"><span>Mã nhân viên</span><b></b></div>
               <div class="nv-row"><span>Họ và tên</span><b></b></div>
@@ -12286,13 +12579,29 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return !!x && !!y && x === y;
   }
 
-  /** Giữ lại sau scan: Locker/Box, hoặc S/R + dãy + dấu - + số (R01-1, S15-1-1). S01 trần → xóa. */
+  /** Giữ lại sau scan: Locker/Box, IQC/PASS/Hàng lỗi/TRA, hoặc S/R + dãy + dấu - + số. */
   private isKkPersistentLocation(loc: string): boolean {
     const raw = String(loc || '').trim().toUpperCase();
     if (!raw || this.kkScanIsWrongLocation(raw)) return false;
     const bare = (this.stripDoiKhoWhPrefix(raw) || raw).trim().toUpperCase();
+    const c = this.locationCompact(bare);
+    // Cũ / tạm / NVL staging — không giữ
+    if (c === 'TAM' || c.startsWith('TAM')) return false;
+    if (/^NVL[A-Z]?\d*/.test(c) || c.startsWith('NVLA') || c.startsWith('NVLH') || c.startsWith('NVL')) {
+      return false;
+    }
+    // Staging / kết quả IQC — giữ (không bị dọn hàng loạt)
+    if (bare === 'IQC' || bare.startsWith('IQC')) return true;
+    if (bare === 'PASS') return true;
+    const foldHangLoi = bare
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/Đ/g, 'D')
+      .replace(/[^A-Z0-9]/g, '');
+    if (foldHangLoi === 'HANGLOI') return true;
+    if (this.isTraLocationToken(raw) || this.isTraLocationToken(bare)) return true;
     if (this.isLockerOrBoxToken(raw) || this.isLockerOrBoxToken(bare)) return true;
-    // Bắt buộc có "-" sau số dãy — S01 / R15 không giữ
+    // Bắt buộc có "-" sau số dãy — S01 / R15 không giữ; kho D1 cũng không khớp
     const n = this.normalizeKkScanLocation(bare) || bare;
     return /^[SR]\d{1,2}-\d+(?:-\d+)?$/.test(n);
   }

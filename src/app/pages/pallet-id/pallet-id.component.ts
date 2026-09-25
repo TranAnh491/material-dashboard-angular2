@@ -108,8 +108,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   shelfLabelSelected = new Set<string>();
   shelfLabelError = '';
   isPrintingShelfLabels = false;
-  /** mam = từng mâm (S01-1-1…); dauKe = 1 tem/dãy; palletSeq = R10-1…R10-N (57×32mm) */
-  shelfLabelKind: 'mam' | 'dauKe' | 'palletSeq' = 'mam';
+  /** mam = từng mâm; dauKe = A4/A5; dauKeNho = 8×12cm; palletSeq = R10-1…R10-N */
+  shelfLabelKind: 'mam' | 'dauKe' | 'dauKeNho' | 'palletSeq' = 'mam';
   shelfLabelSize: '60x130' | '100x150' = '60x130';
   /** Số tem theo thứ tự pallet (R10-1 … R10-N) */
   shelfLabelPalletCount = 30;
@@ -1638,7 +1638,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.shelfLabelError = '';
   }
 
-  setShelfLabelKind(kind: 'mam' | 'dauKe' | 'palletSeq'): void {
+  setShelfLabelKind(kind: 'mam' | 'dauKe' | 'dauKeNho' | 'palletSeq'): void {
     this.shelfLabelKind = kind;
     this.shelfLabelError = '';
   }
@@ -1685,11 +1685,17 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   /** Số tem sẽ in (mâm = tổng vị trí; đầu kệ = số dãy; palletSeq = dãy × số pallet). */
   get shelfLabelPrintCount(): number {
-    if (this.shelfLabelKind === 'dauKe') return this.shelfLabelSelectedCount;
+    if (this.shelfLabelKind === 'dauKe' || this.shelfLabelKind === 'dauKeNho') {
+      return this.shelfLabelSelectedCount;
+    }
     if (this.shelfLabelKind === 'palletSeq') {
       return this.shelfLabelSelectedCount * Math.max(1, this.shelfLabelPalletCount || 1);
     }
     return this.expandShelfLabelSelection().length;
+  }
+
+  get isShelfLabelDauKeKind(): boolean {
+    return this.shelfLabelKind === 'dauKe' || this.shelfLabelKind === 'dauKeNho';
   }
 
   shelfLabelMamCountOf(aisle: string): number {
@@ -1796,7 +1802,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
     }
     const names =
-      this.shelfLabelKind === 'dauKe'
+      this.shelfLabelKind === 'dauKe' || this.shelfLabelKind === 'dauKeNho'
         ? aisles
         : this.shelfLabelKind === 'palletSeq'
           ? this.expandShelfLabelPalletSeq()
@@ -1818,15 +1824,19 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       const html =
         this.shelfLabelKind === 'dauKe'
           ? await this.buildDauKeLabelHtml(aisles)
-          : this.shelfLabelKind === 'palletSeq'
-            ? await this.buildShelfPalletSeqLabelHtml(names)
-            : await this.buildShelfMamLabelHtml(names);
+          : this.shelfLabelKind === 'dauKeNho'
+            ? await this.buildDauKeNhoLabelHtml(aisles)
+            : this.shelfLabelKind === 'palletSeq'
+              ? await this.buildShelfPalletSeqLabelHtml(names)
+              : await this.buildShelfMamLabelHtml(names);
       const fileTag =
         this.shelfLabelKind === 'dauKe'
           ? `dau-ke-${aisles.length}`
-          : this.shelfLabelKind === 'palletSeq'
-            ? `pallet-seq-${names.length}`
-            : `mam-${this.shelfLabelSize}-${names.length}`;
+          : this.shelfLabelKind === 'dauKeNho'
+            ? `dau-ke-8x12-${aisles.length}`
+            : this.shelfLabelKind === 'palletSeq'
+              ? `pallet-seq-${names.length}`
+              : `mam-${this.shelfLabelSize}-${names.length}`;
       if (mode === 'download') {
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -1975,6 +1985,132 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     <button type="button" class="secondary" onclick="window.close()">Đóng</button>
   </div>
   <div class="pages">${pages}</div>
+</body>
+</html>`;
+  }
+
+  /** Tem đầu kệ size nhỏ: mỗi tem 8×12 cm (cao × ngang), xếp nhiều tem trên A4. */
+  private async buildDauKeNhoLabelHtml(aisles: string[]): Promise<string> {
+    const logoUrl = await this.resolveShelfLabelLogoUrl();
+    const widthMm = 120; // ngang 12cm
+    const heightMm = 80; // cao 8cm
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 5;
+    const gap = 2;
+    const usableW = pageW - margin * 2;
+    const usableH = pageH - margin * 2;
+    const cols = Math.max(1, Math.floor((usableW + gap) / (widthMm + gap)));
+    const rows = Math.max(1, Math.floor((usableH + gap) / (heightMm + gap)));
+    const perPage = cols * rows;
+
+    const labelNodes = aisles.map(
+      (name) => `
+      <div class="dau-ke-nho">
+        <img class="dau-ke-nho__logo" src="${logoUrl}" alt="AIRSPEED">
+        <div class="dau-ke-nho__name">${name}</div>
+      </div>`
+    );
+
+    const pagesHtml: string[] = [];
+    for (let i = 0; i < labelNodes.length; i += perPage) {
+      pagesHtml.push(`<div class="page">${labelNodes.slice(i, i + perPage).join('')}</div>`);
+    }
+
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Tem đầu kệ 8×12cm — ${aisles.length} tem</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #e2e8f0;
+      color: #000;
+      padding: 12px;
+    }
+    .toolbar {
+      position: sticky; top: 0; z-index: 2;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      background: #fffbe6; border: 1px solid #e6c000; border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 12px;
+    }
+    .toolbar button {
+      border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer;
+      background: #0f172a; color: #fff; font-weight: 700;
+    }
+    .toolbar button.secondary { background: #64748b; }
+    .meta { font-size: 13px; color: #334155; }
+    .pages { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .page {
+      width: ${pageW}mm;
+      min-height: ${pageH}mm;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(15,23,42,.18);
+      padding: ${margin}mm;
+      display: grid;
+      grid-template-columns: repeat(${cols}, ${widthMm}mm);
+      grid-auto-rows: ${heightMm}mm;
+      gap: ${gap}mm;
+      align-content: start;
+      justify-content: start;
+      page-break-after: always;
+    }
+    .page:last-child { page-break-after: auto; }
+    .dau-ke-nho {
+      position: relative;
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      border: 1px solid #111;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+    .dau-ke-nho__logo {
+      position: absolute;
+      top: 3.5mm;
+      left: 4mm;
+      height: 18mm;
+      width: auto;
+      max-width: 48mm;
+      object-fit: contain;
+      object-position: left top;
+    }
+    .dau-ke-nho__name {
+      font-weight: 900;
+      font-size: 42mm;
+      letter-spacing: 0.04em;
+      line-height: 0.95;
+      text-align: center;
+      color: #000;
+      padding: 0 4mm;
+    }
+    @media print {
+      body { background: #fff !important; padding: 0 !important; }
+      .toolbar { display: none !important; }
+      .pages { gap: 0 !important; }
+      .page {
+        box-shadow: none !important;
+        margin: 0 !important;
+        width: ${pageW}mm !important;
+        min-height: ${pageH}mm !important;
+        height: ${pageH}mm !important;
+      }
+      @page { margin: 0 !important; size: A4 portrait; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="meta"><strong>${aisles.length}</strong> tem đầu kệ · mỗi tem <strong>8 × 12 cm</strong> · <strong>${perPage}</strong> tem/A4</span>
+    <button type="button" onclick="window.print()">In ngay</button>
+    <button type="button" class="secondary" onclick="window.close()">Đóng</button>
+  </div>
+  <div class="pages">${pagesHtml.join('')}</div>
 </body>
 </html>`;
   }
