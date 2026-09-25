@@ -503,6 +503,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkShelfLabelQuery = '';
   showKkMucReportPicker = false;
   kkMucReportQuery = '';
+  /** Tick đầu mã để in giấy kiểm kê. */
+  kkKiemKeSelectedPrefixes: Record<string, boolean> = {};
   showKkCodeLookup = false;
   showKkPalletCheck = false;
   kkPalletCheckBusy = false;
@@ -662,8 +664,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   mobileLocScanMaterial: InventoryMaterial | null = null;
   mobileLocScanWh: '' | '00' | 'J' | 'ASM3' = '';
 
-  /** Quản lý NVL mobile: PDA (scanner) hay điện thoại (camera). */
-  nlScanDevice: 'mobile' | 'pda' | null = null;
+  /** Quản lý NVL: chỉ dùng máy scanner (PDA) — không camera. */
+  nlScanDevice: 'pda' = 'pda';
   showNlDevicePicker = false;
   showNlCamera = false;
   showNlPdaScan = false;
@@ -2471,8 +2473,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     void this.performSearch(term);
   }
 
-  chooseNlScanDevice(device: 'mobile' | 'pda'): void {
-    this.nlScanDevice = device;
+  chooseNlScanDevice(_device?: 'mobile' | 'pda'): void {
+    // Tab Quản lý NVL: chỉ scanner — bỏ chọn camera.
+    this.nlScanDevice = 'pda';
     this.showNlDevicePicker = false;
     const pending = this.nlPendingAction;
     this.nlPendingAction = null;
@@ -2485,31 +2488,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openNlDevicePicker(): void {
-    this.showNlDevicePicker = true;
+    // Không còn picker camera/PDA — luôn scanner.
+    this.nlScanDevice = 'pda';
   }
 
   startNlSearchScan(): void {
-    if (!this.nlScanDevice) {
-      this.nlPendingAction = 'search';
-      this.showNlDevicePicker = true;
-      return;
-    }
-    if (this.nlScanDevice === 'pda') {
-      this.nlPdaBuffer = '';
-      this.showNlPdaScan = true;
-      setTimeout(() => this.focusNlPdaInput(), 50);
-      return;
-    }
-    void this.startNlCamera('search');
+    this.nlScanDevice = 'pda';
+    this.stopNlCamera();
+    this.nlPdaBuffer = '';
+    this.showNlPdaScan = true;
+    setTimeout(() => this.focusNlPdaInput(), 50);
   }
 
   startNlKkScan(): void {
     if (!this.canEdit || this.isLoading) return;
-    if (!this.nlScanDevice) {
-      this.nlPendingAction = 'kk';
-      this.showNlDevicePicker = true;
-      return;
-    }
+    this.nlScanDevice = 'pda';
+    this.stopNlCamera();
     // Cập nhật vị trí: scan kệ S/R (kể cả R10-1…) → scan mã — chỉ đổi vị trí
     this.openKkTypeScanModal(undefined, 'location');
   }
@@ -2532,13 +2526,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get kkScanHideKeyboard(): boolean {
-    return this.isMobile && this.nlScanDevice !== 'mobile';
+    return this.isMobile;
   }
 
   onKkHidScanFocus(event: FocusEvent): void {
     const el = event.target as HTMLInputElement | null;
     if (!el) return;
-    if (this.isMobile && this.nlScanDevice === 'mobile') return;
     // Tem NV PDA: giữ inputmode=text để máy quét gõ vào ô. inputmode=none hay nuốt mã.
     if (el.id === 'kkTypeScanOperatorInput') return;
     this.suppressVirtualKeyboard(el);
@@ -2619,7 +2612,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private onKkDocScanKey(event: KeyboardEvent): void {
     if (!this.showKkTypeScanModal) return;
     if (this.showKkTypeScanConfirm) return;
-    if (this.nlScanDevice === 'mobile' && this.showNlCamera) return;
     // Mã NV chỉ nhập tay
     if (this.kkTypeScanStep === 'operator') return;
     const target = event.target as HTMLElement | null;
@@ -2729,7 +2721,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   pinKkScanFocus(): void {
     if (!this.showKkTypeScanModal) return;
-    if (this.nlScanDevice === 'mobile' && this.showNlCamera) return;
     this.focusKkTypeScanInput(this.kkActiveScanInputId());
   }
 
@@ -2809,54 +2800,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applyNlSearchScan(el?.value || this.nlPdaBuffer);
   }
 
-  async startNlCamera(purpose: 'search' | 'location' | 'kk'): Promise<void> {
-    if (this.html5QrCode) {
-      const prev = this.html5QrCode;
-      this.html5QrCode = null;
-      try { await prev.stop(); } catch { /* ignore */ }
-    }
-    this.nlCameraPurpose = purpose;
-    this.nlScanLock = false;
-    this.showNlCamera = true;
-    this.isScanning = true;
-    this.cdr.markForCheck();
-    // KK: camera gắn trong màn Scan vị trí — đợi DOM inline render
-    await new Promise((r) => setTimeout(r, purpose === 'kk' ? 120 : 80));
-    try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const elId = purpose === 'kk' ? 'kk-inline-qr-reader' : 'nl-qr-reader';
-      const host = document.getElementById(elId);
-      if (!host) {
-        throw new Error(`Camera host #${elId} chưa sẵn sàng`);
-      }
-      host.innerHTML = '';
-      this.html5QrCode = new Html5Qrcode(elId);
-      const cameras = await Html5Qrcode.getCameras();
-      const back = (cameras || []).find((c) => /back|rear|environment/i.test(c.label));
-      const camId = back?.id || cameras?.[cameras.length - 1]?.id || cameras?.[0]?.id;
-      // Khung quét lớn (~78% cạnh ngắn) — dễ bắt tem trên điện thoại
-      const qrboxFn = (viewW: number, viewH: number) => {
-        const edge = Math.floor(Math.min(viewW, viewH) * 0.78);
-        const size = Math.max(200, Math.min(edge, 360));
-        return { width: size, height: size };
-      };
-      const config: any = {
-        fps: 15,
-        qrbox: qrboxFn,
-        aspectRatio: 1.0,
-        disableFlip: false
-      };
-      const onOk = (text: string) => this.onNlCameraDecoded(text);
-      if (camId) {
-        await this.html5QrCode.start(camId, config, onOk, () => undefined);
-      } else {
-        await this.html5QrCode.start({ facingMode: 'environment' }, config, onOk, () => undefined);
-      }
-    } catch (e) {
-      console.error('startNlCamera:', e);
-      this.stopNlCamera();
-      alert('Không mở được camera. Kiểm tra quyền camera, hoặc chọn PDA để dùng scanner.');
-    }
+  async startNlCamera(_purpose: 'search' | 'location' | 'kk'): Promise<void> {
+    // Tab Quản lý NVL: tắt camera — chỉ dùng máy scanner.
+    this.stopNlCamera();
   }
 
   private onNlCameraDecoded(text: string): void {
@@ -3046,7 +2992,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.enterKkLocMap();
     } else if (this.isNguyenLieuPage && this.isMobile) {
       void this.ensureKkMobileCatalog();
-      this.showNlDevicePicker = true;
+      this.nlScanDevice = 'pda';
+      this.showNlDevicePicker = false;
     }
 
     console.log('✅ Materials component initialized - Waiting for user search');
@@ -5673,6 +5620,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.invLocListMaterial = null;
   }
 
+  /** Có quyền sửa/xóa vị trí từ cột Vị trí (popup). */
+  canEditInvLocation(): boolean {
+    return !!(this.canEdit || this.isLocationColumnUnlocked || this.TEMP_UNLOCK_LOCATION_WH_PALLET);
+  }
+
   /** Từ popup danh sách → mở chỉnh sửa sơ đồ kho. */
   editInvLocFromListPopup(): void {
     const m = this.invLocListMaterial;
@@ -5680,18 +5632,47 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (m) this.openLayoutLocPicker(m, undefined, 'location');
   }
 
-  /** Xóa một vị trí sai trong popup danh sách. */
+  /** Xóa một vị trí trong popup danh sách. */
   async removeInvLocFromList(loc: string, event?: Event): Promise<void> {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     const m = this.invLocListMaterial;
-    if (!m?.id || !this.canEdit) return;
+    if (!m?.id || !this.canEditInvLocation()) return;
     const label = this.displayLocationToken(loc);
     if (!confirm(`Xóa vị trí «${label}»?`)) return;
-    this.rememberLocationBeforeEdit(m);
-    const nextParts = this.locationParts(m.location).filter(
-      (t) => !this.kkScanLocationsEqual(t, loc) && String(t).trim().toUpperCase() !== String(loc).trim().toUpperCase()
+    await this.applyInvLocListParts(
+      m,
+      this.locationParts(m.location).filter((t) => {
+        const same =
+          this.kkScanLocationsEqual(t, loc)
+          || String(t).trim().toUpperCase() === String(loc).trim().toUpperCase();
+        return !same;
+      })
     );
+  }
+
+  /** Xóa hàng loạt vị trí sai: S01 trần, D1, không phải S/R-… / Locker / Box. */
+  async removeWrongInvLocsFromList(event?: Event): Promise<void> {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const m = this.invLocListMaterial;
+    if (!m?.id || !this.canEditInvLocation()) return;
+    const parts = this.locationParts(m.location);
+    const wrong = parts.filter((t) => !this.isKkPersistentLocation(t));
+    if (!wrong.length) {
+      alert('Không có vị trí sai để xóa.\n(Giữ lại: Locker/Box và S/R dạng S03-3-4, R10-1…)');
+      return;
+    }
+    const labels = wrong.map((t) => this.displayLocationToken(t)).join(', ');
+    if (!confirm(`Xóa ${wrong.length} vị trí sai?\n${labels}`)) return;
+    await this.applyInvLocListParts(
+      m,
+      parts.filter((t) => this.isKkPersistentLocation(t))
+    );
+  }
+
+  private async applyInvLocListParts(m: InventoryMaterial, nextParts: string[]): Promise<void> {
+    this.rememberLocationBeforeEdit(m);
     m.location = this.normalizeMultiLocationValue(joinMultiLocations(nextParts));
     const ok = await this.persistLocationChange(m, {
       silent: true,
@@ -5709,6 +5690,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           if (x.id === m.id) x.location = m.location;
         });
       });
+    } else {
+      alert('Không lưu được. Thử lại hoặc kiểm tra quyền sửa vị trí.');
     }
     this.cdr.detectChanges();
   }
@@ -9148,6 +9131,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openKkMucReportPicker(): void {
     this.kkMucReportQuery = '';
+    if (!Object.keys(this.kkKiemKeSelectedPrefixes).length) {
+      for (const p of this.kkKiemKeAllPrefixes()) {
+        this.kkKiemKeSelectedPrefixes[p] = false;
+      }
+    }
     this.showKkMucReportPicker = true;
   }
 
@@ -9156,33 +9144,558 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkMucReportQuery = '';
   }
 
-  get kkMucReportGroups(): Array<{
-    category: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    codeCount: number;
-  }> {
-    const q = String(this.kkMucReportQuery || '').trim().toLowerCase();
-    return this.kkTypeBoxGroups
-      .map((muc) => ({
-        category: muc.category,
-        title: muc.title,
-        boxes: muc.boxes,
-        codeCount: muc.boxes.reduce((n, box) => n + (box.groupCodes?.length || 0), 0)
-      }))
-      .filter((g) => {
-        if (!q) return true;
-        return g.title.toLowerCase().includes(q) || String(g.category || '').toLowerCase().includes(q);
-      });
+  private kkKiemKeAllPrefixes(): string[] {
+    const set = new Set<string>();
+    for (const muc of this.kkTypeBoxGroups) {
+      const cat = String(muc.category || '').trim().toUpperCase();
+      if (/^B\d{3}$/.test(cat)) set.add(cat);
+      for (const box of muc.boxes || []) {
+        for (const p of this.kkTypeGroupPrefixes(box.groupCodes || [])) {
+          if (/^B\d{3}$/.test(p)) set.add(p);
+        }
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   }
 
-  private kkBoxHasBPrefix(box: { groupCodes?: string[] }, prefix: string): boolean {
+  get kkKiemKePrefixOptions(): string[] {
+    const q = String(this.kkMucReportQuery || '').trim().toUpperCase();
+    return this.kkKiemKeAllPrefixes().filter((p) => !q || p.includes(q) || this.kkTypeMucTitle(p).toUpperCase().includes(q));
+  }
+
+  get kkKiemKeSelectedCount(): number {
+    return Object.keys(this.kkKiemKeSelectedPrefixes).filter((k) => this.kkKiemKeSelectedPrefixes[k]).length;
+  }
+
+  toggleKkKiemKePrefix(prefix: string, on: boolean): void {
+    this.kkKiemKeSelectedPrefixes = { ...this.kkKiemKeSelectedPrefixes, [prefix]: !!on };
+  }
+
+  selectAllKkKiemKePrefixes(on: boolean): void {
+    const next: Record<string, boolean> = { ...this.kkKiemKeSelectedPrefixes };
+    for (const p of this.kkKiemKePrefixOptions) next[p] = !!on;
+    this.kkKiemKeSelectedPrefixes = next;
+  }
+
+  async printKkKiemKePaper(): Promise<void> {
+    const prefixes = Object.keys(this.kkKiemKeSelectedPrefixes)
+      .filter((k) => this.kkKiemKeSelectedPrefixes[k])
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    if (!prefixes.length) {
+      alert('Tick ít nhất một đầu mã để in giấy kiểm kê.');
+      return;
+    }
+    this.kkTypePrintBusy = true;
+    this.cdr.markForCheck();
+    try {
+      const shelves: Array<{
+        prefix: string;
+        shelf: string;
+        mams: Array<{
+          mam: string;
+          rows: Array<{
+            code: string;
+            po: string;
+            stock: number;
+            locs: string[];
+            webStock: number | null;
+            linkQStock: number | null;
+            note: string;
+            noteWarn: boolean;
+          }>;
+        }>;
+      }> = [];
+      for (const prefix of prefixes) {
+        const byShelf = this.buildKkKiemKeShelfMap(prefix);
+        const shelfIds = Array.from(byShelf.keys()).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+        for (const shelf of shelfIds) {
+          const mamMap = byShelf.get(shelf)!;
+          const mamIds = Array.from(mamMap.keys()).sort((a, b) => {
+            if (a.includes('chưa gán')) return 1;
+            if (b.includes('chưa gán')) return -1;
+            return a.localeCompare(b, 'en', { numeric: true });
+          });
+          const mams = mamIds
+            .map((mam) => ({
+              mam,
+              rows: mamMap.get(mam)!.sort((x, y) =>
+                x.code.localeCompare(y.code, 'en', { numeric: true })
+                || x.po.localeCompare(y.po, 'en', { numeric: true })
+              )
+            }))
+            .filter((m) => m.rows.length);
+          if (mams.length) shelves.push({ prefix, shelf, mams });
+        }
+      }
+      if (!shelves.length) {
+        alert('Các đầu mã đã chọn chưa có vị trí kệ S/R để in.');
+        return;
+      }
+
+      // So sánh tồn web vs LinkQ (cùng Overview «Theo mã» — không cộng trùng dòng)
+      const codes = new Set<string>();
+      for (const s of shelves) {
+        for (const mam of s.mams) {
+          for (const r of mam.rows) codes.add(r.code);
+        }
+      }
+      const linkQPack = await this.loadKkKiemKeLinkQPack();
+      const webByCode = await this.buildKkKiemKeWebStockByCode(codes);
+      for (const s of shelves) {
+        for (const mam of s.mams) {
+          for (const r of mam.rows) {
+            const info = this.kkKiemKeLinkQInfo(r.code, linkQPack.map, webByCode);
+            r.webStock = info.web;
+            r.linkQStock = info.linkQ;
+            r.note = info.note;
+            r.noteWarn = info.warn;
+          }
+        }
+      }
+
+      this.closeKkMucReportPicker();
+      await this.renderKkKiemKePaper(shelves, linkQPack.label);
+    } finally {
+      this.kkTypePrintBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** shelf → mâm → dòng kiểm kê (theo vị trí thực tế). */
+  private buildKkKiemKeShelfMap(prefix: string): Map<
+    string,
+    Map<string, Array<{
+      code: string;
+      po: string;
+      stock: number;
+      locs: string[];
+      webStock: number | null;
+      linkQStock: number | null;
+      note: string;
+      noteWarn: boolean;
+    }>>
+  > {
+    type Row = {
+      code: string;
+      po: string;
+      stock: number;
+      locs: string[];
+      webStock: number | null;
+      linkQStock: number | null;
+      note: string;
+      noteWarn: boolean;
+    };
+    const byShelf = new Map<string, Map<string, Row[]>>();
+    const materials = this.kkKiemKeMaterialsForPrefix(prefix);
+    for (const m of materials) {
+      const code = String(m.materialCode || '').trim().toUpperCase();
+      if (!code) continue;
+      const po = String(m.poNumber || '').trim().toUpperCase() || '—';
+      const stock = this.calculateCurrentStock(m);
+      const locs = this.locationParts(m.location)
+        .map((p) => this.displayLocationToken(p))
+        .filter((p) => !!p && p !== '-');
+      if (!locs.length) continue;
+      const mamKeys = new Set<string>();
+      for (const loc of locs) {
+        const parsed = this.kkParseKiemKeMam(loc);
+        if (!parsed) continue;
+        mamKeys.add(`${parsed.shelf}\t${parsed.mam}`);
+      }
+      for (const key of mamKeys) {
+        const [shelf, mam] = key.split('\t');
+        let mamMap = byShelf.get(shelf);
+        if (!mamMap) {
+          mamMap = new Map();
+          byShelf.set(shelf, mamMap);
+        }
+        let rows = mamMap.get(mam);
+        if (!rows) {
+          rows = [];
+          mamMap.set(mam, rows);
+        }
+        const ordered = [
+          mam,
+          ...locs.filter((l) => l.toUpperCase() !== mam.toUpperCase())
+        ].slice(0, 5);
+        rows.push({
+          code,
+          po,
+          stock,
+          locs: ordered,
+          webStock: null,
+          linkQStock: null,
+          note: '',
+          noteWarn: false
+        });
+      }
+    }
+    return byShelf;
+  }
+
+  /** Tồn web theo mã — đọc inventory-materials (dedupe id), khớp Overview «Theo mã». */
+  private async buildKkKiemKeWebStockByCode(codes: Set<string>): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    const seen = new Set<string>();
+    const add = (m: InventoryMaterial) => {
+      const code = this.normalizeTieuHuyCode(m.materialCode);
+      if (!code || !codes.has(code)) return;
+      if (m.factory && m.factory !== this.selectedFactory) return;
+      const id = String(m.id || `${code}|${m.poNumber}|${this.getDisplayIMD(m)}`);
+      if (seen.has(id)) return;
+      seen.add(id);
+      map.set(code, (map.get(code) || 0) + this.calculateCurrentStock(m));
+    };
+    const fetched = await this.fetchTieuHuyStockByCodes(Array.from(codes));
+    fetched.forEach(add);
+    this.kkLocMapTypeCache.forEach((list) => (list || []).forEach(add));
+    (this.inventoryMaterials || []).forEach(add);
+    map.forEach((v, k) => map.set(k, Math.round(v)));
+    return map;
+  }
+
+  /** File LinkQ mới nhất + map tồn (cùng nguồn Overview). */
+  private async loadKkKiemKeLinkQPack(): Promise<{ map: Map<string, number>; label: string }> {
+    const map = new Map<string, number>();
+    const put = (code: string, stock: unknown) => {
+      const key = this.normalizeTieuHuyCode(code);
+      if (!key) return;
+      map.set(key, Math.round(Number(stock) || 0));
+    };
+    let label = 'Chưa có file LinkQ';
+    try {
+      const canonical = await this.firestore.collection('linkQFiles').doc(this.selectedFactory).get().toPromise();
+      let data: any = null;
+      if (canonical?.exists) {
+        data = canonical.data();
+      } else {
+        const snap = await this.firestore.collection('linkQFiles', (ref) =>
+          ref.where('factory', '==', this.selectedFactory).limit(20)
+        ).get().toPromise();
+        const docs = [...(snap?.docs || [])].sort((a, b) => {
+          const da = (a.data() as any)?.uploadDate?.toMillis?.() || (a.data() as any)?.uploadDate?.seconds * 1000 || 0;
+          const db = (b.data() as any)?.uploadDate?.toMillis?.() || (b.data() as any)?.uploadDate?.seconds * 1000 || 0;
+          return db - da;
+        });
+        data = docs[0]?.data() || null;
+      }
+      const raw = (data?.linkQData || null) as Record<string, unknown> | null;
+      if (raw) {
+        for (const [code, stock] of Object.entries(raw)) put(code, stock);
+      }
+      const ms = data?.uploadDate?.toMillis?.()
+        || (data?.uploadDate?.seconds ? data.uploadDate.seconds * 1000 : 0)
+        || 0;
+      const fileName = String(data?.fileName || data?.name || '').trim();
+      if (ms || fileName || map.size) {
+        const when = ms ? new Date(ms).toLocaleString('vi-VN') : '—';
+        label = `${fileName || 'LinkQ'} · ${when} · ${map.size} mã`;
+      }
+    } catch (e) {
+      console.warn('[KK giấy kiểm kê] load LinkQ failed', e);
+    }
+    return { map, label };
+  }
+
+  /** Overview: lệch nếu |web − LinkQ| > 1; luôn ghi rõ hai số. */
+  private kkKiemKeLinkQInfo(
+    code: string,
+    linkQMap: Map<string, number>,
+    webByCode: Map<string, number>
+  ): { web: number | null; linkQ: number | null; note: string; warn: boolean } {
+    const key = this.normalizeTieuHuyCode(code);
+    const web = webByCode.has(key) ? Number(webByCode.get(key)) : null;
+    if (!key || !linkQMap.has(key)) {
+      return {
+        web,
+        linkQ: null,
+        note: web == null ? 'Chưa có LinkQ' : `Web ${this.formatNumber(web)} · chưa có LinkQ`,
+        warn: false
+      };
+    }
+    const linkQ = Number(linkQMap.get(key));
+    const webN = web == null ? 0 : web;
+    if (!Number.isFinite(linkQ)) {
+      return { web, linkQ: null, note: `Web ${this.formatNumber(webN)} · LinkQ —`, warn: false };
+    }
+    const diff = Math.round(webN - linkQ);
+    const warn = Math.abs(diff) > 1;
+    const diffTxt = `${diff > 0 ? '+' : ''}${this.formatNumber(diff)}`;
+    if (warn) {
+      return {
+        web: webN,
+        linkQ,
+        note: `Lệch ${diffTxt} · Web ${this.formatNumber(webN)} · LQ ${this.formatNumber(linkQ)}`,
+        warn: true
+      };
+    }
+    return {
+      web: webN,
+      linkQ,
+      note: `Đủ · Web ${this.formatNumber(webN)} · LQ ${this.formatNumber(linkQ)}`,
+      warn: false
+    };
+  }
+
+  private kkKiemKeMaterialsForPrefix(prefix: string): InventoryMaterial[] {
+    const p = String(prefix || '').trim().toUpperCase();
+    const out: InventoryMaterial[] = [];
+    const seen = new Set<string>();
+    const push = (m: InventoryMaterial) => {
+      const id = String(m.id || `${m.materialCode}|${m.poNumber}|${this.getDisplayIMD(m)}`);
+      if (seen.has(id)) return;
+      seen.add(id);
+      out.push(m);
+    };
+    for (const box of this.kkTypeBoxesCached || []) {
+      if (!this.kkBoxHasBPrefix(box, p)) continue;
+      for (const m of this.kkMucReportLinesForBox(box)) push(m);
+    }
+    // Bổ sung dòng tồn có mã thuộc đầu mã (kể cả chưa map box)
+    this.kkLocMapTypeCache.forEach((list) => {
+      for (const m of list || []) {
+        const code = String(m.materialCode || '').trim().toUpperCase();
+        const g = this.kkCatalog.groupCodeFromMaterial(code)
+          || this.kkCatalog.normalizeGroupCode(code)
+          || code;
+        if (!g.startsWith(p)) continue;
+        const wh = this.kkWarehouseFromLocation(m.location);
+        if (!this.kkMatchesWh3Mode(wh)) continue;
+        const zone = this.kkLocMapWarehouseFilter;
+        if (zone && wh !== zone) continue;
+        push(m);
+      }
+    });
+    return out;
+  }
+
+  /** S01-1-1 → shelf S01, mam S01-1-1; S01 trần → mâm «chưa gán». */
+  private kkParseKiemKeMam(token: string): { shelf: string; mam: string } | null {
+    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
+    const bare = (this.stripDoiKhoWhPrefix(raw) || raw).toUpperCase();
+    const full = /^([SR])(\d{1,2})-(\d+)-(\d+)$/.exec(bare);
+    if (full) {
+      const shelf = `${full[1]}${String(Number(full[2])).padStart(2, '0')}`;
+      return { shelf, mam: `${shelf}-${Number(full[3])}-${Number(full[4])}` };
+    }
+    const aisle = /^([SR])(\d{1,2})$/.exec(bare);
+    if (aisle) {
+      const shelf = `${aisle[1]}${String(Number(aisle[2])).padStart(2, '0')}`;
+      return { shelf, mam: `${shelf} (chưa gán mâm)` };
+    }
+    const aisleSeq = /^([SR])(\d{1,2})-(\d+)$/.exec(bare);
+    if (aisleSeq) {
+      const shelf = `${aisleSeq[1]}${String(Number(aisleSeq[2])).padStart(2, '0')}`;
+      return { shelf, mam: `${shelf}-${Number(aisleSeq[3])}` };
+    }
+    return null;
+  }
+
+  private async renderKkKiemKePaper(
+    shelves: Array<{
+      prefix: string;
+      shelf: string;
+      mams: Array<{
+        mam: string;
+        rows: Array<{
+          code: string;
+          po: string;
+          stock: number;
+          locs: string[];
+          webStock: number | null;
+          linkQStock: number | null;
+          note: string;
+          noteWarn: boolean;
+        }>;
+      }>;
+    }>,
+    linkQLabel = ''
+  ): Promise<void> {
+    const win = window.open('', '_blank', 'width=980,height=900');
+    if (!win) {
+      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
+      return;
+    }
+    const esc = (s: string) => this.escapeHtmlForPrint(s);
+    const now = new Date().toLocaleString('vi-VN');
+    const QRCode = await import('qrcode') as any;
+    const qrByShelf = new Map<string, string>();
+    const shelvesNeedQr = Array.from(new Set(shelves.map((s) => s.shelf)));
+    await Promise.all(
+      shelvesNeedQr.map(async (key) => {
+        try {
+          qrByShelf.set(
+            key,
+            await QRCode.toDataURL(key, {
+              width: 220,
+              margin: 0,
+              color: { dark: '#000000', light: '#FFFFFF' }
+            })
+          );
+        } catch {
+          qrByShelf.set(key, '');
+        }
+      })
+    );
+
+    const locCells = (locs: string[]) => {
+      const cells: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        cells.push(`<td class="loc">${esc(locs[i] || '')}</td>`);
+      }
+      return cells.join('');
+    };
+
+    const pagesHtml = shelves.map((s, pageIdx) => {
+      let stt = 1;
+      const mamHtml = s.mams.map((mam) => {
+        const body = mam.rows.map((r) => {
+          const n = stt++;
+          const noteCls = r.noteWarn ? ' note--warn' : '';
+          const webTxt = r.webStock == null ? '—' : this.formatNumber(r.webStock);
+          const lqTxt = r.linkQStock == null ? '—' : this.formatNumber(r.linkQStock);
+          return `<tr>
+            <td class="c">${n}</td>
+            <td class="code">${esc(r.code)}</td>
+            <td class="po">${esc(r.po)}</td>
+            <td class="c stock">
+              <span class="stock-old">${esc(this.formatNumber(r.stock))}</span>
+              <span class="stock-new" title="Ghi tồn mới"></span>
+            </td>
+            <td class="c num">${esc(webTxt)}</td>
+            <td class="c num">${esc(lqTxt)}</td>
+            ${locCells(r.locs)}
+            <td class="tick"></td>
+            <td class="tick"></td>
+            <td class="note${noteCls}">${esc(r.note || '')}</td>
+          </tr>`;
+        }).join('');
+        return `<section class="mam">
+          <div class="mam-head">
+            <h3>Mâm ${esc(mam.mam)}</h3>
+            <span>${mam.rows.length} dòng</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th class="c" rowspan="2">STT</th>
+                <th rowspan="2">Mã</th>
+                <th rowspan="2">PO</th>
+                <th class="c" rowspan="2">Tồn dòng<br><small>gạch cũ / ghi mới</small></th>
+                <th class="c" rowspan="2">Tồn web<br><small>theo mã</small></th>
+                <th class="c" rowspan="2">Tồn LinkQ</th>
+                <th class="c" colspan="5">Vị trí (tối đa 5)</th>
+                <th class="c" colspan="2">Kiểm</th>
+                <th rowspan="2">Lưu ý</th>
+              </tr>
+              <tr>
+                <th class="c">VT1</th><th class="c">VT2</th><th class="c">VT3</th><th class="c">VT4</th><th class="c">VT5</th>
+                <th class="c">Đủ</th><th class="c">Thiếu</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </section>`;
+      }).join('');
+
+      const shelfQr = qrByShelf.get(s.shelf) || '';
+      return `<article class="shelf-page"${pageIdx ? ' style="page-break-before:always"' : ''}>
+        <header class="sheet-head">
+          <div class="sheet-meta">
+            <h1>GIẤY KIỂM KÊ — ${esc(s.prefix)} · Kệ ${esc(s.shelf)}</h1>
+            <p>Nhà máy <strong>${esc(this.selectedFactory)}</strong>
+              &nbsp;|&nbsp; Đầu mã <strong>${esc(s.prefix)}</strong>
+              &nbsp;|&nbsp; Kệ <strong>${esc(s.shelf)}</strong>
+              &nbsp;|&nbsp; In: ${esc(now)}</p>
+            <p class="hint">LinkQ: <strong>${esc(linkQLabel || '—')}</strong>. Tồn web/LinkQ so theo mã (Overview). Gạch tồn dòng cũ, ghi tồn thực tế.</p>
+            <div class="nv-box">
+              <div class="nv-row"><span>Mã nhân viên</span><b></b></div>
+              <div class="nv-row"><span>Họ và tên</span><b></b></div>
+            </div>
+          </div>
+          <div class="sheet-qr">
+            ${shelfQr ? `<img src="${shelfQr}" alt="QR ${esc(s.shelf)}">` : ''}
+            <div class="sheet-qr-lab">${esc(s.shelf)}</div>
+          </div>
+        </header>
+        ${mamHtml}
+      </article>`;
+    }).join('');
+
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Giấy kiểm kê</title>
+  <style>
+    @page { size: A4 landscape; margin: 7mm 7mm 9mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; color: #000; background: #fff; }
+    .no-print { background:#ecfdf5; border:1px solid #34d399; padding:8px 14px; margin-bottom:12px;
+                border-radius:4px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
+                       border-radius:4px; cursor:pointer; font-size:12px; }
+    .shelf-page { break-inside: avoid-page; }
+    .sheet-head { display:flex; gap:12px; align-items:stretch; border:1.5px solid #000;
+                  padding:8px 10px; margin-bottom:10px; }
+    .sheet-meta { flex:1; min-width:0; }
+    .sheet-meta h1 { font-size:14px; letter-spacing:.3px; margin-bottom:4px; }
+    .sheet-meta p { font-size:9px; color:#222; margin-bottom:5px; }
+    .sheet-meta .hint { font-size:8px; color:#444; font-style:italic; margin-bottom:8px; }
+    .nv-box { border:1px solid #000; padding:6px 8px; display:grid; gap:6px; max-width:420px; }
+    .nv-row { display:grid; grid-template-columns:110px 1fr; gap:8px; align-items:end; min-height:20px; }
+    .nv-row span { font-size:9px; font-weight:700; }
+    .nv-row b { border-bottom:1px solid #000; min-height:14px; display:block; }
+    .sheet-qr { width:84px; text-align:center; flex-shrink:0; }
+    .sheet-qr img { width:72px; height:72px; display:block; margin:0 auto 4px; }
+    .sheet-qr-lab { font-size:11px; font-weight:800; letter-spacing:.4px; }
+    .mam { margin-bottom:8px; page-break-inside: avoid; }
+    .mam-head { display:flex; align-items:baseline; gap:8px;
+               border-bottom:1px solid #000; padding:2px 0 4px; margin-bottom:4px; }
+    .mam-head h3 { font-size:11px; }
+    .mam-head span { font-size:8px; color:#444; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    thead { display: table-header-group; }
+    th, td { border:1px solid #333; padding:2px 3px; vertical-align:middle; }
+    th { background:#f3f4f6; font-size:8px; text-transform:uppercase; }
+    th small { font-size:6px; text-transform:none; font-weight:600; }
+    td.c, th.c { text-align:center; }
+    td.code { font-weight:700; font-size:9px; word-break:break-all; }
+    td.po { font-size:8px; word-break:break-all; }
+    td.stock { white-space:nowrap; }
+    td.num { font-variant-numeric:tabular-nums; font-size:8px; }
+    .stock-old { display:inline-block; min-width:2em; font-variant-numeric:tabular-nums; }
+    .stock-new { display:inline-block; border-bottom:1px solid #000; min-width:2.4em; min-height:10px;
+                 margin-left:3px; vertical-align:bottom; }
+    td.loc { font-size:7px; text-align:center; word-break:break-all; }
+    td.tick { width:22px; height:16px; }
+    td.note { font-size:7px; font-weight:700; color:#333; word-break:break-word; }
+    td.note--warn { color:#9a3412; background:#fff7ed; }
+    @media print { .no-print { display:none !important; } }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <span>Giấy kiểm kê — QR dãy kệ. LinkQ: ${esc(linkQLabel || '—')}. Nhấn <strong>Ctrl+P</strong>.</span>
+    <button onclick="window.print()">In ngay</button>
+  </div>
+  ${pagesHtml}
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+  }
+
+  private kkBoxHasBPrefix
+(box: { groupCodes?: string[] }, prefix: string): boolean {
     return this.kkTypeGroupPrefixes(box.groupCodes || []).includes(prefix);
   }
 
   private kkShelfLabelTrayCount(prefix: string): number {
     return this.kkConnectorAllTrays(prefix).filter((t) => t.from > 0).length;
   }
+
 
   get kkShelfLabelGroups(): Array<{
     category: string;
@@ -9419,183 +9932,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  printKkMucReportForGroup(group: {
-    category: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-  }): void {
-    const boxes = group?.boxes || [];
-    if (!boxes.length) {
-      alert(`Mục ${group?.title || ''} chưa có mã để in.`);
-      return;
-    }
-    const splitB009 = String(group.category || '') === 'B009';
-    const rows = this.buildKkMucReportRows(boxes, splitB009);
-    if (!rows.length) {
-      alert(`Mục ${group?.title || ''} chưa có mã để in.`);
-      return;
-    }
-    this.closeKkMucReportPicker();
-    this.printKkMucReport(rows, group.title || group.category, splitB009);
-  }
-
-  private buildKkMucReportRows(
-    boxes: typeof this.kkTypeBoxesCached,
-    splitB009: boolean
-  ): Array<{
-    code: string;
-    name: string;
-    requiredLoc: string;
-    actualLoc: string;
-    section: string;
-    sectionOrder: number;
-    trayOrder: number;
-    trayRange: string;
-  }> {
-    type Acc = {
-      code: string;
-      name: string;
-      requiredLoc: string;
-      typeName: string;
-      groupCode: string;
-      stockLocs: Set<string>;
-      otherLocs: Set<string>;
-      hasMaterial: boolean;
-    };
-    const byCode = new Map<string, Acc>();
-    const groupToBox = new Map<string, (typeof boxes)[number]>();
-    for (const box of boxes) {
-      for (const g of box.groupCodes || []) {
-        const ng = this.kkCatalog.normalizeGroupCode(g) || String(g || '').trim().toUpperCase();
-        if (ng && !groupToBox.has(ng)) groupToBox.set(ng, box);
-      }
-    }
-
-    const requiredOf = (groupCode: string, box?: (typeof boxes)[number]): string => {
-      if (splitB009) {
-        const tray = this.kkB009TrayOf(groupCode);
-        return tray ? this.kkB009FloorLocText(tray) : '—';
-      }
-      const loc = box ? this.kkTypeBoxHomeLoc(box) : '';
-      const shown = this.primaryLocationDisplay(loc);
-      return shown && shown !== '-' ? shown : '—';
-    };
-
-    const ensure = (
-      code: string,
-      groupCode: string,
-      typeName: string,
-      box: (typeof boxes)[number] | undefined,
-      name: string,
-      isMaterial: boolean
-    ): Acc => {
-      const key = String(code || '').trim().toUpperCase();
-      let rec = byCode.get(key);
-      if (!rec) {
-        rec = {
-          code: key,
-          name: name || typeName || '—',
-          requiredLoc: requiredOf(groupCode, box),
-          typeName,
-          groupCode,
-          stockLocs: new Set<string>(),
-          otherLocs: new Set<string>(),
-          hasMaterial: isMaterial
-        };
-        byCode.set(key, rec);
-      } else {
-        if (isMaterial) rec.hasMaterial = true;
-        if ((!rec.name || rec.name === '—') && name) rec.name = name;
-      }
-      return rec;
-    };
-
-    const addLocs = (rec: Acc, location: string | null | undefined, hasStock: boolean): void => {
-      const parts = this.locationParts(location)
-        .map((p) => this.displayLocationToken(p))
-        .filter((p) => !!p && p !== '-');
-      const target = hasStock ? rec.stockLocs : rec.otherLocs;
-      for (const p of parts) target.add(p);
-    };
-
-    for (const box of boxes) {
-      const typeName = String(box.productType || '').trim();
-      for (const g of box.groupCodes || []) {
-        const ng = this.kkCatalog.normalizeGroupCode(g) || String(g || '').trim().toUpperCase();
-        if (!ng) continue;
-        ensure(ng, ng, typeName, box, typeName, false);
-      }
-      for (const m of this.kkMucReportLinesForBox(box)) {
-        const code = String(m.materialCode || '').trim().toUpperCase();
-        if (!code) continue;
-        const groupCode = this.kkCatalog.groupCodeFromMaterial(code)
-          || this.kkCatalog.normalizeGroupCode(code)
-          || code;
-        const name = this.kkMucReportNameOf(code, typeName, m);
-        const rec = ensure(code, groupCode, typeName, box, name, true);
-        addLocs(rec, m.location, this.calculateCurrentStock(m) > 0);
-      }
-    }
-
-    this.catalogCache.forEach((item, rawCode) => {
-      const code = String(rawCode || item?.materialCode || '').trim().toUpperCase();
-      if (!code) return;
-      const groupCode = this.kkCatalog.groupCodeFromMaterial(code);
-      if (!groupCode) return;
-      const box = groupToBox.get(groupCode);
-      if (!box) return;
-      const typeName = String(box.productType || '').trim();
-      const name = String(item?.materialName || '').trim() || typeName;
-      ensure(code, groupCode, typeName, box, name, true);
-    });
-
-    const groupedHasMaterial = new Set<string>();
-    byCode.forEach((rec) => {
-      if (rec.hasMaterial && rec.groupCode) groupedHasMaterial.add(rec.groupCode);
-    });
-
-    const rows: Array<{
-      code: string;
-      name: string;
-      requiredLoc: string;
-      actualLoc: string;
-      section: string;
-      sectionOrder: number;
-      trayOrder: number;
-      trayRange: string;
-    }> = [];
-
-    byCode.forEach((rec) => {
-      if (!rec.hasMaterial && groupedHasMaterial.has(rec.code)) return;
-      const locs = rec.stockLocs.size ? rec.stockLocs : rec.otherLocs;
-      const actualLoc = locs.size
-        ? Array.from(locs).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join(', ')
-        : '—';
-      const tray = splitB009 ? this.kkB009TrayOf(rec.groupCode || rec.code) : null;
-      const section = tray?.shelf || '';
-      const sectionOrder = splitB009 ? (tray ? this.kkB009SectionOrder(tray.shelf) : 99) : 0;
-      const trayOrder = tray ? tray.level : 0;
-      rows.push({
-        code: rec.code,
-        name: rec.name || rec.typeName || '—',
-        requiredLoc: rec.requiredLoc || tray?.loc || '—',
-        actualLoc,
-        section,
-        sectionOrder,
-        trayOrder,
-        trayRange: tray ? this.kkB009RangeText(tray.from, tray.to) : ''
-      });
-    });
-
-    rows.sort((a, b) =>
-      a.sectionOrder - b.sectionOrder
-      || a.trayOrder - b.trayOrder
-      || a.code.localeCompare(b.code, 'en', { numeric: true })
-      || a.name.localeCompare(b.name, 'vi', { numeric: true })
-    );
-    return rows;
-  }
-
   private kkMucReportLinesForBox(box: {
     productType: string;
     sourceProductType?: string;
@@ -9621,19 +9957,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
     return out;
-  }
-
-  private kkMucReportNameOf(code: string, fallbackType: string, material?: InventoryMaterial): string {
-    if (material) {
-      const n = this.getKkMaterialName(material);
-      if (n && n !== '—') return n;
-    }
-    const cat = this.catalogCache.get(code);
-    const catName = String(cat?.materialName || '').trim();
-    if (catName) return catName;
-    const inbound = this.inboundNameCache.get(code);
-    if (inbound) return inbound;
-    return String(fallbackType || '').trim() || '—';
   }
 
   /** B009 / B016 / B018: mã theo tầng; tầng không có dải thì from=0. */
@@ -9993,138 +10316,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     <tbody>${tableRows(rRows)}</tbody>
   </table>
   <div class="foot">In lúc: ${esc(now)} · ${esc(this.selectedFactory)}</div>
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
-  }
-
-  private printKkMucReport(
-    rows: Array<{
-      code: string;
-      name: string;
-      requiredLoc: string;
-      actualLoc: string;
-      section: string;
-      trayRange?: string;
-    }>,
-    title: string,
-    splitB009: boolean
-  ): void {
-    const win = window.open('', '_blank', 'width=900,height=800');
-    if (!win) {
-      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
-      return;
-    }
-    const esc = (s: string) => this.escapeHtmlForPrint(s);
-    const now = new Date().toLocaleString('vi-VN');
-    const sections: Array<{ key: string; caption: string; rows: typeof rows }> = [];
-    if (splitB009) {
-      for (const key of ['S07', 'S08', 'S09', 'S10']) {
-        const part = rows.filter((r) => r.section === key);
-        if (!part.length) continue;
-        sections.push({ key, caption: this.kkB009SectionCaption(key), rows: part });
-      }
-    } else {
-      sections.push({ key: '', caption: '', rows });
-    }
-
-    const tableOf = (list: typeof rows, startStt: number): string => {
-      const body = list.map((r, i) => `<tr>
-        <td class="c">${startStt + i}</td>
-        <td>${esc(r.code)}</td>
-        <td>${esc(r.name)}</td>
-        <td class="c">${esc(r.requiredLoc)}</td>
-        <td>${esc(r.actualLoc)}</td>
-      </tr>`).join('');
-      return `<table>
-        <thead>
-          <tr>
-            <th class="c">STT</th>
-            <th>Mã</th>
-            <th>Tên</th>
-            <th class="c">Vị trí yêu cầu</th>
-            <th>Vị trí thực tế</th>
-          </tr>
-        </thead>
-        <tbody>${body}</tbody>
-      </table>`;
-    };
-
-    const traysHtml = (list: typeof rows, startStt: number): { html: string; next: number } => {
-      if (!splitB009) {
-        return { html: tableOf(list, startStt), next: startStt + list.length };
-      }
-      let stt = startStt;
-      const chunks: string[] = [];
-      let i = 0;
-      while (i < list.length) {
-        const loc = list[i].requiredLoc;
-        let j = i + 1;
-        while (j < list.length && list[j].requiredLoc === loc) j += 1;
-        const part = list.slice(i, j);
-        const range = part[0].trayRange || '';
-        chunks.push(`<h3>${esc(loc)}${range ? ` — ${esc(range)}` : ''} <span>(${part.length} mã)</span></h3>
-      ${tableOf(part, stt)}`);
-        stt += part.length;
-        i = j;
-      }
-      return { html: chunks.join(''), next: stt };
-    };
-
-    let stt = 1;
-    const sectionsHtml = sections.map((sec) => {
-      const body = traysHtml(sec.rows, stt);
-      stt = body.next;
-      return `${sec.caption ? `<h2>${esc(sec.caption)} <span>(${sec.rows.length} mã)</span></h2>` : ''}
-      ${body.html}`;
-    }).join('');
-
-    win.document.open();
-    win.document.write(`<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>Báo cáo · ${esc(title)}</title>
-  <style>
-    @page { size: A4 portrait; margin: 10mm 10mm 12mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
-    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:12px;
-                border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
-    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
-                       border-radius:4px; cursor:pointer; font-size:12px; }
-    .page-hdr { border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:10px; }
-    .page-hdr h1 { font-size:16px; letter-spacing:.4px; margin-bottom:4px; }
-    .page-hdr p { font-size:11px; color:#333; }
-    h2 { font-size:13px; margin:14px 0 6px; padding:4px 0; border-bottom:1px solid #000; }
-    h2 span { font-weight:400; font-size:11px; }
-    h3 { font-size:12px; margin:10px 0 4px; }
-    table { width:100%; border-collapse:collapse; margin-bottom:8px; }
-    thead { display: table-header-group; }
-    th, td { border:1px solid #333; padding:4px 6px; }
-    th { background:#f0f0f0; font-size:10px; text-transform:uppercase; text-align:left; }
-    td.c, th.c { text-align:center; }
-    tbody tr:nth-child(even) td { background:#fafafa; }
-    .print-footer { margin-top:10px; font-size:9px; color:#666; text-align:right; }
-    @media print { .no-print { display:none !important; } }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <span>Nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in báo cáo ${esc(title)}</span>
-    <button onclick="window.print()">In ngay</button>
-  </div>
-  <div class="page-hdr">
-    <h1>BÁO CÁO NGUYÊN LIỆU — ${esc(title)}</h1>
-    <p>
-      Nhà máy: <strong>${esc(this.selectedFactory)}</strong>
-      &nbsp;|&nbsp; ${rows.length} mã
-      &nbsp;|&nbsp; In lúc: ${esc(now)}
-    </p>
-  </div>
-  ${sectionsHtml}
-  <div class="print-footer">In lúc: ${esc(now)}</div>
 </body>
 </html>`);
     win.document.close();
@@ -11667,12 +11858,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   get kkTypeScanStageSub(): string {
     if (this.kkTypeScanStep === 'location') {
-      return this.nlScanDevice === 'mobile' ? 'Đưa tem kệ vào khung' : 'Bắn tem kệ S… / R… vào ô';
+      return 'Bắn tem kệ S… / R… vào ô bằng máy scanner';
     }
     if (this.kkTypeScanStep === 'codes' && this.kkTypeScanLocation) {
-      return `Kệ ${this.kkTypeScanLocation} · đưa tem vào khung`;
+      return `Kệ ${this.kkTypeScanLocation} · bắn tem mã hàng vào ô`;
     }
-    return 'Đưa tem vào khung';
+    return 'Bắn tem vào ô bằng máy scanner';
   }
 
   get kkTypeScanStepHint(): string {
@@ -11757,23 +11948,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanStep = 'location';
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanLocationInput');
-    // Sau khi nhập NV xong mới bật camera (nếu đang dùng mobile)
-    if (this.isMobile && this.nlScanDevice === 'mobile' && this.showKkTypeScanModal) {
-      setTimeout(() => void this.startNlCamera('kk'), 180);
-    }
   }
 
   private focusKkTypeScanInput(id: string, retry = 0): void {
     if (!this.showKkTypeScanModal) return;
-    const skipFocus = this.isMobile && this.nlScanDevice === 'mobile';
     setTimeout(() => {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el && !el.disabled) {
         this.bindKkTypeScanHidInput(id, el);
-        if (!skipFocus) {
-          if (id !== 'kkTypeScanOperatorInput') this.suppressVirtualKeyboard(el);
-          el.focus({ preventScroll: true });
-        }
+        if (id !== 'kkTypeScanOperatorInput') this.suppressVirtualKeyboard(el);
+        el.focus({ preventScroll: true });
         return;
       }
       if (retry < 8) this.focusKkTypeScanInput(id, retry + 1);
@@ -11950,16 +12134,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.nlScanLock = false;
     this.cdr.detectChanges();
     this.focusKkTypeScanInput('kkTypeScanQrInput');
-    // Camera vẫn chạy inline — không cần start lại nếu đang mở
-    if (
-      this.isMobile &&
-      this.nlScanDevice === 'mobile' &&
-      this.showKkTypeScanModal &&
-      this.kkTypeScanStep === 'codes' &&
-      !this.showNlCamera
-    ) {
-      setTimeout(() => void this.startNlCamera('kk'), 80);
-    }
   }
 
   private showKkTypeScanLocToast(
@@ -18359,20 +18533,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Mở sheet quét vị trí mới cho 1 dòng tồn. */
   openMobileLocationScan(material: InventoryMaterial): void {
     if (!material?.id || this.mobileLocScanBusy) return;
-    if (this.isNguyenLieuPage && !this.nlScanDevice) {
-      this.mobileLocScanMaterial = material;
-      this.mobileLocScanWh = this.kkLineWhValue(material);
-      this.nlPendingAction = 'location';
-      this.showNlDevicePicker = true;
-      return;
-    }
+    this.nlScanDevice = 'pda';
+    this.stopNlCamera();
     this.mobileLocScanMaterial = material;
     this.mobileLocScanBuffer = '';
     this.mobileLocScanWh = this.kkLineWhValue(material);
-    if (this.isNguyenLieuPage && this.nlScanDevice === 'mobile') {
-      void this.startNlCamera('location');
-      return;
-    }
     this.showMobileLocScan = true;
     setTimeout(() => this.focusMobileLocScanInput(), 50);
   }

@@ -135,9 +135,9 @@
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkMucReportPicker()"
                       [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length"
-                      title="In báo cáo mục — mã, tên, vị trí yêu cầu, vị trí thực tế">
-                <i class="material-icons">description</i>
-                <span class="btn-label">In báo cáo</span>
+                      title="In giấy kiểm kê A4 — tick đầu mã, mỗi kệ một trang, theo mâm">
+                <i class="material-icons">fact_check</i>
+                <span class="btn-label">In giấy kiểm kê</span>
               </button>
               <button type="button"
                       class="more-btn"
@@ -1067,7 +1067,7 @@
               class="mat-m-nl-scanbtn"
               (click)="startNlSearchScan()"
               [disabled]="isLoading || isScanning">
-        <i class="material-icons">{{ nlScanDevice === 'pda' ? 'sensors' : 'qr_code_scanner' }}</i>
+        <i class="material-icons">sensors</i>
         Kiểm tồn kho
       </button>
       <button type="button"
@@ -1077,9 +1077,7 @@
         <i class="material-icons">fact_check</i>
         Cập nhật vị trí
       </button>
-      <button type="button" class="mat-m-nl-devicehint" *ngIf="nlScanDevice" (click)="openNlDevicePicker()">
-        Đang dùng {{ nlScanDevice === 'pda' ? 'PDA — scanner' : 'Mobile — camera' }} · đổi
-      </button>
+      <p class="mat-m-hint mat-m-nl-devicehint">Đang dùng PDA — scanner</p>
       <p class="mat-m-hint" *ngIf="nlScanLastReadMs !== null">
         Đọc tem lần scan: <strong>{{ formatScanMs(nlScanLastReadMs) }}</strong>
       </p>
@@ -2946,62 +2944,7 @@
   </div>
 </div>
 
-<!-- Quản lý NVL mobile: chọn PDA hay điện thoại -->
-<div class="modal-overlay mat-m-kk-overlay" *ngIf="isNguyenLieuPage && isMobile && showNlDevicePicker">
-  <div class="modal-content mat-m-kk-modal" role="dialog" aria-label="Chọn thiết bị">
-    <header class="mat-m-kk-modal__header">
-      <div class="mat-m-kk-modal__brand">
-        <span class="mat-m-kk-modal__ico" aria-hidden="true">
-          <i class="material-icons">devices</i>
-        </span>
-        <div>
-          <h3>Bạn đang dùng thiết bị nào?</h3>
-          <p>Chọn cách quét mã trên tab này</p>
-        </div>
-      </div>
-    </header>
-    <div class="mat-m-kk-modal__body mat-m-nl-device">
-      <button type="button" class="mat-m-nl-devicebtn" (click)="chooseNlScanDevice('mobile')">
-        <i class="material-icons">smartphone</i>
-        <strong>Mobile</strong>
-        <span>Quét bằng camera điện thoại</span>
-      </button>
-      <button type="button" class="mat-m-nl-devicebtn" (click)="chooseNlScanDevice('pda')">
-        <i class="material-icons">scanner</i>
-        <strong>PDA</strong>
-        <span>Quét bằng máy scanner</span>
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Quản lý NVL: camera (search / location) — KK dùng camera gắn trong màn Scan vị trí -->
-<div class="modal-overlay mat-m-kk-overlay"
-     *ngIf="showNlCamera && nlCameraPurpose !== 'kk'"
-     (click)="stopNlCamera()">
-  <div class="modal-content mat-m-kk-modal mat-m-loc-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Quét camera">
-    <header class="mat-m-kk-modal__header">
-      <div class="mat-m-kk-modal__brand">
-        <span class="mat-m-kk-modal__ico mat-m-kk-modal__ico--loc" aria-hidden="true">
-          <i class="material-icons">qr_code_scanner</i>
-        </span>
-        <div>
-          <h3>{{ nlCameraHeading }}</h3>
-          <p>{{ nlCameraSub }}</p>
-        </div>
-      </div>
-      <button type="button" class="mat-m-kk-modal__close" (click)="stopNlCamera()" aria-label="Đóng">
-        <i class="material-icons">close</i>
-      </button>
-    </header>
-    <div class="mat-m-kk-modal__body">
-      <div id="nl-qr-reader" class="mat-m-nl-qr"></div>
-    </div>
-    <footer class="mat-m-kk-modal__footer">
-      <button type="button" class="mat-m-kk-modal__btn mat-m-kk-modal__btn--ghost" (click)="stopNlCamera()">Hủy</button>
-    </footer>
-  </div>
-</div>
+<!-- Quản lý NVL: chỉ máy scanner — đã bỏ chọn camera / modal quét camera -->
 
 <!-- Quản lý NVL: PDA scanner -->
 <div class="modal-overlay mat-m-kk-overlay" *ngIf="showNlPdaScan" (click)="closeNlPdaScan()">
@@ -4086,7 +4029,7 @@
           <strong>{{ displayLocationTokenPublic(loc) }}</strong>
           <button type="button"
                   class="inv-loc-list__del"
-                  *ngIf="canEdit"
+                  *ngIf="canEditInvLocation()"
                   (click)="removeInvLocFromList(loc, $event)"
                   title="Xóa vị trí này"
                   aria-label="Xóa vị trí">
@@ -4101,9 +4044,17 @@
     <div class="modal-footer inv-loc-list-modal__footer">
       <button type="button" class="btn-cancel" (click)="closeInvLocListPopup()">Đóng</button>
       <button type="button"
+              class="btn-inv-loc-clean"
+              *ngIf="canEditInvLocation()"
+              (click)="removeWrongInvLocsFromList($event)"
+              title="Xóa S01 trần, D1, vị trí không phải S/R-… / Locker / Box">
+        <i class="material-icons">auto_fix_high</i>
+        Xóa vị trí sai
+      </button>
+      <button type="button"
               class="btn-print-confirm"
               (click)="editInvLocFromListPopup()"
-              [disabled]="!canEdit">
+              [disabled]="!canEditInvLocation()">
         <i class="material-icons">edit_location_alt</i>
         Sửa vị trí
       </button>
@@ -4362,17 +4313,17 @@
   </div>
 </div>
 
-<!-- Chọn mục in báo cáo -->
+<!-- Chọn đầu mã in giấy kiểm kê -->
 <div class="modal-overlay more-overlay" *ngIf="showKkMucReportPicker" (click)="closeKkMucReportPicker()">
-  <div class="modal-content filter-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="In báo cáo">
+  <div class="modal-content filter-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="In giấy kiểm kê">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon" aria-hidden="true">
-          <i class="material-icons">description</i>
+          <i class="material-icons">fact_check</i>
         </span>
         <div>
-          <h3>In báo cáo</h3>
-          <p class="more-popup-header__sub">Chọn mục — danh sách mã, tên, vị trí yêu cầu, vị trí thực tế</p>
+          <h3>In giấy kiểm kê</h3>
+          <p class="more-popup-header__sub">Tick đầu mã → mỗi kệ một trang A4, theo mâm (S01-1-1…)</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkMucReportPicker()" aria-label="Đóng">
@@ -4382,26 +4333,37 @@
     <div class="modal-body filter-picker-body">
       <div class="hidden-search">
         <i class="material-icons">search</i>
-        <input type="search" [(ngModel)]="kkMucReportQuery" placeholder="Tìm B009, Đầu nối…" autocomplete="off" />
+        <input type="search" [(ngModel)]="kkMucReportQuery" placeholder="Tìm B018, B009…" autocomplete="off" />
         <button type="button" class="hidden-search__clear" *ngIf="kkMucReportQuery" (click)="kkMucReportQuery = ''" aria-label="Xóa">
           <i class="material-icons">close</i>
         </button>
       </div>
-      <div class="filter-picker-list">
-        <button type="button"
-                class="kho-picker-item"
-                *ngFor="let g of kkMucReportGroups"
-                (click)="printKkMucReportForGroup(g)"
-                [disabled]="kkTypePrintBusy">
-          <i class="material-icons">folder_open</i>
-          <span>{{ g.title }}</span>
-          <span class="kk-shelf-label-n">{{ g.codeCount }} mã</span>
-        </button>
-        <p class="hidden-empty" *ngIf="!kkMucReportGroups.length">Không có mục khớp.</p>
+      <div class="kk-kiemke-prefix-toolbar">
+        <button type="button" class="hidden-refresh-btn" (click)="selectAllKkKiemKePrefixes(true)">Chọn hết</button>
+        <button type="button" class="hidden-refresh-btn" (click)="selectAllKkKiemKePrefixes(false)">Bỏ chọn</button>
+        <span class="kk-kiemke-prefix-n">{{ kkKiemKeSelectedCount }} đầu mã</span>
+      </div>
+      <div class="filter-picker-list kk-kiemke-prefix-list">
+        <label class="kk-kiemke-prefix-item"
+               *ngFor="let p of kkKiemKePrefixOptions">
+          <input type="checkbox"
+                 [checked]="!!kkKiemKeSelectedPrefixes[p]"
+                 (change)="toggleKkKiemKePrefix(p, $any($event.target).checked)" />
+          <span class="kk-kiemke-prefix-code">{{ p }}</span>
+          <span class="kk-kiemke-prefix-title">{{ kkTypeMucTitle(p) }}</span>
+        </label>
+        <p class="hidden-empty" *ngIf="!kkKiemKePrefixOptions.length">Không có đầu mã khớp.</p>
       </div>
     </div>
     <div class="filter-picker-footer">
       <button type="button" class="cancel-btn" (click)="closeKkMucReportPicker()">Đóng</button>
+      <button type="button"
+              class="btn-print-confirm"
+              (click)="printKkKiemKePaper()"
+              [disabled]="kkTypePrintBusy || !kkKiemKeSelectedCount">
+        <i class="material-icons">print</i>
+        In giấy kiểm kê
+      </button>
     </div>
   </div>
 </div>
@@ -5044,14 +5006,14 @@
       </div>
 
       <ng-container *ngIf="kkTypeScanStep !== 'operator'">
-        <!-- Stage luôn gắn (camera/PDA) — không *ngIf theo tab để camera không bị tắt -->
+        <!-- Stage scanner (PDA) — không dùng camera -->
         <div class="kk-scan-pro__stage"
              [class.kk-scan-pro__stage--dim]="showKkTypeScanConfirm"
              [class.kk-scan-pro__stage--hide]="kkTypeScanUiTab !== 'scan'">
           <div class="kk-scan-pro__stage-head">
             <div>
               <strong>
-                <i class="material-icons">{{ nlScanDevice === 'mobile' ? 'qr_code_scanner' : 'sensors' }}</i>
+                <i class="material-icons">sensors</i>
                 {{ kkTypeScanStageTitle }}
               </strong>
               <span>{{ kkTypeScanStageSub }}</span>
@@ -5060,11 +5022,7 @@
             <span class="kk-scan-pro__ready kk-scan-pro__ready--busy" *ngIf="kkTypeScanBusy">● Đang xử lý…</span>
           </div>
 
-          <div id="kk-inline-qr-reader"
-               class="kk-scan-pro__cam"
-               *ngIf="isMobile && nlScanDevice === 'mobile'"></div>
-
-          <div class="kk-scan-pro__pda" *ngIf="nlScanDevice !== 'mobile' && kkTypeScanStep === 'location'">
+          <div class="kk-scan-pro__pda" *ngIf="kkTypeScanStep === 'location'">
             <input id="kkTypeScanLocationInput"
                    type="text"
                    class="kk-scan-trap"
@@ -5083,7 +5041,7 @@
               <i class="material-icons">arrow_forward</i>
             </button>
           </div>
-          <div class="kk-scan-pro__pda" *ngIf="nlScanDevice !== 'mobile' && kkTypeScanStep === 'codes'">
+          <div class="kk-scan-pro__pda" *ngIf="kkTypeScanStep === 'codes'">
             <input id="kkTypeScanQrInput"
                    type="text"
                    class="kk-scan-trap"
@@ -5102,24 +5060,6 @@
               <i class="material-icons">{{ kkTypeScanBusy ? 'hourglass_empty' : 'check' }}</i>
             </button>
           </div>
-
-          <ng-container *ngIf="nlScanDevice === 'mobile'">
-            <input *ngIf="kkTypeScanStep === 'location'"
-                   id="kkTypeScanLocationInput"
-                   type="text"
-                   class="kk-scan-trap kk-scan-pro__hid"
-                   [(ngModel)]="kkTypeScanLocationInput"
-                   autocomplete="off"
-                   tabindex="-1"
-                   aria-hidden="true">
-            <input *ngIf="kkTypeScanStep === 'codes'"
-                   id="kkTypeScanQrInput"
-                   type="text"
-                   class="kk-scan-trap kk-scan-pro__hid"
-                   autocomplete="off"
-                   tabindex="-1"
-                   aria-hidden="true">
-          </ng-container>
         </div>
 
         <p class="kk-scan-pro__err" *ngIf="kkTypeScanErr && (kkTypeScanStep === 'location' || kkTypeScanStep === 'codes') && kkTypeScanUiTab === 'scan'">{{ kkTypeScanErr }}</p>
