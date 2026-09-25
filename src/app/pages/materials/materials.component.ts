@@ -3288,8 +3288,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /**
    * Nguyên tắc vị trí sau IQC:
    * - Đang IQC + Pass → PASS
-   * - Đang IQC + NG → Hàng lỗi
-   * (Không còn auto E7/F7.)
+   * - Chưa Pass (chờ kiểm, NG, …) giữ nguyên vị trí IQC
    */
   private applyPassIqcAutoLocation(material: {
     materialCode?: string;
@@ -3304,18 +3303,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const iqc = String(material.iqcStatus || '').trim().toUpperCase();
       const locRaw = String(material.location || '').trim();
       const loc = locRaw.toUpperCase();
-      const isIqcStaging = !loc || loc === 'IQC' || loc.startsWith('IQC');
-      if (!isIqcStaging) return null;
+      const isIqcStaging = loc === 'IQC' || loc.startsWith('IQC');
+      if (!isIqcStaging || iqc !== 'PASS') return null;
 
-      if (iqc === 'PASS') {
-        material.location = 'PASS';
-        return 'PASS';
-      }
-      if (iqc === 'NG') {
-        material.location = 'Hàng lỗi';
-        return 'Hàng lỗi';
-      }
-      return null;
+      material.location = 'PASS';
+      return 'PASS';
     } catch {
       return null;
     }
@@ -3339,7 +3331,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`📦 Loaded ${docs.length} materials from Firebase`);
       this.readTracker.track('materials', 'inventory-materials', docs.length);
 
-        // Auto-set location: IQC + Pass → PASS; IQC + NG → Hàng lỗi
+        // Auto-set location: IQC + Pass → PASS. Chưa Pass giữ IQC.
         const autoLocationBatch = this.firestore.firestore.batch();
         let autoLocationCount = 0;
         const MAX_BATCH_WRITES = 450; // safety margin under 500
@@ -3422,7 +3414,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             .commit()
             .then(() =>
               console.log(
-                `✅ [ASM1 auto location] Updated ${autoLocationCount} docs (IQC+Pass→PASS / IQC+NG→Hàng lỗi).`
+                `✅ [ASM1 auto location] Updated ${autoLocationCount} docs (IQC+Pass→PASS).`
               )
             )
             .catch(err => console.warn('⚠️ [ASM1 auto location] Batch update failed:', err));
@@ -6260,7 +6252,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             .commit()
             .then(() =>
               console.log(
-                `✅ [ASM1 search auto location] Updated ${searchLocWrites} doc(s) (IQC+Pass→PASS / IQC+NG→Hàng lỗi).`
+                `✅ [ASM1 search auto location] Updated ${searchLocWrites} doc(s) (IQC+Pass→PASS).`
               )
             )
             .catch(err => console.warn('⚠️ [ASM1 search auto location] Batch update failed:', err));
