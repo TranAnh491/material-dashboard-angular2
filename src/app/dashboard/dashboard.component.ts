@@ -2769,6 +2769,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (locationRaw || '').trim().toUpperCase().startsWith('IQC');
   }
 
+  /** Vị trí đúng PASS (không tính IQC dù status đã Pass). */
+  private isPassPutawayLocation(locationRaw: string): boolean {
+    const loc = (locationRaw || '').trim().toUpperCase();
+    if (!loc) return false;
+    if (loc === 'PASS') return true;
+    return loc.split(/[\n,;]+/).some((t) => t.trim() === 'PASS');
+  }
+
   /** Vị trí hàng trả TRA (sau trim, không phân biệt hoa thường). */
   private isTraStagingLocation(locationRaw: string): boolean {
     const loc = (locationRaw || '').trim().toUpperCase();
@@ -2922,8 +2930,53 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Cache docs Putaway staging (IQC + TRA) theo nhà máy — tránh đọc lại khi mở popup Putaway ngay sau khi Dashboard vừa tải. */
-  private putawayDocsCache: { factory: string; docs: any[]; traDocs: any[] } | null = null;
+  /** Inventory đang ở vị trí PASS. */
+  private async fetchPutawayPassInventoryDocs(factory: string): Promise<any[]> {
+    const mergeById = (snaps: any[]): any[] => {
+      const byId = new Map<string, any>();
+      for (const snap of snaps) {
+        if (!snap || snap.empty) continue;
+        snap.docs.forEach((d: any) => byId.set(d.id, d));
+      }
+      return Array.from(byId.values());
+    };
+    try {
+      const settled = await Promise.allSettled([
+        this.firestore
+          .collection('inventory-materials', (ref) =>
+            ref.where('factory', '==', factory).where('location', '==', 'PASS')
+          )
+          .get()
+          .toPromise(),
+        this.firestore
+          .collection('inventory-materials', (ref) =>
+            ref.where('factory', '==', factory).where('location', '==', 'pass')
+          )
+          .get()
+          .toPromise()
+      ]);
+      const snaps = settled
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && !!r.value)
+        .map((r) => r.value);
+      const merged = mergeById(snaps);
+      if (merged.length > 0) return merged;
+    } catch (e) {
+      console.warn('Putaway: không tải được hàng vị trí PASS', e);
+    }
+    try {
+      const fb = await this.firestore
+        .collection('inventory-materials', (ref) => ref.where('factory', '==', factory).limit(8000))
+        .get()
+        .toPromise();
+      return (fb?.docs || []).filter((d: any) => this.isPassPutawayLocation(String((d.data() as any)?.location || '')));
+    } catch (e2) {
+      console.error('Putaway: fallback query PASS thất bại', e2);
+      return [];
+    }
+  }
+
+  /** Cache docs Putaway (IQC + TRA + vị trí PASS) theo nhà máy. */
+  private putawayDocsCache: { factory: string; docs: any[]; traDocs: any[]; passDocs: any[] } | null = null;
 
   // Load IQC Materials by Week (8 weeks)
   async loadIQCByWeek() {
@@ -2933,16 +2986,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const weeks = this.buildPutawayWeekBuckets(now);
 
       const factory = this.selectedFactory || 'ASM1';
-      const [docs, traDocs] = await Promise.all([
+      const [docs, traDocs, passDocs] = await Promise.all([
         this.fetchPutawayStagingInventoryDocs(factory),
-        this.fetchPutawayTraInventoryDocs(factory)
+        this.fetchPutawayTraInventoryDocs(factory),
+        this.fetchPutawayPassInventoryDocs(factory)
       ]);
-      this.putawayDocsCache = { factory, docs, traDocs };
+      this.putawayDocsCache = { factory, docs, traDocs, passDocs };
 
       if (!docs.length) {
         this.iqcWeekData = [];
         this.iqcHeatmapWeeks = [];
-        this.putawayDayGrid = this.buildPutawayDayGrid([], traDocs);
+        this.putawayDayGrid = this.buildPutawayDayGrid([], traDocs, passDocs);
         this.cdr.detectChanges();
         return;
       }
@@ -3058,7 +3112,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
 
       this.finalizeIqcHeatmapFromWeekMaps(weeks, weekCells);
-      this.putawayDayGrid = this.buildPutawayDayGrid(docs, traDocs);
+      this.putawayDayGrid = this.buildPutawayDayGrid(docs, traDocs, passDocs);
       console.log('📊 IQC Week Data:', this.iqcWeekData);
       this.cdr.detectChanges();
     } catch (error) {
@@ -3111,7 +3165,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return count;
   }
 
-  private buildPutawayDayGrid(docs: any[], traDocs: any[] = []): PutawayDayCol[] {
+  private buildPutawayDayGrid(docs: any[], traDocs: any[] = [], passDocs: any[] = []): PutawayDayCol[] {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const COLS = 12;
@@ -3142,7 +3196,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (stock <= 0) return;
 
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
-      if (!statusKind) return;
+      if (!statusKind || statusKind === 'pass') return;
 
       const materialCode = (data.materialCode || '').toUpperCase().trim();
       if (!materialCode) return;
@@ -3195,6 +3249,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
       seenTra.add(key);
 
       cols[colIdx].counts.tra++;
+    });
+
+    passDocs.forEach((doc: any) => {
+      const data = doc.data ? doc.data() : doc;
+      const locRaw = (data.location || '').trim();
+      if (!this.isPassPutawayLocation(locRaw)) return;
+      if (this.normalizePutawayIqcStatus((data.iqcStatus || '').trim()) !== 'pass') return;
+
+      const openingStock =
+        data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+      const quantity = Number(data.quantity) || 0;
+      const exported = Number(data.exported) || 0;
+      const xt = Number(data.xt) || 0;
+      const stock = openingStock + quantity - exported - xt;
+      if (stock <= 0) return;
+
+      const materialCode = (data.materialCode || '').toUpperCase().trim();
+      if (!materialCode) return;
+
+      const matDate = this.parsePutawayInventoryDate(data);
+      if (!matDate) return;
+
+      const d0 = new Date(matDate);
+      d0.setHours(0, 0, 0, 0);
+      const daysDiff = this.countDaysNoSunday(d0, today);
+      const colIdx = Math.min(daysDiff, 11);
+
+      const key = `${colIdx}|${materialCode}|pass`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      cols[colIdx].counts.pass++;
+      cols[colIdx].total++;
     });
 
     return cols;
@@ -3313,7 +3400,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private buildPutawayModalSkuRows(
     docs: any[],
     customerMap: Map<string, string>,
-    khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null
+    khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null,
+    passDocs: any[] = []
   ): PutawayModalSkuRow[] {
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -3338,7 +3426,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (stock <= 0) return;
 
       const statusKind = this.normalizePutawayIqcStatus((data.iqcStatus || '').trim());
-      if (!statusKind) return;
+      if (!statusKind || statusKind === 'pass') return;
 
       const materialCode = (data.materialCode || '').toUpperCase().trim();
       if (!materialCode) return;
@@ -3359,6 +3447,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
         existing.statusKind = this.mergePutawayStatusKind(existing.statusKind, statusKind);
       } else {
         skuLines.set(lineKey, { materialCode, statusKind, stock });
+      }
+    });
+
+    passDocs.forEach((doc: any) => {
+      const data = doc.data() as any;
+      if (!this.isPassPutawayLocation((data.location || '').trim())) return;
+      if (this.normalizePutawayIqcStatus((data.iqcStatus || '').trim()) !== 'pass') return;
+
+      const openingStock =
+        data.openingStock !== null && data.openingStock !== undefined ? Number(data.openingStock) : 0;
+      const quantity = Number(data.quantity) || 0;
+      const exported = Number(data.exported) || 0;
+      const xt = Number(data.xt) || 0;
+      const stock = openingStock + quantity - exported - xt;
+      if (stock <= 0) return;
+
+      const materialCode = (data.materialCode || '').toUpperCase().trim();
+      if (!materialCode) return;
+
+      const poNumber = (data.poNumber || '').trim();
+      const batchNumber = (data.batchNumber || '').trim();
+      const materialDate = this.parsePutawayInventoryDate(data) || new Date();
+      const imd = this.getIMDFromDate(materialDate, batchNumber);
+      const lineKey = `${materialCode}|${poNumber}|${imd}`;
+
+      const prev = earliestDate.get(materialCode);
+      if (!prev || materialDate < prev) earliestDate.set(materialCode, materialDate);
+
+      const existing = skuLines.get(lineKey);
+      if (existing) {
+        existing.stock += stock;
+        existing.statusKind = 'pass';
+      } else {
+        skuLines.set(lineKey, { materialCode, statusKind: 'pass', stock });
       }
     });
 
@@ -3673,27 +3795,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Dùng lại docs đã tải bởi loadIQCByWeek() (cùng nhà máy) nếu có — tránh đọc lại Firestore mỗi lần mở popup.
       let docs: any[];
       let traDocs: any[];
+      let passDocs: any[];
       let customerMap: Map<string, string>;
       let khoTypeResolver: ((materialCode: string) => WarehouseType | '') | null;
       if (this.putawayDocsCache && this.putawayDocsCache.factory === factory) {
         docs = this.putawayDocsCache.docs;
         traDocs = this.putawayDocsCache.traDocs;
+        passDocs = this.putawayDocsCache.passDocs || [];
         [customerMap, khoTypeResolver] = await Promise.all([
           this.nvlkhCatalog.loadAllAsMap(),
           this.locationRuleCheck.getMaterialWarehouseTypeResolver(khoFactory)
         ]);
       } else {
-        [docs, traDocs, customerMap, khoTypeResolver] = await Promise.all([
+        [docs, traDocs, passDocs, customerMap, khoTypeResolver] = await Promise.all([
           this.fetchPutawayStagingInventoryDocs(factory),
           this.fetchPutawayTraInventoryDocs(factory),
+          this.fetchPutawayPassInventoryDocs(factory),
           this.nvlkhCatalog.loadAllAsMap(),
           this.locationRuleCheck.getMaterialWarehouseTypeResolver(khoFactory)
         ]);
-        this.putawayDocsCache = { factory, docs, traDocs };
+        this.putawayDocsCache = { factory, docs, traDocs, passDocs };
       }
-      this.iqcMaterialsBySku = docs.length > 0 ? this.buildPutawayModalSkuRows(docs, customerMap, khoTypeResolver) : [];
+      this.iqcMaterialsBySku = (docs.length > 0 || passDocs.length > 0)
+        ? this.buildPutawayModalSkuRows(docs, customerMap, khoTypeResolver, passDocs)
+        : [];
       this.putawayTraMaterialsBySku = traDocs.length > 0 ? this.buildPutawayTraModalSkuRows(traDocs, customerMap, khoTypeResolver) : [];
-      await this.enrichPutawayNeverExported(factory, [...docs, ...traDocs], this.iqcMaterialsBySku, this.putawayTraMaterialsBySku);
+      await this.enrichPutawayNeverExported(factory, [...docs, ...traDocs, ...passDocs], this.iqcMaterialsBySku, this.putawayTraMaterialsBySku);
 
       console.log('📊 Putaway modal SKU rows:', this.iqcMaterialsBySku.length, 'TRA:', this.putawayTraMaterialsBySku.length);
       this.cdr.detectChanges();

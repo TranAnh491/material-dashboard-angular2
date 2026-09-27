@@ -116,6 +116,24 @@
         <mat-spinner diameter="20" *ngIf="loading"></mat-spinner>
         <span *ngIf="!loading">{{ currentLanguage === 'en' ? 'Login' : 'Đăng nhập' }}</span>
       </button>
+
+      <div class="login-scan">
+        <button mat-stroked-button type="button" (click)="openLoginCamera()" [disabled]="loading">
+          {{ currentLanguage === 'en' ? 'Camera' : 'Camera' }}
+        </button>
+        <button mat-stroked-button type="button" (click)="armLoginScanner()" [disabled]="loading">
+          {{ currentLanguage === 'en' ? 'Scanner' : 'Máy scan' }}
+        </button>
+        <input #loginScanInput
+               *ngIf="scanReady"
+               class="login-scan-input"
+               type="text"
+               autocomplete="off"
+               autocapitalize="none"
+               autocorrect="off"
+               spellcheck="false"
+               (keydown.enter)="onLoginScanEnter($event)">
+      </div>
     </form>
 
     <!-- Signup Form -->

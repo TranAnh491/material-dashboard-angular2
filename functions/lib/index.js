@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.lookupAuthLoginEmailByEmployeeIdFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -1208,6 +1208,25 @@ exports.lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (data)
         const anyErr = e;
         const msg = anyErr instanceof Error ? anyErr.message : (_a = anyErr === null || anyErr === void 0 ? void 0 : anyErr.message) !== null && _a !== void 0 ? _a : String(e);
         throw new functions.https.HttpsError('internal', msg || 'Lỗi tra cứu email.');
+    }
+});
+exports.scanLoginFn = functions.https.onCall(async (data) => {
+    var _a;
+    const payload = typeof (data === null || data === void 0 ? void 0 : data.payload) === 'string' ? data.payload : '';
+    if (!payload.trim()) {
+        throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
+    }
+    try {
+        const { signInFromScan } = await Promise.resolve().then(() => __importStar(require('./scan-login')));
+        return await signInFromScan(payload);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : '';
+        if (msg === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
+        }
+        throw new functions.https.HttpsError('internal', 'Không đăng nhập được.');
     }
 });
 /** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456 */

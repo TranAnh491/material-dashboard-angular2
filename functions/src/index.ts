@@ -1316,6 +1316,24 @@ export const lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (
   }
 });
 
+export const scanLoginFn = functions.https.onCall(async (data: { payload?: string }) => {
+  const payload = typeof data?.payload === 'string' ? data.payload : '';
+  if (!payload.trim()) {
+    throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
+  }
+  try {
+    const { signInFromScan } = await import('./scan-login');
+    return await signInFromScan(payload);
+  } catch (e: unknown) {
+    const anyErr = e as { message?: string };
+    const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? '';
+    if (msg === 'permission-denied') {
+      throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
+    }
+    throw new functions.https.HttpsError('internal', 'Không đăng nhập được.');
+  }
+});
+
 /** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456 */
 export const truckDriverSignInFn = functions.https.onCall(async (data: { employeeId?: string; password?: string }) => {
   const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';

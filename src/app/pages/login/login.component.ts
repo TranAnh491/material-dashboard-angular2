@@ -1,9 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
+import { QRScannerModalComponent } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 
 @Component({
@@ -12,10 +14,13 @@ import { FirebaseAuthService } from '../../services/firebase-auth.service';
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent implements OnInit {
+  @ViewChild('loginScanInput') loginScanInput?: ElementRef<HTMLInputElement>;
+
   loginForm: FormGroup;
   signupForm: FormGroup;
   isSignup = false;
   loading = false;
+  scanReady = false;
   currentLanguage: 'en' | 'vi' = 'vi'; // Default to Vietnamese
 
   unlockLoginAutofill(event: Event): void {
@@ -47,7 +52,8 @@ export class LoginComponent implements OnInit {
     private authService: FirebaseAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private fns: AngularFireFunctions
+    private fns: AngularFireFunctions,
+    private dialog: MatDialog
   ) {
     /** Đăng nhập: ASP + 4 số (ASP9999 cho xe tải) hoặc XETAI. */
     this.loginForm = this.fb.group({
@@ -342,6 +348,74 @@ export class LoginComponent implements OnInit {
 
   toggleMode(): void {
     this.isSignup = !this.isSignup;
+    this.scanReady = false;
+  }
+
+  openLoginCamera(): void {
+    if (this.loading || this.isSignup) return;
+    const ref = this.dialog.open(QRScannerModalComponent, {
+      data: {
+        title: this.currentLanguage === 'en' ? 'Scan' : 'Quét',
+        message: this.currentLanguage === 'en' ? 'Point the camera at the code' : 'Hướng camera vào mã'
+      },
+      panelClass: 'qr-scanner-dialog-panel',
+      maxWidth: '95vw',
+      width: '420px'
+    });
+    ref.afterClosed().subscribe((result) => {
+      if (result?.success && result?.text) {
+        void this.completeScanLogin(String(result.text));
+      }
+    });
+  }
+
+  armLoginScanner(): void {
+    if (this.loading || this.isSignup) return;
+    this.scanReady = true;
+    setTimeout(() => {
+      const el = this.loginScanInput?.nativeElement;
+      if (!el) return;
+      el.value = '';
+      el.focus();
+    }, 0);
+  }
+
+  onLoginScanEnter(event: Event): void {
+    event.preventDefault();
+    const el = event.target as HTMLInputElement;
+    const value = el.value;
+    el.value = '';
+    void this.completeScanLogin(value);
+  }
+
+  private async completeScanLogin(raw: string): Promise<void> {
+    const payload = String(raw || '').trim();
+    if (!payload || this.loading) return;
+    this.loading = true;
+    try {
+      const result = await firstValueFrom(this.fns.httpsCallable('scanLoginFn')({ payload }));
+      const data = (result as { data?: { token?: string } })?.data ?? (result as { token?: string });
+      const token = typeof data?.token === 'string' ? data.token : '';
+      if (!token) {
+        this.showMessage(
+          this.currentLanguage === 'en' ? 'Could not sign in.' : 'Không đăng nhập được.',
+          'error'
+        );
+        return;
+      }
+      await this.authService.signInWithCustomToken(token);
+      this.showMessage(
+        this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!',
+        'success'
+      );
+      this.clearLoginFields();
+      this.scanReady = false;
+      this.navigateAfterLogin();
+    } catch (error: any) {
+      this.showMessage(this.getErrorMessage(error), 'error');
+    } finally {
+      this.loading = false;
+    }
   }
 
   setLanguage(lang: 'en' | 'vi'): void {
