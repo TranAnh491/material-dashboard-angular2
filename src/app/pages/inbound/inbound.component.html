@@ -189,20 +189,21 @@
           </div>
 
           <div class="date-range mobile-hide">
-            <button type="button" class="date-range__input" (click)="openDateRangePopover($event)" title="Chọn khung ngày">
+            <button type="button" class="date-range__input" (click)="openDateRangePopover($event)" title="Lọc theo tuần">
               <i class="material-icons">date_range</i>
               <span>{{ dateRangeDisplay }}</span>
             </button>
 
             <div class="date-range__popover" *ngIf="showDateRangePopover" (click)="$event.stopPropagation()">
-              <div class="date-range__row">
-                <label class="date-range__label">Từ ngày</label>
-                <input type="date" [(ngModel)]="tempStartDate" class="date-range__date">
+              <div class="date-range__weeknav">
+                <button type="button" class="btn btn--ghost" (click)="shiftTempWeek(-1)">Tuần trước</button>
+                <button type="button" class="btn btn--ghost" (click)="shiftTempWeek(1)">Tuần sau</button>
               </div>
               <div class="date-range__row">
-                <label class="date-range__label">Đến ngày</label>
-                <input type="date" [(ngModel)]="tempEndDate" class="date-range__date">
+                <label class="date-range__label">Ngày trong tuần</label>
+                <input type="date" [ngModel]="tempWeekPick" (ngModelChange)="setTempWeekFromDate($event)" class="date-range__date">
               </div>
+              <p class="date-range__week" *ngIf="tempWeekLabel">{{ tempWeekLabel }}</p>
               <div class="date-range__actions">
                 <button type="button" class="btn btn--ghost" (click)="cancelDateRange()">Hủy</button>
                 <button type="button" class="btn btn--primary" (click)="applyDateRange()">Áp dụng</button>

@@ -119,16 +119,22 @@ export class InboundComponent implements OnInit, OnDestroy {
   startDate: string = '';
   endDate: string = '';
 
-  // Modern range date picker (single input + popover)
+  // Lọc xem theo tuần (thứ Hai → Chủ nhật)
   showDateRangePopover = false;
   tempStartDate: string = '';
   tempEndDate: string = '';
+  tempWeekPick: string = '';
 
   get dateRangeDisplay(): string {
-    if (this.startDate && this.endDate) return `${this.startDate} → ${this.endDate}`;
-    if (this.startDate && !this.endDate) return `Từ ${this.startDate}`;
-    if (!this.startDate && this.endDate) return `Đến ${this.endDate}`;
-    return 'Chọn khung ngày';
+    if (this.startDate && this.endDate) {
+      return `Tuần ${this.formatInboundDay(this.startDate)} – ${this.formatInboundDay(this.endDate)}`;
+    }
+    return 'Chọn tuần';
+  }
+
+  get tempWeekLabel(): string {
+    if (!this.tempStartDate || !this.tempEndDate) return '';
+    return `${this.formatInboundDay(this.tempStartDate)} – ${this.formatInboundDay(this.tempEndDate)}`;
   }
   
   // Status filter - 3 trạng thái: Đã nhận, Chưa, Toàn bộ
@@ -311,7 +317,6 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Thiết lập khung thời gian mặc định: 30 ngày gần nhất
     this.setupDateDefaults();
     console.log(`📅 Khung thời gian mặc định: ${this.startDate} đến ${this.endDate} (30 ngày gần nhất)`);
 
@@ -323,8 +328,7 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   openDateRangePopover(ev?: Event): void {
     ev?.stopPropagation?.();
-    this.tempStartDate = this.startDate || '';
-    this.tempEndDate = this.endDate || '';
+    this.setTempWeekFromDate(this.startDate || this.toLocalDateInput(new Date()));
     this.showDateRangePopover = true;
   }
 
@@ -337,10 +341,62 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   applyDateRange(): void {
-    this.startDate = this.tempStartDate || '';
-    this.endDate = this.tempEndDate || '';
+    this.setTempWeekFromDate(this.tempWeekPick || this.tempStartDate || this.toLocalDateInput(new Date()));
+    this.startDate = this.tempStartDate;
+    this.endDate = this.tempEndDate;
     this.closeDateRangePopover();
     this.loadMaterials();
+  }
+
+  shiftTempWeek(delta: number): void {
+    const base = this.parseLocalDate(this.tempStartDate || this.toLocalDateInput(new Date()));
+    base.setDate(base.getDate() + delta * 7);
+    this.setTempWeekFromDate(this.toLocalDateInput(base));
+  }
+
+  setTempWeekFromDate(iso: string): void {
+    const { start, end } = this.weekBounds(this.parseLocalDate(iso || this.toLocalDateInput(new Date())));
+    this.tempStartDate = this.toLocalDateInput(start);
+    this.tempEndDate = this.toLocalDateInput(end);
+    this.tempWeekPick = this.tempStartDate;
+  }
+
+  private setupWeekRange(anchor: Date): void {
+    const { start, end } = this.weekBounds(anchor);
+    this.startDate = this.toLocalDateInput(start);
+    this.endDate = this.toLocalDateInput(end);
+  }
+
+  /** Tuần lịch: thứ Hai đến hết Chủ nhật. */
+  private weekBounds(date: Date): { start: Date; end: Date } {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const day = d.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const start = new Date(d);
+    start.setDate(d.getDate() + mondayOffset);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { start, end };
+  }
+
+  private toLocalDateInput(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private parseLocalDate(iso: string): Date {
+    const [y, m, d] = String(iso || '').split('-').map((n) => Number(n));
+    if (!y || !m || !d) return new Date();
+    return new Date(y, m - 1, d);
+  }
+
+  private formatInboundDay(iso: string): string {
+    const d = this.parseLocalDate(iso);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getFullYear()}`;
   }
 
   trackByMaterial(index: number, material: InboundMaterial): any {
@@ -511,17 +567,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
   
   private setupDateDefaults(): void {
-    const today = new Date();
-    // Cố định hiển thị 7 ngày, tính từ hôm nay quay ngược lại 7 ngày
-    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
-    this.startDate = sevenDaysAgo.toISOString().split('T')[0];
-    this.endDate = today.toISOString().split('T')[0];
-    
-    console.log(`📅 Thiết lập khung thời gian mặc định:`);
-    console.log(`  - Từ ngày: ${this.startDate} (${sevenDaysAgo.toLocaleDateString('vi-VN')})`);
-    console.log(`  - Đến ngày: ${this.endDate} (${today.toLocaleDateString('vi-VN')})`);
-    console.log(`  - Tổng cộng: 7 ngày gần nhất`);
+    this.setupWeekRange(new Date());
   }
   
   loadMaterials(): void {
@@ -3942,6 +3988,56 @@ export class InboundComponent implements OnInit, OnDestroy {
     td { border: 1px solid #ccc; padding: 4px 6px; font-size: 10px; vertical-align: middle; }
     tr:nth-child(even) td { background: #fafafa; }
 
+    .damage {
+      margin-top: 12px;
+      border: 1px solid #000;
+      padding: 8px 10px;
+    }
+    .damage-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+    }
+    .damage-row + .damage-row {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #ccc;
+    }
+    .damage-label .vi {
+      font-size: 11px;
+      font-weight: bold;
+      display: block;
+    }
+    .damage-label .en {
+      font-size: 9px;
+      color: #555;
+      display: block;
+    }
+    .tick {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .box {
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid #000;
+      display: inline-block;
+      flex: 0 0 16px;
+    }
+    .damage-row--sign {
+      display: block;
+    }
+    .sign-line {
+      margin-top: 6px;
+      width: 100%;
+      height: 48px;
+      border: 1px solid #000;
+    }
+
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -3983,6 +4079,33 @@ export class InboundComponent implements OnInit, OnDestroy {
         <span class="en">Employee</span>
       </div>
       <div class="info-box-sign"></div>
+    </div>
+  </div>
+
+  <div class="damage">
+    <div class="damage-row">
+      <div class="damage-label">
+        <span class="vi">Hàng hóa có hư hỏng không?</span>
+        <span class="en">Are the goods damaged?</span>
+      </div>
+      <span class="tick"><span class="box"></span> Yes</span>
+      <span class="tick"><span class="box"></span> No</span>
+    </div>
+    <div class="damage-row">
+      <div class="damage-label">
+        <span class="vi">Tình trạng (nếu Yes)</span>
+        <span class="en">Condition (if Yes)</span>
+      </div>
+      <span class="tick"><span class="box"></span> Bể, rách</span>
+      <span class="tick"><span class="box"></span> Ướt</span>
+      <span class="tick"><span class="box"></span> Cả 2</span>
+    </div>
+    <div class="damage-row damage-row--sign">
+      <div class="damage-label">
+        <span class="vi">Người giao ký xác nhận</span>
+        <span class="en">Deliverer confirmation signature</span>
+      </div>
+      <div class="sign-line"></div>
     </div>
   </div>
 

@@ -764,7 +764,7 @@
           <div class="kk-type-filter" *ngIf="kkActiveTypeRow as row">
             <button type="button"
                     class="kk-type-filter__search-clear"
-                    *ngIf="kkTypeFilterLoc || kkTypeFilterWh || kkTypeFilterRolls || kkTypeSortQtyDesc || kkTypeDetailQuery"
+                    *ngIf="kkTypeFilterLoc || kkTypeFilterWh || kkTypeFilterRolls || kkTypeSortQtyDesc || kkTypeDetailQuery || kkLocScanDay"
                     (click)="clearKkTypeFilters()"
                     title="Xóa lọc">
               <i class="material-icons">close</i>
@@ -791,6 +791,24 @@
                        spellcheck="false">
               </label>
             </ng-container>
+            <button type="button"
+                    class="kk-type-filter__sort"
+                    *ngIf="kkAllStockDetail"
+                    [class.kk-type-filter__sort--on]="kkLocScanDay === 'today'"
+                    [disabled]="kkLocScanLoading && kkLocScanDay === 'today'"
+                    (click)="setKkLocScanDay('today')"
+                    title="Chỉ các mã vừa được scan vị trí hôm nay">
+              Hôm nay
+            </button>
+            <button type="button"
+                    class="kk-type-filter__sort"
+                    *ngIf="kkAllStockDetail"
+                    [class.kk-type-filter__sort--on]="kkLocScanDay === 'yesterday'"
+                    [disabled]="kkLocScanLoading && kkLocScanDay === 'yesterday'"
+                    (click)="setKkLocScanDay('yesterday')"
+                    title="Chỉ các mã vừa được scan vị trí hôm qua">
+              Hôm qua
+            </button>
             <button type="button"
                     class="kk-type-filter__sort"
                     [class.kk-type-filter__sort--on]="kkTypeSortQtyDesc"
@@ -980,7 +998,7 @@
                     <td colspan="14" class="hidden-empty">{{ kkAllStockDetail ? 'Không có dòng tồn kho' : ('Không có dòng tồn loại hàng này' + (kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '')) }}.</td>
                   </tr>
                   <tr *ngIf="kkTypeDetailAll.length && !kkTypeDetailFiltered.length">
-                    <td colspan="14" class="hidden-empty">Không có dòng nào khớp bộ lọc.</td>
+                    <td colspan="14" class="hidden-empty">{{ kkLocScanLoading ? 'Đang lấy mã scan vị trí…' : 'Không có dòng nào khớp bộ lọc.' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1154,7 +1172,7 @@
         <div class="mat-m-nl-grid">
           <div class="mat-m-nl-field">
             <span>Vị trí hiện tại</span>
-            <strong>{{ primaryLocationDisplay(material.location) || '—' }}</strong>
+            <strong>{{ locationParts(material.location).join(' · ') || '—' }}</strong>
           </div>
           <div class="mat-m-nl-field mat-m-nl-field--home">
             <span>Vị trí yêu cầu</span>
@@ -4457,6 +4475,13 @@
     </div>
     <div class="filter-picker-footer">
       <button type="button" class="cancel-btn" (click)="closeKkMucReportPicker()">Đóng</button>
+      <button type="button"
+              class="btn-print-confirm"
+              (click)="downloadKkKiemKeExcel()"
+              [disabled]="kkTypePrintBusy || !kkKiemKeSelectedCount">
+        <i class="material-icons">download</i>
+        Tải Excel
+      </button>
       <button type="button"
               class="btn-print-confirm"
               (click)="printKkKiemKePaper()"

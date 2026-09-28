@@ -1816,13 +1816,29 @@ iframe {
   position: absolute;
   right: 0;
   top: calc(100% + 10px);
-  width: 280px;
+  width: 320px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow-md);
   padding: 12px;
   z-index: 20000;
+}
+
+.date-range__weeknav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  .btn {
+    flex: 1;
+  }
+}
+
+.date-range__week {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .date-range__row {
