@@ -61,6 +61,10 @@
       <i class="material-icons">view_week</i>
       <span>{{ isPrintingShelfLabels ? 'Đang tạo...' : 'Tem kệ' }}</span>
     </button>
+    <button class="pid-btn" (click)="openSafetyLabelModal()" [disabled]="isPrintingSafetyLabels">
+      <i class="material-icons">health_and_safety</i>
+      <span>{{ isPrintingSafetyLabels ? 'Đang in...' : 'Tem an toàn' }}</span>
+    </button>
   </div>
 
   <!-- Modal mật khẩu In tem PASS -->
@@ -161,6 +165,47 @@
           <i class="material-icons">print</i>
           In tem Đã Kiểm
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal In tem an toàn -->
+  <div class="modal-overlay" *ngIf="showSafetyLabelModal" (click)="closeSafetyLabelModal()">
+    <div class="modal-content safety-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>In tem an toàn</h3>
+        <button class="btn-close" (click)="closeSafetyLabelModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">Tem <strong>14cm × 9cm</strong> (ngang × cao), nền cam, chữ đen, song ngữ.</p>
+        <div class="pass-label-input-wrap">
+          <label class="pass-label-qty-label" for="safetyLabelQuantity">Số lượng mỗi lần bấm</label>
+          <input id="safetyLabelQuantity"
+                 type="number"
+                 [(ngModel)]="safetyLabelQuantity"
+                 min="1"
+                 max="99"
+                 class="pass-label-input">
+        </div>
+        <div class="safety-label-list">
+          <button type="button"
+                  class="safety-label-pick"
+                  *ngFor="let item of safetyLabels"
+                  (click)="printSafetyLabel(item.id)"
+                  [disabled]="isPrintingSafetyLabels">
+            <span class="safety-label-pick__icon" [class.safety-label-pick__icon--wide]="item.id === 'ppe'" [innerHTML]="safetyLabelIcon(item.id) | safe:'html'"></span>
+            <span class="safety-label-pick__text">
+              <strong>{{ item.vi }}</strong>
+              <small>{{ item.en }}</small>
+            </span>
+            <i class="material-icons">print</i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeSafetyLabelModal()">Đóng</button>
       </div>
     </div>
   </div>

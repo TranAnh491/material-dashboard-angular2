@@ -1141,6 +1141,77 @@
   color: #f44336;
 }
 
+.safety-label-modal {
+  width: min(560px, 96vw);
+}
+
+.safety-label-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.safety-label-pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #ff7a00;
+  border-radius: 8px;
+  background: #fff;
+  color: #ff7a00;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    filter: brightness(0.96);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  strong, small {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  small {
+    margin-top: 2px;
+  }
+}
+
+.safety-label-pick__icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+
+  ::ng-deep svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  &--wide {
+    width: 150px;
+    height: 30px;
+  }
+}
+
+.safety-label-pick__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.safety-label-pick .material-icons {
+  font-size: 22px;
+}
+
 // In tem PASS modal
 .pass-password-modal,
 .pass-label-modal {
