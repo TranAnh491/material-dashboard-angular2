@@ -23,6 +23,7 @@ import { ScrapComponent } from '../../pages/scrap/scrap.component';
 import { QCComponent } from '../../pages/qc/qc.component';
 import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
+import { AccountComponent } from '../../pages/account/account.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
 import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted-materials.component';
 import { ReportComponent } from '../../pages/report/report.component';
@@ -44,6 +45,7 @@ export const AdminLayoutRoutes: Routes = [
     canActivate: [AuthGuard, TabPermissionGuard]
   },
   { path: 'menu',                 component: MenuComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'tai-khoan',            component: AccountComponent, canActivate: [AuthGuard] },
   { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials-dashboard',  component: MaterialsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'lich-lam-viec',        loadChildren: () => import('../../pages/work-schedule/work-schedule.module').then(m => m.WorkScheduleModule), canActivate: [AuthGuard, TabPermissionGuard] },

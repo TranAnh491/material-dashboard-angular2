@@ -11,6 +11,7 @@ import { GoogleSheetService } from '../../services/google-sheet.service';
 // Các component mặc định của admin layout
 import { DashboardComponent } from '../../dashboard/dashboard.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
+import { AccountComponent } from '../../pages/account/account.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
 
@@ -110,6 +111,7 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
   declarations: [
     DashboardComponent,
     MenuComponent,
+    AccountComponent,
     MaterialsDashboardComponent,
     FgsDashboardComponent,
     KpiReportsComponent,

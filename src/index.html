@@ -18,15 +18,7 @@
   <!-- ✅ Nucleo Icons từ Argon Dashboard Pro -->
   <link href="https://demos.creative-tim.com/argon-dashboard/assets/vendor/nucleo/css/nucleo.css" rel="stylesheet" />
 
-  <!-- Google Maps API (nếu bạn cần dùng bản đồ) -->
-  <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=YOUR-KEY-HERE"></script>
-
   <script>window.global = window;</script>
-
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
 
   <!-- Google Fonts loaded via JS để Angular CLI không cố inline (tránh lỗi ECONNRESET) -->
   <script>
@@ -52,23 +44,5 @@
     </div>
   </app-root>
 
-  <!-- Google API nếu bạn có dùng -->
-  <script src="https://apis.google.com/js/api.js"></script>
-  
-  <!-- XLSX Library for Excel export -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script>
-    // Debug XLSX loading
-    window.addEventListener('load', function() {
-      console.log('🔍 Checking XLSX library after page load...');
-      console.log('window.XLSX:', window.XLSX);
-      console.log('typeof XLSX:', typeof window.XLSX);
-      if (window.XLSX) {
-        console.log('✅ XLSX library loaded successfully');
-      } else {
-        console.log('❌ XLSX library not loaded');
-      }
-    });
-  </script>
 </body>
 </html>

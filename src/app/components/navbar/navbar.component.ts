@@ -408,6 +408,10 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return NavbarComponent.PAGES_WITH_OWN_NAV.has(this.currentAppPath());
     }
 
+    goToAccount(): void {
+      this.router.navigate(['/tai-khoan']);
+    }
+
     goToMenu(): void {
       this.router.navigate(['/menu']);
     }

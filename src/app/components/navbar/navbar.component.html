@@ -58,6 +58,9 @@
                             <small>{{ currentUser.email }}</small>
                         </div>
                         <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" href="javascript:void(0)" (click)="goToAccount()">
+                            <i class="material-icons">manage_accounts</i> Quản lý tài khoản
+                        </a>
                         <a class="dropdown-item" href="javascript:void(0)" (click)="signOut()">
                             <i class="material-icons">exit_to_app</i> Đăng xuất
                         </a>

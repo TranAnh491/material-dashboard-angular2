@@ -75,8 +75,7 @@
                  data-form-type="other"
                  readonly
                  (focus)="unlockLoginAutofill($event)"
-                 (input)="onEmployeeIdInput($event, 'login')"
-                 [placeholder]="currentLanguage === 'en' ? 'e.g. ASP9999 (truck) or ASP0704' : 'VD: ASP9999 (xe tải) hoặc ASP0704'">
+                 (input)="onEmployeeIdInput($event, 'login')">
           <mat-error *ngIf="loginForm.get('employeeId')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'This field is required' : 'Bắt buộc nhập' }}
           </mat-error>

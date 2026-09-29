@@ -25,6 +25,8 @@ export interface User {
 })
 export class FirebaseAuthService {
   user$: Observable<User | null>;
+  /** Hồ sơ users vừa đọc lúc đăng nhập — AuthGuard dùng lại, không đọc Firestore lần hai. */
+  private primedUser: User | null = null;
 
   constructor(
     private afAuth: AngularFireAuth,
@@ -41,6 +43,7 @@ export class FirebaseAuthService {
               // Nếu user bị xóa khỏi settings (userData = null), tự động đăng xuất
               if (!userData) {
                 console.log(`❌ User ${user.email} không còn trong settings, tự động đăng xuất...`);
+                this.primedUser = null;
                 // Đăng xuất tự động
                 this.afAuth.signOut().then(() => {
                   console.log(`✅ Đã đăng xuất user ${user.email} do không còn trong settings`);
@@ -76,6 +79,12 @@ export class FirebaseAuthService {
     }
   }
 
+  /** Firebase Auth cần ít nhất 6 ký tự. Mật khẩu 4–5 số được đệm số 0 khi lưu và khi đăng nhập. */
+  authPasswordFor(password: string): string {
+    const p = String(password || '').trim();
+    return p.length >= 6 ? p : p.padEnd(6, '0');
+  }
+
   // Đăng nhập
   async signIn(email: string, password: string): Promise<any> {
     try {
@@ -90,14 +99,12 @@ export class FirebaseAuthService {
         await this.afAuth.signOut();
         throw new Error('Tài khoản chưa được duyệt. Vui lòng liên hệ quản trị viên.');
       }
-      
-      // User có trong settings, cập nhật thông tin đăng nhập
-      await this.updateUserLoginInfo(credential.user);
 
-      // Lưu login history
-      await this.saveLoginHistory(credential.user);
-
+      const profile = userDoc.data() as User;
+      this.primedUser = { ...profile, uid: credential.user.uid };
       markAuthSessionStarted();
+      this.touchLastLogin(credential.user.uid);
+      void this.saveLoginHistory(credential.user);
       console.log('✅ Đăng nhập thành công:', credential.user.uid);
       return credential;
     } catch (error: any) {
@@ -119,9 +126,14 @@ export class FirebaseAuthService {
         await this.afAuth.signOut();
         throw new Error('Tài khoản chưa được duyệt. Vui lòng liên hệ quản trị viên.');
       }
+      const uid = credential.user?.uid || '';
+      const profile = userDoc.data() as User;
+      if (uid) {
+        this.primedUser = { ...profile, uid };
+        this.touchLastLogin(uid);
+      }
       if (credential.user) {
-        await this.updateUserLoginInfo(credential.user);
-        await this.saveLoginHistory(credential.user);
+        void this.saveLoginHistory(credential.user);
       }
       markAuthSessionStarted();
       return credential;
@@ -134,6 +146,7 @@ export class FirebaseAuthService {
   // Đăng xuất
   async signOut(): Promise<void> {
     try {
+      this.primedUser = null;
       await this.afAuth.signOut();
       console.log('✅ Đăng xuất thành công');
     } catch (error) {
@@ -322,24 +335,17 @@ export class FirebaseAuthService {
     }
   }
 
-  // Cập nhật thông tin đăng nhập của user
-  private async updateUserLoginInfo(user: any): Promise<void> {
-    const userRef = this.firestore.doc(`users/${user.uid}`);
-    
-    // Kiểm tra xem user đã tồn tại trong Firestore chưa
-    const doc = await userRef.get().toPromise();
-    
-    if (doc?.exists) {
-      // User đã tồn tại trong settings, chỉ cập nhật lastLoginAt
-      await userRef.update({
-        lastLoginAt: new Date()
-      });
-    } else {
-      // User chưa tồn tại - KHÔNG tự động tạo mới
-      // Chỉ user đã được admin duyệt trong settings mới được phép đăng nhập
-      // Điều này đã được kiểm tra trong signIn method trước khi gọi updateUserLoginInfo
-      console.warn(`⚠️ User ${user.uid} không tồn tại trong settings khi cập nhật login info`);
-    }
+  /** Ghi giờ đăng nhập nền — không chặn chuyển trang. */
+  private touchLastLogin(uid: string): void {
+    void this.firestore.doc(`users/${uid}`).update({ lastLoginAt: new Date() }).catch((error) => {
+      console.error('❌ Error updating lastLoginAt:', error);
+    });
+  }
+
+  /** Hồ sơ đã xác nhận trong phiên đăng nhập này. */
+  peekSessionUser(uid: string): User | null {
+    if (!uid || !this.primedUser || this.primedUser.uid !== uid) return null;
+    return this.primedUser;
   }
 
   // Kiểm tra trạng thái đăng nhập

@@ -28,6 +28,11 @@ export class AuthGuard implements CanActivate {
           return of(false);
         }
 
+        const primed = this.authService.peekSessionUser(user.uid);
+        if (primed) {
+          return of(true);
+        }
+
         // Kiểm tra user có tồn tại trong collection 'users' (chỉ users trong settings mới được phép)
         return this.firestore.collection('users').doc(user.uid).get().pipe(
           switchMap(userDoc => {

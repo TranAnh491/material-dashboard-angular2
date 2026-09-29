@@ -601,6 +601,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Số lượng trên tem: nhận số lẻ, giữ tối đa 2 chữ số thập phân. */
+  private parseScanQty(raw: unknown): number {
+    let s = String(raw ?? '').trim().replace(/\s/g, '');
+    if (!s) return 0;
+    if (/^\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.');
+    else s = s.replace(/,/g, '');
+    const n = parseFloat(s);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.round(n * 100) / 100;
+  }
+
   /**
    * Rule quét: QTY ≤ Standard Packing (Chẵn =SP, Lẻ &lt;SP).
    * Mã bật Xuất thùng trong danh mục → không áp dụng.
@@ -1678,7 +1689,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
     const scannedCode = strippedBs.materialCode.trim().toUpperCase();
     const scannedPo   = (parts[1] || '').trim();
-    const scannedQty  = parseFloat((parts[2] || '').replace(/,/g, '')) || 0;
+    const scannedQty  = this.parseScanQty(parts[2]);
     const part4       = (parts[3] || '').trim();
 
     // Extract IMD (before '-') from part4
@@ -3243,7 +3254,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         this.lastScannedData = {
           materialCode: parts[0].trim(),
           poNumber: parts[1].trim(),
-          quantity: parseInt(parts[2]) || 0,
+          quantity: this.parseScanQty(parts[2]),
           importDate: parts.length >= 4 ? parts[3].trim() : null // Bây giờ là batch number: 26082025
         };
         
@@ -3261,7 +3272,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
           this.lastScannedData = {
             materialCode: commaParts[0].trim(),
             poNumber: commaParts[1].trim(),
-            quantity: parseInt(commaParts[1]) || 0
+            quantity: this.parseScanQty(commaParts[2])
           };
           
           console.log('✅ Parsed QR data (comma format):', this.lastScannedData);
@@ -3277,7 +3288,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
             this.lastScannedData = {
               materialCode: jsonData.materialCode.toString().trim(),
               poNumber: jsonData.poNumber.toString().trim(),
-              quantity: parseInt(jsonData.quantity) || parseInt(jsonData.unitNumber) || 0
+              quantity: this.parseScanQty(jsonData.quantity) || this.parseScanQty(jsonData.unitNumber)
             };
             
             console.log('✅ Parsed QR data (JSON format):', this.lastScannedData);
@@ -3292,13 +3303,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
           // Look for common patterns like "B018694" (material code)
           const materialCodeMatch = decodedText.match(/[A-Z]\d{6,}/);
           const poMatch = decodedText.match(/PO\d+|P\d+/i);
-          const numberMatch = decodedText.match(/\d+/);
+          const numberMatch = decodedText.match(/\d+(?:[.,]\d+)?/);
           
           if (materialCodeMatch && poMatch && numberMatch) {
             this.lastScannedData = {
               materialCode: materialCodeMatch[0],
               poNumber: poMatch[0],
-              quantity: parseInt(numberMatch[0]) || 0
+              quantity: this.parseScanQty(numberMatch[0])
             };
             
             console.log('✅ Parsed QR data (pattern extraction):', this.lastScannedData);
@@ -4424,7 +4435,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         isTemThung = stripped.isTemThung;
         materialCode = stripped.materialCode;
         poNumber = parts[1].trim();
-        quantity = parseInt(parts[2], 10) || 1;
+        quantity = this.parseScanQty(parts[2]);
         if (parts.length >= 4) importDate = parts[3].trim();
       }
     } else {

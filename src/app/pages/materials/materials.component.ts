@@ -3856,15 +3856,41 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onXtBagQtyChange(row: InventoryBagRow, raw: any): void {
-    const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
-    row.qty = Number.isFinite(n) && n > 0 ? n : 0;
+    const n = this.parseXtQty(raw);
+    row.qty = n > 0 ? n : 0;
   }
 
   onXtBagLeQtyChange(row: InventoryBagRow, raw: any): void {
     if (row.exported) return;
-    const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
-    row.leQty = Number.isFinite(n) && n > 0 ? n : null;
+    const n = this.parseXtQty(raw);
+    row.leQty = n > 0 ? n : null;
     if (Number(row.leQty) > 0) row.selected = false;
+  }
+
+  setXtBagFallbackQty(raw: any): void {
+    if (raw === '' || raw === null || raw === undefined) {
+      this.xtBagFallbackQty = null;
+      return;
+    }
+    const n = this.parseXtQty(raw);
+    this.xtBagFallbackQty = n > 0 ? n : null;
+  }
+
+  setXtBagFallbackLeQty(raw: any): void {
+    if (raw === '' || raw === null || raw === undefined) {
+      this.xtBagFallbackLeQty = null;
+      return;
+    }
+    const n = this.parseXtQty(raw);
+    this.xtBagFallbackLeQty = n > 0 ? n : null;
+  }
+
+  /** ASM2: XT giữ đúng 2 số thập phân. */
+  private parseXtQty(raw: any): number {
+    const n = parseFloat(String(raw ?? '').replace(/,/g, '').replace(/\s/g, ''));
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    if (this.selectedFactory !== 'ASM2') return n;
+    return Math.round(n * 100) / 100;
   }
 
   selectAllRemainingXtBags(): void {
@@ -3892,8 +3918,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.xtBagSaving = true;
     try {
       if (this.bagPopupRows.length === 0) {
-        const full = Number(this.xtBagFallbackQty || 0);
-        const le = Number(this.xtBagFallbackLeQty || 0);
+        const full = this.parseXtQty(this.xtBagFallbackQty || 0);
+        const le = this.parseXtQty(this.xtBagFallbackLeQty || 0);
         material.xtBags = [];
         material.xtLe = le > 0 ? le : 0;
         material.xt = (full > 0 ? full : 0) + (le > 0 ? le : 0);
@@ -3901,10 +3927,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const picks = this.bagPopupRows
           .filter((r) => this.getXtRowEffectiveQty(r) > 0)
           .map((r) => {
-            const le = Number(r.leQty) || 0;
+            const le = this.parseXtQty(r.leQty || 0);
+            const qty = this.parseXtQty(this.getXtRowEffectiveQty(r));
             return {
               bagNo: r.bagNo,
-              qty: this.getXtRowEffectiveQty(r),
+              qty,
               ...(le > 0 ? { leQty: le } : {})
             };
           });

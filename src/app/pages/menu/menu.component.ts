@@ -108,6 +108,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', iconImage: 'assets/img/scrap.png', category: 'Admin' },
     { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', iconImage: 'assets/img/safety.png', category: 'Admin' },
     { path: '/equipment', title: 'Training', icon: 'school', iconImage: 'assets/img/training.png', category: 'Admin' },
+    { path: '/tai-khoan', title: 'Quản lý tài khoản', icon: 'manage_accounts', iconImage: 'assets/img/setting.png', category: 'Admin', subtitle: 'Đổi tên và mật khẩu của tài khoản đang đăng nhập' },
     { path: '/settings', title: 'Settings', icon: 'settings', iconImage: 'assets/img/setting.png', category: 'Admin' },
     { path: '/zalo', title: 'Zalo', icon: 'chat', iconImage: 'assets/img/setting.png', category: 'Admin' }
   ];

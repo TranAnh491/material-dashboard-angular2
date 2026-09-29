@@ -2431,18 +2431,18 @@
             <input type="number"
                    class="editable-input bag-track-qty"
                    [ngModel]="xtBagFallbackQty"
-                   (ngModelChange)="xtBagFallbackQty = $event === '' || $event === null ? null : +$event"
+                   (ngModelChange)="setXtBagFallbackQty($event)"
                    min="0"
-                   step="0.1"
+                   [step]="selectedFactory === 'ASM2' ? '0.01' : '0.1'"
                    placeholder="XT">
           </label>
           <label class="tem-xuat-hint">Xuất lẻ
             <input type="number"
                    class="editable-input bag-track-qty"
                    [ngModel]="xtBagFallbackLeQty"
-                   (ngModelChange)="xtBagFallbackLeQty = $event === '' || $event === null ? null : +$event"
+                   (ngModelChange)="setXtBagFallbackLeQty($event)"
                    min="0"
-                   step="0.1"
+                   [step]="selectedFactory === 'ASM2' ? '0.01' : '0.1'"
                    placeholder="Lẻ">
           </label>
         </div>
@@ -2480,7 +2480,7 @@
                        (ngModelChange)="onXtBagQtyChange(row, $event)"
                        [disabled]="row.exported || !row.selected"
                        min="0"
-                       step="0.1">
+                       [step]="selectedFactory === 'ASM2' ? '0.01' : '0.1'">
               </td>
               <td>
                 <input type="number"
@@ -2489,7 +2489,7 @@
                        (ngModelChange)="onXtBagLeQtyChange(row, $event)"
                        [disabled]="row.exported"
                        min="0"
-                       step="0.1"
+                       [step]="selectedFactory === 'ASM2' ? '0.01' : '0.1'"
                        placeholder="Lẻ">
               </td>
               <td>

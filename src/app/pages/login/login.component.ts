@@ -22,6 +22,8 @@ export class LoginComponent implements OnInit {
   loading = false;
   scanReady = false;
   currentLanguage: 'en' | 'vi' = 'vi'; // Default to Vietnamese
+  private readonly loginEmailCacheKey = 'aspLoginEmailById';
+  private readonly loginEmailInflight = new Map<string, Promise<string>>();
 
   unlockLoginAutofill(event: Event): void {
     const el = event.target as HTMLInputElement | null;
@@ -44,6 +46,10 @@ export class LoginComponent implements OnInit {
     if (control && control.value !== upper) {
       control.setValue(upper, { emitEvent: false });
       control.updateValueAndValidity({ emitEvent: false });
+    }
+
+    if (formType === 'login' && /^ASP\d{4}$/.test(upper)) {
+      void this.resolveLoginEmailForSignIn(upper);
     }
   }
 
@@ -94,18 +100,72 @@ export class LoginComponent implements OnInit {
    * Tra email Firebase Auth theo mã ASPxxxx (đăng ký qua mail dùng email công ty).
    * Lỗi mạng / chưa deploy function → fallback asp####@asp.com như cũ.
    */
-  private async resolveLoginEmailForSignIn(employeeId: string): Promise<string> {
+  private readCachedLoginEmail(employeeId: string): string {
+    try {
+      const raw = localStorage.getItem(this.loginEmailCacheKey);
+      if (!raw) return '';
+      const map = JSON.parse(raw) as Record<string, string>;
+      const email = map[employeeId];
+      return typeof email === 'string' ? email.trim().toLowerCase() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private writeCachedLoginEmail(employeeId: string, email: string): void {
+    try {
+      const raw = localStorage.getItem(this.loginEmailCacheKey);
+      const map = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+      map[employeeId] = email.trim().toLowerCase();
+      localStorage.setItem(this.loginEmailCacheKey, JSON.stringify(map));
+    } catch {
+      // ignore quota / private mode
+    }
+  }
+
+  private clearCachedLoginEmail(employeeId: string): void {
+    try {
+      const raw = localStorage.getItem(this.loginEmailCacheKey);
+      if (!raw) return;
+      const map = JSON.parse(raw) as Record<string, string>;
+      delete map[employeeId];
+      localStorage.setItem(this.loginEmailCacheKey, JSON.stringify(map));
+    } catch {
+      // ignore
+    }
+  }
+
+  private async resolveLoginEmailForSignIn(employeeId: string, skipCache = false): Promise<string> {
     const upper = (employeeId || '').trim().toUpperCase();
     if (!/^ASP\d{4}$/.test(upper)) {
       return this.loginFieldToEmail(employeeId);
     }
+    if (!skipCache) {
+      const cached = this.readCachedLoginEmail(upper);
+      if (cached) return cached;
+      const pending = this.loginEmailInflight.get(upper);
+      if (pending) return pending;
+    }
+    const job = this.fetchLoginEmail(upper);
+    this.loginEmailInflight.set(upper, job);
+    try {
+      return await job;
+    } finally {
+      if (this.loginEmailInflight.get(upper) === job) {
+        this.loginEmailInflight.delete(upper);
+      }
+    }
+  }
+
+  private async fetchLoginEmail(employeeId: string): Promise<string> {
     try {
       const result = await firstValueFrom(
-        this.fns.httpsCallable('lookupAuthLoginEmailByEmployeeIdFn')({ employeeId: upper })
+        this.fns.httpsCallable('lookupAuthLoginEmailByEmployeeIdFn')({ employeeId })
       );
       const payload = (result as { data?: { email?: string | null } })?.data ?? (result as { email?: string | null });
       const email = typeof payload?.email === 'string' ? payload.email.trim().toLowerCase() : '';
       if (email) {
+        this.writeCachedLoginEmail(employeeId, email);
         return email;
       }
     } catch {
@@ -127,6 +187,8 @@ export class LoginComponent implements OnInit {
         this.navigateAfterLogin();
       }
     });
+
+    void import('../../layouts/admin-layout/admin-layout.module');
   }
 
   /** Sau đăng nhập: app phụ Xe Tải → /xe-tai, app chính → /menu */
@@ -203,16 +265,33 @@ export class LoginComponent implements OnInit {
           return;
         }
 
-        if (pass.length < 6) {
+        if (pass.length < 4) {
           this.showMessage(
-            this.currentLanguage === 'en' ? 'Password must be at least 6 characters' : 'Mật khẩu phải có ít nhất 6 ký tự',
+            this.currentLanguage === 'en' ? 'Password must be at least 4 characters' : 'Mật khẩu phải có ít nhất 4 ký tự',
             'error'
           );
           return;
         }
         
-        const email = await this.resolveLoginEmailForSignIn(emp);
-        await this.authService.signIn(email, pass);
+        const cachedBefore = this.readCachedLoginEmail(emp);
+        let email = await this.resolveLoginEmailForSignIn(emp);
+        const fromCache = !!cachedBefore && cachedBefore === email;
+        try {
+          await this.authService.signIn(email, this.authService.authPasswordFor(pass));
+        } catch (error: any) {
+          const code = String(error?.code || '');
+          const retryable =
+            code === 'auth/user-not-found' ||
+            code === 'auth/wrong-password' ||
+            code === 'auth/invalid-credential' ||
+            code === 'auth/invalid-login-credentials';
+          if (!fromCache || !retryable) throw error;
+          this.clearCachedLoginEmail(emp);
+          const fresh = await this.resolveLoginEmailForSignIn(emp, true);
+          if (!fresh || fresh === email) throw error;
+          email = fresh;
+          await this.authService.signIn(email, this.authService.authPasswordFor(pass));
+        }
         this.showMessage(
           this.currentLanguage === 'en' ? 'Login successful!' : 'Đăng nhập thành công!', 
           'success'
