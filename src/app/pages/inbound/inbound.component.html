@@ -503,7 +503,7 @@
                       [disabled]="material.isReceived || !canEditMaterials || !canEditInBatch(material)"
                       [title]="getReceivedTitle(material)">
              </td>
-            <td class="number-cell">
+            <td class="number-cell ldv-cell">
               <input type="text"
                      inputmode="decimal"
                      class="editable-input"
@@ -511,8 +511,12 @@
                      (ngModelChange)="onRollsOrBagsInputDraft($event)"
                      (focus)="onRollsOrBagsInputFocus(material, i)"
                      (blur)="onRollsOrBagsInputBlur(material, i)"
-                     [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa lượng đơn vị (tự động lưu vào danh mục)'">
+                     [disabled]="!canEditMaterials || isRollsOrBagsLocked(material)"
+                     [title]="rollsOrBagsInputTitle(material)">
+              <button type="button"
+                      class="ldv-edit-btn"
+                      *ngIf="canEditMaterials && isRollsOrBagsLocked(material)"
+                      (click)="requestRollsOrBagsEdit(material)">Sửa</button>
             </td>
             <td class="number-cell">
               <input type="number"
@@ -1493,6 +1497,28 @@
 
     <div class="modal-footer">
       <button class="btn-close" (click)="closeNoteModal()">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div class="ldv-otp-backdrop" *ngIf="ldvOtpOpen" (click)="closeLdvOtp()">
+  <div class="ldv-otp-dialog" (click)="$event.stopPropagation()">
+    <h3>Sửa lượng đơn vị</h3>
+    <p>Mã hàng <strong>{{ ldvOtpMaterial?.materialCode }}</strong>. Nhập mã 4 số gửi qua Zalo ASP0106.</p>
+    <p class="ldv-otp-info" *ngIf="ldvOtpInfo">{{ ldvOtpInfo }}</p>
+    <p class="ldv-otp-error" *ngIf="ldvOtpError">{{ ldvOtpError }}</p>
+    <input type="text"
+           inputmode="numeric"
+           maxlength="4"
+           class="ldv-otp-input"
+           placeholder="4 số"
+           [(ngModel)]="ldvOtpCode"
+           [disabled]="ldvOtpBusy"
+           (keyup.enter)="confirmLdvOtp()">
+    <div class="ldv-otp-actions">
+      <button type="button" class="ldv-otp-cancel" (click)="closeLdvOtp()" [disabled]="ldvOtpBusy">Hủy</button>
+      <button type="button" class="ldv-otp-resend" (click)="requestRollsOrBagsEdit(ldvOtpMaterial!)" [disabled]="ldvOtpBusy || !ldvOtpMaterial">Gửi lại</button>
+      <button type="button" class="ldv-otp-ok" (click)="confirmLdvOtp()" [disabled]="ldvOtpBusy">Xác nhận</button>
     </div>
   </div>
 </div>

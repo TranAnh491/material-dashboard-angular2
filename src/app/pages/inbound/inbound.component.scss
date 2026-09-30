@@ -4950,6 +4950,82 @@ iframe {
   }
 }
 
+.ldv-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ldv-edit-btn,
+.ldv-otp-resend,
+.ldv-otp-ok,
+.ldv-otp-cancel {
+  border: 1px solid #111;
+  background: #fff;
+  color: #111;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 2px 6px;
+}
+
+.ldv-edit-btn:disabled,
+.ldv-otp-resend:disabled,
+.ldv-otp-ok:disabled,
+.ldv-otp-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ldv-otp-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ldv-otp-dialog {
+  width: min(420px, calc(100vw - 24px));
+  background: #fff;
+  color: #111;
+  border: 1px solid #111;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.ldv-otp-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.ldv-otp-dialog p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.ldv-otp-info { color: #166534; }
+.ldv-otp-error { color: #b91c1c; }
+
+.ldv-otp-input {
+  width: 120px;
+  font-size: 18px;
+  letter-spacing: 4px;
+  padding: 6px 8px;
+  border: 1px solid #111;
+  border-radius: 4px;
+}
+
+.ldv-otp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .tbhd-check-empty {
   grid-column: 1 / -1;
   margin: 0;

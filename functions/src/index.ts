@@ -604,6 +604,85 @@ export const verifyMaterialsInventoryOtpFn = functions
     }
   });
 
+/** Inbound: OTP 4 số Zalo → ASP0106 để sửa lượng đơn vị đã nhập. */
+export const requestInboundLdvOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { requestInboundLdvOtp } = await import('./inbound-ldv-guard');
+      await requestInboundLdvOtp(admin.firestore(), {
+        requestedBy: typeof data?.requestedBy === 'string' ? data.requestedBy : '',
+        materialCode: typeof data?.materialCode === 'string' ? data.materialCode : '',
+        factory: typeof data?.factory === 'string' ? data.factory : ''
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
+export const verifyInboundLdvOtpFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const code = typeof data?.code === 'string' ? data.code.trim().slice(0, 8) : '';
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã OTP.');
+    }
+    try {
+      const { verifyInboundLdvOtp } = await import('./inbound-ldv-guard');
+      return await verifyInboundLdvOtp(admin.firestore(), code);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('không đúng') || msg.includes('hết hạn') || msg.includes('Chưa có') || msg.includes('4 chữ số')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Inbound: mail khi lượng đơn vị khác Standard Packing. */
+export const sendInboundLdvMismatchEmailFn = functions
+  .runWith({ secrets: [emailPass] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const materialCode = typeof data?.materialCode === 'string' ? data.materialCode.trim().slice(0, 120) : '';
+    const rollsOrBags = Number(data?.rollsOrBags);
+    const standardPacking = Number(data?.standardPacking);
+    if (!materialCode || !Number.isFinite(rollsOrBags) || !Number.isFinite(standardPacking)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu dữ liệu so sánh lượng đơn vị.');
+    }
+    try {
+      const { sendInboundLdvMismatchEmail } = await import('./inbound-ldv-guard');
+      await sendInboundLdvMismatchEmail({
+        materialCode,
+        poNumber: typeof data?.poNumber === 'string' ? data.poNumber.trim().slice(0, 80) : '',
+        batchNumber: typeof data?.batchNumber === 'string' ? data.batchNumber.trim().slice(0, 80) : '',
+        factory: typeof data?.factory === 'string' ? data.factory.trim().slice(0, 10) : '',
+        rollsOrBags,
+        standardPacking,
+        reportedBy: typeof data?.reportedBy === 'string' ? data.reportedBy.trim().slice(0, 80) : ''
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
+    }
+  });
+
 /** Work Order: OTP 4 số Zalo → ASP0106 để vượt quyền PXK lệch, mỗi LSX một mã. */
 export const requestWoPxkBypassOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })

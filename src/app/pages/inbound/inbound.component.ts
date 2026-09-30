@@ -16,6 +16,7 @@ import { StorageUnitSize } from '../../models/storage-unit.model';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 import { KkCatalogService } from '../../services/kk-catalog.service';
+import { InboundLdvOtpService } from '../../services/inbound-ldv-otp.service';
 
 type TbhdCheckBatchRow = {
   batchNumber: string;
@@ -44,6 +45,10 @@ export interface InboundMaterial {
   isReceived: boolean;
   notes: string;
   rollsOrBags: number;
+  /** Đã nhập lượng đơn vị — lần sau phải có OTP Zalo ASP0106. */
+  rollsOrBagsLocked?: boolean;
+  /** Giá trị lượng đơn vị đã gửi mail lệch Standard Packing. */
+  ldvMismatchMailedFor?: number;
   supplier: string;
   unitWeight?: number; // Trọng lượng đơn vị (gram) - max 2 decimals
   gwLdv?: number;      // Số bịch (field Firestore `gwLdv` — tên cũ, không còn là gram)
@@ -254,6 +259,16 @@ export class InboundComponent implements OnInit, OnDestroy {
   isSavingStorageUnit = false;
   private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
 
+  /** Dòng đang được mở khóa sửa lượng đơn vị sau OTP (một lần, đến khi lưu). */
+  private ldvUnlockedIds = new Set<string>();
+  private standardPackingCache = new Map<string, number>();
+  ldvOtpOpen = false;
+  ldvOtpMaterial: InboundMaterial | null = null;
+  ldvOtpCode = '';
+  ldvOtpError = '';
+  ldvOtpInfo = '';
+  ldvOtpBusy = false;
+
   constructor(
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
@@ -266,7 +281,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private location: Location,
     private authService: FirebaseAuthService,
-    private kkCatalog: KkCatalogService
+    private kkCatalog: KkCatalogService,
+    private inboundLdvOtp: InboundLdvOtpService
   ) {}
 
   goToMenu(): void {
@@ -581,12 +597,16 @@ export class InboundComponent implements OnInit, OnDestroy {
   private mapInboundDoc(id: string, data: any): InboundMaterial {
     const batchNumber = data?.batchNumber || '';
     const qty = data?.quantity || 0;
+    const storedRolls = Number(data?.rollsOrBags) || 0;
     let rollsOrBags = data?.rollsOrBags ?? 0;
     let gwLdv = data?.gwLdv ?? 0;
     if (batchNumber.toUpperCase().startsWith('TRA')) {
       if (!rollsOrBags || rollsOrBags === 0) rollsOrBags = qty;
       if (!gwLdv || gwLdv === 0) gwLdv = 1;
     }
+    const rollsOrBagsLocked = data?.rollsOrBagsLocked === true || storedRolls > 0;
+    const mailedRaw = Number(data?.ldvMismatchMailedFor);
+    const ldvMismatchMailedFor = Number.isFinite(mailedRaw) && mailedRaw > 0 ? mailedRaw : undefined;
     return {
       id,
       factory: data?.factory || this.selectedFactory,
@@ -605,6 +625,8 @@ export class InboundComponent implements OnInit, OnDestroy {
       isReceived: data?.isReceived || false,
       notes: data?.notes || '',
       rollsOrBags,
+      rollsOrBagsLocked,
+      ldvMismatchMailedFor,
       supplier: data?.supplier || '',
       gwLdv,
       remarks: data?.remarks || '',
@@ -1350,22 +1372,29 @@ export class InboundComponent implements OnInit, OnDestroy {
     }
   }
 
-  // 🆕 Cập nhật Standard Packing từ dữ liệu Inbound ASM1
+  // Ghi Standard Packing lần đầu. Nếu đã có và khác lượng đơn vị thì không ghi đè, gửi mail lệch.
   private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
     try {
       if (!material.rollsOrBags || material.rollsOrBags <= 0) return;
       // Hàng trả (batchNumber bắt đầu bằng TRA) không dùng để ghi đè Standard Packing —
       // số lượng trả lại thường không phản ánh đúng lượng chẵn 1 bịch/cuộn gốc.
       if (material.batchNumber?.toUpperCase().startsWith('TRA')) return;
+      const code = (material.materialCode || '').trim();
+      if (!code) return;
+      const current = await this.getStandardPacking(code);
+      if (current > 0) {
+        if (!this.ldvEquals(current, material.rollsOrBags)) {
+          await this.notifyLdvMismatch(material, current);
+        }
+        return;
+      }
       const standardPackingValue = material.rollsOrBags;
-      const materialsDocRef = this.firestore.collection('materials').doc(material.materialCode).ref;
-      await materialsDocRef.update({ standardPacking: standardPackingValue, updatedAt: new Date() });
-      const catalogDocRef = this.firestore.collection('catalog').doc(material.materialCode).ref;
-      await catalogDocRef.update({ standardPacking: standardPackingValue, updatedAt: new Date() });
-      
+      const payload = { materialCode: code, standardPacking: standardPackingValue, updatedAt: new Date() };
+      await this.firestore.collection('materials').doc(code).ref.set(payload, { merge: true });
+      await this.firestore.collection('catalog').doc(code).ref.set(payload, { merge: true });
+      this.standardPackingCache.set(code, standardPackingValue);
     } catch (error) {
       console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
-      // Không throw error để không ảnh hưởng đến việc add vào inventory
     }
   }
   
@@ -2887,6 +2916,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       isReceived: material.isReceived,
       notes: material.notes,
       rollsOrBags: material.rollsOrBags,
+      rollsOrBagsLocked: material.rollsOrBagsLocked === true,
       supplier: material.supplier,
       unitWeight: material.unitWeight || null,
       gwLdv: this.gwLdvForFirestore(material),
@@ -5094,7 +5124,129 @@ export class InboundComponent implements OnInit, OnDestroy {
     return this.formatRollsOrBagsDisplay(n);
   }
 
+  isRollsOrBagsLocked(m: InboundMaterial): boolean {
+    if (m.id && this.ldvUnlockedIds.has(m.id)) return false;
+    return m.rollsOrBagsLocked === true;
+  }
+
+  rollsOrBagsInputTitle(m: InboundMaterial): string {
+    if (this.isRollsOrBagsLocked(m)) {
+      return 'Đã nhập lượng đơn vị. Bấm Sửa và nhập mã 4 số từ Zalo ASP0106.';
+    }
+    return 'Nhập lượng đơn vị một lần. Sau khi lưu sẽ khóa.';
+  }
+
+  private ldvEquals(a: number, b: number): boolean {
+    return Math.abs(Number(a) - Number(b)) < 0.0001;
+  }
+
+  private async currentUserCode(): Promise<string> {
+    const user = await this.afAuth.currentUser;
+    const email = user ? user.email || user.uid : '';
+    return email.includes('@') ? email.split('@')[0].toUpperCase() : String(email || '').toUpperCase();
+  }
+
+  private async getStandardPacking(materialCode: string): Promise<number> {
+    const code = materialCode.trim();
+    if (!code) return 0;
+    if (this.standardPackingCache.has(code)) return this.standardPackingCache.get(code)!;
+    let n = 0;
+    const mat = await this.firestore.collection('materials').doc(code).ref.get();
+    if (mat.exists) n = Number(mat.data()?.['standardPacking']) || 0;
+    if (n <= 0) {
+      const cat = await this.firestore.collection('catalog').doc(code).ref.get();
+      if (cat.exists) n = Number(cat.data()?.['standardPacking']) || 0;
+    }
+    this.standardPackingCache.set(code, n);
+    return n;
+  }
+
+  private async notifyLdvMismatch(material: InboundMaterial, standardPacking?: number): Promise<void> {
+    const ldv = Number(material.rollsOrBags) || 0;
+    const code = (material.materialCode || '').trim();
+    if (ldv <= 0 || !code) return;
+    const standard = standardPacking != null ? standardPacking : await this.getStandardPacking(code);
+    if (standard <= 0 || this.ldvEquals(standard, ldv)) return;
+    if (material.ldvMismatchMailedFor != null && this.ldvEquals(material.ldvMismatchMailedFor, ldv)) return;
+    const reportedBy = await this.currentUserCode();
+    await this.inboundLdvOtp.sendMismatchEmail({
+      materialCode: code,
+      poNumber: material.poNumber || '',
+      batchNumber: material.batchNumber || '',
+      factory: material.factory || this.selectedFactory || '',
+      rollsOrBags: ldv,
+      standardPacking: standard,
+      reportedBy
+    });
+    material.ldvMismatchMailedFor = ldv;
+    if (material.id) {
+      await this.firestore.collection('inbound-materials').doc(material.id).update({ ldvMismatchMailedFor: ldv });
+    }
+  }
+
+  async requestRollsOrBagsEdit(m: InboundMaterial): Promise<void> {
+    if (!this.canEditMaterials || !m.id || !this.isRollsOrBagsLocked(m)) return;
+    this.ldvOtpMaterial = m;
+    this.ldvOtpCode = '';
+    this.ldvOtpError = '';
+    this.ldvOtpInfo = '';
+    this.ldvOtpOpen = true;
+    this.ldvOtpBusy = true;
+    try {
+      await this.inboundLdvOtp.requestOtp({
+        requestedBy: await this.currentUserCode(),
+        materialCode: m.materialCode,
+        factory: m.factory || this.selectedFactory
+      });
+      this.ldvOtpInfo = 'Đã gửi mã 4 số qua Zalo ASP0106. Mã có hiệu lực 10 phút.';
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.ldvOtpError = msg || 'Không gửi được mã Zalo.';
+    } finally {
+      this.ldvOtpBusy = false;
+    }
+  }
+
+  closeLdvOtp(): void {
+    if (this.ldvOtpBusy) return;
+    this.ldvOtpOpen = false;
+    this.ldvOtpMaterial = null;
+    this.ldvOtpCode = '';
+    this.ldvOtpError = '';
+    this.ldvOtpInfo = '';
+  }
+
+  async confirmLdvOtp(): Promise<void> {
+    const m = this.ldvOtpMaterial;
+    const code = (this.ldvOtpCode || '').trim();
+    if (!m?.id || this.ldvOtpBusy) return;
+    if (!/^\d{4}$/.test(code)) {
+      this.ldvOtpError = 'Nhập đúng 4 chữ số.';
+      return;
+    }
+    this.ldvOtpBusy = true;
+    this.ldvOtpError = '';
+    try {
+      const ok = await this.inboundLdvOtp.verifyOtp(code);
+      if (!ok) {
+        this.ldvOtpError = 'Mã OTP không đúng.';
+        return;
+      }
+      this.ldvUnlockedIds.add(m.id);
+      this.ldvOtpOpen = false;
+      this.ldvOtpMaterial = null;
+      this.ldvOtpCode = '';
+      this.ldvOtpInfo = '';
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.ldvOtpError = msg || 'Mã OTP không đúng.';
+    } finally {
+      this.ldvOtpBusy = false;
+    }
+  }
+
   onRollsOrBagsInputFocus(m: InboundMaterial, rowIndex: number): void {
+    if (this.isRollsOrBagsLocked(m)) return;
     const key = this.getRollsOrBagsRowKey(m, rowIndex);
     this.rollsOrBagsEditRowKey = key;
     const n = m.rollsOrBags != null ? Number(m.rollsOrBags) : NaN;
@@ -5113,12 +5265,28 @@ export class InboundComponent implements OnInit, OnDestroy {
   onRollsOrBagsInputBlur(m: InboundMaterial, rowIndex: number): void {
     const key = this.getRollsOrBagsRowKey(m, rowIndex);
     if (this.rollsOrBagsEditRowKey !== key) return;
+    if (this.isRollsOrBagsLocked(m)) {
+      this.rollsOrBagsEditRowKey = null;
+      this.rollsOrBagsEditDraft = '';
+      return;
+    }
     const raw = (this.rollsOrBagsEditDraft || '').replace(/,/g, '').replace(/\s/g, '').trim();
     const parsed = raw === '' ? 0 : parseFloat(raw);
-    m.rollsOrBags = isFinite(parsed) ? parsed : 0;
+    const next = isFinite(parsed) ? parsed : 0;
+    const unlocked = !!(m.id && this.ldvUnlockedIds.has(m.id));
+    m.rollsOrBags = next;
+    if (next > 0 || unlocked) {
+      m.rollsOrBagsLocked = true;
+      if (m.id) this.ldvUnlockedIds.delete(m.id);
+    }
     this.rollsOrBagsEditRowKey = null;
     this.rollsOrBagsEditDraft = '';
     this.updateMaterial(m);
+    if (next > 0) {
+      void this.notifyLdvMismatch(m).catch(err => {
+        console.error('Không gửi được mail lệch lượng đơn vị', err);
+      });
+    }
   }
 
   /** Cột NCC trong History: ẩn NVL_SX, NVL_KS, PD, ENG */
