@@ -392,6 +392,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   
   // Search term
   searchTerm: string = '';
+  /** Đã gõ số shipment nhưng không có trong dữ liệu đang tải — hiện nút tìm cũ hơn. */
+  olderShipmentOffer = false;
+  olderShipmentSearching = false;
+  monthViewLoading = false;
   
   // Filter by status when clicking summary cards (null = show all)
   filterByStatus: string | null = null;
@@ -1051,9 +1055,24 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   // Apply filters
   applyFilters(): void {
+    const q = (this.searchTerm || '').toString().trim().toLowerCase();
+    const searching = q.length > 0;
+    const hiddenCodes = new Set(
+      this.shipments
+        .filter(row => row.hidden === true)
+        .map(row => this.normalizeShipmentCode(row.shipmentCode))
+        .filter(code => !!code)
+    );
     this.filteredShipments = this.shipments.filter(shipment => {
-      // Filter ra các shipment đã ẩn (trừ khi showHidden = true)
-      if (shipment.hidden === true && !this.showHidden) {
+      const matchesSearch = !q ||
+        (shipment.shipmentCode || '').toLowerCase().includes(q) ||
+        (shipment.materialCode || '').toLowerCase().includes(q) ||
+        (shipment.customerCode || '').toLowerCase().includes(q) ||
+        (shipment.poShip || '').toLowerCase().includes(q) ||
+        this.getKhNameForShipment(shipment).toLowerCase().includes(q);
+
+      const code = this.normalizeShipmentCode(shipment.shipmentCode);
+      if (!this.showHidden && (shipment.hidden === true || (!!code && hiddenCodes.has(code)))) {
         return false;
       }
       
@@ -1064,20 +1083,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
       // Filter by date range - QUAN TRỌNG: Nếu không có requestDate thì vẫn hiển thị
       let isInDateRange = true;
-      if (shipment.requestDate) {
+      if (!searching && shipment.requestDate) {
       const requestDate = new Date(shipment.requestDate);
         isInDateRange = requestDate >= this.startDate && requestDate <= this.endDate;
       }
       // Nếu requestDate = null/undefined, tự động pass filter (hiển thị luôn)
-      
-      // Filter by search term
-      const q = (this.searchTerm || '').toString().trim().toLowerCase();
-      const matchesSearch = !q || 
-        (shipment.shipmentCode || '').toLowerCase().includes(q) ||
-        (shipment.materialCode || '').toLowerCase().includes(q) ||
-        (shipment.customerCode || '').toLowerCase().includes(q) ||
-        (shipment.poShip || '').toLowerCase().includes(q) ||
-        this.getKhNameForShipment(shipment).toLowerCase().includes(q);
 
       if (!this.shipmentMatchesKhFilter(shipment)) {
         return false;
@@ -1085,6 +1095,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
       return isInDateRange && matchesSearch;
     });
+    this.olderShipmentOffer = searching && this.filteredShipments.length === 0 && !this.olderShipmentSearching;
     
     // Sắp xếp: 1) Dispatch theo NGÀY (local), 2) FWD (AIR & SEA xuống cuối), 3) Shipment Code
     const dispatchDaySortKey = (d: Date | null | undefined): number => {
@@ -1607,10 +1618,75 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       alert('Tháng hoặc năm không hợp lệ.');
       return;
     }
-    this.setDateRangeToMonth(year, monthIndex0);
-    this.currentPage = 1;
-    this.applyFilters();
-    this.showMonthViewDialog = false;
+    const start = new Date(year, monthIndex0, 1);
+    const end = new Date(year, monthIndex0 + 1, 1);
+    this.monthViewLoading = true;
+    this.firestore.collection('shipments', ref =>
+      ref.where('requestDate', '>=', start).where('requestDate', '<', end).limit(5000)
+    ).get().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (snap) => {
+        this.mergeShipmentDocs(snap.docs);
+        this.setDateRangeToMonth(year, monthIndex0);
+        this.searchTerm = '';
+        this.olderShipmentOffer = false;
+        this.currentPage = 1;
+        this.applyFilters();
+        this.monthViewLoading = false;
+        this.showMonthViewDialog = false;
+        if (!this.filteredShipments.length) {
+          alert('Không có shipment trong tháng này.');
+        }
+      },
+      error: (err) => {
+        console.error('applyMonthViewFilter', err);
+        this.monthViewLoading = false;
+        alert('Không tải được shipment tháng này. Vui lòng thử lại.');
+      }
+    });
+  }
+
+  /** Gõ số shipment: không có trong danh sách đang mở thì hỏi, rồi chỉ đọc đúng số đó. */
+  searchOlderShipment(): void {
+    const raw = String(this.searchTerm || '').trim();
+    if (!raw || this.olderShipmentSearching) return;
+    const values = Array.from(new Set([raw, raw.toUpperCase()]));
+    this.olderShipmentSearching = true;
+    this.olderShipmentOffer = false;
+    this.firestore.collection('shipments', ref =>
+      ref.where('shipmentCode', 'in', values).limit(200)
+    ).get().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (snap) => {
+        this.olderShipmentSearching = false;
+        const docs = snap.docs || [];
+        if (!docs.length) {
+          alert('Không tìm thấy shipment này.');
+          this.olderShipmentOffer = true;
+          return;
+        }
+        this.mergeShipmentDocs(docs);
+        this.filterByStatus = null;
+        this.applyFilters();
+      },
+      error: (err) => {
+        console.error('searchOlderShipment', err);
+        this.olderShipmentSearching = false;
+        this.olderShipmentOffer = true;
+        alert('Không tìm được shipment cũ. Vui lòng thử lại.');
+      }
+    });
+  }
+
+  private mergeShipmentDocs(docs: Array<{ id: string; data: () => any }>): void {
+    if (!docs.length) return;
+    const byId = new Map<string, ShipmentItem>();
+    for (const s of this.shipments) {
+      if (s.id) byId.set(s.id, s);
+    }
+    for (const doc of docs) {
+      if (!doc.id || byId.has(doc.id)) continue;
+      byId.set(doc.id, this.mapShipmentDoc(doc.id, doc.data()));
+    }
+    this.shipments = Array.from(byId.values());
   }
 
   closeMonthViewDialog(): void {
@@ -2878,24 +2954,34 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Toggle hidden status
+  // Tick Ẩn trên một dòng thì ẩn cả lô cùng số shipment.
   toggleHidden(shipment: ShipmentItem): void {
-    shipment.hidden = !shipment.hidden;
-    shipment.updatedAt = new Date();
-    
-    if (shipment.id) {
-      this.firestore.collection('shipments').doc(shipment.id).update({
-        hidden: shipment.hidden,
-        updatedAt: new Date()
-      })
+    const next = !shipment.hidden;
+    const code = this.normalizeShipmentCode(shipment.shipmentCode);
+    const targets = code
+      ? this.shipments.filter(row => this.normalizeShipmentCode(row.shipmentCode) === code)
+      : [shipment];
+    const now = new Date();
+    for (const row of targets) {
+      row.hidden = next;
+      row.updatedAt = now;
+    }
+    this.applyFilters();
+
+    const writes = targets
+      .filter(row => !!row.id)
+      .map(row => this.firestore.collection('shipments').doc(row.id!).update({
+        hidden: next,
+        updatedAt: now
+      }));
+    if (!writes.length) return;
+    Promise.all(writes)
       .then(() => {
-        console.log(`Shipment ${shipment.shipmentCode} hidden status: ${shipment.hidden}`);
-        this.applyFilters(); // Cập nhật danh sách
+        console.log(`Shipment ${code || shipment.shipmentCode} hidden status: ${next} (${targets.length} dòng)`);
       })
       .catch(error => {
         console.error('Error updating hidden status:', error);
       });
-    }
   }
 
   // Toggle show/hide hidden shipments

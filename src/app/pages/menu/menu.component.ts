@@ -93,6 +93,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', iconImage: 'assets/img/stocktaking.png', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', iconImage: 'assets/img/fglocation.png', category: 'ASM FG' },
     { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', iconImage: 'assets/img/palletid.png', category: 'ASM FG' },
+    { path: '/tem-thanh-pham', title: 'Tem Thành Phẩm', icon: 'label', iconImage: 'assets/img/label.png', category: 'ASM FG' },
     
     // Tools & Operations
     { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', iconImage: 'assets/img/workorder.png', category: 'Tools' },
@@ -245,11 +246,12 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/fg-overview': 'Tổng quan tồn kho thành phẩm',
     '/fg-location': 'Đổi vị trí và nhà máy thành phẩm',
     '/pallet-id': 'Quản lý mã pallet',
+    '/tem-thanh-pham': 'In tem thành phẩm 57×32mm, QR theo Carton No',
     '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
     '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
     '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
     '/stock-check': 'Kiểm kê và đối chiếu tồn kho',
-    '/bieu-mau': 'Phiếu xuất kho / Stock Out Note',
+    '/bieu-mau': 'Phiếu xuất kho, biểu mẫu 5S',
     '/sxxk': 'Quản lý sản xuất xuất khẩu',
     '/scrap': 'Quản lý phế liệu',
     '/checklist': 'An toàn và chất lượng',

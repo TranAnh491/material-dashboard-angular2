@@ -1,11 +1,10 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { forkJoin, Subject } from 'rxjs';
 import { debounceTime, takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
-import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 
 
@@ -182,6 +181,11 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   private searchInput$ = new Subject<string>();
   isLoading: boolean = false;
   checkIdCounter: number = 1;
+  /** Đã search nhưng không có trong dữ liệu gần đây. */
+  olderFgOffer = false;
+  olderFgSearching = false;
+  shipmentCheckQuery = '';
+  shipmentCheckOlderHint = false;
 
   /** Thứ tự hiển thị nhóm Factory trên bảng */
   private readonly factoryDisplayOrder = ['ASM1', 'ASM2', 'ASM3'];
@@ -189,7 +193,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private cdr: ChangeDetectorRef,
-    private fgDailyBackup: FgDailyBackupService,
     private tpCatalogService: TpCatalogFullService,
     private router: Router,
     private location: Location
@@ -202,6 +205,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       .subscribe((term) => {
         this.searchTerm = term;
         this.applyFilters();
+        this.olderFgOffer = !!String(term || '').trim() && this.filteredItems.length === 0 && !this.olderFgSearching;
         this.cdr.markForCheck();
       });
     this.loadItemsFromFirebase();
@@ -319,11 +323,23 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Load items from Firebase
+  private fgRecentCutoff(): Date {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    return cutoff;
+  }
+
+  // Load items from Firebase — 30 ngày gần nhất. Shipment cũ hơn: nhập số rồi bấm Tìm cũ hơn.
   loadItemsFromFirebase(): void {
     this.isLoading = true;
-    
-    void this.fgDailyBackup.loadMergedDocs('fg-check', 'fg-check').then((merged) => {
+    const cutoff = this.fgRecentCutoff();
+
+    void this.firestore.collection('fg-check', ref =>
+      ref.where('updatedAt', '>=', cutoff).limit(3000)
+    ).get().toPromise().then((snap) => {
+        const merged = {
+          docs: (snap?.docs || []).map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }))
+        };
         const firebaseItems = merged.docs.map((doc) => {
           const data = doc.data as any;
           const id = doc.id;
@@ -442,13 +458,35 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   loadShipmentData(): void {
-    this.firestore.collection('shipments')
-      .get()
+    const cutoff = this.fgRecentCutoff();
+    forkJoin([
+      this.firestore.collection('shipments', ref =>
+        ref.where('requestDate', '>=', cutoff).limit(5000)
+      ).get(),
+      this.firestore.collection('shipments', ref =>
+        ref.where('requestDate', '==', null).limit(500)
+      ).get()
+    ])
       .pipe(takeUntil(this.destroy$))
-      .subscribe((snapshot) => {
+      .subscribe(([recentSnap, nullDateSnap]) => {
         this.shipmentDataMap.clear();
+        this.ingestShipmentOrderDocs([...recentSnap.docs, ...nullDateSnap.docs]);
         
-        snapshot.docs.forEach(doc => {
+        console.log('✅ Loaded shipment data for', this.shipmentDataMap.size, 'shipments');
+        
+        this.shipmentDataLoaded = true;
+        
+        if (this.itemsLoaded) {
+          console.log('🔄 Recalculating check results after shipment data update...');
+          this.enrichItemsFactory();
+          this.calculateCheckResults();
+        }
+        this.cdr.markForCheck();
+      });
+  }
+
+  private ingestShipmentOrderDocs(docs: Array<{ data: () => any }>): void {
+        docs.forEach(doc => {
           const data = doc.data() as any;
           // Normalize shipmentCode và materialCode: trim và uppercase cho shipmentCode
           // LƯU CẢ PO SHIP ĐỂ PHÂN BIỆT CÁC DÒNG CÙNG MATERIALCODE
@@ -479,19 +517,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             });
           }
         });
-        
-        console.log('✅ Loaded shipment data for', this.shipmentDataMap.size, 'shipments');
-        
-        this.shipmentDataLoaded = true;
-        
-        // Recalculate check results after loading shipment data (only if items are already loaded)
-        if (this.itemsLoaded) {
-          console.log('🔄 Recalculating check results after shipment data update...');
-          this.enrichItemsFactory();
-          this.calculateCheckResults();
-        }
-        this.cdr.markForCheck();
-      });
   }
 
   // Force reload shipment data and recalculate
@@ -1074,6 +1099,89 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
 
     this.searchInput$.next(searchTerm);
+  }
+
+  /** Không có trong 30 ngày đã tải: đọc đúng số shipment trên Firestore. */
+  searchOlderFgCheck(): void {
+    const raw = String(this.searchTerm || '').trim();
+    const code = raw.toUpperCase();
+    if (!code || this.olderFgSearching) return;
+    const values = Array.from(new Set([raw, code]));
+    this.olderFgSearching = true;
+    this.olderFgOffer = false;
+    forkJoin([
+      this.firestore.collection('fg-check', ref =>
+        ref.where('shipment', 'in', values).limit(500)
+      ).get(),
+      this.firestore.collection('shipments', ref =>
+        ref.where('shipmentCode', 'in', values).limit(200)
+      ).get()
+    ]).pipe(takeUntil(this.destroy$)).subscribe({
+      next: ([checkSnap, shipSnap]) => {
+        this.olderFgSearching = false;
+        const checkDocs = checkSnap.docs || [];
+        if (!this.shipmentDataMap.has(code) && (shipSnap.docs || []).length) {
+          this.ingestShipmentOrderDocs(shipSnap.docs);
+          this.shipmentDataLoaded = true;
+        }
+        if (!checkDocs.length) {
+          alert('Không tìm thấy shipment này.');
+          this.olderFgOffer = true;
+          this.cdr.markForCheck();
+          return;
+        }
+        const existingIds = new Set<string>();
+        this.items.forEach((item) => {
+          if (item.id) existingIds.add(item.id);
+          (item.docIds || []).forEach((id) => existingIds.add(id));
+        });
+        const fresh = checkDocs
+          .filter((doc) => !existingIds.has(doc.id))
+          .map((doc) => this.mapFgCheckDoc(doc.id, doc.data() as any));
+        if (fresh.length) {
+          this.items = [...this.items, ...this.mergeItemsByShipmentMaterialPallet(fresh)];
+          this.enrichItemsFactory();
+          if (this.shipmentDataLoaded) this.calculateCheckResults();
+        }
+        this.unhiddenShipments.add(code);
+        this.applyFilters();
+        this.olderFgOffer = this.filteredItems.length === 0;
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('searchOlderFgCheck', err);
+        this.olderFgSearching = false;
+        this.olderFgOffer = true;
+        alert('Không tìm được shipment cũ. Vui lòng thử lại.');
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  private mapFgCheckDoc(id: string, data: any): FGCheckItem {
+    return {
+      id,
+      shipment: data.shipment || '',
+      materialCode: data.materialCode || '',
+      customerCode: data.customerCode || '',
+      carton: data.carton || 0,
+      quantity: data.quantity || 0,
+      isChecked: data.isChecked || false,
+      checkId: data.checkId || '',
+      scanId: data.scanId || undefined,
+      checkMode: data.checkMode || 'pn',
+      scannedCustomerCode: data.scannedCustomerCode || false,
+      scannedQuantity: data.scannedQuantity || false,
+      isLocked: data.isLocked || false,
+      palletNo: data.palletNo || '',
+      shipmentCarton: data.shipmentCarton || 0,
+      shipmentQuantity: data.shipmentQuantity || 0,
+      poShip: data.poShip || '',
+      factory: data.factory || '',
+      checkResult: data.checkResult || undefined,
+      createdAt: data.createdAt ? new Date(data.createdAt.seconds * 1000) : new Date(),
+      updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
+    };
   }
 
   // Format number
@@ -2773,11 +2881,26 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   /** Tải báo cáo Check theo tháng đã chọn (Excel) */
   async downloadCheckReportByMonth(): Promise<void> {
     const XLSX = await import('xlsx');
-    const itemsInMonth = this.items.filter(item => {
-      const d = item.createdAt ? (item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt)) : null;
-      if (!d || isNaN(d.getTime())) return false;
-      return d.getMonth() + 1 === this.reportMonth && d.getFullYear() === this.reportYear;
-    });
+    const start = new Date(this.reportYear, this.reportMonth - 1, 1);
+    const end = new Date(this.reportYear, this.reportMonth, 1);
+    let itemsInMonth: FGCheckItem[] = [];
+    try {
+      const snap = await this.firestore.collection('fg-check', ref =>
+        ref.where('createdAt', '>=', start).where('createdAt', '<', end).limit(5000)
+      ).get().toPromise();
+      itemsInMonth = (snap?.docs || []).map((doc) => this.mapFgCheckDoc(doc.id, doc.data() as any));
+    } catch (e) {
+      console.error('downloadCheckReportByMonth', e);
+      itemsInMonth = this.items.filter(item => {
+        const d = item.createdAt ? (item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt)) : null;
+        if (!d || isNaN(d.getTime())) return false;
+        return d.getMonth() + 1 === this.reportMonth && d.getFullYear() === this.reportYear;
+      });
+    }
+    if (!itemsInMonth.length) {
+      alert(`Không có dữ liệu check trong tháng ${this.reportMonth}/${this.reportYear}.`);
+      return;
+    }
     const rows = itemsInMonth.map((item, i) => ({
       'STT': i + 1,
       'Shipment': item.shipment || '',
@@ -2810,8 +2933,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.shipmentCheckResults = [];
     this.shipmentCheckLastResult = null;
     this.shipmentCheckLastScanned = '';
+    this.shipmentCheckQuery = '';
+    this.shipmentCheckOlderHint = false;
     this.showShipmentCheckDialog = true;
-    this.loadShipmentCheckBoxes();
   }
 
   closeShipmentCheckDialog(): void {
@@ -2904,6 +3028,47 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
     this.shipmentCheckLoading = false;
     this.cdr.detectChanges();
+  }
+
+  /** Shipment Check: tìm trong dữ liệu gần đây, không có thì mới đọc số cũ. */
+  async searchShipmentForCheck(forceOlder = false): Promise<void> {
+    const raw = String(this.shipmentCheckQuery || '').trim();
+    const code = raw.toUpperCase();
+    if (!code || this.shipmentCheckLoading) return;
+    if (!this.shipmentDataMap.has(code) && !forceOlder) {
+      this.shipmentCheckOlderHint = true;
+      this.cdr.detectChanges();
+      return;
+    }
+    this.shipmentCheckOlderHint = false;
+    this.shipmentCheckLoading = true;
+    try {
+      const values = Array.from(new Set([raw, code]));
+      const snap = await this.firestore.collection('shipments', ref =>
+        ref.where('shipmentCode', 'in', values).limit(50)
+      ).get().toPromise();
+      const docs = snap?.docs || [];
+      if (!docs.length) {
+        alert('Không tìm thấy shipment này.');
+        this.shipmentCheckOlderHint = true;
+        return;
+      }
+      if (!this.shipmentDataMap.has(code)) {
+        this.ingestShipmentOrderDocs(docs);
+      }
+      const allowed = docs.some((doc) => this.isShipmentStatusAllowed((doc.data() as any).status));
+      if (!allowed) {
+        alert('Shipment này chưa ở trạng thái Đã xong hoặc Đã check.');
+        return;
+      }
+      await this.selectShipmentForCheck(code);
+    } catch (e) {
+      console.error('searchShipmentForCheck', e);
+      alert('Không tìm được shipment. Vui lòng thử lại.');
+    } finally {
+      this.shipmentCheckLoading = false;
+      this.cdr.detectChanges();
+    }
   }
 
   async selectShipmentForCheck(shipmentCode: string): Promise<void> {

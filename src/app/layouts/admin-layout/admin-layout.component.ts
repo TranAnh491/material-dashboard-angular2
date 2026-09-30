@@ -22,8 +22,10 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
   constructor( public location: Location, private router: Router) {}
 
   public shouldShowNavbar(): boolean {
+    const path = this.location.path().split('?')[0];
+    if (path.startsWith('/tem-thanh-pham')) return false;
     const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status', '/j-warehouse', '/stock-check', '/nhiet-do', '/pallet-id'];
-    return !hideNavbarOnRoutes.includes(this.location.path());
+    return !hideNavbarOnRoutes.includes(path);
   }
 
   ngOnInit() {
@@ -173,8 +175,10 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
   }
 
   public shouldShowFooter(): boolean {
+    const path = this.location.path().split('?')[0];
+    if (path.startsWith('/tem-thanh-pham')) return false;
     const hideFooterOnRoutes = ['/maps', '/work-order-status', '/documents', '/j-warehouse', '/pallet-id'];
-    return !hideFooterOnRoutes.includes(this.location.path());
+    return !hideFooterOnRoutes.includes(path);
   }
   
   isMac(): boolean {

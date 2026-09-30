@@ -104,6 +104,13 @@
                [(ngModel)]="searchTerm"
                (input)="onSearchChange($event)"
                class="custom-input search-input-uppercase">
+        <button type="button"
+                class="custom-btn"
+                *ngIf="olderFgOffer || olderFgSearching"
+                (click)="searchOlderFgCheck()"
+                [disabled]="olderFgSearching">
+          {{ olderFgSearching ? 'Đang tìm...' : 'Không thấy. Tìm cũ hơn' }}
+        </button>
       </div>
     </div>
     
@@ -559,25 +566,27 @@
       <!-- Bước 1: Chọn shipment -->
       <section class="sc-section sc-section-shipments" *ngIf="!shipmentCheckCode">
         <div class="sc-section-header">
-          <h4 class="sc-section-title">Chọn Shipment cần check</h4>
-          <button type="button" class="sc-btn-refresh"
-                  (click)="loadShipmentCheckBoxes()"
-                  [disabled]="shipmentCheckLoading">
-            <i class="material-icons">{{ shipmentCheckLoading ? 'hourglass_empty' : 'refresh' }}</i>
-            {{ shipmentCheckLoading ? 'Đang tải...' : 'Làm mới' }}
-          </button>
+          <h4 class="sc-section-title">Nhập số shipment</h4>
         </div>
-        <div class="sc-shipment-grid" *ngIf="shipmentCheckBoxes.length > 0">
+        <div class="sc-scan-input-wrap">
+          <input type="text"
+                 class="sc-scan-input"
+                 [(ngModel)]="shipmentCheckQuery"
+                 (ngModelChange)="shipmentCheckOlderHint = false"
+                 placeholder="Nhập số shipment"
+                 (keyup.enter)="searchShipmentForCheck(shipmentCheckOlderHint)"
+                 [disabled]="shipmentCheckLoading"
+                 autocomplete="off"
+                 style="text-transform:uppercase">
           <button type="button"
-                  class="sc-shipment-card"
-                  *ngFor="let s of shipmentCheckBoxes; trackBy: trackByIndex"
-                  (click)="selectShipmentForCheck(s.shipmentCode)">
-            <span class="sc-shipment-card-code">{{ s.shipmentCode }}</span>
-            <span class="sc-shipment-card-meta">{{ s.status }} · {{ s.palletCount }} pallet</span>
+                  class="sc-btn-scan"
+                  (click)="searchShipmentForCheck(shipmentCheckOlderHint)"
+                  [disabled]="shipmentCheckLoading || !shipmentCheckQuery.trim()">
+            <i class="material-icons">{{ shipmentCheckLoading ? 'hourglass_empty' : 'search' }}</i>
           </button>
         </div>
-        <p class="sc-empty-hint" *ngIf="shipmentCheckBoxes.length === 0 && !shipmentCheckLoading">
-          Không có shipment nào có pallet với trạng thái Đã xong hoặc Đã check.
+        <p class="sc-empty-hint" *ngIf="shipmentCheckOlderHint && !shipmentCheckLoading">
+          Không thấy trong dữ liệu gần đây. Bấm tìm lại để search cũ hơn.
         </p>
       </section>
 

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="600px" height="400px" viewBox="-0.5 -0.5 600 400">
+    <defs/>
+    <g>
+        <!-- Đây là hình dạng được định nghĩa ĐÚNG cho khu vực D1 -->
+        <!-- Lưu ý thuộc tính "id" nằm trực tiếp trên phần tử <rect> -->
+        <rect id="D1" x="50" y="50" width="150" height="100" fill="#f9f9f9" stroke="#000000" pointer-events="all"/>
+        
+        <!-- Đây là nhãn văn bản chỉ để HIỂN THỊ trong diagrams.net. Nó KHÔNG phải là id. -->
+        <g transform="translate(-0.5 -0.5)">
+            <switch>
+                <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 148px; height: 1px; padding-top: 100px; margin-left: 51px;">
+                        <div style="box-sizing: border-box; font-size: 0; text-align: center;">
+                            <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal;">
+                                D1
+                            </div>
+                        </div>
+                    </div>
+                </foreignObject>
+                <text x="125" y="104" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">D1</text>
+            </switch>
+        </g>
+
+        <!-- Đây là hình dạng được định nghĩa ĐÚNG cho khu vực NG -->
+        <rect id="NG" x="250" y="50" width="150" height="100" fill="#f9f9f9" stroke="#000000" pointer-events="all"/>
+        <g transform="translate(-0.5 -0.5)">
+            <switch>
+                <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 148px; height: 1px; padding-top: 100px; margin-left: 251px;">
+                        <div style="box-sizing: border-box; font-size: 0; text-align: center;">
+                            <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal;">
+                                NG
+                            </div>
+                        </div>
+                    </div>
+                </foreignObject>
+                <text x="325" y="104" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">NG</text>
+            </switch>
+        </g>
+    </g>
+</svg>

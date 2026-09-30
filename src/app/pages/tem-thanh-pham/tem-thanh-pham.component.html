@@ -1,0 +1,140 @@
+<div class="fgtem-page">
+  <header class="fgtem-top">
+    <div class="fgtem-top__title">
+      <h1>Tem Axon/Fuji</h1>
+      <p>57 × 32 mm · {{ plant === 'ASM2' ? 'ASM2' : 'ASM1 / ASM3' }} · W.O {{ woPrefix }}</p>
+    </div>
+    <div class="fgtem-top__actions">
+      <button type="button" class="fgtem-print" (click)="printLabels()" [disabled]="printing || !canPrint">
+        {{ printing ? 'Đang tạo tem…' : 'In tem' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="fgtem-grid">
+    <aside class="fgtem-card fgtem-catalog">
+      <div class="fgtem-card__head">
+        <h2>Danh mục mã</h2>
+        <span>{{ catalogCount }} mã</span>
+      </div>
+      <div class="fgtem-catalog__tools">
+        <input type="text"
+               [ngModel]="catalogQuery"
+               (ngModelChange)="catalogQuery = up($event); onCatalogQuery()"
+               placeholder="Tìm mã Axone / FJXR..."
+               autocomplete="off">
+      </div>
+      <p class="fgtem-note" *ngIf="catalogLoading">Đang tải danh mục…</p>
+      <p class="fgtem-note" *ngIf="importedRows.length">
+        Danh mục file: {{ importedRows.length }} mã. Import lại sẽ xóa danh mục này.
+        <button type="button" (click)="clearImported()">Bỏ file</button>
+      </p>
+      <ul class="fgtem-list">
+        <li *ngFor="let row of filteredCatalog">
+          <button type="button"
+                  [class.is-on]="selectedKey === (row.source + '|' + row.materialCode + '|' + row.customerCode)"
+                  (click)="applyCatalog(row)">
+            <strong>{{ row.materialCode || '—' }}</strong>
+            <em *ngIf="row.asmCode || row.customerCode">{{ row.asmCode }}<ng-container *ngIf="row.asmCode && row.customerCode"> · </ng-container>{{ row.customerCode }}</em>
+            <small *ngIf="row.name || row.customerName">{{ row.name }}<ng-container *ngIf="row.name && row.customerName"> · </ng-container>{{ row.customerName }}</small>
+          </button>
+        </li>
+      </ul>
+      <p class="fgtem-note" *ngIf="!catalogLoading && !catalogQuery.trim()">Nhập mã để tìm.</p>
+      <p class="fgtem-note" *ngIf="!catalogLoading && catalogQuery.trim() && !filteredCatalog.length">Không có mã khớp.</p>
+    </aside>
+
+    <section class="fgtem-card fgtem-form">
+      <h2>Nội dung tem</h2>
+      <div class="fgtem-fields">
+        <label>Số PO<input type="text" [ngModel]="po" (ngModelChange)="po = up($event)" autocomplete="off"></label>
+        <label>Mã TQ<input type="text" [ngModel]="poSlash" (ngModelChange)="poSlash = up($event)" placeholder="Cột B · Mã ASM TQ" autocomplete="off"></label>
+        <label>Mã hàng<input type="text" [ngModel]="materialCode" (ngModelChange)="materialCode = up($event); scheduleQr()" autocomplete="off"></label>
+        <label>Mã Khách<input type="text" [ngModel]="parenCode" (ngModelChange)="parenCode = up($event)" placeholder="Cột C" autocomplete="off"></label>
+        <label>Số PCS<input type="text" [ngModel]="pcs" (ngModelChange)="pcs = up($event); scheduleQr()" autocomplete="off"></label>
+        <label class="fgtem-wo">W.O
+          <span class="fgtem-wo__row">
+            <span class="fgtem-wo__prefix">{{ woPrefix }}</span>
+            <input type="text" [ngModel]="workOrder" (ngModelChange)="workOrder = up($event)" placeholder="0726/0180" autocomplete="off">
+          </span>
+        </label>
+        <label>Rev<input type="text" [ngModel]="blankRev(rev)" (ngModelChange)="rev = blankRev($event); scheduleQr()" autocomplete="off"></label>
+        <span></span>
+        <label>N.W (KGS)<input type="text" [ngModel]="netWeight" (ngModelChange)="netWeight = up($event)" autocomplete="off"></label>
+        <label>G.W (KGS)<input type="text" [ngModel]="grossWeight" (ngModelChange)="grossWeight = up($event)" autocomplete="off"></label>
+        <label>Carton No
+          <input type="text"
+                 [ngModel]="cartons[0].no"
+                 (ngModelChange)="cartons[0].no = $event; onCartonInput(cartons[0])"
+                 placeholder="YYYYMMDDH001"
+                 autocomplete="off">
+        </label>
+        <label>Số thùng
+          <input type="number"
+                 min="1"
+                 [ngModel]="cartons[0].qty"
+                 (ngModelChange)="cartons[0].qty = $event; onQtyChange(cartons[0])">
+        </label>
+      </div>
+      <p class="fgtem-note" *ngIf="cartonSpan(cartons[0])">{{ cartonSpan(cartons[0]) }}</p>
+    </section>
+
+    <section class="fgtem-card fgtem-preview">
+      <div class="fgtem-card__head">
+        <h2>Xem trước</h2>
+        <span class="fgtem-ready" *ngIf="materialCode">Đang khả dụng</span>
+      </div>
+      <div class="fgtem-stage" *ngFor="let row of cartons">
+        <div class="fgtem-zoom">
+          <div class="fgtem-label">
+            <div class="fgtem-face">
+              <div class="fgtem-head">
+                <div class="fgtem-brand">
+                  <span class="fgtem-brand__code">{{ lineCodeLeft() }}</span>
+                </div>
+                <div class="fgtem-pcs">{{ pcsText() }}</div>
+              </div>
+              <div class="fgtem-body">
+                <div class="fgtem-rows">
+                  <div class="fgtem-row">
+                    <span class="fgtem-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 4 7v10l8 3.8 8-3.8V7l-8-3.8z"/><path d="M12 12.2 4 7.4M12 12.2l8-4.8M12 12.2V21"/></svg></span>
+                    <span class="fgtem-meta"><span class="fgtem-k">ITEM</span><span class="fgtem-v">{{ lineCodeRight() }}</span></span>
+                  </div>
+                  <div class="fgtem-row">
+                    <span class="fgtem-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7.2L19 8.2V20.5H7z"/><path d="M14 3.5V8.4h5.2M9.2 12.2h6.2M9.2 16h6.2"/></svg></span>
+                    <span class="fgtem-meta"><span class="fgtem-k">CARTON No.</span><span class="fgtem-v">{{ previewNo(row) }}</span></span>
+                    <span class="fgtem-box">{{ boxMark(row) }}</span>
+                  </div>
+                  <div class="fgtem-row">
+                    <span class="fgtem-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 5.2 6v5.6c0 4.1 2.7 6.8 6.8 8.2 4.1-1.4 6.8-4.1 6.8-8.2V6L12 3.2z"/><path d="m8.8 12 2.1 2.1 4.3-4.3"/></svg></span>
+                    <span class="fgtem-meta"><span class="fgtem-k">W.O.</span><span class="fgtem-v">{{ woValue() }}</span></span>
+                  </div>
+                  <div class="fgtem-row fgtem-row--pair">
+                    <span class="fgtem-pair">
+                      <span class="fgtem-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2v2.2"/><path d="M7.2 9.2h9.6l1.6 3.2a5.6 5.6 0 0 1-12.8 0l1.6-3.2z"/><path d="M5 20.8h14M8 20.8l1.6-5.2M16 20.8l-1.6-5.2"/></svg></span>
+                      <span class="fgtem-meta"><span class="fgtem-k">N.W</span><span class="fgtem-v">{{ nwValue() }}</span></span>
+                    </span>
+                    <span class="fgtem-pair">
+                      <span class="fgtem-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2v2.2"/><path d="M7.2 9.2h9.6l1.6 3.2a5.6 5.6 0 0 1-12.8 0l1.6-3.2z"/><path d="M5 20.8h14M8 20.8l1.6-5.2M16 20.8l-1.6-5.2"/></svg></span>
+                      <span class="fgtem-meta"><span class="fgtem-k">G.W</span><span class="fgtem-v">{{ gwValue() }}</span></span>
+                    </span>
+                  </div>
+                </div>
+                <div class="fgtem-side">
+                  <div class="fgtem-qr">
+                    <span class="fgtem-c fgtem-c--tl"></span>
+                    <span class="fgtem-c fgtem-c--tr"></span>
+                    <span class="fgtem-c fgtem-c--bl"></span>
+                    <span class="fgtem-c fgtem-c--br"></span>
+                    <img *ngIf="row.qr" [src]="row.qr" alt="">
+                  </div>
+                  <div class="fgtem-rev">{{ revLine() }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

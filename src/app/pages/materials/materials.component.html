@@ -994,10 +994,13 @@
                     </td>
                     <td class="kk-type-note-cell" [title]="getKkTypePalletNote(material)">{{ getKkTypePalletNote(material) || '—' }}</td>
                   </tr>
-                  <tr *ngIf="!kkTypeDetailAll.length">
-                    <td colspan="14" class="hidden-empty">{{ kkAllStockDetail ? 'Không có dòng tồn kho' : ('Không có dòng tồn loại hàng này' + (kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '')) }}.</td>
+                  <tr *ngIf="kkAllStockWaitingSearch()">
+                    <td colspan="14" class="hidden-empty">Nhập mã hoặc vị trí để xem.</td>
                   </tr>
-                  <tr *ngIf="kkTypeDetailAll.length && !kkTypeDetailFiltered.length">
+                  <tr *ngIf="!kkAllStockDetail && !kkTypeDetailAll.length">
+                    <td colspan="14" class="hidden-empty">{{ 'Không có dòng tồn loại hàng này' + (kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '') }}.</td>
+                  </tr>
+                  <tr *ngIf="!kkAllStockWaitingSearch() && ((kkTypeDetailAll.length && !kkTypeDetailFiltered.length) || (kkAllStockDetail && !kkTypeDetailFiltered.length))">
                     <td colspan="14" class="hidden-empty">{{ kkLocScanLoading ? 'Đang lấy mã scan vị trí…' : 'Không có dòng nào khớp bộ lọc.' }}</td>
                   </tr>
                 </tbody>

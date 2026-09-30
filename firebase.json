@@ -63,8 +63,8 @@
       ]
     },
     {
-      "target": "truck-schedule",
-      "public": "dist-truck-schedule",
+      "target": "fg-label",
+      "public": "dist-fg-label",
       "ignore": [
         "firebase.json",
         "**/.*",

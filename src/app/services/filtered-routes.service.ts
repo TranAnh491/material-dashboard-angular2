@@ -72,7 +72,7 @@ export class FilteredRoutesService {
   // Kiểm tra quyền truy cập cho một route
   private hasAccessToRoute(route: RouteInfo, permissions: { [key: string]: boolean }, userRole: string | null): boolean {
     // Xe Tải: ai đăng nhập cũng truy cập được (không phụ thuộc tab permissions)
-    if (route.path === '/xe-tai') return true;
+    if (route.path === '/xe-tai' || route.path === '/tem-thanh-pham') return true;
 
     const tabKey = this.getTabKeyFromRoute(route.path);
     

@@ -1,0 +1,21 @@
+<header class="hist-top">
+  <div>
+    <h1>Lịch sử in</h1>
+    <p>Các lần in tem thành phẩm trên máy này.</p>
+  </div>
+</header>
+
+<p class="hist-empty" *ngIf="!records.length">Chưa có lần in nào.</p>
+
+<ul class="hist-list" *ngIf="records.length">
+  <li *ngFor="let item of records">
+    <div>
+      <strong>{{ item.materialCode || '—' }}</strong>
+      <span *ngIf="item.asmCode"> / {{ item.asmCode }}</span>
+      <span *ngIf="item.customerCode"> · {{ item.customerCode }}</span>
+      <p>{{ when(item.at) }} · {{ item.cartons.length }} carton<span *ngIf="item.po"> · PO {{ item.po }}</span></p>
+      <small>{{ item.cartons.join(', ') }}</small>
+    </div>
+    <button type="button" (click)="openAgain(item)">Mở lại</button>
+  </li>
+</ul>

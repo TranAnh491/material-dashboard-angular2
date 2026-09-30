@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "../../out-tsc/truck-schedule-app",
     "module": "es2020",
-    "baseUrl": "",
+    "baseUrl": "..",
     "types": []
   },
   "files": [

@@ -1,18 +1,31 @@
 <div class="bm-page">
   <div class="bm-toolbar no-print">
-    <button type="button" class="bm-btn" (click)="goToMenu()">
-      <i class="material-icons">home</i>
-      Về Menu
+    <button type="button" class="bm-btn" (click)="activeForm ? backToList() : goToMenu()">
+      <i class="material-icons">{{ activeForm ? 'arrow_back' : 'home' }}</i>
+      {{ activeForm ? 'Danh sách biểu mẫu' : 'Về Menu' }}
     </button>
-    <h1>Biểu mẫu</h1>
-    <button type="button" class="bm-btn bm-btn--primary" (click)="printForm()">
+    <h1>Biểu mẫu<ng-container *ngIf="activeFormCard"> · {{ activeFormCard.title }}</ng-container></h1>
+    <button *ngIf="activeForm === 'five-s'" type="button" class="bm-btn" (click)="resetFiveS()">
+      <i class="material-icons">restart_alt</i>
+      Mặc định
+    </button>
+    <button *ngIf="activeForm" type="button" class="bm-btn bm-btn--primary" (click)="printForm()">
       <i class="material-icons">print</i>
-      In phiếu
+      In biểu mẫu
     </button>
   </div>
 
-  <div class="bm-preview-wrap">
-    <article class="stock-out-note" id="stockOutNotePrint">
+  <!-- Danh sách biểu mẫu: mỗi biểu mẫu 1 icon -->
+  <div class="bm-grid no-print" *ngIf="!activeForm">
+    <button type="button" class="bm-card" *ngFor="let f of forms" (click)="openForm(f.id)">
+      <span class="bm-card__icon"><i class="material-icons">{{ f.icon }}</i></span>
+      <span class="bm-card__title">{{ f.title }}</span>
+      <span class="bm-card__sub">{{ f.subtitle }}</span>
+    </button>
+  </div>
+
+  <div class="bm-preview-wrap" *ngIf="activeForm">
+    <article class="stock-out-note" id="stockOutNotePrint" *ngIf="activeForm === 'stock-out'">
       <!-- Header -->
       <header class="son-header">
         <div class="son-header__brand">
@@ -147,6 +160,195 @@
         <div class="son-sign__cell">
           <div class="son-sign__vi">Giám đốc</div>
           <div class="son-sign__en">/ Director</div>
+        </div>
+      </footer>
+    </article>
+
+    <article class="five-s" *ngIf="activeForm === 'five-s'" (change)="saveFiveS()" (input)="saveFiveS()">
+      <!-- Header -->
+      <header class="son-header">
+        <div class="son-header__brand">
+          <img class="son-logo" [src]="getLogoSrc()" alt="AIRSPEED" />
+          <div class="son-company">AIRSPEED MANUFACTURING VIET NAM</div>
+        </div>
+        <div class="son-header__title">
+          <div class="son-title-vi">PHÂN VÙNG TRÁCH NHIỆM 5S</div>
+          <div class="son-title-en">5S ZONE RESPONSIBILITY · KHO J4 – J5</div>
+        </div>
+        <table class="son-meta-box">
+          <tr>
+            <th>Mã quản lý</th>
+            <td><input class="fs-inp fs-inp--c" [(ngModel)]="fiveSMeta.managementCode" /></td>
+          </tr>
+          <tr>
+            <th>Phiên bản</th>
+            <td><input class="fs-inp fs-inp--c" [(ngModel)]="fiveSMeta.version" /></td>
+          </tr>
+          <tr>
+            <th>Ngày tháng năm / Date</th>
+            <td><input class="fs-inp fs-inp--c" [(ngModel)]="fiveSMeta.issuedDate" /></td>
+          </tr>
+        </table>
+      </header>
+
+      <!-- Sơ đồ phân vùng -->
+      <section class="fs-section">
+        <div class="fs-section__title">
+          1. Sơ đồ phân vùng <span>/ Zone map</span>
+        </div>
+        <div class="fs-map-wrap">
+          <svg class="fs-map" [attr.viewBox]="'0 0 ' + mapWidth + ' ' + mapHeight" xmlns="http://www.w3.org/2000/svg">
+            <!-- Nhãn mặt -->
+            <text class="fs-face" [attr.x]="mapWidth / 2" y="16" text-anchor="middle">Mặt E</text>
+            <text class="fs-face" [attr.x]="mapWidth / 2" [attr.y]="mapHeight - 6" text-anchor="middle">Mặt B</text>
+            <text class="fs-face" x="14" [attr.y]="mapHeight / 2" text-anchor="middle"
+                  [attr.transform]="'rotate(-90 14 ' + mapHeight / 2 + ')'">Mặt A</text>
+            <text class="fs-face" [attr.x]="mapWidth - 14" [attr.y]="mapHeight / 2" text-anchor="middle"
+                  [attr.transform]="'rotate(90 ' + (mapWidth - 14) + ' ' + mapHeight / 2 + ')'">Mặt D</text>
+
+            <!-- Vùng màu -->
+            <g *ngFor="let z of fiveSZones">
+              <rect [attr.x]="zoneRect(z).x" [attr.y]="zoneRect(z).y"
+                    [attr.width]="zoneRect(z).w" [attr.height]="zoneRect(z).h"
+                    [attr.fill]="z.color" fill-opacity="0.28"
+                    [attr.stroke]="z.color" stroke-width="3" />
+              <text class="fs-zone-name" [attr.fill]="z.color"
+                    [attr.x]="zoneRect(z).x + zoneRect(z).w / 2"
+                    [attr.y]="zoneRect(z).y + zoneRect(z).h / 2 - 6"
+                    text-anchor="middle">{{ z.name }}</text>
+              <text class="fs-zone-team"
+                    [attr.x]="zoneRect(z).x + zoneRect(z).w / 2"
+                    [attr.y]="zoneRect(z).y + zoneRect(z).h / 2 + 18"
+                    text-anchor="middle">{{ z.team }}</text>
+            </g>
+
+            <!-- Viền xưởng -->
+            <g *ngFor="let b of ['J4', 'J5']">
+              <rect class="fs-building" [attr.x]="MAP_PAD" [attr.y]="buildingY($any(b))"
+                    [attr.width]="buildingW" [attr.height]="buildingH" />
+              <text class="fs-building-label" [attr.x]="MAP_PAD + 8" [attr.y]="buildingY($any(b)) + 20">
+                Xưởng {{ b }}
+              </text>
+            </g>
+
+            <!-- Trục mét -->
+            <g *ngFor="let m of axisTicks">
+              <line class="fs-tick" [attr.x1]="MAP_PAD + m * MAP_SCALE" [attr.x2]="MAP_PAD + m * MAP_SCALE"
+                    [attr.y1]="mapHeight - MAP_PAD" [attr.y2]="mapHeight - MAP_PAD + 5" />
+            </g>
+          </svg>
+          <div class="fs-map-note">Mỗi xưởng 105m × 30m · J4 giáp J5 ở mặt C · vạch trục mỗi 10m tính từ mặt A</div>
+        </div>
+      </section>
+
+      <!-- Bảng phân công -->
+      <section class="fs-section">
+        <div class="fs-section__title">
+          2. Phân công trách nhiệm <span>/ Responsibility</span>
+        </div>
+        <table class="fs-table">
+          <thead>
+            <tr>
+              <th style="width: 44px">Màu<br /><span>/ Color</span></th>
+              <th style="width: 80px">Vùng<br /><span>/ Zone</span></th>
+              <th style="width: 250px">Phạm vi<br /><span>/ Area</span></th>
+              <th style="width: 100px">Team<br /><span>/ Team</span></th>
+              <th style="width: 130px">Trưởng nhóm<br /><span>/ Leader</span></th>
+              <th>Thành viên<br /><span>/ Members</span></th>
+              <th style="width: 100px">Ký xác nhận<br /><span>/ Signature</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let z of fiveSZones">
+              <td class="c">
+                <span class="fs-swatch" [style.background]="z.color"></span>
+                <input type="color" class="fs-color no-print" [(ngModel)]="z.color" title="Đổi màu vùng" />
+              </td>
+              <td><input class="fs-inp fs-inp--b" [style.color]="z.color" [(ngModel)]="z.name" /></td>
+              <td>
+                <div class="fs-scope no-print">
+                  <select [(ngModel)]="z.building">
+                    <option value="J4">J4</option>
+                    <option value="J5">J5</option>
+                  </select>
+                  <input type="number" min="0" [max]="BUILDING_LENGTH_M" step="0.5"
+                         [(ngModel)]="z.fromM" (blur)="clampZoneRange(z)" />
+                  <span>→</span>
+                  <input type="number" min="0" [max]="BUILDING_LENGTH_M" step="0.5"
+                         [(ngModel)]="z.toM" (blur)="clampZoneRange(z)" />
+                  <span>m</span>
+                </div>
+                <div class="fs-scope-text">{{ zoneScope(z) }}</div>
+              </td>
+              <td><input class="fs-inp fs-inp--b" [(ngModel)]="z.team" /></td>
+              <td><input class="fs-inp" [(ngModel)]="z.leader" placeholder="Họ tên" /></td>
+              <td><textarea class="fs-inp fs-area" rows="2" [(ngModel)]="z.members" placeholder="Danh sách thành viên"></textarea></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Checklist 5S -->
+      <section class="fs-section fs-page-break">
+        <div class="fs-section__title">
+          3. Kiểm tra 5S <span>/ 5S Checklist</span>
+          <span class="fs-check-meta">
+            Ngày kiểm tra / Date: ...................... &nbsp;&nbsp; Người kiểm tra / Auditor: ..............................
+          </span>
+        </div>
+        <table class="fs-table fs-check">
+          <thead>
+            <tr>
+              <th style="width: 34px">STT</th>
+              <th style="width: 120px">Hạng mục<br /><span>/ Item</span></th>
+              <th>Nội dung kiểm tra<br /><span>/ Criteria</span></th>
+              <th *ngFor="let z of fiveSZones" class="fs-check-zone" [style.background]="z.color">
+                {{ z.name }}<br /><span>{{ z.team }}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of fiveSCriteria; let i = index">
+              <td class="c">{{ i + 1 }}</td>
+              <td>
+                <strong>{{ c.vi }}</strong>
+                <div class="fs-sub">{{ c.jp }} · {{ c.en }}</div>
+              </td>
+              <td class="l">{{ c.content }}</td>
+              <td *ngFor="let z of fiveSZones" class="c fs-tick-cell">
+                <span class="fs-box"></span> OK
+                <span class="fs-box"></span> NG
+              </td>
+            </tr>
+            <tr>
+              <td class="c">—</td>
+              <td><strong>Ghi chú</strong><div class="fs-sub">Remark / Action</div></td>
+              <td></td>
+              <td *ngFor="let z of fiveSZones" class="fs-remark"></td>
+            </tr>
+            <tr>
+              <td class="c">—</td>
+              <td><strong>Trưởng nhóm ký</strong><div class="fs-sub">Leader sign</div></td>
+              <td></td>
+              <td *ngFor="let z of fiveSZones" class="fs-remark"></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <footer class="son-sign fs-sign">
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Người lập</div>
+          <div class="son-sign__en">/ Prepared by</div>
+        </div>
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Quản lý kho</div>
+          <div class="son-sign__en">/ WH Manager</div>
+        </div>
+        <div class="son-sign__cell">
+          <div class="son-sign__vi">Phê duyệt</div>
+          <div class="son-sign__en">/ Approved by</div>
         </div>
       </footer>
     </article>

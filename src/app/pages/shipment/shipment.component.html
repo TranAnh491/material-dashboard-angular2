@@ -145,6 +145,13 @@
                            (input)="onSearchInput()">
                     <i class="material-icons search-icon">search</i>
                   </div>
+                  <button type="button"
+                          class="btn btn-outline-primary"
+                          *ngIf="olderShipmentOffer || olderShipmentSearching"
+                          (click)="searchOlderShipment()"
+                          [disabled]="olderShipmentSearching">
+                    {{ olderShipmentSearching ? 'Đang tìm...' : 'Không thấy. Tìm cũ hơn' }}
+                  </button>
 
                   <div class="search-total-carton-box"
                        *ngIf="isShipmentSearchActive && filteredShipments.length > 0">
@@ -633,9 +640,9 @@
         <i class="material-icons">close</i>
         Hủy
       </button>
-      <button type="button" class="btn btn-apply" (click)="applyMonthViewFilter()">
+      <button type="button" class="btn btn-apply" (click)="applyMonthViewFilter()" [disabled]="monthViewLoading">
         <i class="material-icons">check</i>
-        Áp dụng
+        {{ monthViewLoading ? 'Đang tải...' : 'Áp dụng' }}
       </button>
     </div>
   </div>

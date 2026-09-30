@@ -439,6 +439,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkTypeDetailAllCached: InventoryMaterial[] = [];
   private kkTypeDetailFilteredCached: InventoryMaterial[] = [];
   private kkTypeFilteredRollsCached = 0;
+  private kkTypeLiveStock = 0;
+  private kkTypeLiveChecked = 0;
   private kkTypePalletNotesSig = '';
   private kkTypePalletNotesCached = new Map<string, string>();
   showKkTypeScanModal = false;
@@ -8631,34 +8633,63 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeShowExtraFilter = false;
     this.kkTypeDetailSig = '';
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    void this.ensureKkTypeMaterialNames();
     this.syncKkPageLock();
     this.cdr.detectChanges();
+    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
   }
 
-  /** Mọi dòng tồn > 0 (theo Zone / WH3), không gom theo loại hàng. */
+  /** Chi tiết KK đang chờ người dùng nhập mã hoặc vị trí. */
+  kkAllStockWaitingSearch(): boolean {
+    return this.kkAllStockDetail && !this.kkAllStockSearch();
+  }
+
+  /** Chi tiết KK: lấy dòng khi đã nhập mã, vị trí, hoặc bấm Hôm nay / Hôm qua. */
+  private kkAllStockSearch(): { code: string; loc: string } | null {
+    const code = String(this.kkTypeDetailQuery || this.kkLocMapQuery || '').trim().toUpperCase();
+    const loc = String(this.kkTypeFilterLoc || '').trim().toUpperCase();
+    const codeOk = code.length >= 2;
+    if (!codeOk && !loc && !this.kkLocScanDay) return null;
+    return { code: codeOk ? code : '', loc };
+  }
+
+  /** Dòng tồn khớp ô tìm hoặc ngày scan vị trí — không dựng cả danh sách khi chưa chọn gì. */
   private kkAllStockDetailLines(): InventoryMaterial[] {
+    const q = this.kkAllStockSearch();
+    if (!q) return [];
+    if (this.kkLocScanDay && !this.kkLocScanReady) return [];
+
+    const range = this.kkLocScanDay ? this.kkLocScanRange(this.kkLocScanDay) : null;
     const seen = new Set<string>();
     const out: InventoryMaterial[] = [];
+    const zone = this.kkLocMapWarehouseFilter;
     this.kkLocMapTypeCache.forEach((list) => {
       for (const m of list) {
         const id = String(m.id || '');
         if (id && seen.has(id)) continue;
-        if (this.calculateCurrentStock(m) <= 0) continue;
-        if (!this.kkMatchesWh3Mode(this.kkWarehouseFromLocation(m.location))) continue;
-        const zone = this.kkLocMapWarehouseFilter;
-        if (zone && this.kkWarehouseFromLocation(m.location) !== zone) continue;
+        if (q.code && !this.kkLineMatchesSearchQuery(m, q.code)) continue;
+        if (q.loc && !String(m.location || '').toUpperCase().includes(q.loc)) continue;
+        if (range) {
+          const scanned = !!(id && this.kkLocScanIds.has(id));
+          const at = scanned ? null : this.normalizeTimestamp(m.locationScannedAt);
+          if (!scanned && !(at && at >= range.start && at < range.end)) continue;
+        }
+        const opening = m.openingStock !== null && m.openingStock !== undefined ? m.openingStock : 0;
+        if (opening + (m.quantity || 0) - (m.exported || 0) - (m.xt || 0) <= 0) continue;
+        const wh = this.kkWarehouseFromLocation(m.location);
+        if (!this.kkMatchesWh3Mode(wh)) continue;
+        if (zone && wh !== zone) continue;
         if (id) seen.add(id);
         out.push(m);
       }
     });
     out.sort((a, b) => {
-      const code = this.compareMaterialCodesFIFO(
-        String(a.materialCode || ''),
-        String(b.materialCode || '')
-      );
-      if (code) return code;
-      return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+      const ca = a.materialCode || '';
+      const cb = b.materialCode || '';
+      if (ca !== cb) return ca < cb ? -1 : 1;
+      const pa = a.poNumber || '';
+      const pb = b.poNumber || '';
+      if (pa !== pb) return pa < pb ? -1 : 1;
+      return 0;
     });
     return out;
   }
@@ -8708,9 +8739,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeShowExtraFilter = false;
     this.kkTypeDetailSig = '';
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    void this.ensureKkTypeMaterialNames();
     this.syncKkPageLock();
     this.cdr.detectChanges();
+    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
   }
 
   /** Dòng tồn của mọi mã trong dải tầng đang Chi tiết (set cho vị trí mâm đó). */
@@ -9192,17 +9223,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private applyKkTypeRowLiveCounts(row: KkTypeRow): KkTypeRow {
-    const lines = this.kkTypeDetailAll;
-    let stock = 0;
-    let checked = 0;
-    for (const m of lines) {
-      stock += this.calculateCurrentStock(m);
-      if (this.isKkFlagOn(m.kkChecked)) checked += 1;
-    }
-    row.stock = stock;
-    row.totalLines = lines.length;
-    row.checked = checked;
-    row.remaining = Math.max(0, row.totalLines - checked);
+    this.ensureKkTypeDetailCache();
+    row.stock = this.kkTypeLiveStock;
+    row.totalLines = this.kkTypeDetailAllCached.length;
+    row.checked = this.kkTypeLiveChecked;
+    row.remaining = Math.max(0, row.totalLines - row.checked);
     return row;
   }
 
@@ -9235,8 +9260,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeSortQtyDesc = false;
     this.kkTypeShowExtraFilter = false;
     if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    void this.ensureKkTypeMaterialNames();
     this.syncKkPageLock();
+    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
   }
 
   kkTypeHomeLocOf(productType: string): string {
@@ -9685,39 +9710,42 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         .map((p) => this.displayLocationToken(p))
         .filter((p) => !!p && p !== '-');
       if (!locs.length) continue;
-      const mamKeys = new Set<string>();
+      const shelfSlots: Array<{ shelf: string; mam: string }> = [];
       for (const loc of locs) {
         const parsed = this.kkParseKiemKeMam(loc);
         if (!parsed) continue;
-        mamKeys.add(`${parsed.shelf}\t${parsed.mam}`);
+        const dup = shelfSlots.some(
+          (s) => s.shelf === parsed.shelf && s.mam.toUpperCase() === parsed.mam.toUpperCase()
+        );
+        if (!dup) shelfSlots.push(parsed);
       }
-      for (const key of mamKeys) {
-        const [shelf, mam] = key.split('\t');
-        let mamMap = byShelf.get(shelf);
-        if (!mamMap) {
-          mamMap = new Map();
-          byShelf.set(shelf, mamMap);
-        }
-        let rows = mamMap.get(mam);
-        if (!rows) {
-          rows = [];
-          mamMap.set(mam, rows);
-        }
-        const ordered = [
-          mam,
-          ...locs.filter((l) => l.toUpperCase() !== mam.toUpperCase())
-        ].slice(0, 5);
-        rows.push({
-          code,
-          po,
-          stock,
-          locs: ordered,
-          webStock: null,
-          linkQStock: null,
-          note: '',
-          noteWarn: false
-        });
+      if (!shelfSlots.length) continue;
+      // Tồn chỉ gắn với vị trí kệ chính của dòng (vị trí đầu), không lặp số tồn sang vị trí khác.
+      const home = shelfSlots[0];
+      let mamMap = byShelf.get(home.shelf);
+      if (!mamMap) {
+        mamMap = new Map();
+        byShelf.set(home.shelf, mamMap);
       }
+      let rows = mamMap.get(home.mam);
+      if (!rows) {
+        rows = [];
+        mamMap.set(home.mam, rows);
+      }
+      const ordered = [
+        home.mam,
+        ...locs.filter((l) => l.toUpperCase() !== home.mam.toUpperCase())
+      ].slice(0, 5);
+      rows.push({
+        code,
+        po,
+        stock,
+        locs: ordered,
+        webStock: null,
+        linkQStock: null,
+        note: '',
+        noteWarn: false
+      });
     }
     return byShelf;
   }
@@ -10893,9 +10921,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkTypeDetailAllCached = this.kkTypeDetailLines(found);
     }
     this.kkTypeDetailFilteredCached = this.buildKkTypeDetailFiltered(this.kkTypeDetailAllCached);
-    this.kkTypeFilteredRollsCached = this.kkTypeDetailFilteredCached.reduce((sum, m) => {
-      return sum + this.getKkRollsCount(m);
-    }, 0);
+    let stock = 0;
+    let checked = 0;
+    for (const m of this.kkTypeDetailAllCached) {
+      stock += this.calculateCurrentStock(m);
+      if (this.isKkFlagOn(m.kkChecked)) checked += 1;
+    }
+    this.kkTypeLiveStock = stock;
+    this.kkTypeLiveChecked = checked;
+    this.kkTypeFilteredRollsCached = this.kkAllStockDetail
+      ? 0
+      : this.kkTypeDetailFilteredCached.reduce((sum, m) => sum + this.getKkRollsCount(m), 0);
   }
 
   private buildKkTypeDetailFiltered(all: InventoryMaterial[]): InventoryMaterial[] {
@@ -11338,6 +11374,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const max = this.kkTypeDetailTotalPages;
     if (page < 1 || page > max) return;
     this.kkTypePage = page;
+    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
   }
 
   kkTypePrevPage(): void {
@@ -13747,7 +13784,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async ensureKkTypeMaterialNames(): Promise<void> {
     try {
-      const rows = this.kkTypeDetailAll;
+      const rows = this.kkTypeDetailPaged;
       const codes = [...new Set(
         rows.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
       )].filter((code) => {
@@ -14314,12 +14351,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkCachedLinesForType(row.productType)
       .filter((m) => this.calculateCurrentStock(m) > 0)
       .sort((a, b) => {
-        const code = this.compareMaterialCodesFIFO(
-          String(a.materialCode || ''),
-          String(b.materialCode || '')
-        );
-        if (code) return code;
-        return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
+        const ca = a.materialCode || '';
+        const cb = b.materialCode || '';
+        if (ca !== cb) return ca < cb ? -1 : 1;
+        const pa = a.poNumber || '';
+        const pb = b.poNumber || '';
+        if (pa !== pb) return pa < pb ? -1 : 1;
+        return 0;
       });
   }
 

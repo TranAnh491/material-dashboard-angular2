@@ -54,6 +54,10 @@ export interface RawFgCatalogDoc {
   cartonSize: string;
   grossWeight: string;
   netWeight: string;
+  /** Cột Mã ASM TQ trong file danh mục, nếu dòng còn giữ cột gốc. */
+  asmCode?: string;
+  /** Version bản vẽ KH, hoặc Version Bvẽ ASM nếu không có bản vẽ KH. */
+  drawingRev?: string;
   createdAt?: Date;
   updatedAt?: Date;
   /** Mã nhân viên (employeeId) người sửa gần nhất. */
@@ -88,7 +92,7 @@ export class TpCatalogFullService {
   private readonly importMetaPath = 'fg-catalog-meta/merged-import';
   private static readonly CACHE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly LS_KEY = 'tp-catalog-full-cache-v1';
-  private static readonly CATALOG_RAW_LS_KEY = 'fg-catalog-raw-cache-v1';
+  private static readonly CATALOG_RAW_LS_KEY = 'fg-catalog-raw-cache-v3';
   private static readonly MAPPING_RAW_LS_KEY = 'fg-customer-mapping-raw-cache-v1';
 
   private cachedItems: MergedCatalogItem[] | null = null;
@@ -103,6 +107,44 @@ export class TpCatalogFullService {
 
   private norm(v: any): string {
     return String(v ?? '').trim();
+  }
+
+  /** Mã ASM TQ nằm trong cột gốc của file import, không có field riêng. */
+  private asmCodeFromRaw(d: any): string {
+    if (!d || typeof d !== 'object') return '';
+    for (const key of Object.keys(d)) {
+      const n = String(key)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+      if (n === 'maasmtq' || n === 'matq' || n.includes('asmtq')) {
+        const value = this.norm(d[key]);
+        if (value) return value;
+      }
+    }
+    return '';
+  }
+
+  private normHeader(key: string): string {
+    return String(key)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  /** Version bản vẽ KH. Không có Rev KH thì để trống, không lấy Version Bvẽ ASM. */
+  private revFromRaw(d: any): string {
+    if (!d || typeof d !== 'object') return '';
+    let kh = '';
+    for (const key of Object.keys(d)) {
+      const n = this.normHeader(key);
+      const value = this.norm(d[key]);
+      if (!value) continue;
+      if (n === 'versionbanvekh' || (n.includes('version') && n.includes('banve') && n.endsWith('kh'))) kh = value;
+    }
+    return kh;
   }
 
   private key(materialCode: any, customerCode: any): string {
@@ -145,6 +187,8 @@ export class TpCatalogFullService {
         cartonSize: this.norm(d.cartonSize),
         grossWeight: this.norm(d.grossWeight),
         netWeight: this.norm(d.netWeight),
+        asmCode: this.asmCodeFromRaw(d),
+        drawingRev: this.revFromRaw(d),
         createdAt: this.toDate(d.createdAt),
         updatedAt: this.toDate(d.updatedAt),
         lastEditedBy: this.norm(d.lastEditedBy) || undefined

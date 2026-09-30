@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>A5 Calibration Template - 1mm Grid</title>
+    <style>
+        @page {
+            size: A5;
+            margin: 0;
+        }
+        body {
+            margin: 0;
+            padding: 10mm;
+            font-family: Arial, sans-serif;
+            background: white;
+            width: 148mm;
+            height: 210mm;
+            box-sizing: border-box;
+        }
+        .title {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 5mm;
+            color: #333;
+        }
+        .instructions {
+            text-align: center;
+            font-size: 10px;
+            color: #666;
+            margin-bottom: 5mm;
+        }
+        .grid-container {
+            width: 128mm;
+            height: 180mm;
+            border: 1px solid #ccc;
+            margin: 0 auto;
+            position: relative;
+            background: white;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(128, 1mm);
+            grid-template-rows: repeat(180, 1mm);
+            width: 128mm;
+            height: 180mm;
+        }
+        .grid-cell {
+            border: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 6px;
+            color: #ccc;
+        }
+        .label-area {
+            grid-column: 30 / 98;
+            grid-row: 80 / 150;
+            border: 2px dashed red;
+            background: rgba(255, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: red;
+            font-weight: bold;
+            font-size: 12px;
+            text-align: center;
+        }
+        .scale-horizontal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5mm;
+            border-top: 2px solid #999;
+        }
+        .scale-vertical {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 5mm;
+            border-left: 2px solid #999;
+        }
+        .cm-mark {
+            position: absolute;
+            font-size: 8px;
+            color: black;
+        }
+        .cm-mark-horizontal {
+            top: 1mm;
+        }
+        .cm-mark-vertical {
+            left: 1mm;
+        }
+        .reference-line {
+            position: absolute;
+            bottom: 50mm;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: blue;
+            border-top: 2px dashed blue;
+        }
+        .reference-text {
+            position: absolute;
+            bottom: 52mm;
+            left: 50%;
+            transform: translateX(-50%);
+            color: blue;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        .font-samples {
+            position: absolute;
+            top: 30mm;
+            left: 5mm;
+            right: 5mm;
+            font-size: 8px;
+            color: #333;
+        }
+        .font-sample {
+            margin: 1px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">A5 Calibration Template - 1mm Grid</div>
+    <div class="instructions">Print this template and use for precise measurements</div>
+    
+    <!-- Horizontal scale -->
+    <div class="scale-horizontal">
+        <div class="cm-mark cm-mark-horizontal" style="left: 0mm;">0</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 10mm;">1</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 20mm;">2</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 30mm;">3</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 40mm;">4</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 50mm;">5</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 60mm;">6</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 70mm;">7</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 80mm;">8</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 90mm;">9</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 100mm;">10</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 110mm;">11</div>
+        <div class="cm-mark cm-mark-horizontal" style="left: 120mm;">12</div>
+    </div>
+    
+    <!-- Vertical scale -->
+    <div class="scale-vertical">
+        <div class="cm-mark cm-mark-vertical" style="top: 0mm;">0</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 10mm;">1</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 20mm;">2</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 30mm;">3</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 40mm;">4</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 50mm;">5</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 60mm;">6</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 70mm;">7</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 80mm;">8</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 90mm;">9</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 100mm;">10</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 110mm;">11</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 120mm;">12</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 130mm;">13</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 140mm;">14</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 150mm;">15</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 160mm;">16</div>
+        <div class="cm-mark cm-mark-vertical" style="top: 170mm;">17</div>
+    </div>
+    
+    <!-- Reference line at 5cm from bottom -->
+    <div class="reference-line"></div>
+    <div class="reference-text">5cm from bottom edge</div>
+    
+    <!-- Font samples -->
+    <div class="font-samples">
+        <div class="font-sample" style="font-size: 8px;">Arial 8pt: Sample Text ABCD 1234</div>
+        <div class="font-sample" style="font-size: 10px;">Arial 10pt: Sample Text ABCD 1234</div>
+        <div class="font-sample" style="font-size: 12px;">Arial 12pt: Sample Text ABCD 1234</div>
+        <div class="font-sample" style="font-size: 14px;">Arial 14pt: Sample Text ABCD 1234</div>
+        <div class="font-sample" style="font-size: 16px;">Arial 16pt: Sample Text ABCD 1234</div>
+        <div class="font-sample" style="font-size: 18px;">Arial 18pt: Sample Text ABCD 1234</div>
+    </div>
+    
+    <!-- Grid with label area -->
+    <div class="grid-container">
+        <div class="grid">
+            <div class="label-area">
+                <div>PLACE LABEL HERE</div>
+                <div style="font-size: 8px; margin-top: 2px;">Align label edges with red border</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

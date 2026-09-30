@@ -8,8 +8,8 @@
         "main": [
           "airspeed-warehouse"
         ],
-        "truck-schedule": [
-          "airspeed-truck-schedule"
+        "fg-label": [
+          "airspeed-label-fg"
         ]
       }
     }
