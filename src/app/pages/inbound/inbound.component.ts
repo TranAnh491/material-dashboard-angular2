@@ -27,6 +27,18 @@ type TbhdCheckBatchRow = {
 };
 
 
+export interface LdvMismatchRow {
+  id: string;
+  materialCode: string;
+  poNumber: string;
+  batchNumber: string;
+  factory: string;
+  rollsOrBags: number;
+  standardPacking: number;
+  reportedBy: string;
+  createdAt: Date | null;
+}
+
 export interface InboundMaterial {
   id?: string;
   factory?: string; // Factory identifier (ASM1, ASM2, etc.)
@@ -262,6 +274,15 @@ export class InboundComponent implements OnInit, OnDestroy {
   /** Dòng đang được mở khóa sửa lượng đơn vị sau OTP (một lần, đến khi lưu). */
   private ldvUnlockedIds = new Set<string>();
   private standardPackingCache = new Map<string, number>();
+  ldvMismatchOpen = false;
+  ldvMismatchLoading = false;
+  ldvMismatchRows: LdvMismatchRow[] = [];
+  ldvMismatchPendingCount = 0;
+  ldvApprovePass = '';
+  ldvApproveError = '';
+  ldvApproveBusyId = '';
+  private readonly ldvApprovePassword = '2026';
+
   ldvOtpOpen = false;
   ldvOtpMaterial: InboundMaterial | null = null;
   ldvOtpCode = '';
@@ -308,6 +329,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       replaceUrl: true
     });
     this.loadMaterials();
+    void this.loadLdvMismatchPending();
   }
 
   ngOnInit(): void {
@@ -330,6 +352,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       if (this.isValidFactory(f) && f !== this.selectedFactory) {
         this.selectedFactory = f;
         this.loadMaterials();
+        void this.loadLdvMismatchPending();
       }
     });
 
@@ -340,6 +363,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.statusFilter = 'pending';
 
     this.loadMaterials();
+    void this.loadLdvMismatchPending();
   }
 
   openDateRangePopover(ev?: Event): void {
@@ -5165,10 +5189,13 @@ export class InboundComponent implements OnInit, OnDestroy {
     const ldv = Number(material.rollsOrBags) || 0;
     const code = (material.materialCode || '').trim();
     if (ldv <= 0 || !code) return;
+    if (material.batchNumber?.toUpperCase().startsWith('TRA')) return;
     const standard = standardPacking != null ? standardPacking : await this.getStandardPacking(code);
     if (standard <= 0 || this.ldvEquals(standard, ldv)) return;
-    if (material.ldvMismatchMailedFor != null && this.ldvEquals(material.ldvMismatchMailedFor, ldv)) return;
     const reportedBy = await this.currentUserCode();
+    await this.saveLdvMismatchPending(material, standard, reportedBy);
+    void this.loadLdvMismatchPending();
+    if (material.ldvMismatchMailedFor != null && this.ldvEquals(material.ldvMismatchMailedFor, ldv)) return;
     await this.inboundLdvOtp.sendMismatchEmail({
       materialCode: code,
       poNumber: material.poNumber || '',
@@ -5181,6 +5208,131 @@ export class InboundComponent implements OnInit, OnDestroy {
     material.ldvMismatchMailedFor = ldv;
     if (material.id) {
       await this.firestore.collection('inbound-materials').doc(material.id).update({ ldvMismatchMailedFor: ldv });
+    }
+  }
+
+  private async saveLdvMismatchPending(material: InboundMaterial, standardPacking: number, reportedBy: string): Promise<void> {
+    if (!material.id) return;
+    const ref = this.firestore.collection('inbound-ldv-mismatches').doc(material.id).ref;
+    const snap = await ref.get();
+    const prevCreated = snap.exists ? snap.data()?.['createdAt'] : null;
+    const data: Record<string, unknown> = {
+      inboundId: material.id,
+      materialCode: (material.materialCode || '').trim(),
+      poNumber: material.poNumber || '',
+      batchNumber: material.batchNumber || '',
+      factory: material.factory || this.selectedFactory || '',
+      rollsOrBags: Number(material.rollsOrBags) || 0,
+      standardPacking,
+      status: 'pending',
+      createdAt: prevCreated || new Date(),
+      updatedAt: new Date()
+    };
+    if (reportedBy) data['reportedBy'] = reportedBy;
+    await ref.set(data, { merge: true });
+  }
+
+  /** Đưa các dòng đã báo lệch (còn trong danh sách đang tải) vào danh mục chờ duyệt. */
+  private async backfillLoadedLdvMismatches(): Promise<void> {
+    const pending = this.materials.filter(m =>
+      !!m.id &&
+      !m.batchNumber?.toUpperCase().startsWith('TRA') &&
+      (Number(m.rollsOrBags) || 0) > 0 &&
+      (Number(m.ldvMismatchMailedFor) || 0) > 0
+    );
+    for (const material of pending) {
+      const ldv = Number(material.rollsOrBags) || 0;
+      const standard = await this.getStandardPacking(material.materialCode);
+      if (standard <= 0 || this.ldvEquals(standard, ldv)) continue;
+      await this.saveLdvMismatchPending(material, standard, '');
+    }
+  }
+
+  async loadLdvMismatchPending(): Promise<void> {
+    this.ldvMismatchLoading = true;
+    try {
+      const snap = await this.firestore.collection('inbound-ldv-mismatches', ref =>
+        ref.where('status', '==', 'pending')
+      ).get().toPromise();
+      const rows: LdvMismatchRow[] = [];
+      snap?.forEach(doc => {
+        const d = doc.data() as Record<string, any>;
+        if (String(d['factory'] || '') !== this.selectedFactory) return;
+        const created = d['createdAt']?.toDate?.() || (d['createdAt'] instanceof Date ? d['createdAt'] : null);
+        rows.push({
+          id: doc.id,
+          materialCode: String(d['materialCode'] || ''),
+          poNumber: String(d['poNumber'] || ''),
+          batchNumber: String(d['batchNumber'] || ''),
+          factory: String(d['factory'] || ''),
+          rollsOrBags: Number(d['rollsOrBags']) || 0,
+          standardPacking: Number(d['standardPacking']) || 0,
+          reportedBy: String(d['reportedBy'] || ''),
+          createdAt: created
+        });
+      });
+      rows.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+      this.ldvMismatchRows = rows;
+      this.ldvMismatchPendingCount = rows.length;
+    } catch (e) {
+      console.error('Không tải được danh mục lệch Standard', e);
+    } finally {
+      this.ldvMismatchLoading = false;
+    }
+  }
+
+  openLdvMismatchCatalog(): void {
+    this.ldvApprovePass = '';
+    this.ldvApproveError = '';
+    this.ldvMismatchOpen = true;
+    void this.backfillLoadedLdvMismatches()
+      .catch(err => console.error('Không gom được mã lệch Standard', err))
+      .then(() => this.loadLdvMismatchPending());
+  }
+
+  closeLdvMismatchCatalog(): void {
+    if (this.ldvApproveBusyId) return;
+    this.ldvMismatchOpen = false;
+    this.ldvApprovePass = '';
+    this.ldvApproveError = '';
+  }
+
+  async approveLdvMismatch(row: LdvMismatchRow): Promise<void> {
+    if (this.ldvApproveBusyId) return;
+    if ((this.ldvApprovePass || '').trim() !== this.ldvApprovePassword) {
+      this.ldvApproveError = 'Sai mật khẩu duyệt.';
+      return;
+    }
+    this.ldvApproveError = '';
+    this.ldvApproveBusyId = row.id;
+    try {
+      const code = row.materialCode.trim();
+      const value = row.rollsOrBags;
+      const payload = { materialCode: code, standardPacking: value, updatedAt: new Date() };
+      await this.firestore.collection('materials').doc(code).ref.set(payload, { merge: true });
+      await this.firestore.collection('catalog').doc(code).ref.set(payload, { merge: true });
+      this.standardPackingCache.set(code, value);
+      const approvedBy = await this.currentUserCode();
+      const now = new Date();
+      const same = this.ldvMismatchRows.filter(r =>
+        r.materialCode === row.materialCode && this.ldvEquals(r.rollsOrBags, value)
+      );
+      await Promise.all(same.map(r =>
+        this.firestore.collection('inbound-ldv-mismatches').doc(r.id).update({
+          status: 'approved',
+          standardPacking: value,
+          approvedBy,
+          approvedAt: now,
+          updatedAt: now
+        })
+      ));
+      this.ldvMismatchRows = this.ldvMismatchRows.filter(r => !same.some(s => s.id === r.id));
+      this.ldvMismatchPendingCount = this.ldvMismatchRows.length;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.ldvApproveError = msg || 'Không duyệt được.';
+    } finally {
+      this.ldvApproveBusyId = '';
     }
   }
 

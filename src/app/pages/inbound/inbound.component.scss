@@ -5019,6 +5019,58 @@ iframe {
   border-radius: 4px;
 }
 
+.ldv-mismatch-dialog {
+  width: min(980px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: #fff;
+  color: #111;
+  border: 1px solid #111;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.ldv-mismatch-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.ldv-mismatch-dialog p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.ldv-mismatch-empty {
+  color: #6b7280;
+}
+
+.ldv-mismatch-table-wrap {
+  overflow: auto;
+  margin-top: 8px;
+}
+
+.ldv-mismatch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ldv-mismatch-table th,
+.ldv-mismatch-table td {
+  border: 1px solid #111;
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ldv-mismatch-pass {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
 .ldv-otp-actions {
   display: flex;
   justify-content: flex-end;

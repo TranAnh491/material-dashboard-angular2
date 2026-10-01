@@ -102,6 +102,15 @@
 
           <button type="button"
                   class="btn btn--ghost mobile-hide toolbar-tbhd-check-btn"
+                  (click)="openLdvMismatchCatalog()"
+                  title="Mã có lượng đơn vị khác Standard Packing — quản lý duyệt thì Standard đổi theo">
+            <i class="material-icons">rule</i>
+            Danh mục lệch Standard
+            <span class="toolbar-tbhd-check-badge" *ngIf="ldvMismatchPendingCount > 0">{{ ldvMismatchPendingCount }}</span>
+          </button>
+
+          <button type="button"
+                  class="btn btn--ghost mobile-hide toolbar-tbhd-check-btn"
                   (click)="openTbhdCheckModal()"
                   title="Lô đã nhập kho — xác nhận văn phòng đã nhận giấy TBHD">
             <i class="material-icons">fact_check</i>
@@ -1497,6 +1506,63 @@
 
     <div class="modal-footer">
       <button class="btn-close" (click)="closeNoteModal()">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div class="ldv-otp-backdrop" *ngIf="ldvMismatchOpen" (click)="closeLdvMismatchCatalog()">
+  <div class="ldv-mismatch-dialog" (click)="$event.stopPropagation()">
+    <h3>Danh mục lệch Standard</h3>
+    <p>Lượng đơn vị khác Standard Packing. Mã đúng thì nhập mật khẩu duyệt rồi bấm Duyệt — Standard Packing đổi theo lượng đơn vị.</p>
+    <p class="ldv-otp-info" *ngIf="ldvMismatchLoading">Đang tải…</p>
+    <p class="ldv-otp-error" *ngIf="ldvApproveError">{{ ldvApproveError }}</p>
+    <p class="ldv-mismatch-empty" *ngIf="!ldvMismatchLoading && ldvMismatchRows.length === 0">Không có mã nào đang chờ duyệt.</p>
+    <div class="ldv-mismatch-table-wrap" *ngIf="ldvMismatchRows.length">
+      <table class="ldv-mismatch-table">
+        <thead>
+          <tr>
+            <th>Mã hàng</th>
+            <th>P.O</th>
+            <th>Lô</th>
+            <th>Lượng đơn vị</th>
+            <th>Standard</th>
+            <th>Người nhập</th>
+            <th>Thời điểm</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of ldvMismatchRows">
+            <td>{{ row.materialCode }}</td>
+            <td>{{ row.poNumber || '—' }}</td>
+            <td>{{ row.batchNumber || '—' }}</td>
+            <td>{{ formatNumber(row.rollsOrBags) }}</td>
+            <td>{{ formatNumber(row.standardPacking) }}</td>
+            <td>{{ row.reportedBy || '—' }}</td>
+            <td>{{ row.createdAt ? (row.createdAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+            <td>
+              <button type="button"
+                      class="ldv-otp-ok"
+                      (click)="approveLdvMismatch(row)"
+                      [disabled]="!!ldvApproveBusyId">
+                {{ ldvApproveBusyId === row.id ? 'Đang duyệt…' : 'Duyệt' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <label class="ldv-mismatch-pass">
+      Mật khẩu duyệt
+      <input type="password"
+             class="ldv-otp-input"
+             maxlength="8"
+             [(ngModel)]="ldvApprovePass"
+             [disabled]="!!ldvApproveBusyId"
+             autocomplete="off">
+    </label>
+    <div class="ldv-otp-actions">
+      <button type="button" class="ldv-otp-cancel" (click)="closeLdvMismatchCatalog()" [disabled]="!!ldvApproveBusyId">Đóng</button>
     </div>
   </div>
 </div>
