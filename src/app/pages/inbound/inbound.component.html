@@ -1515,7 +1515,6 @@
     <h3>Danh mục lệch Standard</h3>
     <p>Lượng đơn vị khác Standard Packing. Mã đúng thì nhập mật khẩu duyệt rồi bấm Duyệt — Standard Packing đổi theo lượng đơn vị.</p>
     <p class="ldv-otp-info" *ngIf="ldvMismatchLoading">Đang tải…</p>
-    <p class="ldv-otp-error" *ngIf="ldvApproveError">{{ ldvApproveError }}</p>
     <p class="ldv-mismatch-empty" *ngIf="!ldvMismatchLoading && ldvMismatchRows.length === 0">Không có mã nào đang chờ duyệt.</p>
     <div class="ldv-mismatch-table-wrap" *ngIf="ldvMismatchRows.length">
       <table class="ldv-mismatch-table">
@@ -1543,7 +1542,7 @@
             <td>
               <button type="button"
                       class="ldv-otp-ok"
-                      (click)="approveLdvMismatch(row)"
+                      (click)="approveLdvMismatch(row, ldvPassBox.value)"
                       [disabled]="!!ldvApproveBusyId">
                 {{ ldvApproveBusyId === row.id ? 'Đang duyệt…' : 'Duyệt' }}
               </button>
@@ -1554,13 +1553,20 @@
     </div>
     <label class="ldv-mismatch-pass">
       Mật khẩu duyệt
-      <input type="password"
+      <input #ldvPassBox
+             type="text"
+             inputmode="numeric"
              class="ldv-otp-input"
              maxlength="8"
-             [(ngModel)]="ldvApprovePass"
-             [disabled]="!!ldvApproveBusyId"
-             autocomplete="off">
+             name="std-approve-code"
+             autocomplete="off"
+             autocorrect="off"
+             spellcheck="false"
+             [value]="ldvApprovePass"
+             (input)="onLdvApprovePassInput($event)"
+             [disabled]="!!ldvApproveBusyId">
     </label>
+    <p class="ldv-otp-error" *ngIf="ldvApproveError">{{ ldvApproveError }}</p>
     <div class="ldv-otp-actions">
       <button type="button" class="ldv-otp-cancel" (click)="closeLdvMismatchCatalog()" [disabled]="!!ldvApproveBusyId">Đóng</button>
     </div>

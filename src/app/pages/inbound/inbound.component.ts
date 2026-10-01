@@ -5297,9 +5297,15 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.ldvApproveError = '';
   }
 
-  async approveLdvMismatch(row: LdvMismatchRow): Promise<void> {
+  onLdvApprovePassInput(event: Event): void {
+    this.ldvApprovePass = (event.target as HTMLInputElement).value;
+  }
+
+  async approveLdvMismatch(row: LdvMismatchRow, typed?: string): Promise<void> {
     if (this.ldvApproveBusyId) return;
-    if ((this.ldvApprovePass || '').trim() !== this.ldvApprovePassword) {
+    const pass = String(typed ?? this.ldvApprovePass ?? '').trim();
+    this.ldvApprovePass = pass;
+    if (pass !== this.ldvApprovePassword) {
       this.ldvApproveError = 'Sai mật khẩu duyệt.';
       return;
     }
