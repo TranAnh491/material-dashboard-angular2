@@ -44,6 +44,13 @@ const admin = __importStar(require("firebase-admin"));
 const nodemailer = __importStar(require("nodemailer"));
 const params_config_1 = require("./params-config");
 const carton_packing_qty_alert_email_1 = require("./carton-packing-qty-alert-email");
+/** Mail lệch lượng đơn vị / Standard Packing — chỉ kho, không gửi engineer/AST. */
+const LDV_MISMATCH_RECIPIENTS = [
+    'wh1@airspeedmfgvn.com',
+    'wh2@airspeedmfgvn.com',
+    'wh3@airspeedmfgvn.com',
+    'wh4@airspeedmfgvn.com'
+].join(',');
 const OTP_RECIPIENT_ID = 'ASP0106';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_DOC_ID = 'current';
@@ -161,7 +168,7 @@ async function sendInboundLdvMismatchEmail(p) {
     });
     await transporter.sendMail({
         from: cfg.from,
-        to: carton_packing_qty_alert_email_1.ALERT_RECIPIENTS,
+        to: LDV_MISMATCH_RECIPIENTS,
         subject: `[Nhận hàng] ${p.materialCode} lệch lượng đơn vị / Standard Packing`.slice(0, 250),
         text,
         html

@@ -3994,44 +3994,51 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 0;
   }
 
+  /** Chỉ lấy số bag 1–999 từ nhãn bịch (1 hoặc 1/5). Không lấy dãy số IMD. */
   private collectOutboundBagNos(data: Record<string, unknown>): number[] {
     const nos = new Set<number>();
-    const addFrom = (raw: string) => {
+    const addLabel = (raw: string) => {
       const s = String(raw || '').trim();
       if (!s) return;
       for (const part of s.split(',')) {
         const t = part.trim();
         if (!t) continue;
-        const frac = /^(\d+)\s*\//.exec(t);
+        const frac = /^(\d+)\s*\/\s*\d+/.exec(t);
         if (frac) {
           const n = parseInt(frac[1], 10);
-          if (n > 0) nos.add(n);
+          if (n > 0 && n <= 999) nos.add(n);
           continue;
         }
-        const lead = /^(\d+)/.exec(t);
-        if (lead) {
-          const n = parseInt(lead[1], 10);
-          if (n > 0) nos.add(n);
+        if (/^\d{1,3}(?:\([Tt]\d+\))?$/.test(t)) {
+          const n = parseInt(t, 10);
+          if (n > 0 && n <= 999) nos.add(n);
         }
       }
     };
     const resolved = this.rmBagHistory.resolveControlBatchOutboundRowBagFields(data);
-    addFrom(resolved.bagDisplay);
-    addFrom(resolved.bichBatch);
-    addFrom(String(data['bagNumberDisplay'] ?? ''));
-    addFrom(String(data['bagBatch'] ?? ''));
+    addLabel(resolved.bagDisplay);
+    addLabel(resolved.bichBatch);
+    addLabel(String(data['bagNumberDisplay'] ?? ''));
+    addLabel(String(data['bagBatch'] ?? ''));
     const p4 = this.rmBagHistory.parseQrPart4(String(data['importDate'] ?? data['batchNumber'] ?? ''));
-    addFrom(p4.bagNumberDisplay);
-    addFrom(p4.bagFractionLabel);
+    addLabel(p4.bagNumberDisplay);
+    addLabel(p4.bagFractionLabel);
     return [...nos];
   }
 
-  private async loadExportedBagNosForMaterial(material: InventoryMaterial): Promise<Set<number>> {
-    const nos = new Set<number>();
+  private outboundRowQty(data: Record<string, unknown>): number {
+    const raw = data['exportQuantity'] ?? data['exported'] ?? data['quantity'] ?? data['amount'] ?? data['qty'] ?? 0;
+    const n = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  /** Lượng outbound đã phủ từng bag. Bag chỉ khóa XT khi phủ hết lượng bag. */
+  private async loadOutboundCoveredQtyByBag(material: InventoryMaterial): Promise<Map<number, number>> {
+    const byBag = new Map<number, number>();
     const batchKey = this.getInventoryImdBaseKey(material) || '';
     const normCode = String(material.materialCode || '').trim();
     const normPo = String(material.poNumber || '').trim();
-    if (!normCode) return nos;
+    if (!normCode) return byBag;
 
     let snapshot: any;
     try {
@@ -4050,31 +4057,37 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       snapshot.forEach((doc: any) => {
         const data = doc.data() as Record<string, unknown>;
         const imdKey = this.normalizeOutboundImdToKey(data);
-        if (batchKey && imdKey && imdKey !== batchKey) return;
+        if (batchKey && (!imdKey || imdKey !== batchKey)) return;
+        const qty = this.outboundRowQty(data);
+        if (qty <= 0) return;
         const parsed = this.collectOutboundBagNos(data);
-        if (parsed.length) {
-          parsed.forEach((n) => nos.add(n));
-        } else {
-          unlabeled += 1;
+        if (!parsed.length) {
+          unlabeled += qty;
+          return;
         }
+        const each = qty / parsed.length;
+        parsed.forEach((n) => byBag.set(n, (byBag.get(n) || 0) + each));
       });
     }
 
+    if (byBag.size === 0 && unlabeled <= 0) {
+      unlabeled = Number(material.exported) || 0;
+    }
+
     const n = this.getLotBagCount(material);
-    if (unlabeled > 0 && n > 0) {
-      let filled = 0;
-      for (let i = 1; i <= n && filled < unlabeled; i++) {
-        if (!nos.has(i)) {
-          nos.add(i);
-          filled++;
-        }
+    let left = unlabeled;
+    if (left > 0 && n > 0) {
+      for (let i = 1; i <= n && left > 1e-9; i++) {
+        const cap = this.getBagDefaultQty(material, i, n);
+        const have = byBag.get(i) || 0;
+        const room = Math.max(0, cap - have);
+        if (room <= 1e-9) continue;
+        const take = Math.min(left, room);
+        byBag.set(i, have + take);
+        left -= take;
       }
     }
-    if (nos.size === 0) {
-      const used = Math.max(0, Math.floor(Number(material.exportedBags ?? 0)));
-      for (let i = 1; i <= used; i++) nos.add(i);
-    }
-    return nos;
+    return byBag;
   }
 
   private async reloadBagPopupRows(material: InventoryMaterial): Promise<void> {
@@ -4083,10 +4096,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bagPopupRows = [];
     this.cdr.markForCheck();
     try {
-      const exported = await this.loadExportedBagNosForMaterial(material);
+      const covered = await this.loadOutboundCoveredQtyByBag(material);
       const xtMap = new Map(this.normalizeXtBags(material).map((x) => [x.bagNo, x]));
       let n = this.getLotBagCount(material);
-      const seenMax = Math.max(0, ...exported, ...xtMap.keys());
+      const seenMax = Math.max(0, ...covered.keys(), ...xtMap.keys());
       if (seenMax > n) n = seenMax;
       if (n <= 0) {
         this.bagPopupRows = [];
@@ -4094,9 +4107,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       const rows: InventoryBagRow[] = [];
       for (let i = 1; i <= n; i++) {
-        const isExported = exported.has(i);
-        const pick = xtMap.get(i);
         const defaultQty = this.getBagDefaultQty(material, i, n);
+        const coveredQty = covered.get(i) || 0;
+        const isExported = defaultQty > 0 && coveredQty + 1e-6 >= defaultQty;
+        const pick = xtMap.get(i);
         const leQty = Number(pick?.leQty) > 0 ? Number(pick.leQty) : null;
         const isFullXt = !isExported && !!pick && !(leQty > 0);
         rows.push({

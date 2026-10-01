@@ -5,7 +5,15 @@
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
 import { zaloBotToken } from './params-config';
-import { ALERT_RECIPIENTS, esc, getSmtpConfig } from './carton-packing-qty-alert-email';
+import { esc, getSmtpConfig } from './carton-packing-qty-alert-email';
+
+/** Mail lệch lượng đơn vị / Standard Packing — chỉ kho, không gửi engineer/AST. */
+const LDV_MISMATCH_RECIPIENTS = [
+  'wh1@airspeedmfgvn.com',
+  'wh2@airspeedmfgvn.com',
+  'wh3@airspeedmfgvn.com',
+  'wh4@airspeedmfgvn.com'
+].join(',');
 
 const OTP_RECIPIENT_ID = 'ASP0106';
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -151,7 +159,7 @@ export async function sendInboundLdvMismatchEmail(p: InboundLdvMismatchPayload):
   });
   await transporter.sendMail({
     from: cfg.from,
-    to: ALERT_RECIPIENTS,
+    to: LDV_MISMATCH_RECIPIENTS,
     subject: `[Nhận hàng] ${p.materialCode} lệch lượng đơn vị / Standard Packing`.slice(0, 250),
     text,
     html
