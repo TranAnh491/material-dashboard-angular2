@@ -450,8 +450,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
     { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', category: 'ASM FG' },
     { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
-    { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', category: 'ASM FG' },
-    { path: '/tem-thanh-pham', title: 'Tem Thành Phẩm', icon: 'label', category: 'ASM FG' },
+    { path: '/pallet-id', title: 'In tem nội bộ', icon: 'print', category: 'ASM FG' },
 
     // Production
     { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', category: 'Production' },
@@ -588,8 +587,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/fg-inventory': 'Quản lý tồn kho thành phẩm',
       '/fg-overview': 'Tổng quan tồn kho thành phẩm',
       '/fg-location': 'Đổi vị trí và nhà máy thành phẩm',
-      '/pallet-id': 'Quản lý mã pallet',
-      '/tem-thanh-pham': 'In tem thành phẩm 57×32mm, QR theo Carton No',
+      '/pallet-id': 'In tem nội bộ kho',
       '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
       '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
       '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',

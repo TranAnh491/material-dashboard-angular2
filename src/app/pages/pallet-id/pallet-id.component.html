@@ -3,8 +3,8 @@
     <div class="pid-top__brand">
       <img src="assets/img/palletid.png" alt="" class="pid-top__icon">
       <div class="pid-top__titles">
-        <h1>Pallet ID</h1>
-        <p>Quản lý mã pallet · {{ visiblePallets.length | number }}<ng-container *ngIf="palletSearch.trim()"> / {{ pallets.length | number }}</ng-container></p>
+        <h1>In tem nội bộ</h1>
+        <p>Tem kho<ng-container *ngIf="palletSearch.trim()"> · {{ listPallets.length | number }} mã</ng-container></p>
       </div>
     </div>
 
@@ -21,50 +21,55 @@
     <app-tab-back-button></app-tab-back-button>
   </header>
 
-  <div class="pid-toolbar">
+  <section class="pid-funcs" aria-label="Chức năng in tem">
+    <button type="button" class="pid-tile" (click)="createNewPallet()" [disabled]="isCreating">
+      <span class="pid-tile__icon"><i class="material-icons">add_box</i></span>
+      <span class="pid-tile__name">{{ isCreating ? 'Đang tạo' : 'Tạo pallet' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openTempLabelModal()" [disabled]="isPrintingTempLabels">
+      <span class="pid-tile__icon"><i class="material-icons">local_offer</i></span>
+      <span class="pid-tile__name">{{ isPrintingTempLabels ? 'Đang in' : 'Tem tạm' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openNumberLabelModal()" [disabled]="isPrintingNumberLabels">
+      <span class="pid-tile__icon"><i class="material-icons">pin</i></span>
+      <span class="pid-tile__name">{{ isPrintingNumberLabels ? 'Đang in' : 'In số' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openPassLabelFlow()" [disabled]="isPrintingPassLabels">
+      <span class="pid-tile__icon"><i class="material-icons">verified</i></span>
+      <span class="pid-tile__name">{{ isPrintingPassLabels ? 'Đang in' : 'PASS' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openDaKiemLabelModal()" [disabled]="isPrintingDaKiemLabels">
+      <span class="pid-tile__icon"><i class="material-icons">task_alt</i></span>
+      <span class="pid-tile__name">{{ isPrintingDaKiemLabels ? 'Đang in' : 'Đã Kiểm' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openJLocLabelModal()" [disabled]="isPrintingJLocLabels">
+      <span class="pid-tile__icon"><i class="material-icons">place</i></span>
+      <span class="pid-tile__name">{{ isPrintingJLocLabels ? 'Đang in' : 'Tem vị trí' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openShelfLabelModal()" [disabled]="isPrintingShelfLabels">
+      <span class="pid-tile__icon"><i class="material-icons">view_week</i></span>
+      <span class="pid-tile__name">{{ isPrintingShelfLabels ? 'Đang tạo' : 'Tem kệ' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openSafetyLabelModal()" [disabled]="isPrintingSafetyLabels">
+      <span class="pid-tile__icon"><i class="material-icons">health_and_safety</i></span>
+      <span class="pid-tile__name">{{ isPrintingSafetyLabels ? 'Đang in' : 'Tem an toàn' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openFormSignModal()" [disabled]="isPrintingFormSigns">
+      <span class="pid-tile__icon"><i class="material-icons">description</i></span>
+      <span class="pid-tile__name">{{ isPrintingFormSigns ? 'Đang in' : 'Biểu mẫu' }}</span>
+    </button>
+  </section>
+
+  <div class="pid-listbar">
+    <h2>Mã pallet</h2>
     <label class="pid-search">
       <i class="material-icons">search</i>
-      <input type="search"
-             [(ngModel)]="palletSearch"
+      <input type="text"
+             [ngModel]="palletSearch"
+             (ngModelChange)="palletSearch = $event; applyPalletSearch()"
              placeholder="Tìm mã pallet…"
              autocomplete="off">
     </label>
-
-    <button class="pid-btn pid-btn--primary" (click)="createNewPallet()" [disabled]="isCreating">
-      <i class="material-icons">add</i>
-      <span>{{ isCreating ? 'Đang tạo...' : 'Tạo pallet' }}</span>
-    </button>
-
-    <span class="pid-toolbar__split" aria-hidden="true"></span>
-
-    <button class="pid-btn" (click)="openTempLabelModal()" [disabled]="isPrintingTempLabels">
-      <i class="material-icons">local_offer</i>
-      <span>{{ isPrintingTempLabels ? 'Đang in...' : 'Tem tạm' }}</span>
-    </button>
-    <button class="pid-btn" (click)="openNumberLabelModal()" [disabled]="isPrintingNumberLabels">
-      <i class="material-icons">pin</i>
-      <span>{{ isPrintingNumberLabels ? 'Đang in...' : 'In số' }}</span>
-    </button>
-    <button class="pid-btn" (click)="openPassLabelFlow()" [disabled]="isPrintingPassLabels">
-      <i class="material-icons">verified</i>
-      <span>{{ isPrintingPassLabels ? 'Đang in...' : 'PASS' }}</span>
-    </button>
-    <button class="pid-btn" (click)="openDaKiemLabelModal()" [disabled]="isPrintingDaKiemLabels">
-      <i class="material-icons">task_alt</i>
-      <span>{{ isPrintingDaKiemLabels ? 'Đang in...' : 'Đã Kiểm' }}</span>
-    </button>
-    <button class="pid-btn" (click)="openJLocLabelModal()" [disabled]="isPrintingJLocLabels">
-      <i class="material-icons">place</i>
-      <span>{{ isPrintingJLocLabels ? 'Đang in...' : 'Tem vị trí' }}</span>
-    </button>
-    <button class="pid-btn" (click)="openShelfLabelModal()" [disabled]="isPrintingShelfLabels">
-      <i class="material-icons">view_week</i>
-      <span>{{ isPrintingShelfLabels ? 'Đang tạo...' : 'Tem kệ' }}</span>
-    </button>
-    <button class="pid-btn" (click)="openSafetyLabelModal()" [disabled]="isPrintingSafetyLabels">
-      <i class="material-icons">health_and_safety</i>
-      <span>{{ isPrintingSafetyLabels ? 'Đang in...' : 'Tem an toàn' }}</span>
-    </button>
   </div>
 
   <!-- Modal mật khẩu In tem PASS -->
@@ -206,6 +211,42 @@
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" (click)="closeSafetyLabelModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Biểu mẫu A4 / A5 -->
+  <div class="modal-overlay" *ngIf="showFormSignModal" (click)="closeFormSignModal()">
+    <div class="modal-content form-sign-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Biểu mẫu</h3>
+        <button class="btn-close" (click)="closeFormSignModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">In ngang. Chọn khổ <strong>A4</strong> hoặc <strong>A5</strong>, rồi bấm mẫu cần in.</p>
+        <div class="form-sign-size" role="group" aria-label="Khổ giấy">
+          <button type="button" [class.is-on]="formSignSize === 'A4'" (click)="formSignSize = 'A4'">A4</button>
+          <button type="button" [class.is-on]="formSignSize === 'A5'" (click)="formSignSize = 'A5'">A5</button>
+        </div>
+        <div class="form-sign-list">
+          <button type="button"
+                  class="form-sign-pick"
+                  *ngFor="let item of formSigns"
+                  (click)="printFormSign(item.id)"
+                  [disabled]="isPrintingFormSigns">
+            <span class="form-sign-pick__icon" [innerHTML]="formSignIcon(item.id) | safe:'html'"></span>
+            <span class="form-sign-pick__text">
+              <strong>{{ item.vi }}</strong>
+              <small>{{ item.en }}</small>
+            </span>
+            <i class="material-icons">print</i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeFormSignModal()">Đóng</button>
       </div>
     </div>
   </div>
@@ -567,8 +608,8 @@
     </div>
   </div>
 
-  <!-- Pallet Table -->
-  <div class="pid-table-wrap">
+  <!-- Danh sách mã pallet: chỉ hiện khi đang tìm -->
+  <div class="pid-table-wrap" *ngIf="palletSearch.trim()">
     <table class="pallet-table">
       <thead>
         <tr>
@@ -587,16 +628,13 @@
             Đang tải...
           </td>
         </tr>
-        <tr *ngIf="!isLoading && visiblePallets.length === 0">
+        <tr *ngIf="!isLoading && listPallets.length === 0">
           <td colspan="6" class="empty-row">
             <i class="material-icons">inbox</i>
-            <p *ngIf="palletSearch.trim(); else noPalletEmpty">Không tìm thấy pallet khớp «{{ palletSearch }}»</p>
-            <ng-template #noPalletEmpty>
-              <p>Chưa có pallet nào cho {{ selectedFactory }}</p>
-            </ng-template>
+            <p>Không tìm thấy pallet khớp «{{ palletSearch }}»</p>
           </td>
         </tr>
-        <tr *ngFor="let pallet of visiblePallets; let i = index">
+        <tr *ngFor="let pallet of listPallets; let i = index; trackBy: trackPallet">
           <td class="col-stt">{{ i + 1 }}</td>
           <td class="col-code">
             <span class="pallet-code-cell">{{ pallet.palletCode }}</span>

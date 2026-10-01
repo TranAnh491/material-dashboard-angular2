@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef, NgZone } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -45,6 +45,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   // Pallet data
   pallets: PalletItem[] = [];
+  /** Mảng gắn vào bảng. Gán mới sau mỗi lần tải / tìm, để dòng hiện ngay khi mở trang. */
+  listPallets: PalletItem[] = [];
   isLoading: boolean = false;
 
   // Create new pallet
@@ -105,6 +107,21 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     { id: 'ppe', vi: 'Tuân thủ quy định về PPE', en: 'Comply with PPE regulations' }
   ];
 
+  showFormSignModal = false;
+  formSignSize: 'A4' | 'A5' = 'A4';
+  isPrintingFormSigns = false;
+  readonly formSigns: Array<{ id: string; vi: string; en: string }> = [
+    { id: 'closeDoor', vi: 'Vui lòng đóng cửa khi ra vào', en: 'Please close the door when entering or leaving' },
+    { id: 'noEntry', vi: 'Không phận sự miễn vào', en: 'No unauthorized entry' },
+    { id: 'whStaff', vi: 'Chỉ nhân viên Kho sử dụng', en: 'Warehouse staff only' },
+    { id: 'tellWh', vi: 'Báo quản lý Kho khi cần lấy hàng', en: 'Notify warehouse management when goods need to be picked up' },
+    { id: 'noBattery', vi: 'Không để Pin dự phòng trong tủ', en: 'Do not store spare batteries in the cabinet' },
+    { id: 'batteryTools', vi: 'Khu vực để dụng cụ có Pin', en: 'Battery tool area' },
+    { id: 'trolley', vi: 'Khu vực để xe đẩy', en: 'Trolley area' },
+    { id: 'plasticBin', vi: 'Khu vực để Thùng nhựa', en: 'Plastic bin area' },
+    { id: 'palletArea', vi: 'Khu vực để Pallet', en: 'Pallet area' }
+  ];
+
   /** Tem vị trí kho J — 57×32mm, QR trái / tên vị trí phải */
   showJLocLabelModal = false;
   jLocQuery = '';
@@ -133,7 +150,11 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   );
   private shelfLabelSlotsByAisle = new Map<string, string[]>();
 
-  constructor(private firestore: AngularFirestore) {}
+  constructor(
+    private firestore: AngularFirestore,
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone
+  ) {}
 
   ngOnInit(): void {
     this.loadPallets();
@@ -156,10 +177,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   loadPallets(): void {
     this.isLoading = true;
     
-    // Query chỉ dùng where, không dùng orderBy để tránh cần composite index
     this.firestore.collection('pallets', ref =>
       ref.where('factory', '==', this.selectedFactory)
-         .limit(500)
     ).get()
       .pipe(takeUntil(this.destroy$))
       .subscribe(snapshot => {
@@ -177,20 +196,35 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
         });
         // Sắp xếp client-side theo createdAt giảm dần
         this.pallets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        this.isLoading = false;
+        this.ngZone.run(() => {
+          this.isLoading = false;
+          this.applyPalletSearch();
+          this.cdr.detectChanges();
+        });
         console.log(`✅ Loaded ${this.pallets.length} pallets for ${this.selectedFactory}`);
       }, error => {
         console.error('Error loading pallets:', error);
-        this.isLoading = false;
+        this.ngZone.run(() => {
+          this.isLoading = false;
+          this.listPallets = [];
+          this.cdr.detectChanges();
+        });
       });
   }
 
-  get visiblePallets(): PalletItem[] {
+  applyPalletSearch(): void {
     const q = String(this.palletSearch || '').trim().toUpperCase();
-    if (!q) return this.pallets;
-    return this.pallets.filter((p) =>
+    if (!q) {
+      this.listPallets = [];
+      return;
+    }
+    this.listPallets = this.pallets.filter((p) =>
       p.palletCode.toUpperCase().includes(q) || p.factory.toUpperCase().includes(q)
     );
+  }
+
+  trackPallet(_index: number, pallet: PalletItem): string {
+    return pallet.id;
   }
 
   selectFactory(factory: string): void {
@@ -1485,6 +1519,148 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       alert('Lỗi khi in tem an toàn. Vui lòng thử lại.');
     } finally {
       this.isPrintingSafetyLabels = false;
+    }
+  }
+
+  openFormSignModal(): void {
+    this.formSignSize = 'A4';
+    this.showFormSignModal = true;
+  }
+
+  closeFormSignModal(): void {
+    if (this.isPrintingFormSigns) return;
+    this.showFormSignModal = false;
+  }
+
+  formSignIcon(id: string): string {
+    const s = 'fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"';
+    const svg = (inner: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">${inner}</svg>`;
+    const ban = '<circle cx="32" cy="32" r="28" fill="none" stroke="#e10600" stroke-width="3.2"/><path d="M14 14l36 36" fill="none" stroke="#e10600" stroke-width="3.2" stroke-linecap="round"/>';
+    if (id === 'closeDoor') {
+      return svg(`<rect x="14" y="8" width="24" height="48" rx="2" ${s}/><circle cx="32" cy="32" r="1.8" fill="#111"/><path ${s} d="M44 18c8 6 8 22 0 28"/><path ${s} d="M44 18l6-2v8"/>`);
+    }
+    if (id === 'noEntry') {
+      return svg(`<circle cx="32" cy="20" r="6" ${s}/><path ${s} d="M18 50c2-12 8-16 14-16s12 4 14 16"/>${ban}`);
+    }
+    if (id === 'whStaff') {
+      return svg(`<circle cx="32" cy="16" r="6" ${s}/><path ${s} d="M20 28h24l-2 8H22z"/><path ${s} d="M16 54c2-12 8-16 16-16s14 4 16 16"/><path ${s} d="M24 16h16l-2-6H26z"/>`);
+    }
+    if (id === 'tellWh') {
+      return svg(`<circle cx="20" cy="20" r="6" ${s}/><path ${s} d="M10 50c1.5-12 6-16 10-16s8.5 4 10 16"/><path ${s} d="M34 14h20v16H40l-6 6v-6"/>`);
+    }
+    if (id === 'noBattery') {
+      return svg(`<rect x="8" y="12" width="28" height="40" rx="1.5" ${s}/><path ${s} d="M8 24h28M8 36h28"/><rect x="40" y="26" width="16" height="12" rx="1.5" ${s}/><path ${s} d="M56 29v6"/><path d="M38 22l20 20" fill="none" stroke="#e10600" stroke-width="3" stroke-linecap="round"/>`);
+    }
+    if (id === 'batteryTools') {
+      return svg(`<rect x="10" y="28" width="26" height="14" rx="2" ${s}/><path ${s} d="M36 31h12v8H36"/><rect x="48" y="33" width="6" height="4" rx="0.6" ${s}/><rect x="16" y="20" width="12" height="8" rx="1.5" ${s}/><path ${s} d="M19 20V14h6"/>`);
+    }
+    if (id === 'trolley') {
+      return svg(`<rect x="8" y="22" width="32" height="10" rx="1.5" ${s}/><path ${s} d="M40 26h12v14"/><circle cx="18" cy="46" r="5" ${s}/><circle cx="40" cy="46" r="5" ${s}/><path ${s} d="M14 22V12h18"/>`);
+    }
+    if (id === 'plasticBin') {
+      return svg(`<path ${s} d="M12 20h40l-4 32H16z"/><path ${s} d="M18 20l2-8h24l2 8"/><path ${s} d="M24 30v14M32 30v14M40 30v14"/>`);
+    }
+    return svg(`<rect x="6" y="30" width="52" height="6" rx="1" ${s}/><rect x="10" y="36" width="8" height="12" ${s}/><rect x="28" y="36" width="8" height="12" ${s}/><rect x="46" y="36" width="8" height="12" ${s}/><rect x="14" y="16" width="16" height="14" rx="1" ${s}/><rect x="32" y="10" width="16" height="20" rx="1" ${s}/>`);
+  }
+
+  async printFormSign(id: string): Promise<void> {
+    const item = this.formSigns.find((x) => x.id === id);
+    if (!item || this.isPrintingFormSigns) return;
+    this.isPrintingFormSigns = true;
+    const a4 = this.formSignSize === 'A4';
+    const pageW = a4 ? 297 : 210;
+    const pageH = a4 ? 210 : 148;
+    const iconMm = a4 ? 62 : 40;
+    const viMm = a4 ? 16 : 10;
+    const enMm = a4 ? 9 : 6;
+    const vi = this.escapeSafetyText(item.vi);
+    const en = this.escapeSafetyText(item.en);
+    const icon = this.formSignIcon(item.id);
+    try {
+      const logoUrl = await this.resolveShelfLabelLogoUrl();
+      this.printLabelHtml(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>${vi}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      font-family: "Times New Roman", Times, serif;
+    }
+    .fs {
+      position: relative;
+      width: ${pageW}mm;
+      height: ${pageH}mm;
+      background: #fff;
+      color: #111;
+      border: ${a4 ? 2.4 : 1.8}mm solid #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: ${a4 ? '16mm 14mm 10mm' : '12mm 10mm 8mm'};
+      overflow: hidden;
+      page: ${a4 ? 'a4land' : 'a5land'};
+      font-family: "Times New Roman", Times, serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .fs-logo {
+      position: absolute;
+      top: ${a4 ? 5 : 3.5}mm;
+      left: ${a4 ? 7 : 5}mm;
+      height: ${a4 ? 12 : 8}mm;
+      width: auto;
+      max-width: ${a4 ? 46 : 30}mm;
+      object-fit: contain;
+      object-position: left center;
+    }
+    .fs-icon { width: ${iconMm}mm; height: ${iconMm}mm; }
+    .fs-icon svg { width: 100%; height: 100%; display: block; }
+    .fs-vi, .fs-en {
+      width: 100%;
+      font-family: "Times New Roman", Times, serif;
+      color: #111;
+    }
+    .fs-vi {
+      margin-top: ${a4 ? 6 : 4}mm;
+      font-weight: 700;
+      font-size: ${viMm}mm;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    .fs-en {
+      margin-top: ${a4 ? 3 : 2}mm;
+      font-weight: 400;
+      font-size: ${enMm}mm;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    @page a4land { size: A4 landscape; margin: 0; }
+    @page a5land { size: A5 landscape; margin: 0; }
+    @page { size: ${a4 ? 'A4' : 'A5'} landscape; margin: 0; }
+  </style>
+</head>
+<body>
+  <section class="fs">
+    <img class="fs-logo" src="${logoUrl}" alt="">
+    <div class="fs-icon">${icon}</div>
+    <p class="fs-vi">${vi}</p>
+    <p class="fs-en">${en}</p>
+  </section>
+</body>
+</html>`);
+    } catch (err) {
+      console.error('Error printing form sign:', err);
+      alert('Lỗi khi in biểu mẫu. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingFormSigns = false;
     }
   }
 

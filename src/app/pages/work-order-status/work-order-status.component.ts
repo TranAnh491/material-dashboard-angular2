@@ -1163,6 +1163,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
    * Prefix LSX cho logic nghiệp vụ (PXK, outbound, tồn kho…) — không quyết tab khi đã có cột factory:
    * KZ → ASM1 (Sample 1 dùng kho ASM1), LH → ASM2 (Sample 2 dùng kho ASM2).
    */
+  /** PO trên PXK và outbound là một: không phân biệt hoa thường, bỏ khoảng trắng. */
+  private pxkPoKey(raw: unknown): string {
+    return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
   inferFactoryFromLsxPrefix(lsx: string): 'ASM1' | 'ASM2' | null {
     const u = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
     if (u.startsWith('LH')) return 'ASM2';
@@ -1872,7 +1877,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const byLsx = factoryToLsxScanMap.get(entry.factory);
       const scanMap = byLsx?.get(woLsxNorm);
       const lines = this.getPxkLinesForLsx(entry.lsx);
-      const getScanQty = (mat: string, po: string) => scanMap?.get(`${String(mat || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
+      const getScanQty = (mat: string, po: string) => scanMap?.get(`${String(mat || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
       const hasAnyScanData = lines.some(l => {
         const code = String(l.materialCode || '').trim().toUpperCase();
         if (this.isPxkAutoFullExportCode(code) || this.isPxkAlwaysFullExportCode(code)) return false;
@@ -5622,7 +5627,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const mat = String(d.materialCode || '').trim().toUpperCase();
     if (mat.charAt(0) !== 'B') return;
 
-    const po = String(d.poNumber ?? d.po ?? '').trim();
+    const po = this.pxkPoKey(d.poNumber ?? d.po);
     const qty = Number(d.exportQuantity || 0) || 0;
 
     if (!byLsx.has(poLsxNorm)) byLsx.set(poLsxNorm, new Map());
@@ -5751,7 +5756,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const scanMap = byLsx.get(woLsxNorm) || new Map<string, number>();
 
     const getScanQty = (materialCode: string, po: string): number =>
-      scanMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
+      scanMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
       if (Math.abs(diff) < 1) return 'Đủ';
@@ -6610,7 +6615,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         snapshot.docs.forEach((docSnap: any) => {
           const d = docSnap.data() as any;
           const mat = String(d.materialCode || '').trim().toUpperCase();
-          const po = String(d.poNumber || d.po || '').trim();
+          const po = this.pxkPoKey(d.poNumber || d.po);
           const loc = String(d.location || '').trim();
           const iqc = String(d.iqcStatus || '').trim();
           if (!mat || !po) return;
@@ -6699,7 +6704,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
             const empId = String(d.employeeId || d.exportedBy || '').trim();
             if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
             const mat = String(d.materialCode || '').trim().toUpperCase();
-            const po = String(d.poNumber || d.po || '').trim();
+            const po = this.pxkPoKey(d.poNumber || d.po);
             const exportQty = Number(d.exportQuantity || 0);
             if (mat && po) {
               const key = `${mat}|${po}`;
@@ -6726,7 +6731,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
             // Build delivery qty map từ pxkLines
             (deliveryDoc.pxkLines || []).forEach((line: any) => {
               const mat = String(line.materialCode || '').trim().toUpperCase();
-              const po  = String(line.poNumber || line.po || '').trim();
+              const po  = this.pxkPoKey(line.poNumber || line.po);
               const qty = Number(line.checkQuantity ?? 0);
               if (mat && po) {
                 const key = `${mat}|${po}`;
@@ -6741,16 +6746,16 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     ]);
 
     const invKey = (materialCode: string, po: string): string =>
-      `${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`;
+      `${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`;
     const getLocation = (materialCode: string, po: string): string =>
       locationMap.get(invKey(materialCode, po)) || '-';
     const getIqcStatus = (materialCode: string, po: string): string =>
       iqcStatusMap.get(invKey(materialCode, po)) || '';
     const nhanVienSoanStr = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
     const getDeliveryQty = (materialCode: string, po: string): number =>
-      deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
+      deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
     const getScanQty = (materialCode: string, po: string): number =>
-      scanQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${String(po || '').trim()}`) || 0;
+      scanQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
       if (Math.abs(diff) < 1) return 'Đủ';
@@ -6852,7 +6857,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
             const mk = String(ln.maKho || '').trim().toUpperCase();
             if (mk !== 'NVL_SX' && mk !== 'NVL_KS') return;
             const mat = String(ln.materialCode || '').trim();
-            const po = String(ln.po || ln.poNumber || '').trim();
+            const po = this.pxkPoKey(ln.po || ln.poNumber);
             const key = `${mat}|${po}`;
             const cur = matPotoLsxMap.get(key);
             if (!cur || impAt > cur.importedAt) matPotoLsxMap.set(key, { lsx: docLsx, importedAt: impAt });
@@ -6877,7 +6882,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         console.warn('Không load LSX gần nhất cho NVL_SX/NVL_KS:', e);
       }
       const nvlRows = nvlSxKsLines.sort((a, b) => (a.materialCode || '').localeCompare(b.materialCode || '')).map((l, i) => {
-        const key = `${String(l.materialCode || '').trim()}|${String(l.po || '').trim()}`;
+        const key = `${String(l.materialCode || '').trim()}|${this.pxkPoKey(l.po)}`;
         const info = matPotoLsxMap.get(key);
         const lsxVal = info?.lsx || '-';
         const lineVal = info ? lsxToLineMap.get(normLsxForCompare(info.lsx)) || '' : '';

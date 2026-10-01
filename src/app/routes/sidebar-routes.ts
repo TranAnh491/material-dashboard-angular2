@@ -38,8 +38,7 @@ export const ROUTES: RouteInfo[] = [
       { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory', class: 'material-child-icon' },
       { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', class: 'material-child-icon' },
       { path: '/fg-location', title: 'FG Location', icon: 'location_on', class: 'material-child-icon' },
-      { path: '/pallet-id', title: 'Pallet ID', icon: 'view_in_ar', class: 'material-child-icon' },
-      { path: '/tem-thanh-pham', title: 'Tem Thành Phẩm', icon: 'label', class: 'material-child-icon' }
+      { path: '/pallet-id', title: 'In tem nội bộ', icon: 'print', class: 'material-child-icon' }
     ]
   },
   {
