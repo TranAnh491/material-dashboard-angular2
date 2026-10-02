@@ -1,150 +1,174 @@
-<div class="kk-page">
-  <header class="kk-header">
+<div class="sc-page">
+  <header class="sc-header">
     <div>
       <h2>Stock Check</h2>
-      <p>Dùng chung dữ liệu với mục Kiểm kê trong Materials. Tick ở đây sẽ cập nhật trực tiếp vào kiểm kê.</p>
+      <p *ngIf="step === 'gate'">Quét mã nhân viên và chọn nhà máy trước khi kiểm.</p>
+      <p *ngIf="step !== 'gate'">
+        {{ operatorId }} · {{ factory }}
+        <ng-container *ngIf="location"> · Vị trí {{ location }}</ng-container>
+      </p>
     </div>
-    <button type="button" class="kk-menu-btn" (click)="goToMenu()">
-      <i class="material-icons">apps</i>
-      Về Menu
-    </button>
+    <div class="sc-header__actions">
+      <button type="button" class="sc-btn sc-btn--ghost" (click)="openMissingCatalog()">Danh sách mã không có</button>
+      <button type="button" class="sc-btn sc-btn--ghost" (click)="openShortageCatalog()">Danh mục thiếu lượng</button>
+      <button type="button" class="sc-btn sc-btn--ghost" (click)="goToMenu()">Về Menu</button>
+    </div>
   </header>
 
-  <div class="kk-toolbar">
-    <div class="kk-toolbar__left">
-      <div class="kk-group">
-        <span class="kk-label">Nhà máy</span>
-        <button
-          *ngFor="let factory of factories"
-          type="button"
-          class="kk-factory-btn"
-          [class.kk-factory-btn--active]="selectedFactory === factory"
-          [disabled]="isLoading"
-          (click)="setFactory(factory)">
-          {{ factory }}
-        </button>
-      </div>
+  <p class="sc-error" *ngIf="error">{{ error }}</p>
+  <p class="sc-info" *ngIf="info">{{ info }}</p>
 
-      <div class="kk-group" *ngIf="rows.length > 0">
-        <span class="kk-label">Tìm</span>
-        <input type="text" class="kk-input" placeholder="Mã NVL" [(ngModel)]="searchCode">
-        <input type="text" class="kk-input" placeholder="Vị trí" [(ngModel)]="searchLocation">
-      </div>
+  <section class="sc-card" *ngIf="step === 'gate'">
+    <label class="sc-label" for="sc-operator-input">Mã nhân viên</label>
+    <input id="sc-operator-input" class="sc-input" type="text" [(ngModel)]="operatorInput"
+           placeholder="Quét ASP + 4 số" autocomplete="off"
+           (keyup.enter)="submitOperator()">
+    <div class="sc-factory">
+      <button type="button" class="sc-btn" *ngFor="let item of factories"
+              [class.sc-btn--on]="factory === item" (click)="setFactory(item)">{{ item }}</button>
+    </div>
+    <button type="button" class="sc-btn sc-btn--primary" (click)="submitOperator()">Bắt đầu</button>
+  </section>
 
-      <div class="kk-group" *ngIf="rows.length > 0">
-        <span class="kk-label">Trạng thái</span>
-        <button type="button" class="kk-chip" [class.kk-chip--active]="filterMode === 'all'" (click)="setFilterMode('all')">
-          Tất cả ({{ totalRows }})
-        </button>
-        <button type="button" class="kk-chip" [class.kk-chip--active]="filterMode === 'checked'" (click)="setFilterMode('checked')">
-          Đã KK ({{ checkedRows }})
-        </button>
-        <button type="button" class="kk-chip" [class.kk-chip--active]="filterMode === 'unchecked'" (click)="setFilterMode('unchecked')">
-          Chưa KK ({{ uncheckedRows }})
-        </button>
-      </div>
+  <section class="sc-card" *ngIf="step === 'location'">
+    <label class="sc-label" for="sc-location-input">Scan vị trí</label>
+    <input id="sc-location-input" class="sc-input" type="text" [(ngModel)]="locationInput"
+           placeholder="Quét vị trí" autocomplete="off" [disabled]="isLoading"
+           (keyup.enter)="submitLocation()">
+    <button type="button" class="sc-btn sc-btn--primary" (click)="submitLocation()" [disabled]="isLoading">
+      {{ isLoading ? 'Đang tải…' : 'Xem mã tại vị trí' }}
+    </button>
+  </section>
+
+  <section class="sc-work" *ngIf="step === 'work'">
+    <div class="sc-work__bar">
+      <button type="button" class="sc-btn sc-btn--ghost" (click)="changeLocation()">Đổi vị trí</button>
+      <span class="sc-progress">{{ doneCount }} / {{ rows.length }} Done</span>
+      <input id="sc-search-input" class="sc-input sc-input--search" type="text" [(ngModel)]="searchCode"
+             placeholder="Tìm mã">
     </div>
 
-    <div class="kk-toolbar__right">
-      <div class="kk-group">
-        <span class="kk-label">Danh mục KK</span>
-        <input type="date" class="kk-input kk-input--date" [(ngModel)]="exportDate">
-        <button type="button" class="kk-export-btn" (click)="exportCatalog()" [disabled]="isExporting || isLoading">
-          <i class="material-icons">download</i>
-          {{ isExporting ? 'Đang tải...' : 'Tải về' }}
+    <div class="sc-layout">
+      <div class="sc-list">
+        <p class="sc-empty" *ngIf="!filteredRows.length">Không có mã khớp.</p>
+        <button type="button" class="sc-row" *ngFor="let row of filteredRows"
+                [class.sc-row--on]="selectedId === row.id"
+                [class.sc-row--done]="row.kkChecked"
+                (click)="selectRow(row)">
+          <span class="sc-row__code">{{ row.materialCode }}</span>
+          <span class="sc-row__meta">{{ row.poNumber || '—' }} · {{ row.batchNumber || '—' }}</span>
+          <span class="sc-row__qty">Tồn {{ formatQty(row.stock) }} {{ row.unit }}</span>
+          <span class="sc-row__state" *ngIf="row.kkChecked">Done</span>
         </button>
       </div>
 
-      <button type="button" class="kk-run-btn" (click)="run()" [disabled]="isLoading">
-        <i class="material-icons" [class.kk-spin]="isLoading">{{ isLoading ? 'sync' : 'play_arrow' }}</i>
-        {{ isLoading ? 'Đang quét...' : 'Run' }}
-      </button>
+      <div class="sc-panel" *ngIf="selectedRow as row">
+        <h3>{{ row.materialCode }}</h3>
+        <p>{{ row.materialName || '—' }}</p>
+        <p>PO {{ row.poNumber || '—' }} · Batch {{ row.batchNumber || '—' }}</p>
+        <p class="sc-panel__stock">Tồn {{ formatQty(row.stock) }} {{ row.unit }}</p>
+
+        <ng-container *ngIf="!row.kkChecked">
+          <label class="sc-label" for="sc-scan-input">Scan mã</label>
+          <input id="sc-scan-input" class="sc-input" type="text" [(ngModel)]="scanInput"
+                 placeholder="Quét mã hàng" autocomplete="off" [disabled]="isSaving"
+                 (keyup.enter)="submitScan()">
+          <button type="button" class="sc-btn" (click)="submitScan()" [disabled]="isSaving">Khớp mã</button>
+
+          <div class="sc-actions" *ngIf="scanMatched">
+            <button type="button" class="sc-btn sc-btn--ok" (click)="confirmEnough()" [disabled]="isSaving">Xác nhận đủ lượng</button>
+            <button type="button" class="sc-btn sc-btn--warn" (click)="openShortageForm()" [disabled]="isSaving">Báo thiếu lượng</button>
+          </div>
+          <div class="sc-short" *ngIf="showShortageForm">
+            <label class="sc-label" for="sc-actual-qty">Số lượng thực tế</label>
+            <input id="sc-actual-qty" class="sc-input" type="number" min="0" step="0.001"
+                   [(ngModel)]="actualQtyInput" [disabled]="isSaving" (keyup.enter)="submitShortage()">
+            <button type="button" class="sc-btn sc-btn--warn" (click)="submitShortage()" [disabled]="isSaving">Gửi báo thiếu</button>
+          </div>
+          <button type="button" class="sc-btn sc-btn--danger" (click)="reportMissing()" [disabled]="isSaving">Báo cáo mã không có</button>
+        </ng-container>
+        <p class="sc-done" *ngIf="row.kkChecked">Đã Done{{ row.kkBy ? ' bởi ' + row.kkBy : '' }}.</p>
+      </div>
+      <div class="sc-panel sc-panel--idle" *ngIf="!selectedRow">
+        <p>Chọn một mã, quét mã, rồi xác nhận đủ lượng.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="sc-overlay" *ngIf="showMissingCatalog" (click)="closeMissingCatalog()">
+    <div class="sc-dialog" (click)="$event.stopPropagation()">
+      <h3>Danh sách mã không có</h3>
+      <p>Quản lý duyệt thì mã bị xóa khỏi tồn tại vị trí đó.</p>
+      <p *ngIf="catalogLoading">Đang tải…</p>
+      <table *ngIf="!catalogLoading">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Nhà máy</th>
+            <th>Vị trí</th>
+            <th>Mã</th>
+            <th>PO</th>
+            <th>Tồn</th>
+            <th>Người báo</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!missingReports.length">
+            <td colspan="8">Chưa có mã chờ duyệt.</td>
+          </tr>
+          <tr *ngFor="let report of missingReports">
+            <td>{{ formatDateTime(report.createdAt) }}</td>
+            <td>{{ report.factory }}</td>
+            <td>{{ report.location }}</td>
+            <td>{{ report.materialCode }}</td>
+            <td>{{ report.poNumber || '—' }}</td>
+            <td>{{ formatQty(report.stock) }} {{ report.unit }}</td>
+            <td>{{ report.reportedBy || '—' }}</td>
+            <td><button type="button" class="sc-btn sc-btn--danger" (click)="approveMissing(report)" [disabled]="isSaving">Duyệt xóa</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="sc-btn" (click)="closeMissingCatalog()">Đóng</button>
     </div>
   </div>
 
-  <div class="kk-idle" *ngIf="!rows.length && !isLoading">
-    <i class="material-icons">fact_check</i>
-    <h3>Sẵn sàng kiểm kê</h3>
-    <p>Chọn nhà máy rồi bấm <strong>Run</strong> để tải dữ liệu kiểm kê dùng chung với `inventory-materials`.</p>
-  </div>
-
-  <div class="kk-loading" *ngIf="isLoading">
-    <i class="material-icons kk-spin">sync</i>
-    <span>Đang đọc tồn kho {{ selectedFactory }}...</span>
-  </div>
-
-  <div class="kk-results" *ngIf="rows.length > 0 && !isLoading">
-    <div class="kk-kpis">
-      <div class="kk-kpi kk-kpi--primary">
-        <span class="kk-kpi__label">Tiến độ KK</span>
-        <span class="kk-kpi__value">{{ progressPercent | number:'1.0-1' }}%</span>
-        <div class="kk-progress">
-          <div class="kk-progress__bar" [style.width.%]="progressPercent"></div>
-        </div>
-        <span class="kk-kpi__sub">{{ checkedRows | number }} / {{ totalRows | number }} dòng</span>
-      </div>
-      <div class="kk-kpi">
-        <span class="kk-kpi__label">Nhà máy</span>
-        <span class="kk-kpi__value kk-kpi__value--sm">{{ selectedFactory }}</span>
-      </div>
-      <div class="kk-kpi">
-        <span class="kk-kpi__label">Tổng dòng</span>
-        <span class="kk-kpi__value">{{ totalRows | number }}</span>
-      </div>
-      <div class="kk-kpi kk-kpi--success">
-        <span class="kk-kpi__label">Đã KK</span>
-        <span class="kk-kpi__value">{{ checkedRows | number }}</span>
-      </div>
-      <div class="kk-kpi kk-kpi--warn">
-        <span class="kk-kpi__label">Chưa KK</span>
-        <span class="kk-kpi__value">{{ uncheckedRows | number }}</span>
-      </div>
-    </div>
-
-    <div class="kk-table-panel">
-      <div class="kk-table-wrap">
-        <table class="kk-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Mã hàng</th>
-              <th>Tên hàng</th>
-              <th>PO</th>
-              <th>Batch</th>
-              <th>Vị trí</th>
-              <th>Số lượng</th>
-              <th>Tồn</th>
-              <th>ĐVT</th>
-              <th>KK</th>
-              <th>ID kiểm</th>
-              <th>Thời gian</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of filteredRows; let i = index" [class.kk-row--done]="row.kkChecked">
-              <td>{{ i + 1 }}</td>
-              <td class="kk-code">{{ row.materialCode }}</td>
-              <td>{{ row.materialName || '—' }}</td>
-              <td>{{ row.poNumber || '—' }}</td>
-              <td>{{ row.batchNumber || '—' }}</td>
-              <td class="kk-location" [title]="row.location">{{ row.location || '—' }}</td>
-              <td class="kk-num">{{ row.quantity | number:'1.0-2' }}</td>
-              <td class="kk-num">{{ row.stock | number:'1.0-2' }}</td>
-              <td>{{ row.unit || '—' }}</td>
-              <td class="kk-checkbox-cell">
-                <input
-                  type="checkbox"
-                  [checked]="row.kkChecked"
-                  (change)="toggleKk(row)"
-                  [title]="getKkTitle(row)">
-              </td>
-              <td>{{ row.kkBy || '—' }}</td>
-              <td>{{ formatDateTime(row.kkAt) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="kk-empty-filter" *ngIf="filteredRows.length === 0">Không có dòng nào khớp bộ lọc.</p>
+  <div class="sc-overlay" *ngIf="showShortageCatalog" (click)="closeShortageCatalog()">
+    <div class="sc-dialog" (click)="$event.stopPropagation()">
+      <h3>Danh mục thiếu lượng</h3>
+      <p *ngIf="catalogLoading">Đang tải…</p>
+      <table *ngIf="!catalogLoading">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Nhà máy</th>
+            <th>Vị trí</th>
+            <th>Mã</th>
+            <th>PO</th>
+            <th>Tồn</th>
+            <th>Thực tế</th>
+            <th>Thiếu</th>
+            <th>Người báo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!shortageReports.length">
+            <td colspan="9">Chưa có báo thiếu lượng.</td>
+          </tr>
+          <tr *ngFor="let report of shortageReports">
+            <td>{{ formatDateTime(report.createdAt) }}</td>
+            <td>{{ report.factory }}</td>
+            <td>{{ report.location }}</td>
+            <td>{{ report.materialCode }}</td>
+            <td>{{ report.poNumber || '—' }}</td>
+            <td>{{ formatQty(report.stock) }}</td>
+            <td>{{ formatQty(report.actualQty) }}</td>
+            <td>{{ formatQty(report.shortageQty) }} {{ report.unit }}</td>
+            <td>{{ report.reportedBy || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="sc-btn" (click)="closeShortageCatalog()">Đóng</button>
     </div>
   </div>
 </div>

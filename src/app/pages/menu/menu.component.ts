@@ -20,6 +20,7 @@ export class MenuComponent implements OnInit, OnDestroy {
   filteredByCategory: Record<string, MenuTabView[]> = {
     Main: [],
     Production: [],
+    'Stock Check': [],
     'RM': [],
     Quality: [],
     'ASM FG': [],
@@ -100,7 +101,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Tools' },
     { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Tools' },
     { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
-    { path: '/stock-check', title: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png', category: 'Tools' },
+    { path: '/stock-check', title: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png', category: 'Stock Check', subtitle: 'Quét vị trí, kiểm mã và lượng tồn' },
     { path: '/bieu-mau', title: 'Biểu mẫu', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Tools' },
     
     // Admin & Reports
@@ -205,6 +206,7 @@ export class MenuComponent implements OnInit, OnDestroy {
 
     const next: Record<string, MenuTabView[]> = {
       Main: [],
+      'Stock Check': [],
       'RM': [],
       Quality: [],
       'ASM FG': [],
@@ -248,7 +250,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
     '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
     '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
-    '/stock-check': 'Kiểm kê và đối chiếu tồn kho',
+    '/stock-check': 'Quét vị trí, kiểm từng mã và xác nhận lượng',
     '/bieu-mau': 'Phiếu xuất kho, biểu mẫu 5S',
     '/sxxk': 'Quản lý sản xuất xuất khẩu',
     '/scrap': 'Quản lý phế liệu',

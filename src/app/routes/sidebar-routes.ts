@@ -12,6 +12,7 @@ export const ROUTES: RouteInfo[] = [
   { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
   { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', class: '' },
   { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
+  { path: '/stock-check', title: 'Stock Check', icon: 'checklist', class: '' },
   {
     path: '',
     title: 'RM',
@@ -52,7 +53,6 @@ export const ROUTES: RouteInfo[] = [
       { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', class: 'material-child-icon' },
       { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
       { path: '/label', title: 'Label', icon: 'label', class: 'material-child-icon' },
-      { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', class: 'material-child-icon' },
       { path: '/bieu-mau', title: 'Biểu mẫu', icon: 'description', class: 'material-child-icon' }
     ]
   },
