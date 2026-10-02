@@ -24,6 +24,7 @@ import { WoCreatedByStaffService, WoCreatedByStaff } from '../../services/wo-cre
 import { WoPxkBypassOtpService } from '../../services/wo-pxk-bypass-otp.service';
 import { PxkSkipKind, PxkSkipScanItem, WoPxkSkipCatalogService } from '../../services/wo-pxk-skip-catalog.service';
 import { WoGuideJob, WoGuideRole, WoGuideStaff, WoLsxGuideService } from '../../services/wo-lsx-guide.service';
+import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -369,6 +370,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   showPxkDownloadDialog: boolean = false;
   /** Popup trước khi chọn file import PXK (mô tả nguồn dữ liệu) */
   showPxkImportDialog: boolean = false;
+
+  private readonly PXK_WEIGHT_OK_PERCENT = 98;
+  private readonly PXK_WEIGHT_CHECK_COLLECTION = 'pxk-weight-checks';
+  private readonly onPxkWeightWindowMessage = (ev: MessageEvent): void => {
+    void this.handlePxkWeightWindowMessage(ev);
+  };
   /** Nếu true → import PXK vào pxk-bs-data (Bổ Sung), không lưu vào pxk-import-data */
   isBsImport: boolean = false;
   pxkDownloadDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -419,7 +426,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private woCreatedByStaff: WoCreatedByStaffService,
     private woPxkSkipCatalog: WoPxkSkipCatalogService,
     private woPxkBypassOtp: WoPxkBypassOtpService,
-    private woLsxGuide: WoLsxGuideService
+    private woLsxGuide: WoLsxGuideService,
+    private nvlCatalog: NvlCatalogFullService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -429,6 +437,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    window.addEventListener('message', this.onPxkWeightWindowMessage);
     console.log('🚀 WorkOrderStatusComponent initialized');
     console.log('📅 Initial filters:', {
       status: this.statusFilter
@@ -451,6 +460,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    window.removeEventListener('message', this.onPxkWeightWindowMessage);
     this.destroy$.next();
     this.destroy$.complete();
     this.flushGuideSave();
@@ -6630,6 +6640,362 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     return { locationMap, iqcStatusMap };
   }
 
+
+  private async handlePxkWeightWindowMessage(ev: MessageEvent): Promise<void> {
+    if (ev.origin !== window.location.origin) return;
+    const data = ev.data as { type?: string; payload?: any } | null;
+    if (!data || data.type !== 'pxk-weight-check-save') return;
+    const source = ev.source as Window | null;
+    try {
+      const result = await this.savePxkWeightFromWindow(data.payload);
+      source?.postMessage({ type: 'pxk-weight-check-saved', ok: true, ...result }, ev.origin);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Không lưu được. Vui lòng thử lại.';
+      source?.postMessage({ type: 'pxk-weight-check-saved', ok: false, error: message }, ev.origin);
+    }
+  }
+
+  private async savePxkWeightFromWindow(payload: any): Promise<{
+    materialCode: string;
+    poKey: string;
+    weightFull: number;
+    weightOdd: number | null;
+    percent: number | null;
+    okFlag: boolean | null;
+  }> {
+    const lsx = String(payload?.lsx || '').trim();
+    const code = String(payload?.materialCode || '').trim().toUpperCase();
+    const po = String(payload?.po || '').trim();
+    const standard = Number(payload?.standard) || 0;
+    const oddQty = Number(payload?.oddQty) || 0;
+    const exportQty = Number(payload?.exportQty) || 0;
+    const fullQty = Number(payload?.fullQty) || 0;
+    const weightFull = Number(payload?.weightFull);
+    const weightOdd = payload?.weightOdd == null || payload?.weightOdd === '' ? NaN : Number(payload.weightOdd);
+    if (!lsx || !code) throw new Error('Thiếu mã hàng.');
+    if (!this.isPxkWeightCheckLine(code, payload?.maKho)) throw new Error('Mã này không check lượng.');
+    if (!(standard > 0)) throw new Error('Mã chưa có Standard.');
+    if (!(weightFull > 0)) throw new Error('Nhập trọng lượng chẵn cuộn (gram).');
+    if (oddQty > 0 && !(weightOdd > 0)) throw new Error('Nhập trọng lượng lẻ (gram).');
+    const percent = oddQty > 0
+      ? this.pxkOddWeightPercent(weightFull, weightOdd, standard, oddQty)
+      : null;
+    const okFlag = percent == null ? null : this.pxkWeightIsOk(percent);
+    await this.nvlCatalog.update(code, { unitWeight: weightFull });
+    await this.firestore.collection(this.PXK_WEIGHT_CHECK_COLLECTION).doc(this.pxkWeightCheckDocId(lsx, code, po)).set({
+      lsx,
+      materialCode: code,
+      po,
+      poKey: this.pxkPoKey(po),
+      exportQty,
+      standard,
+      fullQty,
+      oddQty,
+      weightFull,
+      weightOdd: oddQty > 0 ? weightOdd : null,
+      percent: percent == null ? null : Math.round(percent * 10) / 10,
+      ok: okFlag,
+      updatedAt: new Date()
+    });
+    return {
+      materialCode: code,
+      poKey: this.pxkPoKey(po),
+      weightFull,
+      weightOdd: oddQty > 0 ? weightOdd : null,
+      percent,
+      okFlag
+    };
+  }
+
+  /** Popup nhập trọng lượng trên cửa sổ PXK. Ẩn khi in. */
+  private buildPxkWeightClientHtml(lsx: string, rows: unknown[]): string {
+    const rowsJson = JSON.stringify(rows).replace(/</g, '\\u003c');
+    const lsxJson = JSON.stringify(lsx);
+    return `
+<div id="pxkWeightModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;align-items:center;justify-content:center;padding:16px;">
+  <div style="width:min(440px,100%);background:#fff;border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.2);font-family:Arial,sans-serif;color:#111;">
+    <h3 id="pxkWTitle" style="margin:0 0 4px;font-size:16px;">Check lượng</h3>
+    <p id="pxkWMeta" style="margin:0 0 6px;font-size:13px;color:#37474f;"></p>
+    <p id="pxkWSplit" style="margin:0 0 10px;font-size:13px;line-height:1.4;"></p>
+    <label style="display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:13px;font-weight:700;">
+      <span id="pxkWFullLabel">Trọng lượng chẵn cuộn</span>
+      <input id="pxkWFull" type="text" inputmode="decimal" autocomplete="off" style="height:36px;border:1px solid #90a4ae;border-radius:4px;padding:0 8px;font-size:14px;">
+      <span style="font-weight:500;color:#607d8b;font-size:12px;">gram — lưu vào cột Trọng lượng</span>
+    </label>
+    <label id="pxkWOddWrap" style="display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:13px;font-weight:700;">
+      <span id="pxkWOddLabel">Trọng lượng lẻ</span>
+      <input id="pxkWOdd" type="text" inputmode="decimal" autocomplete="off" style="height:36px;border:1px solid #90a4ae;border-radius:4px;padding:0 8px;font-size:14px;">
+      <span style="font-weight:500;color:#607d8b;font-size:12px;">gram</span>
+    </label>
+    <p id="pxkWExp" style="margin:6px 0;font-size:13px;"></p>
+    <p id="pxkWRes" style="margin:6px 0;font-size:14px;font-weight:700;"></p>
+    <p id="pxkWErr" style="margin:0 0 8px;color:#c62828;font-size:13px;"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="pxkWCancel" type="button" style="height:34px;padding:0 12px;">Hủy</button>
+      <button id="pxkWSave" type="button" style="height:34px;padding:0 14px;background:#1565c0;color:#fff;border:0;border-radius:4px;font-weight:700;">Lưu</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var LSX = ${lsxJson};
+  var rows = ${rowsJson};
+  var byIdx = {};
+  rows.forEach(function (r) { byIdx[String(r.idx)] = r; });
+  var modal = document.getElementById('pxkWeightModal');
+  var current = null;
+  function pcs(n) {
+    var num = Number(n) || 0;
+    var fixed = num.toFixed(2);
+    var parts = fixed.split('.');
+    parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',');
+    return parts.join('.').replace(/\\.00$/, '');
+  }
+  function gram(n) {
+    if (n == null || !isFinite(Number(n))) return '—';
+    return pcs(n) + ' g';
+  }
+  function parseNum(raw) {
+    var s = String(raw || '').trim().replace(/\\s/g, '');
+    if (!s) return NaN;
+    var normalized = s.indexOf(',') >= 0 && s.indexOf('.') < 0 ? s.replace(',', '.') : s.replace(/,/g, '');
+    var n = Number(normalized);
+    return isFinite(n) ? n : NaN;
+  }
+  function percentOf(full, odd, standard, oddQty) {
+    if (!(full > 0) || !(odd > 0) || !(standard > 0) || !(oddQty > 0)) return null;
+    var expected = (full / standard) * oddQty;
+    if (!(expected > 0)) return null;
+    return (odd / expected) * 100;
+  }
+  function isOk(p) { return Math.round(p * 10) / 10 >= 98; }
+  function pctLabel(p) { return (Math.round(p * 10) / 10).toFixed(1) + '%'; }
+  function checkText(r) {
+    if (!(r.standard > 0)) return 'Thiếu Standard';
+    if (r.weightFull > 0) {
+      if (r.oddQty > 0 && !(r.weightOdd > 0)) return 'Nhập lẻ';
+      return 'Đã nhập';
+    }
+    return 'Nhập';
+  }
+  function compareText(r) {
+    if (!(r.standard > 0)) return 'Thiếu Standard';
+    if (!(r.oddQty > 0)) return r.weightFull > 0 ? 'Không có lẻ' : '—';
+    if (r.percent == null) return '—';
+    var label = pctLabel(r.percent);
+    return r.ok ? (label + ' · OK') : (label + ' · Không đạt');
+  }
+  function paint(r) {
+    var sub = '';
+    if (r.weightFull > 0) sub += '<div class="pxk-check-sub">Chẵn ' + gram(r.weightFull) + '</div>';
+    if (r.weightOdd > 0) sub += '<div class="pxk-check-sub">Lẻ ' + gram(r.weightOdd) + '</div>';
+    document.querySelectorAll('.pxk-check-cell[data-pxk-idx="' + r.idx + '"]').forEach(function (el) {
+      el.innerHTML = '<span class="pxk-check-link">' + checkText(r) + '</span>' + sub;
+    });
+    document.querySelectorAll('.pxk-cmp-cell[data-pxk-idx="' + r.idx + '"]').forEach(function (el) {
+      el.textContent = compareText(r);
+      el.style.color = r.ok === true ? '#1b5e20' : (r.ok === false ? '#c62828' : '');
+      el.style.fontWeight = r.ok == null ? '' : '700';
+    });
+  }
+  function refreshPreview() {
+    if (!current) return;
+    var full = parseNum(document.getElementById('pxkWFull').value);
+    var odd = parseNum(document.getElementById('pxkWOdd').value);
+    var expEl = document.getElementById('pxkWExp');
+    var resEl = document.getElementById('pxkWRes');
+    if (!(current.oddQty > 0)) {
+      expEl.textContent = '';
+      resEl.style.color = '#37474f';
+      resEl.textContent = 'Xuất đúng bội số Standard — không có lượng lẻ. Trọng lượng chẵn sẽ lưu vào cột Trọng lượng.';
+      return;
+    }
+    if (!(full > 0) || !(odd > 0)) {
+      expEl.textContent = '';
+      resEl.style.color = '#37474f';
+      resEl.textContent = 'Nhập đủ 2 trọng lượng để tính %.';
+      return;
+    }
+    var expected = (full / current.standard) * current.oddQty;
+    var pct = percentOf(full, odd, current.standard, current.oddQty);
+    expEl.textContent = 'Trọng lượng lẻ kỳ vọng: ' + gram(expected);
+    if (pct == null) { resEl.textContent = ''; return; }
+    var ok = isOk(pct);
+    resEl.textContent = ok ? (pctLabel(pct) + ' · OK') : (pctLabel(pct) + ' · Không đạt (cần ≥ 98%)');
+    resEl.style.color = ok ? '#1b5e20' : '#c62828';
+  }
+  function openEditor(idx) {
+    var r = byIdx[String(idx)];
+    if (!r) return;
+    if (!(r.standard > 0)) {
+      alert('Mã ' + r.materialCode + ' chưa có Standard trong danh mục NVL. Không tách được cuộn chẵn / lẻ.');
+      return;
+    }
+    current = r;
+    document.getElementById('pxkWTitle').textContent = 'Check lượng — ' + r.materialCode;
+    document.getElementById('pxkWMeta').textContent = r.po || '—';
+    document.getElementById('pxkWSplit').textContent = 'Xuất ' + pcs(r.exportQty) + ' ' + (r.unit || '') + ' · Standard ' + pcs(r.standard) + ' · Chẵn ' + pcs(r.fullQty) + ' pcs · Lẻ ' + pcs(r.oddQty) + ' pcs';
+    var full = r.weightFull > 0 ? r.weightFull : (r.catalogWeight > 0 ? r.catalogWeight : '');
+    document.getElementById('pxkWFull').value = full === '' ? '' : String(full);
+    document.getElementById('pxkWOdd').value = r.weightOdd > 0 ? String(r.weightOdd) : '';
+    document.getElementById('pxkWOddWrap').style.display = r.oddQty > 0 ? 'flex' : 'none';
+    document.getElementById('pxkWFullLabel').textContent = 'Trọng lượng chẵn cuộn (' + pcs(r.fullQty) + ' pcs)';
+    document.getElementById('pxkWOddLabel').textContent = 'Trọng lượng lẻ (' + pcs(r.oddQty) + ' pcs)';
+    document.getElementById('pxkWErr').textContent = '';
+    refreshPreview();
+    modal.style.display = 'flex';
+    document.getElementById('pxkWFull').focus();
+  }
+  function closeEditor() { modal.style.display = 'none'; current = null; }
+  document.getElementById('pxkWFull').addEventListener('input', refreshPreview);
+  document.getElementById('pxkWOdd').addEventListener('input', refreshPreview);
+  document.getElementById('pxkWCancel').addEventListener('click', closeEditor);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeEditor(); });
+  document.getElementById('pxkWSave').addEventListener('click', function () {
+    if (!current) return;
+    var full = parseNum(document.getElementById('pxkWFull').value);
+    var odd = parseNum(document.getElementById('pxkWOdd').value);
+    var err = document.getElementById('pxkWErr');
+    if (!(full > 0)) { err.textContent = 'Nhập trọng lượng chẵn cuộn (gram).'; return; }
+    if (current.oddQty > 0 && !(odd > 0)) { err.textContent = 'Nhập trọng lượng lẻ (gram).'; return; }
+    err.textContent = '';
+    if (!window.opener || window.opener.closed) { alert('Không lưu được vì trang Work Order đã đóng.'); return; }
+    document.getElementById('pxkWSave').disabled = true;
+    window.opener.postMessage({
+      type: 'pxk-weight-check-save',
+      payload: {
+        idx: current.idx, lsx: LSX, materialCode: current.materialCode, maKho: current.maKho, po: current.po,
+        exportQty: current.exportQty, standard: current.standard, fullQty: current.fullQty, oddQty: current.oddQty,
+        weightFull: full, weightOdd: current.oddQty > 0 ? odd : null
+      }
+    }, window.location.origin);
+  });
+  window.addEventListener('message', function (ev) {
+    if (ev.origin !== window.location.origin) return;
+    var data = ev.data;
+    if (!data || data.type !== 'pxk-weight-check-saved') return;
+    document.getElementById('pxkWSave').disabled = false;
+    if (!data.ok) { document.getElementById('pxkWErr').textContent = data.error || 'Không lưu được.'; return; }
+    rows.forEach(function (r) {
+      if (r.materialCode === data.materialCode) r.catalogWeight = data.weightFull;
+      if (r.materialCode === data.materialCode && r.poKey === data.poKey) {
+        r.weightFull = data.weightFull;
+        r.weightOdd = data.weightOdd;
+        r.percent = data.percent;
+        r.ok = data.okFlag;
+        paint(r);
+      }
+    });
+    closeEditor();
+  });
+  document.addEventListener('click', function (e) {
+    var cell = e.target.closest ? e.target.closest('[data-pxk-idx]') : null;
+    if (!cell) return;
+    if (!cell.classList.contains('pxk-mat-cell') && !cell.classList.contains('pxk-check-cell')) return;
+    openEditor(cell.getAttribute('data-pxk-idx'));
+  });
+})();
+</script>`;
+  }
+
+  private async loadPxkCatalogWeightMap(
+    codes: string[]
+  ): Promise<Map<string, { standard: number; unitWeight: number }>> {
+    const map = new Map<string, { standard: number; unitWeight: number }>();
+    const unique = [...new Set(codes.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean))];
+    await Promise.all(unique.map(async (code) => {
+      try {
+        const item = await this.nvlCatalog.getByCode(code);
+        map.set(code, {
+          standard: Number(item?.standardPacking) || 0,
+          unitWeight: Number(item?.unitWeight) || 0
+        });
+      } catch (e) {
+        console.warn('[PXK Check lượng] Không đọc danh mục:', code, e);
+        map.set(code, { standard: 0, unitWeight: 0 });
+      }
+    }));
+    return map;
+  }
+
+  private async loadPxkWeightChecks(lsx: string): Promise<Map<string, any>> {
+    const map = new Map<string, any>();
+    const variants = this.collectLsxQueryVariants(lsx);
+    if (variants.length === 0) return map;
+    try {
+      const snap = await firstValueFrom(
+        this.firestore.collection(this.PXK_WEIGHT_CHECK_COLLECTION, (ref) =>
+          ref.where('lsx', 'in', variants)
+        ).get()
+      );
+      snap.docs.forEach((docSnap: any) => {
+        const data = docSnap.data() as any;
+        const mat = String(data?.materialCode || '').trim().toUpperCase();
+        const po = this.pxkPoKey(data?.po || data?.poKey);
+        if (mat) map.set(`${mat}|${po}`, data);
+      });
+    } catch (e) {
+      console.warn('[PXK Check lượng] Không đọc phiếu đã lưu:', e);
+    }
+    return map;
+  }
+
+  /** Check lượng: chỉ mã B018/B009/B016/B008/B021/B023/B024, không kho trống / NVL_SX / NVL_KS, không mã R/A. */
+  private isPxkWeightCheckLine(materialCode: string, maKho: string | undefined | null): boolean {
+    const kho = String(maKho || '').trim().toUpperCase();
+    if (!kho || kho === 'NVL_SX' || kho === 'NVL_KS' || kho.includes('NVL_SX') || kho.includes('NVL_KS')) return false;
+    const code = String(materialCode || '').trim().toUpperCase();
+    if (!code || code.startsWith('R') || code.startsWith('A')) return false;
+    return ['B018', 'B009', 'B016', 'B008', 'B021', 'B023', 'B024'].some((prefix) => code.startsWith(prefix));
+  }
+
+  /** Chẵn = 1 cuộn Standard. Lẻ = phần dư của số xuất. */
+  private splitPxkRollQty(exportQty: number, standard: number): { fullQty: number; oddQty: number } {
+    const qty = Number(exportQty) || 0;
+    const std = Number(standard) || 0;
+    if (!(std > 0)) return { fullQty: 0, oddQty: qty };
+    const fullRolls = Math.floor(qty / std);
+    const rem = qty - fullRolls * std;
+    const oddQty = Math.abs(rem) < 0.0001 ? 0 : Math.round(rem * 10000) / 10000;
+    return { fullQty: std, oddQty };
+  }
+
+  private pxkOddWeightPercent(
+    weightFull: number,
+    weightOdd: number,
+    standard: number,
+    oddQty: number
+  ): number | null {
+    if (!(weightFull > 0) || !(weightOdd > 0) || !(standard > 0) || !(oddQty > 0)) return null;
+    const expected = (weightFull / standard) * oddQty;
+    if (!(expected > 0)) return null;
+    return (weightOdd / expected) * 100;
+  }
+
+  private parsePxkWeightInput(raw: string): number {
+    const s = String(raw ?? '').trim().replace(/\s/g, '');
+    if (!s) return NaN;
+    const normalized = s.includes(',') && !s.includes('.')
+      ? s.replace(',', '.')
+      : s.replace(/,/g, '');
+    const n = Number(normalized);
+    return isFinite(n) ? n : NaN;
+  }
+
+  private formatPxkPercent(percent: number): string {
+    return (Math.round(percent * 10) / 10).toFixed(1) + '%';
+  }
+
+  /** So với số % đang hiện (1 chữ số). Từ 98.0% trở lên là OK. */
+  private pxkWeightIsOk(percent: number): boolean {
+    return Math.round(percent * 10) / 10 >= this.PXK_WEIGHT_OK_PERCENT;
+  }
+
+  private pxkWeightCheckDocId(lsx: string, materialCode: string, po: string): string {
+    const raw = `${this.normLsxForMatch(lsx)}|${materialCode.trim().toUpperCase()}|${this.pxkPoKey(po)}`;
+    return encodeURIComponent(raw).replace(/%/g, '_');
+  }
+
   async printPxk(workOrder: WorkOrder): Promise<void> {
     const lsx = workOrder.productionOrder || '';
     const printWin = this.openPxkPrintWindow(lsx);
@@ -6658,6 +7024,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     let nhanVienGiaoStr = '-';
     let nhanVienNhanStr = '-';
     const deliveryQtyMap = new Map<string, number>(); // materialCode|PO → checkQuantity
+    const catalogWeightMap = new Map<string, { standard: number; unitWeight: number }>();
+    const savedWeightChecks = new Map<string, any>();
 
     // 🚀 5 lượt đọc/tính độc lập (QR x2, tồn kho, lượng scan, delivery) — chạy song song
     // thay vì await tuần tự từng cái, giảm mạnh thời gian chờ khi bấm "In PXK".
@@ -6742,6 +7110,18 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         } catch (e) {
           console.warn('Không load được dữ liệu Delivery từ RM1 Delivery:', e);
         }
+      })(),
+      (async () => {
+        try {
+          const [catalog, checks] = await Promise.all([
+            this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode)),
+            this.loadPxkWeightChecks(lsx)
+          ]);
+          catalog.forEach((v, k) => catalogWeightMap.set(k, v));
+          checks.forEach((v, k) => savedWeightChecks.set(k, v));
+        } catch (e) {
+          console.warn('Không load Standard / trọng lượng cho PXK:', e);
+        }
       })()
     ]);
 
@@ -6782,9 +7162,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     });
     const hasAnyDeliveryData = lines.some(l => getDeliveryQty(l.materialCode, l.po) > 0);
     let sttCounter = 0;
+    const weightMeta: Array<Record<string, unknown>> = [];
     const rowsHtml = sortedLines.map((l) => {
       if (l === null) {
-        return '<tr><td colspan="17" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
+        return '<tr><td colspan="19" style="border:1px solid #000;padding:8px;background:#fff;"></td></tr>';
       }
       sttCounter++;
       const matCode = String(l.materialCode || '').trim().toUpperCase();
@@ -6813,9 +7194,68 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const deliveryQtyStr = deliveryQty > 0 ? this.formatQuantityForPxk(deliveryQty) : '';
       const ghiChuText = String((l as any).ghiChu || '').trim();
       const iqcIconHtml = this.getPxkIqcStatusIconHtml(getIqcStatus(l.materialCode, po));
+      const weightCheck = this.isPxkWeightCheckLine(matCode, maKho);
+      const cat = catalogWeightMap.get(matCode) || { standard: 0, unitWeight: 0 };
+      const split = this.splitPxkRollQty(qtyPxk, cat.standard);
+      const saved = weightCheck ? savedWeightChecks.get(`${matCode}|${this.pxkPoKey(po)}`) : null;
+      const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : null;
+      const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : null;
+      const weightPercent = weightFull != null && weightOdd != null
+        ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty)
+        : null;
+      const weightOk = weightPercent == null ? null : this.pxkWeightIsOk(weightPercent);
+      if (weightCheck) {
+        weightMeta.push({
+          idx: sttCounter,
+          materialCode: matCode,
+          maKho,
+          po,
+          poKey: this.pxkPoKey(po),
+          unit: String(l.unit || '').trim(),
+          exportQty: qtyPxk,
+          standard: cat.standard,
+          fullQty: split.fullQty,
+          oddQty: split.oddQty,
+          catalogWeight: cat.unitWeight,
+          weightFull,
+          weightOdd,
+          percent: weightPercent,
+          ok: weightOk
+        });
+      }
+      const checkLabel = !weightCheck
+        ? ''
+        : (!(cat.standard > 0)
+          ? 'Thiếu Standard'
+          : (weightFull != null && weightFull > 0
+            ? (split.oddQty > 0 && !(weightOdd != null && weightOdd > 0) ? 'Nhập lẻ' : 'Đã nhập')
+            : 'Nhập'));
+      const checkSub = !weightCheck ? '' : [
+        weightFull != null && weightFull > 0 ? `<div class="pxk-check-sub">Chẵn ${this.escapeHtmlForPrint(this.formatQuantityForPxk(weightFull).replace(/\.00$/, '') + ' g')}</div>` : '',
+        weightOdd != null && weightOdd > 0 ? `<div class="pxk-check-sub">Lẻ ${this.escapeHtmlForPrint(this.formatQuantityForPxk(weightOdd).replace(/\.00$/, '') + ' g')}</div>` : ''
+      ].join('');
+      const compareLabel = !weightCheck
+        ? ''
+        : (!(cat.standard > 0)
+          ? 'Thiếu Standard'
+          : (!(split.oddQty > 0)
+            ? (weightFull != null && weightFull > 0 ? 'Không có lẻ' : '—')
+            : (weightPercent == null
+              ? '—'
+              : `${this.formatPxkPercent(weightPercent)} · ${weightOk ? 'OK' : 'Không đạt'}`)));
+      const compareColor = weightOk === true ? 'color:#1b5e20;font-weight:700;' : weightOk === false ? 'color:#c62828;font-weight:700;' : '';
+      const matCell = weightCheck
+        ? `<td class="pxk-mat-cell" data-pxk-idx="${sttCounter}" title="Bấm để check lượng" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>`
+        : `<td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>`;
+      const checkCell = weightCheck
+        ? `<td class="pxk-screen-only pxk-check-cell" data-pxk-idx="${sttCounter}" style="border:1px solid #000;padding:6px;text-align:center;cursor:pointer;"><span class="pxk-check-link">${this.escapeHtmlForPrint(checkLabel)}</span>${checkSub}</td>`
+        : `<td class="pxk-screen-only" style="border:1px solid #000;padding:6px;"></td>`;
+      const compareCell = weightCheck
+        ? `<td class="pxk-screen-only pxk-cmp-cell" data-pxk-idx="${sttCounter}" style="border:1px solid #000;padding:6px;text-align:center;${compareColor}">${this.escapeHtmlForPrint(compareLabel)}</td>`
+        : `<td class="pxk-screen-only" style="border:1px solid #000;padding:6px;"></td>`;
       return `<tr>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${sttCounter}</td>
-        <td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>
+        ${matCell}
         <td class="col-ten-vat-tu" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(tenVatTu || '-')}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(l.unit)}</td>
         <td style="border:1px solid #000;padding:6px;text-align:center;">${this.escapeHtmlForPrint(dinhMuc || '-')}</td>
@@ -6834,6 +7274,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           ${iqcIconHtml}
         </td>
         <td class="col-sx-tra" style="border:1px solid #000;padding:6px;"></td>
+        ${checkCell}
+        ${compareCell}
       </tr>`;
     }).join('');
     // Box kho NVL_SX, NVL_KS: Mã vật tư, PO, Mã Kho, LSX (LSX gần nhất mà mã hàng+po được xuất)
@@ -6952,9 +7394,16 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 *{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
+@media screen{
+  .pxk-mat-cell{cursor:pointer;color:#1565c0;text-decoration:underline}
+  .pxk-check-link{color:#1565c0;font-weight:700;text-decoration:underline}
+  .pxk-check-sub{margin-top:2px;font-size:9px;font-weight:700;color:#37474f}
+}
 @media print{
   html::before,html::after,body::before,body::after{display:none!important;content:none!important}
   head,header,footer,nav{display:none!important}
+  .pxk-screen-only,#pxkWeightModal{display:none!important}
+  .pxk-mat-cell{color:inherit!important;text-decoration:none!important;cursor:default!important}
 }
 .pxk-table{width:100%;border-collapse:collapse;margin-top:8px}
 .pxk-table th,.pxk-table td{border:1px solid #000;padding:6px;font-size:10px}
@@ -7003,10 +7452,11 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 </div>
 ${headerSection}
 <table class="pxk-table">
-<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>T/L Định Mức</th><th>Lượng yêu cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th class="col-vitri">Vị trí</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Giao SX</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th></tr></thead>
+<thead><tr><th>STT</th><th>Mã vật tư</th><th class="col-ten-vat-tu">Tên Vật Tư</th><th>Đơn vị tính</th><th>Định Mức</th><th>T/L Định Mức</th><th>Lượng yêu cầu</th><th>PO</th><th>Xuất Kho</th><th>Mã Kho</th><th class="col-vitri">Vị trí</th><th>Loại Hình</th><th class="col-luong-scan">Lượng Scan</th><th>So Sánh</th><th>Giao SX</th><th class="col-ghi-chu">Ghi chú</th><th class="col-sx-tra">SX trả</th><th class="pxk-screen-only">Check lượng</th><th class="pxk-screen-only">So sánh TL</th></tr></thead>
 <tbody>${rowsHtml}</tbody>
 </table>
 ${nvlSxKsBoxHtml}
+${this.buildPxkWeightClientHtml(lsx, weightMeta)}
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;
     if (!this.writePxkPrintWindow(printWin, html)) {
