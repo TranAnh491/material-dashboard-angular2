@@ -138,6 +138,97 @@ html, body {
   color: #0f172a;
 }
 
+.wo-guide-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.wo-guide-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.wo-guide-icon__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  color: #334155;
+
+  .material-icons {
+    font-size: 16px;
+    line-height: 1;
+    width: 16px;
+    height: 16px;
+  }
+
+  &--red {
+    border-color: #c62828;
+    background: #ffebee;
+    color: #c62828;
+  }
+
+  &--green {
+    border-color: #2e7d32;
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &--orange {
+    border-color: #fb8c00;
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  &--blue {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  &--hot {
+    border-color: #fdba74;
+    background: #fff7ed;
+    color: #ea580c;
+  }
+
+  &--teal {
+    border-color: #99f6e4;
+    background: #f0fdfa;
+    color: #0f766e;
+  }
+}
+
+.wo-guide-icon__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  strong {
+    font-size: 13px;
+    color: #0f172a;
+  }
+
+  span {
+    font-size: 12px;
+    line-height: 1.35;
+    color: #475569;
+  }
+}
+
 .wo-guide-table-wrap {
   overflow-x: auto;
   border: 1px solid #e2e8f0;
@@ -5085,10 +5176,10 @@ textarea.mat-input-element {
   height: calc(28px * 0.7);
   margin: 0;
   padding: 0;
-  border: 1px solid #fb8c00;
+  border: 1px solid #c62828;
   border-radius: 3px;
-  background: #fff3e0;
-  color: #e65100;
+  background: #ffebee;
+  color: #c62828;
   cursor: pointer;
 
   .material-icons {
@@ -5096,6 +5187,18 @@ textarea.mat-input-element {
     line-height: 1;
     width: calc(16px * 0.7);
     height: calc(16px * 0.7);
+  }
+
+  &--ok {
+    border-color: #2e7d32;
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &--high {
+    border-color: #fb8c00;
+    background: #fff3e0;
+    color: #e65100;
   }
 
   &--slot {

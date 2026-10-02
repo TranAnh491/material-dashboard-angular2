@@ -226,6 +226,19 @@
                   </button>
                 </div>
                 <div class="dialog-content wo-guide-dialog-content">
+                  <h5 class="wo-guide-title">Icon chức năng</h5>
+                  <div class="wo-guide-icons">
+                    <div class="wo-guide-icon" *ngFor="let item of woGuideIcons">
+                      <span class="wo-guide-icon__mark" [ngClass]="'wo-guide-icon__mark--' + item.tone">
+                        <i class="material-icons">{{ item.icon }}</i>
+                      </span>
+                      <div class="wo-guide-icon__text">
+                        <strong>{{ item.title }}</strong>
+                        <span>{{ item.desc }}</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <h5 class="wo-guide-title">Phân việc nhân sự</h5>
                   <div class="wo-guide-toolbar">
                     <input class="wo-guide-input" type="text"
@@ -861,7 +874,12 @@
                                 <i class="material-icons">print</i>
                                 In PXK
                               </button>
-                              <button type="button" class="wo-weight-check-flag" *ngIf="lsxNeedsWeightCheck(wo)" (click)="printPxk(wo)" title="LSX này cần check lượng">
+                              <button type="button" class="wo-weight-check-flag"
+                                      *ngIf="lsxNeedsWeightCheck(wo)"
+                                      [class.wo-weight-check-flag--ok]="lsxWeightIcon(wo) === 'green'"
+                                      [class.wo-weight-check-flag--high]="lsxWeightIcon(wo) === 'orange'"
+                                      (click)="printPxk(wo)"
+                                      [title]="lsxWeightIconTitle(wo)">
                                 <i class="material-icons">scale</i>
                               </button>
                               <span class="wo-weight-check-flag wo-weight-check-flag--slot" *ngIf="!lsxNeedsWeightCheck(wo)" aria-hidden="true"></span>

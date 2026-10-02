@@ -181,6 +181,17 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   lsxLabelWorkOrder: WorkOrder | null = null;
   lsxLabelQty = 1;
   lsxLabelPrinting = false;
+  readonly woGuideIcons: Array<{ icon: string; tone: string; title: string; desc: string }> = [
+    { icon: 'scale', tone: 'red', title: 'Chưa check lượng', desc: 'LSX còn mã phải nhập trọng lượng. Bấm icon hoặc In PXK để check.' },
+    { icon: 'scale', tone: 'green', title: 'Đã check lượng', desc: 'Đã check hết. Không có mã nào lớn hơn 130%.' },
+    { icon: 'scale', tone: 'orange', title: 'Check vượt 130%', desc: 'Đã check hết và có mã lớn hơn 130%.' },
+    { icon: 'print', tone: 'blue', title: 'In PXK', desc: 'Mở phiếu xuất kho. Cột check lượng chỉ hiện trên màn hình, bản in không có.' },
+    { icon: 'local_fire_department', tone: 'hot', title: 'Gấp', desc: 'Đánh dấu LSX cần làm gấp. Bấm lại để bỏ đánh dấu.' },
+    { icon: 'qr_code_2', tone: 'teal', title: 'BAG', desc: 'Soạn túi theo LSX và in tem QR.' },
+    { icon: 'qr_code_scanner', tone: 'slate', title: 'Scan QR', desc: 'Quét mã để đổi tình trạng LSX.' },
+    { icon: 'description', tone: 'slate', title: 'Import file PXK', desc: 'Nhập file Excel phiếu xuất kho cho LSX.' },
+    { icon: 'event', tone: 'slate', title: 'Xem theo ngày', desc: 'Chỉ hiện các LSX của ngày đã chọn.' }
+  ];
   readonly woGuideRules: Array<{ stt: number; title: string; desc: string }> = [
     { stt: 1, title: '1 người = 1 LSX', desc: 'Mỗi nhân viên chỉ phụ trách một LSX tại một thời điểm.' },
     { stt: 2, title: 'Xong LSX này → mới sang LSX khác', desc: 'Không chuyển sang LSX tiếp theo khi LSX hiện tại chưa hoàn tất.' },
@@ -382,6 +393,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private pxkWeightPendingCodes = new Set<string>();
   private pxkWeightCatalogLoad: Promise<void> | null = null;
   private pxkWeightCatalogToken = 0;
+  private readonly PXK_WEIGHT_HIGH_PERCENT = 130;
+  private pxkWeightIconToken = 0;
+  private pxkWeightIconByLsx = new Map<string, 'red' | 'green' | 'orange'>();
   private readonly pxkPrintWindows = new Set<Window>();
   private readonly onPxkWeightWindowMessage = (ev: MessageEvent): void => {
     void this.handlePxkWeightWindowMessage(ev);
@@ -1780,6 +1794,19 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return lines.some((line) => this.isPxkWeightCheckLine(line.materialCode, line.maKho));
   }
 
+  /** Đỏ: chưa check. Xanh: đã check, không mã nào > 130%. Cam: đã check và có mã > 130%. */
+  lsxWeightIcon(wo: WorkOrder): 'red' | 'green' | 'orange' {
+    const key = this.normLsxForMatch(String(wo?.productionOrder || ''));
+    return this.pxkWeightIconByLsx.get(key) || 'red';
+  }
+
+  lsxWeightIconTitle(wo: WorkOrder): string {
+    const kind = this.lsxWeightIcon(wo);
+    if (kind === 'green') return 'Đã check lượng. Không có mã nào lớn hơn 130%.';
+    if (kind === 'orange') return 'Đã check lượng. Có mã lớn hơn 130%.';
+    return 'Chưa check lượng.';
+  }
+
   async approvePxkWeightReport(report: PxkWeightCheckReport): Promise<void> {
     if (!report?.id || this.pxkWeightReportSaving) return;
     if (!confirm(`Duyệt mã ${report.materialCode}? Mã này sẽ không còn bị check lượng.`)) return;
@@ -1788,6 +1815,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const decidedBy = await this.getPxkBypassRequester();
       await this.pxkWeightReports.approve(report, decidedBy);
       await this.refreshPxkWeightCatalog();
+      void this.refreshPxkWeightIcons();
     } catch (error: any) {
       alert(error?.message || 'Không duyệt được báo cáo.');
     } finally {
@@ -1804,6 +1832,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const decidedBy = await this.getPxkBypassRequester();
       await this.pxkWeightReports.reject(report, decidedBy);
       await this.refreshPxkWeightCatalog();
+      void this.refreshPxkWeightIcons();
     } catch (error: any) {
       alert(error?.message || 'Không từ chối được báo cáo.');
     } finally {
@@ -5684,10 +5713,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       if (this.getPxkLinesForLsx(lsx).length > 0) return false;
       return this.hasPxkForWorkOrder(wo);
     });
-    if (need.length === 0) return;
-    await Promise.all(need.map((wo) => this.ensurePxkLoadedForLsx(wo.productionOrder || '')));
-    if (token !== this.pxkSoMaLoadToken) return;
-    this.cdr.markForCheck();
+    if (need.length > 0) {
+      await Promise.all(need.map((wo) => this.ensurePxkLoadedForLsx(wo.productionOrder || '')));
+      if (token !== this.pxkSoMaLoadToken) return;
+      this.cdr.markForCheck();
+    }
+    void this.refreshPxkWeightIcons();
   }
 
   /** R / B030 / B033 / B036004 + mã user thêm: PXK coi như xuất đủ, không bắt scan. */
@@ -6783,6 +6814,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     try {
       const result = await this.savePxkWeightFromWindow(data.payload);
       source?.postMessage({ type: 'pxk-weight-check-saved', ok: true, ...result }, replyOrigin);
+      void this.refreshPxkWeightIcons();
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Không lưu được. Vui lòng thử lại.';
       source?.postMessage({ type: 'pxk-weight-check-saved', ok: false, error: message }, replyOrigin);
@@ -7185,6 +7217,61 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       console.warn('[PXK Check lượng] Không đọc phiếu đã lưu theo LSX:', e);
     }
     return map;
+  }
+
+  private async refreshPxkWeightIcons(): Promise<void> {
+    const token = ++this.pxkWeightIconToken;
+    try {
+      await this.ensurePxkWeightCatalogLoaded();
+      const orders = this.displayedWorkOrders.filter((wo) => this.lsxNeedsWeightCheck(wo));
+      const next = new Map<string, 'red' | 'green' | 'orange'>();
+      await Promise.all(orders.map(async (wo) => {
+        const key = this.normLsxForMatch(String(wo.productionOrder || ''));
+        if (!key) return;
+        next.set(key, await this.computePxkWeightIcon(wo));
+      }));
+      if (token !== this.pxkWeightIconToken) return;
+      this.pxkWeightIconByLsx = next;
+    } catch (e) {
+      console.warn('[PXK Check lượng] Không tính được màu icon:', e);
+    } finally {
+      if (token === this.pxkWeightIconToken) this.cdr.markForCheck();
+    }
+  }
+
+  /** Chưa nhập đủ → đỏ. Đã nhập hết và có % > 130 → cam. Đã nhập hết, không mã nào > 130 → xanh. */
+  private async computePxkWeightIcon(workOrder: WorkOrder): Promise<'red' | 'green' | 'orange'> {
+    const lsx = String(workOrder?.productionOrder || '').trim();
+    if (!lsx) return 'red';
+    await this.ensurePxkLoadedForLsx(lsx);
+    const lines = this.getPxkLinesForLsx(lsx);
+    const applicable = lines.filter((l) => this.isPxkWeightCheckLine(l.materialCode, l.maKho));
+    if (applicable.length === 0) return 'red';
+    const [catalog, checks] = await Promise.all([
+      this.loadPxkCatalogWeightMap(applicable.map((l) => l.materialCode)),
+      this.loadPxkWeightChecks(lsx, applicable)
+    ]);
+    let over = false;
+    const seen = new Set<string>();
+    for (const line of applicable) {
+      const code = String(line.materialCode || '').trim().toUpperCase();
+      const key = `${code}|${this.pxkPoKey(line.po)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const cat = catalog.get(code) || { standard: 0, unitWeight: 0 };
+      const split = this.splitPxkRollQty(Number(line.quantity) || 0, cat.standard);
+      const saved = checks.get(key);
+      const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : 0;
+      const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : 0;
+      if (!(cat.standard > 0) || !(weightFull > 0)) return 'red';
+      if (split.oddQty > 0) {
+        if (!(weightOdd > 0)) return 'red';
+        const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty);
+        if (pct == null) return 'red';
+        if (Math.round(pct * 10) / 10 > this.PXK_WEIGHT_HIGH_PERCENT) over = true;
+      }
+    }
+    return over ? 'orange' : 'green';
   }
 
   /**
