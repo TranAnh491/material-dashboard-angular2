@@ -373,6 +373,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   private readonly PXK_WEIGHT_OK_PERCENT = 98;
   private readonly PXK_WEIGHT_CHECK_COLLECTION = 'pxk-weight-checks';
+  private readonly pxkPrintWindows = new Set<Window>();
   private readonly onPxkWeightWindowMessage = (ev: MessageEvent): void => {
     void this.handlePxkWeightWindowMessage(ev);
   };
@@ -2205,7 +2206,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Line nhận WHE / WHD / WHF / WHG (kể cả WH G, WH-G) → ghi chú tự động ASM3. */
+  /** Line nhận WHE / WHD / WHF / WHG / WHH (kể cả WH G, WH H, WH-H) → ghi chú tự động ASM3. */
   private normalizeProductionLineKey(line: string): string {
     return String(line || '')
       .normalize('NFKC')
@@ -2216,11 +2217,11 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private isAsm3ProductionLine(line: string): boolean {
     const key = this.normalizeProductionLineKey(line);
     if (!key || key === '-') return false;
-    if (key === 'WHE' || key === 'WHD' || key === 'WHF' || key === 'WHG') return true;
-    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF') || key.startsWith('WHG');
+    if (key === 'WHE' || key === 'WHD' || key === 'WHF' || key === 'WHG' || key === 'WHH') return true;
+    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF') || key.startsWith('WHG') || key.startsWith('WHH');
   }
 
-  /** KZ + Line WHE/WHD/WHF/WHG → ASM3 trên PXK; KZ khác → ASM1; LH → ASM2. */
+  /** KZ + Line WHE/WHD/WHF/WHG/WHH → ASM3 trên PXK; KZ khác → ASM1; LH → ASM2. */
   private resolvePxkFactoryBadge(lsx: string, productionLine: string): 'ASM1' | 'ASM2' | 'ASM3' | null {
     const lsxUpper = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
     if (lsxUpper.startsWith('LH')) return 'ASM2';
@@ -2555,6 +2556,18 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       workOrder.status = oldStatus;
       this.cdr.detectChanges();
       return;
+    }
+    if (
+      newStatusEnum !== oldStatus &&
+      (newStatusEnum === WorkOrderStatus.READY || newStatusEnum === WorkOrderStatus.DONE)
+    ) {
+      const weightMsg = await this.getPxkWeightCheckBlockMessage(workOrder);
+      if (weightMsg) {
+        alert(weightMsg);
+        workOrder.status = oldStatus;
+        this.cdr.detectChanges();
+        return;
+      }
     }
     const blocked = await this.isThieuBlockedForWorkOrder(workOrder);
     if (blocked && (newStatusEnum === WorkOrderStatus.DONE || newStatusEnum === WorkOrderStatus.TRANSFER)) {
@@ -4405,6 +4418,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   // New methods for the updated UI
   async completeWorkOrder(workOrder: WorkOrder): Promise<void> {
+    const weightMsg = await this.getPxkWeightCheckBlockMessage(workOrder);
+    if (weightMsg) {
+      alert(weightMsg);
+      return;
+    }
     const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
     if (blocked) {
       if (!this.isPxkBypassGrantedFor(workOrder)) {
@@ -6588,6 +6606,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
   private openPxkPrintWindow(lsx: string): Window | null {
     const w = window.open('', '_blank');
     if (!w) return null;
+    this.pxkPrintWindows.add(w);
     const safe = this.escapeHtmlForPrint(lsx || '');
     w.document.write(
       `<!DOCTYPE html><html><head><meta charset="utf-8"><title>PXK ${safe}</title></head>` +
@@ -6642,16 +6661,18 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 
 
   private async handlePxkWeightWindowMessage(ev: MessageEvent): Promise<void> {
-    if (ev.origin !== window.location.origin) return;
+    const source = ev.source as Window | null;
+    const fromPrintWindow = !!source && this.pxkPrintWindows.has(source);
+    if (ev.origin !== window.location.origin && !fromPrintWindow) return;
     const data = ev.data as { type?: string; payload?: any } | null;
     if (!data || data.type !== 'pxk-weight-check-save') return;
-    const source = ev.source as Window | null;
+    const replyOrigin = !ev.origin || ev.origin === 'null' ? '*' : ev.origin;
     try {
       const result = await this.savePxkWeightFromWindow(data.payload);
-      source?.postMessage({ type: 'pxk-weight-check-saved', ok: true, ...result }, ev.origin);
+      source?.postMessage({ type: 'pxk-weight-check-saved', ok: true, ...result }, replyOrigin);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Không lưu được. Vui lòng thử lại.';
-      source?.postMessage({ type: 'pxk-weight-check-saved', ok: false, error: message }, ev.origin);
+      source?.postMessage({ type: 'pxk-weight-check-saved', ok: false, error: message }, replyOrigin);
     }
   }
 
@@ -6684,7 +6705,9 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     await this.nvlCatalog.update(code, { unitWeight: weightFull });
     await this.firestore.collection(this.PXK_WEIGHT_CHECK_COLLECTION).doc(this.pxkWeightCheckDocId(lsx, code, po)).set({
       lsx,
+      lsxNorm: this.normLsxForMatch(lsx),
       materialCode: code,
+      maKho: String(payload?.maKho || '').trim(),
       po,
       poKey: this.pxkPoKey(po),
       exportQty,
@@ -6696,7 +6719,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       percent: percent == null ? null : Math.round(percent * 10) / 10,
       ok: okFlag,
       updatedAt: new Date()
-    });
+    }, { merge: true });
     return {
       materialCode: code,
       poKey: this.pxkPoKey(po),
@@ -6711,12 +6734,14 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
   private buildPxkWeightClientHtml(lsx: string, rows: unknown[]): string {
     const rowsJson = JSON.stringify(rows).replace(/</g, '\\u003c');
     const lsxJson = JSON.stringify(lsx);
+    const parentOriginJson = JSON.stringify(window.location.origin);
     return `
 <div id="pxkWeightModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;align-items:center;justify-content:center;padding:16px;">
   <div style="width:min(440px,100%);background:#fff;border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.2);font-family:Arial,sans-serif;color:#111;">
     <h3 id="pxkWTitle" style="margin:0 0 4px;font-size:16px;">Check lượng</h3>
     <p id="pxkWMeta" style="margin:0 0 6px;font-size:13px;color:#37474f;"></p>
     <p id="pxkWSplit" style="margin:0 0 10px;font-size:13px;line-height:1.4;"></p>
+    <p id="pxkWSaved" style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1b5e20;"></p>
     <label style="display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:13px;font-weight:700;">
       <span id="pxkWFullLabel">Trọng lượng chẵn cuộn</span>
       <input id="pxkWFull" type="text" inputmode="decimal" autocomplete="off" style="height:36px;border:1px solid #90a4ae;border-radius:4px;padding:0 8px;font-size:14px;">
@@ -6739,6 +6764,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 <script>
 (function () {
   var LSX = ${lsxJson};
+  var PARENT_ORIGIN = ${parentOriginJson};
   var rows = ${rowsJson};
   var byIdx = {};
   rows.forEach(function (r) { byIdx[String(r.idx)] = r; });
@@ -6770,6 +6796,13 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
   }
   function isOk(p) { return Math.round(p * 10) / 10 >= 98; }
   function pctLabel(p) { return (Math.round(p * 10) / 10).toFixed(1) + '%'; }
+  function rowIsCheckOk(r) {
+    if (r.ok === true) return true;
+    return r.standard > 0 && !(r.oddQty > 0) && r.weightFull > 0;
+  }
+  function okIconHtml() {
+    return '<button type="button" class="pxk-ok-icon" title="OK — bấm để xem lượng đã nhập"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#2e7d32"/><path d="M7.5 12.2l2.4 2.4 6.2-6.4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+  }
   function checkText(r) {
     if (!(r.standard > 0)) return 'Thiếu Standard';
     if (r.weightFull > 0) {
@@ -6786,11 +6819,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     return r.ok ? (label + ' · OK') : (label + ' · Không đạt');
   }
   function paint(r) {
-    var sub = '';
-    if (r.weightFull > 0) sub += '<div class="pxk-check-sub">Chẵn ' + gram(r.weightFull) + '</div>';
-    if (r.weightOdd > 0) sub += '<div class="pxk-check-sub">Lẻ ' + gram(r.weightOdd) + '</div>';
+    var html = rowIsCheckOk(r)
+      ? okIconHtml()
+      : '<span class="pxk-check-link">' + checkText(r) + '</span>';
     document.querySelectorAll('.pxk-check-cell[data-pxk-idx="' + r.idx + '"]').forEach(function (el) {
-      el.innerHTML = '<span class="pxk-check-link">' + checkText(r) + '</span>' + sub;
+      el.innerHTML = html;
     });
     document.querySelectorAll('.pxk-cmp-cell[data-pxk-idx="' + r.idx + '"]').forEach(function (el) {
       el.textContent = compareText(r);
@@ -6835,6 +6868,12 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     document.getElementById('pxkWTitle').textContent = 'Check lượng — ' + r.materialCode;
     document.getElementById('pxkWMeta').textContent = r.po || '—';
     document.getElementById('pxkWSplit').textContent = 'Xuất ' + pcs(r.exportQty) + ' ' + (r.unit || '') + ' · Standard ' + pcs(r.standard) + ' · Chẵn ' + pcs(r.fullQty) + ' pcs · Lẻ ' + pcs(r.oddQty) + ' pcs';
+    var savedText = '';
+    if (r.weightFull > 0) {
+      savedText = 'Đã nhập — Chẵn: ' + gram(r.weightFull);
+      if (r.oddQty > 0 && r.weightOdd > 0) savedText += ' · Lẻ: ' + gram(r.weightOdd);
+    }
+    document.getElementById('pxkWSaved').textContent = savedText;
     var full = r.weightFull > 0 ? r.weightFull : (r.catalogWeight > 0 ? r.catalogWeight : '');
     document.getElementById('pxkWFull').value = full === '' ? '' : String(full);
     document.getElementById('pxkWOdd').value = r.weightOdd > 0 ? String(r.weightOdd) : '';
@@ -6868,10 +6907,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         exportQty: current.exportQty, standard: current.standard, fullQty: current.fullQty, oddQty: current.oddQty,
         weightFull: full, weightOdd: current.oddQty > 0 ? odd : null
       }
-    }, window.location.origin);
+    }, PARENT_ORIGIN);
   });
   window.addEventListener('message', function (ev) {
-    if (ev.origin !== window.location.origin) return;
+    if (ev.origin !== PARENT_ORIGIN && ev.origin !== window.location.origin) return;
     var data = ev.data;
     if (!data || data.type !== 'pxk-weight-check-saved') return;
     document.getElementById('pxkWSave').disabled = false;
@@ -6918,8 +6957,28 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     return map;
   }
 
-  private async loadPxkWeightChecks(lsx: string): Promise<Map<string, any>> {
+  private async loadPxkWeightChecks(lsx: string, lines: PxkLine[] = []): Promise<Map<string, any>> {
     const map = new Map<string, any>();
+    const put = (data: any) => {
+      const mat = String(data?.materialCode || '').trim().toUpperCase();
+      const po = this.pxkPoKey(data?.po || data?.poKey);
+      if (mat) map.set(`${mat}|${po}`, data);
+    };
+    const docIds = new Map<string, string>();
+    for (const line of lines) {
+      const code = String(line.materialCode || '').trim().toUpperCase();
+      if (!this.isPxkWeightCheckLine(code, line.maKho)) continue;
+      const po = String(line.po || '').trim();
+      docIds.set(this.pxkWeightCheckDocId(lsx, code, po), `${code}|${this.pxkPoKey(po)}`);
+    }
+    await Promise.all([...docIds.keys()].map(async (docId) => {
+      try {
+        const snap = await this.firestore.collection(this.PXK_WEIGHT_CHECK_COLLECTION).doc(docId).get().toPromise();
+        if (snap?.exists) put(snap.data());
+      } catch (e) {
+        console.warn('[PXK Check lượng] Không đọc phiếu đã lưu:', docId, e);
+      }
+    }));
     const variants = this.collectLsxQueryVariants(lsx);
     if (variants.length === 0) return map;
     try {
@@ -6928,16 +6987,59 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           ref.where('lsx', 'in', variants)
         ).get()
       );
-      snap.docs.forEach((docSnap: any) => {
-        const data = docSnap.data() as any;
-        const mat = String(data?.materialCode || '').trim().toUpperCase();
-        const po = this.pxkPoKey(data?.po || data?.poKey);
-        if (mat) map.set(`${mat}|${po}`, data);
-      });
+      snap.docs.forEach((docSnap: any) => put(docSnap.data()));
     } catch (e) {
-      console.warn('[PXK Check lượng] Không đọc phiếu đã lưu:', e);
+      console.warn('[PXK Check lượng] Không đọc phiếu đã lưu theo LSX:', e);
     }
     return map;
+  }
+
+  /**
+   * Dòng thuộc Check lượng phải OK mới được sang Ready / Done.
+   * Không có lẻ: đã lưu trọng lượng chẵn là đủ. Có lẻ: % phải từ 98% trở lên.
+   */
+  private async getPxkWeightCheckBlockMessage(workOrder: WorkOrder): Promise<string | null> {
+    const lsx = String(workOrder?.productionOrder || '').trim();
+    if (!lsx) return null;
+    try {
+      await this.ensurePxkLoadedForLsx(lsx);
+      const lines = this.getPxkLinesForLsx(lsx);
+      const applicable = lines.filter((l) => this.isPxkWeightCheckLine(l.materialCode, l.maKho));
+      if (applicable.length === 0) return null;
+
+      const [catalog, checks] = await Promise.all([
+        this.loadPxkCatalogWeightMap(applicable.map((l) => l.materialCode)),
+        this.loadPxkWeightChecks(lsx, applicable)
+      ]);
+      const failed: string[] = [];
+      const seen = new Set<string>();
+      for (const line of applicable) {
+        const code = String(line.materialCode || '').trim().toUpperCase();
+        const key = `${code}|${this.pxkPoKey(line.po)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const cat = catalog.get(code) || { standard: 0, unitWeight: 0 };
+        const split = this.splitPxkRollQty(Number(line.quantity) || 0, cat.standard);
+        const saved = checks.get(key);
+        const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : 0;
+        const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : 0;
+        let ok = false;
+        if (cat.standard > 0 && !(split.oddQty > 0)) {
+          ok = weightFull > 0;
+        } else if (cat.standard > 0) {
+          const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty);
+          ok = pct != null && this.pxkWeightIsOk(pct);
+        }
+        if (!ok) failed.push(code);
+      }
+      if (failed.length === 0) return null;
+      const shown = failed.slice(0, 8).join(', ');
+      const more = failed.length > 8 ? ` (+${failed.length - 8})` : '';
+      return `Check lượng chưa OK: ${shown}${more}. Không chuyển được sang Ready hoặc Done.`;
+    } catch (e) {
+      console.warn('[PXK Check lượng] Không kiểm tra được trước khi đổi trạng thái:', e);
+      return 'Không kiểm tra được Check lượng. Vui lòng thử lại.';
+    }
   }
 
   /** Check lượng: chỉ mã B018/B009/B016/B008/B021/B023/B024, không kho trống / NVL_SX / NVL_KS, không mã R/A. */
@@ -7115,7 +7217,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         try {
           const [catalog, checks] = await Promise.all([
             this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode)),
-            this.loadPxkWeightChecks(lsx)
+            this.loadPxkWeightChecks(lsx, lines)
           ]);
           catalog.forEach((v, k) => catalogWeightMap.set(k, v));
           checks.forEach((v, k) => savedWeightChecks.set(k, v));
@@ -7223,6 +7325,9 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           ok: weightOk
         });
       }
+      const lineCheckOk = weightCheck && (
+        weightOk === true || (!(split.oddQty > 0) && weightFull != null && weightFull > 0 && cat.standard > 0)
+      );
       const checkLabel = !weightCheck
         ? ''
         : (!(cat.standard > 0)
@@ -7230,10 +7335,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           : (weightFull != null && weightFull > 0
             ? (split.oddQty > 0 && !(weightOdd != null && weightOdd > 0) ? 'Nhập lẻ' : 'Đã nhập')
             : 'Nhập'));
-      const checkSub = !weightCheck ? '' : [
-        weightFull != null && weightFull > 0 ? `<div class="pxk-check-sub">Chẵn ${this.escapeHtmlForPrint(this.formatQuantityForPxk(weightFull).replace(/\.00$/, '') + ' g')}</div>` : '',
-        weightOdd != null && weightOdd > 0 ? `<div class="pxk-check-sub">Lẻ ${this.escapeHtmlForPrint(this.formatQuantityForPxk(weightOdd).replace(/\.00$/, '') + ' g')}</div>` : ''
-      ].join('');
+      const okIcon = '<button type="button" class="pxk-ok-icon" title="OK — bấm để xem lượng đã nhập"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#2e7d32"/><path d="M7.5 12.2l2.4 2.4 6.2-6.4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+      const checkCell = !weightCheck
+        ? `<td class="pxk-screen-only" style="border:1px solid #000;padding:6px;"></td>`
+        : `<td class="pxk-screen-only pxk-check-cell" data-pxk-idx="${sttCounter}" style="border:1px solid #000;padding:6px;text-align:center;cursor:pointer;">${lineCheckOk ? okIcon : `<span class="pxk-check-link">${this.escapeHtmlForPrint(checkLabel)}</span>`}</td>`;
       const compareLabel = !weightCheck
         ? ''
         : (!(cat.standard > 0)
@@ -7247,9 +7352,6 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const matCell = weightCheck
         ? `<td class="pxk-mat-cell" data-pxk-idx="${sttCounter}" title="Bấm để check lượng" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>`
         : `<td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>`;
-      const checkCell = weightCheck
-        ? `<td class="pxk-screen-only pxk-check-cell" data-pxk-idx="${sttCounter}" style="border:1px solid #000;padding:6px;text-align:center;cursor:pointer;"><span class="pxk-check-link">${this.escapeHtmlForPrint(checkLabel)}</span>${checkSub}</td>`
-        : `<td class="pxk-screen-only" style="border:1px solid #000;padding:6px;"></td>`;
       const compareCell = weightCheck
         ? `<td class="pxk-screen-only pxk-cmp-cell" data-pxk-idx="${sttCounter}" style="border:1px solid #000;padding:6px;text-align:center;${compareColor}">${this.escapeHtmlForPrint(compareLabel)}</td>`
         : `<td class="pxk-screen-only" style="border:1px solid #000;padding:6px;"></td>`;
@@ -7397,6 +7499,7 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 @media screen{
   .pxk-mat-cell{cursor:pointer;color:#1565c0;text-decoration:underline}
   .pxk-check-link{color:#1565c0;font-weight:700;text-decoration:underline}
+  .pxk-ok-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;line-height:0}
   .pxk-check-sub{margin-top:2px;font-size:9px;font-weight:700;color:#37474f}
 }
 @media print{

@@ -35,7 +35,7 @@ type WoHeatKind = 'done' | 'waiting' | 'kitting' | 'ready' | 'delay';
 interface WoHeatmapCell {
   kind: WoHeatKind;
   tooltip: string;
-  /** Line WHE/WHD/WHF/WHG (vd WH G) hoặc ghi chú ASM3 → chấm xanh giữa ô SKU */
+  /** Line WHE/WHD/WHF/WHG/WHH (vd WH G, WH H) hoặc ghi chú ASM3 → chấm xanh giữa ô SKU */
   giaoAsm3?: boolean;
   /** LSX đánh dấu gấp → viền đỏ ngoài ô */
   isUrgent?: boolean;
@@ -1488,12 +1488,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .replace(/[^A-Z0-9]/g, '');
   }
 
-  /** Line nhận WHE / WHD / WHF / WHG (kể cả WH G, WH-G) → ASM3 (cùng quy tắc tab Work Order Status). */
+  /** Line nhận WHE / WHD / WHF / WHG / WHH (kể cả WH H, WH-H) → ASM3 (cùng quy tắc tab Work Order Status). */
   private isAsm3ProductionLine(line?: string): boolean {
     const key = this.normalizeProductionLineKey(line || '');
     if (!key || key === '-') return false;
-    if (key === 'WHE' || key === 'WHD' || key === 'WHF' || key === 'WHG') return true;
-    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF') || key.startsWith('WHG');
+    if (key === 'WHE' || key === 'WHD' || key === 'WHF' || key === 'WHG' || key === 'WHH') return true;
+    return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF') || key.startsWith('WHG') || key.startsWith('WHH');
   }
 
   private isWoAsm3Marked(wo: WorkOrder): boolean {
