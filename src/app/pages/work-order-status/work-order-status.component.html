@@ -856,13 +856,16 @@
                               (click)="openLsxLabelDialog(wo, $event)"
                               title="In tem LSX 10×10 cm">{{wo.productionOrder}}</td>
                           <td class="wo-sl">
-                            <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="printPxk(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In PXK'">
-                              <i class="material-icons">print</i>
-                              In PXK
-                            </button>
-                            <button type="button" class="wo-weight-check-flag" *ngIf="lsxNeedsWeightCheck(wo)" (click)="printPxk(wo)" title="LSX này cần check lượng">
-                              <i class="material-icons">scale</i>
-                            </button>
+                            <div class="wo-sl-row">
+                              <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="printPxk(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In PXK'">
+                                <i class="material-icons">print</i>
+                                In PXK
+                              </button>
+                              <button type="button" class="wo-weight-check-flag" *ngIf="lsxNeedsWeightCheck(wo)" (click)="printPxk(wo)" title="LSX này cần check lượng">
+                                <i class="material-icons">scale</i>
+                              </button>
+                              <span class="wo-weight-check-flag wo-weight-check-flag--slot" *ngIf="!lsxNeedsWeightCheck(wo)" aria-hidden="true"></span>
+                            </div>
                           </td>
                           <td>{{wo.customer}}</td>
                           <td class="wo-urgent">

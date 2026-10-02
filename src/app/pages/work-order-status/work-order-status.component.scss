@@ -5064,27 +5064,45 @@ textarea.mat-input-element {
 }
 
 .wo-sl {
-  min-width: 96px;
+  min-width: 118px;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+.wo-sl-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
 }
 
 .wo-weight-check-flag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: 4px;
+  flex: 0 0 calc(28px * 0.7);
+  width: calc(28px * 0.7);
+  height: calc(28px * 0.7);
+  margin: 0;
   padding: 0;
   border: 1px solid #fb8c00;
-  border-radius: 4px;
+  border-radius: 3px;
   background: #fff3e0;
   color: #e65100;
   cursor: pointer;
-  vertical-align: middle;
 
   .material-icons {
-    font-size: 16px;
+    font-size: calc(16px * 0.7);
+    line-height: 1;
+    width: calc(16px * 0.7);
+    height: calc(16px * 0.7);
+  }
+
+  &--slot {
+    visibility: hidden;
+    pointer-events: none;
+    border-color: transparent;
+    background: transparent;
   }
 }
 
