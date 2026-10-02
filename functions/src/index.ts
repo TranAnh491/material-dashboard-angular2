@@ -762,7 +762,9 @@ export const notifyPxkWeightCheckReportFn = functions
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new functions.https.HttpsError(
-        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg.includes('Thiếu') || msg.includes('zalo_links') || msg.includes('Quản lý kho')
+          ? 'failed-precondition'
+          : 'internal',
         msg
       );
     }

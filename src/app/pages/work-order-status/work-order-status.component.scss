@@ -5209,6 +5209,37 @@ textarea.mat-input-element {
   }
 }
 
+.pxk-weight-include {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.pxk-weight-include__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+
+  button {
+    border: 0;
+    background: transparent;
+    color: #9a3412;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+}
+
 .pxk-weight-report-approve,
 .pxk-weight-report-reject {
   height: 28px;

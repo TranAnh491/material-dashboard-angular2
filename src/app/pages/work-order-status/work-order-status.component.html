@@ -488,9 +488,30 @@
                 </div>
                 <div class="dialog-content pxk-skip-catalog-content">
                   <p class="prep-catalog-desc">
-                    Báo cáo mã không hợp lý để check lượng. <strong>Duyệt</strong> thì mã đó không còn bị check.
-                    <strong>Từ chối</strong> thì mã vẫn phải check lượng.
+                    Thêm mã để mã đó được check lượng. Báo cáo gửi Zalo tới nhóm Quản lý kho.
+                    <strong>Duyệt</strong> thì mã không còn bị check. <strong>Từ chối</strong> thì mã vẫn phải check.
                   </p>
+                  <form class="pxk-skip-catalog-add" (submit)="$event.preventDefault(); addPxkWeightInclude()">
+                    <input class="pxk-skip-catalog-add__input"
+                           type="text"
+                           [(ngModel)]="pxkWeightIncludeDraft"
+                           name="pxkWeightIncludeDraft"
+                           placeholder="Nhập mã hàng cần check…"
+                           maxlength="40"
+                           [disabled]="pxkWeightReportSaving"
+                           autocomplete="off">
+                    <button type="submit" class="pxk-skip-catalog-add__btn"
+                            [disabled]="pxkWeightReportSaving || !pxkWeightIncludeDraft.trim()">
+                      <i class="material-icons">add</i>
+                      Thêm mã
+                    </button>
+                  </form>
+                  <div class="pxk-weight-include" *ngIf="pxkWeightIncludeList.length">
+                    <span class="pxk-weight-include__chip" *ngFor="let code of pxkWeightIncludeList">
+                      {{ code }}
+                      <button type="button" (click)="removePxkWeightInclude(code)" [disabled]="pxkWeightReportSaving" title="Bỏ {{ code }}">×</button>
+                    </span>
+                  </div>
                   <div class="staff-catalog-loading" *ngIf="pxkWeightReportLoading">Đang tải báo cáo…</div>
                   <div class="pxk-skip-catalog-table-wrap" *ngIf="!pxkWeightReportLoading">
                     <table class="prep-catalog-table pxk-skip-catalog-table">

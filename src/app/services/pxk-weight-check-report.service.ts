@@ -20,11 +20,39 @@ export interface PxkWeightCheckReport {
 export class PxkWeightCheckReportService {
   static readonly REPORTS = 'pxk-weight-check-reports';
   static readonly EXEMPT = 'pxk-weight-check-exempt';
+  static readonly INCLUDE = 'pxk-weight-check-include';
 
   constructor(
     private firestore: AngularFirestore,
     private fns: AngularFireFunctions
   ) {}
+
+  async loadIncludeCodes(): Promise<string[]> {
+    const snap = await firstValueFrom(
+      this.firestore.collection(PxkWeightCheckReportService.INCLUDE).get()
+    );
+    return snap.docs
+      .map((d) => String(d.id || '').trim().toUpperCase())
+      .filter(Boolean)
+      .sort();
+  }
+
+  async addInclude(materialCode: string, addedBy: string): Promise<void> {
+    const code = materialCode.trim().toUpperCase();
+    if (!code) throw new Error('Nhập mã hàng.');
+    await this.firestore.collection(PxkWeightCheckReportService.EXEMPT).doc(code).delete();
+    await this.firestore.collection(PxkWeightCheckReportService.INCLUDE).doc(code).set({
+      materialCode: code,
+      addedAt: new Date(),
+      addedBy: String(addedBy || '').trim().toUpperCase().slice(0, 20)
+    }, { merge: true });
+  }
+
+  async removeInclude(materialCode: string): Promise<void> {
+    const code = materialCode.trim().toUpperCase();
+    if (!code) return;
+    await this.firestore.collection(PxkWeightCheckReportService.INCLUDE).doc(code).delete();
+  }
 
   async loadExemptCodes(): Promise<string[]> {
     const snap = await firstValueFrom(

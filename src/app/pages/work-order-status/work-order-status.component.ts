@@ -390,6 +390,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private readonly PXK_WEIGHT_OK_PERCENT = 98;
   private readonly PXK_WEIGHT_CHECK_COLLECTION = 'pxk-weight-checks';
   private pxkWeightExemptCodes = new Set<string>();
+  private pxkWeightIncludeCodes = new Set<string>();
+  pxkWeightIncludeList: string[] = [];
+  pxkWeightIncludeDraft = '';
   private pxkWeightPendingCodes = new Set<string>();
   private pxkWeightCatalogLoad: Promise<void> | null = null;
   private pxkWeightCatalogToken = 0;
@@ -1857,12 +1860,15 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const token = ++this.pxkWeightCatalogToken;
     this.pxkWeightReportLoading = true;
     try {
-      const [codes, pending] = await Promise.all([
+      const [codes, pending, includeCodes] = await Promise.all([
         this.pxkWeightReports.loadExemptCodes(),
-        this.pxkWeightReports.loadPending()
+        this.pxkWeightReports.loadPending(),
+        this.pxkWeightReports.loadIncludeCodes()
       ]);
       if (token !== this.pxkWeightCatalogToken) return;
       this.pxkWeightExemptCodes = new Set(codes);
+      this.pxkWeightIncludeCodes = new Set(includeCodes);
+      this.pxkWeightIncludeList = includeCodes;
       this.pxkWeightPendingCodes = new Set(pending.map((row) => row.materialCode));
       this.pxkWeightReportsList = pending;
     } catch (error) {
@@ -6843,7 +6849,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     await this.refreshPxkWeightCatalog();
     return {
       zaloOk: sent.zaloOk,
-      error: sent.zaloOk ? '' : 'Đã lưu báo cáo. Zalo chưa gửi được tới ASP0106.'
+      error: sent.zaloOk ? '' : 'Đã lưu báo cáo. Zalo chưa gửi được tới nhóm Quản lý kho.'
     };
   }
 
@@ -7323,14 +7329,59 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     }
   }
 
-  /** Check lượng: chỉ mã B018/B009/B016/B008/B021/B023/B024, không kho trống / NVL_SX / NVL_KS, không mã R/A. */
+  /** Check lượng: mã đầu B018/B009/B016/B008/B021/B023/B024, hoặc mã được thêm trong danh mục. Không kho trống / NVL_SX / NVL_KS. */
   private isPxkWeightCheckLine(materialCode: string, maKho: string | undefined | null): boolean {
     const kho = String(maKho || '').trim().toUpperCase();
     if (!kho || kho === 'NVL_SX' || kho === 'NVL_KS' || kho.includes('NVL_SX') || kho.includes('NVL_KS')) return false;
     const code = String(materialCode || '').trim().toUpperCase();
-    if (!code || code.startsWith('R') || code.startsWith('A')) return false;
-    if (this.pxkWeightExemptCodes.has(code)) return false;
+    if (!code || this.pxkWeightExemptCodes.has(code)) return false;
+    if (this.pxkWeightIncludeCodes.has(code)) return true;
+    if (code.startsWith('R') || code.startsWith('A')) return false;
     return ['B018', 'B009', 'B016', 'B008', 'B021', 'B023', 'B024'].some((prefix) => code.startsWith(prefix));
+  }
+
+  private pxkNeedCheckIconHtml(tone: 'red' | 'green' | 'orange'): string {
+    const fill = tone === 'green' ? '#2e7d32' : tone === 'orange' ? '#e65100' : '#c62828';
+    const title = tone === 'green'
+      ? 'Đã check lượng, không quá 130%'
+      : tone === 'orange'
+        ? 'Đã check lượng, lớn hơn 130%'
+        : 'Mã này cần check lượng';
+    return `<span class="pxk-need-ico" title="${title}"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="${fill}"/><path d="M7.2 14.2l2.2-4.2 2.1 3.1 1.6-2.4 3.2 3.5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  }
+
+  async addPxkWeightInclude(): Promise<void> {
+    const code = this.pxkWeightIncludeDraft.trim().toUpperCase();
+    if (!code || this.pxkWeightReportSaving) return;
+    this.pxkWeightReportSaving = true;
+    try {
+      const addedBy = await this.getPxkBypassRequester();
+      await this.pxkWeightReports.addInclude(code, addedBy);
+      this.pxkWeightIncludeDraft = '';
+      await this.refreshPxkWeightCatalog();
+      void this.refreshPxkWeightIcons();
+    } catch (error: any) {
+      alert(error?.message || 'Không thêm được mã.');
+    } finally {
+      this.pxkWeightReportSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async removePxkWeightInclude(code: string): Promise<void> {
+    if (!code || this.pxkWeightReportSaving) return;
+    if (!confirm(`Bỏ mã ${code} khỏi danh sách thêm để check?`)) return;
+    this.pxkWeightReportSaving = true;
+    try {
+      await this.pxkWeightReports.removeInclude(code);
+      await this.refreshPxkWeightCatalog();
+      void this.refreshPxkWeightIcons();
+    } catch (error: any) {
+      alert(error?.message || 'Không bỏ được mã.');
+    } finally {
+      this.pxkWeightReportSaving = false;
+      this.cdr.markForCheck();
+    }
   }
 
   /** Chẵn = 1 cuộn Standard. Lẻ = phần dư của số xuất. */
@@ -7632,8 +7683,18 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
               ? '—'
               : `${this.formatPxkPercent(weightPercent)} · ${weightOk ? 'OK' : 'Không đạt'}`)));
       const compareColor = weightOk === true ? 'color:#1b5e20;font-weight:700;' : weightOk === false ? 'color:#c62828;font-weight:700;' : '';
+      const needTone: '' | 'red' | 'green' | 'orange' = !weightCheck
+        ? ''
+        : (!(cat.standard > 0) || weightFull == null || !(weightFull > 0)
+          ? 'red'
+          : (split.oddQty > 0 && (weightOdd == null || !(weightOdd > 0) || weightPercent == null)
+            ? 'red'
+            : (weightPercent != null && Math.round(weightPercent * 10) / 10 > this.PXK_WEIGHT_HIGH_PERCENT
+              ? 'orange'
+              : 'green')));
+      const needIcon = needTone ? this.pxkNeedCheckIconHtml(needTone) : '';
       const matCell = weightCheck
-        ? `<td class="pxk-mat-cell" data-pxk-idx="${sttCounter}" title="Bấm để check lượng" style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>`
+        ? `<td class="pxk-mat-cell" data-pxk-idx="${sttCounter}" title="Bấm để check lượng" style="border:1px solid #000;padding:6px;">${needIcon}${this.escapeHtmlForPrint(l.materialCode)}</td>`
         : `<td style="border:1px solid #000;padding:6px;">${this.escapeHtmlForPrint(l.materialCode)}</td>`;
       const compareCell = weightCheck
         ? `<td class="pxk-screen-only pxk-cmp-cell" data-pxk-idx="${sttCounter}" style="border:1px solid #000;padding:6px;text-align:center;${compareColor}">${this.escapeHtmlForPrint(compareLabel)}</td>`
@@ -7802,6 +7863,8 @@ body{font-family:Arial,sans-serif;padding:5mm;color:#000;font-size:12px}
 .pxk-iqc-icon.pxk-iqc-pass{background:#c8e6c9;color:#1b5e20}
 .pxk-iqc-icon.pxk-iqc-dac-cach{background:#ffe0b2;color:#e65100}
 .pxk-iqc-icon svg{display:block}
+.pxk-need-ico{display:inline-block;vertical-align:middle;margin-right:4px;line-height:0}
+.pxk-need-ico svg{display:block}
 .pxk-iqc-dash{position:absolute;right:4px;bottom:4px;font-size:9px;font-weight:700;color:#757575;line-height:1;letter-spacing:-0.5px}
 .pxk-top-header{width:100%;border-collapse:collapse;margin-bottom:12px}
 .pxk-top-header td{vertical-align:middle;border:1px solid #000;padding:8px}

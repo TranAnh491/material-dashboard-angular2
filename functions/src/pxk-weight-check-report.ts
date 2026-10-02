@@ -1,10 +1,10 @@
 /**
- * Báo cáo mã không hợp lý để Check lượng PXK — gửi Zalo tới ASP0106.
+ * Báo cáo mã không hợp lý để Check lượng PXK — gửi Zalo tới nhóm Quản lý kho.
  */
 import * as admin from 'firebase-admin';
 import { zaloBotToken } from './params-config';
 
-const RECIPIENT_ID = 'ASP0106';
+const KHO_GROUP_DOC = 'zalo_group_config/quanly_kho';
 
 function vnNowLabel(d = new Date()): string {
   return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
@@ -29,13 +29,10 @@ export async function notifyPxkWeightCheckReport(
   if (!token) {
     throw new Error('Thiếu ZALO_BOT_TOKEN');
   }
-  const linkSnap = await db.collection('zalo_links').where('memberId', '==', RECIPIENT_ID).limit(1).get();
-  if (linkSnap.empty) {
-    throw new Error(`Chưa có zalo_links cho ${RECIPIENT_ID}`);
-  }
-  const chatId = String(linkSnap.docs[0].data()?.chatId || '').trim();
+  const groupSnap = await db.doc(KHO_GROUP_DOC).get();
+  const chatId = String(groupSnap.data()?.chatId || '').trim();
   if (!chatId) {
-    throw new Error(`Thiếu chatId cho ${RECIPIENT_ID}`);
+    throw new Error('Chưa gắn nhóm Quản lý kho trong zalo_group_config/quanly_kho.');
   }
   const lines = [
     '📋 Báo cáo Check lượng PXK',
@@ -46,7 +43,7 @@ export async function notifyPxkWeightCheckReport(
     clip(opts?.maKho, 40) ? `Kho: ${clip(opts?.maKho, 40)}` : '',
     clip(opts?.po, 80) ? `PO: ${clip(opts?.po, 80)}` : '',
     clip(opts?.reason, 400) ? `Lý do: ${clip(opts?.reason, 400)}` : '',
-    'Work Order Status → KHÁC → Danh mục check lượng: Duyệt hoặc Từ chối.'
+    'Nhóm Quản lý kho: Work Order Status → KHÁC → Danh mục check lượng → Duyệt hoặc Từ chối.'
   ].filter(Boolean);
   const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
   const res = await fetch(url, {
