@@ -1095,9 +1095,20 @@ body.fg-loc-mobile-tab {
   font-weight: 600;
   color: #8e8e93;
   cursor: pointer;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
 
   .material-icons {
     font-size: 20px;
+  }
+
+  &:hover {
+    color: #1976d2;
+  }
+
+  &:active {
+    color: #1565c0;
   }
 }
 
