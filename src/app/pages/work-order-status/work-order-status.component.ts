@@ -25,6 +25,7 @@ import { WoPxkBypassOtpService } from '../../services/wo-pxk-bypass-otp.service'
 import { PxkSkipKind, PxkSkipScanItem, WoPxkSkipCatalogService } from '../../services/wo-pxk-skip-catalog.service';
 import { WoGuideJob, WoGuideRole, WoGuideStaff, WoLsxGuideService } from '../../services/wo-lsx-guide.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
+import { PxkWeightCheckReport, PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -191,6 +192,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     { stt: 8, title: 'Không trộn LSX', desc: 'Pallet của LSX A không được để chung với LSX B, dù cùng mã NVL.' }
   ];
   showPxkSkipCatalogDialog = false;
+  showPxkWeightReportDialog = false;
+  pxkWeightReportsList: PxkWeightCheckReport[] = [];
+  pxkWeightReportLoading = false;
+  pxkWeightReportSaving = false;
   pxkSkipScanCatalog: PxkSkipScanItem[] = [];
   pxkSkipCatalogDraft = '';
   pxkSkipCatalogKind: PxkSkipKind = 'code';
@@ -373,6 +378,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   private readonly PXK_WEIGHT_OK_PERCENT = 98;
   private readonly PXK_WEIGHT_CHECK_COLLECTION = 'pxk-weight-checks';
+  private pxkWeightExemptCodes = new Set<string>();
+  private pxkWeightPendingCodes = new Set<string>();
+  private pxkWeightCatalogLoad: Promise<void> | null = null;
+  private pxkWeightCatalogToken = 0;
   private readonly pxkPrintWindows = new Set<Window>();
   private readonly onPxkWeightWindowMessage = (ev: MessageEvent): void => {
     void this.handlePxkWeightWindowMessage(ev);
@@ -428,7 +437,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private woPxkSkipCatalog: WoPxkSkipCatalogService,
     private woPxkBypassOtp: WoPxkBypassOtpService,
     private woLsxGuide: WoLsxGuideService,
-    private nvlCatalog: NvlCatalogFullService
+    private nvlCatalog: NvlCatalogFullService,
+    private pxkWeightReports: PxkWeightCheckReportService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -450,6 +460,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     void this.loadCreatedByStaffCatalog();
     void this.loadWoGuide();
     void this.loadPxkSkipCatalog();
+    void this.ensurePxkWeightCatalogLoaded();
     
     // Factory access disabled for work order tab - only applies to materials inventory
     // this.loadFactoryAccess();
@@ -1745,6 +1756,97 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.pxkSkipCatalogDraft = '';
   }
 
+  openPxkWeightReportDialog(): void {
+    this.showMoreDialog = false;
+    this.showPxkWeightReportDialog = true;
+    void this.refreshPxkWeightCatalog();
+  }
+
+  closePxkWeightReportDialog(): void {
+    if (this.pxkWeightReportSaving) return;
+    this.showPxkWeightReportDialog = false;
+  }
+
+  pxkWeightReportTime(value: any): string {
+    if (!value) return '';
+    const d = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+  }
+
+  /** LSX còn dòng phải check lượng — icon ở cột SL sản phẩm. */
+  lsxNeedsWeightCheck(wo: WorkOrder): boolean {
+    const lines = this.getPxkLinesForLsx(String(wo?.productionOrder || ''));
+    return lines.some((line) => this.isPxkWeightCheckLine(line.materialCode, line.maKho));
+  }
+
+  async approvePxkWeightReport(report: PxkWeightCheckReport): Promise<void> {
+    if (!report?.id || this.pxkWeightReportSaving) return;
+    if (!confirm(`Duyệt mã ${report.materialCode}? Mã này sẽ không còn bị check lượng.`)) return;
+    this.pxkWeightReportSaving = true;
+    try {
+      const decidedBy = await this.getPxkBypassRequester();
+      await this.pxkWeightReports.approve(report, decidedBy);
+      await this.refreshPxkWeightCatalog();
+    } catch (error: any) {
+      alert(error?.message || 'Không duyệt được báo cáo.');
+    } finally {
+      this.pxkWeightReportSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async rejectPxkWeightReport(report: PxkWeightCheckReport): Promise<void> {
+    if (!report?.id || this.pxkWeightReportSaving) return;
+    if (!confirm(`Từ chối mã ${report.materialCode}? Mã này vẫn phải check lượng.`)) return;
+    this.pxkWeightReportSaving = true;
+    try {
+      const decidedBy = await this.getPxkBypassRequester();
+      await this.pxkWeightReports.reject(report, decidedBy);
+      await this.refreshPxkWeightCatalog();
+    } catch (error: any) {
+      alert(error?.message || 'Không từ chối được báo cáo.');
+    } finally {
+      this.pxkWeightReportSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private ensurePxkWeightCatalogLoaded(): Promise<void> {
+    if (!this.pxkWeightCatalogLoad) {
+      this.pxkWeightCatalogLoad = this.reloadPxkWeightCatalogState();
+    }
+    return this.pxkWeightCatalogLoad;
+  }
+
+  private refreshPxkWeightCatalog(): Promise<void> {
+    this.pxkWeightCatalogLoad = this.reloadPxkWeightCatalogState();
+    return this.pxkWeightCatalogLoad;
+  }
+
+  private async reloadPxkWeightCatalogState(): Promise<void> {
+    const token = ++this.pxkWeightCatalogToken;
+    this.pxkWeightReportLoading = true;
+    try {
+      const [codes, pending] = await Promise.all([
+        this.pxkWeightReports.loadExemptCodes(),
+        this.pxkWeightReports.loadPending()
+      ]);
+      if (token !== this.pxkWeightCatalogToken) return;
+      this.pxkWeightExemptCodes = new Set(codes);
+      this.pxkWeightPendingCodes = new Set(pending.map((row) => row.materialCode));
+      this.pxkWeightReportsList = pending;
+    } catch (error) {
+      console.warn('[PXK Check lượng] Không tải danh mục báo cáo:', error);
+      if (token === this.pxkWeightCatalogToken) this.pxkWeightCatalogLoad = null;
+    } finally {
+      if (token === this.pxkWeightCatalogToken) {
+        this.pxkWeightReportLoading = false;
+        this.cdr.markForCheck();
+      }
+    }
+  }
+
   pxkSkipKindLabel(kind: PxkSkipKind): string {
     return this.woPxkSkipCatalog.kindLabel(kind);
   }
@@ -1878,7 +1980,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     }
     const getSoSanhForCheck = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
-      if (Math.abs(diff) < 1) return 'Đủ';
+      if (Math.abs(diff) < 0.005) return 'Đủ';
       if (diff < 0) return 'Thiếu';
       return 'Dư';
     };
@@ -5787,7 +5889,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       scanMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
-      if (Math.abs(diff) < 1) return 'Đủ';
+      if (Math.abs(diff) < 0.005) return 'Đủ';
       if (diff < 0) return 'Thiếu';
       return 'Dư';
     };
@@ -6665,8 +6767,19 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const fromPrintWindow = !!source && this.pxkPrintWindows.has(source);
     if (ev.origin !== window.location.origin && !fromPrintWindow) return;
     const data = ev.data as { type?: string; payload?: any } | null;
-    if (!data || data.type !== 'pxk-weight-check-save') return;
+    if (!data) return;
     const replyOrigin = !ev.origin || ev.origin === 'null' ? '*' : ev.origin;
+    if (data.type === 'pxk-weight-check-report') {
+      try {
+        const result = await this.savePxkWeightReportFromWindow(data.payload);
+        source?.postMessage({ type: 'pxk-weight-check-reported', ok: true, ...result }, replyOrigin);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Không gửi được báo cáo.';
+        source?.postMessage({ type: 'pxk-weight-check-reported', ok: false, error: message }, replyOrigin);
+      }
+      return;
+    }
+    if (data.type !== 'pxk-weight-check-save') return;
     try {
       const result = await this.savePxkWeightFromWindow(data.payload);
       source?.postMessage({ type: 'pxk-weight-check-saved', ok: true, ...result }, replyOrigin);
@@ -6674,6 +6787,32 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const message = e instanceof Error ? e.message : 'Không lưu được. Vui lòng thử lại.';
       source?.postMessage({ type: 'pxk-weight-check-saved', ok: false, error: message }, replyOrigin);
     }
+  }
+
+  private async savePxkWeightReportFromWindow(payload: any): Promise<{ zaloOk: boolean; error: string }> {
+    const lsx = String(payload?.lsx || '').trim();
+    const code = String(payload?.materialCode || '').trim().toUpperCase();
+    const reason = String(payload?.reason || '').trim();
+    if (!lsx || !code) throw new Error('Thiếu mã hàng.');
+    if (!reason) throw new Error('Nhập lý do báo cáo.');
+    if (!this.isPxkWeightCheckLine(code, payload?.maKho)) throw new Error('Mã này không thuộc Check lượng.');
+    if (this.pxkWeightPendingCodes.has(code)) {
+      return { zaloOk: false, error: 'Mã này đã có báo cáo, đang chờ duyệt.' };
+    }
+    const reportedBy = await this.getPxkBypassRequester();
+    const sent = await this.pxkWeightReports.submit({
+      lsx,
+      materialCode: code,
+      maKho: String(payload?.maKho || '').trim(),
+      po: String(payload?.po || '').trim(),
+      reason,
+      reportedBy
+    });
+    await this.refreshPxkWeightCatalog();
+    return {
+      zaloOk: sent.zaloOk,
+      error: sent.zaloOk ? '' : 'Đã lưu báo cáo. Zalo chưa gửi được tới ASP0106.'
+    };
   }
 
   private async savePxkWeightFromWindow(payload: any): Promise<{
@@ -6735,6 +6874,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const rowsJson = JSON.stringify(rows).replace(/</g, '\\u003c');
     const lsxJson = JSON.stringify(lsx);
     const parentOriginJson = JSON.stringify(window.location.origin);
+    const pendingJson = JSON.stringify([...this.pxkWeightPendingCodes]).replace(/</g, '\\u003c');
     return `
 <div id="pxkWeightModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;align-items:center;justify-content:center;padding:16px;">
   <div style="width:min(440px,100%);background:#fff;border-radius:8px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.2);font-family:Arial,sans-serif;color:#111;">
@@ -6755,9 +6895,22 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     <p id="pxkWExp" style="margin:6px 0;font-size:13px;"></p>
     <p id="pxkWRes" style="margin:6px 0;font-size:14px;font-weight:700;"></p>
     <p id="pxkWErr" style="margin:0 0 8px;color:#c62828;font-size:13px;"></p>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button id="pxkWCancel" type="button" style="height:34px;padding:0 12px;">Hủy</button>
-      <button id="pxkWSave" type="button" style="height:34px;padding:0 14px;background:#1565c0;color:#fff;border:0;border-radius:4px;font-weight:700;">Lưu</button>
+    <div id="pxkWReportBox" style="display:none;margin:8px 0 10px;">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;">
+        <span>Lý do mã này không hợp lý để check</span>
+        <textarea id="pxkWReason" rows="3" maxlength="400" style="border:1px solid #90a4ae;border-radius:4px;padding:8px;font-size:13px;font-family:Arial,sans-serif;"></textarea>
+      </label>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+        <button id="pxkWReportSend" type="button" style="height:34px;padding:0 14px;background:#e65100;color:#fff;border:0;border-radius:4px;font-weight:700;">Gửi báo cáo</button>
+      </div>
+    </div>
+    <p id="pxkWReportNote" style="margin:0 0 8px;font-size:13px;font-weight:700;color:#e65100;"></p>
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;">
+      <button id="pxkWReport" type="button" style="height:34px;padding:0 12px;">Báo cáo</button>
+      <span style="display:flex;gap:8px;">
+        <button id="pxkWCancel" type="button" style="height:34px;padding:0 12px;">Hủy</button>
+        <button id="pxkWSave" type="button" style="height:34px;padding:0 14px;background:#1565c0;color:#fff;border:0;border-radius:4px;font-weight:700;">Lưu</button>
+      </span>
     </div>
   </div>
 </div>
@@ -6766,6 +6919,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
   var LSX = ${lsxJson};
   var PARENT_ORIGIN = ${parentOriginJson};
   var rows = ${rowsJson};
+  var pendingCodes = {};
+  (${pendingJson}).forEach(function (c) { pendingCodes[String(c)] = true; });
   var byIdx = {};
   rows.forEach(function (r) { byIdx[String(r.idx)] = r; });
   var modal = document.getElementById('pxkWeightModal');
@@ -6881,6 +7036,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     document.getElementById('pxkWFullLabel').textContent = 'Trọng lượng chẵn cuộn (' + pcs(r.fullQty) + ' pcs)';
     document.getElementById('pxkWOddLabel').textContent = 'Trọng lượng lẻ (' + pcs(r.oddQty) + ' pcs)';
     document.getElementById('pxkWErr').textContent = '';
+    document.getElementById('pxkWReason').value = '';
+    document.getElementById('pxkWReportBox').style.display = 'none';
+    document.getElementById('pxkWReportNote').textContent = pendingCodes[r.materialCode]
+      ? 'Mã này đã có báo cáo, đang chờ duyệt.'
+      : '';
     refreshPreview();
     modal.style.display = 'flex';
     document.getElementById('pxkWFull').focus();
@@ -6889,6 +7049,30 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
   document.getElementById('pxkWFull').addEventListener('input', refreshPreview);
   document.getElementById('pxkWOdd').addEventListener('input', refreshPreview);
   document.getElementById('pxkWCancel').addEventListener('click', closeEditor);
+  document.getElementById('pxkWReport').addEventListener('click', function () {
+    if (!current) return;
+    if (pendingCodes[current.materialCode]) {
+      document.getElementById('pxkWReportNote').textContent = 'Mã này đã có báo cáo, đang chờ duyệt.';
+      return;
+    }
+    document.getElementById('pxkWReportBox').style.display = 'block';
+    document.getElementById('pxkWReason').focus();
+  });
+  document.getElementById('pxkWReportSend').addEventListener('click', function () {
+    if (!current) return;
+    var reason = String(document.getElementById('pxkWReason').value || '').trim();
+    var err = document.getElementById('pxkWErr');
+    err.textContent = '';
+    if (!reason) { err.textContent = 'Nhập lý do báo cáo.'; return; }
+    if (!window.opener || window.opener.closed) { alert('Không gửi được vì trang Work Order đã đóng.'); return; }
+    document.getElementById('pxkWReportSend').disabled = true;
+    window.opener.postMessage({
+      type: 'pxk-weight-check-report',
+      payload: {
+        lsx: LSX, materialCode: current.materialCode, maKho: current.maKho, po: current.po, reason: reason
+      }
+    }, PARENT_ORIGIN);
+  });
   modal.addEventListener('click', function (e) { if (e.target === modal) closeEditor(); });
   document.getElementById('pxkWSave').addEventListener('click', function () {
     if (!current) return;
@@ -6912,7 +7096,16 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
   window.addEventListener('message', function (ev) {
     if (ev.origin !== PARENT_ORIGIN && ev.origin !== window.location.origin) return;
     var data = ev.data;
-    if (!data || data.type !== 'pxk-weight-check-saved') return;
+    if (!data) return;
+    if (data.type === 'pxk-weight-check-reported') {
+      document.getElementById('pxkWReportSend').disabled = false;
+      if (!data.ok) { document.getElementById('pxkWErr').textContent = data.error || 'Không gửi được báo cáo.'; return; }
+      if (current) pendingCodes[current.materialCode] = true;
+      document.getElementById('pxkWReportBox').style.display = 'none';
+      document.getElementById('pxkWReportNote').textContent = data.error || 'Đã gửi báo cáo tới quản lý.';
+      return;
+    }
+    if (data.type !== 'pxk-weight-check-saved') return;
     document.getElementById('pxkWSave').disabled = false;
     if (!data.ok) { document.getElementById('pxkWErr').textContent = data.error || 'Không lưu được.'; return; }
     rows.forEach(function (r) {
@@ -7002,6 +7195,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const lsx = String(workOrder?.productionOrder || '').trim();
     if (!lsx) return null;
     try {
+      await this.ensurePxkWeightCatalogLoaded();
       await this.ensurePxkLoadedForLsx(lsx);
       const lines = this.getPxkLinesForLsx(lsx);
       const applicable = lines.filter((l) => this.isPxkWeightCheckLine(l.materialCode, l.maKho));
@@ -7048,6 +7242,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!kho || kho === 'NVL_SX' || kho === 'NVL_KS' || kho.includes('NVL_SX') || kho.includes('NVL_KS')) return false;
     const code = String(materialCode || '').trim().toUpperCase();
     if (!code || code.startsWith('R') || code.startsWith('A')) return false;
+    if (this.pxkWeightExemptCodes.has(code)) return false;
     return ['B018', 'B009', 'B016', 'B008', 'B021', 'B023', 'B024'].some((prefix) => code.startsWith(prefix));
   }
 
@@ -7106,6 +7301,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       return;
     }
     try {
+    await this.ensurePxkWeightCatalogLoaded();
     const hasPxk = await this.ensurePxkLoadedForLsx(lsx);
     const lines = this.getPxkLinesForLsx(lsx);
     if (!hasPxk || lines.length === 0) {
@@ -7240,7 +7436,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       scanQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
     const getSoSanh = (xuất: number, scan: number): string => {
       const diff = scan - xuất;
-      if (Math.abs(diff) < 1) return 'Đủ';
+      if (Math.abs(diff) < 0.005) return 'Đủ';
       if (diff < 0) return 'Thiếu ' + this.formatQuantityForPxk(xuất - scan);
       return 'Dư ' + this.formatQuantityForPxk(scan - xuất);
     };

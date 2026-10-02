@@ -637,6 +637,7 @@
 .pack-badge {
   display: inline-block;
   padding: 2px 8px;
+  white-space: nowrap;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 800;
@@ -2916,7 +2917,7 @@
   .col-pack-chan,
   .col-pack-le {
     width: 6%;
-    min-width: 52px;
+    min-width: 72px;
   }
 
   .col-scan-count {

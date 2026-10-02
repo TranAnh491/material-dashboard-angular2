@@ -1929,7 +1929,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const mk = this.normMatForPxk(ln.materialCode);
       const pk = this.normPoForPxk(ln.po);
       const key = `${mk}\0${pk}`;
-      const add = Math.floor(Number(ln.quantity) || 0);
+      const add = Math.round((Number(ln.quantity) || 0) * 100) / 100;
       if (add <= 0 || !mk) {
         continue;
       }
@@ -2050,7 +2050,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const consumed = new Map<string, number>();
     const mat = line.materialCode.trim();
     const po = (line.po || '').trim();
-    const Q = Math.floor(Number(line.quantity) || 0);
+    const Q = Math.round((Number(line.quantity) || 0) * 100) / 100;
     if (Q <= 0 || !mat) {
       return { payloads: [], consumed };
     }

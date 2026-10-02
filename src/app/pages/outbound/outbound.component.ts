@@ -91,6 +91,8 @@ export interface OutboundMaterial {
   quantity: number;
   unit: string;
   exportQuantity: number;
+  /** Số xuất kho lẻ (QTY < Standard Packing), giữ phần thập phân. Ví dụ 112.85. */
+  leQty?: number;
   /** Số lần đã scan/xuất cùng một dòng (không cộng dồn quantity, chỉ đếm số lần). */
   scanCount?: number;
   exportDate: Date;
@@ -583,6 +585,26 @@ export class OutboundComponent implements OnInit, OnDestroy {
     return this.getPackKind(material.materialCode, qty) === 'le';
   }
 
+  /** Số xuất kho lẻ cần ghi nhận. Giữ tối đa 2 số sau dấu chấm (112.85). Chẵn thì 0. */
+  leExportQty(materialCode: string | null | undefined, qty: number): number {
+    const q = Math.round((Number(qty) || 0) * 100) / 100;
+    if (!(q > 0)) return 0;
+    return this.getPackKind(materialCode, q) === 'le' ? q : 0;
+  }
+
+  /** Hiện số lẻ trên cột Lẻ. Dòng cũ chưa có leQty thì lấy từ số xuất nếu là Lẻ. */
+  packLeQtyText(material: { materialCode?: string; exportQuantity?: number; quantity?: number; leQty?: number } | null | undefined): string {
+    if (!material) return '';
+    const stored = Number(material.leQty);
+    const qty = stored > 0
+      ? stored
+      : (this.isPackLe(material) ? (Number(material.exportQuantity ?? material.quantity) || 0) : 0);
+    if (!(qty > 0)) return '';
+    const r = Math.round(qty * 100) / 100;
+    if (Number.isInteger(r)) return String(r);
+    return r.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
   packKindLabel(material: { materialCode?: string; exportQuantity?: number; quantity?: number } | null | undefined): string {
     if (!material) return '—';
     const qty = Number(material.exportQuantity ?? material.quantity) || 0;
@@ -757,6 +779,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       quantity: data.quantity || 0,
       unit: data.unit || '',
       exportQuantity: data.exportQuantity || 0,
+      leQty: Number(data.leQty) > 0 ? Math.round(Number(data.leQty) * 100) / 100 : undefined,
       scanCount: data.scanCount ?? 1,
       exportDate: data.exportDate?.toDate() || new Date(),
       location: data.location || '',
@@ -1761,6 +1784,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
           materialCode: line.materialCode,
           poNumber: line.po,
           exportQuantity: line.qty,
+          ...(this.leExportQty(line.materialCode, line.qty) > 0
+            ? { leQty: this.leExportQty(line.materialCode, line.qty) }
+            : {}),
           unit: item.unit,
           productionOrder: String(item.lsx || '').trim(),
           importDate: line.imd,
@@ -3081,6 +3107,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
           quantity: scanItem.quantity,
           unit: 'PCS',
           exportQuantity: scanItem.quantity,
+          ...(this.leExportQty(scanItem.materialCode, scanItem.quantity) > 0
+            ? { leQty: this.leExportQty(scanItem.materialCode, scanItem.quantity) }
+            : {}),
           scanCount: scanItem.scanCount ?? 1,
           exportDate: new Date(),
           location: scanItem.location,
@@ -3464,6 +3493,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
       quantity: this.lastScannedData.quantity,
       unit: 'KG', // Default unit
       exportQuantity: this.exportQuantity,
+      ...(this.leExportQty(this.lastScannedData.materialCode, this.exportQuantity) > 0
+        ? { leQty: this.leExportQty(this.lastScannedData.materialCode, this.exportQuantity) }
+        : {}),
       exportDate: new Date(),
       location: '',
       exportedBy: this.batchEmployeeId || exportedBy,
@@ -3775,6 +3807,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
           quantity: scanItem.quantity,
           unit: 'KG',
           exportQuantity: scanItem.quantity,
+          ...(this.leExportQty(scanItem.materialCode, scanItem.quantity) > 0
+            ? { leQty: this.leExportQty(scanItem.materialCode, scanItem.quantity) }
+            : {}),
           scanCount: scanItem.scanCount || 1,
           exportDate: scanItem.scanTime,
           exportedBy: scanItem.employeeId,
@@ -4215,6 +4250,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
           exported: firebase.default.firestore.FieldValue.increment(exportQuantity),
           updatedAt: new Date()
         };
+        const leQty = this.leExportQty(materialCode, exportQuantity);
+        if (leQty > 0) {
+          payload.xtLe = firebase.default.firestore.FieldValue.increment(leQty);
+        }
         if (exportedBagsDelta > 0) {
           payload.exportedBags = firebase.default.firestore.FieldValue.increment(exportedBagsDelta);
         }
@@ -5207,6 +5246,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
               quantity: alloc.qty,
               unit: 'PCS',
               exportQuantity: alloc.qty,
+              ...(this.leExportQty(row.materialCode, alloc.qty) > 0
+                ? { leQty: this.leExportQty(row.materialCode, alloc.qty) }
+                : {}),
               scanCount: 1,
               exportDate: now,
               location: alloc.location || '',
@@ -5221,8 +5263,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
               createdAt: now,
               updatedAt: now
             } as OutboundMaterial);
+            const leQty = this.leExportQty(row.materialCode, alloc.qty);
             await this.firestore.collection('inventory-materials').doc(alloc.inventoryId).update({
               exported: firebase.default.firestore.FieldValue.increment(alloc.qty),
+              ...(leQty > 0 ? { xtLe: firebase.default.firestore.FieldValue.increment(leQty) } : {}),
               updatedAt: now
             });
           }

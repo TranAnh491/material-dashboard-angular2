@@ -741,6 +741,33 @@ export const verifyWoPxkBypassOtpFn = functions
     }
   });
 
+/** Work Order: báo cáo mã không hợp lý để Check lượng — Zalo tới ASP0106. */
+export const notifyPxkWeightCheckReportFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { notifyPxkWeightCheckReport } = await import('./pxk-weight-check-report');
+      await notifyPxkWeightCheckReport(admin.firestore(), {
+        lsx: typeof data?.lsx === 'string' ? data.lsx : '',
+        materialCode: typeof data?.materialCode === 'string' ? data.materialCode : '',
+        maKho: typeof data?.maKho === 'string' ? data.maKho : '',
+        po: typeof data?.po === 'string' ? data.po : '',
+        reason: typeof data?.reason === 'string' ? data.reason : '',
+        reportedBy: typeof data?.reportedBy === 'string' ? data.reportedBy : ''
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 /** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
 export const verifyFgLotLsxOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })

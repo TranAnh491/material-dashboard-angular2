@@ -448,7 +448,8 @@ html, body {
   }
 }
 
-.time-range-dialog.pxk-skip-catalog-dialog {
+.time-range-dialog.pxk-skip-catalog-dialog,
+.time-range-dialog.pxk-weight-report-dialog {
   max-width: min(1100px, 96vw);
   width: 94%;
   max-height: min(88vh, 860px);
@@ -5064,6 +5065,47 @@ textarea.mat-input-element {
 
 .wo-sl {
   min-width: 96px;
+  white-space: nowrap;
+}
+
+.wo-weight-check-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid #fb8c00;
+  border-radius: 4px;
+  background: #fff3e0;
+  color: #e65100;
+  cursor: pointer;
+  vertical-align: middle;
+
+  .material-icons {
+    font-size: 16px;
+  }
+}
+
+.pxk-weight-report-approve,
+.pxk-weight-report-reject {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pxk-weight-report-approve {
+  background: #2e7d32;
+}
+
+.pxk-weight-report-reject {
+  background: #c62828;
 }
 
 .wo-print-btn {

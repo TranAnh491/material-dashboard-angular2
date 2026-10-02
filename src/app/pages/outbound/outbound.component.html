@@ -281,7 +281,7 @@
             <span class="ob-m-card__cell ob-m-card__cell--qty">{{ getMobileMaterialQtyLine(material) }}</span>
             <span class="ob-m-card__cell"
                   [class.ob-m-card__cell--chan]="isPackChan(material)"
-                  [class.ob-m-card__cell--le]="isPackLe(material)">{{ packKindLabel(material) }}</span>
+                  [class.ob-m-card__cell--le]="!!packLeQtyText(material)">{{ packLeQtyText(material) || packKindLabel(material) }}</span>
             <i class="material-icons ob-m-card__chev">{{ isMobileMaterialExpanded(material) ? 'expand_less' : 'chevron_right' }}</i>
           </button>
           <div class="ob-m-card__detail" *ngIf="isMobileMaterialExpanded(material)">
@@ -289,7 +289,7 @@
             <div class="ob-m-dl"><span>Bag</span><b [class.ob-m-dupwarn]="material.bagDuplicate">{{ getOutboundBagColumnDisplay(material) }}</b></div>
             <div class="ob-m-dl"><span>Bịch</span><b>{{ material.bagBatch || '—' }}</b></div>
             <div class="ob-m-dl"><span>Chẵn</span><b>{{ isPackChan(material) ? 'Chẵn' : '—' }}</b></div>
-            <div class="ob-m-dl"><span>Lẻ</span><b>{{ isPackLe(material) ? 'Lẻ' : '—' }}</b></div>
+            <div class="ob-m-dl"><span>Lẻ</span><b>{{ packLeQtyText(material) || '—' }}</b></div>
             <div class="ob-m-dl"><span>SP</span><b>{{ getStandardPacking(material.materialCode) || '—' }}</b></div>
             <div class="ob-m-dl"><span>Số lần quét</span><b>×{{ material.scanCount ?? 0 }}</b></div>
             <div class="ob-m-dl"><span>Ngày xuất</span><b>{{ material.createdAt | date:'dd/MM/yyyy HH:mm' }}</b></div>
@@ -752,7 +752,7 @@
             <th class="col-bag-batch">Bịch</th>
             <th class="col-quantity">Xuất</th>
             <th class="col-pack-chan" title="QTY = Standard Packing">Chẵn</th>
-            <th class="col-pack-le" title="QTY &lt; Standard Packing">Lẻ</th>
+            <th class="col-pack-le" title="Số xuất kho lẻ, giữ phần thập phân. Ví dụ 112.85">Lẻ</th>
             <th class="col-scan-count">Số lần</th>
             <th class="col-employee">Mã nhân viên</th>
             <th class="col-production">Lệnh sản xuất</th>
@@ -792,9 +792,9 @@
               <span *ngIf="isPackChan(material)" class="pack-badge pack-badge--chan">Chẵn</span>
               <span *ngIf="!isPackChan(material)">—</span>
             </td>
-            <td class="pack-kind-cell readonly-cell" [class.pack-kind-cell--on]="isPackLe(material)">
-              <span *ngIf="isPackLe(material)" class="pack-badge pack-badge--le">Lẻ</span>
-              <span *ngIf="!isPackLe(material)">—</span>
+            <td class="pack-kind-cell readonly-cell" [class.pack-kind-cell--on]="!!packLeQtyText(material)">
+              <span *ngIf="packLeQtyText(material)" class="pack-badge pack-badge--le" title="Xuất lẻ">{{ packLeQtyText(material) }}</span>
+              <span *ngIf="!packLeQtyText(material)">—</span>
             </td>
             <td class="number-cell readonly-cell">
               {{ material.scanCount ?? 0 }}
@@ -946,7 +946,7 @@
                 <div class="scan-detail">
                   <strong>Số lượng:</strong> {{ item.quantity }} KG
                   <span class="pack-badge pack-badge--chan" *ngIf="isPackChan(item)">Chẵn</span>
-                  <span class="pack-badge pack-badge--le" *ngIf="isPackLe(item)">Lẻ</span>
+                  <span class="pack-badge pack-badge--le" *ngIf="packLeQtyText(item)">{{ packLeQtyText(item) }}</span>
                   <span class="pack-badge pack-badge--bypass" *ngIf="isAllowExportByCarton(item.materialCode)">Thùng</span>
                 </div>
                 <div class="scan-detail" *ngIf="item.importDate">
@@ -1004,7 +1004,7 @@
             <div class="scan-detail">
               <strong>Số lượng:</strong> {{ item.quantity }} KG
               <span class="pack-badge pack-badge--chan" *ngIf="isPackChan(item)">Chẵn</span>
-              <span class="pack-badge pack-badge--le" *ngIf="isPackLe(item)">Lẻ</span>
+              <span class="pack-badge pack-badge--le" *ngIf="packLeQtyText(item)">{{ packLeQtyText(item) }}</span>
               <span class="pack-badge pack-badge--bypass" *ngIf="isAllowExportByCarton(item.materialCode)">Thùng</span>
             </div>
             <div class="scan-detail" *ngIf="item.importDate">

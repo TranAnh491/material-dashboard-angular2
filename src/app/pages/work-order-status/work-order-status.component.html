@@ -166,6 +166,10 @@
                               style="color: #0f766e; font-weight: 600;" title="Mã / đầu mã tự điền PXK, không cần scan">
                         <i class="material-icons">playlist_add_check</i> Danh mục không tính PXK
                       </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openPxkWeightReportDialog()"
+                              style="color: #e65100; font-weight: 600;" title="Báo cáo mã không hợp lý để check lượng">
+                        <i class="material-icons">rule</i> Danh mục check lượng
+                      </button>
                       <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
                               style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
                         <i class="material-icons">search</i> Search
@@ -452,6 +456,69 @@
                 </div>
                 <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
                   <button mat-raised-button type="button" (click)="closePxkSkipCatalogDialog()" [disabled]="pxkSkipCatalogSaving">
+                    <mat-icon>close</mat-icon> Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="time-range-dialog-overlay" *ngIf="showPxkWeightReportDialog" (click)="closePxkWeightReportDialog()">
+              <div class="time-range-dialog pxk-weight-report-dialog" (click)="$event.stopPropagation()">
+                <div class="dialog-header">
+                  <h4>
+                    <i class="material-icons" style="vertical-align:middle;margin-right:6px;">rule</i>
+                    Danh mục check lượng
+                  </h4>
+                  <button mat-icon-button type="button" (click)="closePxkWeightReportDialog()" title="Đóng" [disabled]="pxkWeightReportSaving">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+                <div class="dialog-content pxk-skip-catalog-content">
+                  <p class="prep-catalog-desc">
+                    Báo cáo mã không hợp lý để check lượng. <strong>Duyệt</strong> thì mã đó không còn bị check.
+                    <strong>Từ chối</strong> thì mã vẫn phải check lượng.
+                  </p>
+                  <div class="staff-catalog-loading" *ngIf="pxkWeightReportLoading">Đang tải báo cáo…</div>
+                  <div class="pxk-skip-catalog-table-wrap" *ngIf="!pxkWeightReportLoading">
+                    <table class="prep-catalog-table pxk-skip-catalog-table">
+                      <thead>
+                        <tr>
+                          <th>Thời gian</th>
+                          <th>LSX</th>
+                          <th>Mã hàng</th>
+                          <th>Kho</th>
+                          <th>PO</th>
+                          <th>Lý do</th>
+                          <th>Người gửi</th>
+                          <th>Duyệt</th>
+                          <th>Từ chối</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngIf="pxkWeightReportsList.length === 0">
+                          <td colspan="9" class="pxk-skip-catalog-empty">Chưa có báo cáo chờ duyệt.</td>
+                        </tr>
+                        <tr *ngFor="let row of pxkWeightReportsList">
+                          <td>{{ pxkWeightReportTime(row.createdAt) }}</td>
+                          <td>{{ row.lsx }}</td>
+                          <td class="pxk-skip-catalog-code">{{ row.materialCode }}</td>
+                          <td>{{ row.maKho || '—' }}</td>
+                          <td>{{ row.po || '—' }}</td>
+                          <td>{{ row.reason }}</td>
+                          <td>{{ row.reportedBy || '—' }}</td>
+                          <td>
+                            <button type="button" class="pxk-weight-report-approve" (click)="approvePxkWeightReport(row)" [disabled]="pxkWeightReportSaving">Duyệt</button>
+                          </td>
+                          <td>
+                            <button type="button" class="pxk-weight-report-reject" (click)="rejectPxkWeightReport(row)" [disabled]="pxkWeightReportSaving">Từ chối</button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="dialog-actions" style="padding: 0 20px 20px; display:flex; justify-content:flex-end;">
+                  <button mat-raised-button type="button" (click)="closePxkWeightReportDialog()" [disabled]="pxkWeightReportSaving">
                     <mat-icon>close</mat-icon> Đóng
                   </button>
                 </div>
@@ -792,6 +859,9 @@
                             <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="printPxk(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In PXK'">
                               <i class="material-icons">print</i>
                               In PXK
+                            </button>
+                            <button type="button" class="wo-weight-check-flag" *ngIf="lsxNeedsWeightCheck(wo)" (click)="printPxk(wo)" title="LSX này cần check lượng">
+                              <i class="material-icons">scale</i>
                             </button>
                           </td>
                           <td>{{wo.customer}}</td>
