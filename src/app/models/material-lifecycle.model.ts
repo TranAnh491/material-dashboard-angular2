@@ -119,6 +119,7 @@ export enum WorkOrderStatus {
   WAITING = 'waiting',
   KITTING = 'kitting',
   READY = 'ready',
+  READY_IQC = 'ready-iqc',
   TRANSFER = 'transfer',
   DONE = 'done',
   DELAY = 'delay'

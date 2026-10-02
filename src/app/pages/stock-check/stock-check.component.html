@@ -1,165 +1,305 @@
-<div class="sc-page">
-  <header class="sc-header">
-    <div>
-      <h2>Stock Check</h2>
-      <p *ngIf="step === 'gate'">Quét mã nhân viên và chọn nhà máy trước khi kiểm.</p>
-      <p *ngIf="step !== 'gate'">
-        {{ operatorId }} · {{ factory }}
-        <ng-container *ngIf="location"> · Vị trí {{ location }}</ng-container>
-      </p>
+<div class="sc" [class.sc--laptop]="uiMode === 'laptop'" [class.sc--pda]="uiMode === 'pda'">
+  <div class="lp" *ngIf="uiMode === 'laptop'">
+    <aside class="lp-nav">
+      <div class="lp-nav__brand">
+        <span><i class="material-icons">grid_view</i></span>
+        Stock Check
+      </div>
+      <nav>
+        <button type="button" class="is-on"><i class="material-icons">grid_view</i>Stock Check</button>
+        <button type="button" (click)="goNav('/inbound')"><i class="material-icons">move_to_inbox</i>Nhập kho</button>
+        <button type="button" (click)="goNav('/outbound')"><i class="material-icons">outbox</i>Xuất kho</button>
+        <button type="button" (click)="goNav('/materials')"><i class="material-icons">inventory_2</i>Tồn kho</button>
+        <button type="button" (click)="goNav('/quan-ly-nguyen-lieu')"><i class="material-icons">fact_check</i>Kiểm kê</button>
+        <button type="button" (click)="goNav('/report')"><i class="material-icons">bar_chart</i>Báo cáo</button>
+        <button type="button" (click)="goNav('/settings')"><i class="material-icons">settings</i>Cài đặt</button>
+      </nav>
+      <div class="lp-nav__foot">
+        <span class="lp-dot"></span> Online
+        <small>v1.0.0</small>
+      </div>
+    </aside>
+
+    <div class="lp-main">
+      <div class="lp-tools">
+        <div class="sc-switch" role="tablist" aria-label="Giao diện">
+          <button type="button" [class.is-on]="uiMode === 'laptop'" (click)="setUiMode('laptop')"><i class="material-icons">laptop</i>Laptop</button>
+          <button type="button" (click)="setUiMode('pda')"><i class="material-icons">qr_code_scanner</i>PDA</button>
+        </div>
+        <button type="button" class="sc-textbtn" (click)="openMissingCatalog()"><i class="material-icons">inventory</i>Mã không có</button>
+        <button type="button" class="sc-textbtn" (click)="openShortageCatalog()"><i class="material-icons">warning_amber</i>Thiếu lượng</button>
+        <button type="button" class="sc-textbtn" (click)="goToMenu()"><i class="material-icons">apps</i>Menu</button>
+      </div>
+
+      <p class="sc-banner sc-banner--err" *ngIf="error">{{ error }}</p>
+      <p class="sc-banner sc-banner--ok" *ngIf="info">{{ info }}</p>
+
+      <section class="lp-hero">
+        <span class="lp-hero__icon"><i class="material-icons">qr_code_scanner</i></span>
+        <div>
+          <h1>Stock Check</h1>
+          <p>Quét mã để kiểm tra tồn kho nhanh chóng và chính xác</p>
+        </div>
+        <div class="lp-hero__art" aria-hidden="true">
+          <i class="material-icons">qr_code_2</i>
+          <i class="material-icons">document_scanner</i>
+        </div>
+      </section>
+
+      <section class="lp-card" *ngIf="step === 'gate'">
+        <h2><i></i>1. Nhập mã nhân viên</h2>
+        <label for="sc-operator-input">Quét mã nhân viên</label>
+        <div class="lp-field">
+          <i class="material-icons">qr_code_2</i>
+          <input id="sc-operator-input" type="text" [(ngModel)]="operatorInput" placeholder="ASP0000" autocomplete="off" (keyup.enter)="submitOperator()">
+          <i class="material-icons">qr_code_scanner</i>
+        </div>
+        <div class="lp-asms">
+          <button type="button" *ngFor="let item of factories" [class.is-on]="factory === item" (click)="setFactory(item)">
+            <span><i class="material-icons">person</i></span>
+            <b>{{ item }}</b>
+            <small>Quét mã khu vực {{ item }}</small>
+          </button>
+        </div>
+        <button type="button" class="lp-start" (click)="submitOperator()">
+          <i class="material-icons">qr_code_scanner</i>
+          Bắt đầu
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </section>
+
+      <section class="lp-card" *ngIf="step === 'location'">
+        <h2><i></i>2. Scan vị trí</h2>
+        <p class="lp-note">{{ operatorId }} · {{ factory }}</p>
+        <label for="sc-location-input">Quét vị trí</label>
+        <div class="lp-field">
+          <i class="material-icons">place</i>
+          <input id="sc-location-input" type="text" [(ngModel)]="locationInput" placeholder="Quét vị trí" autocomplete="off" [disabled]="isLoading" (keyup.enter)="submitLocation()">
+          <i class="material-icons">qr_code_scanner</i>
+        </div>
+        <button type="button" class="lp-start" (click)="submitLocation()" [disabled]="isLoading">
+          <i class="material-icons">qr_code_scanner</i>
+          {{ isLoading ? 'Đang tải…' : 'Xem mã tại vị trí' }}
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </section>
+
+      <section class="lp-work" *ngIf="step === 'work'">
+        <div class="lp-work__bar">
+          <div><span>Vị trí</span><strong>{{ location }}</strong></div>
+          <div><span>Đã xong</span><strong>{{ doneCount }}</strong></div>
+          <div><span>Còn lại</span><strong>{{ remainCount }}</strong></div>
+          <div class="lp-work__track"><span>{{ progressPercent }}%</span><i [style.width.%]="progressPercent"></i></div>
+          <button type="button" class="sc-textbtn" (click)="changeLocation()">Đổi vị trí</button>
+          <input id="sc-search-input" type="text" [(ngModel)]="searchCode" placeholder="Tìm mã, PO, batch">
+        </div>
+        <div class="lp-work__grid">
+          <div class="sc-tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th><th>Mã hàng</th><th>Tên</th><th>PO</th><th>Batch</th><th>Tồn</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngIf="!filteredRows.length"><td colspan="7">Không có mã khớp.</td></tr>
+                <tr *ngFor="let row of filteredRows; let i = index" [class.is-on]="selectedId === row.id" [class.is-done]="row.kkChecked" (click)="selectRow(row)">
+                  <td>{{ i + 1 }}</td>
+                  <td class="sc-code">{{ row.materialCode }}</td>
+                  <td>{{ row.materialName || '—' }}</td>
+                  <td>{{ row.poNumber || '—' }}</td>
+                  <td>{{ row.batchNumber || '—' }}</td>
+                  <td>{{ formatQty(row.stock) }} {{ row.unit }}</td>
+                  <td><span class="sc-pill" [class.sc-pill--ok]="row.kkChecked">{{ row.kkChecked ? 'Done' : 'Chưa' }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <aside class="sc-side" *ngIf="selectedRow as row">
+            <span class="sc-kicker">Mã đang kiểm</span>
+            <h2>{{ row.materialCode }}</h2>
+            <p>{{ row.materialName || '—' }}</p>
+            <dl>
+              <div><dt>PO</dt><dd>{{ row.poNumber || '—' }}</dd></div>
+              <div><dt>Batch</dt><dd>{{ row.batchNumber || '—' }}</dd></div>
+              <div><dt>Tồn</dt><dd>{{ formatQty(row.stock) }} {{ row.unit }}</dd></div>
+            </dl>
+            <ng-container *ngIf="!row.kkChecked">
+              <label for="sc-scan-input">Scan mã</label>
+              <div class="lp-field">
+                <i class="material-icons">qr_code_2</i>
+                <input id="sc-scan-input" type="text" [(ngModel)]="scanInput" placeholder="Quét tem mã hàng" autocomplete="off" [disabled]="isSaving" (keyup.enter)="submitScan()">
+                <i class="material-icons">qr_code_scanner</i>
+              </div>
+              <button type="button" class="sc-go sc-go--line" (click)="submitScan()" [disabled]="isSaving">Khớp mã</button>
+              <div class="sc-side__acts" *ngIf="scanMatched">
+                <button type="button" class="sc-go" (click)="confirmEnough()" [disabled]="isSaving">Xác nhận đủ lượng</button>
+                <button type="button" class="sc-go sc-go--warn" (click)="openShortageForm()" [disabled]="isSaving">Báo thiếu lượng</button>
+              </div>
+              <div class="sc-short" *ngIf="showShortageForm">
+                <label for="sc-actual-qty">Số lượng thực tế</label>
+                <input id="sc-actual-qty" type="number" min="0" step="0.001" [(ngModel)]="actualQtyInput" [disabled]="isSaving" (keyup.enter)="submitShortage()">
+                <button type="button" class="sc-go sc-go--warn" (click)="submitShortage()" [disabled]="isSaving">Gửi báo thiếu</button>
+              </div>
+              <button type="button" class="sc-go sc-go--danger" (click)="reportMissing()" [disabled]="isSaving">Báo cáo mã không có</button>
+            </ng-container>
+            <p class="sc-done" *ngIf="row.kkChecked">Đã Done{{ row.kkBy ? ' · ' + row.kkBy : '' }}</p>
+          </aside>
+          <aside class="sc-side sc-side--idle" *ngIf="!selectedRow">
+            <h2>Chọn một mã</h2>
+            <p>Bấm dòng trong bảng, quét tem, rồi xác nhận đủ lượng.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="lp-ready" *ngIf="step === 'gate'">
+        <i class="material-icons">plagiarism</i>
+        <h3>Sẵn sàng quét</h3>
+        <p>Vui lòng quét mã nhân viên để bắt đầu</p>
+      </section>
     </div>
-    <div class="sc-header__actions">
-      <button type="button" class="sc-btn sc-btn--ghost" (click)="openMissingCatalog()">Danh sách mã không có</button>
-      <button type="button" class="sc-btn sc-btn--ghost" (click)="openShortageCatalog()">Danh mục thiếu lượng</button>
-      <button type="button" class="sc-btn sc-btn--ghost" (click)="goToMenu()">Về Menu</button>
+  </div>
+
+  <!-- PDA -->
+  <ng-container *ngIf="uiMode === 'pda'">
+  <header class="sc-top">
+    <div class="sc-top__brand">
+      <span class="sc-mark"><i class="material-icons">fact_check</i></span>
+      <div>
+        <h1>Stock Check</h1>
+        <p *ngIf="step === 'gate'">Quét nhân viên, chọn nhà máy, rồi kiểm từng vị trí.</p>
+        <p *ngIf="step !== 'gate'">{{ operatorId }} · {{ factory }}<ng-container *ngIf="location"> · {{ location }}</ng-container></p>
+      </div>
+    </div>
+    <div class="sc-top__tools">
+      <div class="sc-switch" role="tablist" aria-label="Giao diện">
+        <button type="button" (click)="setUiMode('laptop')">Laptop</button>
+        <button type="button" class="is-on">PDA</button>
+      </div>
+      <button type="button" class="sc-textbtn" (click)="openMissingCatalog()">Mã không có</button>
+      <button type="button" class="sc-textbtn" (click)="openShortageCatalog()">Thiếu lượng</button>
+      <button type="button" class="sc-textbtn" (click)="goToMenu()">Menu</button>
     </div>
   </header>
-
-  <p class="sc-error" *ngIf="error">{{ error }}</p>
-  <p class="sc-info" *ngIf="info">{{ info }}</p>
-
-  <section class="sc-card" *ngIf="step === 'gate'">
-    <label class="sc-label" for="sc-operator-input">Mã nhân viên</label>
-    <input id="sc-operator-input" class="sc-input" type="text" [(ngModel)]="operatorInput"
-           placeholder="Quét ASP + 4 số" autocomplete="off"
-           (keyup.enter)="submitOperator()">
-    <div class="sc-factory">
-      <button type="button" class="sc-btn" *ngFor="let item of factories"
-              [class.sc-btn--on]="factory === item" (click)="setFactory(item)">{{ item }}</button>
-    </div>
-    <button type="button" class="sc-btn sc-btn--primary" (click)="submitOperator()">Bắt đầu</button>
-  </section>
-
-  <section class="sc-card" *ngIf="step === 'location'">
-    <label class="sc-label" for="sc-location-input">Scan vị trí</label>
-    <input id="sc-location-input" class="sc-input" type="text" [(ngModel)]="locationInput"
-           placeholder="Quét vị trí" autocomplete="off" [disabled]="isLoading"
-           (keyup.enter)="submitLocation()">
-    <button type="button" class="sc-btn sc-btn--primary" (click)="submitLocation()" [disabled]="isLoading">
-      {{ isLoading ? 'Đang tải…' : 'Xem mã tại vị trí' }}
-    </button>
-  </section>
-
-  <section class="sc-work" *ngIf="step === 'work'">
-    <div class="sc-work__bar">
-      <button type="button" class="sc-btn sc-btn--ghost" (click)="changeLocation()">Đổi vị trí</button>
-      <span class="sc-progress">{{ doneCount }} / {{ rows.length }} Done</span>
-      <input id="sc-search-input" class="sc-input sc-input--search" type="text" [(ngModel)]="searchCode"
-             placeholder="Tìm mã">
-    </div>
-
-    <div class="sc-layout">
-      <div class="sc-list">
-        <p class="sc-empty" *ngIf="!filteredRows.length">Không có mã khớp.</p>
-        <button type="button" class="sc-row" *ngFor="let row of filteredRows"
-                [class.sc-row--on]="selectedId === row.id"
-                [class.sc-row--done]="row.kkChecked"
-                (click)="selectRow(row)">
-          <span class="sc-row__code">{{ row.materialCode }}</span>
-          <span class="sc-row__meta">{{ row.poNumber || '—' }} · {{ row.batchNumber || '—' }}</span>
-          <span class="sc-row__qty">Tồn {{ formatQty(row.stock) }} {{ row.unit }}</span>
-          <span class="sc-row__state" *ngIf="row.kkChecked">Done</span>
-        </button>
+  <p class="sc-banner sc-banner--err" *ngIf="error">{{ error }}</p>
+  <p class="sc-banner sc-banner--ok" *ngIf="info">{{ info }}</p>
+    <section class="sc-pda" *ngIf="step === 'gate'">
+      <span class="sc-kicker">1 · Nhân viên</span>
+      <label for="sc-operator-input">Quét mã nhân viên</label>
+      <input id="sc-operator-input" class="sc-pda__scan" type="text" [(ngModel)]="operatorInput" placeholder="ASP0000" autocomplete="off" (keyup.enter)="submitOperator()">
+      <div class="sc-factories sc-factories--pda">
+        <button type="button" *ngFor="let item of factories" [class.is-on]="factory === item" (click)="setFactory(item)">{{ item }}</button>
       </div>
+      <button type="button" class="sc-go sc-go--block" (click)="submitOperator()">Bắt đầu</button>
+    </section>
 
-      <div class="sc-panel" *ngIf="selectedRow as row">
-        <h3>{{ row.materialCode }}</h3>
-        <p>{{ row.materialName || '—' }}</p>
-        <p>PO {{ row.poNumber || '—' }} · Batch {{ row.batchNumber || '—' }}</p>
-        <p class="sc-panel__stock">Tồn {{ formatQty(row.stock) }} {{ row.unit }}</p>
+    <section class="sc-pda" *ngIf="step === 'location'">
+      <span class="sc-kicker">2 · Vị trí</span>
+      <label for="sc-location-input">Scan vị trí</label>
+      <input id="sc-location-input" class="sc-pda__scan" type="text" [(ngModel)]="locationInput" placeholder="Quét kệ" autocomplete="off" [disabled]="isLoading" (keyup.enter)="submitLocation()">
+      <button type="button" class="sc-go sc-go--block" (click)="submitLocation()" [disabled]="isLoading">{{ isLoading ? 'Đang tải…' : 'Xem mã' }}</button>
+    </section>
 
-        <ng-container *ngIf="!row.kkChecked">
-          <label class="sc-label" for="sc-scan-input">Scan mã</label>
-          <input id="sc-scan-input" class="sc-input" type="text" [(ngModel)]="scanInput"
-                 placeholder="Quét mã hàng" autocomplete="off" [disabled]="isSaving"
-                 (keyup.enter)="submitScan()">
-          <button type="button" class="sc-btn" (click)="submitScan()" [disabled]="isSaving">Khớp mã</button>
-
-          <div class="sc-actions" *ngIf="scanMatched">
-            <button type="button" class="sc-btn sc-btn--ok" (click)="confirmEnough()" [disabled]="isSaving">Xác nhận đủ lượng</button>
-            <button type="button" class="sc-btn sc-btn--warn" (click)="openShortageForm()" [disabled]="isSaving">Báo thiếu lượng</button>
-          </div>
-          <div class="sc-short" *ngIf="showShortageForm">
-            <label class="sc-label" for="sc-actual-qty">Số lượng thực tế</label>
-            <input id="sc-actual-qty" class="sc-input" type="number" min="0" step="0.001"
-                   [(ngModel)]="actualQtyInput" [disabled]="isSaving" (keyup.enter)="submitShortage()">
-            <button type="button" class="sc-btn sc-btn--warn" (click)="submitShortage()" [disabled]="isSaving">Gửi báo thiếu</button>
-          </div>
-          <button type="button" class="sc-btn sc-btn--danger" (click)="reportMissing()" [disabled]="isSaving">Báo cáo mã không có</button>
-        </ng-container>
-        <p class="sc-done" *ngIf="row.kkChecked">Đã Done{{ row.kkBy ? ' bởi ' + row.kkBy : '' }}.</p>
+    <section class="sc-pda" *ngIf="step === 'work' && !selectedRow">
+      <div class="sc-pda__head">
+        <button type="button" class="sc-textbtn" (click)="changeLocation()">Đổi vị trí</button>
+        <strong>{{ location }}</strong>
+        <span>{{ doneCount }}/{{ rows.length }}</span>
       </div>
-      <div class="sc-panel sc-panel--idle" *ngIf="!selectedRow">
-        <p>Chọn một mã, quét mã, rồi xác nhận đủ lượng.</p>
-      </div>
-    </div>
-  </section>
+      <div class="sc-track"><i [style.width.%]="progressPercent"></i></div>
+      <input id="sc-search-input" type="text" [(ngModel)]="searchCode" placeholder="Tìm mã">
+      <button type="button" class="sc-pda__item" *ngFor="let row of filteredRows"
+              [class.is-on]="selectedId === row.id" [class.is-done]="row.kkChecked" (click)="selectRow(row)">
+        <b>{{ row.materialCode }}</b>
+        <small>{{ row.poNumber || '—' }} · {{ row.batchNumber || '—' }}</small>
+        <em>{{ formatQty(row.stock) }} {{ row.unit }}</em>
+        <span>{{ row.kkChecked ? 'Done' : 'Chọn' }}</span>
+      </button>
+      <p class="sc-empty" *ngIf="!filteredRows.length">Không có mã khớp.</p>
+    </section>
+
+    <section class="sc-pda sc-pda--focus" *ngIf="step === 'work' && selectedRow as row">
+      <button type="button" class="sc-textbtn" (click)="clearSelection()">← Danh sách</button>
+      <h2>{{ row.materialCode }}</h2>
+      <p>{{ row.materialName || '—' }}</p>
+      <p class="sc-pda__meta">{{ row.poNumber || '—' }} · {{ row.batchNumber || '—' }}</p>
+      <p class="sc-pda__qty">{{ formatQty(row.stock) }} <small>{{ row.unit || 'tồn' }}</small></p>
+      <ng-container *ngIf="!row.kkChecked">
+        <label for="sc-scan-input">Scan mã</label>
+        <input id="sc-scan-input" class="sc-pda__scan" type="text" [(ngModel)]="scanInput" placeholder="Quét tem" autocomplete="off" [disabled]="isSaving" (keyup.enter)="submitScan()">
+        <button type="button" class="sc-go sc-go--block sc-go--line" (click)="submitScan()" [disabled]="isSaving">Khớp mã</button>
+        <div class="sc-pda__stack" *ngIf="scanMatched">
+          <button type="button" class="sc-go sc-go--block" (click)="confirmEnough()" [disabled]="isSaving">Xác nhận đủ lượng</button>
+          <button type="button" class="sc-go sc-go--block sc-go--warn" (click)="openShortageForm()" [disabled]="isSaving">Báo thiếu lượng</button>
+        </div>
+        <div class="sc-short" *ngIf="showShortageForm">
+          <label for="sc-actual-qty">Số lượng thực tế</label>
+          <input id="sc-actual-qty" class="sc-pda__scan" type="number" min="0" step="0.001" [(ngModel)]="actualQtyInput" [disabled]="isSaving" (keyup.enter)="submitShortage()">
+          <button type="button" class="sc-go sc-go--block sc-go--warn" (click)="submitShortage()" [disabled]="isSaving">Gửi báo thiếu</button>
+        </div>
+        <button type="button" class="sc-go sc-go--block sc-go--danger" (click)="reportMissing()" [disabled]="isSaving">Báo cáo mã không có</button>
+      </ng-container>
+      <p class="sc-done" *ngIf="row.kkChecked">Đã Done{{ row.kkBy ? ' · ' + row.kkBy : '' }}</p>
+    </section>
+  </ng-container>
 
   <div class="sc-overlay" *ngIf="showMissingCatalog" (click)="closeMissingCatalog()">
     <div class="sc-dialog" (click)="$event.stopPropagation()">
-      <h3>Danh sách mã không có</h3>
-      <p>Quản lý duyệt thì mã bị xóa khỏi tồn tại vị trí đó.</p>
+      <div class="sc-dialog__head">
+        <h3>Danh sách mã không có</h3>
+        <button type="button" class="sc-textbtn" (click)="closeMissingCatalog()">Đóng</button>
+      </div>
+      <p>Duyệt xóa thì mã bị gỡ khỏi tồn tại vị trí đó.</p>
       <p *ngIf="catalogLoading">Đang tải…</p>
-      <table *ngIf="!catalogLoading">
+      <table *ngIf="!catalogLoading && uiMode === 'laptop'">
         <thead>
-          <tr>
-            <th>Thời gian</th>
-            <th>Nhà máy</th>
-            <th>Vị trí</th>
-            <th>Mã</th>
-            <th>PO</th>
-            <th>Tồn</th>
-            <th>Người báo</th>
-            <th></th>
-          </tr>
+          <tr><th>Thời gian</th><th>Nhà máy</th><th>Vị trí</th><th>Mã</th><th>PO</th><th>Tồn</th><th>Người báo</th><th></th></tr>
         </thead>
         <tbody>
-          <tr *ngIf="!missingReports.length">
-            <td colspan="8">Chưa có mã chờ duyệt.</td>
-          </tr>
+          <tr *ngIf="!missingReports.length"><td colspan="8">Chưa có mã chờ duyệt.</td></tr>
           <tr *ngFor="let report of missingReports">
             <td>{{ formatDateTime(report.createdAt) }}</td>
             <td>{{ report.factory }}</td>
             <td>{{ report.location }}</td>
-            <td>{{ report.materialCode }}</td>
+            <td class="sc-code">{{ report.materialCode }}</td>
             <td>{{ report.poNumber || '—' }}</td>
             <td>{{ formatQty(report.stock) }} {{ report.unit }}</td>
             <td>{{ report.reportedBy || '—' }}</td>
-            <td><button type="button" class="sc-btn sc-btn--danger" (click)="approveMissing(report)" [disabled]="isSaving">Duyệt xóa</button></td>
+            <td><button type="button" class="sc-go sc-go--danger" (click)="approveMissing(report)" [disabled]="isSaving">Duyệt xóa</button></td>
           </tr>
         </tbody>
       </table>
-      <button type="button" class="sc-btn" (click)="closeMissingCatalog()">Đóng</button>
+      <div class="sc-cards" *ngIf="!catalogLoading && uiMode === 'pda'">
+        <p *ngIf="!missingReports.length">Chưa có mã chờ duyệt.</p>
+        <article *ngFor="let report of missingReports">
+          <b>{{ report.materialCode }}</b>
+          <span>{{ report.factory }} · {{ report.location }}</span>
+          <span>{{ report.poNumber || '—' }} · tồn {{ formatQty(report.stock) }} {{ report.unit }}</span>
+          <small>{{ report.reportedBy || '—' }} · {{ formatDateTime(report.createdAt) }}</small>
+          <button type="button" class="sc-go sc-go--block sc-go--danger" (click)="approveMissing(report)" [disabled]="isSaving">Duyệt xóa</button>
+        </article>
+      </div>
     </div>
   </div>
 
   <div class="sc-overlay" *ngIf="showShortageCatalog" (click)="closeShortageCatalog()">
     <div class="sc-dialog" (click)="$event.stopPropagation()">
-      <h3>Danh mục thiếu lượng</h3>
+      <div class="sc-dialog__head">
+        <h3>Danh mục thiếu lượng</h3>
+        <button type="button" class="sc-textbtn" (click)="closeShortageCatalog()">Đóng</button>
+      </div>
       <p *ngIf="catalogLoading">Đang tải…</p>
-      <table *ngIf="!catalogLoading">
+      <table *ngIf="!catalogLoading && uiMode === 'laptop'">
         <thead>
-          <tr>
-            <th>Thời gian</th>
-            <th>Nhà máy</th>
-            <th>Vị trí</th>
-            <th>Mã</th>
-            <th>PO</th>
-            <th>Tồn</th>
-            <th>Thực tế</th>
-            <th>Thiếu</th>
-            <th>Người báo</th>
-          </tr>
+          <tr><th>Thời gian</th><th>Nhà máy</th><th>Vị trí</th><th>Mã</th><th>PO</th><th>Tồn</th><th>Thực tế</th><th>Thiếu</th><th>Người báo</th></tr>
         </thead>
         <tbody>
-          <tr *ngIf="!shortageReports.length">
-            <td colspan="9">Chưa có báo thiếu lượng.</td>
-          </tr>
+          <tr *ngIf="!shortageReports.length"><td colspan="9">Chưa có báo thiếu lượng.</td></tr>
           <tr *ngFor="let report of shortageReports">
             <td>{{ formatDateTime(report.createdAt) }}</td>
             <td>{{ report.factory }}</td>
             <td>{{ report.location }}</td>
-            <td>{{ report.materialCode }}</td>
+            <td class="sc-code">{{ report.materialCode }}</td>
             <td>{{ report.poNumber || '—' }}</td>
             <td>{{ formatQty(report.stock) }}</td>
             <td>{{ formatQty(report.actualQty) }}</td>
@@ -168,7 +308,16 @@
           </tr>
         </tbody>
       </table>
-      <button type="button" class="sc-btn" (click)="closeShortageCatalog()">Đóng</button>
+      <div class="sc-cards" *ngIf="!catalogLoading && uiMode === 'pda'">
+        <p *ngIf="!shortageReports.length">Chưa có báo thiếu lượng.</p>
+        <article *ngFor="let report of shortageReports">
+          <b>{{ report.materialCode }}</b>
+          <span>{{ report.factory }} · {{ report.location }}</span>
+          <span>Tồn {{ formatQty(report.stock) }} · thực tế {{ formatQty(report.actualQty) }}</span>
+          <em>Thiếu {{ formatQty(report.shortageQty) }} {{ report.unit }}</em>
+          <small>{{ report.reportedBy || '—' }} · {{ formatDateTime(report.createdAt) }}</small>
+        </article>
+      </div>
     </div>
   </div>
 </div>

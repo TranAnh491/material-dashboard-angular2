@@ -725,6 +725,7 @@
                   <option value="waiting">Waiting</option>
                   <option value="kitting">Kitting</option>
                   <option value="ready">Ready</option>
+                  <option value="ready-iqc">Ready-IQC</option>
                   <option value="transfer">Transfer</option>
                   <option value="delay">Delay</option>
                 </select>
@@ -966,6 +967,7 @@
                               <option value="waiting">Waiting</option>
                               <option value="kitting" [disabled]="isStatusOptionDisabled(wo, 'kitting')">Kitting</option>
                               <option value="ready" [disabled]="isStatusOptionDisabled(wo, 'ready')">Ready</option>
+                              <option value="ready-iqc">Ready-IQC</option>
                               <option value="transfer" [disabled]="isStatusOptionDisabled(wo, 'transfer')">Transfer</option>
                               <option value="done">Done</option>
                               <option value="delay">Delay</option>
@@ -1339,6 +1341,7 @@
           <button mat-stroked-button (click)="onScanStatusSelect('waiting')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'waiting')">Waiting</button>
           <button mat-stroked-button (click)="onScanStatusSelect('kitting')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'kitting')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'kitting') ? 'Chỉ chọn Kitting khi đang Waiting' : ''">Kitting</button>
           <button mat-stroked-button (click)="onScanStatusSelect('ready')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'ready')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'ready') ? 'Chỉ chọn Ready khi đang Kitting' : ''">Ready</button>
+          <button mat-stroked-button (click)="onScanStatusSelect('ready-iqc')">Ready-IQC</button>
           <button mat-stroked-button (click)="onScanStatusSelect('transfer')" [disabled]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer')" [matTooltip]="isStatusOptionDisabled(scanStatusSelectWorkOrder, 'transfer') ? 'Chỉ chọn Transfer khi đang Ready' : (isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - cần OTP Zalo nhóm Quản lý kho cho LSX này' : '')">Transfer</button>
           <button mat-stroked-button (click)="onScanStatusSelect('done')" [matTooltip]="isTransferDisabledForWorkOrder(scanStatusSelectWorkOrder) ? 'LSX bị thiếu - cần OTP Zalo nhóm Quản lý kho cho LSX này' : ''">Done</button>
           <button mat-stroked-button (click)="onScanStatusSelect('delay')">Delay</button>

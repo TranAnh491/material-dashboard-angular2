@@ -88,6 +88,7 @@ export class StockCheckComponent {
   missingReports: MissingReport[] = [];
   shortageReports: ShortageReport[] = [];
   catalogLoading = false;
+  uiMode: 'laptop' | 'pda' = 'laptop';
 
   private factoryRows: StockCheckRow[] = [];
   private factoryRowsKey = '';
@@ -95,10 +96,41 @@ export class StockCheckComponent {
   constructor(
     private firestore: AngularFirestore,
     private router: Router
-  ) {}
+  ) {
+    const saved = localStorage.getItem('stock-check-ui');
+    if (saved === 'laptop' || saved === 'pda') {
+      this.uiMode = saved;
+    } else if (window.innerWidth <= 1024) {
+      this.uiMode = 'pda';
+    }
+  }
+
+  setUiMode(mode: 'laptop' | 'pda'): void {
+    this.uiMode = mode;
+    localStorage.setItem('stock-check-ui', mode);
+  }
+
+  clearSelection(): void {
+    this.selectedId = '';
+    this.resetScan();
+    this.error = '';
+  }
+
+  get remainCount(): number {
+    return Math.max(0, this.rows.length - this.doneCount);
+  }
+
+  get progressPercent(): number {
+    if (!this.rows.length) return 0;
+    return Math.round((this.doneCount / this.rows.length) * 100);
+  }
 
   goToMenu(): void {
     void this.router.navigate(['/menu']);
+  }
+
+  goNav(path: string): void {
+    void this.router.navigate([path]);
   }
 
   get selectedRow(): StockCheckRow | null {

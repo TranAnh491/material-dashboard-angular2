@@ -26,6 +26,7 @@ import { PxkSkipKind, PxkSkipScanItem, WoPxkSkipCatalogService } from '../../ser
 import { WoGuideJob, WoGuideRole, WoGuideStaff, WoLsxGuideService } from '../../services/wo-lsx-guide.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { PxkWeightCheckReport, PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
+import { ReadyIqcZaloService } from '../../services/ready-iqc-zalo.service';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -399,6 +400,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private readonly PXK_WEIGHT_HIGH_PERCENT = 130;
   private pxkWeightIconToken = 0;
   private pxkWeightIconByLsx = new Map<string, 'red' | 'green' | 'orange'>();
+  private readonly readyIqcNoticeKeys = new Set<string>();
   private readonly pxkPrintWindows = new Set<Window>();
   private readonly onPxkWeightWindowMessage = (ev: MessageEvent): void => {
     void this.handlePxkWeightWindowMessage(ev);
@@ -455,7 +457,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private woPxkBypassOtp: WoPxkBypassOtpService,
     private woLsxGuide: WoLsxGuideService,
     private nvlCatalog: NvlCatalogFullService,
-    private pxkWeightReports: PxkWeightCheckReportService
+    private pxkWeightReports: PxkWeightCheckReportService,
+    private readyIqcZalo: ReadyIqcZaloService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -1141,6 +1144,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     });
     
     this.workOrders = processedWorkOrders;
+    void this.notifyReadyIqcOrders(this.workOrders);
     this.syncCreatedByTeamOptions();
     
     // Auto-mark old completed work orders as completed
@@ -2761,6 +2765,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       if (newStatus === WorkOrderStatus.DONE && oldStatus !== WorkOrderStatus.DONE) {
         workOrder.doneAt = now;
       }
+      if (newStatus === WorkOrderStatus.READY_IQC && oldStatus !== WorkOrderStatus.READY_IQC) {
+        void this.notifyReadyIqcForWorkOrder(workOrder, true);
+      }
       if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
         workOrder.isCompleted = false;
       }
@@ -3003,6 +3010,7 @@ Please check the console for error details.`);
       case WorkOrderStatus.WAITING: return 'status-waiting';
       case WorkOrderStatus.KITTING: return 'status-kitting';
       case WorkOrderStatus.READY: return 'status-ready';
+      case WorkOrderStatus.READY_IQC: return 'status-ready-iqc';
       case WorkOrderStatus.TRANSFER: return 'status-transfer';
       case WorkOrderStatus.DONE: return 'status-done';
       case WorkOrderStatus.DELAY: return 'status-delay';
@@ -4513,6 +4521,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       case 'ready':
       case 'sẵn sàng':
         return WorkOrderStatus.READY;
+      case 'ready-iqc':
+      case 'ready iqc':
+        return WorkOrderStatus.READY_IQC;
       case 'transfer':
       case 'chuyển':
         return WorkOrderStatus.TRANSFER;
@@ -4534,6 +4545,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         return WorkOrderStatus.KITTING;
       case 'ready':
         return WorkOrderStatus.READY;
+      case 'ready-iqc':
+        return WorkOrderStatus.READY_IQC;
       case 'transfer':
         return WorkOrderStatus.TRANSFER;
       case 'done':
@@ -6763,6 +6776,65 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     return true;
   }
 
+  private isIqcHoldLocation(location: string): boolean {
+    const value = String(location || '').trim().toUpperCase();
+    return value === 'IQC' || value.startsWith('IQC');
+  }
+
+  private async notifyReadyIqcOrders(workOrders: WorkOrder[]): Promise<void> {
+    const rows = workOrders.filter((wo) => wo.status === WorkOrderStatus.READY_IQC);
+    for (const wo of rows) {
+      await this.notifyReadyIqcForWorkOrder(wo, false);
+    }
+  }
+
+  private async notifyReadyIqcForWorkOrder(wo: WorkOrder, alertOnFail: boolean): Promise<void> {
+    const lsx = String(wo?.productionOrder || '').trim();
+    if (!lsx || wo.status !== WorkOrderStatus.READY_IQC) return;
+    try {
+      await this.ensurePxkLoadedForLsx(lsx);
+      const lines = this.getPxkLinesForLsx(lsx);
+      const factory = this.mapDisplayFactoryToOperationalAsm(this.getWorkOrderDisplayFactory(wo)) || 'ASM1';
+      const maps = await this.loadPxkLocationIqcMaps(factory, lines.map((line) => line.materialCode));
+      const seen = new Set<string>();
+      const items: Array<{ materialCode: string; po: string; location: string; iqcStatus: string }> = [];
+      for (const line of lines) {
+        const materialCode = String(line.materialCode || '').trim().toUpperCase();
+        const poKey = this.pxkPoKey(line.po);
+        if (!materialCode) continue;
+        const key = `${materialCode}|${poKey}`;
+        if (seen.has(key)) continue;
+        const location = maps.locationMap.get(key) || '';
+        const iqcStatus = maps.iqcStatusMap.get(key) || '';
+        if (!this.isIqcHoldLocation(location)) continue;
+        if (this.normalizePxkIqcStatus(iqcStatus) === 'pass') continue;
+        seen.add(key);
+        items.push({
+          materialCode,
+          po: String(line.po || '').trim(),
+          location,
+          iqcStatus: iqcStatus || 'Chưa pass'
+        });
+      }
+      if (!items.length) return;
+      const signature = `${this.normLsxForMatch(lsx)}|${items.map((item) => `${item.materialCode}|${this.pxkPoKey(item.po)}|${item.iqcStatus}`).sort().join(',')}`;
+      if (this.readyIqcNoticeKeys.has(signature)) return;
+      this.readyIqcNoticeKeys.add(signature);
+      try {
+        await this.readyIqcZalo.notify({ lsx, factory, items });
+      } catch (error) {
+        this.readyIqcNoticeKeys.delete(signature);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Ready-IQC Zalo:', error);
+      if (alertOnFail) {
+        const message = error instanceof Error ? error.message : 'Không gửi được Zalo.';
+        alert(`Đã lưu Ready-IQC. Zalo chưa báo được nhóm PLN / WH ASM1.\n${message}`);
+      }
+    }
+  }
+
   private async loadPxkLocationIqcMaps(
     factory: string,
     materialCodes: string[]
@@ -8226,6 +8298,8 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
         return 'Kitting';
       case WorkOrderStatus.READY:
         return 'Ready';
+      case WorkOrderStatus.READY_IQC:
+        return 'Ready-IQC';
       case WorkOrderStatus.TRANSFER:
         return 'Transfer';
       case WorkOrderStatus.DONE:

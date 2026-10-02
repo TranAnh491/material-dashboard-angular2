@@ -1579,6 +1579,14 @@ html, body {
   }
 }
 
+.status-ready-iqc {
+  background-color: #e0f2f1;
+
+  &:hover {
+    background-color: #b2dfdb;
+  }
+}
+
 .status-transfer {
   background-color: #fff3e0;
   
@@ -2050,6 +2058,7 @@ textarea.mat-input-element {
 .table-hover tbody tr.status-waiting:hover,
 .table-hover tbody tr.status-kitting:hover,
 .table-hover tbody tr.status-ready:hover,
+.table-hover tbody tr.status-ready-iqc:hover,
 .table-hover tbody tr.status-transfer:hover,
 .table-hover tbody tr.status-done:hover,
 .table-hover tbody tr.status-delay:hover,

@@ -745,7 +745,43 @@ export const verifyWoPxkBypassOtpFn = functions
     }
   });
 
-/** Work Order: báo cáo mã không hợp lý để Check lượng — Zalo tới ASP0106. */
+/** Work Order Ready-IQC: Zalo nhóm PLN và WH ASM1 các mã đang ở IQC chưa Pass. */
+export const notifyReadyIqcWaitingFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const rawItems = Array.isArray(data?.items) ? data.items : [];
+    const items = rawItems.slice(0, 80).map((item) => {
+      const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+      return {
+        materialCode: typeof row.materialCode === 'string' ? row.materialCode : '',
+        po: typeof row.po === 'string' ? row.po : '',
+        location: typeof row.location === 'string' ? row.location : '',
+        iqcStatus: typeof row.iqcStatus === 'string' ? row.iqcStatus : ''
+      };
+    });
+    try {
+      const { notifyReadyIqcWaiting } = await import('./ready-iqc-zalo');
+      const result = await notifyReadyIqcWaiting(admin.firestore(), {
+        lsx: typeof data?.lsx === 'string' ? data.lsx : '',
+        factory: typeof data?.factory === 'string' ? data.factory : '',
+        items
+      });
+      return { ok: true, sent: result.sent };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('Chưa gắn') || msg.includes('ZALO_BOT_TOKEN')
+          ? 'failed-precondition'
+          : 'internal',
+        msg
+      );
+    }
+  });
+
+/** Work Order: báo cáo mã không hợp lý để Check lượng — Zalo tới nhóm Quản lý kho. */
 export const notifyPxkWeightCheckReportFn = functions
   .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: Record<string, unknown>, context) => {

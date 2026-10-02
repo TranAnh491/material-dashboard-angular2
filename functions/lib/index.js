@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyPxkWeightCheckReportFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = void 0;
+exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -704,7 +704,40 @@ exports.verifyWoPxkBypassOtpFn = functions
             : 'internal', msg);
     }
 });
-/** Work Order: báo cáo mã không hợp lý để Check lượng — Zalo tới ASP0106. */
+/** Work Order Ready-IQC: Zalo nhóm PLN và WH ASM1 các mã đang ở IQC chưa Pass. */
+exports.notifyReadyIqcWaitingFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const rawItems = Array.isArray(data === null || data === void 0 ? void 0 : data.items) ? data.items : [];
+    const items = rawItems.slice(0, 80).map((item) => {
+        const row = item && typeof item === 'object' ? item : {};
+        return {
+            materialCode: typeof row.materialCode === 'string' ? row.materialCode : '',
+            po: typeof row.po === 'string' ? row.po : '',
+            location: typeof row.location === 'string' ? row.location : '',
+            iqcStatus: typeof row.iqcStatus === 'string' ? row.iqcStatus : ''
+        };
+    });
+    try {
+        const { notifyReadyIqcWaiting } = await Promise.resolve().then(() => __importStar(require('./ready-iqc-zalo')));
+        const result = await notifyReadyIqcWaiting(admin.firestore(), {
+            lsx: typeof (data === null || data === void 0 ? void 0 : data.lsx) === 'string' ? data.lsx : '',
+            factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory : '',
+            items
+        });
+        return { ok: true, sent: result.sent };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('Chưa gắn') || msg.includes('ZALO_BOT_TOKEN')
+            ? 'failed-precondition'
+            : 'internal', msg);
+    }
+});
+/** Work Order: báo cáo mã không hợp lý để Check lượng — Zalo tới nhóm Quản lý kho. */
 exports.notifyPxkWeightCheckReportFn = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
