@@ -550,6 +550,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.loadPxkPresenceFromIndex(),
         this.applyOutboundCreatedByOverrides()
       ]);
+      void this.notifyReadyIqcOrders(this.workOrders);
       void this.ensurePxkSoMaForDisplayed();
     } catch (e) {
       console.error('❌ Tải LSX theo ngày thất bại:', e);
@@ -703,6 +704,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         this.loadPxkPresenceFromIndex(),
         this.applyOutboundCreatedByOverrides()
       ]);
+      void this.notifyReadyIqcOrders(this.workOrders);
       void this.ensurePxkSoMaForDisplayed();
     } catch (e) {
       console.error('❌ loadWorkOrders failed:', e);
@@ -969,7 +971,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const norm = this.normLsxForMatch(raw);
     if (this.pxkLoadAttemptedNorms.has(norm)) return false;
     if (!this.pxkLsxHasImportedPresence(raw)) {
-      this.pxkLoadAttemptedNorms.add(norm);
+      if (this.pxkIndexLsxKeys.length > 0) this.pxkLoadAttemptedNorms.add(norm);
       return false;
     }
 
@@ -1144,7 +1146,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     });
     
     this.workOrders = processedWorkOrders;
-    void this.notifyReadyIqcOrders(this.workOrders);
     this.syncCreatedByTeamOptions();
     
     // Auto-mark old completed work orders as completed

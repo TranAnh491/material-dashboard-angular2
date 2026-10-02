@@ -205,7 +205,8 @@ exports.zaloWebhook = onRequest(
       "Danh sách câu lệnh:\n" +
       "- /link   (liên kết mã nhân viên để nhận thông báo)\n" +
       "- /id     (xem mã nhân viên đã liên kết)\n" +
-      "- /nhomkho  (trong nhóm Kho: gắn nhóm nhận file hướng dẫn Scan)";
+      "- /nhomkho  (trong nhóm Kho: gắn nhóm nhận file hướng dẫn Scan)\n" +
+      "- /nhompln  (trong nhóm PLN: gắn nhóm nhận báo Ready-IQC)";
 
     // Greetings:
     // - Always show intro + guidance
@@ -273,6 +274,42 @@ exports.zaloWebhook = onRequest(
       } catch (err) {
         logger.error("nhomkho command failed", err);
         await sendText(chatId, "Không gắn được nhóm Kho. Thử lại.");
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    const isNhomPlnCommand =
+      nhomKhoCmd === "/nhompln" ||
+      nhomKhoCmd === "/nhómpln" ||
+      nhomKhoCmd === "/dangkypln";
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && isNhomPlnCommand) {
+      try {
+        if (!isGroupChat) {
+          await sendText(chatId, "Lệnh /nhompln chỉ dùng trong nhóm. Mở nhóm PLN, @bot rồi gõ /nhompln.");
+        } else {
+          await db.collection("zalo_group_config").doc("pln").set(
+            {
+              key: "pln",
+              label: "PLN",
+              name: chatName || "PLN",
+              purpose: "pln",
+              chatId: String(chatId),
+              chatType: chatType || "GROUP",
+              source: "zaloWebhook:/nhompln",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {merge: true}
+          );
+          await sendText(
+            chatId,
+            "Đã gắn nhóm này là nhóm PLN.\nLSX Ready-IQC sẽ báo mã đang chờ IQC vào đây."
+          );
+        }
+      } catch (err) {
+        logger.error("nhompln command failed", err);
+        await sendText(chatId, "Không gắn được nhóm PLN. Thử lại.");
       }
       res.status(200).json({ok: true});
       return;
