@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
 
-/** OTP 4 số Zalo → ASP0106 để sửa lượng đơn vị đã nhập trên Inbound. */
+/** OTP 4 số Zalo → nhóm Quản lý kho để sửa lượng đơn vị đã nhập trên Inbound. */
 @Injectable({ providedIn: 'root' })
 export class InboundLdvOtpService {
   constructor(private fns: AngularFireFunctions) {}

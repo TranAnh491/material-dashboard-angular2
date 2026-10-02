@@ -604,7 +604,7 @@ export const verifyMaterialsInventoryOtpFn = functions
     }
   });
 
-/** Inbound: OTP 4 số Zalo → ASP0106 để sửa lượng đơn vị đã nhập. */
+/** Inbound: OTP 4 số Zalo → nhóm Quản lý kho để sửa lượng đơn vị đã nhập. */
 export const requestInboundLdvOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: Record<string, unknown>, context) => {
@@ -622,7 +622,9 @@ export const requestInboundLdvOtpFn = functions
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new functions.https.HttpsError(
-        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg.includes('Thiếu') || msg.includes('zalo_links') || msg.includes('Quản lý kho')
+          ? 'failed-precondition'
+          : 'internal',
         msg
       );
     }
@@ -683,7 +685,7 @@ export const sendInboundLdvMismatchEmailFn = functions
     }
   });
 
-/** Work Order: OTP 4 số Zalo → ASP0106 để vượt quyền PXK lệch, mỗi LSX một mã. */
+/** Work Order: OTP 4 số Zalo → nhóm Quản lý kho để vượt quyền PXK lệch, mỗi LSX một mã. */
 export const requestWoPxkBypassOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: Record<string, unknown>, context) => {
@@ -702,7 +704,9 @@ export const requestWoPxkBypassOtpFn = functions
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new functions.https.HttpsError(
-        msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal',
+        msg.includes('Thiếu') || msg.includes('zalo_links') || msg.includes('Quản lý kho')
+          ? 'failed-precondition'
+          : 'internal',
         msg
       );
     }

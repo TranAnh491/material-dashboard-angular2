@@ -57,7 +57,7 @@ export interface InboundMaterial {
   isReceived: boolean;
   notes: string;
   rollsOrBags: number;
-  /** Đã nhập lượng đơn vị — lần sau phải có OTP Zalo ASP0106. */
+  /** Đã nhập lượng đơn vị — lần sau phải có OTP Zalo nhóm Quản lý kho. */
   rollsOrBagsLocked?: boolean;
   /** Giá trị lượng đơn vị đã gửi mail lệch Standard Packing. */
   ldvMismatchMailedFor?: number;
@@ -5155,7 +5155,7 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   rollsOrBagsInputTitle(m: InboundMaterial): string {
     if (this.isRollsOrBagsLocked(m)) {
-      return 'Đã nhập lượng đơn vị. Bấm Sửa và nhập mã 4 số từ Zalo ASP0106.';
+      return 'Đã nhập lượng đơn vị. Bấm Sửa và nhập mã 4 số từ Zalo nhóm Quản lý kho.';
     }
     return 'Nhập lượng đơn vị một lần. Sau khi lưu sẽ khóa.';
   }
@@ -5356,7 +5356,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         materialCode: m.materialCode,
         factory: m.factory || this.selectedFactory
       });
-      this.ldvOtpInfo = 'Đã gửi mã 4 số qua Zalo ASP0106. Mã có hiệu lực 10 phút.';
+      this.ldvOtpInfo = 'Đã gửi mã 4 số qua Zalo nhóm Quản lý kho. Mã có hiệu lực 10 phút.';
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       this.ldvOtpError = msg || 'Không gửi được mã Zalo.';

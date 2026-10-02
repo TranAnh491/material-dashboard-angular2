@@ -37,12 +37,13 @@ exports.woPxkBypassOtpDocId = woPxkBypassOtpDocId;
 exports.requestWoPxkBypassOtp = requestWoPxkBypassOtp;
 exports.verifyWoPxkBypassOtp = verifyWoPxkBypassOtp;
 /**
- * Work Order Status: OTP 4 số gửi Zalo tới ASP0106
+ * Work Order Status: OTP 4 số gửi Zalo tới nhóm Quản lý kho
  * để vượt quyền đổi tình trạng khi PXK lệch — mỗi LSX một mã riêng.
  */
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
-const OTP_RECIPIENT_ID = 'ASP0106';
+const KHO_GROUP_DOC = 'zalo_group_config/quanly_kho';
+const OTP_RECIPIENT_ID = 'quanly_kho';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_COLLECTION = 'wo-pxk-bypass-otp';
 function random4DigitCode() {
@@ -62,13 +63,10 @@ function woPxkBypassOtpDocId(lsxRaw) {
 }
 async function sendOtpToZalo(db, code, token, lsx, requestedBy, nextStatus, factory) {
     var _a;
-    const linkSnap = await db.collection('zalo_links').where('memberId', '==', OTP_RECIPIENT_ID).limit(1).get();
-    if (linkSnap.empty) {
-        throw new Error(`Chưa có zalo_links cho ${OTP_RECIPIENT_ID}`);
-    }
-    const chatId = String(((_a = linkSnap.docs[0].data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
+    const groupSnap = await db.doc(KHO_GROUP_DOC).get();
+    const chatId = String(((_a = groupSnap.data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
     if (!chatId) {
-        throw new Error(`Thiếu chatId cho ${OTP_RECIPIENT_ID}`);
+        throw new Error('Chưa gắn nhóm Quản lý kho trong zalo_group_config/quanly_kho.');
     }
     const lines = [
         `🔐 Vượt quyền PXK lệch (Work Order)`,

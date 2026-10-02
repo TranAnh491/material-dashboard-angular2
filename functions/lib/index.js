@@ -575,7 +575,7 @@ exports.verifyMaterialsInventoryOtpFn = functions
             : 'internal', msg);
     }
 });
-/** Inbound: OTP 4 số Zalo → ASP0106 để sửa lượng đơn vị đã nhập. */
+/** Inbound: OTP 4 số Zalo → nhóm Quản lý kho để sửa lượng đơn vị đã nhập. */
 exports.requestInboundLdvOtpFn = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
@@ -593,7 +593,9 @@ exports.requestInboundLdvOtpFn = functions
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') || msg.includes('Quản lý kho')
+            ? 'failed-precondition'
+            : 'internal', msg);
     }
 });
 exports.verifyInboundLdvOtpFn = functions
@@ -648,7 +650,7 @@ exports.sendInboundLdvMismatchEmailFn = functions
         throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
     }
 });
-/** Work Order: OTP 4 số Zalo → ASP0106 để vượt quyền PXK lệch, mỗi LSX một mã. */
+/** Work Order: OTP 4 số Zalo → nhóm Quản lý kho để vượt quyền PXK lệch, mỗi LSX một mã. */
 exports.requestWoPxkBypassOtpFn = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
@@ -667,7 +669,9 @@ exports.requestWoPxkBypassOtpFn = functions
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') ? 'failed-precondition' : 'internal', msg);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('zalo_links') || msg.includes('Quản lý kho')
+            ? 'failed-precondition'
+            : 'internal', msg);
     }
 });
 /** Work Order: xác nhận OTP vượt quyền PXK lệch theo đúng LSX. */

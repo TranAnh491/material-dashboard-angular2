@@ -365,7 +365,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private pxkIndexLsxKeys: string[] = [];
   private readonly PXK_INDEX_DOC = 'app-settings/pxk-import-lsx-index';
   isImportingPxk: boolean = false;
-  /** OTP vượt quyền PXK lệch — mỗi LSX một mã Zalo ASP0106 (ASM1/ASM3/Sample 1); ASM2/Sample 2 dùng mật khẩu cố định. */
+  /** OTP vượt quyền PXK lệch — mỗi LSX một mã Zalo nhóm Quản lý kho (ASM1/ASM3/Sample 1); ASM2/Sample 2 dùng mật khẩu cố định. */
   private readonly PXK_BYPASS_PASSCODE_FACTORIES = ['asm2', 'sample 2'];
   private readonly PXK_BYPASS_PASSCODE = '6789';
   showPxkBypassOtpModal = false;
@@ -2589,7 +2589,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         factory: this.selectedFactory || ''
       });
       this.pxkBypassOtpStep = 2;
-      this.pxkBypassOtpInfo = `Đã gửi mã 4 số qua Zalo tới ASP0106 cho LSX ${lsx}.`;
+      this.pxkBypassOtpInfo = `Đã gửi mã 4 số qua Zalo tới nhóm Quản lý kho cho LSX ${lsx}.`;
     } catch (e: unknown) {
       this.pxkBypassOtpError = this.extractCallableError(e);
     } finally {

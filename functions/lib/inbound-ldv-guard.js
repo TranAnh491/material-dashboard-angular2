@@ -37,7 +37,7 @@ exports.requestInboundLdvOtp = requestInboundLdvOtp;
 exports.verifyInboundLdvOtp = verifyInboundLdvOtp;
 exports.sendInboundLdvMismatchEmail = sendInboundLdvMismatchEmail;
 /**
- * Inbound: OTP 4 số Zalo → ASP0106 để sửa lượng đơn vị đã nhập.
+ * Inbound: OTP 4 số Zalo → nhóm Quản lý kho để sửa lượng đơn vị đã nhập.
  * Mail khi lượng đơn vị khác Standard Packing.
  */
 const admin = __importStar(require("firebase-admin"));
@@ -51,7 +51,8 @@ const LDV_MISMATCH_RECIPIENTS = [
     'wh3@airspeedmfgvn.com',
     'wh4@airspeedmfgvn.com'
 ].join(',');
-const OTP_RECIPIENT_ID = 'ASP0106';
+const KHO_GROUP_DOC = 'zalo_group_config/quanly_kho';
+const OTP_RECIPIENT_ID = 'quanly_kho';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_DOC_ID = 'current';
 const OTP_COLLECTION = 'inbound-ldv-otp';
@@ -63,13 +64,10 @@ function vnNowLabel(d = new Date()) {
 }
 async function sendOtpToZalo(db, code, token, requestedBy, materialCode, factory) {
     var _a;
-    const linkSnap = await db.collection('zalo_links').where('memberId', '==', OTP_RECIPIENT_ID).limit(1).get();
-    if (linkSnap.empty) {
-        throw new Error(`Chưa có zalo_links cho ${OTP_RECIPIENT_ID}`);
-    }
-    const chatId = String(((_a = linkSnap.docs[0].data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
+    const groupSnap = await db.doc(KHO_GROUP_DOC).get();
+    const chatId = String(((_a = groupSnap.data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
     if (!chatId) {
-        throw new Error(`Thiếu chatId cho ${OTP_RECIPIENT_ID}`);
+        throw new Error('Chưa gắn nhóm Quản lý kho trong zalo_group_config/quanly_kho.');
     }
     const msg = `🔐 Sửa lượng đơn vị (Nhận hàng)\n` +
         `Thời điểm: ${vnNowLabel()}\n` +

@@ -1576,7 +1576,7 @@
 <div class="ldv-otp-backdrop" *ngIf="ldvOtpOpen" (click)="closeLdvOtp()">
   <div class="ldv-otp-dialog" (click)="$event.stopPropagation()">
     <h3>Sửa lượng đơn vị</h3>
-    <p>Mã hàng <strong>{{ ldvOtpMaterial?.materialCode }}</strong>. Nhập mã 4 số gửi qua Zalo ASP0106.</p>
+    <p>Mã hàng <strong>{{ ldvOtpMaterial?.materialCode }}</strong>. Nhập mã 4 số gửi qua Zalo nhóm Quản lý kho.</p>
     <p class="ldv-otp-info" *ngIf="ldvOtpInfo">{{ ldvOtpInfo }}</p>
     <p class="ldv-otp-error" *ngIf="ldvOtpError">{{ ldvOtpError }}</p>
     <input type="text"

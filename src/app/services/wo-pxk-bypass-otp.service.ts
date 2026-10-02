@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
 
-/** Vượt quyền PXK lệch trên Work Order — OTP 4 số gửi Zalo tới ASP0106, mỗi LSX một mã. */
+/** Vượt quyền PXK lệch trên Work Order — OTP 4 số gửi Zalo tới nhóm Quản lý kho, mỗi LSX một mã. */
 @Injectable({ providedIn: 'root' })
 export class WoPxkBypassOtpService {
   private static readonly REQUEST_FN = 'requestWoPxkBypassOtpFn';
