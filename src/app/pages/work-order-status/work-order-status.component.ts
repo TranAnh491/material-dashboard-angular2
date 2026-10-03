@@ -6831,7 +6831,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       console.error('Ready-IQC Zalo:', error);
       if (alertOnFail) {
         const message = error instanceof Error ? error.message : 'Không gửi được Zalo.';
-        alert(`Đã lưu Ready-IQC. Zalo chưa báo được nhóm PLN / WH ASM1.\n${message}`);
+        alert(`Đã lưu Ready-IQC. Zalo chưa báo được nhóm PLN.\n${message}`);
       }
     }
   }

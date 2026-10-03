@@ -241,14 +241,14 @@ exports.zaloWebhook = onRequest(
     const chatName = String(
       message?.chat?.name || message?.chat?.title || message?.chat?.display_name || ""
     ).trim();
-    const nhomKhoCmd = String(text || "")
+    const compactCmd = String(text || "")
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "");
     const isNhomKhoCommand =
-      nhomKhoCmd === "/nhomkho" ||
-      nhomKhoCmd === "/nhómkho" ||
-      nhomKhoCmd === "/dangkykho";
+      compactCmd.includes("/nhomkho") ||
+      compactCmd.includes("/nhómkho") ||
+      compactCmd.includes("/dangkykho");
 
     if (eventName === "message.text.received" && chatId && typeof text === "string" && isNhomKhoCommand) {
       try {
@@ -280,9 +280,9 @@ exports.zaloWebhook = onRequest(
     }
 
     const isNhomPlnCommand =
-      nhomKhoCmd === "/nhompln" ||
-      nhomKhoCmd === "/nhómpln" ||
-      nhomKhoCmd === "/dangkypln";
+      compactCmd.includes("/nhompln") ||
+      compactCmd.includes("/nhómpln") ||
+      compactCmd.includes("/dangkypln");
 
     if (eventName === "message.text.received" && chatId && typeof text === "string" && isNhomPlnCommand) {
       try {

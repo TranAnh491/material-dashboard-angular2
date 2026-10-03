@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notifyReadyIqcWaiting = notifyReadyIqcWaiting;
 /**
- * LSX Ready-IQC: báo nhóm PLN và WH ASM1 các mã NVL đang ở vị trí IQC, chưa Pass.
+ * LSX Ready-IQC: báo nhóm PLN các mã NVL đang ở vị trí IQC, chưa Pass.
  */
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -53,12 +53,6 @@ function groupBlob(id, data) {
 function isPlnGroup(id, data) {
     const blob = groupBlob(id, data);
     return blob === 'pln' || blob.includes('nhompln') || blob.includes('pln');
-}
-function isWhAsm1Group(id, data) {
-    const blob = groupBlob(id, data);
-    if (blob.includes('pln'))
-        return false;
-    return blob === 'khoasm1' || blob === 'whasm1' || blob.includes('whasm1') || blob.includes('khoasm1');
 }
 function lsxDocId(lsx) {
     return lsx
@@ -81,29 +75,20 @@ async function sendText(token, chatId, text) {
         throw new Error(`Zalo sendMessage failed: ${res.status} ${JSON.stringify(body)}`);
     }
 }
-async function resolveGroups(db) {
+async function resolvePlnChatId(db) {
     const snap = await db.collection('zalo_group_config').get();
     let pln = '';
-    let whAsm1 = '';
     snap.docs.forEach((doc) => {
         var _a;
         const chatId = String(((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.chatId) || '').trim();
-        if (!chatId)
+        if (!chatId || pln)
             return;
-        if (!pln && isPlnGroup(doc.id, doc.data()))
+        if (isPlnGroup(doc.id, doc.data()))
             pln = chatId;
-        if (!whAsm1 && isWhAsm1Group(doc.id, doc.data()))
-            whAsm1 = chatId;
     });
-    const missing = [];
     if (!pln)
-        missing.push('PLN (zalo_group_config, tên/nhãn có PLN)');
-    if (!whAsm1)
-        missing.push('WH ASM1 (zalo_group_config/kho_asm1 hoặc wh_asm1)');
-    if (missing.length) {
-        throw new Error(`Chưa gắn nhóm: ${missing.join('; ')}.`);
-    }
-    return { pln, whAsm1 };
+        throw new Error('Chưa gắn nhóm PLN (zalo_group_config, tên/nhãn có PLN).');
+    return pln;
 }
 async function notifyReadyIqcWaiting(db, opts) {
     var _a;
@@ -133,14 +118,13 @@ async function notifyReadyIqcWaiting(db, opts) {
     const prev = await noticeRef.get();
     if (String(((_a = prev.data()) === null || _a === void 0 ? void 0 : _a.signature) || '') === signature)
         return { sent: false };
-    const { pln, whAsm1 } = await resolveGroups(db);
+    const pln = await resolvePlnChatId(db);
     const codes = items.map((item) => item.materialCode);
     const shown = codes.slice(0, 30);
     const more = codes.length - shown.length;
     const codeText = more > 0 ? `${shown.join(', ')} và ${more} mã nữa` : shown.join(', ');
     const text = `Chào chị Hồng,\nLSX ${lsx} đã ready, nhưng chờ mã ${codeText}`;
     await sendText(token, pln, text);
-    await sendText(token, whAsm1, text);
     await noticeRef.set({
         lsx,
         factory,

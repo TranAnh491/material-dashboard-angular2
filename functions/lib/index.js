@@ -704,7 +704,7 @@ exports.verifyWoPxkBypassOtpFn = functions
             : 'internal', msg);
     }
 });
-/** Work Order Ready-IQC: Zalo nhóm PLN và WH ASM1 các mã đang ở IQC chưa Pass. */
+/** Work Order Ready-IQC: Zalo nhóm PLN các mã đang ở IQC chưa Pass. */
 exports.notifyReadyIqcWaitingFn = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
