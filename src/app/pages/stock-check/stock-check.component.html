@@ -51,7 +51,7 @@
           <span><i class="material-icons">qr_code_scanner</i></span>
           <div>
             <h1>Stock Check</h1>
-            <p>Quét nhân viên, chọn nhà máy, rồi tìm mã để xem và bỏ tick KK.</p>
+            <p>Nhà máy {{ factory }}. Quét nhân viên rồi tìm mã.</p>
           </div>
         </div>
         <div class="lp-tools">
@@ -77,13 +77,6 @@
           <input id="sc-operator-input" type="text" [(ngModel)]="operatorInput" placeholder="ASP0000" autocomplete="off" (keyup.enter)="submitOperator()">
           <i class="material-icons">qr_code_scanner</i>
         </div>
-        <div class="lp-asms">
-          <button type="button" *ngFor="let item of factories" [class.is-on]="factory === item" (click)="setFactory(item)">
-            <span><i class="material-icons">person</i></span>
-            <b>{{ item }}</b>
-            <small>Quét mã khu vực {{ item }}</small>
-          </button>
-        </div>
         <button type="button" class="lp-start" (click)="submitOperator()" [disabled]="isLoading">
           <i class="material-icons">search</i>
           {{ isLoading ? 'Đang tải mã…' : 'Tìm mã' }}
@@ -99,7 +92,7 @@
       <aside class="lp-brief">
         <h3>Cách kiểm</h3>
         <ol>
-          <li [class.is-on]="step === 'gate'"><b>Nhân viên</b><span>Quét mã ASP, chọn ASM1 hoặc ASM2</span></li>
+          <li [class.is-on]="step === 'gate'"><b>Nhân viên</b><span>Đã chọn {{ factory }}. Quét mã ASP</span></li>
           <li [class.is-on]="step === 'work' && !selectedRow"><b>Tìm mã</b><span>Ô tìm nằm ở sidebar trái</span></li>
           <li [class.is-on]="!!selectedRow"><b>Tick KK</b><span>Bấm mã để xem lịch sử. Bỏ tick để KK lại</span></li>
         </ol>
@@ -186,19 +179,21 @@
   <!-- PDA -->
   <ng-container *ngIf="uiMode === 'pda'">
   <header class="sc-top">
-    <div class="sc-top__brand">
-      <span class="sc-mark"><i class="material-icons">fact_check</i></span>
-      <div>
-        <h1>Stock Check</h1>
-        <p *ngIf="step === 'gate'">Quét nhân viên, chọn nhà máy, rồi tìm mã.</p>
-        <p *ngIf="step !== 'gate'">{{ operatorId }} · {{ factory }}</p>
+    <div class="sc-top__row">
+      <div class="sc-top__brand">
+        <span class="sc-mark"><i class="material-icons">fact_check</i></span>
+        <div>
+          <h1>Stock Check</h1>
+          <p *ngIf="step === 'gate'">Nhà máy {{ factory }}. Quét nhân viên rồi tìm mã.</p>
+          <p *ngIf="step !== 'gate'">{{ operatorId }} · {{ factory }}</p>
+        </div>
       </div>
-    </div>
-    <div class="sc-top__tools">
-      <div class="sc-switch" role="tablist" aria-label="Giao diện">
+      <div class="sc-switch" *ngIf="allowLaptopUi" role="tablist" aria-label="Giao diện">
         <button type="button" (click)="setUiMode('laptop')">Laptop</button>
         <button type="button" class="is-on">PDA</button>
       </div>
+    </div>
+    <div class="sc-pda-nav">
       <button type="button" class="sc-textbtn" (click)="openMissingCatalog()">Mã không có</button>
       <button type="button" class="sc-textbtn" (click)="openShortageCatalog()">Thiếu lượng</button>
       <button type="button" class="sc-textbtn" (click)="goToMenu()">Menu</button>
@@ -210,9 +205,7 @@
       <span class="sc-kicker">1 · Nhân viên</span>
       <label for="sc-operator-input">Quét mã nhân viên</label>
       <input id="sc-operator-input" class="sc-pda__scan" type="text" [(ngModel)]="operatorInput" placeholder="ASP0000" autocomplete="off" (keyup.enter)="submitOperator()">
-      <div class="sc-factories sc-factories--pda">
-        <button type="button" *ngFor="let item of factories" [class.is-on]="factory === item" (click)="setFactory(item)">{{ item }}</button>
-      </div>
+      <p class="sc-pda__meta">Nhà máy {{ factory }}</p>
       <button type="button" class="sc-go sc-go--block" (click)="submitOperator()" [disabled]="isLoading">{{ isLoading ? 'Đang tải mã…' : 'Tìm mã' }}</button>
     </section>
 
@@ -333,6 +326,16 @@
           <em>Thiếu {{ formatQty(report.shortageQty) }} {{ report.unit }}</em>
           <small>{{ report.reportedBy || '—' }} · {{ formatDateTime(report.createdAt) }}</small>
         </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="sc-overlay sc-factory" *ngIf="showFactoryPopup">
+    <div class="sc-dialog sc-factory__box">
+      <h3>Chọn nhà máy</h3>
+      <p>Chọn ASM1 hoặc ASM2 trước khi làm bước tiếp theo.</p>
+      <div class="sc-factory__picks">
+        <button type="button" *ngFor="let item of factories" (click)="confirmFactory(item)">{{ item }}</button>
       </div>
     </div>
   </div>

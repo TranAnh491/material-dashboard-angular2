@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, HostListener } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Router } from '@angular/router';
 import { isAsm3OrWh3PrefixLocation } from '../layout-warehouse/layout-warehouse-location.util';
@@ -73,11 +73,11 @@ interface ShortageReport {
 })
 export class StockCheckComponent {
   readonly factories: KkFactory[] = ['ASM1', 'ASM2'];
-
+  showFactoryPopup = true;
   step: ScStep = 'gate';
   operatorId = '';
   operatorInput = '';
-  factory: KkFactory | '' = '';
+  factory: KkFactory = 'ASM1';
 
   locationInput = '';
   location = '';
@@ -100,6 +100,7 @@ export class StockCheckComponent {
   shortageReports: ShortageReport[] = [];
   catalogLoading = false;
   uiMode: 'laptop' | 'pda' = 'laptop';
+  allowLaptopUi = true;
   kkHistory: KkHistoryItem[] = [];
   historyLoading = false;
   historyCode = '';
@@ -113,6 +114,30 @@ export class StockCheckComponent {
     private firestore: AngularFirestore,
     private router: Router
   ) {
+    this.syncViewportMode();
+    this.applySavedFactory();
+  }
+
+  @HostListener('window:resize')
+  onViewportResize(): void {
+    const phone = this.isPhoneViewport();
+    this.allowLaptopUi = !phone;
+    if (phone) this.uiMode = 'pda';
+  }
+
+  setUiMode(mode: 'laptop' | 'pda'): void {
+    if (mode === 'laptop' && !this.allowLaptopUi) return;
+    this.uiMode = mode;
+    localStorage.setItem('stock-check-ui', mode);
+  }
+
+  private syncViewportMode(): void {
+    const phone = this.isPhoneViewport();
+    this.allowLaptopUi = !phone;
+    if (phone) {
+      this.uiMode = 'pda';
+      return;
+    }
     const saved = localStorage.getItem('stock-check-ui');
     if (saved === 'laptop' || saved === 'pda') {
       this.uiMode = saved;
@@ -121,9 +146,8 @@ export class StockCheckComponent {
     }
   }
 
-  setUiMode(mode: 'laptop' | 'pda'): void {
-    this.uiMode = mode;
-    localStorage.setItem('stock-check-ui', mode);
+  private isPhoneViewport(): boolean {
+    return window.innerWidth <= 820;
   }
 
   clearSelection(): void {
@@ -316,6 +340,7 @@ export class StockCheckComponent {
       this.error = 'Chọn ASM1 hoặc ASM2.';
       return;
     }
+    if (this.showFactoryPopup) return;
     this.operatorId = code;
     this.error = '';
     this.info = '';
@@ -338,16 +363,35 @@ export class StockCheckComponent {
     }
   }
 
-  setFactory(factory: KkFactory): void {
-    if (this.factory === factory) return;
+  confirmFactory(factory: KkFactory): void {
+    const changed = this.factory !== factory;
     this.factory = factory;
+    localStorage.setItem('selectedFactory', factory);
+    this.showFactoryPopup = false;
+    if (!changed) return;
     this.factoryRows = [];
     this.factoryRowsKey = '';
     this.rows = [];
-    this.location = '';
     this.selectedId = '';
+    this.searchCode = '';
     this.resetScan();
     this.clearKkHistory();
+    this.step = 'gate';
+  }
+
+  private applySavedFactory(): void {
+    const saved = localStorage.getItem('selectedFactory');
+    const next: KkFactory = saved === 'ASM2' ? 'ASM2' : 'ASM1';
+    if (this.factory === next && this.factoryRowsKey === next) return;
+    this.factory = next;
+    this.factoryRows = [];
+    this.factoryRowsKey = '';
+    if (this.step === 'work') {
+      this.rows = [];
+      this.selectedId = '';
+      this.resetScan();
+      this.clearKkHistory();
+    }
   }
 
   async submitLocation(): Promise<void> {
