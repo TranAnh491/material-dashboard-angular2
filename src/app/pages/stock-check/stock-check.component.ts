@@ -38,6 +38,17 @@ interface MissingReport {
   createdAt: Date | null;
 }
 
+interface KkHistoryItem {
+  id: string;
+  materialCode: string;
+  materialName: string;
+  location: string;
+  checkedBy: string;
+  factory: string;
+  checkedAt: Date | null;
+  action: 'tick' | 'untick';
+}
+
 interface ShortageReport {
   id: string;
   inventoryDocId: string;
@@ -89,9 +100,14 @@ export class StockCheckComponent {
   shortageReports: ShortageReport[] = [];
   catalogLoading = false;
   uiMode: 'laptop' | 'pda' = 'laptop';
+  kkHistory: KkHistoryItem[] = [];
+  historyLoading = false;
+  historyCode = '';
 
   private factoryRows: StockCheckRow[] = [];
   private factoryRowsKey = '';
+  private historyRequest = 0;
+  private historyCache = new Map<string, KkHistoryItem[]>();
 
   constructor(
     private firestore: AngularFirestore,
@@ -114,6 +130,7 @@ export class StockCheckComponent {
     this.selectedId = '';
     this.resetScan();
     this.error = '';
+    this.clearKkHistory();
   }
 
   get remainCount(): number {
@@ -125,12 +142,145 @@ export class StockCheckComponent {
     return Math.round((this.doneCount / this.rows.length) * 100);
   }
 
+  get historyPeopleList(): { id: string; tick: number; untick: number }[] {
+    const map = new Map<string, { tick: number; untick: number }>();
+    this.kkHistory.forEach((item) => {
+      const id = item.checkedBy || 'Chưa rõ';
+      const current = map.get(id) || { tick: 0, untick: 0 };
+      if (item.action === 'untick') current.untick += 1;
+      else current.tick += 1;
+      map.set(id, current);
+    });
+    return Array.from(map.entries()).map(([id, value]) => ({ id, tick: value.tick, untick: value.untick }));
+  }
+
   goToMenu(): void {
     void this.router.navigate(['/menu']);
   }
 
   goNav(path: string): void {
     void this.router.navigate([path]);
+  }
+
+  formatHistoryTime(value: Date | null): string {
+    if (!value) return '—';
+    const hh = String(value.getHours()).padStart(2, '0');
+    const mi = String(value.getMinutes()).padStart(2, '0');
+    const dd = String(value.getDate()).padStart(2, '0');
+    const mm = String(value.getMonth() + 1).padStart(2, '0');
+    return `${hh}:${mi} ${dd}-${mm}-${value.getFullYear()}`;
+  }
+
+  onHistorySearch(value: string): void {
+    const q = String(value || '').trim().toUpperCase();
+    if (!q) {
+      this.clearKkHistory();
+      return;
+    }
+    if (this.rows.some((row) => row.materialCode === q)) {
+      this.loadHistoryForCode(q);
+      return;
+    }
+    if (this.historyCode && this.historyCode !== q) {
+      this.clearKkHistory();
+    }
+  }
+
+  submitHistorySearch(code?: string): void {
+    const q = String(code || this.searchCode || '').trim().toUpperCase();
+    if (!q) {
+      this.clearKkHistory();
+      return;
+    }
+    this.searchCode = q;
+    this.loadHistoryForCode(q);
+  }
+
+  get historyCodePicks(): string[] {
+    const q = this.searchCode.trim().toUpperCase();
+    if (!q || !this.rows.length) return [];
+    const codes: string[] = [];
+    this.rows.forEach((row) => {
+      if (codes.length >= 8 || codes.includes(row.materialCode)) return;
+      if (row.materialCode.includes(q)) codes.push(row.materialCode);
+    });
+    return codes;
+  }
+
+  loadHistoryForCode(code: string): void {
+    const materialCode = String(code || '').trim().toUpperCase();
+    this.historyCode = materialCode;
+    if (!materialCode) {
+      this.clearKkHistory();
+      return;
+    }
+    const cached = this.historyCache.get(materialCode);
+    if (cached) {
+      this.kkHistory = cached;
+      this.historyLoading = false;
+      return;
+    }
+    const request = ++this.historyRequest;
+    this.historyLoading = true;
+    this.kkHistory = [];
+    this.firestore.collection('inventory-kk-history', (ref) =>
+      ref.where('materialCode', '==', materialCode)
+    ).get().subscribe((snapshot) => {
+      if (request !== this.historyRequest || this.historyCode !== materialCode) return;
+      const fetched = snapshot.docs.map((doc) => this.mapKkHistory(doc.id, doc.data() as any));
+      const pendingLocal = (this.historyCache.get(materialCode) || [])
+        .filter((item) => item.id.startsWith('local-') && !fetched.some((row) =>
+          row.checkedBy === item.checkedBy && row.checkedAt?.getTime() === item.checkedAt?.getTime()
+        ));
+      const items = [...pendingLocal, ...fetched]
+        .sort((a, b) => (b.checkedAt?.getTime() || 0) - (a.checkedAt?.getTime() || 0));
+      this.historyCache.set(materialCode, items);
+      this.kkHistory = items;
+      this.historyLoading = false;
+    }, () => {
+      if (request !== this.historyRequest) return;
+      this.historyLoading = false;
+    });
+  }
+
+  private clearKkHistory(): void {
+    this.historyRequest += 1;
+    this.historyCode = '';
+    this.kkHistory = [];
+    this.historyLoading = false;
+  }
+
+  private rememberHistoryTick(row: StockCheckRow, checkedAt: Date, action: 'tick' | 'untick'): void {
+    const code = row.materialCode.trim().toUpperCase();
+    const item: KkHistoryItem = {
+      id: `local-${action}-${checkedAt.getTime()}`,
+      materialCode: code,
+      materialName: row.materialName,
+      location: row.location,
+      checkedBy: this.operatorId,
+      factory: row.factory,
+      checkedAt,
+      action
+    };
+    const prev = this.historyCache.get(code) || (this.historyCode === code ? this.kkHistory : []);
+    const items = [item, ...prev];
+    this.historyCache.set(code, items);
+    this.historyCode = code;
+    this.kkHistory = items;
+    this.historyLoading = false;
+  }
+
+  private mapKkHistory(id: string, data: any): KkHistoryItem {
+    return {
+      id,
+      materialCode: String(data?.materialCode || '').trim(),
+      materialName: String(data?.materialName || '').trim(),
+      location: String(data?.location || '').trim(),
+      checkedBy: String(data?.checkedBy || data?.kkBy || '').trim(),
+      factory: String(data?.factory || '').trim(),
+      checkedAt: this.normalizeTimestamp(data?.checkedAt || data?.kkAt),
+      action: data?.action === 'untick' ? 'untick' : 'tick'
+    };
   }
 
   get selectedRow(): StockCheckRow | null {
@@ -143,20 +293,20 @@ export class StockCheckComponent {
 
   get filteredRows(): StockCheckRow[] {
     const q = this.searchCode.trim().toUpperCase();
-    const rows = q
-      ? this.rows.filter((row) =>
-          row.materialCode.includes(q) ||
-          row.poNumber.toUpperCase().includes(q) ||
-          row.batchNumber.toUpperCase().includes(q)
-        )
-      : this.rows.slice();
-    return rows.sort((a, b) => {
-      if (a.kkChecked !== b.kkChecked) return a.kkChecked ? 1 : -1;
-      return a.materialCode.localeCompare(b.materialCode) || a.poNumber.localeCompare(b.poNumber);
-    });
+    if (!q) return [];
+    return this.rows
+      .filter((row) =>
+        row.materialCode.includes(q) ||
+        row.poNumber.toUpperCase().includes(q) ||
+        row.batchNumber.toUpperCase().includes(q)
+      )
+      .sort((a, b) => {
+        if (a.kkChecked !== b.kkChecked) return a.kkChecked ? 1 : -1;
+        return a.materialCode.localeCompare(b.materialCode) || a.poNumber.localeCompare(b.poNumber);
+      });
   }
 
-  submitOperator(): void {
+  async submitOperator(): Promise<void> {
     const code = this.parseEmployee(this.operatorInput);
     if (!code) {
       this.error = 'Mã nhân viên không đúng. Quét theo chuẩn ASP + 4 số.';
@@ -169,8 +319,23 @@ export class StockCheckComponent {
     this.operatorId = code;
     this.error = '';
     this.info = '';
-    this.step = 'location';
-    this.focus('sc-location-input');
+    this.isLoading = true;
+    try {
+      await this.ensureFactoryRows(this.factory);
+      this.rows = this.factoryRows.slice();
+      this.location = '';
+      this.searchCode = '';
+      this.selectedId = '';
+      this.resetScan();
+      this.clearKkHistory();
+      this.step = 'work';
+      this.focus('sc-search-input');
+    } catch (e) {
+      console.error('stock-check search:', e);
+      this.error = 'Không tải được danh sách mã.';
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   setFactory(factory: KkFactory): void {
@@ -182,6 +347,7 @@ export class StockCheckComponent {
     this.location = '';
     this.selectedId = '';
     this.resetScan();
+    this.clearKkHistory();
   }
 
   async submitLocation(): Promise<void> {
@@ -205,6 +371,7 @@ export class StockCheckComponent {
       this.selectedId = '';
       this.searchCode = '';
       this.resetScan();
+      this.clearKkHistory();
       this.step = 'work';
       if (!this.rows.length) {
         this.info = `Không có mã tại vị trí ${loc}.`;
@@ -226,6 +393,7 @@ export class StockCheckComponent {
     this.selectedId = '';
     this.searchCode = '';
     this.resetScan();
+    this.clearKkHistory();
     this.error = '';
     this.info = '';
     this.focus('sc-location-input');
@@ -234,9 +402,11 @@ export class StockCheckComponent {
   selectRow(row: StockCheckRow): void {
     if (this.selectedId === row.id) return;
     this.selectedId = row.id;
+    this.searchCode = row.materialCode;
     this.resetScan();
     this.error = '';
     this.info = '';
+    this.loadHistoryForCode(row.materialCode);
     if (!row.kkChecked) this.focus('sc-scan-input');
   }
 
@@ -270,6 +440,57 @@ export class StockCheckComponent {
     const row = this.selectedRow;
     if (!row || !this.scanMatched || row.kkChecked || this.isSaving) return;
     await this.markDone(row);
+  }
+
+  async clearKkTick(row: StockCheckRow): Promise<void> {
+    if (!row.kkChecked || this.isSaving) return;
+    this.isSaving = true;
+    this.error = '';
+    try {
+      const kkAt = new Date();
+      await this.firestore.collection('inventory-materials').doc(row.id).update({
+        kkChecked: false,
+        kkBy: '',
+        kkAt: null,
+        updatedAt: kkAt
+      });
+      await this.firestore.collection('inventory-kk-history').add({
+        inventoryDocId: row.id,
+        factory: row.factory,
+        materialCode: row.materialCode,
+        materialName: row.materialName,
+        poNumber: row.poNumber,
+        batchNumber: row.batchNumber,
+        location: row.location,
+        quantity: row.quantity,
+        stock: row.stock,
+        unit: row.unit,
+        action: 'untick',
+        checkedBy: this.operatorId,
+        checkedAt: kkAt,
+        checkedDateKey: this.toDateKey(kkAt),
+        createdAt: kkAt
+      });
+      this.rememberHistoryTick(row, kkAt, 'untick');
+      row.kkChecked = false;
+      row.kkBy = '';
+      row.kkAt = null;
+      const cached = this.factoryRows.find((item) => item.id === row.id);
+      if (cached) {
+        cached.kkChecked = false;
+        cached.kkBy = '';
+        cached.kkAt = null;
+      }
+      this.selectedId = row.id;
+      this.resetScan();
+      this.info = `Đã bỏ tick KK ${row.materialCode}. Có thể kiểm lại.`;
+      this.focus('sc-scan-input');
+    } catch (e) {
+      console.error('stock-check untick:', e);
+      this.error = 'Không bỏ được tick KK.';
+    } finally {
+      this.isSaving = false;
+    }
   }
 
   async reportMissing(): Promise<void> {
@@ -421,6 +642,7 @@ export class StockCheckComponent {
       if (this.selectedId === report.inventoryDocId) {
         this.selectedId = '';
         this.resetScan();
+        this.clearKkHistory();
       }
       this.info = `Đã duyệt xóa mã ${report.materialCode}.`;
     } catch (e) {
@@ -506,6 +728,7 @@ export class StockCheckComponent {
         quantity: row.quantity,
         stock: row.stock,
         unit: row.unit,
+        action: 'tick',
         checkedBy: this.operatorId,
         checkedAt: kkAt,
         checkedDateKey: this.toDateKey(kkAt),
@@ -520,8 +743,8 @@ export class StockCheckComponent {
         cached.kkBy = this.operatorId;
         cached.kkAt = kkAt;
       }
+      this.rememberHistoryTick(row, kkAt, 'tick');
       this.info = `Done ${row.materialCode}.`;
-      this.selectedId = '';
       this.resetScan();
       if (this.doneCount === this.rows.length && this.rows.length) {
         this.info = `Đã kiểm xong vị trí ${this.location}.`;

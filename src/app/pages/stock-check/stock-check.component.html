@@ -2,50 +2,73 @@
   <div class="lp" *ngIf="uiMode === 'laptop'">
     <aside class="lp-nav">
       <div class="lp-nav__brand">
-        <span><i class="material-icons">grid_view</i></span>
-        Stock Check
+        <span><i class="material-icons">history</i></span>
+        <div>
+          <b>Lịch sử kiểm kê</b>
+          <small *ngIf="!historyCode">Tìm mã để xem</small>
+          <small *ngIf="historyCode">{{ historyCode }}</small>
+        </div>
       </div>
-      <nav>
-        <button type="button" class="is-on"><i class="material-icons">grid_view</i>Stock Check</button>
-        <button type="button" (click)="goNav('/inbound')"><i class="material-icons">move_to_inbox</i>Nhập kho</button>
-        <button type="button" (click)="goNav('/outbound')"><i class="material-icons">outbox</i>Xuất kho</button>
-        <button type="button" (click)="goNav('/materials')"><i class="material-icons">inventory_2</i>Tồn kho</button>
-        <button type="button" (click)="goNav('/quan-ly-nguyen-lieu')"><i class="material-icons">fact_check</i>Kiểm kê</button>
-        <button type="button" (click)="goNav('/report')"><i class="material-icons">bar_chart</i>Báo cáo</button>
-        <button type="button" (click)="goNav('/settings')"><i class="material-icons">settings</i>Cài đặt</button>
-      </nav>
-      <div class="lp-nav__foot">
-        <span class="lp-dot"></span> Online
-        <small>v1.0.0</small>
+      <label class="lp-search lp-search--side">
+        <i class="material-icons">search</i>
+        <input id="sc-search-input" type="text" [(ngModel)]="searchCode" placeholder="Tìm mã hàng" autocomplete="off" (ngModelChange)="onHistorySearch($event)" (keyup.enter)="submitHistorySearch()">
+      </label>
+      <div class="lp-hist__picks" *ngIf="historyCodePicks.length">
+        <button type="button" *ngFor="let code of historyCodePicks" [class.is-on]="historyCode === code" (click)="submitHistorySearch(code)">{{ code }}</button>
+      </div>
+      <div class="lp-hist__sum" *ngIf="historyCode && !historyLoading">
+        <strong>{{ kkHistory.length }}</strong>
+        <span>lượt Tick KK / Bỏ tick KK</span>
+        <ul *ngIf="historyPeopleList.length">
+          <li *ngFor="let person of historyPeopleList">
+            <b>{{ person.id }}</b>
+            <span>
+              <ng-container *ngIf="person.tick">Tick KK {{ person.tick }}</ng-container>
+              <ng-container *ngIf="person.untick">{{ person.tick ? ' · ' : '' }}Bỏ tick KK {{ person.untick }}</ng-container>
+            </span>
+          </li>
+        </ul>
+      </div>
+      <div class="lp-hist">
+        <p class="lp-hist__empty" *ngIf="!historyCode">Nhập mã ở ô tìm, rồi Enter, để xem lịch sử KK.</p>
+        <p class="lp-hist__empty" *ngIf="historyCode && historyLoading">Đang tải lịch sử mã {{ historyCode }}…</p>
+        <p class="lp-hist__empty" *ngIf="historyCode && !historyLoading && !kkHistory.length">Mã {{ historyCode }} chưa được tick KK lần nào.</p>
+        <article class="lp-hist__item" *ngFor="let item of kkHistory">
+          <span class="lp-hist__avatar">{{ item.checkedBy.slice(-2) || '—' }}</span>
+          <div>
+            <b>{{ item.checkedBy || 'Chưa rõ' }}</b>
+            <span class="lp-hist__act" [class.is-untick]="item.action === 'untick'">{{ item.action === 'untick' ? 'Bỏ tick KK' : 'Tick KK' }}</span>
+            <small>{{ item.location || '—' }}<ng-container *ngIf="item.factory"> · {{ item.factory }}</ng-container></small>
+            <em>{{ formatHistoryTime(item.checkedAt) }}</em>
+          </div>
+        </article>
       </div>
     </aside>
 
     <div class="lp-main">
-      <div class="lp-tools">
-        <div class="sc-switch" role="tablist" aria-label="Giao diện">
-          <button type="button" [class.is-on]="uiMode === 'laptop'" (click)="setUiMode('laptop')"><i class="material-icons">laptop</i>Laptop</button>
-          <button type="button" (click)="setUiMode('pda')"><i class="material-icons">qr_code_scanner</i>PDA</button>
+      <header class="lp-head">
+        <div class="lp-head__title">
+          <span><i class="material-icons">qr_code_scanner</i></span>
+          <div>
+            <h1>Stock Check</h1>
+            <p>Quét nhân viên, chọn nhà máy, rồi tìm mã để xem và bỏ tick KK.</p>
+          </div>
         </div>
-        <button type="button" class="sc-textbtn" (click)="openMissingCatalog()"><i class="material-icons">inventory</i>Mã không có</button>
-        <button type="button" class="sc-textbtn" (click)="openShortageCatalog()"><i class="material-icons">warning_amber</i>Thiếu lượng</button>
-        <button type="button" class="sc-textbtn" (click)="goToMenu()"><i class="material-icons">apps</i>Menu</button>
-      </div>
+        <div class="lp-tools">
+          <div class="sc-switch" role="tablist" aria-label="Giao diện">
+            <button type="button" [class.is-on]="uiMode === 'laptop'" (click)="setUiMode('laptop')"><i class="material-icons">laptop</i>Laptop</button>
+            <button type="button" (click)="setUiMode('pda')"><i class="material-icons">qr_code_scanner</i>PDA</button>
+          </div>
+          <button type="button" class="sc-textbtn" (click)="openMissingCatalog()"><i class="material-icons">inventory</i>Mã không có</button>
+          <button type="button" class="sc-textbtn" (click)="openShortageCatalog()"><i class="material-icons">warning_amber</i>Thiếu lượng</button>
+          <button type="button" class="sc-textbtn" (click)="goToMenu()"><i class="material-icons">apps</i>Menu</button>
+        </div>
+      </header>
 
       <p class="sc-banner sc-banner--err" *ngIf="error">{{ error }}</p>
       <p class="sc-banner sc-banner--ok" *ngIf="info">{{ info }}</p>
 
-      <section class="lp-hero">
-        <span class="lp-hero__icon"><i class="material-icons">qr_code_scanner</i></span>
-        <div>
-          <h1>Stock Check</h1>
-          <p>Quét mã để kiểm tra tồn kho nhanh chóng và chính xác</p>
-        </div>
-        <div class="lp-hero__art" aria-hidden="true">
-          <i class="material-icons">qr_code_2</i>
-          <i class="material-icons">document_scanner</i>
-        </div>
-      </section>
-
+      <div class="lp-board" *ngIf="step !== 'work'">
       <section class="lp-card" *ngIf="step === 'gate'">
         <h2><i></i>1. Nhập mã nhân viên</h2>
         <label for="sc-operator-input">Quét mã nhân viên</label>
@@ -61,56 +84,59 @@
             <small>Quét mã khu vực {{ item }}</small>
           </button>
         </div>
-        <button type="button" class="lp-start" (click)="submitOperator()">
-          <i class="material-icons">qr_code_scanner</i>
-          Bắt đầu
+        <button type="button" class="lp-start" (click)="submitOperator()" [disabled]="isLoading">
+          <i class="material-icons">search</i>
+          {{ isLoading ? 'Đang tải mã…' : 'Tìm mã' }}
           <i class="material-icons">chevron_right</i>
         </button>
+        <div class="lp-card__meta">
+          <div><span>Bước</span><b>Nhân viên</b></div>
+          <div><span>Lịch sử KK</span><b>Theo mã chọn</b></div>
+          <div><span>Nhà máy</span><b>{{ factory || 'Chưa chọn' }}</b></div>
+        </div>
       </section>
 
-      <section class="lp-card" *ngIf="step === 'location'">
-        <h2><i></i>2. Scan vị trí</h2>
-        <p class="lp-note">{{ operatorId }} · {{ factory }}</p>
-        <label for="sc-location-input">Quét vị trí</label>
-        <div class="lp-field">
-          <i class="material-icons">place</i>
-          <input id="sc-location-input" type="text" [(ngModel)]="locationInput" placeholder="Quét vị trí" autocomplete="off" [disabled]="isLoading" (keyup.enter)="submitLocation()">
-          <i class="material-icons">qr_code_scanner</i>
+      <aside class="lp-brief">
+        <h3>Cách kiểm</h3>
+        <ol>
+          <li [class.is-on]="step === 'gate'"><b>Nhân viên</b><span>Quét mã ASP, chọn ASM1 hoặc ASM2</span></li>
+          <li [class.is-on]="step === 'work' && !selectedRow"><b>Tìm mã</b><span>Ô tìm nằm ở sidebar trái</span></li>
+          <li [class.is-on]="!!selectedRow"><b>Tick KK</b><span>Bấm mã để xem lịch sử. Bỏ tick để KK lại</span></li>
+        </ol>
+        <div class="lp-brief__last">
+          <span>Lịch sử KK</span>
+          <strong>Theo mã đang chọn</strong>
+          <small>Bấm một mã để xem đã tick bao nhiêu lần và bởi ai.</small>
         </div>
-        <button type="button" class="lp-start" (click)="submitLocation()" [disabled]="isLoading">
-          <i class="material-icons">qr_code_scanner</i>
-          {{ isLoading ? 'Đang tải…' : 'Xem mã tại vị trí' }}
-          <i class="material-icons">chevron_right</i>
-        </button>
-      </section>
+      </aside>
+      </div>
 
       <section class="lp-work" *ngIf="step === 'work'">
         <div class="lp-work__bar">
-          <div><span>Vị trí</span><strong>{{ location }}</strong></div>
-          <div><span>Đã xong</span><strong>{{ doneCount }}</strong></div>
-          <div><span>Còn lại</span><strong>{{ remainCount }}</strong></div>
-          <div class="lp-work__track"><span>{{ progressPercent }}%</span><i [style.width.%]="progressPercent"></i></div>
-          <button type="button" class="sc-textbtn" (click)="changeLocation()">Đổi vị trí</button>
-          <input id="sc-search-input" type="text" [(ngModel)]="searchCode" placeholder="Tìm mã, PO, batch">
+          <div><span>Kết quả</span><strong>{{ filteredRows.length }}</strong></div>
+          <div><span>Nhà máy</span><strong>{{ factory }}</strong></div>
+          <div><span>Nhân viên</span><strong>{{ operatorId }}</strong></div>
         </div>
         <div class="lp-work__grid">
           <div class="sc-tablewrap">
             <table>
               <thead>
                 <tr>
-                  <th>#</th><th>Mã hàng</th><th>Tên</th><th>PO</th><th>Batch</th><th>Tồn</th><th></th>
+                  <th>#</th><th>Mã hàng</th><th>Tên</th><th>Vị trí</th><th>PO</th><th>Batch</th><th>Tồn</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngIf="!filteredRows.length"><td colspan="7">Không có mã khớp.</td></tr>
+                <tr *ngIf="!searchCode.trim()"><td colspan="8">Nhập mã để tìm.</td></tr>
+                <tr *ngIf="searchCode.trim() && !filteredRows.length"><td colspan="8">Không có mã khớp.</td></tr>
                 <tr *ngFor="let row of filteredRows; let i = index" [class.is-on]="selectedId === row.id" [class.is-done]="row.kkChecked" (click)="selectRow(row)">
                   <td>{{ i + 1 }}</td>
                   <td class="sc-code">{{ row.materialCode }}</td>
                   <td>{{ row.materialName || '—' }}</td>
+                  <td>{{ row.location || '—' }}</td>
                   <td>{{ row.poNumber || '—' }}</td>
                   <td>{{ row.batchNumber || '—' }}</td>
                   <td>{{ formatQty(row.stock) }} {{ row.unit }}</td>
-                  <td><span class="sc-pill" [class.sc-pill--ok]="row.kkChecked">{{ row.kkChecked ? 'Done' : 'Chưa' }}</span></td>
+                  <td><span class="sc-pill" [class.sc-pill--ok]="row.kkChecked">{{ row.kkChecked ? 'Đã tick' : 'Chưa' }}</span></td>
                 </tr>
               </tbody>
             </table>
@@ -120,6 +146,7 @@
             <h2>{{ row.materialCode }}</h2>
             <p>{{ row.materialName || '—' }}</p>
             <dl>
+              <div><dt>Vị trí</dt><dd>{{ row.location || '—' }}</dd></div>
               <div><dt>PO</dt><dd>{{ row.poNumber || '—' }}</dd></div>
               <div><dt>Batch</dt><dd>{{ row.batchNumber || '—' }}</dd></div>
               <div><dt>Tồn</dt><dd>{{ formatQty(row.stock) }} {{ row.unit }}</dd></div>
@@ -143,20 +170,16 @@
               </div>
               <button type="button" class="sc-go sc-go--danger" (click)="reportMissing()" [disabled]="isSaving">Báo cáo mã không có</button>
             </ng-container>
-            <p class="sc-done" *ngIf="row.kkChecked">Đã Done{{ row.kkBy ? ' · ' + row.kkBy : '' }}</p>
+            <p class="sc-done" *ngIf="row.kkChecked">Đã tick KK{{ row.kkBy ? ' · ' + row.kkBy : '' }}</p>
+            <button type="button" class="sc-go sc-go--line" *ngIf="row.kkChecked" (click)="clearKkTick(row)" [disabled]="isSaving">Bỏ tick KK</button>
           </aside>
           <aside class="sc-side sc-side--idle" *ngIf="!selectedRow">
-            <h2>Chọn một mã</h2>
-            <p>Bấm dòng trong bảng, quét tem, rồi xác nhận đủ lượng.</p>
+            <h2>Tìm một mã</h2>
+            <p>Tìm mã ở sidebar trái để xem lịch sử KK. Bấm dòng nếu cần bỏ tick và kiểm lại.</p>
           </aside>
         </div>
       </section>
 
-      <section class="lp-ready" *ngIf="step === 'gate'">
-        <i class="material-icons">plagiarism</i>
-        <h3>Sẵn sàng quét</h3>
-        <p>Vui lòng quét mã nhân viên để bắt đầu</p>
-      </section>
     </div>
   </div>
 
@@ -167,8 +190,8 @@
       <span class="sc-mark"><i class="material-icons">fact_check</i></span>
       <div>
         <h1>Stock Check</h1>
-        <p *ngIf="step === 'gate'">Quét nhân viên, chọn nhà máy, rồi kiểm từng vị trí.</p>
-        <p *ngIf="step !== 'gate'">{{ operatorId }} · {{ factory }}<ng-container *ngIf="location"> · {{ location }}</ng-container></p>
+        <p *ngIf="step === 'gate'">Quét nhân viên, chọn nhà máy, rồi tìm mã.</p>
+        <p *ngIf="step !== 'gate'">{{ operatorId }} · {{ factory }}</p>
       </div>
     </div>
     <div class="sc-top__tools">
@@ -190,32 +213,21 @@
       <div class="sc-factories sc-factories--pda">
         <button type="button" *ngFor="let item of factories" [class.is-on]="factory === item" (click)="setFactory(item)">{{ item }}</button>
       </div>
-      <button type="button" class="sc-go sc-go--block" (click)="submitOperator()">Bắt đầu</button>
-    </section>
-
-    <section class="sc-pda" *ngIf="step === 'location'">
-      <span class="sc-kicker">2 · Vị trí</span>
-      <label for="sc-location-input">Scan vị trí</label>
-      <input id="sc-location-input" class="sc-pda__scan" type="text" [(ngModel)]="locationInput" placeholder="Quét kệ" autocomplete="off" [disabled]="isLoading" (keyup.enter)="submitLocation()">
-      <button type="button" class="sc-go sc-go--block" (click)="submitLocation()" [disabled]="isLoading">{{ isLoading ? 'Đang tải…' : 'Xem mã' }}</button>
+      <button type="button" class="sc-go sc-go--block" (click)="submitOperator()" [disabled]="isLoading">{{ isLoading ? 'Đang tải mã…' : 'Tìm mã' }}</button>
     </section>
 
     <section class="sc-pda" *ngIf="step === 'work' && !selectedRow">
-      <div class="sc-pda__head">
-        <button type="button" class="sc-textbtn" (click)="changeLocation()">Đổi vị trí</button>
-        <strong>{{ location }}</strong>
-        <span>{{ doneCount }}/{{ rows.length }}</span>
-      </div>
-      <div class="sc-track"><i [style.width.%]="progressPercent"></i></div>
-      <input id="sc-search-input" type="text" [(ngModel)]="searchCode" placeholder="Tìm mã">
+      <span class="sc-kicker">Tìm mã</span>
+      <input id="sc-search-input" class="sc-pda__scan" type="text" [(ngModel)]="searchCode" placeholder="Tìm mã hàng" autocomplete="off">
       <button type="button" class="sc-pda__item" *ngFor="let row of filteredRows"
               [class.is-on]="selectedId === row.id" [class.is-done]="row.kkChecked" (click)="selectRow(row)">
         <b>{{ row.materialCode }}</b>
-        <small>{{ row.poNumber || '—' }} · {{ row.batchNumber || '—' }}</small>
+        <small>{{ row.location || '—' }} · {{ row.poNumber || '—' }}</small>
         <em>{{ formatQty(row.stock) }} {{ row.unit }}</em>
-        <span>{{ row.kkChecked ? 'Done' : 'Chọn' }}</span>
+        <span>{{ row.kkChecked ? 'Đã tick' : 'Chọn' }}</span>
       </button>
-      <p class="sc-empty" *ngIf="!filteredRows.length">Không có mã khớp.</p>
+      <p class="sc-empty" *ngIf="!searchCode.trim()">Nhập mã để tìm.</p>
+      <p class="sc-empty" *ngIf="searchCode.trim() && !filteredRows.length">Không có mã khớp.</p>
     </section>
 
     <section class="sc-pda sc-pda--focus" *ngIf="step === 'work' && selectedRow as row">
@@ -239,7 +251,11 @@
         </div>
         <button type="button" class="sc-go sc-go--block sc-go--danger" (click)="reportMissing()" [disabled]="isSaving">Báo cáo mã không có</button>
       </ng-container>
-      <p class="sc-done" *ngIf="row.kkChecked">Đã Done{{ row.kkBy ? ' · ' + row.kkBy : '' }}</p>
+      <p class="sc-done" *ngIf="row.kkChecked">Đã tick KK{{ row.kkBy ? ' · ' + row.kkBy : '' }}</p>
+      <p class="sc-pda__meta" *ngIf="selectedRow && historyLoading">Đang tải lịch sử tick KK…</p>
+      <p class="sc-pda__meta" *ngIf="selectedRow && !historyLoading">Đã tick KK {{ kkHistory.length }} lần</p>
+      <p class="sc-pda__meta" *ngFor="let person of historyPeopleList">{{ person.id }} · <ng-container *ngIf="person.tick">Tick KK {{ person.tick }}</ng-container><ng-container *ngIf="person.untick">{{ person.tick ? ' · ' : '' }}Bỏ tick KK {{ person.untick }}</ng-container></p>
+      <button type="button" class="sc-go sc-go--block sc-go--line" *ngIf="row.kkChecked" (click)="clearKkTick(row)" [disabled]="isSaving">Bỏ tick KK</button>
     </section>
   </ng-container>
 

@@ -14,6 +14,32 @@ interface PalletItem {
   printCount: number;
 }
 
+type InternalTemplateSize = 'A3' | 'A4' | 'A5';
+
+interface InternalTemplateItem {
+  id: string;
+  name: string;
+  content: string;
+  contentEn: string;
+  bilingual: boolean;
+  pageCount: number;
+  size: InternalTemplateSize;
+  previewUrl: string;
+  createdAt: Date;
+}
+
+interface InternalTemplatePage {
+  viLines: string[];
+  enLines: string[];
+  viFontPx: number;
+  viLinePx: number;
+  enFontPx: number;
+  enLinePx: number;
+  iconH: number;
+}
+
+type InternalTemplateScene = 'door' | 'stop' | 'staff' | 'talk' | 'battery' | 'cart' | 'bin' | 'pallet' | 'note';
+
 const ALLOWED_EMPLOYEE_PREFIXES = ['ASP0106', 'ASP0119', 'ASP1761', 'ASP0538', 'ASP0384'];
 const SCAN_MAX_MS = 150; // Coi là quét nếu nhập xong trong 150ms
 type PalletLabelSizeKey = '100x100' | '130x100';
@@ -110,6 +136,27 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   showFormSignModal = false;
   formSignSize: 'A4' | 'A5' = 'A4';
   isPrintingFormSigns = false;
+
+  showInternalTemplateModal = false;
+  showInternalTemplateForm = false;
+  isLoadingInternalTemplates = false;
+  isSavingInternalTemplate = false;
+  internalTemplateError = '';
+  internalTemplateName = '';
+  internalTemplateContent = '';
+  internalTemplateContentEn = '';
+  internalTemplatePages = 1;
+  internalTemplateSize: InternalTemplateSize = 'A4';
+  internalTemplateBilingual = false;
+  internalTemplatePreviewUrl = '';
+  internalTemplates: InternalTemplateItem[] = [];
+  readonly internalTemplateSizes: InternalTemplateSize[] = ['A3', 'A4', 'A5'];
+  private readonly internalTemplatePageMm: Record<InternalTemplateSize, { w: number; h: number }> = {
+    A3: { w: 297, h: 420 },
+    A4: { w: 210, h: 297 },
+    A5: { w: 148, h: 210 }
+  };
+  private internalMeasureCanvas?: HTMLCanvasElement;
   readonly formSigns: Array<{ id: string; vi: string; en: string }> = [
     { id: 'closeDoor', vi: 'Vui lòng đóng cửa khi ra vào', en: 'Please close the door when entering or leaving' },
     { id: 'noEntry', vi: 'Không phận sự miễn vào', en: 'No unauthorized entry' },
@@ -2697,5 +2744,534 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   </div>
 </body>
 </html>`;
+  }
+
+  get internalTemplatePageCount(): number {
+    const n = Math.floor(Number(this.internalTemplatePages) || 0);
+    return Math.min(20, Math.max(1, n));
+  }
+
+  openInternalTemplateModal(): void {
+    this.showInternalTemplateModal = true;
+    this.showInternalTemplateForm = false;
+    this.internalTemplateError = '';
+    this.loadInternalTemplates();
+  }
+
+  closeInternalTemplateModal(): void {
+    if (this.isSavingInternalTemplate) return;
+    this.showInternalTemplateModal = false;
+    this.showInternalTemplateForm = false;
+  }
+
+  openInternalTemplateForm(): void {
+    this.internalTemplateName = '';
+    this.internalTemplateContent = '';
+    this.internalTemplateContentEn = '';
+    this.internalTemplatePages = 1;
+    this.internalTemplateSize = 'A4';
+    this.internalTemplateBilingual = false;
+    this.internalTemplateError = '';
+    this.showInternalTemplateForm = true;
+    this.refreshInternalTemplateDrawing();
+  }
+
+  closeInternalTemplateForm(): void {
+    if (this.isSavingInternalTemplate) return;
+    this.showInternalTemplateForm = false;
+    this.internalTemplateError = '';
+  }
+
+  loadInternalTemplates(): void {
+    this.isLoadingInternalTemplates = true;
+    this.firestore.collection('pallet-internal-templates').get()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(snapshot => {
+        const rows = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          const size = data.size === 'A3' || data.size === 'A5' ? data.size : 'A4';
+          const pageCount = Math.min(20, Math.max(1, Number(data.pageCount) || 1));
+          let previewUrl = String(data.previewUrl || '');
+          try {
+            previewUrl = this.drawInternalTemplatePreview({
+              name: String(data.name || 'Mẫu nội bộ'),
+              content: String(data.content || ' '),
+              contentEn: String(data.contentEn || ''),
+              bilingual: !!data.bilingual,
+              pageCount,
+              size
+            }) || previewUrl;
+          } catch (err) {
+            console.error('draw saved template', err);
+          }
+          return {
+            id: doc.id,
+            name: String(data.name || ''),
+            content: String(data.content || ''),
+            contentEn: String(data.contentEn || ''),
+            bilingual: !!data.bilingual,
+            pageCount,
+            size,
+            previewUrl,
+            createdAt: data.createdAt?.toDate?.() || new Date()
+          } as InternalTemplateItem;
+        });
+        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        this.internalTemplates = rows;
+        this.isLoadingInternalTemplates = false;
+        this.cdr.markForCheck();
+      }, () => {
+        this.isLoadingInternalTemplates = false;
+        this.cdr.markForCheck();
+      });
+  }
+
+  async createInternalTemplate(): Promise<void> {
+    if (this.isSavingInternalTemplate) return;
+    const name = this.internalTemplateName.trim();
+    const content = this.internalTemplateContent.trim();
+    const contentEn = this.internalTemplateContentEn.trim();
+    const pageCount = this.internalTemplatePageCount;
+    const size = this.internalTemplateSize;
+    const bilingual = this.internalTemplateBilingual;
+    if (!name) {
+      this.internalTemplateError = 'Đặt tên mẫu.';
+      return;
+    }
+    if (!content) {
+      this.internalTemplateError = 'Nhập nội dung.';
+      return;
+    }
+    if (bilingual && !contentEn) {
+      this.internalTemplateError = 'Nhập nội dung tiếng Anh.';
+      return;
+    }
+    this.internalTemplateError = '';
+    this.isSavingInternalTemplate = true;
+    try {
+      const previewUrl = this.drawInternalTemplatePreview({
+        name, content, contentEn, bilingual, pageCount, size
+      });
+      await this.firestore.collection('pallet-internal-templates').add({
+        name,
+        content,
+        contentEn: bilingual ? contentEn : '',
+        bilingual,
+        pageCount,
+        size,
+        previewUrl,
+        createdAt: new Date()
+      });
+      this.showInternalTemplateForm = false;
+      this.loadInternalTemplates();
+    } catch (err) {
+      console.error('create internal template', err);
+      this.internalTemplateError = 'Không lưu được mẫu. Vui lòng thử lại.';
+    } finally {
+      this.isSavingInternalTemplate = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  setInternalTemplateSize(size: InternalTemplateSize): void {
+    this.internalTemplateSize = size;
+    this.refreshInternalTemplateDrawing();
+  }
+
+  refreshInternalTemplateDrawing(): void {
+    const name = this.internalTemplateName.trim() || 'Mẫu nội bộ';
+    const content = this.internalTemplateContent.trim() || 'Nội dung sẽ hiện ở đây';
+    try {
+      this.internalTemplatePreviewUrl = this.drawInternalTemplatePreview({
+        name,
+        content,
+        contentEn: this.internalTemplateContentEn.trim(),
+        bilingual: this.internalTemplateBilingual && !!this.internalTemplateContentEn.trim(),
+        pageCount: this.internalTemplatePageCount,
+        size: this.internalTemplateSize
+      });
+    } catch (err) {
+      console.error('draw internal template', err);
+      this.internalTemplatePreviewUrl = '';
+    }
+  }
+
+  printInternalTemplate(item: InternalTemplateItem): void {
+    const mm = this.internalTemplatePageMm[item.size];
+    const scene = this.internalTemplateScene(`${item.name} ${item.content}`);
+    const icon = this.internalTemplateIconSvg(scene);
+    const laid = this.layoutInternalTemplate(item);
+    const pages = laid.pages.map((page, index) => {
+      const vi = page.viLines.map((line) => this.escapeSafetyText(line)).join('<br>');
+      const en = page.enLines.map((line) => this.escapeSafetyText(line)).join('<br>');
+      const viMm = this.internalPxToMm(page.viFontPx, mm.w);
+      const viLh = this.internalPxToMm(page.viLinePx, mm.w);
+      const enMm = this.internalPxToMm(page.enFontPx, mm.w);
+      const enLh = this.internalPxToMm(page.enLinePx, mm.w);
+      const iconMm = this.internalPxToMm(page.iconH, mm.w);
+      return `<section class="pg${index ? ' pg--next' : ''}">
+        <div class="ico" style="width:${iconMm}mm;height:${iconMm}mm">${icon}</div>
+        <h1>${this.escapeSafetyText(item.name)}</h1>
+        <div class="vi" style="font-size:${viMm}mm;line-height:${viLh}mm">${vi}</div>
+        ${item.bilingual ? `<div class="en" style="font-size:${enMm}mm;line-height:${enLh}mm">${en}</div>` : ''}
+        <footer>${item.size} · ${index + 1}/${laid.pages.length}</footer>
+      </section>`;
+    }).join('');
+    this.printLabelHtml(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>${this.escapeSafetyText(item.name)}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #fff; }
+    .pg {
+      position: relative;
+      width: ${mm.w}mm;
+      height: ${mm.h}mm;
+      padding: 12mm 14mm 12mm;
+      page-break-after: always;
+      font-family: "Times New Roman", Times, serif;
+      color: #111;
+      overflow: hidden;
+      border: 2.2mm solid #111;
+      text-align: center;
+    }
+    .ico { margin: 0 auto 4mm; }
+    .ico svg { width: 100%; height: 100%; display: block; }
+    h1 { font-size: 9mm; line-height: 1.15; text-align: center; margin-bottom: 4mm; }
+    .vi, .en { width: 100%; word-break: break-word; text-align: center; }
+    .en { margin-top: 5mm; font-style: italic; }
+    footer { position: absolute; left: 0; right: 0; bottom: 6mm; text-align: center; font-size: 3.2mm; }
+    @page { size: ${item.size} portrait; margin: 0; }
+  </style>
+</head>
+<body>${pages}</body>
+</html>`);
+  }
+
+  private internalPxToMm(px: number, pageWidthMm: number): number {
+    return Math.round((px / 1000) * pageWidthMm * 10) / 10;
+  }
+
+  private internalMeasureCtx(): CanvasRenderingContext2D {
+    if (!this.internalMeasureCanvas) this.internalMeasureCanvas = document.createElement('canvas');
+    const ctx = this.internalMeasureCanvas.getContext('2d');
+    if (!ctx) throw new Error('Không tạo được hình mô tả.');
+    return ctx;
+  }
+
+  private wrapInternalLines(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    fontPx: number
+  ): string[] {
+    ctx.font = `${fontPx}px "Times New Roman", Times, serif`;
+    const lines: string[] = [];
+    const paragraphs = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    const pushLong = (word: string) => {
+      let chunk = '';
+      for (const ch of word) {
+        const next = chunk + ch;
+        if (ctx.measureText(next).width <= maxWidth) chunk = next;
+        else {
+          if (chunk) lines.push(chunk);
+          chunk = ch;
+        }
+      }
+      return chunk;
+    };
+    paragraphs.forEach((para, paraIndex) => {
+      const words = para.split(/\s+/).filter(Boolean);
+      if (!words.length) {
+        if (paraIndex < paragraphs.length - 1) lines.push('');
+        return;
+      }
+      let line = '';
+      words.forEach((word) => {
+        const test = line ? `${line} ${word}` : word;
+        if (ctx.measureText(test).width <= maxWidth) {
+          line = test;
+          return;
+        }
+        if (line) lines.push(line);
+        line = ctx.measureText(word).width <= maxWidth ? word : pushLong(word);
+      });
+      if (line) lines.push(line);
+    });
+    return lines.length ? lines : [''];
+  }
+
+  private expandInternalLines(lines: string[], count: number): string[] {
+    const out = lines.map((line) => line.trim()).filter((line) => line.length > 0);
+    if (!out.length) return Array.from({ length: count }, () => '');
+    let guard = 0;
+    while (out.length < count && guard < 800) {
+      guard += 1;
+      let idx = 0;
+      out.forEach((line, i) => {
+        if (line.length > out[idx].length) idx = i;
+      });
+      const line = out[idx];
+      if (line.length < 2) break;
+      const mid = Math.max(1, Math.floor(line.length / 2));
+      let cut = line.lastIndexOf(' ', mid);
+      if (cut < 1) cut = mid;
+      const left = line.slice(0, cut).trim();
+      const right = line.slice(cut).trim();
+      if (!left || !right) break;
+      out.splice(idx, 1, left, right);
+    }
+    while (out.length < count) out.push(out[out.length - 1]);
+    return out;
+  }
+
+  private chunkInternalLines(lines: string[], pages: number): string[][] {
+    const chunks: string[][] = [];
+    const base = Math.floor(lines.length / pages);
+    const extra = lines.length % pages;
+    let index = 0;
+    for (let page = 0; page < pages; page += 1) {
+      const take = base + (page < extra ? 1 : 0);
+      const slice = lines.slice(index, index + take);
+      chunks.push(slice.length ? slice : ['']);
+      index += take;
+    }
+    return chunks;
+  }
+
+  private fitInternalZone(lineCount: number, zoneH: number): { font: number; line: number } {
+    const n = Math.max(1, lineCount);
+    let line = zoneH / n;
+    let font = Math.min(line * 0.72, 86);
+    font = Math.max(16, font);
+    line = Math.max(font * 1.2, Math.min(line, font * 1.7));
+    if (line * n > zoneH) {
+      line = zoneH / n;
+      font = Math.max(12, line * 0.72);
+    }
+    return { font, line };
+  }
+
+  private layoutInternalTemplate(opts: {
+    name: string;
+    content: string;
+    contentEn: string;
+    bilingual: boolean;
+    pageCount: number;
+    size: InternalTemplateSize;
+  }): { pageW: number; pageH: number; margin: number; titlePx: number; pages: InternalTemplatePage[] } {
+    const mm = this.internalTemplatePageMm[opts.size];
+    const pageW = 1000;
+    const pageH = Math.round(pageW * (mm.h / mm.w));
+    const margin = 64;
+    const titlePx = 42;
+    const innerW = pageW - margin * 2;
+    const ctx = this.internalMeasureCtx();
+    const viAll = this.expandInternalLines(
+      this.wrapInternalLines(ctx, opts.content, innerW, 34),
+      opts.pageCount
+    );
+    const enAll = opts.bilingual
+      ? this.expandInternalLines(this.wrapInternalLines(ctx, opts.contentEn, innerW, 28), opts.pageCount)
+      : [];
+    const viChunks = this.chunkInternalLines(viAll, opts.pageCount);
+    const enChunks = opts.bilingual ? this.chunkInternalLines(enAll, opts.pageCount) : [];
+    const pages = viChunks.map((viLines, index) => {
+      const enLines = enChunks[index] || [];
+      const iconH = index === 0 ? Math.round(pageW * 0.34) : Math.round(pageW * 0.1);
+      const bodyH = pageH - margin - iconH - titlePx - 36 - margin - 40;
+      const viH = opts.bilingual ? bodyH * 0.58 : bodyH;
+      const enH = opts.bilingual ? bodyH * 0.34 : 0;
+      const viFit = this.fitInternalZone(viLines.length, Math.max(40, viH));
+      const enFit = this.fitInternalZone(enLines.length || 1, Math.max(24, enH || 1));
+      return {
+        viLines,
+        enLines,
+        viFontPx: viFit.font,
+        viLinePx: viFit.line,
+        enFontPx: enFit.font,
+        enLinePx: enFit.line,
+        iconH
+      };
+    });
+    return { pageW, pageH, margin, titlePx, pages };
+  }
+
+  private drawInternalTemplatePreview(opts: {
+    name: string;
+    content: string;
+    contentEn: string;
+    bilingual: boolean;
+    pageCount: number;
+    size: InternalTemplateSize;
+  }): string {
+    const laid = this.layoutInternalTemplate(opts);
+    const scene = this.internalTemplateScene(`${opts.name} ${opts.content}`);
+    const gap = 22;
+    const maxH = 1680;
+    let scale = 0.56;
+    const naturalH = laid.pages.length * laid.pageH * scale + (laid.pages.length - 1) * gap;
+    if (naturalH > maxH) scale = (maxH - (laid.pages.length - 1) * gap) / (laid.pages.length * laid.pageH);
+    const pageW = Math.max(220, Math.round(laid.pageW * scale));
+    const pageH = Math.max(300, Math.round(laid.pageH * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = pageW + 28;
+    canvas.height = laid.pages.length * pageH + (laid.pages.length - 1) * gap + 28;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Không tạo được hình mô tả.');
+    ctx.fillStyle = '#efeae2';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const s = pageW / laid.pageW;
+    laid.pages.forEach((page, index) => {
+      const left = 14;
+      const top = 14 + index * (pageH + gap);
+      ctx.fillStyle = 'rgba(17,24,39,0.08)';
+      ctx.fillRect(left + 8, top + 10, pageW, pageH);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(left, top, pageW, pageH);
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = Math.max(3, 7 * s);
+      ctx.strokeRect(left + 3, top + 3, pageW - 6, pageH - 6);
+      const icon = page.iconH * s;
+      this.drawInternalScene(ctx, scene, left + (pageW - icon) / 2, top + laid.margin * s * 0.45, icon);
+      let y = top + laid.margin * s * 0.45 + icon + 10 * s;
+      ctx.fillStyle = '#111';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.font = `700 ${Math.max(16, Math.round(laid.titlePx * s))}px "Times New Roman", Times, serif`;
+      ctx.fillText(opts.name, left + pageW / 2, y, pageW - laid.margin * 2 * s);
+      y += laid.titlePx * s + 8 * s;
+      ctx.font = `${Math.max(13, Math.round(page.viFontPx * s))}px "Times New Roman", Times, serif`;
+      page.viLines.forEach((line) => {
+        if (line) ctx.fillText(line, left + pageW / 2, y, pageW - laid.margin * 2 * s);
+        y += page.viLinePx * s;
+      });
+      if (opts.bilingual) {
+        y += 10 * s;
+        ctx.fillStyle = '#374151';
+        ctx.font = `italic ${Math.max(12, Math.round(page.enFontPx * s))}px "Times New Roman", Times, serif`;
+        page.enLines.forEach((line) => {
+          if (line) ctx.fillText(line, left + pageW / 2, y, pageW - laid.margin * 2 * s);
+          y += page.enLinePx * s;
+        });
+      }
+      ctx.fillStyle = '#6b7280';
+      ctx.font = `${Math.max(11, Math.round(16 * s))}px "Times New Roman", Times, serif`;
+      ctx.fillText(`${opts.size}  ·  ${index + 1} / ${laid.pages.length}`, left + pageW / 2, top + pageH - 26 * s);
+    });
+    let quality = 0.82;
+    let url = canvas.toDataURL('image/jpeg', quality);
+    while (url.length > 800000 && quality > 0.45) {
+      quality -= 0.1;
+      url = canvas.toDataURL('image/jpeg', quality);
+    }
+    return url;
+  }
+
+  private internalTemplateScene(text: string): InternalTemplateScene {
+    const s = String(text || '').toLowerCase();
+    if (/cửa|cua|door/.test(s)) return 'door';
+    if (/miễn vào|mien vao|cấm|cam vao|không vào|khong vao|no entry/.test(s)) return 'stop';
+    if (/nhân viên|nhan vien|staff|ppe|an toàn|an toan/.test(s)) return 'staff';
+    if (/báo|bao quản|quản lý|quan ly|notify/.test(s)) return 'talk';
+    if (/pin|battery/.test(s)) return 'battery';
+    if (/xe đẩy|xe day|trolley|xe nâng/.test(s)) return 'cart';
+    if (/thùng|thung|bin|nhựa|nhua/.test(s)) return 'bin';
+    if (/pallet|kệ| ke\b/.test(s)) return 'pallet';
+    return 'note';
+  }
+
+  private internalTemplateIconSvg(scene: InternalTemplateScene): string {
+    const s = 'fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"';
+    const wrap = (inner: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">${inner}</svg>`;
+    if (scene === 'door') return wrap(`<rect x="16" y="8" width="24" height="48" rx="2" ${s}/><circle cx="34" cy="32" r="1.8" fill="#111"/><path ${s} d="M46 18c8 6 8 22 0 28"/>`);
+    if (scene === 'stop') return wrap(`<circle cx="32" cy="22" r="7" ${s}/><path ${s} d="M18 54c2-14 8-18 14-18s12 4 14 18"/><circle cx="32" cy="32" r="26" fill="none" stroke="#c81e1e" stroke-width="3"/><path d="M14 14l36 36" stroke="#c81e1e" stroke-width="3" stroke-linecap="round"/>`);
+    if (scene === 'staff') return wrap(`<path ${s} d="M22 18h20l-2-8H24z"/><circle cx="32" cy="24" r="6" ${s}/><path ${s} d="M18 54c2-14 8-18 14-18s12 4 14 18"/>`);
+    if (scene === 'talk') return wrap(`<path ${s} d="M10 14h32v20H22l-8 8v-8H10z"/><circle cx="44" cy="40" r="8" ${s}/><path ${s} d="M40 54c1-6 3-8 4-8"/>`);
+    if (scene === 'battery') return wrap(`<rect x="10" y="22" width="36" height="20" rx="3" ${s}/><path ${s} d="M46 28h6v8h-6"/><path ${s} d="M22 32h8M26 28v8"/>`);
+    if (scene === 'cart') return wrap(`<path ${s} d="M8 18h10l6 22h24"/><circle cx="28" cy="48" r="4" ${s}/><circle cx="44" cy="48" r="4" ${s}/><path ${s} d="M20 28h28l-3 12H24"/>`);
+    if (scene === 'bin') return wrap(`<path ${s} d="M14 20h36l-4 32H18z"/><path ${s} d="M20 20l2-8h20l2 8"/><path ${s} d="M26 30v14M32 30v14M38 30v14"/>`);
+    if (scene === 'pallet') return wrap(`<rect x="8" y="28" width="48" height="8" rx="1" ${s}/><path ${s} d="M14 36v12M32 36v12M50 36v12"/><rect x="16" y="12" width="14" height="16" ${s}/><rect x="34" y="16" width="14" height="12" ${s}/>`);
+    return wrap(`<path ${s} d="M18 8h20l10 10v38H18z"/><path ${s} d="M38 8v10h10"/><path ${s} d="M24 30h16M24 38h16M24 46h10"/>`);
+  }
+
+  private drawInternalScene(
+    ctx: CanvasRenderingContext2D,
+    scene: InternalTemplateScene,
+    x: number,
+    y: number,
+    size: number
+  ): void {
+    const s = size;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#f7f3ea';
+    ctx.beginPath();
+    ctx.arc(s / 2, s / 2, s * 0.48, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = Math.max(2, s * 0.035);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    const u = s / 64;
+    const ink = () => {
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = Math.max(1.6, s * 0.028);
+    };
+    ctx.save();
+    ctx.translate(s * 0.18, s * 0.18);
+    ctx.scale(u * 0.64, u * 0.64);
+    ink();
+    const path = (d: string) => {
+      const p = new Path2D(d);
+      ctx.stroke(p);
+    };
+    if (scene === 'door') {
+      path('M18 6h22v52H18z');
+      ctx.beginPath(); ctx.arc(34, 32, 2, 0, Math.PI * 2); ctx.fill();
+      path('M40 16c10 8 10 24 0 32');
+    } else if (scene === 'stop') {
+      path('M32 12a8 8 0 1 1 0 16a8 8 0 1 1 0-16');
+      path('M16 54c3-16 9-20 16-20s13 4 16 20');
+      ctx.strokeStyle = '#c81e1e';
+      ctx.lineWidth = Math.max(2, s * 0.04);
+      path('M8 8l48 48');
+      ctx.beginPath(); ctx.arc(32, 32, 28, 0, Math.PI * 2); ctx.stroke();
+    } else if (scene === 'staff') {
+      path('M20 16h24l-2-8H22z');
+      path('M32 18a7 7 0 1 1 0 14a7 7 0 1 1 0-14');
+      path('M16 56c3-16 9-20 16-20s13 4 16 20');
+    } else if (scene === 'talk') {
+      path('M6 10h36v22H20l-10 10V32H6z');
+      path('M44 36a8 8 0 1 1 0 16a8 8 0 1 1 0-16');
+    } else if (scene === 'battery') {
+      path('M8 22h40v20H8z');
+      path('M48 28h8v8h-8');
+      path('M20 32h12M26 26v12');
+    } else if (scene === 'cart') {
+      path('M6 14h12l8 24h28');
+      path('M22 26h30l-4 12H24');
+      ctx.beginPath(); ctx.arc(28, 50, 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(46, 50, 4, 0, Math.PI * 2); ctx.stroke();
+    } else if (scene === 'bin') {
+      path('M12 18h40l-5 36H17z');
+      path('M18 18l3-8h22l3 8');
+      path('M24 28v16M32 28v16M40 28v16');
+    } else if (scene === 'pallet') {
+      path('M6 28h52v8H6z');
+      path('M14 36v16M32 36v16M50 36v16');
+      path('M14 10h16v18H14z');
+      path('M34 14h16v14H34z');
+    } else {
+      path('M16 6h22l12 12v40H16z');
+      path('M38 6v12h12');
+      path('M24 30h16M24 38h16M24 46h10');
+    }
+    ctx.restore();
+    ctx.restore();
   }
 }

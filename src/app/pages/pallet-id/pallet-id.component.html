@@ -58,6 +58,10 @@
       <span class="pid-tile__icon"><i class="material-icons">description</i></span>
       <span class="pid-tile__name">{{ isPrintingFormSigns ? 'Đang in' : 'Biểu mẫu' }}</span>
     </button>
+    <button type="button" class="pid-tile" (click)="openInternalTemplateModal()">
+      <span class="pid-tile__icon"><i class="material-icons">note_add</i></span>
+      <span class="pid-tile__name">Tạo mẫu nội bộ</span>
+    </button>
   </section>
 
   <div class="pid-listbar">
@@ -776,6 +780,123 @@
         <button class="btn-print-confirm" (click)="confirmScannedEmployee()">
           <i class="material-icons">check</i>
           Xác nhận
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" *ngIf="showInternalTemplateModal" (click)="closeInternalTemplateModal()">
+    <div class="modal-content itpl-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Tạo mẫu nội bộ</h3>
+        <button class="btn-close" type="button" (click)="closeInternalTemplateModal()" [disabled]="isSavingInternalTemplate">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+
+      <div class="modal-body itpl-body" *ngIf="!showInternalTemplateForm">
+        <div class="itpl-bar">
+          <div>
+            <p class="itpl-kicker">Mẫu đã lưu</p>
+            <p class="itpl-lead">Mỗi mẫu có hình mô tả theo nội dung, khổ giấy và số trang.</p>
+          </div>
+          <button type="button" class="itpl-add" (click)="openInternalTemplateForm()">+ Mẫu</button>
+        </div>
+        <p class="itpl-empty" *ngIf="isLoadingInternalTemplates">Đang tải mẫu…</p>
+        <div class="itpl-empty-card" *ngIf="!isLoadingInternalTemplates && !internalTemplates.length">
+          <i class="material-icons">draw</i>
+          <strong>Chưa có mẫu</strong>
+          <span>Bấm + Mẫu để đặt tên, nhập nội dung và xem hình mô tả.</span>
+        </div>
+        <div class="itpl-grid" *ngIf="internalTemplates.length">
+          <article class="itpl-card" *ngFor="let item of internalTemplates">
+            <img class="itpl-card__img" [src]="item.previewUrl" [alt]="item.name">
+            <div class="itpl-card__meta">
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.size }} · {{ item.pageCount }} trang<span *ngIf="item.bilingual"> · Song ngữ</span></span>
+              <button type="button" class="itpl-card__print" (click)="printInternalTemplate(item)">
+                <i class="material-icons">print</i>
+                In
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="modal-body itpl-body" *ngIf="showInternalTemplateForm">
+        <div class="itpl-studio">
+          <div class="itpl-form">
+            <label class="itpl-field">
+              <span>Đặt tên</span>
+              <input type="text"
+                     [(ngModel)]="internalTemplateName"
+                     (ngModelChange)="refreshInternalTemplateDrawing()"
+                     maxlength="80"
+                     placeholder="Ví dụ: Khu vực để pallet"
+                     [disabled]="isSavingInternalTemplate">
+            </label>
+            <label class="itpl-field">
+              <span>Nhập nội dung</span>
+              <textarea [(ngModel)]="internalTemplateContent"
+                        (ngModelChange)="refreshInternalTemplateDrawing()"
+                        rows="5"
+                        placeholder="Nội dung in trên mẫu"
+                        [disabled]="isSavingInternalTemplate"></textarea>
+            </label>
+            <div class="itpl-row">
+              <label class="itpl-field">
+                <span>Số trang</span>
+                <input type="number"
+                       min="1"
+                       max="20"
+                       step="1"
+                       [(ngModel)]="internalTemplatePages"
+                       (ngModelChange)="refreshInternalTemplateDrawing()"
+                       [disabled]="isSavingInternalTemplate">
+              </label>
+              <div class="itpl-field">
+                <span>Size</span>
+                <div class="itpl-sizes" role="group" aria-label="Size">
+                  <button type="button"
+                          *ngFor="let size of internalTemplateSizes"
+                          [class.is-on]="internalTemplateSize === size"
+                          (click)="setInternalTemplateSize(size)"
+                          [disabled]="isSavingInternalTemplate">
+                    {{ size }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <label class="itpl-check">
+              <input type="checkbox"
+                     [(ngModel)]="internalTemplateBilingual"
+                     (ngModelChange)="refreshInternalTemplateDrawing()"
+                     [disabled]="isSavingInternalTemplate">
+              <span>Song ngữ</span>
+            </label>
+            <label class="itpl-field" *ngIf="internalTemplateBilingual">
+              <span>Nội dung tiếng Anh</span>
+              <textarea [(ngModel)]="internalTemplateContentEn"
+                        (ngModelChange)="refreshInternalTemplateDrawing()"
+                        rows="3"
+                        placeholder="English content"
+                        [disabled]="isSavingInternalTemplate"></textarea>
+            </label>
+            <p class="itpl-hint">Hình bên cạnh cập nhật theo tên và nội dung. Chữ được chỉnh để đủ {{ internalTemplatePageCount }} trang {{ internalTemplateSize }}.</p>
+            <p class="itpl-error" *ngIf="internalTemplateError">{{ internalTemplateError }}</p>
+          </div>
+          <aside class="itpl-stage">
+            <p class="itpl-stage__label">Hình mô tả</p>
+            <img *ngIf="internalTemplatePreviewUrl" [src]="internalTemplatePreviewUrl" alt="Hình mô tả mẫu">
+          </aside>
+        </div>
+      </div>
+
+      <div class="modal-footer" *ngIf="showInternalTemplateForm">
+        <button class="btn-cancel" type="button" (click)="closeInternalTemplateForm()" [disabled]="isSavingInternalTemplate">Hủy</button>
+        <button class="btn-print-confirm" type="button" (click)="createInternalTemplate()" [disabled]="isSavingInternalTemplate">
+          <i class="material-icons">add</i>
+          {{ isSavingInternalTemplate ? 'Đang tạo' : 'Tạo' }}
         </button>
       </div>
     </div>
