@@ -1507,11 +1507,20 @@ $accent-soft: #ccfbf1;
 
 .jw-rack-label {
   fill: #000000;
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 9px;
+  font-weight: 700;
   text-anchor: middle;
-  dominant-baseline: auto;
+  dominant-baseline: hanging;
   pointer-events: none;
+
+  &--above {
+    dominant-baseline: auto;
+  }
+
+  &--side {
+    text-anchor: start;
+    dominant-baseline: middle;
+  }
 }
 
 .jw-block {

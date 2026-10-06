@@ -603,8 +603,9 @@
             <div class="kk-type-muc__bar">
               <button type="button"
                       class="kk-type-muc__head"
-                      (click)="toggleKkTypeMuc(muc.category, $event)">
-                <i class="material-icons">{{ isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less' }}</i>
+                      [attr.title]="muc.category === 'B017' ? 'Mở chi tiết để điền vị trí' : null"
+                      (click)="muc.category === 'B017' ? openKkB017LocDetail($event) : toggleKkTypeMuc(muc.category, $event)">
+                <i class="material-icons">{{ muc.category === 'B017' ? 'edit_location' : (isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less') }}</i>
                 <strong>{{ muc.title }}</strong>
                 <span *ngIf="!(isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc))">{{ muc.boxes.length }} loại</span>
                 <span class="kk-b009-board__range"
@@ -633,7 +634,7 @@
                 Reset lần quét
               </button>
             </div>
-            <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
+            <ng-container *ngIf="muc.category !== 'B017' && !isKkTypeMucCollapsed(muc.category)">
               <div class="kk-b009-board" *ngIf="isKkConnectorRackMuc(muc.category) && muc.groups?.length">
                 <p class="kk-b009-board__hint">Bấm ô vị trí để chọn tầng · bấm Chi tiết để mở bảng kiểm kê toàn bộ mã của vị trí đó.</p>
                 <div class="kk-b009-board__cols">

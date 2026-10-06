@@ -481,6 +481,11 @@
                           {{ line }}
                         </tspan>
                       </text>
+                      <text
+                        *ngIf="block.index === 1 && !isVerticalRackLayout"
+                        class="jw-rack-label jw-rack-label--above"
+                        [attr.x]="meterX(block.xM + block.wM / 2)"
+                        [attr.y]="j4MirrorTopY(block.yM, block.hM) - 1">{{ rackRowLabel(rack.num) }}</text>
                     </g>
                   </g>
                 </g>
@@ -1093,6 +1098,16 @@
                       {{ line }}
                     </tspan>
                   </text>
+                  <text
+                    *ngIf="block.index === 1 && !isVerticalRackLayout"
+                    class="jw-rack-label"
+                    [attr.x]="meterX(block.xM + block.wM / 2)"
+                    [attr.y]="meterY(block.yM + block.hM) + 2">{{ rackRowLabel(rack.num) }}</text>
+                  <text
+                    *ngIf="block.index === 1 && isVerticalRackLayout"
+                    class="jw-rack-label jw-rack-label--side"
+                    [attr.x]="meterX(block.xM + block.wM) + 3"
+                    [attr.y]="meterY(block.yM + block.hM / 2)">{{ rackRowLabel(rack.num) }}</text>
                 </g>
               </g>
               </g>

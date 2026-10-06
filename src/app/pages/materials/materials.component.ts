@@ -8154,7 +8154,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return head.length ? head.join(' ') : raw;
   }
 
-  /** B009/B016/B017/B018 chia kệ × tầng. Mục Nhựa / Dây cáp / B036 / B042: chỉ box loại, không mục con. */
+  /** B009/B016/B018 chia kệ × tầng. B017, Nhựa, Dây cáp, B036, B042: không chia mục con. */
   private kkTypeBrandGroupsOf(
     category: string,
     boxes: typeof this.kkTypeBoxesCached
@@ -8164,12 +8164,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     boxes: typeof this.kkTypeBoxesCached;
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
   }> | undefined {
-    // Nhựa / Dây cáp / B036 / B042: không chia mục con
-    if (category === 'NHUA' || category === 'DAYCAP' || category === 'B036' || category === 'B042') {
+    // B017 bấm mục là mở chi tiết điền vị trí, không chia kệ.
+    if (category === 'NHUA' || category === 'DAYCAP' || category === 'B036' || category === 'B042' || category === 'B017') {
       return undefined;
     }
     if (!/^B\d{3}$/.test(category)) return undefined;
-    if (category === 'B009' || category === 'B016' || category === 'B017' || category === 'B018') {
+    if (category === 'B009' || category === 'B016' || category === 'B018') {
       return this.kkTypeConnectorShelfGroupsOf(category, boxes);
     }
     return undefined;
@@ -8766,6 +8766,48 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return 0;
     });
     return out;
+  }
+
+  /** Mục B017: không chia kệ. Bấm mục là mở chi tiết toàn bộ mã để điền vị trí. */
+  openKkB017LocDetail(event?: Event): void {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const prefix = 'B017';
+    const from = 1;
+    const to = 999;
+    const title = 'Mục B017';
+    const groupCodes: string[] = [];
+    for (let n = from; n <= to; n++) groupCodes.push(this.kkConnectorCode(prefix, n));
+    this.kkAllStockDetail = false;
+    this.kkConnectorFloorDetail = {
+      prefix,
+      shelf: '',
+      level: 0,
+      from,
+      to,
+      locs: [],
+      title
+    };
+    this.kkActiveProductType = title;
+    this.kkActiveSourceProductType = title;
+    this.kkActivePinSplit = null;
+    const draft = this.buildEmptyKkTypeRow(title);
+    draft.productType = title;
+    draft.groupCodes = groupCodes;
+    this.kkActiveTypeDraft = draft;
+    this.kkTypePage = 1;
+    this.kkTypeDetailQuery = '';
+    this.kkTypeSearchDraft = '';
+    this.kkTypeFilterLoc = '';
+    this.kkTypeFilterWh = '';
+    this.kkTypeFilterRolls = '';
+    this.kkTypeSortQtyDesc = false;
+    this.kkTypeShowExtraFilter = false;
+    this.kkTypeDetailSig = '';
+    if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
+    this.syncKkPageLock();
+    this.cdr.detectChanges();
+    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
   }
 
   /** Chi tiết tầng B009/B016/B018 → giao diện kiểm kê, mọi mã set cho vị trí tầng đó. */

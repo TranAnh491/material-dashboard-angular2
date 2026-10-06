@@ -2369,6 +2369,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.show3D) this.syncRack3dInputs();
   }
 
+  /** Số dãy kệ, ví dụ R01, đặt ở đầu kệ đầu tiên. */
+  rackRowLabel(num: number): string {
+    return `R${String(num).padStart(2, '0')}`;
+  }
+
   /** Tách nhãn block xuống dòng nếu dài (VD R281 → R28 / 1). */
   blockLabelLines(code: string): string[] {
     const c = String(code || '').trim();
@@ -4321,7 +4326,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       clone.removeAttribute('style');
       clone.setAttribute('width', String(this.viewBoxW));
       clone.setAttribute('height', String(this.viewBoxH));
-      clone.querySelectorAll('.jw-grid, .jw-j4__grid-line').forEach((el) => el.remove());
+      clone.querySelectorAll('.jw-grid, .jw-j4__grid-line, .jw-block__pos-line, .jw-axis__line').forEach((el) => el.remove());
 
       const cssText = this.collectStylesheetCss();
       const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
