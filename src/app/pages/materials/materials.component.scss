@@ -7650,6 +7650,34 @@ $asm1-toolbar-h: 36px;
   }
 }
 
+.kk-aisle-rule {
+  margin: 0 0 12px;
+
+  h4 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0 0 8px;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  &__scroll {
+    max-height: 240px;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  &__groups {
+    white-space: pre-line;
+  }
+}
+
 .hidden-table-wrap {
   background: #ffffff;
   border: 1px solid #e2e8f0;

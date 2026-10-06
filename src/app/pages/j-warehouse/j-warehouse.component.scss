@@ -309,6 +309,10 @@ $accent-soft: #ccfbf1;
   }
 }
 
+.jw-print-block {
+  display: none;
+}
+
 .jw-map {
   flex: 1;
   min-width: 0;
@@ -940,14 +944,14 @@ $accent-soft: #ccfbf1;
   &__outline {
     fill: none;
     stroke: #000000;
-    stroke-width: 2;
+    stroke-width: 2.8;
     pointer-events: none;
   }
 
   &__room {
     fill: #ffffff;
     stroke: #000000;
-    stroke-width: 1.5;
+    stroke-width: 2.8;
 
     &--open {
       stroke: none;
@@ -1019,8 +1023,7 @@ $accent-soft: #ccfbf1;
 .jw-kho-mat {
   &__row {
     fill: none;
-    stroke: #94a3b8;
-    stroke-width: 0.6;
+    stroke: none;
     pointer-events: none;
   }
 
@@ -1031,7 +1034,7 @@ $accent-soft: #ccfbf1;
   &__block {
     fill: #ffffff;
     stroke: #000000;
-    stroke-width: 0.8;
+    stroke-width: 0.6;
   }
 
   &__hit:hover &__block {
@@ -1039,11 +1042,13 @@ $accent-soft: #ccfbf1;
   }
 
   &__hit--occupied &__block {
-    stroke-width: 1.6;
+    fill: #f1f5f9;
+    stroke-width: 0.6;
   }
 
   &__hit--on &__block {
-    stroke-width: 2.2;
+    fill: #e2e8f0;
+    stroke-width: 0.6;
   }
 
   &__label {
@@ -1757,6 +1762,60 @@ $accent-soft: #ccfbf1;
 .jw-btn--block {
   width: 100%;
   justify-content: center;
+}
+
+.jw-shelf-loc {
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+
+  &__title,
+  &__head {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: $text;
+  }
+
+  &__head {
+    margin-top: 10px;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  &__note,
+  &__status {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: $muted;
+  }
+
+  &__item {
+    padding: 8px 0;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  &__shelf {
+    font-size: 13px;
+    font-weight: 700;
+    color: $text;
+  }
+
+  &__groups {
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: $text;
+    white-space: pre-line;
+    word-break: break-word;
+
+    &--empty {
+      font-weight: 500;
+      color: $muted;
+    }
+  }
 }
 
 .jw-fields {
@@ -2541,5 +2600,94 @@ $accent-soft: #ccfbf1;
     height: 8px;
     border-radius: 50%;
     background: #22c55e;
+  }
+}
+
+@media print {
+  :host:has(.jw-print-block),
+  :host:has(.jw-print-block) .jw,
+  :host:has(.jw-print-block) .jw-shell,
+  :host:has(.jw-print-block) .jw-workspace,
+  :host:has(.jw-print-block) .jw-map,
+  :host:has(.jw-print-block) .jw-viewport,
+  :host:has(.jw-print-block) .jw-zoom-space {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  :host:has(.jw-print-block) .jw-header,
+  :host:has(.jw-print-block) .jw-tools,
+  :host:has(.jw-print-block) .jw-detail,
+  :host:has(.jw-print-block) .jw-map__toolbar {
+    display: none !important;
+  }
+
+  :host:has(.jw-print-block) .jw-workspace {
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  :host:has(.jw-print-block) .jw-svg {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  :host:has(.jw-print-block) .jw-print-block {
+    display: block;
+    position: fixed;
+    top: 6mm;
+    right: 6mm;
+    z-index: 20;
+    width: 78mm;
+    box-sizing: border-box;
+    background: #fff;
+    border: 1.5px solid #000;
+    padding: 3mm;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+
+    img {
+      display: block;
+      height: 14mm;
+      width: auto;
+      max-width: 100%;
+      margin: 0 0 2mm auto;
+      object-fit: contain;
+      background: #fff;
+    }
+
+    h1 {
+      margin: 0 0 1.5mm;
+      font-size: 20.8px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0 0 1mm;
+      font-size: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2mm;
+      font-size: 12px;
+    }
+
+    th,
+    td {
+      border-top: 1px solid #000;
+      padding: 1.2mm 0;
+      text-align: left;
+      font-weight: 400;
+      vertical-align: top;
+    }
+
+    th {
+      width: 28mm;
+      font-weight: 700;
+    }
   }
 }

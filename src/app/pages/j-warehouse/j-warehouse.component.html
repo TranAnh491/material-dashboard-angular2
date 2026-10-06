@@ -193,6 +193,20 @@
           </div>
         </div>
 
+        <aside class="jw-print-block" *ngIf="drawMode === 'kho' && !show3D && !showUtilization">
+          <img [src]="khoLogoSrc" alt="AIRSPEED">
+          <h1>{{ t('print.sheetTitle') }}</h1>
+          <p>{{ t('print.rev') }}: 1.0</p>
+          <p>{{ t('print.date') }}: {{ khoPrintDate }}</p>
+          <table>
+            <tbody>
+              <tr><th>R1–R18</th><td>{{ t('print.nvl') }}</td></tr>
+              <tr><th>{{ t('print.shelfS') }}</th><td>{{ t('print.nvl') }}</td></tr>
+              <tr><th>R19–R26</th><td>{{ t('print.fg') }}</td></tr>
+            </tbody>
+          </table>
+        </aside>
+
         <div
           *ngIf="!show3D && !showUtilization"
           #mapViewport
@@ -344,7 +358,7 @@
                   [attr.x2]="j4X + j4W"
                   [attr.y2]="j4MeterY(m)" />
 
-                <!-- Khu J4: Y01–Y02 KHP · Y02–Y04 phế liệu · Y04–Y07 Kho Admin -->
+                <!-- Khu J4 X16–X17: Vật tư VP Y01–Y02, Máy móc Y02–Y03, Tài liệu Y03–Y04, Hóa chất Y04–Y05, ASM2 Y05–Y07, NG Y07–Y09, Scrap ASM1 Y09–Y11, SX Y11–Y13, Admin Y13–Y15. Kho kề nhau cách 0,5m. -->
                 <g *ngFor="let z of j4FloorZones; trackBy: trackFloorZone">
                   <rect
                     class="jw-floor-zone__body"
@@ -363,13 +377,6 @@
                       [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
                       {{ line }}
                     </tspan>
-                  </text>
-                  <text
-                    class="jw-floor-zone__meta"
-                    *ngIf="!showTechDims"
-                    [attr.x]="meterX(z.xM + z.wM / 2)"
-                    [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 + 9 + (z.labelLines.length - 1) * 10">
-                    {{ z.wM | number:'1.0-2' }} × {{ z.hM | number:'1.0-2' }} m
                   </text>
                 </g>
 
@@ -401,31 +408,33 @@
                   </text>
                 </g>
 
-                <!-- Kệ kho J4 — giống bố trí kệ J5, chỉ hiển thị hình ảnh (chưa gán pallet) — chỉ hiện ở Bản vẽ Đăng ký -->
-                <g class="jw-j4-racks" *ngIf="racksReady && drawMode === 'dang-ky' && showDefaultAisles" aria-hidden="true">
+                <!-- Kệ R1–R26 kéo sang J4: từ mặt C tới X18 -->
+                <g class="jw-j4-racks" *ngIf="racksReady" aria-hidden="true">
+                  <ng-container *ngIf="showDefaultAisles">
                   <rect
-                    *ngFor="let g of pairGaps"
+                    *ngFor="let g of j4PairGaps"
                     class="jw-pair-gap"
                     [attr.x]="meterX(g.xM)"
                     [attr.y]="j4MirrorTopY(g.yM, g.hM)"
                     [attr.width]="meterW(g.wM)"
                     [attr.height]="j4MirrorHeight(g.hM)" />
                   <rect
-                    *ngFor="let g of blockGroupGaps"
+                    *ngFor="let g of j4BlockGroupGaps"
                     class="jw-block-group-gap"
                     [attr.x]="meterX(g.xM)"
                     [attr.y]="j4MirrorTopY(g.yM, g.hM)"
                     [attr.width]="meterW(g.wM)"
                     [attr.height]="j4MirrorHeight(g.hM)" />
                   <rect
-                    *ngFor="let a of aisles"
+                    *ngFor="let a of j4Aisles"
                     class="jw-aisle"
                     [attr.x]="meterX(a.xM)"
                     [attr.y]="j4MirrorTopY(a.yM, a.hM)"
                     [attr.width]="meterW(a.wM)"
                     [attr.height]="j4MirrorHeight(a.hM)" />
+                  </ng-container>
 
-                  <g *ngFor="let rack of racks; trackBy: trackRack">
+                  <g *ngFor="let rack of j4Racks; trackBy: trackRack">
                     <rect
                       class="jw-rack-outline"
                       [class.jw-rack-outline--inner]="rack.isInner"
@@ -476,6 +485,26 @@
                   </g>
                 </g>
 
+                <g *ngIf="j4FgAwaitStoreZone as z" aria-hidden="true">
+                  <rect
+                    class="jw-floor-zone__body"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="j4MeterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
+                  <text
+                    class="jw-floor-zone__label"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2">
+                    <tspan
+                      *ngFor="let line of z.labelLines; let i = index"
+                      [attr.x]="meterX(z.xM + z.wM / 2)"
+                      [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
+                      {{ line }}
+                    </tspan>
+                  </text>
+                </g>
+
                 <!-- Nền cao giống J5 (cùng vị trí trục), không có cầu thang -->
                 <rect
                   class="jw-j4__raised"
@@ -483,12 +512,27 @@
                   [attr.y]="j4Y"
                   [attr.width]="meterW(raisedZone.wM)"
                   [attr.height]="j4H" />
-                <text
-                  class="jw-j4__raised-label"
-                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
-                  [attr.y]="j4Y + j4H / 2">
-                  {{ t('raised.label') }} {{ RAISED_LEVEL }}
-                </text>
+                <g *ngFor="let z of j4RaisedPackZones; trackBy: trackFloorZone">
+                  <rect
+                    class="jw-floor-zone__body"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="j4MeterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
+                </g>
+                <g *ngFor="let z of j4RaisedPackZones; trackBy: trackFloorZone">
+                  <text
+                    class="jw-floor-zone__label"
+                    [attr.x]="meterX(z.xM + z.wM / 2)"
+                    [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 - 5">
+                    <tspan
+                      *ngFor="let line of z.labelLines; let i = index"
+                      [attr.x]="meterX(z.xM + z.wM / 2)"
+                      [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
+                      {{ line }}
+                    </tspan>
+                  </text>
+                </g>
 
                 <rect
                   *ngIf="!hideSharedFaceC"
@@ -626,7 +670,7 @@
               <g class="jw-floor-zone" aria-hidden="true">
                 <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
                   <rect
-                    *ngIf="!isKhoMatDashedBox(z)"
+                    *ngIf="!isKhoMatDashedBox(z) && !isRaisedPackZone(z)"
                     class="jw-floor-zone__body"
                     [class.jw-floor-zone__body--no-stroke]="isKhoMatBandFloorZone(z)"
                     [attr.x]="meterX(z.xM)"
@@ -746,6 +790,30 @@
                     </text>
                   </ng-template>
                 </g>
+                <g *ngFor="let door of khoMatEntranceDoors; trackBy: trackKhoMatDoor">
+                  <rect
+                    class="jw-office__door-gap"
+                    [attr.x]="meterX(door.hingeXM)"
+                    [attr.y]="meterY(door.yM) - 2"
+                    [attr.width]="meterW(door.wM)"
+                    height="4" />
+                  <path
+                    class="jw-office__door-swing"
+                    [attr.d]="khoMatDoorSwingPath(door)" />
+                  <line
+                    class="jw-office__door-leaf"
+                    [attr.x1]="meterX(door.hingeXM)"
+                    [attr.y1]="meterY(door.yM)"
+                    [attr.x2]="meterX(door.hingeXM)"
+                    [attr.y2]="meterY(door.yM + door.wM)" />
+                  <text
+                    class="jw-office__door-label"
+                    *ngIf="showTechDims"
+                    [attr.x]="meterX(door.hingeXM + door.wM / 2)"
+                    [attr.y]="meterY(door.yM) + 11">
+                    {{ door.wM * 1000 }}
+                  </text>
+                </g>
               </g>
 
               <!-- Hóa chất / ESD / in tem — viền gạch đứt, vẽ sau phòng để không bị che -->
@@ -826,6 +894,15 @@
                   [attr.y]="meterY(raisedZone.yM)"
                   [attr.width]="meterW(raisedZone.wM)"
                   [attr.height]="meterH(raisedZone.hM)" />
+                <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
+                  <rect
+                    *ngIf="isRaisedPackZone(z)"
+                    class="jw-floor-zone__body"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="meterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="meterH(z.hM)" />
+                </g>
                 <rect
                   class="jw-raised__edge"
                   [attr.x]="meterX(raisedZone.xM)"
@@ -854,24 +931,6 @@
                     meterX(raisedZone.xM - 0.35) + ',' + meterY(WIDTH_M / 2 + 0.7) + ' ' +
                     meterX(raisedZone.xM + 0.9) + ',' + meterY(WIDTH_M / 2)
                   " />
-                <text
-                  class="jw-raised__zone-name"
-                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
-                  [attr.y]="meterY(2.2)">
-                  {{ t('raised.fgOutbound') }}
-                </text>
-                <text
-                  class="jw-raised__label"
-                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
-                  [attr.y]="meterY(WIDTH_M / 2)">
-                  {{ t('raised.label') }} {{ RAISED_LEVEL }}
-                </text>
-                <text
-                  class="jw-raised__meta"
-                  [attr.x]="meterX(raisedZone.xM + raisedZone.wM / 2)"
-                  [attr.y]="meterY(WIDTH_M / 2) + 14">
-                  {{ raisedMetaLabel }}
-                </text>
               </g>
 
               <!-- Cửa cuốn ngoài layout (cạnh A + B) -->
@@ -1172,23 +1231,16 @@
                   <ng-container *ngIf="!(showTechDims && z.id === 'shipping-area')">
                     <text
                       class="jw-floor-zone__label"
-                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat' || isKhoMatSideBox(z)"
+                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat' || z.id === 'nvl-cho-xac-nhan' || isKhoMatSideBox(z)"
                       *ngFor="let line of z.labelLines; let i = index"
                       [attr.x]="meterX(floorZoneLabelXM(z))"
-                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * ((z.id === 'kho-hoa-chat' || isKhoMatSideBox(z)) ? 8.4 : 14)"
+                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * ((z.id === 'kho-hoa-chat' || z.id === 'nvl-cho-xac-nhan' || isKhoMatSideBox(z)) ? 8.4 : 14)"
                       [attr.transform]="floorZoneLabelRotate(z)
                         ? ('rotate(-90 ' + meterX(floorZoneLabelXM(z)) + ' ' + meterY(floorZoneLabelYM(z)) + ')')
                         : null">
                       {{ line }}
                     </text>
                   </ng-container>
-                  <text
-                    class="jw-floor-zone__meta"
-                    *ngIf="z.labelLines.length && z.id !== 'kho-mat-ext' && z.id !== 'kho-hoa-chat' && z.id !== 'kho-esd' && z.id !== 'khu-in-tem' && z.id !== 'shipping-area' && !showTechDims"
-                    [attr.x]="meterX(floorZoneLabelXM(z))"
-                    [attr.y]="meterY(floorZoneLabelYM(z)) + 9 + (z.labelLines.length - 1) * 10">
-                    {{ z.wM | number:'1.0-3' }} × {{ z.hM | number:'1.0-2' }} m
-                  </text>
                 </g>
               </g>
 
@@ -1415,7 +1467,7 @@
             </ng-container>
             <ng-container *ngIf="cam.building === 'j4'">
               <rect
-                *ngFor="let rack of racks; trackBy: trackRack"
+                *ngFor="let rack of j4Racks; trackBy: trackRack"
                 class="jw-cctv-monitor__rack"
                 [attr.x]="meterX(rack.xM)"
                 [attr.y]="j4MirrorTopY(rack.yM, rack.hM)"
@@ -1904,6 +1956,24 @@
             <h3>{{ t('info.title') }}</h3>
             <i class="material-icons">{{ infoPanelOpen ? 'expand_more' : 'chevron_right' }}</i>
           </button>
+          <div class="jw-shelf-loc" *ngIf="drawMode === 'kho' && infoPanelOpen">
+            <h4 class="jw-shelf-loc__title">{{ t('info.shelfTitle') }}</h4>
+            <p class="jw-shelf-loc__note">{{ t('info.stagingNote') }}</p>
+            <p class="jw-shelf-loc__status" *ngIf="shelfLocLoading">{{ t('info.shelfLoading') }}</p>
+            <p class="jw-shelf-loc__status" *ngIf="!shelfLocLoading && shelfLocError">{{ t('info.shelfError') }}</p>
+            <ng-container *ngIf="!shelfLocLoading && !shelfLocError">
+              <h5 class="jw-shelf-loc__head">{{ t('info.shelfR') }}</h5>
+              <div class="jw-shelf-loc__item" *ngFor="let row of shelfLocRRows">
+                <div class="jw-shelf-loc__shelf">{{ row.shelf }}</div>
+                <div class="jw-shelf-loc__groups" [class.jw-shelf-loc__groups--empty]="row.groups === '—'">{{ row.groups }}</div>
+              </div>
+              <h5 class="jw-shelf-loc__head">{{ t('info.shelfS') }}</h5>
+              <div class="jw-shelf-loc__item" *ngFor="let row of shelfLocSRows">
+                <div class="jw-shelf-loc__shelf">{{ row.shelf }}</div>
+                <div class="jw-shelf-loc__groups" [class.jw-shelf-loc__groups--empty]="row.groups === '—'">{{ row.groups }}</div>
+              </div>
+            </ng-container>
+          </div>
           <dl class="jw-fields" *ngIf="infoPanelOpen">
             <div class="jw-fields__row" *ngFor="let row of warehouseInfoRows">
               <dt>{{ row.label }}</dt>

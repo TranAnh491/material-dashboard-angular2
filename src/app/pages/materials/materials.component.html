@@ -3782,6 +3782,26 @@
           </button>
         </div>
       </div>
+      <div class="kk-aisle-rule" *ngIf="!kkCatalogLoading && kkCatalogAisleRows.length">
+        <h4>Theo dãy kệ</h4>
+        <p>R01 đến R26 và S01 đến S25. Mỗi dãy ghi nhóm mã được gán trong danh mục này.</p>
+        <div class="kk-aisle-rule__scroll">
+          <table class="hidden-table">
+            <thead>
+              <tr>
+                <th>Kệ</th>
+                <th>Nhóm mã</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of kkCatalogAisleRows">
+                <td><strong>{{ row.shelf }}</strong></td>
+                <td class="kk-aisle-rule__groups">{{ row.groups }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div class="hidden-table-wrap" *ngIf="!kkCatalogLoading">
         <table class="hidden-table" *ngIf="kkCatalogFilteredEntries.length; else kkCatalogEmpty">
           <thead>

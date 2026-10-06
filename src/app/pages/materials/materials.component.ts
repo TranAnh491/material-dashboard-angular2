@@ -350,6 +350,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private tieuHuyLinkQMap = new Map<string, number>();
   private readonly tieuHuyWarehouseValue = 'TIEUHUY';
   kkCatalogEntries: KkCatalogEntry[] = [];
+  kkCatalogAisleRows: Array<{ shelf: string; groups: string; family: 'R' | 'S' }> = [];
   kkCatalogQuery = '';
   kkCatalogLoading = false;
   kkCatalogImporting = false;
@@ -15765,14 +15766,27 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showKkCatalogPopup = false;
   }
 
+  private refreshKkCatalogAisleRows(): void {
+    this.kkCatalogAisleRows = this.kkCatalog.aisleCatalogRows(
+      this.kkCatalogEntries,
+      this.kkCatalogTypeMap,
+      this.kkTypeHomeLocs,
+      26,
+      25
+    );
+  }
+
   kkCatalogLocOf(entry: KkCatalogEntry): string {
     return this.kkCatalogEffectiveLoc(entry);
   }
 
   kkCatalogRuleLoc(entry: KkCatalogEntry): string {
-    const planned = this.kkCatalog.plannedShelfLocForMaterial(entry.groupCode);
-    if (planned) return planned;
-    return this.kkCatalog.homeLocForMaterial(entry.groupCode, this.kkCatalogTypeMap, this.kkTypeHomeLocs);
+    return this.kkCatalog.ruleLocForMaterial(
+      entry.groupCode,
+      entry.productType,
+      this.kkCatalogTypeMap,
+      this.kkTypeHomeLocs
+    );
   }
 
   private kkCatalogEffectiveLoc(entry: KkCatalogEntry): string {
@@ -15790,6 +15804,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.kkCatalog.saveGroupLocation(entry.groupCode, next);
       entry.location = next;
       this.kkCatalogLocCommitted.set(entry.groupCode, next);
+      this.refreshKkCatalogAisleRows();
     } catch (e) {
       console.error('saveKkCatalogLocation:', e);
       entry.location = prev;
@@ -15810,10 +15825,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkCatalogLocCommitted = new Map(
         this.kkCatalogEntries.map((entry) => [entry.groupCode, String(entry.location || '').trim().toUpperCase()])
       );
+      this.refreshKkCatalogAisleRows();
     } catch (e) {
       console.error('❌ loadKkCatalogPopup:', e);
       alert('❌ Không tải được Danh mục KK.');
       this.kkCatalogEntries = [];
+      this.kkCatalogAisleRows = [];
     } finally {
       this.kkCatalogLoading = false;
       this.cdr.detectChanges();
