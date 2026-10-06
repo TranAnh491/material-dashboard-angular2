@@ -9,10 +9,15 @@ import { JWarehouseComponent } from './j-warehouse.component';
 // trang J Warehouse (2D) không phải tải three.js ngay từ đầu.
 @NgModule({
   declarations: [JWarehouseComponent],
+  imports: [CommonModule, FormsModule],
+  exports: [JWarehouseComponent]
+})
+export class JWarehouseModule {}
+
+@NgModule({
   imports: [
-    CommonModule,
-    FormsModule,
+    JWarehouseModule,
     RouterModule.forChild([{ path: '', component: JWarehouseComponent }])
   ]
 })
-export class JWarehouseModule {}
+export class JWarehousePageModule {}

@@ -86,7 +86,7 @@ export class KkCatalogService {
 
   /**
    * Vị trí kệ theo đầu mã + khoảng nhóm mã (cùng quy định tab Quản lý nguyên liệu).
-   * B018521–B018600 → S03-T5. B017 theo ô S23-1… B009/B016 theo tầng Sxx-T1…T5.
+   * B018521–B018600 → S03-T5. B009/B016 theo tầng Sxx-T1…T5. B017 không gán kệ sẵn.
    */
   plannedShelfLocForMaterial(materialCode: string | null | undefined): string {
     const group = this.groupCodeFromMaterial(materialCode);
@@ -95,17 +95,6 @@ export class KkCatalogService {
     const prefix = `B${match[1]}`;
     const seq = Number(match[2]);
     if (!seq) return '';
-    if (prefix === 'B017') {
-      const slots = [
-        { loc: 'S23-1', from: 1, to: 20 },
-        { loc: 'S23-2', from: 21, to: 40 },
-        { loc: 'S24-1', from: 41, to: 60 },
-        { loc: 'S24-2', from: 61, to: 80 },
-        { loc: 'S25-1', from: 81, to: 100 },
-        { loc: 'S25-2', from: 101, to: 999 }
-      ];
-      return slots.find((slot) => seq >= slot.from && seq <= slot.to)?.loc || '';
-    }
     const shelves = this.connectorShelves(prefix);
     if (!shelves) return '';
     for (const shelf of shelves) {

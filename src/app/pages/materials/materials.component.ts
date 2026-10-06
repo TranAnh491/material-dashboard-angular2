@@ -431,6 +431,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     to: number;
     locs: string[];
     title: string;
+    /** B017: lẻ = R17, chẵn = R18. */
+    parity?: 'odd' | 'even';
   } | null = null;
   /** Chi tiết KK — toàn bộ tồn kho, không phân loại theo loại hàng */
   kkAllStockDetail = false;
@@ -8164,7 +8166,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     boxes: typeof this.kkTypeBoxesCached;
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
   }> | undefined {
-    // B017 bấm mục là mở chi tiết điền vị trí, không chia kệ.
+    // B017 hiện hai dãy R17/R18, không chia kệ S.
     if (category === 'NHUA' || category === 'DAYCAP' || category === 'B036' || category === 'B042' || category === 'B017') {
       return undefined;
     }
@@ -8347,13 +8349,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         { shelf: 'S05', from: 601, to: 999, perFloor: 80 }
       ];
     }
-    if (prefix === 'B017') {
-      return [
-        { shelf: 'S23', from: 1, to: 40, perFloor: 20 },
-        { shelf: 'S24', from: 41, to: 80, perFloor: 20 },
-        { shelf: 'S25', from: 81, to: 999, perFloor: 20 }
-      ];
-    }
+    if (prefix === 'B017') return [];
     if (prefix === 'B016') {
       return [
         { shelf: 'S11', from: 1, to: 250, perFloor: 50 },
@@ -8381,7 +8377,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isKkConnectorRackMuc(category: string): boolean {
-    return category === 'B009' || category === 'B016' || category === 'B017' || category === 'B018';
+    return category === 'B009' || category === 'B016' || category === 'B018';
   }
 
   isKkNhuaMuc(category: string): boolean {
@@ -8768,23 +8764,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return out;
   }
 
-  /** Mục B017: không chia kệ. Bấm mục là mở chi tiết toàn bộ mã để điền vị trí. */
-  openKkB017LocDetail(event?: Event): void {
+  /** Mở toàn bộ mã B017 để tự chọn vị trí, không gán sẵn R17/R18. */
+  openKkB017Detail(event?: Event): void {
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    const prefix = 'B017';
-    const from = 1;
-    const to = 999;
-    const title = 'Mục B017';
+    const title = 'B017';
     const groupCodes: string[] = [];
-    for (let n = from; n <= to; n++) groupCodes.push(this.kkConnectorCode(prefix, n));
+    for (let n = 1; n <= 999; n++) {
+      groupCodes.push(this.kkConnectorCode('B017', n));
+    }
     this.kkAllStockDetail = false;
     this.kkConnectorFloorDetail = {
-      prefix,
+      prefix: 'B017',
       shelf: '',
       level: 0,
-      from,
-      to,
+      from: 1,
+      to: 999,
       locs: [],
       title
     };
@@ -8869,9 +8864,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     to: number;
     locs: string[];
     title: string;
+    parity?: 'odd' | 'even';
   }): InventoryMaterial[] {
     const codeSet = new Set<string>();
-    for (let n = d.from; n <= d.to; n++) codeSet.add(this.kkConnectorCode(d.prefix, n));
+    for (let n = d.from; n <= d.to; n++) {
+      if (d.parity === 'odd' && n % 2 === 0) continue;
+      if (d.parity === 'even' && n % 2 === 1) continue;
+      codeSet.add(this.kkConnectorCode(d.prefix, n));
+    }
     const seen = new Set<string>();
     const out: InventoryMaterial[] = [];
     this.kkLocMapTypeCache.forEach((list) => {
@@ -10605,7 +10605,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (n >= 11 && n <= 14) return 'B016';
     if (n === 15) return 'B007';
     if (n === 16) return 'B008';
-    if (n >= 23 && n <= 25) return 'B017';
+    if (n >= 23 && n <= 25) return 'home';
     return 'home';
   }
 

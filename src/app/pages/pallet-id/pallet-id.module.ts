@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 
 import { PalletIdComponent } from './pallet-id.component';
 import { SharedModule } from '../../shared/shared.module';
+import { JWarehouseModule } from '../j-warehouse/j-warehouse.module';
 
 @NgModule({
   declarations: [PalletIdComponent],
@@ -14,7 +15,8 @@ import { SharedModule } from '../../shared/shared.module';
     RouterModule.forChild([
       { path: '', component: PalletIdComponent }
     ]),
-    SharedModule
+    SharedModule,
+    JWarehouseModule
   ],
   exports: [PalletIdComponent]
 })

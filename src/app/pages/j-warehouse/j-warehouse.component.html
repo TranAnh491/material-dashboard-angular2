@@ -1,4 +1,4 @@
-<div class="jw">
+<div class="jw" [class.jw--label-pick]="labelPick">
   <div class="jw-shell">
     <header class="jw-header">
       <div class="jw-header__brand">
@@ -234,7 +234,8 @@
                 [attr.height]="viewBoxH * zoom"
                 preserveAspectRatio="xMinYMin meet"
                 role="img"
-                [attr.aria-label]="t('aria.map', { title: drawModeTitle, l: LENGTH_M, w: WIDTH_M })">
+                [attr.aria-label]="t('aria.map', { title: drawModeTitle, l: LENGTH_M, w: WIDTH_M })"
+                (pointerdown)="onPlanPointerDown($event)">
               <defs>
                 <marker id="jwDimArrowSky" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
                   <path d="M0,0 L9,4 L0,8 Z" fill="#00a2e8" />
@@ -363,6 +364,7 @@
                   <rect
                     class="jw-floor-zone__body"
                     [class.jw-floor-zone__body--solid]="z.id === 'j4-cold-storage'"
+                    [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="j4MeterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -443,7 +445,7 @@
                       [attr.width]="meterW(rack.wM)"
                       [attr.height]="j4MirrorHeight(rack.hM)" />
 
-                    <g *ngFor="let block of rack.blocks; trackBy: trackBlock" class="jw-j4-rack-block">
+                    <g *ngFor="let block of rack.blocks; trackBy: trackBlock" class="jw-j4-rack-block" [attr.data-jw-loc]="blockPickAttr(block)">
                       <rect
                         class="jw-block__body"
                         [attr.x]="meterX(block.xM)"
@@ -493,6 +495,7 @@
                 <g *ngIf="j4FgAwaitStoreZone as z" aria-hidden="true">
                   <rect
                     class="jw-floor-zone__body"
+                    [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="j4MeterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -520,6 +523,7 @@
                 <g *ngFor="let z of j4RaisedPackZones; trackBy: trackFloorZone">
                   <rect
                     class="jw-floor-zone__body"
+                    [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="j4MeterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -677,6 +681,7 @@
                   <rect
                     *ngIf="!isKhoMatDashedBox(z) && !isRaisedPackZone(z)"
                     class="jw-floor-zone__body"
+                    [attr.data-jw-loc]="zonePickAttr(z)"
                     [class.jw-floor-zone__body--no-stroke]="isKhoMatBandFloorZone(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
@@ -827,6 +832,7 @@
                   <rect
                     *ngIf="isKhoMatDashedBox(z)"
                     class="jw-floor-zone__body"
+                    [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -903,6 +909,7 @@
                   <rect
                     *ngIf="isRaisedPackZone(z)"
                     class="jw-floor-zone__body"
+                    [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"

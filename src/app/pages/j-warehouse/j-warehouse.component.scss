@@ -4,6 +4,10 @@
   height: 100dvh;
 }
 
+:host:has(.jw--label-pick) {
+  height: 100%;
+}
+
 $bg: #f4f6f8;
 $card: #ffffff;
 $border: #e2e8f0;
@@ -12,6 +16,31 @@ $text2: #334155;
 $muted: #64748b;
 $accent: #0f766e;
 $accent-soft: #ccfbf1;
+
+.jw--label-pick {
+  height: 100%;
+
+  .jw-header,
+  .jw-tools,
+  .jw-detail,
+  .jw-map__title-row,
+  .jw-map__tools > .jw-btn {
+    display: none !important;
+  }
+
+  [data-jw-loc],
+  .jw-block,
+  .jw-kho-mat__hit {
+    cursor: pointer;
+  }
+
+  [data-jw-loc]:hover .jw-block__body,
+  .jw-block:hover .jw-block__body,
+  .jw-kho-mat__hit:hover .jw-kho-mat__block,
+  rect.jw-floor-zone__body[data-jw-loc]:hover {
+    fill: #e0f2fe;
+  }
+}
 
 .jw {
   display: flex;

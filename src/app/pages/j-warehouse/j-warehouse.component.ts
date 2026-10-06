@@ -4,9 +4,12 @@ import {
   Component,
   ComponentRef,
   ElementRef,
+  EventEmitter,
+  Input,
   NgZone,
   OnDestroy,
   OnInit,
+  Output,
   ViewChild,
   ViewContainerRef
 } from '@angular/core';
@@ -137,9 +140,16 @@ export interface JwKhoMatRow {
   blocks: JwKhoMatBlock[];
 }
 
+export interface JwLocLabel {
+  vi: string;
+  en: string;
+  qr: string;
+}
+
 export interface JwFloorZone {
   id: string;
   label: string;
+  labelKey?: string;
   labelLines: string[];
   xM: number;
   yM: number;
@@ -728,6 +738,10 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class JWarehouseComponent implements OnInit, OnDestroy {
+  /** Nhúng trong Tem vị trí: chỉ xem J4 + J5, bấm vị trí để in tem. */
+  @Input() labelPick = false;
+  @Output() locationPicked = new EventEmitter<JwLocLabel>();
+
   readonly LENGTH_M = 105;
   readonly WIDTH_M = 30;
 
@@ -3113,6 +3127,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       return {
         id: z.id,
         label,
+        labelKey: z.labelKey,
         labelLines: [...this.wrapLabel(label, wrapAt), ...notes],
         xM: z.xM,
         yM: z.yM,
@@ -3132,6 +3147,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return {
       id: 'j4-fg-await-store',
       label,
+      labelKey: 'zone.fgReceiving',
       labelLines: this.wrapLabel(label, 14),
       xM: this.round2(y14),
       yM: this.round2(x18),
@@ -3188,6 +3204,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       return {
         id: z.id,
         label,
+        labelKey: z.labelKey,
         labelLines: this.wrapLabel(label, z.id === 'j4-customs-wait' ? 16 : 12),
         xM: z.xM,
         yM: z.yM,
@@ -3470,6 +3487,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    if (this.labelPick) {
+      this.buildingView = 'j4-j5';
+      this.infoPanelOpen = false;
+    }
     this.viewOnly = this.resolveViewOnly();
     this.loadLang();
     this.loadSavedLayout();
@@ -3787,6 +3808,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   onBlockPointerDown(block: JwBlock, event: PointerEvent): void {
+    if (this.labelPick) {
+      event.stopPropagation();
+      this.emitLocPick(this.blockPickAttr(block));
+      return;
+    }
     if (this.showCctv) return;
     if (this.mapTool === 'pan') return;
     event.stopPropagation();
@@ -4056,6 +4082,47 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return (m / this.VIEW_WIDTH_M) * this.floor.h;
   }
 
+  /** Tem vị trí: R01-1, hoặc mã kệ S. */
+  blockPickAttr(block: JwBlock): string | null {
+    if (!this.labelPick) return null;
+    if (block.kind === 'kho-mat') return block.code ? `b:${block.code}` : null;
+    return `b:R${String(block.rackNum).padStart(2, '0')}-${block.index}`;
+  }
+
+  zonePickAttr(z: { label?: string; labelKey?: string }): string | null {
+    if (!this.labelPick || !z.labelKey) return null;
+    const label = (z.label || '').replace(/\s+/g, ' ').trim();
+    if (!label) return null;
+    return `k:${z.labelKey}`;
+  }
+
+  private emitLocPick(token: string | null): void {
+    if (!token) return;
+    if (token.startsWith('k:')) {
+      const key = token.slice(2);
+      const vi = (JW_I18N.vi[key] || '').replace(/\s+/g, ' ').trim();
+      const en = (JW_I18N.en[key] || vi).replace(/\s+/g, ' ').trim();
+      if (!vi) return;
+      this.locationPicked.emit({ vi, en, qr: vi });
+      return;
+    }
+    if (token.startsWith('b:')) {
+      const code = token.slice(2).trim();
+      if (!code) return;
+      this.locationPicked.emit({ vi: `Kệ ${code}`, en: `Rack ${code}`, qr: code });
+    }
+  }
+
+  onPlanPointerDown(event: PointerEvent): void {
+    if (!this.labelPick) return;
+    const el = event.target as Element | null;
+    const loc = el?.closest?.('[data-jw-loc]')?.getAttribute('data-jw-loc')?.trim();
+    if (!loc) return;
+    event.stopPropagation();
+    event.preventDefault();
+    this.emitLocPick(loc);
+  }
+
   /** R{dãy}{block} → R11 */
   blockCode(rackNum: number, blockIndex: number): string {
     return `R${rackNum}${blockIndex}`;
@@ -4108,6 +4175,12 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   onKhoMatPointerDown(block: JwKhoMatBlock, event: PointerEvent): void {
+    if (this.labelPick) {
+      event.stopPropagation();
+      const code = (block.code || '').trim();
+      this.emitLocPick(code ? `b:${code}` : null);
+      return;
+    }
     if (this.showCctv) return;
     if (this.mapTool === 'pan') return;
     event.stopPropagation();

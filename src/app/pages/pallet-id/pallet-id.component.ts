@@ -169,13 +169,18 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     { id: 'palletArea', vi: 'Khu vực để Pallet', en: 'Pallet area' }
   ];
 
-  /** Tem vị trí kho J — 57×32mm, QR trái / tên vị trí phải */
+  /** Tem vị trí kho J — màn hình sơ đồ, tem A3/A4/A5/A6, song ngữ. */
   showJLocLabelModal = false;
   jLocQuery = '';
   jLocExpandedId = '';
   jLocSelected = new Set<string>();
   jLocError = '';
   isPrintingJLocLabels = false;
+  jLocLabelSize: 'A3' | 'A4' | 'A5' | 'A6' = 'A4';
+  readonly jLocSizes: Array<'A3' | 'A4' | 'A5' | 'A6'> = ['A3', 'A4', 'A5', 'A6'];
+  jLocOrient: 'doc' | 'ngang' = 'doc';
+  jLocPrintQty = 1;
+  private jLocLogoDataUrl = '';
   readonly jLocGroups: LayoutLocGroup[] = getLayoutLocationGroups('J');
 
   /** Tem kệ (dãy R/S) — tem mâm hoặc label đầu kệ */
@@ -262,7 +267,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   applyPalletSearch(): void {
     const q = String(this.palletSearch || '').trim().toUpperCase();
     if (!q) {
-      this.listPallets = [];
+      this.listPallets = this.pallets.slice(0, 10);
       return;
     }
     this.listPallets = this.pallets.filter((p) =>
@@ -1854,128 +1859,250 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       }));
   }
 
-  async printJLocLabels(): Promise<void> {
-    const order = new Map<string, number>();
-    for (const g of this.jLocGroups) {
-      for (const s of g.slots) {
-        if (!order.has(s)) order.set(s, order.size);
-      }
-    }
-    const slots = Array.from(this.jLocSelected).sort(
-      (a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)
-    );
-    if (!slots.length) {
-      this.jLocError = 'Chọn ít nhất một vị trí để in.';
+  printJLocFromPlan(loc: { vi: string; en: string; qr: string }): void {
+    const qty = Math.floor(Number(this.jLocPrintQty));
+    if (!loc?.vi || !loc.qr || this.isPrintingJLocLabels) return;
+    if (!Number.isFinite(qty) || qty < 1) {
+      this.jLocError = 'Nhập số lượng tem từ 1 trở lên.';
       return;
     }
-    if (slots.length > 200 && !confirm(`In ${slots.length} tem vị trí kho J?`)) return;
+    void this.printJLocLabels(loc, qty);
+  }
+
+  async printJLocLabels(loc?: { vi: string; en: string; qr: string }, qty?: number): Promise<void> {
+    if (!loc?.vi || !loc.qr) return;
+    const count = Math.min(200, Math.floor(Number(qty)));
+    if (!Number.isFinite(count) || count < 1) return;
+    if (count > 40 && !confirm(`In ${count} tem vị trí?`)) return;
+    const spec = this.jLocPaperSpec(this.jLocLabelSize, this.jLocOrient);
     this.jLocError = '';
     this.isPrintingJLocLabels = true;
     try {
-      const qrImages = await Promise.all(
-        slots.map((name) =>
-          QRCode.toDataURL(name, {
-            width: 360,
-            margin: 1,
-            color: { dark: '#000000', light: '#FFFFFF' }
-          })
-        )
-      );
-
-      const labelHtml = slots.map((name, i) => `
-        <div class="j-loc-label">
-          <div class="j-loc-label__qr">
-            <img src="${qrImages[i]}" alt="QR ${name}">
+      const [qrImage, logoUrl] = await Promise.all([
+        QRCode.toDataURL(loc.qr, {
+          width: 480,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' }
+        }),
+        this.jLocLogoOnWhite()
+      ]);
+      const esc = (value: string) =>
+        value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const viText = loc.vi.toLocaleUpperCase('vi');
+      const enText = (loc.en || loc.vi).toLocaleUpperCase('en');
+      const vi = esc(viText);
+      const en = esc(enText);
+      const viFont = viText.length > 22 ? spec.vi * 0.62 : spec.vi;
+      const enFont = enText.length > 28 ? spec.en * 0.7 : spec.en;
+      const namePad = Math.max(spec.logo, spec.qr) + 8;
+      const cell = (filled: boolean) => `
+        <div class="j-loc-label${filled ? '' : ' j-loc-label--blank'}">
+          ${filled ? `<img class="j-loc-label__logo" src="${logoUrl}" alt="AIRSPEED">
+          <div class="j-loc-label__names">
+            <div class="j-loc-label__vi" style="font-size:${viFont}mm">${vi}</div>
+            <div class="j-loc-label__en" style="font-size:${enFont}mm">${en}</div>
           </div>
-          <div class="j-loc-label__text">${name}</div>
-        </div>`).join('');
-
+          <img class="j-loc-label__qr" src="${qrImage}" alt="QR ${vi}">` : ''}
+        </div>`;
+      const pages: string[] = [];
+      for (let i = 0; i < count; i += spec.perPage) {
+        const cells = [];
+        for (let n = 0; n < spec.perPage; n++) cells.push(cell(i + n < count));
+        pages.push(`<section class="j-loc-sheet">${cells.join('')}</section>`);
+      }
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
-
       printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Tem vị trí kho J</title>
+  <title>Tem vị trí ${esc(loc.vi)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #fff;
-      width: 57mm;
-      height: 32mm;
-    }
-    .j-loc-label {
-      width: 57mm;
-      height: 32mm;
-      border: 1px solid #000;
+    body { background: #fff; }
+    .j-loc-sheet {
+      width: ${spec.pageW}mm;
+      height: ${spec.pageH}mm;
       display: flex;
-      align-items: stretch;
-      background: #fff;
-      overflow: hidden;
+      flex-wrap: wrap;
+      align-content: flex-start;
       page-break-after: always;
-      page-break-inside: avoid;
+      overflow: hidden;
     }
-    .j-loc-label:last-child { page-break-after: avoid; }
-    .j-loc-label__qr {
-      width: 39mm;
-      height: 32mm;
+    .j-loc-sheet:last-child { page-break-after: avoid; }
+    .j-loc-label {
+      width: ${spec.labelW}mm;
+      height: ${spec.labelH}mm;
+      border: 0.8mm solid #000;
+      background: #fff;
+      position: relative;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      border-right: 1px solid #ccc;
-      flex-shrink: 0;
+      flex-direction: column;
+      overflow: hidden;
     }
-    .j-loc-label__qr img {
-      width: 30.5mm;
-      height: 30.5mm;
+    .j-loc-label__logo {
+      position: absolute;
+      top: 3mm;
+      left: 3mm;
+      width: ${spec.logo}mm;
+      height: ${spec.logo}mm;
       object-fit: contain;
-      display: block;
+      object-position: left top;
     }
-    .j-loc-label__text {
+    .j-loc-label__qr {
+      position: absolute;
+      top: 4mm;
+      right: 4mm;
+      width: ${spec.qr}mm;
+      height: ${spec.qr}mm;
+      object-fit: contain;
+    }
+    .j-loc-label__names {
       flex: 1;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 1mm 1.5mm;
       text-align: center;
-      font-size: 15px;
-      font-weight: bold;
-      color: #000;
+      padding: ${namePad}mm 6mm 6mm;
+      min-height: 0;
+    }
+    .j-loc-label__vi {
+      font-weight: 800;
+      line-height: 1.05;
+      word-break: break-word;
+    }
+    .j-loc-label__en {
+      margin-top: 2mm;
+      font-weight: 600;
+      line-height: 1.1;
       word-break: break-word;
     }
     @media print {
-      body { margin: 0 !important; padding: 0 !important; background: #fff !important; width: 57mm !important; height: 32mm !important; }
-      @page { margin: 0 !important; size: 57mm 32mm !important; }
-      .j-loc-label {
-        width: 57mm !important;
-        height: 32mm !important;
-        page-break-after: always !important;
-      }
-      .j-loc-label:last-child { page-break-after: avoid !important; }
+      body { margin: 0 !important; background: #fff !important; }
+      @page { margin: 0 !important; size: ${spec.page} ${spec.orientCss} !important; }
+      .j-loc-sheet { page-break-after: always !important; }
+      .j-loc-sheet:last-child { page-break-after: avoid !important; }
     }
   </style>
 </head>
-<body>${labelHtml}</body>
+<body>${pages.join('')}</body>
 </html>`);
       printWindow.document.close();
       setTimeout(() => {
         printWindow.print();
         printWindow.close();
       }, 400);
-      this.showJLocLabelModal = false;
     } catch (err) {
       console.error('Error printing J location labels:', err);
       alert('Lỗi khi in tem vị trí. Vui lòng thử lại.');
     } finally {
       this.isPrintingJLocLabels = false;
     }
+  }
+
+  private jLocPaperSpec(size: 'A3' | 'A4' | 'A5' | 'A6', orient: 'doc' | 'ngang'): {
+    page: 'A3' | 'A4';
+    orientCss: 'portrait' | 'landscape';
+    pageW: number;
+    pageH: number;
+    labelW: number;
+    labelH: number;
+    perPage: number;
+    vi: number;
+    en: number;
+    qr: number;
+    logo: number;
+  } {
+    let page: 'A3' | 'A4' = 'A4';
+    let pageW = 210;
+    let pageH = 297;
+    let labelW = 210;
+    let labelH = 297;
+    let perPage = 1;
+    let vi = 22;
+    let en = 12;
+    let qr = 52;
+    if (size === 'A3') {
+      page = 'A3';
+      pageW = 297;
+      pageH = 420;
+      labelW = 297;
+      labelH = 420;
+      vi = 28;
+      en = 14;
+      qr = 70;
+    } else if (size === 'A5') {
+      labelW = 210;
+      labelH = 148.5;
+      perPage = 2;
+      vi = 14;
+      en = 8;
+      qr = 32;
+    } else if (size === 'A6') {
+      labelW = 105;
+      labelH = 148.5;
+      perPage = 4;
+      vi = 9;
+      en = 5.5;
+      qr = 26;
+    }
+    if (orient === 'ngang') {
+      const pageTmp = pageW;
+      pageW = pageH;
+      pageH = pageTmp;
+      const labelTmp = labelW;
+      labelW = labelH;
+      labelH = labelTmp;
+    }
+    const logo = Math.round(Math.sqrt((pageW * pageH) / 16) * 10) / 10;
+    return {
+      page,
+      orientCss: orient === 'ngang' ? 'landscape' : 'portrait',
+      pageW,
+      pageH,
+      labelW,
+      labelH,
+      perPage,
+      vi,
+      en,
+      qr,
+      logo
+    };
+  }
+
+  private async jLocLogoOnWhite(): Promise<string> {
+    if (this.jLocLogoDataUrl) return this.jLocLogoDataUrl;
+    const src = await this.resolveShelfLabelLogoUrl();
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('logo'));
+      el.src = src;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const g = canvas.getContext('2d');
+    if (!g || !canvas.width) return src;
+    g.drawImage(img, 0, 0);
+    const frame = g.getImageData(0, 0, canvas.width, canvas.height);
+    const px = frame.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const max = Math.max(px[i], px[i + 1], px[i + 2]);
+      const min = Math.min(px[i], px[i + 1], px[i + 2]);
+      if (max < 45 && max - min < 20) {
+        px[i] = 255;
+        px[i + 1] = 255;
+        px[i + 2] = 255;
+      }
+    }
+    g.putImageData(frame, 0, 0);
+    this.jLocLogoDataUrl = canvas.toDataURL('image/png');
+    return this.jLocLogoDataUrl;
   }
 
   // ====== Tem kệ (dãy R / S) — tem mâm hoặc label đầu kệ ======
