@@ -3344,7 +3344,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       const parsed = this.parseInboundQrLabelDisplayFields(String(qr.qrData || ''));
       const code = String(qr.materialCode || parsed.materialCode || '').trim();
       if (!cache.has(code)) {
-        cache.set(code, this.kkCatalog.homeLocForMaterial(code, typeMap, homeLocs));
+        cache.set(code, this.kkCatalog.assignedLocForMaterial(code, typeMap, homeLocs));
       }
       qr.homeLoc = cache.get(code) || '';
     }

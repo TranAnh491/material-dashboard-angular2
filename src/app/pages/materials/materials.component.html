@@ -224,7 +224,7 @@
               <button type="button"
                       class="more-btn"
                       (click)="openKkCatalogPopup()"
-                      title="Import Nhóm mã (B+6 số) · Loại hàng">
+                      title="Danh mục nhóm mã và vị trí được gán">
                 <i class="material-icons">category</i>
                 <span class="btn-label">Danh mục</span>
               </button>
@@ -1752,7 +1752,7 @@
                   class="more-btn catalog-refresh-btn"
                   (click)="refreshNvlCatalogNow()"
                   [disabled]="isCatalogLoading"
-                  title="Đọc lại Danh mục NVL ngay — cập nhật cột Standard Packing (mặc định 1 lần/ngày)">
+                  title="Đọc lại toàn bộ Danh mục NVL. Standard Packing sửa ở Danh mục được áp ngay khi mở tab.">
             <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
             <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật danh mục' }}</span>
           </button>
@@ -2023,7 +2023,7 @@
             <th *ngIf="showKhColumn">KH</th>
 
             <th>Lưu ý</th>
-            <th title="Chỉ đọc từ Danh mục NVL — làm mới 1 lần/ngày, hoặc bấm Cập nhật danh mục">Standard Packing</th>
+            <th title="Chỉ đọc từ Danh mục NVL — sửa ở Danh mục thì cột này cập nhật khi mở lại tab">Standard Packing</th>
             <th title="Mã thuộc danh sách MSD/ESD — gán ở Inbound/Danh mục">MSD/ESD</th>
             <th title="Đã kiểm kê (đếm tồn kho)">KK</th>
             <th>Trạng thái</th>
@@ -3320,7 +3320,7 @@
             <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">category</i></span>
             <span class="more-tile__text">
               <strong>Danh mục KK</strong>
-              <small>Import Nhóm mã (B+6 số) · Loại hàng</small>
+              <small>Nhóm mã, loại hàng và vị trí được gán</small>
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
@@ -3748,8 +3748,8 @@
           <i class="material-icons">category</i>
         </span>
         <div>
-          <h3>Danh mục KK</h3>
-          <p class="more-popup-header__sub">Nhóm mã = B + 6 số (vd B001680) · Loại hàng</p>
+          <h3>Danh mục vị trí</h3>
+          <p class="more-popup-header__sub">Nhóm mã, loại hàng và vị trí được gán. Sửa vị trí tại đây để quản lý toàn bộ.</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkCatalogPopup()" aria-label="Đóng"
@@ -3761,7 +3761,7 @@
       <div class="hidden-toolbar">
         <div class="hidden-search">
           <i class="material-icons">search</i>
-          <input type="search" [(ngModel)]="kkCatalogQuery" placeholder="Tìm nhóm mã, loại hàng…" autocomplete="off" />
+          <input type="search" [(ngModel)]="kkCatalogQuery" placeholder="Tìm nhóm mã, loại hàng, vị trí…" autocomplete="off" />
           <button type="button" class="hidden-search__clear" *ngIf="kkCatalogQuery" (click)="kkCatalogQuery = ''" aria-label="Xóa">
             <i class="material-icons">close</i>
           </button>
@@ -3789,6 +3789,8 @@
               <th>#</th>
               <th>Nhóm mã</th>
               <th>Loại hàng</th>
+              <th>Vị trí được gán</th>
+              <th>Gán lại</th>
             </tr>
           </thead>
           <tbody>
@@ -3796,6 +3798,12 @@
               <td>{{ i + 1 }}</td>
               <td><strong>{{ e.groupCode }}</strong></td>
               <td>{{ e.productType }}</td>
+              <td><strong>{{ kkCatalogLocOf(e) || '—' }}</strong></td>
+              <td>
+                <input class="kk-cat-loc" type="text" [(ngModel)]="e.location" [placeholder]="kkCatalogRuleLoc(e) || 'Nhập vị trí'"
+                       [disabled]="kkCatalogSavingCode === e.groupCode"
+                       (change)="saveKkCatalogLocation(e)" (keyup.enter)="saveKkCatalogLocation(e)" />
+              </td>
             </tr>
           </tbody>
         </table>

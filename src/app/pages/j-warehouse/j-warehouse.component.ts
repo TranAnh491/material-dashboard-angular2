@@ -804,7 +804,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly OFFICE_IQC_H_M = 6.25;
   readonly OFFICE_SECURED_W_M = 18.6;
   readonly OFFICE_KHOMAT_EXT_W_M = 10;
-  /** Phòng hóa chất — tách từ kho mát mở rộng, rộng 1.5m về phía mặt A. */
+  /** Phòng hóa chất — chiều ngang 1.5m về phía mặt A, chiều dài còn 1/3 kho mát. */
   readonly OFFICE_CHEM_W_M = 1.5;
   readonly OFFICE_H_M = 7;
   /** Nhãn Secured WH dịch về phía mặt C 1.5m (không dịch phòng). */
@@ -819,10 +819,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   readonly KHO_MAT_BLOCK_D_M = 1.5;
   readonly KHO_MAT_BLOCKS_PER_ROW = 3;
   readonly KHO_MAT_GAP_M = 0.8;
-  /** S01 đưa ra khỏi vách VP Kho 5.5m — trong khe đó: ESD 2.5×3m + in tem 2.5×3m. */
+  /** S01 đưa ra khỏi vách VP Kho 5.5m. */
   readonly KHO_MAT_S01_FROM_VP_M = 5.5;
+  /** ESD 2.5×3m — đặt sát đáy, cạnh phòng hóa chất. */
   readonly KHO_MAT_SIDE_BOX_W_M = 2.5;
   readonly KHO_MAT_SIDE_BOX_H_M = 3;
+  /** In tem sát VP Kho: ngang 1m, dài 5m. */
+  readonly KHU_IN_TEM_W_M = 1;
+  readonly KHU_IN_TEM_H_M = 5;
+  /** S23–S24 đưa ra ngoài kho mát, cách vách phải phòng IQC 1m. */
+  readonly KHO_MAT_IQC_CLEAR_M = 1;
   readonly KHO_MAT_LEVELS = 7;
   readonly KHO_MAT_HEIGHT_M = 3;
   readonly khoMatRows: JwKhoMatRow[] = this.buildKhoMatRows();
@@ -1861,7 +1867,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       }
       const label = z.labelKey ? this.t(z.labelKey) : '';
       const wrapAt =
-        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 4 : this.isKhoMatSideBox(z) ? 8 : 12;
+        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 4 : z.id === 'khu-in-tem' ? 20 : this.isKhoMatSideBox(z) ? 8 : 12;
       return { ...z, label, labelLines: label ? this.wrapLabel(label, wrapAt) : [] };
     });
     return this.floorZonesMemo;
@@ -1871,7 +1877,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return z.id === 'kho-mat-ext';
   }
 
-  /** Box ESD / in tem trong khe 5.5m giữa vách VP Kho và S01. */
+  /** Box ESD / in tem — nhãn nhỏ. */
   isKhoMatSideBox(z: { id: string }): boolean {
     return z.id === 'kho-esd' || z.id === 'khu-in-tem';
   }
@@ -1924,8 +1930,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.round2(z.yM + z.hM / 2);
   }
 
-  floorZoneLabelRotate(_z: JwFloorZone): boolean {
-    return false;
+  floorZoneLabelRotate(z: JwFloorZone): boolean {
+    return z.id === 'khu-in-tem';
   }
 
   /** Phòng có vách cứng — dùng cho mô hình 3D. */
@@ -1949,7 +1955,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: chem.hM
       });
     }
-    const ext = this.khoMatExtInnerZone;
+    const ext = this.khoMatExtZone;
     if (ext.wM > 0 && ext.hM > 0) {
       rooms.push({
         id: 'kho-mat-ext',
@@ -4701,39 +4707,42 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     };
   }
 
-  /** Phòng hóa chất 1.5×7m — mép kho mát mở rộng hướng về mặt A. */
+  /** Phòng hóa chất — ngang 1.5m, dài còn 1/3, sát cạnh B. */
   get khoHoaChatZone(): { xM: number; yM: number; wM: number; hM: number } {
     const ext = this.khoMatExtZone;
+    const hM = this.round2(ext.hM / 3);
     return {
       xM: ext.xM,
-      yM: ext.yM,
+      yM: this.round2(ext.yM + ext.hM - hM),
       wM: this.OFFICE_CHEM_W_M,
-      hM: ext.hM
+      hM
     };
   }
 
-  /** Box ESD 2.5×3m — trong khe 5.5m, sát vách VP Kho (cạnh B). */
+  /** Box ESD 2.5×3m — sát cạnh B, ngay bên phải phòng hóa chất. */
   get khoEsdZone(): { xM: number; yM: number; wM: number; hM: number } {
-    const room = this.securedOfficeRoom;
-    if (!room) return { xM: 0, yM: 0, wM: 0, hM: 0 };
+    const chem = this.khoHoaChatZone;
     const wM = this.KHO_MAT_SIDE_BOX_W_M;
     const hM = this.KHO_MAT_SIDE_BOX_H_M;
     return {
-      xM: this.round2(room.xM + room.wM - wM),
-      yM: this.round2(room.yM + room.hM - hM),
+      xM: this.round2(chem.xM + chem.wM),
+      yM: this.round2(chem.yM + chem.hM - hM),
       wM,
       hM
     };
   }
 
-  /** Box in tem 2.5×3m — cạnh ESD, về phía S01. */
+  /** In tem sát vách trái VP Kho: ngang 1m, dài 5m, sát cạnh B. */
   get khuInTemZone(): { xM: number; yM: number; wM: number; hM: number } {
-    const esd = this.khoEsdZone;
+    const vp = this.officeRooms.find((r) => r.id === 'vp-kho-1');
+    const wM = this.KHU_IN_TEM_W_M;
+    const hM = this.KHU_IN_TEM_H_M;
+    if (!vp) return { xM: 0, yM: 0, wM, hM };
     return {
-      xM: this.round2(esd.xM - this.KHO_MAT_SIDE_BOX_W_M),
-      yM: esd.yM,
-      wM: this.KHO_MAT_SIDE_BOX_W_M,
-      hM: this.KHO_MAT_SIDE_BOX_H_M
+      xM: this.round2(vp.xM - wM),
+      yM: this.round2(vp.yM + vp.hM - hM),
+      wM,
+      hM
     };
   }
 
@@ -4824,7 +4833,26 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       }
       xRight = this.round2(leftColX - gap);
     }
+    this.placeKhoMatRowsOutsideIqc(rows);
     return rows;
+  }
+
+  /** S23 (phải) và S24 (trái) ra khỏi kho mát, cách vách phải phòng IQC 1m. */
+  private placeKhoMatRowsOutsideIqc(rows: JwKhoMatRow[]): void {
+    const s23 = rows.find((r) => r.id === 'S23');
+    const s24 = rows.find((r) => r.id === 'S24');
+    if (!s23 || !s24) return;
+    const x0 = this.round2(this.OFFICE_IQC_W_M + this.KHO_MAT_IQC_CLEAR_M);
+    this.shiftKhoMatRowX(s24, x0);
+    this.shiftKhoMatRowX(s23, this.round2(x0 + s24.wM));
+  }
+
+  private shiftKhoMatRowX(row: JwKhoMatRow, xM: number): void {
+    const dx = this.round2(xM - row.xM);
+    row.xM = xM;
+    for (const block of row.blocks) {
+      block.xM = this.round2(block.xM + dx);
+    }
   }
 
   trackKhoMatRow(_: number, row: JwKhoMatRow): string {
@@ -4866,7 +4894,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: khoMatInner.hM
       },
       {
-        /** Phòng hóa chất 1.5m — hướng về mặt A, nét liền. */
+        /** Phòng hóa chất — ngang 1.5m, dài 1/3, sát cạnh B. */
         id: 'kho-hoa-chat',
         labelKey: 'zone.khoHoaChat',
         xM: khoHoaChat.xM,
@@ -4875,7 +4903,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: khoHoaChat.hM
       },
       {
-        /** Box ESD 2.5×3m — khe 5.5m sát vách VP Kho. */
+        /** Box ESD 2.5×3m — sát cạnh B, cạnh phòng hóa chất. */
         id: 'kho-esd',
         labelKey: 'zone.khoEsd',
         xM: khoEsd.xM,
@@ -4884,7 +4912,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: khoEsd.hM
       },
       {
-        /** Box in tem 2.5×3m — cạnh ESD, về phía S01. */
+        /** In tem sát VP Kho — ngang 1m, dài 5m. */
         id: 'khu-in-tem',
         labelKey: 'zone.inTem',
         xM: khuInTem.xM,

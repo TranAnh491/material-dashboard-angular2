@@ -7658,6 +7658,16 @@ $asm1-toolbar-h: 36px;
   max-height: min(58vh, 520px);
 }
 
+.kk-cat-loc {
+  width: 140px;
+  height: 34px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  padding: 0 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .hidden-table {
   width: 100%;
   border-collapse: collapse;

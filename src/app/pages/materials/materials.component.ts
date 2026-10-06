@@ -353,6 +353,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkCatalogQuery = '';
   kkCatalogLoading = false;
   kkCatalogImporting = false;
+  kkCatalogSavingCode = '';
+  private kkCatalogLocCommitted = new Map<string, string>();
   private kkCatalogTypeMap = new Map<string, string>();
   kkActiveProductType: string | null = null;
   private kkActiveTypeDraft: KkTypeRow | null = null;
@@ -709,6 +711,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Cache danh mục sống sót khi Angular hủy component (rời tab). */
   private static sharedCatalogCache = new Map<string, any>();
   private static sharedCatalogDateKey = '';
+  /** Mốc danh mục NVL lúc cache này được ghi — cũ hơn mốc sửa Standard Packing thì bỏ. */
+  private static sharedCatalogSourceTs = 0;
+  private catalogSourceTs = 0;
+  private onNvlCatalogStorage = (ev: StorageEvent) => {
+    if (ev.key !== NvlCatalogFullService.cacheStampKey) return;
+    void this.adoptNewerNvlCatalog();
+  };
   
   // Search and filter — mã hàng hoặc vị trí (tick Location)
   searchTerm = '';
@@ -2899,11 +2908,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   getKkHomeLocForMaterial(material: InventoryMaterial | null | undefined): string {
     const code = String(material?.materialCode || '').trim();
     if (!code) return '';
-    const type = this.kkCatalog.productTypeOf(code, this.kkCatalogTypeMap);
-    const group = this.kkCatalog.groupCodeFromMaterial(code);
-    const canonical = type ? this.kkCanonicalTypeKey(type, group ? [group] : []) : '';
-    const loc = this.kkTypeHomeLocOf(canonical) || this.kkTypeHomeLocOf(type);
-    return loc ? this.primaryLocationDisplay(loc) : '';
+    const loc = this.kkCatalog.assignedLocForMaterial(code, this.kkCatalogTypeMap, this.kkTypeHomeLocs);
+    if (!loc) return '';
+    if (/^S\d{2}-T\d$/i.test(loc) || /^S\d{2}-\d+$/i.test(loc)) return loc.toUpperCase();
+    return this.primaryLocationDisplay(loc);
   }
 
   private async ensureKkMobileCatalog(): Promise<void> {
@@ -2972,6 +2980,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
+    window.addEventListener('storage', this.onNvlCatalogStorage);
+    this.nvlCatalogFull.changed$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      void this.adoptNewerNvlCatalog();
+    });
     this.restoreKkScanOpSession();
     this.loadPermissions();
     this.isLocationColumnUnlocked = this.TEMP_UNLOCK_LOCATION_WH_PALLET || this.locationUnlock.isUnlocked();
@@ -3120,6 +3132,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
+    window.removeEventListener('storage', this.onNvlCatalogStorage);
     this.stopScanning();
     this.stopKkLive();
     if (this.kkScanOpTimer) {
@@ -4469,17 +4482,24 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private restoreCatalogMemoryFast(): void {
     const today = this.catalogTodayKey();
-    if (MaterialsComponent.sharedCatalogCache.size > 0 && MaterialsComponent.sharedCatalogDateKey === today) {
+    const nvlTs = this.nvlCatalogFull.readCacheTimestamp();
+    if (
+      MaterialsComponent.sharedCatalogCache.size > 0 &&
+      MaterialsComponent.sharedCatalogDateKey === today &&
+      MaterialsComponent.sharedCatalogSourceTs >= nvlTs
+    ) {
       this.catalogCache = MaterialsComponent.sharedCatalogCache;
       this.catalogLoaded = true;
       this.catalogLoadedDateKey = today;
+      this.catalogSourceTs = MaterialsComponent.sharedCatalogSourceTs;
       return;
     }
     const mem = this.nvlCatalogFull.peekCached();
-    if (mem?.length) {
+    if (mem?.length && this.nvlCatalogFull.cacheSavedAt() >= nvlTs) {
       this.fillCatalogCacheFromNvlItems(mem);
       this.catalogLoaded = true;
       this.catalogLoadedDateKey = today;
+      this.catalogSourceTs = Math.max(nvlTs, this.nvlCatalogFull.cacheSavedAt());
       this.rememberSharedCatalog();
     }
   }
@@ -4488,15 +4508,31 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.catalogCache.size) return;
     MaterialsComponent.sharedCatalogCache = this.catalogCache;
     MaterialsComponent.sharedCatalogDateKey = this.catalogLoadedDateKey || this.catalogTodayKey();
+    MaterialsComponent.sharedCatalogSourceTs = this.catalogSourceTs;
   }
 
   /** Đọc catalog từ đĩa (IndexedDB / localStorage compact) — không tốn lượt đọc Firestore. */
   private async hydrateCatalogFromDisk(): Promise<boolean> {
-    if (this.catalogCache.size > 0 && this.catalogLoadedDateKey === this.catalogTodayKey()) return true;
-    const fromLs = this.tryApplyCatalogCachePayload(this.readCatalogCacheFromLocalStorage());
-    if (fromLs) return true;
-    const fromIdb = this.tryApplyCatalogCachePayload(await this.readCatalogCacheFromIdb());
-    return fromIdb;
+    const today = this.catalogTodayKey();
+    if (this.catalogCache.size > 0 && this.catalogLoadedDateKey === today && !this.nvlCatalogIsNewer()) return true;
+    const fromLs = this.readCatalogCacheFromLocalStorage();
+    if (this.catalogPayloadIsOlderThanNvl(fromLs)) return false;
+    if (this.tryApplyCatalogCachePayload(fromLs)) return true;
+    const fromIdb = await this.readCatalogCacheFromIdb();
+    if (this.catalogPayloadIsOlderThanNvl(fromIdb)) return false;
+    return this.tryApplyCatalogCachePayload(fromIdb);
+  }
+
+  /** Danh mục NVL vừa sửa Standard Packing sau lần cache inventory này. */
+  private nvlCatalogIsNewer(): boolean {
+    return this.nvlCatalogFull.readCacheTimestamp() > this.catalogSourceTs;
+  }
+
+  private catalogPayloadIsOlderThanNvl(parsed: unknown): boolean {
+    if (!parsed || typeof parsed !== 'object') return false;
+    const ts = Number((parsed as { t?: number; timestamp?: number }).t || (parsed as { timestamp?: number }).timestamp || 0);
+    if (!ts) return false;
+    return this.nvlCatalogFull.readCacheTimestamp() > ts;
   }
 
   private readCatalogCacheFromLocalStorage(): unknown {
@@ -4542,6 +4578,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log(`📱 Loaded ${this.catalogCache.size} catalog items from disk cache`);
       this.catalogLoaded = true;
       this.catalogLoadedDateKey = this.catalogTodayKey();
+      this.catalogSourceTs = ts;
       this.rememberSharedCatalog();
       return true;
     }
@@ -4833,6 +4870,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.fillCatalogCacheFromNvlItems(items);
         this.catalogLoaded = true;
         this.catalogLoadedDateKey = today;
+        this.catalogSourceTs = this.nvlCatalogFull.readCacheTimestamp() || Date.now();
         this.rememberSharedCatalog();
         if (forceRefresh) this.readTracker.track('materials', 'materials', items.length);
         this.persistCatalogCache();
@@ -4851,7 +4889,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private hydrateCatalogFromNvlMemoryOrShared(): boolean {
     this.restoreCatalogMemoryFast();
-    return this.catalogLoaded && this.catalogLoadedDateKey === this.catalogTodayKey();
+    return this.catalogLoaded && this.catalogLoadedDateKey === this.catalogTodayKey() && !this.nvlCatalogIsNewer();
+  }
+
+  /** Áp Standard Packing vừa sửa ở Danh mục NVL lên bảng tồn, không đọc lại cả collection. */
+  private async adoptNewerNvlCatalog(): Promise<void> {
+    if (!this.nvlCatalogIsNewer()) return;
+    try {
+      const items = await this.nvlCatalogFull.listAll(false);
+      if (!items.length) return;
+      this.fillCatalogCacheFromNvlItems(items);
+      this.catalogLoaded = true;
+      this.catalogLoadedDateKey = this.catalogTodayKey();
+      this.catalogSourceTs = this.nvlCatalogFull.readCacheTimestamp() || Date.now();
+      this.rememberSharedCatalog();
+      this.persistCatalogCache();
+      this.applyCatalogToAllViews();
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.warn('adoptNewerNvlCatalog:', e);
+    }
   }
 
   // Apply filters to inventory
@@ -7872,7 +7929,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const q = (this.kkCatalogQuery || '').trim().toUpperCase();
     if (!q) return this.kkCatalogEntries;
     return this.kkCatalogEntries.filter((e) =>
-      e.groupCode.includes(q) || e.productType.toUpperCase().includes(q)
+      e.groupCode.includes(q) ||
+      e.productType.toUpperCase().includes(q) ||
+      this.kkCatalogEffectiveLoc(e).toUpperCase().includes(q)
     );
   }
 
@@ -15706,12 +15765,51 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showKkCatalogPopup = false;
   }
 
+  kkCatalogLocOf(entry: KkCatalogEntry): string {
+    return this.kkCatalogEffectiveLoc(entry);
+  }
+
+  kkCatalogRuleLoc(entry: KkCatalogEntry): string {
+    const planned = this.kkCatalog.plannedShelfLocForMaterial(entry.groupCode);
+    if (planned) return planned;
+    return this.kkCatalog.homeLocForMaterial(entry.groupCode, this.kkCatalogTypeMap, this.kkTypeHomeLocs);
+  }
+
+  private kkCatalogEffectiveLoc(entry: KkCatalogEntry): string {
+    const saved = String(entry.location || '').trim();
+    if (saved) return saved;
+    return this.kkCatalogRuleLoc(entry);
+  }
+
+  async saveKkCatalogLocation(entry: KkCatalogEntry): Promise<void> {
+    const next = String(entry.location || '').trim().toUpperCase();
+    const prev = this.kkCatalogLocCommitted.get(entry.groupCode) || '';
+    if (next === prev || this.kkCatalogSavingCode) return;
+    this.kkCatalogSavingCode = entry.groupCode;
+    try {
+      await this.kkCatalog.saveGroupLocation(entry.groupCode, next);
+      entry.location = next;
+      this.kkCatalogLocCommitted.set(entry.groupCode, next);
+    } catch (e) {
+      console.error('saveKkCatalogLocation:', e);
+      entry.location = prev;
+      alert('Không lưu được vị trí của nhóm mã ' + entry.groupCode + '.');
+    } finally {
+      this.kkCatalogSavingCode = '';
+      this.cdr.detectChanges();
+    }
+  }
+
   async loadKkCatalogPopup(forceRefresh = false): Promise<void> {
     this.kkCatalogLoading = true;
     this.cdr.detectChanges();
     try {
       this.kkCatalogEntries = await this.kkCatalog.loadAll(forceRefresh);
       this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
+      this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs(forceRefresh);
+      this.kkCatalogLocCommitted = new Map(
+        this.kkCatalogEntries.map((entry) => [entry.groupCode, String(entry.location || '').trim().toUpperCase()])
+      );
     } catch (e) {
       console.error('❌ loadKkCatalogPopup:', e);
       alert('❌ Không tải được Danh mục KK.');

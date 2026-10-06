@@ -414,6 +414,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
   private allowExportByCartonSet: Set<string> = new Set();
   /** Standard Packing theo mã (từ danh mục NVL) — dùng rule Chẵn/Lẻ khi quét. */
   private standardPackingByCode = new Map<string, number>();
+  private onNvlCatalogStorage = (ev: StorageEvent) => {
+    if (ev.key !== NvlCatalogFullService.cacheStampKey) return;
+    void this.loadAllowExportByCartonSet();
+  };
 
   /** Scan xuất không còn ghi người scan lên work order. */
   private syncWorkOrderCreatedByAfterExport(_lsx?: string, _employeeId?: string): void {
@@ -482,6 +486,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
     void this.refreshOutboundQcRuleCache();
     void this.loadAllowExportByCartonSet();
+    this.nvlCatalog.changed$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      void this.loadAllowExportByCartonSet();
+    });
+    window.addEventListener('storage', this.onNvlCatalogStorage);
   }
 
   /** Đổi nhà máy đang xem (ASM1 ⇄ ASM2) — đồng bộ URL query param rồi tải lại data. */
@@ -539,6 +547,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         }
       });
       this.standardPackingByCode = spMap;
+      this.cdr.markForCheck();
     } catch (e) {
       console.error('❌ Load Xuất thùng / Standard Packing catalog:', e);
     }
@@ -803,6 +812,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
   
   ngOnDestroy(): void {
+    window.removeEventListener('storage', this.onNvlCatalogStorage);
     this.destroy$.next();
     this.destroy$.complete();
     

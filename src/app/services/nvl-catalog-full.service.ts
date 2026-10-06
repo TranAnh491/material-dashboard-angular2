@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { Subject } from 'rxjs';
 import * as firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -38,12 +39,20 @@ export interface OutboundQtyStats {
  *
  * Cache 2 lớp (bộ nhớ + localStorage, 1 lần/ngày) để mở tab không phải đọc lại toàn bộ
  * ~8-9 nghìn document mỗi lần — chỉ đọc lại khi sang ngày mới hoặc bấm "Cập nhật danh mục".
+ * Sửa 1 mã (Standard Packing, …) ghi thêm một mốc thời gian + bản vá nhỏ để Outbound
+ * và Inventory áp ngay, không chờ hết ngày và không đọc lại cả collection.
  */
 @Injectable({ providedIn: 'root' })
 export class NvlCatalogFullService {
   readonly collectionName = 'materials';
   private static readonly CACHE_TTL_MS = 24 * 60 * 60 * 1000;
   private static readonly LS_KEY = 'nvl-catalog-full-cache-v1';
+  /** Mốc lần sửa gần nhất — tab khác lắng nghe storage event này. */
+  static readonly cacheStampKey = 'nvl-catalog-cache-ts-v1';
+  private static readonly PATCH_KEY = 'nvl-catalog-patches-v1';
+
+  /** Bắn khi 1 mã vừa được sửa trong phiên này. */
+  readonly changed$ = new Subject<string>();
 
   private cachedItems: NvlCatalogItem[] | null = null;
   private cachedAt = 0;
@@ -74,15 +83,31 @@ export class NvlCatalogFullService {
     return null;
   }
 
+  /** Mốc cache trong RAM của tab này. */
+  cacheSavedAt(): number {
+    return this.cachedAt;
+  }
+
+  /** Mốc mới nhất, kể cả tab khác vừa ghi localStorage. */
+  readCacheTimestamp(): number {
+    let stamped = 0;
+    try {
+      stamped = Number(localStorage.getItem(NvlCatalogFullService.cacheStampKey)) || 0;
+    } catch { /* ignore */ }
+    return Math.max(this.cachedAt, stamped);
+  }
+
   async listAll(forceRefresh = false): Promise<NvlCatalogItem[]> {
     const today = this.todayKey();
-    const mem = !forceRefresh ? this.peekCached() : null;
-    if (mem) return mem;
     if (!forceRefresh) {
+      const stamped = this.readCacheTimestamp();
+      const mem = this.peekCached();
+      if (mem && (stamped === 0 || this.cachedAt >= stamped)) return mem;
       const fromLocalStorage = this.loadFromLocalStorage();
       if (fromLocalStorage) {
+        this.applyPatches(fromLocalStorage.items);
         this.cachedItems = fromLocalStorage.items;
-        this.cachedAt = fromLocalStorage.timestamp;
+        this.cachedAt = Math.max(fromLocalStorage.timestamp, stamped);
         this.cachedDateKey = today;
         return fromLocalStorage.items;
       }
@@ -94,6 +119,7 @@ export class NvlCatalogFullService {
       .toPromise();
     const items = (snap?.docs || []).map(doc => this.mapDoc(doc.id, doc.data() as Record<string, unknown>));
     items.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    this.clearPatches();
     this.setCache(items);
     return items;
   }
@@ -136,9 +162,53 @@ export class NvlCatalogFullService {
 
   private setCache(items: NvlCatalogItem[]): void {
     this.cachedItems = items;
+    this.stampCache();
+    this.saveToLocalStorage(items);
+  }
+
+  private stampCache(): void {
     this.cachedAt = Date.now();
     this.cachedDateKey = this.todayKey();
-    this.saveToLocalStorage(items);
+    try {
+      localStorage.setItem(NvlCatalogFullService.cacheStampKey, String(this.cachedAt));
+    } catch { /* ignore */ }
+  }
+
+  private readPatches(): Record<string, Partial<NvlCatalogItem>> {
+    try {
+      const raw = localStorage.getItem(NvlCatalogFullService.PATCH_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, Partial<NvlCatalogItem>>;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private writePatch(code: string, patch: Partial<NvlCatalogItem> | null): void {
+    const all = this.readPatches();
+    if (patch === null) delete all[code];
+    else all[code] = { ...patch, materialCode: code };
+    try {
+      localStorage.setItem(NvlCatalogFullService.PATCH_KEY, JSON.stringify(all));
+    } catch { /* ignore */ }
+  }
+
+  private clearPatches(): void {
+    try {
+      localStorage.removeItem(NvlCatalogFullService.PATCH_KEY);
+    } catch { /* ignore */ }
+  }
+
+  private applyPatches(items: NvlCatalogItem[]): void {
+    const patches = this.readPatches();
+    for (const [code, patch] of Object.entries(patches)) {
+      if (!patch) continue;
+      const idx = items.findIndex(i => i.materialCode === code);
+      if (idx >= 0) {
+        items[idx] = { ...items[idx], ...patch, materialCode: code };
+      }
+    }
   }
 
   private saveToLocalStorage(items: NvlCatalogItem[]): void {
@@ -175,8 +245,10 @@ export class NvlCatalogFullService {
     this.cachedItems = null;
     this.cachedAt = 0;
     this.cachedDateKey = '';
+    this.clearPatches();
     try {
       localStorage.removeItem(NvlCatalogFullService.LS_KEY);
+      localStorage.removeItem(NvlCatalogFullService.cacheStampKey);
     } catch {
       /* ignore */
     }
@@ -184,7 +256,12 @@ export class NvlCatalogFullService {
 
   /** Cập nhật 1 dòng trong cache tại chỗ (thay vì đọc lại toàn bộ collection). */
   private patchCache(code: string, patch: Partial<NvlCatalogItem> | null): void {
-    if (!this.cachedItems) return;
+    this.stampCache();
+    this.writePatch(code, patch);
+    if (!this.cachedItems) {
+      this.changed$.next(code);
+      return;
+    }
     const idx = this.cachedItems.findIndex(i => i.materialCode === code);
     if (patch === null) {
       if (idx >= 0) this.cachedItems.splice(idx, 1);
@@ -206,6 +283,7 @@ export class NvlCatalogFullService {
       this.cachedItems.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
     }
     this.saveToLocalStorage(this.cachedItems);
+    this.changed$.next(code);
   }
 
   /** Thêm mã mới. Báo lỗi nếu mã đã tồn tại (dùng addOrUpdate để ghi đè có chủ đích). */

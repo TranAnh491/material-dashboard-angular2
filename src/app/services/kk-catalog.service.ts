@@ -8,6 +8,8 @@ export interface KkCatalogEntry {
   id: string;
   groupCode: string;
   productType: string;
+  /** Vị trí gán trực tiếp trên nhóm mã. Trống thì dùng quy định kệ hoặc vị trí loại hàng. */
+  location?: string;
   updatedAt?: Date;
 }
 
@@ -80,6 +82,117 @@ export class KkCatalogService {
     const group = this.groupCodeFromMaterial(materialCode);
     if (!group) return '';
     return (map || this.cachedMap || new Map()).get(group) || '';
+  }
+
+  /**
+   * Vị trí kệ theo đầu mã + khoảng nhóm mã (cùng quy định tab Quản lý nguyên liệu).
+   * B018521–B018600 → S03-T5. B017 theo ô S23-1… B009/B016 theo tầng Sxx-T1…T5.
+   */
+  plannedShelfLocForMaterial(materialCode: string | null | undefined): string {
+    const group = this.groupCodeFromMaterial(materialCode);
+    const match = /^B(\d{3})(\d{3})$/.exec(group);
+    if (!match) return '';
+    const prefix = `B${match[1]}`;
+    const seq = Number(match[2]);
+    if (!seq) return '';
+    if (prefix === 'B017') {
+      const slots = [
+        { loc: 'S23-1', from: 1, to: 20 },
+        { loc: 'S23-2', from: 21, to: 40 },
+        { loc: 'S24-1', from: 41, to: 60 },
+        { loc: 'S24-2', from: 61, to: 80 },
+        { loc: 'S25-1', from: 81, to: 100 },
+        { loc: 'S25-2', from: 101, to: 999 }
+      ];
+      return slots.find((slot) => seq >= slot.from && seq <= slot.to)?.loc || '';
+    }
+    const shelves = this.connectorShelves(prefix);
+    if (!shelves) return '';
+    for (const shelf of shelves) {
+      if (seq < shelf.from || seq > shelf.to) continue;
+      for (let level = 1; level <= 5; level++) {
+        const from = shelf.from + (level - 1) * shelf.perFloor;
+        if (from > shelf.to) break;
+        const to = Math.min(from + shelf.perFloor - 1, shelf.to);
+        if (seq >= from && seq <= to) return `${shelf.shelf}-T${level}`;
+      }
+    }
+    return '';
+  }
+
+  private connectorShelves(prefix: string): Array<{ shelf: string; from: number; to: number; perFloor: number }> | null {
+    if (prefix === 'B018') {
+      return [
+        { shelf: 'S01', from: 1, to: 200, perFloor: 50 },
+        { shelf: 'S03', from: 201, to: 600, perFloor: 80 },
+        { shelf: 'S05', from: 601, to: 999, perFloor: 80 }
+      ];
+    }
+    if (prefix === 'B016') {
+      return [
+        { shelf: 'S11', from: 1, to: 250, perFloor: 50 },
+        { shelf: 'S12', from: 251, to: 500, perFloor: 50 },
+        { shelf: 'S13', from: 501, to: 750, perFloor: 50 },
+        { shelf: 'S14', from: 751, to: 999, perFloor: 50 }
+      ];
+    }
+    if (prefix === 'B009') {
+      return [
+        { shelf: 'S07', from: 1, to: 250, perFloor: 50 },
+        { shelf: 'S08', from: 251, to: 500, perFloor: 50 },
+        { shelf: 'S09', from: 501, to: 750, perFloor: 50 },
+        { shelf: 'S10', from: 751, to: 999, perFloor: 50 }
+      ];
+    }
+    return null;
+  }
+
+  /**
+   * Vị trí dùng cho tem và quản lý: vị trí lưu trên nhóm mã, không có thì quy định kệ, rồi vị trí loại hàng.
+   */
+  assignedLocForMaterial(
+    materialCode: string,
+    typeMap?: Map<string, string>,
+    homeLocs?: Map<string, string>
+  ): string {
+    const group = this.groupCodeFromMaterial(materialCode);
+    const saved = this.savedGroupLocation(group);
+    if (saved) return saved;
+    return this.plannedShelfLocForMaterial(materialCode) || this.homeLocForMaterial(materialCode, typeMap, homeLocs);
+  }
+
+  savedGroupLocation(groupCode: string | null | undefined): string {
+    const group = this.normalizeGroupCode(groupCode) || this.groupCodeFromMaterial(groupCode);
+    if (!group) return '';
+    const hit = (this.cachedEntries || []).find((entry) => entry.groupCode === group);
+    return String(hit?.location || '').trim();
+  }
+
+  async saveGroupLocation(groupCode: string, location: string): Promise<void> {
+    const code = this.normalizeGroupCode(groupCode);
+    if (!code) return;
+    const loc = String(location || '').trim().toUpperCase();
+    const ref = this.firestore.collection(this.collectionName).doc(this.buildDocId(code)).ref;
+    if (!loc) {
+      await ref.set(
+        {
+          location: firebase.firestore.FieldValue.delete(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    } else {
+      await ref.set(
+        {
+          groupCode: code,
+          location: loc,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    }
+    const hit = (this.cachedEntries || []).find((entry) => entry.groupCode === code);
+    if (hit) hit.location = loc;
   }
 
   /** Vị trí yêu cầu đã gán theo loại hàng (danh mục KK). */
@@ -251,6 +364,7 @@ export class KkCatalogService {
       id,
       groupCode: this.normalizeGroupCode(String(data['groupCode'] || '')),
       productType: String(data['productType'] || '').trim(),
+      location: String(data['location'] || '').trim().toUpperCase(),
       updatedAt: (data['updatedAt'] as firebase.firestore.Timestamp | undefined)?.toDate?.()
     };
   }
