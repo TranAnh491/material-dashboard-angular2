@@ -18,6 +18,9 @@
     <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'tp'" (click)="setTab('tp')">
       Danh mục TP &amp; Mapping KH
     </button>
+    <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'storage'" (click)="setTab('storage')">
+      Storage Standard
+    </button>
   </div>
 
   <!-- ===== NVL ===== -->
@@ -464,6 +467,57 @@
         </table>
       </div>
     </div>
+  </section>
+
+  <!-- ===== Storage Standard ===== -->
+  <section class="dv-panel" *ngIf="activeTab === 'storage'">
+    <div class="dv-filter-bar">
+      <div class="dv-search-bar">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="storageSearchText" (input)="applyStorageFilter()"
+               placeholder="Loại vật tư, mã, môi trường...">
+        <button type="button" class="dv-search-clear" *ngIf="storageSearchText" (click)="clearStorageSearch()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <span class="dv-import-summary">{{ filteredStorageGroups.length }} / {{ storageGroups.length }} nhóm</span>
+    </div>
+
+    <div class="dv-table-wrap" *ngIf="filteredStorageGroups.length; else storageEmpty">
+      <div class="dv-table-scroll">
+        <table class="dv-catalog-table dv-catalog-table--storage">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Loại vật tư</th>
+              <th>Mã vật tư</th>
+              <th>Môi trường lưu trữ</th>
+              <th>Nhiệt độ</th>
+              <th>Độ ẩm</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let group of filteredStorageGroups">
+              <td>{{ group.no }}</td>
+              <td>{{ group.materialType }}</td>
+              <td>
+                <span class="dv-code-chip" *ngFor="let code of group.materialCodes">{{ code }}</span>
+              </td>
+              <td>
+                <span class="dv-env" [attr.data-env]="group.environment">{{ storageEnvLabel(group.environment) }}</span>
+              </td>
+              <td class="dv-climate">{{ storageTemperature(group.environment) }}</td>
+              <td class="dv-climate">{{ storageHumidity(group.environment) }}</td>
+              <td>{{ group.note || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <ng-template #storageEmpty>
+      <div class="dv-catalog-empty">Không có nhóm nào khớp tìm kiếm.</div>
+    </ng-template>
   </section>
 
   <!-- ===== Xóa toàn bộ danh mục — OTP qua Zalo ===== -->

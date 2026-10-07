@@ -33,10 +33,10 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     id: 'ASM1-special',
     factory: 'ASM1',
     formType: 'special',
-    titleVi: 'Kho Lưu Trữ Đặc Biệt',
-    titleEn: 'Special Storage Warehouse',
-    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO LƯU TRỮ ĐẶC BIỆT',
-    sheetTitleEn: 'SPECIAL STORAGE WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
+    titleVi: 'Kho Mát',
+    titleEn: 'Cool Warehouse',
+    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO MÁT',
+    sheetTitleEn: 'COOL WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'inventory_2',
     manageCode: 'WH-P01/F07',
     docVersion: '08',
@@ -72,10 +72,10 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     id: 'ASM2-special',
     factory: 'ASM2',
     formType: 'special',
-    titleVi: 'Kho Lưu Trữ Đặc Biệt',
-    titleEn: 'Special Storage Warehouse',
-    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO LƯU TRỮ ĐẶC BIỆT',
-    sheetTitleEn: 'SPECIAL STORAGE WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
+    titleVi: 'Kho Mát',
+    titleEn: 'Cool Warehouse',
+    sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO MÁT',
+    sheetTitleEn: 'COOL WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'inventory_2',
     manageCode: 'WH-P01/F07',
     docVersion: '08',
@@ -104,17 +104,35 @@ export interface NhietDoFactoryGroup {
   forms: NhietDoFormDef[];
 }
 
-/** Giới hạn nhiệt độ theo loại kho (vạch đỏ / tô màu ô) */
+/** Giới hạn nhiệt độ theo loại kho (vạch đỏ / tô màu ô). Cận dưới null = chỉ cận trên. */
 export interface TempChartLimits {
   scaleMin: number;
   scaleMax: number;
   gridLines: number[];
-  redLow: number;
+  redLow: number | null;
   redHigh: number;
-  warnLow: number;
+  warnLow: number | null;
   warnHigh: number;
   noteVi: string;
   noteEn: string;
+}
+
+/** Kho thường từ tháng 10/2026: chỉ cận trên. */
+export const REGULAR_UPPER_ONLY_FROM = { year: 2026, month: 10 };
+
+export function isNhietDoUpperOnlyPeriod(year: number, month: number): boolean {
+  return year > REGULAR_UPPER_ONLY_FROM.year
+    || (year === REGULAR_UPPER_ONLY_FROM.year && month >= REGULAR_UPPER_ONLY_FROM.month);
+}
+
+export interface HumChartLimits {
+  scaleMin: number;
+  scaleMax: number;
+  gridLines: number[];
+  redLow: number | null;
+  redHigh: number;
+  warnLow: number | null;
+  warnHigh: number;
 }
 
 export const TEMP_LIMITS_BY_FORM: Record<NhietDoFormType, TempChartLimits> = {
@@ -137,8 +155,8 @@ export const TEMP_LIMITS_BY_FORM: Record<NhietDoFormType, TempChartLimits> = {
     redHigh: 25,
     warnLow: 18,
     warnHigh: 23,
-    noteVi: 'Nhiệt độ kho lưu trữ đặc biệt: 16°C – 25°C.',
-    noteEn: 'Special storage warehouse temperature: 16°C – 25°C.'
+    noteVi: 'Nhiệt độ kho mát: 16°C – 25°C.',
+    noteEn: 'Cool warehouse temperature: 16°C – 25°C.'
   },
   cold: {
     scaleMin: 0,
@@ -153,10 +171,78 @@ export const TEMP_LIMITS_BY_FORM: Record<NhietDoFormType, TempChartLimits> = {
   }
 };
 
+/** Kho thường từ 01/10/2026: tối đa 40°C, cảnh báo 39°C, không cận dưới. */
+export const REGULAR_TEMP_LIMITS_UPPER: TempChartLimits = {
+  scaleMin: 5,
+  scaleMax: 45,
+  gridLines: [45, 40, 35, 30, 25, 20, 15, 10, 5],
+  redLow: null,
+  redHigh: 40,
+  warnLow: null,
+  warnHigh: 39,
+  noteVi: 'Nhiệt độ kho thường: tối đa 40°C, cảnh báo 39°C.',
+  noteEn: 'Regular warehouse temperature: max 40°C, warning 39°C.'
+};
+
+export const HUM_LIMITS_RANGE: HumChartLimits = {
+  scaleMin: 20,
+  scaleMax: 85,
+  gridLines: [85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20],
+  redLow: 25,
+  redHigh: 75,
+  warnLow: 27,
+  warnHigh: 73
+};
+
+/** Độ ẩm kho thường từ 01/10/2026: tối đa 85%, cảnh báo 84%, không cận dưới. */
+export const HUM_LIMITS_UPPER: HumChartLimits = {
+  scaleMin: 20,
+  scaleMax: 100,
+  gridLines: [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20],
+  redLow: null,
+  redHigh: 85,
+  warnLow: null,
+  warnHigh: 84
+};
+
+/** Độ ẩm kho mát và tủ lạnh từ 01/10/2026: tối đa 75% (dưới 75 là đạt), cảnh báo 74%, không cận dưới. */
+export const HUM_LIMITS_COOL_COLD: HumChartLimits = {
+  scaleMin: 20,
+  scaleMax: 100,
+  gridLines: [100, 90, 80, 75, 70, 60, 50, 40, 30, 20],
+  redLow: null,
+  redHigh: 75,
+  warnLow: null,
+  warnHigh: 74
+};
+
 /** Lưu ý đầy đủ — Kho Thường (F08), Kho Đặc Biệt (F07), Tủ Lạnh (F09) */
 export interface SheetNoteLine {
   vi: string;
   en: string;
+}
+
+export function regularWarehouseSheetNotes(upperOnly: boolean): {
+  grid: SheetNoteLine[];
+  list: SheetNoteLine[];
+} {
+  const notes = REGULAR_WAREHOUSE_SHEET_NOTES;
+  if (!upperOnly) return notes;
+  return {
+    grid: [
+      {
+        vi: '1. Nhiệt độ kho thường: tối đa 40°C, cảnh báo 39°C',
+        en: 'Normal warehouse temperature: max 40°C, warning 39°C'
+      },
+      notes.grid[1],
+      notes.grid[2],
+      {
+        vi: '4. Độ ẩm kho thường: tối đa 85%, cảnh báo 84%. Độ ẩm kho mát và tủ lạnh: tối đa 75%, cảnh báo 74%',
+        en: 'Normal warehouse humidity: max 85%, warning 84%. Cool warehouse and refrigerator humidity: max 75%, warning 74%'
+      }
+    ],
+    list: notes.list
+  };
 }
 
 export const REGULAR_WAREHOUSE_SHEET_NOTES: {
@@ -169,8 +255,8 @@ export const REGULAR_WAREHOUSE_SHEET_NOTES: {
       en: 'Normal warehouse temperature: 15-35°C'
     },
     {
-      vi: '2. Nhiệt độ kho đặc biệt (phòng lạnh) 16-25°C',
-      en: 'Special warehouse temperature 16-25°C'
+      vi: '2. Nhiệt độ kho mát: 16-25°C',
+      en: 'Cool warehouse temperature: 16-25°C'
     },
     {
       vi: '3. Nhiệt độ tủ lạnh 2-8°C',

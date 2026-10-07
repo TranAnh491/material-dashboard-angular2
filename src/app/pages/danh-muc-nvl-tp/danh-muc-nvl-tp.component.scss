@@ -450,6 +450,62 @@
   }
 }
 
+.dv-catalog-table--storage {
+  th:nth-child(1),
+  td:nth-child(1) {
+    width: 56px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  td:nth-child(3) {
+    white-space: normal;
+  }
+}
+
+.dv-climate {
+  white-space: pre-line;
+}
+
+.dv-code-chip {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dv-env {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #ecfdf5;
+  color: #047857;
+
+  &[data-env='COOL'] {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  &[data-env='COLD'] {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+
+  &[data-env='NORMAL_COOL'],
+  &[data-env='NORMAL_COLD'] {
+    background: #fff7ed;
+    color: #c2410c;
+  }
+}
+
 /** Danh mục NVL: Tên rộng; thêm cột Vị trí yêu cầu. */
 // Cột: 1 Mã, 2 Tên, 3 ĐVT, 4 Trọng lượng, 5 Khách hàng, 6 DV Lưu trữ, 7 Vị trí yêu cầu, 8 SP, 9 Lock, 10 Xuất thùng, 11 Thao tác, 12 ID
 .dv-catalog-table--nvl {

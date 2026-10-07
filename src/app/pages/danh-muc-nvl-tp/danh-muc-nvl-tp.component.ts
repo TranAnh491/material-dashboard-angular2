@@ -12,8 +12,9 @@ import { StorageUnitSize, getStorageUnitOption } from '../../models/storage-unit
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-alert.service';
 import { KkCatalogService } from '../../services/kk-catalog.service';
+import { STORAGE_ENV_CLIMATE, STORAGE_ENV_LABEL, STORAGE_MATERIAL_GROUPS, StorageMaterialGroup } from './storage-standard';
 
-type CatalogTab = 'nvl' | 'tp';
+type CatalogTab = 'nvl' | 'tp' | 'storage';
 
 /** Dòng hiển thị NVL — gộp thêm Khách hàng (NVLKH) và DV Lưu trữ (dữ liệu riêng, gộp vào tab này để sửa cùng chỗ). */
 interface NvlCatalogRow extends NvlCatalogItem {
@@ -71,6 +72,10 @@ export class DanhMucNvlTpComponent implements OnInit {
   showNvlAddForm = false;
   editingNvlCode: string | null = null;
   nvlEditDraft: Partial<NvlCatalogRow> | null = null;
+
+  readonly storageGroups = STORAGE_MATERIAL_GROUPS;
+  storageSearchText = '';
+  filteredStorageGroups: StorageMaterialGroup[] = STORAGE_MATERIAL_GROUPS;
   newNvlItem = { materialCode: '', materialName: '', unit: '', unitWeight: 0, standardPacking: 0 };
 
   // ===== DV Lưu trữ (gộp từ Danh mục DV Lưu trữ) =====
@@ -144,7 +149,9 @@ export class DanhMucNvlTpComponent implements OnInit {
 
   ngOnInit(): void {
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    this.setTab(tab === 'tp' ? 'tp' : 'nvl');
+    if (tab === 'tp') this.setTab('tp');
+    else if (tab === 'storage') this.setTab('storage');
+    else this.setTab('nvl');
   }
 
   /** Chỉ tải dữ liệu của tab được chọn, và chỉ tải lần đầu tiên bấm vào — giảm lượt đọc. */
@@ -152,6 +159,40 @@ export class DanhMucNvlTpComponent implements OnInit {
     this.activeTab = tab;
     if (tab === 'nvl' && !this.nvlLoadedAt) void this.loadNvl();
     if (tab === 'tp' && !this.tpLoadedAt) void this.loadTp();
+  }
+
+  storageEnvLabel(env: StorageMaterialGroup['environment']): string {
+    return STORAGE_ENV_LABEL[env];
+  }
+
+  storageTemperature(env: StorageMaterialGroup['environment']): string {
+    return STORAGE_ENV_CLIMATE[env].temperature;
+  }
+
+  storageHumidity(env: StorageMaterialGroup['environment']): string {
+    return STORAGE_ENV_CLIMATE[env].humidity;
+  }
+
+  applyStorageFilter(): void {
+    const q = this.storageSearchText.trim().toLowerCase();
+    if (!q) {
+      this.filteredStorageGroups = this.storageGroups;
+      return;
+    }
+    this.filteredStorageGroups = this.storageGroups.filter(group => {
+      const env = `${group.environment} ${this.storageEnvLabel(group.environment)} ${this.storageTemperature(group.environment)} ${this.storageHumidity(group.environment)}`.toLowerCase();
+      const codes = group.materialCodes.join(' ').toLowerCase();
+      return group.materialType.toLowerCase().includes(q)
+        || codes.includes(q)
+        || env.includes(q)
+        || (group.note || '').toLowerCase().includes(q)
+        || String(group.no) === q;
+    });
+  }
+
+  clearStorageSearch(): void {
+    this.storageSearchText = '';
+    this.applyStorageFilter();
   }
 
   goToMenu(): void {

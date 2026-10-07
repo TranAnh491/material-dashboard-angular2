@@ -10,7 +10,13 @@ import {
   NhietDoFactoryGroup,
   NhietDoFormDef,
   NhietDoFormType,
-  REGULAR_WAREHOUSE_SHEET_NOTES,
+  HUM_LIMITS_COOL_COLD,
+  HUM_LIMITS_RANGE,
+  HUM_LIMITS_UPPER,
+  HumChartLimits,
+  isNhietDoUpperOnlyPeriod,
+  REGULAR_TEMP_LIMITS_UPPER,
+  regularWarehouseSheetNotes,
   TEMP_LIMITS_BY_FORM,
   TempChartLimits
 } from './nhiet-do.model';
@@ -58,16 +64,9 @@ export class NhietDoComponent implements OnInit {
   readonly collection = 'warehouse-temp-humidity-checklists';
   readonly dayNumbers = Array.from({ length: 31 }, (_, i) => i + 1);
   readonly factoryGroups: NhietDoFactoryGroup[] = buildNhietDoFactoryGroups();
-  readonly regularWarehouseNotes = REGULAR_WAREHOUSE_SHEET_NOTES;
 
   view: NhietDoView = 'picker';
   activeForm: NhietDoFormDef | null = null;
-
-  // Giới hạn độ ẩm: đỏ 25–75%, vàng 27–73%
-  readonly humChart = { redLow: 25, redHigh: 75, warnLow: 27, warnHigh: 73 };
-
-  // Lưới Y-axis cho độ ẩm (85→20%, mỗi 5%)
-  readonly humGridLines = [85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20];
 
   // ── SVG chart constants ──────────────────────────────────────────
   readonly svgLabelW = 76;   // = col-group(44) + col-slot(32) — left label area
@@ -149,13 +148,33 @@ export class NhietDoComponent implements OnInit {
     return day <= this.daysInMonth;
   }
 
+  /** Từ 01/10/2026: kho thường chỉ cận trên 40°C; độ ẩm kho thường tối đa 85%, kho mát và tủ lạnh tối đa 75%. */
+  get usesUpperOnlyLimits(): boolean {
+    return isNhietDoUpperOnlyPeriod(this.selectedYear, this.selectedMonth);
+  }
+
+  get regularWarehouseNotes(): { grid: { vi: string; en: string }[]; list: { vi: string; en: string }[] } {
+    return regularWarehouseSheetNotes(this.usesUpperOnlyLimits);
+  }
+
   get tempLimits(): TempChartLimits {
     const type: NhietDoFormType = this.activeForm?.formType ?? 'special';
+    if (type === 'regular' && this.usesUpperOnlyLimits) return REGULAR_TEMP_LIMITS_UPPER;
     return TEMP_LIMITS_BY_FORM[type];
   }
 
   get tempGridLines(): number[] {
     return this.tempLimits.gridLines;
+  }
+
+  get humChart(): HumChartLimits {
+    if (!this.usesUpperOnlyLimits) return HUM_LIMITS_RANGE;
+    const type: NhietDoFormType = this.activeForm?.formType ?? 'regular';
+    return type === 'regular' ? HUM_LIMITS_UPPER : HUM_LIMITS_COOL_COLD;
+  }
+
+  get humGridLines(): number[] {
+    return this.humChart.gridLines;
   }
 
   private emptyDays(): DayTempHumReading[] {
@@ -276,8 +295,13 @@ export class NhietDoComponent implements OnInit {
     const v = Number(slot === 'morning' ? d?.tempMorning : d?.tempAfternoon);
     if (!Number.isFinite(v)) return '';
     const lim = this.tempLimits;
+    if (lim.redLow == null) {
+      if (v >= lim.redHigh) return 'cell--danger';
+      if (v >= lim.warnHigh) return 'cell--warn';
+      return '';
+    }
     if (v < lim.redLow || v > lim.redHigh) return 'cell--danger';
-    if (v < lim.warnLow || v > lim.warnHigh) return 'cell--warn';
+    if (v < (lim.warnLow ?? lim.redLow) || v > lim.warnHigh) return 'cell--warn';
     return '';
   }
 
@@ -285,8 +309,14 @@ export class NhietDoComponent implements OnInit {
     const d = this.days[day - 1];
     const v = Number(slot === 'morning' ? d?.humidityMorning : d?.humidityAfternoon);
     if (!Number.isFinite(v)) return '';
-    if (v <= this.humChart.redLow || v >= this.humChart.redHigh) return 'cell--danger';
-    if (v <= this.humChart.warnLow || v >= this.humChart.warnHigh) return 'cell--warn';
+    const lim = this.humChart;
+    if (lim.redLow == null) {
+      if (v >= lim.redHigh) return 'cell--danger';
+      if (v >= lim.warnHigh) return 'cell--warn';
+      return '';
+    }
+    if (v <= lim.redLow || v >= lim.redHigh) return 'cell--danger';
+    if (v <= (lim.warnLow ?? lim.redLow) || v >= lim.warnHigh) return 'cell--warn';
     return '';
   }
 
@@ -303,17 +333,18 @@ export class NhietDoComponent implements OnInit {
   get svgViewBox(): string { return `0 0 ${this.svgTotalW} ${this.svgTotalH}`; }
 
   // Y coordinate in temperature zone (scaleMax=top, scaleMin=bottom)
-  svgTempY(v: number): number {
+  svgTempY(v: number | null): number {
     const { scaleMin, scaleMax } = this.tempLimits;
-    const c = Math.max(scaleMin, Math.min(scaleMax, v));
+    const c = Math.max(scaleMin, Math.min(scaleMax, v ?? scaleMin));
     const span = scaleMax - scaleMin || 1;
     return this.svgTempH * (1 - (c - scaleMin) / span);
   }
 
-  // Y coordinate in humidity zone (85%=top, 20%=bottom)
-  svgHumY(v: number): number {
-    const c = Math.max(20, Math.min(85, v));
-    return this.svgHumH * (1 - (c - 20) / 65);
+  svgHumY(v: number | null): number {
+    const { scaleMin, scaleMax } = this.humChart;
+    const c = Math.max(scaleMin, Math.min(scaleMax, v ?? scaleMin));
+    const span = scaleMax - scaleMin || 1;
+    return this.svgHumH * (1 - (c - scaleMin) / span);
   }
 
   // X coordinate for day (center of column)

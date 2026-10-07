@@ -364,21 +364,24 @@
                   <line x1="0" [attr.y1]="svgTempY(tempLimits.redHigh)"
                         [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.redHigh)"
                         class="svg-limit-red"/>
-                  <line x1="0" [attr.y1]="svgTempY(tempLimits.redLow)"
+                  <line *ngIf="tempLimits.redLow != null"
+                        x1="0" [attr.y1]="svgTempY(tempLimits.redLow)"
                         [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.redLow)"
                         class="svg-limit-red"/>
                   <!-- Vạch vàng cảnh báo -->
                   <line x1="0" [attr.y1]="svgTempY(tempLimits.warnHigh)"
                         [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.warnHigh)"
                         class="svg-limit-yellow"/>
-                  <line x1="0" [attr.y1]="svgTempY(tempLimits.warnLow)"
+                  <line *ngIf="tempLimits.warnLow != null"
+                        x1="0" [attr.y1]="svgTempY(tempLimits.warnLow)"
                         [attr.x2]="svgPlotW" [attr.y2]="svgTempY(tempLimits.warnLow)"
                         class="svg-limit-yellow"/>
 
                   <!-- Label đỏ bên phải -->
                   <text [attr.x]="svgPlotW + 3" [attr.y]="svgTempY(tempLimits.redHigh) - 2"
                         class="svg-limit-label-red">{{ tempLimits.redHigh }}°C</text>
-                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgTempY(tempLimits.redLow) + 8"
+                  <text *ngIf="tempLimits.redLow != null"
+                        [attr.x]="svgPlotW + 3" [attr.y]="svgTempY(tempLimits.redLow) + 8"
                         class="svg-limit-label-red">{{ tempLimits.redLow }}°C</text>
 
                   <!-- Đường nối dữ liệu Sáng (xanh dương, liền) -->
@@ -436,26 +439,26 @@
                           class="svg-grid-v"/>
                   </ng-container>
 
-                  <!-- Vạch đỏ giới hạn: 75% và 25% -->
-                  <line x1="0" [attr.y1]="svgHumY(75)"
-                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(75)"
+                  <line x1="0" [attr.y1]="svgHumY(humChart.redHigh)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(humChart.redHigh)"
                         class="svg-limit-red"/>
-                  <line x1="0" [attr.y1]="svgHumY(25)"
-                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(25)"
+                  <line *ngIf="humChart.redLow != null"
+                        x1="0" [attr.y1]="svgHumY(humChart.redLow)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(humChart.redLow)"
                         class="svg-limit-red"/>
-                  <!-- Vạch vàng cảnh báo: 73% và 27% -->
-                  <line x1="0" [attr.y1]="svgHumY(73)"
-                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(73)"
+                  <line x1="0" [attr.y1]="svgHumY(humChart.warnHigh)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(humChart.warnHigh)"
                         class="svg-limit-yellow"/>
-                  <line x1="0" [attr.y1]="svgHumY(27)"
-                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(27)"
+                  <line *ngIf="humChart.warnLow != null"
+                        x1="0" [attr.y1]="svgHumY(humChart.warnLow)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(humChart.warnLow)"
                         class="svg-limit-yellow"/>
 
-                  <!-- Label đỏ bên phải -->
-                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgHumY(75)-2"
-                        class="svg-limit-label-red">75%</text>
-                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgHumY(25)+8"
-                        class="svg-limit-label-red">25%</text>
+                  <text [attr.x]="svgPlotW + 3" [attr.y]="svgHumY(humChart.redHigh)-2"
+                        class="svg-limit-label-red">{{ humChart.redHigh }}%</text>
+                  <text *ngIf="humChart.redLow != null"
+                        [attr.x]="svgPlotW + 3" [attr.y]="svgHumY(humChart.redLow)+8"
+                        class="svg-limit-label-red">{{ humChart.redLow }}%</text>
 
                   <!-- Đường nối dữ liệu Sáng -->
                   <polyline *ngIf="humAmPts"
