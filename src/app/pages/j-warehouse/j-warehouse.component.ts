@@ -259,7 +259,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'faceD.emergency': 'Cửa thoát hiểm',
     'faceD.factory3': 'Factory 3',
     'zone.incomingInspect': 'PASS',
-    'zone.nvlTra': 'NVL Trả',
+    'zone.nvlTra': 'NVL Sản Xuất DC',
     'zone.nvlCachLy': 'NVL cách ly',
     'zone.nvlChoXacNhan': 'Chờ xác nhận',
     'zone.traNcc': 'Trả NCC',
@@ -269,7 +269,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.fgStrap2': 'Khu vực đóng dây đai TP',
     'zone.fgWaitShip': 'TP chờ ship',
     'zone.fgPack': 'Đóng thành phẩm',
-    'zone.nvlShip': 'NVL Packing',
+    'zone.nvlShip': 'NVL Đóng Hàng',
     'zone.customsWait': 'Khu vực hàng cách ly của Hải Quan',
     'zone.khoAdmin': 'Kho Admin',
     'zone.khoSanXuat': 'Kho Sản Xuất',
@@ -519,7 +519,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'faceD.emergency': 'Emergency exit',
     'faceD.factory3': 'Factory 3',
     'zone.incomingInspect': 'Accepted/PASS Storage Area',
-    'zone.nvlTra': 'Production Return',
+    'zone.nvlTra': 'PD Materials Return',
     'zone.nvlCachLy': 'Isolated Materials',
     'zone.nvlChoXacNhan': 'Raw Materials Waiting Confirmation Area',
     'zone.traNcc': 'Return to Supplier Area',
@@ -529,7 +529,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.fgStrap2': 'FG Strapping Area',
     'zone.fgWaitShip': 'FG Waiting for Delivery Area',
     'zone.fgPack': 'Packing Area',
-    'zone.nvlShip': 'Packaging Material Area',
+    'zone.nvlShip': 'Packaging Materials',
     'zone.customsWait': 'Customs Quarantine Area',
     'zone.khoAdmin': 'Admin Warehouse',
     'zone.khoSanXuat': 'Production Material Storage',
@@ -1987,11 +1987,17 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
           ? this.lang === 'en'
             ? ['FG Strapping', 'Area']
             : ['Khu vực đóng', 'dây đai TP']
-          : label
-            ? this.wrapLabel(label, wrapAt)
-            : [];
+          : z.id === 'nvl-tra'
+            ? this.lang === 'en'
+              ? ['PD', 'Materials', 'Return']
+              : ['NVL', 'Sản Xuất', 'DC']
+            : label
+              ? this.wrapLabel(label, wrapAt)
+              : [];
       return { ...z, label, labelLines };
     });
+    const j5Solids = this.j5SolidZoneRects();
+    this.floorZonesMemo = this.floorZonesMemo.map((z) => this.pullDashedClear(z, j5Solids));
     this.layoutFloorZoneLabels(this.floorZonesMemo);
     return this.floorZonesMemo;
   }
@@ -2019,6 +2025,98 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Hóa chất, ESD, in tem, Backup — viền gạch đứt. */
   isKhoMatDashedBox(z: { id: string }): boolean {
     return z.id === 'kho-hoa-chat' || z.id === 'khu-backup' || z.id === 'khu-backup-intem' || this.isKhoMatSideBox(z);
+  }
+
+  /** Khu nét đứt cách khu nét liền và tường ngoài 0,2m để thấy đủ 4 cạnh. */
+  private readonly DASH_CLEAR_M = 0.2;
+
+  private outerWallSolids(): Array<{ xM: number; yM: number; wM: number; hM: number }> {
+    const t = 1;
+    return [
+      { xM: -t, yM: 0, wM: t, hM: this.WIDTH_M },
+      { xM: this.LENGTH_M, yM: 0, wM: t, hM: this.WIDTH_M },
+      { xM: 0, yM: -t, wM: this.LENGTH_M, hM: t },
+      { xM: 0, yM: this.WIDTH_M, wM: this.LENGTH_M, hM: t }
+    ];
+  }
+
+  private j5SolidZoneRects(): Array<{ xM: number; yM: number; wM: number; hM: number }> {
+    const rooms = this.officeRooms
+      .filter((room) => room.id !== 'secured')
+      .map((room) => ({ xM: room.xM, yM: room.yM, wM: room.wM, hM: room.hM }));
+    const wc = this.j5WcFemaleZone;
+    return [
+      ...rooms,
+      this.khoMatUnionZone,
+      this.bFaceStripZone,
+      { xM: wc.xM, yM: wc.yM, wM: wc.wM, hM: wc.hM },
+      this.raisedZone,
+      ...this.outerWallSolids()
+    ];
+  }
+
+  private j4SolidZoneRects(): Array<{ xM: number; yM: number; wM: number; hM: number }> {
+    const wc = this.j4WcMaleZone;
+    return [
+      { xM: wc.xM, yM: wc.yM, wM: wc.wM, hM: wc.hM },
+      this.raisedZone,
+      ...this.outerWallSolids()
+    ];
+  }
+
+  private pullDashedClear<T extends { id: string; xM: number; yM: number; wM: number; hM: number }>(
+    zone: T,
+    solids: Array<{ xM: number; yM: number; wM: number; hM: number }>
+  ): T {
+    if (zone.id === 'kho-mat-ext' || zone.id === 'shipping-area' || zone.wM <= 0 || zone.hM <= 0) return zone;
+    const gap = this.DASH_CLEAR_M;
+    const tol = 0.08;
+    let xM = zone.xM;
+    let yM = zone.yM;
+    let wM = zone.wM;
+    let hM = zone.hM;
+    let left = false;
+    let right = false;
+    let top = false;
+    let bottom = false;
+    const L = zone.xM;
+    const R = zone.xM + zone.wM;
+    const T = zone.yM;
+    const B = zone.yM + zone.hM;
+    for (const solid of solids) {
+      if (solid.wM <= 0 || solid.hM <= 0) continue;
+      const sL = solid.xM;
+      const sR = solid.xM + solid.wM;
+      const sT = solid.yM;
+      const sB = solid.yM + solid.hM;
+      const overlapX = Math.min(R, sR) - Math.max(L, sL);
+      const overlapY = Math.min(B, sB) - Math.max(T, sT);
+      if (overlapY > tol) {
+        if (Math.abs(L - sR) <= tol || (Math.abs(L - sL) <= tol && R > sL + tol)) left = true;
+        if (Math.abs(R - sL) <= tol || (Math.abs(R - sR) <= tol && L < sR - tol)) right = true;
+      }
+      if (overlapX > tol) {
+        if (Math.abs(T - sB) <= tol || (Math.abs(T - sT) <= tol && B > sT + tol)) top = true;
+        if (Math.abs(B - sT) <= tol || (Math.abs(B - sB) <= tol && T < sB - tol)) bottom = true;
+      }
+    }
+    if (left && wM - gap > 0.3) {
+      xM += gap;
+      wM -= gap;
+    }
+    if (right && wM - gap > 0.3) wM -= gap;
+    if (top && hM - gap > 0.3) {
+      yM += gap;
+      hM -= gap;
+    }
+    if (bottom && hM - gap > 0.3) hM -= gap;
+    return {
+      ...zone,
+      xM: this.round2(xM),
+      yM: this.round2(yM),
+      wM: this.round2(wM),
+      hM: this.round2(hM)
+    };
   }
 
   /** Cụm Kho hóa chất + ESD + kho mát mở rộng + Kho mát — một khối, không vách ngăn trong. */
@@ -3296,16 +3394,19 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
             ? ['Chemical', '(Production)']
             : ['Hóa chất', '(Sản Xuất)']
           : [...this.wrapLabel(label, wrapAt), ...notes];
-      return {
-        id: z.id,
-        label,
-        labelKey: z.labelKey,
-        labelLines,
-        xM: z.xM,
-        yM: z.yM,
-        wM: z.wM,
-        hM: z.hM
-      };
+      return this.pullDashedClear(
+        {
+          id: z.id,
+          label,
+          labelKey: z.labelKey,
+          labelLines,
+          xM: z.xM,
+          yM: z.yM,
+          wM: z.wM,
+          hM: z.hM
+        },
+        this.j4SolidZoneRects()
+      );
     });
     return this.j4FloorZonesMemo;
   }
@@ -3378,17 +3479,24 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
           ? this.lang === 'en'
             ? ['Customs Quarantine', 'Area']
             : ['Khu vực hàng cách ly', 'của Hải Quan']
-          : this.wrapLabel(label, 12);
-      return {
-        id: z.id,
-        label,
-        labelKey: z.labelKey,
-        labelLines,
-        xM: z.xM,
-        yM: z.yM,
-        wM: z.wM,
-        hM: z.hM
-      };
+          : z.id === 'j4-nvl-ship'
+            ? this.lang === 'en'
+              ? ['Packaging', 'Materials']
+              : ['NVL', 'Đóng Hàng']
+            : this.wrapLabel(label, 12);
+      return this.pullDashedClear(
+        {
+          id: z.id,
+          label,
+          labelKey: z.labelKey,
+          labelLines,
+          xM: z.xM,
+          yM: z.yM,
+          wM: z.wM,
+          hM: z.hM
+        },
+        this.j4SolidZoneRects()
+      );
     });
   }
 
@@ -4738,13 +4846,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.setZoom(delta);
   }
 
-  /** Xem đúng ảnh PNG sẽ được tải về. */
+  /** Xem trước bản vẽ. Ảnh tải về nét hơn ảnh xem. */
   previewDrawing(event?: Event): void {
     event?.stopPropagation();
     if (this.show3D || this.isDownloading) return;
     this.isDownloading = true;
     this.cdr.markForCheck();
-    this.renderExportPng()
+    this.renderExportPng(false)
       .then((blob) => {
         this.revokeDownloadPreview();
         this.downloadPreviewObjectUrl = URL.createObjectURL(blob);
@@ -4786,7 +4894,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.isDownloading) return;
     this.isDownloading = true;
     this.cdr.markForCheck();
-    this.renderExportPng()
+    this.renderExportPng(true)
       .then((blob) => {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
@@ -4805,11 +4913,12 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Tỉ lệ raster để PNG đủ nét khi in vừa khổ A3 (300 dpi).
-   * Cạnh dài A3 là 420mm → khoảng 4961 px. Không thấp hơn scale 3.
+   * Tỉ lệ raster khi in vừa khổ A3.
+   * Xem trước giữ 300 dpi. Tải về dùng 600 dpi.
    */
-  private exportPngScale(): number {
-    const dpi = 300;
+  private exportPngScale(forDownload = false): number {
+    const dpi = forDownload ? 600 : 300;
+    const cap = forDownload ? 8 : 6;
     const a3LongPx = (420 / 25.4) * dpi;
     const a3ShortPx = (297 / 25.4) * dpi;
     const baseW = this.viewBoxW + 16 + 360;
@@ -4818,10 +4927,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const pageAspect = a3LongPx / a3ShortPx;
     const needW = aspect >= pageAspect ? a3LongPx : a3ShortPx * aspect;
     const dpiScale = needW / baseW;
-    return Math.min(6, Math.max(3, Math.ceil(dpiScale * 10) / 10));
+    return Math.min(cap, Math.max(3, Math.ceil(dpiScale * 10) / 10));
   }
 
-  private renderExportPng(): Promise<Blob> {
+  private renderExportPng(forDownload = false): Promise<Blob> {
     const svg = this.planSvg?.nativeElement;
     if (!svg) return Promise.reject(new Error('plan svg missing'));
     const clone = svg.cloneNode(true) as SVGSVGElement;
@@ -4835,7 +4944,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     clone.insertBefore(styleEl, clone.firstChild);
 
     const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
-    const scale = this.exportPngScale();
+    const scale = this.exportPngScale(forDownload);
     const infoW = 360 * scale;
     const gap = 16 * scale;
 
