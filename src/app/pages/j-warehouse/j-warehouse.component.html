@@ -1,4 +1,4 @@
-<div class="jw" [class.jw--label-pick]="labelPick">
+<div class="jw" [class.jw--label-pick]="labelPick" [class.jw--kho]="drawMode === 'kho'">
   <div class="jw-shell">
     <header class="jw-header">
       <div class="jw-header__brand">
@@ -155,6 +155,16 @@
               (click)="toggleWorkMode($event)"
               [title]="t('work.hint')">
               <i class="material-icons">work</i> {{ t('btn.work') }}
+            </button>
+            <button
+              type="button"
+              class="jw-btn jw-btn--outline"
+              *ngIf="!show3D && !showUtilization"
+              [disabled]="isDownloading"
+              (click)="previewDrawing($event)"
+              [title]="t('title.preview')">
+              <i class="material-icons">visibility</i>
+              {{ t('btn.preview') }}
             </button>
             <button
               type="button"
@@ -364,12 +374,31 @@
                   <rect
                     class="jw-floor-zone__body"
                     [class.jw-floor-zone__body--solid]="z.id === 'j4-cold-storage'"
+                    [class.jw-floor-zone__body--split]="!!zoneColor2(z.id)"
+                    [style.stroke]="zoneColor(z.id)"
                     [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="j4MeterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
                     [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
+                  <rect
+                    *ngIf="zoneColor2(z.id) as c2"
+                    class="jw-floor-zone__split"
+                    fill="none"
+                    [style.stroke]="c2"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="j4MeterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
                   <text
+                    *ngIf="zoneBadge(z.id) as no"
+                    class="jw-floor-zone__label jw-floor-zone__badge"
+                    [attr.x]="meterX(z.xM + z.wM) - 4"
+                    [attr.y]="j4MeterY(z.yM) + 3">
+                    {{ no }}
+                  </text>
+                  <text
+                    *ngIf="zoneShowsName(z.id)"
                     class="jw-floor-zone__label"
                     [attr.x]="meterX(z.xM + z.wM / 2)"
                     [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 - 5">
@@ -386,10 +415,18 @@
                 <g class="jw-wc-zone" *ngIf="j4WcMaleZone as wc" aria-hidden="true">
                   <rect
                     class="jw-wc-zone__body"
+                    [style.stroke]="zoneColor(wc.id)"
                     [attr.x]="meterX(wc.xM)"
                     [attr.y]="j4MeterY(wc.yM)"
                     [attr.width]="meterW(wc.wM)"
                     [attr.height]="j4MeterY(wc.yM + wc.hM) - j4MeterY(wc.yM)" />
+                  <text
+                    *ngIf="zoneBadge(wc.id) as no"
+                    class="jw-wc-zone__label jw-floor-zone__badge"
+                    [attr.x]="meterX(wc.xM + wc.wM) - 4"
+                    [attr.y]="j4MeterY(wc.yM) + 3">
+                    {{ no }}
+                  </text>
                   <text
                     class="jw-wc-zone__label"
                     [attr.x]="meterX(wc.xM + wc.wM / 2)"
@@ -410,7 +447,7 @@
                   </text>
                 </g>
 
-                <!-- Kệ R1–R26 kéo sang J4: từ mặt C tới X18 -->
+                <!-- Kệ R3–R26 kéo sang J4: từ mặt C tới X18. R01 và R02 không vẽ trên J4. -->
                 <g class="jw-j4-racks" *ngIf="racksReady" aria-hidden="true">
                   <ng-container *ngIf="showDefaultAisles">
                   <rect
@@ -436,7 +473,7 @@
                     [attr.height]="j4MirrorHeight(a.hM)" />
                   </ng-container>
 
-                  <g *ngFor="let rack of j4Racks; trackBy: trackRack">
+                  <g *ngFor="let rack of j4ShownRacks; trackBy: trackRack">
                     <rect
                       class="jw-rack-outline"
                       [class.jw-rack-outline--inner]="rack.isInner"
@@ -445,7 +482,12 @@
                       [attr.width]="meterW(rack.wM)"
                       [attr.height]="j4MirrorHeight(rack.hM)" />
 
-                    <g *ngFor="let block of rack.blocks; trackBy: trackBlock" class="jw-j4-rack-block" [attr.data-jw-loc]="blockPickAttr(block)">
+                    <g
+                      *ngFor="let block of rack.blocks; trackBy: trackBlock"
+                      class="jw-j4-rack-block"
+                      [class.jw-block--nvl]="drawMode === 'kho' && rack.num <= 18"
+                      [class.jw-block--fg]="drawMode === 'kho' && rack.num >= 19"
+                      [attr.data-jw-loc]="blockPickAttr(block, true)">
                       <rect
                         class="jw-block__body"
                         [attr.x]="meterX(block.xM)"
@@ -477,7 +519,7 @@
                         [attr.x]="meterX(block.xM + block.wM / 2)"
                         [attr.y]="j4MirrorY(block.yM + block.hM / 2)">
                         <tspan
-                          *ngFor="let line of blockLabelLines(block.code); let i = index; let count = count"
+                          *ngFor="let line of rackBlockLabelLines(block, true); let i = index; let count = count"
                           [attr.x]="meterX(block.xM + block.wM / 2)"
                           [attr.dy]="i === 0 ? (-(count - 1) * 0.45 + 'em') : '1.05em'">
                           {{ line }}
@@ -492,27 +534,6 @@
                   </g>
                 </g>
 
-                <g *ngIf="j4FgAwaitStoreZone as z" aria-hidden="true">
-                  <rect
-                    class="jw-floor-zone__body"
-                    [attr.data-jw-loc]="zonePickAttr(z)"
-                    [attr.x]="meterX(z.xM)"
-                    [attr.y]="j4MeterY(z.yM)"
-                    [attr.width]="meterW(z.wM)"
-                    [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
-                  <text
-                    class="jw-floor-zone__label"
-                    [attr.x]="meterX(z.xM + z.wM / 2)"
-                    [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2">
-                    <tspan
-                      *ngFor="let line of z.labelLines; let i = index"
-                      [attr.x]="meterX(z.xM + z.wM / 2)"
-                      [attr.dy]="i === 0 ? (-(z.labelLines.length - 1) * 0.5 + 'em') : '1.1em'">
-                      {{ line }}
-                    </tspan>
-                  </text>
-                </g>
-
                 <!-- Nền cao giống J5 (cùng vị trí trục), không có cầu thang -->
                 <rect
                   class="jw-j4__raised"
@@ -523,7 +544,18 @@
                 <g *ngFor="let z of j4RaisedPackZones; trackBy: trackFloorZone">
                   <rect
                     class="jw-floor-zone__body"
+                    [class.jw-floor-zone__body--split]="!!zoneColor2(z.id)"
+                    [style.stroke]="zoneColor(z.id)"
                     [attr.data-jw-loc]="zonePickAttr(z)"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="j4MeterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="j4MeterY(z.yM + z.hM) - j4MeterY(z.yM)" />
+                  <rect
+                    *ngIf="zoneColor2(z.id) as c2"
+                    class="jw-floor-zone__split"
+                    fill="none"
+                    [style.stroke]="c2"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="j4MeterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -531,6 +563,14 @@
                 </g>
                 <g *ngFor="let z of j4RaisedPackZones; trackBy: trackFloorZone">
                   <text
+                    *ngIf="zoneBadge(z.id) as no"
+                    class="jw-floor-zone__label jw-floor-zone__badge"
+                    [attr.x]="meterX(z.xM + z.wM) - 4"
+                    [attr.y]="j4MeterY(z.yM) + 3">
+                    {{ no }}
+                  </text>
+                  <text
+                    *ngIf="zoneShowsName(z.id)"
                     class="jw-floor-zone__label"
                     [attr.x]="meterX(z.xM + z.wM / 2)"
                     [attr.y]="(j4MeterY(z.yM) + j4MeterY(z.yM + z.hM)) / 2 - 5">
@@ -643,7 +683,7 @@
                   </g>
                 </g>
 
-                <text class="jw-j4__edge-label" [attr.x]="j4X + j4W / 2" [attr.y]="j4Y - 65">E</text>
+                <text class="jw-j4__edge-label" [attr.x]="j4X + j4W / 2" [attr.y]="j4Y - 26">E</text>
 
                 <!-- Đầu xưởng J4 — mặt D -->
                 <ng-container
@@ -681,8 +721,19 @@
                   <rect
                     *ngIf="!isKhoMatDashedBox(z) && !isRaisedPackZone(z)"
                     class="jw-floor-zone__body"
+                    [class.jw-floor-zone__body--split]="!!zoneColor2(z.id)"
+                    [style.stroke]="zoneColor(z.id)"
                     [attr.data-jw-loc]="zonePickAttr(z)"
                     [class.jw-floor-zone__body--no-stroke]="isKhoMatBandFloorZone(z)"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="meterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="meterH(z.hM)" />
+                  <rect
+                    *ngIf="!isKhoMatDashedBox(z) && !isRaisedPackZone(z) && zoneColor2(z.id)"
+                    class="jw-floor-zone__split"
+                    fill="none"
+                    [style.stroke]="zoneColor2(z.id)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -692,10 +743,11 @@
 
               <!-- WC Nữ J5 -->
               <g class="jw-wc-zone" *ngIf="j5WcFemaleZone as wc" aria-hidden="true">
-                <rect
-                  class="jw-wc-zone__body"
-                  [attr.x]="meterX(wc.xM)"
-                  [attr.y]="meterY(wc.yM)"
+                  <rect
+                    class="jw-wc-zone__body"
+                    [style.stroke]="zoneColor(wc.id)"
+                    [attr.x]="meterX(wc.xM)"
+                    [attr.y]="meterY(wc.yM)"
                   [attr.width]="meterW(wc.wM)"
                   [attr.height]="meterH(wc.hM)" />
                 <ng-container *ngIf="wc.exit as exit">
@@ -718,6 +770,13 @@
                     {{ t('faceD.emergency') }}
                   </text>
                 </ng-container>
+                <text
+                  *ngIf="zoneBadge(wc.id) as no"
+                  class="jw-wc-zone__label jw-floor-zone__badge"
+                  [attr.x]="meterX(wc.xM + wc.wM) - 4"
+                  [attr.y]="meterY(wc.yM + (wc.exit ? wc.exit.hM : 0)) + 3">
+                  {{ no }}
+                </text>
                 <text
                   class="jw-wc-zone__label"
                   [attr.x]="meterX(wc.xM + wc.wM / 2)"
@@ -749,6 +808,7 @@
                 <g *ngFor="let room of officeRooms; trackBy: trackOfficeRoom">
                   <rect
                     class="jw-office__room"
+                    [style.stroke]="zoneColor(room.id)"
                     [class.jw-office__room--open]="room.id === 'secured'"
                     [attr.x]="meterX(room.xM)"
                     [attr.y]="meterY(room.yM)"
@@ -782,6 +842,13 @@
                       {{ officeRoomDoorWidth(room) * 1000 }}
                     </text>
                   </ng-container>
+                  <text
+                    *ngIf="zoneBadge(room.id) as no"
+                    class="jw-office__label jw-floor-zone__badge"
+                    [attr.x]="meterX(room.xM + room.wM) - 4"
+                    [attr.y]="meterY(room.yM) + 3">
+                    {{ no }}
+                  </text>
                   <ng-container *ngIf="room.id === 'secured'; else otherOfficeLabel">
                     <text
                       class="jw-office__label"
@@ -800,6 +867,13 @@
                     </text>
                   </ng-template>
                 </g>
+                <rect
+                  *ngIf="drawMode === 'kho'"
+                  class="jw-kho-mat-outline"
+                  [attr.x]="meterX(khoMatUnionZone.xM)"
+                  [attr.y]="meterY(khoMatUnionZone.yM)"
+                  [attr.width]="meterW(khoMatUnionZone.wM)"
+                  [attr.height]="meterH(khoMatUnionZone.hM)" />
                 <g *ngFor="let door of khoMatEntranceDoors; trackBy: trackKhoMatDoor">
                   <rect
                     class="jw-office__door-gap"
@@ -832,7 +906,18 @@
                   <rect
                     *ngIf="isKhoMatDashedBox(z)"
                     class="jw-floor-zone__body"
+                    [class.jw-floor-zone__body--split]="!!zoneColor2(z.id)"
+                    [style.stroke]="zoneColor(z.id)"
                     [attr.data-jw-loc]="zonePickAttr(z)"
+                    [attr.x]="meterX(z.xM)"
+                    [attr.y]="meterY(z.yM)"
+                    [attr.width]="meterW(z.wM)"
+                    [attr.height]="meterH(z.hM)" />
+                  <rect
+                    *ngIf="isKhoMatDashedBox(z) && zoneColor2(z.id)"
+                    class="jw-floor-zone__split"
+                    fill="none"
+                    [style.stroke]="zoneColor2(z.id)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
                     [attr.width]="meterW(z.wM)"
@@ -841,7 +926,7 @@
               </g>
 
               <!-- Kệ trong Kho mát: 7 tầng, không chia A/B/C — ẩn trên bản vẽ kỹ thuật -->
-              <g class="jw-kho-mat" *ngIf="racksReady && khoMatRows.length && !showTechDims">
+              <g class="jw-kho-mat" [class.jw-kho-mat--nvl]="drawMode === 'kho'" *ngIf="racksReady && khoMatRows.length && !showTechDims">
                 <g *ngFor="let row of khoMatRows; trackBy: trackKhoMatRow">
                   <rect
                     class="jw-kho-mat__row"
@@ -909,6 +994,7 @@
                   <rect
                     *ngIf="isRaisedPackZone(z)"
                     class="jw-floor-zone__body"
+                    [style.stroke]="zoneColor(z.id)"
                     [attr.data-jw-loc]="zonePickAttr(z)"
                     [attr.x]="meterX(z.xM)"
                     [attr.y]="meterY(z.yM)"
@@ -1064,6 +1150,8 @@
                 <g
                   *ngFor="let block of rack.blocks; trackBy: trackBlock"
                   class="jw-block"
+                  [class.jw-block--nvl]="drawMode === 'kho' && rack.num <= 18"
+                  [class.jw-block--fg]="drawMode === 'kho' && rack.num >= 19"
                   [class.jw-block--selected]="isBlockSelected(block)"
                   [class.jw-block--occupied]="blockOccupiedCount(block) > 0"
                   (pointerdown)="onBlockPointerDown(block, $event)"
@@ -1099,7 +1187,7 @@
                     [attr.x]="meterX(block.xM + block.wM / 2)"
                     [attr.y]="meterY(block.yM + block.hM / 2)">
                     <tspan
-                      *ngFor="let line of blockLabelLines(block.code); let i = index; let count = count"
+                      *ngFor="let line of rackBlockLabelLines(block); let i = index; let count = count"
                       [attr.x]="meterX(block.xM + block.wM / 2)"
                       [attr.dy]="i === 0 ? (-(count - 1) * 0.45 + 'em') : '1.05em'">
                       {{ line }}
@@ -1242,26 +1330,34 @@
                 </g>
               </g>
 
-              <text class="jw-edge-label" [attr.x]="floor.x - 56" [attr.y]="floor.y + floor.h / 2">A</text>
-              <text class="jw-edge-label" *ngIf="!showJ4" [attr.x]="floor.x + floor.w + 58 + meterW(1)" [attr.y]="floor.y + floor.h / 2">D</text>
-              <text class="jw-edge-label" *ngIf="!hideSharedFaceC" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y - 12">C</text>
-              <text class="jw-edge-label" [attr.x]="floor.x - 56" [attr.y]="floor.y + floor.h + 22">B</text>
+              <text class="jw-edge-label" [attr.x]="floor.x - 74" [attr.y]="floor.y">A</text>
+              <text class="jw-edge-label" [attr.x]="faceDEndTagX() - 26" [attr.y]="floor.y">D</text>
+              <text class="jw-edge-label" *ngIf="!hideSharedFaceC && !showJ4" [attr.x]="floor.x + floor.w / 2 - meterW(2)" [attr.y]="floor.y - 26">C</text>
+              <text class="jw-edge-label" *ngIf="!hideSharedFaceC && showJ4" [attr.x]="floor.x + floor.w / 2 - meterW(2)" [attr.y]="floor.y">C</text>
+              <text class="jw-edge-label" [attr.x]="floor.x + floor.w / 2" [attr.y]="floor.y + floor.h + 26">B</text>
 
               <!-- Nhãn khu vực vẽ sau WC / nền cao / trục để không bị che -->
               <g class="jw-floor-zone jw-floor-zone--labels" aria-hidden="true">
                 <g *ngFor="let z of floorZones; trackBy: trackFloorZone">
                   <ng-container *ngIf="!(showTechDims && z.id === 'shipping-area')">
                     <text
+                      *ngIf="zoneBadge(z.id) as no"
+                      class="jw-floor-zone__label jw-floor-zone__badge"
+                      [attr.x]="meterX(z.xM + z.wM) - 4"
+                      [attr.y]="meterY(z.yM) + 3">
+                      {{ no }}
+                    </text>
+                    <ng-container *ngIf="zoneShowsName(z.id)">
+                    <text
                       class="jw-floor-zone__label"
-                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat' || z.id === 'nvl-cho-xac-nhan' || isKhoMatSideBox(z)"
+                      [class.jw-floor-zone__label--chem]="z.id === 'kho-hoa-chat' || z.id === 'nvl-tra' || z.id === 'nvl-cho-xac-nhan' || z.id === 'tra-ncc' || isKhoMatSideBox(z)"
                       *ngFor="let line of z.labelLines; let i = index"
-                      [attr.x]="meterX(floorZoneLabelXM(z))"
-                      [attr.y]="meterY(floorZoneLabelYM(z)) + (i - (z.labelLines.length - 1) / 2) * ((z.id === 'kho-hoa-chat' || z.id === 'nvl-cho-xac-nhan' || isKhoMatSideBox(z)) ? 8.4 : 14)"
-                      [attr.transform]="floorZoneLabelRotate(z)
-                        ? ('rotate(-90 ' + meterX(floorZoneLabelXM(z)) + ' ' + meterY(floorZoneLabelYM(z)) + ')')
-                        : null">
+                      [attr.x]="floorZoneLabelX(z)"
+                      [attr.y]="floorZoneLabelY(z, i)"
+                      [attr.transform]="floorZoneLabelTransform(z)">
                       {{ line }}
                     </text>
+                    </ng-container>
                   </ng-container>
                 </g>
               </g>
@@ -1489,7 +1585,7 @@
             </ng-container>
             <ng-container *ngIf="cam.building === 'j4'">
               <rect
-                *ngFor="let rack of j4Racks; trackBy: trackRack"
+                *ngFor="let rack of j4ShownRacks; trackBy: trackRack"
                 class="jw-cctv-monitor__rack"
                 [attr.x]="meterX(rack.xM)"
                 [attr.y]="j4MirrorTopY(rack.yM, rack.hM)"
@@ -1978,23 +2074,18 @@
             <h3>{{ t('info.title') }}</h3>
             <i class="material-icons">{{ infoPanelOpen ? 'expand_more' : 'chevron_right' }}</i>
           </button>
-          <div class="jw-shelf-loc" *ngIf="drawMode === 'kho' && infoPanelOpen">
-            <h4 class="jw-shelf-loc__title">{{ t('info.shelfTitle') }}</h4>
-            <p class="jw-shelf-loc__note">{{ t('info.stagingNote') }}</p>
-            <p class="jw-shelf-loc__status" *ngIf="shelfLocLoading">{{ t('info.shelfLoading') }}</p>
-            <p class="jw-shelf-loc__status" *ngIf="!shelfLocLoading && shelfLocError">{{ t('info.shelfError') }}</p>
-            <ng-container *ngIf="!shelfLocLoading && !shelfLocError">
-              <h5 class="jw-shelf-loc__head">{{ t('info.shelfR') }}</h5>
-              <div class="jw-shelf-loc__item" *ngFor="let row of shelfLocRRows">
-                <div class="jw-shelf-loc__shelf">{{ row.shelf }}</div>
-                <div class="jw-shelf-loc__groups" [class.jw-shelf-loc__groups--empty]="row.groups === '—'">{{ row.groups }}</div>
-              </div>
-              <h5 class="jw-shelf-loc__head">{{ t('info.shelfS') }}</h5>
-              <div class="jw-shelf-loc__item" *ngFor="let row of shelfLocSRows">
-                <div class="jw-shelf-loc__shelf">{{ row.shelf }}</div>
-                <div class="jw-shelf-loc__groups" [class.jw-shelf-loc__groups--empty]="row.groups === '—'">{{ row.groups }}</div>
-              </div>
-            </ng-container>
+          <div class="jw-zone-key" *ngIf="drawMode === 'kho' && infoPanelOpen">
+            <h4 class="jw-zone-key__title">{{ t('info.zoneColors') }}</h4>
+            <div class="jw-zone-key__item" *ngFor="let item of zoneLegend">
+              <span class="jw-zone-key__no">{{ item.no }}</span>
+              <span
+                class="jw-zone-key__swatch"
+                [class.jw-zone-key__swatch--split]="item.color2"
+                [style.border-color]="item.color2 ? 'transparent' : item.color"
+                [style.--c1]="item.color"
+                [style.--c2]="item.color2"></span>
+              <span class="jw-zone-key__name">{{ item.label }}</span>
+            </div>
           </div>
           <dl class="jw-fields" *ngIf="infoPanelOpen">
             <div class="jw-fields__row" *ngFor="let row of warehouseInfoRows">
@@ -2015,6 +2106,22 @@
         </ng-template>
         </ng-template>
       </aside>
+    </div>
+  </div>
+
+  <div class="jw-modal-backdrop" *ngIf="showDownloadPreview" (click)="closeDownloadPreview()">
+    <div class="jw-modal jw-modal--preview" role="dialog" (click)="$event.stopPropagation()">
+      <header class="jw-modal__head">
+        <h2 class="jw-modal__title">
+          <i class="material-icons">visibility</i> {{ t('btn.preview') }}
+        </h2>
+        <button type="button" class="jw-modal__close" (click)="closeDownloadPreview()" [title]="t('title.close')">
+          <i class="material-icons">close</i>
+        </button>
+      </header>
+      <div class="jw-modal__preview">
+        <img *ngIf="downloadPreviewUrl" [src]="downloadPreviewUrl" [alt]="t('title.preview')" />
+      </div>
     </div>
   </div>
 

@@ -717,6 +717,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Mốc danh mục NVL lúc cache này được ghi — cũ hơn mốc sửa Standard Packing thì bỏ. */
   private static sharedCatalogSourceTs = 0;
   private catalogSourceTs = 0;
+  /** Mốc server (doc app-meta/nvl-catalog) mà danh mục này đã đồng bộ tới — máy khác sửa thì tải phần đổi. */
+  private static sharedCatalogRemoteTs = 0;
+  private catalogRemoteTs = 0;
   private onNvlCatalogStorage = (ev: StorageEvent) => {
     if (ev.key !== NvlCatalogFullService.cacheStampKey) return;
     void this.adoptNewerNvlCatalog();
@@ -3006,6 +3009,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => {
       void this.hydrateCatalogFromDisk().then((ok) => {
         if (ok) this.rememberSharedCatalog();
+        void this.syncCatalogRemoteChanges();
       });
     }, 0);
 
@@ -4454,6 +4458,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       
       console.log(`✅ Deletion completed! Deleted ${deletedCount} documents`);
+      if (deletedCount) void this.nvlCatalogFull.markRemoteChanged({ reset: true });
       
       alert(`✅ XÓA THÀNH CÔNG!\n\n` +
             `🗑️ Đã xóa: ${deletedCount} documents\n` +
@@ -4495,6 +4500,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.catalogLoaded = true;
       this.catalogLoadedDateKey = today;
       this.catalogSourceTs = MaterialsComponent.sharedCatalogSourceTs;
+      this.catalogRemoteTs = MaterialsComponent.sharedCatalogRemoteTs;
       return;
     }
     const mem = this.nvlCatalogFull.peekCached();
@@ -4512,6 +4518,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     MaterialsComponent.sharedCatalogCache = this.catalogCache;
     MaterialsComponent.sharedCatalogDateKey = this.catalogLoadedDateKey || this.catalogTodayKey();
     MaterialsComponent.sharedCatalogSourceTs = this.catalogSourceTs;
+    MaterialsComponent.sharedCatalogRemoteTs = this.catalogRemoteTs;
   }
 
   /** Đọc catalog từ đĩa (IndexedDB / localStorage compact) — không tốn lượt đọc Firestore. */
@@ -4550,7 +4557,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private tryApplyCatalogCachePayload(parsed: unknown): boolean {
     if (!parsed || typeof parsed !== 'object') return false;
-    const p = parsed as { v?: number; t?: number; timestamp?: number; d?: string; rows?: unknown[]; items?: any[] };
+    const p = parsed as { v?: number; t?: number; timestamp?: number; d?: string; m?: number; rows?: unknown[]; items?: any[] };
     const ts = Number(p.t || p.timestamp || 0);
     if (!ts || Date.now() - ts >= MaterialsComponent.CATALOG_CACHE_TTL_MS) return false;
     const cacheDay = String(p.d || '') || this.catalogDateKeyFromTs(ts);
@@ -4582,13 +4589,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.catalogLoaded = true;
       this.catalogLoadedDateKey = this.catalogTodayKey();
       this.catalogSourceTs = ts;
+      this.catalogRemoteTs = Number(p.m) || ts;
       this.rememberSharedCatalog();
       return true;
     }
     return false;
   }
 
-  private buildCatalogCachePayload(): { v: number; t: number; d: string; rows: Array<[string, string, string, number, number]> } {
+  private buildCatalogCachePayload(): { v: number; t: number; d: string; m: number; rows: Array<[string, string, string, number, number]> } {
     const rows: Array<[string, string, string, number, number]> = [];
     this.catalogCache.forEach((item, code) => {
       const flags =
@@ -4603,7 +4611,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         flags
       ]);
     });
-    return { v: 2, t: Date.now(), d: this.catalogTodayKey(), rows };
+    return { v: 2, t: Date.now(), d: this.catalogTodayKey(), m: this.catalogRemoteTs, rows };
   }
 
   private persistCatalogCache(): void {
@@ -4795,18 +4803,56 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     isEsd?: boolean;
   }>): void {
     this.catalogCache.clear();
+    this.catalogRemoteTs = this.nvlCatalogFull.remoteSyncTs() || Date.now();
     for (const item of items) {
-      const materialCode = this.nvlCatalogFull.normalizeCode(item.materialCode);
-      if (!materialCode) continue;
-      this.catalogCache.set(materialCode, {
-        materialCode,
-        materialName: item.materialName || '',
-        unit: item.unit || 'PCS',
-        standardPacking: Number(item.standardPacking) || 0,
-        standardPackingLocked: item.standardPackingLocked === true,
-        isMsd: item.isMsd === true,
-        isEsd: item.isEsd === true
-      });
+      this.setCatalogItemFromNvl(item);
+    }
+  }
+
+  private setCatalogItemFromNvl(item: {
+    materialCode: string;
+    materialName?: string;
+    unit?: string;
+    standardPacking?: number;
+    standardPackingLocked?: boolean;
+    isMsd?: boolean;
+    isEsd?: boolean;
+  }): void {
+    const materialCode = this.nvlCatalogFull.normalizeCode(item.materialCode);
+    if (!materialCode) return;
+    this.catalogCache.set(materialCode, {
+      materialCode,
+      materialName: item.materialName || '',
+      unit: item.unit || 'PCS',
+      standardPacking: Number(item.standardPacking) || 0,
+      standardPackingLocked: item.standardPackingLocked === true,
+      isMsd: item.isMsd === true,
+      isEsd: item.isEsd === true
+    });
+  }
+
+  /** Máy khác vừa sửa Danh mục NVL: chỉ tải các mã đã sửa (1 doc mốc + vài doc), không đọc lại cả collection. */
+  private async syncCatalogRemoteChanges(): Promise<void> {
+    if (!this.catalogCache.size) return;
+    try {
+      const changes = await this.nvlCatalogFull.fetchChangesSince(this.catalogRemoteTs);
+      if (!changes) return;
+      if (changes.reset) {
+        const items = await this.nvlCatalogFull.listAll(false);
+        if (!items.length) return;
+        this.fillCatalogCacheFromNvlItems(items);
+      } else {
+        changes.deletedCodes.forEach((code) => this.catalogCache.delete(code));
+        changes.items.forEach((item) => this.setCatalogItemFromNvl(item));
+        this.catalogRemoteTs = changes.syncTs;
+      }
+      this.catalogSourceTs = Math.max(this.catalogSourceTs, this.nvlCatalogFull.readCacheTimestamp());
+      this.rememberSharedCatalog();
+      this.persistCatalogCache();
+      this.applyCatalogToAllViews();
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.warn('syncCatalogRemoteChanges:', e);
     }
   }
 
@@ -4852,12 +4898,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       if (!forceRefresh && this.hydrateCatalogFromNvlMemoryOrShared()) {
         this.applyCatalogToAllViews();
+        void this.syncCatalogRemoteChanges();
         return;
       }
 
       if (!forceRefresh && this.catalogCache.size > 0 && this.catalogLoadedDateKey === today) {
         this.catalogLoaded = true;
         this.applyCatalogToAllViews();
+        void this.syncCatalogRemoteChanges();
         return;
       }
 
@@ -4865,6 +4913,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.catalogLoaded = true;
         this.catalogLoadedDateKey = today;
         this.applyCatalogToAllViews();
+        void this.syncCatalogRemoteChanges();
         return;
       }
 

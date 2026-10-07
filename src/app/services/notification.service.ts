@@ -155,7 +155,7 @@ export class NotificationService {
   async cleanupOldNotifications(): Promise<void> {
     try {
       const notificationsRef = this.firestore.collection('notifications');
-      const snapshot = await notificationsRef.ref.orderBy('createdAt', 'desc').get();
+      const snapshot = await notificationsRef.ref.orderBy('createdAt', 'desc').limit(40).get();
       
       if (snapshot.docs.length > 20) {
         const batch = this.firestore.firestore.batch();
@@ -173,9 +173,11 @@ export class NotificationService {
     }
   }
 
-  // Lấy số lượng thông báo (cho navbar)
+  // Số thông báo gần nhất cho navbar. Không lắng nghe cả collection.
   getNotificationCount(): Observable<any> {
-    return this.firestore.collection('notifications').valueChanges().pipe(
+    return this.firestore.collection('notifications', ref =>
+      ref.orderBy('createdAt', 'desc').limit(20)
+    ).valueChanges().pipe(
       map(notifications => ({
         status: 'success',
         count: notifications.length

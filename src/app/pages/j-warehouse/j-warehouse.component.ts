@@ -14,12 +14,11 @@ import {
   ViewContainerRef
 } from '@angular/core';
 import { Location } from '@angular/common';
+import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subscription } from 'rxjs';
 import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
-import { KkCatalogService } from '../../services/kk-catalog.service';
-
 export interface JwBlock {
   /** VD: R11 hoặc S01-1 (kho mát) */
   code: string;
@@ -155,6 +154,10 @@ export interface JwFloorZone {
   yM: number;
   wM: number;
   hM: number;
+  /** Tâm cụm chữ. Khi chữ lớn hơn ô thì nằm ngoài ô. */
+  labelAnchorXM?: number;
+  labelAnchorYM?: number;
+  labelRotate?: boolean;
 }
 
 export interface JwWcZone {
@@ -233,6 +236,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'kpi.racks': 'Dãy kệ',
     'kpi.totalPallets': 'Tổng pallet',
     'kpi.assigned': 'Đã gán',
+    'btn.preview': 'Xem trước',
     'btn.download': 'Tải về',
     'btn.downloading': 'Đang xuất…',
     'btn.work': 'Work',
@@ -255,15 +259,18 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'faceD.emergency': 'Cửa thoát hiểm',
     'faceD.factory3': 'Factory 3',
     'zone.incomingInspect': 'PASS',
-    'zone.nvlChoXacNhan': 'NVL chờ xác nhận',
-    'zone.nvlChoGiao': 'NVL Chờ giao',
+    'zone.nvlTra': 'NVL Trả',
+    'zone.nvlCachLy': 'NVL cách ly',
+    'zone.nvlChoXacNhan': 'Chờ xác nhận',
+    'zone.traNcc': 'Trả NCC',
+    'zone.nvlChoGiao': 'NVL Giao ASM3',
     'zone.fgReceiving': 'Khu vực thành phẩm chờ cất',
-    'zone.fgStrap1': 'Đai thành phẩm số 1',
-    'zone.fgStrap2': 'Đai thành phẩm số 2',
+    'zone.fgStrap1': 'Khu vực đóng dây đai TP',
+    'zone.fgStrap2': 'Khu vực đóng dây đai TP',
     'zone.fgWaitShip': 'TP chờ ship',
     'zone.fgPack': 'Đóng thành phẩm',
     'zone.nvlShip': 'NVL Packing',
-    'zone.customsWait': 'Khu vực hàng chờ Hải quan',
+    'zone.customsWait': 'Khu vực hàng cách ly của Hải Quan',
     'zone.khoAdmin': 'Kho Admin',
     'zone.khoSanXuat': 'Kho Sản Xuất',
     'zone.scrap': 'Kho ASM2 Scrap',
@@ -271,8 +278,9 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.khoVatTuVp': 'Kho Vật tư văn phòng',
     'zone.khoMayMoc': 'Kho Máy móc thiết bị',
     'zone.khoTaiLieu': 'Kho tài liệu',
-    'zone.khoHoaChatThuong': 'Kho Hóa chất nhiệt độ thường',
+    'zone.khoHoaChatThuong': 'Hóa chất (Sản Xuất)',
     'zone.receiving': 'Khu vực Nhận nguyên liệu',
+    'zone.nvlGiaoAsm1': 'Khu vực NVL giao ASM1',
     'zone.nvlChoKiem': 'Khu vực NVL chờ kiểm',
     'zone.wc': 'WC',
     'zone.wcMale': 'WC Nam',
@@ -285,7 +293,9 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.khoEsd': 'ESD',
     'zone.inTem': 'Khu vực in tem',
     'zone.backup': 'Backup',
+    'zone.locker': 'Locker',
     'zone.vpKho': 'VP Kho',
+    'zone.vpKhoAdmin': 'VP Kho',
     'zone.shipping': 'Khu xuất hàng',
     'raised.label': 'NỀN CAO',
     'raised.meta': '{{from}}–{{to}} · {{w}}m · bậc thang lên',
@@ -304,6 +314,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'print.nvl': 'Nguyên vật liệu',
     'print.fg': 'Thành phẩm',
     'print.shelfS': 'Kệ S',
+    'info.zoneColors': 'Khu vực',
     'info.shelfTitle': 'Nhóm mã theo kệ',
     'info.shelfR': 'Kệ R',
     'info.shelfS': 'Kệ S',
@@ -359,6 +370,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'util.level': 'Tầng',
     'util.empty': 'Chưa có dữ liệu kệ.',
     'title.extraPallet': 'Nhập pallet ngoài',
+    'title.preview': 'Xem trước bản vẽ khi tải về',
     'title.download2d': 'Tải về bản vẽ + Thông tin kho (PNG)',
     'title.download3d': 'Tải hình mô hình 3D (PNG)',
     'title.close': 'Đóng',
@@ -484,6 +496,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'kpi.racks': 'Rack rows',
     'kpi.totalPallets': 'Total pallets',
     'kpi.assigned': 'Assigned',
+    'btn.preview': 'Preview',
     'btn.download': 'Download',
     'btn.downloading': 'Exporting…',
     'btn.work': 'Work',
@@ -505,38 +518,44 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'faceD.cabinet': 'Electrical cabinet',
     'faceD.emergency': 'Emergency exit',
     'faceD.factory3': 'Factory 3',
-    'zone.incomingInspect': 'PASS',
-    'zone.nvlChoXacNhan': 'RM pending confirmation',
-    'zone.nvlChoGiao': 'RM awaiting handover',
-    'zone.fgReceiving': 'FG awaiting putaway',
-    'zone.fgStrap1': 'FG strapping area 1',
-    'zone.fgStrap2': 'FG strapping area 2',
-    'zone.fgWaitShip': 'FG awaiting shipment',
-    'zone.fgPack': 'FG packing',
-    'zone.nvlShip': 'NVL Packing',
-    'zone.customsWait': 'Goods awaiting customs',
-    'zone.khoAdmin': 'Admin warehouse',
-    'zone.khoSanXuat': 'Production warehouse',
-    'zone.scrap': 'ASM2 Scrap warehouse',
-    'zone.khoScrapAsm1': 'ASM1 Scrap warehouse',
-    'zone.khoVatTuVp': 'Office supplies warehouse',
-    'zone.khoMayMoc': 'Machinery and equipment warehouse',
-    'zone.khoTaiLieu': 'Document warehouse',
-    'zone.khoHoaChatThuong': 'Ambient-temperature chemical warehouse',
-    'zone.receiving': 'Raw material receiving area',
-    'zone.nvlChoKiem': 'RM awaiting inspection',
+    'zone.incomingInspect': 'Accepted/PASS Storage Area',
+    'zone.nvlTra': 'Production Return',
+    'zone.nvlCachLy': 'Isolated Materials',
+    'zone.nvlChoXacNhan': 'Raw Materials Waiting Confirmation Area',
+    'zone.traNcc': 'Return to Supplier Area',
+    'zone.nvlChoGiao': 'Work Order Waiting Outbound Area (ASM3)',
+    'zone.fgReceiving': 'FG Pending Put-away Area',
+    'zone.fgStrap1': 'FG Strapping Area',
+    'zone.fgStrap2': 'FG Strapping Area',
+    'zone.fgWaitShip': 'FG Waiting for Delivery Area',
+    'zone.fgPack': 'Packing Area',
+    'zone.nvlShip': 'Packaging Material Area',
+    'zone.customsWait': 'Customs Quarantine Area',
+    'zone.khoAdmin': 'Admin Warehouse',
+    'zone.khoSanXuat': 'Production Material Storage',
+    'zone.scrap': 'ASM2 SCRAP / NG Area',
+    'zone.khoScrapAsm1': 'Scrap Area',
+    'zone.khoVatTuVp': 'Office Supplies Warehouse',
+    'zone.khoMayMoc': 'Machinery and Equipment Warehouse',
+    'zone.khoTaiLieu': 'Document Warehouse',
+    'zone.khoHoaChatThuong': 'Chemical (Production)',
+    'zone.receiving': 'Inbound Staging Area',
+    'zone.nvlGiaoAsm1': 'Work Order Waiting Outbound Area (ASM1)',
+    'zone.nvlChoKiem': 'IQC Area',
     'zone.wc': 'WC',
     'zone.wcMale': 'WC',
     'zone.wcFemale': 'WC',
-    'zone.forkliftCharging': 'Forklift charging area',
-    'zone.j4NonConforming': 'Non-conforming goods area',
+    'zone.forkliftCharging': 'Forklift Charging Area',
+    'zone.j4NonConforming': 'NG / Non-conforming Area',
     'zone.j4ColdStorage': 'Secured WH',
     'zone.khoMatExt': 'Secured WH Extension',
-    'zone.khoHoaChat': 'Chemical',
-    'zone.khoEsd': 'ESD',
-    'zone.inTem': 'Label printing area',
-    'zone.backup': 'Backup',
-    'zone.vpKho': 'Office',
+    'zone.khoHoaChat': 'Chemical Storage',
+    'zone.khoEsd': 'ESD Storage Area',
+    'zone.inTem': 'Label Printing Area',
+    'zone.backup': 'Backup Storage Area',
+    'zone.locker': 'Employee Locker Area',
+    'zone.vpKho': 'WH Office',
+    'zone.vpKhoAdmin': 'WH Office',
     'zone.shipping': 'Shipping area',
     'raised.label': 'RAISED FLOOR',
     'raised.meta': '{{from}}–{{to}} · {{w}}m · stairs up',
@@ -555,6 +574,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'print.nvl': 'Raw materials',
     'print.fg': 'Finished goods',
     'print.shelfS': 'S shelves',
+    'info.zoneColors': 'Areas',
     'info.shelfTitle': 'Code groups by shelf',
     'info.shelfR': 'R racks',
     'info.shelfS': 'S shelves',
@@ -610,6 +630,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'util.level': 'Level',
     'util.empty': 'No rack data.',
     'title.extraPallet': 'Enter extra pallets',
+    'title.preview': 'Preview the downloaded drawing',
     'title.download2d': 'Download drawing + warehouse info (PNG)',
     'title.download3d': 'Download 3D image (PNG)',
     'title.close': 'Close',
@@ -909,6 +930,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Backup giữa 2 cửa kho mát: cách mỗi cửa 2m, rộng 0.5m vào trong phòng. */
   readonly KHU_BACKUP_DOOR_CLEAR_M = 2;
   readonly KHU_BACKUP_D_M = 0.5;
+  /** Locker sát bên trái backup gần cửa: ngang 0.5m, sâu 1m. */
+  readonly KHU_LOCKER_W_M = 0.5;
+  readonly KHU_LOCKER_H_M = 1;
   /** Backup cũ sát khu in tem: cách 0.5m, ngang 2m, dài 5m. */
   readonly KHU_BACKUP_INTEM_W_M = 2;
   readonly KHU_BACKUP_INTEM_H_M = 5;
@@ -1957,9 +1981,18 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       }
       const label = z.labelKey ? this.t(z.labelKey) : '';
       const wrapAt =
-        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 4 : z.id === 'khu-in-tem' || z.id === 'nvl-cho-xac-nhan' ? 24 : z.id === 'nvl-cho-giao' ? 16 : z.id === 'fg-strap-2' ? 9 : this.isKhoMatSideBox(z) ? 8 : 12;
-      return { ...z, label, labelLines: label ? this.wrapLabel(label, wrapAt) : [] };
+        z.id === 'shipping-area' ? 20 : z.id === 'kho-hoa-chat' ? 4 : z.id === 'khu-in-tem' ? 8 : z.id === 'nvl-cho-xac-nhan' || z.id === 'tra-ncc' ? 16 : z.id === 'nvl-cho-giao' ? 16 : this.isKhoMatSideBox(z) ? 8 : 12;
+      const labelLines =
+        z.id === 'fg-strap-1' || z.id === 'fg-strap-2'
+          ? this.lang === 'en'
+            ? ['FG Strapping', 'Area']
+            : ['Khu vực đóng', 'dây đai TP']
+          : label
+            ? this.wrapLabel(label, wrapAt)
+            : [];
+      return { ...z, label, labelLines };
     });
+    this.layoutFloorZoneLabels(this.floorZonesMemo);
     return this.floorZonesMemo;
   }
 
@@ -1969,7 +2002,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
   /** Box ESD / in tem / backup — nhãn nhỏ. */
   isKhoMatSideBox(z: { id: string }): boolean {
-    return z.id === 'kho-esd' || z.id === 'khu-in-tem' || z.id === 'khu-backup';
+    return z.id === 'kho-esd' || z.id === 'khu-in-tem' || z.id === 'khu-backup' || z.id === 'khu-locker';
   }
 
   /** Khu trên nền cao — vẽ sau lớp nền cao để không bị che. */
@@ -2032,7 +2065,61 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }
 
   floorZoneLabelRotate(z: JwFloorZone): boolean {
-    return z.id === 'khu-in-tem' || z.id === 'nvl-cho-xac-nhan';
+    return z.id === 'khu-in-tem' || z.id === 'nvl-cho-xac-nhan' || z.id === 'tra-ncc';
+  }
+
+  floorZoneLabelX(z: JwFloorZone): number {
+    return this.meterX(z.labelAnchorXM != null ? z.labelAnchorXM : this.floorZoneLabelXM(z));
+  }
+
+  floorZoneLabelY(z: JwFloorZone, lineIndex: number): number {
+    const step = this.floorZoneLabelStep(z);
+    const n = z.labelLines.length || 1;
+    const anchorY = z.labelAnchorYM != null ? z.labelAnchorYM : this.floorZoneLabelYM(z);
+    return this.meterY(anchorY) + (lineIndex - (n - 1) / 2) * step;
+  }
+
+  floorZoneLabelTransform(z: JwFloorZone): string | null {
+    if (!z.labelRotate) return null;
+    const x = this.floorZoneLabelX(z);
+    const y = this.meterY(z.labelAnchorYM != null ? z.labelAnchorYM : this.floorZoneLabelYM(z));
+    return `rotate(-90 ${x} ${y})`;
+  }
+
+  private floorZoneLabelStep(z: { id: string }): number {
+    return this.floorZoneLabelFont(z).step;
+  }
+
+  private floorZoneLabelFont(z: { id: string }): { font: number; step: number } {
+    const small =
+      z.id === 'kho-hoa-chat' ||
+      z.id === 'nvl-tra' ||
+      z.id === 'nvl-cho-xac-nhan' ||
+      z.id === 'tra-ncc' ||
+      this.isKhoMatSideBox(z);
+    return small ? { font: 7.8, step: 8.4 } : { font: 12, step: 14 };
+  }
+
+  /** Nhãn nằm giữa ô. Chữ không vừa thì sơ đồ chỉ hiện số. */
+  private layoutFloorZoneLabels(zones: JwFloorZone[]): void {
+    for (const z of zones) {
+      if (!z.labelLines.length) continue;
+      z.labelAnchorXM = this.floorZoneLabelXM(z);
+      z.labelAnchorYM = this.floorZoneLabelYM(z);
+      z.labelRotate = this.zoneTextFits(z) && this.floorZoneLabelRotate(z);
+    }
+  }
+
+  /** Chữ không vừa ô thì false — sơ đồ chỉ ghi số, tên nằm ở thông tin kho. */
+  private zoneTextFits(z: { id: string; labelLines: string[]; wM: number; hM: number }): boolean {
+    if (!z.labelLines.length) return true;
+    const { font, step } = this.floorZoneLabelFont(z);
+    const textWpx = z.labelLines.reduce((max, line) => Math.max(max, line.length * font * 0.56), 0);
+    const textHpx = z.labelLines.length === 1 ? font : (z.labelLines.length - 1) * step + font;
+    const rotated = this.floorZoneLabelRotate(z as JwFloorZone);
+    const along = (rotated ? z.hM : z.wM) * this.SCALE;
+    const across = (rotated ? z.wM : z.hM) * this.SCALE;
+    return textWpx <= along - 2 && textHpx <= across - 3;
   }
 
   /** Phòng có vách cứng — dùng cho mô hình 3D. */
@@ -2991,11 +3078,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.round2(this.WIDTH_M - this.j4AxisYM('X18'));
   }
 
-  /** R1–R26 trên J4, cùng vị trí X với J5, thân kệ chạm X18. */
+  /** J4 không vẽ dãy R01 và R02 (nhãn tiếp nối R01-7… và R02-7…). */
+  private j4OmitsRack(num: number): boolean {
+    return num === 1 || num === 2;
+  }
+
+  /** R3–R26 trên J4, cùng vị trí X với J5, thân kệ chạm X18. */
   get j4Racks(): JwRack[] {
     const span = this.j4RackSpanM;
     return this.racks
-      .filter((rack) => rack.num >= 1 && rack.num <= this.MAX_RACK_NUM)
+      .filter((rack) => rack.num >= 1 && rack.num <= this.MAX_RACK_NUM && !this.j4OmitsRack(rack.num))
       .map((rack) => {
         const scale = rack.hM > 0 ? span / rack.hM : 1;
         return {
@@ -3011,12 +3103,57 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       });
   }
 
+  /** Khu 20 (thành phẩm chờ cất trên J4) thành hai dãy R27, R28. */
+  get j4Zone20Racks(): JwRack[] {
+    const sample = this.j4Racks.find((rack) => rack.blocks.length);
+    const zone = this.j4FgAwaitStoreZone;
+    if (!sample || zone.wM < this.RACK_DEPTH_M * 2) return [];
+    const step = this.RACK_DEPTH_M + this.RACK_GAP_M;
+    return [27, 28].map((num, i) => {
+      const xM = this.round2(zone.xM + i * step);
+      return {
+        id: `R${num}`,
+        num,
+        pairIndex: -1,
+        isInner: i === 0,
+        xM,
+        yM: sample.yM,
+        wM: this.RACK_DEPTH_M,
+        hM: sample.hM,
+        blocks: sample.blocks.map((block) => ({
+          ...block,
+          code: this.blockCode(num, block.index),
+          rackNum: num,
+          xM
+        }))
+      };
+    });
+  }
+
+  get j4ShownRacks(): JwRack[] {
+    return [...this.j4Racks, ...this.j4Zone20Racks];
+  }
+
   get j4Aisles(): JwAisleRect[] {
-    return this.aisles.map((aisle) => this.j4StretchFromFaceC(aisle));
+    const cut = this.axisXM('Y03');
+    const out: JwAisleRect[] = [];
+    for (const aisle of this.aisles) {
+      const stretched = this.j4StretchFromFaceC(aisle);
+      const end = this.round2(stretched.xM + stretched.wM);
+      if (end <= cut + 0.001) continue;
+      if (stretched.xM < cut) {
+        out.push({ ...stretched, xM: cut, wM: this.round2(end - cut) });
+      } else {
+        out.push(stretched);
+      }
+    }
+    return out;
   }
 
   get j4PairGaps(): JwPairGapRect[] {
-    return this.pairGaps.map((gap) => this.j4StretchFromFaceC(gap));
+    return this.pairGaps
+      .filter((_, i) => !this.j4OmitsRack(i * 2 + 1))
+      .map((gap) => this.j4StretchFromFaceC(gap));
   }
 
   get j4BlockGroupGaps(): JwPairGapRect[] {
@@ -3024,11 +3161,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const src = this.RACK_LEN_M || 1;
     const scale = span / src;
     const origin = this.MARGIN_C_M;
-    return this.blockGroupGaps.map((gap) => ({
-      ...gap,
-      yM: this.round2((gap.yM - origin) * scale),
-      hM: this.round2(gap.hM * scale)
-    }));
+    const hiddenX = new Set(
+      this.racks.filter((rack) => this.j4OmitsRack(rack.num)).map((rack) => this.round2(rack.xM))
+    );
+    return this.blockGroupGaps
+      .filter((gap) => !hiddenX.has(this.round2(gap.xM)))
+      .map((gap) => ({
+        ...gap,
+        yM: this.round2((gap.yM - origin) * scale),
+        hM: this.round2(gap.hM * scale)
+      }));
   }
 
   private j4StretchFromFaceC<T extends { yM: number; hM: number }>(rect: T): T {
@@ -3063,16 +3205,25 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const strip = this.j4OuterStripY();
     const coldStorageX0 = this.round2(this.axisXM('Y04'));
     const coldStorageX1 = this.round2(this.axisXM('Y10'));
-    const receive = this.receivingZoneRect();
+    const receive = this.j4ReceivingZoneRect();
+    const giao = this.j4NvlGiaoAsm1Rect(receive);
     const defs: Array<{ id: string; labelKey: string; xM: number; wM: number; yM: number; hM: number }> = [
       {
-        /** Cùng 6×16m với J5, cách vách chung 6m và cách mặt A 3.5m. */
+        /** Từ X19 tới cách mặt C 0.5m, mép phải tới Y03, cách WC 1m. */
         id: 'j4-receiving',
         labelKey: 'zone.receiving',
         xM: receive.xM,
         wM: receive.wM,
-        yM: this.round2(this.WIDTH_M - receive.yM - receive.hM),
+        yM: receive.yM,
         hM: receive.hM
+      },
+      {
+        id: 'j4-nvl-giao-asm1',
+        labelKey: 'zone.nvlGiaoAsm1',
+        xM: giao.xM,
+        wM: giao.wM,
+        yM: giao.yM,
+        hM: giao.hM
       }
     ];
     if (this.drawMode === 'dang-ky') {
@@ -3119,16 +3270,37 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: outerH
       }))
     );
+    const x19 = this.j4AxisYM('X19');
+    const x20 = this.j4AxisYM('X20');
+    defs.push({
+      id: 'j4-nvl-cach-ly',
+      labelKey: 'zone.nvlCachLy',
+      xM: 0,
+      wM: 2,
+      yM: this.round2(x19),
+      hM: this.round2(x20 - 2 - x19)
+    });
     this.j4FloorZonesMemoKey = key;
     this.j4FloorZonesMemo = defs.map((z) => {
       const label = this.t(z.labelKey);
-      const notes = z.id === 'j4-non-conforming' ? ['NG', 'Cách ly'] : [];
-      const wrapAt = z.id === 'j4-hoa-chat-thuong' || z.id === 'j4-may-moc' || z.id === 'j4-tai-lieu' ? 8 : 12;
+      const notes = z.id === 'j4-non-conforming' ? ['NG'] : [];
+      const wrapAt =
+        z.id === 'j4-may-moc' || z.id === 'j4-tai-lieu'
+          ? 8
+          : z.id === 'j4-nvl-giao-asm1'
+            ? 18
+            : 12;
+      const labelLines =
+        z.id === 'j4-hoa-chat-thuong'
+          ? this.lang === 'en'
+            ? ['Chemical', '(Production)']
+            : ['Hóa chất', '(Sản Xuất)']
+          : [...this.wrapLabel(label, wrapAt), ...notes];
       return {
         id: z.id,
         label,
         labelKey: z.labelKey,
-        labelLines: [...this.wrapLabel(label, wrapAt), ...notes],
+        labelLines,
         xM: z.xM,
         yM: z.yM,
         wM: z.wM,
@@ -3201,11 +3373,17 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     ];
     return defs.map((z) => {
       const label = this.t(z.labelKey);
+      const labelLines =
+        z.id === 'j4-customs-wait'
+          ? this.lang === 'en'
+            ? ['Customs Quarantine', 'Area']
+            : ['Khu vực hàng cách ly', 'của Hải Quan']
+          : this.wrapLabel(label, 12);
       return {
         id: z.id,
         label,
         labelKey: z.labelKey,
-        labelLines: this.wrapLabel(label, z.id === 'j4-customs-wait' ? 16 : 12),
+        labelLines,
         xM: z.xM,
         yM: z.yM,
         wM: z.wM,
@@ -3214,9 +3392,50 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Nhận nguyên liệu J5: 6×16m, cách mặt A 3.5m, cách mặt C 6m. J4 dùng cùng ô, lật qua vách chung. */
+  /** Khu 19 trên J4: từ trục X19 tới cách mặt C 0.5m, mở ngang tới Y03, cách WC 1m. */
+  private j4ReceivingZoneRect(): { xM: number; yM: number; wM: number; hM: number } {
+    const xM = this.round2(3.5 + 1);
+    const right = this.axisXM('Y03');
+    const top = this.j4AxisYM('X19');
+    const bottom = this.round2(this.WIDTH_M - 0.5);
+    return {
+      xM,
+      yM: top,
+      wM: this.round2(right - xM),
+      hM: this.round2(bottom - top)
+    };
+  }
+
+  /** NVL giao ASM1: mép trên ở giữa X17–X18, mép dưới cách khu 19 đúng 1m, cùng bề ngang khu 19. */
+  private j4NvlGiaoAsm1Rect(zone19: { xM: number; yM: number; wM: number }): {
+    xM: number;
+    yM: number;
+    wM: number;
+    hM: number;
+  } {
+    const top = this.round2((this.j4AxisYM('X17') + this.j4AxisYM('X18')) / 2);
+    const bottom = this.round2(zone19.yM - 1);
+    return {
+      xM: zone19.xM,
+      yM: top,
+      wM: zone19.wM,
+      hM: this.round2(bottom - top)
+    };
+  }
+
+  /** NVL chờ kiểm trên J5: kéo tới cách mặt C 0.5m, cách WC 1m. Mép xa giữ nguyên. */
   private receivingZoneRect(): { xM: number; yM: number; wM: number; hM: number } {
-    return { xM: 3.5, yM: 6, wM: 6, hM: 16 };
+    const wcDepth = 3.5;
+    const xM = this.round2(wcDepth + 1);
+    const right = 9.5;
+    const fromC = 0.5;
+    const bottom = 22;
+    return {
+      xM,
+      yM: fromC,
+      wM: this.round2(right - xM),
+      hM: this.round2(bottom - fromC)
+    };
   }
 
   /** Dải X16–X17 (X21–X22 trên J5) sát tường ngoài J4 */
@@ -3245,6 +3464,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   isSavingPallet = false;
   isClearingPallet = false;
   isDownloading = false;
+  showDownloadPreview = false;
+  downloadPreviewUrl: SafeUrl | null = null;
+  private downloadPreviewObjectUrl = '';
   lastUpdated: Date | null = null;
 
   showExtraPalletModal = false;
@@ -3483,7 +3705,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private ngZone: NgZone,
     private cdr: ChangeDetectorRef,
-    private kkCatalog: KkCatalogService
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit(): void {
@@ -3500,7 +3722,6 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.loadOutletLayout();
     this.loadNetOutletLayout();
     this.loadExtraPallets();
-    void this.loadShelfAssignments();
     this.ensureKhoPrintPageStyle();
     this.prepareKhoLogo();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
@@ -3520,52 +3741,173 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
             this.cdr.markForCheck();
           });
           setTimeout(() => {
-            void this.loadSlotPallets();
+            if (!this.labelPick) void this.loadSlotPallets();
           }, 0);
         });
       });
     });
   }
 
-  /** Nhóm mã → kệ, theo danh mục vị trí (Quản lý nguyên liệu). Chỉ hiện ở Sơ đồ Kho. */
-  shelfLocRRows: Array<{ shelf: string; groups: string }> = [];
-  shelfLocSRows: Array<{ shelf: string; groups: string }> = [];
-  shelfLocLoading = false;
-  shelfLocError = '';
-  private shelfLocAlive = true;
+  /** Màu viền từng khu. Xanh da trời và xanh dương dùng một xanh blue. Không dùng tím. */
+  private readonly zoneSwatches: Array<{ ids: string[]; color: string; color2?: string }> = [
+    { ids: ['incoming-inspect'], color: '#16a34a' },
+    { ids: ['nvl-tra'], color: '#16a34a' },
+    { ids: ['nvl-cho-xac-nhan', 'tra-ncc', 'j4-nvl-cach-ly'], color: '#eab308' },
+    { ids: ['kho-hoa-chat', 'j4-hoa-chat-thuong'], color: '#dc2626', color2: '#eab308' },
+    { ids: ['kho-esd'], color: '#16a34a', color2: '#eab308' },
+    { ids: ['khu-in-tem'], color: '#111827' },
+    { ids: ['khu-backup', 'khu-backup-intem'], color: '#65a30d' },
+    { ids: ['khu-locker'], color: '#d97706' },
+    { ids: ['iqc'], color: '#111827' },
+    { ids: ['vp-kho-1', 'vp-kho-2'], color: '#111827' },
+    { ids: ['receiving', 'j4-receiving'], color: '#f97316' },
+    { ids: ['j4-nvl-giao-asm1'], color: '#16a34a' },
+    { ids: ['forklift-charging'], color: '#eab308', color2: '#111827' },
+    { ids: ['nvl-cho-giao'], color: '#059669' },
+    { ids: ['fg-receiving', 'fg-wait-ship', 'j4-fg-wait-ship'], color: '#2563eb' },
+    { ids: ['fg-strap-1'], color: '#d97706' },
+    { ids: ['fg-pack-c', 'fg-pack-b', 'fg-strap-2'], color: '#6b7280' },
+    { ids: ['j4-customs-wait'], color: '#f97316', color2: '#ffffff' },
+    { ids: ['j4-nvl-ship'], color: '#16a34a' },
+    { ids: ['j4-vat-tu-vp', 'j4-may-moc', 'j4-tai-lieu', 'j4-kho-sx', 'j4-kho-admin'], color: '#6b7280' },
+    { ids: ['j4-scrap', 'j4-non-conforming', 'j4-scrap-asm1'], color: '#dc2626' },
+    { ids: ['j4-wc-male', 'wc-female'], color: '#111827' }
+  ];
+
+  zoneColor(id: string): string | null {
+    if (this.drawMode !== 'kho') return null;
+    const row = this.zoneSwatches.find((item) => item.ids.includes(id));
+    return row ? row.color : null;
+  }
+
+  /** Vạch thứ hai khi viền hai màu (đỏ–vàng, vàng–đen, cam–trắng). */
+  zoneColor2(id: string): string | null {
+    if (this.drawMode !== 'kho') return null;
+    const row = this.zoneSwatches.find((item) => item.ids.includes(id));
+    return row && row.color2 ? row.color2 : null;
+  }
+
+  get zoneLegend(): Array<{ label: string; color: string; color2?: string; no: number }> {
+    if (this.drawMode !== 'kho') return [];
+    this.ensureZoneBadges();
+    return this.zoneBadgeRows;
+  }
+
+  /** Số của khu vực. Kệ không đánh số. */
+  zoneBadge(id: string): number | null {
+    if (this.drawMode !== 'kho') return null;
+    this.ensureZoneBadges();
+    return this.zoneBadgeById.get(id) ?? null;
+  }
+
+  /** Tên vẫn hiện khi vừa ô. Số luôn hiện. */
+  zoneShowsName(id: string): boolean {
+    if (this.drawMode !== 'kho') return true;
+    if (id === 'kho-hoa-chat') return false;
+    this.ensureZoneBadges();
+    return this.zoneNameFit.get(id) !== false;
+  }
+
+  /**
+   * Số 1 bắt đầu từ nhận NVL, rồi kiểm, lưu, soạn–giao NVL,
+   * thành phẩm nhận, soạn, giao, cuối cùng là các khu còn lại.
+   */
+  private readonly zoneBadgeOrder: readonly string[] = [
+    'j4-receiving',
+    'receiving',
+    'iqc',
+    'incoming-inspect',
+    'nvl-cho-xac-nhan',
+    'tra-ncc',
+    'kho-hoa-chat',
+    'j4-hoa-chat-thuong',
+    'kho-esd',
+    'j4-cold-storage',
+    'j4-vat-tu-vp',
+    'j4-may-moc',
+    'j4-tai-lieu',
+    'j4-kho-sx',
+    'j4-kho-admin',
+    'khu-in-tem',
+    'j4-nvl-ship',
+    'nvl-cho-giao',
+    'j4-nvl-giao-asm1',
+    'fg-receiving',
+    'fg-strap-1',
+    'fg-pack-c',
+    'fg-pack-b',
+    'fg-strap-2',
+    'j4-customs-wait',
+    'fg-wait-ship',
+    'j4-fg-wait-ship',
+    'khu-backup',
+    'khu-backup-intem',
+    'khu-locker',
+    'forklift-charging',
+    'j4-scrap',
+    'j4-non-conforming',
+    'j4-scrap-asm1',
+    'vp-kho-1',
+    'vp-kho-2',
+    'j4-wc-male',
+    'wc-female',
+    'nvl-tra',
+    'j4-nvl-cach-ly'
+  ];
+
+  private zoneBadgeKey = '';
+  private zoneBadgeById = new Map<string, number>();
+  private zoneNameFit = new Map<string, boolean>();
+  private zoneBadgeRows: Array<{ label: string; color: string; color2?: string; no: number }> = [];
+
+  private ensureZoneBadges(): void {
+    const key = `${this.lang}|${this.drawMode}`;
+    if (this.zoneBadgeKey === key) return;
+    const zones: Array<{ id: string; label: string; labelLines: string[]; wM: number; hM: number }> = [
+      ...this.floorZones,
+      ...this.j4FloorZones,
+      ...this.j4RaisedPackZones
+    ];
+    for (const room of this.officeRooms) {
+      const label = this.officeRoomLabel(room);
+      zones.push({ id: room.id, label, labelLines: [label], wM: room.wM, hM: room.hM });
+    }
+    for (const wc of [this.j4WcMaleZone, this.j5WcFemaleZone]) {
+      zones.push(wc);
+    }
+    const map = new Map<string, number>();
+    const fit = new Map<string, boolean>();
+    const rows: Array<{ label: string; color: string; color2?: string; no: number }> = [];
+    const rank = new Map(this.zoneBadgeOrder.map((id, index) => [id, index]));
+    const ordered = [...zones].sort((a, b) => (rank.get(a.id) ?? 1000) - (rank.get(b.id) ?? 1000));
+    let next = 0;
+    for (const zone of ordered) {
+      if (zone.id === 'shipping-area' || zone.id === 'kho-mat-ext' || zone.id === 'secured') continue;
+      const label = zone.label || '';
+      if (!label) continue;
+      next += 1;
+      map.set(zone.id, next);
+      fit.set(zone.id, zone.labelLines.length > 0 && this.zoneTextFits(zone));
+      const color2 = this.zoneColor2(zone.id);
+      rows.push({
+        no: next,
+        label,
+        color: this.zoneColor(zone.id) || '#334155',
+        ...(color2 ? { color2 } : {})
+      });
+    }
+    this.zoneBadgeById = map;
+    this.zoneNameFit = fit;
+    this.zoneBadgeRows = rows;
+    this.zoneBadgeKey = key;
+  }
 
   ngOnDestroy(): void {
-    this.shelfLocAlive = false;
+    this.revokeDownloadPreview();
     window.removeEventListener('pointermove', this.onWindowPointerMove);
     window.removeEventListener('pointerup', this.onWindowPointerUp);
     window.removeEventListener('pointercancel', this.onWindowPointerUp);
     this.unmountRack3d();
-  }
-
-  private async loadShelfAssignments(): Promise<void> {
-    this.shelfLocLoading = true;
-    this.shelfLocError = '';
-    this.cdr.markForCheck();
-    try {
-      const entries = await this.kkCatalog.loadAll();
-      const typeMap = await this.kkCatalog.loadAllAsMap();
-      const homeLocs = await this.kkCatalog.loadHomeLocs();
-      if (!this.shelfLocAlive) return;
-      const rows = this.kkCatalog.aisleCatalogRows(entries, typeMap, homeLocs, this.MAX_RACK_NUM, 25);
-      this.shelfLocRRows = rows.filter((row) => row.family === 'R');
-      this.shelfLocSRows = rows.filter((row) => row.family === 'S');
-    } catch (e) {
-      console.error('loadShelfAssignments:', e);
-      if (!this.shelfLocAlive) return;
-      this.shelfLocRRows = [];
-      this.shelfLocSRows = [];
-      this.shelfLocError = this.t('info.shelfError');
-    } finally {
-      if (this.shelfLocAlive) {
-        this.shelfLocLoading = false;
-        this.cdr.markForCheck();
-      }
-    }
   }
 
   /** Duyệt lên toàn bộ route cha để tìm data.viewOnly — không phụ thuộc chiến lược kế thừa data của Router. */
@@ -4082,11 +4424,25 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return (m / this.VIEW_WIDTH_M) * this.floor.h;
   }
 
+  /**
+   * Số ô trên dãy. J5 là 1…6. J4 nối tiếp từ mặt C: ô sát C là 7, rồi 8…12 vào trong J4.
+   */
+  rackBlockNo(block: JwBlock, j4 = false): number {
+    if (!j4) return block.index;
+    return this.BLOCKS_PER_RACK * 2 + 1 - block.index;
+  }
+
+  /** Nhãn ô kệ hai dòng: R01 / 1 hoặc R01 / 7. */
+  rackBlockLabelLines(block: JwBlock, j4 = false): string[] {
+    const head = `R${String(block.rackNum).padStart(2, '0')}`;
+    return [head, String(this.rackBlockNo(block, j4))];
+  }
+
   /** Tem vị trí: R01-1, hoặc mã kệ S. */
-  blockPickAttr(block: JwBlock): string | null {
+  blockPickAttr(block: JwBlock, j4 = false): string | null {
     if (!this.labelPick) return null;
     if (block.kind === 'kho-mat') return block.code ? `b:${block.code}` : null;
-    return `b:R${String(block.rackNum).padStart(2, '0')}-${block.index}`;
+    return `b:R${String(block.rackNum).padStart(2, '0')}-${this.rackBlockNo(block, j4)}`;
   }
 
   zonePickAttr(z: { label?: string; labelKey?: string }): string | null {
@@ -4382,6 +4738,43 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.setZoom(delta);
   }
 
+  /** Xem đúng ảnh PNG sẽ được tải về. */
+  previewDrawing(event?: Event): void {
+    event?.stopPropagation();
+    if (this.show3D || this.isDownloading) return;
+    this.isDownloading = true;
+    this.cdr.markForCheck();
+    this.renderExportPng()
+      .then((blob) => {
+        this.revokeDownloadPreview();
+        this.downloadPreviewObjectUrl = URL.createObjectURL(blob);
+        this.downloadPreviewUrl = this.sanitizer.bypassSecurityTrustUrl(this.downloadPreviewObjectUrl);
+        this.showDownloadPreview = true;
+      })
+      .catch((e) => {
+        console.error('[JWarehouse] previewDrawing failed', e);
+        alert(this.t('alert.exportError'));
+      })
+      .finally(() => {
+        this.isDownloading = false;
+        this.cdr.markForCheck();
+      });
+  }
+
+  closeDownloadPreview(event?: Event): void {
+    event?.stopPropagation();
+    this.showDownloadPreview = false;
+    this.revokeDownloadPreview();
+    this.cdr.markForCheck();
+  }
+
+  private revokeDownloadPreview(): void {
+    if (!this.downloadPreviewObjectUrl) return;
+    URL.revokeObjectURL(this.downloadPreviewObjectUrl);
+    this.downloadPreviewObjectUrl = '';
+    this.downloadPreviewUrl = null;
+  }
+
   /** Xuất bản vẽ đang xem + Thông tin kho thành file PNG (2D) hoặc ảnh mô hình 3D. */
   downloadDrawing(event?: Event): void {
     event?.stopPropagation();
@@ -4390,67 +4783,93 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       if (!ok) alert(this.t('alert.exportError'));
       return;
     }
-    const svg = this.planSvg?.nativeElement;
-    if (!svg || this.isDownloading) return;
+    if (this.isDownloading) return;
     this.isDownloading = true;
+    this.cdr.markForCheck();
+    this.renderExportPng()
+      .then((blob) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `j-warehouse-${this.lang}-${this.drawMode}-${this.buildingView}.png`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+      })
+      .catch((e) => {
+        console.error('[JWarehouse] downloadDrawing failed', e);
+        alert(this.t('alert.exportError'));
+      })
+      .finally(() => {
+        this.isDownloading = false;
+        this.cdr.markForCheck();
+      });
+  }
 
-    try {
-      const clone = svg.cloneNode(true) as SVGSVGElement;
-      clone.removeAttribute('style');
-      clone.setAttribute('width', String(this.viewBoxW));
-      clone.setAttribute('height', String(this.viewBoxH));
-      clone.querySelectorAll('.jw-grid, .jw-j4__grid-line, .jw-block__pos-line, .jw-axis__line').forEach((el) => el.remove());
+  /**
+   * Tỉ lệ raster để PNG đủ nét khi in vừa khổ A3 (300 dpi).
+   * Cạnh dài A3 là 420mm → khoảng 4961 px. Không thấp hơn scale 3.
+   */
+  private exportPngScale(): number {
+    const dpi = 300;
+    const a3LongPx = (420 / 25.4) * dpi;
+    const a3ShortPx = (297 / 25.4) * dpi;
+    const baseW = this.viewBoxW + 16 + 360;
+    const baseH = Math.max(1, this.viewBoxH);
+    const aspect = baseW / baseH;
+    const pageAspect = a3LongPx / a3ShortPx;
+    const needW = aspect >= pageAspect ? a3LongPx : a3ShortPx * aspect;
+    const dpiScale = needW / baseW;
+    return Math.min(6, Math.max(3, Math.ceil(dpiScale * 10) / 10));
+  }
 
-      const cssText = this.collectStylesheetCss();
-      const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-      styleEl.textContent = cssText;
-      clone.insertBefore(styleEl, clone.firstChild);
+  private renderExportPng(): Promise<Blob> {
+    const svg = this.planSvg?.nativeElement;
+    if (!svg) return Promise.reject(new Error('plan svg missing'));
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.removeAttribute('style');
+    clone.setAttribute('width', String(this.viewBoxW));
+    clone.setAttribute('height', String(this.viewBoxH));
+    clone.querySelectorAll('.jw-grid, .jw-j4__grid-line, .jw-block__pos-line, .jw-axis__line').forEach((el) => el.remove());
 
-      const svgString = new XMLSerializer().serializeToString(clone);
-      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
+    const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    styleEl.textContent = this.collectStylesheetCss();
+    clone.insertBefore(styleEl, clone.firstChild);
 
+    const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
+    const scale = this.exportPngScale();
+    const infoW = 360 * scale;
+    const gap = 16 * scale;
+
+    return new Promise((resolve, reject) => {
       const img = new Image();
+      const finish = (blob: Blob | null, err?: unknown) => {
+        URL.revokeObjectURL(svgUrl);
+        if (blob) resolve(blob);
+        else reject(err || new Error('png blob missing'));
+      };
       img.onload = () => {
         const paint = (logo?: HTMLImageElement) => {
-        try {
-          const scale = 2;
-          const infoW = 360 * scale;
-          const gap = 16 * scale;
-          const canvas = document.createElement('canvas');
-          canvas.width = this.viewBoxW * scale + gap + infoW;
-          canvas.height = this.viewBoxH * scale;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('canvas context unavailable');
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, this.viewBoxW * scale, this.viewBoxH * scale);
-          this.drawWarehouseInfoOnCanvas(
-            ctx,
-            this.viewBoxW * scale + gap,
-            0,
-            infoW,
-            canvas.height,
-            scale,
-            logo
-          );
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const link = document.createElement('a');
-              link.href = URL.createObjectURL(blob);
-              link.download = `j-warehouse-${this.lang}-${this.drawMode}-${this.buildingView}.png`;
-              link.click();
-              setTimeout(() => URL.revokeObjectURL(link.href), 2000);
-            }
-            URL.revokeObjectURL(svgUrl);
-            this.isDownloading = false;
-          }, 'image/png');
-        } catch (e) {
-          console.error('[JWarehouse] downloadDrawing render failed', e);
-          URL.revokeObjectURL(svgUrl);
-          this.isDownloading = false;
-          alert(this.t('alert.exportError'));
-        }
+          try {
+            const planW = this.viewBoxW * scale;
+            const planH = this.viewBoxH * scale;
+            const infoH = this.drawMode === 'kho' ? this.khoSheetInfoHeight(scale) : planH;
+            const canvas = document.createElement('canvas');
+            canvas.width = planW + gap + infoW;
+            canvas.height = Math.max(planH, infoH);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('canvas context unavailable');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, planW, planH);
+            ctx.save();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2 * scale;
+            ctx.strokeRect(scale, scale, planW - 2 * scale, canvas.height - 2 * scale);
+            ctx.restore();
+            this.drawWarehouseInfoOnCanvas(ctx, planW + gap, 0, infoW, canvas.height, scale, logo);
+            canvas.toBlob((blob) => finish(blob), 'image/png');
+          } catch (e) {
+            finish(null, e);
+          }
         };
         if (this.drawMode !== 'kho') {
           paint();
@@ -4461,17 +4880,9 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         logo.onerror = () => paint();
         logo.src = 'assets/img/logo.png';
       };
-      img.onerror = () => {
-        URL.revokeObjectURL(svgUrl);
-        this.isDownloading = false;
-        alert(this.t('alert.exportError'));
-      };
+      img.onerror = () => finish(null, new Error('svg image failed'));
       img.src = svgUrl;
-    } catch (e) {
-      console.error('[JWarehouse] downloadDrawing failed', e);
-      this.isDownloading = false;
-      alert(this.t('alert.exportError'));
-    }
+    });
   }
 
   private drawWarehouseInfoOnCanvas(
@@ -4522,7 +4933,23 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     ctx.restore();
   }
 
-  /** Cột phải của file tải về Sơ đồ Kho: logo, tên bản vẽ, Rev, ngày in, quy định kệ. */
+  /** Chiều cao cột phải Sơ đồ Kho, kể cả danh sách khu vực. */
+  private khoSheetInfoHeight(scale: number): number {
+    const pad = 18 * scale;
+    let h = pad;
+    h += 54 * scale + 14 * scale;
+    h += 28 * 1.3 * scale;
+    h += 22 * scale;
+    h += 18 * scale;
+    h += 3 * (10 + 8 + 18) * scale;
+    h += 8 * scale;
+    h += 22 * scale;
+    h += this.zoneLegend.length * (18 * scale);
+    h += pad;
+    return Math.ceil(h);
+  }
+
+  /** Cột phải của file tải về Sơ đồ Kho: logo, tên bản vẽ, Rev, ngày in, quy định kệ, danh sách khu. */
   private drawKhoSheetInfoOnCanvas(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -4540,13 +4967,15 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const logoW = logoSource instanceof HTMLCanvasElement ? logoSource.width : logoSource?.naturalWidth || 0;
     const logoH = logoSource instanceof HTMLCanvasElement ? logoSource.height : logoSource?.naturalHeight || 0;
     if (logoSource && logoW > 0 && logoH > 0) {
-      const lh = 36 * scale;
+      const lh = 54 * scale;
       const lw = Math.min(w - pad * 2, lh * (logoW / logoH));
       const lx = x + w - pad - lw;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(lx, cy, lw, lh);
       ctx.drawImage(logoSource, lx, cy, lw, lh);
       cy += lh + 14 * scale;
+    } else {
+      cy += 54 * scale + 14 * scale;
     }
     ctx.fillStyle = '#000000';
     ctx.font = `700 ${18 * 1.3 * scale}px "Segoe UI", system-ui, sans-serif`;
@@ -4577,6 +5006,42 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       ctx.fillText(label, x + pad, cy);
       ctx.font = `${14 * scale}px "Segoe UI", system-ui, sans-serif`;
       ctx.fillText(value, x + pad + labelW, cy);
+      cy += 18 * scale;
+    }
+    cy += 8 * scale;
+    ctx.fillStyle = '#000000';
+    ctx.font = `700 ${14 * scale}px "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText(this.t('info.zoneColors'), x + pad, cy);
+    cy += 22 * scale;
+    const sw = 12 * scale;
+    const noW = 28 * scale;
+    const nameX = x + pad + noW + sw + 8 * scale;
+    const nameMax = x + w - pad - nameX;
+    for (const item of this.zoneLegend) {
+      ctx.fillStyle = '#000000';
+      ctx.font = `700 ${12 * scale}px "Segoe UI", system-ui, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(String(item.no), x + pad + noW - 6 * scale, cy + 1 * scale);
+      ctx.textAlign = 'left';
+      const sx = x + pad + noW;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(sx, cy, sw, sw);
+      ctx.lineWidth = 2 * scale;
+      ctx.strokeStyle = item.color;
+      ctx.setLineDash([]);
+      ctx.strokeRect(sx + scale, cy + scale, sw - 2 * scale, sw - 2 * scale);
+      if (item.color2) {
+        ctx.strokeStyle = item.color2;
+        ctx.setLineDash([3 * scale, 3 * scale]);
+        ctx.strokeRect(sx + scale, cy + scale, sw - 2 * scale, sw - 2 * scale);
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle = '#000000';
+      ctx.font = `${12 * scale}px "Segoe UI", system-ui, sans-serif`;
+      let name = item.label;
+      while (name.length > 1 && ctx.measureText(name).width > nameMax) name = name.slice(0, -2);
+      if (name !== item.label) name = `${name.slice(0, -1)}…`;
+      ctx.fillText(name, nameX, cy);
       cy += 18 * scale;
     }
   }
@@ -5230,13 +5695,26 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       {
         id: 'vp-kho-2',
         label: 'VP Kho',
-        labelKey: 'zone.vpKho',
+        labelKey: 'zone.vpKhoAdmin',
         xM: vpKho2XM,
         yM,
         wM: this.OFFICE_VPKHO_W_M,
         hM
       }
     ];
+  }
+
+  /** Kho mát và phần mở rộng là một khối, một viền. */
+  get khoMatUnionZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const ext = this.khoMatExtZone;
+    const room = this.securedOfficeRoom;
+    if (!room || ext.wM <= 0) return ext;
+    return {
+      xM: ext.xM,
+      yM: Math.min(ext.yM, room.yM),
+      wM: this.round2(room.xM + room.wM - ext.xM),
+      hM: Math.max(ext.hM, room.hM)
+    };
   }
 
   /** Kho mát mở rộng 10×7m — nét liền; bên trong tách kho hóa chất 1.5m (về mặt A). */
@@ -5304,6 +5782,17 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       yM: left.yM,
       wM: this.round2(Math.max(0, x1 - x0)),
       hM: depth
+    };
+  }
+
+  /** Locker sát mép trái backup gần cửa, cùng vách hướng mặt C. */
+  get khuLockerZone(): { xM: number; yM: number; wM: number; hM: number } {
+    const backup = this.khuBackupZone;
+    return {
+      xM: this.round2(backup.xM - this.KHU_LOCKER_W_M),
+      yM: backup.yM,
+      wM: this.KHU_LOCKER_W_M,
+      hM: this.KHU_LOCKER_H_M
     };
   }
 
@@ -5445,11 +5934,13 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const khoEsd = this.khoEsdZone;
     const khuInTem = this.khuInTemZone;
     const khuBackup = this.khuBackupZone;
+    const khuLocker = this.khuLockerZone;
     const khuBackupInTem = this.khuBackupInTemZone;
     const khoMatInner = this.khoMatExtInnerZone;
     const passWM = 15;
     const passHM = 7;
     const choWM = 2;
+    const choH = passHM / 2;
     const choXM = this.round2(khoMatExt.xM - choWM);
     const passGapM = 1;
     const passXM = this.round2(choXM - passGapM - passWM);
@@ -5479,13 +5970,31 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         hM: passHM
       },
       {
-        /** NVL chờ xác nhận 2×7m — sát mép trái kho mát. */
+        /** Góc trái phía trên của PASS, 3×3m. */
+        id: 'nvl-tra',
+        labelKey: 'zone.nvlTra',
+        xM: passXM,
+        yM: khoMatExt.yM,
+        wM: 3,
+        hM: 3
+      },
+      {
+        /** Nửa trên của dải 2×7m sát kho mát. */
         id: 'nvl-cho-xac-nhan',
         labelKey: 'zone.nvlChoXacNhan',
         xM: choXM,
         yM: khoMatExt.yM,
         wM: choWM,
-        hM: passHM
+        hM: choH
+      },
+      {
+        /** Nửa dưới, sát mặt B. */
+        id: 'tra-ncc',
+        labelKey: 'zone.traNcc',
+        xM: choXM,
+        yM: this.round2(khoMatExt.yM + choH),
+        wM: choWM,
+        hM: choH
       },
       {
         /** Kho mát mở rộng còn lại (sau kho hóa chất) — nét liền. */
@@ -5531,6 +6040,15 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         yM: khuBackup.yM,
         wM: khuBackup.wM,
         hM: khuBackup.hM
+      },
+      {
+        /** Locker 0.5×1m — sát bên trái backup gần cửa. */
+        id: 'khu-locker',
+        labelKey: 'zone.locker',
+        xM: khuLocker.xM,
+        yM: khuLocker.yM,
+        wM: khuLocker.wM,
+        hM: khuLocker.hM
       },
       {
         /** Backup cũ cạnh khu in tem — ngang 2m, dài 5m, cách 0.5m. */

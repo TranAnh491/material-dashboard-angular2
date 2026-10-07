@@ -3,7 +3,7 @@ import { ROUTES } from '../../routes/sidebar-routes';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
 import { Router, NavigationEnd } from '@angular/router';
 import { NotificationService } from '../../services/notification.service';
-import { interval, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
 import { NotificationDropdownComponent } from '../notification-dropdown/notification-dropdown.component';
@@ -58,9 +58,14 @@ export class NavbarComponent implements OnInit, OnDestroy {
       this.lastNotificationCount = parseInt(localStorage.getItem('lastNotificationCount') || '0', 10);
       this.notificationCount = this.lastNotificationCount; // Hiển thị số cũ trong khi chờ tải
 
-      // Bắt đầu kiểm tra thông báo định kỳ (ví dụ: mỗi 30 giây)
-      this.notificationSubscription = interval(30000).subscribe(() => this.checkForNotifications());
-      this.checkForNotifications(); // Kiểm tra ngay lần đầu
+      // Một listener, tối đa 20 thông báo. Không tạo listener mới mỗi 30 giây.
+      this.notificationSubscription = this.notificationService.getNotificationCount().subscribe({
+        next: (data) => this.applyNotificationCount(data),
+        error: (err) => {
+          console.error('Failed to get notifications:', err);
+          this.notificationCount = 0;
+        }
+      });
 
       // Subscribe to user changes
       this.userSubscription = this.authService.currentUser.subscribe(user => {
@@ -83,37 +88,20 @@ export class NavbarComponent implements OnInit, OnDestroy {
         });
     }
 
-    checkForNotifications() {
-      this.notificationService.getNotificationCount().subscribe({
-        next: (data) => {
-          if (data.status === 'success') {
-            if (data.count > this.lastNotificationCount) {
-              this.notificationCount = data.count - this.lastNotificationCount;
-            } else {
-              // Nếu không có thông báo mới, hoặc sheet đã bị xóa bớt, reset về 0
-              this.notificationCount = 0;
-            }
-            // Không lưu data.count trực tiếp, chỉ lưu khi người dùng đã xem
-          }
-        },
-        error: (err) => {
-          console.error('Failed to get notifications:', err);
-          this.notificationCount = 0; // Reset nếu có lỗi
-        }
-      });
+    private applyNotificationCount(data: { status?: string; count?: number }): void {
+      if (data?.status !== 'success' || !Number.isFinite(data.count)) return;
+      const count = data.count as number;
+      this.notificationCount = count > this.lastNotificationCount
+        ? count - this.lastNotificationCount
+        : 0;
     }
 
     // Khi người dùng nhấp vào chuông thông báo, reset số lượng
     resetNotificationCount() {
-        this.notificationService.getNotificationCount().subscribe({
-            next: (data) => {
-                if(data.status === 'success') {
-                    this.lastNotificationCount = data.count;
-                    localStorage.setItem('lastNotificationCount', this.lastNotificationCount.toString());
-                    this.notificationCount = 0;
-                }
-            }
-        });
+      const seen = this.lastNotificationCount + this.notificationCount;
+      this.lastNotificationCount = seen;
+      localStorage.setItem('lastNotificationCount', String(seen));
+      this.notificationCount = 0;
     }
 
     ngOnDestroy() {

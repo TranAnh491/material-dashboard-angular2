@@ -23,6 +23,16 @@ export interface NvlCatalogItem {
   lastEditedBy?: string;
 }
 
+/** Thay đổi danh mục trên server kể từ một mốc — để máy khác F5 thấy mã vừa sửa. */
+export interface NvlCatalogRemoteChanges {
+  /** Mốc mới của cache sau khi áp thay đổi. */
+  syncTs: number;
+  /** Có xóa hàng loạt / gộp trùng → phải đọc lại toàn bộ. */
+  reset: boolean;
+  items: NvlCatalogItem[];
+  deletedCodes: string[];
+}
+
 export interface OutboundQtyStats {
   /** Giá trị "quantity" (tem đầy) xuất hiện nhiều nhất trong lịch sử Outbound của mã này. */
   suggestedStandardPacking: number;
@@ -50,6 +60,13 @@ export class NvlCatalogFullService {
   /** Mốc lần sửa gần nhất — tab khác lắng nghe storage event này. */
   static readonly cacheStampKey = 'nvl-catalog-cache-ts-v1';
   private static readonly PATCH_KEY = 'nvl-catalog-patches-v1';
+  /** Doc ghi mốc lần sửa danh mục gần nhất (giờ server) — mọi máy đọc 1 doc này để biết có gì mới. */
+  private static readonly META_COLLECTION = 'app-meta';
+  private static readonly META_DOC = 'nvl-catalog';
+  /** Đọc doc mốc tối đa 1 lần / phút mỗi tab. */
+  private static readonly META_CHECK_MS = 60 * 1000;
+  /** Lùi mốc khi truy vấn mã đã sửa — bù lệch giờ máy khách ghi updatedAt. */
+  private static readonly DELTA_MARGIN_MS = 15 * 60 * 1000;
 
   /** Bắn khi 1 mã vừa được sửa trong phiên này. */
   readonly changed$ = new Subject<string>();
@@ -58,6 +75,10 @@ export class NvlCatalogFullService {
   private cachedAt = 0;
   private cachedDateKey = '';
   private codesWithStockCache: Set<string> | null = null;
+  /** Mốc server mà cache này đã đồng bộ tới (lưu cùng cache localStorage). */
+  private syncTs = 0;
+  private metaPromise: Promise<{ updatedAt: number; resetAt: number; deleted: Record<string, number> } | null> | null = null;
+  private metaReadAt = 0;
 
   private todayKey(): string {
     const d = new Date();
@@ -102,17 +123,29 @@ export class NvlCatalogFullService {
     if (!forceRefresh) {
       const stamped = this.readCacheTimestamp();
       const mem = this.peekCached();
-      if (mem && (stamped === 0 || this.cachedAt >= stamped)) return mem;
-      const fromLocalStorage = this.loadFromLocalStorage();
-      if (fromLocalStorage) {
-        this.applyPatches(fromLocalStorage.items);
-        this.cachedItems = fromLocalStorage.items;
-        this.cachedAt = Math.max(fromLocalStorage.timestamp, stamped);
-        this.cachedDateKey = today;
-        return fromLocalStorage.items;
+      if (mem) {
+        // Tab khác vừa sửa mã: áp bản vá vào RAM, không đọc lại cả collection.
+        if (stamped > this.cachedAt) {
+          this.applyPatches(mem);
+          this.cachedAt = stamped;
+        }
+      } else {
+        const fromLocalStorage = this.loadFromLocalStorage();
+        if (fromLocalStorage) {
+          this.applyPatches(fromLocalStorage.items);
+          this.cachedItems = fromLocalStorage.items;
+          this.cachedAt = Math.max(fromLocalStorage.timestamp, stamped);
+          this.cachedDateKey = today;
+          this.syncTs = fromLocalStorage.syncTs;
+        }
+      }
+      if (this.cachedItems && this.cachedDateKey === today) {
+        // Máy khác sửa danh mục: đọc 1 doc mốc + chỉ các mã đã sửa.
+        if (await this.syncRemoteChanges()) return this.cachedItems;
       }
     }
 
+    const meta = await this.readMeta(true).catch(() => null);
     const snap = await this.firestore
       .collection(this.collectionName, ref => ref.limit(10000))
       .get()
@@ -120,8 +153,131 @@ export class NvlCatalogFullService {
     const items = (snap?.docs || []).map(doc => this.mapDoc(doc.id, doc.data() as Record<string, unknown>));
     items.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
     this.clearPatches();
+    this.syncTs = meta?.updatedAt || Date.now();
     this.setCache(items);
     return items;
+  }
+
+  private syncing: Promise<boolean> | null = null;
+
+  /** Áp thay đổi từ server vào cache RAM. false = cần đọc lại toàn bộ. */
+  private syncRemoteChanges(): Promise<boolean> {
+    if (!this.syncing) {
+      this.syncing = this.doSyncRemoteChanges().finally(() => { this.syncing = null; });
+    }
+    return this.syncing;
+  }
+
+  private async doSyncRemoteChanges(): Promise<boolean> {
+    let changes: NvlCatalogRemoteChanges | null;
+    try {
+      changes = await this.fetchChangesSince(this.syncTs);
+    } catch (e) {
+      console.warn('NVL catalog: không kiểm tra được thay đổi từ server', e);
+      return true;
+    }
+    if (!changes) return true;
+    if (changes.reset) return false;
+    const items = this.cachedItems;
+    if (!items) return false;
+    const deleted = new Set(changes.deletedCodes);
+    const byCode = new Map(changes.items.map(i => [i.materialCode, i]));
+    const merged = items.filter(i => !deleted.has(i.materialCode) && !byCode.has(i.materialCode));
+    merged.push(...byCode.values());
+    merged.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    this.cachedItems = merged;
+    this.syncTs = changes.syncTs;
+    this.cachedAt = Date.now();
+    this.saveToLocalStorage(merged);
+    if (byCode.size || deleted.size) this.changed$.next('*');
+    return true;
+  }
+
+  /**
+   * Mã đã sửa trên server sau mốc `since` (giờ server). null = không có gì mới.
+   * Tốn 1 lượt read cho doc mốc (tối đa 1 lần/phút) + số mã đã sửa.
+   */
+  async fetchChangesSince(since: number): Promise<NvlCatalogRemoteChanges | null> {
+    if (!since) return null;
+    const meta = await this.readMeta();
+    if (!meta || meta.updatedAt <= since) return null;
+    if (meta.resetAt > since) {
+      return { syncTs: meta.updatedAt, reset: true, items: [], deletedCodes: [] };
+    }
+    const snap = await this.firestore
+      .collection(this.collectionName, ref =>
+        ref.where('updatedAt', '>', new Date(since - NvlCatalogFullService.DELTA_MARGIN_MS))
+      )
+      .get()
+      .toPromise();
+    const items = (snap?.docs || []).map(doc => this.mapDoc(doc.id, doc.data() as Record<string, unknown>));
+    const deletedCodes = Object.entries(meta.deleted)
+      .filter(([, ts]) => ts > since - NvlCatalogFullService.DELTA_MARGIN_MS)
+      .map(([code]) => code)
+      .filter(code => !items.some(i => i.materialCode === code));
+    return { syncTs: meta.updatedAt, reset: false, items, deletedCodes };
+  }
+
+  /** Mốc server mà cache danh mục trong service đang có. */
+  remoteSyncTs(): number {
+    return this.syncTs;
+  }
+
+  private readMeta(force = false): Promise<{ updatedAt: number; resetAt: number; deleted: Record<string, number> } | null> {
+    const now = Date.now();
+    if (!force && this.metaPromise && now - this.metaReadAt < NvlCatalogFullService.META_CHECK_MS) {
+      return this.metaPromise;
+    }
+    this.metaReadAt = now;
+    this.metaPromise = this.firestore
+      .collection(NvlCatalogFullService.META_COLLECTION)
+      .doc(NvlCatalogFullService.META_DOC)
+      .get()
+      .toPromise()
+      .then(snap => {
+        if (!snap?.exists) return null;
+        const d = (snap.data() || {}) as Record<string, unknown>;
+        const deleted: Record<string, number> = {};
+        const rawDeleted = (d['deleted'] || {}) as Record<string, unknown>;
+        for (const [code, ts] of Object.entries(rawDeleted)) deleted[code] = this.toMillis(ts);
+        return { updatedAt: this.toMillis(d['updatedAt']), resetAt: this.toMillis(d['resetAt']), deleted };
+      })
+      .catch(e => {
+        this.metaPromise = null;
+        throw e;
+      });
+    return this.metaPromise;
+  }
+
+  private toMillis(v: unknown): number {
+    if (!v) return 0;
+    if (typeof (v as any).toMillis === 'function') return (v as any).toMillis();
+    if (v instanceof Date) return v.getTime();
+    return Number(v) || 0;
+  }
+
+  /**
+   * Ghi mốc "danh mục vừa đổi" (giờ server). Gọi sau mọi lần ghi vào collection `materials`
+   * để máy khác F5 biết mà tải phần đã sửa.
+   */
+  async markRemoteChanged(opts: { deletedCodes?: string[]; reset?: boolean } = {}): Promise<void> {
+    const serverTs = firebase.default.firestore.FieldValue.serverTimestamp();
+    const payload: Record<string, unknown> = { updatedAt: serverTs };
+    if (opts.reset) payload['resetAt'] = serverTs;
+    if (opts.deletedCodes?.length) {
+      const deleted: Record<string, unknown> = {};
+      for (const code of opts.deletedCodes) deleted[code] = serverTs;
+      payload['deleted'] = deleted;
+    }
+    try {
+      await this.firestore
+        .collection(NvlCatalogFullService.META_COLLECTION)
+        .doc(NvlCatalogFullService.META_DOC)
+        .set(payload, { merge: true });
+      this.metaPromise = null;
+    } catch (e) {
+      console.warn('NVL catalog: không ghi được mốc thay đổi', e);
+    }
   }
 
   /** Đọc 1 mã từ Firestore (không dùng cache) — để Materials biết Lock vừa unlock trên Danh mục NVL. */
@@ -162,7 +318,10 @@ export class NvlCatalogFullService {
 
   private setCache(items: NvlCatalogItem[]): void {
     this.cachedItems = items;
-    this.stampCache();
+    // Không ghi mốc localStorage ở đây: mốc đó bắn storage event sang tab khác.
+    // Nếu cache lớn không lưu được localStorage, các tab sẽ đọc lại cả collection rồi bắn tiếp → vòng lặp.
+    this.cachedAt = Date.now();
+    this.cachedDateKey = this.todayKey();
     this.saveToLocalStorage(items);
   }
 
@@ -215,18 +374,18 @@ export class NvlCatalogFullService {
     try {
       localStorage.setItem(
         NvlCatalogFullService.LS_KEY,
-        JSON.stringify({ items, timestamp: this.cachedAt, dateKey: this.cachedDateKey })
+        JSON.stringify({ items, timestamp: this.cachedAt, dateKey: this.cachedDateKey, syncTs: this.syncTs })
       );
     } catch {
       /* localStorage full/unavailable — bỏ qua, vẫn còn cache trong bộ nhớ */
     }
   }
 
-  private loadFromLocalStorage(): { items: NvlCatalogItem[]; timestamp: number } | null {
+  private loadFromLocalStorage(): { items: NvlCatalogItem[]; timestamp: number; syncTs: number } | null {
     try {
       const raw = localStorage.getItem(NvlCatalogFullService.LS_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { items: NvlCatalogItem[]; timestamp: number; dateKey?: string };
+      const parsed = JSON.parse(raw) as { items: NvlCatalogItem[]; timestamp: number; dateKey?: string; syncTs?: number };
       if (!parsed?.items) return null;
       const ts = Number(parsed.timestamp) || 0;
       if (!ts || Date.now() - ts >= NvlCatalogFullService.CACHE_TTL_MS) return null;
@@ -234,7 +393,9 @@ export class NvlCatalogFullService {
       if (cacheDay !== this.todayKey()) return null;
       return {
         timestamp: ts,
-        items: parsed.items
+        items: parsed.items,
+        // Cache cũ chưa có mốc server: dùng giờ lưu cache.
+        syncTs: Number(parsed.syncTs) || ts
       };
     } catch {
       return null;
@@ -316,6 +477,7 @@ export class NvlCatalogFullService {
       createdAt: new Date(),
       updatedAt: new Date()
     });
+    await this.markRemoteChanged();
     this.patchCache(code, {
       materialCode: code,
       materialName,
@@ -362,6 +524,7 @@ export class NvlCatalogFullService {
       patch.lastEditedBy = editedBy;
     }
     await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
+    await this.markRemoteChanged();
     this.patchCache(code, patch);
   }
 
@@ -371,6 +534,7 @@ export class NvlCatalogFullService {
     const payload: Record<string, unknown> = { standardPackingLocked: locked, updatedAt: new Date() };
     if (editedBy) payload['lastEditedBy'] = editedBy;
     await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
+    await this.markRemoteChanged();
     this.patchCache(code, { standardPackingLocked: locked, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
   }
 
@@ -380,6 +544,7 @@ export class NvlCatalogFullService {
     const payload: Record<string, unknown> = { allowExportByCarton: allowed, updatedAt: new Date() };
     if (editedBy) payload['lastEditedBy'] = editedBy;
     await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
+    await this.markRemoteChanged();
     this.patchCache(code, { allowExportByCarton: allowed, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
   }
 
@@ -396,6 +561,7 @@ export class NvlCatalogFullService {
     const code = this.normalizeCode(materialCode);
     if (!code) return;
     await this.firestore.collection(this.collectionName).doc(code).delete();
+    await this.markRemoteChanged({ deletedCodes: [code] });
     this.patchCache(code, null);
   }
 
@@ -513,6 +679,7 @@ export class NvlCatalogFullService {
       await batch.commit();
       idx += chunk.length;
     }
+    await this.markRemoteChanged({ reset: true });
     this.invalidateCache();
     return docs.length;
   }
@@ -588,6 +755,7 @@ export class NvlCatalogFullService {
       idx += chunk.length;
     }
 
+    await this.markRemoteChanged({ reset: true });
     this.invalidateCache();
     return { dedupedCodes, deletedDocs: toDelete.length };
   }
@@ -672,6 +840,7 @@ export class NvlCatalogFullService {
       await batch.commit();
       idx += chunk.length;
     }
+    if (added || updated) await this.markRemoteChanged();
 
     return { added, updated, skipped, uniqueInFile: codes.length };
   }

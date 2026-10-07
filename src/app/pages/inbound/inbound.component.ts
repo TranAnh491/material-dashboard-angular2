@@ -17,6 +17,7 @@ import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 import { KkCatalogService } from '../../services/kk-catalog.service';
 import { InboundLdvOtpService } from '../../services/inbound-ldv-otp.service';
+import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 
 type TbhdCheckBatchRow = {
   batchNumber: string;
@@ -303,7 +304,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     private location: Location,
     private authService: FirebaseAuthService,
     private kkCatalog: KkCatalogService,
-    private inboundLdvOtp: InboundLdvOtpService
+    private inboundLdvOtp: InboundLdvOtpService,
+    private nvlCatalogFull: NvlCatalogFullService
   ) {}
 
   goToMenu(): void {
@@ -1416,6 +1418,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       const payload = { materialCode: code, standardPacking: standardPackingValue, updatedAt: new Date() };
       await this.firestore.collection('materials').doc(code).ref.set(payload, { merge: true });
       await this.firestore.collection('catalog').doc(code).ref.set(payload, { merge: true });
+      void this.nvlCatalogFull.markRemoteChanged();
       this.standardPackingCache.set(code, standardPackingValue);
     } catch (error) {
       console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
@@ -1438,6 +1441,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           updatedAt: new Date()
         }, { merge: true });
       }
+      void this.nvlCatalogFull.markRemoteChanged();
     } catch (error) {
       console.error(`❌ Error updating Unit Weight for ${material.materialCode}:`, error);
       // Không throw error để không ảnh hưởng đến việc add vào inventory
@@ -5317,6 +5321,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       const payload = { materialCode: code, standardPacking: value, updatedAt: new Date() };
       await this.firestore.collection('materials').doc(code).ref.set(payload, { merge: true });
       await this.firestore.collection('catalog').doc(code).ref.set(payload, { merge: true });
+      void this.nvlCatalogFull.markRemoteChanged();
       this.standardPackingCache.set(code, value);
       const approvedBy = await this.currentUserCode();
       const now = new Date();
