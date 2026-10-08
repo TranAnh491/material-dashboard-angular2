@@ -273,11 +273,11 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.customsWait': 'Khu vực hàng cách ly của Hải Quan',
     'zone.khoAdmin': 'Kho Admin',
     'zone.khoSanXuat': 'Kho Sản Xuất',
-    'zone.scrap': 'Kho ASM2 Scrap',
+    'zone.scrap': 'Kho Scrap',
     'zone.khoScrapAsm1': 'Kho Scrap ASM1',
     'zone.khoVatTuVp': 'Kho Vật tư văn phòng',
     'zone.khoMayMoc': 'Kho Máy móc thiết bị',
-    'zone.khoTaiLieu': 'Kho tài liệu',
+    'zone.khoTaiLieu': 'Kho Tài liệu',
     'zone.khoHoaChatThuong': 'Hóa chất (Sản Xuất)',
     'zone.receiving': 'Khu vực Nhận nguyên liệu',
     'zone.nvlGiaoAsm1': 'Khu vực NVL giao ASM1',
@@ -286,7 +286,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.wcMale': 'WC Nam',
     'zone.wcFemale': 'WC Nữ',
     'zone.forkliftCharging': 'Khu vực sạc xe nâng',
-    'zone.j4NonConforming': 'Khu vực hàng không phù hợp',
+    'zone.j4NonConforming': 'Kho hàng lỗi (NG)',
     'zone.j4ColdStorage': 'Kho Mát',
     'zone.khoMatExt': 'Kho mát mở rộng',
     'zone.khoHoaChat': 'Hóa chất',
@@ -533,7 +533,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.customsWait': 'Customs Quarantine Area',
     'zone.khoAdmin': 'Admin Warehouse',
     'zone.khoSanXuat': 'Production Material Storage',
-    'zone.scrap': 'ASM2 SCRAP / NG Area',
+    'zone.scrap': 'Scrap Warehouse',
     'zone.khoScrapAsm1': 'Scrap Area',
     'zone.khoVatTuVp': 'Office Supplies Warehouse',
     'zone.khoMayMoc': 'Machinery and Equipment Warehouse',
@@ -546,7 +546,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'zone.wcMale': 'WC',
     'zone.wcFemale': 'WC',
     'zone.forkliftCharging': 'Forklift Charging Area',
-    'zone.j4NonConforming': 'NG / Non-conforming Area',
+    'zone.j4NonConforming': 'NG Warehouse',
     'zone.j4ColdStorage': 'Secured WH',
     'zone.khoMatExt': 'Secured WH Extension',
     'zone.khoHoaChat': 'Chemical Storage',
@@ -3292,8 +3292,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   }));
 
   /**
-   * Khu J4, nhịp X16–X17: Vật tư VP Y01–Y02, Máy móc Y02–Y03, Tài liệu Y03–Y04,
-   * Hóa chất thường Y04–Y05, ASM2 Scrap Y05–Y07, NG Y07–Y09, Scrap ASM1 Y09–Y11,
+   * Khu J4, nhịp X16–X17: Kho hàng lỗi Y01–Y03, Kho Scrap Y03–Y06,
+   * Hóa chất (Sản Xuất) Y06–Y07, Máy móc Y07–Y08, Vật tư VP Y08–Y09, Tài liệu Y09–Y10,
    * Kho SX Y11–Y13, Kho Admin Y13–Y15.
    * Hai kho kề nhau cách 0,5m. Kho Mát Y04–Y10 chỉ hiện ở "Bản vẽ Đăng ký".
    */
@@ -3340,13 +3340,12 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const khoGap = 0.5;
     const khoInset = khoGap / 2;
     const spans: Array<{ id: string; labelKey: string; from: string; to: string; x0: number; x1: number }> = [
-      { id: 'j4-vat-tu-vp', labelKey: 'zone.khoVatTuVp', from: 'Y01', to: 'Y02' },
-      { id: 'j4-may-moc', labelKey: 'zone.khoMayMoc', from: 'Y02', to: 'Y03' },
-      { id: 'j4-tai-lieu', labelKey: 'zone.khoTaiLieu', from: 'Y03', to: 'Y04' },
-      { id: 'j4-hoa-chat-thuong', labelKey: 'zone.khoHoaChatThuong', from: 'Y04', to: 'Y05' },
-      { id: 'j4-scrap', labelKey: 'zone.scrap', from: 'Y05', to: 'Y07' },
-      { id: 'j4-non-conforming', labelKey: 'zone.j4NonConforming', from: 'Y07', to: 'Y09' },
-      { id: 'j4-scrap-asm1', labelKey: 'zone.khoScrapAsm1', from: 'Y09', to: 'Y11' },
+      { id: 'j4-non-conforming', labelKey: 'zone.j4NonConforming', from: 'Y01', to: 'Y03' },
+      { id: 'j4-scrap', labelKey: 'zone.scrap', from: 'Y03', to: 'Y06' },
+      { id: 'j4-hoa-chat-thuong', labelKey: 'zone.khoHoaChatThuong', from: 'Y06', to: 'Y07' },
+      { id: 'j4-may-moc', labelKey: 'zone.khoMayMoc', from: 'Y07', to: 'Y08' },
+      { id: 'j4-vat-tu-vp', labelKey: 'zone.khoVatTuVp', from: 'Y08', to: 'Y09' },
+      { id: 'j4-tai-lieu', labelKey: 'zone.khoTaiLieu', from: 'Y09', to: 'Y10' },
       { id: 'j4-kho-sx', labelKey: 'zone.khoSanXuat', from: 'Y11', to: 'Y13' },
       { id: 'j4-kho-admin', labelKey: 'zone.khoAdmin', from: 'Y13', to: 'Y15' }
     ].map((s) => ({ ...s, x0: this.axisXM(s.from), x1: this.axisXM(s.to) }));
@@ -3381,7 +3380,6 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.j4FloorZonesMemoKey = key;
     this.j4FloorZonesMemo = defs.map((z) => {
       const label = this.t(z.labelKey);
-      const notes = z.id === 'j4-non-conforming' ? ['NG'] : [];
       const wrapAt =
         z.id === 'j4-may-moc' || z.id === 'j4-tai-lieu'
           ? 8
@@ -3393,7 +3391,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
           ? this.lang === 'en'
             ? ['Chemical', '(Production)']
             : ['Hóa chất', '(Sản Xuất)']
-          : [...this.wrapLabel(label, wrapAt), ...notes];
+          : z.id === 'j4-non-conforming'
+            ? this.lang === 'en'
+              ? ['NG Warehouse']
+              : ['Kho hàng lỗi', '(NG)']
+            : this.wrapLabel(label, wrapAt);
       return this.pullDashedClear(
         {
           id: z.id,

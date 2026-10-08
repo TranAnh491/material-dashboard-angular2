@@ -374,6 +374,7 @@ export class NavbarComponent implements OnInit, OnDestroy {
       '/pd-control',
       '/shorted-materials',
       '/nhiet-do',
+      '/equipment-checklist',
       '/location',
       '/fg-in',
       '/fg-out',

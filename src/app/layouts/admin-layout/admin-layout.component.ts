@@ -23,7 +23,7 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
 
   public shouldShowNavbar(): boolean {
     const path = this.location.path().split('?')[0];
-    const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status', '/j-warehouse', '/stock-check', '/nhiet-do', '/pallet-id'];
+    const hideNavbarOnRoutes = ['/maps', '/documents', '/work-order-status', '/j-warehouse', '/stock-check', '/nhiet-do', '/pallet-id', '/equipment-checklist'];
     return !hideNavbarOnRoutes.includes(path);
   }
 
@@ -175,7 +175,7 @@ export class AdminLayoutComponent implements OnInit, AfterViewInit {
 
   public shouldShowFooter(): boolean {
     const path = this.location.path().split('?')[0];
-    const hideFooterOnRoutes = ['/maps', '/work-order-status', '/documents', '/j-warehouse', '/pallet-id', '/stock-check'];
+    const hideFooterOnRoutes = ['/maps', '/work-order-status', '/documents', '/j-warehouse', '/pallet-id', '/stock-check', '/equipment-checklist'];
     return !hideFooterOnRoutes.includes(path);
   }
   

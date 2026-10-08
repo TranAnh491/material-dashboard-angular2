@@ -84,6 +84,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     // Quality
     { path: '/qc', title: 'Quality', icon: 'verified', iconImage: 'assets/img/qc.png', category: 'Quality' },
     { path: '/nhiet-do', title: 'Nhiệt Độ', icon: 'thermostat', iconImage: 'assets/img/qc.png', category: 'Quality' },
+    { path: '/equipment-checklist', title: 'Quản lý thiết bị', icon: 'precision_manufacturing', iconImage: 'assets/img/qc.png', category: 'Quality', subtitle: 'Checklist thiết bị kho, tem QR và nhắc Zalo' },
     { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', iconImage: 'assets/img/traceback.png', category: 'Quality' },
 
     // ASM FG
@@ -239,6 +240,7 @@ export class MenuComponent implements OnInit, OnDestroy {
     '/label': 'In tem nhãn nguyên liệu',
     '/qc': 'Kiểm tra chất lượng nguyên liệu',
     '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
+    '/equipment-checklist': 'Checklist thiết bị kho, tem QR và nhắc kiểm tra',
     '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
     '/fg-in': 'Nhập thành phẩm vào kho',
     '/fg-out': 'Xuất thành phẩm',

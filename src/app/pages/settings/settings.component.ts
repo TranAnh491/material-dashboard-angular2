@@ -72,6 +72,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { key: 'equipment', name: 'Training', category: 'Khác' },
     { key: 'qc', name: 'Quality', category: 'Khác' },
     { key: 'nhiet-do', name: 'Nhiệt Độ', category: 'Khác' },
+    { key: 'equipment-checklist', name: 'Quản lý thiết bị', category: 'Khác' },
     { key: 'rm1-delivery', name: 'RM Delivery', category: 'Khác' },
     { key: 'report', name: 'Report', category: 'Khác' },
     { key: 'shorted-materials', name: 'Shorted materials', category: 'Khác' },

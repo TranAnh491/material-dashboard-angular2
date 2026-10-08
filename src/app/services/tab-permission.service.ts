@@ -187,6 +187,7 @@ export class TabPermissionService {
     { key: 'equipment', name: 'Training' },
     { key: 'qc', name: 'Quality' },
     { key: 'nhiet-do', name: 'Nhiệt Độ' },
+    { key: 'equipment-checklist', name: 'Quản lý thiết bị' },
     { key: 'rm1-delivery', name: 'RM Delivery' },
     { key: 'report', name: 'Report' },
     { key: 'shorted-materials', name: 'Shorted materials' },

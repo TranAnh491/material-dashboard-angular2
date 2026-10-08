@@ -441,6 +441,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { path: '/bag-history', title: 'Control Batch', icon: 'history', category: 'RM' },
 
     { path: '/qc', title: 'Quality', icon: 'verified', category: 'Quality' },
+    { path: '/equipment-checklist', title: 'Quản lý thiết bị', icon: 'precision_manufacturing', category: 'Quality', subtitle: 'Checklist thiết bị kho, tem QR và nhắc Zalo' },
     { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', category: 'Quality' },
 
     // ASM FG
@@ -580,6 +581,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       '/label': 'In tem nhãn nguyên liệu',
       '/qc': 'Kiểm tra chất lượng nguyên liệu',
       '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
+      '/equipment-checklist': 'Checklist thiết bị kho, tem QR và nhắc kiểm tra',
       '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
       '/fg-in': 'Nhập thành phẩm vào kho',
       '/fg-out': 'Xuất thành phẩm',

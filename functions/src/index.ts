@@ -207,6 +207,35 @@ export const sendNhietDoZaloRemindTestFn = functions
     }
   });
 
+/**
+ * 11:00 các ngày làm việc (thứ 2–thứ 7). Chủ nhật và ngày lễ không nhắc.
+ * Nếu còn thiết bị đến hạn chưa kiểm tra thì nhắn vào nhóm Kho.
+ */
+export const notifyEquipmentChecklistZalo = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .pubsub.schedule('0 11 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { sendEquipmentChecklistZaloRemind } = await import('./equipment-checklist-zalo');
+    await sendEquipmentChecklistZaloRemind(admin.firestore());
+  });
+
+/** Gửi ngay vào nhóm Kho nếu còn thiết bị đến hạn chưa kiểm tra. */
+export const sendEquipmentChecklistZaloRemindFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (_data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    try {
+      const { sendEquipmentChecklistZaloRemind } = await import('./equipment-checklist-zalo');
+      return await sendEquipmentChecklistZaloRemind(admin.firestore());
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError('internal', msg);
+    }
+  });
+
 /** Quản lý NVL: gửi file hướng dẫn Scan vào nhóm Zalo Kho. */
 export const sendKkScanGuideToKhoGroupFn = functions
   .runWith({ secrets: [zaloBotToken], timeoutSeconds: 120 })

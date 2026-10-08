@@ -32,6 +32,7 @@ import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
 import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
 import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
+import { EquipmentChecklistComponent } from '../../pages/equipment-checklist/equipment-checklist.component';
 import { TruckScheduleComponent } from '../../pages/truck-schedule/truck-schedule.component';
 import { AuthGuard } from '../../guards/auth.guard';
 import { SettingsGuard } from '../../guards/settings.guard';
@@ -93,5 +94,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },
-  { path: 'nhiet-do',             component: NhietDoComponent, canActivate: [AuthGuard, TabPermissionGuard] }
+  { path: 'nhiet-do',             component: NhietDoComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'equipment-checklist',  component: EquipmentChecklistComponent, canActivate: [AuthGuard, TabPermissionGuard] }
 ];
