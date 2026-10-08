@@ -343,6 +343,11 @@
                   <rect x="0" y="0" [attr.width]="svgPlotW" [attr.height]="svgTempH"
                         fill="white" stroke="#000" stroke-width="0.8"/>
 
+                  <line *ngFor="let v of tempDegreeLines"
+                        x1="0" [attr.y1]="svgTempY(v)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgTempY(v)"
+                        class="svg-grid-deg"/>
+
                   <!-- Lưới ngang + nhãn Y -->
                   <ng-container *ngFor="let v of tempGridLines">
                     <line x1="0" [attr.y1]="svgTempY(v)"
@@ -421,6 +426,11 @@
                   <!-- Đường viền ngoài vùng độ ẩm -->
                   <rect x="0" y="0" [attr.width]="svgPlotW" [attr.height]="svgHumH"
                         fill="white" stroke="#000" stroke-width="0.8"/>
+
+                  <line *ngFor="let v of humDegreeLines"
+                        x1="0" [attr.y1]="svgHumY(v)"
+                        [attr.x2]="svgPlotW" [attr.y2]="svgHumY(v)"
+                        class="svg-grid-deg"/>
 
                   <!-- Lưới ngang + nhãn Y -->
                   <ng-container *ngFor="let v of humGridLines">
@@ -514,24 +524,22 @@
     </div><!-- /form-sheet__body-scroll -->
 
     <!-- Lưu ý -->
-    <div class="sheet-notes sheet-notes--full">
+    <div class="sheet-notes sheet-notes--full" [class.sheet-notes--rev]="usesUpperOnlyLimits">
       <div class="sheet-notes__head">Lưu ý / Note:</div>
       <div class="sheet-notes__grid4" [class.sheet-notes__grid4--three]="usesUpperOnlyLimits">
         <div *ngFor="let note of regularWarehouseNotes.grid">
-          <span class="vi">{{ note.vi }}</span>
-          <span class="en">{{ note.en }}</span>
+          <span class="vi">{{ note.vi }}</span><span class="en">{{ note.en }}</span>
         </div>
       </div>
       <div class="sheet-notes__list">
         <div class="sheet-notes__item" *ngFor="let note of regularWarehouseNotes.list">
-          <span class="vi">{{ note.vi }}</span>
-          <span class="en">{{ note.en }}</span>
+          <span class="vi">{{ note.vi }}</span><span class="en">{{ note.en }}</span>
         </div>
       </div>
     </div>
 
     <!-- Chữ ký: nhãn | ký tên | nhãn | ký tên -->
-    <div class="sheet-signatures">
+    <div class="sheet-signatures" [class.sheet-signatures--joined]="usesUpperOnlyLimits">
       <div class="sign-cell sign-cell--label">
         <span class="sign-cell__title">Thẩm định</span>
         <span class="sign-cell__title-en">Assessment</span>

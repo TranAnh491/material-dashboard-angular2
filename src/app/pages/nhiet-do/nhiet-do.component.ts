@@ -15,6 +15,7 @@ import {
   HUM_LIMITS_UPPER,
   HumChartLimits,
   isNhietDoUpperOnlyPeriod,
+  COOL_TEMP_LIMITS_FROM_OCT,
   REGULAR_TEMP_LIMITS_UPPER,
   regularWarehouseSheetNotes,
   TEMP_LIMITS_BY_FORM,
@@ -174,12 +175,18 @@ export class NhietDoComponent implements OnInit {
 
   get tempLimits(): TempChartLimits {
     const type: NhietDoFormType = this.activeForm?.formType ?? 'special';
-    if (type === 'regular' && this.usesUpperOnlyLimits) return REGULAR_TEMP_LIMITS_UPPER;
+    if (this.usesUpperOnlyLimits && type === 'regular') return REGULAR_TEMP_LIMITS_UPPER;
+    if (this.usesUpperOnlyLimits && type === 'special') return COOL_TEMP_LIMITS_FROM_OCT;
     return TEMP_LIMITS_BY_FORM[type];
   }
 
   get tempGridLines(): number[] {
     return this.tempLimits.gridLines;
+  }
+
+  /** Đường ngang xám nhạt, mỗi đường một độ. Mọi loại kho. */
+  get tempDegreeLines(): number[] {
+    return this.unitLines(this.tempLimits.scaleMin, this.tempLimits.scaleMax);
   }
 
   get humChart(): HumChartLimits {
@@ -190,6 +197,19 @@ export class NhietDoComponent implements OnInit {
 
   get humGridLines(): number[] {
     return this.humChart.gridLines;
+  }
+
+  /** Đường ngang xám nhạt, mỗi đường 1%. Mọi loại kho. */
+  get humDegreeLines(): number[] {
+    return this.unitLines(this.humChart.scaleMin, this.humChart.scaleMax);
+  }
+
+  private unitLines(scaleMin: number, scaleMax: number): number[] {
+    const min = Math.ceil(scaleMin);
+    const max = Math.floor(scaleMax);
+    const lines: number[] = [];
+    for (let v = min + 1; v < max; v++) lines.push(v);
+    return lines;
   }
 
   private emptyDays(): DayTempHumReading[] {

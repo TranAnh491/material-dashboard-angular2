@@ -23,7 +23,7 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     titleVi: 'Kho Thường',
     titleEn: 'Regular Warehouse',
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO THƯỜNG',
-    sheetTitleEn: 'NORMAL WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
+    sheetTitleEn: 'REGULAR WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'warehouse',
     manageCode: 'WH-P01/F08',
     docVersion: '03',
@@ -49,7 +49,7 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     titleVi: 'Tủ Lạnh',
     titleEn: 'Refrigerator',
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHU VỰC TỦ LẠNH',
-    sheetTitleEn: 'CHECKLIST OF TEMPERATURE AND HUMIDITY IN REFRIGERATOR',
+    sheetTitleEn: 'REFRIGERATOR TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'ac_unit',
     manageCode: 'WH-P01/F09',
     docVersion: '00',
@@ -62,7 +62,7 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     titleVi: 'Kho Thường',
     titleEn: 'Regular Warehouse',
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHO THƯỜNG',
-    sheetTitleEn: 'NORMAL WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
+    sheetTitleEn: 'REGULAR WAREHOUSE TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'warehouse',
     manageCode: 'WH-P01/F08',
     docVersion: '03',
@@ -88,7 +88,7 @@ export const NHET_DO_FORMS: NhietDoFormDef[] = [
     titleVi: 'Tủ Lạnh',
     titleEn: 'Refrigerator',
     sheetTitleVi: 'BẢNG KIỂM TRA NHIỆT ĐỘ, ĐỘ ẨM KHU VỰC TỦ LẠNH',
-    sheetTitleEn: 'CHECKLIST OF TEMPERATURE AND HUMIDITY IN REFRIGERATOR',
+    sheetTitleEn: 'REFRIGERATOR TEMPERATURE AND HUMIDITY CHECKLIST',
     icon: 'ac_unit',
     manageCode: 'WH-P01/F09',
     docVersion: '00',
@@ -171,6 +171,19 @@ export const TEMP_LIMITS_BY_FORM: Record<NhietDoFormType, TempChartLimits> = {
   }
 };
 
+/** Kho mát từ 01/10/2026: 5°C – 25°C. Tháng trước đó vẫn 16°C – 25°C. */
+export const COOL_TEMP_LIMITS_FROM_OCT: TempChartLimits = {
+  scaleMin: 0,
+  scaleMax: 30,
+  gridLines: [30, 25, 20, 15, 10, 5, 0],
+  redLow: 5,
+  redHigh: 25,
+  warnLow: 7,
+  warnHigh: 23,
+  noteVi: 'Nhiệt độ kho mát: 5°C – 25°C.',
+  noteEn: 'Cool warehouse temperature: 5°C – 25°C.'
+};
+
 /** Kho thường từ 01/10/2026: tối đa 40°C, cảnh báo 39°C, không cận dưới. */
 export const REGULAR_TEMP_LIMITS_UPPER: TempChartLimits = {
   scaleMin: 5,
@@ -244,8 +257,8 @@ export function regularWarehouseSheetNotes(upperOnly: boolean): {
     ],
     list: [
       {
-        vi: '4. Thời gian kiểm tra - sáng (9:00 am) và chiều (3:00 pm).',
-        en: 'Check time: morning (9:00 am) and afternoon (3:00 pm).'
+        vi: '4. Thời gian kiểm tra - sáng (9.00 am) và chiều (3.00 pm).',
+        en: 'Check time: morning (9.00 am) and afternoon (3.00 pm).'
       },
       {
         vi: '5. Khi nhiệt độ, độ ẩm vượt gần tới mức giới hạn, đồng hồ sẽ phát tín hiệu cảnh báo bằng âm thanh, cần tiến hành điều chỉnh nhiệt độ, độ ẩm bằng cách mở điều hòa/ quạt, máy hút ẩm.',

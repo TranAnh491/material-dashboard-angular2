@@ -885,6 +885,10 @@
 }
 
 /* ══ SVG elements ══ */
+.svg-grid-deg {
+  stroke: #d1d5db;
+  stroke-width: 0.7;
+}
 .svg-grid-h {
   stroke: #d1d5db;
   stroke-width: 0.6;
@@ -1031,6 +1035,49 @@
   &--full .sheet-notes__grid4 > div {
     min-width: 0;
   }
+
+  &--rev {
+    padding: 3px 6px 4px;
+    font-size: 8.5px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+
+    .sheet-notes__head {
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .sheet-notes__grid4 {
+      gap: 2px 8px;
+      margin-bottom: 2px;
+      padding-bottom: 0;
+      border-bottom: none;
+      align-items: start;
+
+      > div { border-right: none; padding-right: 6px; }
+    }
+
+    .sheet-notes__item { margin-bottom: 1px; }
+
+    .sheet-notes__grid4 .vi,
+    .sheet-notes__grid4 .en,
+    .sheet-notes__item .vi,
+    .sheet-notes__item .en {
+      display: inline;
+      font-size: 8.5px;
+      line-height: 1.28;
+      font-weight: 500;
+    }
+
+    .en {
+      color: #5f86a8;
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .en::before { content: ' '; }
+  }
 }
 
 /* ══ Chữ ký: Thẩm định | ký | Kiểm tra | ký ══ */
@@ -1040,6 +1087,11 @@
   margin-top: 10px;
   border: 1px solid #000;
   gap: 0;
+}
+
+.sheet-signatures--joined {
+  margin-top: 0;
+  border-top: none;
 }
 
 .sign-cell {
