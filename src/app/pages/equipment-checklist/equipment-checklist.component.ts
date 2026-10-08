@@ -24,7 +24,9 @@ import {
   EquipmentStaff,
   InspectionFrequency,
   InspectionRecord,
-  InspectionResult
+  InspectionResult,
+  MaintenanceBy,
+  MaintenanceCycle
 } from './equipment-checklist.models';
 
 type PageView = 'check' | 'list' | 'groups' | 'items' | 'history' | 'labels' | 'scan' | 'staff';
@@ -44,7 +46,6 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   readonly categories = EQUIPMENT_CATEGORIES;
   readonly categoryName = categoryName;
   readonly subcategoryName = subcategoryName;
-  readonly checklistNames = checklistNames;
   readonly frequencyLabel = frequencyLabel;
 
   view: PageView = 'check';
@@ -77,6 +78,8 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   staff: EquipmentStaff[] = [];
   staffName = '';
   staffCode = '';
+  checklistGroups: Array<{ name: string; subs: Array<{ id: string; name: string; items: string[] }> }> = [];
+  maintenanceItems: string[] = [];
   scanBuffer = '';
   private scanLock = false;
 
@@ -114,18 +117,6 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   mobileScanBy: 'pda' | 'camera' = 'pda';
   mobileStaff: EquipmentStaff | null = null;
   private scanner: { stop: () => Promise<void> } | null = null;
-  private mobileMedia?: MediaQueryList;
-  private readonly onMobileMedia = (): void => {
-    const next = !!this.mobileMedia?.matches;
-    if (next === this.mobileUi) return;
-    this.mobileUi = next;
-    this.cdr.detectChanges();
-    if (next) {
-      if (this.mobileStep === 'staff' || this.mobileStep === 'equip') this.resumeMobileScan();
-    } else {
-      void this.stopScan();
-    }
-  };
 
   zaloSending = false;
 
@@ -144,9 +135,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.userRole = user?.role || '';
     await this.reload();
     if (seeded) this.flash(`Đã nạp ${seeded} thiết bị ban đầu.`);
-    this.mobileMedia = window.matchMedia('(max-width: 820px), (hover: none) and (pointer: coarse)');
-    this.mobileUi = this.mobileMedia.matches;
-    this.mobileMedia.addEventListener('change', this.onMobileMedia);
+    this.mobileUi = this.isHandheld();
     if (this.mobileUi) {
       this.cdr.detectChanges();
       this.focusMobileScan();
@@ -154,7 +143,6 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.mobileMedia?.removeEventListener('change', this.onMobileMedia);
     void this.stopScan();
   }
 
@@ -298,14 +286,16 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.cdr.markForCheck();
     try {
-      const [equipment, records, staff] = await Promise.all([
+      const [equipment, records, staff, catalog] = await Promise.all([
         this.api.listEquipment(),
         this.api.listInspections(this.year, this.month),
-        this.api.listStaff()
+        this.api.listStaff(),
+        this.api.loadItemCatalog()
       ]);
       this.equipment = equipment;
       this.records = records;
       this.staff = staff;
+      this.applyCatalog(catalog.checklists, catalog.maintenanceItems);
       this.initCollapse();
       const max = daysOfMonth(this.year, this.month).length;
       if (this.selectedDay > max) this.selectedDay = max;
@@ -338,7 +328,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   }
 
   itemsText(eq: Equipment): string {
-    return checklistNames(eq).join(', ');
+    return this.namesFor(eq).join(', ');
   }
 
   openCreate(): void {
@@ -405,8 +395,8 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.dialogDefect = existing?.defectDescription || '';
     this.dialogAction = existing?.correctiveAction || '';
     this.dialogImage = existing?.imageUrl || '';
-    this.dialogChecks = new Set(existing?.checkedItems || checklistNames(eq));
-    const names = checklistNames(eq);
+    this.dialogChecks = new Set(existing?.checkedItems || this.namesFor(eq));
+    const names = this.namesFor(eq);
     this.itemRows = names.map(name => {
       const hit = existing?.itemResults?.find(row => row.itemName === name);
       const checked = existing?.checkedItems?.includes(name);
@@ -444,7 +434,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
 
   dialogItems(): string[] {
     if (!this.dialogEquipment) return [];
-    return checklistNames(this.dialogEquipment);
+    return this.namesFor(this.dialogEquipment);
   }
 
   toggleCheck(item: string): void {
@@ -634,13 +624,6 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     return [...set].sort((a, b) => a.localeCompare(b, 'vi'));
   }
 
-  get checklistCatalog(): Array<{ name: string; subs: Array<{ name: string; items: string[] }> }> {
-    return SEED_CATEGORIES.map(cat => ({
-      name: cat.name,
-      subs: cat.subcategories.map(sub => ({ name: sub.name, items: sub.inspectionItems }))
-    }));
-  }
-
   get userInitials(): string {
     const parts = this.userName.trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return 'NV';
@@ -735,6 +718,55 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     eq.checkBy = value === 'qr' ? 'qr' : 'computer';
     await this.saveRow(eq);
     this.cdr.markForCheck();
+  }
+
+  async setMaintenance(eq: Equipment, value: string): Promise<void> {
+    const by: MaintenanceBy | null = value === 'internal' || value === 'external' ? value : null;
+    eq.maintenanceBy = by;
+    if (eq.maintenanceBy !== 'internal') eq.maintenanceCycle = null;
+    await this.saveRow(eq);
+    this.cdr.markForCheck();
+  }
+
+  async setMaintenanceCycle(eq: Equipment, value: string): Promise<void> {
+    const cycle: MaintenanceCycle | null = value === 'quarter' || value === 'half' || value === 'year' ? value : null;
+    eq.maintenanceCycle = cycle;
+    await this.saveRow(eq);
+    this.cdr.markForCheck();
+  }
+
+  addCheckItem(sub: { items: string[] }): void {
+    sub.items.push('');
+    this.cdr.markForCheck();
+  }
+
+  removeCheckItem(sub: { items: string[] }, index: number): void {
+    sub.items.splice(index, 1);
+    void this.saveCatalog();
+  }
+
+  addMaintenanceItem(): void {
+    this.maintenanceItems.push('');
+    this.cdr.markForCheck();
+  }
+
+  removeMaintenanceItem(index: number): void {
+    this.maintenanceItems.splice(index, 1);
+    void this.saveCatalog();
+  }
+
+  async saveCatalog(): Promise<void> {
+    const checklists: Record<string, string[]> = {};
+    this.checklistGroups.forEach(group => {
+      group.subs.forEach(sub => {
+        checklists[sub.id] = sub.items.map(item => item.trim()).filter(Boolean);
+      });
+    });
+    try {
+      await this.api.saveItemCatalog(checklists, this.maintenanceItems.map(item => item.trim()).filter(Boolean));
+    } catch (e: unknown) {
+      this.flash(e instanceof Error ? e.message : 'Không lưu được hạng mục.', true);
+    }
   }
 
   isQrCheck(eq: Equipment): boolean {
@@ -1069,6 +1101,30 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
 
   private focusMobileScan(): void {
     window.setTimeout(() => this.mobileScanBox?.nativeElement.focus(), 50);
+  }
+
+  private namesFor(eq: Equipment): string[] {
+    if (eq.inspectionItems?.length) return eq.inspectionItems.filter(Boolean);
+    const sub = this.checklistGroups.flatMap(group => group.subs).find(row => row.id === eq.subcategoryId);
+    const items = sub?.items.map(item => item.trim()).filter(Boolean);
+    if (items?.length) return items;
+    return checklistNames(eq);
+  }
+
+  private applyCatalog(checklists: Record<string, string[]>, maintenanceItems: string[]): void {
+    this.checklistGroups = SEED_CATEGORIES.map(cat => ({
+      name: cat.name,
+      subs: cat.subcategories.map(sub => ({
+        id: sub.id,
+        name: sub.name,
+        items: (checklists[sub.id]?.length ? checklists[sub.id] : sub.inspectionItems).slice()
+      }))
+    }));
+    this.maintenanceItems = maintenanceItems.slice();
+  }
+
+  private isHandheld(): boolean {
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
   }
 
   private canInspectDate(iso: string): boolean {

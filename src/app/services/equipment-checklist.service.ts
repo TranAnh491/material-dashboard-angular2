@@ -116,6 +116,21 @@ export class EquipmentChecklistService {
     }, { merge: true });
   }
 
+  async loadItemCatalog(): Promise<{ checklists: Record<string, string[]>; maintenanceItems: string[] }> {
+    const snap = await this.firestore.firestore.collection('warehouse-equipment-meta').doc('catalog').get();
+    const data = snap.data() || {};
+    const checklists = (data.checklists || {}) as Record<string, string[]>;
+    const maintenanceItems = Array.isArray(data.maintenanceItems) ? data.maintenanceItems.map(item => String(item)) : [];
+    return { checklists, maintenanceItems };
+  }
+
+  async saveItemCatalog(checklists: Record<string, string[]>, maintenanceItems: string[]): Promise<void> {
+    await this.firestore.firestore.collection('warehouse-equipment-meta').doc('catalog').set({
+      checklists,
+      maintenanceItems
+    });
+  }
+
   private async deletedEquipmentIds(): Promise<Set<string>> {
     const snap = await this.firestore.firestore.collection('warehouse-equipment-meta').doc('deleted').get();
     const ids = (snap.data()?.ids as string[] | undefined) || [];

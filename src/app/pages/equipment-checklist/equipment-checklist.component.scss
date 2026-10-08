@@ -259,6 +259,20 @@
 .eq-row-actions button {
   border: 0; background: transparent; color: #2563eb; cursor: pointer; margin-right: 6px;
 }
+.eq-col-btn {
+  width: 100%;
+  min-width: 72px;
+  height: 30px;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+}
+.eq-item-edit { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.eq-item-edit .eq-inline { flex: 1; }
+.eq-item-edit .eq-col-btn { width: auto; }
 
 .eq-dot {
   width: 18px;
@@ -531,6 +545,7 @@
 .eq-mobile__done .eq-mobile__go { max-width: 320px; }
 
 @media print {
+  .eq-mobile { display: none !important; }
   .eq-side, .eq-top, .eq-scroll > :not(.eq-labels), .no-print, .eq-modal { display: none !important; }
   .eq-shell, :host, .eq-main, .eq-scroll { height: auto; overflow: visible; background: #fff; }
   .eq-label-grid { display: block; }

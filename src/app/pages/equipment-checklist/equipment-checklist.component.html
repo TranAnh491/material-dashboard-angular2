@@ -370,7 +370,7 @@
           <thead>
             <tr>
               <th><input type="checkbox" [checked]="filteredSelected" (change)="toggleAllFiltered()"></th>
-              <th>STT</th><th>Tên thiết bị</th><th>Mã số quản lý</th><th>Nhóm</th><th>Người phụ trách</th><th>Mã nhân viên</th><th>Tần suất</th><th>Trạng thái</th><th>Kiểm tra bằng</th><th></th>
+              <th>STT</th><th>Tên thiết bị</th><th>Mã số quản lý</th><th>Nhóm</th><th>Người phụ trách</th><th>Mã nhân viên</th><th>Tần suất</th><th>Trạng thái</th><th>Kiểm tra bằng</th><th>Bảo dưỡng</th><th>Chu kỳ bảo dưỡng</th><th>In tem</th><th>Sửa</th><th>Lịch sử</th>
             </tr>
           </thead>
           <tbody>
@@ -403,11 +403,24 @@
                   <option value="computer">Máy tính</option>
                 </select>
               </td>
-              <td class="eq-row-actions">
-                <button type="button" (click)="printOne(eq)">In tem</button>
-                <button type="button" (click)="openEdit(eq)">Sửa</button>
-                <button type="button" (click)="openHistory(eq)">Lịch sử</button>
+              <td>
+                <select class="eq-inline" [ngModel]="eq.maintenanceBy || ''" (ngModelChange)="setMaintenance(eq, $event)">
+                  <option value="">—</option>
+                  <option value="internal">Nội bộ</option>
+                  <option value="external">Bên ngoài</option>
+                </select>
               </td>
+              <td>
+                <select *ngIf="eq.maintenanceBy === 'internal'" class="eq-inline" [ngModel]="eq.maintenanceCycle || ''" (ngModelChange)="setMaintenanceCycle(eq, $event)">
+                  <option value="">—</option>
+                  <option value="quarter">Theo quý</option>
+                  <option value="half">Theo 6 tháng</option>
+                  <option value="year">Theo 1 năm</option>
+                </select>
+              </td>
+              <td><button type="button" class="eq-col-btn" (click)="printOne(eq)">In tem</button></td>
+              <td><button type="button" class="eq-col-btn" (click)="openEdit(eq)">Sửa</button></td>
+              <td><button type="button" class="eq-col-btn" (click)="openHistory(eq)">Lịch sử</button></td>
             </tr>
           </tbody>
         </table>
@@ -423,12 +436,25 @@
 
       <section class="eq-page" *ngIf="view === 'items'">
         <h1 class="eq-title">Hạng mục kiểm tra</h1>
-        <article class="eq-block" *ngFor="let g of checklistCatalog">
+        <article class="eq-block" *ngFor="let g of checklistGroups">
           <h2>{{ g.name }}</h2>
           <div *ngFor="let sub of g.subs">
             <h3>{{ sub.name }}</h3>
-            <ol><li *ngFor="let item of sub.items">{{ item }}</li></ol>
+            <div class="eq-item-edit" *ngFor="let item of sub.items; let i = index">
+              <input class="eq-inline" [(ngModel)]="sub.items[i]" (blur)="saveCatalog()">
+              <button type="button" class="eq-col-btn" (click)="removeCheckItem(sub, i)">Xóa</button>
+            </div>
+            <button type="button" class="eq-btn" (click)="addCheckItem(sub)">Thêm hạng mục</button>
           </div>
+        </article>
+        <article class="eq-block">
+          <h2>Bảo dưỡng nội bộ</h2>
+          <p class="eq-hint">Nhập các mục cần bảo dưỡng.</p>
+          <div class="eq-item-edit" *ngFor="let item of maintenanceItems; let i = index">
+            <input class="eq-inline" [(ngModel)]="maintenanceItems[i]" (blur)="saveCatalog()">
+            <button type="button" class="eq-col-btn" (click)="removeMaintenanceItem(i)">Xóa</button>
+          </div>
+          <button type="button" class="eq-btn" (click)="addMaintenanceItem()">Thêm mục bảo dưỡng</button>
         </article>
       </section>
 
