@@ -123,9 +123,9 @@
       <p class="eq-toast" *ngIf="message" [class.is-error]="messageError">{{ message }}</p>
 
       <ng-container *ngIf="view === 'check'">
-        <h1 class="eq-title"><i class="material-icons">fact_check</i> KIỂM TRA TRANG THIẾT BỊ KHO</h1>
+        <h1 class="eq-title" *ngIf="!showInspect"><i class="material-icons">fact_check</i> KIỂM TRA TRANG THIẾT BỊ KHO</h1>
 
-        <section class="eq-cards">
+        <section class="eq-cards" *ngIf="!showInspect">
           <article>
             <span class="eq-card-ico eq-card-ico--blue"><i class="material-icons">local_shipping</i></span>
             <div><small>Tổng thiết bị</small><strong>{{ stats.total }}</strong><em>thiết bị</em></div>
@@ -156,51 +156,11 @@
           </article>
         </section>
 
-        <div class="eq-filters__actions">
+        <div class="eq-filters__actions" *ngIf="!showInspect">
           <button type="button" class="eq-btn eq-btn--primary" (click)="showInspect = true">
             <i class="material-icons">fact_check</i> Kiểm tra
           </button>
         </div>
-
-        <section class="eq-page" *ngIf="showInspect">
-          <div class="eq-page__bar">
-            <h2 class="eq-title">Danh sách kiểm tra</h2>
-            <button type="button" class="eq-btn" (click)="showInspect = false">Đóng</button>
-          </div>
-          <p class="eq-hint">Tick ô đúng ngày để kiểm tra. Ngày chưa tới thì không tick được. Thiết bị kiểm tra bằng QR code không tick trên máy tính.</p>
-          <div class="eq-table-card">
-            <table class="eq-table">
-              <thead>
-                <tr>
-                  <th>STT</th>
-                  <th>Tên thiết bị</th>
-                  <th>Mã số quản lý</th>
-                  <th>Người phụ trách</th>
-                  <th *ngFor="let d of days" class="eq-day" [class.is-day]="d === selectedDay">{{ d }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let eq of equipment; let i = index; trackBy: trackEq" [class.eq-row--view]="isQrCheck(eq)">
-                  <td>{{ i + 1 }}</td>
-                  <td class="eq-name">{{ eq.equipmentName }}</td>
-                  <td>{{ eq.managementCode }}</td>
-                  <td>{{ eq.responsiblePerson || '—' }}</td>
-                  <td *ngFor="let d of days" class="eq-day">
-                    <span *ngIf="isQrCheck(eq)" class="eq-status-dot" [class.is-done]="checkedDay(eq, d)" title="Kiểm tra bằng QR code"></span>
-                    <input *ngIf="!isQrCheck(eq)" type="checkbox"
-                           [checked]="checkedDay(eq, d)"
-                           [disabled]="!canInspectDay(d)"
-                           (click)="$event.preventDefault(); openInspectDay(eq, d)"
-                           [title]="canInspectDay(d) ? (checkedDay(eq, d) ? 'Đã kiểm' : 'Tick để kiểm tra') : 'Không kiểm tra trước ngày'">
-                  </td>
-                </tr>
-                <tr *ngIf="!equipment.length">
-                  <td [attr.colspan]="4 + days.length">Chưa có thiết bị.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
 
         <div class="eq-modal" *ngIf="dialogOpen && dialogEquipment">
           <aside class="eq-panel eq-panel--popup">
@@ -300,7 +260,7 @@
           </aside>
         </div>
 
-        <section class="eq-charts">
+        <section class="eq-charts" *ngIf="!showInspect">
           <article>
             <h3>Tình trạng kiểm tra trong tháng {{ month }}/{{ year }}</h3>
             <div class="eq-legend">
@@ -310,14 +270,14 @@
               <span><i class="lg-open"></i> Chưa kiểm tra ({{ stats.outstanding }})</span>
             </div>
             <div class="eq-bars">
-              <div *ngFor="let bar of monthBars" class="eq-bar" [title]="bar.day + ': Đạt ' + bar.pass + ', Không đạt ' + bar.fail">
+              <div *ngFor="let bar of monthBars" class="eq-bar" [class.is-sunday]="bar.sunday" [title]="bar.sunday ? 'Chủ nhật không kiểm tra' : (weekdayLabel(bar.day) + ' ' + bar.day + ': Đạt ' + bar.pass + ', Không đạt ' + bar.fail)">
                 <div class="eq-stack">
                   <i class="pass" [style.flex]="bar.pass"></i>
                   <i class="fail" [style.flex]="bar.fail"></i>
                   <i class="na" [style.flex]="bar.na"></i>
                   <i class="open" [style.flex]="bar.open"></i>
                 </div>
-                <small>{{ bar.day }}</small>
+                <small>{{ weekdayLabel(bar.day) }} {{ bar.day }}</small>
               </div>
             </div>
           </article>
@@ -354,6 +314,50 @@
           </article>
         </section>
       </ng-container>
+
+      <section class="eq-inspect-page" *ngIf="view === 'check' && showInspect">
+        <div class="eq-page__bar">
+          <h1 class="eq-title">Danh sách kiểm tra</h1>
+          <button type="button" class="eq-btn" (click)="showInspect = false">Đóng</button>
+        </div>
+        <p class="eq-hint">Tick ô đúng ngày để kiểm tra. Ngày chưa tới và Chủ nhật thì không kiểm tra được. Thiết bị kiểm tra bằng QR code không tick trên máy tính.</p>
+        <div class="eq-table-card">
+          <table class="eq-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Tên thiết bị</th>
+                <th>Mã số quản lý</th>
+                <th>Người phụ trách</th>
+                <th *ngFor="let d of days" class="eq-day" [class.is-day]="d === selectedDay" [class.is-sunday]="isSundayDay(d)">
+                  <span class="eq-day__w">{{ weekdayLabel(d) }}</span>
+                  <span class="eq-day__n">{{ d }}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let eq of equipment; let i = index; trackBy: trackEq" [class.eq-row--view]="isQrCheck(eq)">
+                <td>{{ i + 1 }}</td>
+                <td class="eq-name">{{ eq.equipmentName }}</td>
+                <td>{{ eq.managementCode }}</td>
+                <td>{{ eq.responsiblePerson || '—' }}</td>
+                <td *ngFor="let d of days" class="eq-day" [class.is-sunday]="isSundayDay(d)">
+                  <span *ngIf="isSundayDay(d)" class="eq-day-lock" title="Chủ nhật không kiểm tra."><i class="material-icons">lock</i></span>
+                  <span *ngIf="!isSundayDay(d) && isQrCheck(eq)" class="eq-status-dot" [class.is-done]="checkedDay(eq, d)" title="Kiểm tra bằng QR code"></span>
+                  <input *ngIf="!isSundayDay(d) && !isQrCheck(eq)" type="checkbox"
+                         [checked]="checkedDay(eq, d)"
+                         [disabled]="!canInspectDay(d)"
+                         (click)="$event.preventDefault(); openInspectDay(eq, d)"
+                         [title]="dayLockTitle(d, eq)">
+                </td>
+              </tr>
+              <tr *ngIf="!equipment.length">
+                <td [attr.colspan]="4 + days.length">Chưa có thiết bị.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="eq-page" *ngIf="view === 'list'">
         <div class="eq-page__bar">
@@ -463,6 +467,7 @@
         <div class="eq-legend">
           <span><i class="eq-status-dot is-done"></i> Đã kiểm</span>
           <span><i class="eq-status-dot"></i> Chưa kiểm</span>
+          <span>Chủ nhật: khóa</span>
         </div>
         <div class="eq-table-card">
           <table class="eq-table">
@@ -471,7 +476,10 @@
                 <th>STT</th>
                 <th>Tên thiết bị</th>
                 <th>Mã số quản lý</th>
-                <th *ngFor="let d of days" class="eq-day">{{ d }}</th>
+                <th *ngFor="let d of days" class="eq-day" [class.is-sunday]="isSundayDay(d)">
+                  <span class="eq-day__w">{{ weekdayLabel(d) }}</span>
+                  <span class="eq-day__n">{{ d }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -479,8 +487,9 @@
                 <td>{{ i + 1 }}</td>
                 <td class="eq-name">{{ eq.equipmentName }}</td>
                 <td>{{ eq.managementCode }}</td>
-                <td *ngFor="let d of days" class="eq-day">
-                  <span class="eq-status-dot" [class.is-done]="checkedDay(eq, d)" [title]="checkedDay(eq, d) ? 'Đã kiểm' : 'Chưa kiểm'"></span>
+                <td *ngFor="let d of days" class="eq-day" [class.is-sunday]="isSundayDay(d)">
+                  <span *ngIf="isSundayDay(d)" class="eq-day-lock" title="Chủ nhật không kiểm tra."><i class="material-icons">lock</i></span>
+                  <span *ngIf="!isSundayDay(d)" class="eq-status-dot" [class.is-done]="checkedDay(eq, d)" [title]="checkedDay(eq, d) ? 'Đã kiểm' : 'Chưa kiểm'"></span>
                 </td>
               </tr>
               <tr *ngIf="!equipment.length"><td [attr.colspan]="3 + days.length">Chưa có thiết bị.</td></tr>
@@ -498,10 +507,11 @@
         <div class="eq-label-grid">
           <div class="eq-label" *ngFor="let eq of selectedLabels()">
             <div class="eq-label__text">
+              <img class="eq-label__logo" src="assets/img/logo.png" alt="Airspeed">
               <strong>{{ eq.equipmentName }}</strong>
               <span>{{ eq.managementCode }}</span>
             </div>
-            <img *ngIf="labelImages.get(eq.equipmentId) as src" [src]="src" alt="">
+            <img class="eq-label__qr" *ngIf="labelImages.get(eq.equipmentId) as src" [src]="src" alt="">
           </div>
         </div>
       </section>

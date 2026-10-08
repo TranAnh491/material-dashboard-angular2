@@ -227,6 +227,9 @@
   border: 1px solid #e8eef6;
   border-radius: 12px;
 }
+.eq-inspect-page { min-height: calc(100vh - 96px); }
+.eq-inspect-page .eq-table-card { max-height: none; overflow: visible; }
+.eq-inspect-page .eq-table { width: max-content; min-width: 100%; }
 .eq-table-card { overflow: auto; max-height: 560px; }
 .eq-page, .eq-block { padding: 16px; margin-bottom: 12px; }
 
@@ -248,8 +251,21 @@
 }
 .eq-table .eq-name, .eq-table .eq-items { white-space: normal; max-width: 220px; }
 .eq-items { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-.eq-day { text-align: center !important; width: 28px; padding: 4px 2px !important; }
+.eq-day { text-align: center !important; width: 34px; padding: 4px 2px !important; }
 .eq-day.is-day { background: #f8fbff; }
+.eq-day__w, .eq-day__n { display: block; line-height: 1.15; }
+.eq-day__w { font-size: 10px; font-weight: 700; }
+.eq-day__n { font-size: 11px; }
+.eq-day.is-sunday,
+.eq-day.is-sunday.is-day {
+  background: #d1d5db !important;
+  color: #4b5563;
+}
+.eq-day-lock { color: #4b5563; }
+.eq-day-lock .material-icons { font-size: 16px; vertical-align: middle; }
+.eq-bar.is-sunday .eq-stack { background: #d1d5db; }
+.eq-bar.is-sunday .eq-stack i { display: none; }
+.eq-bar.is-sunday small { color: #4b5563; }
 .eq-check { width: 32px; }
 .eq-group td, .eq-sub td { font-weight: 700; cursor: pointer; background: #f8fafc; }
 .eq-sub td { font-weight: 600; padding-left: 22px !important; background: #fff; }
@@ -411,34 +427,59 @@
 .eq-dialog label { margin-bottom: 8px; }
 .eq-dialog input, .eq-dialog select { width: 100%; }
 
-.eq-label-grid { display: flex; flex-wrap: wrap; gap: 0; }
+.eq-label-grid { display: flex; flex-wrap: wrap; gap: 2mm; align-content: flex-start; }
 .eq-label {
-  width: 57mm;
-  height: 32mm;
-  border: 1px solid #000;
+  width: 80mm;
+  height: 50mm;
+  border: 0.4mm solid #1d4ed8;
   box-sizing: border-box;
   display: flex;
   flex-direction: row;
-  align-items: center;
-  padding: 1mm 1.2mm;
+  align-items: stretch;
   background: #fff;
   overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
-.eq-label__text { flex: 1; min-width: 0; padding-right: 1mm; }
+.eq-label__text {
+  width: 50%;
+  flex: 0 0 50%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 2mm 2mm 2.5mm;
+}
+.eq-label__logo {
+  width: 18mm;
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 2mm;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
 .eq-label__text strong {
   display: block;
-  font-size: 11px;
-  line-height: 1.15;
+  font-size: 12px;
+  line-height: 1.2;
   font-weight: 700;
-  white-space: normal;
+  color: #0f172a;
 }
 .eq-label__text span {
   display: block;
-  margin-top: 1mm;
+  margin-top: auto;
   font-size: 13px;
   font-weight: 700;
+  color: #1d4ed8;
 }
-.eq-label img { width: 28mm; height: 28mm; flex: 0 0 28mm; }
+.eq-label__qr {
+  width: 50%;
+  height: 100%;
+  flex: 0 0 50%;
+  object-fit: contain;
+  padding: 2mm;
+  box-sizing: border-box;
+}
 .eq-inline {
   width: 100%;
   min-width: 110px;
@@ -548,7 +589,11 @@
   .eq-mobile { display: none !important; }
   .eq-side, .eq-top, .eq-scroll > :not(.eq-labels), .no-print, .eq-modal { display: none !important; }
   .eq-shell, :host, .eq-main, .eq-scroll { height: auto; overflow: visible; background: #fff; }
-  .eq-label-grid { display: block; }
-  .eq-label { break-inside: avoid; page-break-after: always; }
-  @page { size: 57mm 32mm; margin: 0; }
+  .eq-label, .eq-label__logo {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .eq-label-grid { display: flex; flex-wrap: wrap; gap: 2mm; }
+  .eq-label { break-inside: avoid; page-break-inside: avoid; page-break-after: auto; }
+  @page { size: A4; margin: 8mm; }
 }

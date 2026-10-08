@@ -35,7 +35,7 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.clientReloadService.startListening();
-    this.clientReloadService.updateAvailable$.subscribe(available => {
+    this.clientReloadService.showPrompt$.subscribe(available => {
       this.updateAvailable = available;
     });
     this.forceLogoutService.startListening();

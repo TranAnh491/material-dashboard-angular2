@@ -226,22 +226,36 @@ export function regularWarehouseSheetNotes(upperOnly: boolean): {
   grid: SheetNoteLine[];
   list: SheetNoteLine[];
 } {
-  const notes = REGULAR_WAREHOUSE_SHEET_NOTES;
-  if (!upperOnly) return notes;
+  if (!upperOnly) return REGULAR_WAREHOUSE_SHEET_NOTES;
   return {
     grid: [
       {
-        vi: '1. Nhiệt độ kho thường: tối đa 40°C, cảnh báo 39°C',
-        en: 'Normal warehouse temperature: max 40°C, warning 39°C'
+        vi: '1. Môi trường thường: từ 5°C đến 40°C, với độ ẩm tối đa tới 85%. Tránh tiếp xúc trực tiếp với ánh sáng mặt trời hoặc tia cực tím kéo dài. Giữ sản phẩm trong môi trường sạch sẽ, khô ráo. Không gian khô ráo và thông thoáng. Tránh tiếp xúc trực tiếp với ánh sáng mặt trời và mưa. Tránh xa các hóa chất ăn mòn.',
+        en: 'Regular environment: 5°C to 40°C, with a maximum relative humidity of up to 85%. Avoid prolonged direct sunlight or ultraviolet (UV) radiation. Keep products in a clean and dry environment. Dry and well-ventilated space. Avoid direct exposure to sunlight and rain. Keep away from corrosive chemicals.'
       },
-      notes.grid[1],
-      notes.grid[2],
       {
-        vi: '4. Độ ẩm kho thường: tối đa 85%, cảnh báo 84%. Độ ẩm kho mát và tủ lạnh: tối đa 75%, cảnh báo 74%',
-        en: 'Normal warehouse humidity: max 85%, warning 84%. Cool warehouse and refrigerator humidity: max 75%, warning 74%'
+        vi: '2. Môi trường mát: từ 5°C đến 25°C, với độ ẩm tối đa tới 75%.',
+        en: 'Cool environment: 5°C to 25°C, with a maximum relative humidity of up to 75%.'
+      },
+      {
+        vi: '3. Môi trường lạnh: từ 2°C đến 8°C, với độ ẩm tối đa tới 75%.',
+        en: 'Cold environment: 2°C to 8°C, with a maximum relative humidity of up to 75%.'
       }
     ],
-    list: notes.list
+    list: [
+      {
+        vi: '4. Thời gian kiểm tra - sáng (9:00 am) và chiều (3:00 pm).',
+        en: 'Check time: morning (9:00 am) and afternoon (3:00 pm).'
+      },
+      {
+        vi: '5. Khi nhiệt độ, độ ẩm vượt gần tới mức giới hạn, đồng hồ sẽ phát tín hiệu cảnh báo bằng âm thanh, cần tiến hành điều chỉnh nhiệt độ, độ ẩm bằng cách mở điều hòa/ quạt, máy hút ẩm.',
+        en: 'When the temperature and humidity are close to the limit, the watch will give an audible warning signal. It is necessary to adjust the temperature and humidity by turning on the air conditioner/fan or dehumidifier.'
+      },
+      {
+        vi: '6. Khi nhiệt độ hoặc độ ẩm chạm ngưỡng cảnh báo (tiếp xúc đường màu vàng), người kiểm tra ngay lập tức thông báo cho trưởng bộ phận để xử lý kịp thời.',
+        en: 'When the temperature or humidity reaches the warning threshold (contacts the yellow line), the inspector immediately notifies the department head for timely handling.'
+      }
+    ]
   };
 }
 

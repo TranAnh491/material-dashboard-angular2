@@ -157,6 +157,21 @@ export class NhietDoComponent implements OnInit {
     return regularWarehouseSheetNotes(this.usesUpperOnlyLimits);
   }
 
+  /** Tháng 9/2026 trở về trước giữ phiên bản cũ. Từ 10/2026 tăng 1. */
+  get formDocVersion(): string {
+    const base = this.activeForm?.docVersion ?? '';
+    if (!this.usesUpperOnlyLimits) return base;
+    const n = Number.parseInt(base, 10);
+    if (!Number.isFinite(n)) return base;
+    return String(n + 1).padStart(base.length, '0');
+  }
+
+  /** Tháng 9/2026 trở về trước giữ ngày ban hành cũ. */
+  get formIssuedDate(): string {
+    if (!this.activeForm) return '';
+    return this.usesUpperOnlyLimits ? '01/10/2026' : this.activeForm.issuedDate;
+  }
+
   get tempLimits(): TempChartLimits {
     const type: NhietDoFormType = this.activeForm?.formType ?? 'special';
     if (type === 'regular' && this.usesUpperOnlyLimits) return REGULAR_TEMP_LIMITS_UPPER;

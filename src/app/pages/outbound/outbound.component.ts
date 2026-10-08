@@ -22,6 +22,7 @@ import { TemXuatKhoService } from '../../services/tem-xuat-kho.service';
 import { stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
 import * as XLSX from 'xlsx';
+import { ClientReloadService } from '../../services/client-reload.service';
 
 
 /** Một dòng scan trong phiên xuất BS */
@@ -315,8 +316,20 @@ export class OutboundComponent implements OnInit, OnDestroy {
     private readTracker: ReadTrackerService,
     private nvlCatalog: NvlCatalogFullService,
     private authService: FirebaseAuthService,
-    private temXuatKho: TemXuatKhoService
+    private temXuatKho: TemXuatKhoService,
+    private clientReload: ClientReloadService
   ) {}
+
+  private static readonly RELOAD_HOLD_KEY = 'outbound-scan';
+
+  /** Đang scan dở 1 LSX (đã quét LSX hoặc còn mã chờ lưu) → hoãn popup tải lại tới khi lưu xong. */
+  private isScanSessionActive(): boolean {
+    return (
+      this.pendingScanData.length > 0 ||
+      this.isSavingBatchData ||
+      (this.isProductionOrderScanned && !!this.batchProductionOrder)
+    );
+  }
 
   private clearBatchPxkCache(): void {
     this.batchPxkPairs = [];
@@ -490,6 +503,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       void this.loadAllowExportByCartonSet();
     });
     window.addEventListener('storage', this.onNvlCatalogStorage);
+    this.clientReload.setHold(OutboundComponent.RELOAD_HOLD_KEY, () => this.isScanSessionActive());
   }
 
   /** Đổi nhà máy đang xem (ASM1 ⇄ ASM2) — đồng bộ URL query param rồi tải lại data. */
@@ -813,6 +827,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   
   ngOnDestroy(): void {
     window.removeEventListener('storage', this.onNvlCatalogStorage);
+    this.clientReload.clearHold(OutboundComponent.RELOAD_HOLD_KEY);
     this.destroy$.next();
     this.destroy$.complete();
     

@@ -379,11 +379,11 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.api.exportMonth(this.filtered, this.records, this.year, this.month);
   }
 
-  async openDay(eq: Equipment, day: number): Promise<void> {
+  async openDay(eq: Equipment, day: number): Promise<boolean> {
     const date = dateKey(this.year, this.month, day);
     if (!this.canInspectDate(date)) {
-      this.flash('Không kiểm tra trước ngày.', true);
-      return;
+      this.flash(this.inspectBlockReason(date), true);
+      return false;
     }
     const existing = this.records.find(r => r.equipmentId === eq.equipmentId && r.inspectionDate === date);
     const user = await firstValueFrom(this.auth.user$);
@@ -407,12 +407,13 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.dialogOpen = true;
     this.view = 'check';
     this.cdr.markForCheck();
+    return true;
   }
 
   async onPanelDate(): Promise<void> {
     if (!this.dialogEquipment || !/^\d{4}-\d{2}-\d{2}$/.test(this.dialogDate)) return;
     if (!this.canInspectDate(this.dialogDate)) {
-      this.flash('Không kiểm tra trước ngày.', true);
+      this.flash(this.inspectBlockReason(this.dialogDate), true);
       this.dialogDate = this.cellDate(this.selectedDay);
       this.cdr.markForCheck();
       return;
@@ -452,7 +453,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   async saveInspection(): Promise<void> {
     if (!this.dialogEquipment) return;
     if (!this.canInspectDate(this.dialogDate)) {
-      this.flash('Không kiểm tra trước ngày.', true);
+      this.flash(this.inspectBlockReason(this.dialogDate), true);
       return;
     }
     if (this.dialogResult === 'FAIL' && !this.dialogDefect.trim()) {
@@ -558,9 +559,10 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     });
   }
 
-  get monthBars(): Array<{ day: number; pass: number; fail: number; na: number; open: number }> {
+  get monthBars(): Array<{ day: number; pass: number; fail: number; na: number; open: number; sunday: boolean }> {
     return this.days.map(day => {
       const key = dateKey(this.year, this.month, day);
+      if (this.isSundayDate(key)) return { day, pass: 0, fail: 0, na: 0, open: 0, sunday: true };
       let pass = 0;
       let fail = 0;
       let na = 0;
@@ -572,7 +574,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
         else if (result === 'NA') na += 1;
         else open += 1;
       });
-      return { day, pass, fail, na, open };
+      return { day, pass, fail, na, open, sunday: false };
     });
   }
 
@@ -777,14 +779,30 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     return isClosed(this.resultOn(eq, this.cellDate(day)));
   }
 
+  isSundayDay(day: number): boolean {
+    return this.isSundayDate(this.cellDate(day));
+  }
+
+  weekdayLabel(day: number): string {
+    const [y, m, d] = this.cellDate(day).split('-').map(Number);
+    return ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][new Date(y, m - 1, d).getDay()];
+  }
+
   canInspectDay(day: number): boolean {
     return this.canInspectDate(this.cellDate(day));
+  }
+
+  dayLockTitle(day: number, eq?: Equipment): string {
+    if (this.isSundayDay(day)) return 'Chủ nhật không kiểm tra.';
+    if (!this.canInspectDay(day)) return 'Không kiểm tra trước ngày.';
+    if (eq && this.checkedDay(eq, day)) return 'Đã kiểm';
+    return eq ? 'Tick để kiểm tra' : 'Chưa kiểm';
   }
 
   openInspectDay(eq: Equipment, day: number): void {
     if (this.isQrCheck(eq)) return;
     if (!this.canInspectDay(day)) {
-      this.flash('Không kiểm tra trước ngày.', true);
+      this.flash(this.inspectBlockReason(this.cellDate(day)), true);
       return;
     }
     void this.openDay(eq, day);
@@ -1075,7 +1093,11 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
       this.selectedDay = now.getDate();
       await this.reload();
       const fresh = this.equipment.find(item => item.equipmentId === eq.equipmentId) || eq;
-      await this.openDay(fresh, this.selectedDay);
+      const opened = await this.openDay(fresh, this.selectedDay);
+      if (!opened) {
+        this.resumeMobileScan();
+        return;
+      }
       this.dialogInspector = this.mobileStaff?.name || this.mobileStaff?.employeeId || this.dialogInspector;
       this.dialogOpen = false;
       this.mobileStep = 'form';
@@ -1128,7 +1150,18 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   }
 
   private canInspectDate(iso: string): boolean {
-    return /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso <= this.todayKey();
+    return /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso <= this.todayKey() && !this.isSundayDate(iso);
+  }
+
+  private isSundayDate(iso: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay() === 0;
+  }
+
+  private inspectBlockReason(iso: string): string {
+    if (this.isSundayDate(iso)) return 'Chủ nhật không kiểm tra.';
+    return 'Không kiểm tra trước ngày.';
   }
 
   private selectedDate(): string {
@@ -1157,7 +1190,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   private async ensureLabelImages(ids: string[]): Promise<void> {
     for (const id of ids) {
       if (this.labelImages.has(id)) continue;
-      const url = await QRCode.toDataURL(`EQ:${id}`, { width: 240, margin: 1 });
+      const url = await QRCode.toDataURL(`EQ:${id}`, { width: 512, margin: 1 });
       this.labelImages.set(id, url);
     }
     this.cdr.markForCheck();

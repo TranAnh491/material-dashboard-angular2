@@ -1010,6 +1010,10 @@
 
       > div:nth-child(2) { border-right: none; }
     }
+
+    &--three {
+      grid-template-columns: repeat(3, 1fr);
+    }
   }
 
   &__list .sheet-notes__item:last-child {

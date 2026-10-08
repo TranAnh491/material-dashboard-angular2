@@ -121,6 +121,12 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   daKiemLabelError = '';
   isPrintingDaKiemLabels = false;
 
+  // In tem NVL Trả / Return (57×32mm, cùng khổ tem PASS)
+  showReturnLabelModal = false;
+  returnLabelQuantity = 1;
+  returnLabelError = '';
+  isPrintingReturnLabels = false;
+
   showSafetyLabelModal = false;
   safetyLabelQuantity = 1;
   isPrintingSafetyLabels = false;
@@ -1439,6 +1445,131 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       alert('Lỗi khi in tem Đã Kiểm. Vui lòng thử lại.');
     } finally {
       this.isPrintingDaKiemLabels = false;
+    }
+  }
+
+  // ====== In tem NVL Trả / Return (57×32mm, cùng khổ tem PASS) ======
+
+  openReturnLabelModal(): void {
+    this.returnLabelQuantity = 1;
+    this.returnLabelError = '';
+    this.showReturnLabelModal = true;
+  }
+
+  closeReturnLabelModal(): void {
+    this.showReturnLabelModal = false;
+    this.returnLabelError = '';
+  }
+
+  get canPrintReturnLabels(): boolean {
+    const qty = Math.floor(Number(this.returnLabelQuantity));
+    return Number.isFinite(qty) && qty >= 1 && qty <= 9999;
+  }
+
+  printReturnLabels(): void {
+    const qty = Math.floor(Number(this.returnLabelQuantity));
+    if (qty < 1 || qty > 9999) {
+      this.returnLabelError = 'Số lượng phải từ 1 đến 9999';
+      return;
+    }
+    this.returnLabelError = '';
+    this.isPrintingReturnLabels = true;
+
+    const widthMm = 57;
+    const heightMm = 32;
+
+    try {
+      const labelHtml = Array.from({ length: qty }, () => `
+        <div class="pass-label-container">
+          <div class="pass-label-fit">
+            <svg viewBox="0 0 ${widthMm} ${heightMm}" xmlns="http://www.w3.org/2000/svg" aria-label="NVL TRẢ / Return">
+              <text x="50%" y="38%" text-anchor="middle" dominant-baseline="central"
+                    font-family="Arial, Helvetica, sans-serif" font-weight="900"
+                    font-size="8.2" letter-spacing="0.1">NVL TRẢ</text>
+              <text x="50%" y="66%" text-anchor="middle" dominant-baseline="central"
+                    font-family="Arial, Helvetica, sans-serif" font-weight="900"
+                    font-size="7.2" letter-spacing="0.12">Return</text>
+            </svg>
+          </div>
+        </div>`).join('');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        return;
+      }
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>In tem NVL TRẢ / Return (${widthMm}×${heightMm}mm)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, 'Helvetica Neue', sans-serif;
+      padding: 0;
+      margin: 0;
+      background: white;
+    }
+    @media print {
+      body { margin: 0 !important; padding: 0 !important; }
+      @page { margin: 0 !important; size: ${widthMm}mm ${heightMm}mm !important; }
+      .pass-label-container {
+        width: ${widthMm}mm !important;
+        height: ${heightMm}mm !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+      .pass-label-container:last-child {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+    }
+    .pass-label-container {
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #000;
+      page-break-inside: avoid;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pass-label-fit {
+      width: 90%;
+      height: 90%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .pass-label-fit svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pass-label-fit text {
+      fill: #000;
+    }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 400);
+      this.closeReturnLabelModal();
+    } catch (err) {
+      console.error('Error printing NVL Trả labels:', err);
+      alert('Lỗi khi in tem NVL TRẢ. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingReturnLabels = false;
     }
   }
 

@@ -193,8 +193,8 @@
       <div class="sheet-header__box sheet-header__box--meta">
         <table class="meta-table">
           <tr><td class="meta-table__label">Mã quản lý /Code</td><td class="meta-table__value">{{ activeForm.manageCode }}</td></tr>
-          <tr><td class="meta-table__label">Phiên bản /Version</td><td class="meta-table__value">{{ activeForm.docVersion }}</td></tr>
-          <tr><td class="meta-table__label">Ngày ban hành /Issued date</td><td class="meta-table__value">{{ activeForm.issuedDate }}</td></tr>
+          <tr><td class="meta-table__label">Phiên bản /Version</td><td class="meta-table__value">{{ formDocVersion }}</td></tr>
+          <tr><td class="meta-table__label">Ngày ban hành /Issued date</td><td class="meta-table__value">{{ formIssuedDate }}</td></tr>
           <tr><td class="meta-table__label">Số trang /Page</td><td class="meta-table__value">1/1</td></tr>
         </table>
       </div>
@@ -516,7 +516,7 @@
     <!-- Lưu ý -->
     <div class="sheet-notes sheet-notes--full">
       <div class="sheet-notes__head">Lưu ý / Note:</div>
-      <div class="sheet-notes__grid4">
+      <div class="sheet-notes__grid4" [class.sheet-notes__grid4--three]="usesUpperOnlyLimits">
         <div *ngFor="let note of regularWarehouseNotes.grid">
           <span class="vi">{{ note.vi }}</span>
           <span class="en">{{ note.en }}</span>

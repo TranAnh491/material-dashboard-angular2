@@ -27,6 +27,15 @@ export class ClientReloadService implements OnDestroy {
   private readonly updateAvailableSubject = new BehaviorSubject<boolean>(false);
   readonly updateAvailable$ = this.updateAvailableSubject.asObservable();
 
+  /**
+   * Trang đang làm dở (VD: Outbound đang scan 1 LSX) đăng ký hold → popup tải lại chờ tới khi
+   * mọi hold trả về false, tránh F5 giữa chừng làm hỏng phiên scan.
+   */
+  private readonly holds = new Map<string, () => boolean>();
+  private holdTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly showPromptSubject = new BehaviorSubject<boolean>(false);
+  readonly showPrompt$ = this.showPromptSubject.asObservable();
+
   constructor(private firestore: AngularFirestore) {}
 
   /** Lắng nghe realtime — gọi 1 lần khi app khởi động */
@@ -58,12 +67,46 @@ export class ClientReloadService implements OnDestroy {
           if (token > 0 && token !== lastToken) {
             sessionStorage.setItem(ClientReloadService.STORAGE_KEY, String(token));
             this.updateAvailableSubject.next(true);
+            this.evaluatePrompt();
           }
         },
         error: (err) => {
           console.error('ClientReloadService: listen failed', err);
         }
       });
+  }
+
+  setHold(key: string, isBusy: () => boolean): void {
+    this.holds.set(key, isBusy);
+  }
+
+  clearHold(key: string): void {
+    this.holds.delete(key);
+    this.evaluatePrompt();
+  }
+
+  private isHeld(): boolean {
+    for (const isBusy of this.holds.values()) {
+      try {
+        if (isBusy()) return true;
+      } catch { /* bỏ qua hold lỗi */ }
+    }
+    return false;
+  }
+
+  private evaluatePrompt(): void {
+    if (!this.updateAvailableSubject.value || this.showPromptSubject.value) return;
+    if (this.isHeld()) {
+      if (!this.holdTimer) this.holdTimer = setInterval(() => this.evaluatePrompt(), 1000);
+      return;
+    }
+    this.stopHoldTimer();
+    this.showPromptSubject.next(true);
+  }
+
+  private stopHoldTimer(): void {
+    if (this.holdTimer) clearInterval(this.holdTimer);
+    this.holdTimer = null;
   }
 
   /** Gọi từ nút "Tải lại ngay" trên popup bắt buộc. */
@@ -92,6 +135,7 @@ export class ClientReloadService implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.stopHoldTimer();
     this.subscription?.unsubscribe();
     this.subscription = null;
     this.listening = false;

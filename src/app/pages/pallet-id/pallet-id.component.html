@@ -42,6 +42,10 @@
       <span class="pid-tile__icon"><i class="material-icons">task_alt</i></span>
       <span class="pid-tile__name">{{ isPrintingDaKiemLabels ? 'Đang in' : 'Đã Kiểm' }}</span>
     </button>
+    <button type="button" class="pid-tile" (click)="openReturnLabelModal()" [disabled]="isPrintingReturnLabels">
+      <span class="pid-tile__icon"><i class="material-icons">undo</i></span>
+      <span class="pid-tile__name">{{ isPrintingReturnLabels ? 'Đang in' : 'NVL TRẢ' }}</span>
+    </button>
     <button type="button" class="pid-tile" (click)="openJLocLabelModal()" [disabled]="isPrintingJLocLabels">
       <span class="pid-tile__icon"><i class="material-icons">place</i></span>
       <span class="pid-tile__name">{{ isPrintingJLocLabels ? 'Đang in' : 'Tem vị trí' }}</span>
@@ -173,6 +177,42 @@
         <button class="btn-print-confirm" (click)="printDaKiemLabels()" [disabled]="isPrintingDaKiemLabels || !canPrintDaKiemLabels">
           <i class="material-icons">print</i>
           In tem Đã Kiểm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal In tem NVL TRẢ / Return -->
+  <div class="modal-overlay" *ngIf="showReturnLabelModal" (click)="closeReturnLabelModal()">
+    <div class="modal-content pass-label-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>In tem NVL TRẢ / Return</h3>
+        <button class="btn-close" (click)="closeReturnLabelModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">Tem <strong>57mm × 32mm</strong>, chữ <strong>NVL TRẢ / Return</strong> căn giữa (cùng kích cỡ tem PASS).</p>
+        <div class="pass-label-input-wrap">
+          <label class="pass-label-qty-label" for="returnLabelQuantity">Số lượng tem cần in</label>
+          <input id="returnLabelQuantity"
+                 type="number"
+                 [(ngModel)]="returnLabelQuantity"
+                 min="1"
+                 max="9999"
+                 class="pass-label-input"
+                 placeholder="Ví dụ: 10">
+        </div>
+        <p class="pass-label-preview text-muted" *ngIf="canPrintReturnLabels">
+          Sẽ in <strong>{{ returnLabelQuantity | number }}</strong> tem NVL TRẢ / Return
+        </p>
+        <p class="pass-label-error" *ngIf="returnLabelError">{{ returnLabelError }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeReturnLabelModal()">Hủy</button>
+        <button class="btn-print-confirm" (click)="printReturnLabels()" [disabled]="isPrintingReturnLabels || !canPrintReturnLabels">
+          <i class="material-icons">print</i>
+          In tem NVL TRẢ
         </button>
       </div>
     </div>
